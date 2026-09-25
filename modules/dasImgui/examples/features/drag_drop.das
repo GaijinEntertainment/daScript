@@ -42,11 +42,9 @@ def update() {
         // Source: a normal button. Body runs only on active drag.
         button(SOURCE_BTN, (text = "SOURCE"))
         drag_drop_source(SOURCE_DD, (flags = ImGuiDragDropFlags.None)) {
-            unsafe {
-                SetDragDropPayload("MY_INT", addr(PAYLOAD_VALUE),
-                                   uint64(typeinfo sizeof(PAYLOAD_VALUE)),
-                                   ImGuiCond.Once)
-            }
+            SetDragDropPayload("MY_INT", unsafe(addr(PAYLOAD_VALUE)),
+                               uint64(typeinfo sizeof(PAYLOAD_VALUE)),
+                               ImGuiCond.Once)
             text("Dragging int: {PAYLOAD_VALUE}")
         }
 

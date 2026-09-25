@@ -78,24 +78,20 @@ struct private VulkanApp {
 }
 
 def private finalize(var a : VulkanApp) {
-    unsafe {
-        vkDeviceWaitIdle(boost_value_to_vk(a.device))
-    }
+    vkDeviceWaitIdle(boost_value_to_vk(a.device))
     if (a.ctx != null) {
         ImGui_ImplGlfw_Shutdown()
         DestroyContext(a.ctx)
         a.ctx = null
     }
-    unsafe {
-        delete a.igvk           // GPU renderer (uses device)
-        delete a.sync
-        delete a.swap           // framebuffers + views + handle
-        delete a.render_pass
-        delete a.pool
-        delete a.device
-        delete a.surface
-        delete a.instance
-    }
+    delete a.igvk           // GPU renderer (uses device)
+    delete a.sync
+    delete a.swap           // framebuffers + views + handle
+    delete a.render_pass
+    delete a.pool
+    delete a.device
+    delete a.surface
+    delete a.instance
     if (a.window != null) {
         glfwDestroyWindow(a.window)
         a.window = null
@@ -135,9 +131,7 @@ def public harness_init(title : string; width : int = 800; height : int = 600; r
     var inst_exts : array<string>
     inst_exts |> reserve(int(ext_count))
     for (i in range(int(ext_count))) {
-        unsafe {
-            inst_exts |> push(glfw_exts[i])
-        }
+        inst_exts |> push(unsafe(glfw_exts[i]))
     }
     var inscope instance <- create_instance(title, make_api_version(1u, 3u, 0u), inst_exts)
     volkLoadInstance(boost_value_to_vk(instance))

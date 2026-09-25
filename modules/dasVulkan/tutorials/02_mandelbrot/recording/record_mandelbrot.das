@@ -31,16 +31,13 @@ struct private MandelRecorder {
     buf_size : uint64
 }
 
-// Custom finalize so `var inscope rec` works at the call site without leaking unsafe outward -- the
-// raw VkQueue handle is non-owning (no destroy), the rest delete in reverse-of-creation order.
+//! The raw VkQueue handle is non-owning (no destroy); the rest delete in reverse-of-creation order.
 def private finalize(var rec : MandelRecorder) {
-    unsafe {
-        delete rec.readback
-        delete rec.mc
-        delete rec.pool
-        delete rec.device
-        delete rec.instance
-    }
+    delete rec.readback
+    delete rec.mc
+    delete rec.pool
+    delete rec.device
+    delete rec.instance
 }
 
 def private build_mandel_recorder() : MandelRecorder {

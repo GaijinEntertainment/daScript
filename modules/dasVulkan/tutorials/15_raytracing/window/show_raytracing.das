@@ -49,9 +49,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     var inst_exts : array<string>
     inst_exts |> reserve(int(ext_count))
     for (i in range(int(ext_count))) {
-        unsafe {
-            inst_exts |> push(glfw_exts[i])
-        }
+        inst_exts |> push(unsafe(glfw_exts[i]))
     }
     var inscope instance <- create_instance("dasVulkan tutorial 15", make_api_version(1u, 3u, 0u), inst_exts)
     volkLoadInstance(boost_value_to_vk(instance))
@@ -132,10 +130,8 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
             region.dstOffsets[1].x = swap.width
             region.dstOffsets[1].y = swap.height
             region.dstOffsets[1].z = 1
-            unsafe {
-                vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(rv.image), VkImageLayout.GENERAL,
-                    target, VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, addr(region), VkFilter.LINEAR)
-            }
+            vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(rv.image), VkImageLayout.GENERAL,
+                target, VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, unsafe(addr(region)), VkFilter.LINEAR)
             transition_image(cmd, dst, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.PRESENT_SRC_KHR,
                 transfer_write, none, xfer, bottom)
         }

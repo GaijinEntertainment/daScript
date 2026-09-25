@@ -28,9 +28,10 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // looks for known inherently-unsafe AST shapes:
 //   ExprCast(upcast|reinterpret), ExprDelete, ExprAddr, ExprRef2Ptr,
 //   ExprAsVariant, ExprSafeAsVariant (`?as`), ExprAt on table, ExprField
-//   on variant, and ExprCallFunc whose `func.flags.unsafeOperation` (or
-//   unsafeOutsideOfFor outside a for-loop source) is set. If nothing
-//   matches, the wrap is redundant.
+//   on variant, ExprCallFunc whose `func.flags.unsafeOperation` (or
+//   unsafeOutsideOfFor outside a for-loop source) is set, an ExprMove of
+//   a class or of a value that needs inscope, and a non-inscope local
+//   whose type needs inscope. If nothing matches, the wrap is redundant.
 //
 // Note: the parser-flag form (`unsafe(expr)`) only survives compile-time
 // folding when `no_optimizations + no_infer_time_folding` is set; the
@@ -41,6 +42,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 expect 31209:6
 
 require daslib/style_lint
+require daslib/rtti
 
 // --- Bad patterns ---
 
@@ -174,5 +176,44 @@ def good_block_binds_non_local_ref(i : int) : void {
     unsafe {
         var r & = g_rack.items[i]
         r += 1
+    }
+}
+
+// --- Regression: moving a value that holds a smart pointer requires unsafe ---
+// infer refuses `a <- b` outside `unsafe` when b's type needs inscope (strict_smart_pointers is
+// on by default), and `unsafe(a <- b)` does not parse, so the block form is the only spelling:
+// neither STYLE024 nor STYLE025 may fire on it.
+
+struct private SmartHolder {
+    ctx : smart_ptr<Context>
+}
+
+var private g_holder : SmartHolder
+var private g_holder_src : SmartHolder
+
+def good_block_moves_smart_pointer_holder() : void {
+    unsafe {
+        g_holder <- g_holder_src
+    }
+}
+
+// --- Regression: moving classes, and declaring a smart-pointer holder local, require unsafe ---
+// infer refuses `a <- b` on class references outside `unsafe`, and a local whose type needs
+// inscope must be declared `inscope` or under `unsafe`: neither STYLE024 nor STYLE025 may fire.
+
+class private Widget {
+    id : int
+}
+
+def good_block_moves_class_refs(var a : Widget&; var b : Widget&) : void {
+    unsafe {
+        a <- b
+    }
+}
+
+def good_block_declares_smart_holder_local() : void {
+    unsafe {
+        var local : SmartHolder
+        g_holder <- local
     }
 }

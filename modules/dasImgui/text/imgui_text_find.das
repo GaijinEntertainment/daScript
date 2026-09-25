@@ -359,10 +359,8 @@ def private find_query_input(strip : int; var state : TextFindState) : int2 {
     }
     if (synced) {
         // pending write waits a frame — the input's working buffer must exist
-        unsafe {
-            FIND_INPUT[strip].has_pending = true
-            FIND_INPUT[strip].pending_value = state.pending_widget_query
-        }
+        FIND_INPUT[strip].has_pending = true
+        FIND_INPUT[strip].pending_value = state.pending_widget_query
         state.pending_widget_valid = false
     }
     return int2(input_active ? 1 : 0, input_done ? 1 : 0)
@@ -453,10 +451,8 @@ def private text_find_replace_row(strip : int; var state : TextFindState) {
     }
     if (synced) {
         // same delayed-sync dance as the query input (see text_find_bar)
-        unsafe {
-            REPLACE_INPUT[strip].has_pending = true
-            REPLACE_INPUT[strip].pending_value = state.pending_replace_text
-        }
+        REPLACE_INPUT[strip].has_pending = true
+        REPLACE_INPUT[strip].pending_value = state.pending_replace_text
         state.pending_replace_valid = false
     }
     same_line(REPLACE_JOIN[strip * 4 + 1])

@@ -1879,10 +1879,8 @@ def public text_edit_open_goto(var ed : TextEditState) {
     ed.goto_open = true
     ed.goto_focus = true
     // fresh dialog, fresh query
-    unsafe {
-        GOTO_INPUT.has_pending = true
-        GOTO_INPUT.pending_value = ""
-    }
+    GOTO_INPUT.has_pending = true
+    GOTO_INPUT.pending_value = ""
 }
 
 def public text_edit_diagnostic_row_span(ed : TextEditState const;
@@ -3774,10 +3772,8 @@ def private swatch_at_mouse(var ed : TextEditState; m : EditMetrics;
             ed.color_digits = hit.y
             ed.color_undo_mark = -1
             ed.color_anchor = float2(rect.x, edit_row_y(m, row + 1) + 2.0f)
-            unsafe {
-                COLOR_STATE.has_pending = true
-                COLOR_STATE.pending_value = text_edit_color_value(line, hit.x, hit.y)
-            }
+            COLOR_STATE.has_pending = true
+            COLOR_STATE.pending_value = text_edit_color_value(line, hit.x, hit.y)
             return true
         }
         at = end_

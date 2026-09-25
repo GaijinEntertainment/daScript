@@ -191,16 +191,14 @@ def draw_binary_preview() {
     let scale = min(1.0f, min(
         available.x / max(1.0f, float(g_inspector.preview_width)),
         available.y / max(1.0f, float(g_inspector.preview_height))))
-    unsafe {
-        image(INSPECTOR_BINARY_PREVIEW,
-            (user_texture_id = inspector_preview_texture_ref(
-                g_inspector.preview_texture),
-             size = float2(max(1.0f, float(g_inspector.preview_width) * scale),
-                           max(1.0f, float(g_inspector.preview_height) * scale)),
-             uv0 = float2(0.0f, 0.0f), uv1 = float2(1.0f, 1.0f),
-             tint_col = float4(1.0f, 1.0f, 1.0f, 1.0f),
-             border_col = float4(0.35f, 0.35f, 0.35f, 1.0f)))
-    }
+    image(INSPECTOR_BINARY_PREVIEW,
+        (user_texture_id = inspector_preview_texture_ref(
+            g_inspector.preview_texture),
+         size = float2(max(1.0f, float(g_inspector.preview_width) * scale),
+                       max(1.0f, float(g_inspector.preview_height) * scale)),
+         uv0 = float2(0.0f, 0.0f), uv1 = float2(1.0f, 1.0f),
+         tint_col = float4(1.0f, 1.0f, 1.0f, 1.0f),
+         border_col = float4(0.35f, 0.35f, 0.35f, 1.0f)))
 }
 
 def draw_side_by_side_diff() { // nolint:STYLE038

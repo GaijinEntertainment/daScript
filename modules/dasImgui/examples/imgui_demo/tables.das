@@ -1072,8 +1072,7 @@ def private edit_table_sizing_flags(var p_flags : ImGuiTableFlags? implicit; id 
                              ImGuiTableFlags.SizingFixedSame,
                              ImGuiTableFlags.SizingStretchProp,
                              ImGuiTableFlags.SizingStretchSame)
-    var current : ImGuiTableFlags
-    unsafe { current = *p_flags & policy_mask; }
+    let current = *p_flags & policy_mask
     var idx = 0
     for (n in range(5)) {
         if (values[n] == current) {
@@ -1092,7 +1091,7 @@ def private edit_table_sizing_flags(var p_flags : ImGuiTableFlags? implicit; id 
         if (edit_combo(unsafe(addr(local_idx)),
                        (id = "SIZING_POLICY_COMBO", text = "Sizing Policy",
                         items = items))) {
-            unsafe { *p_flags = (*p_flags & ~policy_mask) | values[local_idx]; }
+            *p_flags = (*p_flags & ~policy_mask) | values[local_idx]
         }
         delete items
     }
@@ -1466,11 +1465,11 @@ def private edit_column_flags(var p_flags : ImGuiTableColumnFlags? implicit) {
         flags_value = ImGuiTableColumnFlags.DefaultSort))
     if (edit_checkbox_flags(p_flags, (id = "CF_WS", text = "_WidthStretch",
         flags_value = ImGuiTableColumnFlags.WidthStretch))) {
-        unsafe { *p_flags = *p_flags & ~stretch_mask; }
+        *p_flags = *p_flags & ~stretch_mask
     }
     if (edit_checkbox_flags(p_flags, (id = "CF_WF", text = "_WidthFixed",
         flags_value = ImGuiTableColumnFlags.WidthFixed))) {
-        unsafe { *p_flags = *p_flags & ~fixed_mask; }
+        *p_flags = *p_flags & ~fixed_mask
     }
     edit_checkbox_flags(p_flags, (id = "CF_NR", text = "_NoResize",
         flags_value = ImGuiTableColumnFlags.NoResize))

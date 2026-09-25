@@ -92,18 +92,14 @@ def cpu_band(var pacc : array<float3>?; var ppix : array<uint8>?; var pepoch : i
         if (*pepoch != my_epoch) {
             break
         }
-        unsafe {
-            pt_render_rows(my_pass, TRACE_W, TRACE_H, y, y + 1, *pacc)
-        }
+        pt_render_rows(my_pass, TRACE_W, TRACE_H, y, y + 1, *pacc)
         for (x in range(TRACE_W)) {
             let i = y * TRACE_W + x
             let c = pt_tonemap((*pacc)[i] * inv)
-            unsafe {
-                (*ppix)[i * 4 + 0] = uint8(int(clamp(c.x, 0.0, 1.0) * 255.0 + 0.5))
-                (*ppix)[i * 4 + 1] = uint8(int(clamp(c.y, 0.0, 1.0) * 255.0 + 0.5))
-                (*ppix)[i * 4 + 2] = uint8(int(clamp(c.z, 0.0, 1.0) * 255.0 + 0.5))
-                (*ppix)[i * 4 + 3] = uint8(255)
-            }
+            (*ppix)[i * 4 + 0] = uint8(int(clamp(c.x, 0.0, 1.0) * 255.0 + 0.5))
+            (*ppix)[i * 4 + 1] = uint8(int(clamp(c.y, 0.0, 1.0) * 255.0 + 0.5))
+            (*ppix)[i * 4 + 2] = uint8(int(clamp(c.z, 0.0, 1.0) * 255.0 + 0.5))
+            (*ppix)[i * 4 + 3] = uint8(255)
         }
     }
 }
@@ -154,9 +150,7 @@ def advance_ready : bool {
             note_pass_done()
         }
         var st = g_threads_status
-        unsafe {
-            job_status_remove(st)
-        }
+        unsafe(job_status_remove(st))
         g_threads_status = null
     }
     if (g_render_epoch != g_epoch) {
@@ -653,9 +647,7 @@ def shutdown() {
     if (g_threads_status != null) {
         g_threads_status |> join()
         var st = g_threads_status
-        unsafe {
-            job_status_remove(st)
-        }
+        unsafe(job_status_remove(st))
         g_threads_status = null
     }
     delete g_quad

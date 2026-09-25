@@ -113,9 +113,7 @@ def private teacher_logits(t : Model; nb, nsteps : int64; feeds : array<int64>; 
     var cur : array<int64>
     cur |> reserve(nb)
     for (i in range64(nb)) {
-        unsafe {
-            sess |> push(addr(ss[i]))
-        }
+        sess |> push(unsafe(addr(ss[i])))
         cur |> push(0l)
     }
     for (st in range64(nsteps)) {

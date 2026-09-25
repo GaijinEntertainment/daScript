@@ -487,28 +487,28 @@ def fx_init_from_event(var fx : VoiceFX; event : Event; sample_rate : float) {
     //! Configure a VoiceFX chain from the relevant Event fields (crush/coarse/shape/djf/bpf/phaser/tremolo/compressor).
     //! Leaves everything disabled when no Event field is active, so the chain can stay at `fx.active == false`.
     if (event.crush > 0.0 || event.coarse > 0) {
-        unsafe { bitcrush_init(addr(fx.bc)); }
+        bitcrush_init(unsafe(addr(fx.bc)))
         fx.bc.bits = event.crush
         fx.bc.coarse = event.coarse
         fx.has_crush = true
     }
     if (event.shape > 0.0) {
-        unsafe { waveshaper_init(addr(fx.ws)); }
+        waveshaper_init(unsafe(addr(fx.ws)))
         fx.ws.drive = event.shape
         fx.has_shape = true
     }
     if (abs(event.djf - 0.5) > 0.001) {
-        unsafe { djfilter_init(addr(fx.dj), sample_rate); }
+        djfilter_init(unsafe(addr(fx.dj)), sample_rate)
         fx.dj.position = event.djf
         fx.has_djf = true
     }
     if (event.bpf > 0.0) {
-        unsafe { bandpass_init(addr(fx.bp), sample_rate); }
-        unsafe { bandpass_setup(addr(fx.bp), event.bpf, max(event.bpq, 0.01)); }
+        bandpass_init(unsafe(addr(fx.bp)), sample_rate)
+        bandpass_setup(unsafe(addr(fx.bp)), event.bpf, max(event.bpq, 0.01))
         fx.has_bpf = true
     }
     if (event.phaser > 0.0) {
-        unsafe { phaser_init(addr(fx.ph), sample_rate); }
+        phaser_init(unsafe(addr(fx.ph)), sample_rate)
         fx.ph.rate = event.phaser
         fx.ph.depth = clamp(event.phaserdepth, 0.0, 1.0)
         fx.ph.center = event.phasercenter
@@ -516,13 +516,13 @@ def fx_init_from_event(var fx : VoiceFX; event : Event; sample_rate : float) {
         fx.has_phaser = true
     }
     if (event.tremolo > 0.0 && event.tremolodepth > 0.0) {
-        unsafe { tremolo_init(addr(fx.trem), sample_rate); }
+        tremolo_init(unsafe(addr(fx.trem)), sample_rate)
         fx.trem.rate = event.tremolo
         fx.trem.depth = clamp(event.tremolodepth, 0.0, 1.0)
         fx.has_tremolo = true
     }
     if (event.compressor < 0.0) {
-        unsafe { compressor_init(addr(fx.comp), sample_rate); }
+        compressor_init(unsafe(addr(fx.comp)), sample_rate)
         fx.comp.threshold_db = event.compressor
         fx.comp.ratio = max(event.compressor_ratio, 1.0)
         fx.comp.knee_db = max(event.compressor_knee, 0.0)
@@ -654,12 +654,12 @@ def osc_voice_init_filters(var voice : OscVoice; lpf, hpf, lpq, hpq : float) {
     // LPF: active if cutoff > 0 and below Nyquist
     if (lpf > 0.0 && lpf < sr * 0.5) {
         voice.lpf_biquad.q_inv = 1.0lf / double(max(lpq, 0.1))
-        unsafe { ma_sf2_biquad_setup(addr(voice.lpf_biquad), lpf / sr); }
+        ma_sf2_biquad_setup(unsafe(addr(voice.lpf_biquad)), lpf / sr)
     }
     // HPF: proper high-pass biquad coefficients
     if (hpf > 0.0 && hpf < sr * 0.5) {
         voice.hpf_biquad.q_inv = 1.0lf / double(max(hpq, 0.1))
-        unsafe { ma_sf2_biquad_setup_hpf(addr(voice.hpf_biquad), hpf / sr); }
+        ma_sf2_biquad_setup_hpf(unsafe(addr(voice.hpf_biquad)), hpf / sr)
     }
 }
 
@@ -682,8 +682,8 @@ def private osc_chunk_sine(var voice : OscVoice; var output : array<float>; var 
             voice.fm_mod_phase -= floor(voice.fm_mod_phase)
         }
         var sample = sin((voice.phase + fmOffset) * tp) * env
-        if (hasLpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.lpf_biquad), sample); } }
-        if (hasHpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.hpf_biquad), sample); } }
+        if (hasLpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.lpf_biquad)), sample); }
+        if (hasHpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.hpf_biquad)), sample); }
         if (hasVowel) { sample = vowel_filter_tick(voice.vowel_filter, sample); }
         output[f * 2]     += sample * lGain
         output[f * 2 + 1] += sample * rGain
@@ -712,8 +712,8 @@ def private osc_chunk_sawtooth(var voice : OscVoice; var output : array<float>; 
         p -= floor(p)
         // Band-limited sawtooth via polyBLEP to suppress aliasing above Nyquist.
         var sample = (p * 2.0 - 1.0 - poly_blep(p, phaseInc)) * env
-        if (hasLpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.lpf_biquad), sample); } }
-        if (hasHpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.hpf_biquad), sample); } }
+        if (hasLpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.lpf_biquad)), sample); }
+        if (hasHpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.hpf_biquad)), sample); }
         if (hasVowel) { sample = vowel_filter_tick(voice.vowel_filter, sample); }
         output[f * 2]     += sample * lGain
         output[f * 2 + 1] += sample * rGain
@@ -744,8 +744,8 @@ def private osc_chunk_square(var voice : OscVoice; var output : array<float>; va
         var p_half = p + 0.5
         p_half -= floor(p_half)
         var sample = ((p < 0.5 ? 1.0 : -1.0) - poly_blep(p, phaseInc) + poly_blep(p_half, phaseInc)) * env
-        if (hasLpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.lpf_biquad), sample); } }
-        if (hasHpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.hpf_biquad), sample); } }
+        if (hasLpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.lpf_biquad)), sample); }
+        if (hasHpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.hpf_biquad)), sample); }
         if (hasVowel) { sample = vowel_filter_tick(voice.vowel_filter, sample); }
         output[f * 2]     += sample * lGain
         output[f * 2 + 1] += sample * rGain
@@ -773,8 +773,8 @@ def private osc_chunk_triangle(var voice : OscVoice; var output : array<float>; 
         var p = voice.phase + fmOffset
         p -= floor(p)
         var sample = (abs(p * 4.0 - 2.0) - 1.0) * env
-        if (hasLpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.lpf_biquad), sample); } }
-        if (hasHpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.hpf_biquad), sample); } }
+        if (hasLpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.lpf_biquad)), sample); }
+        if (hasHpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.hpf_biquad)), sample); }
         if (hasVowel) { sample = vowel_filter_tick(voice.vowel_filter, sample); }
         output[f * 2]     += sample * lGain
         output[f * 2 + 1] += sample * rGain
@@ -821,13 +821,11 @@ def private osc_chunk_supersaw(var voice : OscVoice; var output : array<float>; 
         var sampleL = mixL * env
         var sampleR = mixR * env
         if (hasLpf) {
-            var filtered : float
-            unsafe { filtered = ma_sf2_biquad_tick(addr(voice.lpf_biquad), (sampleL + sampleR) * 0.5); }
+            let filtered = ma_sf2_biquad_tick(unsafe(addr(voice.lpf_biquad)), (sampleL + sampleR) * 0.5)
             sampleL = filtered * filterScale; sampleR = filtered * filterScale
         }
         if (hasHpf) {
-            var filtered : float
-            unsafe { filtered = ma_sf2_biquad_tick(addr(voice.hpf_biquad), (sampleL + sampleR) * 0.5); }
+            let filtered = ma_sf2_biquad_tick(unsafe(addr(voice.hpf_biquad)), (sampleL + sampleR) * 0.5)
             sampleL = filtered * filterScale; sampleR = filtered * filterScale
         }
         if (hasVowel) {
@@ -852,8 +850,8 @@ def private osc_chunk_pink_noise(var voice : OscVoice; var output : array<float>
         let env = adsr(t, att, dec, sus, rel, dur)
         if (env <= 0.001 && t >= dur) { voice.finished = true; break; }
         var sample = pink_noise_tick(voice.pink) * env
-        if (hasLpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.lpf_biquad), sample); } }
-        if (hasHpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.hpf_biquad), sample); } }
+        if (hasLpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.lpf_biquad)), sample); }
+        if (hasHpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.hpf_biquad)), sample); }
         if (hasVowel) { sample = vowel_filter_tick(voice.vowel_filter, sample); }
         output[f * 2]     += sample * lGain
         output[f * 2 + 1] += sample * rGain
@@ -872,8 +870,8 @@ def private osc_chunk_white_noise(var voice : OscVoice; var output : array<float
         let env = adsr(t, att, dec, sus, rel, dur)
         if (env <= 0.001 && t >= dur) { voice.finished = true; break; }
         var sample = noise(voice.white_seed) * env
-        if (hasLpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.lpf_biquad), sample); } }
-        if (hasHpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.hpf_biquad), sample); } }
+        if (hasLpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.lpf_biquad)), sample); }
+        if (hasHpf) { sample = ma_sf2_biquad_tick(unsafe(addr(voice.hpf_biquad)), sample); }
         if (hasVowel) { sample = vowel_filter_tick(voice.vowel_filter, sample); }
         output[f * 2]     += sample * lGain
         output[f * 2 + 1] += sample * rGain

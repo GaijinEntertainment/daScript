@@ -341,7 +341,7 @@ def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int)
     // kill existing voice on same channel+note (re-trigger)
     for (i in range(length(state.csf2_voices))) {
         if (g_sf2_meta[i].channel == ch && g_sf2_meta[i].note == note && state.csf2_voices[i].released == 0 && state.csf2_voices[i].finished == 0) {
-            unsafe { ma_sf2_voice_end_quick(addr(state.csf2_voices[i])); }
+            ma_sf2_voice_end_quick(unsafe(addr(state.csf2_voices[i])))
         }
     }
     let preset = state.sf2.presets[preset_idx]
@@ -362,7 +362,7 @@ def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int)
             if (excl > 0) {
                 for (i in range(length(state.csf2_voices))) {
                     if (g_sf2_meta[i].exclusive_class == excl && g_sf2_meta[i].channel == ch && state.csf2_voices[i].finished == 0) {
-                        unsafe { ma_sf2_voice_end_quick(addr(state.csf2_voices[i])); }
+                        ma_sf2_voice_end_quick(unsafe(addr(state.csf2_voices[i])))
                     }
                 }
             }
@@ -392,7 +392,7 @@ def private sf2_note_off(var state : MidiPlaybackState; ch, note : int) {
             if (state.channels[ch].sustain) {
                 g_sf2_meta[i].sustain_held = true
             } else {
-                unsafe { ma_sf2_voice_note_off(addr(state.csf2_voices[i])); }
+                ma_sf2_voice_note_off(unsafe(addr(state.csf2_voices[i])))
             }
         }
     }
@@ -525,7 +525,7 @@ def process_events(var state : MidiPlaybackState) {  // nolint:STYLE037,STYLE038
                     // C SF2 voices — release those held by sustain pedal
                     for (i in range(length(state.csf2_voices))) {
                         if (g_sf2_meta[i].channel == ch && g_sf2_meta[i].sustain_held && state.csf2_voices[i].released == 0 && state.csf2_voices[i].finished == 0) {
-                            unsafe { ma_sf2_voice_note_off(addr(state.csf2_voices[i])); }
+                            ma_sf2_voice_note_off(unsafe(addr(state.csf2_voices[i])))
                             g_sf2_meta[i].sustain_held = false
                         }
                     }
@@ -827,9 +827,7 @@ var private g_midi_audio_vis_ptr : void?  // audio vis channel as void* (avoids 
 // ─── Audio Thread Main Loop ───
 
 def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_status : JobStatus?; audio_channel : void?; vis_ptr : void?) {  // nolint:STYLE037,STYLE038 - thread lifecycle + watermark loop, state is loop-carried
-    unsafe {
-        set_audio_thread_command_stream(audio_channel)
-    }
+    unsafe(set_audio_thread_command_stream(audio_channel))
     let CHUNK_SEC = 0.05lf
     var total_time = 0.lf
     var total_samples = 0ul
@@ -1010,9 +1008,7 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
     }
     unset_status_update(sid)
     status_box |> seq_box_release
-    unsafe {
-        set_audio_thread_command_stream(null)
-    }
+    unsafe(set_audio_thread_command_stream(null))
     cmd_stream |> release
     unsafe {
         if (g_reverb != null) {

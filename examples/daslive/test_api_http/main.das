@@ -188,9 +188,7 @@ def update() {
 [export]
 def shutdown() {
     print("test_api_http: shutdown\n")
-    unsafe {
-        atomic32_remove(g_client_state)
-    }
+    unsafe(atomic32_remove(g_client_state))
 }
 
 [export]

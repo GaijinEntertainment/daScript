@@ -96,7 +96,7 @@ def render_note(sf2 : SF2File; bank, program, key, velocity : int; duration : fl
             if (excl > 0) {
                 for (v, ec in voices, excl_classes) {
                     if (ec == excl && v.finished == 0) {
-                        unsafe { ma_sf2_voice_end_quick(addr(v)); }
+                        ma_sf2_voice_end_quick(unsafe(addr(v)))
                     }
                 }
             }
@@ -119,7 +119,7 @@ def render_note(sf2 : SF2File; bank, program, key, velocity : int; duration : fl
         let frames = min(chunk_size, total_frames - frame)
         if (!note_off_sent && frame >= note_off_frame) {
             for (v in voices) {
-                unsafe { ma_sf2_voice_note_off(addr(v)); }
+                ma_sf2_voice_note_off(unsafe(addr(v)))
             }
             note_off_sent = true
         }

@@ -232,28 +232,25 @@ class public StdioFront {
         var noise : array<string>
         var answered = false
         log->emit("child_started", JV({"command" => JV(join(command, " "))}))
-        var rc : int
-        unsafe {
-            rc = popen_argv_pipe(command) $(w, r) {
-                if (!replay_handshake(w, r, noise)) return
-                while (!done) {
-                    if (has_pending) {
-                        if (!write_child(w, pending.line)) return
-                        has_pending = false
-                        answered = true
-                        let response = read_child(r, noise)
-                        if (empty(response)) {
-                            reply(jsonrpc_error(pending.id_text, -32000, death_message("the daslang child died while answering", noise)))
-                            return
-                        }
-                        reply(response)
+        let rc = unsafe(popen_argv_pipe(command) $(w, r) {
+            if (!replay_handshake(w, r, noise)) return
+            while (!done) {
+                if (has_pending) {
+                    if (!write_child(w, pending.line)) return
+                    has_pending = false
+                    answered = true
+                    let response = read_child(r, noise)
+                    if (empty(response)) {
+                        reply(jsonrpc_error(pending.id_text, -32000, death_message("the daslang child died while answering", noise)))
+                        return
                     }
-                    if (!serve_client_line(w)) {
-                        done = true
-                    }
+                    reply(response)
+                }
+                if (!serve_client_line(w)) {
+                    done = true
                 }
             }
-        }
+        })
         log->emit("child_exited", JV({"code" => JV(rc), "answered" => JV(answered)}))
         if (done) return true
         if (answered) {

@@ -3890,6 +3890,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `TypeDecl.isLocal` - Returns whether the given type is a local type that can be allocated on the stack.
 - `TypeDecl.hasClasses` - Returns whether the type definition contains any class types.
 - `TypeDecl.isSafeToDelete` - Returns whether a value of the given type is safe to delete, meaning that deleting it does not require an unsafe block.
+- `TypeDecl.needInScope` - Returns whether a local of the given type must be declared `inscope` (or sit under `unsafe`) when `strict_smart_pointers` is on, meaning that the type holds a smart pointer anywhere inside it.
 - `TypeDecl.hasNonTrivialCtor` - Returns whether the type definition contains any non-trivial constructors.
 - `TypeDecl.hasNonTrivialDtor` - Returns whether the type definition contains any non-trivial destructors.
 - `TypeDecl.hasNonTrivialCopy` - Returns whether the type definition contains any non-trivial copy operations.

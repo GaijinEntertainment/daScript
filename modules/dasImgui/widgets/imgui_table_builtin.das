@@ -169,6 +169,6 @@ def public sort_specs(blk : block<(specs : array<TableSortSpec>) : void>) : bool
     }
     invoke(blk, arr)
     delete arr
-    unsafe { p.SpecsDirty = false; }
+    p.SpecsDirty = false
     return true
 }

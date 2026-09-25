@@ -33,6 +33,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 expect 31209:2
 
 require daslib/style_lint
+require daslib/rtti
 
 [unsafe_operation]
 def my_unsafe_void(a : int) : void {
@@ -87,4 +88,24 @@ def good_nested_addr_block() : void {
     unsafe {
         my_unsafe_void(*addr(arr[0]))
     }
+}
+
+// --- Regression: a move that is not the block's first statement still has no narrow form ---
+// `unsafe(a <- b)` does not parse, so the scan covers the whole block, as it does for delete:
+// STYLE025 must NOT fire on a benign statement followed by the one move that needs unsafe.
+
+struct private MoveHolder {
+    ctx : smart_ptr<Context>
+}
+
+var private g_move_dst : MoveHolder
+var private g_move_src : MoveHolder
+
+def good_move_after_benign_statement() : void {
+    var counted = 0
+    unsafe {
+        counted += 1
+        g_move_dst <- g_move_src
+    }
+    print("{counted}\n")
 }

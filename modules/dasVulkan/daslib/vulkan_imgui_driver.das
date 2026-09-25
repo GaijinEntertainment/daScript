@@ -73,9 +73,7 @@ let private IDX_SIZE  = 2
 def private map_and_write(device : Device; memory : DeviceMemory; size : uint64; blk : block<(dst : void?) : void>) {
     var mapped : void? = null
     let flags : VkMemoryMapFlags
-    unsafe {
-        vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, size, flags, addr(mapped)), null)
-    }
+    vk_check(vkMapMemory(boost_value_to_vk(device), boost_value_to_vk(memory), 0ul, size, flags, unsafe(addr(mapped))), null)
     invoke(blk, mapped)
     vkUnmapMemory(boost_value_to_vk(device), boost_value_to_vk(memory))
 }
@@ -105,28 +103,26 @@ struct public ImguiVkRenderer {
 }
 
 def public finalize(var r : ImguiVkRenderer) {
-    unsafe {
-        for (t in r.textures) {
-            // Vulkan requires the image destroyed before its backing memory is freed.
-            delete t.view
-            delete t.image
-            delete t.memory
-        }
-        delete r.textures
-        if (r.vbuf_cap > 0ul) {
-            delete r.vbuf
-        }
-        if (r.ibuf_cap > 0ul) {
-            delete r.ibuf
-        }
-        delete r.pipeline
-        delete r.frag_mod
-        delete r.vert_mod
-        delete r.pipe_layout
-        delete r.desc_pool
-        delete r.set_layouts
-        delete r.sampler
+    for (t in r.textures) {
+        // Vulkan requires the image destroyed before its backing memory is freed.
+        delete t.view
+        delete t.image
+        delete t.memory
     }
+    delete r.textures
+    if (r.vbuf_cap > 0ul) {
+        delete r.vbuf
+    }
+    if (r.ibuf_cap > 0ul) {
+        delete r.ibuf
+    }
+    delete r.pipeline
+    delete r.frag_mod
+    delete r.vert_mod
+    delete r.pipe_layout
+    delete r.desc_pool
+    delete r.set_layouts
+    delete r.sampler
 }
 
 //! ImGui's pipeline: per-vertex (pos, uv, col-as-rgba8), alpha blend, no depth, no cull, dynamic
@@ -305,9 +301,7 @@ def private upload_pixels_to_image(device : Device; phys : VkPhysicalDevice; que
     staging_usage.transfer_src = true
     var inscope staging <- create_host_buffer(device, phys, nbytes, staging_usage)
     map_and_write(device, staging.memory, nbytes) $(dst) {
-        unsafe {
-            memcpy(dst, pixels, nbytes)
-        }
+        unsafe(memcpy(dst, pixels, nbytes))
     }
     run_cmd_sync(device, pool, queue) $(cmd) {
         var to_dst : VkAccessFlags; to_dst.transfer_write = true
@@ -454,7 +448,7 @@ def public imgui_vk_render(var r : ImguiVkRenderer; device : Device; phys : VkPh
     // grow host-visible vertex/index buffers if needed (with slack to avoid per-frame churn)
     if (r.vbuf_cap < vtx_bytes) {
         if (r.vbuf_cap > 0ul) {
-            unsafe { delete r.vbuf }
+            delete r.vbuf
         }
         var vusage : VkBufferUsageFlags
         vusage.vertex_buffer = true
@@ -464,7 +458,7 @@ def public imgui_vk_render(var r : ImguiVkRenderer; device : Device; phys : VkPh
     }
     if (r.ibuf_cap < idx_bytes) {
         if (r.ibuf_cap > 0ul) {
-            unsafe { delete r.ibuf }
+            delete r.ibuf
         }
         var iusage : VkBufferUsageFlags
         iusage.index_buffer = true

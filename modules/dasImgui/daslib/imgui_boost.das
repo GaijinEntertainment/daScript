@@ -130,9 +130,7 @@ def PlotLines(
               scale_min : float = FLT_MAX; scale_max : float = FLT_MAX;
               graph_size : float2 = float2()) {
     let gsize = graph_size
-    unsafe {
-        _builtin_PlotLines(getter, lab, values_count, values_offset, overlay_text, scale_min, scale_max, gsize)
-    }
+    _builtin_PlotLines(getter, lab, values_count, values_offset, overlay_text, scale_min, scale_max, gsize)
 }
 
 def PlotHistogram(
@@ -141,9 +139,7 @@ def PlotHistogram(
                   scale_min : float = FLT_MAX; scale_max : float = FLT_MAX;
                   graph_size : float2 = float2()) {
     let gsize = graph_size
-    unsafe {
-        _builtin_PlotHistogram(getter, lab, values_count, values_offset, overlay_text, scale_min, scale_max, gsize)
-    }
+    _builtin_PlotHistogram(getter, lab, values_count, values_offset, overlay_text, scale_min, scale_max, gsize)
 }
 
 let IM_COL32_WHITE = IM_COL32(255, 255, 255, 255)
@@ -160,12 +156,10 @@ def IM_COL32(R, G, B, A : int) {
 
 def Combo(lab : string; current_item : int? implicit; items : array<string>; popul_max_heigh_in_items : int = -1) {
     let nItems = length(items)
-    unsafe {
-        if (nItems != 0) {
-            return imgui::Combo(lab, current_item, addr(items[0]), nItems, popul_max_heigh_in_items)
-        } else {
-            return imgui::Combo(lab, current_item, null, 0, popul_max_heigh_in_items)
-        }
+    if (nItems != 0) {
+        return imgui::Combo(lab, current_item, unsafe(addr(items[0])), nItems, popul_max_heigh_in_items)
+    } else {
+        return imgui::Combo(lab, current_item, null, 0, popul_max_heigh_in_items)
     }
 }
 
@@ -177,12 +171,10 @@ def Combo(lab : string; current_item : int? implicit; items : string[]; popul_ma
 
 def ListBox(lab : string; current_item : int? implicit; items : array<string>; height_in_items : int = -1) {
     let nItems = length(items)
-    unsafe {
-        if (nItems != 0) {
-            return imgui::ListBox(lab, current_item, addr(items[0]), nItems, height_in_items)
-        } else {
-            return imgui::ListBox(lab, current_item, null, 0, height_in_items)
-        }
+    if (nItems != 0) {
+        return imgui::ListBox(lab, current_item, unsafe(addr(items[0])), nItems, height_in_items)
+    } else {
+        return imgui::ListBox(lab, current_item, null, 0, height_in_items)
     }
 }
 
@@ -211,9 +203,7 @@ def PlotLines(
               graph_size : float2 = float2();
               stride : int = typeinfo sizeof(type<float>)) {
     let gsize = graph_size
-    unsafe {
-        imgui::PlotLines(lab, addr(values[0]), length(values), values_offset, overlay_text, scale_min, scale_max, gsize, stride)
-    }
+    imgui::PlotLines(lab, unsafe(addr(values[0])), length(values), values_offset, overlay_text, scale_min, scale_max, gsize, stride)
 }
 
 def PlotHistogram(
@@ -235,9 +225,7 @@ def PlotHistogram(
                   graph_size : float2 = float2();
                   stride : int = typeinfo sizeof(type<float>)) {
     let gsize = graph_size
-    unsafe {
-        imgui::PlotHistogram(lab, addr(values[0]), length(values), values_offset, overlay_text, scale_min, scale_max, gsize, stride)
-    }
+    imgui::PlotHistogram(lab, unsafe(addr(values[0])), length(values), values_offset, overlay_text, scale_min, scale_max, gsize, stride)
 }
 
 def CheckboxFlags(lab : string; var p_flags : auto(FLAGT)? implicit; flags : FLAGT) {

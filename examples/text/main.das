@@ -1934,9 +1934,7 @@ def private handle_document_shortcuts(doc : TextViewerDocument const) {
 
 def private draw_document_window(var doc : TextViewerDocument; dock_id : uint) {
     if (doc.pending_dock && dock_id != 0u) {
-        unsafe {
-            g_document_windows[doc.id].pending_dock_to = dock_id
-        }
+        g_document_windows[doc.id].pending_dock_to = dock_id
         doc.pending_dock = false
     }
     let base_title = (empty(doc.source.path)
@@ -2547,9 +2545,7 @@ def update() {
             DOCK_ROOT.has_initial_layout = true
         }
         for (index in range(length(g_documents))) {
-            unsafe {
-                draw_document_window(g_documents[index], DOCK_ROOT.dock_id)
-            }
+            draw_document_window(g_documents[index], DOCK_ROOT.dock_id)
         }
     }
 
