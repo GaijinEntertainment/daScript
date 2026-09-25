@@ -302,7 +302,7 @@ def pocket_release_scratch(var sc : PocketScratch) {
 // ===== the GGUF =====
 
 let private LN_EPS = 1e-5
-let private HEAD_LN_EPS = 1e-6
+let POCKET_HEAD_LN_EPS = 1e-6   //! the flow head's LayerNorm epsilon
 let private TIME_RMS_EPS = 1e-5   // the timestep embedder's norm: its activations' variance is 1e-4-ish, so the epsilon is load-bearing
 let private MAX_GEN_TOKENS_PER_SECOND = 3.0   // the reference's estimate of speech rate, for the frame cap
 let private GEN_SECONDS_PADDING = 2.0
@@ -614,6 +614,7 @@ def pocket_has_voice(m : PocketModel; name : string) : bool {
 //! Load a converted Pocket TTS GGUF: the scalars from its `pocket.*` metadata, the weights
 //! prepared for the rows kernels, the tokenizer, and the roster (its states built on first use).
 def load_pocket(path : string) : PocketModel {
+    bump_weights_epoch()   //! the previous model's GPU slabs drop before this one's weights can land at their addresses
     var inscope m = PocketModel()
     m.q8 = pocket_serve_q8_()
     g_stage_q8 = m.q8
@@ -855,6 +856,65 @@ def private res_conv_stream(b : PocketResConv; var cr : PocketConvCarry; x : arr
 //! the window in frames a stream runs: the knob, else the whole run
 def private codec_window(frames : int64) : int64 => stream_window_for(g_pocket_codec_window, frames)
 
+//! The codec decoder as a whole: latents [frames][latent_dim] (denormalized) to `frames * frame_samples` samples in `wave`.
+typedef PocketCodecGpuFn = function<(m : PocketModel; latents : array<float>; frames : int64; var sc : PocketScratch; @scratch @exact_size var wave : array<float>) : bool>
+
+//! The frame loop as a whole once the prompt's rows sit in the voice's caches: `pocket_synthesize`'s
+//! loop contract (noise from `sc.rng` at `std` or `captured`, `forced` fed back, at most `max_frames`),
+//! the latents, conditioning rows and EOS logits into the scratch; frames below zero = declined, the caches untouched.
+typedef PocketFramesGpuFn = function<(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; std : float; frames_after_eos : int;
+                                      captured, forced : array<float>; max_frames : int64; var sc : PocketScratch) : tuple<frames : int64; eos_at : int64>>
+
+//! A driver's seats, one per stage; a seat left empty keeps the CPU form for that stage.
+struct PocketGpuDriver {
+    codec : PocketCodecGpuFn
+    frames : PocketFramesGpuFn
+}
+
+var private g_pk_drv : PocketGpuDriver
+var private g_pk_drv_prev : PocketGpuDriver   //! the registration a caller's seat displaced
+
+let private PK_SEATS <- ["codec", "frames"]
+var private g_pk_gpu_calls : int [2]
+var private g_pk_gpu_served : int [2]
+
+[cold_path]
+def private pk_seat_index(stage : string) : int {
+    for (i in range(length(PK_SEATS))) {
+        return i if (PK_SEATS[i] == stage)
+    }
+    return -1
+}
+
+[arch(at = "../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_pocket_gpu(drv : PocketGpuDriver) {
+    g_pk_drv_prev = g_pk_drv
+    g_pk_drv = drv
+}
+
+//! The restore half of the seats a caller takes: the displaced registration serves again.
+[cold_path]
+def unregister_pocket_gpu {
+    g_pk_drv = g_pk_drv_prev
+    g_pk_drv_prev = PocketGpuDriver()
+}
+
+//! Hook invocations and the ones that served, since the process started, per stage (a seat
+//! name of `PK_SEATS`): engage is read from these counters, never inferred from a synthesis
+//! having run.
+[cold_path]
+def pocket_gpu_stats(stage : string) : tuple<calls : int; served : int> {
+    let i = pk_seat_index(stage)
+    if (i < 0) {
+        panic("dasLLAMA pocket: no GPU seat named '{stage}'")
+    }
+    return (calls = g_pk_gpu_calls[i], served = g_pk_gpu_served[i])
+}
+
+//! The seat names of the hook record, in dispatch order.
+[cold_path]
+def pocket_gpu_seats() : array<string> => clone_to_move(PK_SEATS)
+
 //! The clip's latent frames [frames][latent_dim] through the codec encoder - the voice prompt's
 //! source. `pcm` is 24 kHz mono; its tail pads to a whole frame with zeros as the reference does.
 def pocket_encode_latents(m : PocketModel; pcm : array<float>; var sc : PocketScratch; @scratch @exact_size var latents : array<float>) : int64 {
@@ -917,6 +977,13 @@ def pocket_encode_latents(m : PocketModel; pcm : array<float>; var sc : PocketSc
 //! carrying its rows between steps - the output the whole chunk in one step gives.
 [arch(at="../ARCHITECTURE_POCKET.md#pocket-codec-stream")]
 def pocket_decode_latents(m : PocketModel; latents : array<float>; frames : int64; var sc : PocketScratch; @scratch @exact_size var wave : array<float>) {
+    if (g_pk_drv.codec != null) {
+        g_pk_gpu_calls[0]++
+        if (invoke(g_pk_drv.codec, m, latents, frames, sc, wave)) {
+            g_pk_gpu_served[0]++
+            return
+        }
+    }
     let mm & = unsafe(m.mimi)
     let nr = long_length(mm.ratios)
     let ld = mm.quant_proj.cin
@@ -1260,7 +1327,7 @@ def private head_step(hd : PocketHead; var sc : PocketScratch) {
     for (b in hd.blocks) {
         linear_vec(b.adaln, sc.hy, sc.hmod)
         copy_rows(sc.hn, sc.hx, n)
-        layernorm_rows(sc.hn, 1l, n, b.ln, HEAD_LN_EPS)
+        layernorm_rows(sc.hn, 1l, n, b.ln, POCKET_HEAD_LN_EPS)
         modulate(sc.hn, sc.hmod, n)
         linear_vec(b.mlp1, sc.hn, sc.hm)
         silu(sc.hm, n)
@@ -1271,7 +1338,7 @@ def private head_step(hd : PocketHead; var sc : PocketScratch) {
     }
     linear_vec(hd.final_adaln, sc.hy, sc.hmod)
     copy_rows(sc.hn, sc.hx, n)
-    layernorm_rows(sc.hn, 1l, n, hd.final_ln, HEAD_LN_EPS)
+    layernorm_rows(sc.hn, 1l, n, hd.final_ln, POCKET_HEAD_LN_EPS)
     modulate(sc.hn, sc.hmod, n)
     linear_vec(hd.final_linear, sc.hn, sc.x1)
     for (j in range64(long_length(sc.x1))) {
@@ -1318,6 +1385,22 @@ def private caches_ready(var vs : PocketVoiceState; n_txt : int64) {
 }
 
 [cold_path]
+//! The loop's noise for latent element `at` of the chunk: the captured stream's value where it
+//! reaches, the generator's normal at `std` past it - both loops draw in this order.
+def pocket_noise_at(var sc : PocketScratch; captured : array<float>; at : int64; std : float) : float {
+    return at < long_length(captured) ? captured[at] : rng_normal(sc.rng) * std
+}
+
+//! The EOS rule on frame `frame`'s logit: the first crossing of the threshold pins `eos_at`, and
+//! the loop stops `frames_after_eos` frames past it - both loops stop by this one rule.
+def pocket_eos_stops(m : PocketModel; eos : float; frame : int64; frames_after_eos : int; var eos_at : int64&) : bool {
+    if (eos > m.eos_threshold && eos_at < 0l) {
+        eos_at = frame
+    }
+    return eos_at >= 0l && frame >= eos_at + int64(frames_after_eos)
+}
+
+[cold_path]
 def private warn_no_eos(frames, n_txt : int64) {
     to_log(LOG_WARNING, "dasLLAMA pocket: {frames} frames without an end of speech - the cap for {n_txt} tokens\n")
 }
@@ -1325,6 +1408,20 @@ def private warn_no_eos(frames, n_txt : int64) {
 //! The frames one chunk needs at most: the reference's speech-rate estimate plus a margin.
 def pocket_max_frames(n_tokens : int64) : int64 {
     return int64(ceil((float(n_tokens) / MAX_GEN_TOKENS_PER_SECOND + GEN_SECONDS_PADDING) * FRAME_RATE))
+}
+
+//! The text prompt's rows through the backbone after the voice's, every layer's cache filled.
+def private prompt_rows(m : PocketModel; ids : array<int64>; var vs : PocketVoiceState; var sc : PocketScratch) {
+    let d = m.backbone.d
+    let n_txt = long_length(ids)
+    unsafe(scratch_resize(sc.rows, n_txt * d))
+    for (r in range64(n_txt)) {
+        let src = ids[r] * d
+        for (j in range64(d)) {
+            sc.rows[r * d + j] = m.text_emb.a[src + j]
+        }
+    }
+    transformer_rows(m.backbone, sc.rows, n_txt, vs.len, vs.caches, sc)
 }
 
 //! One prepared chunk in one voice: the text prompt after the voice's rows, frames until EOS plus
@@ -1338,14 +1435,7 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
     let n_txt = long_length(ids)
     let clock = ref_time_ticks()
     caches_ready(vs, n_txt)
-    unsafe(scratch_resize(sc.rows, n_txt * d))
-    for (r in range64(n_txt)) {
-        let src = ids[r] * d
-        for (j in range64(d)) {
-            sc.rows[r * d + j] = m.text_emb.a[src + j]
-        }
-    }
-    transformer_rows(m.backbone, sc.rows, n_txt, vs.len, vs.caches, sc)
+    prompt_rows(m, ids, vs, sc)
     tm.prompt_us = int64(get_time_usec(clock))
     let max_frames = pocket_max_frames(n_txt)
     unsafe {
@@ -1366,7 +1456,20 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
     var frames = 0l
     var backbone_us = 0l
     var head_us = 0l
-    while (frames < max_frames) {
+    var served = false
+    if (g_pk_drv.frames != null) {
+        g_pk_gpu_calls[1]++
+        let tb = ref_time_ticks()
+        let r = invoke(g_pk_drv.frames, m, vs, n_txt, std, frames_after_eos, captured, forced, max_frames, sc)
+        if (r.frames >= 0l) {
+            served = true
+            frames = r.frames
+            eos_at = r.eos_at
+            backbone_us = int64(get_time_usec(tb))
+            g_pk_gpu_served[1]++
+        }
+    }
+    while (!served && frames < max_frames) {
         let tb = ref_time_ticks()
         let eos = frame_step(m, vs, vs.len + n_txt + frames, sc)
         backbone_us += int64(get_time_usec(tb))
@@ -1374,13 +1477,10 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
             sc.conds[frames * d + j] = sc.cond[j]
         }
         sc.eos_logits[frames] = eos
-        if (eos > m.eos_threshold && eos_at < 0l) {
-            eos_at = frames
-        }
-        break if (eos_at >= 0l && frames >= eos_at + int64(frames_after_eos))
+        break if (pocket_eos_stops(m, eos, frames, frames_after_eos, eos_at))
         let th = ref_time_ticks()
         for (j in range64(ld)) {
-            sc.x0[j] = frames * ld + j < long_length(captured) ? captured[frames * ld + j] : rng_normal(sc.rng) * std
+            sc.x0[j] = pocket_noise_at(sc, captured, frames * ld + j, std)
         }
         head_step(m.head, sc)
         let force = (frames + 1l) * ld <= long_length(forced)

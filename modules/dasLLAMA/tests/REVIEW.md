@@ -16,6 +16,8 @@ must be kept in step with something maintained outside the cell (a document, a c
 committed artifact's form, a roster, a knob list) or that a checked-in table names as its
 evidence, applies `REVIEW_PINNED_GATES.md` (beside this file) together with this list.**
 
+**Weakening `test_metal_float_a_gate.das` - the gate that checks the MSL emitter refuses a float A operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without the `[metal_kernel(float_a_ok=true)]` license - is a defect.**
+
 **Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
 the models stocked, plus every test here the change reaches - never the whole directory.** A
 change reaches a test when it alters anything the test's result depends on - the test file, a
@@ -119,8 +121,8 @@ never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its
 calls no loader that bakes a `.dlim` - a loader that, with `DASLLAMA_IMAGE` unset, writes a
 `.dlim` beside the model: `load_model`, `load_model_cached`, `load_model_image`,
 `load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
-`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`, and a new
-loader of that kind joins this list in the same change; such a test loads a media carrier in
+`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2` (`load_pocket`, and `load_tts_model` on a
+Pocket file, bake nothing), and a new loader of that kind joins this list in the same change; such a test loads a media carrier in
 memory from the family's `stage_*` staging - its `mint_*` twin, or `cache_via_image_staged` with
 an empty image path.** A disk bake under a lane pin (a `set_<family>_q8`-class knob or a Metal
 tensor-crowns pin) purges the serving lane's `.dlim` beside the model, and the next direct-image
@@ -212,9 +214,10 @@ selects on that model's blob twin (`blob_twin(t, path, seq_cap)`, `_metal_blob_t
 session.** The planar model and its blob twin share one shape, so one session serves both.
 
 **A diff that adds a model-loading block to a file of a `run.das` suite that accepts `--arm` -
-every suite but `model-free` and `stocked` - tags it with its family.** The family tag is the
-token passed to `family_on(t, name)` (`_model_tier.das`). An untagged block runs under every
-`--family` filter.
+every suite but `model-free` and `stocked` - tags it with the carrier family it loads: one `family_on(t, name)` check
+per carrier family (`_model_tier.das`), the token that family's entry in `CLAUDE.md`'s family filter list (a family with
+no entry adds one in the same change), the checks in sequence so a block loading several families runs only under a
+filter naming every one of them.** Kitten and kokoro are two families of one architecture; an untagged block runs under every `--family` filter.
 
 **A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
 stack against a per-session sequential forward - onto a carrier above `LARGE_TIER_BYTES`

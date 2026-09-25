@@ -10,6 +10,7 @@ require daslib/f16_cvt   // f16<->f32 halfword codecs — the Q5_K encoder + eve
 require daslib/jobque_boost public   // quantize_k5_plane threads its superblock loop
 require dasllama/dasllama_par        // maybe_parallel_for (+ its emitted dispatch counters)
 require dasllama/dasllama_math       // get_dispatch_lanes — the requant wrappers shape their fan-out
+require dasllama/dasllama_math_default   // dequant_kq_row_grp - the repacked plane's group gather behind kq_plane_row_f32
 require dasllama/dasllama_kqformat public   // KqFmt + the plane stride truth (K4_QSB et al.) — re-exported down the gguf chain
 require dasllama/dasllama_tune       // [tuned]: the f16 row converts carry per-box loop hints
 require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
@@ -1171,6 +1172,24 @@ def quantize_q8_0(src : array<float> | #; n : int64) : Q8Tensor {
         }
     }
     return <- qt
+}
+
+//! One row of a K-quant plane pair as f32: a repacked plane's packed rows through the active
+//! layout's group gather, a disk-order plane's or a repacked plane's tail row superblock by superblock.
+def kq_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout : int64; repacked : bool; r : int64; var dst : array<float>; doff : int64) {
+    let nsb = nin / kq_elems(f)
+    let mr = repacked ? active_kq_layout_mr(kq_schema_id(f)) : 1l   //! the kernel id, never the enum position
+    let packed_rows = repacked ? (nout / mr) * mr : 0l
+    if (r < packed_rows) {
+        let sbg = (r / mr) * mr * nsb
+        unsafe {
+            dequant_kq_row_grp(int64(kq_schema_id(f)), addr(kq[sbg * kq_qsb(f)]), addr(ks[sbg * kq_ssb(f)]), r % mr, mr, nin, addr(dst[doff]))
+        }
+    } else {
+        for (s in range64(nsb)) {
+            dequant_kq_plane_sb(f, kq, ks, r * nsb + s, false, dst, doff + s * kq_elems(f))
+        }
+    }
 }
 
 //! Quantize a flat fp32 tensor to Q8_0 directly into pre-allocated slices: quants land at

@@ -100,7 +100,7 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   decoder through the source, the generator and the inverse STFT) and the generator seat the CPU
   chain reaches after a declined decode - each fed the stage's inputs and answering with its
   rows or declining; the trace rail keeps the CPU chain, and engage is read from the counters.
-  The Metal tower driver fills every seat on both lanes (`ARCHITECTURE_GPU_TOWER.md` sec.2.2y). The carrier also holds each family's DATA - the `KittenFamily` /
+  The Metal tower driver fills every seat on both lanes (`ARCHITECTURE_GPU_TOWER.md` sec.2.2au). The carrier also holds each family's DATA - the `KittenFamily` /
   `KokoroFamily` records of `dasllama_tts_types.das`, read from the GGUF's `kitten.*` /
   `kokoro.symbol_*` metadata by `stage_family_data` - because the image meta serializes them and a
   `.dlim` load has no GGUF to read them from (sec.2.32); the family LOGIC that interprets those
@@ -257,7 +257,7 @@ operation order - the cumulative sum, the resampler's arithmetic, the multiply b
 index - reproduces its phase, so `sine_source` and `source_resize` keep it exactly and the
 scalar sine stays on libm. The GPU route keeps the same order on the device: its source kernels
 compile without fast math, the torch law's double accumulator runs as a two-float sum, and the
-sine reduces its argument in exact pieces (`ARCHITECTURE_GPU_TOWER.md` sec.2.2y).
+sine reduces its argument in exact pieces (`ARCHITECTURE_GPU_TOWER.md` sec.2.2au).
 
 ### 2.34 What a word sees around it {#tts-heteronym-context}
 

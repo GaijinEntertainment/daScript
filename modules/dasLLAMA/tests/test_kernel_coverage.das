@@ -1,5 +1,6 @@
 // The parakeet tower row needs ggml-parakeet-tdt-0.6b-v2-f32.bin under whisper_dir() and skips without it; the
-// StyleTTS2 tower row needs kitten-nano.gguf under models_dir() and the kitten family on, and skips without them.
+// StyleTTS2 tower row needs kitten-nano.gguf (and kokoro-82m.gguf for the torch-law stamps) under models_dir() and the kitten
+// family on, and skips without them; the Pocket row needs pocket-tts-en.gguf (and pocket-tts-en-kq.gguf for the q8 head stamps) and the pocket family on.
 options gen2
 options persistent_heap   // + explicit deletes: the models free before the process exits
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
@@ -26,6 +27,7 @@ require dasllama/dasllama_parakeet  // the cov_tower parakeet row
 require dasllama/dasllama_qwen25v   // the cov_tower window-ViT row
 require dasllama/dasllama_qwen3v    // the cov_tower GPU-stem row
 require dasllama/dasllama_styletts2
+require dasllama/dasllama_pocket   // nolint:STYLE030,LINT019 — the Pocket census leg sits in the das_metal static_if half
 require dasllama/dasllama_tts_types   // nolint:STYLE030,LINT019 — read only inside the Apple half
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
 require ?das_metal dasllama/dasllama_metal_prefill // metal_prefill_shutdown — the crowned twin-W leg re-arms PSOs
@@ -164,7 +166,12 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // geglu family on moe_dense_shexp, and its panel always clears CVT_MIN_ROWS, so the HX twin
     // serves and this one never does. Its coverage is ew2_totb_gate(geglu = true) in
     // test_metal_misc_kernels.das
-    "MetalGegluB"
+    "MetalGegluB",
+    // the transposed im2col: only a transposed conv whose channel count is off the GEMM's 8-run
+    // lattice takes it, and every stocked StyleTTS2 and Pocket transposed conv sits on the lattice,
+    // so the gathering CONV stamp serves. Its coverage is st2_im2col_gate(transposed = true) in
+    // test_metal_prefill_kernels.das
+    "metal_st2_im2col_tr"
 ]
 
 def private counting_prompt(start, last : int) : string {
@@ -602,14 +609,16 @@ def private cov_tower(t : T?) {
         cov_tower_qwen25v(t)
         cov_tower_qwen3v(t)
         cov_tower_styletts2(t)
+        cov_tower_pocket(t)
     }
 }
 
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower_styletts2(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        let path = path_join(models_dir(), "kitten-nano.gguf")
-        if (family_on(t, "kitten") && model_available(t, path)) {
+        for (name in ["kitten-nano.gguf", "kokoro-82m.gguf"]) {   //! the ONNX law's stamps and the torch law's
+            let path = path_join(models_dir(), name)
+            continue if (!family_on(t, name == "kokoro-82m.gguf" ? "kokoro" : "kitten") || !model_available(t, path))
             var inscope stg <- stage_styletts2(path, false)   // stage+mint: no .dlim written, no sibling-lane GC
             var inscope m = StyleTts2Model()
             mint_styletts2(stg, m)
@@ -626,6 +635,36 @@ def private cov_tower_styletts2(t : T?) {
             with_job_que() {
                 setup_dasllama_jobque()
                 styletts2_synthesize(m, ids, style, 1.0, noise, 0x5eedul, null, tm, sc)
+            }
+        }
+    }
+}
+
+[unused_argument(t)]   //! off-Apple the gated body is empty
+def private cov_tower_pocket(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), "pocket-tts-en.gguf")
+        if (family_on(t, "pocket") && model_available(t, path)) {
+            var inscope m <- load_pocket(path)   //! the Pocket loader stages in memory: no .dlim
+            var inscope sc = PocketScratch()
+            let frames = 24l
+            var inscope lat : array<float>
+            lat |> resize(frames * m.latent_dim)
+            for (i in range(length(lat))) {
+                lat[i] = 0.1 * float(i % 17) - 0.8
+            }
+            var inscope wave : array<float>
+            var tm = TtsTimings()
+            with_job_que() {
+                setup_dasllama_jobque()
+                pocket_decode_latents(m, lat, frames, sc, wave)
+                pocket_speak(m, "The census row speaks one short line.", m.default_voice, m.default_temperature, 1ul, tm, sc)
+                let kq = path_join(models_dir(), "pocket-tts-en-kq.gguf")   //! the small form: its head's q8 linears take the q8 stamps
+                if (model_available(t, kq)) {
+                    var inscope mk <- load_pocket(kq)
+                    var inscope sck = PocketScratch()
+                    pocket_speak(mk, "The small form speaks the same line.", mk.default_voice, mk.default_temperature, 1ul, tm, sck)
+                }
             }
         }
     }

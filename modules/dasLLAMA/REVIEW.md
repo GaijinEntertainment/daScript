@@ -11,8 +11,14 @@ measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup
 `dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das`, or the special-token or template
 strings any of them look up - applies `REVIEW_TOKENIZER.md` (beside this file) too.**
 
-**A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, or adds a
-file under `dasllama/` - the charter lines - applies `REVIEW_DOCS.md` (beside this file) too.**
+**A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, adds a file
+under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this folder applies
+`REVIEW_DOCS.md` (beside this file) too.**
+
+**A diff that lands the work a `followup_*.md` row names deletes the row - or, when the row lists
+several items, only the landed item - and repoints every checked-in citation naming the landed
+item to where the landed fact now lives (the architecture doc or the code) or drops it, dated
+`PERF_LEDGER.md` entries included.**
 
 **Code that times a run itself and hands the wall or rate back as its result - a file that
 prints it, or a function that returns it to whichever file calls it - a kernel race (a run timing

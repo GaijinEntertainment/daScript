@@ -11,8 +11,88 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-25) - the Pocket TTS frame loop rides the Metal tower as the family's second
+  seat (`ARCHITECTURE_GPU_TOWER.md` sec.2.2aw): the backbone step and the flow head for every
+  frame, eight frames a command buffer over a per-voice device K/V slot, the EOS rule on the host
+  between batches, the q8 backbone on the decode GEMV, the head's GEMVs carrying their norm and
+  activations, the attention row a threadgroup a head with its scores staged.** Box, flags and
+  the 20-sentence walls as the codec seat's entry below; `direction-grade` - the CPU arm a second
+  process, the codec-seat column and the rig's before-rows the previous commit's readings; both
+  seats serve in these rows.
+
+  | file | voice | audio | das tower, mean (min-max) | das tower, codec seat alone | das CPU, mean (min-max) |
+  |---|---|---|---|---|---|
+  | pocket-tts-en-q8 | alba | 120.8 s | 81 ms (43-186), rtf 0.0133 | 142 ms (81-227), rtf 0.0238 | 200 ms (107-264), 0.0334 |
+  | pocket-tts-en-kq | alba | 121.2 s | 72 ms (37-198), 0.0118 | 117 ms (61-189), 0.0195 | 176 ms (92-232), 0.0293 |
+  | pocket-tts-en-stuart-kq | stuart_bell | 143.6 s | 78 ms (42-209), 0.0109 | 134 ms (80-210), 0.0187 | 204 ms (111-280), 0.0286 |
+
+  The loop alone - the frames hook's wall a frame, the voice slot and the batches' round trips
+  inside it - through `harness/pocket_stage_probe.das -m <gguf> -t "<one sentence>" --voice
+  <voice> -r 5` (a 4.6 s sentence free-running, the best of five passes each way in one process):
+  on the q8 file 0.91 ms a frame on the tower against 1.29 on the CPU chain, on the kq file 0.69
+  against 1.04, on the one-voice stuart-kq file 0.78 against 0.98, on the f16 file's f32 lane
+  (`--f32`, every linear on the f32 row GEMV) 1.91 against 5.89. Of the GPU's own time
+  the backbone's 57 dispatches take about two thirds and the head's 22 the rest; the first form
+  of the loop, a dispatch per row operation (105 a frame) and an attention kernel accumulating
+  in a dynamically indexed register array, cost half again as much a frame, most of it the
+  attention - the rope-and-store, the residual joins and the head's operations folded into
+  their GEMVs, and the attention row rewritten over staged scores, are what brought it down.
+  The device footprint on the q8 file (`harness/pocket_stage_probe.das`'s attach log lines): the
+  frames slab 36.3 MB of f32 rows and the q8 blob 80.3 MB, the codec slab 41.3 MB, the voice slot
+  20.2 MB of K/V over 411 rows (16 layers x 2 x 411 x 768 x 4 bytes) with 0.1 MB of rope tables;
+  a chunk's working buffers come from the pool. Parity, teacher-forced on
+  the oracle's noise and frames against the CPU chain (`test_pocket_frames_metal`): the f32
+  lane's latents, conditioning rows and EOS logits at 2e-6 rel-rms, the cell asserting the
+  tower's encodes rose one a batch, and its free run - the loop's own noise, every frame fed its
+  own output - at 1.5e-4 and 1.1e-4 on the two stage cases against the CPU chain's free run on
+  the same seed (`GPU_FRAME_FREE_BAR` 1e-3, the M5 Max); on the served lanes (`test_pocket_frames_metal_served`, which
+  logs both distances) the tower reads nearer the f32 oracle than the CPU chain does - the q8
+  file's latents 0.012 against the CPU chain's 0.025, the kq file's 0.10 against 0.11 - since the
+  CPU quantizes the activations it feeds a q8 or K-quant plane and the tower feeds them f32. Quality,
+  `harness/tts_rig.py` on the 200-sentence corpus against the codec-seat rows: q8 4.23 / 4.364 -> 4.18 / 4.364, kq 4.04 / 4.333 -> 3.91 / 4.325, stuart-kq 3.23 / 4.117 -> 3.36 / 4.136 (WER / UTMOS, a word or two of the 2201 either way, the UTMOS within a hundredth). The
+  levers left are `followup_metal.md` sec.27.
+
+- **LANDED (2026-09-25) - the Pocket TTS codec rides the Metal tower (`ARCHITECTURE_GPU_TOWER.md`
+  sec.2.2av): a chunk's latents up, its samples back, one command buffer, the CPU's windowed codec
+  run as one shot over the chunk on the f32-exact GEMM stamps, the K-quant transformer linears
+  dequantized into the slab so the small form serves too.** Box: the M5 Max, every das figure
+  `-jit` on this tree with `DAS_TUNE_MANIFEST=performance/m5.tune.json` (its runtime section
+  applied, the kernel winners on their fallback bodies - the sidecar predates the binary) and
+  `DAS_LOG_LEVEL=info`, no other overrides unless named, one process at a time. The first 20
+  sentences of the g2p corpus through `harness/tts_synth.das --model <gguf> --voice <voice> --out
+  <dir> --limit 20` (every sentence timed from the first, so the first one pays the slab build
+  and the pipeline warm-up), the mean generation wall a sentence with its min and max over the 20
+  and the real-time factor of the run; the CPU arm a second process under
+  `DASLLAMA_METAL_TOWER=0` (`direction-grade`). The frame loop - the backbone and the flow head -
+  stays on the CPU in both arms, so the tower arm moves the codec's share only.
+
+  | file | voice | audio | das tower, mean (min-max) | das CPU, mean (min-max) |
+  |---|---|---|---|---|
+  | pocket-tts-en-q8 | alba | 119.6 s | 142 ms (81-227), rtf 0.0238 | 200 ms (107-264), 0.0334 |
+  | pocket-tts-en-kq | alba | 119.8 s | 117 ms (61-189), 0.0195 | 176 ms (92-232), 0.0293 |
+  | pocket-tts-en-stuart-kq | stuart_bell | 142.8 s | 134 ms (80-210), 0.0187 | 204 ms (111-280), 0.0286 |
+
+  The codec alone, one sentence's 60-odd latent frames (4.6 s of audio) through
+  `harness/pocket_stage_probe.das -r 5` (the best of five passes each way in one process; a
+  tower pass spreads over a fifth of its mean, and the first pays the pipeline library, about
+  5 s once a process): the f16 file on the f32 lane (`--f32`) 87 ms CPU -> 23 ms tower at
+  rel-rms 9.0e-7 against the CPU chain (`test_pocket_codec_metal` reads 8.7e-7 on the oracle's
+  latents, the cell asserting one tower encode a call); the q8 file 70 ms -> 20 ms at 7.1e-3,
+  the kq file 64 ms -> 22 ms at 1.7e-2, the stuart-kq file 77 ms -> 24 ms at 2.3e-2
+  (`test_pocket_codec_metal_served` reads 1.3e-2 and 7.7e-3 on the oracle's latents
+  of the q8 and kq files: the CPU's served lanes quantize their activations against the q8 and
+  K-quant planes, the tower reads the planes dequantized at f32, the StyleTTS2 decode seat's
+  gap); the f16-staged
+  GEMM twins read the same 33 ms at 9e-4, so the seat keeps the exact stamps. The served-lane
+  cell's stage clocks (`test_pocket_synthesis_metal` in `tests/test_tts_pocket.das`, a 4.08 s
+  sentence, a first synthesis): the codec 61 -> 40 ms with the slab build inside it. Quality, `harness/tts_rig.py` on the 200-sentence corpus (WER
+  through parakeet, UTMOS), the tower arm against `DASLLAMA_METAL_TOWER=0`: q8 4.23 / 4.364 both
+  arms; kq 4.09 / 4.333 -> 4.04 / 4.333; stuart-kq 3.32 / 4.117 -> 3.23 / 4.117 (a word or two of
+  the 2201 on the served lanes' 1e-2 gap, the UTMOS equal to the third digit, the audio lengths
+  equal). The frames seat is the entry above.
+
 - **LANDED (2026-09-24) - the whole StyleTTS2 synthesis rides the Metal tower
-  (`ARCHITECTURE_GPU_TOWER.md` sec.2.2y): seven seats from PL-BERT to the inverse STFT, the front
+  (`ARCHITECTURE_GPU_TOWER.md` sec.2.2au): seven seats from PL-BERT to the inverse STFT, the front
   end on the f32-exact GEMM stamp and an f32 attention row kernel so the durations round as the
   CPU's, the harmonic source the CPU's operation for operation, the decoder through the
   generator and the inverse STFT as one command buffer.** Box: the M5 Max, every das figure `-jit`

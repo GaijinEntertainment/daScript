@@ -780,6 +780,7 @@ def bake_styletts2_image(path, out : string; q8 : bool) : bool {
 //! file names its lane, and the gguf is not needed.
 [arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def load_styletts2(path : string) : StyleTts2Model {
+    bump_weights_epoch()   //! the previous model's GPU slabs drop before this one's weights can land at their addresses
     var inscope m = StyleTts2Model()
     let q8 = st2_serve_q8()
     if (path |> ends_with(".dlim")) {
