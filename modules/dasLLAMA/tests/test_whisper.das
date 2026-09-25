@@ -772,6 +772,101 @@ def test_whisper_vulkan_wdec(t : T?) {
     }
 }
 
+//! the last row's logits of the CPU chain over the flushed memory against the knob-off chain's: the same token, within a bar on the
+//! logit scale (the device's cross-KV planes are the f16 feed's GEMM, the knob-off chain's the q8 dot), the bar with its poison
+def private wdec_flush_compare(tt : T?; cpu, dev : array<float>) {
+    tt |> equal(long_length(dev), long_length(cpu), "both chains landed the last row's logits")
+    var maxc = 0.0
+    var md = 0.0
+    var argc = 0
+    var argd = 0
+    for (i in range(length(cpu))) {
+        maxc = max(maxc, abs(cpu[i]))
+        md = max(md, abs(dev[i] - cpu[i]))
+        if (cpu[i] > cpu[argc]) {
+            argc = i
+        }
+        if (dev[i] > dev[argd]) {
+            argd = i
+        }
+    }
+    let bar = 0.05 * maxc
+    to_log(LOG_INFO, "ggml-tiny.bin wdec flush: the CPU chain over the flushed memory vs the knob-off chain - max diff {md} of {maxc} (bar {bar}), argmax {argd} vs {argc}\n")
+    tt |> equal(argd, argc, "the CPU chain over the flushed memory picks the knob-off chain's token")
+    tt |> success(md <= bar, "and its logits sit within the bar ({md} vs {bar})")
+    tt |> success(md + 3.0 > bar, "the bar's poison: a logit moved by 3 must exceed it")
+}
+
+//! the served window's CPU-layout memory (kx, vx) lands only when the CPU chain needs it: a first batch past the step's row cap
+//! declines `rows`, the pending readback flushes, and the CPU decode over it reads what the knob-off chain computes itself
+[test]
+def test_whisper_vulkan_wdec_flush(t : T?) {
+    t |> run("ggml-tiny.bin: the pending cross-KV readback lands at the step's rows decline; the CPU chain over it matches the knob-off chain") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!jit_enabled()) {
+                tt |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+            if (!model_available(tt, model_path)) {
+                return
+            }
+            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                tt |> skip("jfk.wav not present")
+                return
+            }
+            if (!vulkan_twin_seat(tt)) {
+                return
+            }
+            let tower_was_on = vulkan_tower_on()
+            let wdec_was_on = vulkan_wdec_on()
+            defer() {
+                set_vulkan_tower(tower_was_on)
+                set_vulkan_wdec(wdec_was_on)
+            }
+            set_vulkan_tower(true)
+            set_asr_fp32(false)
+            set_asr_tower_fp32(false)
+            var inscope m <- load_asr_model(model_path)
+            let batch <- [for (i in range(9)); m.whisper.tok_sot + i]   //! nine rows: one past the step's cap, the first batch of a window
+            var cpu_logits : array<float>
+            var dev_logits : array<float>
+            with_job_que() {
+                setup_dasllama_jobque_()
+                set_vulkan_wdec(false)
+                var inscope sc <- create_session(m)
+                transcribe(m, sc, samples) $(_seg) {}
+                sc.w.ds.n_past = 0l
+                whisper_decode_batch(m.whisper, sc.w.ds, batch)
+                cpu_logits := sc.w.ds.logits
+                set_vulkan_wdec(true)
+                let d0 = vulkan_wdec_stats()
+                var inscope sg <- create_session(m)
+                transcribe(m, sg, samples) $(_seg) {}
+                let d1 = vulkan_wdec_stats()
+                tt |> success(d1.windows - d0.windows >= 1l, "the device served the window's cross-KV ({d1.windows - d0.windows})")
+                let rows0 = vulkan_wdec_declines()?["rows"] ?? 0l
+                sg.w.ds.n_past = 0l
+                sg.w.ds.gpu_kv_gen = 0l
+                whisper_decode_batch(m.whisper, sg.w.ds, batch)
+                let rows1 = vulkan_wdec_declines()?["rows"] ?? 0l
+                tt |> equal(rows1 - rows0, 1l, "a first batch past the row cap declined `rows`")
+                tt |> equal(vulkan_wdec_stats().steps, d1.steps, "and the device served no step: the CPU chain decoded it over the flushed memory")
+                dev_logits := sg.w.ds.logits
+            }
+            wdec_flush_compare(tt, cpu_logits, dev_logits)
+            delete cpu_logits
+            delete dev_logits
+            delete m
+            vulkan_wdec_shutdown()
+            vulkan_tower_shutdown()
+        } else {
+            tt |> skip("dasVulkan not present")
+        }
+    }
+}
+
 def private segs_text(segs : array<TranscribeSegment>) : string {
     return build_string() $(var w : StringBuilderWriter) {
         for (seg in segs) {

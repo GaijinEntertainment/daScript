@@ -224,8 +224,12 @@ store on the cm2 feed, the Q8_0 requant on the mul_mm tiles), then per layer the
 the tile the tower chains ride (`VtTile`, the schedule records written as the tower's) and the
 K/V store class (`TowerWdecKv`), which writes a projection's [rows x d] output - a head's hs
 columns a row - into head-major planes, run twice off each projection - the f16 resident plane, and the CPU chain's f32
-layout (kx pre-scaled and transposed, vx with its bias) read back into the decoder state, so the
-CPU chain has the window's memory whenever the step declines its first batch. The decode step is
+layout (kx pre-scaled and transposed, vx with its bias) on device planes of its own. That layout is
+read back into the decoder state only when a CPU reader can need it - the step's `rows` decline on
+a window's first batch, the step called on a state that is not the live window, another state's
+window taking the planes, and the driver's release (`wd_flush_cross_kv`, over a pending mark the
+cross-KV chain leaves) - so the served loop never pays the 61 MB copy a turbo window's layouts
+make, and a state's next window supersedes its pending one unread. The decode step is
 one command buffer per batch: the token and position rows summed on the host and uploaded, then
 per layer the LN, the Q8_0 feed, the fused q|k|v GEMV (three regions of one dispatch, the N-column
 form over a batch's rows), the two f16 appends with the v bias folded, the chunked self attention
