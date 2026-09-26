@@ -203,8 +203,8 @@ def flags_in_surface(flags : array<tuple<flag : string; owner : string>>; source
 def check_flags_in_surfaces() {
     var inscope server : array<tuple<flag : string; owner : string>>
     server_flags(server)
-    if (length(server) < 20) {
-        gate_finding(MAIN_DAS, "the ServerArgs scan found {length(server)} flags - the struct block moved or changed shape; teach the gate the new shape")
+    if (empty(server)) {
+        gate_finding(MAIN_DAS, "the ServerArgs scan found no flags - the struct block moved or changed shape; teach the gate the new shape")
     }
     flags_in_surface(server, MAIN_DAS, README_MD, "`")
     flags_in_surface(server, MAIN_DAS, SERVER_RST, "``")

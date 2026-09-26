@@ -413,8 +413,18 @@ def test_llvm_gate_fixtures(t : T?) {
 def make_server_fixture(t : T?; tree, root : string) {
     write_at(t, root, "utils/dasllama-server/openai_server.das",
         "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        STREAM(\"/sse\") <| $() \{\n        \}\n        ANY(\"*\") <| $() \{\n        \}\n    \}\n\}\n")
-    write_at(t, root, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc` and `/sse`\n")
-    write_at(t, root, "doc/source/reference/utils/dasllama_server.rst", "``/v1/models`` and ``/gc`` and ``/sse``\n")
+    // the flag check's inputs: one documented server flag, and the CLI's structs empty
+    write_at(t, root, "utils/dasllama-server/main.das",
+        "options gen2\n\n[CommandLineArgs]\nstruct ServerArgs \{\n    @clarg_doc = \"Listen port\"\n    port : int\n\}\n")
+    write_at(t, root, "utils/dasllama-server/cli_args.das",
+        "options gen2\nmodule cli_args shared\nrequire daslib/clargs\n" +
+        "[CommandLineArgs]\nstruct CommonArgs \{\n\}\n[CommandLineArgs]\nstruct SamplerArgs \{\n\}\n[CommandLineArgs]\nstruct PlayArgs \{\n\}\n" +
+        "[CommandLineArgs]\nstruct CompleteArgs \{\n\}\n[CommandLineArgs]\nstruct ChatArgs \{\n\}\n[CommandLineArgs]\nstruct TranscribeArgs \{\n\}\n" +
+        "[CommandLineArgs]\nstruct SpeakArgs \{\n\}\n[CommandLineArgs]\nstruct TalkArgs \{\n\}\n[CommandLineArgs]\nstruct EmbedArgs \{\n\}\n" +
+        "[CommandLineArgs]\nstruct TokenizeArgs \{\n\}\n[CommandLineArgs]\nstruct BenchArgs \{\n\}\n")
+    write_at(t, root, "doc/source/reference/utils/dasllama_cli.rst", "the CLI page\n")
+    write_at(t, root, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc` and `/sse`; flags: `--port`\n")
+    write_at(t, root, "doc/source/reference/utils/dasllama_server.rst", "``/v1/models`` and ``/gc`` and ``/sse``; ``--port``\n")
     write_at(t, root, "utils/dasllama-server/control.html", "<script>fetch(\"/gc\")</script>\n")
     var err : string
     t |> success(copy_file(path_join(tree, "utils/dasllama-server/REVIEW.das"), path_join(root, "utils/dasllama-server/REVIEW.das"), true, err), "copied the real server gate")
@@ -439,9 +449,12 @@ def test_server_gate_fixtures(t : T?) {
     // one violation per direction - the needle list is the census
     write_at(t, fixture, "utils/dasllama-server/openai_server.das",
         "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        STREAM(\"/sse\") <| $() \{\n        \}\n        POST(\"/vad\") <| $() \{\n        \}\n        ANY(\"/anyroute\") <| $() \{\n        \}\n        ANY(\"*\") <| $() \{\n        \}\n    \}\n\}\n")
-    write_at(t, fixture, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc` and `/sse` and `/dead`\n")
+    write_at(t, fixture, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc` and `/sse` and `/dead`; flags: `--port`\n")
     write_at(t, fixture, "doc/source/reference/utils/dasllama_server.rst", "``/v1/models`` and ``/gc`` and ``/sse`` and ``/rstdead``\n")
     write_at(t, fixture, "utils/dasllama-server/control.html", "<script>fetch(\"/gc\");fetch(\"/nope\")</script>\n")
+    // a second server flag with no help string, and the rst page losing the first
+    write_at(t, fixture, "utils/dasllama-server/main.das",
+        "options gen2\n\n[CommandLineArgs]\nstruct ServerArgs \{\n    @clarg_doc = \"Listen port\"\n    port : int\n\n    @clarg_name = \"show-help\"\n    help : bool\n\}\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "utils/dasllama-server/REVIEW.das")])
     t |> equal(1, red.rc, "planted fixture is red")
@@ -450,7 +463,10 @@ def test_server_gate_fixtures(t : T?) {
                     "served route /anyroute has no `/anyroute` mention",
                     "README.md: documents route /dead, which the server does not register",
                     "dasllama_server.rst: documents route /rstdead, which the server does not register",
-                    "the control page consumes route /nope, which the server does not register"]) {
+                    "the control page consumes route /nope, which the server does not register",
+                    "flag --port of ServerArgs (utils/dasllama-server/main.das) has no ``--port`` mention",
+                    "flag --help of ServerArgs has no @clarg_doc",
+                    "flag --help of ServerArgs (utils/dasllama-server/main.das) has no `--help` mention"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }
 
