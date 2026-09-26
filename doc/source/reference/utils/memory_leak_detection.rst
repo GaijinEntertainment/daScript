@@ -398,3 +398,22 @@ Keep heap and string measurements separate; live-byte changes include alignment
 and GC, so they need not equal requested allocations minus explicit releases.
 Keep telemetry histories bounded and serialize reports only on request.
 Worker contexts have independent heaps and must be sampled on their own threads.
+
+
+Reserved capacity and worker ownership
+======================================
+
+``daslib/runtime_memory`` provides ``context_memory()``: used/reserved heap and
+string bytes, script-stack capacity, globals size and (on WebAssembly) the calling
+native thread's stack size. Sample from the owning context and publish a value copy
+when crossing threads. ``context_idle_forks()`` accounts for pooled idle job contexts
+separately; join work first to observe the complete pool. Active contexts are excluded
+rather than reading concurrently changing heaps. Idle contexts are not native threads.
+
+On WebAssembly, ``native_allocator_stats()`` returns allocated and reusable native
+allocator bytes, and ``native_allocator_extent()`` returns the static heap boundary
+and current program break. Other platforms return zero; callers must mark these
+measurements unavailable there. WASM capacity above the break is unused growth
+capacity, distinct from reusable allocator blocks. Native totals include script
+reservations, so these categories must not be added together. GPU memory, JavaScript
+heaps and browser filesystem data are outside this native allocator measurement.

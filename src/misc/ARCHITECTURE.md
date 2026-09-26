@@ -2,7 +2,9 @@
 
 ## 1. File charters
 
-- `job_que.cpp` - how many compute lanes a `JobQue` starts with, and where the OS puts them.
+- `job_que.cpp` - compute lanes, OS placement, dispatch and spin/park scheduling.
+- `job_que_spin.h` - spin deadline construction, renewal and expiration; its clock type is
+  supplied by the runtime or a deterministic test.
 - `sysos.cpp` - the per-platform core-count probes `job_que.cpp` calls.
 - `network.cpp` - the single-client TCP `Server` the DAP debugger and `daslib/network` sit on,
   the `Client` end beside it, `probe_local_port`, and the two helpers every socket error passes
@@ -117,18 +119,29 @@ answers with nothing.
 A worker in the spin-before-park window (`JobQue::job`, opt-in via `setWorkerSpin`) wants the
 clock twice: to extend the window when it served a team chunk, and to end the window when it
 did not. Both happen at one place and one cadence - `JOBQUE_SPIN_DEADLINE_STRIDE` iterations -
-off a single `steady_clock::now()`; the team-chunk arm only raises a flag the strided read then
+off a single `JobQueSpinClock::now()`; the team-chunk arm only raises a flag the strided read then
 acts on. Keeping the extend out of the loop body is the load-bearing half: in team mode the
 worker does its WORK inside this loop, so a clock read on the served-a-chunk path fires per
 chunk and lands between units of real work rather than in idle spin.
 
 The stride is what that call costs. Native is 1 - the clock is a vDSO read, cheaper than the
 `jobque_spin_pause` burst it guards - which leaves native behaviour exactly as it was, one read
-per iteration. Under emscripten the same call crosses into JS for `performance.now()`, costing
-more than the burst, so the stride is 16. A ZERO window strides 1 whatever the target AND stands
-its team-chunk extend down: team mode enters this loop on its own, so a worker with `spinUs == 0`
-arrives at an already-expired deadline and has to be free to park on the first test. Striding that
-one would hold it for a whole stride; extending a zero-length window on a served chunk would hold
+per iteration. Native `JobQueSpinClock` remains `std::chrono::steady_clock`. Under emscripten,
+`JobQueSpinClock` reads `emscripten_get_now()` directly as a double in milliseconds and keeps
+its deadlines in that representation inside WASM. Browser builds avoid the pointer/integer
+WASI `clock_time_get` JavaScript bridge, which boxes BigInts and, with debug checks, builds
+temporary strings. Standalone Emscripten retains its own platform implementation of the clock.
+The direct clock still crosses into JS for the browser performance clock, so the stride is 16.
+`JobQueSpinClock` advertises `is_steady = false` because Emscripten can use
+`Date.now` outside performance-clock contexts.
+Fractional milliseconds are retained even at epoch-sized origins; spin deadlines do not need
+integer nanoseconds. The WASM import/behavior regression is `web/test/jobque_spin_clock.cjs`.
+
+A ZERO window strides 1 whatever the target and performs no clock reads, including at
+construction. Team mode enters this loop on its own, so a worker with `spinUs == 0`
+has to be free to park on the first test. `JobQueSpinDeadline` answers that test directly
+without constructing or comparing timestamps. Striding that
+case would hold it for a whole stride; extending a zero-length window on a served chunk would hold
 it for one more iteration. Either is a spin the caller explicitly asked not to have, which is what
 `jobque_spin_us = 0` in a box profile says. What a stride buys is only the resolution of the
 window's trailing edge, which stays far finer than the window itself, and a worker that finds

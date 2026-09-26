@@ -290,3 +290,11 @@ the worker is still handing the fork back - into a pool the destructor has alrea
 an owner that no longer exists. So the owner counts its borrowed forks (`forkContextsBorrowed`):
 `acquireForkContext` raises the count, `releaseForkContext` lowers it as its last touch of the
 owner, and `~Context` waits for zero before it frees the pool.
+
+
+## 10. Native memory metrics {#native-memory-metrics}
+
+`native_thread_stack_size`, `native_allocator_stats`, and `native_allocator_extent`
+report Emscripten native stack size, allocator use, and heap extent. On other targets
+they return zero as an unavailable measurement. Consumers check the platform before
+displaying those values.

@@ -62,6 +62,7 @@
 #include "compressor.h"
 
 #include "dasAudio.h"
+#include "playback_buffer.h"
 
 #ifndef HRTF_SAMPLE_RATE
 #define HRTF_SAMPLE_RATE 48000
@@ -73,6 +74,7 @@ float das_ma_sf2_biquad_tick ( ma_sf2_biquad * bq, float input ) {
 }
 
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context);
+MAKE_TYPE_FACTORY(PlaybackDiagnostics,das::PlaybackDiagnostics);
 
 das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
 
@@ -337,13 +339,37 @@ static bool g_playback_buffered = false;
 static std::atomic<uint64_t> g_playback_underrun_frames { 0 };
 static std::atomic<uint32_t> g_playback_drain_seq { 0 };
 
+static std::atomic<uint64_t> playback_callbacks{0}, playback_underruns{0}, playback_recovery_frames{0}, playback_recoveries{0};
+static std::atomic<uint64_t> playback_refills{0}, playback_timeouts{0}, playback_max_mix_us{0}, playback_max_wake_us{0}, playback_max_callback_gap_us{0};
+static std::atomic<uint64_t> playback_notified_us{0};
+static std::atomic<uint32_t> playback_queued{0};
+static PlaybackRecoveryState playback_recovery;
+static uint64_t playback_last_callback_us = 0;
+static uint64_t playback_wall_us() {
+    return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+}
+static uint64_t playback_elapsed(uint64_t now, uint64_t then) { return now >= then ? now - then : 0; }
+static uint64_t playback_clock_us() {
+    return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+static void playback_peak(std::atomic<uint64_t> & peak, uint64_t value) {
+    uint64_t prior = peak.load(std::memory_order_relaxed);
+    while (prior < value && !peak.compare_exchange_weak(prior, value, std::memory_order_relaxed)) {}
+}
+static void wake_playback() {
+    uint64_t empty = 0;
+    playback_notified_us.compare_exchange_strong(empty, playback_wall_us(), std::memory_order_relaxed);
+    g_playback_drain_seq.fetch_add(1, std::memory_order_release);
+    emscripten_futex_wake((void *)&g_playback_drain_seq, 1);
+}
+
 static constexpr ma_uint32 PLAYBACK_RING_MS = 20;
 static constexpr ma_uint32 PLAYBACK_RING_MIN_FRAMES = 512;
 static constexpr ma_uint32 PLAYBACK_RING_MAX_FRAMES = 4096;
 
 static ma_uint32 playback_ring_frames() {
     ma_uint32 rate = g_device.sampleRate ? g_device.sampleRate : (ma_uint32)g_rate;
-    ma_uint32 frames = rate * PLAYBACK_RING_MS / 1000u;
+    ma_uint32 frames = playback_aligned_frames(rate * PLAYBACK_RING_MS / 1000u);
     return frames < PLAYBACK_RING_MIN_FRAMES ? PLAYBACK_RING_MIN_FRAMES
          : (frames > PLAYBACK_RING_MAX_FRAMES ? PLAYBACK_RING_MAX_FRAMES : frames);
 }
@@ -353,7 +379,10 @@ static bool fill_playback_ring() {
     void * output = nullptr;
     if (ma_pcm_rb_acquire_write(&g_playback_rb, &count, &output) != MA_SUCCESS || !count) return false;
     memset(output, 0, (size_t)count * g_channels * sizeof(float));
+    auto started = playback_clock_us();
     mix_audio(output, count);
+    playback_peak(playback_max_mix_us, playback_clock_us() - started);
+    playback_refills.fetch_add(1, std::memory_order_relaxed);
     ma_pcm_rb_commit_write(&g_playback_rb, count);
     return true;
 }
@@ -361,14 +390,20 @@ static bool fill_playback_ring() {
 static bool start_playback_worker() {
     if (ma_pcm_rb_init(ma_format_f32, (ma_uint32)g_channels, playback_ring_frames(), nullptr, nullptr, &g_playback_rb) != MA_SUCCESS) return false;
     g_playback_underrun_frames.store(0, std::memory_order_relaxed);
+    playback_callbacks = 0; playback_underruns = 0; playback_recovery_frames = 0; playback_recoveries = 0;
+    playback_refills = 0; playback_timeouts = 0; playback_max_mix_us = 0; playback_max_wake_us = 0; playback_max_callback_gap_us = 0;
+    playback_notified_us = 0; playback_queued = 0; playback_recovery = {}; playback_last_callback_us = 0;
     while (fill_playback_ring()) {}
     g_playback_running.store(true, std::memory_order_release);
     try {
         g_playback_thread = std::thread([] {
             while (g_playback_running.load(std::memory_order_acquire)) {
                 uint32_t seen = g_playback_drain_seq.load(std::memory_order_acquire);
+                auto notified = playback_notified_us.exchange(0, std::memory_order_relaxed);
+                if (notified) playback_peak(playback_max_wake_us, playback_elapsed(playback_wall_us(), notified));
                 if (fill_playback_ring()) continue;
-                emscripten_futex_wait((void *)&g_playback_drain_seq, seen, 20.0);
+                if (emscripten_futex_wait((void *)&g_playback_drain_seq, seen, 20.0) == -ETIMEDOUT)
+                    playback_timeouts.fetch_add(1, std::memory_order_relaxed);
             }
         });
     } catch (...) {
@@ -382,26 +417,24 @@ static bool start_playback_worker() {
 
 static void stop_playback_worker() {
     g_playback_running.store(false, std::memory_order_release);
+    wake_playback();
     if (g_playback_thread.joinable()) g_playback_thread.join();
 }
 
 static void read_playback_ring(void * output, ma_uint32 frameCount) {
     float * destination = (float *)output;
-    while (frameCount) {
-        ma_uint32 count = frameCount;
-        void * input = nullptr;
-        if (ma_pcm_rb_acquire_read(&g_playback_rb, &count, &input) != MA_SUCCESS || !count) {
-            memset(destination, 0, (size_t)frameCount * g_channels * sizeof(float));
-            g_playback_underrun_frames.fetch_add(frameCount, std::memory_order_relaxed);
-            return;
-        }
-        memcpy(destination, input, (size_t)count * g_channels * sizeof(float));
-        ma_pcm_rb_commit_read(&g_playback_rb, count);
-        g_playback_drain_seq.fetch_add(1, std::memory_order_release);
-        emscripten_futex_wake((void *)&g_playback_drain_seq, 1);
-        destination += (size_t)count * g_channels;
-        frameCount -= count;
-    }
+    const auto now = playback_wall_us();
+    if (playback_last_callback_us) playback_peak(playback_max_callback_gap_us, playback_elapsed(now, playback_last_callback_us));
+    playback_last_callback_us = now;
+    playback_callbacks.fetch_add(1, std::memory_order_relaxed);
+    auto queued = ma_pcm_rb_available_read(&g_playback_rb);
+    playback_queued.store(queued, std::memory_order_relaxed);
+    auto read = read_playback_pcm(g_playback_rb, playback_recovery, destination, frameCount,
+                                  ma_uint32(g_channels), playback_ring_frames(), wake_playback);
+    g_playback_underrun_frames.fetch_add(uint64_t(read.missing) + read.recovery_silence, std::memory_order_relaxed);
+    if (read.missing) playback_underruns.fetch_add(1, std::memory_order_relaxed);
+    playback_recovery_frames.fetch_add(read.recovery_silence, std::memory_order_relaxed);
+    if (read.recovered) playback_recoveries.fetch_add(1, std::memory_order_relaxed);
 }
 #endif
 
@@ -662,6 +695,25 @@ int64_t dasAudio_playback_underrun_frames ( void ) {
 #endif
 }
 
+PlaybackDiagnostics dasAudio_playback_diagnostics() {
+    PlaybackDiagnostics result;
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+    result.callbacks = playback_callbacks.load(std::memory_order_relaxed);
+    result.underrun_frames = g_playback_underrun_frames.load(std::memory_order_relaxed);
+    result.underruns = playback_underruns.load(std::memory_order_relaxed);
+    result.recovery_frames = playback_recovery_frames.load(std::memory_order_relaxed);
+    result.recoveries = playback_recoveries.load(std::memory_order_relaxed);
+    result.refills = playback_refills.load(std::memory_order_relaxed);
+    result.wait_timeouts = playback_timeouts.load(std::memory_order_relaxed);
+    result.max_mix_us = playback_max_mix_us.load(std::memory_order_relaxed);
+    result.max_wake_us = playback_max_wake_us.load(std::memory_order_relaxed);
+    result.max_callback_gap_us = playback_max_callback_gap_us.load(std::memory_order_relaxed);
+    result.queued_frames = playback_queued.load(std::memory_order_relaxed);
+    result.capacity_frames = g_playback_buffered ? playback_ring_frames() : 0;
+#endif
+    return result;
+}
+
 int32_t dasAudio_record_device_count ( Context *, LineInfoArg * ) {
     g_capture_device_cache.clear();   // a failed enumeration must not leave stale devices readable by name/is_default
     if ( !ensure_capture_context() ) return 0;
@@ -726,6 +778,24 @@ MA_API ma_uint64 dasAudio_ma_decoder_read_pcm_frames(ma_decoder* pDecoder, void*
     ma_decoder_read_pcm_frames(pDecoder, pFramesOut, frameCount, &framesRead);
     return framesRead;
 }
+
+struct PlaybackDiagnosticsAnnotation : ManagedStructureAnnotation<PlaybackDiagnostics> {
+    bool isLocal() const override { return true; }
+    PlaybackDiagnosticsAnnotation(ModuleLibrary & lib) : ManagedStructureAnnotation("PlaybackDiagnostics", lib, "das::PlaybackDiagnostics") {
+        addField<DAS_BIND_MANAGED_FIELD(callbacks)>("callbacks","callbacks");
+        addField<DAS_BIND_MANAGED_FIELD(underrun_frames)>("underrun_frames","underrun_frames");
+        addField<DAS_BIND_MANAGED_FIELD(underruns)>("underruns","underruns");
+        addField<DAS_BIND_MANAGED_FIELD(recovery_frames)>("recovery_frames","recovery_frames");
+        addField<DAS_BIND_MANAGED_FIELD(recoveries)>("recoveries","recoveries");
+        addField<DAS_BIND_MANAGED_FIELD(refills)>("refills","refills");
+        addField<DAS_BIND_MANAGED_FIELD(wait_timeouts)>("wait_timeouts","wait_timeouts");
+        addField<DAS_BIND_MANAGED_FIELD(max_mix_us)>("max_mix_us","max_mix_us");
+        addField<DAS_BIND_MANAGED_FIELD(max_wake_us)>("max_wake_us","max_wake_us");
+        addField<DAS_BIND_MANAGED_FIELD(max_callback_gap_us)>("max_callback_gap_us","max_callback_gap_us");
+        addField<DAS_BIND_MANAGED_FIELD(queued_frames)>("queued_frames","queued_frames");
+        addField<DAS_BIND_MANAGED_FIELD(capacity_frames)>("capacity_frames","capacity_frames");
+    }
+};
 
 struct MAResamplerConfigAnnotation : ManagedStructureAnnotation<ma_resampler_config> {
     MAResamplerConfigAnnotation ( ModuleLibrary & mlib )
@@ -1377,6 +1447,8 @@ public:
         addEnumeration(new Enumerationma_dither_mode());
         addEnumeration(new Enumerationma_result());
         // resampler
+        addAnnotation(new PlaybackDiagnosticsAnnotation(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_playback_diagnostics), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "sound_playback_diagnostics", SideEffects::accessExternal, "dasAudio_playback_diagnostics");
         addAnnotation(new MAResamplerConfigAnnotation(lib));
         addAnnotation(new MAResamplerAnnotation(lib));
         addExtern<DAS_BIND_FUN(ma_resampler_config_init),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ma_resampler_config_init",

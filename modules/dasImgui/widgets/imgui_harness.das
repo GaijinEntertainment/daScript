@@ -148,10 +148,10 @@ def public harness_wants_no_ini() : bool {
     return g_no_ini
 }
 
-def public harness_init(title : string; width : int = 800; height : int = 600) {
-    //! Windowed: ``live_create_window`` + ``live_imgui_init`` (applies the daslang theme + JetBrains
-    //! Mono font). Headless: ``CreateContext`` + ``apply_daslang_theme`` + font atlas build + ``DisplaySize``
-    //! — no window, no GL context, no TTF (the headless atlas uses ProggyClean).
+def public harness_init(title : string; width : int = 800; height : int = 600; samples : int = 4) {
+    //! Windowed creates a GLFW/ImGui window with the daslang theme and JetBrains Mono.
+    //! `samples` controls framebuffer multisampling (default 4; 0 disables it).
+    //! Headless uses a ProggyClean font atlas and DisplaySize without a window or GL context.
     if (harness_is_headless()) {
         g_headless_ctx = CreateContext(null)
         imgui_touch_device = live_imgui_touch_forced()       // --imgui-touch reaches the headless arm too, so a phone layout can be snapshotted
@@ -190,7 +190,7 @@ def public harness_init(title : string; width : int = 800; height : int = 600) {
             h = int(float(vw) / aspect + 0.5f)
         }
     }
-    live_create_window(title, w, h)
+    live_create_window(title, w, h, samples)
     live_imgui_init(live_window)
     InstallCoreClipboardBackend()
     // --no-imgui-ini (with_imgui_app passes it per test spawn): null the ini AFTER live_imgui_init

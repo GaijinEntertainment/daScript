@@ -19,16 +19,17 @@
   }
   function bytesURL(bytes){let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));return 'data:image/png;base64,'+btoa(binary);}
   function browserInfo(){
+    try{const custom=window.dasLiveCaptureBrowserInfo?.();if(custom&&typeof custom==='object')return custom;}catch(e){retain('metadata',[e]);}
     const canvas=document.getElementById('canvas');let gpu={};
     try{const gl=canvas.getContext('webgl2')||canvas.getContext('webgl');const ext=gl.getExtension('WEBGL_debug_renderer_info');gpu={renderer:gl.getParameter(ext?ext.UNMASKED_RENDERER_WEBGL:gl.RENDERER),vendor:gl.getParameter(ext?ext.UNMASKED_VENDOR_WEBGL:gl.VENDOR),version:gl.getParameter(gl.VERSION)};}catch(e){gpu={error:String(e)};}
     return {user_agent:navigator.userAgent,platform:navigator.platform,device_pixel_ratio:devicePixelRatio,canvas:[canvas.width,canvas.height],page:location.pathname,gpu};
   }
-  function makeReport(reply){
+  async function makeReport(reply){
     const fs=filesystem();let image=null;
-    if(reply.image){try{image={kind:'scene-framebuffer',data_url:bytesURL(fs.readFile(reply.image))};}catch(e){retain('error',[e]);}}
-    return {schema:'daslang.live.report/1',created_at:new Date().toISOString(),description:'',snapshot:reply.snapshot,image,browser:browserInfo(),console:logs.slice(),input:(window.dasPreviewInputHistory||[]).slice()};
+    if(reply.image){try{image=typeof window.dasLiveCaptureImage==='function' ? await window.dasLiveCaptureImage(reply) : {kind:'scene-framebuffer',data_url:bytesURL(fs.readFile(reply.image))};}catch(e){retain('error',[e]);}}
+    return {schema:'daslang.live.report/1',created_at:new Date().toISOString(),description:'',snapshot:reply.snapshot,capture_timings:reply.timings,image,browser:browserInfo(),console:logs.slice(),input:(window.dasPreviewInputHistory||[]).slice()};
   }
-  async function capture(){const reply=await send('capture');return current;}
+  async function capture(){return send('capture');}
   async function restore(report){
     if(!report||report.schema!=='daslang.live.report/1')throw Error('This is not a live report bundle.');
     const reply=await send('restore',{snapshot:report.snapshot});
@@ -74,19 +75,25 @@
     for(const meta of reports.reverse())list.append(button(meta.id+' — '+(meta.description||'No description'),async()=>{const r=await fetch('/api/report?id='+encodeURIComponent(meta.id));if(!r.ok)throw Error('Report not found');const report=await r.json();report.server_id=meta.id;open(report);}));
     if(!reports.length)list.textContent='No reports yet.';
   }
-  function poll(){
+  let captureVersion=0;
+  async function poll(){
+    setTimeout(poll,80);
     const fs=filesystem();if(fs){try{
       const path=root+'/response.json';if(fs.analyzePath(path).exists){
         const reply=JSON.parse(fs.readFile(path,{encoding:'utf8'}));fs.unlink(path);
         const wait=pending.get(reply.id);
         const nativeCapture=reply.operation==='capture'&&typeof reply.id==='string'&&reply.id.startsWith('button-');
         if(wait||nativeCapture){
-          if(reply.operation==='capture'){current=makeReport(reply);open(current);}
-          if(wait){clearTimeout(wait.timer);pending.delete(reply.id);wait.resolve(reply);}
+          let report=null;
+          if(reply.operation==='capture'){
+            const version=++captureVersion;report=await makeReport(reply);
+            if(wait&&pending.get(reply.id)!==wait)return;
+            if(version===captureVersion){current=report;open(current);}
+          }
+          if(wait&&pending.get(reply.id)===wait){clearTimeout(wait.timer);pending.delete(reply.id);wait.resolve(report||reply);}
         }
       }
     }catch(e){retain('transport',[e]);}}
-    setTimeout(poll,80);
   }
   const launcher=button('Reports',()=>loadList());launcher.id='live-report-launcher';Object.assign(launcher.style,{position:'fixed',right:'12px',bottom:'12px',zIndex:9000,padding:'8px 14px'});document.body.append(launcher);
   window.addEventListener('keydown',e=>{if(e.key==='F8'){e.preventDefault();capture().catch(err=>{open(null);message.textContent=err.message;});}});

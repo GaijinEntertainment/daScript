@@ -1,15 +1,15 @@
 # daslib architecture notes
 
-Design rationale a maintainer cannot recover from the code alone. One numbered section per
-module; entries are anchored to symbols.
+Design rationale not evident in code; numbered module sections are anchored to symbols.
 
-Six companions carry a concern each.
+Companion documents carry separate concerns.
 - `ARCHITECTURE_LINT.md` - sec. 1-4: perf_lint, lint_config, lint, style_lint.
 - `ARCHITECTURE_EMIT.md` - sec. 5-7, 28-29: aot_cpp, aot_standalone, flatten, the shader rails.
 - `ARCHITECTURE_CAPI.md` - sec. 30: c_api_header, the C surface both backends emit.
 - `ARCHITECTURE_LINQ.md` - sec. 11-17, 33, 37: the linq family, sql_linq, sql_migrate.
 - `ARCHITECTURE_CURSOR.md` - sec. 40: ast_cursor, the cursor module the LSP and MCP navigation tools share.
 - `ARCHITECTURE_SYNTAX.md` - sec. 42: the raw assignment spellings, the formatter / printer / builtin sides of the lexer, parser and inference pairs.
+- `ARCHITECTURE_MEMORY.md` - sec. 43: runtime memory snapshots.
 
 ## 8. ast_verify
 

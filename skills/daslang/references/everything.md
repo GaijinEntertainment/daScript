@@ -105,6 +105,7 @@ One section per module: what the module is for, then its public symbols grouped 
 - [result](#result) - Monadic `Result<T, E>` — a value (`ok`) or an error (`err`).
 - [rst](#rst) - The RST module implements the documentation generation pipeline for daslang.
 - [rtti](#rtti) - The RTTI module exposes runtime type information and program introspection facilities.
+- [runtime_memory](#runtime_memory) - Context and retained idle-fork memory snapshots for runtime diagnostics.
 - [safe_addr](#safe_addr) - The SAFE_ADDR module provides compile-time checked pointer operations.
 - [sha_256](#sha_256) - FIPS 180-4 SHA-256 in pure daslang: one-shot hashing of strings and byte arrays to lowercase hex, plus a streaming init/update/final state for data that arrives in pieces.
 - [soa](#soa) - The SOA (Structure of Arrays) module transforms array-of-structures data layouts into structure-of-arrays layouts for better cache performance.
@@ -338,6 +339,8 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 
 ### Heap reporting
 
+- `context_idle_fork_memory` - Samples idle fork contexts retained by the caller under the pool lock.
+- `context_memory_sizes` - Returns the calling context's stack capacity in bytes in `x` and global storage size in bytes in `y`.
 - `frame_position` - Returns the call site's frame position -- the value the garbage collector's locals gate reads from a stack frame's line handoff -- resolved at simulate time within the calling function's own numbering.
 - `heap_allocation_count` - Returns the total number of heap allocations performed by the current context since it was created.
 - `heap_allocation_stats` - Returns heap allocation statistics as a `urange64`, where the `x` component is total bytes allocated and the `y` component is total bytes freed.
@@ -350,6 +353,9 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 - `heap_total_allocated` - Total bytes the context's value heap has reserved from the OS (aligned), including currently-free space.
 - `max_unreserved_size` - Returns the context's `max_unreserved_size` limit in bytes: an array `resize` that has to grow past this many bytes without a prior `reserve` panics.
 - `memory_report` - Prints a report of memory allocations for the current context; when `errorsOnly` is true, only GC-related errors are included.
+- `native_allocator_extent` - Returns the Emscripten linear-memory heap base address in `x` and current program break in `y`.
+- `native_allocator_stats` - Returns Emscripten allocator allocated bytes in `x` and free bytes in `y` from `mallinfo`.
+- `native_thread_stack_size` - Returns the current Emscripten thread's native stack capacity in bytes, or zero on other platforms.
 - `set_max_unreserved_size` - Sets the context's `max_unreserved_size` limit to `bytes`: an array `resize` that has to grow past this many bytes without a prior `reserve` panics.
 - `string_heap_allocation_count` - Returns the total number of individual string allocations performed on the current context's string heap.
 - `string_heap_allocation_stats` - Returns string heap allocation statistics as a `urange64` where `x` is total bytes allocated and `y` is total bytes deleted.
@@ -1861,6 +1867,7 @@ Module audio
 - `ma_limiter` - Look-ahead brick-wall limiter.
 - `ma_phaser` - Four-stage all-pass phaser with resonant feedback and triangle LFO.
 - `ma_waveshaper` - tanh-based stereo waveshaper for soft saturation.
+- `PlaybackDiagnostics` - Threaded browser audio-device counters, timings and buffering state; unavailable fields are zero.
 
 ### Audio device
 
@@ -1868,6 +1875,7 @@ Module audio
 - `mixer_context` - Get the audio mixer thread's context.
 - `sound_finalize` - Shut down the audio device and release resources.
 - `sound_initalize` - Initialize the audio device with a mixer callback.
+- `sound_playback_diagnostics` - Samples threaded browser audio-device counters and ring occupancy.
 - `sound_playback_underrun_frames` - Number of output frames the device played as silence because the mixer had not refilled the ring in time.
 - `sound_set_null_device` - Forces the audio system to use miniaudio's null backend — a timer-driven playback device with no real hardware — on the next audio_system_create / with_audio_system.
 
@@ -2035,6 +2043,7 @@ Module audio_boost
 ### Structures
 
 - `AudioChannelStatus`
+- `PlaybackBufferStats` - Threaded browser audio-device counters, timings and buffering state; unavailable fields are zero.
 - `AudioSystemStats`
 - `Attenuation`
 
@@ -2102,6 +2111,8 @@ Module audio_boost
 ### Status monitoring
 
 - `clear_status` - Drop the stored snapshot; the box reads back empty until the next publish.
+- `get_playback_diagnostics` - Samples threaded browser device counters; unavailable counters are zero.
+- `set_audio_memory_box` - Publish ContextMemory once per second, independently of the optional stats box.
 - `set_audio_stats_box` - Register a box to receive periodic AudioSystemStats updates from the audio thread.
 - `set_status_update` - Publish this sound's status into `status` until `unset_status_update`.
 - `unset_status_update` - unset status for sound
@@ -2461,6 +2472,7 @@ Module strudel_player
 - `strudel_debug_voices` - Log the number of active sample/oscillator voices on each track (debug helper).
 - `strudel_get_diagnostics` - Returns a read-only producer/consumer telemetry snapshot; threaded playback reads it from the separate diagnostics `SeqBox`.
 - `strudel_get_worker_heap_bytes` - The playback worker's heap, as of its last tick; 0 in main-thread mode, where the caller's own heap is the one in play.
+- `strudel_get_worker_memory` - Worker-owned heaps; zero in main-thread mode to avoid counting that heap twice.
 - `strudel_reset_memory_baseline` - Reset memory-tracking baseline to the current heap state.
 
 ## strudel_midi
@@ -6070,6 +6082,21 @@ The JOBQUE_PROFILE module wraps the low-level `jobque_trace_*` builtins into a s
 
 - `profile_marker` - Stamp an instant unit boundary on the caller lane (no-op when tracing is off).
 - `profile_marker_id` - Register/look up a marker kind (e.g.
+
+## runtime_memory
+
+Context and retained idle-fork memory snapshots for runtime diagnostics. Sample on the owning context and publish value copies across threads.
+
+
+### Structures
+
+- `ContextMemory` - Memory sizes in bytes, sampled on the owning context.
+- `IdleForkMemory` - Memory retained by idle forks; active jobs are excluded.
+
+### Context snapshots
+
+- `context_idle_forks` - Idle job contexts retained by this owner.
+- `context_memory` - Samples the calling context.
 
 ## json_boost
 

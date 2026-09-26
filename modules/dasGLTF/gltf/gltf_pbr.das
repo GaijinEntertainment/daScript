@@ -140,6 +140,7 @@ var @uniform u_roughness_factor : float
 var @uniform u_emissive_factor : float3
 var @uniform u_normal_scale : float
 var @uniform u_occlusion_strength : float
+var @uniform u_draw_opacity : float
 var @uniform u_alpha_cutoff : float
 var @uniform u_alpha_mode         : float   // 0 OPAQUE, 1 MASK, 2 BLEND
 
@@ -266,7 +267,7 @@ def gltf_pbr_fs {
     out_rgb = lerp(out_rgb, float3(grey) * u_background_tint.xyz, u_background_tint.w)
     let transmission = atmosphere_transmittance(u_cam_pos, v_world_pos, u_fog_params, max(u_fog_falloff, 0.01))
     out_rgb = lerp(u_fog_color, out_rgb, transmission)
-    let out_a = u_alpha_mode > 1.5 ? base.w : 1.0
+    let out_a = (u_alpha_mode > 1.5 ? base.w : 1.0) * u_draw_opacity
     o_color = float4(out_rgb, out_a)
 }
 
@@ -369,7 +370,7 @@ def finalize(var r : GltfPbrRenderer) {
     if (r.normalProgram != 0u) { glDeleteProgram(r.normalProgram) }
 }
 
-def private bind_material(model : GltfGlModel; mat : GltfMaterial) {
+def private bind_material(model : GltfGlModel; mat : GltfMaterial; opacity : float = 1.0) {
     u_base_color_factor = mat.baseColorFactor
     u_metallic_factor = mat.metallicFactor
     u_roughness_factor = mat.roughnessFactor
@@ -384,7 +385,7 @@ def private bind_material(model : GltfGlModel; mat : GltfMaterial) {
     u_normal_tex := gltf_gl_resolve_tex(model, mat.normalTex, model.flatNormalTex)
     u_occlusion_tex := gltf_gl_resolve_tex(model, mat.occlusionTex, model.whiteTex)
     u_emissive_tex := gltf_gl_resolve_tex(model, mat.emissiveTex, model.whiteTex)
-    gl_material_state_filtered(mat.doubleSided, mat.alphaMode == GltfAlphaMode.blend)
+    gl_material_state_filtered(mat.doubleSided, mat.alphaMode == GltfAlphaMode.blend || opacity < 1.0)
 }
 
 // Fill the joint-palette uniform for a skin (clamped to GLTF_MAX_JOINTS), pre-multiplied by the world-
@@ -520,8 +521,8 @@ def gltf_pbr_render_silhouette(var r : GltfPbrRenderer; model : GltfGlModel; sce
 //! otherwise the node's precomputed `world` matrix is the model transform. Per primitive the material
 //! factors + textures are bound and doubleSided/alpha GL state is set. Caller owns clear + depth state.
 def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
-                    view, proj : float4x4; camPos : float3; light : GltfPbrLight) {
-    gltf_pbr_render(r, model, scene, identity4x4(), view, proj, camPos, light)
+                    view, proj : float4x4; camPos : float3; light : GltfPbrLight; opacity : float = 1.0) {
+    gltf_pbr_render(r, model, scene, identity4x4(), view, proj, camPos, light, opacity)
 }
 
 //! As above, but pre-multiplies a world-space `root` transform onto the whole scene (a viewer turntable
@@ -529,9 +530,10 @@ def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
 //! the joint palette, so it transforms rigid and skinned geometry alike — and lighting responds correctly
 //! (root reaches the world-space normals). The plain overload passes `identity4x4()`, so it is unchanged.
 def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene; root : float4x4;
-                    view, proj : float4x4; camPos : float3; light : GltfPbrLight) {
+                    view, proj : float4x4; camPos : float3; light : GltfPbrLight; opacity : float = 1.0) {
     gltf_shadow_comparison_bind(r.shadowComparison, r.shadowTex, r.localShadowTex); u_shadow_filter = r.shadowFilter
     gl_use_program_filtered(r.program)
+    u_draw_opacity = clamp(opacity, 0.0, 1.0)
     u_viewProj = proj * view
     u_cam_pos = camPos
     u_light_dir = normalize(light.direction)
@@ -569,9 +571,9 @@ def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
         bind_node(scene, node, root, palette)
         for (glp in model.meshes[node.mesh].primitives) {
             if (glp.material >= 0 && glp.material < length(scene.materials)) {
-                bind_material(model, scene.materials[glp.material])
+                bind_material(model, scene.materials[glp.material], opacity)
             } else {
-                bind_material(model, GltfMaterial())
+                bind_material(model, GltfMaterial(), opacity)
             }
             gltf_pbr_vs_bind_uniform(r.program)
             gltf_pbr_fs_bind_uniform(r.program)

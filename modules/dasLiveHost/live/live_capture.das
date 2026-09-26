@@ -31,6 +31,11 @@ var capture_mailbox = ""
 var capture_request_id = ""
 var capture_message = ""
 var capture_last_file = ""
+struct CaptureTimings { artifact_ms, snapshot_ms, serialize_ms, write_ms, total_ms : double }
+var capture_timings = CaptureTimings()
+var capture_completed = 0
+var capture_artifact_file, capture_artifact_format : string
+var capture_artifact_width, capture_artifact_height : int
 var capture_artifact : function<(file : string) : bool>
 
 def live_capture_configure(application, build, mailbox : string) {
@@ -116,16 +121,30 @@ def live_capture_poll() {
     }
     delete_json(request)
 }
+[arch(at="../ARCHITECTURE.md#capture-response-serialization")]
 def live_capture_flush(frame : int) {
     capture_frame = frame
     if (!capture_pending){return }
     capture_pending = false
+    let started = ref_time_ticks(); var phase = started
     let png = "{capture_mailbox}/scene.png"
+    capture_artifact_file = ""; capture_artifact_format = "png"; capture_artifact_width = 0; capture_artifact_height = 0
     let image_ok = capture_artifact != null && invoke(capture_artifact, png)
+    capture_timings.artifact_ms = double(get_time_usec(phase)) / 1000.0lf; phase = ref_time_ticks()
     var document = live_capture(null)
+    capture_timings.snapshot_ms = double(get_time_usec(phase)) / 1000.0lf; phase = ref_time_ticks()
+    let encoded = write_json_compact(document); delete_json(document)
+    capture_timings.serialize_ms = double(get_time_usec(phase)) / 1000.0lf; phase = ref_time_ticks()
+    let previous_file = capture_last_file
     capture_last_file = "{capture_mailbox}/capture-{capture_sequence}.json"
-    fwrite(capture_last_file, write_json(document))
-    var reply = JV((id = capture_request_id, operation = "capture", snapshot = document, image = image_ok ? png : "", file = capture_last_file))
-    fwrite("{capture_mailbox}/response.json", write_json(reply)); delete_json(reply)
+    fwrite(capture_last_file, encoded)
+    if (get_running_platform_name() == "emscripten" && !empty(previous_file) && previous_file != capture_last_file){remove(previous_file)}
+    capture_timings.write_ms = double(get_time_usec(phase)) / 1000.0lf
+    capture_timings.total_ms = double(get_time_usec(started)) / 1000.0lf
+    var meta = JV((id = capture_request_id, operation = "capture", image = image_ok ? (empty(capture_artifact_file) ? png : capture_artifact_file) : "", image_format = capture_artifact_format, image_width = capture_artifact_width, image_height = capture_artifact_height, file = capture_last_file, timings = JV(capture_timings)))
+    let envelope = write_json_compact(meta); delete_json(meta)
+    fwrite("{capture_mailbox}/response.json", "{slice(envelope, 0, length(envelope) - 1)},\"snapshot\":{encoded}\u007d")
+    capture_timings.total_ms = double(get_time_usec(started)) / 1000.0lf
+    capture_completed++
     capture_message = "Captured: {capture_last_file}"
 }
