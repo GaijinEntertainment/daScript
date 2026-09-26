@@ -11,7 +11,7 @@ require dastest/testing_boost public
 require math
 require daslib/math_bits
 require metal/msl_shader
-require _metal_common
+require _metal_common   // nolint:STYLE030 — used only inside the das_metal static_if half
 
 let N = 256
 let TPG = 64u
