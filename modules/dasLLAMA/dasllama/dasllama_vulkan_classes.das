@@ -13301,13 +13301,13 @@ struct TtsLstmArgs {
     hidden : uint     //! H, at most `TTS_LSTM_LANES`
     goff : uint       //! the input gates' element base: [t][4H] rows in gate order i, f, g, o
     gstride : uint    //! ... and their row stride (4H on the GEMM's 64 lattice)
-    hhoff : uint      //! w_hh's element base: [4H][H], dense
+    hhoff : uint      //! the recurrence's element base: w_hh transposed [H][4H], element (i, g H + j) = w_hh[(g H + j) H + i]
     hoff : uint       //! the h rows' element base
     hstride : uint    //! ... and their row stride: 2H where the two directions share a row
     backward : uint   //! 1 = the steps walk t - 1 down to 0
 }
 
-let TTS_LSTM_LANES = 256u   //! one invocation a hidden unit: a direction past it declines at the driver
+let TTS_LSTM_LANES = 256u   //! the hidden units a direction's workgroup holds (four invocations each): a direction past it declines at the driver
 
 //! tanh clamped to +-15, where it already saturates in f32: past that a device tanh built from exp answers NaN, the CPU +-1
 def tts_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
@@ -13315,10 +13315,11 @@ def tts_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
 //! the CPU `sigmoid_f`
 def tts_sigmoid(v : float) : float => 1.0 / (1.0 + exp(-v))
 
-//! one LSTM direction end to end in one workgroup (the CPU `lstm_direction`, wgs = 1 a direction): per step invocation
-//! j < H takes its four gates - the input gate row (x w_ih^T + b, an F32GemmB ahead of it) plus the w_hh row's dot with
-//! h_prev in k order - then c = f c + i g and h = o tanh(c); h lives in `hs` between steps, c in the invocation.
-//! A direction over `TTS_LSTM_LANES` hidden units declines at the driver
+//! one LSTM direction end to end in one workgroup (the CPU `lstm_direction`, wgs = 1 a direction): four invocations a
+//! hidden unit j, one a gate g, each taking its gate's input row (x w_ih^T + b, an F32GemmB ahead of it) plus the dot
+//! of the transposed recurrence's column g H + j with h_prev in k order - a step's lanes read consecutive floats - and
+//! the unit's first lane folding the four into c = f c + i g and h = o tanh(c); h lives in `hs` between steps, c in that
+//! lane. A direction over `TTS_LSTM_LANES` hidden units declines at the driver
 [vk_dispatch(name = "tts_lstm_dir_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TtsLstmDir {
     @ssbo @binding = 0 gates : array<float>
@@ -13326,45 +13327,43 @@ class TtsLstmDir {
     @ssbo @binding = 2 h : array<float>
     @push_constant pa : TtsLstmArgs
     @workgroup hs : float[int(TTS_LSTM_LANES)]
+    @workgroup gs : float[int(TTS_LSTM_LANES) * 4]   //! a step's four gate dots a unit, the unit's lanes side by side
 
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 1024)]
     def run {
-        let j = gl_LocalInvocationID.x
+        let lane = gl_LocalInvocationID.x
+        let j = lane >> 2u
+        let g = lane & 3u
         let hd = pa.hidden
         let live = j < hd
-        if (live) {
+        let lead = live && g == 0u
+        if (lead) {
             hs[j] = 0.0
         }
         var cst = 0.0
         let t_first = pa.backward != 0u ? pa.t - 1u : 0u   //! the direction, decided once: the step loop walks t_first -/+ step
-        let hh = hd * hd
+        let w4 = 4u * hd
+        let col = pa.hhoff + g * hd + j
         var step = 0u
         while (step < pa.t) {
             barrier()
-            var ai = 0.0
-            var af = 0.0
-            var ag = 0.0
-            var ao = 0.0
+            var acc = 0.0
             if (live) {
-                let ri = pa.hhoff + j * hd
                 var i = 0u
                 while (i < hd) {
-                    let hv = hs[i]
-                    ai = mad(whh[ri + i], hv, ai)
-                    af = mad(whh[ri + hh + i], hv, af)
-                    ag = mad(whh[ri + 2u * hh + i], hv, ag)
-                    ao = mad(whh[ri + 3u * hh + i], hv, ao)
+                    acc = mad(whh[col + i * w4], hs[i], acc)
                     i++
                 }
             }
+            gs[lane] = acc
             barrier()
-            if (live) {
+            if (lead) {
                 let ti = pa.backward != 0u ? t_first - step : t_first + step
                 let gb = pa.goff + ti * pa.gstride + j
-                let gi = tts_sigmoid(gates[gb] + ai)
-                let gf = tts_sigmoid(gates[gb + hd] + af)
-                let gg = tts_tanh(gates[gb + 2u * hd] + ag)
-                let go = tts_sigmoid(gates[gb + 3u * hd] + ao)
+                let gi = tts_sigmoid(gates[gb] + gs[lane])
+                let gf = tts_sigmoid(gates[gb + hd] + gs[lane + 1u])
+                let gg = tts_tanh(gates[gb + 2u * hd] + gs[lane + 2u])
+                let go = tts_sigmoid(gates[gb + 3u * hd] + gs[lane + 3u])
                 cst = gf * cst + gi * gg
                 let hn = go * tts_tanh(cst)
                 hs[j] = hn

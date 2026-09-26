@@ -17,7 +17,8 @@ seat is honest about the rest.
 Every seat computes in f32. The part's weights live in a slab the shared host writer lays out
 (`dasllama_tts_slab.das`): every conv or linear dense as [cout padded to 64 x k*cin padded to 32]
 with column j = tap*cin + ci and its bias row beside it, every norm as a scale and a shift row,
-an LSTM direction as its input linear and its dense recurrence; the q8 lane's quants and a
+an LSTM direction as its input linear and its recurrence transposed to [H][4H], so the
+recurrence kernel's lanes read a step's column as consecutive floats; the q8 lane's quants and a
 K-quant linear are dequantized into the slab through the active repack, so the served lane's
 numbers land. The slab uploads once to one device buffer and stays resident under a key that
 folds the part's weight addresses and the q8 lane's repack layout; the model-drop sweep releases
@@ -47,8 +48,11 @@ and the biased tile over the slot's rows, the layernorm over the row (the CPU's 
 layernorm per position) on the tower's layernorm stamp, and the leaky ReLU (`TtsLeaky`), the
 conv stack ping-ponging two row sets as the CPU chain does; then the BiLSTM as two directions,
 each its input gates on the biased tile ([t][4H], gate order i, f, g, o) and one workgroup
-walking the recurrence (`TtsLstmDir`, the backward direction writing the second half of the
-shared [t][2H] rows). The rows read back and transpose on the host into the channel-major
+walking the recurrence (`TtsLstmDir`: four lanes a hidden unit, one a gate, each dotting the
+transposed recurrence's column with the previous step's h in k order, the unit's first lane
+folding the gates into the cell; the backward direction writing the second half of the
+shared [t][2H] rows). The workgroup is 1024 invocations, so a device whose compute limit is
+under that declines the LSTM seats at pipeline creation. The rows read back and transpose on the host into the channel-major
 [c][t] the CPU stage answers. Every seat's scratch is one float-count list, a slot a row set,
 the seat's own slot table naming them, plus two more row sets - the aux rows a call uploads
 (the style vector, then fc(style) per norm: gamma then beta, gamma + 1 where a layernorm reads

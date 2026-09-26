@@ -67,7 +67,7 @@ struct TtsNormSlot {
 struct TtsLstmSlot {
     fx : TtsConvSlot    //! the forward direction's input linear [4H][nin] with its bias
     bx : TtsConvSlot
-    fhh : int64         //! ... and its dense recurrence [4H][H]
+    fhh : int64         //! ... and its recurrence transposed [H][4H]
     bhh : int64
 }
 
@@ -233,7 +233,15 @@ def private tts_slab_lstm_dir(var w : TtsSlabWriter; l : TtsLstm; var xs : TtsCo
     lin.w := l.w_ih
     lin.b := l.b
     xs = tts_slab_linear(w, lin)
-    hh = tts_slab_raw(w, l.w_hh, 4l * l.hidden * l.hidden)
+    // the recurrence transposed [H][4H]: the recurrence kernel's lanes read a step's column as consecutive floats
+    let hd = l.hidden
+    hh = tsw_alloc(w, 4l * hd * hd)
+    return if (w.measure)
+    for (o in range64(4l * hd)) {
+        for (i in range64(hd)) {
+            w.host[hh + i * 4l * hd + o] = l.w_hh[o * hd + i]
+        }
+    }
 }
 
 def tts_slab_lstm(var w : TtsSlabWriter; l : TtsBiLstm) : TtsLstmSlot {

@@ -295,7 +295,7 @@ def private half_rows(y : array<float>; hd, half : int) : array<float> {
 struct private LstmFixture {
     x : array<float>
     gates : array<float>    //! the forward direction's gate rows, then the backward's at `LSTM_T * gstride`
-    whh : array<float>      //! the forward w_hh, `LSTM_HH_GAP` poisoned slots, then the backward w_hh
+    whh : array<float>      //! the forward w_hh transposed [H][4H], `LSTM_HH_GAP` poisoned slots, then the backward's
     y_ref : array<float>    //! the CPU bilstm: [t][2H]
     yc_ref : array<float>   //! the forward weights walked backward: [t][H], the CPU bilstm's second half over (fwd, fwd)
     gstride : int
@@ -312,9 +312,11 @@ def private lstm_fixture(hd : int) : LstmFixture {
     f.gates |> push_from(gb)
     let nhh = 4 * hd * hd
     f.whh |> resize(f.bwd_hh + nhh)
-    for (i in range(nhh)) {
-        f.whh[i] = lf.w_hh[i]
-        f.whh[f.bwd_hh + i] = lb.w_hh[i]
+    for (o in range(4 * hd)) {   // each direction's w_hh transposed [H][4H], as the slab lays it
+        for (i in range(hd)) {
+            f.whh[i * 4 * hd + o] = lf.w_hh[o * hd + i]
+            f.whh[f.bwd_hh + i * 4 * hd + o] = lb.w_hh[o * hd + i]
+        }
     }
     for (i in range(nhh, f.bwd_hh)) {
         f.whh[i] = POISON
