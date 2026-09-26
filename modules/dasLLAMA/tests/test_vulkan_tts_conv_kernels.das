@@ -251,7 +251,7 @@ def private im2col16_arm(t : T?; tag : string; g : ConvGeom) {
         var pm = F16GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, ybase = 0u, ystride = uint(g.cout), ksplit = 0u)
         var pb = TowerBiasArgs(d = uint(g.cout), nelem = uint(ny), boff = 0u, act = BIAS_ACT_NONE)
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_im2col16_cls(raw, h, s_col, pc, tts_im2col_wgs(int64(tout * kdim)))
+            enc_tts_im2col16_cls(raw, h, s_col, pc, tts_im2col16_wgs(int64(tout * kdim)))
             f16_gemm_enc(khr, raw, h, s_mm, pm, int64(tout), int64(g.cout))
             enc_tower_bias_act_cls(raw, h, s_b, pb, (int64(ny) / 4l + 255l) / 256l)
             cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
