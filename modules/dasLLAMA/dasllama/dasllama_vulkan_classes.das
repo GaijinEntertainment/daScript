@@ -13539,44 +13539,108 @@ class TtsSigSum {
 def tts_sigsum_wgs(t : int64) : int64 => (t + 255l) / 256l
 
 struct TtsStatsArgs {
-    t : uint   //! the rows
-    c : uint   //! the channels, x's row width
+    t : uint      //! the rows
+    c : uint      //! the channels, x's row width
+    rb : uint     //! the rows a block sums
+    nblk : uint   //! the blocks: ceil(t / rb)
+    poff : uint   //! the block partials' element base in `part`: [nblk][c]
 }
 
-//! the instance norm's column statistics of x [t][c]: stats[ch] = the channel's mean, stats[c + ch] = its sum of squared
-//! deviations from that mean - the CPU `column_stats`; one workgroup a channel, wgs = c
-[vk_dispatch(name = "tts_colstats_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsColStats : WgReduceBase {
+let TTS_STATS_ROWS = 128u   //! the rows a column-statistics block sums
+
+//! the block partials of the instance norm's column statistics of x [t][c]: workgroup `blk` sums rows blk rb .. + rb of every
+//! channel, a lane a channel reading the rows as they lie (the lanes of a row consecutive) - the plain sum, or under SQ the
+//! squared deviations from the mean `stats[ch]` holds; part[poff + blk c + ch]; wgs = nblk. The CPU `column_stats`'s two
+//! passes, each over row blocks so every SM takes a share of the rows
+[ |> template_struct_instance]
+class template TtsColPartT {
+    @template_constant SQ : bool = false
     @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 stats : array<float>
+    @ssbo @binding = 2 part : array<float>
+    @push_constant pa : TtsStatsArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let blk = gl_WorkGroupID.x
+        let r0 = blk * pa.rb
+        let r1 = min(r0 + pa.rb, pa.t)
+        var ch = gl_LocalInvocationID.x
+        while (ch < pa.c) {
+            var m = 0.0
+            static_if (SQ) {
+                m = stats[ch]
+            }
+            var s = 0.0
+            var r = r0
+            while (r < r1) {
+                let v = x[r * pa.c + ch]
+                static_if (SQ) {
+                    let dv = v - m
+                    s += dv * dv
+                } else {
+                    s += v
+                }
+                r++
+            }
+            part[pa.poff + blk * pa.c + ch] = s
+            ch += 256u
+        }
+    }
+}
+
+[vk_dispatch(name = "tts_colpart_sum_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsColPartSum : TtsColPartT {}
+
+[vk_dispatch(name = "tts_colpart_sq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsColPartSq : TtsColPartT {
+    override SQ = true
+}
+
+//! the partials folded a channel a lane: stats[ch] = the mean, or under SQ stats[c + ch] = the sum of squared deviations;
+//! wgs = `tts_colreduce_wgs`
+[ |> template_struct_instance]
+class template TtsColReduceT {
+    @template_constant SQ : bool = false
+    @ssbo @binding = 0 part : array<float>
     @ssbo @binding = 1 stats : array<float>
     @push_constant pa : TtsStatsArgs
 
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let ch = gl_WorkGroupID.x
-        let lid = gl_LocalInvocationID.x
-        var s = 0.0
-        var r = lid
-        while (r < pa.t) {
-            s += x[r * pa.c + ch]
-            r += 256u
-        }
-        let tot = wg_sum(s, 0u)
-        let mean = tot / float(pa.t)
-        var q = 0.0
-        r = lid
-        while (r < pa.t) {
-            let dv = x[r * pa.c + ch] - mean
-            q += dv * dv
-            r += 256u
-        }
-        let qtot = wg_sum(q, 1u)
-        if (lid == 0u) {
-            stats[ch] = mean
-            stats[pa.c + ch] = qtot
+        let ch = gl_GlobalInvocationID.x
+        if (ch < pa.c) {
+            var s = 0.0
+            var blk = 0u
+            while (blk < pa.nblk) {
+                s += part[pa.poff + blk * pa.c + ch]
+                blk++
+            }
+            static_if (SQ) {
+                stats[pa.c + ch] = s
+            } else {
+                stats[ch] = s / float(pa.t)
+            }
         }
     }
 }
+
+[vk_dispatch(name = "tts_colreduce_mean_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsColReduceMean : TtsColReduceT {}
+
+[vk_dispatch(name = "tts_colreduce_sq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsColReduceSq : TtsColReduceT {
+    override SQ = true
+}
+
+//! the column statistics' blocks over `t` rows
+def tts_stats_blocks(t : int64) : int64 => (t + int64(TTS_STATS_ROWS) - 1l) / int64(TTS_STATS_ROWS)
+
+//! the reduce stamps' workgroup count over `c` channels
+def tts_colreduce_wgs(c : int64) : int64 => (c + 255l) / 256l
+
+//! the stats rows a seat holds for `c_max` channels over `t_max` rows: the mean and squared-deviation rows, then the partials
+def tts_stats_floats(t_max, c_max : int64) : int64 => 2l * c_max + tts_stats_blocks(t_max) * c_max
 
 struct TtsAdainArgs {
     c : uint       //! the channels

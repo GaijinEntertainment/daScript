@@ -367,8 +367,10 @@ first query row); and the predictor and decoder row classes - `test_vkt_concat` 
 (`rs = 0`) and the f0 and noise columns at their strides with a zero pad past them (control: the
 columns follow their strides), `test_vkt_sigsum` the duration sigmoid sums (`TtsSigSum`, 50 of 64
 columns, the pad columns carrying garbage) against the in-test f32 sum at the approx bar (control:
-the pad columns stay out of the sum), `test_vkt_colstats` the column statistics (`TtsColStats`) against
-double-precision sums at t 45 / 72 channels and t 300 / 20 (a lane's second row),
+the pad columns stay out of the sum), `test_vkt_colstats` the column statistics (the four passes
+`TtsColPartSum`, `TtsColReduceMean`, `TtsColPartSq`, `TtsColReduceSq` over 128-row blocks) against
+double-precision sums at t 45 / 72 channels, t 300 / 20 and t 1000 / 300 (eight blocks, a lane's
+second channel),
 `test_vkt_adain` the statistics then both fused AdaIN stamps (`TtsAdainLeaky`, `TtsAdainSnake`) against
 the CPU `adain_rows_into` followed by `leaky_relu` or `snake_rows`, every plane at an element base
 off zero, plus the leaky stamp in place (bit for bit the out-of-place rows, the input overwritten),

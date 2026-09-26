@@ -76,7 +76,9 @@ aux rows, and the style appended again; the rows come back [t][c + style]. The d
 BiLSTM, the projection, then the sigmoid sum a token over speed (`TtsSigSum`), one float a
 token back. Prosody: the encoder rows transposed on the host into the rows form, the shared
 BiLSTM, then each branch's residual blocks pinging between two row sets - the AdaIN as the
-column stats (`TtsColStats`, one workgroup a channel) and the fold with the leaky ReLU
+column stats (four coalesced passes over 128-row blocks: `TtsColPartSum` and
+`TtsColReduceMean`, then `TtsColPartSq` and `TtsColReduceSq`, the block partials past the two
+stats rows of the scratch) and the fold with the leaky ReLU
 (`TtsAdainLeaky`, the CPU `adain_affine`'s scale and shift), the upsampling block's depthwise
 transposed pool (`TtsPoolDw`) and its nearest shortcut as the row gather over a r / 2 map, the
 convs on the im2col and the biased tile, the learned shortcut the same, the join as the scaled
