@@ -1814,18 +1814,8 @@
    voice and prints the per-sentence wall and the real-time factor as its other modalities do,
    `gen_bench_records` carries a `tts` workload, and the StyleTTS2 ledger entry cites the row.
 
-167. **The dasllama-cli follow-up bundle (one PR).** (1) `--verbose`: tee the engine's log
-    records (`logs/dasllama-cli.log` - a missing Metal profile, a GPU decline) to stderr, so a
-    user who never opens the log still sees them; (2) the sampler cost: a sampled decode runs
-    `sample_logits_row` over the whole vocab per token - a k-pass top-k scan, a full sort for
-    top-p, a CDF walk - which on Qwen3.5-4B Q8 under Metal turns 105 tok/s greedy into 76 sampled
-    while llama.cpp's candidate-list sampler costs nothing measurable (93 both ways); done = a
-    partial top-k selection, nucleus and the draw over the k survivors, sampled decode back at
-    greedy speed on that model, `test_sampling.das`'s arms green; (3) a gemma-4 image turn under
-    `set_thinking(false)` stops at its first channel marker with zero tokens (the marker is a stop
-    id in instruct mode), which is why `complete --image` keeps the family's thinking default -
-    done = the instruct-mode media turn answers, or the toggle refuses by name on a media turn;
-    (4) speaker playback for `chat` and `talk` beside the WAV, through the audio device rail;
-    (5) a `REVIEW.das` gate in `utils/dasllama-server/` that checks every `main.das` and
-    `cli_args.das` flag has its README entry and its rst row, after which the two flag-copies
-    rules in that folder's `REVIEW.md` keep only the wording duty.
+167. **A sampler arm on `benchmarks/lcpp_bench.das`'s tg row.** The bench's only sampler knob
+    is `--mtp-temp`, a temperature alone, so no board row holds a sampled decode rate and the
+    candidate-list sampler's `PERF_LEDGER.md` entry reads its rates off `dasllama-cli`'s stats
+    line. Done = `--temp/--top-k/--top-p` on the tg row, a `tg128@sampled` cell beside `tg128`,
+    and the ledger entry re-minted from it.

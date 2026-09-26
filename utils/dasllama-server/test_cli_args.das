@@ -51,6 +51,40 @@ def test_plan_dispatch(t : T?) {
 }
 
 [test]
+def test_plan_playback(t : T?) {
+    t |> run("--play and --null-audio parse on the commands that speak, off by default") @(t : T?) {
+        for (cmd in ["chat", "speak", "talk"]) {
+            let off <- parse_cli([cmd, "--tts", "t.gguf", "hi"])
+            t |> equal(off.error, "", cmd)
+            t |> success(!off.playback.play && !off.playback.null_audio, "{cmd}: off by default")
+            let on <- parse_cli([cmd, "--tts", "t.gguf", "--play", "--null-audio", "hi"])
+            t |> equal(on.error, "", cmd)
+            t |> success(on.playback.play && on.playback.null_audio, "{cmd} --play --null-audio")
+            t |> equal(length(on.bare), 1, "{cmd}: neither flag is a bare token")
+            t |> equal(on.bare[0], "hi")
+        }
+        t |> success(find(command_help(CliCommand.speak), "--play") >= 0, "the speak help lists the speaker flags")
+        t |> success(find(command_help(CliCommand.tokenize), "--play") < 0, "the tokenize help does not")
+    }
+}
+
+[test]
+def test_plan_verbose(t : T?) {
+    t |> run("--verbose is a shared flag on every command, off by default") @(t : T?) {
+        let quiet <- parse_cli(["complete", "-m", "x.gguf", "hi"])
+        t |> success(!quiet.common.verbose, "off by default")
+        for (cmd in ["complete", "chat", "transcribe", "speak", "talk", "embed", "tokenize", "bench"]) {
+            let plan <- parse_cli([cmd, "--verbose", "-m", "x.gguf"])
+            t |> equal(plan.error, "", cmd)
+            t |> success(plan.common.verbose, "{cmd} --verbose")
+        }
+        let voiced <- parse_cli(["speak", "-v", "alba", "--verbose", "hi"])
+        t |> equal(voiced.speak.voice, "alba", "-v stays the voice short flag")
+        t |> success(voiced.common.verbose, "verbose has no short form and rides beside -v")
+    }
+}
+
+[test]
 def test_plan_flags(t : T?) {
     t |> run("complete: the shared, the sampler and its own flags land on one plan") @(t : T?) {
         let plan <- parse_cli(["complete", "-m", "x.gguf", "--gpu", "off", "-t", "4", "--temp", "0.7", "-n", "12", "-p", "hi", "--quiet"])
@@ -402,6 +436,7 @@ def test_validate_plan(t : T?) {
             (args = ["talk", "--tts", "t.gguf"], wants = "nothing to answer"),
             (args = ["talk", "--tts", "t.gguf", "--in", "q.wav"], wants = "no ASR model to hear"),
             (args = ["talk", "--prompt", "hi"], wants = "no TTS model to speak"),
+            (args = ["chat", "-m", "x.gguf", "--play"], wants = "--play needs a speech model"),
             (args = ["embed", "-m", "x.gguf"], wants = "nothing to embed"),
             (args = ["tokenize", "-m", "x.gguf"], wants = "nothing to tokenize"),
             (args = ["bench", "-m", "x.gguf", "-o", "csv"], wants = "--output is txt | md"),
@@ -420,6 +455,7 @@ def test_validate_plan(t : T?) {
         t |> equal(validate_plan(parse_cli(["speak", "hello"]), cfg), "")
         t |> equal(validate_plan(parse_cli(["talk", "--in", "q.wav"]), cfg), "")
         t |> equal(validate_plan(parse_cli(["complete", "-m", "x", "--image", "a.jpg", "hi"]), cfg), "")
+        t |> equal(validate_plan(parse_cli(["chat", "-m", "x", "--play"]), cfg), "")
     }
     t |> run("a plan that holds is not refused") @(t : T?) {
         for (a in [["complete", "-m", "x", "hi"], ["chat", "-m", "x"], ["transcribe", "--asr", "a", "q.wav"], ["speak", "--tts", "t", "hi"],

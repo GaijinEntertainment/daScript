@@ -2630,7 +2630,8 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              tools_declared : bool = false; call_open : string = ""; call_close : string = "";
                              seed : int = 0; think : ThinkStream = ThinkStream();
                              tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l;
-                             media_is_audio : bool = false; media_grid : int2 = int2(0)) {
+                             media_is_audio : bool = false; media_grid : int2 = int2(0);
+                             var nothink : NothinkStopGuard = NothinkStopGuard()) {
     if (bench_hold_active()) {
         service_unavailable(srv, writer, ibench_hold_text())
         return
@@ -2649,6 +2650,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                            media_grid = media_grid)   // qwen mrope grid; (0,0) on gemma families
     preq.prompt <- prompt
     preq.stop_ids <- stop_ids
+    preq.nothink <- nothink
     preq.close_toks <- close_toks
     preq.media_embd <- media
     if (!submit(cur_model(), cur_sched(), preq)) {
@@ -2683,6 +2685,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
 def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : array<string>;   // nolint:STYLE037,STYLE038 — one arm per message role, each accumulating into the same renderer state
                                max_new : int64; start : int; think_set, think_val, has_media, media_is_audio : bool;
                                var prompt, stop_ids, close : array<int64>&;
+                               var nothink_out : NothinkStopGuard&;
                                var call_open, call_close : string&; var think_out : ThinkStream&;
                                var tool_mode_out : ToolMode&; var media_at : int64&) : string {
     var chat <- create_chat_renderer(cur_model(), system, max_new)
@@ -2815,7 +2818,8 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     }
     // out-params: the sole caller hands them in empty and deletes them before every re-render
     prompt <- rendered      // nolint:PERF030 — empty on entry
-    stop_ids <- effective_stop_ids(chat)   // nolint:PERF030 — empty on entry; + thinking-off extras
+    stop_ids <- turn_stop_ids(chat)   // nolint:PERF030 — empty on entry; the thinking-off extras ride the guard
+    nothink_out <- make_nothink_guard(chat)   // nolint:PERF030 — empty on entry, like stop_ids
     close <- render_close(cur_model(), chat)   // nolint:PERF030 — empty on entry
     call_open = chat.tmpl.tool_call_open
     call_close = chat.tmpl.tool_call_close
@@ -3039,6 +3043,8 @@ def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWri
     defer() { delete prompt }
     var stop_ids : array<int64>
     defer() { delete stop_ids }
+    var nothink = NothinkStopGuard()
+    defer() { delete nothink }
     var close : array<int64>
     defer() { delete close }
     var call_open = ""
@@ -3049,7 +3055,7 @@ def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWri
     var start = 0
     while (true) {
         let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val,
-                                              n_media > 0l, media_is_audio, prompt, stop_ids, close, call_open, call_close,
+                                              n_media > 0l, media_is_audio, prompt, stop_ids, close, nothink, call_open, call_close,
                                               think_stream, wire_tool_mode, media_at)
         if (!empty(render_error)) {
             bad_request(srv, writer, render_error)
@@ -3069,12 +3075,13 @@ def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWri
         start = next
         delete prompt
         delete stop_ids
+        delete nothink
         delete close
     }
     register_request(srv, writer, prompt, stop_ids, close, media, media_at, n_media, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
-                     media_is_audio, media_grid)
+                     media_is_audio, media_grid, nothink)
 }
 
 def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {

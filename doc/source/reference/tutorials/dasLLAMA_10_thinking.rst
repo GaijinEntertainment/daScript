@@ -97,10 +97,9 @@ Turning thinking off
 
 Hybrid families answer directly when the turn opens with the template's empty
 think block. ``set_thinking(false)`` renders exactly that (a no-op for models
-with no think specials in the vocabulary); the default is on. Schedulers that
-cut streams themselves read ``effective_stop_ids`` — the template's stops plus
-the thinking-off extras while thinking is off — rather than the template's raw
-stop list:
+with no think specials in the vocabulary); the default is on.
+``effective_stop_ids`` is the merged view of every stop in force — the
+template's stops plus the thinking-off extras while thinking is off:
 
 .. code-block:: das
 
@@ -108,6 +107,26 @@ stop list:
    let stops <- effective_stop_ids(chat)
    add_user(chat, "And 12 * 12 vs 11 * 13? One sentence.")
    // respond(...) now answers directly — no <think> span on the wire
+
+A loop that samples the tokens itself splits that list in two.
+``turn_stop_ids`` are the template's own stops and end the turn outright;
+``make_nothink_guard`` carries the thinking-off extras, and
+``nothink_stop_here`` decides each token: a channel marker before the reply's
+first content piece is a leading thought the reply matcher splits (gemma-4's
+E-series opens a media turn with one even in instruct mode), a marker after
+content ends the turn:
+
+.. code-block:: das
+
+   let turn_stops <- turn_stop_ids(chat)
+   var guard <- make_nothink_guard(chat)
+   let prompt <- render_turn(m, chat)
+   generate(m, chat.session, prompt, SamplingParams(), 96l) $(id, piece) {
+       return false if (find_index(turn_stops, id) >= 0)
+       return false if (nothink_stop_here(guard, id, piece))
+       print("{piece}")
+       return true
+   }
 
 .. seealso::
 

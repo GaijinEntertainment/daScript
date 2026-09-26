@@ -7,18 +7,17 @@ doc: `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo roo
 `dasllama/*` module, or to `README.md` text stating dasLLAMA engine behavior or a measured
 number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
-**A diff that adds a `main.das` flag, changes what one does or defaults to, or edits any copy of
-its text leaves the flag's `@clarg_doc`, its `README.md` table row with its `Default` cell, the
-`README.md` section on its config-file key where one exists, and its row in
+**A diff that adds a `main.das` flag, changes what one does or defaults to, or adds or edits any
+copy of its text, leaves the flag's `@clarg_doc`, its `README.md` table row with its `Default`
+cell, the `README.md` section on its config-file key where one exists, and its row in
 `doc/source/reference/utils/dasllama_server.rst` (repo root) stating the same behavior and the
-same default, adding any copy that is missing.** A copy left behind sends the user to a flag that
-no longer does what it says.
+same default.** A copy left behind sends the user to a flag that no longer does what it says.
 
-**A diff that adds a `cli_args.das` flag, changes what one does or defaults to, or edits any copy
-of its text leaves the flag's `@clarg_doc`, its entry in the `README.md` dasllama-cli section (the
-command's table row, or the shared-flags sentence for a shared flag), and its row in
-`doc/source/reference/utils/dasllama_cli.rst` (repo root) stating the same behavior and the same
-default, adding any copy that is missing.**
+**A diff that adds a `cli_args.das` flag, changes what one does or defaults to, or adds or edits
+any copy of its text, leaves the flag's `@clarg_doc`, its entry in the `README.md` dasllama-cli
+section (the command's row, or the shared-flags paragraph for a flag more than one command
+takes), and its row in `doc/source/reference/utils/dasllama_cli.rst` (repo root) stating the
+same behavior and the same default.**
 
 **A diff that changes how `serving_knobs.das` derives a knob updates, for every `main.das` and
 `cli_args.das` flag that reads that knob, the flag's `@clarg_doc`, its `README.md` entry and its
@@ -41,10 +40,10 @@ before - a new route requires all of its fields - adds that field to every `cont
 request to that route, in the same change.**
 
 **A diff that changes the shape a route answers - a key, an item in a list it answers, or a value
-the code sets itself rather than one the traffic since boot, the configuration, the loaded model or
-the machine decides, including one a `dasllama/*` module supplies - re-captures every fixture under
-`tests/fixtures/` that records that route, in the same change.** The fixtures are the recorded
-response shape.
+the code sets itself, whether this folder's code or a `dasllama/*` module's - re-captures every
+fixture under `tests/fixtures/` that records that route, in the same change; a value the traffic
+since boot, the configuration, the loaded model or the machine decides is not shape.** The
+fixtures are the recorded response shape.
 
 **A diff that adds a read of a response key in `control.html` or in a Playwright `.spec.js`,
 wherever the diff puts it, or edits a line that reads one, and no fixture under
@@ -54,8 +53,9 @@ produce, hand-compose the fixture and name it as hand-composed, with why, in its
 `tests/fixtures/README.md`.**
 
 **A diff that adds a key to what a route answers, or changes the condition under which the route
-answers one, updates that route's `README.md` row in the same change.** The row is where a
-consumer learns the key exists and when to expect it.
+answers one, names the key and that condition in the route's `README.md` row and updates every
+other `README.md` passage that names the key or the condition, in the same change.** The row is
+where a consumer learns the key exists and when to expect it.
 
 **A `served` or `served_note` value a diff adds or changes in `openai_server.das` - all of it
 but the engine text it quotes - uses only words a user understands without knowing how the
@@ -84,14 +84,15 @@ the diff opens included, at or below the regions the driver armed (`gpu_device_s
 scheduler in device mode counts as its `max_streams`.** The driver panics on the session that
 finds no region.
 
-**A diff in this folder that calls `moe_gpu_drop_model` turns off every device mode this folder
-armed before the dropped slot's next step, in the same change.** The regions go with the model,
-and a scheduler left in device mode admits a session that has none.
+**A diff in this folder that calls `moe_gpu_drop_model` turns off, before the dropped slot's next
+step, every scheduler device mode (`set_device_kv`) this folder turned on, in the same change.**
+The regions go with the model, and a scheduler left in device mode admits a session that has none.
 
 **A reference in this folder to a symbol of a module the folder requires conditionally - a
 `require ?<guard>` or a `require [<group>]` line - outside a `static_if (typeinfo module_exists(M))`
 arm, where M is that module or a module whose own `require` brings it in, is a defect - wrap the
-reference in that arm.** The unguarded reference fails the compile of a build without dasLLVM.
+reference in that arm.** The unguarded reference fails the compile of every build that lacks that
+module.
 
 **A function signature in this folder never names a type from a module this folder requires
 conditionally - those types stay inside the guarded arm, and plain types cross the boundary.** A

@@ -208,6 +208,58 @@ def test_split_ff_vt_whitespace(t : T?) {
     }
 }
 
+// ===== the instruct-mode stop guard: a channel marker before content is a thought, after it a stop =====
+
+let CH_OPEN = 100l    // the guarded ids are opaque to the guard; the pieces carry the marker text
+let CH_CLOSE = 101l
+
+def private feed_stops(var g : NothinkStopGuard; steps : array<tuple<id : int64; piece : string>>) : array<bool> {
+    return <- [for (s in steps); nothink_stop_here_(g, s.id, s.piece)]
+}
+
+[test]
+def test_nothink_stop_guard(t : T?) {
+    t |> run("a leading thought block passes whole; the first marker after content stops") @(t : T?) {
+        var ct <- arch_chat("gemma4")
+        var g <- make_nothink_guard_(ct, [CH_OPEN, CH_CLOSE])
+        let stops <- feed_stops(g, [(id = CH_OPEN, piece = "<|channel>"), (id = 5l, piece = "thought\n"),
+                                    (id = 6l, piece = "Let me look."), (id = CH_CLOSE, piece = "<channel|>"),
+                                    (id = 7l, piece = "Two cats."), (id = CH_CLOSE, piece = "<channel|>")])
+        t |> equal(stops, [false, false, false, false, false, true])
+        delete ct
+    }
+    t |> run("content first: the very next marker stops") @(t : T?) {
+        var ct <- arch_chat("gemma4")
+        var g <- make_nothink_guard_(ct, [CH_OPEN, CH_CLOSE])
+        let stops <- feed_stops(g, [(id = 9l, piece = "4"), (id = CH_CLOSE, piece = "<channel|>")])
+        t |> equal(stops, [false, true])
+        delete ct
+    }
+    t |> run("whitespace before a marker is not content") @(t : T?) {
+        var ct <- arch_chat("gemma4")
+        var g <- make_nothink_guard_(ct, [CH_OPEN, CH_CLOSE])
+        let stops <- feed_stops(g, [(id = 5l, piece = "\n"), (id = CH_OPEN, piece = "<|channel>"), (id = 5l, piece = "thought\n"),
+                                    (id = CH_CLOSE, piece = "<channel|>"), (id = 7l, piece = "Yes."), (id = CH_OPEN, piece = "<|channel>")])
+        t |> equal(stops, [false, false, false, false, false, true])
+        delete ct
+    }
+    t |> run("a bare leading marker passes, and the marker after the content stops") @(t : T?) {
+        var ct <- arch_chat("gemma4")
+        var g <- make_nothink_guard_(ct, [CH_OPEN, CH_CLOSE])
+        let stops <- feed_stops(g, [(id = CH_OPEN, piece = "<|channel>"), (id = 7l, piece = "The answer"), (id = CH_OPEN, piece = "<|channel>")])
+        t |> equal(stops, [false, false, true])
+        delete ct
+    }
+    t |> run("an unarmed guard (a thinking turn) never stops") @(t : T?) {
+        var ct <- arch_chat("gemma4")
+        var no_ids : array<int64>
+        var g <- make_nothink_guard_(ct, no_ids)
+        let stops <- feed_stops(g, [(id = 7l, piece = "4"), (id = CH_CLOSE, piece = "<channel|>"), (id = CH_OPEN, piece = "<|channel>")])
+        t |> equal(stops, [false, false, false])
+        delete ct
+    }
+}
+
 // ===== the hold-back path: a marker split across a feed boundary =====
 
 // check_all_chunkings sweeps chunk sizes, but a per-feed assert is what pins WHERE the bytes go:

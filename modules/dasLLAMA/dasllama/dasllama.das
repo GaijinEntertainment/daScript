@@ -425,10 +425,30 @@ def render_assistant_calls(model : Model; var chat : ChatSession; text : string;
 }
 
 def effective_stop_ids(chat : ChatSession) : array<int64> {
-    //! The stop ids in force for the NEXT generation: the template's stops plus its thinking-off
-    //! extras while thinking is off. Schedulers that stop streams themselves read this, not
-    //! ``chat.stop_ids``, so an instruct-mode gemma-4 cuts at a stray channel marker.
+    //! Every stop id for the NEXT generation as one list: the template's stops plus the
+    //! thinking-off extras while thinking is off. A scheduler that stops streams itself reads
+    //! ``turn_stop_ids`` and runs the extras through ``nothink_stop_here`` instead.
     return <- effective_stop_ids_(chat)
+}
+
+def turn_stop_ids(chat : ChatSession) : array<int64> {
+    //! The template's own stop ids for the NEXT generation (``<turn|>``, ``<eos>`` and their
+    //! kin): a token among them ends the turn outright. The thinking-off extras are the
+    //! ``make_nothink_guard`` guard's.
+    return <- turn_stop_ids_(chat)
+}
+
+def make_nothink_guard(chat : ChatSession) : NothinkStopGuard {
+    //! The instruct-mode stop guard for ``chat``'s next turn over the family's channel markers
+    //! (gemma-4): unarmed on a thinking turn. Feed every sampled token through
+    //! ``nothink_stop_here`` after the ``turn_stop_ids`` check.
+    return <- make_nothink_guard_(chat)
+}
+
+def nothink_stop_here(var guard : NothinkStopGuard; id : int64; piece : string) : bool {
+    //! true = ``id`` ends the turn: a guarded channel marker sampled after the reply's first
+    //! content piece. A marker before content opens a leading thought the reply matcher splits.
+    return nothink_stop_here_(guard, id, piece)
 }
 
 def split_reasoning(chat : ChatSession; reply : string) : ThinkSplit {
@@ -439,9 +459,9 @@ def split_reasoning(chat : ChatSession; reply : string) : ThinkSplit {
 }
 
 def make_think_stream(chat : ChatSession) : ThinkStream {
-    //! The incremental reasoning/content splitter for ``chat``'s next turn — feed streamed pieces
-    //! through ``think_feed``, flush with ``think_finish``. Armed only when the turn actually
-    //! thinks (toggle on, markers in the vocab, gate rendered) — else a pass-through stream.
+    //! The incremental reasoning/content splitter for ``chat``'s next turn (``think_feed`` per
+    //! piece, ``think_finish`` at the end). Armed when the turn thinks, and on an instruct turn of
+    //! a family with guarded channel markers (gemma-4); else a pass-through stream.
     return make_think_stream_(chat)
 }
 

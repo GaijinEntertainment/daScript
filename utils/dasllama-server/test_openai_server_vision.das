@@ -6,10 +6,11 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require openai_server                                   // set_model / set_model_vision / run_server (sibling)
+require _server_rig                                     // models_dir / image_data_uri (sibling)
 require dasllama/dasllama                               // load_model / QuantMode
 require daslib/jobque_boost                             // with_job_status (server-thread lifecycle)
 require daslib/json_boost                               // read_json
-require daslib/base64                                   // the request's data: URI payload
+require daslib/base64                                   // the BMP header probes' payloads
 require daslib/fio
 require strings
 require dasllama/dasllama_env
@@ -22,9 +23,6 @@ require dasllama/dasllama_env
 
 let TEST_PORT = 18097
 
-def private models_dir() : string {
-    return models_dir_resolved()   // the ONE resolution: DASLLAMA_MODELS_DIR, else the rig default
-}
 let DEC_PATH = path_join(models_dir(), "gemma-4-12B-it-Q4_K_M.gguf")
 let MM_PATH = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
 let CATS_PATH = path_join(models_dir(), "coco-val2017-000000039769.jpg")
@@ -66,19 +64,6 @@ def private with_vision_server(port : int; blk : block<(base_url : string) : voi
     }
 }
 
-// the cats jpeg as the data: URI a browser's FileReader would produce (byte read, not fread(path):
-// a jpeg carries interior NULs, which a string read would truncate at)
-def private cats_data_uri() : string {
-    var inscope bytes : array<uint8>
-    fopen(CATS_PATH, "rb") $(f) {
-        if (f != null) {
-            bytes |> resize(int64(fstat(f).size))
-            fread(f, bytes)
-        }
-    }
-    return empty(bytes) ? "" : "data:image/jpeg;base64,{base64_encode(bytes)}"
-}
-
 // a valid 54-byte BMP header (BITMAPINFOHEADER, 24bpp) declaring w x h, with NO pixel data —
 // header probes answer without any pixels (test_vision.das builds the same stub)
 def private bmp_header_stub(w, h : int) : array<uint8> {
@@ -114,7 +99,7 @@ def test_openai_server_vision(t : T?) {   // nolint:STYLE038 — one server boot
             t |> skip("the 12B pair runs under DASLLAMA_PARITY_FULL=1 (final pre-PR gate, not the iteration loop)")
             return
         }
-        let uri = cats_data_uri()
+        let uri = image_data_uri(CATS_PATH)
         t |> success(length(uri) > 1000, "the cats jpeg encoded to a data URI ({length(uri)} chars)")
         with_vision_server(TEST_PORT) $(base_url) {
             // the arm is declared on the stats surface (the page gates its attach button on this)
@@ -263,7 +248,7 @@ def test_openai_server_vision_mrope(t : T?) {
             t |> success(true, "skipped: the Omni pair runs under DASLLAMA_PARITY_FULL=1 (final pre-PR gate, not the iteration loop)")
             return
         }
-        let uri = cats_data_uri()
+        let uri = image_data_uri(CATS_PATH)
         t |> success(length(uri) > 1000, "the cats jpeg encoded to a data URI ({length(uri)} chars)")
         with_vision_server(OMNI_TEST_PORT, dec = OMNI_DEC_PATH, mm = OMNI_MM_PATH) $(base_url) {
             var body = "\{\"messages\":[\{\"role\":\"user\",\"content\":["

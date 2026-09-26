@@ -3189,12 +3189,15 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 ### Reasoning (thinking models)
 
-- `effective_stop_ids` - The stop ids in force for the NEXT generation: the template's stops plus its thinking-off extras while thinking is off.
-- `make_think_stream` - The incremental reasoning/content splitter for `chat`'s next turn — feed streamed pieces through `think_feed`, flush with `think_finish`.
+- `effective_stop_ids` - Every stop id for the NEXT generation as one list: the template's stops plus the thinking-off extras while thinking is off.
+- `make_nothink_guard` - The instruct-mode stop guard for `chat`'s next turn over the family's channel markers (gemma-4): unarmed on a thinking turn.
+- `make_think_stream` - The incremental reasoning/content splitter for `chat`'s next turn (`think_feed` per piece, `think_finish` at the end).
+- `nothink_stop_here` - true = `id` ends the turn: a guarded channel marker sampled after the reply's first content piece.
 - `split_reasoning` - Split a complete reply at its reasoning boundary per the model family's reply format (`<think>` pair, Harmony channels, gemma-4's thought channel).
 - `think_drain` - Drain a COMPLETE reply through the splitter in one call: feed + finish + the strip rule (both halves strip when a reasoning span was consumed).
 - `think_feed` - Feed one streamed piece through the splitter; the out-strings are OVERWRITTEN with this piece's reasoning/content deltas (either may be empty while a partial marker is held).
 - `think_finish` - Flush the splitter at end-of-generation (OVERWRITES the out-strings with the final deltas): an unclosed reasoning span classifies as reasoning — the truncated-tail rule.
+- `turn_stop_ids` - The template's own stop ids for the NEXT generation (`<turn|>`, `<eos>` and their kin): a token among them ends the turn outright.
 
 ### Operations: prepared images and dispatch
 
@@ -6626,6 +6629,7 @@ The logger module provides a structured, file-backed logging facility for daslan
 - `logger_capture_diagnostics` - Send the runtime's own diagnostics — a leak dump, a fatal, what it reports about itself — as raw text to `<log>.diag.log`, or to stderr when that cannot open.
 - `logger_close` - Close the log file.
 - `logger_flush` - Explicit flush.
+- `logger_set_echo_stderr` - Echo every record the file receives to stderr as one plain `[level] message` line - a tool's `--verbose`: stdout stays untouched, unlike `logger_set_tee`, which lets the runtime's own sink print.
 - `logger_set_stderr_fallback` - Enable / disable writing to stderr when the log file can't be opened.
 - `logger_set_tee` - Tee mode: hooked `print`/`to_log` lines go to the log file AND still reach stdout/stderr (the default hook behavior diverts them to the file only — right for stdio-transport tools, wrong for interactive servers watched on a console).
 

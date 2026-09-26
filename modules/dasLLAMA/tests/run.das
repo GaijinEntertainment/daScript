@@ -356,7 +356,7 @@ let MODULE_AREAS <- {
     "dasllama_metal_prefill" => "llm,tts",   // its rope serves the Pocket codec transformer
     "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
-    "dasllama_rope" => "llm", "dasllama_sampling" => "llm", "dasllama_scheduler" => "llm",
+    "dasllama_rope" => "llm", "dasllama_sampling" => "llm,vision,audio", "dasllama_scheduler" => "llm",
     "dasllama_spm" => "llm,tts",   // the unigram arm is the Pocket tokenizer (test_tts_pocket)
     "dasllama_bench" => "llm,infra",   // the rows serve lcpp_bench (llm) and the server's /bench (infra's tooling)
     "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm",

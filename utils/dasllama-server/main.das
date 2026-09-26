@@ -68,10 +68,10 @@ struct ServerArgs {
     @clarg_doc = "GPU backend: auto (default: metal/vulkan when detected, else CPU) | off | metal | metal-required | vulkan. vulkan serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got (a set --metal flag keeps the legacy env-driven path)"
     gpu : string
 
-    @clarg_doc = "vulkan: resident MoE expert-stack layers K, offloaded from the end (default 2 under --gpu vulkan)"
+    @clarg_doc = "vulkan: resident MoE expert-stack layers K, offloaded from the end (default auto under --gpu vulkan)"
     gpu_layers : int
 
-    @clarg_doc = "vulkan: streamed prefill MoE layers below the resident set (default 35 under --gpu vulkan)"
+    @clarg_doc = "vulkan: streamed prefill MoE layers below the resident set (default auto under --gpu vulkan)"
     gpu_stream : int
 
     @clarg_doc = "vulkan: deltanet (recurrent) layers through the device chain (default on under --gpu vulkan)"
@@ -146,7 +146,7 @@ struct ServerArgs {
     @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) host-cached, off at several streams or on a device-resident (--gpu vulkan) slot; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
     mtp : bool
 
-    @clarg_doc = "Path to a llama.cpp llama-bench binary — enables the control page's benchmark button"
+    @clarg_doc = "Path to a llama.cpp llama-bench binary: the control page's benchmark button then runs the A/B child (our bench, then llama-bench on the same GGUF) instead of the in-process rows; source-tree daslang only"
     lcpp_bin : string
 
     @clarg_doc = "Directory the model catalog downloads into (default ~/.dasllama/models; DASLLAMA_MODELS_DIR overrides)"

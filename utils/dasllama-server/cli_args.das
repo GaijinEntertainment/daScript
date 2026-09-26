@@ -55,7 +55,7 @@ def command_of(name : string) : CliCommand => to_enum(type<CliCommand>, name, Cl
 [CommandLineArgs]
 struct CommonArgs {
     @clarg_short = "c"
-    @clarg_doc = "TOML config file (default: dasllama-server.toml beside the program, else in the cwd); keys mirror the long flag names, explicit flags win"
+    @clarg_doc = "TOML config file (default: dasllama-server.toml in the cwd, else beside the program); keys mirror the long flag names, explicit flags win"
     config : string
 
     @clarg_short = "m"
@@ -102,6 +102,9 @@ struct CommonArgs {
 
     @clarg_doc = "Where a bare model name resolves (default ~/.dasllama/models; DASLLAMA_MODELS_DIR overrides)"
     models_dir : string
+
+    @clarg_doc = "Echo the engine's log records (logs/dasllama-cli.log: a missing Metal profile, a GPU decline, model load) to stderr as they land; stdout stays the answer"
+    verbose : bool
 
     @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch (a fat build carries no tuner and ignores it)"
     tune : bool
@@ -316,6 +319,17 @@ struct TalkArgs {
     quiet : bool
 }
 
+//! The speaker flags of the commands that speak (chat, speak, talk): the WAV is always the
+//! artifact, playback is asked for.
+[CommandLineArgs]
+struct PlayArgs {
+    @clarg_doc = "Also play each spoken reply through the speaker once its WAV has landed (blocks until the clip ends; a box with no audio device says so and keeps writing the files)"
+    play : bool
+
+    @clarg_doc = "With --play: drive the null audio backend instead of a device (a test box, a CI runner)"
+    null_audio : bool
+}
+
 [CommandLineArgs]
 struct EmbedArgs {
     @clarg_doc = "The text to embed (or --file, or the first bare argument)"
@@ -378,6 +392,7 @@ struct CliPlan {
     transcribe : TranscribeArgs
     speak : SpeakArgs
     talk : TalkArgs
+    playback : PlayArgs      // chat, speak, talk
     embed : EmbedArgs
     tokenize : TokenizeArgs
     bench : BenchArgs = BenchArgs()
@@ -414,6 +429,9 @@ def private command_infos(cmd : CliCommand) : array<CommandInfo> {
     if (cmd == CliCommand.complete || cmd == CliCommand.chat || cmd == CliCommand.talk) {
         infos |> emplace(get_command_info(type<SamplerArgs>))
     }
+    if (speaks(cmd)) {
+        infos |> emplace(get_command_info(type<PlayArgs>))
+    }
     if (cmd == CliCommand.complete) {
         infos |> emplace(get_command_info(type<CompleteArgs>))
     } elif (cmd == CliCommand.chat) {
@@ -434,7 +452,11 @@ def private command_infos(cmd : CliCommand) : array<CommandInfo> {
     return <- infos
 }
 
-//! The help for one subcommand: its own flags, the sampler where it samples, then the shared flags.
+//! The commands that can speak a reply, and so take the speaker flags.
+def speaks(cmd : CliCommand) : bool => cmd == CliCommand.chat || cmd == CliCommand.speak || cmd == CliCommand.talk
+
+//! The help for one subcommand: its own flags, the sampler where it samples, the speaker flags
+//! where it speaks, then the shared flags.
 def command_help(cmd : CliCommand) : string {
     let name = "dasllama-cli {cmd}"
     var text = ""
@@ -457,6 +479,9 @@ def command_help(cmd : CliCommand) : string {
     }
     if (cmd == CliCommand.complete || cmd == CliCommand.chat || cmd == CliCommand.talk) {
         text = "{text}\nsampling:\n{format_help(get_command_info(type<SamplerArgs>), name)}"
+    }
+    if (speaks(cmd)) {
+        text = "{text}\nspeaker:\n{format_help(get_command_info(type<PlayArgs>), name)}"
     }
     return "{text}\nshared flags:\n{format_help(get_command_info(type<CommonArgs>), name)}"
 }
@@ -500,24 +525,11 @@ def parse_cli(argv : array<string>) : CliPlan {
     if (plan.cmd == CliCommand.complete || plan.cmd == CliCommand.chat || plan.cmd == CliCommand.talk) {
         ok = parse_into(plan.sampler, plan.rest, err)
     }
+    if (ok && speaks(plan.cmd)) {
+        ok = parse_into(plan.playback, plan.rest, err)
+    }
     if (ok) {
-        if (plan.cmd == CliCommand.complete) {
-            ok = parse_into(plan.complete, plan.rest, err)
-        } elif (plan.cmd == CliCommand.chat) {
-            ok = parse_into(plan.chat, plan.rest, err)
-        } elif (plan.cmd == CliCommand.transcribe) {
-            ok = parse_into(plan.transcribe, plan.rest, err)
-        } elif (plan.cmd == CliCommand.speak) {
-            ok = parse_into(plan.speak, plan.rest, err)
-        } elif (plan.cmd == CliCommand.talk) {
-            ok = parse_into(plan.talk, plan.rest, err)
-        } elif (plan.cmd == CliCommand.embed) {
-            ok = parse_into(plan.embed, plan.rest, err)
-        } elif (plan.cmd == CliCommand.tokenize) {
-            ok = parse_into(plan.tokenize, plan.rest, err)
-        } elif (plan.cmd == CliCommand.bench) {
-            ok = parse_into(plan.bench, plan.rest, err)
-        }
+        ok = parse_command_args(plan, err)
     }
     if (!ok) {
         plan.error = err
@@ -526,6 +538,28 @@ def parse_cli(argv : array<string>) : CliPlan {
     let infos <- command_infos(plan.cmd)
     plan.bare <- bare_tokens(plan.rest, infos)
     return <- plan
+}
+
+//! The subcommand's own struct off `plan.rest`; false with the parser's reason.
+def private parse_command_args(var plan : CliPlan; var err : string&) : bool {
+    if (plan.cmd == CliCommand.complete) {
+        return parse_into(plan.complete, plan.rest, err)
+    } elif (plan.cmd == CliCommand.chat) {
+        return parse_into(plan.chat, plan.rest, err)
+    } elif (plan.cmd == CliCommand.transcribe) {
+        return parse_into(plan.transcribe, plan.rest, err)
+    } elif (plan.cmd == CliCommand.speak) {
+        return parse_into(plan.speak, plan.rest, err)
+    } elif (plan.cmd == CliCommand.talk) {
+        return parse_into(plan.talk, plan.rest, err)
+    } elif (plan.cmd == CliCommand.embed) {
+        return parse_into(plan.embed, plan.rest, err)
+    } elif (plan.cmd == CliCommand.tokenize) {
+        return parse_into(plan.tokenize, plan.rest, err)
+    } elif (plan.cmd == CliCommand.bench) {
+        return parse_into(plan.bench, plan.rest, err)
+    }
+    return true
 }
 
 // ===== The config file =====
@@ -729,6 +763,7 @@ def validate_plan(plan : CliPlan; cfg : CliConfig) : string {   // nolint:STYLE0
         if (!empty(plan.chat.script) && empty(fread(plan.chat.script))) {
             return "could not read --script {plan.chat.script}"
         }
+        return "--play needs a speech model - pass --tts <gguf> or configure one" if (plan.playback.play && empty(plan.chat.tts) && empty(cfg.tts))
     } elif (plan.cmd == CliCommand.transcribe) {
         let file = !empty(plan.transcribe.file) ? plan.transcribe.file : (empty(plan.bare) ? "" : plan.bare[0])
         return "nothing to transcribe - pass --file <audio> or the file as the first argument" if (empty(file))

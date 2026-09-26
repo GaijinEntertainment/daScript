@@ -31,18 +31,23 @@ family-blind.
    generation prompt switches to the bare `assistant_open_think` header so the model emits its
    own thought channel. gemma-4's default `assistant_open` keeps the closed empty
    `<|channel>thought\n<channel|>` prefill, so thinking-off renders the exact pre-arc tokens.
-4. **`stop_nothink`** - extra stop tokens in force whenever the next turn is NOT a thinking
-   turn, merged by `effective_stop_ids`. gemma-4 lists its channel markers: an instruct-mode
-   E-series model rambles past its answer through a stray `<channel|>` (observed live:
-   `...4.<channel|>4`), and in a non-thinking turn a channel marker is always framing noise - the
-   turn is over. Anything that generates from a ChatSession reads `effective_stop_ids(chat)`,
-   never `chat.stop_ids`.
-5. **Arming is vocab-gated and gate-aware** (`think_turn_active`): the reply matcher, the
-   alternate opener, and the stop merge all key on one predicate - toggle on, the reply markers
-   resolve in the vocab (an inert declaration like Qwen2.5's shared ChatML template never arms),
-   and a gate family's gate rendered on a consumed turn or renders this turn. A mid-conversation
+4. **`stop_nothink`** - guarded stop tokens in force whenever the next turn is NOT a thinking
+   turn. gemma-4 lists its channel markers: an instruct-mode E-series model rambles past its
+   answer through a stray `<channel|>` (`...4.<channel|>4`), and the same model opens a media
+   turn with a whole `<|channel>thought...<channel|>` block even with the closed empty thought
+   prefilled. So the marker is position-aware (`nothink_stop_here`): before the reply's first
+   content piece it is a leading thought the reply matcher splits - `make_think_stream` arms on
+   these turns too - and after content it ends the turn. Anything that generates from a
+   ChatSession checks `turn_stop_ids(chat)` and then the `make_nothink_guard(chat)` guard, never
+   `chat.stop_ids` alone; `effective_stop_ids(chat)` is the merged view for callers that only
+   need the set.
+5. **Arming is vocab-gated and gate-aware** (`think_turn_active`): the alternate opener and the
+   stop merge key on one predicate - toggle on, the reply markers resolve in the vocab (an inert
+   declaration like Qwen2.5's shared ChatML template never arms), and a gate family's gate
+   rendered on a consumed turn or renders this turn - and the reply matcher arms on that
+   predicate or on a `stop_nothink` family's instruct turn (item 4). A mid-conversation
    `set_thinking(true)` on gemma-4 therefore stays instruct-shaped (the gate cannot enter an
-   already-rendered context) with the framing stops still armed.
+   already-rendered context) with the framing stops still guarded.
 
 **Reply side - the per-family matcher** (`think_mode` + `think_open`/`think_close`):
 

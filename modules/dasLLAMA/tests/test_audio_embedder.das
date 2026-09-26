@@ -104,6 +104,24 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
 
 // The pre-encoded audio rows on a PLAIN chat (no tower): the E2B family hears through this seam,
 // and every refusal at it is a panic the caller must never reach by accident.
+// The rows turn with thinking OFF under the chat sampler preset: the E-series opens a media turn
+// with a channel marker even so, and the instruct-mode guard lets the reply through.
+def private instruct_audio_turn(t : T?; m : Model; rows : array<float>; n : int64) {
+    var chat <- create_chat(m, "", 96l)
+    set_thinking(chat, false)
+    set_seed(chat.session, 1234)
+    var rows_d := rows
+    add_user_audio_rows(m, chat, rows_d, n)
+    add_user(chat, "What did you hear?")
+    var pieces = 0l
+    let reply = respond(m, chat, SamplingParams(temp = 0.7, top_k = 20l, top_p = 0.95)) $(_piece) {
+        pieces++
+        return true
+    }
+    t |> success(pieces > 0l && !empty(reply), "the instruct-mode audio turn answers: {length(reply)} chars over {pieces} pieces")
+    delete chat
+}
+
 [test]
 def test_audio_rows_on_a_plain_chat(t : T?) {
     let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
@@ -164,6 +182,7 @@ def test_audio_rows_on_a_plain_chat(t : T?) {
             t |> equal(stats(chat2.session).n_prompt, long_length(head) + n + long_length(tail), "the prefill is head + rows + tail")
             t |> equal(chat2.n_audio_rows, 0l, "the rows are consumed by the turn")
             delete chat2
+            instruct_audio_turn(t, m, rows, n)
             // one media kind per turn: an image already queued refuses the audio rows
             var chat3 <- create_chat(m, "", 8l)
             var img : array<float>

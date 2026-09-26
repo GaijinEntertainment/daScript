@@ -13,7 +13,7 @@ require strings
 //   - split_reasoning — split a complete reply into (reasoning, content)
 //   - Streaming the split live: make_think_stream + think_feed / think_finish
 //   - think_drain — the same splitter over a reply already in hand
-//   - set_thinking(false) — answer directly; effective_stop_ids for schedulers
+//   - set_thinking(false) — answer directly; turn_stop_ids + the nothink guard for a loop of your own
 //
 // Prerequisites: tutorial 02; a thinking-family GGUF (Qwen3-0.6B-Q8_0 works:
 // https://huggingface.co/Qwen/Qwen3-0.6B-GGUF).
@@ -135,10 +135,15 @@ def section_streamed_split(m : Model) {
 //
 // Hybrid families answer directly when the turn opens with the template's
 // empty think block. set_thinking(false) renders exactly that (a no-op for
-// models with no think specials in the vocab); the default is on. Schedulers
-// that cut streams themselves read effective_stop_ids — the template's stops
-// plus the thinking-off extras while thinking is off — rather than the
-// template's raw stop list.
+// models with no think specials in the vocab); the default is on.
+// effective_stop_ids is the merged view of every stop in force — the
+// template's stops plus the thinking-off extras while thinking is off. A loop
+// that samples the tokens itself (a scheduler) splits the two: turn_stop_ids
+// end the turn outright, the extras ride the guard (make_nothink_guard /
+// nothink_stop_here) — a channel marker before the reply's first content
+// piece is a leading thought the reply matcher splits (gemma-4's E-series
+// opens a media turn with one even in instruct mode), a marker after content
+// ends the turn.
 
 def section_thinking_off(m : Model; var chat : ChatSession) {
     let stops_on <- effective_stop_ids(chat)
@@ -154,6 +159,28 @@ def section_thinking_off(m : Model; var chat : ChatSession) {
         return true
     }
     print("\n")
+
+    // the same turn the way a scheduler's own loop cuts it
+    add_user(chat, "And 100 / 7, rounded? One sentence.")
+    let turn_stops <- turn_stop_ids(chat)
+    var guard <- make_nothink_guard(chat)
+    let prompt <- render_turn(m, chat)
+    print("Bot (a hand-rolled loop, {length(turn_stops)} turn stops, {length(stops_off) - length(turn_stops)} guarded): ")
+    var cut = "the budget"
+    generate(m, chat.session, prompt, SamplingParams(), 96l) $(id, piece) {
+        if (find_index(turn_stops, id) >= 0) {
+            cut = "the turn's own stop"
+            return false
+        }
+        if (nothink_stop_here(guard, id, piece)) {
+            cut = "a channel marker after content"
+            return false
+        }
+        fprint(fstdout(), piece)
+        fflush(fstdout())
+        return true
+    }
+    print("\n(ended by {cut})\n")
 }
 
 [export]

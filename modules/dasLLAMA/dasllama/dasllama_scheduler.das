@@ -51,6 +51,7 @@ struct PendingReq {
     prompt : array<int64>                   // the full rendered prompt
     close_toks : array<int64>               // the turn-terminating tokens (render_close; evaled at donation so the next turn extends the cached prefix)
     stop_ids : array<int64>                 // sampling one of these finishes "stop" (the token is not emitted)
+    nothink : NothinkStopGuard = NothinkStopGuard()   // the instruct-mode channel-marker guard (`make_nothink_guard`); unarmed = every token passes
     params : SamplingParams = SamplingParams()
     max_new : int64 = 256l                  // reply token budget (>= 1)
     seed : int = 0                          // != 0 => set_seed at admit (reproducible sampling)
@@ -74,6 +75,7 @@ struct Stream {
     prompt : array<int64>
     close_toks : array<int64>
     stop_ids : array<int64>
+    nothink : NothinkStopGuard = NothinkStopGuard()
     n_prefilled : int64                     // prompt tokens evaled so far
     media_embd : array<float>               // the splice's soft-token rows (see PendingReq)
     n_media : int64
@@ -337,6 +339,10 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
         }
     }
     let ptxt = piece(m, tok)
+    if (nothink_stop_here(st.nothink, tok, ptxt)) {
+        finish_stream(st, "stop", events)
+        return false
+    }
     peek_data(ptxt) $(bytes) {
         for (b in bytes) {
             st.gen_tail_bytes |> push(b)
@@ -410,6 +416,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         var st <- Stream(id = sch.queue[0].id,
                          params = sch.queue[0].params, prompt <- sch.queue[0].prompt,
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
+                         nothink <- sch.queue[0].nothink,
                          media_embd <- sch.queue[0].media_embd, n_media = sch.queue[0].n_media,
                          media_at = sch.queue[0].media_at,
                          media_non_causal = sch.queue[0].media_non_causal,

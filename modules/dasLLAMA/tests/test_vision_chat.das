@@ -18,12 +18,15 @@ require ?das_metal dasllama/dasllama_metal_tower   // the tower engage/knob legs
 // The image chat turn: the prompt stream shape around the soft-token splice (tier 2) and the
 // greedy caption (tier 3). Pinned: marker ids, media-first order, span length from the
 // geometry, and that the model describes what is in the picture. NOT token-parity with
-// llama-mtmd-cli — tests/CLAUDE.md carries why.
+// llama-mtmd-cli — tests/CLAUDE.md carries why. Every cell skips on its carrier pair (the
+// gemma-4-12B, E2B Q8_0 and E2B Q4_K_M decoders with their mmproj, the gemma-3 pair) and on
+// the cats jpg being absent from the models dir.
 
 let MM = "mmproj-gemma-4-12B-it-BF16.gguf"
 let DEC = "gemma-4-12B-it-Q4_K_M.gguf"
 let MM_E2B = "mmproj-gemma-4-E2B-it-bf16.gguf"   // the gemma4v ViT pair (E-series)
 let DEC_E2B = "gemma-4-E2B-it-Q8_0.gguf"
+let DEC_E2B_Q4 = "gemma-4-E2B-it-Q4_K_M.gguf"
 let CATS = "coco-val2017-000000039769.jpg"
 
 // the pinned marker ids (gemma-4 vocab; ggml-vocab-gemma-4.gguf)
@@ -200,6 +203,57 @@ def test_vision_chat_e2b(t : T?) {
             let low = to_lower(reply)
             tt |> success(find(low, "cat") >= 0, "the cats are described as cats")
             tt |> success(length(reply) > 40, "the caption is a description, not a fragment")
+            delete chat
+        }
+        delete m
+    }
+}
+
+// The E2B image turn with thinking OFF: instruct mode arms the channel markers as stops, and a
+// model that opens the media turn with one must still answer - the leading block is tolerated.
+// The Q4_K_M decoder under the chat sampler preset at the session's default seed draws a channel
+// marker first on this box (greedy on the Q8_0 decoder does not), so the cell runs that shape;
+// the assert is the answer, since the first draw follows the box's tower lane.
+[test]
+def test_vision_chat_e2b_nothink(t : T?) {
+    t |> run("the E2B image turn on the first turn under set_thinking(false) answers") @(tt : T?) {
+        let mm = path_join(models_dir(), MM_E2B)
+        let dec = path_join(models_dir(), DEC_E2B_Q4)
+        let cats = path_join(models_dir(), CATS)
+        if (!model_available(tt, mm) || !model_available(tt, dec)) {
+            return
+        }
+        if (!stat(cats).is_valid) {
+            tt |> skip("{CATS} not present - fetch it into the models dir (gemma4-vision-oracle/mint.sh documents the URL)")
+            return
+        }
+        let img <- load_image_rgb(cats)
+        var m <- load_model_(dec, QuantMode.q8)   // the planar rail: no .dlim beside the model
+        allow_cpu_prefill()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var emb <- load_vision_embedder(mm)
+            var chat <- create_chat_(m, emb, "", 640l)
+            set_thinking_(chat, false)
+            set_seed_(chat.session, 1234)
+            add_user_image_(chat, img)
+            add_user_(chat, "describe this image")
+            let params = SamplingParams(temp = 0.7, top_k = 20l, top_p = 0.95)
+            var n_pieces = 0
+            let reply = respond_(m, chat, params) $(piece : string) {
+                n_pieces++
+                return true
+            }
+            // the model opens with a thought block despite the closed empty prefill; the armed
+            // matcher files it as reasoning and the answer is the content half
+            let sp = split_reasoning_(chat.tmpl, reply)
+            to_log(LOG_INFO, "vision caption (E2B/gemma4v, thinking off): reasoning {length(sp.reasoning)} chars, content: {replace(sp.content, "\n", "\\n")}\n")
+            tt |> success(n_pieces > 0, "the turn generated tokens")
+            tt |> success(find(to_lower(sp.content), "cat") >= 0, "the content half describes the cats as cats")
+            tt |> success(find(sp.content, "<channel|>") < 0 && find(sp.content, "<|channel>") < 0, "no channel marker reaches the content half")
+            tt |> success(stats(chat.session).n_gen < 640l, "the turn ended on a stop, not the budget ({stats(chat.session).n_gen} tokens)")
+            tt |> equal(length(chat.history), 2, "the turn is on the history")
+            tt |> success(find(chat.history[1].content, "<|channel>") < 0, "history stores the answer without the thought")
             delete chat
         }
         delete m

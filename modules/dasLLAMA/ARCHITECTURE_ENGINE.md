@@ -90,7 +90,12 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   tier specializes it. A refusal is `ok = false` plus a `why`, never a panic - a drafter is
   optional and a bad sidecar must degrade to plain decode.
 - **`dasllama_sampling.das`** - token sampling and the generation drivers: the sampler over
-  `dasllama_common`'s `SamplingParams`. It registers the accept walk's row sampler
+  `dasllama_common`'s `SamplingParams`. A top-k within `SAMPLE_TOPK_FAST_CAP` is a candidate-list
+  sampler - one pass over the row selects the k largest logits into a heap (ties at the k-th all
+  survive), and the temperature, softmax, nucleus and min-p cuts and the one draw run over those
+  survivors in `Session.cand`, so a sampled decode costs what a greedy one does at a 250K vocab;
+  top-k off or past the cap takes the vocab-wide reference path, which is also the fast path's
+  parity oracle in `tests/test_sampling.das`. It registers the accept walk's row sampler
   (`register_mtp_sample_row`) at init, and that registration is the only way the engine reaches
   this file.
 - **`dasllama_ple.das`** - gemma-4 E-series per-layer embeddings and the gemma4 MoE FFN. The
