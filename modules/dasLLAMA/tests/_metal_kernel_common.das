@@ -48,7 +48,7 @@ def private buf_mismatch_bars_as(buf; t : type<auto(TT)>; want : array<float>; r
     let p = unsafe(reinterpret<TT const?>(metal_buffer_contents(buf)))
     var bad = 0
     for (k in range(length(want))) {
-        let g = float(unsafe(p[k]))   // nolint:PERF020 - the half payload's widening; the float instance's identity
+        let g = float(unsafe(p[k]))   // nolint:PERF020,LINT019 - the half payload's widening; the float instance's identity
         let w = want[k]
         if (!(abs(g - w) <= absf) && !(abs(g - w) <= rel * max(1.0, max(abs(g), abs(w))))) {
             if (bad < DUMP_CAP) {
@@ -78,7 +78,7 @@ def private buf_mismatch_env_as(buf; t : type<auto(TT)>; want, env : array<float
     let p = unsafe(reinterpret<TT const?>(metal_buffer_contents(buf)))
     var bad = 0
     for (k in range(length(want))) {
-        let g = float(unsafe(p[k]))   // nolint:PERF020 - the half payload's widening; the float instance's identity
+        let g = float(unsafe(p[k]))   // nolint:PERF020,LINT019 - the half payload's widening; the float instance's identity
         let w = want[k]
         if (!(abs(g - w) <= max(rel * env[k], 1e-3))) {
             if (bad < DUMP_CAP) {
@@ -186,17 +186,15 @@ def q8_blob_fill(nrows, nkb : int; var blob : array<uint8>; var wdeq : array<flo
     let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
     blob |> resize(nrows * nkb * 34)
     wdeq |> resize(nrows * nkb * 32)
-    unsafe {
-        for (b in range(nrows * nkb)) {
-            let d = lut[(b * 7 + 1) % 4]
-            let dbits = f32_to_f16(d)
-            blob[b * 34] = uint8(dbits & 0xFFu)
-            blob[b * 34 + 1] = uint8(dbits >> 8u)
-            for (c in range(32)) {
-                let q = (b * 5 + c * 11) % span - span / 2
-                blob[b * 34 + 2 + c] = uint8(q & 0xFF)
-                wdeq[b * 32 + c] = float(q) * d
-            }
+    for (b in range(nrows * nkb)) {
+        let d = lut[(b * 7 + 1) % 4]
+        let dbits = f32_to_f16(d)
+        blob[b * 34] = uint8(dbits & 0xFFu)
+        blob[b * 34 + 1] = uint8(dbits >> 8u)
+        for (c in range(32)) {
+            let q = (b * 5 + c * 11) % span - span / 2
+            blob[b * 34 + 2 + c] = uint8(q & 0xFF)
+            wdeq[b * 32 + c] = float(q) * d
         }
     }
 }

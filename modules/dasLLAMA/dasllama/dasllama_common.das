@@ -3983,14 +3983,12 @@ def embed_row(t : Model; token : int64; var dst : float?) {
     } elif (cls_kq(t)) {
         // trimmed: embq/embs hold the region's pair verbatim, rebased to 0; else the pair sits at wcls_off in the model's plane, split-scale when metal_blob
         let fmt = t.emb_fmt
-        unsafe {
-            var row = temp_array(dst, dim, type<float>)
-            if (t.planes_trimmed) {
-                kq_plane_row_f32(fmt, t.embq, t.embs, dim, t.config.vocab_size, t.kq_repacked, token, row, 0l)
-            } else {
-                let i = kq_slot("embed_row", fmt)
-                kq_plane_row_f32(fmt, t.kq[i].q, t.kq[i].s, dim, t.config.vocab_size, t.kq_repacked, token, row, 0l, t.wcls_off / 256l, t.metal_blob)
-            }
+        var row = unsafe(temp_array(dst, dim, type<float>))
+        if (t.planes_trimmed) {
+            kq_plane_row_f32(fmt, t.embq, t.embs, dim, t.config.vocab_size, t.kq_repacked, token, row, 0l)
+        } else {
+            let i = kq_slot("embed_row", fmt)
+            kq_plane_row_f32(fmt, t.kq[i].q, t.kq[i].s, dim, t.config.vocab_size, t.kq_repacked, token, row, 0l, t.wcls_off / 256l, t.metal_blob)
         }
     } else {
         copy_floats(dst, unsafe(addr(t.fblob[t.tok_emb_off + token * dim])), dim)

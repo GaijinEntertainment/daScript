@@ -7,9 +7,8 @@ require dasllama/dasllama_lint public
 require _compares
 require daslib/fio public
 require strings public
-require dasllama/dasllama_gguf   // rd_u32 / rd_i32 over the mapped bytes
+require dasllama/dasllama_convert   // rd_u32 / rd_i32 over the mapped bytes
 require daslib/array_boost
-require math
 
 // Reader for the KittenTTS oracle dumps (harness/kitten_oracle.py): one `TTSO` container per
 // case - named f32 / i32 tensors - and the per-size manifest.json listing the cases.

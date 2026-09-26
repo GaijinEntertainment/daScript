@@ -3106,7 +3106,8 @@ def private st2_conv(enc : MetalComputeEncoder?; var c : St2GpuCtx; slot : St2Co
 //! The conv's bias over its `rows` output rows, and the conv counted.
 def private st2_conv_bias(enc : MetalComputeEncoder?; var c : St2GpuCtx; slot : St2ConvSlot; by : MetalBuffer?; rows : int64) {
     let n = rows * slot.cout_p
-    enc_add_bias_rows(enc, by, 0ul, c.slab, slot.boff, slot.u_cout, st2_u(c, uint(n)), n)
+    let u_n = st2_u(c, uint(n))
+    enc_add_bias_rows(enc, by, 0ul, c.slab, slot.boff, slot.u_cout, u_n, n)
     g_tower_convs++
 }
 
@@ -4162,6 +4163,7 @@ def private pk_codec_ok(mm : PocketMimi) : bool {
     return pk_conv_ok(mm.dec_out) && mm.dec_out.cout >= 1l
 }
 
+[cold_path]
 def private pk_codec_attach(mm : PocketMimi) : bool {
     var bytes = 0l
     let ok = st2_slab_attach(g_tw_pk_codec, pk_codec_key(mm), $(var w; measuring) {
@@ -4257,8 +4259,11 @@ def private pk_transformer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
         st2_lin(enc, c, s.in_proj, b.bxb, t, b.bqkv)
         let qs = uint(s.in_proj.cout_p)
         let u_dh = st2_u(c, dh)
-        enc_rope(enc, b.bqkv, 0ul, b.bcos, 0ul, b.bsin, u_d, u_dh, st2_u(c, uint(t * (d / 2l))), st2_u(c, 0u), null, st2_u(c, qs), t * (d / 2l))
-        enc_rope(enc, b.bqkv, uint64(d * 4l), b.bcos, 0ul, b.bsin, u_d, u_dh, st2_u(c, uint(t * (d / 2l))), st2_u(c, 0u), null, st2_u(c, qs), t * (d / 2l))
+        let u_np = st2_u(c, uint(t * (d / 2l)))
+        let u_neox = st2_u(c, 0u)
+        let u_qs = st2_u(c, qs)
+        enc_rope(enc, b.bqkv, 0ul, b.bcos, 0ul, b.bsin, u_d, u_dh, u_np, u_neox, null, u_qs, t * (d / 2l))
+        enc_rope(enc, b.bqkv, uint64(d * 4l), b.bcos, 0ul, b.bsin, u_d, u_dh, u_np, u_neox, null, u_qs, t * (d / 2l))
         var kc = PkRowsArgs(rows = uint(t), width = uint(d), ss = qs, sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = 0u)
         enc_pk_rows(enc, b.bqkv, g_tw_pk_sc.bk[i], kc, nd)
         kc.sc = uint(2l * d)
@@ -4635,6 +4640,7 @@ def private pk_frames_ok(m : PocketModel) : bool {
 }
 
 //! The frames slab and its q8 blob: the blob writer rides the slab writer's two passes, its bytes uploaded after the slab.
+[cold_path]
 def private pk_frames_attach(m : PocketModel) : bool {
     var inscope qb = PkBlobWriter(measure = true)
     var qbytes = 0l
