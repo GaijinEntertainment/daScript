@@ -10,6 +10,53 @@ options indenting = 4
 module das_metal_boost shared public
 
 require das_metal public
+require math
+
+// ===== the test suites' buffer helpers: generic (untyped `dev`/`buf`) so a consumer behind
+// `require ?das_metal` instantiates them only inside its static_if(builtin_module_exists(das_metal)) =====
+
+//! relative-tolerance float compare for fastmath GPU results vs a CPU oracle
+def public fapprox(x, y : float) : bool {
+    return abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
+}
+
+//! upload a das array into a fresh shared-memory MTLBuffer
+def public buf_upload(dev; arr : array<auto(TT)>) : auto {
+    var buf = metal_new_buffer(dev, uint64(long_length(arr)) * uint64(typeinfo sizeof(arr[0])))
+    buf_store(buf, arr)
+    return buf
+}
+
+//! a das array's elements into an existing shared-memory MTLBuffer
+def public buf_store(buf; arr : array<auto(TT)>) {
+    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
+    for (k in range(length(arr))) {
+        unsafe(p[k]) = arr[k]
+    }
+}
+
+//! a fresh shared-memory MTLBuffer holding `nn` copies of `value` (zero-fill or sentinel-fill)
+def public buf_fill(dev; nn : int; value : auto(TT)) : auto {
+    var buf = metal_new_buffer(dev, uint64(nn) * uint64(typeinfo sizeof(value)))
+    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
+    for (k in range(nn)) {
+        unsafe(p[k]) = value
+    }
+    return buf
+}
+
+//! copy `nn` elements of a shared-memory MTLBuffer into a fresh das array (`t` fixes TT; the
+//! parameter position appends const to TT, so every use strips it back with -const)
+[unused_argument(t)]
+def public buf_download(buf; nn : int; t : type<auto(TT)>) : array<TT -const> {
+    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
+    var res : array<TT -const>
+    res |> resize(nn)
+    for (k in range(nn)) {
+        res[k] = unsafe(p[k])
+    }
+    return <- res
+}
 
 //! Scoped system-default device: creates, invokes, releases. `dev` is null when the box has no
 //! Metal device — the block decides whether that is a skip or a failure.

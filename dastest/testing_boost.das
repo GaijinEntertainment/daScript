@@ -6,6 +6,18 @@ module testing_boost shared
 
 require daslib/ast_boost
 require testing public
+require strings   // rtrim - the panic text without its newline
+
+//! The panic a block raises, as text ("" when it returns): a refusal cell reads the message it holds.
+def public panic_text(blk : block<() : void>) : string {
+    var why = ""
+    try {
+        invoke(blk)
+    } recover {
+        why = this_context().last_exception |> rtrim
+    }
+    return why
+}
 
 [macro_function]
 def private validate_arguments(type_name : string, args) : bool {

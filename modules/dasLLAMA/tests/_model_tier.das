@@ -220,6 +220,21 @@ def read_wav_pcm16_mono(path : string) : array<float> {
 // DASLLAMA_PARITY_FULL) and returns false — the arm lands in the suite's skipped count instead
 // of masquerading as a pass (two real x64 failures hid behind the passing form for months).
 // `skip` does NOT unwind: the caller's `if (!model_available(t, path)) return` exits the arm.
+//! The TTS cells' data gate: the model through the model gate, then the front-end packs (the g2p pack, and the
+//! tagger pack when `postag`) - a missing one skips the cell loudly and answers true.
+def tts_data_missing(t : T?; gguf : string; postag : bool = true) : bool {
+    if (!model_available(t, gguf)) {
+        return true
+    }
+    for (pack in (postag ? ["tts_g2p.bin", "tts_postag.bin"] : ["tts_g2p.bin"])) {
+        if (!stat(path_join(models_dir(), pack)).is_valid) {
+            t |> skip("{pack} not present")
+            return true
+        }
+    }
+    return false
+}
+
 def model_available(t : T?; path : string) : bool {
     let st = stat(path)
     if (!st.is_valid) {

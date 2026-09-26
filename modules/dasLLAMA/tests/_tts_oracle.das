@@ -4,6 +4,7 @@ options _dasllama_internal = true
 module _tts_oracle shared public
 
 require dasllama/dasllama_lint public
+require _compares   // logits_maxdiff
 require daslib/fio public
 require strings public
 require dasllama/dasllama_gguf   // rd_u32 / rd_i32 over the mapped bytes
@@ -98,14 +99,21 @@ def load_tts_dump(path : string) : table<string; TtsDumpTensor> {
     return <- out
 }
 
+//! A directory's manifest.json into the manifest record `m` (its type picks the schema); false when the
+//! directory is not stocked, a panic when the file does not parse.
+def load_json_manifest(dir_path : string; var m : auto(TT)) : bool {
+    let text = fread(path_join(dir_path, "manifest.json"))
+    return false if (empty(text))
+    if (!sscan_json(text, m)) {
+        panic("{dir_path}/manifest.json does not parse")
+    }
+    return true
+}
+
 //! The manifest of one size's dumps; `cases` empty when the directory is not stocked.
 def load_tts_oracle_manifest(dir_path : string) : TtsOracleManifest {
     var m = TtsOracleManifest()
-    let text = fread(path_join(dir_path, "manifest.json"))
-    return <- m if (empty(text))
-    if (!sscan_json(text, m)) {
-        panic("tts oracle: {dir_path}/manifest.json does not parse")
-    }
+    load_json_manifest(dir_path, m)
     return <- m
 }
 
@@ -114,9 +122,5 @@ def max_abs_diff(a, b : array<float>) : float {
     if (length(a) != length(b)) {
         panic("tts oracle: comparing {length(a)} against {length(b)} elements")
     }
-    var m = 0.0
-    for (x, y in a, b) {
-        m = max(m, abs(x - y))
-    }
-    return m
+    return logits_maxdiff(a, b)
 }

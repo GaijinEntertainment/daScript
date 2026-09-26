@@ -1737,17 +1737,6 @@ def private st2_rows_gate(t : T?; dev, queue) {
 }
 
 //! a 64-lane dispatch of one pipeline over `total` elements
-def private st2_dispatch_64_lanes(t : T?; queue; tag : string; pso; total : int; blk : block<(enc : MetalComputeEncoder?)>) : bool {
-    var err2 : string
-    let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        invoke(blk, enc)
-        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
-    }
-    t |> success(ran, "{tag} dispatch: {err2}")
-    return ran
-}
-
 def private st2_fill(n : int; seed_mul : int; scale, bias : float) : array<float> {
     var a : array<float>
     a |> resize(n)
@@ -1781,7 +1770,7 @@ def private st2_gather_gate(t : T?; dev, queue) {
     var bo = buf_fill(dev, nrows * c, -1.0e30)
     let run <- @(bax : MetalBuffer?; add_b, add_c : uint) : bool {
         var ka = RowGatherArgs(c = uint(c), add_b = add_b, add_c = add_c, total = uint(nrows * c))
-        return st2_dispatch_64_lanes(t, queue, "{tag} add_b {add_b} add_c {add_c}", pso, nrows * c) $(enc) {
+        return dispatch_64_lanes(t, queue, "{tag} add_b {add_b} add_c {add_c}", pso, nrows * c) $(enc) {
             metal_set_buffer(enc, bax, 0ul, 0)
             metal_set_buffer(enc, bidx, 0ul, 1)
             metal_set_buffer(enc, bb, 0ul, 2)
@@ -1859,7 +1848,7 @@ def private st2_concat_gate(t : T?; dev, queue; with_res : bool) {
     let run <- @(bres : MetalBuffer?) : bool {
         var ka = St2ConcatArgs(c = uint(c), rc = uint(rc), rs = uint(rs), f0s = uint(f0s), ns = uint(f0s), with_res = with_res ? 1u : 0u,
             width = uint(width), total = uint(nrows * width))
-        return st2_dispatch_64_lanes(t, queue, tag, pso, nrows * width) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, nrows * width) $(enc) {
             metal_set_buffer(enc, bx, 0ul, 0)
             metal_set_buffer(enc, bres, 0ul, 1)
             metal_set_buffer(enc, bf0, 0ul, 2)
@@ -1924,7 +1913,7 @@ def private st2_pool_gate(t : T?; dev, queue) {
     var by = buf_fill(dev, t_out * c, -1.0e30)
     let run <- @(bxx : MetalBuffer?) : bool {
         var ka = St2PoolArgs(c = uint(c), k = uint(k), stride = uint(stride), pad_l = uint(pad_l), dil = 1u, t_in = uint(t_in), total = uint(t_out * c))
-        return st2_dispatch_64_lanes(t, queue, tag, pso, t_out * c) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, t_out * c) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
             metal_set_buffer(enc, by, 0ul, 1)
             metal_set_buffer(enc, bw, 0ul, 2)
@@ -2108,7 +2097,7 @@ def private pk_rows_gate(t : T?; dev, queue; elu : bool) {
         }
     }
     let run <- @(bxx : MetalBuffer?; byy : MetalBuffer?) : bool {
-        return st2_dispatch_64_lanes(t, queue, tag, pso, rows * width) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, rows * width) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
             metal_set_buffer(enc, byy, 0ul, 1)
             metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
@@ -2153,7 +2142,7 @@ def private pk_row_scale_gate(t : T?; dev, queue) {
     let run <- @(bxx : MetalBuffer?) : bool {
         var u_c = uint(c)
         var u_n = uint(tt * c)
-        return st2_dispatch_64_lanes(t, queue, tag, pso, tt * c) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, tt * c) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
             metal_set_buffer(enc, bs, 64ul, 1)
             metal_set_bytes(enc, unsafe(addr<void?>(u_c)), 4ul, 2)
@@ -2218,7 +2207,7 @@ def private rope_stride_gate(t : T?; dev, queue) {
     var u_stride = buf_u32(dev, uint(stride))
     let toff = uint64(pos0 * (dh / 2) * 4)
     let run <- @(bxx : MetalBuffer?) : bool {
-        return st2_dispatch_64_lanes(t, queue, tag, pso, tt * d / 2) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, tt * d / 2) $(enc) {
             metal_set_buffer(enc, bxx, uint64(col * 4), 0)
             metal_set_buffer(enc, bcos, toff, 1)
             metal_set_buffer(enc, bsin, toff, 2)
@@ -2386,7 +2375,7 @@ def private rope_store_pocket_gate(t : T?; dev, queue) {
     let toff = uint64(pos * (dh / 2) * 4)
     let roff = uint64(pos * d * 4)
     let run <- @(bxx : MetalBuffer?; bkk : MetalBuffer?; bvv : MetalBuffer?) : bool {
-        return st2_dispatch_64_lanes(t, queue, tag, pso, d) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, d) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
             metal_set_buffer(enc, bxx, uint64(2 * d * 4), 1)
             metal_set_buffer(enc, bkk, roff, 2)
@@ -2561,9 +2550,6 @@ def private pk_gemv_tgmem(dev; q8 : bool; kind : int) : uint64 {   //! `dev` unt
     return kind == 0 ? metal_pk_gemv_f32_msl_tgmem : (kind == 1 ? metal_pk_gemv_f32_ln_silu_msl_tgmem : (kind == 2 ? metal_pk_gemv_f32_gate_msl_tgmem
         : (kind == 3 ? metal_pk_gemv_f32_add_silu_msl_tgmem : metal_pk_gemv_f32_tail_msl_tgmem)))
 }
-
-def private silu_d(v : double) : double => v / (1.0lf + exp(-v))
-
 //! the row GEMV over 9 rows of 96 (three q8 blocks; the f32 rows at stride 128) under one stamp:
 //! the bare dot, the normed and modulated x with the SiLU out, the gated residual, the SiLU over
 //! the slab vector, and the frame tail - x, y and the latent row bound at offsets, an fp64 oracle
@@ -2735,7 +2721,7 @@ def private st2_sigsum_gate(t : T?; dev, queue) {
         var u_ls = uint(ls)
         var u_speed = 1.3
         var u_t = uint(nrows)
-        return st2_dispatch_64_lanes(t, queue, tag, pso, nrows) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, nrows) $(enc) {
             metal_set_buffer(enc, blg, 0ul, 0)
             metal_set_buffer(enc, braw, 0ul, 1)
             metal_set_bytes(enc, unsafe(addr<void?>(u_nb)), 4ul, 2)
@@ -2778,7 +2764,7 @@ def private st2_gelu_gate(t : T?; dev, queue) {
     }
     let run <- @(bxx : MetalBuffer?) : bool {
         var u_n = uint(n)
-        return st2_dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
             metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 1)
         }
@@ -3061,7 +3047,7 @@ def private st2_stft_gate(t : T?; dev, queue; reflect : bool) {
     var bspec = buf_fill(dev, frames * 2 * bins, -1.0e30)
     let run <- @(bh : MetalBuffer?) : bool {
         var ka = St2StftArgs(n = uint(n), frames = uint(frames), bins = uint(bins), k = uint(k), hop = uint(hop), pad = uint(pad), eps = 1e-9)
-        return st2_dispatch_64_lanes(t, queue, tag, pso, frames * bins) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, frames * bins) $(enc) {
             metal_set_buffer(enc, bh, 0ul, 0)
             metal_set_buffer(enc, bre, 0ul, 1)
             metal_set_buffer(enc, bim, 0ul, 2)
@@ -3130,7 +3116,7 @@ def private st2_istft_gate(t : T?; dev, queue; envelope : bool) {
     let run <- @(byy : MetalBuffer?) : bool {
         var ka = St2IstftArgs(tt = uint(tt), stride = uint(stride), bins = uint(bins), k = uint(k), hop = uint(hop), pad = uint(pad),
             envelope = envelope ? 1u : 0u, n = uint(n))
-        return st2_dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
             metal_set_buffer(enc, byy, 0ul, 0)
             metal_set_buffer(enc, bre, 0ul, 1)
             metal_set_buffer(enc, bim, 0ul, 2)
@@ -3189,7 +3175,7 @@ def private tower_gather_gate(t : T?; dev, queue) {
     var by = buf_fill(dev, nr * d, -1.0e30)
     let ka = RowGatherArgs(c = uint(d), add_b = 0u, add_c = 0u, total = uint(nr * d))
     let run <- @(bidx : MetalBuffer?) : bool {
-        return st2_dispatch_64_lanes(t, queue, tag, pso, nr * d) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, nr * d) $(enc) {
             metal_set_buffer(enc, bx, 0ul, 0)
             metal_set_buffer(enc, bidx, 0ul, 1)
             metal_set_buffer(enc, bx, 0ul, 2)
