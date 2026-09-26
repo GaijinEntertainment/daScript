@@ -332,6 +332,24 @@ def test_talk_chain(t : T?) {
         t |> success(wav_seconds(t, out) > 0.5lf, "with speech in it")
         remove(out)
     }
+    t |> run("chat --play: every spoken reply plays, the speaker opened once for the run") @(t : T?) {
+        return if (model_missing(t, model(SMOL)) || model_missing(t, model(KITTEN)))
+        let script = scratch("play_script.txt")
+        let out_dir = scratch("play_replies")
+        t |> success(fwrite(script, "/speak on\nSay hello.\nSay goodbye.\n/exit\n"), "the script is written")
+        let r = run_cli(["chat", "-m", model(SMOL), "--tts", model(KITTEN), "--out-dir", out_dir, "--script", script, "-n", "12", "--quiet", "--play", "--null-audio"])
+        return if (!pass_cell(t, r, "chat --play"))
+        var played = 0
+        for (ln in split(r.out, "\n")) {
+            played += starts_with(ln, "dasllama-cli: played ") ? 1 : 0
+        }
+        t |> equal(played, 2, "two replies, two clips played: {tail_of(r.out)}")
+        t |> success(fexist(path_join(out_dir, "reply_2.wav")), "the second WAV landed too")
+        remove(path_join(out_dir, "reply_1.wav"))
+        remove(path_join(out_dir, "reply_2.wav"))
+        rmdir(out_dir)
+        remove(script)
+    }
     t |> run("talk --play: the spoken reply plays after its WAV lands") @(t : T?) {
         return if (model_missing(t, model(SMOL)) || model_missing(t, model(KITTEN)))
         let out = scratch("reply_play.wav")
@@ -790,6 +808,18 @@ def test_towers(t : T?) {
         let r = run_cli(["complete", "-m", llm, "--image-mmproj", mm, "--image", model(CATS), "-n", "160", "--quiet", "What animals are in this picture? One word."])
         return if (!pass_cell(t, r, "complete --image"))
         t |> success(find(to_lower(r.out), "cat") >= 0, "it sees cats: {tail_of(r.out)}")
+    }
+    t |> run("chat --no-think --hide-thinking with /image first: the leading thought block stays off the screen") @(t : T?) {
+        return if (model_missing(t, llm) || model_missing(t, mm) || model_missing(t, model(CATS)))
+        // the E-series opens an instruct-mode media turn with a thought block anyway (the chat
+        // preset at the session's default seed); the armed matcher files it as reasoning
+        let script = scratch("hide_script.txt")
+        t |> success(fwrite(script, "/image {model(CATS)}\ndescribe this image\n/exit\n"), "the script is written")
+        let r = run_cli(["chat", "-m", llm, "--image-mmproj", mm, "--script", script, "-n", "640", "--quiet", "--no-think", "--hide-thinking", "--gpu", "off"])
+        return if (!pass_cell(t, r, "chat --hide-thinking"))
+        t |> success(find(to_lower(r.out), "cat") >= 0, "the caption reached the screen: {tail_of(r.out)}")
+        t |> success(find(r.out, "<|channel>") < 0 && find(r.out, "thinking process") < 0, "the thought block did not: {tail_of(r.out)}")
+        remove(script)
     }
     t |> run("chat --script with /audio: the JFK clip through the audio tower, spoken back by pocket") @(t : T?) {
         return if (model_missing(t, llm) || model_missing(t, mm))

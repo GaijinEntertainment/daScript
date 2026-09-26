@@ -27,9 +27,9 @@ def model_missing(t : T?; path : string) : bool {
     return false
 }
 
-//! A jpeg as the data: URI a browser's FileReader would produce (a byte read, not fread(path):
-//! a jpeg carries interior NULs, which a string read would truncate at); "" when unreadable.
-def image_data_uri(path : string) : string {
+//! A file's bytes as base64 (a byte read, not fread(path): a jpeg or a wav carries interior
+//! NULs, which a string read would truncate at); "" when unreadable.
+def file_base64(path : string) : string {
     var inscope bytes : array<uint8>
     fopen(path, "rb") $(f) {
         if (f != null) {
@@ -37,7 +37,13 @@ def image_data_uri(path : string) : string {
             fread(f, bytes)
         }
     }
-    return empty(bytes) ? "" : "data:image/jpeg;base64,{base64_encode(bytes)}"
+    return empty(bytes) ? "" : base64_encode(bytes)
+}
+
+//! A jpeg as the data: URI a browser's FileReader would produce; "" when unreadable.
+def image_data_uri(path : string) : string {
+    let b64 = file_base64(path)
+    return empty(b64) ? "" : "data:image/jpeg;base64,{b64}"
 }
 
 //! The last `n` bytes of a child's output, for a failure message.

@@ -620,6 +620,13 @@ and probabilities within the bound (a poisoned probability as the bound's contro
 draw on each path, the same token wherever the draw clears a CDF boundary (at least 500 of 512;
 a half-mass margin as the floor's control), the k+3 tie set surviving a top-k of k, and a top-k
 past the fast cap taking the reference.
+`test_chat.das` - stocked suite; the chat template renderer per family against pinned token
+streams (each cell skips without its carrier), the tool wires, and the gemma-4 E2B cells: the
+thinking renderer pins (the instruct prefill token for token, the gate + bare opener, the
+thinking-off extras on `effective_stop_ids`, a mid-conversation toggle staying instruct) and
+the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no channel marker in
+the content half, the turn ending on a stop - red when the guard does not end the turn on the
+stray `<channel|>` the E2B emits after its answer).
 `test_think_split.das` - the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte, and the
 instruct-mode stop guard (`nothink_stop_here_`): a channel marker before the reply's first

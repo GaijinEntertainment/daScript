@@ -250,6 +250,8 @@ def test_vision_chat_e2b_nothink(t : T?) {
             to_log(LOG_INFO, "vision caption (E2B/gemma4v, thinking off): reasoning {length(sp.reasoning)} chars, content: {replace(sp.content, "\n", "\\n")}\n")
             tt |> success(n_pieces > 0, "the turn generated tokens")
             tt |> success(find(to_lower(sp.content), "cat") >= 0, "the content half describes the cats as cats")
+            tt |> success(find(sp.content, "<channel|>") < 0 && find(sp.content, "<|channel>") < 0, "no channel marker reaches the content half")
+            tt |> success(stats(chat.session).n_gen < 640l, "the turn ended on a stop, not the budget ({stats(chat.session).n_gen} tokens)")
             tt |> equal(length(chat.history), 2, "the turn is on the history")
             tt |> success(find(chat.history[1].content, "<|channel>") < 0, "history stores the answer without the thought")
             delete chat

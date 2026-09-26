@@ -6,13 +6,13 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require openai_server                                   // set_model / set_model_audio / run_server (sibling)
+require _server_rig                                     // file_base64 (sibling)
 require dasllama/dasllama                               // load_model / QuantMode
 require daslib/jobque_boost                             // with_job_status (server-thread lifecycle)
 require daslib/json_boost                               // read_json
 require daslib/base64                                   // input_audio.data payload
 require daslib/fio
 require strings
-require dasllama/dasllama_env
 
 // NATIVE AUDIO through the serving slot: input_audio part -> media worker gemma4a encode -> soft
 // tokens spliced (causal) between the audio span markers -> the model transcribes/answers. ONE
@@ -23,9 +23,6 @@ require dasllama/dasllama_env
 
 let TEST_PORT = 18098
 
-def private models_dir() : string {
-    return models_dir_resolved()   // the ONE resolution: DASLLAMA_MODELS_DIR, else the rig default
-}
 let DEC_PATH = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
 let MM_PATH = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
 let JFK_PATH = "modules/dasLLAMA/models/jfk_ask_not.wav"   // in-tree, 4 s, 16 kHz mono
@@ -65,16 +62,7 @@ def private with_audio_server(port : int; blk : block<(base_url : string) : void
 }
 
 // the wav's base64 (byte read: RIFF interior NULs would truncate a string read)
-def private jfk_b64() : string {
-    var inscope bytes : array<uint8>
-    fopen(JFK_PATH, "rb") $(f) {
-        if (f != null) {
-            bytes |> resize(int64(fstat(f).size))
-            fread(f, bytes)
-        }
-    }
-    return empty(bytes) ? "" : base64_encode(bytes)
-}
+def private jfk_b64() : string => file_base64(JFK_PATH)
 
 def private push_le16(var b : array<uint8>; v : int) {
     b |> push(uint8(v & 0xFF))

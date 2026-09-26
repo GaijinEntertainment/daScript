@@ -154,7 +154,8 @@ def cli_flags(info : CommandInfo; owner : string; var out : array<tuple<flag : s
 }
 
 //! main.das's ServerArgs flags off the source: the field lines of the struct block, a preceding
-//! `@clarg_name` winning over the field's own underscore-to-dash spelling.
+//! `@clarg_name` winning over the field's own underscore-to-dash spelling. Not clargs'
+//! `get_command_info` as the CLI structs: main.das requires the engine, which the gate does not load.
 def server_flags(var out : array<tuple<flag : string; owner : string>>) {
     var inside = false
     var named = ""

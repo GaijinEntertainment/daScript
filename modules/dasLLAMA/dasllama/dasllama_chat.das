@@ -1522,6 +1522,18 @@ def private assemble_media_embd(m : Model; c : ChatSession; head, tail : array<i
     embed_text_rows_strided(m, tail, embd, n_head + n_media, rw)
 }
 
+//! One generated token of a respond: false ends the turn - the template's own stop, or a
+//! guarded channel marker after content - else the piece joins the reply and the caller's block.
+def private admit_piece_(stops : array<int64>; var guard : NothinkStopGuard; var reply_parts : array<string>;
+                         blk : block<(piece : string) : bool>; id : int64; piece : string) : bool {
+    for (sid in stops) {
+        return false if (id == sid)
+    }
+    return false if (nothink_stop_here_(guard, id, piece))
+    reply_parts |> push(piece)
+    return invoke(blk, piece)
+}
+
 def private respond_media_or_text_(m : Model; var c : ChatSession; params : SamplingParams;
                                    blk : block<(piece : string) : bool>) : string {
     // local clones so the streaming callback captures no part of `c` (c.session is passed to generate)
@@ -1548,12 +1560,7 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
         let span_lo = is_image ? n_head : 0l
         let span_hi = is_image ? n_head + n_media : 0l
         generate_embd_(m, c.session, embd, npos, params, c.max_new, span_lo, span_hi, is_image ? c.image_grid : int2(0)) $(id, piece) {
-            for (sid in stops) {
-                return false if (id == sid)
-            }
-            return false if (nothink_stop_here_(guard, id, piece))
-            reply_parts |> push(piece)
-            return invoke(blk, piece)
+            return admit_piece_(stops, guard, reply_parts, blk, id, piece)
         }
         c.audio_rows |> clear()
         c.n_audio_rows = 0l
@@ -1564,12 +1571,7 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
         render_prompt(m, c, pre)
         render_think_suppress(m, c, pre)
         generate_(m, c.session, pre, params, c.max_new) $(id, piece) {
-            for (sid in stops) {
-                return false if (id == sid)
-            }
-            return false if (nothink_stop_here_(guard, id, piece))
-            reply_parts |> push(piece)
-            return invoke(blk, piece)
+            return admit_piece_(stops, guard, reply_parts, blk, id, piece)
         }
     }
     consume_pending_(c)

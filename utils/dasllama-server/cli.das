@@ -365,10 +365,6 @@ def private play_clip(var sp : Speech; rate : int; pcm : array<float>) {
     let seconds = double(length(pcm)) / double(max(rate, 1))
     var samples := pcm
     let sid = play_sound_from_pcm(rate, 1, samples)
-    if (sid == INVALID_SID) {
-        note("the speaker refused the clip")
-        return
-    }
     var status_box = seq_box_create()   // one box per clip: a shared box reads the last clip's stop as this one's
     set_status_update(sid, status_box)
     let t0 = ref_time_ticks()

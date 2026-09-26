@@ -324,6 +324,18 @@ def test_fast_path_parity(t : T?) {
         let pc = parity_sweep(t, SamplingParams(temp = 0.8, top_k = 40l))
         t |> equal(pc.mismatches, 0, "the same token on every clear row")
     }
+    t |> run("a sharp temperature with a wide min-p: the floor cuts survivors on both paths alike") @(t : T?) {
+        // at temp 0.25 the rows' +-10 logits spread to +-40, so a 0.3 floor drops most of the top 40
+        let pc = parity_sweep(t, SamplingParams(temp = 0.25, top_k = 40l, min_p = 0.3))
+        t |> equal(pc.mismatches, 0, "the same token on every clear row")
+    }
+    t |> run("temperature 0 with a top-k set is the greedy argmax, not the candidate list") @(t : T?) {
+        var s = mk_sampler(6)
+        set_logits(s, [0.5, 3.0, 1.0, 2.0, 2.9, -1.0])
+        t |> equal(sample(s, SamplingParams(temp = 0.0, top_k = 20l)), 1l)
+        t |> equal(length(s.cand), 0, "the candidate list stays untouched under greedy")
+        delete s
+    }
 }
 
 [test]

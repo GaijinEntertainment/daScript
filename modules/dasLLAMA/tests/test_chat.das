@@ -397,6 +397,38 @@ def test_chat_think_suppress(t : T?) {
 
 // ===== gemma-4 E-series thinking (ON by default; instruct = the opt-out) =====
 
+// The instruct-mode TEXT turn through respond: the E-series rambles past its answer through a
+// stray channel marker, and the guard ends the turn there - the content half carries no marker
+// and the turn does not run to the budget.
+[test]
+def test_chat_gemma4_instruct_text_turn(t : T?) {
+    t |> run("thinking off on E2B: '2+2' answers and a stray channel marker ends the turn") @(t : T?) {
+        let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        var m <- load_capped(path)
+        allow_cpu_prefill()
+        with_job_que() {
+            setup_dasllama_jobque()
+            var c = create_chat(m, "", 64l)
+            set_thinking(c, false)
+            add_user(c, "What is 2+2? Answer with just the number.")
+            let reply = respond(m, c, SamplingParams()) $(_piece) {
+                return true
+            }
+            let sp = split_reasoning(c, reply)
+            to_log(LOG_INFO, "instruct text turn: '{replace(reply, "\n", "\\n")}' ({stats(c.session).n_gen} tokens)\n")
+            t |> success(find(sp.content, "4") >= 0, "the answer is 4: '{sp.content}'")
+            t |> success(find(sp.content, "<channel|>") < 0 && find(sp.content, "<|channel>") < 0, "no channel marker reaches the content half")
+            t |> success(stats(c.session).n_gen < 64l, "the turn ended on a stop, not the budget ({stats(c.session).n_gen} tokens)")
+            delete c
+        }
+        delete m
+    }
+}
+
 [test]
 def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
     t |> run("default = thinking; instruct opt-out = closed empty thought (needs gemma-4-E2B)") @(t : T?) {

@@ -637,10 +637,12 @@ absent; set `DASLLAMA_MODELS_DIR`):
 - `test_cli.das` - dasllama-cli end to end, one child process per cell as a user runs it: every
   command on the fastest small models (`SmolLM2-135M-Instruct-Q8_0.gguf`, `kitten-nano.gguf`,
   `Qwen3-ASR-0.6B-Q8_0.gguf` with its mmproj), the `talk` chain on those and on
-  `Qwen3.5-0.8B-Q8_0.gguf` + `kokoro-82m.gguf`, and the tower cell on `gemma-4-E2B-it-Q4_K_M.gguf`
-  with `mmproj-gemma-4-E2B-it-bf16.gguf` (the picture through the vision tower, the JFK clip
-  through the audio tower, spoken back by `pocket-tts-en-q8.gguf`). Runs on the stocked box at
-  release time.
+  `Qwen3.5-0.8B-Q8_0.gguf` + `kokoro-82m.gguf`, the speaker cells (`speak`, `talk` and a
+  two-reply `chat` under `--play --null-audio`), the `--verbose` echo with the streams split, and
+  the tower cells on `gemma-4-E2B-it-Q4_K_M.gguf` with `mmproj-gemma-4-E2B-it-bf16.gguf` (the
+  picture through the vision tower, the JFK clip through the audio tower, spoken back by
+  `pocket-tts-en-q8.gguf`, and a `--no-think --hide-thinking` image turn whose leading thought
+  block stays off the screen). Runs on the stocked box at release time.
 - `test_openai_server_mtp.das` - the self-speculation default: a NextN-headed slot drafts at one
   stream and decodes plain at four, an explicit `mtp` wins either way, and a head-less model
   serves plain under the default; read off `/v1/stats`'s `mtp_drafted`. Needs
