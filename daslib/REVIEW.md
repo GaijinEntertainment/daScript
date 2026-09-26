@@ -146,14 +146,16 @@ suggestion that does not compile.
 
 **A diff that adds or changes an emit entry point - a function that runs the emit visitor
 (`CppAot` or any subclass of it) and then writes the generated C++ to a file - keeps the
-error check ahead of that file write.** The error check is the program's
-`macroException`/`failToCompile` state, read directly or through `log_aot_emit_errors`; a
-codegen exception mid-visit leaves partial C++.
+error check ahead of that file write.** The error check reads the program's failed state:
+`program.failed`, both `program.flags.macroException` and `program.flags.failToCompile`, or
+`log_aot_emit_errors`, which reads those two flags. A codegen exception mid-visit leaves
+partial C++.
 
-**Never gate a visitor override in `CppAot` or any subclass of it on
-`macroException`/`failToCompile` - the function that runs the visitor owns that check.** An
-override that returns early on the error state emits truncated C++ that the caller still
-writes out as complete.
+**Never gate a visitor override in `CppAot` or any subclass of it on the program's failed
+state - `program.failed`, `program.flags.macroException`, `program.flags.failToCompile`, or
+`log_aot_emit_errors` - the function that runs the visitor owns that check.** An override that
+returns early on the error state emits truncated C++ that the caller still writes out as
+complete.
 
 **Never report an unreachable emit state with `panic` - write `#error` into the output.**
 `runMacroFunction` swallows a panic, so the emitter never reports through it.

@@ -1770,6 +1770,13 @@ namespace das
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
     DAS_CC_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
+    // src/ast/ARCHITECTURE_BUILT.md#built-programs
+    DAS_CC_API ProgramPtr requireDefaultModules ( const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup,
+        CodeOfPolicies & policies );
+    DAS_CC_API ProgramPtr buildDaScriptModule ( const string & moduleName, const FileAccessPtr & access, TextWriter & logs,
+        ModuleGroup & libGroup, CodeOfPolicies & policies, const callable<void (Program *)> & fill );
+    DAS_CC_API ProgramPtr buildDaScriptProgram ( const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup,
+        CodeOfPolicies policies, const callable<void (Program *)> & fill );
     // src/ast/ARCHITECTURE.md#require-after-walk
     DAS_CC_API Module * requireModuleNow ( const string & requireName, const FileAccessPtr & access,
         TextWriter & logs, CodeOfPolicies policies = CodeOfPolicies() );
