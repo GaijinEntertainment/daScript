@@ -179,10 +179,10 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
 }
 
 let private SHALLOW_ABS_BAR = 0.1   //! one layer of GPU noise measures ~2.6e-2 abs peak on quad (f16-operand GEMMs + the K=5120 merger on |~70| values), a routing defect mixes quadrants at >= 1.0
+let private WA_WINDOW_ONLY = 99l   //! the one-block tower's full-attention period: (0 + 1) % 99 != 0 puts the block on the window arm
+let private WA_FULL_ONLY = 1l      //! ... and (0 + 1) % 1 == 0 on the full-attention arm
 
-//! the one-block routing cell on a GPU lane (`set_on` its knob, `encodes` its served-encode counter): the `lane` chain against the
-//! CPU chain on quad content within `SHALLOW_ABS_BAR`, then - `poison` - the lane over a tower whose one block is zeroed, against the
-//! same clean CPU chain, must EXCEED the bar
+//! the one-block `lane` chain (`set_on` its knob, `encodes` its counter) against the CPU chain on quad within `SHALLOW_ABS_BAR`; `poison`: a zeroed block must EXCEED it
 def private shallow_routing_cell(t : T?; mm, name, lane : string; wa : int64; poison : bool; set_on : block<(on : bool) : void>;
                                  encodes : block<() : int64>) {
     var tw <- mint_tower(mm, 1l, wa)
@@ -258,10 +258,10 @@ def test_qwen25v_vulkan_twin(t : T?) {
             twin_encode(tt, tw, st, "cb", 616, 336, mm)
             delete st
             delete tw
-            shallow_routing_cell(tt, mm, "window", "device", 99l, true, $(on) { set_vulkan_tower(on) }) $ {
+            shallow_routing_cell(tt, mm, "window", "device", WA_WINDOW_ONLY, true, $(on) { set_vulkan_tower(on) }) $ {
                 return vulkan_tower_stats().encodes
             }
-            shallow_routing_cell(tt, mm, "full", "device", 1l, true, $(on) { set_vulkan_tower(on) }) $ {
+            shallow_routing_cell(tt, mm, "full", "device", WA_FULL_ONLY, true, $(on) { set_vulkan_tower(on) }) $ {
                 return vulkan_tower_stats().encodes
             }
             vulkan_tower_shutdown()
@@ -338,10 +338,10 @@ def test_qwen25v_tier1_gpu(t : T?) {
             }
             delete stq
             delete twp
-            shallow_routing_cell(tt, mm, "window", "GPU", 99l, false, $(on) { set_metal_tower(on) }) $ {   // (0+1) % 99 != 0 -> the window arm
+            shallow_routing_cell(tt, mm, "window", "GPU", WA_WINDOW_ONLY, false, $(on) { set_metal_tower(on) }) $ {
                 return metal_tower_stats().encodes
             }
-            shallow_routing_cell(tt, mm, "full", "GPU", 1l, false, $(on) { set_metal_tower(on) }) $ {   // (0+1) % 1 == 0 -> the slab arm
+            shallow_routing_cell(tt, mm, "full", "GPU", WA_FULL_ONLY, false, $(on) { set_metal_tower(on) }) $ {
                 return metal_tower_stats().encodes
             }
         } else {

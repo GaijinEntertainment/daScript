@@ -528,7 +528,6 @@ def private mint_whisper(path : string; enc_q8, dec_q8 : bool; zero_from : int64
     return <- w
 }
 
-//! `whisper_encode` of `win` as a twin leg: the encoder's rows (`xb`) copied into `out`, their length returned
 def private whisper_rows_encode(enc : AudioTower; var es : EncoderState; win : MelChunk; var out : array<float>) : int64 {
     whisper_encode(enc, es, win)
     out := es.xb
@@ -555,7 +554,7 @@ def private whisper_rows_twin(tt : T?; name, model_path : string; w : WhisperMod
             tt |> equal(legs.dev.encodes - legs.cpu.encodes, 1l, "{tag}: the device encode served")
         }
         delete esx
-        delete wx   // the exact encoder leaves before the poisoned one mints
+        delete wx
         var inscope wz <- mint_whisper(model_path, true, true, w.enc.n_layer / 2l)
         tt |> success(wz.enc.q8, "{tag}: the poisoned encoder is on the q8 lane")
         var esz <- make_encoder_state(wz.enc)
@@ -576,7 +575,7 @@ def test_whisper_vulkan_twin(t : T?) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 let model_path = path_join(whisper_dir(), name)
                 jfk_twin_cell(tt, model_path, true) $(samples) {
-                    set_vulkan_wdec(false)   // the decoder rail stays on the CPU so only the encoder varies between the legs
+                    set_vulkan_wdec(false)   //! the decoder rail stays on the CPU so only the encoder varies between the legs
                     set_asr_fp32(false)
                     set_asr_tower_fp32(false)
                     var inscope m <- load_asr_model(model_path)
@@ -626,7 +625,7 @@ def test_whisper_vulkan_wdec(t : T?) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 let model_path = path_join(whisper_dir(), name)
                 jfk_twin_cell(tt, model_path, true) $(samples) {
-                    set_vulkan_tower(true)   // the tower serves the encoder on both legs, so only the decoder varies
+                    set_vulkan_tower(true)   //! the tower serves the encoder on both legs, so only the decoder varies
                     set_asr_fp32(false)
                     set_asr_tower_fp32(false)
                     var inscope m <- load_asr_model(model_path)
@@ -671,8 +670,6 @@ def test_whisper_vulkan_wdec(t : T?) {
     }
 }
 
-//! the stem's rows stay on the device for the block chain; with the block hooks pinned off they land in `s.x` at the decline and the
-//! CPU block loop transcribes over them: the same text as the all-CPU chain, the stem counter up, the block counter still
 [test]
 def test_whisper_vulkan_stem_flush(t : T?) {
     t |> run("ggml-tiny.bin: the stem's pending readback lands at the block hooks' decline; the CPU blocks over it match the all-CPU chain") @(tt : T?) {
@@ -711,8 +708,7 @@ def test_whisper_vulkan_stem_flush(t : T?) {
     }
 }
 
-//! the last row's logits of the CPU chain over the flushed memory against the knob-off chain's: the same token, within a bar on the
-//! logit scale (the device's cross-KV planes are the f16 feed's GEMM, the knob-off chain's the q8 dot), the bar with its poison
+//! the same token and logits within 5% of the peak - the device's cross-KV planes are the f16 feed's GEMM, the knob-off chain's the q8 dot - with the bar's poison
 def private wdec_flush_compare(tt : T?; cpu, dev : array<float>) {
     tt |> equal(long_length(dev), long_length(cpu), "both chains landed the last row's logits")
     var maxc = 0.0
@@ -736,8 +732,6 @@ def private wdec_flush_compare(tt : T?; cpu, dev : array<float>) {
     tt |> success(md + 3.0 > bar, "the bar's poison: a logit moved by 3 must exceed it")
 }
 
-//! the served window's CPU-layout memory (kx, vx) lands only when the CPU chain needs it: a first batch past the step's row cap
-//! declines `rows`, the pending readback flushes, and the CPU decode over it reads what the knob-off chain computes itself
 [test]
 def test_whisper_vulkan_wdec_flush(t : T?) {
     t |> run("ggml-tiny.bin: the pending cross-KV readback lands at the step's rows decline; the CPU chain over it matches the knob-off chain") @(tt : T?) {
@@ -748,7 +742,7 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
                 set_asr_fp32(false)
                 set_asr_tower_fp32(false)
                 var inscope m <- load_asr_model(model_path)
-                let batch <- [for (i in range(9)); m.whisper.tok_sot + i]   //! nine rows: one past the step's cap, the first batch of a window
+                let batch <- [for (i in range(int(WD_ROW_CAP) + 1)); m.whisper.tok_sot + i]   //! one past the step's cap, the first batch of a window
                 var cpu_logits : array<float>
                 var dev_logits : array<float>
                 with_job_que() {

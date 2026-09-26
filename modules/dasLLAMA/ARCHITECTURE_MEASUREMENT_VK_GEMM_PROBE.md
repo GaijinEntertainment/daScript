@@ -33,7 +33,11 @@ The resync copy is the row a lever's arm is read against, and its bit-exact read
 shipped class is what says the copies still track the shipped body. The sweep runs three whole
 windows and one partial window of 300 tokens, the row that takes the edge store; the copies
 stage and store whole tiles, so on the partial window only the two controls run.
-`khrprof:<arm>` submits one arm alone for a GPU profiler. The `mmqx` arm is the first axis for
+`khrprof:<arm>` submits one arm alone for a GPU profiler. `wh` times the whisper large-v3-turbo
+encoder's role shapes over one 30 s chunk (1500 rows, d 1280, ff 5120: q / k / v / o, fc1, fc2, and
+fc2 under the split-k ladder), then the same shapes at 1536 rows, where every l column is whole -
+the alternate that reads what the 1500 rows' partial last column costs the l stamp; it skips the
+sdot4 mm tile, which stalls at 1500 rows on the fc1 shape. The `mmqx` arm is the first axis for
 the integer tile: the sdot4 k4 tile against register-block prototypes over the same planes. Both
 sweeps time the served graph's shape first: sixteen dispatches per submit over two alternating
 outputs with a fresh hazard each, the arms interleaved round by round, an arm's figure its best

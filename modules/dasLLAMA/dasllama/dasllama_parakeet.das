@@ -1107,10 +1107,10 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     // conv subsampling ([time][mel] rows are already the [ih][iw][c=1] layout)
     var tp = ref_time_ticks()
     let t1 = conv_s2_out(st.mel.n_len)
-    let w1 = conv_s2_out(m.n_mel)          // 64
+    let w1 = conv_s2_out(m.n_mel)
     pk_conv2d_c1_s2_relu(st.y0, st.mel.data, m.blob, m.c0_w, m.c0_b, m.n_mel, st.mel.n_len, nch)
     pk_conv2d_dw_s2(st.y2, st.y0, m.blob, m.c2_w, m.c2_b, w1, t1, nch)
-    let w2 = conv_s2_out(w1)               // 32
+    let w2 = conv_s2_out(w1)
     let t2 = conv_s2_out(t1)
     pk_ensure(st.y3, t2 * w2 * nch)
     pk_scan("y0", st.y0, t1 * w1 * nch)
@@ -1118,7 +1118,7 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     pk_mm_rq(m, st.y3, m.c3_w, st.y2, st.xqi, st.xsi, nch, nch, t2 * w2)   // 1x1 conv = per-position channel mix
     pk_bias_relu(st.y3, m.blob, m.c3_b, nch, t2 * w2)
     pk_conv2d_dw_s2(st.y5, st.y3, m.blob, m.c5_w, m.c5_b, w2, t2, nch)
-    let w3 = conv_s2_out(w2)               // 16
+    let w3 = conv_s2_out(w2)
     let t3 = conv_s2_out(t2)
     pk_ensure(st.y6, t3 * w3 * nch)
     pk_mm_rq(m, st.y6, m.c6_w, st.y5, st.xqi, st.xsi, nch, nch, t3 * w3)

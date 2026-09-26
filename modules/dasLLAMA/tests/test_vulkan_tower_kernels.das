@@ -184,8 +184,6 @@ def test_vkt_fa_bidir(t0 : T?) {
     }
 }
 
-//! the decode step's fused row passes: each lands the Q8_0 bytes of its row pass followed by `TowerClampRq`, byte for byte,
-//! the residual in place the same, a poisoned input moving each one's bytes
 [test]
 def test_vkt_wdec_fused_rq(t0 : T?) {   // nolint:STYLE038 — one flat gate over the four fused classes: the fixture, one command buffer, the pairs and their poisons
     t0 |> run("the layernorm, the post-add, the bias-activation and the attention combine fused with the Q8_0 requant == the pass then TowerClampRq") <| @(t : T?) {
@@ -329,7 +327,7 @@ def test_vkt_wdec_fused_rq(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 }
             }
             t |> equal(xoff, 0, "the fused post-add updates the residual rows in place as the separate pass does")
-            unsafe {   //! the poisons: one input element moved on each fused class's source must move its bytes
+            unsafe {
                 x[7]++
                 y[7 + d]++
                 hrows[3]++
@@ -375,7 +373,6 @@ def test_vkt_wdec_fused_rq(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
     }
 }
 
-//! the rows a GEMM record carries: rounded up to the cm2 token column so the stamp's last column is whole, the raw count off cm2
 [test]
 def test_vkt_tile_rows(t0 : T?) {
     t0 |> run("a GEMM record's rows round up to the l column; the s and m columns and the batch tile keep the raw count") <| @(t : T?) {
@@ -1039,7 +1036,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             let xbd = make_device_buf(bx)
             let yd = make_device_buf(bx)
             let act_arms = fixed_array((act = BIAS_ACT_GELU_TANH, bit = B_G), (act = BIAS_ACT_NONE, bit = B_G0), (act = BIAS_ACT_GELU_ERF, bit = B_GERF),
-                (act = BIAS_ACT_SILU, bit = B_GSILU), (act = BIAS_ACT_RELU, bit = B_GRELU))   // one in-place row buffer an activation, the same rows in each
+                (act = BIAS_ACT_SILU, bit = B_GSILU), (act = BIAS_ACT_RELU, bit = B_GRELU))
             let act_d <- [for (_a in act_arms); make_device_buf(bx)]
             let xb2d = make_device_buf(bx)
             let x0d = make_device_buf(bx)    // the ln_on = 0 arm's x: the seam with no next layernorm
@@ -1308,7 +1305,7 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let x_post16z_d = make_device_buf(bx)   // the f16 post-add at ln_on = 0: the seam alone
             let xb2h0d = make_device_buf(bxh)       // ... and its half pre-norm output, which must stay untouched
             let act_arms = fixed_array((act = BIAS_ACT_GELU_TANH, bit = B_G, hbit = B_GH), (act = BIAS_ACT_GELU_ERF, bit = B_GE, hbit = B_GHE),
-                (act = BIAS_ACT_RELU, bit = B_GR, hbit = B_GHR))   // an activation's pair: the f32 stamp in place, the f16 stamp reading its rows first
+                (act = BIAS_ACT_RELU, bit = B_GR, hbit = B_GHR))
             let act_d <- [for (_a in act_arms); make_device_buf(bx)]
             let act_hd <- [for (_a in act_arms); make_device_buf(bxh)]
             let xbd = make_device_buf(bx)
@@ -1369,7 +1366,7 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 enc_tower_ln16_cls(raw, h, s_ln16, pa_ln, int64(rows))
                 for (arm, s_act, s_act16 in act_arms, s_acts, s_acts16) {
                     var pa_act = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = arm.act)
-                    enc_tower_bias_act_cvt16_cls(raw, h, s_act16, pa_act, wg4)   // reads the rows before the in-place stamp rewrites them
+                    enc_tower_bias_act_cvt16_cls(raw, h, s_act16, pa_act, wg4)   //! reads the rows before the in-place stamp rewrites them
                     enc_tower_bias_act_cls(raw, h, s_act, pa_act, wg4)
                 }
                 enc_tower_hpad_b_cls(raw, h, s_padb, pa_rs, wg_rs)
@@ -1907,8 +1904,8 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             let wd = make_device_buf(bw)
             let bxh = int64(nd) * 2l
             let brex = int64(nrows) * 4l
-            let ghd = make_device_buf(bxh)    // the gated hidden's f16 rows
-            let rexd = make_device_buf(brex)  // the row map: every row the one expert, so the bias rows are the layer's
+            let gated_h16d = make_device_buf(bxh)    // the gated hidden's f16 rows
+            let rexd = make_device_buf(brex)  //! the row map: every row the one expert, so the bias rows are the layer's
             let sizes = fixed_array(bc, bx, bx, bxh, bx, bx)
             let at <- staged_offsets(sizes)
             var host = make_host_buf(at[length(sizes)], true, [cached = true])
@@ -1927,12 +1924,12 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             nan_sentinel_upload(attd, bc)
             nan_sentinel_upload(xbd, bx)
             nan_sentinel_upload(xb0d, bx)
-            fill_upload(ghd, 0l, bxh, F16_SENTINEL_BITS)
+            fill_upload(gated_h16d, 0l, bxh, F16_SENTINEL_BITS)
             upload_zeros(rexd, 0l, brex)
             var s_win = set_tower_win_attn_cls(fixed_array(qd, kd, vd, attd, wld), fixed_array(bc, bc, bc, bc, bwl), fixed_array(B_Q, B_K, B_V, B_ATT, 0u))
             var s_post = set_tower_post_add_rms_cls(fixed_array(xd, yd, xbd, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB, 0u))
             var s_post0 = set_tower_post_add_rms_cls(fixed_array(x0d, yd, xb0d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X0, B_Y, B_XB0, 0u))
-            var s_glu = set_actf16_b_cls(fixed_array(gd, ud, ghd, wd, wd, rexd), fixed_array(bx, bx, bxh, bw, bw, brex), fixed_array(B_G, B_U, B_GH, 0u, 0u, 0u))
+            var s_glu = set_actf16_b_cls(fixed_array(gd, ud, gated_h16d, wd, wd, rexd), fixed_array(bx, bx, bxh, bw, bw, brex), fixed_array(B_G, B_U, B_GH, 0u, 0u, 0u))
             var pa_win = TowerWinArgs(nheads = uint(WIN_HEADS), scale = scale)
             var pa_post = TowerLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = uint(d), lnboff = 0u, ascale = 1.0)
             var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = uint(d), lnboff = 0u, ascale = 1.0)
@@ -1943,7 +1940,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 enc_actf16_b_cls(raw, h, s_glu, pa_glu, wg4)
                 enc_tower_post_add_rms_cls(raw, h, s_post0, pa_post0, int64(nrows))
                 enc_tower_post_add_rms_cls(raw, h, s_post, pa_post, int64(nrows))
-                cmd_copy_planes(raw, h, fixed_array(attd, xd, xbd, ghd, x0d, xb0d), host, sizes, B_ATT | B_X | B_XB | B_GH | B_X0 | B_XB0)
+                cmd_copy_planes(raw, h, fixed_array(attd, xd, xbd, gated_h16d, x0d, xb0d), host, sizes, B_ATT | B_X | B_XB | B_GH | B_X0 | B_XB0)
             }
             let att_dev <- staged(host.mapped, at[0], rows * dc, type<float>)
             let x_dev <- staged(host.mapped, at[1], nd, type<float>)
@@ -1997,10 +1994,10 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             add_bias_rows(g_ref, wn, int64(2 * d), int64(d), int64(nrows))
             add_bias_rows(u_ref, wn, int64(3 * d), int64(d), int64(nrows))
             swiglu(g_ref, u_ref, int64(nd))
-            let bad_glu = mismatch_approx(g_dev, g_ref)   // the half store rounds at 2^-11 relative, inside `approx`'s bar
+            let bad_glu = mismatch_approx(g_dev, g_ref)
             t |> success(bad_glu == 0, "actf16_b (the gated hidden): silu(g + bg) . (u + bu) as halves matches the CPU form ({bad_glu} of {nd} off)")
             t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "actf16_b (the gated hidden): the bar reds a poisoned element")
-            for (b in fixed_array(qd, kd, vd, attd, wld, xd, yd, xbd, x0d, xb0d, gd, ud, wd, ghd, rexd)) {
+            for (b in fixed_array(qd, kd, vd, attd, wld, xd, yd, xbd, x0d, xb0d, gd, ud, wd, gated_h16d, rexd)) {
                 destroy_device_buf(b)
             }
             destroy_host_buf(host)
@@ -2087,7 +2084,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             var y3 <- row_fill(FM_CHUNKS * 16 * q3_tok * q3_nch, 11, 2, 0.06, 2.9)
             var fs_src <- row_fill(fs_t * fs_w * fs_c, 13, 9, 0.05, 1.5)
             var x <- row_fill(nd, 41, 7, 0.05, 2.1)
-            var wn <- row_fill((3 + q3_tok) * d, 7, 1, 0.01, -0.6)   // the panel's bias row at 0, the add plane at d, the finish's bias at 2d and its tok position rows at 3d, the ln weight at 0
+            var wn <- row_fill((3 + q3_tok) * d, 7, 1, 0.01, -0.6)   //! the panel's bias row at 0, the add plane at d, the finish's bias at 2d and its tok position rows at 3d, the ln weight at 0
             let bsrc = int64(n_src) * 4l
             let bcol = int64(n_col) * 2l
             let bmel1 = int64(nch1 * len1) * 4l
@@ -2155,13 +2152,13 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             var pa_sh = TowerQ3aShuffleArgs(nch = uint(q3_nch), npos = uint(q3_pos))
             var pa_fs = TowerFeatShuffleArgs(w = uint(fs_w), ch = uint(fs_c), t = uint(fs_t))
             var pa_gq = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d),
-                soff = uint(second_head_base), boff = uint(second_head_base))   // canary's panel: one head's rows restrided at one head, the pad and the tail none
+                soff = uint(second_head_base), boff = uint(second_head_base))
             var pa_gp = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d),
                 soff = uint(second_head_base))
             var pa_cvt = TowerClampArgs(nelem = uint(nd), lo = -1.5, hi = 1.5)
             var pa_add = TowerBiasArgs(d = uint(add_n), nelem = uint(add_n), boff = uint(d), act = BIAS_ACT_NONE)   // the stem's position plane: one bias row the width of the rows
-            var pa_fin_b = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_NONE)   // the q3a finish: the conv_out bias row ...
-            var pa_fin_p = TowerBiasArgs(d = uint(q3_tok * d), nelem = uint(nd), boff = uint(3 * d), act = BIAS_ACT_NONE)   // ... then the chunk's position rows as one bias row a chunk wide
+            var pa_fin_b = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_NONE)
+            var pa_fin_p = TowerBiasArgs(d = uint(q3_tok * d), nelem = uint(nd), boff = uint(3 * d), act = BIAS_ACT_NONE)
             var pa_ln = TowerLnReluArgs(cout = uint(d), rows = uint(rows), woff = 0u, eps = ROWS_EPS)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tower_im2col_cls(raw, h, s_im, pa_im, int64((n_col + 255) / 256))

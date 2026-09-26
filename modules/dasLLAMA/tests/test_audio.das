@@ -251,7 +251,6 @@ def private mint_aud(path : string; q8 : bool; zero_block : int64) : AudioTower 
     return <- tw
 }
 
-//! `audio_encode` over `mel` as a twin leg: the output copied into `out`, its length returned
 def private aud_twin_encode(tw : AudioTower; var enc : EncoderState; mel : MelChunk; var out : array<float>) : int64 {
     audio_encode(tw, enc, mel)
     out := enc.out
@@ -344,10 +343,7 @@ def private clip_head(samples : array<float>) : array<float> {
     return <- [for (i in range64(n)); samples[i]]
 }
 
-//! a short encode then the full clip on one residency (the scratch - and gemma4a's rel projection sets, canary's rel quartet -
-//! regrown under it), then the clip on a fresh residency after a shutdown, each held to the bar `r` set, then the input poison
-//! over the q8 tower `mint_poisoned` returns; `exactly_three`: the three encodes are three dispatches, else at least three (a
-//! chunked encode dispatches per chunk)
+//! the regrow legs at `r`'s bar - a short encode then the clip on one residency, the clip after a shutdown, then the poison; `exactly_three`: one dispatch an encode, else a chunked encode's several
 [cold_path, unused_argument(t, tag, enc, st, samples, r, exactly_three, mint_poisoned, encode)]
 def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto(ST); samples : array<float>; r : TwinResult;
                              exactly_three : bool; mint_poisoned : block<() : TW>;
@@ -459,7 +455,6 @@ def private mint_cn(path : string; q8 : bool; zero_block : int64) : CanaryEncode
     return <- enc
 }
 
-//! canary's log-mel and encode of `clip` as a twin leg: the output copied into `out`, the frame count returned
 def private cn_twin_encode(enc : CanaryEncoder; var st : CanaryState; clip : array<float>; var out : array<float>) : int64 {
     canary_log_mel(enc, clip, st)
     let n = canary_encode(enc, st)
@@ -555,8 +550,7 @@ def private q3a_leg_state(tw : Qwen3aTower) : Q3aLegState {
     return <- s
 }
 
-//! `qwen3a_encode` as a twin leg: the device leg (the knob on) reads the device mel's window `dev_win`, the CPU legs the CPU
-//! mel's `win`; the output copied into `out`, its length returned
+//! the device leg (the knob on) encodes the device mel's `dev_win`, the CPU legs the CPU mel's `win`
 def private q3a_twin_encode(tw : Qwen3aTower; var s : Q3aLegState; win, dev_win : MelChunk; var out : array<float>) : int64 {
     if (vulkan_tower_knob()) {
         qwen3a_encode(tw, s.enc, s.cs, dev_win)

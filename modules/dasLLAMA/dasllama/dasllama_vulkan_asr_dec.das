@@ -18,8 +18,8 @@ require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_tower
 
-//! The whisper ASR-decoder Vulkan driver, q8-native: the per-window cross-KV and the decode step (`ARCHITECTURE_GPU_TOWER.md`,
-//! the Vulkan ASR-decoder section); the Metal ASR-decoder driver fills the same hooks on an Apple build.
+//! The whisper ASR-decoder Vulkan driver, q8-native: the per-window cross-KV and the decode step
+//! (`ARCHITECTURE_GPU_TOWER_VULKAN.md`, the Vulkan ASR-decoder section); the Metal ASR-decoder driver fills the same hooks on an Apple build.
 
 var private g_wd_env = true
 var private g_wd_declines : VkDeclineCounter
@@ -39,7 +39,7 @@ enum private VulkanWdecDecline {
     rows         //! the window's first batch is wider than the step's row cap: the CPU chain serves the window
 }
 
-let private WD_ROW_CAP = 8l          //! the rows a decode batch may carry: the N-column GEMV's widest form
+let WD_ROW_CAP = 8l          //! the rows a decode batch may carry: the N-column GEMV's widest form
 let private WD_LAYER_SITES = 6l             //! a layer's GEMV sites: qkv (three regions), o, cq, co, fc1, fc2
 let private WD_S_QKV = 0l
 let private WD_S_O = 1l
@@ -111,7 +111,7 @@ struct private WdResident {
     xkv_q_dev : uint64
     xkv_s_dev : uint64
     xkv_proj_dev : uint64
-    ta_gemm : int64           //! the cross-KV GEMM record's rows: `ta` rounded up to the tile's token column (`vt_tile_rows`); the projection plane holds them
+    ta_tile_rows : int64           //! the cross-KV GEMM record's rows: `ta` rounded up to the tile's token column (`vt_tile_rows`); the projection plane holds them
     kx_dev : uint64
     vx_dev : uint64
     xkv_meta : HostBuf
@@ -139,9 +139,6 @@ struct private WdResident {
 var private g_wd : WdResident
 var private g_wd_window_key = 0ul     //! the live window: ONE DecoderState at a time, claimed by a served cross-KV
 var private g_wd_window_live = false
-//! the served window's CPU-layout planes (kx, vx) are read back only when that state's own CPU reader can need them (the decode
-//! step's declines); another state's window or the release drops the pending readback and marks the superseded state (the
-//! driver never writes into a state that may be gone) - ARCHITECTURE_GPU_TOWER_VULKAN.md sec.2.2at carries the rule
 var private g_wd_pend_kx : float?
 var private g_wd_pend_vx : float?
 var private g_wd_pend_bytes = 0l
@@ -200,7 +197,6 @@ def private wd_dev_buf(bytes : int64) : uint64 => soft_device_buf(g_wd.oom, byte
 def private wd_host_buf(bytes : int64; cached : bool) : HostBuf => soft_host_buf(g_wd.oom, bytes, cached)
 
 [cold_path]
-//! the pending window's kx / vx CPU layouts copied off the device planes into the decoder state that owns them (a no-op with none pending)
 def private wd_flush_cross_kv {
     if (g_wd_pend_bytes == 0l) {
         return
@@ -216,7 +212,7 @@ def private wd_flush_cross_kv {
 def private wd_release {
     var r & = g_wd
     if (g_wd_pend_bytes > 0l) {
-        g_wd_dropped_key = g_wd_pend_key   //! the planes die with the release: the pending window is dropped, its state marked
+        g_wd_dropped_key = g_wd_pend_key
         g_wd_pend_bytes = 0l
     }
     if (r.key != 0ul) {
@@ -281,10 +277,10 @@ def private wd_site_meta(woffs : array<int64>) : HostBuf {
 [cold_path]
 def private wd_xkv_set : VkDescriptorSet {
     let r & = g_wd
-    let bt = r.ta_gemm * r.d * 4l
+    let bt = r.ta_tile_rows * r.d * 4l
     if (r.xkv_tile.tc > 0l) {
         return cm2_cls_set(int(KqFmt.q8), r.xkv_tile.tc, fixed_array(r.wq_dev, r.ws_dev, r.xkv_meta.buf, r.xh_dev, r.xkv_proj_dev),
-            fixed_array(r.wq_bytes, r.ws_bytes, r.xkv_meta_bytes, (r.ta_gemm + TILE_READ_SLACK) * r.d * 2l, bt), fixed_array(0u, 0u, 0u, WD_XFEED, WD_TMP))
+            fixed_array(r.wq_bytes, r.ws_bytes, r.xkv_meta_bytes, (r.ta_tile_rows + TILE_READ_SLACK) * r.d * 2l, bt), fixed_array(0u, 0u, 0u, WD_XFEED, WD_TMP))
     }
     let bq = r.ta * r.d
     return q8_batch_cls_set(r.xkv_tile.v, fixed_array(r.wq_dev, r.ws_dev, r.xkv_meta.buf, r.xkv_q_dev, r.xkv_s_dev, r.xkv_proj_dev),
@@ -318,7 +314,7 @@ def private wd_sets {
     r.s_bias_h_rq = set_tower_bias_act_rq_cls(fixed_array(r.h_dev, r.norms_dev, r.xq_dev, r.xs_dev), fixed_array(bh, r.norms_bytes, bq, bs), fixed_array(WD_H, 0u, WD_XQ, WD_XQ))
     r.s_comb_rq = set_tower_wdec_attn_comb_rq_cls(fixed_array(r.pms_dev, r.py_dev, r.xq_dev, r.xs_dev), fixed_array(bpms, bpy, bq, bs), fixed_array(WD_PARTIALS, WD_PARTIALS, WD_XQ, WD_XQ))
     if (r.cm2) {
-        r.s_xfeed = set_tower_clamp_cvt_cls(fixed_array(r.xin_dev, r.xh_dev), fixed_array(bt, (r.ta_gemm + TILE_READ_SLACK) * d * 2l), fixed_array(WD_XIN, WD_XFEED))
+        r.s_xfeed = set_tower_clamp_cvt_cls(fixed_array(r.xin_dev, r.xh_dev), fixed_array(bt, (r.ta_tile_rows + TILE_READ_SLACK) * d * 2l), fixed_array(WD_XIN, WD_XFEED))
     } else {
         r.s_xfeed = set_tower_clamp_rq_cls(fixed_array(r.xin_dev, r.xkv_q_dev, r.xkv_s_dev), fixed_array(bt, r.ta * d, r.ta * d / q8e * 4l), fixed_array(WD_XIN, WD_XFEED, WD_XFEED))
     }
@@ -446,7 +442,7 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     r.nvocab = w.n_vocab
     r.cm2 = vt_cm2_feed()
     r.xkv_tile = vt_tile(r.cm2, d, r.ta)
-    r.ta_gemm = vt_tile_rows(r.xkv_tile, r.ta)
+    r.ta_tile_rows = vt_tile_rows(r.xkv_tile, r.ta)
     r.oom = false
     if (!wd_ensure_classes(r.cm2, r.xkv_tile)) {
         return false
@@ -479,7 +475,7 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     r.logits_dev = wd_dev_buf(r.nvocab * 4l)
     r.xin_dev = wd_dev_buf(bt)
     if (r.cm2) {
-        r.xh_dev = wd_dev_buf((r.ta_gemm + TILE_READ_SLACK) * d * 2l)
+        r.xh_dev = wd_dev_buf((r.ta_tile_rows + TILE_READ_SLACK) * d * 2l)
         r.xkv_q_dev = wd_dev_buf(64l)
         r.xkv_s_dev = wd_dev_buf(64l)
     } else {
@@ -487,7 +483,7 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
         r.xkv_q_dev = wd_dev_buf(r.ta * d)
         r.xkv_s_dev = wd_dev_buf(r.ta * d / q8e * 4l)
     }
-    r.xkv_proj_dev = wd_dev_buf(r.ta_gemm * d * 4l)
+    r.xkv_proj_dev = wd_dev_buf(r.ta_tile_rows * d * 4l)
     r.kx_dev = wd_dev_buf(nl * d * r.ta * 4l)
     r.vx_dev = wd_dev_buf(nl * d * r.ta * 4l)
     let groups = vt_tile_groups(r.xkv_tile, d, r.ta)
@@ -513,7 +509,7 @@ def private wd_announce {
 def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) : bool {   // nolint:STYLE038 - the dispatch chain is the shape
     g_wd_window_live = false
     if (g_wd_dropped_key == intptr(unsafe(addr(ds)))) {
-        g_wd_dropped_key = 0ul   //! the superseded state starts a window of its own: its old memory is moot on either lane
+        g_wd_dropped_key = 0ul
     }
     if (!g_wd_env) {
         return wd_decline(VulkanWdecDecline.knob)
@@ -541,7 +537,7 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     let bkxf = nl * d * ta * 4l
     assert(long_length(ds.kx) >= nl * d * ta && long_length(ds.vx) >= nl * d * ta)
     if (g_wd_pend_bytes > 0l && g_wd_pend_key != intptr(unsafe(addr(ds)))) {
-        g_wd_dropped_key = g_wd_pend_key   //! another state's window sits on the planes this one overwrites: dropped, that state marked
+        g_wd_dropped_key = g_wd_pend_key
     }
     g_wd_pend_bytes = 0l
     let groups = vt_tile_groups(r.xkv_tile, d, ta)
@@ -551,10 +547,10 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     var cur = 2l * nl * 4l
     for (l in range64(nl)) {
         let lo = dec_layer_offsets(w, l)
-        g_wd_maps[l * 2l] = vt_sched_map(mp, cur, l * 2l, lo.ck_w / q8e, r.ta_gemm, groups)
-        g_wd_maps[l * 2l + 1l] = vt_sched_map(mp, cur, l * 2l + 1l, lo.cv_w / q8e, r.ta_gemm, groups)
+        g_wd_maps[l * 2l] = vt_sched_map(mp, cur, l * 2l, lo.ck_w / q8e, r.ta_tile_rows, groups)
+        g_wd_maps[l * 2l + 1l] = vt_sched_map(mp, cur, l * 2l + 1l, lo.cv_w / q8e, r.ta_tile_rows, groups)
     }
-    let enc_dev = vulkan_tower_enc_out(unsafe(addr<float const?>(enc_out[0])), bt)   //! the tower's own plane of these rows, taken device to device
+    let enc_dev = vulkan_tower_enc_out(unsafe(addr<float const?>(enc_out[0])), bt)
     if (enc_dev == 0ul) {
         upload_region_at(r.xin_dev, 0l, unsafe(addr<uint8 const?>(enc_out[0])), bt)
     } else {
@@ -632,7 +628,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
     }
     if (!g_wd_window_live || g_wd_window_key != intptr(unsafe(addr(ds)))) {
         if (g_wd_pend_key == intptr(unsafe(addr(ds)))) {
-            wd_flush_cross_kv()   //! the CPU chain decodes this state: its own pending window lands first
+            wd_flush_cross_kv()
         }
         if (ds.gpu_kv_gen != 0l && ds.n_past > 0l) {
             panic("dasLLAMA vulkan wdec: the device decoder window was evicted mid-window - ONE live decoder window per process (a second DecoderState may not interleave whisper_cross_kv/whisper_decode_batch)")
@@ -642,7 +638,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
     if (n > WD_ROW_CAP) {
         if (ds.n_past == 0l) {
             g_wd_window_live = false
-            wd_flush_cross_kv()   //! the CPU chain takes the window: its memory lands now
+            wd_flush_cross_kv()
             return wd_decline(VulkanWdecDecline.rows)
         }
         panic("dasLLAMA vulkan wdec: decode batch of {n} exceeds the {WD_ROW_CAP}-row step cap mid-window")
@@ -742,7 +738,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
             pc_post.boff = uint(lo.fc2_b - r.norms_base)
             pc_post.lnoff = uint(last ? r.final_ln_w_off : dec_layer_offsets(w, l + 1l).ln1_w - r.norms_base)
             pc_post.lnboff = uint(last ? r.final_ln_b_off : dec_layer_offsets(w, l + 1l).ln1_b - r.norms_base)
-            enc_tower_post_add_ln_rq_cls(raw, h, r.s_post_rq, pc_post, n)   //! the last layer's norm is the final one: its feed is the logits GEMV's
+            enc_tower_post_add_ln_rq_cls(raw, h, r.s_post_rq, pc_post, n)
             vt_pt(raw, VtProfRole.post_add)
         }
         wd_gemv(raw, h, int(nl * WD_LAYER_SITES), d, r.nvocab, 1l, 1l)

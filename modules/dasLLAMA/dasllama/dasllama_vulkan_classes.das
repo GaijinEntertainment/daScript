@@ -87,13 +87,12 @@ def private q8k_amax5(m0 : float) : float {
 
 //! the Q8_0 block store every requant stamp shares - under OUT_Q8 the stamp binds `outq` and `outs`, and the store's text lives
 //! (a stamp off the gate carries no such binding and none of the text): eight consecutive lanes hold a 32-block, four elements
-//! each, and `q8_amax3`'s xor fold spans exactly those lanes; `blk_pass` quantizes a row's blocks from `rowval`, the value the
+//! each, and `q8_amax3`'s xor fold spans exactly those lanes; `blk_pass` quantizes a row's blocks from `normed_at`, the value the
 //! stamp names for a plane element under the row's statistics
 [ |> template_struct_instance]
 class template Q8BlockStoreT {
     @template_constant OUT_Q8 : bool = false   //!< the stamp quantizes its rows into Q8_0 blocks: `outq` and the block scales `outs`
 
-    //! called by a block's 8 co-active lanes: the xor 1/2/4 amax fold spans exactly those lanes
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def blk_store(b, lane8 : uint; v : float4) {
         static_if (OUT_Q8) {
@@ -111,9 +110,9 @@ class template Q8BlockStoreT {
         }
     }
 
-    def rowval(e : uint; mean, inv : float) : float => 0.0   //! the normed value at plane element `e` of the row whose statistics are `mean` and `inv`
+    def normed_at(e : uint; mean, inv : float) : float => 0.0   //! the normed value at plane element `e` of the row whose statistics are `mean` and `inv`
 
-    //! the row's `nblk` blocks from plane element `base` quantized from `rowval` into the blocks from `qb0` (32 blocks a pass over 256 lanes)
+    //! the row's `nblk` blocks from plane element `base` quantized from `normed_at` into the blocks from `qb0` (32 blocks a pass over 256 lanes)
     def blk_pass(base, nblk, qb0 : uint; mean, inv : float) {
         static_if (OUT_Q8) {
             let tid = gl_LocalInvocationID.x
@@ -121,7 +120,7 @@ class template Q8BlockStoreT {
             var b = (tid / 32u) * 4u + lane / 8u
             while (b < nblk) {
                 let e = base + b * 32u + (lane % 8u) * 4u
-                let v = float4(rowval(e, mean, inv), rowval(e + 1u, mean, inv), rowval(e + 2u, mean, inv), rowval(e + 3u, mean, inv))
+                let v = float4(normed_at(e, mean, inv), normed_at(e + 1u, mean, inv), normed_at(e + 2u, mean, inv), normed_at(e + 3u, mean, inv))
                 blk_store(qb0 + b, lane % 8u, v)
                 b += 32u
             }
@@ -300,7 +299,7 @@ class template ResidualT : RmsWgBase {
         }
     }
 
-    def override rowval(e : uint; mean, inv : float) : float => norm_weight(e) * (stashed(e) * inv)
+    def override normed_at(e : uint; mean, inv : float) : float => norm_weight(e) * (stashed(e) * inv)
 }
 
 [ |> template_struct_instance]
@@ -10040,7 +10039,7 @@ class template TowerLnT : RmsWgBase {
         }
     }
 
-    def override rowval(e : uint; mean, inv : float) : float => (x[e] - mean) * inv * wn[pa.woff + e % pa.d] + wn[pa.boff + e % pa.d]
+    def override normed_at(e : uint; mean, inv : float) : float => (x[e] - mean) * inv * wn[pa.woff + e % pa.d] + wn[pa.boff + e % pa.d]
 }
 
 [vk_dispatch(name = "tower_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -10059,14 +10058,14 @@ class TowerLnRq : TowerLnT {
 }
 
 //! the residual seam of a block, one workgroup a row: x[r] += ascale . branch, where the branch is y[r] + b (BIAS: the branch's
-//! output bias at `boff`), rmsnorm(y[r]) . wpost (POST: the branch's post-norm at `woff`, the gemma towers) or y[r] as it is (the
-//! conv module's plain add); then under `ln_on` the next branch's pre-norm - xb[r] = layernorm(x[r]) . wln + bln at `lnoff` /
-//! `lnboff`, or rms(x[r]) . wln on an RMS stamp (POST implies RMS: the two reduces take slots 0 and 1); the OUT_Q8 stamp (the
+//! output bias at `boff`), rmsnorm(y[r]) . wpost (POST_NORM: the branch's post-norm at `woff`, the gemma towers) or y[r] as it is
+//! (the conv module's plain add); then under `ln_on` the next branch's pre-norm - xb[r] = layernorm(x[r]) . wln + bln at `lnoff` /
+//! `lnboff`, or rms(x[r]) . wln on an RMS stamp (POST_NORM implies RMS: the two reduces take slots 0 and 1); the OUT_Q8 stamp (the
 //! layernorm arm) quantizes the next norm into Q8_0 blocks in place of storing it
 [ |> template_struct_instance]
 class template TowerPostAddLnT : RmsWgBase {
     @template_constant RMS : bool = false   //! the next pre-norm is the weighted rms (qwen25v, the gemma towers), not the layernorm
-    @template_constant POST : bool = false  //! the branch rows carry their post-norm before the add
+    @template_constant POST_NORM : bool = false  //! the branch rows carry their post-norm before the add
     @template_constant BIAS : bool = true   //! the branch rows carry their output bias before the add
     @template_constant OUT16 : bool = false   //! the normed rows as f16 (the cm2 tile's feed), else f32
     @template_constant OUT32 : bool = true
@@ -10091,7 +10090,7 @@ class template TowerPostAddLnT : RmsWgBase {
 
     //! the branch's element `i` of the row at `base` as the add takes it
     def branch(base, i : uint; inv_post : float) : float {
-        static_if (POST) {
+        static_if (POST_NORM) {
             return (y[base + i] * inv_post) * wn[pa.woff + i]
         } else {
             static_if (BIAS) {
@@ -10104,7 +10103,7 @@ class template TowerPostAddLnT : RmsWgBase {
 
     //! the branch's post-norm inverse over the row at `base` (slot 0), 1 on a stamp without the post-norm
     def post_inv(base : uint) : float {
-        static_if (POST) {
+        static_if (POST_NORM) {
             var ss = 0.0
             var i = gl_LocalInvocationID.x
             while (i < pa.d) {
@@ -10137,7 +10136,7 @@ class template TowerPostAddLnT : RmsWgBase {
         }
         if (pa.ln_on != 0u) {
             static_if (RMS) {
-                let inv = wg_rms_inv(s1, pa.d, pa.eps, POST ? 1u : 0u)
+                let inv = wg_rms_inv(s1, pa.d, pa.eps, POST_NORM ? 1u : 0u)
                 i = tid
                 while (i < pa.d) {
                     store(base + i, (x[base + i] * inv) * wn[pa.lnoff + i])
@@ -10168,7 +10167,7 @@ class template TowerPostAddLnT : RmsWgBase {
         }
     }
 
-    def override rowval(e : uint; mean, inv : float) : float => (x[e] - mean) * inv * wn[pa.lnoff + e % pa.d] + wn[pa.lnboff + e % pa.d]
+    def override normed_at(e : uint; mean, inv : float) : float => (x[e] - mean) * inv * wn[pa.lnoff + e % pa.d] + wn[pa.lnboff + e % pa.d]
 }
 
 [vk_dispatch(name = "tower_post_add_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -10189,7 +10188,7 @@ class TowerPostAddLnRq : TowerPostAddLnT {
 [vk_dispatch(name = "tower_post_add_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerPostAdd : TowerPostAddLnT {
     override RMS = true
-    override POST = true
+    override POST_NORM = true
     override BIAS = false
 }
 
@@ -10257,8 +10256,6 @@ def tower_act(v : float; act : uint) : float {
     }
     return tower_gelu_tanh(v)
 }
-
-// ===== the whisper decoder's fused row passes: a row pass and the Q8_0 requant of its output in one dispatch =====
 
 struct TowerBiasRqArgs {
     d : uint        //! the row width, a 32-multiple

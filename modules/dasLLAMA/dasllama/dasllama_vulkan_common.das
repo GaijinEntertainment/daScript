@@ -2707,7 +2707,6 @@ def gemv_region_pair(hb : HostBuf; i : int; wblk : uint) {
     }
 }
 
-// class-GEMV regions: (rel_wblock, xblock) pairs at 0 — n/d/nreg/ybase ride the push instead
 def fill_gemv_regions(hb : HostBuf; blk : int64) {
     gemv_region_pair(hb, 0, uint(arena_local_blk(blk)))
 }

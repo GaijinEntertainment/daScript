@@ -2799,8 +2799,8 @@ def private usec_per_dispatch(var raw : VkCommandBuffer; dispatches : int = DISP
     return double(get_time_usec(t0)) / double(SUBMITS * dispatches)
 }
 
-//! `baseline` off skips the sdot4 mm tile (the row a shape's cm2 question does not need)
-def private run_shape(name : string; d, n, cnt : int; baseline : bool = true) {   // nolint:STYLE038 — one linear measurement sweep
+//! `with_sdot4_mm` off skips the sdot4 mm tile (the row a shape's cm2 question does not need)
+def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = true) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
     let rows = cnt
     let wtiles = (d + MM_TILE - 1) / MM_TILE
@@ -2842,7 +2842,7 @@ def private run_shape(name : string; d, n, cnt : int; baseline : bool = true) { 
         let gbits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
         let begin = VkCommandBufferBeginInfo()
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        if (baseline) {
+        if (with_sdot4_mm) {
             var sc = set_q8_batch_mm_a_cls(bufs, sizes, gbits)
             var raw = alloc_cmd()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -2879,7 +2879,7 @@ def private run_shape(name : string; d, n, cnt : int; baseline : bool = true) { 
         }
     }
     let flop = 2.0lf * double(rows) * double(d) * double(n)
-    if (baseline) {
+    if (with_sdot4_mm) {
         let tflops = flop / (per_us * 1000000.0lf)
         let ms = per_us / 1000.0lf
         print("{name}: d={d} K={n} cnt={cnt} wgs={wgs}  {ms} ms/dispatch  {tflops} TFLOP/s  timing-only\n")
@@ -4064,18 +4064,16 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         return
     }
     if (only == "wh") {
-        // whisper large-v3-turbo encoder role shapes over one 30 s chunk (1500 rows, d 1280, ff 5120): q/k/v/o, fc1, fc2 and fc2 under the split-k ladder
-        run_shape("wh qkvo", 1280, 1280, 1500, baseline = false)
-        run_shape("wh fc1 ", 5120, 1280, 1500, baseline = false)
-        run_shape("wh fc2 ", 1280, 5120, 1500, baseline = false)
+        run_shape("wh qkvo", 1280, 1280, 1500, with_sdot4_mm = false)
+        run_shape("wh fc1 ", 5120, 1280, 1500, with_sdot4_mm = false)
+        run_shape("wh fc2 ", 1280, 5120, 1500, with_sdot4_mm = false)
         for (sk in [2, 4]) {
             run_shape_split("wh fc2 ", 1280, 5120, 1500, sk)
         }
         run_shape_split("wh qkvo", 1280, 1280, 1500, 2)
-        // the same shapes at 1536 rows - every l column full - against the partial last column 1500 rows leave the l stamp
-        run_shape("wh1536 qkvo", 1280, 1280, 1536, baseline = false)
-        run_shape("wh1536 fc1 ", 5120, 1280, 1536, baseline = false)
-        run_shape("wh1536 fc2 ", 1280, 5120, 1536, baseline = false)
+        run_shape("wh1536 qkvo", 1280, 1280, 1536, with_sdot4_mm = false)
+        run_shape("wh1536 fc1 ", 5120, 1280, 1536, with_sdot4_mm = false)
+        run_shape("wh1536 fc2 ", 1280, 5120, 1536, with_sdot4_mm = false)
         for (sk in [2, 4]) {
             run_shape_split("wh1536 fc2 ", 1280, 5120, 1536, sk)
         }

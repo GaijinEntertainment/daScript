@@ -13,7 +13,7 @@ the Q8_0 batch tile (or the f16 GEMM class) and the flash tile. The row operatio
 `[vk_dispatch]` classes in `dasllama_vulkan_classes.das`, each the device twin of one CPU tower
 helper (`rms_rows`, `clamp_rows`, `requant_rows_q8_sized`, `rope_neox_2d_rows`,
 `rope_neox_tab_rows`, `layernorm`, `add_inplace_rows`) or of one closed form (the clamped
-GEGLU-quick, the tanh GELU with the CPU LUT's f16 rounding, silu(g + bg) . (u + bu)); the CPU
+GEGLU-quick, the tanh GELU with the CPU LUT's f16 rounding); the CPU
 helper is each class's oracle in `tests/test_vulkan_tower_kernels.das`. The seams fold what the
 CPU loop spells as two calls: a post-add writes x += y (+ b) and, in the same workgroup, the next
 branch's pre-norm off the updated row.
@@ -72,7 +72,10 @@ the chain runs it (gemma4a's projector tail). Where a chain and its family part 
   into a stash read back beside x, and the tap mergers run on the CPU off those rows, a tap past
   a truncated tower's blocks skipped as the CPU loop skips it. **qwen25v** has no q8 lane, so its
   blocks-only seat (`register_qwen25v_gpu_blocks`) runs after the CPU stem and before the CPU
-  tail over the baked halfword twin through the f16 GEMM class; a bf16-sourced twin declines.
+  tail over the baked halfword twin through the f16 GEMM class; a bf16-sourced twin declines. Its
+  gated hidden, silu(g + bg) . (u + bu), runs on the LLM's biased f16 act stamp (`ActF16B`) at a
+  zero row map (`rex_dev`: every row the one expert), with the norms plane bound as both bias
+  planes, so the halves the down GEMM reads land in one dispatch.
 - **The whisper-class towers** (whisper, qwen2audio, voxtral, ultravox, the Omni audio towers,
   Qwen3-ASR through its conv front) share one chain with gemma3v: the pre-LN block loop
   `vt_ln_chain` over one offsets record a block (`LayerOffs`; gemma3v's block offsets mapped onto
@@ -100,7 +103,11 @@ the chain runs it (gemma4a's projector tail). Where a chain and its family part 
   the front hook runs the window's chunk convs (im2col to f16 and the f16 GEMM a stage, the
   bias + activation as a row class), the feature shuffle, `conv_out` on the cm2 q8 tile and the
   bias + positions, read back into the state the block loop then serves - so a second window on
-  the same residency recomputes every stage's offsets from its own chunk count.
+  the same residency recomputes every stage's offsets from its own chunk count. A position plane
+  adds through the bias class as one bias row as wide as the rows it covers (the class repeats its
+  bias row every `d` elements): the whisper stem's row is its whole plane, so each position row
+  lands once, and qwen3a's is one chunk's 13 position rows, so every chunk takes them - qwen3a's
+  finish is two bias passes, the `conv_out` bias row, then those positions.
 - **gemma4a** serves the whole chunk (`vulkan_gemma4a_chunk`: the DFT with the magnitude arm and a
   frame-major store, the mel, both subsample convs as im2col + the f16 GEMM + a LayerNorm-ReLU row
   class, the input projection on the cm2 q8 tile) and hands the residual rows to its blocks chain,
@@ -126,7 +133,8 @@ the chain runs it (gemma4a's projector tail). Where a chain and its family part 
   (2 npos - 1 rows) and a row class builds it on the device ahead of the blocks (the CPU table stays
   the CPU chain's), so the rel quartet is sized by the scratch and the table's projection is a
   batch GEMM over those rows. The attention does not walk the projected table per row: per head
-  the (q + v) and rel-table panels are gathered as f16, the plane R = (q + v) P^T runs on the f16
+  the (q + v) and rel-table panels are the restride stamps at one head - unpadded f16 panels, the
+  (q + v) one on the biased stamp with the head's slice of `bias_v` as its bias row - the plane R = (q + v) P^T runs on the f16
   coopmat GEMM, and a tiled online-softmax kernel (`TowerCnAttnRT`, a workgroup per 64 query rows
   of one head) scores ((q_i + u) . k_j + R[i][npos - 1 - i + j]) x scale, reading R beside the keys
   and values staged 32 a tile through workgroup memory - the plane's [cap x 2 cap - 1] f32 rows are
@@ -142,9 +150,13 @@ the q8 batch variant off cm2), one clamp + halfword store class feeds every inpu
 table, and the Conformer sets are bound per tile. The f16 feed (`xh_dev`) keeps stale rows past
 the encode's live count by design: the feed's rows past the live count reach no live row, because
 every restride reads `rows` and the GEMM output rows past npos those stale rows produce are dead.
+Each block family lists its GEMM regions once, in record order (`vt_g4a_regions`,
+`vt_cn_regions`, `vt_ln_regions`, `vt_q3v_regions`): the upload gathers the regions in that order,
+and the schedule walk maps its records in the same order beside a per-record tile or group list,
+so a record's index names one region in both walks.
 A GEMM record on the l column carries the encode's rows rounded up to 256 (`vt_tile_rows`), and
-the scratch's row cap is a multiple of the l column (`vt_cap_rows`), so the l stamp's last column
-is whole and takes its fast path: a partial column runs its clamped edge path at a third of the
+the scratch's row cap is a multiple of the l column (`vt_cap_rows`, so every plane the scratch
+sizes holds a record's rounded rows), so the l stamp's last column is whole and takes its fast path: a partial column runs its clamped edge path at a third of the
 rate (whisper's 1500-row chunk read q/k/v/o 95 us against 52 at 1536, fc2 357 against 185, on the
 RTX PRO 4500). A record on the s or m column keeps the raw count - those stamps load a partial
 column unclamped and clamp the store, and a plane sized to the record (gemma4a's 13-row rel

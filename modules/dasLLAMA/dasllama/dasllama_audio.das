@@ -1279,8 +1279,7 @@ def private enc_gelu_batch(t : AudioTower; var x : array<float>; d, npos : int64
     }
 }
 
-//! the conv stem over one chunk into `s.x`: the conv hook where it serves (its output may stay on the device until the block
-//! hook takes it), else the CPU im2col + GEMM pair and the position rows
+//! the conv stem into `s.x` - on the conv hook its rows may stay on the device until the block hook takes or lands them
 def private audio_encode_stem(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     if (mel.n_len != AUDIO_CHUNK_FRAMES || mel.n_mel != t.n_mel) {
         panic("audio_encode: mel chunk is {mel.n_mel}x{mel.n_len}, want {t.n_mel}x{AUDIO_CHUNK_FRAMES}")
@@ -1362,8 +1361,6 @@ typedef TowerBlocksFinalGpuFn = function<(t : AudioTower; var s : EncoderState; 
 var private g_tw_blocks_final : TowerBlocksFinalGpuFn
 var private g_tw_blocks_final_set = false
 
-//! the blocks-with-post-norm seat: a driver that runs the block loop and the tower's post-norm in one chain fills it; the
-//! whisper encode asks this seat first and falls to the blocks seat plus the CPU norm
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_tower_blocks_final_gpu(fn : TowerBlocksFinalGpuFn) {
     g_tw_blocks_final = fn
