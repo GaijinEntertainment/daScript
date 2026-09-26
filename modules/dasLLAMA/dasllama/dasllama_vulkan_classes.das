@@ -13246,6 +13246,7 @@ struct TtsIm2colArgs {
     kdim : uint         //! the column row's width: k * cin on the GEMM's 32 lattice, the columns past k * cin zero
     xoff : uint         //! x's element base
     coloff : uint       //! col's element base
+    rows : uint         //! 1 = x is row-major [tin][cin] (the tower's rows form), 0 = channel-major [cin][tin]
 }
 
 //! the 1-D conv's im2col, the F32Gemm's feed: col [tout][kdim] at coloff, column j = tap * cin + ci - the slab's weight-row
@@ -13282,7 +13283,7 @@ class TtsIm2col {
                     }
                 }
                 if (st >= 0) {
-                    v = x[pa.xoff + ci * pa.tin + uint(st)]
+                    v = pa.rows != 0u ? x[pa.xoff + uint(st) * pa.cin + ci] : x[pa.xoff + ci * pa.tin + uint(st)]
                 }
             }
             col[pa.coloff + gid] = v

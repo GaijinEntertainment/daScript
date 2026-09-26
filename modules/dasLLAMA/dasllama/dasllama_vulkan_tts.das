@@ -203,13 +203,24 @@ def private ts_forget {
     ts_albert_scratch_release()
 }
 
+def private ts_gemm_args(slot : TtsConvSlot; nin, nout, rows : int64) : F32GemmArgs
+    => F32GemmArgs(n = uint(nin), d = uint(nout), rows = uint(rows), woff = uint(slot.woff), wstride = uint(slot.kdim_p), boff = uint(slot.boff),
+        xoff = 0u, xstride = uint(nin), yoff = 0u, ystride = uint(nout))
+
 //! a dense linear's GEMM: y[rows x nout] = x[rows x nin] W^T + b over the slab's rows, the f32 tile
 def private ts_lin(raw : VkCommandBuffer; var h : VkHaz; slab : uint64; slab_bytes : int64; slot : TtsConvSlot; nin, nout : int64;
                    x : uint64; x_bytes : int64; x_bit : uint; y : uint64; y_bytes : int64; y_bit : uint; rows : int64) {
     var s = set_f32_gemm_b_cls(fixed_array(slab, x, y, slab), fixed_array(slab_bytes, x_bytes, y_bytes, slab_bytes), fixed_array(0u, x_bit, y_bit, 0u))
-    var pa = F32GemmArgs(n = uint(nin), d = uint(nout), rows = uint(rows), woff = uint(slot.woff), wstride = uint(slot.kdim_p), boff = uint(slot.boff),
-        xoff = 0u, xstride = uint(nin), yoff = 0u, ystride = uint(nout))
+    var pa = ts_gemm_args(slot, nin, nout, rows)
     enc_f32_gemm_b_cls(raw, h, s, pa, f32_gemm_wgs(rows, nout))
+}
+
+//! the same GEMM with its bias row left for the residual seam that follows it (`ts_add_ln` adds it there)
+def private ts_lin_branch(raw : VkCommandBuffer; var h : VkHaz; slab : uint64; slab_bytes : int64; slot : TtsConvSlot; nin, nout : int64;
+                          x : uint64; x_bytes : int64; x_bit : uint; y : uint64; y_bytes : int64; y_bit : uint; rows : int64) {
+    var s = set_f32_gemm_cls(fixed_array(slab, x, y), fixed_array(slab_bytes, x_bytes, y_bytes), fixed_array(0u, x_bit, y_bit))
+    var pa = ts_gemm_args(slot, nin, nout, rows)
+    enc_f32_gemm_cls(raw, h, s, pa, f32_gemm_wgs(rows, nout))
 }
 
 //! layernorm rows in place against a norm slot's scale and shift rows
@@ -220,12 +231,12 @@ def private ts_ln(raw : VkCommandBuffer; var h : VkHaz; slab : uint64; slab_byte
     enc_tower_ln_cls(raw, h, s, pa, rows)
 }
 
-//! x += y, then the next norm of the sum into xb (the residual seam of a pre-LN block)
-def private ts_add_ln(raw : VkCommandBuffer; var h : VkHaz; slab : uint64; slab_bytes : int64; ns : TtsNormSlot;
+//! the post-LN residual seam: x += y + b (the branch linear's bias row, `bslot`), then xb = layernorm(x) on the norm slot's rows
+def private ts_add_ln(raw : VkCommandBuffer; var h : VkHaz; slab : uint64; slab_bytes : int64; bslot : TtsConvSlot; ns : TtsNormSlot;
                       x : uint64; x_bit : uint; y : uint64; y_bit : uint; xb : uint64; xb_bit : uint; row_bytes : int64; rows, d : int64; eps : float) {
-    var s = set_tower_post_add_plain_cls(fixed_array(x, y, xb, slab), fixed_array(row_bytes, row_bytes, row_bytes, slab_bytes), fixed_array(x_bit, y_bit, xb_bit, 0u))
-    var pa = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = 0u, eps = eps, ln_on = 1u, lnoff = uint(ns.gwoff), lnboff = uint(ns.gboff), ascale = 1.0)
-    enc_tower_post_add_plain_cls(raw, h, s, pa, rows)
+    var s = set_tower_post_add_ln_cls(fixed_array(x, y, xb, slab), fixed_array(row_bytes, row_bytes, row_bytes, slab_bytes), fixed_array(x_bit, y_bit, xb_bit, 0u))
+    var pa = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(bslot.boff), eps = eps, ln_on = 1u, lnoff = uint(ns.gwoff), lnboff = uint(ns.gboff), ascale = 1.0)
+    enc_tower_post_add_ln_cls(raw, h, s, pa, rows)
 }
 
 def private ts_albert_shape_ok(a : St2Albert; t : int64) : bool {
@@ -239,8 +250,8 @@ def private ts_albert_shape_ok(a : St2Albert; t : int64) : bool {
 }
 
 def private ts_albert_ensure : bool {
-    return (ensure_f32_gemm_b_cls() && ensure_tower_ln_cls() && ensure_tower_post_add_plain_cls() && ensure_tts_row_gather_cls()
-        && ensure_tts_gelu_tanh_cls() && ensure_tts_attn_cls())
+    return (ensure_f32_gemm_cls() && ensure_f32_gemm_b_cls() && ensure_tower_ln_cls() && ensure_tower_post_add_ln_cls()
+        && ensure_tts_row_gather_cls() && ensure_tts_gelu_tanh_cls() && ensure_tts_attn_cls())
 }
 
 //! The PL-BERT seat: the embeddings gathered and normed, the map-in, then the one ALBERT layer n_layers times, out [t][hidden]
@@ -294,21 +305,23 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
         qoff = 0u, koff = 0u, voff = 0u, ooff = 0u)
     var pa_gelu = TtsElemArgs(nelem = uint(t * ff), off = 0u, slope = 0.0)
     let eps = ST2_ALBERT_EPS
+    //! the CPU chain's rows: x the residual stream, xb2 the attention context and then the attention-normed rows the ffn reads
+    //! and the second seam adds to, x again the full-normed rows the next layer reads
     vt_chain_one_shot("albert", a.n_layers, t) $(raw : VkCommandBuffer; var h : VkHaz) {
-        enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, (ne + 255l) / 256l)
+        enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, tts_row_gather_wgs(ne))
         ts_ln(raw, h, slab, sb, sl.emb_ln, e_d, be, TS_E, t, a.emb_dim, eps)
         ts_lin(raw, h, slab, sb, sl.map_in, a.emb_dim, d, e_d, be, TS_E, x_d, bx, TS_X, t)
         for (_l in range64(a.n_layers)) {
             ts_lin(raw, h, slab, sb, sl.q, d, d, x_d, bx, TS_X, q_d, bx, TS_Q, t)
             ts_lin(raw, h, slab, sb, sl.k, d, d, x_d, bx, TS_X, k_d, bx, TS_K, t)
             ts_lin(raw, h, slab, sb, sl.v, d, d, x_d, bx, TS_X, v_d, bx, TS_V, t)
-            enc_tts_attn_cls(raw, h, s_attn, pa_attn, t * a.heads)
-            ts_lin(raw, h, slab, sb, sl.dense, d, d, xb2_d, bx, TS_XB2, xb_d, bx, TS_XB, t)
-            ts_add_ln(raw, h, slab, sb, sl.attn_ln, xb_d, TS_XB, x_d, TS_X, xb2_d, TS_XB2, bx, t, d, eps)
+            enc_tts_attn_cls(raw, h, s_attn, pa_attn, tts_attn_wgs(t, a.heads))
+            ts_lin_branch(raw, h, slab, sb, sl.dense, d, d, xb2_d, bx, TS_XB2, xb_d, bx, TS_XB, t)
+            ts_add_ln(raw, h, slab, sb, sl.dense, sl.attn_ln, x_d, TS_X, xb_d, TS_XB, xb2_d, TS_XB2, bx, t, d, eps)
             ts_lin(raw, h, slab, sb, sl.ffn, d, ff, xb2_d, bx, TS_XB2, ffn_d, bff, TS_FFN, t)
-            enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, (t * ff / 4l + 255l) / 256l)
-            ts_lin(raw, h, slab, sb, sl.ffn_out, ff, d, ffn_d, bff, TS_FFN, f2_d, bx, TS_F2, t)
-            ts_add_ln(raw, h, slab, sb, sl.full_ln, f2_d, TS_F2, xb2_d, TS_XB2, x_d, TS_X, bx, t, d, eps)
+            enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, tts_elem_wgs(t * ff))
+            ts_lin_branch(raw, h, slab, sb, sl.ffn_out, ff, d, ffn_d, bff, TS_FFN, f2_d, bx, TS_F2, t)
+            ts_add_ln(raw, h, slab, sb, sl.ffn_out, sl.full_ln, xb2_d, TS_XB2, f2_d, TS_F2, x_d, TS_X, bx, t, d, eps)
         }
     }
     unsafe(scratch_resize(out, t * d))
