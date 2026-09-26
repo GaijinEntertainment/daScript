@@ -628,6 +628,9 @@ def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : 
     }
 }
 
+//! the output length of a k3 / stride-2 / pad-1 conv stage over an axis of `l`
+def conv_s2_out(l : int64) : int64 => (l - 1l) / 2l + 1l
+
 //! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in [C][KH][KW]
 //! order (row index c·p² + ky·p + kx), one row per non-overlapping p×p patch walking the canvas
 //! row-major (pos_x = i % n_cols, pos_y = i / n_cols). Returns npos; ``x0`` grows to npos × 3p².

@@ -510,8 +510,8 @@ def qwen3a_mel_window(m : WhisperMel; off : int64) : MelChunk {
 def private conv2d_s2(@scratch var out : array<float>; @scratch var col : array<float>;
                       x : array<float>; blob : PlaneF; w_off, b_off : int64;
                       iw, ih, cin, cout : int64) {
-    let ow = (iw - 1l) / 2l + 1l
-    let oh = (ih - 1l) / 2l + 1l
+    let ow = conv_s2_out(iw)
+    let oh = conv_s2_out(ih)
     let kdim = cin * 9l
     let rows = oh * ow
     var tc = ref_time_ticks()

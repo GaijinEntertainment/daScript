@@ -767,8 +767,8 @@ def gemma4a_log_mel(enc : Gemma4aEncoder; samples : array<float> | #; off, len :
 // Weight flat [cout][cin][kh][kw] (= im2col column order). LayerNorm has weight only (no bias).
 def private g4a_conv_stage(enc : Gemma4aEncoder; var st : Gemma4aState; var out : array<float>;
                            x : array<float>; w_off, norm_off, iw, ih, cin, cout : int64) {
-    let ow = (iw - 1l) / 2l + 1l
-    let oh = (ih - 1l) / 2l + 1l
+    let ow = conv_s2_out(iw)
+    let oh = conv_s2_out(ih)
     let kdim = cin * 9l
     let rows = oh * ow
     ensure_length(st.col, rows * kdim)
@@ -912,16 +912,16 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
     let dh = enc.d_head
     let n_mel = enc.n_mel
     // the conformer block loop walks the twice-subsampled frame count
-    dispatch_phase_encode(((st.n_len - 1l) / 2l + 1l - 1l) / 2l + 1l)
+    dispatch_phase_encode(conv_s2_out(conv_s2_out(st.n_len)))
 
     var tprof = ref_time_ticks()
     // subsample: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]
     g4a_conv_stage(enc, st, st.y0, st.mel, enc.c0_w, enc.norm0_w, n_mel, st.n_len, 1l, enc.sub_ch0)
-    let t1 = (st.n_len - 1l) / 2l + 1l
-    let w1 = (n_mel - 1l) / 2l + 1l
+    let t1 = conv_s2_out(st.n_len)
+    let w1 = conv_s2_out(n_mel)
     g4a_conv_stage(enc, st, st.y1, st.y0, enc.c1_w, enc.norm1_w, w1, t1, enc.sub_ch0, enc.sub_ch1)
-    let t2 = (t1 - 1l) / 2l + 1l
-    let w2 = (w1 - 1l) / 2l + 1l
+    let t2 = conv_s2_out(t1)
+    let w2 = conv_s2_out(w1)
     let npos = t2
     let feat = w2 * enc.sub_ch1     // 32 × 32 = 1024; y1 rows are already [freq·32 + channel]
 

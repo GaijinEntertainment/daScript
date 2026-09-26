@@ -869,10 +869,10 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     let n_mel = t.n_mel
     let n_bins = t.n_bins
     let n_fft = (n_bins - 1l) * 2l
-    let t1 = (n_len - 1l) / 2l + 1l
-    let w1 = (n_mel - 1l) / 2l + 1l
-    let t2 = (t1 - 1l) / 2l + 1l
-    let w2 = (w1 - 1l) / 2l + 1l
+    let t1 = conv_s2_out(n_len)
+    let w1 = conv_s2_out(n_mel)
+    let t2 = conv_s2_out(t1)
+    let w2 = conv_s2_out(w1)
     let feat = w2 * t.sub_ch1
     let npos = t2
     if (n_fft % 32l != 0l || feat % 32l != 0l || feat != t.d_model || t.sub_ch0 % 64l != 0l || t.sub_ch0 != n_mel

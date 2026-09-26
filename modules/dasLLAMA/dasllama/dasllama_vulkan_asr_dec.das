@@ -205,17 +205,9 @@ def private wd_flush_cross_kv {
     if (g_wd_pend_bytes == 0l) {
         return
     }
-    var r & = g_wd
-    let bkxf = g_wd_pend_bytes
-    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-        vhz_dep(raw, h, WD_KX | WD_VX, 0u, true)
-        cmd_copy_range(raw, r.kx_dev, 0l, r.kvhost.buf, 0l, bkxf)
-        cmd_copy_range(raw, r.vx_dev, 0l, r.kvhost.buf, bkxf, bkxf)
-    }
-    unsafe {
-        memcpy(reinterpret<void?>(g_wd_pend_kx), r.kvhost.mapped, bkxf)
-        memcpy(reinterpret<void?>(g_wd_pend_vx), reinterpret<uint8?>(r.kvhost.mapped) + bkxf, bkxf)
-    }
+    let r & = g_wd
+    readback_range(r.kx_dev, WD_KX, r.kvhost, g_wd_pend_kx, g_wd_pend_bytes)
+    readback_range(r.vx_dev, WD_VX, r.kvhost, g_wd_pend_vx, g_wd_pend_bytes)
     g_wd_pend_bytes = 0l
     g_wd_pend_kx = null
     g_wd_pend_vx = null
@@ -279,12 +271,8 @@ def private wd_site_meta(woffs : array<int64>) : HostBuf {
     let q8e = kq_elems(KqFmt.q8)   // nolint:LINT021 - the element offset divides in 64-bit ahead of the narrowing store
     let hb = wd_host_buf(WD_SITE_META_BYTES, false)
     if (hb.buf != 0ul) {
-        unsafe {
-            var mp = reinterpret<uint?>(hb.mapped)
-            for (i in range(length(woffs))) {
-                mp[i * 2] = uint(woffs[i] / q8e)
-                mp[i * 2 + 1] = 0u
-            }
+        for (i in range(length(woffs))) {
+            gemv_region_pair(hb, i, uint(woffs[i] / q8e))
         }
     }
     return hb
@@ -584,10 +572,7 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     pc_v16.bias_on = 1u
     var pc_vx = pc_v16
     pc_vx.mode = WDEC_KV_VX
-    let t0 = ref_time_ticks()
-    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-        pfq_begin(raw)
-        pfq_ts(raw)
+    vt_prof_chain("whisper cross-kv", nl, ta) $(raw : VkCommandBuffer; var h : VkHaz) {
         if (enc_dev != 0ul) {
             vhz_dep(raw, h, 0u, WD_XIN, true)
             cmd_copy_range(raw, enc_dev, 0l, r.xin_dev, 0l, bt)
@@ -617,10 +602,6 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
             enc_tower_wdec_kv_cls(raw, h, r.s_kvx_v, pc_vx, wg_kv)
             vt_pt(raw, VtProfRole.kv_store)
         }
-        pfq_end(raw)
-    }
-    if (vk_prof()) {
-        vt_prof_report("whisper cross-kv", nl, ta, get_time_usec(t0))
     }
     unsafe {
         g_wd_pend_kx = addr(ds.kx[0])
@@ -710,9 +691,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
     let wg_attn_c = nch_c * hh * n
     let wg_comb = hh * n
     let t0 = ref_time_ticks()
-    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-        pfq_begin(raw)
-        pfq_ts(raw)
+    vt_prof_chain("whisper decode", nl, n) $(raw : VkCommandBuffer; var h : VkHaz) {
         for (l in range64(nl)) {
             let lo = dec_layer_offsets(w, l)
             let site = int(l * WD_LAYER_SITES)
@@ -778,10 +757,6 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
         vhz_dep(raw, h, WD_LOGITS, 0u, true)
         cmd_copy_range(raw, r.logits_dev, 0l, r.xhost.buf, 0l, r.nvocab * 4l)
         vt_pt(raw, VtProfRole.copy_out)
-        pfq_end(raw)
-    }
-    if (vk_prof()) {
-        vt_prof_report("whisper decode", nl, n, get_time_usec(t0))
     }
     unsafe {
         memcpy(addr<void?>(ds.logits[0]), r.xhost.mapped, r.nvocab * 4l)

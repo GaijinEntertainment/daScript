@@ -287,9 +287,7 @@ def private pk_repack_all(var st : ParakeetStaging) {
     let d = st.e.n_state
     let ff = 4l * d
     let nch = st.e.n_sub_ch
-    let w1 = (st.e.n_mel - 1l) / 2l + 1l
-    let w2 = (w1 - 1l) / 2l + 1l
-    let w3 = (w2 - 1l) / 2l + 1l
+    let w3 = conv_s2_out(conv_s2_out(conv_s2_out(st.e.n_mel)))
     let feat = w3 * nch                       // pre_w input dim (encode's xf row width)
     pk_repack(st, st.e.c3_w, nch, nch)
     pk_repack(st, st.e.c6_w, nch, nch)
@@ -907,8 +905,8 @@ def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : Par
 // (conv_sub_bench); threads over oy rows (bit-exact at any lane count).
 def private pk_conv2d_c1_s2_relu(var out : array<float>; x : array<float>; blob : PlaneF;
                                  w_off, b_off : int64; iw, ih, cout : int64) {
-    let ow = (iw - 1l) / 2l + 1l
-    let oh = (ih - 1l) / 2l + 1l
+    let ow = conv_s2_out(iw)
+    let oh = conv_s2_out(ih)
     pk_ensure(out, oh * ow * cout)
     unsafe {
         var op = addr(out[0])
@@ -989,8 +987,8 @@ def private pk_dw_pos(var op : float?; xp, wp, bp : float const?; oy, ox, iw, ih
 // interior threads over oy rows (independent — bit-exact at any lane count)
 def private pk_conv2d_dw_s2(var out : array<float>; x : array<float>; blob : PlaneF;
                             w_off, b_off : int64; iw, ih, ch : int64) {
-    let ow = (iw - 1l) / 2l + 1l
-    let oh = (ih - 1l) / 2l + 1l
+    let ow = conv_s2_out(iw)
+    let oh = conv_s2_out(ih)
     let oy_end = (ih - 2l) / 2l + 1l   // last oy with iy=2*oy+1 in bounds, exclusive
     let ox_end = (iw - 2l) / 2l + 1l
     let rs = iw * ch
@@ -1108,20 +1106,20 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
 
     // conv subsampling ([time][mel] rows are already the [ih][iw][c=1] layout)
     var tp = ref_time_ticks()
-    let t1 = (st.mel.n_len - 1l) / 2l + 1l
-    let w1 = (m.n_mel - 1l) / 2l + 1l          // 64
+    let t1 = conv_s2_out(st.mel.n_len)
+    let w1 = conv_s2_out(m.n_mel)          // 64
     pk_conv2d_c1_s2_relu(st.y0, st.mel.data, m.blob, m.c0_w, m.c0_b, m.n_mel, st.mel.n_len, nch)
     pk_conv2d_dw_s2(st.y2, st.y0, m.blob, m.c2_w, m.c2_b, w1, t1, nch)
-    let w2 = (w1 - 1l) / 2l + 1l               // 32
-    let t2 = (t1 - 1l) / 2l + 1l
+    let w2 = conv_s2_out(w1)               // 32
+    let t2 = conv_s2_out(t1)
     pk_ensure(st.y3, t2 * w2 * nch)
     pk_scan("y0", st.y0, t1 * w1 * nch)
     pk_scan("y2", st.y2, t2 * w2 * nch)
     pk_mm_rq(m, st.y3, m.c3_w, st.y2, st.xqi, st.xsi, nch, nch, t2 * w2)   // 1x1 conv = per-position channel mix
     pk_bias_relu(st.y3, m.blob, m.c3_b, nch, t2 * w2)
     pk_conv2d_dw_s2(st.y5, st.y3, m.blob, m.c5_w, m.c5_b, w2, t2, nch)
-    let w3 = (w2 - 1l) / 2l + 1l               // 16
-    let t3 = (t2 - 1l) / 2l + 1l
+    let w3 = conv_s2_out(w2)               // 16
+    let t3 = conv_s2_out(t2)
     pk_ensure(st.y6, t3 * w3 * nch)
     pk_mm_rq(m, st.y6, m.c6_w, st.y5, st.xqi, st.xsi, nch, nch, t3 * w3)
     pk_bias_relu(st.y6, m.blob, m.c6_b, nch, t3 * w3)
