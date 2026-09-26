@@ -51,6 +51,22 @@ def test_plan_dispatch(t : T?) {
 }
 
 [test]
+def test_plan_verbose(t : T?) {
+    t |> run("--verbose is a shared flag on every command, off by default") @(t : T?) {
+        let quiet <- parse_cli(["complete", "-m", "x.gguf", "hi"])
+        t |> success(!quiet.common.verbose, "off by default")
+        for (cmd in ["complete", "chat", "transcribe", "speak", "talk", "embed", "tokenize", "bench"]) {
+            let plan <- parse_cli([cmd, "--verbose", "-m", "x.gguf"])
+            t |> equal(plan.error, "", cmd)
+            t |> success(plan.common.verbose, "{cmd} --verbose")
+        }
+        let voiced <- parse_cli(["speak", "-v", "alba", "--verbose", "hi"])
+        t |> equal(voiced.speak.voice, "alba", "-v stays the voice short flag")
+        t |> success(voiced.common.verbose, "verbose has no short form and rides beside -v")
+    }
+}
+
+[test]
 def test_plan_flags(t : T?) {
     t |> run("complete: the shared, the sampler and its own flags land on one plan") @(t : T?) {
         let plan <- parse_cli(["complete", "-m", "x.gguf", "--gpu", "off", "-t", "4", "--temp", "0.7", "-n", "12", "-p", "hi", "--quiet"])

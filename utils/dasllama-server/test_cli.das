@@ -600,6 +600,27 @@ def test_doc_scenarios(t : T?) {
         t |> equal(non_empty, 1, "stdout carries one line, the answer: {out}")
         t |> success(find(out, "dasllama-cli:") < 0 && find(out, "[W]") < 0, "no progress line and no engine notice on stdout")
     }
+    t |> run("--verbose echoes the engine's log records to stderr; stdout still carries the answer alone") @(t : T?) {
+        return if (model_missing(t, llm))
+        if (get_platform_name() == "windows") {
+            t |> skip("the stream redirects below are POSIX")
+            return
+        }
+        let plain = run_cli(["complete", "-m", llm, "-n", "4", "--quiet", "--gpu", "off", "hi"])
+        return if (!pass_cell(t, plain, "complete"))
+        t |> success(find(plain.out, "[info] ") < 0, "without --verbose no record reaches the console: {tail_of(plain.out)}")
+        let argv <- cli_argv(["complete", "-m", llm, "-n", "4", "--quiet", "--gpu", "off", "--verbose", "hi"])
+        let quoted <- [for (a in argv); "'{a}'"]
+        var err_only = ""
+        let rc_e = run_and_capture(["/bin/sh", "-c", "{join(quoted, " ")} 2>&1 >/dev/null"], err_only, CELL_TIMEOUT_SEC)
+        t |> equal(rc_e, 0, "exit 0: {tail_of(err_only)}")
+        t |> success(find(err_only, "[info] dasllama-cli: tune status") >= 0, "the tune status record is echoed as a plain [info] line: {tail_of(err_only)}")
+        t |> success(find(err_only, "\"level\":\"info\"") < 0, "the console gets the plain line, not the file's JSON")
+        var out_only = ""
+        let rc_o = run_and_capture(["/bin/sh", "-c", "{join(quoted, " ")} 2>/dev/null"], out_only, CELL_TIMEOUT_SEC)
+        t |> equal(rc_o, 0, "exit 0: {tail_of(out_only)}")
+        t |> success(find(out_only, "[info] ") < 0, "no record on stdout: {out_only}")
+    }
     t |> run("the shared knobs: --gpu off --ctx --threads --quant --kv-dtype all take on one run") @(t : T?) {
         return if (model_missing(t, llm))
         let r = run_cli(["complete", "-m", llm, "-n", "6", "--quiet", "--gpu", "off", "--ctx", "256", "--threads", "4", "--quant", "q8", "--kv-dtype", "q8_0", "The capital of France is"])

@@ -103,6 +103,9 @@ struct CommonArgs {
     @clarg_doc = "Where a bare model name resolves (default ~/.dasllama/models; DASLLAMA_MODELS_DIR overrides)"
     models_dir : string
 
+    @clarg_doc = "Echo the engine's log records (logs/dasllama-cli.log: a missing Metal profile, a GPU decline, model load) to stderr as they land; stdout stays the answer"
+    verbose : bool
+
     @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch (a fat build carries no tuner and ignores it)"
     tune : bool
 

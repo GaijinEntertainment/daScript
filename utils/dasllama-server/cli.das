@@ -863,6 +863,15 @@ def private run_bench(plan : CliPlan; cfg : CliConfig) : int {
 
 // ===== main =====
 
+//! `--verbose`: the engine's INFO records reach the log AND stderr. Two floors open - the
+//! runtime drops a `to_log` below DAS_LOG_LEVEL before any hook sees it, the logger drops one
+//! below its own level before the file does - and the echo rides the file write.
+def private arm_verbose() {
+    set_env_variable("DAS_LOG_LEVEL", "info")
+    logger_set_min_level(LOG_INFO)
+    logger_set_echo_stderr(true)
+}
+
 [export, tune_policy(missing = "auto")]
 def main : int {
     if (!jit_enabled() && !is_standalone_exe()) {
@@ -885,6 +894,9 @@ def main : int {
     if (plan.help) {
         emit(plan.cmd == CliCommand.none ? cli_usage() : command_help(plan.cmd))
         return 0
+    }
+    if (plan.common.verbose) {
+        arm_verbose()
     }
     log_tune_status(TOOL)
     let cfg = load_cli_config(plan.common.config, get_this_module_dir())

@@ -218,6 +218,7 @@ def test_hook_at_field_decimal(t : T?) {
         }
         let rc = run_child(cmd, out)
         t |> equal(rc, 0, "the probe process exits clean: {out}")
+        t |> success(find(out, "[info] hook at-field probe") < 0, "without the echo the console sees no record: {out}")
         let lines = read_lines(p)
         remove(p)
         var at = ""
@@ -235,5 +236,24 @@ def test_hook_at_field_decimal(t : T?) {
         let tail = slice(at, rfind(at, ":") + 1)
         t |> success(find(at, "0x") < 0, "the line is not hex: '{at}'")
         t |> success(to_int(tail) > 0 && "{to_int(tail)}" == tail, "the line is a decimal number: '{at}'")
+    }
+    t |> run("the stderr echo prints the record as one plain line beside the file's JSON") @(t : T?) {
+        let p = temp_log_path()
+        var out : string
+        var cmd = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" \"{get_das_root()}/tests/daslib/_logger_hook_child.das\" -- echo \"{p}\" 2>&1"
+        if (get_platform_name() == "windows") {
+            cmd = "\"{cmd}\""
+        }
+        let rc = run_child(cmd, out)
+        t |> equal(rc, 0, "the probe process exits clean: {out}")
+        t |> success(find(out, "[info] hook at-field probe") >= 0, "the echo line reached the console: {out}")
+        t |> success(find(out, "\"level\":\"info\"") < 0, "the console line is plain text, not the file's JSON record")
+        let lines = read_lines(p)
+        remove(p)
+        var in_file = false
+        for (line in lines) {
+            in_file ||= find(line, "hook at-field probe") >= 0
+        }
+        t |> success(in_file, "the file still receives the record")
     }
 }
