@@ -222,7 +222,7 @@ def main() : int {
             return 1
         }
         for (t in threads) {
-            to_log(LOG_INFO, "{t}\n")
+            print("{t}\n")   //! the listing is the command's product: `to_log` at info is filtered by default
         }
         to_log(LOG_INFO, "pr-babysit: {length(threads)} unresolved\n")
     }
