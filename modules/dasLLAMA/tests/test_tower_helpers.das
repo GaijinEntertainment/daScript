@@ -8,6 +8,7 @@ require dasllama/dasllama_math    // setup_dasllama_jobque_
 require dasllama/dasllama_rope    // build_rope_tabs_rows — the 2-axis rope's table source
 require dasllama/dasllama_plane
 require daslib/jobque_boost
+require _attn_oracle   // attn_row_oracle - the naive attention the bidir core answers to
 require daslib/f16_cvt   // the binary16 round-trip the geglu table property checks
 require math
 
@@ -239,36 +240,17 @@ def test_avg_pool2d_rows(t : T?) {
     }
 }
 
-// the oracle stays naive on purpose: no blocking, no packing - nothing the kernel does
+// the oracle stays naive on purpose: no blocking, no packing - nothing the kernel does; every key is in range, so
+// the causal row oracle attends bidirectionally
 def private attention_ref(qq, kk, vv : array<float>; tt, d, n_head : int64; scale : float) : array<float> {
-    let hs = d / n_head
+    let (nt, dim, nh) = (int(tt), int(d), int(n_head))   // the oracle indexes in 32 bits; the fixture is a few dozen floats
+    let hs = dim / nh
     var out : array<float>
     out |> resize(tt * d)
-    var sc : array<double>
-    sc |> resize(tt)
-    for (h in range64(n_head)) {
-        for (p in range64(tt)) {
-            var mx = -1e300lf
-            for (q in range64(tt)) {
-                var s = 0.0lf
-                for (j in range64(hs)) {
-                    s += double(qq[p * d + h * hs + j]) * double(kk[q * d + h * hs + j])
-                }
-                sc[q] = s * double(scale)
-                mx = max(mx, sc[q])
-            }
-            var sum = 0.0lf
-            for (q in range64(tt)) {
-                sc[q] = exp(sc[q] - mx)
-                sum += sc[q]
-            }
-            for (j in range64(hs)) {
-                var acc = 0.0lf
-                for (q in range64(tt)) {
-                    acc += sc[q] / sum * double(vv[q * d + h * hs + j])
-                }
-                out[p * d + h * hs + j] = float(acc)
-            }
+    for (h in range(nh)) {
+        for (p in range(nt)) {
+            let row = p * dim + h * hs
+            attn_row_oracle(qq, row, kk, 0, vv, 0, dim, h, hs, 1, nt, scale, out, row)
         }
     }
     return <- out

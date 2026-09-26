@@ -10,7 +10,6 @@ require daslib/jobque_boost                             // with_job_status / wit
 require daslib/json_boost                               // read_json — the /v1/stats tts block
 require daslib/fio                                      // run_and_capture — the spawned speech-only boot
 require daslib/module_path                              // get_this_module_dir: main.das sits beside this test
-require daslib/rtti                                     // this_context().last_exception — proving configure_tts does NOT panic
 require math                                            // max: the child's captured tail is clamped to its last bytes
 require strings
 require dasllama/dasllama_env
@@ -194,22 +193,12 @@ def private with_speechless_server(t : T?; port : int; blk : block<(base_url : s
     }
 }
 
-def private panic_text_of(blk : block<() : void>) : string {
-    var why = ""
-    try {
-        invoke(blk)
-    } recover {
-        why = this_context().last_exception |> rtrim
-    }
-    return why
-}
-
 [test]
 def test_configure_tts_degrades_a_boot_it_cannot_serve(t : T?) {
     t |> run("a missing model file drops the route instead of panicking") @(t : T?) {
         t |> equal(tts_missing_file(BOGUS_TTS_PATH), BOGUS_TTS_PATH, "the probe names the missing model")
         t |> success(!tts_files_present(BOGUS_TTS_PATH), "the boot's setup-mode probe reads unservable")
-        let why = panic_text_of() {
+        let why = panic_text() {
             configure_tts(BOGUS_TTS_PATH)
         }
         t |> equal(why, "", "configure_tts panicked instead of degrading")
@@ -230,7 +219,7 @@ def test_configure_tts_degrades_a_boot_it_cannot_serve(t : T?) {
         let missing = tts_missing_file(packless)
         t |> success(find(missing, "tts_g2p.bin") >= 0, "the probe names the missing pack: {missing}")
         t |> success(!tts_files_present(packless), "the boot's setup-mode probe reads unservable")
-        let why = panic_text_of() {
+        let why = panic_text() {
             configure_tts(packless)
         }
         t |> equal(why, "", "configure_tts panicked instead of degrading")
