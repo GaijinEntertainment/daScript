@@ -3463,7 +3463,19 @@ enum VtProfRole {
     spectrum    //! the fronts' DFT
     mel         //! the fronts' log filterbank and canary's normalization
     shuffle     //! the fronts' feature-row shuffles
+    tts_gemm    //! the TTS seats' f32 tile GEMMs (the linears, the convs' tiles, the LSTM input gates)
+    tts_im2col  //! the TTS convs' column builder
+    tts_lstm    //! the LSTM recurrence walks
+    tts_ln      //! the TTS layernorm stamps, the residual seams included
+    tts_act     //! the leaky ReLU and tanh GELU maps
+    tts_adain   //! the column stats and the AdaIN folds
+    tts_attn    //! the PL-BERT attention rows
+    tts_source  //! the harmonic source's stamps: the noise draw, the increments, the cumsum, the sines
+    tts_stft    //! the STFT and the inverse STFT
+    tts_rows    //! the row movers: gathers, concats, sums, pools, reflects, axpys
+    tts_pk      //! the Pocket family's classes
 }
+let private VT_PROF_ROLES = 64   //! the role sums' width: past `VtProfRole`'s count
 var private g_vt_prof_roles : VtProfRole[int(PFQ_CAP)]
 
 def vt_pt(raw : VkCommandBuffer; role : VtProfRole) {
@@ -3475,8 +3487,8 @@ def vt_pt(raw : VkCommandBuffer; role : VtProfRole) {
 
 [cold_path]
 def vt_prof_report(chain : string; nl, npos : int64; wall_us : int) {
-    var sum : double[32]
-    var cnt : int[32]
+    var sum : double[VT_PROF_ROLES]
+    var cnt : int[VT_PROF_ROLES]
     var tot = 0.0lf
     for (i in urange(1u, g_pfq_n)) {
         let us = pfq_us(i)

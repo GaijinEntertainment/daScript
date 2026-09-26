@@ -336,7 +336,12 @@ Vulkan sequence classes against the CPU chain - `test_vkt_tts_im2col` feeds the 
 (`TtsIm2col`) through the biased f32 GEMM over the slab-layout weight rows and holds the result to
 the CPU `conv1d` end to end, a forward k5 conv at 22 channels (the column rows' pad past k x cin
 under poisoned weights, the columns at an offset) and a transposed k4 stride-2 one at 16 (x at an
-offset); `test_vkt_tts_lstm_dir` holds one LSTM direction (`TtsLstmDir`) at hidden 64 and 200 over
+offset); `test_vkt_tts_im2col16` feeds the half im2col (`TtsIm2col16`) through the f16 tile the
+device serves (cm2, else the KHR twin) over the halfword weight rows and the bias pass
+(`TowerBiasAct`), the decoder's route, on operands of the f16 lattice - every product exact, so the
+bar covers the accumulation alone - the same forward k5 conv, the transposed k4 stride-2 one and a
+k3 conv over 32 channels whose 96-wide row sits off the tile's 64 step, the half column plane
+carrying the driver's slack rows; `test_vkt_tts_lstm_dir` holds one LSTM direction (`TtsLstmDir`) at hidden 64 and 200 over
 gates the CPU `linear_rows` computed, both directions into one shared row set (the backward w_hh
 and gates at offsets) against the CPU `bilstm`, and the forward weights walked backward against the
 CPU's backward walk, which must move the output off the forward walk; `test_vkt_tts_pool_dw` holds
