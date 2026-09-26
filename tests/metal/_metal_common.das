@@ -9,6 +9,7 @@ options indenting = 4
 module _metal_common shared public
 
 require math
+require dastest/testing_boost   // fapprox - the fastmath compare the oracle walks use, Metal or not
 require ?das_metal metal/das_metal_boost public
 
 //! count exact mismatches between buffer contents and the oracle array (int/uint scalars + vectors)

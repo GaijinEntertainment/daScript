@@ -12,11 +12,6 @@ module das_metal_boost shared public
 require das_metal public
 require math
 
-//! relative-tolerance float compare for fastmath GPU results vs a CPU oracle
-def public fapprox(x, y : float) : bool {
-    return abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
-}
-
 //! upload a das array into a fresh shared-memory MTLBuffer
 def public buf_upload(dev; arr : array<auto(TT)>) : auto {
     var buf = metal_new_buffer(dev, uint64(long_length(arr)) * uint64(typeinfo sizeof(arr[0])))

@@ -7,6 +7,7 @@ module testing_boost shared
 require daslib/ast_boost
 require testing public
 require strings
+require math
 
 //! The panic a block raises, as text ("" when it returns): a refusal cell reads the message it holds.
 def public panic_text(blk : block<() : void>) : string {
@@ -17,6 +18,11 @@ def public panic_text(blk : block<() : void>) : string {
         why = this_context().last_exception |> rtrim
     }
     return why
+}
+
+//! The relative-tolerance float compare of a fastmath (GPU, flattened) result against its oracle.
+def public fapprox(x, y : float) : bool {
+    return abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
 }
 
 [macro_function]
