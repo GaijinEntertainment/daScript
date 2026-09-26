@@ -2347,7 +2347,7 @@ def private sw_put_kq(var w : St2SlabWriter; l : TtsLinear; w0, stride : int64) 
     var inscope @exact_size row : array<float>
     row |> reserve_resize(l.nin)
     for (r in range64(l.nout)) {
-        kq_plane_row_f32(f, l.kq, l.ks, l.nin, l.nout, l.kq_repacked, r, row, 0l)
+        kq_plane_row_f32(f, l.kq, l.ks, l.nin, l.nout, l.kq_repacked ? active_kq_layout_mr(l.kq_fmt) : 1l, r, row, 0l)
         for (i in range64(l.nin)) {
             w.host[w0 + r * stride + i] = row[i]
         }
@@ -4480,7 +4480,7 @@ def private pk_blob_q8(var qb : PkBlobWriter; l : TtsLinear) : uint64 {
             var inscope @exact_size rows : array<float>
             rows |> reserve_resize(n)
             for (r in range64(l.nout)) {
-                kq_plane_row_f32(f, l.kq, l.ks, l.nin, l.nout, l.kq_repacked, r, rows, r * l.nin)
+                kq_plane_row_f32(f, l.kq, l.ks, l.nin, l.nout, l.kq_repacked ? active_kq_layout_mr(l.kq_fmt) : 1l, r, rows, r * l.nin)
             }
             var inscope @exact_size xq : array<int8>
             var inscope @exact_size xs : array<float>

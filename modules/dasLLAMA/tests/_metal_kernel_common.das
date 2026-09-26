@@ -227,5 +227,5 @@ def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wro
     let tail = fmt == 2 ? 4l : 2l   //! the engine finds the d tail from the plane's length: the fixture's plane holds nsb_total superblocks exactly
     assert(fmt == 4 || fmt == 5 || fmt == 40 || fmt == 45 || long_length(ks) == int64(nsb_total) * (16l + tail), "kq_row_ref: the scale plane holds nsb_total superblocks")
     let f = kq_fmt_of_id(fmt, "kq_row_ref")
-    kq_plane_row_f32(f, kq, ks, int64(nb) * kq_elems(f), 1l, false, 0l, wrow, 0l, int64(sb_base), true)
+    kq_plane_row_f32(f, kq, ks, int64(nb) * kq_elems(f), 1l, 1l, 0l, wrow, 0l, int64(sb_base), true)
 }

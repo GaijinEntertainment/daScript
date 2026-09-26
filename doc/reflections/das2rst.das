@@ -414,6 +414,7 @@ def document_module_dasllama_tts(_root : string) {
         group_by_regex("Text front end", mod, %regex~(tts_normalize|tts_phonemize|tts_chunks)$%%),
         group_by_regex("Synthesis", mod, %regex~(synthesize|synthesize_stream|tts_release_scratch|tts_set_chunk_chars)$%%),
         group_by_regex("The served lane", mod, %regex~(set_tts_q8|reset_tts_q8|tts_serves_q8)$%%),
+        group_by_regex("GPU seats", mod, %regex~(tts_seats|tts_seat_index|tts_seat_call|tts_seat_served|tts_seat_stats|tts_seat_names)$%%),
         group_by_regex("Timings", mod, %regex~(rtf|timings_line)$%%)
     )
     documents("dasLLAMA text to speech: models, voices, synthesis", mod, "dasllama_tts.rst", groups)

@@ -1174,12 +1174,13 @@ def quantize_q8_0(src : array<float> | #; n : int64) : Q8Tensor {
     return <- qt
 }
 
-//! Row r of a K-quant plane pair as f32 into dst[doff..]: `sb0` = the plane's first superblock inside a larger pair (a model blob's region), `metal_blob` = the split GPU scale form.
-def kq_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout : int64; repacked : bool; r : int64; var dst : array<float>; doff : int64;
+//! Row r of a K-quant plane pair as f32 into dst[doff..]: `mr` = the interleave the plane was repacked to (1 = disk order; a Model's
+//! frozen `kq_active_mr`, a TTS plane's active layout), `sb0` = the plane's first superblock inside a larger pair (a model blob's
+//! region), `metal_blob` = the split GPU scale form.
+def kq_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout, mr : int64; r : int64; var dst : array<float>; doff : int64;
                      sb0 : int64 = 0l; metal_blob : bool = false) {
     let nsb = nin / kq_elems(f)
-    let mr = repacked ? active_kq_layout_mr(kq_schema_id(f)) : 1l   //! the kernel id, never the enum position
-    let packed_rows = repacked ? (nout / mr) * mr : 0l
+    let packed_rows = mr > 1l ? (nout / mr) * mr : 0l
     if (r < packed_rows) {
         let sbg = sb0 + (r / mr) * mr * nsb
         unsafe {
