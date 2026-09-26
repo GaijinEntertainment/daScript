@@ -1813,3 +1813,9 @@
    Done = `lcpp_bench --tts -m <gguf>` serves the g2p corpus's first N sentences at a named
    voice and prints the per-sentence wall and the real-time factor as its other modalities do,
    `gen_bench_records` carries a `tts` workload, and the StyleTTS2 ledger entry cites the row.
+
+167. **A sampler arm on `benchmarks/lcpp_bench.das`'s tg row.** The bench's only sampler knob
+    is `--mtp-temp`, a temperature alone, so no board row holds a sampled decode rate and the
+    candidate-list sampler's `PERF_LEDGER.md` entry reads its rates off `dasllama-cli`'s stats
+    line. Done = `--temp/--top-k/--top-p` on the tg row, a `tg128@sampled` cell beside `tg128`,
+    and the ledger entry re-minted from it.
