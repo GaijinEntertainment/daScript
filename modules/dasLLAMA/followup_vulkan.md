@@ -1738,6 +1738,21 @@ module) is independent and can land any time - it is pure structure.
     folded into the flash tile's load on the padded route and K and V staged in workgroup memory on
     the f32 window route (it reads them off the compact rows). The instrument is `lcpp_bench
     --image` on the E2B / gemma-3-4b / Qwen3-VL-4B / Qwen2.5-Omni-3B pairs beside their CPU rows.
+106. **The TTS LSTM recurrence walks one SM.** `TtsLstmDir` runs a direction in one workgroup
+    (four lanes a hidden unit over the recurrence transposed to [H][4H]), and at kokoro's H = 256 a
+    step costs 14 us whatever the k loop's shape (four independent accumulators read the same as
+    one): the workgroup re-reads the 1 MB recurrence from L2 every step, the SM's own bandwidth
+    the bound. A kokoro sentence pays 22 ms of it - dur_enc's six directions over ~145 steps 12 ms,
+    prosody's two over ~356 frames 10 ms - of its 69 ms on the pod against the 52 ms torch CUDA
+    row; kitten's narrower hidden pays 1 ms. f16 weights halve the traffic and break the
+    predictor's 2e-5 bars (the front end is f32-exact by ruling). The form that removes the bound
+    is a persistent walk over several workgroups, each owning a slice of the 4H rows small enough
+    to stay in its L1, the step's h exchanged through a `@coherent` buffer under a per-step spin
+    barrier on an atomic counter, the one-workgroup walk the fallback where the device cannot hold
+    the slices resident (Vulkan promises no forward progress across workgroups, so the walk is a
+    device-count guess, not a contract). Boris's ruling: after the other levers - the ledger under
+    `DASLLAMA_GPU_PROF=1` names them (the column stats' strided reads, 6 ms of the decode chain's
+    22; the AdaIN fold; the Pocket codec's 250 ms against the Metal row's 81) - so this row waits.
 105. **The prefill window's partial token column on the l stamp.** The l tile takes its clamped
     edge path on a partial 256-token column, at about a third of the rate: the probe's `wh` arm
     read q / k / v / o 95 us at 1500 rows against 52 at 1536, fc2 357 against 185 (RTX PRO 4500,
