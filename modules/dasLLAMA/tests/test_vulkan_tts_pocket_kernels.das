@@ -728,3 +728,195 @@ def test_vkt_pk_rope(t0 : T?) {
         }
     }
 }
+
+// ===== the frame loop's fused stamps =====
+
+let private PF_D = 64        //! the backbone width: the q, k and v spans
+let private PF_DH = 32       //! two heads a span
+let private PF_P = 5         //! the frame's position: the tables' and the caches' row
+let private PF_CAP = 8       //! the caches' rows
+let private PF_STRIDE = 96   //! the weight rows' stride, the pad past the width poisoned
+let private PF_XOFF = 7
+let private PF_YOFF = 9
+
+//! the frame loop's linears on the slab: the qkv rows [3d][d] and a square [d][d], their biases, the norm rows and the scale row
+struct private PkFusedFix {
+    qkv : TtsLinear = TtsLinear()
+    sq : TtsLinear = TtsLinear()
+    norm : TtsNorm = TtsNorm()
+    x : array<float>
+    y0 : array<float>      //! the residual row the adds land in
+    scale : array<float>   //! the layer scale row
+    slab : array<float>
+    tabs : array<float>    //! the rope tables: cos at coff, sin at soff
+    woff_q : int
+    boff_q : int
+    woff_s : int
+    boff_s : int
+    lwoff : int
+    lboff : int
+    aoff : int
+    coff : int
+    soff : int
+}
+
+def private pk_fused_fixture() : PkFusedFix {
+    let d = PF_D
+    var f <- PkFusedFix(qkv <- TtsLinear(w <- row_fill(3 * d * d, 17, 3, 0.02, 0.97), b <- row_fill(3 * d, 29, 11, 0.03, 1.4), nin = int64(d), nout = int64(3 * d)),
+        sq <- TtsLinear(w <- row_fill(d * d, 19, 5, 0.02, 0.9), b <- row_fill(d, 23, 7, 0.03, 1.2), nin = int64(d), nout = int64(d)),
+        norm <- TtsNorm(w <- row_fill(d, 29, 5, 0.01, -0.5), b <- row_fill(d, 31, 2, 0.02, 0.9)),
+        x <- row_fill(d, 41, 7, 0.05, 2.1), y0 <- row_fill(d, 47, 17, 0.03, 1.1), scale <- row_fill(d, 37, 5, 0.03, 1.3))
+    var wq <- poison_plane(3 * d * PF_STRIDE)
+    for (o in range(3 * d)) {
+        for (k in range(d)) {
+            wq[o * PF_STRIDE + k] = f.qkv.w[o * d + k]
+        }
+    }
+    var ws <- poison_plane(d * PF_STRIDE)
+    for (o in range(d)) {
+        for (k in range(d)) {
+            ws[o * PF_STRIDE + k] = f.sq.w[o * d + k]
+        }
+    }
+    f.woff_q = put(f.slab, wq)
+    f.boff_q = put(f.slab, f.qkv.b)
+    f.woff_s = put(f.slab, ws)
+    f.boff_s = put(f.slab, f.sq.b)
+    f.lwoff = put(f.slab, f.norm.w)
+    f.lboff = put(f.slab, f.norm.b)
+    f.aoff = put(f.slab, f.scale)
+    f.slab |> push_from(poison_plane(GAP))
+    var cos_tab : array<float>
+    var sin_tab : array<float>
+    let no_freqs : array<float>
+    build_rope_tabs(cos_tab, sin_tab, PO_THETA, 1.0, 1.0, no_freqs, false, 0l, int64(PF_CAP), int64(PF_DH))
+    f.coff = put(f.tabs, cos_tab)
+    f.soff = put(f.tabs, sin_tab)
+    return <- f
+}
+
+//! a span of a row
+def private span_of(row : array<float>; from, n : int) : array<float> {
+    return <- [for (i in range(n)); row[from + i]]
+}
+
+//! one fused stamp's row against its CPU chain, the maxdiff logged, with its poisoned element
+def private pk_fused_check(t : T?; tag : string; got, want : array<float>) {
+    let bad = mismatch_approx(got, want)
+    let mi = maxdiff_at(got, want)
+    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at {mi}\n")
+    t |> success(bad == 0, "{tag}: the device == the CPU chain ({bad} of {length(want)} off)")
+    t |> success(!approx(got[length(want) - 1] + 0.5, want[length(want) - 1]), "{tag}: the bar reds a poisoned element")
+}
+
+[test]
+def test_vkt_pk_gemv_fused(t0 : T?) {   // nolint:STYLE038 — one fixture's four stamps over one command buffer, the checks in the order the planes read
+    t0 |> run("the frame loop's fused stamps == the CPU chains: the normed qkv row roped into y and the caches, the residual adds, the normed GELU") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tts_pk_gemv_ln_qkv_cls() || !ensure_tts_pk_gemv_add_scale_cls() || !ensure_tts_pk_gemv_add_cls()
+                    || !ensure_tts_pk_gemv_ln_gelu_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let d = PF_D
+            var inscope f <- pk_fused_fixture()
+            // the CPU chains: the normed qkv row, its q and k spans turned at the position, the plain and the normed square dots
+            var xn := f.x
+            var qkv_row : array<float>
+            var dp : array<float>
+            var dn : array<float>
+            with_job_que() {
+                setup_dasllama_jobque_()
+                layernorm_rows(xn, 1l, int64(d), f.norm, PG_EPS)
+                linear_vec(f.qkv, xn, qkv_row)
+                linear_vec(f.sq, f.x, dp)
+                linear_vec(f.sq, xn, dn)
+            }
+            var want_q <- span_of(qkv_row, 0, d)
+            rope_rows(want_q, 1l, int64(d), int64(PF_DH), int64(PF_P), PO_THETA)
+            var want_k <- span_of(qkv_row, d, d)
+            rope_rows(want_k, 1l, int64(d), int64(PF_DH), int64(PF_P), PO_THETA)
+            let want_v <- span_of(qkv_row, 2 * d, d)
+            let want_as <- [for (o in range(d)); f.y0[o] + dp[o] * f.scale[o]]
+            let want_a <- [for (o in range(d)); f.y0[o] + dp[o]]
+            var want_g := dn
+            gelu(want_g, int64(d))
+            // the device: the qkv row under a NaN fill, the caches poisoned, the adds over the residual row, the GELU under a NaN fill
+            let B_Y = 1u
+            let B_K = 2u
+            let B_V = 4u
+            let B_AS = 8u
+            let B_A = 16u
+            let B_G = 32u
+            let ny = PF_YOFF + 3 * d + SLACK
+            let ng = PF_YOFF + d + SLACK
+            let nc = PF_CAP * d
+            let wnd = dev_upload(f.slab)
+            let xd = dev_upload(with_base(f.x, PF_XOFF))
+            let tabsd = dev_upload(f.tabs)
+            let kcd = dev_upload(poison_plane(nc))
+            let vcd = dev_upload(poison_plane(nc))
+            let yasd = dev_upload(with_base(f.y0, PF_YOFF))
+            let yad = dev_upload(with_base(f.y0, PF_YOFF))
+            let yd = make_device_buf(int64(ny) * 4l)
+            let ygd = make_device_buf(int64(ng) * 4l)
+            let bwn = long_length(f.slab) * 4l
+            let bx = int64(PF_XOFF + d + SLACK) * 4l
+            let bt = long_length(f.tabs) * 4l
+            let bc = int64(nc) * 4l
+            let by = int64(ny) * 4l
+            let bg = int64(ng) * 4l
+            let br = int64(PF_YOFF + d) * 4l
+            nan_sentinel_upload(yd, by)
+            nan_sentinel_upload(ygd, bg)
+            let outs = fixed_array(yd, kcd, vcd, yasd, yad, ygd)
+            let sizes = fixed_array(by, bc, bc, br, br, bg)
+            let at <- staged_offsets(sizes)
+            let host = make_host_buf(at[length(sizes)], true, [cached = true])
+            var s_qkv = set_tts_pk_gemv_ln_qkv_cls(fixed_array(wnd, xd, yd, tabsd, kcd, vcd), fixed_array(bwn, bx, by, bt, bc, bc), fixed_array(0u, 0u, B_Y, 0u, B_K, B_V))
+            var s_as = set_tts_pk_gemv_add_scale_cls(fixed_array(wnd, xd, yasd), fixed_array(bwn, bx, br), fixed_array(0u, 0u, B_AS))
+            var s_a = set_tts_pk_gemv_add_cls(fixed_array(wnd, xd, yad), fixed_array(bwn, bx, br), fixed_array(0u, 0u, B_A))
+            var s_g = set_tts_pk_gemv_ln_gelu_cls(fixed_array(wnd, xd, ygd), fixed_array(bwn, bx, bg), fixed_array(0u, 0u, B_G))
+            var pq = TtsPkGemvArgs(nin = uint(d), nout = uint(3 * d), stride = uint(PF_STRIDE), eps = PG_EPS, woff = uint(f.woff_q), boff = uint(f.boff_q),
+                xoff = uint(PF_XOFF), yoff = uint(PF_YOFF), moff = 0u, lwoff = uint(f.lwoff), lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = 0u, loff = 0u,
+                span = uint(d), dh = uint(PF_DH), p = uint(PF_P), coff = uint(f.coff), soff = uint(f.soff))
+            var ps = pq
+            ps.nout = uint(d)
+            ps.woff = uint(f.woff_s)
+            ps.boff = uint(f.boff_s)
+            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tts_pk_gemv_ln_qkv_cls(raw, h, s_qkv, pq, tts_pk_gemv_wgs(int64(3 * d)))
+                enc_tts_pk_gemv_add_scale_cls(raw, h, s_as, ps, tts_pk_gemv_wgs(int64(d)))
+                enc_tts_pk_gemv_add_cls(raw, h, s_a, ps, tts_pk_gemv_wgs(int64(d)))
+                enc_tts_pk_gemv_ln_gelu_cls(raw, h, s_g, ps, tts_pk_gemv_wgs(int64(d)))
+                cmd_copy_planes(raw, h, outs, host, sizes, B_Y | B_K | B_V | B_AS | B_A | B_G)
+            }
+            let y_whole <- staged(host.mapped, at[0], ny, type<float>)
+            let kc <- staged(host.mapped, at[1], nc, type<float>)
+            let vc <- staged(host.mapped, at[2], nc, type<float>)
+            let yas <- staged(host.mapped, at[3], PF_YOFF + d, type<float>)
+            let ya <- staged(host.mapped, at[4], PF_YOFF + d, type<float>)
+            let yg <- staged(host.mapped, at[5], ng, type<float>)
+            pk_fused_check(t, "tts_pk_gemv_ln_qkv q", span_of(y_whole, PF_YOFF, d), want_q)
+            pk_fused_check(t, "tts_pk_gemv_ln_qkv k cache", span_of(kc, PF_P * d, d), want_k)
+            pk_fused_check(t, "tts_pk_gemv_ln_qkv v cache", span_of(vc, PF_P * d, d), want_v)
+            pk_fused_check(t, "tts_pk_gemv_add_scale", span_of(yas, PF_YOFF, d), want_as)
+            pk_fused_check(t, "tts_pk_gemv_add", span_of(ya, PF_YOFF, d), want_a)
+            pk_fused_check(t, "tts_pk_gemv_ln_gelu", span_of(yg, PF_YOFF, d), want_g)
+            t |> equal(nan_count(y_whole), ny - d, "tts_pk_gemv_ln_qkv: only the q span lands in y - the k and v spans and the slots outside keep their sentinel")
+            let other_rows <- [for (i in range(nc)); kc[i] + vc[i]; where i / d != PF_P]
+            t |> success(elem_all(other_rows, 2.0 * POISON), "tts_pk_gemv_ln_qkv: the caches' other rows are untouched")
+            t |> equal(nan_count(yg), ng - d, "tts_pk_gemv_ln_gelu: the slots outside the row keep their sentinel")
+            t |> success(yas[PF_YOFF] != f.y0[0] && ya[PF_YOFF] != f.y0[0], "the adds' in place control: the residual row is moved off its input")
+            for (dev in fixed_array(wnd, xd, tabsd)) {
+                destroy_device_buf(dev)
+            }
+            for (o in outs) {
+                destroy_device_buf(o)
+            }
+            destroy_host_buf(host)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}

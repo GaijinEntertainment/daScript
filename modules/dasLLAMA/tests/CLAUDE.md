@@ -417,7 +417,13 @@ four-row multiple) against `linear_vec` under the CPU chain's norm, modulation, 
 residual and frame tail, the weight rows (their stride pad poisoned), bias, norm rows and slab
 vector at offsets in one slab plane between poisoned slots, x, the modulation rows, the noise row,
 y and the latent row at offsets (controls: the gated residual moves its row off its input, the
-masked rows past nout keep their sentinel); `test_vkt_pk_rope` the rows rope (`TtsPkRope`) on the
+masked rows past nout keep their sentinel); `test_vkt_pk_gemv_fused` the frame loop's fused stamps
+(`TtsPkGemvLnQkv`, `TtsPkGemvAddScale`, `TtsPkGemvAdd`, `TtsPkGemvLnGelu`) at a 64-wide backbone of two
+heads against the CPU chains - the normed qkv row's q span roped into y and its k span roped and v span
+copied into the caches' row at the position (`rope_rows` on `linear_vec` over `layernorm_rows`),
+the residual joins with and without the layer scale over a residual row, the normed GELU (controls: the
+k and v spans and the caches' other rows keep their sentinel and poison, the residual row moves off its
+input); `test_vkt_pk_rope` the rows rope (`TtsPkRope`) on the
 k span of 23 rows x 384 at column 128, two 64-wide heads at position 37, the tables from
 `build_rope_tabs`, against `rope_rows` at the approx bar (the q and v spans bit for bit untouched);
 every written-only output under a NaN fill, every compare with its poisoned element.

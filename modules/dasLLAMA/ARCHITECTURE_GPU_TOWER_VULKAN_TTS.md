@@ -126,12 +126,16 @@ block, the last ELU, dec_out and the sample column copied out. The frames seat: 
 K/V rows live on the device per backbone layer as [cap][d] rows under a key over the host
 caches, with the rope tables for every position they can hold; the chunk's text rows come up
 before the loop; each frame is the CPU's `frame_step` and `head_step` at t = 1 - the input
-linear, per layer the seam, the qkv row, the rope at the frame's position, the k and v rows
-stored at that position, the attention over the cache, the projections and scales, then the
-output norm's row copied to the frame's conditioning row, the EOS logit, and the flow head as
-the row GEMV family (`TtsPkGemv`: four rows a workgroup, x staged, the dot in lane order; the
-bare dot, the layernorm-modulate-SiLU prologue, the gated residual, the add-SiLU over the slab
-vector, and the tail that adds the noise row and denormalizes the latent). The frames run in
+linear, per layer five dispatches (the qkv row off the residual's norm with its q span roped in
+place and its k and v spans roped and stored into the caches' row at the frame's position, the
+attention over the cache, the out projection added into the residual under its layer scale, the
+ffn up off the residual's norm with its GELU, the down projection added into the residual), then
+the output norm's row copied to the frame's conditioning row, the EOS logit, and the flow head
+as the row GEMV family (`TtsPkGemv`: four rows a workgroup, x staged, the dot in lane order; the
+bare dot, the layernorm and the layernorm-modulate-SiLU prologues, the gated residual, the
+add-SiLU over the slab vector, the residual joins with and without the scale row, the GELU, the
+qkv rope-and-store - the rope's pairs sit in a workgroup's even and odd rows, so the span sits on
+the four lattice - and the tail that adds the noise row and denormalizes the latent). The frames run in
 batches of eight a submit (`set_vulkan_pocket_frame_batch`), the EOS rule walked on the host
 between batches from the logits read back, the generator rewound past the frames made, as the
 Metal twin does.

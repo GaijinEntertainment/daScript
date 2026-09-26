@@ -14406,21 +14406,32 @@ struct TtsPkGemvArgs {
     moff : uint     //! the modulation rows in mod: shift [nin], scale [nin], gate [nout]
     lwoff : uint    //! the input norm's scale row in wn
     lboff : uint    //! the input norm's shift row in wn
-    aoff : uint     //! the slab vector in wn: the add-SiLU's [nout], the tail's scale [nout] then shift [nout]
+    aoff : uint     //! the slab vector in wn: the add-SiLU's [nout], the tail's scale [nout] then shift [nout], the residual's scale [nout]
     x0off : uint    //! the tail's noise row in x0
     loff : uint     //! the tail's latent row in lat
+    span : uint     //! the rope-store epilogue: the q, k and v spans' width (the backbone's d), the caches' row stride
+    dh : uint       //! ... the head size
+    p : uint        //! ... the position: the tables' row and the caches' row
+    coff : uint     //! ... the cos table [pos][dh / 2] in tabs
+    soff : uint     //! ... the sin table, the same layout
 }
 
-//! y [nout] = W . x [nin] + b at one row, W the slab's f32 rows at `stride`, x staged in the workgroup - as it is, or under
-//! NORM_MOD_IN through a LayerNorm (lw, lb) and the adaLN modulation; EPI the epilogue: 0 the bare dot, 1 the SiLU, 2 the
-//! gated residual y += gate * d, 3 the SiLU over d plus the slab vector, 4 the frame tail (y = d + x0, lat = y * scale +
-//! shift); 32 lanes a row in lane-strided order, four rows a workgroup, wgs = `tts_pk_gemv_wgs`
+//! y [nout] = W . x [nin] + b at one row, W the slab's f32 rows at `stride`, x staged in the workgroup - as it is, under
+//! NORM_IN through a LayerNorm (lw, lb), or under NORM_MOD_IN through the LayerNorm and the adaLN modulation; EPI the
+//! epilogue: 0 the bare dot, 1 the SiLU, 2 the gated residual y += gate * d, 3 the SiLU over d plus the slab vector, 4 the
+//! frame tail (y = d + x0, lat = y * scale + shift), 5 the backbone's qkv rows - the q span roped into y, the k span roped
+//! into the k cache's row p, the v span into the v cache's (the CPU's rope_rows and kv_cache_append), 6 the residual
+//! y += d * the slab vector (the layer scale), 7 the residual y += d, 8 the tanh GELU; 32 lanes a row in lane-strided
+//! order, four rows a workgroup, wgs = `tts_pk_gemv_wgs`. The rope-store stamp turns the pairs (2j, 2j + 1) a workgroup's
+//! even and odd rows hold, so it takes a span on the four lattice
 [ |> template_struct_instance]
 class template TtsPkGemvT {
+    @template_constant NORM_IN : bool = false       //!< the input through the LayerNorm (lw, lb) alone
     @template_constant NORM_MOD_IN : bool = false
     @template_constant MOD_IN : bool = false   //!< the modulation rows are read: the normed input or the gate epilogue
-    @template_constant AUX_IN : bool = false   //!< the slab vector is read: the add-SiLU or the tail
+    @template_constant AUX_IN : bool = false   //!< the slab vector is read: the add-SiLU, the tail or the residual's scale
     @template_constant TAIL : bool = false     //!< the frame tail: the noise row in, the latent row out
+    @template_constant ROPE_STORE : bool = false   //!< the qkv epilogue: the tables and the two caches bound
     @template_constant EPI : int = 0           //!< the epilogue, spelled as its literal: a template constant folds only a literal
     @ssbo @binding = 0 @role = "weight" wn : array<float>
     @ssbo @binding = 1 x : array<float>
@@ -14428,9 +14439,13 @@ class template TtsPkGemvT {
     @ssbo @binding = 3 @template_gate = MOD_IN mod : array<float>
     @ssbo @binding = 4 @template_gate = TAIL x0 : array<float>
     @ssbo @binding = 5 @template_gate = TAIL lat : array<float>
+    @ssbo @binding = 6 @template_gate = ROPE_STORE tabs : array<float>
+    @ssbo @binding = 7 @template_gate = ROPE_STORE kc : array<float>
+    @ssbo @binding = 8 @template_gate = ROPE_STORE vc : array<float>
     @push_constant pa : TtsPkGemvArgs
     @workgroup xs : float[int(TTS_PK_GEMV_MAX_NIN)]
     @workgroup red : float[128]
+    @workgroup dq : float[4]   //! the rope-store stamp: the workgroup's four dots side by side, so an even row turns its pair
 
     //! the workgroup sum of one value a lane, every lane adding the 128 partials in lane order; `red` is free on return
     def gemv_wg_sum(v : float) : float {
@@ -14454,32 +14469,42 @@ class template TtsPkGemvT {
         }
     }
 
+    //! the input row staged into xs through the LayerNorm (lw, lb), then under NORM_MOD_IN the adaLN modulation
+    def stage_normed(tid : uint) {
+        var k = tid
+        var s = 0.0
+        while (k < pa.nin) {
+            s += x[pa.xoff + k]
+            k += 128u
+        }
+        let mean = gemv_wg_sum(s) / float(pa.nin)
+        var vs = 0.0
+        k = tid
+        while (k < pa.nin) {
+            let dv = x[pa.xoff + k] - mean
+            vs += dv * dv
+            k += 128u
+        }
+        let inv = 1.0 / sqrt(gemv_wg_sum(vs) / float(pa.nin) + pa.eps)
+        k = tid
+        while (k < pa.nin) {
+            let nv = (x[pa.xoff + k] - mean) * inv * wn[pa.lwoff + k] + wn[pa.lboff + k]
+            static_if (NORM_MOD_IN) {
+                xs[k] = nv * (1.0 + mod[pa.moff + pa.nin + k]) + mod[pa.moff + k]
+            } else {
+                xs[k] = nv
+            }
+            k += 128u
+        }
+    }
+
     [spirv_kernel(local_size_x = 128)]
     def run {
         let tid = gl_LocalInvocationID.x
-        var k = tid
-        static_if (NORM_MOD_IN) {
-            var s = 0.0
-            while (k < pa.nin) {
-                s += x[pa.xoff + k]
-                k += 128u
-            }
-            let mean = gemv_wg_sum(s) / float(pa.nin)
-            var vs = 0.0
-            k = tid
-            while (k < pa.nin) {
-                let dv = x[pa.xoff + k] - mean
-                vs += dv * dv
-                k += 128u
-            }
-            let inv = 1.0 / sqrt(gemv_wg_sum(vs) / float(pa.nin) + pa.eps)
-            k = tid
-            while (k < pa.nin) {
-                let nv = (x[pa.xoff + k] - mean) * inv * wn[pa.lwoff + k] + wn[pa.lboff + k]
-                xs[k] = nv * (1.0 + mod[pa.moff + pa.nin + k]) + mod[pa.moff + k]
-                k += 128u
-            }
+        static_if (NORM_MOD_IN || NORM_IN) {
+            stage_normed(tid)
         } else {
+            var k = tid
             while (k < pa.nin) {
                 xs[k] = x[pa.xoff + k]
                 k += 128u
@@ -14526,6 +14551,51 @@ class template TtsPkGemvT {
                 y[pa.yoff + row] = tv
                 lat[pa.loff + row] = tv * aux_at(row) + aux_at(pa.nout + row)
             }
+            static_if (EPI == 5) {
+                dq[tid / 32u] = d
+            }
+            static_if (EPI == 6) {
+                y[pa.yoff + row] = y[pa.yoff + row] + d * aux_at(row)
+            }
+            static_if (EPI == 7) {
+                y[pa.yoff + row] = y[pa.yoff + row] + d
+            }
+            static_if (EPI == 8) {
+                y[pa.yoff + row] = 0.5 * d * (1.0 + tanh(clamp(0.7978845608028654 * (d + 0.044715 * d * d * d), -15.0, 15.0)))
+            }
+        }
+        static_if (EPI == 5) {
+            barrier()
+            if (live && lane == 0u && (row & 1u) == 0u) {
+                rope_store(row, dq[tid / 32u], dq[tid / 32u + 1u])
+            }
+        }
+    }
+
+    //! the rope-store epilogue over the pair (row, row + 1): the q span turned into y, the k span turned into the k cache's
+    //! row p, the v span copied into the v cache's
+    def rope_store(row : uint; r0, r1 : float) {
+        static_if (ROPE_STORE) {
+            let sp = row / pa.span
+            let c = row % pa.span
+            if (sp < 2u) {
+                let hh = pa.dh / 2u
+                let tb = pa.p * hh + (c % pa.dh) / 2u
+                let cv = tabs[pa.coff + tb]
+                let sv = tabs[pa.soff + tb]
+                let o0 = r0 * cv - r1 * sv
+                let o1 = r0 * sv + r1 * cv
+                if (sp == 0u) {
+                    y[pa.yoff + c] = o0
+                    y[pa.yoff + c + 1u] = o1
+                } else {
+                    kc[pa.p * pa.span + c] = o0
+                    kc[pa.p * pa.span + c + 1u] = o1
+                }
+            } else {
+                vc[pa.p * pa.span + c] = r0
+                vc[pa.p * pa.span + c + 1u] = r1
+            }
         }
     }
 }
@@ -14559,6 +14629,30 @@ class TtsPkGemvTail : TtsPkGemvT {
     override AUX_IN = true
     override TAIL = true
     override EPI = 4
+}
+
+[vk_dispatch(name = "tts_pk_gemv_ln_qkv_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsPkGemvLnQkv : TtsPkGemvT {
+    override NORM_IN = true
+    override ROPE_STORE = true
+    override EPI = 5
+}
+
+[vk_dispatch(name = "tts_pk_gemv_add_scale_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsPkGemvAddScale : TtsPkGemvT {
+    override AUX_IN = true
+    override EPI = 6
+}
+
+[vk_dispatch(name = "tts_pk_gemv_add_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsPkGemvAdd : TtsPkGemvT {
+    override EPI = 7
+}
+
+[vk_dispatch(name = "tts_pk_gemv_ln_gelu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsPkGemvLnGelu : TtsPkGemvT {
+    override NORM_IN = true
+    override EPI = 8
 }
 
 //! the row GEMV's workgroup count over `nout` rows, four a workgroup

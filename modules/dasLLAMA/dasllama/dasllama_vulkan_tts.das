@@ -2027,6 +2027,7 @@ struct private TsPkSite {
     x0off : int64
     lat : TsRows
     loff : int64
+    eps : float = POCKET_HEAD_LN_EPS   //! the input norm's epsilon: the head's unless the site sits in the backbone
 }
 
 def private ts_pk_site(x : TsRows; xoff : int64; y : TsRows; yoff : int64 = 0l) : TsPkSite => TsPkSite(x = x, xoff = xoff, y = y, yoff = yoff)
@@ -2036,10 +2037,13 @@ let private TS_PK_GEMV_LN_SILU = 1
 let private TS_PK_GEMV_GATE = 2
 let private TS_PK_GEMV_ADD_SILU = 3
 let private TS_PK_GEMV_TAIL = 4
+let private TS_PK_GEMV_LN_GELU = 5      //! the frame loop's ffn up: the normed input, the GELU out
+let private TS_PK_GEMV_ADD_SCALE = 6    //! ... and its residual joins: y += d times the slab's scale row at aoff
+let private TS_PK_GEMV_ADD = 7          //! ... or y += d alone
 
 //! the row GEMV at a site under one of the five stamps, over the slab's f32 rows of `p`
 def private ts_pk_gemv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : TtsConvSlot; nin, nout : int64; kind : int; s : TsPkSite) {
-    var pa = TtsPkGemvArgs(nin = uint(nin), nout = uint(nout), stride = uint(p.kdim_p), eps = POCKET_HEAD_LN_EPS, woff = uint(p.woff), boff = uint(p.boff),
+    var pa = TtsPkGemvArgs(nin = uint(nin), nout = uint(nout), stride = uint(p.kdim_p), eps = s.eps, woff = uint(p.woff), boff = uint(p.boff),
         xoff = uint(s.xoff), yoff = uint(s.yoff), moff = uint(s.moff), lwoff = uint(s.lwoff), lboff = uint(s.lboff), aoff = uint(s.aoff),
         x0off = uint(s.x0off), loff = uint(s.loff))
     let wgs = tts_pk_gemv_wgs(nout)
@@ -2057,6 +2061,15 @@ def private ts_pk_gemv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : 
     } elif (kind == TS_PK_GEMV_ADD_SILU) {
         var d3 = set_tts_pk_gemv_add_silu_cls(fixed_array(slab.dev, s.x.dev, s.y.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes), fixed_array(0u, s.x.bit, s.y.bit))
         enc_tts_pk_gemv_add_silu_cls(raw, h, d3, pa, wgs)
+    } elif (kind == TS_PK_GEMV_LN_GELU) {
+        var d5 = set_tts_pk_gemv_ln_gelu_cls(fixed_array(slab.dev, s.x.dev, s.y.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes), fixed_array(0u, s.x.bit, s.y.bit))
+        enc_tts_pk_gemv_ln_gelu_cls(raw, h, d5, pa, wgs)
+    } elif (kind == TS_PK_GEMV_ADD_SCALE) {
+        var d6 = set_tts_pk_gemv_add_scale_cls(fixed_array(slab.dev, s.x.dev, s.y.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes), fixed_array(0u, s.x.bit, s.y.bit))
+        enc_tts_pk_gemv_add_scale_cls(raw, h, d6, pa, wgs)
+    } elif (kind == TS_PK_GEMV_ADD) {
+        var d7 = set_tts_pk_gemv_add_cls(fixed_array(slab.dev, s.x.dev, s.y.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes), fixed_array(0u, s.x.bit, s.y.bit))
+        enc_tts_pk_gemv_add_cls(raw, h, d7, pa, wgs)
     } else {
         var d4 = set_tts_pk_gemv_tail_cls(fixed_array(slab.dev, s.x.dev, s.y.dev, s.mod.dev, s.x0.dev, s.lat.dev),
             fixed_array(slab.bytes, s.x.bytes, s.y.bytes, s.mod.bytes, s.x0.bytes, s.lat.bytes), fixed_array(0u, s.x.bit, s.y.bit, s.mod.bit, s.x0.bit, s.lat.bit))
@@ -2288,9 +2301,9 @@ let private TS_F_CONDS = 13   //! ... and its conditioning row [max_frames][d]
 let private TS_F_EOS = 14     //! ... and its EOS logit
 
 def private ts_pk_frames_ensure : bool {
-    return (ensure_tower_ln_cls() && ensure_tower_post_add_ln_cls() && ensure_tts_gelu_tanh_cls() && ensure_tts_pk_rows_cls() && ensure_tts_pk_row_scale_cls()
-        && ensure_tts_pk_attn_cls() && ensure_tts_pk_rope_cls() && ensure_tts_pk_gemv_dot_cls() && ensure_tts_pk_gemv_ln_silu_cls()
-        && ensure_tts_pk_gemv_gate_cls() && ensure_tts_pk_gemv_add_silu_cls() && ensure_tts_pk_gemv_tail_cls())
+    return (ensure_tower_ln_cls() && ensure_tts_pk_rows_cls() && ensure_tts_pk_attn_cls() && ensure_tts_pk_gemv_dot_cls() && ensure_tts_pk_gemv_ln_silu_cls()
+        && ensure_tts_pk_gemv_gate_cls() && ensure_tts_pk_gemv_add_silu_cls() && ensure_tts_pk_gemv_tail_cls() && ensure_tts_pk_gemv_ln_qkv_cls()
+        && ensure_tts_pk_gemv_add_scale_cls() && ensure_tts_pk_gemv_add_cls() && ensure_tts_pk_gemv_ln_gelu_cls())
 }
 
 def private ts_pk_frames_floats(m : PocketModel; max_frames, batch, forced_n : int64) : TsFloats {
@@ -2316,44 +2329,40 @@ def private ts_pk_frames_floats(m : PocketModel; max_frames, batch, forced_n : i
     return fl
 }
 
-//! one backbone layer at position p: the CPU's `layer_attention` and `layer_ffn` at t = 1; the residual of the layer before it (its ffn rows in xb)
-//! joins at the first norm, its own ffn rows are left in xb for the next join
-def private ts_pk_fr_layer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; tf : PocketTransformer; L : TtsPkLayerSlots; zero : int64; li : int; p : int64) {
+//! the residual join of a frame's projection: x += W . x_in + b, times the layer scale where the layer carries one
+def private ts_pk_gemv_add(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : TtsConvSlot; nin, nout : int64; x_in : TsRows; x : TsRows; scaled : bool; soff : int64) {
+    var s = ts_pk_site(x_in, 0l, x)
+    s.aoff = soff
+    ts_pk_gemv(raw, h, slab, p, nin, nout, scaled ? TS_PK_GEMV_ADD_SCALE : TS_PK_GEMV_ADD, s)
+}
+
+//! one backbone layer at position p: the CPU's `layer_attention` and `layer_ffn` at t = 1 in five dispatches - the normed qkv row with its q
+//! roped in place and its k and v into the voice's caches (the norm the residual x carries in, the residual the layer before it added),
+//! the attention row, the out projection added into x under its scale, the normed ffn with its GELU, the down projection added into x
+def private ts_pk_fr_layer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; tf : PocketTransformer; L : TtsPkLayerSlots; li : int; p : int64) {
     let d = tf.d
-    let dh = d / tf.heads
+    let dh = uint(d / tf.heads)
     let r_x = ts_rows(sc_, TS_F_X)
-    let r_xb = ts_rows(sc_, TS_F_XB)
     let r_qkv = ts_rows(sc_, TS_F_QKV)
     let r_ctx = ts_rows(sc_, TS_F_CTX)
     let r_h = ts_rows(sc_, TS_F_H)
     let v & = g_ts_pk_voice
-    if (li == 0) {
-        ts_ln_into(raw, h, slab, L.n1, r_x, r_xb, 1l, d, tf.eps)
-    } else {
-        ts_pk_add_ln(raw, h, slab, zero, L.n1, r_x, r_xb, r_xb, 1l, d, tf.eps)
-    }
-    ts_pk_lin(raw, h, slab, L.in_proj, d, 3l * d, r_xb, 0l, r_qkv, 0l)
-    ts_pk_rope(raw, h, v.rope, 0l, v.sin_off, r_qkv, 1l, 3l * d, 0l, d, dh, p)
-    ts_pk_rope(raw, h, v.rope, 0l, v.sin_off, r_qkv, 1l, 3l * d, d, d, dh, p)
-    var kc = TtsPkRowsArgs(rows = 1u, width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(p))
-    ts_pk_rows(raw, h, r_qkv, v.k[li], kc, false)
-    kc.sc = uint(2l * d)
-    ts_pk_rows(raw, h, r_qkv, v.v[li], kc, false)
+    var sq = set_tts_pk_gemv_ln_qkv_cls(fixed_array(slab.dev, r_x.dev, r_qkv.dev, v.rope.dev, v.k[li].dev, v.v[li].dev),
+        fixed_array(slab.bytes, r_x.bytes, r_qkv.bytes, v.rope.bytes, v.k[li].bytes, v.v[li].bytes),
+        fixed_array(0u, r_x.bit, r_qkv.bit, v.rope.bit, v.k[li].bit, v.v[li].bit))
+    var pq = TtsPkGemvArgs(nin = uint(d), nout = uint(3l * d), stride = uint(L.in_proj.kdim_p), eps = tf.eps, woff = uint(L.in_proj.woff),
+        boff = uint(L.in_proj.boff), xoff = 0u, yoff = 0u, moff = 0u, lwoff = uint(L.n1.gwoff), lboff = uint(L.n1.gboff), aoff = 0u, x0off = 0u, loff = 0u,
+        span = uint(d), dh = dh, p = uint(p), coff = 0u, soff = uint(v.sin_off))
+    enc_tts_pk_gemv_ln_qkv_cls(raw, h, sq, pq, tts_pk_gemv_wgs(3l * d))
+    vt_pt(raw, VtProfRole.tts_pk)
     ts_pk_attn(raw, h, r_qkv, v.k[li], v.v[li], r_ctx, 1l, 3l * d, d, tf.heads, p, tf.context)
-    ts_pk_lin(raw, h, slab, L.out_proj, d, d, r_ctx, 0l, r_xb, 0l)
-    if (L.has_s1) {
-        ts_pk_row_scale(raw, h, slab, r_xb, 1l, d, L.scale1_off)
-    }
-    ts_pk_add_ln(raw, h, slab, zero, L.n2, r_x, r_xb, r_xb, 1l, d, tf.eps)
-    ts_pk_lin(raw, h, slab, L.ffn1, d, tf.ffn, r_xb, 0l, r_h, 0l)
-    var s_gelu = set_tts_gelu_tanh_cls(fixed_array(r_h.dev), fixed_array(r_h.bytes), fixed_array(r_h.bit))
-    var pa_gelu = TtsElemArgs(nelem = uint(tf.ffn), off = 0u, slope = 0.0)
-    enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, tts_elem_wgs(tf.ffn))
-    vt_pt(raw, VtProfRole.tts_act)
-    ts_pk_lin(raw, h, slab, L.ffn2, tf.ffn, d, r_h, 0l, r_xb, 0l)
-    if (L.has_s2) {
-        ts_pk_row_scale(raw, h, slab, r_xb, 1l, d, L.scale2_off)
-    }
+    ts_pk_gemv_add(raw, h, slab, L.out_proj, d, d, r_ctx, r_x, L.has_s1, L.scale1_off)
+    var s1 = ts_pk_site(r_x, 0l, r_h)
+    s1.lwoff = L.n2.gwoff
+    s1.lboff = L.n2.gboff
+    s1.eps = tf.eps
+    ts_pk_gemv(raw, h, slab, L.ffn1, d, tf.ffn, TS_PK_GEMV_LN_GELU, s1)
+    ts_pk_gemv_add(raw, h, slab, L.ffn2, tf.ffn, d, r_h, r_x, L.has_s2, L.scale2_off)
 }
 
 //! one frame `f` at cache position p, its noise at row `i` of the batch: the CPU's `frame_step` and `head_step`, the conditioning row and the EOS logit kept,
@@ -2385,9 +2394,9 @@ def private ts_pk_frame(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_
     }
     ts_pk_lin(raw, h, slab, sl.input_linear, ld, d, xin, xoff, r_x, 0l)
     for (li in range(length(sl.layers))) {
-        ts_pk_fr_layer(raw, h, slab, sc_, m.backbone, sl.layers[li], sl.zero, li, p)
+        ts_pk_fr_layer(raw, h, slab, sc_, m.backbone, sl.layers[li], li, p)
     }
-    ts_pk_add_ln(raw, h, slab, sl.zero, sl.out_norm, r_x, r_xb, r_xb, 1l, d, m.backbone.eps)
+    ts_ln_into(raw, h, slab, sl.out_norm, r_x, r_xb, 1l, d, m.backbone.eps)
     let coff = f * d
     let kc = TtsPkRowsArgs(rows = 1u, width = uint(d), ss = uint(d), sc = 0u, sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f))
     ts_pk_rows(raw, h, r_xb, r_conds, kc, false)
@@ -2501,7 +2510,7 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
     let ld = m.latent_dim
     let base = vs.len + n_txt
     if (max_frames < 1l || n_txt < 0l || length(vs.caches) != length(tf.layers) || empty(vs.caches) || base + max_frames > vs.caches[0].cap
-        || vs.caches[0].cap > TS_PK_ATTN_MAX_KEYS || !tts_pk_frames_ok(m, TS_PK_ATTN_HS, TS_PK_GEMV_MAX_NIN)) {
+        || vs.caches[0].cap > TS_PK_ATTN_MAX_KEYS || d % 4l != 0l || !tts_pk_frames_ok(m, TS_PK_ATTN_HS, TS_PK_GEMV_MAX_NIN)) {
         ts_decline("frames", VulkanTtsDecline.shape)
         return none
     }
