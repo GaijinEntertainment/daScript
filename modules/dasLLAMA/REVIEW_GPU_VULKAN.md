@@ -6,13 +6,13 @@ docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_ATTN.md`,
 `ARCHITECTURE_GPU_VULKAN_MOE.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`,
 `ARCHITECTURE_GPU_VULKAN_NROW.md`, `ARCHITECTURE_GPU.md`. Planned work: `followup_vulkan.md`.
 
-**Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
-with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
-
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
-`set_<family>` pair generated from it - adds every piece of state the family keeps per model to
-`vk_drop_model_state`'s sweep, or to a listener registered through `register_vk_drop_hook`
-(`dasllama/dasllama_vulkan_common.das`), in the same change.** A `make_device_buf` result and any
+`set_<family>` pair generated from it - or that caches a descriptor set or a host address (a
+pointer into CPU memory) across dispatches, puts every piece of state the family keeps per model,
+and every such cached set or address, where the model drop clears it, in the same change: in
+`vk_drop_model_state`'s sweep, or in a listener registered through `register_vk_drop_hook`
+(`dasllama/dasllama_vulkan_common.das`).** To clear is
+to zero the state or leave it unreachable to every later read. A `make_device_buf` result and any
 field of `RDec` - the resident decode driver's state struct - are swept already, a `*_ready` latch
 and a profiler accumulator are not; pipelines are device-lifetime state that survives the drop
 and rebuilds lazily.
@@ -20,17 +20,12 @@ and rebuilds lazily.
 **A diff that adds a host-side ensure/set/enc pick ladder for a new family of class stamps -
 the stamps of one `[vk_dispatch]` class template, picked by a shape argument - to
 `dasllama/dasllama_vulkan_classes.das` adds that family's stamp glob to the kernel-home row's
-stamp list in `ARCHITECTURE_GPU.md` sec.1.5, in the same change.**
+stamp list in `ARCHITECTURE_GPU.md#gpu-backends`, in the same change.**
 
 **Never size a buffer bound as one SSBO (shader storage buffer) range above
 `vk_max_storage_range()` - compare it where its size is computed: at the site that computes that
 buffer's size, or once at the function that starts the encode chain binding it, against a size no
 buffer of that chain can exceed.** The bind site cannot shrink a buffer that was sized wrong.
-
-**Never cache a descriptor set or a host address - a pointer into CPU memory - across
-dispatches in state that `vk_drop_model_state` does not clear** - hold it in
-`dasllama/dasllama_vulkan_common.das` module state that `vk_drop_model_state` clears, or in a
-driver's own state that a listener registered through `register_vk_drop_hook` clears.
 
 **Never take a quant byte out of an `unpack8` select in a cm2 decode body - the `decode` method
 of a format's `<Fmt>Cm2T` class in `dasllama/dasllama_vulkan_classes.das` - or its four-wide twin
@@ -55,14 +50,15 @@ path inside the tier - is a defect when it does not log, at load, how many layer
 routed off and why.** A silent decline is a fallback a user finds only by profiling.
 
 **A Vulkan-tier serving gate that decides per call - a predicate or loop whose false branch or
-`continue` routes work off the path it armed, to the CPU path or to another path inside the tier -
+`continue` routes work off the path it armed, to the CPU path, to another path inside the tier, or
+to a slower form inside the same path (a host upload in place of a device-to-device copy) -
 that does not log the concrete reason it declined, once per reason per armed model, is a defect.**
 
-**A function under `dasllama/` outside the tier's arm probe `vulkan_moe_gpu_arm` that calls
-`vk_moe_init()` tests `gpu_want_arms_tier()` first, and when the want is off declines without
-calling it; a serving hook that keeps a decline counter counts that decline under its no-device
-reason.** `vk_moe_init` reads no knob, so a caller that skips the test serves on a box whose
-`DASLLAMA_GPU` says no.
+**A diff that adds or changes a function under `dasllama/` outside the tier's arm probe
+`vulkan_moe_gpu_arm` that calls `vk_moe_init()` makes it test `gpu_want_arms_tier()` first, and
+decline without calling it when the want is off; a serving hook that keeps a decline counter
+counts that decline under its no-device reason.** `vk_moe_init` reads no knob, so a caller that
+skips the test serves on a box whose `DASLLAMA_GPU` says no.
 
 **A diff that changes what a device limit or extension decides for the tier - which path
 serves, how much it arms, whether it declines - adds that limit or extension to `vk_ext_roster`
@@ -76,12 +72,7 @@ starts at a literal or at a value rounded down to the loop's step - never at a b
 product or a buffer-read value.** That coordinate is `c0` where the contraction runs along
 columns, `r0` where it runs along rows. The shader compiler vectorizes the decode-load only
 where it can prove the coordinate's alignment, and an unproven start runs the same loop at half
-the rate (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
-
-**A per-loop hint on a kernel loop - in `dasllama/dasllama_vulkan_classes.das` or a helper a
-kernel body reaches (`dasllama/dasllama_gpu_math.das`) - carries a name
-`append_loop_hint_operand` (`modules/dasLLVM/daslib/llvm_jit.das`) knows.** A kernel body compiles
-for the CPU oracle too, and the JIT fails a hint name it does not know.
+the rate (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`).
 
 **A cm2 tile - `cm2_tile` of `KqCm2BatchT` in `dasllama/dasllama_vulkan_classes.das`, the
 NV_cooperative_matrix2 GEMM body stamped per weight format, token-column width (`BN`) and k step
@@ -89,11 +80,12 @@ NV_cooperative_matrix2 GEMM body stamped per weight format, token-column width (
 branch it takes when its 128 weight rows fit the plane, the plane's width is a whole number of k
 steps, and its token column is whole or its stamp loads partial columns unclamped (`STILE`); every
 other tile takes the edge path.** A clamped decode-load runs every tile at a third the speed
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
+(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`).
 
 **A weight tile the plane cannot fill starts at the plane's last whole 128 rows, never past the
 plane's end.** The whole dispatch already runs at its partial workgroups' rate, and a load past
-the plane reads memory the plane does not own (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
+the plane reads memory the plane does not own
+(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`).
 
 **A scale cache a cm2 tile stages indexes a row by its offset from the tile's first row
 (`wg_m0`), never by `bc.x & 127`.** `bc.x` is the plane's absolute row, and a last-window tile
@@ -154,7 +146,7 @@ fixture left on a retired shape validates nothing the stamp runs.
 (`decode(wq[i], ...)`), never a local copy of it (`let blk = wq[i]` then `decode(blk, ...)`).**
 Both compile: on the element the emitter passes the index and the callee chains through the
 plane; on a copy it loads and spills the whole block per call
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k).
+(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`).
 
 **A diff whose probe rows show a format's `DASLLAMA_VK_DECVEC=1` row slower than its `=0` row
 ships one of two fixes in the same change: a hand-written `decode_v4` under `override DECV4 = true`
@@ -175,7 +167,7 @@ stages a codebook into `@workgroup` memory reads it from the family's grid buffe
 filled by `kq_grid_dev` at the format's `KQ_GRID_<FMT>` offset), never from a `*_grid_word`
 accessor.** The accessor is a constant composite the driver reads lane-serially per index,
 while the grid buffer is staged once per workgroup and read by every row that workgroup serves,
-whatever their number (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
+whatever their number (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`).
 
 **Never let a reduce write a workgroup slot while the previous reduce's partials still occupy it -
 pass the other slot, or put a `barrier()` between the two reduces.** A reduce sums a value across
@@ -184,10 +176,10 @@ argument, 0 or 1 (`dasllama/dasllama_vulkan_classes.das`); a slot is the run of 
 reduce writes into that array. A reduce carries one barrier, so a thread still summing the first
 reduce's partials would read the second's writes out of the same slot.
 
-**A builder in `dasllama/dasllama_vulkan_decode.das` that asks `set_<family>` for a class ensures
-`ensure_<family>` on every path that reaches it.** A set asked of a class whose pipeline is not
-ensured is the null handle; `vkd_alloc_set` refuses it by the class's family name, and the model's
-prepare fails on the path that skipped the ensure.
+**A diff that adds or changes a builder in `dasllama/dasllama_vulkan_decode.das` that asks
+`set_<family>` for a class ensures `ensure_<family>` on every path that reaches it.** A set asked
+of a class whose pipeline is not ensured is the null handle; `vkd_alloc_set` refuses it by the
+class's family name, and the model's prepare fails on the path that skipped the ensure.
 
 **A diff that adds a stamp, or adds, removes or retypes a binding on one stamp, of a
 `[vk_dispatch]` class template whose set is picked at dispatch keeps every stamp's binding list
@@ -226,9 +218,10 @@ then reads its fields outside the binding, with no error.
 own command buffer (`dasllama/dasllama_vulkan_decode.das`) - gives that form its own stamp-name
 list and stamp count.** The profiler sums intervals by the recorder's own names.
 
-**A recorder that installs its own stamp names in `g_rdq_stamp_names`
-(`dasllama/dasllama_vulkan_decode.das`) puts the one-row command's list back before it returns.** A
-form that leaves its list installed sends every later one-row profile to another form's role names.
+**A diff that adds or changes a recorder that installs its own stamp names in
+`g_rdq_stamp_names` (`dasllama/dasllama_vulkan_decode.das`) puts the one-row command's list back
+before the recorder returns.** A form that leaves its list installed sends every later one-row
+profile to another form's role names.
 
 **A diff that submits a transfer copy with `xfer_submit_after`
 (`dasllama/dasllama_vulkan_common.das`) waits (`xfer_wait`, spinning or blocking) on the value it
@@ -238,19 +231,19 @@ is the only order between the copy's read and that write.
 **An integer division or modulo in `dasllama/dasllama_vulkan_classes.das` kernel code - a kernel
 body or any method it reaches through calls, `dasllama/dasllama_gpu_math.das`'s helpers included -
 whose divisor is not a literal or a template constant (a push-constant field, bare or computed
-from one)
-either clamps the divisor to at least one (`max(1u, ...)`) before it divides, or sits inside an
-`if` whose condition tests the divisor expression as the division reads it and is false when
-that expression is zero; a test on any other field, one the divisor is computed from included,
-is no guard, and a `?:` select is neither.** Some drivers evaluate both arms of a select, and an
-integer division by zero is undefined in SPIR-V, so the selected arm can carry the undefined
-result.
+from one) either clamps the divisor to at least one (`max(1u, ...)`) before it divides, or sits
+inside an `if` whose condition tests the divisor expression as the division reads it and is false
+when that expression is zero; a test on any other field, one the divisor is computed from
+included, is no guard, and a `?:` select is neither.** Some drivers evaluate both arms of a
+select, and an integer division by zero is undefined in SPIR-V, so the selected arm can carry the
+undefined result.
 
-**A path under `dasllama/` that re-records the one-row token command's split form - the chain
-recorded with the attention at `RD_SPLIT_PIECES` key pieces - or replaces a descriptor set it
-dispatches, clears that region's wide-twin recorded flag (`RDec.tok_wide_recorded`) in the same
-path.** The wide twin (the same chain at `RD_SPLIT_WIDE_PIECES` pieces) dispatches the same sets,
-so a twin left marked recorded runs sets the new record replaced.
+**A diff that adds or changes a path under `dasllama/` that re-records the one-row token
+command's split form - the chain recorded with the attention at `RD_SPLIT_PIECES` key pieces - or
+replaces a descriptor set it dispatches, makes it clear that region's wide-twin recorded flag
+(`RDec.tok_wide_recorded`) in the same path.** The wide twin (the same chain at
+`RD_SPLIT_WIDE_PIECES` pieces) dispatches the same sets, so a twin left marked recorded runs sets
+the new record replaced.
 
 **A twin's availability flag (`RDec.unsplit_on`, `RDec.wide_on`) is written where the twin's
 command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path that writes

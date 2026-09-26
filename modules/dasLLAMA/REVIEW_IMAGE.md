@@ -3,9 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_IMAGE.md`. Planned work: `followup_general.md`.
 
-**Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
-`REVIEW.md`.**
-
 **A diff that moves or re-means the `.dlim` header's first two words - the magic number and the
 version - or changes their byte layout, updates `examples/dasLLAMA/wasm/mint_models.py` in the
 same change.** That script reads both words at their offsets to gate a browser deploy, and no
@@ -72,8 +69,8 @@ layout-stamp closure, and a diff that takes a function out of the closure names 
 as one that places none.** A struct field added or dropped moves `layout_fingerprint()`,
 which the load compares by name, so that image refuses loudly and a re-stamp of the closure hash
 discharges it; without the fingerprint's help a stale image stays structurally valid and
-silently serves a different model. What the stamp covers is the layout stamp section of
-`ARCHITECTURE_IMAGE.md`.
+silently serves a different model. What the stamp covers is
+`ARCHITECTURE_IMAGE.md#image-layout-stamp`.
 
 **Weakening a meta field-count tripwire - `IMAGE_META_FIELDS` and every `*_META_FIELDS`
 constant in a `dasllama/` file - is a defect.** Raising the constant
