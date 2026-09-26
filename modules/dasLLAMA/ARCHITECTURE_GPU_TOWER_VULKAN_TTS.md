@@ -118,7 +118,8 @@ stride rows with no pad) and the biased tile, the depthwise transposed upsample 
 the transformer as the CPU's layer loop - the layernorm into a copy, the qkv projection, the
 NORM rope on the q and k spans against the slab's tables (`TtsPkRope`), the k and v columns
 copied to one row set the layers reuse (`TtsPkRows`), the causal attention over the context
-window (`TtsPkAttn`, a workgroup a head and query row, the head size the body's literal 64),
+window (`TtsPkAttn`, a workgroup a head and query row, the head size the body's literal 64, the
+value sum walking eight keys a step so a lane's loads sit in flight together),
 the output projection, the layer scale (`TtsPkRowScale`), the residual seam on the post-add
 layernorm stamp against the slab's zero row, the ffn with the tanh GELU - then dec_in, per
 ratio the ELU (`TtsPkRowsElu`), the transposed upsample and the ELU-conv-ELU-conv residual
@@ -131,7 +132,9 @@ place and its k and v spans roped and stored into the caches' row at the frame's
 attention over the cache, the out projection added into the residual under its layer scale, the
 ffn up off the residual's norm with its GELU, the down projection added into the residual), then
 the output norm's row copied to the frame's conditioning row, the EOS logit, and the flow head
-as the row GEMV family (`TtsPkGemv`: four rows a workgroup, x staged, the dot in lane order; the
+as the row GEMV family (`TtsPkGemv`: four rows a workgroup, x staged, 32 lanes a row each reading a
+float4 of it a step - the slab writer lays every run on the 16-byte lattice - and a float where a
+row base sits off it, the lanes folded by shuffle; the
 bare dot, the layernorm and the layernorm-modulate-SiLU prologues, the gated residual, the
 add-SiLU over the slab vector, the residual joins with and without the scale row, the GELU, the
 qkv rope-and-store - the rope's pairs sit in a workgroup's even and odd rows, so the span sits on

@@ -2002,7 +2002,7 @@ def private ts_pk_attn(raw : VkCommandBuffer; var h : VkHaz; qkv, k, v, o : TsRo
     var s = set_tts_pk_attn_cls(fixed_array(qkv.dev, k.dev, v.dev, o.dev), fixed_array(qkv.bytes, k.bytes, v.bytes, o.bytes), fixed_array(qkv.bit, k.bit, v.bit, o.bit))
     var pa = TtsPkAttnArgs(t = uint(t), qs = uint(qs), qcol = 0u, d = uint(d), pos0 = uint(pos0), ctx = uint(ctx), qoff = 0u, koff = 0u, voff = 0u, ooff = 0u)
     enc_tts_pk_attn_cls(raw, h, s, pa, heads * t)
-    vt_pt(raw, VtProfRole.tts_pk)
+    vt_pt(raw, VtProfRole.tts_pk_attn)
 }
 
 //! x += y (no bias: the slab's zero row), then xb = layernorm(x) on the norm slot's rows - a transformer layer's residual join and the norm after it
@@ -2075,7 +2075,15 @@ def private ts_pk_gemv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : 
             fixed_array(slab.bytes, s.x.bytes, s.y.bytes, s.mod.bytes, s.x0.bytes, s.lat.bytes), fixed_array(0u, s.x.bit, s.y.bit, s.mod.bit, s.x0.bit, s.lat.bit))
         enc_tts_pk_gemv_tail_cls(raw, h, d4, pa, wgs)
     }
-    vt_pt(raw, VtProfRole.tts_pk)
+    vt_pt(raw, ts_pk_gemv_role(kind))
+}
+
+//! the ledger role of a row GEMV stamp
+def private ts_pk_gemv_role(kind : int) : VtProfRole {
+    if (kind == TS_PK_GEMV_DOT) return VtProfRole.tts_pk_dot
+    if (kind == TS_PK_GEMV_LN_GELU) return VtProfRole.tts_pk_ffn
+    if (kind == TS_PK_GEMV_ADD_SCALE || kind == TS_PK_GEMV_ADD) return VtProfRole.tts_pk_res
+    return VtProfRole.tts_pk_head
 }
 
 def private ts_pk_lin(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : TtsConvSlot; nin, nout : int64; x : TsRows; xoff : int64; y : TsRows; yoff : int64) {
@@ -2354,7 +2362,7 @@ def private ts_pk_fr_layer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
         boff = uint(L.in_proj.boff), xoff = 0u, yoff = 0u, moff = 0u, lwoff = uint(L.n1.gwoff), lboff = uint(L.n1.gboff), aoff = 0u, x0off = 0u, loff = 0u,
         span = uint(d), dh = dh, p = uint(p), coff = 0u, soff = uint(v.sin_off))
     enc_tts_pk_gemv_ln_qkv_cls(raw, h, sq, pq, tts_pk_gemv_wgs(3l * d))
-    vt_pt(raw, VtProfRole.tts_pk)
+    vt_pt(raw, VtProfRole.tts_pk_qkv)
     ts_pk_attn(raw, h, r_qkv, v.k[li], v.v[li], r_ctx, 1l, 3l * d, d, tf.heads, p, tf.context)
     ts_pk_gemv_add(raw, h, slab, L.out_proj, d, d, r_ctx, r_x, L.has_s1, L.scale1_off)
     var s1 = ts_pk_site(r_x, 0l, r_h)

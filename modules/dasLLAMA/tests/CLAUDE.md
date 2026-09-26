@@ -416,8 +416,9 @@ step's window leaves its output bit for bit, the 16-key window moves the prompt'
 four-row multiple) against `linear_vec` under the CPU chain's norm, modulation, SiLU, gated
 residual and frame tail, the weight rows (their stride pad poisoned), bias, norm rows and slab
 vector at offsets in one slab plane between poisoned slots, x, the modulation rows, the noise row,
-y and the latent row at offsets (controls: the gated residual moves its row off its input, the
-masked rows past nout keep their sentinel); `test_vkt_pk_gemv_fused` the frame loop's fused stamps
+y and the latent row at offsets, in two arms - the weight rows off the four lattice (the float
+dot) and on it (the float4 dot) - each arm asserting its rows' alignment (controls: the gated
+residual moves its row off its input, the masked rows past nout keep their sentinel); `test_vkt_pk_gemv_fused` the frame loop's fused stamps
 (`TtsPkGemvLnQkv`, `TtsPkGemvAddScale`, `TtsPkGemvAdd`, `TtsPkGemvLnGelu`) at a 64-wide backbone of two
 heads against the CPU chains - the normed qkv row's q span roped into y and its k span roped and v span
 copied into the caches' row at the position (`rope_rows` on `linear_vec` over `layernorm_rows`),

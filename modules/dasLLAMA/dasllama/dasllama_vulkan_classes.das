@@ -14311,8 +14311,8 @@ struct TtsPkAttnArgs {
 
 //! the causal cached attention of one query row over the caches' rows (the CPU `attention_causal_rows`): query i at
 //! position pos0 + i sees the keys up to itself, the last `ctx` of them when ctx is nonzero; the scaled query staged,
-//! the scores into the stage, the softmax, then the value sum four parts a column; one workgroup a (head, query row),
-//! wgs = heads * t
+//! the scores into the stage, the softmax, then the value sum four parts a column (`value_sum`); one workgroup a
+//! (head, query row), wgs = heads * t
 [vk_dispatch(name = "tts_pk_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TtsPkAttn : WgReduceBase {
     @ssbo @binding = 0 q : array<float>
@@ -14323,6 +14323,37 @@ class TtsPkAttn : WgReduceBase {
     @workgroup qh : float[64]
     @workgroup sc : float[int(TTS_PK_ATTN_MAX_KEYS)]
     @workgroup po : float[256]
+
+    //! a column's quarter of the value sum: the keys `quarter`, `quarter` + 4, ... in order, eight a step with their loads
+    //! in flight together, the column at `vb` in the first key's row
+    def value_sum(vb, quarter, nk : uint) : float {
+        var acc = 0.0
+        var jj = quarter
+        while (jj + 28u < nk) {
+            let v0 = v[vb + jj * pa.d]
+            let v1 = v[vb + (jj + 4u) * pa.d]
+            let v2 = v[vb + (jj + 8u) * pa.d]
+            let v3 = v[vb + (jj + 12u) * pa.d]
+            let v4 = v[vb + (jj + 16u) * pa.d]
+            let v5 = v[vb + (jj + 20u) * pa.d]
+            let v6 = v[vb + (jj + 24u) * pa.d]
+            let v7 = v[vb + (jj + 28u) * pa.d]
+            acc += sc[jj] * v0
+            acc += sc[jj + 4u] * v1
+            acc += sc[jj + 8u] * v2
+            acc += sc[jj + 12u] * v3
+            acc += sc[jj + 16u] * v4
+            acc += sc[jj + 20u] * v5
+            acc += sc[jj + 24u] * v6
+            acc += sc[jj + 28u] * v7
+            jj += 32u
+        }
+        while (jj < nk) {
+            acc += sc[jj] * v[vb + jj * pa.d]
+            jj += 4u
+        }
+        return acc
+    }
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -14344,8 +14375,15 @@ class TtsPkAttn : WgReduceBase {
             var sdot = 0.0
             var e = 0u
             while (e < 64u) {
-                sdot += qh[e] * k[krow + e]
-                e++
+                let k0 = k[krow + e]
+                let k1 = k[krow + e + 1u]
+                let k2 = k[krow + e + 2u]
+                let k3 = k[krow + e + 3u]
+                sdot += qh[e] * k0
+                sdot += qh[e + 1u] * k1
+                sdot += qh[e + 2u] * k2
+                sdot += qh[e + 3u] * k3
+                e += 4u
             }
             sc[j] = sdot
             m = max(m, sdot)
@@ -14369,13 +14407,7 @@ class TtsPkAttn : WgReduceBase {
         barrier()
         let col = lid % 64u
         let quarter = lid / 64u
-        var acc = 0.0
-        var jj = quarter
-        while (jj < nk) {
-            acc += sc[jj] * v[pa.voff + (j0 + jj) * pa.d + h * 64u + col]
-            jj += 4u
-        }
-        po[quarter * 64u + col] = acc
+        po[quarter * 64u + col] = value_sum(pa.voff + j0 * pa.d + h * 64u + col, quarter, nk)
         barrier()
         if (lid < 64u) {
             var tot = 0.0
@@ -14421,9 +14453,10 @@ struct TtsPkGemvArgs {
 //! epilogue: 0 the bare dot, 1 the SiLU, 2 the gated residual y += gate * d, 3 the SiLU over d plus the slab vector, 4 the
 //! frame tail (y = d + x0, lat = y * scale + shift), 5 the backbone's qkv rows - the q span roped into y, the k span roped
 //! into the k cache's row p, the v span into the v cache's (the CPU's rope_rows and kv_cache_append), 6 the residual
-//! y += d * the slab vector (the layer scale), 7 the residual y += d, 8 the tanh GELU; 32 lanes a row in lane-strided
-//! order, four rows a workgroup, wgs = `tts_pk_gemv_wgs`. The rope-store stamp turns the pairs (2j, 2j + 1) a workgroup's
-//! even and odd rows hold, so it takes a span on the four lattice
+//! y += d * the slab vector (the layer scale), 7 the residual y += d, 8 the tanh GELU; 32 lanes a row, each a float4 of the
+//! row a step when the row base, the stride and nin sit on the four lattice (the slab writer's 16-byte runs) and a float
+//! otherwise, the lanes folded by shuffle; four rows a workgroup, wgs = `tts_pk_gemv_wgs`. The rope-store stamp turns the
+//! pairs (2j, 2j + 1) a workgroup's even and odd rows hold, so it takes a span on the four lattice
 [ |> template_struct_instance]
 class template TtsPkGemvT {
     @template_constant NORM_IN : bool = false       //!< the input through the LayerNorm (lw, lb) alone
@@ -14434,6 +14467,7 @@ class template TtsPkGemvT {
     @template_constant ROPE_STORE : bool = false   //!< the qkv epilogue: the tables and the two caches bound
     @template_constant EPI : int = 0           //!< the epilogue, spelled as its literal: a template constant folds only a literal
     @ssbo @binding = 0 @role = "weight" wn : array<float>
+    @ssbo @binding = 0 @role = "alias" wn4 : array<float4>   //! the same rows as float4: the quad dot's loads
     @ssbo @binding = 1 x : array<float>
     @ssbo @binding = 2 y : array<float>
     @ssbo @binding = 3 @template_gate = MOD_IN mod : array<float>
@@ -14444,21 +14478,61 @@ class template TtsPkGemvT {
     @ssbo @binding = 8 @template_gate = ROPE_STORE vc : array<float>
     @push_constant pa : TtsPkGemvArgs
     @workgroup xs : float[int(TTS_PK_GEMV_MAX_NIN)]
-    @workgroup red : float[128]
+    @workgroup red : float[4]   //! the subgroups' partials of a workgroup sum
     @workgroup dq : float[4]   //! the rope-store stamp: the workgroup's four dots side by side, so an even row turns its pair
 
-    //! the workgroup sum of one value a lane, every lane adding the 128 partials in lane order; `red` is free on return
+    //! the workgroup sum of one value a lane: the subgroups' sums, every lane adding them in order; `red` is free on return
     def gemv_wg_sum(v : float) : float {
-        red[gl_LocalInvocationID.x] = v
+        let s = subgroupAdd(v)
+        if (gl_SubgroupInvocationID == 0u) {
+            red[gl_SubgroupID] = s
+        }
         barrier()
         var tot = 0.0
         var i = 0u
-        while (i < 128u) {
+        while (i < gl_NumSubgroups) {
             tot += red[i]
             i++
         }
         barrier()
         return tot
+    }
+
+    //! the 32 lanes of a row folded: a butterfly over the row's aligned lane group, every lane holding the row's sum
+    def row_sum(v : float) : float {
+        var s = v
+        s += subgroupShuffleXor(s, 16u)
+        s += subgroupShuffleXor(s, 8u)
+        s += subgroupShuffleXor(s, 4u)
+        s += subgroupShuffleXor(s, 2u)
+        s += subgroupShuffleXor(s, 1u)
+        return s
+    }
+
+    //! the row's dot with the staged x over lanes: float4 steps on the four lattice, floats otherwise
+    def row_dot(wrow, lane : uint) : float {
+        var acc = 0.0
+        if (((pa.woff | pa.stride | pa.nin) & 3u) == 0u) {
+            let w4 = wrow >> 2u
+            let n4 = pa.nin >> 2u
+            var j = lane
+            while (j < n4) {
+                let w = wn4[w4 + j]
+                let xb = j * 4u
+                acc += w.x * xs[xb]
+                acc += w.y * xs[xb + 1u]
+                acc += w.z * xs[xb + 2u]
+                acc += w.w * xs[xb + 3u]
+                j += 32u
+            }
+        } else {
+            var j = lane
+            while (j < pa.nin) {
+                acc += wn[wrow + j] * xs[j]
+                j += 32u
+            }
+        }
+        return acc
     }
 
     def aux_at(i : uint) : float {
@@ -14516,22 +14590,10 @@ class template TtsPkGemvT {
         let live = row < pa.nout
         var acc = 0.0
         if (live) {
-            let wrow = pa.woff + row * pa.stride
-            var j = lane
-            while (j < pa.nin) {
-                acc += wn[wrow + j] * xs[j]
-                j += 32u
-            }
+            acc = row_dot(pa.woff + row * pa.stride, lane)
         }
-        red[tid] = acc
-        barrier()
+        let sum = row_sum(acc)
         if (live && lane == 0u) {
-            var sum = 0.0
-            var i = 0u
-            while (i < 32u) {
-                sum += red[tid + i]
-                i++
-            }
             let d = sum + wn[pa.boff + row]
             static_if (EPI == 0) {
                 y[pa.yoff + row] = d

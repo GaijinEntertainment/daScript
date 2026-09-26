@@ -480,7 +480,16 @@ struct PkGemvRows {
     lat : array<float>
 }
 
-def private pk_gemv_fixture() : PkGemvFix {
+//! `put` at the next run base on the four lattice: the quad dot's weight rows
+def private put4(var plane : array<float>; a : array<float>) : int {
+    while ((length(plane) + GAP) % 4 != 0) {
+        plane |> push(POISON)
+    }
+    return put(plane, a)
+}
+
+//! the fixture with its weight rows on the four lattice (`quad`: the float4 dot) or off it (the float dot)
+def private pk_gemv_fixture(quad : bool) : PkGemvFix {
     let nin = PG_NIN
     let nout = PG_NOUT
     var f <- PkGemvFix(lin <- TtsLinear(w <- row_fill(nout * nin, 17, 3, 0.02, 0.97), b <- row_fill(nout, 29, 11, 0.03, 1.4),
@@ -495,7 +504,7 @@ def private pk_gemv_fixture() : PkGemvFix {
             wst[o * PG_STRIDE + k] = f.lin.w[o * nin + k]
         }
     }
-    f.woff = put(f.slab, wst)
+    f.woff = quad ? put4(f.slab, wst) : put(f.slab, wst)
     f.boff = put(f.slab, f.lin.b)
     f.lwoff = put(f.slab, f.norm.w)
     f.lboff = put(f.slab, f.norm.b)
@@ -621,31 +630,38 @@ def private pk_gemv_check(t : T?; tag : string; whole : array<float>; off : int;
     t |> success(!approx(got[PG_NOUT - 1] + 0.5, want[PG_NOUT - 1]), "{tag}: the bar reds a poisoned element")
 }
 
+//! the five stamps over one fixture against their CPU chains, `arm` naming the dot's path
+def private pk_gemv_arm(t : T?; arm : string; quad : bool) {
+    var inscope f <- pk_gemv_fixture(quad)
+    t |> equal(f.woff % 4 == 0, quad, "{arm}: the weight rows sit on the lattice the arm names")
+    var inscope want <- pk_gemv_wants(f)
+    var inscope got <- pk_gemv_device(f)
+    pk_gemv_check(t, "{arm} tts_pk_gemv_dot", got.dot, PG_YOFF, want.dot)
+    pk_gemv_check(t, "{arm} tts_pk_gemv_ln_silu", got.ln, PG_YOFF, want.ln)
+    pk_gemv_check(t, "{arm} tts_pk_gemv_gate", got.gate, PG_YOFF, want.gate)
+    pk_gemv_check(t, "{arm} tts_pk_gemv_add_silu", got.add, PG_YOFF, want.add)
+    pk_gemv_check(t, "{arm} tts_pk_gemv_tail", got.tail, PG_YOFF, want.tail)
+    pk_gemv_check(t, "{arm} tts_pk_gemv_tail latent", got.lat, PG_LOFF, want.lat)
+    t |> success(got.gate[PG_YOFF] != f.y0[0], "{arm} tts_pk_gemv_gate in place control: the residual row is moved off its input")
+    let ny = length(got.dot)
+    t |> equal(nan_count(got.dot) + nan_count(got.ln) + nan_count(got.add) + nan_count(got.tail), 4 * (ny - PG_NOUT),
+        "{arm} tts_pk_gemv: the slots before yoff and the masked rows past nout keep their sentinel")
+    t |> equal(nan_count(got.lat), PG_LOFF + SLACK, "{arm} tts_pk_gemv_tail: the latent plane outside its row keeps its sentinel")
+    let gate_out <- [for (i in range(ny)); got.gate[i]; where i < PG_YOFF || i >= PG_YOFF + PG_NOUT]
+    t |> success(elem_all(gate_out, POISON), "{arm} tts_pk_gemv_gate: the residual plane outside its row is untouched")
+}
+
 [test]
 def test_vkt_pk_gemv(t0 : T?) {
-    t0 |> run("the row GEMV's five stamps == the CPU linear_vec chains at nin 200 / nout 45, the slab's runs at offsets") <| @(t : T?) {
+    t0 |> run("the row GEMV's five stamps == the CPU linear_vec chains at nin 200 / nout 45, the slab's runs at offsets, the rows on and off the four lattice") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tts_pk_gemv_dot_cls() || !ensure_tts_pk_gemv_ln_silu_cls() || !ensure_tts_pk_gemv_gate_cls()
                     || !ensure_tts_pk_gemv_add_silu_cls() || !ensure_tts_pk_gemv_tail_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
-            var inscope f <- pk_gemv_fixture()
-            var inscope want <- pk_gemv_wants(f)
-            var inscope got <- pk_gemv_device(f)
-            pk_gemv_check(t, "tts_pk_gemv_dot", got.dot, PG_YOFF, want.dot)
-            pk_gemv_check(t, "tts_pk_gemv_ln_silu", got.ln, PG_YOFF, want.ln)
-            pk_gemv_check(t, "tts_pk_gemv_gate", got.gate, PG_YOFF, want.gate)
-            pk_gemv_check(t, "tts_pk_gemv_add_silu", got.add, PG_YOFF, want.add)
-            pk_gemv_check(t, "tts_pk_gemv_tail", got.tail, PG_YOFF, want.tail)
-            pk_gemv_check(t, "tts_pk_gemv_tail latent", got.lat, PG_LOFF, want.lat)
-            t |> success(got.gate[PG_YOFF] != f.y0[0], "tts_pk_gemv_gate in place control: the residual row is moved off its input")
-            let ny = length(got.dot)
-            t |> equal(nan_count(got.dot) + nan_count(got.ln) + nan_count(got.add) + nan_count(got.tail), 4 * (ny - PG_NOUT),
-                "tts_pk_gemv: the slots before yoff and the masked rows past nout keep their sentinel")
-            t |> equal(nan_count(got.lat), PG_LOFF + SLACK, "tts_pk_gemv_tail: the latent plane outside its row keeps its sentinel")
-            let gate_out <- [for (i in range(ny)); got.gate[i]; where i < PG_YOFF || i >= PG_YOFF + PG_NOUT]
-            t |> success(elem_all(gate_out, POISON), "tts_pk_gemv_gate: the residual plane outside its row is untouched")
+            pk_gemv_arm(t, "float rows", false)
+            pk_gemv_arm(t, "float4 rows", true)
         } else {
             t |> skip("dasVulkan not present")
         }

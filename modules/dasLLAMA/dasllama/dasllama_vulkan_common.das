@@ -3540,7 +3540,13 @@ enum VtProfRole {
     tts_source  //! the harmonic source's stamps: the noise draw, the increments, the cumsum, the sines
     tts_stft    //! the STFT and the inverse STFT
     tts_rows    //! the row movers: gathers, concats, sums, pools, reflects, axpys
-    tts_pk      //! the Pocket family's classes
+    tts_pk      //! the Pocket family's row movers, rope, scales and ELUs
+    tts_pk_dot  //! the Pocket row GEMV's bare dot
+    tts_pk_qkv  //! ... the frame loop's normed qkv stamp with its rope-and-store
+    tts_pk_attn //! ... the cached attention row
+    tts_pk_res  //! ... the residual joins
+    tts_pk_ffn  //! ... the normed ffn up with its GELU
+    tts_pk_head //! ... the flow head's modulated stamps: the LN-SiLU, the gate, the add-SiLU, the tail
 }
 let private VT_PROF_ROLES = 64   //! the role sums' width: past `VtProfRole`'s count
 var private g_vt_prof_roles : VtProfRole[int(PFQ_CAP)]
