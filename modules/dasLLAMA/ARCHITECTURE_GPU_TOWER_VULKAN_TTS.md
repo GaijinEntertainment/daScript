@@ -68,9 +68,10 @@ layernorm per position) on the tower's layernorm stamp, and the leaky ReLU (`Tts
 conv stack ping-ponging two row sets as the CPU chain does; then the BiLSTM as two directions,
 each its input gates on the biased tile ([t][4H], gate order i, f, g, o) and one workgroup
 walking the recurrence (`TtsLstmDir`: four lanes a hidden unit, one a gate, each dotting the
-transposed recurrence's column with the previous step's h in k order, the unit's first lane
-folding the gates into the cell; the backward direction writing the second half of the
-shared [t][2H] rows). The workgroup is 1024 invocations, so a device whose compute limit is
+transposed recurrence's column with the previous step's h over four accumulators - i mod 4,
+folded at the end, so a step's loads pipeline; the CPU's `matmul` dot carries its own order,
+so no k order is the reference's - the unit's first lane folding the gates into the cell; the
+backward direction writing the second half of the shared [t][2H] rows). The workgroup is 1024 invocations, so a device whose compute limit is
 under that declines the LSTM seats at pipeline creation. The rows read back and transpose on the host into the channel-major
 [c][t] the CPU stage answers. Every seat's scratch is one float-count list, a slot a row set,
 the seat's own slot table naming them, plus two more row sets - the aux rows a call uploads

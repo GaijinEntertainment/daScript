@@ -82,8 +82,6 @@ def public farith_words : array<uint> {
     return clone_to_move(farith_spv)
 }
 
-// ===== the `precise` property: a two-float sum's correction terms, every float op decorated NoContraction,
-// against the same body plain; the class-kernel form carries the property too =====
 var @ssbo @binding = 0 pr_x : array<float>
 var @ssbo @binding = 1 pr_y : array<float2>
 

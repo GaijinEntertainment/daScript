@@ -8831,8 +8831,6 @@ def f16_gemm_enc(khr : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDes
     }
 }
 
-// ===== the f32-exact tile GEMM (the TTS front end's feed) =====
-
 struct F32GemmArgs {
     n : uint        //! K: the columns multiplied, a 32-multiple (the slab pads a row to 32 with zeros)
     d : uint        //! M: the weight rows, the output width
@@ -8923,8 +8921,8 @@ class template F32GemmT {
         let dgroups = (pa.d + F32G_TD - 1u) / F32G_TD
         let p0 = (gl_WorkGroupID.x / dgroups) * F32G_TP
         let o0 = (gl_WorkGroupID.x % dgroups) * F32G_TD
-        let tp = (tid / 16u) * 4u   //! the invocation's four positions tp..tp+3 of the tile
-        let to = (tid % 16u) * 4u   //! ... and four rows to..to+3
+        let tp = (tid / 16u) * 4u
+        let to = (tid % 16u) * 4u
         var a00 = 0.0
         var a01 = 0.0
         var a02 = 0.0
@@ -8995,8 +8993,6 @@ class F32GemmB : F32GemmT {
 
 //! the f32 tile's workgroup count over rows x d
 def f32_gemm_wgs(rows, d : int64) : int64 => ((rows + int64(F32G_TP) - 1l) / int64(F32G_TP)) * ((d + int64(F32G_TD) - 1l) / int64(F32G_TD))
-
-// ===== the TTS tower's row classes =====
 
 struct TtsGatherArgs {
     c : uint          //! the row width
@@ -13234,11 +13230,9 @@ def vt_feed_enc(raw : VkCommandBuffer; var h : VkHaz; cm2 : bool; var s_rq : VkD
     }
 }
 
-// ===== the TTS tower's sequence classes =====
-
 struct TtsIm2colArgs {
     cin : uint          //! the input channels
-    tin : uint          //! the input positions: x is channel-major [cin][tin]
+    tin : uint          //! the input positions
     tout : uint         //! the output positions, the column rows
     k : uint            //! the taps
     stride : uint
@@ -13256,7 +13250,7 @@ struct TtsIm2colArgs {
 //! a forward tap reads x at t * stride + tap * dilation - pad_l, a transposed one the input position whose stride lands
 //! the tap on t, (t + pad_l - tap * dilation) / stride where that divides exactly (the CPU `conv1d_transposed_dense`'s
 //! scatter read as a gather); one element an invocation, wgs = `tts_im2col_wgs`. The HALF stamp stores the columns as
-//! f16 into `col16`, the f16 tile's feed (the decoder's and generator's convs); the plain stamp as f32, the f32 tile's
+//! f16 into `col16`, the f16 tile's feed (the decoder's and generator's convs); the plain stamp as f32, the f32 tile's feed
 [ |> template_struct_instance]
 class template TtsIm2colT {
     @template_constant HALF : bool = false
@@ -13301,8 +13295,7 @@ class template TtsIm2colT {
     [spirv_kernel(local_size_x = 256)]
     def run {
         static_if (HALF) {
-            // four consecutive columns an invocation (kdim sits on the 32 lattice): where cin sits on the four lattice the four share
-            // one tap and one source position, so the index arithmetic runs once and the reads are one 16-byte span
+            //! four columns an invocation: on a cin four-lattice they share one tap and source position, one 16-byte read
             let e = gl_GlobalInvocationID.x * 4u
             if (e < pa.tout * pa.kdim) {
                 let r = e / pa.kdim
@@ -13387,8 +13380,10 @@ def tts_sigmoid(v : float) : float => 1.0 / (1.0 + exp(-v))
 
 //! one LSTM direction end to end in one workgroup (the CPU `lstm_direction`, wgs = 1 a direction): four invocations a
 //! hidden unit j, one a gate g, each taking its gate's input row (x w_ih^T + b, an F32GemmB ahead of it) plus the dot
-//! of the transposed recurrence's column g H + j with h_prev in k order - a step's lanes read consecutive floats - and
-//! the unit's first lane folding the four into c = f c + i g and h = o tanh(c); h lives in `hs` between steps, c in that
+//! of the transposed recurrence's column g H + j with h_prev over four accumulators (i mod 4, folded at the end, so a
+//! step's loads pipeline; the CPU's `matmul` dot carries its own order, so no k order is the reference's) - a step's
+//! lanes read consecutive floats - and the unit's first lane folding the four into c = f c + i g and h = o tanh(c); h
+//! lives in `hs` between steps, c in that
 //! lane. A direction over `TTS_LSTM_LANES` hidden units declines at the driver
 [vk_dispatch(name = "tts_lstm_dir_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TtsLstmDir {
@@ -13411,7 +13406,7 @@ class TtsLstmDir {
             hs[j] = 0.0
         }
         var cst = 0.0
-        let t_first = pa.backward != 0u ? pa.t - 1u : 0u   //! the direction, decided once: the step loop walks t_first -/+ step
+        let t_first = pa.backward != 0u ? pa.t - 1u : 0u
         let w4 = 4u * hd
         let col = pa.hhoff + g * hd + j
         var step = 0u
@@ -13419,8 +13414,6 @@ class TtsLstmDir {
             barrier()
             var acc = 0.0
             if (live) {
-                // four accumulators over i mod 4, folded at the end: the loads and mads of a step pipeline instead of
-                // waiting on one chain (the CPU's `matmul` dot carries its own order, so no k order is the reference's)
                 var a0 = 0.0
                 var a1 = 0.0
                 var a2 = 0.0
@@ -13850,8 +13843,7 @@ struct TtsTaps {
     l1 : float
 }
 
-//! a / b rounded as the CPU's IEEE division rounds it: the device's own division may sit 2.5 ulp off, which the source's
-//! cumulative sums carry into every later phase frame; the reciprocal refined once, the quotient corrected by its exact remainder
+//! a / b as the CPU's IEEE division rounds it: the device's own sits up to 2.5 ulp off, which the phase's cumulative sums carry
 def tts_div(a, b : float) : float {
     var r = 1.0 / b
     r = mad(mad(-b, r, 1.0), r, r)
@@ -13859,8 +13851,7 @@ def tts_div(a, b : float) : float {
     return mad(mad(-q, b, a), r, q)
 }
 
-//! the cycles at sample i of harmonic h off its frame's f0 `f0v`, the harmonic's initial phase `nu` folded into sample 0
-//! of the overtones - the CPU `sine_phase_frames`' rad
+//! the CPU `sine_phase_frames`' rad: the cycles at sample i of harmonic h off f0 `f0v`, `nu` folded into the overtones' sample 0
 def tts_src_rad(f0v, nu : float; i, h : uint; sr : float) : float {
     let cyc = tts_div(f0v * float(h + 1u), sr)
     let r = cyc - floor(cyc)
@@ -13886,8 +13877,7 @@ def tts_resize_taps_onnx(n, to : uint; scale : float) : TtsTaps {
 
 def tts_resize_mix_torch(x0, x1, l0, l1 : float) : float => mad(l0, x0, l1 * x1)
 
-//! onnxruntime's trilinear mix in the reference's operation order: the last channel averages itself at quarter weights
-//! through all seven fma terms, every other channel carries only its two nonzero terms (the zero-weight fmas are exact)
+//! onnxruntime's trilinear mix in its operation order: the last channel through all seven fma terms, the rest their two nonzero ones
 def tts_resize_mix_onnx(x0, x1, l0, l1 : float; last : bool) : float {
     if (last) {
         let q0 = (l0 * 0.5) * 0.5
@@ -13925,8 +13915,7 @@ def tts_hash_u32(x : uint) : uint {
     return c ^ (c >> 16u)
 }
 
-//! a counter-keyed normal: two hashed uniforms through Box-Muller, not the CPU's PCG32 stream; the seed hashed first, since
-//! a raw seed xor-ed into the counter aliases seeds a multiple of four apart
+//! a counter-keyed Box-Muller normal, not the CPU's PCG32 stream; the seed hashed first, else seeds four apart alias
 def tts_hash_normal(seed, idx : uint) : float {
     let sh = tts_hash_u32(seed)
     let a = tts_hash_u32(sh ^ (idx * 2u + 1u))
@@ -13999,7 +13988,7 @@ class template TtsSrcCumsumT : TtsSrcLawT {
     @ssbo @binding = 1 lowc : array<float>
     @push_constant pa : TtsSourceArgs
 
-    [spirv_kernel(local_size_x = 256, precise = true)]   //! the device compiler folds the two-float sum's correction terms otherwise
+    [spirv_kernel(local_size_x = 256, precise = true)]
     def run {
         let h = gl_LocalInvocationID.x
         if (h < pa.nh) {
@@ -14217,8 +14206,6 @@ class TtsIstft {
 //! the inverse STFT's workgroup count over `n` samples
 def tts_istft_wgs(n : int64) : int64 => (n + 255l) / 256l
 
-// ===== the Pocket TTS classes =====
-
 struct TtsPkRowsArgs {
     rows : uint
     width : uint   //! the floats a row copies
@@ -14430,7 +14417,7 @@ struct TtsPkGemvArgs {
     nin : uint
     nout : uint
     stride : uint   //! the weight rows' stride
-    eps : float     //! the input norm's epsilon, read under NORM_MOD_IN
+    eps : float     //! the input norm's epsilon, read under NORM_IN or NORM_MOD_IN
     woff : uint     //! the weight rows [nout][stride] in wn
     boff : uint     //! the bias [nout] in wn
     xoff : uint     //! the input row in x

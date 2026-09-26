@@ -2,7 +2,13 @@
 
 Companion to `ARCHITECTURE.md`; a section is cited by its anchor.
 
-### Encoder towers, audio, and ASR
+### Encoder towers, audio, and ASR {#tower-audio-charters}
+
+`REVIEW.das`'s `check_require_bans` holds these charters' require bans: `dasllama_tower.das`
+requires no carrier (`dasllama_audio`, `dasllama_vision`), no audio or vision family file the
+carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `dasllama_pocket`,
+`dasllama_styletts2`); only `dasllama_audio_io.das` requires `audio` and only
+`dasllama_vision_io.das` requires `stbimage`. It licenses no names.
 
 - **`dasllama_asr_types.das`** - the ASR floor: the capability/segment/timestamp types every
   family file and the facade share (`AsrCaps`/`AsrTimestamps`/`TranscribeSegment`, plus

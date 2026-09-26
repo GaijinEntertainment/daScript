@@ -967,8 +967,9 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     return b._vk
 }
 
+[arch(at = "../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
 def destroy_device_buf(h : uint64) {
-    vkd_set_cache_clear()   //! a cached set may bind this buffer
+    vkd_set_cache_clear()
     unsafe {
         vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(h), null)
         if (key_exists(g_gpu.dev_mem, h)) {
@@ -1871,6 +1872,7 @@ def register_vk_drop_hook(fn : function<() : void>) {
 //! MoeGpuDropModelFn: destroy every model-owned device object — stacks, arenas, the resident
 //! driver, all lazy dispatch state, their descriptor sets and command buffers. Device-lifetime
 //! state (instance/device/pipelines/staging/fence/profiler) survives and rebuilds lazily.
+[arch(at = "../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
 def vk_drop_model_state {
     if (g_gpu == null) {
         return
@@ -3106,9 +3108,6 @@ def private vkd_set_entry_matches(e : VkdSetEntry; layout : uint64; bufs : uint6
     return true
 }
 
-//! the set over `bufs` on the class's layout, written once and served from the cache after: a chain recorded every call
-//! (the TTS seats' submits, the Pocket frame loop) asks the same sets a hundred times a frame, and a set's allocation and
-//! write are host time on the dispatch path. Any device buffer's destruction and the model drop's pool reset empty the cache
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
 def vkd_cached_set(c : VkdClass; family : string; bufs : uint64 const[]; sizes : int64 const[]; gbits : uint const[]) : VkDescriptorSet {
     let layout = intptr(boost_value_to_vk(c.set_layout))
@@ -3134,7 +3133,6 @@ def vkd_cached_set(c : VkdClass; family : string; bufs : uint64 const[]; sizes :
     return vkd_set_cache_miss(c, family, k, layout, bufs, sizes, gbits)
 }
 
-//! the cache's miss: the set allocated, written and remembered under its tuple
 [cold_path]
 def private vkd_set_cache_miss(c : VkdClass; family : string; k, layout : uint64; bufs : uint64 const[]; sizes : int64 const[]; gbits : uint const[]) : VkDescriptorSet {
     var set_ = vkd_alloc_set(c, family)

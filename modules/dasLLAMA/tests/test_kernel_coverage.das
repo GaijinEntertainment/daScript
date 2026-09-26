@@ -613,7 +613,7 @@ def private cov_tower(t : T?) {
     }
 }
 
-[unused_argument(t)]   // without a GPU module the gated body is empty
+[unused_argument(t)]   //! without a GPU module the gated body is empty
 def private cov_tower_styletts2(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         for (name in ["kitten-nano.gguf", "kokoro-82m.gguf"]) {   //! the ONNX law's stamps and the torch law's
@@ -934,9 +934,6 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das
     "router_gemm_cls_spv",
-    // the TTS classes (the f32-exact tile, the StyleTTS2 and Pocket row, sequence, source and STFT classes) are dispatched by the
-    // TTS census rows cov_tower_styletts2 and cov_tower_pocket on their carriers; their kernel cells are the test_vulkan_tts_*
-    // files. A box without the TTS carriers reads them at zero - a warning, never an entry here
     // the scalar beta/alpha GEMM: the same route split for a hybrid's f32 beta/alpha rows on the f16
     // feed; off the f16 feed (DASLLAMA_COOPMAT=sdot4) it runs. Its coverage is the dn_ba run of
     // test_vkd_dn_family in test_vulkan_kernels.das
@@ -1088,8 +1085,6 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"), "qwen2moe", none)
             // the UD-IQ2_XXS 30B: the resident MoE block's s and e stamps over iq2xxs expert planes, whole on a 16 GB card
             vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "qwen3moe", none)
-            // the TTS rows: the StyleTTS2 and Pocket seats on the Vulkan tier - the f32 tile, the row, sequence,
-            // source and STFT classes - on the TTS carriers a box stocks
             cov_tower_styletts2(t)
             cov_tower_pocket(t)
             vk_kernel_coverage_report()

@@ -11,9 +11,9 @@ require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
 require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
-require dasllama/dasllama_convert   // the f16 image of the weight rows
+require dasllama/dasllama_convert
 require dasllama/dasllama_tts_blocks
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math
 require daslib/jobque_boost
 
 //! The TTS tower's sequence classes on Vulkan against the CPU chain (a Vulkan device, else the cells skip): the conv
@@ -69,8 +69,7 @@ def private make_conv(g : ConvGeom) : TtsConv1d {
     return <- c
 }
 
-//! the conv's weights as `st2_slab_conv` lays them: row co [kdim], column j = tap * cin + ci, the columns past k * cin
-//! poisoned - the im2col's zero columns keep them out of the sum
+//! the conv's weights as `tts_slab_conv` lays them, the columns past k * cin poisoned: the im2col's zero columns keep them out
 def private slab_rows(c : TtsConv1d; kdim : int) : array<float> {
     let cin = int(c.cin)
     let cout = int(c.cout)
@@ -167,7 +166,7 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom) {
             cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
         }
         var y_dev <- staged(host.mapped, 0l, ny, type<float>)
-        // `approx`'s 2e-3: both sides f32 over K <= 128 products, the CPU's matmul_batch reassociating the k-ordered sum
+        //! `approx`'s 2e-3: both sides f32 over K <= 128 products, the CPU's matmul_batch reassociating the k-ordered sum
         let bad = mismatch_approx(y_dev, y_ref)
         log_maxdiff(tag, y_dev, y_ref, g.cout)
         t |> success(bad == 0, "{tag}: im2col + F32GemmB == the CPU conv1d over {tout} x {g.cout} ({bad} of {ny} off)")
@@ -199,8 +198,7 @@ def private make_conv16(g : ConvGeom) : TtsConv1d {
 
 let private COL16_SLACK_ROWS = 64   //! the half column plane's rows past the conv's: the KHR tile loads whole 16-row blocks
 
-//! one conv through TtsIm2col16, the f16 tile the device serves (cm2, else the KHR twin) over the halfword weight rows, and the bias
-//! pass, against the CPU conv1d on f16-lattice operands: every product exact, so the bar covers the accumulation alone
+//! one conv through TtsIm2col16, the served f16 tile and the bias pass against the CPU conv1d on f16-lattice operands (every product exact)
 def private im2col16_arm(t : T?; tag : string; g : ConvGeom) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let B_COL = 1u
@@ -353,8 +351,7 @@ def private make_lstm(hd, salt : int) : TtsLstm {
     return <- l
 }
 
-//! the input gates the driver's F32GemmB computes, x w_ih^T + b, on the CPU `linear_rows`: [t][4H] laid at `gstride`,
-//! the pad columns poisoned
+//! the input gates x w_ih^T + b on the CPU `linear_rows`: [t][4H] at `gstride`, the pad columns poisoned
 def private gates_ref(l : TtsLstm; x : array<float>; gstride : int) : array<float> {
     var lin = TtsLinear(nin = l.nin, nout = 4l * l.hidden)
     lin.w := l.w_ih
@@ -423,7 +420,7 @@ def private lstm_fixture(hd : int) : LstmFixture {
     f.gates |> push_from(gb)
     let nhh = 4 * hd * hd
     f.whh |> resize(f.bwd_hh + nhh)
-    for (o in range(4 * hd)) {   // each direction's w_hh transposed [H][4H], as the slab lays it
+    for (o in range(4 * hd)) {   //! each direction's w_hh transposed [H][4H], as the slab lays it
         for (i in range(hd)) {
             f.whh[i * 4 * hd + o] = lf.w_hh[o * hd + i]
             f.whh[f.bwd_hh + i * 4 * hd + o] = lb.w_hh[o * hd + i]
@@ -499,7 +496,7 @@ def private lstm_arm(t : T?; hd : int) {
 def private lstm_asserts(t : T?; tag : string; hd : int; f : LstmFixture; y_dev, yc_dev : array<float>) {
     let ny = LSTM_T * 2 * hd
     let nyc = LSTM_T * hd
-    // `approx`'s 2e-3: both sides f32, the CPU matmul reassociating the h dot and adding the bias after it, over 23 steps
+    //! `approx`'s 2e-3: both sides f32, the CPU matmul reassociating the h dot and adding the bias after it, over 23 steps
     let bad = mismatch_approx(y_dev, f.y_ref)
     log_maxdiff(tag, y_dev, f.y_ref, 2 * hd)
     t |> success(bad == 0, "{tag}: both directions over {LSTM_T} steps == the CPU bilstm ({bad} of {ny} off)")
@@ -595,7 +592,7 @@ def private pool_dw_arm(t : T?) {
             cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
         }
         var y_dev <- staged(host.mapped, 0l, ny, type<float>)
-        // `approx`'s 2e-3: both sides f32 over at most two taps a channel
+        //! `approx`'s 2e-3: both sides f32 over at most two taps a channel
         let bad = mismatch_approx(y_dev, want)
         log_maxdiff(tag, y_dev, want, PD_C)
         t |> success(bad == 0, "{tag}: the pool == the CPU conv1d_rows_transposed_depthwise over {tout} x {PD_C} ({bad} of {ny} off)")

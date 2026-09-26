@@ -72,7 +72,7 @@ def test_vkt_f32_gemm(t0 : T?) {
             var x <- row_fill(nx, 41, 7, 0.05, 2.1)
             var w <- row_fill(nw, 17, 3, 0.04, 1.9)
             var b <- row_fill(d, 29, 11, 0.06, 2.8)
-            for (o in range(d)) {   // the pad past n carries garbage: a read past n lands it in the sum
+            for (o in range(d)) {   //! the pad past n carries garbage: a read past n lands it in the sum
                 for (k in range(n, G_WSTRIDE)) {
                     w[o * G_WSTRIDE + k] = 7.5
                 }
@@ -179,8 +179,6 @@ def private dev_upload(a : array<auto(TT)>) : uint64 {
     }
 }
 
-// ===== the PL-BERT embedding gather =====
-
 let private GA_C = 72       //! the row width: a row straddles the 256-element workgroups
 let private GA_ROWS = 23
 let private GA_VOCAB = 40
@@ -215,7 +213,7 @@ def test_vkt_row_gather(t0 : T?) {
             let type_off = pos_off + rows * c
             var slab <- row_fill(type_off + c, 37, 5, 0.03, 1.4)
             var ids <- [for (r in range(rows)); (r * 7 + 3) % GA_VOCAB]
-            ids[1] = ids[0]   // two positions on one word: only the position rows part them
+            ids[1] = ids[0]   //! two positions on one word: only the position rows part them
             let bout = int64(GA_OUT + total) * 4l
             let slabd = dev_upload(slab)
             let idsd = dev_upload(ids)
@@ -251,7 +249,6 @@ def test_vkt_row_gather(t0 : T?) {
             }
             t |> success(parted > 0, "tts_row_gather control: two positions on one word differ by their position rows")
             t |> equal(nan_count(prefix), GA_OUT, "tts_row_gather: the prefix before out_off keeps its sentinel")
-            // the text encoder's form: the word rows alone, the position and type rows left out of the sum
             nan_sentinel_upload(outd, bout)
             pa.adds = 0u
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -277,8 +274,6 @@ def test_vkt_row_gather(t0 : T?) {
         }
     }
 }
-
-// ===== the elementwise maps: the tanh GELU and the leaky ReLU =====
 
 let private EL_OFF = 7      //! the mapped run's element base: the prefix before it stays as it was
 let private EL_N = 5203     //! five whole 1024-element workgroups and 83 more: the last live invocation maps the three-element tail
@@ -395,10 +390,7 @@ def test_vkt_leaky(t0 : T?) {
     }
 }
 
-// ===== the bidirectional attention =====
-
-//! one attention shape: q, k, v and out at element bases off zero, dispatched over the keys as they are and again with
-//! the last key row zeroed, each against the CPU `attention_rows`
+//! one attention shape at element bases off zero, over the keys as they are and with the last key row zeroed, against `attention_rows`
 def private attn_arm(t : T?; rows, heads, hs : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = "tts_attn t{rows} {heads}x{hs}"
@@ -487,19 +479,17 @@ def test_vkt_attn(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            with_job_que() {   // attention_rows threads its heads
+            with_job_que() {   //! attention_rows threads its heads
                 setup_dasllama_jobque_()
                 attn_arm(t, 37, 4, 64)
                 attn_arm(t, 130, 2, 128)
-                attn_arm(t, 512, 2, 64)   // the staged score row full: every invocation scores two keys
+                attn_arm(t, 512, 2, 64)   //! the staged score row full: every invocation scores two keys
             }
         } else {
             t |> skip("dasVulkan not present")
         }
     }
 }
-
-// ===== the concat rows =====
 
 let private CC_ROWS = 37
 let private CC_C = 40
@@ -601,8 +591,6 @@ def test_vkt_concat(t0 : T?) {
     }
 }
 
-// ===== the duration sigmoid sums =====
-
 let private SG_T = 37
 let private SG_NB = 50      //! the duration bins summed
 let private SG_LS = 64      //! the logit rows' stride: the columns past SG_NB carry GARBAGE
@@ -668,8 +656,6 @@ def test_vkt_sigsum(t0 : T?) {
     }
 }
 
-// ===== the AdaIN column statistics and the fused AdaIN stamps =====
-
 //! the channel means, then the sums of squared deviations from them, of x [rows][c], in double
 def private colstats_ref(x : array<float>; rows, c : int) : array<float> {
     var st : array<float>
@@ -691,8 +677,7 @@ def private colstats_ref(x : array<float>; rows, c : int) : array<float> {
     return <- st
 }
 
-//! the four column-statistics passes over x [rows][c] into `std`'s stats rows, the partials past them: the sums over row blocks,
-//! the means, the squared deviations over row blocks, their sums
+//! the four column-statistics passes over x [rows][c] into `std`'s stats rows, the partials past them
 def private colstats_enc(raw : VkCommandBuffer; var h : VkHaz; xd : uint64; bx : int64; std : uint64; bst : int64; rows, c : int; bit : uint) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nblk = tts_stats_blocks(int64(rows))
@@ -738,7 +723,7 @@ def private colstats_arm(t : T?; rows, c : int) {
         let half = mi < c ? "mean" : "ssq"
         to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at {half} channel {mi % c}\n")
         t |> success(bad == 0, "{tag}: the means and squared deviations == the double-precision sums ({bad} of {2 * c} off)")
-        t |> success(!approx(got[c - 1], want[c - 1] + 0.5), "{tag}: the bar reds a poisoned mean")   // a sum of 300 squared deviations sits past the relative bar's reach of 0.5
+        t |> success(!approx(got[c - 1], want[c - 1] + 0.5), "{tag}: the bar reds a poisoned mean")   //! a sum of 300 squared deviations sits past the relative bar's reach of 0.5
         t |> success(!approx(got[2 * c - 1], want[2 * c - 1] * 1.01), "{tag}: the bar reds a squared-deviation sum a percent off")
         destroy_device_buf(xd)
         destroy_device_buf(std)
@@ -755,8 +740,8 @@ def test_vkt_colstats(t0 : T?) {
                 return
             }
             colstats_arm(t, 45, 72)
-            colstats_arm(t, 300, 20)     // three blocks, the last one short
-            colstats_arm(t, 1000, 300)   // eight blocks; lanes 0..43 take a second channel
+            colstats_arm(t, 300, 20)     //! three blocks, the last one short
+            colstats_arm(t, 1000, 300)   //! eight blocks; lanes 0..43 take a second channel
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -925,8 +910,6 @@ def private elem_all(a : array<float>; v : float) : bool {
     }
     return true
 }
-
-// ===== the residual join =====
 
 let private AS_N = 1030     //! four whole workgroups and six more
 let private AS_AOFF = 3

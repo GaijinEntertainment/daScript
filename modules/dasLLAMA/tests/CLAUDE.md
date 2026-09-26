@@ -234,7 +234,10 @@ SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR
 under `DASLLAMA_PARITY_FULL=1` - the Qwen1.5-MoE Q8_0 and its `-local` Q4_K_M mint, the Qwen3-30B
 Q4_K_M and UD-IQ2_XXS: the resident MoE block's s stamps (the 32-row column) and e stamps (the
 128-row column) on the expert planes those files carry; an e stamp no stocked carrier reaches is a
-`VK_CENSUS_NEVER_DISPATCHED` entry in `test_kernel_coverage.das` naming its kernel-unit cell;
+`VK_CENSUS_NEVER_DISPATCHED` entry in `test_kernel_coverage.das` naming its kernel-unit cell; the
+TTS classes are dispatched by `cov_tower_styletts2` and `cov_tower_pocket` on their carriers, their
+kernel cells the `test_vulkan_tts_*` files, and a box without the carriers reads them at zero - a
+warning, never an entry;
 every prefill tile family is reached through the qwen3 Q8_0 and Q4_K_M and the 1B llama
 requants, machine-local like the other fixtures - the `-local` ones are
 minted from the bartowski Q8_0 with `llama-quantize --allow-requantize [--imatrix llama32_1b.imatrix] <q8> <out> <type>` (the IQ2/IQ3 types need the imatrix; the exact recipes are the catalog rows in `performance/model_specs.das`) - each

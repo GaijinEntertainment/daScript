@@ -10,19 +10,20 @@ require _spirv_common
 require spirv/spirv_dis
 require spirv/spirv_grammar
 
-//! the result ids of the float arithmetic ops, and the NoContraction targets, over one module
-def private float_ops_and_marks(words : array<uint>) : tuple<ops : table<uint>; marks : array<uint>> {
-    var ops : table<uint>
-    var marks : array<uint>
+def private float_results_and_no_contraction(words : array<uint>) : tuple<result_ids : table<uint>; no_contraction_targets : array<uint>> {
+    var result_ids : table<uint>
+    var no_contraction_targets : array<uint>
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
         if (opcode == uint(SpvOp.FAdd) || opcode == uint(SpvOp.FSub) || opcode == uint(SpvOp.FMul) || opcode == uint(SpvOp.FDiv) ||
                 opcode == uint(SpvOp.FRem) || opcode == uint(SpvOp.FNegate) || opcode == uint(SpvOp.VectorTimesScalar)) {
-            ops |> insert(w[s + 1])   // result type, RESULT ID, operands
+            let result_id = w[s + 1]
+            result_ids |> insert(result_id)
         } elif (opcode == uint(SpvOp.Decorate) && n >= 2 && w[s + 1] == uint(SpvDecoration.NoContraction)) {
-            marks |> push(w[s])       // target, decoration
+            let target_id = w[s]
+            no_contraction_targets |> push(target_id)
         }
     }
-    return <- (ops = ops, marks = marks)
+    return <- (result_ids = result_ids, no_contraction_targets = no_contraction_targets)
 }
 
 def private validate(t : T?; words : array<uint>; lbl : string) {
@@ -36,14 +37,14 @@ def private validate(t : T?; words : array<uint>; lbl : string) {
 }
 
 def private check_marked(t : T?; words : array<uint>; lbl : string; least : int) {
-    var fm <- float_ops_and_marks(words)
-    t |> success(length(fm.ops) >= least, "{lbl}: {length(fm.ops)} float ops emitted (at least {least})")
-    t |> equal(length(fm.marks), length(fm.ops))
+    var fm <- float_results_and_no_contraction(words)
+    t |> success(length(fm.result_ids) >= least, "{lbl}: {length(fm.result_ids)} float ops emitted (at least {least})")
+    t |> equal(length(fm.no_contraction_targets), length(fm.result_ids))
     var on_ops = 0
-    for (id in fm.marks) {
-        on_ops += key_exists(fm.ops, id) ? 1 : 0
+    for (id in fm.no_contraction_targets) {
+        on_ops += key_exists(fm.result_ids, id) ? 1 : 0
     }
-    t |> equal(on_ops, length(fm.marks))
+    t |> equal(on_ops, length(fm.no_contraction_targets))
     t |> success(has_op(words, SpvOp.FunctionCall), "{lbl}: the two-float step stays a called function")
     validate(t, words, lbl)
     delete fm
@@ -72,9 +73,9 @@ def test_precise_class_kernel(t : T?) {
 def test_plain_twin_unmarked(t : T?) {
     t |> run("the plain twin: the same float ops, no NoContraction") <| @(t : T?) {
         var words <- plain_sum_words()
-        var fm <- float_ops_and_marks(words)
-        t |> success(length(fm.ops) >= 8, "plain: {length(fm.ops)} float ops emitted")
-        t |> equal(length(fm.marks), 0)
+        var fm <- float_results_and_no_contraction(words)
+        t |> success(length(fm.result_ids) >= 8, "plain: {length(fm.result_ids)} float ops emitted")
+        t |> equal(length(fm.no_contraction_targets), 0)
         delete fm
         validate(t, words, "plain")
         delete words

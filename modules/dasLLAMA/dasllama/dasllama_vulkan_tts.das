@@ -15,14 +15,14 @@ require dasllama/dasllama_styletts2
 require dasllama/dasllama_pocket
 require dasllama/dasllama_rope
 require dasllama/dasllama_tts_slab
-require dasllama/dasllama_convert   // cvt_f32_to_f16_sat: the decoder slab's halfword twin
+require dasllama/dasllama_convert
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_tower
 
-//! The StyleTTS2 Vulkan driver: the kitten and kokoro families' synthesis seats on the tower's
-//! knob (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`); the Metal tower driver fills the same seats on
-//! an Apple build.
+//! The Vulkan TTS driver: the kitten and kokoro families' synthesis seats and the Pocket family's
+//! codec and frames seats on the tower's knob (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`); the Metal
+//! tower driver fills the same seats on an Apple build.
 
 var private g_ts_declines : VkDeclineCounter
 var private g_ts_encodes = 0l   //! seats served, one per call
@@ -70,8 +70,6 @@ struct private TsRows {
     bytes : int64
     bit : uint
 }
-
-// ----- the slabs: one device buffer per part, keyed on the part's weights -----
 
 struct private TsSlab {
     key : uint64
@@ -135,7 +133,6 @@ def private ts_slab_upload(var sl : TsSlab; key : uint64; host : array<float>; h
     return true
 }
 
-//! the slab for this part stands under its key, else the cold rebuild lands it
 def private ts_albert_attach(a : St2Albert) : bool {
     let key = tts_albert_key(a)
     return true if (g_ts_albert.dev != 0ul && g_ts_albert.key == key)
@@ -188,8 +185,6 @@ def private ts_pred_rebuild(p : St2Predictor; key : uint64) : bool {
     g_ts_pred_slots <- slots
     return true
 }
-
-// ----- the seats' scratch: device rows sized once for the widest call, kept across calls -----
 
 let private TS_SCRATCH_BUFS = 30
 let private TS_AUX_BIT = 1u << 30u       //! the hazard bit of a scratch's aux rows
@@ -252,7 +247,6 @@ def private ts_hb_floats(floats : TsFloats; hb_floats : int64) : int64 {
     return widest
 }
 
-//! every slot holds its floats, the readback buffer its floats
 def private ts_scratch_fits(s : TsScratch; floats : TsFloats; aux_floats, stats_floats, hb_floats : int64) : bool {
     return false if (s.aux.bytes < aux_floats * 4l || s.stats.bytes < stats_floats * 4l)
     for (i in range(TS_SCRATCH_BUFS)) {
@@ -274,16 +268,13 @@ def private ts_rows_alloc(var r : TsRows; floats : int64; bit : uint) : bool {
 
 let private TS_SCRATCH_HEADROOM = 4l   //! a slot is sized this fraction past the call's need: a longer sentence reuses it
 
-//! `floats` grown by the headroom and rounded to the grain; the exact round-up where the grown size would bind past the
-//! device's storage range
+//! `floats` grown by the headroom to the grain; the exact round-up where the grown size would bind past the storage range
 def private ts_grown(floats : int64) : int64 {
     let grown = tts_round_up(floats + floats / TS_SCRATCH_HEADROOM, TS_SCRATCH_GRAIN)
     return grown * 4l <= vk_max_storage_range() ? grown : tts_round_up(floats, TS_SCRATCH_GRAIN)
 }
 
-//! the slots sized a quarter past this call's need in 256 KB steps (a longer sentence reuses them), the readback buffer at
-//! `hb_floats` (-1: the widest slot); false when an allocation failed or a slot would bind past the device's storage
-//! range (a binding past it wraps its range at 32 bits, and the rows past the wrap read as zeros)
+//! false when an allocation fails or a slot would bind past the storage range (a binding past it wraps at 32 bits and reads zeros)
 [cold_path]
 def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, stats_floats, hb_floats : int64) : bool {
     ts_scratch_release(s)
@@ -330,8 +321,6 @@ def private ts_forget {
     ts_scratch_release(g_ts_dec_scratch)
 }
 
-// ----- the aux rows a seat uploads per call: the style vector, then fc(style) per norm (gamma, then beta; +1 on gamma in the LN form) -----
-
 var private @scratch g_ts_aux_host : array<float>   //! the staged rows, `g_ts_aux_n` of them live; grow-only
 var private g_ts_aux_n = 0l
 var private @scratch g_ts_h_tmp : array<float>
@@ -372,8 +361,6 @@ def private ts_aux_upload(s : TsScratch) : bool {
     upload_region_at(s.aux.dev, 0l, unsafe(addr<uint8 const?>(g_ts_aux_host[0])), n * 4l)
     return true
 }
-
-// ----- the dispatches -----
 
 def private ts_gemm_args(slot : TtsConvSlot; nin, nout, rows : int64) : F32GemmArgs
     => F32GemmArgs(n = uint(nin), d = uint(nout), rows = uint(rows), woff = uint(slot.woff), wstride = uint(slot.kdim_p), boff = uint(slot.boff),
@@ -433,18 +420,16 @@ def private ts_conv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : 
     vt_pt(raw, VtProfRole.tts_gemm)
 }
 
-//! the f16 tile the decoder rides: the KHR twin off a cm2 device, as the prefill's f16 GEMM picks
-def private ts_khr : bool => g_gpu.coopmat_mode != COOPMAT_CM2
+def private ts_f16_tile_khr : bool => g_gpu.coopmat_mode != COOPMAT_CM2
 
-//! a conv on rows through the f16 tile: x gathered into col16 [tout][kdim_p] as halves, the tile over the decoder slab's halfword twin
-//! into y [tout][cout], then the bias row added in place (the tile carries no epilogue)
+//! a conv on rows through the f16 tile over the decoder slab's halfword twin: col16 [tout][kdim_p] as halves, y [tout][cout], the bias after
 def private ts_conv16(raw : VkCommandBuffer; var h : VkHaz; slab, slab16 : TsRows; slot : TtsConvSlot; cv : TtsConv1d; tin, tout : int64; x, col16, y : TsRows) {
     var sc = set_tts_im2col16_cls(fixed_array(x.dev, col16.dev), fixed_array(x.bytes, col16.bytes), fixed_array(x.bit, col16.bit))
     var pc = TtsIm2colArgs(cin = uint(cv.cin), tin = uint(tin), tout = uint(tout), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(cv.pad_l),
         dilation = uint(cv.dilation), transposed = cv.transposed ? 1u : 0u, kdim = uint(slot.kdim_p), xoff = 0u, coloff = 0u, rows = 1u)
     enc_tts_im2col16_cls(raw, h, sc, pc, tts_im2col16_wgs(tout * slot.kdim_p))
     vt_pt(raw, VtProfRole.tts_im2col)
-    let khr = ts_khr()
+    let khr = ts_f16_tile_khr()
     var sm = f16_gemm_set(khr, fixed_array(slab16.dev, col16.dev, y.dev), fixed_array(slab16.bytes, col16.bytes, y.bytes), fixed_array(0u, col16.bit, y.bit))
     var pm = F16GemmArgs(n = uint(slot.kdim_p), d = uint(cv.cout), rows = uint(tout), woff = uint(slot.woff), ybase = 0u, ystride = uint(cv.cout), ksplit = 0u)
     f16_gemm_enc(khr, raw, h, sm, pm, tout, cv.cout)
@@ -455,8 +440,7 @@ def private ts_conv16(raw : VkCommandBuffer; var h : VkHaz; slab, slab16 : TsRow
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
-//! a conv on rows on the tile its site asks: under `half` a conv whose width sits on the bias pass's four lattice rides the f16 tile over the
-//! decoder slab's halfword twin, every other conv - the front end's, the predictor's, the narrow F0, energy and post convs - the f32 tile
+//! a conv on rows: under `half`, a width on the bias pass's four lattice rides the f16 tile; every other conv the f32 tile
 def private ts_conv_at(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : TtsConvSlot; cv : TtsConv1d; tin, tout : int64; x, col, col16, y : TsRows;
                        half : bool) {
     if (half && g_ts_dec.dev16 != 0ul && col16.dev != 0ul && cv.cout % 4l == 0l && cv.cout >= 16l) {
@@ -482,8 +466,6 @@ def private ts_bilstm(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; ls : 
     ts_lstm_dir(raw, h, slab, ls.fx, ls.fhh, l.fwd, t, x, gf, y, false)
     ts_lstm_dir(raw, h, slab, ls.bx, ls.bhh, l.bwd, t, x, gb, y, true)
 }
-
-// ----- the albert seat -----
 
 let private TS_A_IDS = 0
 let private TS_A_E = 1
@@ -511,7 +493,6 @@ def private ts_albert_ensure : bool {
         && ensure_tts_row_gather_cls() && ensure_tts_gelu_tanh_cls() && ensure_tts_attn_cls())
 }
 
-//! The PL-BERT seat: the embeddings gathered and normed, the map-in, then the one ALBERT layer n_layers times, out [t][hidden]
 [hot_path, unused_argument(sc), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) : bool {
     if (!vulkan_tower_on()) {
@@ -565,8 +546,7 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
         qoff = 0u, koff = 0u, voff = 0u, ooff = 0u)
     var pa_gelu = TtsElemArgs(nelem = uint(t * ff), off = 0u, slope = 0.0)
     let eps = ST2_ALBERT_EPS
-    //! the CPU chain's rows: x the residual stream, xb2 the attention context and then the attention-normed rows the ffn reads
-    //! and the second seam adds to, x again the full-normed rows the next layer reads
+    //! x the residual stream, then the full-normed rows; xb2 the attention context, then the attention-normed rows the ffn reads
     vt_chain_one_shot("albert", a.n_layers, t) $(raw : VkCommandBuffer; var h : VkHaz) {
         enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, tts_row_gather_wgs(t * a.emb_dim))
         vt_pt(raw, VtProfRole.tts_rows)
@@ -593,8 +573,6 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     g_ts_encodes++
     return true
 }
-
-// ----- the text seat -----
 
 let private TS_T_IDS = 0
 let private TS_T_A = 1
@@ -628,7 +606,6 @@ def private ts_text_kdim(te : St2TextEncoder) : int64 {
     return kdim
 }
 
-//! The text encoder seat: the embedding rows, the conv + layernorm + leaky stack on rows, the BiLSTM; out channel-major [c][t]
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) : bool {
     if (!vulkan_tower_on()) {
@@ -674,7 +651,7 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     vt_chain_one_shot("text", int64(ncnn), t) $(raw : VkCommandBuffer; var h : VkHaz) {
         enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, tts_row_gather_wgs(t * cc))
         vt_pt(raw, VtProfRole.tts_rows)
-        for (i in range(ncnn)) {   // the conv stack ping-pongs a and b, as the CPU chain does
+        for (i in range(ncnn)) {
             let src = i % 2 == 0 ? r_a : r_b
             let dst = i % 2 == 0 ? r_b : r_a
             ts_conv(raw, h, slab, sl.cnn[i], te.cnn[i], t, t, src, r_col, dst)
@@ -693,8 +670,6 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     g_ts_encodes++
     return true
 }
-
-// ----- the predictor's dispatches -----
 
 let private TS_JOIN = 0.70710678118654752   //! the AdaIN residual blocks' join: (out + shortcut) / sqrt 2
 let private TS_MAX_DE_LSTMS = 8              //! the duration encoder's LSTM stack the seat holds style rows for
@@ -725,8 +700,7 @@ def private ts_sigsum(raw : VkCommandBuffer; var h : VkHaz; logits, out : TsRows
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
-//! the column statistics of x [t][c] into the scratch's stats rows: the sums over row blocks, the means, the squared deviations
-//! over row blocks, their sums - four coalesced passes, the partials past the two stats rows
+//! the column statistics of x [t][c] into the scratch's stats rows, the block partials past the two stats rows
 def private ts_colstats(raw : VkCommandBuffer; var h : VkHaz; sc_ : TsScratch; x : TsRows; t, c : int64) {
     let st = sc_.stats
     var pa = TtsStatsArgs(t = uint(t), c = uint(c), rb = TTS_STATS_ROWS, nblk = uint(tts_stats_blocks(t)), poff = uint(2l * c))
@@ -741,8 +715,7 @@ def private ts_colstats(raw : VkCommandBuffer; var h : VkHaz; sc_ : TsScratch; x
     vt_pt(raw, VtProfRole.tts_adain)
 }
 
-//! AdaIN then the site's activation - leaky(0.2), or Snake on the norm slot's alpha row - from x into y (y may be x): the column stats over t,
-//! then the fold with the norm slot's rows and the style rows at `hoff`
+//! AdaIN, then leaky(0.2) or Snake on the norm slot's alpha row, from x into y (y may be x), the style rows at `hoff`
 def private ts_adain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; x, y : TsRows; t, c : int64; ns : TtsNormSlot; hoff : int64; snake : bool) {
     ts_colstats(raw, h, sc_, x, t, c)
     let bufs = fixed_array(x.dev, y.dev, sc_.stats.dev, sc_.aux.dev, slab.dev)
@@ -792,8 +765,6 @@ def private ts_pred_ensure : bool {
         && ensure_tts_pool_dw_cls() && ensure_tts_add_scale_cls())
 }
 
-// ----- the duration encoder seat -----
-
 let private TS_DE_BERT = 0
 let private TS_DE_DEN = 1
 let private TS_DE_X = 2
@@ -815,7 +786,6 @@ def private ts_dur_enc_shape_ok(p : St2Predictor; t, sd : int64) : bool {
     return tts_pred_ok(p, TS_LSTM_MAX_HIDDEN)
 }
 
-//! The duration encoder seat: the BERT projection, the style appended, then per LSTM the BiLSTM, the AdaLayerNorm and the style appended again; out [t][c + style]
 [hot_path, unused_argument(sc), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private vulkan_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : int64; s : array<float>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) : bool {
     if (!vulkan_tower_on()) {
@@ -863,7 +833,6 @@ def private vulkan_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : 
         return ts_decline("dur_enc", VulkanTtsDecline.memory)
     }
     upload_region_at(r_bert.dev, 0l, unsafe(addr<uint8 const?>(bert[0])), t * hidden * 4l)
-    //! the style appended as a broadcast residual of stride 0; the width holds the f0/n columns out
     let pa_cat = TtsConcatArgs(c = uint(cc), rc = uint(sd), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(width), rows = uint(t))
     vt_chain_one_shot("dur_enc", int64(nl), t) $(raw : VkCommandBuffer; var h : VkHaz) {
         ts_lin(raw, h, slab, sl.bert_enc, hidden, cc, r_bert, r_den, t)
@@ -881,8 +850,6 @@ def private vulkan_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : 
     return true
 }
 
-// ----- the durations seat -----
-
 let private TS_DU_D = 0
 let private TS_DU_Y = 1
 let private TS_DU_GF = 2
@@ -890,7 +857,6 @@ let private TS_DU_GB = 3
 let private TS_DU_LOG = 4
 let private TS_DU_RAW = 5
 
-//! The durations seat: the BiLSTM, the duration projection, the sigmoid sum a token over speed; raw [t]
 [hot_path, unused_argument(sc), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private vulkan_styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : float; @scratch @exact_size var raw : array<float>; var sc : St2Scratch) : bool {
     if (!vulkan_tower_on()) {
@@ -937,8 +903,6 @@ def private vulkan_styletts2_durations(p : St2Predictor; d : array<float>; t : i
     g_ts_encodes++
     return true
 }
-
-// ----- the prosody seat -----
 
 let private TS_PR_EN = 0     //! the encoder rows [frames][c]
 let private TS_PR_Y = 1      //! the shared BiLSTM's rows [frames][2H]
@@ -1126,7 +1090,6 @@ def private ts_pr_style_rows(p : St2Predictor; s : array<float>; var hoffs : int
     return ts_aux_upload(sc_)
 }
 
-//! The prosody seat: the shared BiLSTM over the aligned rows, then each branch's residual blocks and projection; f0 and n [f2]
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, frames : int64; s : array<float>;
                                      @scratch @exact_size var f0 : array<float>; @scratch @exact_size var n : array<float>; var f2 : int64&; var sc : St2Scratch) : bool {
@@ -1197,8 +1160,6 @@ def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fr
     return true
 }
 
-// ----- the decoder's seats: the decode chain and the generator -----
-
 var private g_ts_dec : TsSlab
 var private g_ts_dec_slots : TtsDecSlab
 var private g_ts_dec_scratch : TsScratch
@@ -1219,7 +1180,7 @@ def private ts_dec_rebuild(d : St2Decoder; key : uint64) : bool {
     let host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsDecSlab) {
         tts_dec_write(w, d, s)
     }
-    return false if (!ts_slab_upload(g_ts_dec, key, host, true))   //! the halfword twin feeds the decoder's and generator's convs
+    return false if (!ts_slab_upload(g_ts_dec, key, host, true))
     delete g_ts_dec_slots
     g_ts_dec_slots <- slots
     return true
@@ -1399,8 +1360,7 @@ def private ts_dec_floats(d : St2Decoder; sh : TsDecShape; nh, text_c, frames, f
     return fl
 }
 
-//! the style rows of the decode blocks (two a block into `dhoff`) and of the generator's blocks (two a norm site into g_ts_hoffs, the block's base in
-//! g_ts_hbase in the slab's block order: the noise blocks, then the stages' kernels); false where the aux rows ran short
+//! the decode blocks' style rows (two a block into `dhoff`), then the generator's (`ts_gen_style_rows`); false where the aux rows ran short
 def private ts_dec_style_rows(d : St2Decoder; s : array<float>; var dhoff : int64[2 + 2 * TS_MAX_RES_BLOCKS]; sc_ : TsScratch) : bool {
     ts_aux_reset()
     dhoff[0] = ts_style_rows(d.encode.norm1.fc, s, d.encode.dim_in_s, false)
@@ -1534,8 +1494,7 @@ def private ts_generator_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRo
         ts_rows(sc_, TS_D_POST), true)
 }
 
-//! the source: the noise rows drawn on the device unless captured, the phase increments and the phase per frame on the law's stamps, the mixed
-//! signal through the source linear, then its spectrum rows on the pad law's stamp
+//! the source: the noise drawn unless captured, the phases on the law's stamps, the mixed signal, its spectrum on the pad law's stamp
 def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; d : St2Decoder; cfg : SineSourceCfg; sh : TsDecShape;
                             captured : bool; seed : uint64) {
     let sl & = g_ts_dec_slots
@@ -1632,7 +1591,7 @@ def private ts_decoder_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows
 }
 
 def private ts_dec_ensure : bool {
-    return (ts_pred_ensure() && ensure_tts_im2col16_cls() && f16_gemm_ensure(ts_khr()) && ensure_tower_bias_act_cls()
+    return (ts_pred_ensure() && ensure_tts_im2col16_cls() && f16_gemm_ensure(ts_f16_tile_khr()) && ensure_tower_bias_act_cls()
         && ensure_tts_leaky_cls() && ensure_tts_adain_snake_cls() && ensure_tts_axpy_cls() && ensure_tts_reflect1_cls() && ensure_tts_src_noise_cls()
         && ensure_tts_src_low_torch_cls() && ensure_tts_src_low_onnx_cls() && ensure_tts_src_cumsum_torch_cls() && ensure_tts_src_cumsum_onnx_cls()
         && ensure_tts_src_sines_torch_cls() && ensure_tts_src_sines_onnx_cls() && ensure_tts_stft_reflect_cls() && ensure_tts_stft_edge_cls()
@@ -1648,7 +1607,6 @@ def private ts_idx_upload(r_idx : TsRows; rows : int64) {
     upload_region_at(r_idx.dev, 0l, unsafe(addr<uint8 const?>(g_ts_idx_host[0])), rows * 4l)
 }
 
-//! The decode seat: the front convs, the encode and decode blocks over the concat rows, the source and its spectrum, the generator, the inverse STFT; the samples out
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : SineSourceCfg; asr : array<float>; frames : int64; f0, nrg : array<float>; f2 : int64;
                                     s_ref : array<float>; noise : TtsNoise; seed : uint64; @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : bool {
@@ -1714,7 +1672,6 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
     return true
 }
 
-//! The generator seat: the rows form of its input and the source spectrum through the stages and conv_post on the device, the inverse STFT on the host
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx, t : int64; s : array<float>; har_spec : array<float>; har_frames : int64;
                                        @scratch @exact_size var wave : array<float>; var sc : St2Scratch) : bool {
@@ -1771,8 +1728,6 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
     return true
 }
 
-// ----- the Pocket seats: the codec decoder and the frame loop -----
-
 let private TS_PK_ATTN_HS = 64l              //! the attention row's head size, the kernel body's literal
 let private TS_PK_ATTN_MAX_KEYS = 2048l      //! the scores the attention row stages
 let private TS_PK_GEMV_MAX_NIN = 4096l       //! the x the row GEMV stages
@@ -1827,9 +1782,7 @@ def private ts_attach_log(what : string; floats : int64; build_us, upload_us : i
     to_log(LOG_INFO, "vk tts {what}: {floats * 4l / 1048576l} MB, built in {build_us / 1000} ms, uploaded in {upload_us / 1000} ms\n")
 }
 
-//! ... and a seat's pipelines, logged when the ensure built something (an ensured set returns in microseconds): the wall, and
-//! the driver's share of it (the shader modules and the pipelines) from `drv0`, the tier's build counter before the ensure;
-//! `arms_us` the tier's arm before it - the device bring-up when this seat is the process's first device call
+//! a seat's pipeline build wall and the driver's share since `drv0`, logged past a ms; `arms_us` the device bring-up the call paid
 [cold_path]
 def private ts_ensure_log(seat : string; us, drv0, arms_us : int) {
     if (arms_us >= 1000) {
@@ -1911,7 +1864,7 @@ def private ts_pk_kv_upload(kc : TtsKvCache; bk, bv : TsRows; r0, r1 : int64) {
     upload_region_at(bv.dev, r0 * d * 4l, unsafe(addr<uint8 const?>(g_ts_pk_kv_host[rows * d])), rows * d * 4l)
 }
 
-[arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames")]
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private ts_pk_voice_key(vs : PocketVoiceState) : uint64 {
     var key = 29ul + uint64(vs.len) * 7ul
     for (kc in vs.caches) {
@@ -1978,10 +1931,7 @@ def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer; k
 
 var private g_ts_no_freqs : array<float>   //! the rope builder's absent frequency table
 
-// ----- the Pocket dispatches -----
-
-//! a codec conv in the CPU's first-window form: a forward conv over `t` rows with the causal pad k - stride, a transposed one over t * stride rows
-//! with no pad; the output row count
+//! a codec conv in the CPU's first-window form (forward: causal pad k - stride; transposed: t * stride rows, no pad); the output row count
 def private ts_pk_conv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : TtsConvSlot; cv : TtsConv1d; t : int64; x, col, y : TsRows) : int64 {
     let rows = cv.transposed ? t * cv.stride : t
     var sc = set_tts_im2col_cls(fixed_array(x.dev, col.dev), fixed_array(x.bytes, col.bytes), fixed_array(x.bit, col.bit))
@@ -2088,7 +2038,7 @@ let private TS_PK_GEMV_LN_GELU = 5      //! the frame loop's ffn up: the normed 
 let private TS_PK_GEMV_ADD_SCALE = 6    //! ... and its residual joins: y += d times the slab's scale row at aoff
 let private TS_PK_GEMV_ADD = 7          //! ... or y += d alone
 
-//! the row GEMV at a site under one of the five stamps, over the slab's f32 rows of `p`
+//! the row GEMV at a site under the stamp `kind` names (a `TS_PK_GEMV_*`), over the slab's f32 rows of `p`
 def private ts_pk_gemv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : TtsConvSlot; nin, nout : int64; kind : int; s : TsPkSite) {
     var pa = TtsPkGemvArgs(nin = uint(nin), nout = uint(nout), stride = uint(p.kdim_p), eps = s.eps, woff = uint(p.woff), boff = uint(p.boff),
         xoff = uint(s.xoff), yoff = uint(s.yoff), moff = uint(s.moff), lwoff = uint(s.lwoff), lboff = uint(s.lboff), aoff = uint(s.aoff),
@@ -2136,8 +2086,6 @@ def private ts_pk_gemv_role(kind : int) : VtProfRole {
 def private ts_pk_lin(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : TtsConvSlot; nin, nout : int64; x : TsRows; xoff : int64; y : TsRows; yoff : int64) {
     ts_pk_gemv(raw, h, slab, p, nin, nout, TS_PK_GEMV_DOT, ts_pk_site(x, xoff, y, yoff))
 }
-
-// ----- the codec seat -----
 
 let private TS_C_LAT = 0     //! the latent frames [frames][cin]
 let private TS_C_Q = 1       //! ... projected [frames][d]
@@ -2298,7 +2246,6 @@ def private ts_pk_codec_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRow
     ts_pk_rows(raw, h, r_o, ts_rows(sc_, TS_C_WAVE), kw, false)
 }
 
-//! The Pocket codec seat: latents [frames][latent_dim] to frames x frame_samples samples on one submit
 [hot_path, unused_argument(sc), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private vulkan_pocket_codec(m : PocketModel; latents : array<float>; frames : int64; var sc : PocketScratch; @scratch @exact_size var wave : array<float>) : bool {
     if (!vulkan_tower_on()) {
@@ -2343,8 +2290,6 @@ def private vulkan_pocket_codec(m : PocketModel; latents : array<float>; frames 
     g_ts_encodes++
     return true
 }
-
-// ----- the frames seat -----
 
 let private TS_F_X = 0        //! the backbone's residual row [d]
 let private TS_F_XB = 1
@@ -2398,9 +2343,7 @@ def private ts_pk_gemv_add(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
     ts_pk_gemv(raw, h, slab, p, nin, nout, scaled ? TS_PK_GEMV_ADD_SCALE : TS_PK_GEMV_ADD, s)
 }
 
-//! one backbone layer at position p: the CPU's `layer_attention` and `layer_ffn` at t = 1 in five dispatches - the normed qkv row with its q
-//! roped in place and its k and v into the voice's caches (the norm the residual x carries in, the residual the layer before it added),
-//! the attention row, the out projection added into x under its scale, the normed ffn with its GELU, the down projection added into x
+//! one backbone layer at position p: the CPU's `layer_attention` and `layer_ffn` at t = 1 in five dispatches, x the residual in and out
 def private ts_pk_fr_layer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; tf : PocketTransformer; L : TtsPkLayerSlots; li : int; p : int64) {
     let d = tf.d
     let dh = uint(d / tf.heads)
@@ -2427,8 +2370,7 @@ def private ts_pk_fr_layer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
     ts_pk_gemv_add(raw, h, slab, L.ffn2, tf.ffn, d, r_h, r_x, L.has_s2, L.scale2_off)
 }
 
-//! one frame `f` at cache position p, its noise at row `i` of the batch: the CPU's `frame_step` and `head_step`, the conditioning row and the EOS logit kept,
-//! the latent denormalized
+//! frame `f` at cache position p, noise row `i` of the batch: the CPU's `frame_step` and `head_step`, the conditioning row and EOS logit kept
 def private ts_pk_frame(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; m : PocketModel; sl : TtsPkFramesSlab; p, f, i, forced_rows : int64) {
     let d = m.backbone.d
     let ld = m.latent_dim
@@ -2506,8 +2448,7 @@ def private ts_readback_at(dev : uint64; bits : uint; off : int64; hb : HostBuf;
     }
 }
 
-//! the batches: each one submit of `batch` frames over its pre-drawn noise, the EOS rule walked on the host between them, the last batch's draws past the
-//! frames made rewound so the generator ends where the CPU loop's does; the frames made and the EOS frame
+//! the batches, a submit of `batch` frames each, the EOS rule walked on the host between them; the frames made and the EOS frame
 def private ts_pk_frames_loop(m : PocketModel; sl : TtsPkFramesSlab; slab : TsRows; sc_ : TsScratch; base, batch, max_frames, forced_rows : int64; std : float;
                               frames_after_eos : int; captured : array<float>; var sc : PocketScratch; var f0 : int64&) : tuple<frames : int64; eos_at : int64> {
     let ld = m.latent_dim
@@ -2558,7 +2499,6 @@ def private ts_pk_frames_loop(m : PocketModel; sl : TtsPkFramesSlab; slab : TsRo
     return (frames = frames, eos_at = eos_at)
 }
 
-//! The Pocket frames seat: the frame loop once the prompt's rows sit in the voice's caches - the CPU loop's contract, batches of frames a submit
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; std : float; frames_after_eos : int;
                                  captured, forced : array<float>; max_frames : int64; var sc : PocketScratch) : tuple<frames : int64; eos_at : int64> {

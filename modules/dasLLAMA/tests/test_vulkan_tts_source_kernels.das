@@ -12,7 +12,7 @@ require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
 require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
 require dasllama/dasllama_tts_blocks
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math
 require daslib/jobque_boost
 
 //! The TTS tower's decoder tail on Vulkan against the CPU chain (a Vulkan device, else the cells skip): the stage sum's
@@ -57,8 +57,7 @@ def private bar_ok(g, w, rel, absf : float) : bool => abs(g - w) <= absf || abs(
 //! `w` moved by a hundredth of its magnitude (floored at 1): outside every bar in this file
 def private poison_of(w : float) : float => w + max(1.0, abs(w)) * 0.01
 
-//! the elements of `got` outside the bars, the first six logged, and the widest miss logged with its row and column in
-//! rows `width` wide
+//! the elements of `got` outside the bars, the first six and the widest miss logged (its row and column in rows `width` wide)
 def private bars_bad(tag : string; got, want : array<float>; rel, absf : float; width : int) : int {
     var bad = 0
     var worst = 0.0
@@ -112,8 +111,6 @@ def private dev_upload(a : array<auto(TT)>) : uint64 {
         return 0ul
     }
 }
-
-// ===== the stage sum's axpy =====
 
 let private AX_N = 1030        //! four whole workgroups and six more
 let private AX_OOFF = 3
@@ -183,8 +180,6 @@ def test_vkt_axpy(t0 : T?) {
     }
 }
 
-// ===== the last stage's reflect pad =====
-
 let private RF_T = 37
 let private RF_C = 24
 
@@ -227,8 +222,6 @@ def test_vkt_reflect1(t0 : T?) {
         }
     }
 }
-
-// ===== the harmonic source =====
 
 let private SRC_NH = 3
 let private SRC_SR = 24000.0
@@ -302,8 +295,7 @@ def private src_fixture(torch : bool; up, frames : int) : SrcFixture {
     return <- f
 }
 
-//! the source chain on the device - the own draw at `seed` first when `own`, else the captured rows - low, cumsum and
-//! sines on the law's stamps, every written buffer under a NaN fill first
+//! the source chain on the device (the own draw at `seed` when `own`, else the captured rows), every written buffer under a NaN fill
 def private src_run(f : SrcFixture; torch : bool; f0 : array<float>; own : bool; seed : uint) : SrcOut {
     var o : SrcOut
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -441,8 +433,7 @@ def private long_cumsum_arm(t : T?; tag : string; torch : bool; up : int) {
     }
 }
 
-//! the source's own draw at seed 77: the rows against the CPU hash, the signal finite and in tanh's range, repeatable,
-//! apart from the captured rows' signal, and moved by seeds 78 and 81 (81 = 77 xor 4, which a raw-seed xor would alias)
+//! the own draw at seed 77 against the CPU hash: finite, in tanh's range, repeatable, apart from the captured signal, moved by seeds 78 and 81 (77 xor 4)
 def private own_draw_arm(t : T?; tag : string; torch : bool; f : SrcFixture; cap : SrcOut) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nz = f.n * SRC_NH
@@ -481,8 +472,7 @@ def private own_draw_arm(t : T?; tag : string; torch : bool; f : SrcFixture; cap
     }
 }
 
-//! one source shape on one law: the captured rows against the CPU chain, a poisoned f0 frame that must red both compares,
-//! and under `full` the long cumsum and the own draw
+//! one source shape on one law against the CPU chain, a poisoned f0 frame that must red both, under `full` the long cumsum and own draw
 def private source_arm(t : T?; torch : bool; up, frames : int; full : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = "tts_source {torch ? "torch" : "onnx"} law up{up} x{frames}"
@@ -546,8 +536,6 @@ def test_vkt_source(t0 : T?) {
     }
 }
 
-// ===== the STFT =====
-
 let private ST_N = 40
 let private ST_K = 8
 let private ST_HOP = 4
@@ -588,8 +576,7 @@ def private stft_ref(har, wre, wim : array<float>; reflect : bool) : array<float
     return <- want
 }
 
-//! one pad law: the spectrum against the double form, then the signal with the first frame's reflected sample moved, which
-//! must red the compare
+//! one pad law: the spectrum against the double form, then the first frame's reflected sample moved, which must red the compare
 def private stft_arm(t : T?; reflect : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = reflect ? "tts_stft reflect" : "tts_stft edge"
@@ -683,8 +670,6 @@ def test_vkt_stft(t0 : T?) {
         }
     }
 }
-
-// ===== the inverse STFT =====
 
 let private IS_TT = 9
 let private IS_STRIDE = 8     //! the bins' magnitude and phase columns and two past them

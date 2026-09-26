@@ -30,7 +30,7 @@ require dasllama/dasllama_rope   // build_rope_tabs - the Pocket kernels' tables
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_layout
-require dasllama/dasllama_tts_slab   // the TTS parts' host slab writer, its slots adapted to byte offsets here
+require dasllama/dasllama_tts_slab
 require daslib/f16_cvt
 require daslib/apply
 require dasllama/dasllama_tower   // Clamp — the calibration record the gemma4a sites carry
@@ -2303,8 +2303,7 @@ def private st2_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : St2ConvSlot 
 //! n floats of src into the slab, zeros past its length; the byte offset
 def private st2_slab_raw(var w : TtsSlabWriter; src : array<float>; n : int64) : uint64 => uint64(tts_slab_raw(w, src, n) * 4l)
 
-//! the recurrence stays [4H][H] here - the Metal recurrence kernel reads a unit's four gate rows, where the shared writer's
-//! transposed rows serve the Vulkan lanes
+[arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
 def private st2_slab_lstm_dir(var w : TtsSlabWriter; l : TtsLstm; var xs : St2ConvSlot; var hh : uint64&) {
     var lin = TtsLinear(nin = l.nin, nout = 4l * l.hidden)
     lin.w := l.w_ih
@@ -2472,8 +2471,6 @@ def private st2_slab_free(var base : auto(TT)) {
 //! The slab for `key` stands: its buffer is up under that key.
 def private st2_slab_current(base : St2SlabBase; key : uint64) : bool => base.buf != null && base.key == key
 
-//! The family's writer runs twice through the shared builder (a measuring pass sizes the host copy, the second fills it),
-//! then the copy uploads under `key`.
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
 def private st2_slab_rebuild(var base : auto(SS); key : uint64; write : block<(var w : TtsSlabWriter; var s : SS) : void>) : bool {
     st2_slab_free(base)

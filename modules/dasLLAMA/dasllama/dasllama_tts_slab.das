@@ -143,8 +143,7 @@ struct TtsDecSlab {
     window : int64
 }
 
-//! q8 rows dequantized into the slab rows [rows][stride]: the quants gathered through the active repack, so the
-//! served lane's numbers land, not the disk order's; the gather over its parallel slice and the rows over the pool
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private tsw_put_q8(var w : TtsSlabWriter; q : array<int8>; qs : array<float>; rows, cols, w0, stride : int64) {
     return if (w.measure)
     var wq : array<uint8>
@@ -173,7 +172,7 @@ def private tsw_put_q8(var w : TtsSlabWriter; q : array<int8>; qs : array<float>
     }
 }
 
-//! a K-quant linear dequantized into the slab rows [nout][stride], a row at a time through the active layout's group gather
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private tsw_put_kq(var w : TtsSlabWriter; l : TtsLinear; w0, stride : int64) {
     return if (w.measure)
     let f = kq_fmt_of_id(l.kq_fmt, "the tower slab")
@@ -239,12 +238,12 @@ def tts_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot {
     return s
 }
 
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private tts_slab_lstm_dir(var w : TtsSlabWriter; l : TtsLstm; var xs : TtsConvSlot; var hh : int64&) {
     var lin = TtsLinear(nin = l.nin, nout = 4l * l.hidden)
     lin.w := l.w_ih
     lin.b := l.b
     xs = tts_slab_linear(w, lin)
-    // the recurrence transposed [H][4H]: the recurrence kernel's lanes read a step's column as consecutive floats
     let hd = l.hidden
     hh = tsw_alloc(w, 4l * hd * hd)
     return if (w.measure)
@@ -391,8 +390,7 @@ def tts_dec_write(var w : TtsSlabWriter; d : St2Decoder; var s : TtsDecSlab) {
     s.window = tts_slab_raw(w, d.window.a, d.stft_bwd_re.k)
 }
 
-//! the part's writer run twice - a measuring pass sizes the host copy, the second fills it and the slot record; the
-//! host floats come back for the backend to upload (empty when the part carries nothing)
+//! the part's writer run twice (a measuring pass, then the fill); the host floats come back to upload, empty when the part carries nothing
 def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; var s : SS) : void>) : array<float> {
     var inscope w = TtsSlabWriter(measure = true)
     var probe : SS
@@ -406,8 +404,6 @@ def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; v
     invoke(write, w, slots)
     return <- w.host
 }
-
-// ----- keys: the parts' weight addresses folded with the q8 lane's repack layout -----
 
 //! the q8 lane's repack layout, folded into every slab key: the same quants under another layout dequantize differently
 def tts_lane_key() : uint64 {
@@ -522,8 +518,6 @@ def tts_text_key(te : St2TextEncoder) : uint64 {
     return hash_combine64(key, tts_arr_key(te.lstm.fwd.w_hh))
 }
 
-// ----- the shape checks a part's writer needs to hold before it reads the weights -----
-
 def tts_conv_ok(c : TtsConv1d) : bool {
     return (c.groups == 1l && c.k >= 1l && c.cin >= 1l && c.cout >= 1l && c.stride >= 1l && c.dilation >= 1l
         && (c.q8 ? !empty(c.wq) : (!empty(c.w) || !empty(c.wt) || !empty(c.transposed ? c.wtr : c.wk))))
@@ -589,8 +583,6 @@ def tts_text_ok(te : St2TextEncoder; max_hidden : int64) : bool {
     }
     return tts_lstm_ok(te.lstm, te.lstm.fwd.nin, max_hidden)
 }
-
-// ----- the Pocket parts: the codec decoder's slab and the frame loop's, every linear as f32 rows (a q8 or K-quant one dequantized) -----
 
 //! a transformer layer's slots: the two norms, the four linears, the layer scale rows where the layer carries them
 struct TtsPkLayerSlots {

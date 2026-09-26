@@ -13,13 +13,13 @@ require ?vulkan _vkd_oracles
 require _compares
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_rope
-require dasllama/dasllama_math   // setup_dasllama_jobque_, silu
+require dasllama/dasllama_math
 require daslib/jobque_boost
 
 //! The Pocket TTS family's Vulkan classes against the CPU chain (a Vulkan device, else the cells skip): the codec
 //! stream's row copies with and without the ELU, the layer scale, the causal cached attention row over the caches' rows,
-//! the row GEMV's five stamps and the rows rope; every written-only output under a NaN fill, every compare with its
-//! poisoned element.
+//! the row GEMV's five stamps and the frame loop's four fused stamps, and the rows rope; every written-only output under a
+//! NaN fill, every compare with its poisoned element.
 
 let private POISON = 7.5   //! the slots a kernel must never read or write: a large finite value
 let private SLACK = 5      //! the elements past a run, left at their fill
@@ -112,8 +112,6 @@ def private dev_upload(a : array<auto(TT)>) : uint64 {
         return 0ul
     }
 }
-
-// ===== the row copies =====
 
 let private PR_SROWS = 30
 let private PR_SS = 40
@@ -208,8 +206,6 @@ def test_vkt_pk_rows(t0 : T?) {
     }
 }
 
-// ===== the layer scale =====
-
 let private RS_T = 37
 let private RS_C = 72
 let private RS_XOFF = 5
@@ -263,8 +259,6 @@ def test_vkt_pk_row_scale(t0 : T?) {
     }
 }
 
-// ===== the causal cached attention row =====
-
 let private PA_HEADS = 2
 let private PA_DH = 64
 let private PA_D = 128
@@ -297,8 +291,7 @@ struct PkAttnOut {
     pre : array<float>
 }
 
-//! the cache's keys and values as the device's rows [pos][d], `PA_PROWS` of them - the rows past the cache's poisoned,
-//! and the row `blank` poisoned too
+//! the cache as the device's `PA_PROWS` rows [pos][d], the rows past the cache's and the row `blank` poisoned
 def private pk_cache_rows(kc : TtsKvCache; blank : int64) : PkCacheRows {
     var k <- poison_plane(PA_PROWS * PA_D)
     var v <- poison_plane(PA_PROWS * PA_D)
@@ -314,8 +307,7 @@ def private pk_cache_rows(kc : TtsKvCache; blank : int64) : PkCacheRows {
     return <- PkCacheRows(k <- k, v <- v)
 }
 
-//! the CPU outputs over the cache the keys and values fill: the prompt over every key (a), the decode step over its
-//! window (b), the prompt over the 16-key window (c)
+//! the CPU outputs: the prompt over every key (a), the decode step over its window (b), the prompt over the 16-key window (c)
 def private pk_attn_wants(var kc : TtsKvCache; q : array<float>) : PkAttnOut {
     let d = PA_D
     let kr <- row_fill(PA_T * d, 17, 3, 0.02, 0.97)
@@ -440,8 +432,6 @@ def test_vkt_pk_attn(t0 : T?) {
     }
 }
 
-// ===== the row GEMV =====
-
 let private PG_NIN = 200     //! off the 32-lane multiple
 let private PG_NOUT = 45     //! off the four-row multiple: the last workgroup masks three rows
 let private PG_STRIDE = 208  //! the weight rows' stride, the pad past nin poisoned
@@ -546,8 +536,7 @@ def private pk_gemv_wants(f : PkGemvFix) : PkGemvRows {
     return <- out
 }
 
-//! the five stamps over one command buffer: the y planes staged whole, the gated residual's over its input row, every
-//! other under a NaN fill
+//! the five stamps over one command buffer, the y planes staged whole: the gated residual's over its input row, the rest under a NaN fill
 def private pk_gemv_device(f : PkGemvFix) : PkGemvRows {
     var out : PkGemvRows
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -668,8 +657,6 @@ def test_vkt_pk_gemv(t0 : T?) {
     }
 }
 
-// ===== the rows rope =====
-
 let private PO_T = 23
 let private PO_D = 128
 let private PO_DH = 64
@@ -744,8 +731,6 @@ def test_vkt_pk_rope(t0 : T?) {
         }
     }
 }
-
-// ===== the frame loop's fused stamps =====
 
 let private PF_D = 64        //! the backbone width: the q, k and v spans
 let private PF_DH = 32       //! two heads a span
@@ -836,7 +821,6 @@ def test_vkt_pk_gemv_fused(t0 : T?) {   // nolint:STYLE038 — one fixture's fou
             }
             let d = PF_D
             var inscope f <- pk_fused_fixture()
-            // the CPU chains: the normed qkv row, its q and k spans turned at the position, the plain and the normed square dots
             var xn := f.x
             var qkv_row : array<float>
             var dp : array<float>
@@ -857,7 +841,6 @@ def test_vkt_pk_gemv_fused(t0 : T?) {   // nolint:STYLE038 — one fixture's fou
             let want_a <- [for (o in range(d)); f.y0[o] + dp[o]]
             var want_g := dn
             gelu(want_g, int64(d))
-            // the device: the qkv row under a NaN fill, the caches poisoned, the adds over the residual row, the GELU under a NaN fill
             let B_Y = 1u
             let B_K = 2u
             let B_V = 4u

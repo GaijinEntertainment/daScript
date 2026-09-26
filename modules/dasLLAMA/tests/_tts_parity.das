@@ -69,9 +69,6 @@ def tower_served(t : T?; msg, declines : string) : bool {
     return false
 }
 
-// The GPU tower the build serves the TTS seats on: the Metal tower driver on an Apple build, else the
-// Vulkan TTS driver - one knob, one encode counter and one decline table behind these names.
-
 //! the tower knob as the cell found it
 def gpu_knob() : bool {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -146,7 +143,7 @@ def set_gpu_pocket_frame_batch(n : int64) {
     }
 }
 
-//! a seat the registered driver leaves empty skips its stage loudly - a driver ported seat by seat is honest about the rest
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private seat_present(t : T?; tag, stage : string) : bool {
     return true if (styletts2_gpu_seat_present(stage))
     t |> skip("{tag} GPU {stage}: the driver registers no {stage} seat on this backend")

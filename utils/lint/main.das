@@ -589,9 +589,6 @@ def run_arch_pass(roots : array<string>) : int {
             cited |> insert("{c.doc}#{c.anchor}")
         }
     }
-    // a rule document or a ledger cites a section by `<doc>.md#<anchor>` too: such a citation
-    // must resolve, and it keeps the anchor it names alive (a section only prose leans on is
-    // narrative the rules read, not a dead promise); the folder-tree rule binds code, not prose
     for (md in mds) {
         let text = fread(md)
         continue if (empty(text) || find(text, ".md#") < 0)

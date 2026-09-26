@@ -1551,10 +1551,8 @@ def private md_name_before(line : string; at : int) : string {
     return find(tok, ".md") >= 0 ? tok : ""
 }
 
-// The architecture set is cited by anchor (`ARCHITECTURE_COMMON.md`): a `sec.N` pointer at one of
-// this module's documents names a number no heading carries. A ledger's own numbered sections
-// (`followup_*.md`), a HOW_TO's steps and another folder's still-numbered document stay citable
-// by number.
+//! a `sec.N` pointer at one of this module's documents names a number no heading carries (`ARCHITECTURE_COMMON.md`); a
+//! ledger's own numbered sections, a HOW_TO's steps and another folder's still-numbered document stay citable by number
 def private check_arch_cites_by_name {
     var docs : array<string>
     collect_files_ending("modules/dasLLAMA", ".md", docs)
@@ -1627,10 +1625,7 @@ def private required_modules(path : string) : array<string> {
     return <- out
 }
 
-// The placement checklist's require bans, mechanically (REVIEW.md's rule on weakening a gate covers this one): the
-// tower helper file requires no carrier and no family file (the shared shape lands in the ASR
-// types file); only the audio and vision decode files require the decode modules `audio` and
-// `stbimage`.
+[arch(at = "ARCHITECTURE_MEDIA.md#tower-audio-charters")]
 def private check_require_bans {
     if (fexist(TOWER_FILE)) {
         var banned <- { "dasllama_audio", "dasllama_vision" }
@@ -1663,8 +1658,7 @@ def private check_require_bans {
     }
 }
 
-// harness/REVIEW.md's dashv rule, mechanically: a harness tool that speaks HTTP itself never
-// names the sidecar exchange host - the exchange module is the one client of it.
+[arch(at = "ARCHITECTURE_ENGINE.md#instrumentation-and-support")]
 def private check_harness_dashv {
     var files : array<string>
     collect_das_files("modules/dasLLAMA/harness", files, true)

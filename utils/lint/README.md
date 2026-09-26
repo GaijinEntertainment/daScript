@@ -20,7 +20,8 @@ once per invocation, over a walk of the directory roots the run was given. A dir
 **LINT025**. **LINT026**'s reverse direction needs no tag: every `{#anchor}` in any `.md` under
 the run's roots must be cited - by an `[arch]` in a `.das` there, a `// <doc>.md#<anchor>`
 pointer in a C++ source, or a `<doc>.md#<anchor>` in a rule document or ledger - and a
-markdown citation that resolves to no section is a forward finding like a code one. **LINT027** caps each
+markdown citation that resolves to no section is a forward finding like a code one; a markdown
+citation resolves the way a C++ pointer does, so the folder-tree rule does not bind it. **LINT027** caps each
 `REVIEW*.md` / `ARCHITECTURE*.md` at 300 lines in every folder that holds one. Two more read
 the checklists' text: **LINT032** reports a `REVIEW*.md` citing a rule by position ("the rule
 above", "see below"), and **LINT033** a `REVIEW*.md` naming a path (a backticked token with a

@@ -132,8 +132,8 @@ struct EmitCtx {
     mesh_max_primitives : int                   // mesh-output array sizing: gl_PrimitiveTriangleIndicesEXT length
     mesh_topology : MeshOutputTopology          // declared output topology; the index-array builtin must match it (triangles -> gl_PrimitiveTriangleIndicesEXT)
     local_size : int3                           // the declared workgroup size (LocalSize execution mode); gl_WorkGroupSize folds to it
-    precise : bool                              // `precise = true` on the shader annotation: every float arithmetic result NoContraction-decorated
-    task_payload_id : uint                     // the @task_payload TaskPayloadWorkgroupEXT variable id (0 = none); EmitMeshTasksEXT appends it as the 4th operand
+    precise : bool                              // every float arithmetic op decorated NoContraction (ARCHITECTURE.md#precise-no-contraction)
+    task_payload_id : uint                      // the @task_payload TaskPayloadWorkgroupEXT variable id (0 = none); EmitMeshTasksEXT appends it as the 4th operand
     nonuniform_ids : table<uint>                // set of result ids that carry the NonUniform decoration (nonuniformEXT marker + cascade through OpAccessChain / OpLoad on descriptor arrays)
     spec_ids      : table<uint>                 // SpecId decorations already used (@constant_id globals + local_size_*_id axes) -> duplicate ids rejected
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
@@ -2300,7 +2300,7 @@ def private binop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> 
     return (ok = false, code = SpvOp.Nop)
 }
 
-//! the float arithmetic opcodes a `precise` shader decorates
+[arch(at="../ARCHITECTURE.md#precise-no-contraction")]
 def private precise_float_op(code : SpvOp) : bool {
     return (code == SpvOp.FAdd || code == SpvOp.FSub || code == SpvOp.FMul || code == SpvOp.FDiv || code == SpvOp.FRem || code == SpvOp.FNegate ||
         code == SpvOp.VectorTimesScalar || code == SpvOp.MatrixTimesScalar || code == SpvOp.VectorTimesMatrix ||
