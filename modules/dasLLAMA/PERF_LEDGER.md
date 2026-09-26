@@ -3116,6 +3116,21 @@ other overrides alike.
   14792 / 11007 / 12442, gemma-3-1b 34671 / 34280 / 32909, E2B 16313 / 13196 / 14920, E4B 9804 /
   8918 / 9496, gemma-2-2b 19540 / 18044 / 17533), and the wave model picks the faster column on
   every 512-row shape the probe's `g3`, `gemma`, `tl` and default arms time.
+- **The tower dedup pass's tip (the same rig, `vk`, wall / encode over the five clips):** turbo
+  **61 / 31**, **149 / 61**, **772 / 249**, **988 / 371**, **1934 / 721** - within noise of the
+  parity pass's rows; the jfk ledger the same (the stem 0.28 ms, the blocks 29.9, the cross-KV
+  0.73, the decode 55 dispatches at 0.77 ms for the three-row batch). The pass's gate for a
+  stamp it left alone is `harness/vk_spv_diff.das` over the dump before and after (the kernel
+  files and every twin): 256 stamps byte-identical, 18 moved, none appeared, and the moved set
+  is the fold set - the six residual seams (`cls_ar_rq`, `cls_ar_rq_b`, `cls_ar_rqx`,
+  `cls_ar_comb_rq`, `cls_ar_comb_g4_rq`, `q8_gemv_ar`) on the shared block pass, the two clamp
+  arms, the seven post-add and Q8 norm stamps on the seam template, the decoder's attention
+  partial on the shared reduces and its two combines on one template; the f32 and f16
+  layer-norm stamps and every requant stamp stayed identical. The residual seams' own gate is a
+  decode row: E2B Q8_0 flat tg128 **198.45 +/- 0.09** against the ledger's 198.5 to 198.8 (pp512
+  16352 +/- 43 against 16313). The four classes the pass deleted
+  (`TowerHeadGather`, `TowerZeroRows`, `TowerQ3aFinish`, `TowerGluAct`) are the four that
+  vanish, the family twins holding their chains' bars on the pod.
 - **The driver's allocations at the largest shape the path serves, the 4096-row encode cap
   (`VT_MAX_ENCODE_ROWS`; whisper-class chunks stop at 1500 rows, gemma4a's at 768; canary has no
   row cap and declines `shape` only past the device's storage-buffer range):** the rel quartet
