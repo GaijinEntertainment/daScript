@@ -705,13 +705,26 @@ def private ts_sigsum(raw : VkCommandBuffer; var h : VkHaz; logits, out : TsRows
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
+//! the column statistics of x [t][c] into the scratch's stats rows: the sums over row blocks, the means, the squared deviations
+//! over row blocks, their sums - four coalesced passes, the partials past the two stats rows
+def private ts_colstats(raw : VkCommandBuffer; var h : VkHaz; sc_ : TsScratch; x : TsRows; t, c : int64) {
+    let st = sc_.stats
+    var pa = TtsStatsArgs(t = uint(t), c = uint(c), rb = TTS_STATS_ROWS, nblk = uint(tts_stats_blocks(t)), poff = uint(2l * c))
+    var s1 = set_tts_colpart_sum_cls(fixed_array(x.dev, st.dev, st.dev), fixed_array(x.bytes, st.bytes, st.bytes), fixed_array(x.bit, st.bit, st.bit))
+    enc_tts_colpart_sum_cls(raw, h, s1, pa, tts_stats_blocks(t))
+    var s2 = set_tts_colreduce_mean_cls(fixed_array(st.dev, st.dev), fixed_array(st.bytes, st.bytes), fixed_array(st.bit, st.bit))
+    enc_tts_colreduce_mean_cls(raw, h, s2, pa, tts_colreduce_wgs(c))
+    var s3 = set_tts_colpart_sq_cls(fixed_array(x.dev, st.dev, st.dev), fixed_array(x.bytes, st.bytes, st.bytes), fixed_array(x.bit, st.bit, st.bit))
+    enc_tts_colpart_sq_cls(raw, h, s3, pa, tts_stats_blocks(t))
+    var s4 = set_tts_colreduce_sq_cls(fixed_array(st.dev, st.dev), fixed_array(st.bytes, st.bytes), fixed_array(st.bit, st.bit))
+    enc_tts_colreduce_sq_cls(raw, h, s4, pa, tts_colreduce_wgs(c))
+    vt_pt(raw, VtProfRole.tts_adain)
+}
+
 //! AdaIN then the site's activation - leaky(0.2), or Snake on the norm slot's alpha row - from x into y (y may be x): the column stats over t,
 //! then the fold with the norm slot's rows and the style rows at `hoff`
 def private ts_adain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; x, y : TsRows; t, c : int64; ns : TtsNormSlot; hoff : int64; snake : bool) {
-    var s1 = set_tts_colstats_cls(fixed_array(x.dev, sc_.stats.dev), fixed_array(x.bytes, sc_.stats.bytes), fixed_array(x.bit, sc_.stats.bit))
-    var p1 = TtsStatsArgs(t = uint(t), c = uint(c))
-    enc_tts_colstats_cls(raw, h, s1, p1, c)
-    vt_pt(raw, VtProfRole.tts_adain)
+    ts_colstats(raw, h, sc_, x, t, c)
     let bufs = fixed_array(x.dev, y.dev, sc_.stats.dev, sc_.aux.dev, slab.dev)
     let sizes = fixed_array(x.bytes, y.bytes, sc_.stats.bytes, sc_.aux.bytes, slab.bytes)
     let bits = fixed_array(x.bit, y.bit, sc_.stats.bit, sc_.aux.bit, 0u)
@@ -754,7 +767,8 @@ def private ts_add_scale(raw : VkCommandBuffer; var h : VkHaz; a, b, o : TsRows;
 
 def private ts_pred_ensure : bool {
     return (ensure_f32_gemm_b_cls() && ensure_tower_ln_cls() && ensure_tts_row_gather_cls() && ensure_tts_im2col_cls() && ensure_tts_lstm_dir_cls()
-        && ensure_tts_concat_cls() && ensure_tts_sigsum_cls() && ensure_tts_colstats_cls() && ensure_tts_adain_leaky_cls()
+        && ensure_tts_concat_cls() && ensure_tts_sigsum_cls() && ensure_tts_colpart_sum_cls() && ensure_tts_colpart_sq_cls()
+        && ensure_tts_colreduce_mean_cls() && ensure_tts_colreduce_sq_cls() && ensure_tts_adain_leaky_cls()
         && ensure_tts_pool_dw_cls() && ensure_tts_add_scale_cls())
 }
 
@@ -1121,7 +1135,7 @@ def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fr
         return ts_decline("prosody", VulkanTtsDecline.device)
     }
     let fl = ts_pr_floats(sh, cc, hd, frames)
-    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_pr_scratch, fl, sh.aux, 2l * sh.c_max)) {
+    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_pr_scratch, fl, sh.aux, tts_stats_floats(sh.t_max, sh.c_max))) {
         return ts_decline("prosody", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_pred_slots
@@ -1631,7 +1645,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
     }
     let nh = source.n_harm
     let fl = ts_dec_floats(d, sh, nh, text_c, frames, f2)
-    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, 2l * sh.blk.c_max)) {
+    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, tts_stats_floats(sh.blk.t_max, sh.blk.c_max))) {
         return ts_decline("decode", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_dec_slots
@@ -1709,7 +1723,7 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
     }
     fl[TS_D_COL] = sh.blk.col
     fl[TS_D_COL16] = ts_col16_floats(sh.blk)
-    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, 2l * sh.blk.c_max)) {
+    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, tts_stats_floats(sh.blk.t_max, sh.blk.c_max))) {
         return ts_decline("generator", VulkanTtsDecline.memory)
     }
     let sc_ & = g_ts_dec_scratch

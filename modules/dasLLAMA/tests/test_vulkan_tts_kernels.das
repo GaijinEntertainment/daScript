@@ -691,6 +691,29 @@ def private colstats_ref(x : array<float>; rows, c : int) : array<float> {
     return <- st
 }
 
+//! the four column-statistics passes over x [rows][c] into `std`'s stats rows, the partials past them: the sums over row blocks,
+//! the means, the squared deviations over row blocks, their sums
+def private colstats_enc(raw : VkCommandBuffer; var h : VkHaz; xd : uint64; bx : int64; std : uint64; bst : int64; rows, c : int; bit : uint) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let nblk = tts_stats_blocks(int64(rows))
+        var pa = TtsStatsArgs(t = uint(rows), c = uint(c), rb = TTS_STATS_ROWS, nblk = uint(nblk), poff = uint(2 * c))
+        var s1 = set_tts_colpart_sum_cls(fixed_array(xd, std, std), fixed_array(bx, bst, bst), fixed_array(0u, bit, bit))
+        enc_tts_colpart_sum_cls(raw, h, s1, pa, nblk)
+        var s2 = set_tts_colreduce_mean_cls(fixed_array(std, std), fixed_array(bst, bst), fixed_array(bit, bit))
+        enc_tts_colreduce_mean_cls(raw, h, s2, pa, tts_colreduce_wgs(int64(c)))
+        var s3 = set_tts_colpart_sq_cls(fixed_array(xd, std, std), fixed_array(bx, bst, bst), fixed_array(0u, bit, bit))
+        enc_tts_colpart_sq_cls(raw, h, s3, pa, nblk)
+        var s4 = set_tts_colreduce_sq_cls(fixed_array(std, std), fixed_array(bst, bst), fixed_array(bit, bit))
+        enc_tts_colreduce_sq_cls(raw, h, s4, pa, tts_colreduce_wgs(int64(c)))
+    }
+}
+
+//! the stats plane's bytes for `rows` x `c`: the two stats rows and the block partials
+def private colstats_bytes(rows, c : int) : int64 => tts_stats_floats(int64(rows), int64(c)) * 4l
+
+def private ensure_colstats : bool
+    => ensure_tts_colpart_sum_cls() && ensure_tts_colreduce_mean_cls() && ensure_tts_colpart_sq_cls() && ensure_tts_colreduce_sq_cls()
+
 //! one statistics shape: x [rows][c] off a mean, the stats plane under a NaN fill
 def private colstats_arm(t : T?; rows, c : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -698,16 +721,14 @@ def private colstats_arm(t : T?; rows, c : int) {
         let B_ST = 1u
         var x <- row_fill(rows * c, 53, 11, 0.05, 1.3)
         let xd = dev_upload(x)
-        let bst = int64(2 * c) * 4l
+        let bst = colstats_bytes(rows, c)
         let std = make_device_buf(bst)
-        let sizes = fixed_array(bst)
+        let sizes = fixed_array(int64(2 * c) * 4l)
         let at <- staged_offsets(sizes)
         let host = make_host_buf(at[length(sizes)], true, [cached = true])
         nan_sentinel_upload(std, bst)
-        var s = set_tts_colstats_cls(fixed_array(xd, std), fixed_array(long_length(x) * 4l, bst), fixed_array(0u, B_ST))
-        var pa = TtsStatsArgs(t = uint(rows), c = uint(c))
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_colstats_cls(raw, h, s, pa, int64(c))
+            colstats_enc(raw, h, xd, long_length(x) * 4l, std, bst, rows, c, B_ST)
             cmd_copy_planes(raw, h, fixed_array(std), host, sizes, B_ST)
         }
         let got <- staged(host.mapped, at[0], 2 * c, type<float>)
@@ -729,12 +750,13 @@ def private colstats_arm(t : T?; rows, c : int) {
 def test_vkt_colstats(t0 : T?) {
     t0 |> run("the column statistics == the double-precision mean and squared deviations, one and two strides a lane") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_tts_colstats_cls()) {
+            if (!vk_moe_init() || !ensure_colstats()) {
                 t |> skip("no Vulkan device")
                 return
             }
             colstats_arm(t, 45, 72)
-            colstats_arm(t, 300, 20)   // lanes 0..43 take a second row
+            colstats_arm(t, 300, 20)     // three blocks, the last one short
+            colstats_arm(t, 1000, 300)   // eight blocks; lanes 0..43 take a second channel
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -818,7 +840,7 @@ def private adain_asserts(t : T?; tag : string; got, want : array<float>) {
 def test_vkt_adain(t0 : T?) {
     t0 |> run("the column stats + fused AdaIN, leaky and Snake stamps, == the CPU adain_rows_into, out of place and in place") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_tts_colstats_cls() || !ensure_tts_adain_leaky_cls() || !ensure_tts_adain_snake_cls()) {
+            if (!vk_moe_init() || !ensure_colstats() || !ensure_tts_adain_leaky_cls() || !ensure_tts_adain_snake_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -836,7 +858,7 @@ def test_vkt_adain(t0 : T?) {
             let xid = dev_upload(xp)
             let hd = dev_upload(hp)
             let wnd = dev_upload(f.slab)
-            let bst = int64(2 * c) * 4l
+            let bst = colstats_bytes(AD_T, c)
             let by = int64(AD_YOFF + n) * 4l
             let bxp = long_length(xp) * 4l
             let bh = long_length(hp) * 4l
@@ -850,18 +872,16 @@ def test_vkt_adain(t0 : T?) {
             nan_sentinel_upload(std, bst)
             nan_sentinel_upload(yld, by)
             nan_sentinel_upload(ysd, by)
-            var s_st = set_tts_colstats_cls(fixed_array(x0d, std), fixed_array(long_length(f.x) * 4l, bst), fixed_array(0u, B_ST))
             var s_l = set_tts_adain_leaky_cls(fixed_array(xpd, yld, std, hd, wnd), fixed_array(bxp, by, bst, bh, bwn), fixed_array(0u, B_YL, B_ST, 0u, 0u))
             var s_s = set_tts_adain_snake_cls(fixed_array(xpd, ysd, std, hd, wnd), fixed_array(bxp, by, bst, bh, bwn), fixed_array(0u, B_YS, B_ST, 0u, 0u))
             var s_i = set_tts_adain_leaky_cls(fixed_array(xid, xid, std, hd, wnd), fixed_array(bxp, bxp, bst, bh, bwn), fixed_array(B_XI, B_XI, B_ST, 0u, 0u))
-            var ps = TtsStatsArgs(t = uint(AD_T), c = uint(c))
             var pa = TtsAdainArgs(c = uint(c), t = uint(AD_T), eps = AD_EPS, xoff = uint(AD_XOFF), yoff = uint(AD_YOFF), hoff = uint(AD_HOFF),
                 gwoff = uint(AD_GWOFF), gboff = uint(f.gboff), aoff = uint(f.aoff))
             var pi = pa
             pi.yoff = uint(AD_XOFF)
             let wgs = tts_adain_wgs(int64(n))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_colstats_cls(raw, h, s_st, ps, int64(c))
+                colstats_enc(raw, h, x0d, long_length(f.x) * 4l, std, bst, AD_T, c, B_ST)
                 enc_tts_adain_leaky_cls(raw, h, s_l, pa, wgs)
                 enc_tts_adain_snake_cls(raw, h, s_s, pa, wgs)
                 enc_tts_adain_leaky_cls(raw, h, s_i, pi, wgs)
