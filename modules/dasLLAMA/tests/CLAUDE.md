@@ -9,9 +9,9 @@ full-suite run turns a one-arm fix into an afternoon.
 ```
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|mtp|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate that needs no models - runs the same on a bare box, no --arm
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # the per-PR gate on a box with models: the model-gated files, no --arm
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # the per-PR run on a box with models, and after an edit: the areas the changed files reach
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # every model-gated file, no --arm: what --changed runs when a core module changed
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the PLE file
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # after an edit: the areas the changed files reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | llm | infra (comma list)
 ```
 
@@ -309,14 +309,15 @@ dispatch that skips `metal_set_threadgroup_memory_length` for a kernel with `@wo
 reads garbage silently - no error, a plausible wrong number - which is why the lens makes the
 omission a compile refusal (`test_lens_tgmem_gate` above).
 
-## The per-PR suites - model-free and stocked
+## The per-PR runs - model-free whole, the stocked files by area
 
 The split between the `model-free` and `stocked` suites: a file that reaches a machine-local
 fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`, `whisper_dir()`) is `stocked`,
 every other suite-less file is `model-free`, and `test_run_suites.das` reads the files and fails a
 misfiled one (the pinned gate `REVIEW.md` names for the split). A `stocked` cell skips honestly
-when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box it is
-the model coverage the per-PR gate owes - `test_ple_modes` alone is ~10 min. The runner sets
+when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box a PR
+owes the stocked files of the areas its change reaches (`--changed`), never the whole suite for
+its own sake - `test_ple_modes` alone is ~10 min, the suite hours. The runner sets
 `DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride either
 suite: the runner disarms the guard that tripwire asserts. The map below is partial. `run.das`'s
 two lists together are the census.

@@ -3147,9 +3147,15 @@ other overrides alike.
   `test_whisper_vulkan_twin`, `test_whisper_vulkan_wdec` (`tests/test_whisper.das`),
   `test_gemma4v_vulkan_twin`, `test_gemma3v_vulkan_twin`, `test_qwen3v_vulkan_twin`,
   `test_qwen25v_vulkan_twin`, and `tests/test_vulkan_tower_kernels.das` whole, each run through
-  dastest's `--test-names` filter on the pod at the tip. The whisper decoder's flushed-memory bar
-  (`test_whisper_vulkan_wdec_flush`, `WDEC_FLUSH_LOGIT_BAR` = 5% of the knob-off chain's peak
-  logit) reads WDEC_FLUSH_READING on tiny on the pod.
+  dastest's `--test-names` filter on the pod at the tip. The review round's fix tip (the
+  layernorm and post-add stores on one `mad`, the block pass behind a buffer barrier, the fused
+  bias pass on the literal tanh GELU) reads **61 / 31**, **151 / 62**, **772 / 247**, **993 / 370**,
+  **1934 / 714** on the same rig - within noise again - with E2B tg128 198.67 +/- 0.32 and pp512
+  16432 +/- 79, and the probe's `wh` arm, its feed now carrying the read slack and its two columns
+  raced round by round, reads q / k / v / o 95 -> 52 us, fc1 240 -> 170, fc2 359 -> 184 whole,
+  split4 240 -> 153 + 16, the m column 62 / 186 / 228 at either count. The whisper decoder's
+  flushed-memory bar (`test_whisper_vulkan_wdec_flush`, `WDEC_FLUSH_LOGIT_BAR` = 5% of the
+  knob-off chain's peak logit) reads WDEC_FLUSH_READING on tiny on the pod.
 - **The driver's allocations at the largest shape the path serves, the 4096-row encode cap
   (`VT_MAX_ENCODE_ROWS`; whisper-class chunks stop at 1500 rows, gemma4a's at 768; canary has no
   row cap and declines `shape` only past the device's storage-buffer range):** the rel quartet

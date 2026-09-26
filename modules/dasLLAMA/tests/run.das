@@ -702,9 +702,9 @@ def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_exclud
         if (find_index(areas, "llm") >= 0) {
             to_log(LOG_INFO, "NEXT the model suites (decode | prefill | matrix) take --arm scoped to the change: run.das -- --arm <arms> --suite <name>\n")
         }
-        to_log(LOG_INFO, "NEXT before the PR: run.das -- --suite model-free, then --suite stocked on a box with models (preflight --full runs both when the module changed)\n")
+        to_log(LOG_INFO, "NEXT before the PR: run.das -- --suite model-free, then this --changed run on a box with models\n")
     } elif (cfg.suite == "model-free") {
-        to_log(LOG_INFO, "NEXT before the PR: run.das -- --suite stocked on a box with models\n")
+        to_log(LOG_INFO, "NEXT before the PR: run.das -- --changed on a box with models (the stocked files of the areas the change reaches)\n")
     }
 }
 

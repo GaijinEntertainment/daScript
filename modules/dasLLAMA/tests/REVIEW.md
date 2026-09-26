@@ -18,20 +18,20 @@ evidence, applies `REVIEW_PINNED_GATES.md` (beside this file) together with this
 
 **Weakening `test_metal_float_a_gate.das` - the gate that checks the MSL emitter refuses a float A operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without the `[metal_kernel(float_a_ok=true)]` license - is a defect.**
 
-**Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
-the models stocked, plus every test here the change reaches - never the whole directory.** A
-change reaches a test when it alters anything the test's result depends on - the test file, a
-shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name it
-asserts on; a comment-only edit reaches none.
+**Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the models
+stocked (the stocked files of the areas the change reaches; a core module with no `MODULE_AREAS` row
+reaches every area), plus every test here the change reaches - never the whole directory, never the
+whole `stocked` suite for its own sake.** A change reaches a test when it alters anything the test's
+result depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture or
+corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
 **A PR that adds or changes a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
 `_model_tier.das`) also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
-stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when
-`run.das` accepts `--arm` for that suite (every suite but `model-free` and `stocked`) - and names
-the box in the PR body.** A run without `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
+stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when `run.das`
+accepts `--arm` for that suite (every suite but `model-free` and `stocked`) - and names the box in the
+PR body.** A run without `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
-**The `stocked` run every PR owes carries no `--exclude`** - an excluding run is the iteration form
-between PRs; a PR that ships on it never ran the coverage it dropped.
+**The `--changed` or `stocked` run a PR cites carries no `--exclude`** - an excluding run is the iteration form between PRs; a PR that ships on it never ran the coverage it dropped.
 
 **A test file - a `.das` in this folder that dastest runs: one carrying at least one `[test]`
 function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion -

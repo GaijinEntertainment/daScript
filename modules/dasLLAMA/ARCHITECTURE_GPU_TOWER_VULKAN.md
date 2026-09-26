@@ -158,10 +158,10 @@ A GEMM record on the l column carries the encode's rows rounded up to 256 (`vt_t
 the scratch's row cap is a multiple of the l column (`vt_cap_rows`, so every plane the scratch
 sizes holds a record's rounded rows), so the l stamp's last column is whole and takes its fast path: a partial column runs its clamped edge path at a third of the
 rate (whisper's 1500-row chunk read q/k/v/o 95 us against 52 at 1536, fc2 357 against 185, on the
-RTX PRO 4500). A record on the s or m column keeps the raw count - those stamps load a partial
-column unclamped and clamp the store - and so does gemma4a's rel record on every column: its
-13-row planes are sized to it, and a forced l column would read and write past them. The rounded
-rows past the live count are the same dead rows.
+RTX PRO 4500 - `debug-jit`, the whisper parity pass's bullet in `PERF_LEDGER.md`). A record on the
+s or m column keeps the raw count - those stamps load a partial column unclamped and clamp the
+store - and so does gemma4a's rel record on every column: its 13-row planes are sized to it, and a
+forced l column would read and write past them. The rounded rows past the live count are the same dead rows.
 
 The whisper-class stem leaves its rows on the device (`x_ready`, a pending readback naming the
 encoder state's `x`), and the block chain takes them there; a block hook that declines after the
