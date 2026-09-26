@@ -35,6 +35,7 @@ require _model_tier
 // carries becomes radians of harmonic phase.
 
 let BAR = 1e-4
+let SOURCE_BAR = 5e-3   //! the harmonic source against the oracle's, absolute: the phase past 1e5 radians turns a ulp of an increment into radians, and the pod's x64 chain reads 2.5e-3 on kitten's ONNX law where the M5 Max reads under 1e-4
 
 //! The Metal driver's bars: rel-rms against the CPU chain fed the same inputs on the f32 lane (the readings: tests/CLAUDE.md).
 let GPU_SEAM_BAR = 5e-3
@@ -192,9 +193,9 @@ def bar_diff(t : T?; tag : string; ours, ref : array<float>; bar : float; absolu
 }
 
 //! One stage against its dump within BAR (of the oracle's peak, or absolute); a stage the dump lacks is skipped.
-def stage_diff(t : T?; tag, name : string; ours : array<float>; dump : table<string; TtsDumpTensor>; absolute : bool = false) {
+def stage_diff(t : T?; tag, name : string; ours : array<float>; dump : table<string; TtsDumpTensor>; absolute : bool = false; bar : float = BAR) {
     dump |> get(name) $(tensor) {
-        bar_diff(t, "{tag} {name}", ours, tensor.f, BAR, absolute)
+        bar_diff(t, "{tag} {name}", ours, tensor.f, bar, absolute)
     }
 }
 
@@ -270,7 +271,7 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     var inscope sc = St2Scratch()
     var inscope har : array<float>
     let n = styletts2_source(m.decoder, m.source, f0, f2, noise, 0ul, har, sc)
-    stage_diff(t, "{tag} SOURCE", "har", har, dump, true)
+    stage_diff(t, "{tag} SOURCE", "har", har, dump, true, SOURCE_BAR)
     var inscope har_ref <- dump_f(dump, "har")
     var inscope spec : array<float>
     let frames = styletts2_har_spectrum(m.decoder, har_ref, n, tr, spec, sc)
