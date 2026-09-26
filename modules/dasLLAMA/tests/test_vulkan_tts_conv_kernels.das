@@ -152,7 +152,7 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom) {
         var s_mm = set_f32_gemm_b_cls(fixed_array(wd, cold, yd, bd), fixed_array(bw, bcol, by, bb), fixed_array(0u, B_COL, B_Y, 0u))
         var pc = TtsIm2colArgs(cin = uint(g.cin), tin = uint(g.tin), tout = uint(tout), k = uint(g.k), stride = uint(g.stride),
             pad_l = uint(g.pad), dilation = 1u, transposed = g.transposed ? 1u : 0u, kdim = uint(kdim), xoff = uint(g.xoff),
-            coloff = uint(g.coloff))
+            coloff = uint(g.coloff), rows = 0u)
         var pm = F32GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, wstride = uint(kdim), boff = 0u,
             xoff = uint(g.coloff), xstride = uint(kdim), yoff = 0u, ystride = uint(g.cout))
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {

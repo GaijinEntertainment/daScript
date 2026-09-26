@@ -33,9 +33,11 @@ embedding norm, the map-in, then the one ALBERT layer n_layers times: q, k and v
 the bidirectional f32 attention row (`TtsAttn`, one workgroup per query row and head, softmax
 the CPU way), the dense projection, the residual add with the attention norm, the ffn, the
 exact tanh GELU (`TtsGeluTanh`), the ffn output, the residual add with the full norm - the
-residual seams on the tower's post-add stamp with the next norm folded in, the norms on the
-tower's layernorm stamp reading the slab's rows. The rows come back to the host through the
-scratch's own readback buffer; one seat call is one submit.
+residual seams on the tower's post-add layernorm stamp (`TowerPostAddLn`: the branch linear
+runs the unbiased tile and the seam adds its bias row, then the norm of the sum, as the CPU's
+post-LN block orders them), the norms on the tower's layernorm stamp reading the slab's rows.
+The rows come back to the host through the scratch's own readback buffer; one seat call is one
+submit.
 
 The declines: `knob`, `shape` (a width off the 64 lattice, a head width other than 64 or 128,
 more than 512 tokens for the attention stage, an LSTM direction over 256 hidden), `device` (the
