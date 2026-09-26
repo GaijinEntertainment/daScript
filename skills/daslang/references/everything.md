@@ -3191,7 +3191,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 - `effective_stop_ids` - Every stop id for the NEXT generation as one list: the template's stops plus the thinking-off extras while thinking is off.
 - `make_nothink_guard` - The instruct-mode stop guard for `chat`'s next turn over the family's channel markers (gemma-4): unarmed on a thinking turn.
-- `make_think_stream` - The incremental reasoning/content splitter for `chat`'s next turn — feed streamed pieces through `think_feed`, flush with `think_finish`.
+- `make_think_stream` - The incremental reasoning/content splitter for `chat`'s next turn (`think_feed` per piece, `think_finish` at the end).
 - `nothink_stop_here` - true = `id` ends the turn: a guarded channel marker sampled after the reply's first content piece.
 - `split_reasoning` - Split a complete reply at its reasoning boundary per the model family's reply format (`<think>` pair, Harmony channels, gemma-4's thought channel).
 - `think_drain` - Drain a COMPLETE reply through the splitter in one call: feed + finish + the strip rule (both halves strip when a reasoning span was consumed).
