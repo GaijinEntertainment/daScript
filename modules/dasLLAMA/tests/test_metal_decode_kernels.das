@@ -26,9 +26,6 @@ let KV_DIM = (N_HEADS / KV_MUL) * HS
 let QD = N_HEADS * HS
 let CHUNK = 64                          // the split-K chunk height the part kernels hardcode
 
-def private approx(x, y : float) : bool {
-    return abs(x - y) <= 2e-3 * max(1.0, max(abs(x), abs(y)))
-}
 
 // K/V hold f16-exact small values so the oracle sees the same numbers the kernel loads
 def private kv_at(j, d : int) : float => float((j * 7 + d * 3) % 9 - 4) * 0.25

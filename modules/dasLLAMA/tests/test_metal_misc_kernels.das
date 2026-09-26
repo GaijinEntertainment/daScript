@@ -823,19 +823,6 @@ def private gelu_form_delta(t : T?) {
 }
 
 //! The HX twin's compare: `bh` holds the RNE narrow of each value the same thread stored to `bf`, the sentinel past `live`.
-def private hx_narrow_mismatch(bh, bf; n, live : int; tag : string) : int {
-    var fgpu <- buf_download(bf, n, type<float>)
-    var wanth : array<float16>
-    wanth |> resize(n)
-    for (k in range(n)) {
-        wanth[k] = k < live ? float16(fgpu[k]) : float16(-1000.0)
-    }
-    let bad = buf_mismatch_exact(bh, wanth, tag)
-    delete fgpu
-    delete wanth
-    return bad
-}
-
 //! `weighted` off: a ones vector against the weightless CPU norm (gemma4uv's idiom); `hx`: MetalRmsNormHX, its f16 twin the RNE narrow of the f32 store.
 def private rms_gate(t : T?; dev, queue; dim, nrows : int; eps : float; weighted, hx : bool) {
     let tag = "rms{hx ? "_hx" : ""}{weighted ? "" : "_weightless"} dim={dim} nrows={nrows}"

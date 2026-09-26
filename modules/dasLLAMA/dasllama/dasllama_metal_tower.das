@@ -2703,17 +2703,20 @@ def private st2_slab_free(var base : auto(TT)) {
 //! The slab for `key` stands: its buffer is up under that key.
 def private st2_slab_current(base : St2SlabBase; key : uint64) : bool => base.buf != null && base.key == key
 
+//! The family's writer runs twice: over a probe slab with `w.measure` set to size the host copy, then over the resident.
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
-def private st2_slab_rebuild(var base : St2SlabBase; key : uint64; write : block<(var w : St2SlabWriter; measuring : bool) : void>; drop : function<void>) : bool {
-    invoke(drop)
+def private st2_slab_rebuild(var base : auto(SS); key : uint64; write : block<(var w : St2SlabWriter; var s : SS) : void>) : bool {
+    st2_slab_free(base)
     var inscope w = St2SlabWriter(measure = true)
-    invoke(write, w, true)
+    var probe : SS
+    invoke(write, w, probe)
+    st2_slab_free(probe)
     w.host |> reserve_resize(w.n)
     w.n = 0l
     w.measure = false
-    invoke(write, w, false)
+    invoke(write, w, base)
     if (!st2_slab_upload(base, w, key)) {
-        invoke(drop)
+        st2_slab_free(base)
         return false
     }
     return true
@@ -2753,9 +2756,6 @@ def private st2_dec_write(var w : St2SlabWriter; d : St2Decoder; var s : St2DecS
     s.window = st2_slab_raw(w, d.window.a, d.stft_bwd_re.k)
 }
 
-def private st2_dec_drop {
-    st2_slab_free(g_tw_st2_dec)
-}
 
 def private st2_lin_ok(l : TtsLinear) : bool {
     return l.nin >= 1l && l.nout >= 1l && (l.q8 ? !empty(l.wq) : (l.kq_fmt != 0 ? !empty(l.kq) : (!empty(l.w) || !empty(l.wt))))
@@ -2818,15 +2818,9 @@ def private st2_dec_attach(d : St2Decoder) : bool {
 
 [cold_path]
 def private st2_dec_rebuild(d : St2Decoder; key : uint64) : bool {
-    return st2_slab_rebuild(g_tw_st2_dec, key, $(var w; measuring) {
-        if (measuring) {
-            var probe : St2DecSlab
-            st2_dec_write(w, d, probe)
-            st2_slab_free(probe)
-        } else {
-            st2_dec_write(w, d, g_tw_st2_dec)
-        }
-    }, @@st2_dec_drop)
+    return st2_slab_rebuild(g_tw_st2_dec, key) $(var w; var s :St2DecSlab) {
+        st2_dec_write(w, d, s)
+    }
 }
 
 def private st2_pred_write(var w : St2SlabWriter; p : St2Predictor; var s : St2PredSlab) {
@@ -2850,9 +2844,6 @@ def private st2_pred_write(var w : St2SlabWriter; p : St2Predictor; var s : St2P
     s.n_proj = st2_slab_conv(w, p.n_proj)
 }
 
-def private st2_pred_drop {
-    st2_slab_free(g_tw_st2_pred)
-}
 
 def private st2_pred_attach(p : St2Predictor) : bool {
     let key = st2_pred_key(p)
@@ -2861,15 +2852,9 @@ def private st2_pred_attach(p : St2Predictor) : bool {
 
 [cold_path]
 def private st2_pred_rebuild(p : St2Predictor; key : uint64) : bool {
-    return st2_slab_rebuild(g_tw_st2_pred, key, $(var w; measuring) {
-        if (measuring) {
-            var probe : St2PredSlab
-            st2_pred_write(w, p, probe)
-            st2_slab_free(probe)
-        } else {
-            st2_pred_write(w, p, g_tw_st2_pred)
-        }
-    }, @@st2_pred_drop)
+    return st2_slab_rebuild(g_tw_st2_pred, key) $(var w; var s :St2PredSlab) {
+        st2_pred_write(w, p, s)
+    }
 }
 
 def private st2_albert_write(var w : St2SlabWriter; a : St2Albert; var s : St2AlbertSlab) {
@@ -2888,9 +2873,6 @@ def private st2_albert_write(var w : St2SlabWriter; a : St2Albert; var s : St2Al
     s.full_ln = st2_slab_norm_rows(w, a.full_ln, a.hidden)
 }
 
-def private st2_albert_drop {
-    st2_slab_free(g_tw_st2_albert)
-}
 
 def private st2_albert_attach(a : St2Albert) : bool {
     let key = st2_albert_key(a)
@@ -2899,15 +2881,9 @@ def private st2_albert_attach(a : St2Albert) : bool {
 
 [cold_path]
 def private st2_albert_rebuild(a : St2Albert; key : uint64) : bool {
-    return st2_slab_rebuild(g_tw_st2_albert, key, $(var w; measuring) {
-        if (measuring) {
-            var probe : St2AlbertSlab
-            st2_albert_write(w, a, probe)
-            st2_slab_free(probe)
-        } else {
-            st2_albert_write(w, a, g_tw_st2_albert)
-        }
-    }, @@st2_albert_drop)
+    return st2_slab_rebuild(g_tw_st2_albert, key) $(var w; var s :St2AlbertSlab) {
+        st2_albert_write(w, a, s)
+    }
 }
 
 def private st2_text_write(var w : St2SlabWriter; te : St2TextEncoder; var s : St2TextSlab) {
@@ -2923,9 +2899,6 @@ def private st2_text_write(var w : St2SlabWriter; te : St2TextEncoder; var s : S
     s.lstm = st2_slab_lstm(w, te.lstm)
 }
 
-def private st2_text_drop {
-    st2_slab_free(g_tw_st2_text)
-}
 
 def private st2_text_attach(te : St2TextEncoder) : bool {
     let key = st2_text_key(te)
@@ -2934,24 +2907,18 @@ def private st2_text_attach(te : St2TextEncoder) : bool {
 
 [cold_path]
 def private st2_text_rebuild(te : St2TextEncoder; key : uint64) : bool {
-    return st2_slab_rebuild(g_tw_st2_text, key, $(var w; measuring) {
-        if (measuring) {
-            var probe : St2TextSlab
-            st2_text_write(w, te, probe)
-            st2_slab_free(probe)
-        } else {
-            st2_text_write(w, te, g_tw_st2_text)
-        }
-    }, @@st2_text_drop)
+    return st2_slab_rebuild(g_tw_st2_text, key) $(var w; var s :St2TextSlab) {
+        st2_text_write(w, te, s)
+    }
 }
 
 def private st2_slab_drop {
-    st2_dec_drop()
-    st2_pred_drop()
-    st2_albert_drop()
-    st2_text_drop()
-    pk_codec_drop()
-    pk_frames_drop()
+    st2_slab_free(g_tw_st2_dec)
+    st2_slab_free(g_tw_st2_pred)
+    st2_slab_free(g_tw_st2_albert)
+    st2_slab_free(g_tw_st2_text)
+    st2_slab_free(g_tw_pk_codec)
+    st2_slab_free(g_tw_pk_frames)
     pk_voice_drop()
 }
 
@@ -4142,9 +4109,6 @@ def private pk_codec_write(var w : St2SlabWriter; mm : PocketMimi; var s : PkCod
     s.dec_out = st2_slab_conv(w, mm.dec_out)
 }
 
-def private pk_codec_drop {
-    st2_slab_free(g_tw_pk_codec)
-}
 
 //! A codec conv the gathering stamps serve: dense, a channel count on the 8-run lattice, a transposed conv's taps at least its stride (the padding the one-shot row count assumes).
 def private pk_conv_ok(c : TtsConv1d) : bool {
@@ -4194,20 +4158,14 @@ def private pk_codec_attach(mm : PocketMimi) : bool {
 [cold_path]
 def private pk_codec_rebuild(mm : PocketMimi; key : uint64) : bool {
     var bytes = 0l
-    let ok = st2_slab_rebuild(g_tw_pk_codec, key, $(var w; measuring) {
-        if (measuring) {
-            var probe : PkCodecSlab
-            pk_codec_write(w, mm, probe)
-            st2_slab_free(probe)
-        } else {
-            pk_codec_write(w, mm, g_tw_pk_codec)
-            bytes = long_length(w.host) * 4l
-        }
-    }, @@pk_codec_drop)
+    let ok = st2_slab_rebuild(g_tw_pk_codec, key) $(var w; var s :PkCodecSlab) {
+        pk_codec_write(w, mm, s)
+        bytes = long_length(w.host) * 4l
+    }
     return false if (!ok)
     pk_stage_rows(mm, PK_CODEC_MAX_FRAMES, g_tw_pk_sc.rows)
     if (!pk_rope_tables(mm.dec_tf, g_tw_pk_sc.rows[1], g_tw_pk_codec.bcos, g_tw_pk_codec.bsin)) {
-        pk_codec_drop()
+        st2_slab_free(g_tw_pk_codec)
         return false
     }
     to_log(LOG_INFO, "dasLLAMA metal tower: pocket codec slab {bytes} bytes\n")
@@ -4633,10 +4591,6 @@ def private pk_frames_key(m : PocketModel) : uint64 {
     return key
 }
 
-def private pk_frames_drop {
-    st2_slab_free(g_tw_pk_frames)
-}
-
 def private pk_voice_drop {
     st2_slab_free(g_tw_pk_voice)
     g_tw_pk_voice.cap = 0l
@@ -4681,26 +4635,22 @@ def private pk_frames_rebuild(m : PocketModel; key : uint64) : bool {
     var inscope qb = PkBlobWriter(measure = true)
     var qbytes = 0l
     var bytes = 0l
-    let ok = st2_slab_rebuild(g_tw_pk_frames, key, $(var w; measuring) {
-        if (measuring) {
-            var probe : PkFramesSlab
-            pk_frames_write(w, qb, m, probe)
-            st2_slab_free(probe)
-        } else {
+    let ok = st2_slab_rebuild(g_tw_pk_frames, key) $(var w; var s :PkFramesSlab) {
+        if (!w.measure) {
             qbytes = max(qb.n, 16l)
             qb.host |> reserve_resize(qbytes)
             qb.n = 0l
             qb.measure = false
-            pk_frames_write(w, qb, m, g_tw_pk_frames)
-            bytes = long_length(w.host) * 4l
         }
-    }, @@pk_frames_drop)
+        pk_frames_write(w, qb, m, s)
+        bytes = long_length(w.host) * 4l
+    }
     if (!ok || qbytes == 0l) {
         return ok
     }
     g_tw_pk_frames.blob = metal_new_buffer_untracked(g_dev, uint64(qbytes))
     if (g_tw_pk_frames.blob == null) {
-        pk_frames_drop()
+        st2_slab_free(g_tw_pk_frames)
         return false
     }
     unsafe {

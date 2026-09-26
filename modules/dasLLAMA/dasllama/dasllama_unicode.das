@@ -202,7 +202,9 @@ def cpt_is_mark(cpt : int) : bool {
 //! True if codepoint is whitespace (regex \s), per the upstream whitespace set.
 def cpt_is_whitespace(cpt : int) : bool => find_index(WS, cpt) >= 0
 
-//! The codepoints a string holds - `length()` on a string is BYTES, and an em dash costs three of them.
+//! The codepoints a string holds - `length()` on a string is BYTES, and an em dash costs three of them; a stray
+//! continuation byte counts one, as `utf8_to_cpts` decodes it, so an index into the codepoints agrees with the
+//! count (`utf8_length` skips it).
 def cpt_count(s : string) : int {
     var inscope c <- utf8_to_cpts(s)
     return length(c)

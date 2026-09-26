@@ -13,7 +13,6 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require strings
-require math
 require _tts_parity
 require _model_tier
 
@@ -42,15 +41,6 @@ def private kokoro_ids_of(ps : string) : array<int> {
 }
 
 //! the speech-sanity read of one synthesis: every sample finite (asserted), the peak returned for the cell's own bar
-def private speech_peak(t : T?; audio : TtsAudio) : float {
-    var finite = true
-    for (v in audio.pcm) {
-        finite = finite && abs(v) < 10.0   // a NaN fails the comparison too
-    }
-    t |> success(finite, "every sample finite")
-    return logits_maxabs(audio.pcm)
-}
-
 // The samples the model speaks for one phoneme string in one voice - the facade's chunk path with
 // its dialect pick taken out, so a synthesis can be held against the string it should have read.
 // Noise never moves the length, so the seed here need not be the facade's.

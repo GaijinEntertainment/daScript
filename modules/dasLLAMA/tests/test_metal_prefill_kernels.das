@@ -137,18 +137,7 @@ def private qk_rope_gate(t : T?; dev, queue; hx, donorm, neox, partial : bool) {
     if (ran) {
         t |> equal(buf_mismatch_approx(bx, want, tag), 0)
         if (hx) {
-            var badh = 0
-            unsafe {
-                let pf = reinterpret<float const?>(metal_buffer_contents(bx))
-                let ph = reinterpret<uint16 const?>(metal_buffer_contents(bxh))
-                for (k in range(nrows * rstride)) {
-                    let wantbits = uint(reinterpret<uint16>(float16(pf[k])))
-                    if (uint(ph[k]) != wantbits) {
-                        badh++
-                    }
-                }
-            }
-            t |> equal(badh, 0, "{tag}: f16 twin bit-equals float16(panel)")
+            t |> equal(hx_narrow_mismatch(bxh, bx, nrows * rstride, nrows * rstride, "{tag} f16 twin"), 0, "{tag}: f16 twin bit-equals float16(panel)")
         }
     }
     metal_release(bx)

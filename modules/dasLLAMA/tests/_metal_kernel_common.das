@@ -94,6 +94,20 @@ def buf_mismatch_env_h(buf; want, env : array<float>; rel : float; tag : string)
 
 def buf_mismatch_env(buf; want, env : array<float>; rel : float; tag : string) : int => buf_mismatch_env_as(buf, type<float>, want, env, rel, tag)
 
+//! The f16 twin `bh` of the float panel `bf` over `n` elements: bit-equal to `float16(panel)` over the `live` prefix, the -1000 sentinel past it.
+def hx_narrow_mismatch(bh, bf; n, live : int; tag : string) : int {
+    var fgpu <- buf_download(bf, n, type<float>)
+    var wanth : array<float16>
+    wanth |> resize(n)
+    for (k in range(n)) {
+        wanth[k] = k < live ? float16(fgpu[k]) : float16(-1000.0)
+    }
+    let bad = buf_mismatch_exact(bh, wanth, tag)
+    delete fgpu
+    delete wanth
+    return bad
+}
+
 def buf_mismatch_exact(buf; want : array<auto(TT)>; tag : string) : int {
     let p = unsafe(reinterpret<TT -const const?>(metal_buffer_contents(buf)))
     var bad = 0

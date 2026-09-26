@@ -12,7 +12,6 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
 require daslib/fio
-require math
 require _tts_corpus
 require _tts_parity
 require _model_tier
@@ -89,12 +88,7 @@ def private facade_smoke(t : T?; size : string) {
         t |> equal(audio.sample_rate, 24000)
         // 51 characters of text: well over a second of speech, under ten
         t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
-        var finite = true
-        for (v in audio.pcm) {
-            finite = finite && abs(v) < 10.0   // a NaN fails the comparison too
-        }
-        let peak = logits_maxabs(audio.pcm)
-        t |> success(finite, "every sample finite")
+        let peak = speech_peak(t, audio)
         t |> success(peak > 0.05, "peak {peak}: the model spoke")
         let tm & = audio.timings
         let gen_on_tower = tm.generator_us == 0l && tm.source_us == 0l && styletts2_gpu_stats("decode").served > served0

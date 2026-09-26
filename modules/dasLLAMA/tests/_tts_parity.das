@@ -616,6 +616,16 @@ def private stage_checks(t : T?; tag : string; tr : StyleTts2Trace?; dump : tabl
     stage_diff(t, tag, "gen_in", tr.gen_in, dump)
 }
 
+//! Every sample finite (a NaN fails the compare too), and the waveform's peak.
+def speech_peak(t : T?; audio : TtsAudio) : float {
+    var finite = true
+    for (v in audio.pcm) {
+        finite = finite && abs(v) < 10.0
+    }
+    t |> success(finite, "every sample finite")
+    return logits_maxabs(audio.pcm)
+}
+
 //! Run one family's rig, or skip loudly when its model or dumps are not stocked.
 [cold_path]
 def tts_parity(t : T?; rig : TtsParityRig) {
