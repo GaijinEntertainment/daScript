@@ -2818,7 +2818,7 @@ def private st2_dec_attach(d : St2Decoder) : bool {
 
 [cold_path]
 def private st2_dec_rebuild(d : St2Decoder; key : uint64) : bool {
-    return st2_slab_rebuild(g_tw_st2_dec, key) $(var w; var s :St2DecSlab) {
+    return st2_slab_rebuild(g_tw_st2_dec, key) $(var w; var s : St2DecSlab) {
         st2_dec_write(w, d, s)
     }
 }
@@ -2852,7 +2852,7 @@ def private st2_pred_attach(p : St2Predictor) : bool {
 
 [cold_path]
 def private st2_pred_rebuild(p : St2Predictor; key : uint64) : bool {
-    return st2_slab_rebuild(g_tw_st2_pred, key) $(var w; var s :St2PredSlab) {
+    return st2_slab_rebuild(g_tw_st2_pred, key) $(var w; var s : St2PredSlab) {
         st2_pred_write(w, p, s)
     }
 }
@@ -2881,7 +2881,7 @@ def private st2_albert_attach(a : St2Albert) : bool {
 
 [cold_path]
 def private st2_albert_rebuild(a : St2Albert; key : uint64) : bool {
-    return st2_slab_rebuild(g_tw_st2_albert, key) $(var w; var s :St2AlbertSlab) {
+    return st2_slab_rebuild(g_tw_st2_albert, key) $(var w; var s : St2AlbertSlab) {
         st2_albert_write(w, a, s)
     }
 }
@@ -2907,7 +2907,7 @@ def private st2_text_attach(te : St2TextEncoder) : bool {
 
 [cold_path]
 def private st2_text_rebuild(te : St2TextEncoder; key : uint64) : bool {
-    return st2_slab_rebuild(g_tw_st2_text, key) $(var w; var s :St2TextSlab) {
+    return st2_slab_rebuild(g_tw_st2_text, key) $(var w; var s : St2TextSlab) {
         st2_text_write(w, te, s)
     }
 }
@@ -4158,7 +4158,7 @@ def private pk_codec_attach(mm : PocketMimi) : bool {
 [cold_path]
 def private pk_codec_rebuild(mm : PocketMimi; key : uint64) : bool {
     var bytes = 0l
-    let ok = st2_slab_rebuild(g_tw_pk_codec, key) $(var w; var s :PkCodecSlab) {
+    let ok = st2_slab_rebuild(g_tw_pk_codec, key) $(var w; var s : PkCodecSlab) {
         pk_codec_write(w, mm, s)
         bytes = long_length(w.host) * 4l
     }
@@ -4635,7 +4635,7 @@ def private pk_frames_rebuild(m : PocketModel; key : uint64) : bool {
     var inscope qb = PkBlobWriter(measure = true)
     var qbytes = 0l
     var bytes = 0l
-    let ok = st2_slab_rebuild(g_tw_pk_frames, key) $(var w; var s :PkFramesSlab) {
+    let ok = st2_slab_rebuild(g_tw_pk_frames, key) $(var w; var s : PkFramesSlab) {
         if (!w.measure) {
             qbytes = max(qb.n, 16l)
             qb.host |> reserve_resize(qbytes)
