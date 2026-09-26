@@ -55,3 +55,6 @@ def with_auto_inline_visibility_root(blk : block<(root : string) : void>) {
     let root = auto_inline_visibility_root()
     invoke(blk, root)
 }
+
+[inline]
+def scoped_transitive_dependency() : int => auto_inline_visibility_leaf()

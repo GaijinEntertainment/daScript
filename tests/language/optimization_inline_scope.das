@@ -65,6 +65,11 @@ def target_inside_with(a, b : int) : int {
     return r
 }
 
+[export]
+def target_transitive_dependency() : int {
+    return scoped_transitive_dependency()
+}
+
 [test]
 def test_scope_wrapped_inline_fired(t : T?) {
     ast_gc_guard() {
@@ -81,6 +86,11 @@ def test_scope_wrapped_inline_fired(t : T?) {
             let b = body_of(t, "target_inside_with")
             t |> success(!has(b, "scoped_add("), "call is gone: {b}")
         }
+        t |> run("[inline] callee keeps its dependency scope") @(t : T?) {
+            let b = body_of(t, "target_transitive_dependency")
+            t |> success(!has(b, "scoped_transitive_dependency("),
+                "call is gone: {b}")
+        }
     }
 }
 
@@ -91,6 +101,7 @@ def test_scope_wrapped_inline_behavior(t : T?) {
         t |> equal(target_scoped_pick(5), 5 + 7)
         t |> equal(target_scoped_pick(-5), -(5 + 7))
         t |> equal(target_inside_with(3, 4), (3 + 7) + (4 + 7))
+        t |> equal(target_transitive_dependency(), 42)
     }
     t |> run("mirror rule: caller global wins over callee module's same-named global") @(t : T?) {
         // caller g_shared = 555 substitutes outside the wrap; body's own g_shared

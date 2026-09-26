@@ -228,14 +228,16 @@ namespace das {
             Module * mod;
             Module * dest;
             bool underscoreExempt;  // callee lives in the program module: its _:: already bound here
+            void scopeNeed ( const string & name ) {
+                if ( verdict.scope.empty() ) verdict.scope = name;
+            }
             void noteModuleUse ( const string & name, Module * owner ) {
                 if ( owner && owner!=mod && dest
                     && !dest->isVisibleDirectly(owner) ) {
                     verdict.invisibleSymbol = name;
                     verdict.invisibleModule = owner->name;
-                    return;
                 }
-                if ( verdict.scope.empty() ) verdict.scope = name;
+                scopeNeed(name);
             }
             void checkName ( const string & name, bool generatedNode, Function * fn ) {
                 if ( !verdict.hard.empty() || underscoreExempt ) return;
@@ -272,15 +274,16 @@ namespace das {
                     // a foreign instance re-resolves only through the origin-generic
                     // fallback, which needs the origin module visible - hence the wrapper
                     if ( fn->module!=dest ) {
-                        noteModuleUse(origin->name, origin->module);
+                        scopeNeed(origin->name);
                     }
                 }
                 if ( fn->privateFunction || origin->privateFunction ) {
                     if ( fn->module!=dest && origin->module!=dest ) {
-                        noteModuleUse(origin->name, origin->module);
+                        scopeNeed(origin->name);
                     }
                 }
-                if ( dest && origin->module && !dest->isVisibleDirectly(origin->module) ) {
+                if ( !fn->fromGeneric && dest && origin->module
+                    && !dest->isVisibleDirectly(origin->module) ) {
                     noteModuleUse(origin->name, origin->module);
                 }
             }
@@ -311,13 +314,11 @@ namespace das {
                 checkName(expr->name, expr->generated, nullptr);
                 if ( expr->variable->private_variable ) {
                     if ( expr->variable->module!=dest ) {
-                        noteModuleUse(expr->variable->name,
-                            expr->variable->module);
+                        scopeNeed(expr->variable->name);
                     }
                 } else if ( dest && expr->isGlobalVariable() && expr->variable->module
                     && !dest->isVisibleDirectly(expr->variable->module) ) {
-                    noteModuleUse(expr->variable->name,
-                        expr->variable->module);
+                    scopeNeed(expr->variable->name);
                 }
             }
         };
@@ -2089,7 +2090,9 @@ namespace das {
                         siteFail(site, "can't inline " + subj.name + " across modules: " + verdict.hardWhy, callLike->at);
                         return false;
                     }
-                    if ( !verdict.invisibleSymbol.empty() ) {
+                    if ( site.kind==SiteKind::AutoCall
+                        && siteWith != originModule->name
+                        && !verdict.invisibleSymbol.empty() ) {
                         siteFail(site, "can't inline " + subj.name
                             + " across modules: body references '"
                             + verdict.invisibleSymbol + "' from module "

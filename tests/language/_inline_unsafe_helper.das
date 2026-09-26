@@ -67,3 +67,5 @@ def auto_inline_visibility_root() : string {
     }
     return root
 }
+
+def auto_inline_visibility_leaf() : int => 42
