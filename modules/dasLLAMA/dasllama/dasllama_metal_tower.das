@@ -1849,7 +1849,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
 // one command buffer, s.x readback. BEST-EFFORT inside the tower knob: any decline is a
 // silent false (no counter noise — the CPU conv serves and the blocks still ride the GPU).
 [hot_path]
-def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {
     if (!g_tw_env_tower || t.q8) {
         return false
     }
