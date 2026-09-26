@@ -4846,14 +4846,18 @@ class MetalRmsNormHX : MetalRmsNormT {
 [ |> template_struct_instance]
 class template MetalLayerNormT : MetalTgReduceBase {
     @template_constant ADD : bool = false
-
-    def abstract ln_dim : uint
-    def abstract ln_eps : float
+    @ssbo @binding = 0 x : array<float>     //!< [nrows x dim] source; the ADD stamp sums a into it in place
+    @ssbo @binding = 1 @role = "weight" @off = "woff" w : array<float>     //!< [dim]
+    @ssbo @binding = 2 @role = "weight" @off = "boff" b : array<float>     //!< [dim]
+    @ssbo @binding = 3 @role = "write" @off = "yoff" y : array<float>     //!< [nrows x dim] out (x aliasing safe, see header)
+    @uniform @binding = 4 dim : uint
+    @uniform @binding = 5 eps : float
+    @ssbo @binding = 6 @role = "read" @template_gate = ADD a : array<float>   //!< [nrows x dim] the rows joined into x
 
     def ln_body {
         let row = gl_WorkGroupID.x
         let lid = gl_LocalInvocationID.x
-        let n = ln_dim()
+        let n = dim
         let base = row * n
         var ss = 0.0
         var k = lid
@@ -4877,7 +4881,7 @@ class template MetalLayerNormT : MetalTgReduceBase {
             k += gl_WorkGroupSize.x
         }
         barrier()
-        let inv = tg_rms_inv(vs, n, ln_eps())
+        let inv = tg_rms_inv(vs, n, eps)
         k = lid
         while (k < n) {
             y[base + k] = (x[base + k] - mean) * inv * w[k] + b[k]
@@ -4888,16 +4892,6 @@ class template MetalLayerNormT : MetalTgReduceBase {
 
 [metal_dispatch(name = "enc_ln", pso = "g_pso_ln", tgmem = "metal_layernorm_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
 class MetalLayerNorm : MetalLayerNormT {
-    @ssbo @binding = 0 x : array<float>     // [nrows x dim] source
-    @ssbo @binding = 1 @role = "weight" @off = "woff" w : array<float>     // [dim]
-    @ssbo @binding = 2 @role = "weight" @off = "boff" b : array<float>     // [dim]
-    @ssbo @binding = 3 y : array<float>     // [nrows x dim] out (x aliasing safe, see header)
-    @uniform @binding = 4 dim : uint
-    @uniform @binding = 5 eps : float
-
-    def override ln_dim : uint => dim
-    def override ln_eps : float => eps
-
     [metal_kernel(name="metal_layernorm_msl")]
     def metal_layernorm {
         ln_body()
@@ -5915,7 +5909,7 @@ class template MetalKqMulMmK45T : MetalMmTileBase {
                     } else {
                     static_if (IQ2XS) {
                         // iq2xs: the iq2s strip/scale reads; each u16 qs word = 9-bit grid
-                        // index + 7-bit ksigns index whose sign byte ksign7m recomputes
+                        // index + 7-bit ksigns index whose sign byte ksign7 recomputes
                         let sv = ks4[blk]
                         let si2 = js * 2u + il0
                         let scw = si2 < 8u ? (si2 < 4u ? sv.x : sv.y) : (si2 < 12u ? sv.z : sv.w)
@@ -8419,7 +8413,7 @@ class MetalMoeGemvIq2s : MetalKqGemvIq2sT {
 }
 
 // IQ2_XS: the iq2s GEMV geometry over the parity-signed u16 words - one u32 = two u16 qs
-// words, the 9-bit index doubles into the grid pair, and ksign7m recomputes the sign byte
+// words, the 9-bit index doubles into the grid pair, and ksign7 recomputes the sign byte
 // (no sign plane, no qh); per-16 UNSIGNED strips, d eighth-ed.
 [ |> template_struct_instance]
 class template MetalKqGemvIq2xsT : MetalGemvSiteT {
@@ -8875,7 +8869,7 @@ class MetalKqMvB8Iq2s : MetalKqMvB8ShellT {
 }
 
 // The iq2xs B2/B4 pair: the iq2s shell with the parity-signed u16 walk - lane tx owns block
-// tx; two u32 qs words per block, ksign7m per u16; per-16 UNSIGNED strips as dl0/dl1.
+// tx; two u32 qs words per block, ksign7 per u16; per-16 UNSIGNED strips as dl0/dl1.
 [ |> template_struct_instance]
 class template MetalKqMvIq2xsT : MetalKqMvShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16
@@ -8965,7 +8959,7 @@ class MetalKqMvB8Iq2xs : MetalKqMvB8ShellT {
 }
 
 // The iq2xxs B2/B4 pair: the iq2xs shell over the aux32 walk - lane tx owns block tx; the
-// block's grid word supplies four byte indices, ksign7m per index; ONE per-32 strip as dl.
+// block's grid word supplies four byte indices, ksign7 per index; ONE per-32 strip as dl.
 [ |> template_struct_instance]
 class template MetalKqMvIq2xxsT : MetalKqMvShellT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d8 plane - the scale buffer bound at byte nsb*16
@@ -11128,9 +11122,8 @@ class MetalPkAttn {
     @workgroup sc : float[2048]   // == PK_ATTN_MAX_KEYS
     @workgroup po : float[512]
     @workgroup red : float[8]
-    @workgroup lsum : float
 
-    //! the scaled scores of keys j0.. into the stage, and their softmax weights; lsum their sum
+    //! the scaled scores of keys j0.. into the stage, then their normalized softmax weights
     def pk_attn_scores(h, j0, nk, lid : uint) {
         var m = -1.0e30
         var j = lid
@@ -11155,11 +11148,14 @@ class MetalPkAttn {
             l += pw
             j += 256u
         }
-        barrier()   // also fences the exp pass's sc[] for the V loop
-        let tot = tg_sum_all(l, red)
-        if (lid == 0u) {
-            lsum = tot
+        barrier()
+        let inv = 1.0 / tg_sum_all(l, red)
+        j = lid
+        while (j < nk) {
+            sc[j] *= inv
+            j += 256u
         }
+        barrier()   // fences the weights for the V loop
     }
 
     [metal_kernel(name="metal_pk_attn_msl")]
@@ -11196,7 +11192,7 @@ class MetalPkAttn {
                 tot += po[pp * 64u + lid]
                 pp++
             }
-            o[i * ka.d + h * 64u + lid] = tot / lsum
+            o[i * ka.d + h * 64u + lid] = tot
         }
     }
 }
@@ -11204,23 +11200,9 @@ class MetalPkAttn {
 //! Rows [nrows x dim]: x += a in place, then y = LayerNorm(x) * w + b at `yoff` - a layer's residual join
 //! and the norm after it as one dispatch (a is read out before y is written, so y may alias it): the
 //! ADD stamp of the LayerNorm body.
-struct PkAddLnArgs {
-    dim : uint
-    eps : float
-}
-
 [metal_dispatch(name = "enc_pk_add_ln", pso = "g_pso_pk_add_ln", tgmem = "metal_pk_add_ln_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
 class MetalPkAddLn : MetalLayerNormT {
     override ADD = true
-    @ssbo @binding = 0 @role = "readwrite" x : array<float>
-    @ssbo @binding = 1 @role = "read" a : array<float>
-    @ssbo @binding = 2 @role = "weight" @off = "woff" w : array<float>
-    @ssbo @binding = 3 @role = "weight" @off = "boff" b : array<float>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
-    @uniform @binding = 5 ka : PkAddLnArgs
-
-    def override ln_dim : uint => ka.dim
-    def override ln_eps : float => ka.eps
 
     [metal_kernel(name="metal_pk_add_ln_msl")]
     def metal_pk_add_ln {

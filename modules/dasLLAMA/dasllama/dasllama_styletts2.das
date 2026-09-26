@@ -951,9 +951,9 @@ def styletts2_albert(a : St2Albert; ids : array<int>; @scratch @exact_size var o
         panic("dasLLAMA styletts2: {t} tokens exceed the encoder's {a.max_pos} positions; styletts2_synthesize truncates before it gets here")
     }
     if (g_st2_drv.albert != null && !sc.cpu_only) {
-        st2_seat_call("albert")
+        st2_seat_call(ST2_SEAT_ALBERT)
         if (invoke(g_st2_drv.albert, a, ids, out, sc)) {
-            st2_seat_served("albert")
+            st2_seat_served(ST2_SEAT_ALBERT)
             return
         }
     }
@@ -990,9 +990,9 @@ def styletts2_albert(a : St2Albert; ids : array<int>; @scratch @exact_size var o
 //! The text encoder: embedding, conv + channel LayerNorm + LeakyReLU stack, BiLSTM; out [C][T].
 def styletts2_text_encoder(te : St2TextEncoder; ids : array<int>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) {
     if (g_st2_drv.text != null && !sc.cpu_only) {
-        st2_seat_call("text")
+        st2_seat_call(ST2_SEAT_TEXT)
         if (invoke(g_st2_drv.text, te, ids, out, sc)) {
-            st2_seat_served("text")
+            st2_seat_served(ST2_SEAT_TEXT)
             return
         }
     }
@@ -1042,9 +1042,9 @@ def private append_style_rows(x : array<float>; t, c : int64; s : array<float>; 
 //! rows stay in `sc.d_en` for the trace rail.
 def styletts2_duration_encoder(p : St2Predictor; bert : array<float>; t : int64; s : array<float>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) {
     if (g_st2_drv.dur_enc != null && !sc.cpu_only) {
-        st2_seat_call("dur_enc")
+        st2_seat_call(ST2_SEAT_DUR_ENC)
         if (invoke(g_st2_drv.dur_enc, p, bert, t, s, out, sc)) {
-            st2_seat_served("dur_enc")
+            st2_seat_served(ST2_SEAT_DUR_ENC)
             return
         }
     }
@@ -1068,10 +1068,10 @@ def styletts2_duration_encoder(p : St2Predictor; bert : array<float>; t : int64;
 def styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : float; @scratch @exact_size var dur : array<int>; @scratch @exact_size var raw : array<float>; var sc : St2Scratch) : int64 {
     var served = false
     if (g_st2_drv.durations != null && !sc.cpu_only) {
-        st2_seat_call("durations")
+        st2_seat_call(ST2_SEAT_DURATIONS)
         served = invoke(g_st2_drv.durations, p, d, t, speed, raw, sc)
         if (served) {
-            st2_seat_served("durations")
+            st2_seat_served(ST2_SEAT_DURATIONS)
         }
     }
     if (!served) {
@@ -1180,10 +1180,10 @@ def private prosody_branch(blocks : array<St2AdainResBlk>; proj : TtsConv1d; x :
 def styletts2_prosody(p : St2Predictor; en : array<float>; c, frames : int64; s : array<float>;
                       @scratch @exact_size var f0 : array<float>; @scratch @exact_size var n : array<float>; var sc : St2Scratch) : int64 {
     if (g_st2_drv.prosody != null && !sc.cpu_only) {
-        st2_seat_call("prosody")
+        st2_seat_call(ST2_SEAT_PROSODY)
         var f2g = 0l
         if (invoke(g_st2_drv.prosody, p, en, c, frames, s, f0, n, f2g, sc)) {
-            st2_seat_served("prosody")
+            st2_seat_served(ST2_SEAT_PROSODY)
             return f2g
         }
     }
@@ -1437,6 +1437,13 @@ var private g_st2_drv : St2GpuDriver
 var private g_st2_drv_prev : St2GpuDriver   //! the registration a caller's seat displaced
 
 var private g_st2_seats <- tts_seats(["albert", "text", "dur_enc", "durations", "prosody", "decode", "generator"])
+let private ST2_SEAT_ALBERT = 0   //!< the seats' indices in the record's order
+let private ST2_SEAT_TEXT = 1
+let private ST2_SEAT_DUR_ENC = 2
+let private ST2_SEAT_DURATIONS = 3
+let private ST2_SEAT_PROSODY = 4
+let private ST2_SEAT_DECODE = 5
+let private ST2_SEAT_GENERATOR = 6
 
 [arch(at = "../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_styletts2_gpu(drv : St2GpuDriver) {
@@ -1450,12 +1457,12 @@ def unregister_styletts2_gpu {
     g_st2_drv_prev = St2GpuDriver()
 }
 
-def private st2_seat_call(stage : string) {
-    tts_seat_call(g_st2_seats, tts_seat_index(g_st2_seats, stage, "styletts2"))
+def private st2_seat_call(seat : int) {
+    tts_seat_call(g_st2_seats, seat)
 }
 
-def private st2_seat_served(stage : string) {
-    tts_seat_served(g_st2_seats, tts_seat_index(g_st2_seats, stage, "styletts2"))
+def private st2_seat_served(seat : int) {
+    tts_seat_served(g_st2_seats, seat)
 }
 
 //! Hook invocations and the ones that served, since the process started, per stage (a seat name of the record).
@@ -1478,9 +1485,9 @@ def styletts2_generator_rows(d : St2Decoder; var x : array<float>; c, t : int64;
     var a & = unsafe(sc.gen_a)
     var b & = unsafe(sc.gen_b)
     if (g_st2_drv.gen != null && tr == null && !sc.cpu_only) {
-        st2_seat_call("generator")
+        st2_seat_call(ST2_SEAT_GENERATOR)
         if (invoke(g_st2_drv.gen, d, x, c, t, s, har_spec, har_frames, wave, sc)) {
-            st2_seat_served("generator")
+            st2_seat_served(ST2_SEAT_GENERATOR)
             return long_length(wave)
         }
     }
@@ -1621,10 +1628,10 @@ def styletts2_decode(d : St2Decoder; text_c : int64; source : SineSourceCfg; asr
     var clock = ref_time_ticks()
     if (g_st2_drv.decode != null && tr == null && !sc.cpu_only) {
         //! A served decode is one command buffer: the decoder clock carries it, the source and generator clocks read zero.
-        st2_seat_call("decode")
+        st2_seat_call(ST2_SEAT_DECODE)
         styletts2_draw_noise(source, seed, noise)
         if (invoke(g_st2_drv.decode, d, text_c, source, asr, frames, f0, nrg, f2, s_ref, noise, seed, sc.wave, sc)) {
-            st2_seat_served("decode")
+            st2_seat_served(ST2_SEAT_DECODE)
             tm.decoder_us = int64(get_time_usec(clock))
             tm.source_us = 0l
             tm.generator_us = 0l

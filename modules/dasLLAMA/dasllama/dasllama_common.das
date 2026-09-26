@@ -3988,7 +3988,7 @@ def embed_row(t : Model; token : int64; var dst : float?) {
             kq_plane_row_f32(fmt, t.embq, t.embs, dim, t.config.vocab_size, t.kq_repacked, token, row, 0l)
         } else {
             let i = kq_slot("embed_row", fmt)
-            kq_plane_row_f32(fmt, t.kq[i].q, t.kq[i].s, dim, t.config.vocab_size, t.kq_repacked, token, row, 0l, t.wcls_off / 256l, t.metal_blob)
+            kq_plane_row_f32(fmt, t.kq[i].q, t.kq[i].s, dim, t.config.vocab_size, t.kq_repacked, token, row, 0l, t.wcls_off / kq_elems(fmt), t.metal_blob)
         }
     } else {
         copy_floats(dst, unsafe(addr(t.fblob[t.tok_emb_off + token * dim])), dim)

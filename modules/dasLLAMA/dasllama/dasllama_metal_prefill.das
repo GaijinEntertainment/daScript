@@ -15,7 +15,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_gpu_math
-require dasllama/dasllama_metal_kernels  // the shared kq decode helpers (grid tables, ksign7m) for the tensor twins
+require dasllama/dasllama_metal_kernels  // the shared kq decode helpers (grid tables, ksign7) for the tensor twins
 require dasllama/dasllama_metal_lens
 require dasllama/dasllama_load   // register_devw_kq_mirror: the image bake's CPU twin of the split-scale dequant passes
 
@@ -31,7 +31,7 @@ require dasllama/dasllama_load   // register_devw_kq_mirror: the image bake's CP
 //                         (rowstat mints rowmax + 1/sum; AV applies exp at P staging)
 //   metal_swiglu        ~ swiglu                   (g = g/(1+exp(-g)) * u)
 //   metal_add           ~ add_inplace
-// Reductions ride simd_sum / a max butterfly over simd_shuffle_xor with hardcoded masks 16..1 —
+// Reductions ride simd_sum / simd_max and the kernel home's threadgroup folds (tg_sum_all / tg_max_all) —
 // Apple-GPU simdgroups are width 32 (asserted at driver init). Kernels with barriers/simd ops are
 // NOT sequentially CPU-replayable; their oracles are the dasLLAMA CPU functions themselves
 // (modules/dasLLAMA/tests/test_metal_prefill_kernels.das).
@@ -2520,8 +2520,8 @@ class MetalMoeMulMmMx4 : MetalMoeMulMmBase {
 [metal_dispatch(name = "enc_rope", pso = "g_pf_pso_rope", tg = 64, grid = "npairs/64", params = "npairs : int64")]
 class MetalRope {
     @ssbo @binding = 0 @role = "readwrite" @off = "voff" v : array<float>     //!< [ntok x stride] roped in place over n columns from voff
-    @ssbo @binding = 1 @role = "weight" @off = "toff" tcos : array<float>  //!< [ntok x head_size/2], bound at the first position's row
-    @ssbo @binding = 2 @role = "weight" @off = "toff" tsin : array<float>
+    @ssbo @binding = 1 @role = "weight" tcos : array<float>  //!< [ntok x head_size/2], written once at attach
+    @ssbo @binding = 2 @role = "weight" tsin : array<float>
     @uniform @binding = 3 n : uint          //!< roped width (qd or kv_dim), % head_size
     @uniform @binding = 4 head_size : uint
     @uniform @binding = 5 npairs : uint     //!< ntok * n/2 — grid guard
@@ -6544,9 +6544,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     //! sliding layers rope with the swa row pair, whose rows are the class's own hs/2 wide
                     var bcos_l = lsl && dual_rope ? bcos_swa : bcos
                     var bsin_l = lsl && dual_rope ? bsin_swa : bsin
-                    enc_rope(enc, bq, 0ul, bcos_l, 0ul, bsin_l, u_qd_l, u_hs_l, u_npairs_q_l, u_neox, u_rot, null, npos * qd_l / 2l)
+                    enc_rope(enc, bq, 0ul, bcos_l, bsin_l, u_qd_l, u_hs_l, u_npairs_q_l, u_neox, u_rot, null, npos * qd_l / 2l)
                     if (!kvsh) {
-                        enc_rope(enc, bks[l], koff, bcos_l, 0ul, bsin_l, u_kvd_l, u_hs_l, u_npairs_k_l, u_neox, u_rot, null, npos * kvd_l / 2l)
+                        enc_rope(enc, bks[l], koff, bcos_l, bsin_l, u_kvd_l, u_hs_l, u_npairs_k_l, u_neox, u_rot, null, npos * kvd_l / 2l)
                     }
                 }
                 if (!recr && g_pf_skip != "attn" && g_pf_skip != "nongemm") {

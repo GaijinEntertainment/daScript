@@ -77,7 +77,8 @@ columns, `r0` where it runs along rows. The shader compiler vectorizes the decod
 where it can prove the coordinate's alignment, and an unproven start runs the same loop at half
 the rate (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
 
-**A per-loop hint on a kernel loop in `dasllama/dasllama_vulkan_classes.das` carries a name
+**A per-loop hint on a kernel loop - in `dasllama/dasllama_vulkan_classes.das` or a helper a
+kernel body reaches (`dasllama/dasllama_gpu_math.das`) - carries a name
 `append_loop_hint_operand` (`modules/dasLLVM/daslib/llvm_jit.das`) knows.** A kernel body compiles
 for the CPU oracle too, and the JIT fails a hint name it does not know.
 
@@ -233,7 +234,8 @@ form that leaves its list installed sends every later one-row profile to another
 returned before it submits any command that writes the buffer that copy reads.** The host's wait
 is the only order between the copy's read and that write.
 
-**An integer division or modulo in a kernel body in `dasllama/dasllama_vulkan_classes.das` whose
+**An integer division or modulo in a kernel body - in `dasllama/dasllama_vulkan_classes.das` or a
+helper a kernel body reaches (`dasllama/dasllama_gpu_math.das`) - whose
 divisor is not a literal or a template constant - a push-constant field, bare or computed from -
 either clamps the divisor to at least one (`max(1u, ...)`) before it divides, or sits inside an
 `if` whose condition tests the divisor expression as the division reads it and is false when

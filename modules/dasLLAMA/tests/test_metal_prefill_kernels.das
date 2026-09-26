@@ -2160,19 +2160,21 @@ def private pk_add_ln_gate(t : T?; dev, queue; dim : int) {
     for (i in range(yoff + dim)) {
         want_y[i] = i < yoff ? -7.0 : yn[i - yoff]
     }
-    let ka = PkAddLnArgs(dim = uint(dim), eps = eps)
     var bw = buf_upload(dev, w)
     var bbb = buf_upload(dev, bb)
+    var bdim = buf_u32(dev, uint(dim))
+    var beps = buf_f32(dev, eps)
     let run <- @(bxx : MetalBuffer?; baa : MetalBuffer?; byy : MetalBuffer?) : bool {
         var err2 : string
         let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
             metal_set_pipeline(enc, pso)
             metal_set_buffer(enc, bxx, 0ul, 0)
-            metal_set_buffer(enc, baa, 0ul, 1)
-            metal_set_buffer(enc, bw, 0ul, 2)
-            metal_set_buffer(enc, bbb, 0ul, 3)
-            metal_set_buffer(enc, byy, uint64(yoff * 4), 4)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+            metal_set_buffer(enc, bw, 0ul, 1)
+            metal_set_buffer(enc, bbb, 0ul, 2)
+            metal_set_buffer(enc, byy, uint64(yoff * 4), 3)
+            metal_set_buffer(enc, bdim, 0ul, 4)
+            metal_set_buffer(enc, beps, 0ul, 5)
+            metal_set_buffer(enc, baa, 0ul, 6)
             metal_set_threadgroup_memory_length(enc, metal_pk_add_ln_msl_tgmem, 0)
             metal_dispatch_threadgroups(enc, uint3(1u, 1u, 1u), uint3(256u, 1u, 1u))
         }
@@ -2196,6 +2198,8 @@ def private pk_add_ln_gate(t : T?; dev, queue; dim : int) {
     }
     metal_release(bw)
     metal_release(bbb)
+    metal_release(bdim)
+    metal_release(beps)
     metal_release(bx)
     metal_release(ba)
     metal_release(by)

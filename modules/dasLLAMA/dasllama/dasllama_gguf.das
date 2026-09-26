@@ -659,7 +659,7 @@ def gguf_need_tensor(m : GGUFMeta; name, who : string) : int {
 //! A whole tensor as f32, whatever its on-disk type.
 def gguf_read_f32_arr(m : GGUFMeta; bytes : array<uint8> | #; name, who : string) : array<float> {
     let ti = gguf_need_tensor(m, name, who)
-    var inscope a : array<float>
+    var inscope @exact_size a : array<float>
     a |> reserve_resize(m.tensors[ti].n_elem)
     gguf_read_tensor_f32(m, bytes, name, a, 0l, m.tensors[ti].n_elem)
     return <- a

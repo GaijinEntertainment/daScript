@@ -42,7 +42,7 @@ borrows, `dasllama/dasllama_metal_common.das`, a `register_*` function that
 `dasllama_metal_tower_register` or `dasllama_vulkan_tower_register` calls with a hook, or a site
 that calls the hook such a function stores - applies `REVIEW_TOWER.md` too.**
 
-**A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`,
+**A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_gpu_math.das`,
 `dasllama/dasllama_gpu_resident.das`, `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a
 `[spirv_decode]` callback, or a cooperative-matrix GEMM class stamped per weight format and
 column width, on the NV cooperative-matrix-2 arm or the KHR cooperative-matrix arm, or a kernel

@@ -67,8 +67,9 @@ stream it from device instead.** A dequant, a transpose, or a layout or element-
 makes the forms differ. A staged pass-through costs the op more than the reads it saves.
 
 **Never fill a `@workgroup` tile with a loop whose tile address - where the lane writes in the
-tile - needs a div or mod of anything but the lane's own slot index (the index that steps by one
-from lane to lane); give each lane a consecutive run of elements, or a lane-coalesced stride
+tile - needs a div or mod of a run-time value other than the lane's own slot index (the index that
+steps by one from lane to lane; an unrolled loop's counter folds to a constant and is no run-time
+value); give each lane a consecutive run of elements, or a lane-coalesced stride
 (`i += 32`), instead.**
 
 **Never decide a kernel row's validity or owner by scanning the per-bucket base and count
@@ -84,16 +85,18 @@ per-row bucket entry, the one the bucket-building kernel writes, with the live e
 hold stale pool bytes, not the sentinel, and an equality test sends their token index out of
 bounds.
 
-**A Metal kernel body that folds simdgroup partials across the threadgroup by hand - a
+**A Metal kernel body that folds ONE float sum or max across the threadgroup by hand - a
 `simd_shuffle_xor` butterfly over a lane's value, a lane-0 loop over a partials array, a broadcast
 slot the lanes read back - is a defect: the fold is `tg_sum_all` / `tg_max_all` over the class's
-partials array (`MetalTgReduceBase`'s `tg_sum` / `tg_max` / `tg_rms_inv` over its own), every lane
-holding the result after one barrier, and two folds in a row take a barrier between them.** One
-fold spelled in one place is what the decode attention's, the norms' and the tower's parity cells
-hold; a private butterfly rounds its own way.
+`@workgroup` partials array (`MetalTgReduceBase`'s `tg_sum` / `tg_max` / `tg_rms_inv` over its own
+`partial[]`).** A fold of another shape - two rows at once, a value with its index, a compensated
+sum - has no shared form and stays in its body.
+
+**A diff that calls two folds over one partials array puts a `barrier()` between the calls.**
 
 **Never put an op every lane of the group must reach together - a `barrier()`, a simdgroup matrix
-op, or a subgroup shuffle, vote, ballot or reduction - behind an early `return`, a loop or a
+op, a subgroup shuffle, vote, ballot or reduction, or a call that reaches one (`tg_sum_all`,
+`tg_max_all`, a fold method, `sq_softmax_sink`) - behind an early `return`, a loop or a
 branch that a per-lane value decides, unless that value is equal across every lane the op
 exchanges with (the workgroup for a barrier or matrix op, the subgroup for the rest); gate or
 bound it with such a value, or hoist the op out.** A lane that exits early, or reaches the op a

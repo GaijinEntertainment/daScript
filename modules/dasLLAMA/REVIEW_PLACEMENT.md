@@ -48,9 +48,12 @@ and in `dasllama/dasllama_vulkan_prefill.das` when the prefill pass calls it.**
 **A host-side ensure/set/encode chain on any backend that only switches on a stamp it is handed
 lands in the file of the function that decides that stamp.**
 
-**A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
-decode helper lands in its backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
-`dasllama/dasllama_vulkan_classes.das`).**
+**A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`.**
+
+**A kernel-side decode helper one backend's kernels splice lands in that backend's kernel file
+(`dasllama/dasllama_metal_kernels.das`, `dasllama/dasllama_vulkan_classes.das`); one both
+backends' kernels splice - pure arithmetic, no codebook table - lands in
+`dasllama/dasllama_gpu_math.das`, never as a copy per home.**
 
 **A disk-order -> compute-order transform lands by its consumer: a transform into the layout
 the CPU kernels read row by row in `dasllama/dasllama_repack.das`, a transform into the layout a

@@ -754,10 +754,10 @@ the head as one threadgroup over q8 weights (nine million parameters, one dispat
 22 - where the CPU's head is q8 already, the kq files), the first norm folded into the q8 GEMV's
 prologue as the f32 route already folds it, and the text prompt's rows on the tower (the
 `prompt` stage clock of `test_pocket_synthesis_metal`, six milliseconds a chunk on the CPU). The frames' K/V never return to the host, so a chunk
-whose command buffer fails reruns whole on the CPU. The StyleTTS2 stage cells
-(`gpu_stage_checks` in `tests/_tts_parity.das`) still carry an output-moved element as their only
-control; `REVIEW_GPU_PARITY.md` now asks an input-side one (a scaled input re-run through the
-compare), so each stage cell owes a scaled-input leg.
+whose command buffer fails reruns whole on the CPU. The codec transformer's layer
+(`pk_transformer`) and the frame loop's (`pk_fr_layer`) are two bodies of one layer: one body
+waits on a rows form of the ADD LayerNorm stamp (`MetalPkAddLn` over `nrows`) and a rows form of
+the rope-and-store (`MetalRopeStoreBKvT` with a row table is the candidate).
 
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 

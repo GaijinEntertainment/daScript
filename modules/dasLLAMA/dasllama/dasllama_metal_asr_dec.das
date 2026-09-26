@@ -404,7 +404,7 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
             let koff_self = uint64(l * d * tmax * 2l)   // the resident K/V memory is f16
             let koff_cross = uint64(l * d * ta * 2l)
             // self-attention (v bias folds into the append shuffle, q bias into the attention load)
-            enc_ln(enc, g_wd_sx, bblobf, uint64(lo.ln1_w * 4l), bblobf, uint64(lo.ln1_b * 4l), g_wd_sxb, u_d, u_eps, n)
+            enc_ln(enc, g_wd_sx, bblobf, uint64(lo.ln1_w * 4l), bblobf, uint64(lo.ln1_b * 4l), g_wd_sxb, 0ul, u_d, u_eps, n)
             if (n == 1l) {   // the fused-QKV GEMV: the q,k,v regions sit contiguous in the driver's blob
                 enc_gemv(enc, g_wd_mblob, g_wd_boffs[bo], g_wd_sxb, g_wd_sq, u_d, u_3d, 3l * d)
                 // dim = the SOURCE row stride: the k/v column blocks sit in the fused 3d-wide rows
@@ -422,21 +422,21 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
             wd_mm(enc, g_wd_boffs[bo + 3l], g_wd_sxb2, g_wd_sxb, u_d, u_d, d, d, n)
             enc_bias_add_res(enc, g_wd_sx, g_wd_sxb, bblobf, uint64(lo.o_b * 4l), u_d, u_totd, n * d)
             // cross-attention against the window's resident memory
-            enc_ln(enc, g_wd_sx, bblobf, uint64(lo.cln_w * 4l), bblobf, uint64(lo.cln_b * 4l), g_wd_sxb, u_d, u_eps, n)
+            enc_ln(enc, g_wd_sx, bblobf, uint64(lo.cln_w * 4l), bblobf, uint64(lo.cln_b * 4l), g_wd_sxb, 0ul, u_d, u_eps, n)
             wd_mm(enc, g_wd_boffs[bo + 4l], g_wd_sxb, g_wd_sq, u_d, u_d, d, d, n)
             enc_wdec_attn_part(enc, g_wd_sq, g_wd_bkxr, koff_cross, g_wd_bvxr, koff_cross, g_wd_bpms, g_wd_bpy, bblobf, uint64(lo.cq_b * 4l), u_d, u_hs, u_ta, u_ta, u_c0, u_scale, u_hh, u_n, hh, n, (ta + 255l) / 256l)
             enc_wdec_attn_comb(enc, g_wd_bpms, g_wd_bpy, g_wd_sxb2, u_d, u_hs, u_nch_c, u_hh, u_n, hh, n)
             wd_mm(enc, g_wd_boffs[bo + 7l], g_wd_sxb2, g_wd_sxb, u_d, u_d, d, d, n)
             enc_bias_add_res(enc, g_wd_sx, g_wd_sxb, bblobf, uint64(lo.co_b * 4l), u_d, u_totd, n * d)
             // mlp (fc1 bias folds into the LUT-GELU pass, fc2's into the residual add)
-            enc_ln(enc, g_wd_sx, bblobf, uint64(lo.ln2_w * 4l), bblobf, uint64(lo.ln2_b * 4l), g_wd_sxb, u_d, u_eps, n)
+            enc_ln(enc, g_wd_sx, bblobf, uint64(lo.ln2_w * 4l), bblobf, uint64(lo.ln2_b * 4l), g_wd_sxb, 0ul, u_d, u_eps, n)
             wd_mm(enc, g_wd_boffs[bo + 8l], g_wd_sxb, g_wd_sh, u_d, u_ff, d, 4l * d, n)
             enc_bias_gelu_lut(enc, g_wd_sh, 0ul, bblobf, uint64(lo.fc1_b * 4l), u_ff, u_totff, n * 4l * d)
             wd_mm(enc, g_wd_boffs[bo + 9l], g_wd_sh, g_wd_sxb, u_ff, u_d, 4l * d, d, n)
             enc_bias_add_res(enc, g_wd_sx, g_wd_sxb, bblobf, uint64(lo.fc2_b * 4l), u_d, u_totd, n * d)
         }
         // final LN, then logits: a single-row GEMV per token; the prompt batch GEMMs every row
-        enc_ln(enc, g_wd_sx, bblobf, uint64(w.d_ln_w_off * 4l), bblobf, uint64(w.d_ln_b_off * 4l), g_wd_sxb, u_d, u_eps, n)
+        enc_ln(enc, g_wd_sx, bblobf, uint64(w.d_ln_w_off * 4l), bblobf, uint64(w.d_ln_b_off * 4l), g_wd_sxb, 0ul, u_d, u_eps, n)
         wd_mm(enc, g_wd_te_boff, g_wd_sxb, g_wd_slog, u_d, u_nv, d, g_wd_nvpad, n)
     }
     pool_release(g_upool, u_d, 4ul)

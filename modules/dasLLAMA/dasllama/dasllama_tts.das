@@ -352,14 +352,17 @@ def private is_sentence_boundary(cps : array<int>; i : int) : bool {
             ((tok == "a" || tok == "p") && i + 1 < n && (cps[i + 1] == 'm' || cps[i + 1] == 'M')))
         if (tok == "m" && i >= 3 && cps[i - 2] == '.' && (cps[i - 3] == 'a' || cps[i - 3] == 'p' || cps[i - 3] == 'A' || cps[i - 3] == 'P')) {
             var k = i + 1
-            while (k < n && is_white_space(cps[k])) {
+            while (k < n && is_space_cpt(cps[k])) {
                 k++
             }
             return k >= n || int(utf32_to_lower(uint(cps[k]))) != cps[k]
         }
     }
-    return i + 1 >= n || is_white_space(cps[i + 1])
+    return i + 1 >= n || is_space_cpt(cps[i + 1])
 }
+
+//! the splitter's whitespace: the four the reference driver splits on, not `is_white_space`'s form feed and vertical tab
+def private is_space_cpt(c : int) : bool => c == ' ' || c == '\t' || c == '\n' || c == '\r'
 
 // a chunk ends on prosodic punctuation when the family's driver says so (Kitten's appends a comma
 // where the split left none; Kokoro's pipeline sends the text as it is)
