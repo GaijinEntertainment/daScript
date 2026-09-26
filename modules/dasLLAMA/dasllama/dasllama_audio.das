@@ -1341,12 +1341,17 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
 }
 
 //! the stem, then the blocks with the tower's post-norm folded where the blocks-with-post-norm seat serves (true: `s.xb` holds the
-//! normed rows), else the CPU block loop (false: `s.x` holds its output and the caller norms it) - a decline asks no second seat
+//! normed rows), else the blocks alone (false: `s.x` holds their output and the caller norms it) - a driver with no post-norm
+//! seat (Metal) serves them at the blocks seat; a post-norm seat that declines asks no second seat, its blocks seat declines alike
 def audio_encode_blocks_ln_post(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {
     audio_encode_stem(t, s, mel)
     let tt = t.n_ctx
+    if (!g_tw_blocks_ln_post_set) {
+        encoder_blocks(t, s, tt)
+        return false
+    }
     dispatch_phase_encode(tt)
-    if (g_tw_blocks_ln_post_set && empty(g_audio_ref_dir)) {
+    if (empty(g_audio_ref_dir)) {
         let te = ref_time_ticks()
         if (invoke(g_tw_blocks_ln_post, t, s, tt)) {
             asr_prof_add("enc.blocks.gpu", te)
