@@ -1768,44 +1768,24 @@ module) is independent and can land any time - it is pure structure.
     in the args that lets a garbage prefix sit before the block (the upper-side guards are
     covered); the `sdot4` arm of every audio twin (the cm2-off feeds: `vt_tile`'s q8 variant, the
     requant steps, the decoder's non-cm2 buffers) as a standing run, not the one p22 leg.
-103. **The audio tower arc's templatable sets - the post-arc dedup pass.** Row 97's shape: the
-    per-PR audits fold DUPLICATEs only, and these are the sibling sets the arc left, each with its
-    fold. In `dasllama_vulkan_tower.das`: the cm2 set cache beside the batch set cache
-    (`vt_cm2_set` / `vt_batch_set`, their `vt_build_*_sets_d/_ff` and `vt_cm2_sets` /
-    `vt_batch_sets`, `vt_rel_proj_set_cm2` / `vt_rel_proj_set`, the stem's, qwen3a front's and
-    gemma4a chunk's inline `cm2_cls_set`, `vt_cn_front_set`) - every set keyed by `VtTile` through
-    one `vt_tile_set`, as `vt_tail_gemm_set` is; the per-block GEMM table spelled three or four
-    times a family (`vt_upload_g4a` / `vt_upload_cn` / `vt_upload_ln` regions, each chain's
-    schedule loop and its `meta_bytes` sum, the tests' `mint_g4a` / `mint_cn` / `mint_aud` zero
-    lists and `truncate_and_poison`) - one per-family region table with a group class per GEMM that
-    the upload, `vt_sched_map`'s walk and the test poison all read; `vulkan_gemma3v_blocks`'s
-    inline copies of `vt_aud_ensure` and `vt_aud_attach` - gemma3v calls `vt_aud_ensure` and a
-    shared `vt_ln_attach`; the stride-2 conv geometry (`vt_conv_stage`, `vt_cn_geom`, the inline
-    copies in `vulkan_gemma4a_chunk`, `vt_g4a_front_scratch` and `vt_upload_cn`, and
-    `dasllama_canary.das`'s private `cn_conv_out_len`) - `vt_conv_stage` chained per stage; the
-    per-driver GPU timestamp ledgers (`vt_pt` / `vt_prof_report`, the decode driver's stamp-name
-    report, `pf_prof_report`) - one role-per-stamp record and one sum-by-role reporter in
-    `dasllama_vulkan_common.das`. In `dasllama_vulkan_classes.das`: `TowerHeadGather` against the
-    restride stamps (axes: the bias flag, the clamp, the pad rows); `TowerQ3aFinish`'s fused bias +
-    position rows against the whisper stem's two bias passes - one fused stamp both fronts use, or
-    the bias class twice; `TowerDwConv5` against `TowerCnDw` - one template over the pad placement
-    (causal or centered) with a gated BatchNorm + silu epilogue, the weakest of the set, since the
-    epilogues compute different things. In the tests: `tower_twin_bar` / `tower_twin_held` /
-    `tower_twin_poison` beside `twin_three_way` / `twin_poison` (`_tower_twin.das`), with the
-    hand-rolled three-way encodes of `test_audio.das` and `test_whisper.das` - the two instruments
-    take a metric parameter and the audio cells pass their encode block. The local blocks: the
-    `s_rq_xb/att/hg/yd` set quartet the g4a and canary builders re-spell (`vt_sets_rq`); the
-    qwen3a and canary spectral slab halves and front scratch headers; the front landing (memcpy,
-    the front counter, the announce) five times beside `vt_served_from` (`vt_front_served`);
-    qwen3a's chunk staging, a third copy after `dasllama_qwen3a.das` and the Metal tower; the
-    whisper token + position embedding sum in `dasllama_vulkan_asr_dec.das`, a third copy after
-    `dasllama_whisper.das` and the Metal ASR decoder; the kernel cells' hand-rolled offset
-    readbacks and `halves_off` count loops in `test_vulkan_tower_kernels.das` (`vkd_run_copy`
-    promoted to `_vkd_oracles.das` serves both kernel files); the bias + activation dispatch pair
-    `vt_bias_act` wraps, still inline at the stem, the qwen3a front and the canary front; the
-    bench's two Vulkan tower witness captures in `asr_measure_spec` (the bucket loop and the
-    library loop). Each fold that moves a dispatch takes the family twin cells on the pod as its
-    evidence.
+103. **The tower dedup pass's leftovers.** The folds the pass ruled out or left, each with its
+    reason. `TowerDwConv5` against `TowerCnDw` (one template over the pad placement, causal or
+    centered, with a gated BatchNorm + silu epilogue): the epilogues compute different things, the
+    weakest fold of the census - deferred. `TowerRms` against `ClsArAddRms` at `add_on = 0`: the
+    residual class reads a zero add partner, rewrites the row in place and stashes it in a 32 KB
+    workgroup array where the tower class reads the row once, so the fold adds two plane passes and
+    a workgroup array to a role that reads 1% of the gemma4a chain (176 us over 36 dispatches at
+    275 rows) - a fold only a ledger showing no loss admits, and the shape says loss. The qwen3v
+    block chain against `vt_ln_chain`'s mul_mm arm: the fold puts the fused qkv GEMM, its bias row
+    and the rope tables under branches in the whisper and gemma3v hot chain, and no differ gates
+    it (the dispatch order changes) - the qwen3v twin alone does; left as the family's own chain.
+    The three GPU timestamp ledgers (`vt_prof_report` per encode by role, the decode driver's
+    running per-token average by stamp name with its idle accounting, the prefill's fixed
+    per-layer-kind table) share a six-line stamp walk and nothing else. The LLM arena's `F16Cvt`
+    and the requant stamps keep their own classes (the tower's f16 converts moved to the
+    clamp-convert; the arena's did not). The seam pair `TowerPostAddLnT` / `ClsArAddRms`: the
+    residual class computes (x + partner) . ascale and the tower x + ascale . branch, and the
+    `pre_on` mad rounds differently - a fold with an ascale-placement axis, ruled separately.
 102. **The whisper decode step's remaining dispatches.** A token is 55 dispatches over a
     four-layer turbo decoder after the row passes took their Q8_0 feed (`TowerLnRq`,
     `TowerPostAddLnRq`, `TowerBiasActRq`, `TowerWdecAttnCombRq`; 0.77 ms on the device and 1.0 ms
@@ -1867,43 +1847,22 @@ module) is independent and can land any time - it is pure structure.
     between steps, and no cell passes a batched stream to the CPU afterwards. The fix reads the
     landing's flag from the session's state before the step (`rdec_has_device_only_rows`) rather
     than setting it true unconditionally, with a cell that runs the sequence.
-97. **The vision tower arc's templatable sets - the post-arc dedup pass.** The per-PR audits
-    fold DUPLICATEs only; these are the sibling sets the arc left for the folds pass, each with
-    the fold. The tower classes that rebuild an LLM class (`dasllama_vulkan_classes.das`):
-    `TowerPostAdd` and `TowerPostAddLnT<RMS>` are `ClsArAddRms` with `pre_on` / `abias_on` set
-    (and gain its `mad` spelling), `TowerRms` its `add_on = 0` form, `TowerGluAct` plus the
-    `F16Cvt` pass after it is `ActF16B` at a zero row map (one pass per block fewer - a row 95
-    lever too); `TowerLn` / `TowerPostAddLnT`'s layer-norm arm against a layer-norm constant on
-    `ResidualT`, `TowerClamp` / `TowerClampCvt` against `F16Cvt` on an `OUT16` gate
-    (`TowerClampCvt` has no engine caller), `TowerClampRqT` against `RqPlainT` with the bounds in
-    the requant args - each fold moves a chain's dispatch onto an existing stamp, so its evidence
-    is the family twin cells on the pod. The driver's residency pairs
-    (`dasllama_vulkan_tower.das`): `vt_key` / `vt_key_f16` over a region list, `vt_upload` /
-    `vt_upload_f16`, `vt_scratch` / `vt_scratch_f16` (`vt_scratch_max_bytes` already takes the
-    flag) - one builder over a buffer-size table; the four `vt_sets_*` builders on a `vt_sizes`
-    struct plus per-route set helpers; the three `vt_build_sets_*` and the three blocks of
-    `vt_batch_sets` - one table keyed by width class and variant; the three `vt_upload_*` region
-    walks, the schedule-map loops and the `meta_bytes` sums - one region list per family every
-    walker reads; `vt_sched_map` / `vt_gemm_groups` against the prefill's
-    `fill_arena_batch_sched` - one record writer in `dasllama_vulkan_common.das`. The g3v / q3v
-    block tails (25 lines differing in offset field names), the gemma4v clamp-in / GEMM /
-    clamp-out site written four times (Metal's `g4a_mm_site` is the shape), the state resets
-    `vt_release_scratch` / `vt_forget_one` share. `VkDeclineCounter` against Metal's
-    `DeclineCounter` (and the say-once tables in `dasllama_gpu_tier.das` /
-    `dasllama_gpu_resident.das`) - one backend-neutral counter; the engage-counter bump written
-    four times here and eight in the Metal driver - a `TowerEngage` in `dasllama_tower.das`.
-    `wg_sum` against `wg_rms_inv` (the fold moves eighteen decode stamps by 108 bytes - a fold
-    takes the stamp source-diff evidence and a decode row). The three hand-rolled listener
-    registries (`register_vk_drop_hook`, `register_weights_epoch_listener`,
-    `register_reload_prep`) against daslib's `delegate` module. The tests: `fa_bidir_arm` against
-    `fa_tile_run` (a `bidir` field on its arm tuple, the causal twin under it), the readback
-    offsets typed twice per cell in `test_vulkan_tower_kernels.das` (`vkd_run_copy` moved to
-    `_vkd_oracles.das` with a `host_floats` reader), the post-add seam trio, `q8_rows_off`
-    against `mismatch_qbytes` in `_compares`, the Vulkan dump rungs and `shallow_routing_cell_vk`
-    against their Metal twins (the stats accessor as the axis), the `poison_device_leg` pair,
-    the older zero-block loops in `test_qwen3v.das` / `test_qwen25v.das` onto
-    `truncate_and_poison`, the five `x * sigmoid(1.702 x)` spellings, and `approx` in
-    `test_metal_decode_kernels.das` against `_compares`.
+97. **The vision tower arc's dedup leftovers.** What the tower dedup pass (row 103 carries its
+    leftovers) did not take from this arc's census: the residency pairs `vt_key` / `vt_key_f16`,
+    `vt_upload` / `vt_upload_f16` and `vt_scratch_build` / `vt_scratch_f16_build` over a
+    buffer-size table (the f16 twin allocates a different buffer set, a table gains little); the
+    four `vt_sets_*` builders on a sizes struct; `vt_sched_map` / `vt_gemm_groups` against the
+    prefill's `fill_arena_batch_sched` (one record writer in `dasllama_vulkan_common.das`); the
+    g3v / q3v block tails; `VkDeclineCounter` against Metal's `DeclineCounter` and the say-once
+    tables in `dasllama_gpu_tier.das` / `dasllama_gpu_resident.das` (one backend-neutral counter);
+    the engage-counter bump written four times here and eight in the Metal driver (a `TowerEngage`
+    in `dasllama_tower.das`); `wg_sum` against `wg_rms_inv` (the fold moves eighteen decode stamps
+    by 108 bytes for fifteen lines); the three hand-rolled listener registries
+    (`register_vk_drop_hook`, `register_weights_epoch_listener`, `register_reload_prep`) against
+    daslib's `delegate` module; `TowerClampRqT` against `RqPlainT` with the bounds in the requant
+    args; the Vulkan dump rungs and `shallow_routing_cell_vk` against their Metal twins, the five
+    `x * sigmoid(1.702 x)` spellings, and `approx` in `test_metal_decode_kernels.das` against
+    `_compares`.
 92. **The low-format N-row arc's review leftovers.** The kq kernel
     bodies write the per-format scale-row strides as literals (`wsb * 5u`, `* 8u`, `* 6u`, `* 10u`,
     `* 12u`, `* 40u + 32u`), which `REVIEW_KQ_FORMATS.md` wants read off `dasllama_kqformat.das`'s

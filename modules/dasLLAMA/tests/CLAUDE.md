@@ -365,10 +365,11 @@ norm, the bias + tanh GELU and the attention combine, each fused with the Q8_0 r
 against the pass followed by `TowerClampRq`, the residual rows in place the same, a poisoned input moving each one's bytes);
 the audio fronts' classes - `test_vkt_tower_front_movers` (the k3
 s2 p1 im2col over two chunks with its pad and zero tail, the stem's im2col1d on both source
-layouts and strides, the qwen3a and canary feature shuffles, the rel-plane head gather with and
-without its bias, the clamp + halfword feed, the zero rows, the position-plane add (the bias class
-at `d = nelem`: one bias row the width of the rows, nothing past it touched), the qwen3a
-finish and the subsample LayerNorm + ReLU - the data movers bit for bit as halves or floats, the
+layouts and strides, the qwen3a and canary feature shuffles, canary's rel-plane head panels (the
+restride stamps at one head, with and without the bias row), the clamp + halfword feed, the
+position-plane add (the bias class at `d = nelem`: one bias row the width of the rows, nothing past
+it touched), the qwen3a finish as its two bias passes (the conv_out bias row, then the chunk's
+position rows as one bias row the width of a chunk) and the subsample LayerNorm + ReLU - the data movers bit for bit as halves or floats, the
 rest at the approx bar), `test_vkt_tower_front_mel` (the spectrum on both arms and the log
 filterbank in its three forms - gemma4a's max floor, canary's added floor, the whisper
 preprocessors' mel-major log10 - against double-precision sums with the quiet frame flooring on
@@ -380,7 +381,8 @@ u/v biases - the scaled keys and the scaled rel table as controls);
 the padded attention route end to end (pad, the h128 bidirectional tile, unpad over sixteen 72-wide
 heads) against `attention_bidir`; and the window classes - the f32 per-window attention over the
 compact rows on sixteen windows (one ragged) against `attention_bidir_windows` with full attention
-over the same rows as the leak control, the rms seam and the gated hidden against their CPU forms;
+over the same rows as the leak control, the rms seam and the gated hidden (the LLM's biased f16 act
+stamp at a zero row map, the qwen25v hidden's stamp) against their CPU forms;
 the bias class's erf arm (the whisper-class towers' GELU) against `gelu_erf_batch` at 1e-5
 relative - the f32 evaluation of the CPU's double erfc - with the tanh arm missing that bar as the
 told-apart control, and its silu arm (canary's FFN) against `silu` with the tanh arm as its
@@ -1177,10 +1179,12 @@ chain's own, the input poison on the one-block cb96 leg (a fresh q8 tower with i
 through the device chain must EXCEED the bar), then the exact-lane tower's `quant_mode` decline
 (the blocks seat is the driver's, which declines the exact planes once and leaves the encode to
 the CPU chain). Skips without the mmproj, without a Vulkan device under `DASLLAMA_GPU=1`, and on
-a build with das_metal, where the Metal driver owns the tower hooks. The four families' Vulkan
-twins share one instrument, `_tower_twin.das`: the seat guard (the tier's want and the device,
-`vulkan_tower_arms`), the three-way encode with its counters and bar, the input poison, the
-exact-lane decline and the staged tower's truncate-and-zero.
+a build with das_metal, where the Metal driver owns the tower hooks. The vision and audio families'
+Vulkan twins share one instrument, `_tower_twin.das`: the seat guard (the tier's want and the device,
+`vulkan_tower_arms`) and the jfk cells' seat, the three-way encode with the family's counters and
+the bar by metric (the vision canvases' maxdiff in rms, the audio towers' rel_l2), the input
+poison, the exact-lane decline, the vision canvas and dump-poison legs, and the staged tower's
+truncate-and-zero and in-memory mint.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - stocked suite; the qwen25v tower (Qwen2.5-Omni's window-attention ViT,

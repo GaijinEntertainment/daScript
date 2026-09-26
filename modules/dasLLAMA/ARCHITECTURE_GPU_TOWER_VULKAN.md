@@ -255,7 +255,8 @@ the post-add with the next layer's first norm and its feed (the final norm on th
 whose feed is the logits GEMV's), then the tied-embedding logits GEMV over the last row alone and
 the logits readback - the CPU filter and sampler stay the parity anchor. The fused passes land
 the same Q8_0 bytes as the row pass and the separate requant (`TowerClampRq`) - the block store is
-`RqT`'s text, eight consecutive lanes a block - and cost a token 66 dispatches where the separate
+`Q8BlockStoreT`'s, the one text every requant stamp shares, eight consecutive lanes a block, and the
+fused passes are their f32 templates' `OUT_Q8` stamps - and cost a token 66 dispatches where the separate
 passes cost 91, the dispatch floor of a decode step being its own launch and barrier. A partial's workgroup
 (`TowerWdecAttnPart`) is one chunk of 256 keys, one head and one row - the chunk's scores off the
 f16 keys, its own max and exp-sum, its unnormalized weighted values - so a 1500-key cross window
