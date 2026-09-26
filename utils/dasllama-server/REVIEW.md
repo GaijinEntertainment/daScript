@@ -7,18 +7,17 @@ doc: `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo roo
 `dasllama/*` module, or to `README.md` text stating dasLLAMA engine behavior or a measured
 number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
-**A diff that changes what a `main.das` flag does or defaults to, or edits any copy of its text,
-leaves the flag's `@clarg_doc`, its `README.md` table row with its `Default` cell, the `README.md`
-section on its config-file key where one exists, and its row in
+**A diff that adds a `main.das` flag, changes what one does or defaults to, or adds or edits any
+copy of its text, leaves the flag's `@clarg_doc`, its `README.md` table row with its `Default`
+cell, the `README.md` section on its config-file key where one exists, and its row in
 `doc/source/reference/utils/dasllama_server.rst` (repo root) stating the same behavior and the
-same default.** A copy left behind sends the user to a flag that no longer does what it says;
-that every flag has its README and rst mention at all is `REVIEW.das`'s.
+same default.** A copy left behind sends the user to a flag that no longer does what it says.
 
-**A diff that changes what a `cli_args.das` flag does or defaults to, or edits any copy of its
-text, leaves the flag's `@clarg_doc`, its entry in the `README.md` dasllama-cli section (the
-command's row, or the shared-flags paragraph for a shared, sampler or speaker flag), and its row
-in `doc/source/reference/utils/dasllama_cli.rst` (repo root) stating the same behavior and the
-same default.**
+**A diff that adds a `cli_args.das` flag, changes what one does or defaults to, or adds or edits
+any copy of its text, leaves the flag's `@clarg_doc`, its entry in the `README.md` dasllama-cli
+section (the command's row, or the shared-flags paragraph for a flag more than one command
+takes), and its row in `doc/source/reference/utils/dasllama_cli.rst` (repo root) stating the
+same behavior and the same default.**
 
 **A diff that changes how `serving_knobs.das` derives a knob updates, for every `main.das` and
 `cli_args.das` flag that reads that knob, the flag's `@clarg_doc`, its `README.md` entry and its
@@ -54,8 +53,9 @@ produce, hand-compose the fixture and name it as hand-composed, with why, in its
 `tests/fixtures/README.md`.**
 
 **A diff that adds a key to what a route answers, or changes the condition under which the route
-answers one, updates that route's `README.md` row in the same change.** The row is where a
-consumer learns the key exists and when to expect it.
+answers one, updates every `README.md` passage that names the key or its condition - the route's
+row and any section on it - in the same change.** The row is where a consumer learns the key
+exists and when to expect it.
 
 **A `served` or `served_note` value a diff adds or changes in `openai_server.das` - all of it
 but the engine text it quotes - uses only words a user understands without knowing how the

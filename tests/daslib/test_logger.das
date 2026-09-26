@@ -237,17 +237,22 @@ def test_hook_at_field_decimal(t : T?) {
         t |> success(find(at, "0x") < 0, "the line is not hex: '{at}'")
         t |> success(to_int(tail) > 0 && "{to_int(tail)}" == tail, "the line is a decimal number: '{at}'")
     }
-    t |> run("the stderr echo prints the record as one plain line beside the file's JSON") @(t : T?) {
+    t |> run("the stderr echo prints the record as one plain line on stderr alone, beside the file's JSON") @(t : T?) {
         let p = temp_log_path()
-        var out : string
-        var cmd = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" \"{get_das_root()}/tests/daslib/_logger_hook_child.das\" -- echo \"{p}\" 2>&1"
-        if (get_platform_name() == "windows") {
-            cmd = "\"{cmd}\""
+        let windows = get_platform_name() == "windows"
+        let child = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" \"{get_das_root()}/tests/daslib/_logger_hook_child.das\" -- echo \"{p}\""
+        // stderr alone: stdout to the null device after the merge
+        var err_cmd = "{child} 2>&1 >{windows ? "NUL" : "/dev/null"}"
+        var out_cmd = "{child} 2>{windows ? "NUL" : "/dev/null"}"
+        if (windows) {
+            err_cmd = "\"{err_cmd}\""
+            out_cmd = "\"{out_cmd}\""
         }
-        let rc = run_child(cmd, out)
-        t |> equal(rc, 0, "the probe process exits clean: {out}")
-        t |> success(find(out, "[info] hook at-field probe") >= 0, "the echo line reached the console: {out}")
-        t |> success(find(out, "\"level\":\"info\"") < 0, "the console line is plain text, not the file's JSON record")
+        var err_only : string
+        let rc = run_child(err_cmd, err_only)
+        t |> equal(rc, 0, "the probe process exits clean: {err_only}")
+        t |> success(find(err_only, "[info] hook at-field probe") >= 0, "the echo line reached stderr: {err_only}")
+        t |> success(find(err_only, "\"level\":\"info\"") < 0, "the console line is plain text, not the file's JSON record")
         let lines = read_lines(p)
         remove(p)
         var in_file = false
@@ -255,5 +260,9 @@ def test_hook_at_field_decimal(t : T?) {
             in_file ||= find(line, "hook at-field probe") >= 0
         }
         t |> success(in_file, "the file still receives the record")
+        var out_only : string
+        t |> equal(run_child(out_cmd, out_only), 0, "the probe process exits clean: {out_only}")
+        t |> success(find(out_only, "hook at-field probe") < 0, "stdout carries no echo: {out_only}")
+        remove(p)
     }
 }

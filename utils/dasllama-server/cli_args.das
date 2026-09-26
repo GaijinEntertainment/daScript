@@ -55,7 +55,7 @@ def command_of(name : string) : CliCommand => to_enum(type<CliCommand>, name, Cl
 [CommandLineArgs]
 struct CommonArgs {
     @clarg_short = "c"
-    @clarg_doc = "TOML config file (default: dasllama-server.toml beside the program, else in the cwd); keys mirror the long flag names, explicit flags win"
+    @clarg_doc = "TOML config file (default: dasllama-server.toml in the cwd, else beside the program); keys mirror the long flag names, explicit flags win"
     config : string
 
     @clarg_short = "m"

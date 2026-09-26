@@ -282,7 +282,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - ``--no-think``
      - Answer directly on a hybrid thinking model (default: the model's own default)
    * - ``--quiet``
-     - Print the transcript and the reply only - no stage times or token counts
+     - Print the reply only - no transcript, stage times or token counts
 
 .. list-table:: ``embed``
    :header-rows: 1

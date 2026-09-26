@@ -105,7 +105,7 @@ a line without a server up.
 | `chat` | a conversation from the terminal (/help lists the slash commands: /image, /audio, /read, /save, /load, /regen, /clear, /system, /stats, /speak on), or from `--script <file>` one message per line; `--tts` speaks every reply to `reply_<n>.wav` | `--system`, `--script`, `--image-mmproj` (arms /image), `--audio-mmproj` (arms /audio; the E-series mmproj serves both, pass it twice), `--tts`, `--voice` / `-v`, `--speed`, `--out-dir` (where `reply_<n>.wav` land, default the cwd), `--hide-thinking` (a thinking model's reasoning streams before the answer by default), `--no-think` (answer directly on a hybrid model), `--quiet` |
 | `transcribe` | an audio file to text through an ASR model (`--asr`, `--mmproj` for a GGUF pair) | `--asr` / `-a`, `--mmproj`, `--file` / `-f` (or the first bare argument), `--out` / `-o` (the transcript to a file instead of stdout), `--lang` / `-l` (a hint where the model takes one; a self-detecting model refuses it) |
 | `speak` | text to a 16-bit WAV through a TTS model (`--tts`, `--voice`, `--speed`) | `--tts`, `--text` (or `--file` / `-f`, or the first bare argument), `--out` / `-o` (default `out.wav`), `--voice` / `-v` (an unknown voice is refused with the model's voices), `--speed` (refused on a model that takes none), `--tts-lane q8 \| f32`, `--prof` (the generator's per-op profile) |
-| `talk` | the chain: `--in <audio>` heard by `--asr`, answered by `--model`, spoken by `--tts` into `--out`; `--prompt <text>` skips the hearing | `--asr` / `-a`, `--mmproj`, `--in` / `-i` (or the first bare argument), `--prompt` / `-p`, `--system`, `--lang` / `-l`, `--tts`, `--voice` / `-v`, `--speed`, `--out` / `-o` (default `reply.wav`), `--no-think`, `--quiet` (no stage times or counters) |
+| `talk` | the chain: `--in <audio>` heard by `--asr`, answered by `--model`, spoken by `--tts` into `--out`; `--prompt <text>` skips the hearing | `--asr` / `-a`, `--mmproj`, `--in` / `-i` (or the first bare argument), `--prompt` / `-p`, `--system`, `--lang` / `-l`, `--tts`, `--voice` / `-v`, `--speed`, `--out` / `-o` (default `reply.wav`), `--no-think`, `--quiet` (no transcript, stage times or counters) |
 | `embed` | a text's embedding vector, one float per line or `--json` | `--text` (or `--file` / `-f`, or the first bare argument), `--json` |
 | `tokenize` | a text's token ids and pieces | `--text` (or `--file` / `-f`, or the first bare argument), `--ids` (the ids alone, space-separated), `--no-special` (no BOS / leading specials) |
 | `bench` | the llama-bench rows on a model - `pp512`, `tg128`, and `tg128@N` with `--npl N` - `-o md` for the table; `dasllama-bench` stays the records instrument | `--plen` / `-p` (default 512), `--ngen` / `-n` (default 128), `--reps` / `-r` (default 5), `--npl` (streams of the batched row), `--output` / `-o` `txt \| md` |
@@ -535,8 +535,10 @@ Instruct generation branch such as Qwen3 Instruct-2507 defaults off), and a pres
 top-level or the llama.cpp spelling
 `"chat_template_kwargs": {"enable_thinking": ...}` - overrides it. `false` on a
 `<think>`-family appends the template's empty think block so the model answers directly;
-`false` on gemma-4 prefills the closed empty thought channel (the instruct opt-out). A no-op
-for models whose vocab has no think tokens.
+`false` on gemma-4 prefills the closed empty thought channel (the instruct opt-out); a gemma-4
+that opens its reply with a thought block anyway (the E-series does on a media turn) still
+answers, the block coming back as `reasoning_content`, and a channel marker after the answer
+ends the turn. A no-op for models whose vocab has no think tokens.
 
 A thinking reply's reasoning span comes back as **`reasoning_content`** (the
 DeepSeek/llama.cpp framing) with `content` clean of the family's markers: on the
