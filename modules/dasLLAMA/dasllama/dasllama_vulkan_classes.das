@@ -13251,15 +13251,19 @@ struct TtsIm2colArgs {
     rows : uint         //! 1 = x is row-major [tin][cin] (the tower's rows form), 0 = channel-major [cin][tin]
 }
 
-//! the 1-D conv's im2col, the F32Gemm's feed: col [tout][kdim] at coloff, column j = tap * cin + ci - the slab's weight-row
+//! the 1-D conv's im2col, the GEMM's feed: col [tout][kdim] at coloff, column j = tap * cin + ci - the slab's weight-row
 //! order, so one weight row [cout][kdim] multiplies it - zero where the tap falls off x and in the columns past k * cin;
 //! a forward tap reads x at t * stride + tap * dilation - pad_l, a transposed one the input position whose stride lands
 //! the tap on t, (t + pad_l - tap * dilation) / stride where that divides exactly (the CPU `conv1d_transposed_dense`'s
-//! scatter read as a gather); one element an invocation, wgs = `tts_im2col_wgs`
-[vk_dispatch(name = "tts_im2col_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsIm2col {
+//! scatter read as a gather); one element an invocation, wgs = `tts_im2col_wgs`. The HALF stamp stores the columns as
+//! f16 into `col16`, the f16 tile's feed (the decoder's and generator's convs); the plain stamp as f32, the f32 tile's
+[ |> template_struct_instance]
+class template TtsIm2colT {
+    @template_constant HALF : bool = false
+    @template_constant FULL : bool = true
     @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 col : array<float>
+    @ssbo @binding = 1 @template_gate = FULL col : array<float>
+    @ssbo @binding = 2 @template_gate = HALF col16 : array<float16>
     @push_constant pa : TtsIm2colArgs
 
     [spirv_kernel(local_size_x = 256)]
@@ -13288,9 +13292,22 @@ class TtsIm2col {
                     v = pa.rows != 0u ? x[pa.xoff + uint(st) * pa.cin + ci] : x[pa.xoff + ci * pa.tin + uint(st)]
                 }
             }
-            col[pa.coloff + gid] = v
+            static_if (HALF) {
+                col16[pa.coloff + gid] = float16(clamp(v, -65504.0, 65504.0))
+            } else {
+                col[pa.coloff + gid] = v
+            }
         }
     }
+}
+
+[vk_dispatch(name = "tts_im2col_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsIm2col : TtsIm2colT {}
+
+[vk_dispatch(name = "tts_im2col16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsIm2col16 : TtsIm2colT {
+    override HALF = true
+    override FULL = false
 }
 
 //! the im2col's workgroup count over `total` = tout * kdim column elements
@@ -13349,11 +13366,25 @@ class TtsLstmDir {
             barrier()
             var acc = 0.0
             if (live) {
+                // four accumulators over i mod 4, folded at the end: the loads and mads of a step pipeline instead of
+                // waiting on one chain (the CPU's `matmul` dot carries its own order, so no k order is the reference's)
+                var a0 = 0.0
+                var a1 = 0.0
+                var a2 = 0.0
+                var a3 = 0.0
                 var i = 0u
+                while (i + 3u < hd) {
+                    a0 = mad(whh[col + i * w4], hs[i], a0)
+                    a1 = mad(whh[col + (i + 1u) * w4], hs[i + 1u], a1)
+                    a2 = mad(whh[col + (i + 2u) * w4], hs[i + 2u], a2)
+                    a3 = mad(whh[col + (i + 3u) * w4], hs[i + 3u], a3)
+                    i += 4u
+                }
                 while (i < hd) {
-                    acc = mad(whh[col + i * w4], hs[i], acc)
+                    a0 = mad(whh[col + i * w4], hs[i], a0)
                     i++
                 }
+                acc = (a0 + a1) + (a2 + a3)
             }
             gs[lane] = acc
             barrier()

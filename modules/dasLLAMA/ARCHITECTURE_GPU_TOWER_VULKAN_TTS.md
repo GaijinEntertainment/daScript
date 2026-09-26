@@ -14,7 +14,8 @@ one seat per stage, registered on a build without das_metal. A seat the driver d
 stays on the CPU chain, and the parity rail skips its stage loudly, so a driver ported seat by
 seat is honest about the rest.
 
-Every seat computes in f32. The part's weights live in a slab the shared host writer lays out
+Every seat computes in f32 but the decoder's and generator's convs, which ride the f16 tile as
+the Metal twin's f16-staged GEMM does. The part's weights live in a slab the shared host writer lays out
 (`dasllama_tts_slab.das`): every conv or linear dense as [cout padded to 64 x k*cin padded to 32]
 with column j = tap*cin + ci and its bias row beside it, every norm as a scale and a shift row,
 an LSTM direction as its input linear and its recurrence transposed to [H][4H], so the
@@ -25,6 +26,16 @@ folds the part's weight addresses and the q8 lane's repack layout; the model-dro
 it, and a reload or another lane keys differently and rebuilds. The seats' activation rows are
 a scratch per seat, one device buffer a slot sized in floats and grown in 256 KB steps, kept
 across calls and rebuilt only when a call needs a slot wider than it holds.
+
+The decoder slab uploads twice: its f32 rows, and a halfword twin of the whole slab at the same
+element offsets. A decoder or generator conv whose width sits on the bias pass's four lattice
+gathers its columns as halves (`TtsIm2col16`, the same column order) into the half column slot,
+runs the f16 tile the device serves over the twin's weight rows (`F16GemmCm2`, or `F16GemmKhr`
+off a cm2 device) into f32 rows, and adds its bias row in place (`TowerBiasAct`, no activation),
+since the tile carries no epilogue. The half column slot holds 64 rows of slack past the widest
+conv's rows at its padded row width: the KHR tile loads whole 16-row blocks and the slack is what
+those reads land in. The narrow F0, energy and post convs and every conv of the front end and
+the predictor stay on the f32 tile.
 
 The front end - the PL-BERT encoder, the text encoder, the duration encoder, the duration head
 and prosody - runs on the f32-exact tile GEMM (`F32GemmT`: 64 positions by 64 weight rows a
