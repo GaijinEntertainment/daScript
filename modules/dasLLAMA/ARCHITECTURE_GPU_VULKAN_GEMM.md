@@ -176,6 +176,14 @@ EMITTED words as `<dir>/<kernel>.spv`, `g_vkd_spv_keep` keeps the same words in 
 the kernel's name for the kernel cells, and `DASLLAMA_VK_SPV_OVERRIDE=<dir>` then serves that directory's
 file - a round trip (dump, edit or spirv-opt, serve back) a dump taken after the override would not give.
 
+**A class's `set_<family>` builder serves its sets from a cache.** The set over a binding tuple
+(the layout, the buffers, their sizes, their region bits) is allocated and written once and served
+from `vkd_cached_set`'s table after, the tuple checked on every hit; a chain recorded on every call -
+the TTS seats' submits, the Pocket frame loop's hundred sets a frame - would otherwise allocate and
+write every set again on the dispatch path, and grow the descriptor pools until the model drop.
+Any device buffer's destruction and the drop's pool reset empty the cache, since a cached set may
+bind the buffer or hold a recycled handle.
+
 **Full subgroups are a whole-run arm, never a per-pipeline one.** `DASLLAMA_VK_FULLSG` plus a
 device that reports the feature sets `g_gpu.full_sg_on` once at device init, and every class
 pipeline is then built with `REQUIRE_FULL_SUBGROUPS`, so an A/B compares two whole runs. Plain

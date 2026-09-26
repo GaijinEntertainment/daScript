@@ -968,6 +968,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
 }
 
 def destroy_device_buf(h : uint64) {
+    vkd_set_cache_clear()   //! a cached set may bind this buffer
     unsafe {
         vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(h), null)
         if (key_exists(g_gpu.dev_mem, h)) {
@@ -1909,6 +1910,7 @@ def vk_drop_model_state {
     }
     g_gpu.desc_pool_at = 0
     g_set_bits |> clear()   // pool reset recycles set handles — stale region bits must not survive
+    vkd_set_cache_clear()
     // device buffers: dev_mem tracks every make_device_buf result — all model-owned
     for (buf, mem in keys(g_gpu.dev_mem), values(g_gpu.dev_mem)) {
         unsafe {
@@ -3076,6 +3078,71 @@ def vkd_class_init(var c : VkdClass; bindings : array<int>; push_bytes : int) {
     c.pipe_layout <- create_pipeline_layout(g_gpu.device, plci)
     c.push_bytes = push_bytes
     c.ready = true
+}
+
+//! a cached set: the layout and the binding tuple it was written for, checked on every hit
+struct private VkdSetEntry {
+    @do_not_delete set_ : VkDescriptorSet   //! the pool's handle, recycled by the pool reset
+    layout : uint64
+    bufs : array<uint64>
+    sizes : array<int64>
+    gbits : array<uint>
+}
+
+var private @scratch g_vkd_set_cache : table<uint64; VkdSetEntry>   //! the binding tuple's hash -> the set written for it
+
+def private vkd_set_entry_matches(e : VkdSetEntry; layout : uint64; bufs : uint64 const[]; sizes : int64 const[]; gbits : uint const[]) : bool {
+    return false if (e.layout != layout || length(e.bufs) != length(bufs))
+    for (i in range(length(bufs))) {
+        return false if (e.bufs[i] != bufs[i] || e.sizes[i] != sizes[i] || e.gbits[i] != gbits[i])
+    }
+    return true
+}
+
+//! the set over `bufs` on the class's layout, written once and served from the cache after: a chain recorded every call
+//! (the TTS seats' submits, the Pocket frame loop) asks the same sets a hundred times a frame, and a set's allocation and
+//! write are host time on the dispatch path. Any device buffer's destruction and the model drop's pool reset empty the cache
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
+def vkd_cached_set(c : VkdClass; family : string; bufs : uint64 const[]; sizes : int64 const[]; gbits : uint const[]) : VkDescriptorSet {
+    let layout = intptr(boost_value_to_vk(c.set_layout))
+    var k = layout * 0x9E3779B97F4A7C15ul
+    for (b in bufs) {
+        k = (k ^ b) * 0xBF58476D1CE4E5B9ul
+    }
+    for (s in sizes) {
+        k = (k ^ uint64(s)) * 0x94D049BB133111EBul
+    }
+    for (g in gbits) {
+        k = (k ^ uint64(g)) * 0x9E3779B97F4A7C15ul
+    }
+    var hit : VkDescriptorSet
+    g_vkd_set_cache |> get(k) $(e) {
+        if (vkd_set_entry_matches(e, layout, bufs, sizes, gbits)) {
+            hit = e.set_
+        }
+    }
+    if (hit != null) {
+        return hit
+    }
+    return vkd_set_cache_miss(c, family, k, layout, bufs, sizes, gbits)
+}
+
+//! the cache's miss: the set allocated, written and remembered under its tuple
+[cold_path]
+def private vkd_set_cache_miss(c : VkdClass; family : string; k, layout : uint64; bufs : uint64 const[]; sizes : int64 const[]; gbits : uint const[]) : VkDescriptorSet {
+    var set_ = vkd_alloc_set(c, family)
+    vkd_set(c, set_, bufs, sizes, gbits)
+    var e = VkdSetEntry(set_ = set_, layout = layout)
+    e.bufs |> push_from(bufs)
+    e.sizes |> push_from(sizes)
+    e.gbits |> push_from(gbits)
+    g_vkd_set_cache[k] <- e
+    return set_
+}
+
+//! the cached sets dropped: a buffer they bind is gone, or the pools reset
+def vkd_set_cache_clear {
+    g_vkd_set_cache |> clear()
 }
 
 // write a class set's descriptors + declare its region bits (the [vk_dispatch]-generated set
