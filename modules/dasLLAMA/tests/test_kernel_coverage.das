@@ -897,9 +897,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the biased-block (SigLIP) row classes: the bias with its GELU, the head restrides to the flash tile's width (the
     // stocked mmproj-gemma-3-4b-it-F16.gguf, dispatched by test_gemma3v_vulkan_twin in test_gemma3v.das; the rope on a
     // fused row's slot is the qwen3v tower's - mmproj-Qwen3VL-4B-Instruct-F16.gguf via test_qwen3v_vulkan_twin in
-    // test_qwen3v.das); their kernel coverage is test_vkt_tower_ln_rows. The layernorm and the seam with its next
-    // layernorm serve the TTS rows' PL-BERT seat too, so the census reaches them on a box with a StyleTTS2 carrier
-    "tower_bias_act_cls_spv", "tower_hpad_cls_spv", "tower_hpad16_cls_spv",
+    // test_qwen3v.das); their kernel coverage is test_vkt_tower_ln_rows. The layernorm, the seam with its next
+    // layernorm and the bias pass serve the TTS rows too (the PL-BERT seat, the decoder convs' bias after the f16
+    // tile), so the census reaches them on a box with a StyleTTS2 carrier
+    "tower_hpad_cls_spv", "tower_hpad16_cls_spv",
     "tower_hunpad_cls_spv", "tower_rope_tab_cls_spv",
     // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows and the rms seam (the
     // gated hidden is the LLM's biased f16 act stamp at a zero row map; the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf,
