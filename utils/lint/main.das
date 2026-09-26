@@ -589,11 +589,27 @@ def run_arch_pass(roots : array<string>) : int {
             cited |> insert("{c.doc}#{c.anchor}")
         }
     }
+    // a rule document or a ledger cites a section by `<doc>.md#<anchor>` too: such a citation
+    // must resolve, and it keeps the anchor it names alive (a section only prose leans on is
+    // narrative the rules read, not a dead promise); the folder-tree rule binds code, not prose
+    for (md in mds) {
+        let text = fread(md)
+        continue if (empty(text) || find(text, ".md#") < 0)
+        for (c in collect_md_citations(md, text)) {
+            let reason = citation_failure_reason(docs, c)
+            if (!empty(reason)) {
+                print("{md}:{c.line}: LINT026: citation does not resolve - {reason} (\"{c.raw}\")\n")
+                found ++
+                continue
+            }
+            cited |> insert("{c.doc}#{c.anchor}")
+        }
+    }
     for (md in mds) {
         let doc = arch_path(md)
         each_arch_anchor(docs, doc) $(a) {
             return if (cited |> key_exists("{doc}#{a.name}"))
-            print("{md}:{a.line}: LINT026: anchor \{#{a.name}\} has no [arch] citation - cite it from the owning code, or strip the anchor to demote the section to narrative\n")
+            print("{md}:{a.line}: LINT026: anchor \{#{a.name}\} has no citation - cite it from the owning code or from the rule document that leans on it, or strip the anchor to demote the section to narrative\n")
             found ++
         }
     }

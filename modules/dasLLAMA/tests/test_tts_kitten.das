@@ -177,7 +177,7 @@ def test_kitten_synthesis_metal(t : T?) {
     }
 }
 
-// ARCHITECTURE_TTS.md sec.2.32: q8 is the served default, f32 the reference lane the parity
+// ARCHITECTURE_TTS.md#tts-image-rail: q8 is the served default, f32 the reference lane the parity
 // rail holds against; a pin resets from the exact pin it took.
 [test]
 def test_tts_lane_pin(t : T?) {

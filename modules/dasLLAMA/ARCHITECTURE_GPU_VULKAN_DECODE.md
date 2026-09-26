@@ -1,6 +1,6 @@
 # dasLLAMA Architecture - the Vulkan per-op tier's decode era
 
-Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
+Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
 document carries sections 2.2r-2.2v: the decode attention block over per-layer K/V mirrors, the
 streamed expert layer's GPU/CPU split, the whole-token decode span, the deltanet decode step's
 per-session resident state, and the whole-model driver's hybrid token command. The prefill
@@ -10,9 +10,9 @@ window's and the token command's - is `ARCHITECTURE_GPU_VULKAN_MOE.md` sections 
 2.2ag; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq tile and the decode GEMV
 family's lane split are `ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q, 2.2ae and
 2.2ah; the residency plan and
-the marks swap under them, the token command's logits landing on the transfer queue and the N-row token command are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o and 2.2an, and `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao.
+the marks swap under them, the token command's logits landing on the transfer queue and the N-row token command are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o and 2.2an, and `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`.
 
-### 2.2r The per-op tier's decode attention block {#decode-attention-block}
+### The per-op tier's decode attention block {#decode-attention-block}
 
 A MoE model rides the per-op tier, whose decode ran attention on the CPU: q/k/v/o are GEMVs
 over weights the tier already holds resident for prefill, and reading them from host DRAM
@@ -44,7 +44,7 @@ VRAM is layers x rows x kvd x 4 bytes). The loader reports that need
 way the stream slots are carved: the mirrors are allocated after placement, and un-carved they
 came out of the desktop reserve and paged the resident expert stacks (the FFN chain's submit
 went from 147 us to 741 us). The prefill chain fills it from its own f16 K/V shadows at the end
-of each layer's window (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2q's fa arm converts the
+of each layer's window (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`'s fa arm converts the
 attended prefix; the fill is a device copy of it), and the block appends one row per served
 token.
 
@@ -77,7 +77,7 @@ attention time with a forward look (`attn_dec_gpu_next_serves`): only when the n
 serve with no remedy, so a hydrate or a claim is never pre-empted; a streamed layer's FFN (CPU)
 and the last layer keep the plain form, whose host reduce the combine kernel mirrors in order.
 
-### 2.2s A streamed expert layer's prefill is split between the GPU and the CPU {#streamed-layer-split}
+### A streamed expert layer's prefill is split between the GPU and the CPU {#streamed-layer-split}
 
 **The GPU takes the head of the routed-expert list, the CPU the tail, concurrently.** A layer
 whose expert stacks live on the host (the streamed layers of a model past the weight budget) used
@@ -104,7 +104,7 @@ partial copy is on demand per layer and never prefetches the next group, so the 
 would only hold VRAM the resident stacks want. A device the split cannot serve keeps both slots
 and the whole-group rail's overlap - compute on one while the transfer queue fills the other.
 
-### 2.2t The whole-token decode span {#whole-token-decode-span}
+### The whole-token decode span {#whole-token-decode-span}
 
 **Every resident expert layer's decode runs as ONE recorded chain and ONE submit per token**
 (`DASLLAMA_GPU_DEC_SPAN`, on; the `vulkan_moe_span` decode override, selected when the MoE
@@ -114,7 +114,7 @@ of queue and fence latency the GPU spends idle (`DASLLAMA_GPU_PROF=1`'s `vk_dec 
 over 96 tokens) - on a 48-layer model with 35 resident layers that is the largest single term
 of the token. The span keeps the host out of the resident suffix [l0, n_layers): the host feeds
 layer l0's attention row in its plane's acts form, the device runs per layer the attention
-chain (sec.2.2r above), the residual add fused with the FFN rms (`cls_ar`, `add_on`), the
+chain (`ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block` above), the residual add fused with the FFN rms (`cls_ar`, `add_on`), the
 gate/up feed requants, the router GEMV over an f32 plane
 (`router_gemv_cls`: one workgroup per expert row, f32 in and f32 out - the host router's own
 arithmetic rather than a quant chain, so the device's picks track the CPU's up to summation
@@ -165,7 +165,7 @@ those edges by hand (`vhz_dep` on the span's own region bits) after
 each requant and after the top-k. The loader carves the router planes with the mirrors
 (`set_moe_gpu_dat_need`).
 
-### 2.2u The deltanet decode step's resident state follows its session {#dn-step-owner}
+### The deltanet decode step's resident state follows its session {#dn-step-owner}
 
 **The deltanet decode step keeps one device copy of a recurrent layer's state and conv ring,
 and that copy belongs to one session at a time.** The step (`vk_moe_dn_step`) records, per
@@ -176,7 +176,7 @@ cold-uploads its own state and takes the slot. A flush request (`vk_dn_step_flus
 when the requester is the owner - a foreign session's state is already on its host, so the
 request is a no-op there. Two sessions decoding turn about on the per-op tier therefore pay a
 flush and an upload per recurrent layer per switch, and each reads its own state; the whole-model
-driver keeps a slot per mirror region instead (sec.2.2v). The resident prefill takes its region's
+driver keeps a slot per mirror region instead (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). The resident prefill takes its region's
 slot the same way: a prompt from position zero zeroes that slot, so the chain first sends home
 whatever another session left dirty in it (`vk_rdec_dn_flush_owners`).
 
@@ -197,10 +197,10 @@ authoritative at once. The engine reaches those seams through the tier's forward
 `moe_gpu_dn_release` for one session's copies, and `moe_gpu_dn_invalidate` for every copy at
 once.
 
-### 2.2v The whole-model driver's hybrid token command {#hybrid-token-command}
+### The whole-model driver's hybrid token command {#hybrid-token-command}
 
 **A recurrent layer rides the same recorded token command as an attention layer.** The
-whole-model driver (`ARCHITECTURE_GPU.md` sec.1.5, `dasllama_gpu_resident.das`) records one
+whole-model driver (`ARCHITECTURE_GPU.md#gpu-backends`, `dasllama_gpu_resident.das`) records one
 command per model whose per-layer body is one of two heads followed by the shared FFN tail (a q8 triple with a Q8_0 feed runs `Q8GemvGu` - the gate and up dots, the activation and the hidden row's Q8_0 requant in one dispatch, a workgroup a 32-row block - else the gate GEMV, the up GEMV and the act+requant kernel; then the down GEMV; a q8 wo or down GEMV whose residual step quantizes to Q8_0 carries that step as its last-arriving workgroup's epilogue (`Q8GemvAr`: the rows into a `@coherent` plane, an arrival counter, the `ArRq` math over the whole row by the last workgroup) so no dependent dispatch follows it; an E-series layer's per-layer-embedding branch follows in three dispatches - the FFN residual step quantizes the row it writes as it is (`ArArgs.no_norm`, the gate's feed), the gate GEMV, and `Q8GemvPleAct`, which builds gelu(gate) x the side row and its Q8_0 blocks in workgroup memory and runs the proj GEMV over them, `DASLLAMA_VK_FUSE=0` keeping the five; where the driver holds the pre-step's projection (`RDec.ple_gpu`, the window chain's f16 mirror) the token command opens with the pre-step's finish too - the f16 row GEMV over the embedded row (`RouterGemvF16`, a workgroup a projected element row) and the residual step's kernel over the [layers] slices of ple, so the host gathers the table row alone and the `forward()` gate takes the same offer the prefill's does): an
 attention head (the q, k and v GEMVs as ONE region dispatch where the three planes share a format and a slab - q in kv-width pieces, then k, then v, the projection row landing whole, the ungated q buffer being that row's front - else a GEMV a plane; the fused qk-norm and rope storing the mirror row, decode attention
 over the mirror, the wo requant and GEMV) or a recurrent head - the fused qkv GEMV and the z
@@ -236,7 +236,7 @@ so the layer after it requants on its own.
 **Each recurrent layer owns a device state slot per mirror region in the per-op step's shape**
 (`RLayer.dn`: a `DnStep` a region over one state and one smalls buffer - the slot's state at
 `state_byte_off`, its parity-double-buffered conv ring at `hist_off`, the owner's host addresses), and
-the ownership rule of sec.2.2u holds per slot: before a token the driver binds the selected
+the ownership rule of `ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner` holds per slot: before a token the driver binds the selected
 region's slot in every recurrent layer to the calling session (`vk_rdec_dn_own` - the owner's path
 is one pointer compare; a foreign dirty slot flushes home first, then the session's state and
 history come up), the flush, release and invalidate seams walk every slot beside the per-op
@@ -245,7 +245,7 @@ table, and a position-zero reset releases the session's slots. The ring parity i
 slots step once per row, so the driver flips its word after each row it submits. A slot is
 `nvh x ds x ds` floats of state and a ring pair of `2 x cd x (dconv - 1)` floats; the step kernel
 binds every slot and indexes the row's own from `dnslot` and the head count its geometry pins. Two regions step
-with no flush between them, so the N-row command takes a recurrent layer (`ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao).
+with no flush between them, so the N-row command takes a recurrent layer (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`).
 
 **The K/V mirror has one slot per ATTENTION layer.** A recurrent layer keeps no K/V, so the
 mirror is sized `n_attn x seq_cap x kv_dim` and each attention layer carries its slot index
@@ -254,10 +254,10 @@ once on a recurrent layer. The attention geometry (head size, q and kv widths) i
 attention layer's - on qwen35 layer 0 is recurrent.
 
 The mirror holds that layout once per region, a region a session's whole history, and the token
-command records once per region (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n).
+command records once per region (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`).
 
 The attention-side planes the driver uploads beside its norms - the q/k/v projection bias, the
-sink logits and the output bias - are `ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2am.
+sink logits and the output bias - are `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes`.
 
 **Gated attention and partial rotary ride the fused qk-norm+rope kernel and the decode attention
 kernel, not a detour.** On a gated model the q GEMV writes `2 x qd` rows in the loader's per-head
@@ -270,8 +270,7 @@ split qk-rms + rope pair carries neither arm, so a gated or partial-rope model t
 kernel whatever the lever says (`DASLLAMA_VK_FUSE=0` pins the split pair only on a plain qk-norm
 model); the two arms need qk-norm, and a model with either but without it declines by name.
 
-**The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN.md`
-sec.2.2ad): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
+**The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
 rows into the layer's own smalls, the conv, the sequential scan over the layer's own device
 state slot (the raw o rows in the tier's workspace), the o requant and the out GEMM into the block
 output, so the window command needs no host round trip per layer. The state slots are the
@@ -296,5 +295,4 @@ dispatches (`rd_ts`), and the sampler sums every interval under the name the rec
 name's prefix picks its table - `a:` an attention head's, `d:` a recurrent head's, `m:` the MoE
 tail's, `p:` the prologue's, `t:` the tail's - a name two stamps share sums both (the attention
 head's two `a:kv`), and a bare name is the anchor no interval bills to. What one stamp costs the
-command, and why a Linux driver's per-role figures are standalone, is `ARCHITECTURE_GPU_VULKAN.md`
-sec.2.2j's.
+command, and why a Linux driver's per-role figures are standalone, is `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`'s.

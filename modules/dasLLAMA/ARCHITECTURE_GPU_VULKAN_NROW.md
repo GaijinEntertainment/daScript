@@ -1,14 +1,13 @@
 # dasLLAMA Architecture - the Vulkan tier's N-row token command
 
-Companion to `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; section numbers are `ARCHITECTURE.md`'s. This
+Companion to `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; a section is cited by its anchor. This
 document carries sections 2.2ao and 2.2ap: the N-row token command a batched step's rows go
 through, and the residual step's two forms it holds bit for bit. The residency plan, the marks
 swap and the logits landing that the command runs under are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`
-sections 2.2n-2.2o and 2.2an; the decode attention's forms are `ARCHITECTURE_GPU_VULKAN_ATTN.md`
-sec.2.2al; the per-op tier's decode era, whose routed block the command's rows form mirrors, is
+sections 2.2n-2.2o and 2.2an; the decode attention's forms are `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`; the per-op tier's decode era, whose routed block the command's rows form mirrors, is
 `ARCHITECTURE_GPU_VULKAN_DECODE.md` sections 2.2r-2.2v.
 
-### 2.2ao The N-row token command: a batched step's rows through one weight pass {#nrow-token-command}
+### The N-row token command: a batched step's rows through one weight pass {#nrow-token-command}
 
 **A batched decode step runs its rows through ONE recorded command, so a layer's weights stream
 once for the step instead of once a row.** The driver sizes every per-token plane to `RDec.nb`
@@ -54,7 +53,7 @@ cached count and mirror region, which ride the shared `TokMeta` block a row (`mi
 element offset; `DaAttnArgs.rowwg` and `qrow` carry the row stride into the attention, `rowwg`
 0 naming a one-row dispatch). The attention's key split is the span's, the ladder the one-row
 command takes below its wide form (`rd_split_pieces` and the layer's window cap,
-`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al), so the rows sum as each row does alone while every
+`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`), so the rows sum as each row does alone while every
 row sits in one band - the batch's furthest row picks the form, the unsplit twin under
 `RD_UNSPLIT_POS` and the split form at every span past it (the ruler reads eight pieces slower
 than four at four rows, so the rows take no wide twin). A command is recorded once per row
@@ -72,7 +71,7 @@ apart, the f32 arm's router form `2 x nvh`, `DnStepArgs.beta_row_stride`), an o 
 step (`dn_step_cls`) runs a workgroup per (row, head), the row's `TokMeta` naming the state and
 ring slot (`dnslot`) and the ring parity it reads, so two rows in two regions advance two states
 in one dispatch and the driver flips each row's region parity after the submit
-(`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v); the batch driver owns each row's state in its
+(`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`); the batch driver owns each row's state in its
 region before the command, as the one-row path does before a token. A gated q rides the same
 kernels as one row: the q GEMV's y stride, the fused norm+rope's and the attention's `qrow` are the
 q plane's `2 x qd` row where the gate is on, the projection row's width where it is not.
@@ -144,7 +143,7 @@ two rows share one, and the caller's row-at-a-time loop serves that step. `DASLL
 (`ENVIRONMENT.md`) drops a class of dispatch from the recorded command so a profile prices it; the
 logits are garbage under any bit.
 
-### 2.2ap The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
+### The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
 
 The residual step has two forms on the decode rail: the row kernel (`ArBase.accum_row`, a
 row a workgroup, the N-row command's every site) and the q8 GEMV's epilogue

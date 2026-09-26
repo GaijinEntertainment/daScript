@@ -8607,7 +8607,7 @@ class MetalMoeGemvIq2xxs : MetalKqGemvIq2xxsFam {
     }
 }
 
-// the F4 twin serves only under the box's serving-confirm crown (ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md sec.2.21)
+// the F4 twin serves only under the box's serving-confirm crown (ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity)
 [metal_dispatch(name = "enc_kq_iq2xxs_f4_c", pso = "g_pso_kq_iq2xxs_f4", tgmem = "MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq2xxsF4 : MetalKqGemvIq2xxsFam {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>

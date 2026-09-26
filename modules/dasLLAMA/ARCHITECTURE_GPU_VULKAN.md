@@ -1,6 +1,6 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
-Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
+Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
 carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj: the prefill window
 chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer, the tile probe's
 shared descriptor set layout, the recurrent block of the prefill window, the roster of Vulkan
@@ -17,7 +17,7 @@ section 2.2ah. What a model has to fit on the card before any of this runs - the
 and the marks swap that lets one GPU slot serve many models - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s
 sections 2.2n-2.2o and 2.2an, and the N-row token command a batched step's rows go through is
 `ARCHITECTURE_GPU_VULKAN_NROW.md`'s 2.2ao-2.2ap. The decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s
-sections 2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
+sections 2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 The module gate's seven Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
 reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses no names: its
@@ -35,7 +35,7 @@ trio reads `KQ_CM2E_ALIASES_M` (`dasllama_kqformat.das`): a format whose s stamp
 `dasllama_vulkan_classes.das`, the probe's twins in `harness/vk_gemm_probe.das` and the bring-up
 fixture `tests/_vkd_toy.das` - and requires its `AT`, `BT`, `ACC` and `ACCW` typedefs to follow
 its `BK` and `BN`, an e or s stamp's `BN` to equal `SCHED_M_ROWS` or `SCHED_S_ROWS`, and a
-scale-caching stamp's `BLKW` to equal `BK x UNR`; it licenses no names. `check_kq_gemv_grid_literals` holds every grid format's `<Fmt>GemvT` literal `GRID_WORDS` / `GRID_OFF` to the `KQ_GRID_<FMT>` chain the host fill reads (sec.2.2ab); it licenses no names. `check_vk_extension_roster`
+scale-caching stamp's `BLKW` to equal `BK x UNR`; it licenses no names. `check_kq_gemv_grid_literals` holds every grid format's `<Fmt>GemvT` literal `GRID_WORDS` / `GRID_OFF` to the `KQ_GRID_<FMT>` chain the host fill reads (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`); it licenses no names. `check_vk_extension_roster`
 walks `dasllama/` for every `"VK_*"` extension name and every `*_supported` probe
 `modules/dasVulkan/daslib/vulkan_boost.das` declares, and requires each inside `vk_ext_roster` in
 `dasllama_vulkan_common.das`, licensing no names.
@@ -44,7 +44,7 @@ walks `dasllama/` for every `"VK_*"` extension name and every `*_supported` prob
 under `performance/` (`coopmat_mulmm_reference.das`, `coopmat_mulmm_port.das`) sit outside the
 walk as reference measurements of another engine's kernels.
 
-### 2.2j The Vulkan resident prefill window chain {#vk-prefill-window-chain}
+### The Vulkan resident prefill window chain {#vk-prefill-window-chain}
 
 **A prompt longer than `PF_WINDOW` rows runs as SEQUENTIAL windows over the same activation
 buffers.** Every window's rope and attention address the KV mirror at ABSOLUTE positions, so window w attends
@@ -63,10 +63,10 @@ mirrors are stored before the FFN, and a later window starts from fresh embeddin
 gate, up and down GEMMs, the activation and the residual step of the last layer take a region
 starting 32 rows below the window's end (`fill_arena_batch_sched`'s `row0`, `ActArgs.elem0`,
 `ArArgs.row0`). Thirty-two, not one, because the s tile - the cm2 tile with 32-row columns
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l) - loads a whole 32-row column unclamped on its
+(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`) - loads a whole 32-row column unclamped on its
 fast path, and the resident prefill's activation planes (`pf_xf`, `pf_hf`) carry no read slack
 past the window - unlike the MoE chain's gathered image and hidden plane, which
-`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l sizes with 128 rows of slack past their last region
+`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default` sizes with 128 rows of slack past their last region
 (`TILE_READ_SLACK`). Rows below the slice keep stale gate, up,
 hidden and residual values that nothing reads. The sliced GEMMs do not split k: the split-k
 reduce sums partial planes from row 0, so a region starting below the window's end would reduce
@@ -142,7 +142,7 @@ planes and the driver's prepare zero-fills both mirrors whole: the fragment read
 the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror
 attention gates on the sigmoid of the gate half, a partial-rope model rotates a head's first `rot` elements, and at head size 256 the gated twins take the h256 cm2 flash stamps (Br 64, Bc 32), q at the head's q stride, the normalized output gated before the store.
 
-### 2.2p The Q8 requant writers store one quant per byte {#q8-requant-byte-store}
+### The Q8 requant writers store one quant per byte {#q8-requant-byte-store}
 
 Every requant writer on the class rail - the prefill and decode-tail kernels that write Q8_0 or
 Q8_K quants - declares its output plane `array<int8>` and stores one quant per element, over
@@ -154,7 +154,7 @@ the same under either form: the amax fold, the scale and the rounding decide the
 three sit above the store. The path needs the device's 8/16-bit storage feature set, which the
 family's device creator enables.
 
-### 2.2ab The decode GEMV family stages its grid codebooks from one device buffer {#kq-gemv-grid-buffer}
+### The decode GEMV family stages its grid codebooks from one device buffer {#kq-gemv-grid-buffer}
 
 The grid formats' codebooks (iq2s, iq2xs, iq2xxs, iq3s, iq3xxs) live in one 17 KB model-owned
 device buffer, bound at binding 6 of the kq GEMV family and built on the family's first set
@@ -171,10 +171,10 @@ iq3s 415 GB/s on the reference card, `harness/vk_gemv_probe.das`). The buffer di
 model-drop sweep with every other device buffer, and its handle zeroes there, so the next
 model's first kq set rebuilds it.
 
-### 2.2ac The tile probe's arms share one descriptor set layout {#khrx-shared-set-layout}
+### The tile probe's arms share one descriptor set layout {#khrx-shared-set-layout}
 
-`khrx` is the lever sweep of the KHR kq tile (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ae) in
-`harness/vk_gemm_probe.das` (`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` sec.2.5a): eight arms
+`khrx` is the lever sweep of the KHR kq tile (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`) in
+`harness/vk_gemm_probe.das` (`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`): eight arms
 timed over one shape. Two are shipped bodies - the KHR class, the reference each compared arm
 is checked against, and the sdot4 kq tile. `ship` is the KHR tile copied with no lever moved,
 the control the lever arms read against, and the four lever arms are that copy with one lever -
@@ -190,7 +190,7 @@ tile's ceiling with the weight loads removed. It still binds the weight plane an
 words the shared layout declares, and its stage reads neither (`KhrPxNil`, whose `wq` field
 carries `@role = "alias"`). Those two are the probe's deliberately unread bindings.
 
-### 2.2ad The recurrent block of the prefill window {#vk-prefill-dn-block}
+### The recurrent block of the prefill window {#vk-prefill-dn-block}
 
 **A recurrent (deltanet) layer's window block replaces the attention head; the FFN tail is
 shared.** Per window the block runs the qkv and z GEMMs into the window planes, the beta and
@@ -198,18 +198,17 @@ alpha rows into the layer's smalls, the conv over the selected region's ring ima
 scan over that region's state slot (the slot's bases ride the pushes, the sets bind every region's
 slot), and the out GEMM into `pf_xb2`. The smalls are the layer's per-layer f32 plane: the layer's
 cold constants (conv taps, out-norm weights, the `a` and `dt` rows), the beta and alpha rows, and a
-parity ring pair per region (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v). A prompt from position
+parity ring pair per region (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). A prompt from position
 zero resets the region's parity word and zero-fills the slot's state and its first ring image
 alone (`pf_dn_zero_region`), so the first window's conv reads a zero history and the last window's tail
 lands in image 0, the parity the owner handoff hands the session. The weight planes stay in their file
-formats where the loader tags them natively (`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v
+formats where the loader tags them natively (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`
 carries the tagging condition), so a Q5_K/Q6_K file rides the k5/k6 tiles.
 
 The block reads two activation feeds, and each one is decided on its own.
 
 - **The x feed is the layer's input rows.** The qkv and z GEMMs read it. `pf_dnx6` decides it:
-  f16 rows when both of those planes admit the coopmat tiles (`ARCHITECTURE_GPU_VULKAN_GEMM.md`
-  sec.2.2l), else the quant image.
+  f16 rows when both of those planes admit the coopmat tiles (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`), else the quant image.
 - **The o feed is the scan's output rows.** The out GEMM reads it. `pf_dno6` decides it: f16
   rows when the out plane admits the coopmat tiles, else a requant.
 
@@ -218,14 +217,13 @@ tiles and takes the requant on the o feed alone.
 
 When the x feed is not f16, a K-quant qkv/z pair reads the Q8_K activation form, as the
 attention head's kq planes do, and the q8 beta/alpha arm re-requantizes the rows Q8_0 behind
-the z GEMM - one feed, two forms, as the decode step does (`ARCHITECTURE_GPU_VULKAN_DECODE.md`
-sec.2.2v).
+the z GEMM - one feed, two forms, as the decode step does (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`).
 
 The beta and alpha rows take one of three arms. A file that carries them as f32 rows keeps them
 f16 on the device; on the cm2 route with the f16 x feed they are two small f16 GEMMs - the beta
 rows and the alpha rows each through `F16GemmCm2`, eight k chunks into the split-k scratch and
 the reduce into the layer's smalls at the beta and alpha bases (the class is the MoE router's,
-`ARCHITECTURE_GPU_VULKAN_MOE.md` sec.2.2af). Off that route the f32 arm is a scalar tile GEMM
+`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`). Off that route the f32 arm is a scalar tile GEMM
 over the `[beta ; alpha]` rows: one workgroup covers 16 positions by 16 output rows, one output
 per invocation, and the grid runs over both group axes, so a layer of only `2 x nvh` rows
 (`nvh`, the layer's value-head count) - 64 on the 9B - still fills the card. The q8 arm is two
@@ -256,9 +254,8 @@ chain (a sixth of the scan's time there). The conv, the scan and the requant fam
 fold map their 32-lane blocks and clusters from the invocation id, never from the subgroup id:
 every shuffle in them carries an xor mask under 32, which stays inside such a block on any
 subgroup width the tier admits (32 or more), so the kernels hold on a 64-lane device as on a
-32-lane one; only the KHR tile keys on the width itself (`ARCHITECTURE_GPU_VULKAN_GEMM.md`
-sec.2.2ae). The conv and smalls bindings are NonWritable, as every
-binding no kernel of a class writes is (sec.2.2aj). The decoration is load-bearing: without it the driver orders each token's k and q
+32-lane one; only the KHR tile keys on the width itself (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`). The conv and smalls bindings are NonWritable, as every
+binding no kernel of a class writes is (`ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens`). The decoration is load-bearing: without it the driver orders each token's k and q
 loads behind the previous token's o store (the two buffers may alias), and the same kernel ran
 2.35x slower (19004 against 8084 us over the 0.8B's 18 layers on the Linux RTX 5080; the staged
 two-column form it replaced 8854). The raw o rows land in the per-op tier's workspace, for the
@@ -266,13 +263,13 @@ gated out-norm's one workgroup per position.
 
 The conv history crosses windows position-major in ring image 0; the last window transposes the
 tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is stated in
-`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v). Every window past the first carries at least as
+`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). Every window past the first carries at least as
 many rows as the conv has taps: when a full window would leave the last window fewer rows than
 that, the earlier window takes fewer rows instead, so the last one still holds the taps. Only a
 lone first window can be shorter - its history is zero, so the tail writes the ring's leading
 rows as zero (`DnTailArgs.zero_rows`).
 
-### 2.2ai The device-init log names every Vulkan capability the tier keys a route on {#vk-extension-roster}
+### The device-init log names every Vulkan capability the tier keys a route on {#vk-extension-roster}
 
 `vk_ext_roster` (`dasllama_vulkan_common.das`) is the one list of the Vulkan extensions, core
 feature sets and device limits the tier reads: for each, the probe the tier's arming reads
@@ -288,7 +285,7 @@ same probe - the kernel file's roster cell holds the arming's fields to the rost
 module gate keeps the roster complete: every extension name and every such probe the tier calls
 appears in it.
 
-### 2.2aj The `[vk_dispatch]` lens derives `readonly` from the class family's accesses {#vk-readonly-lens}
+### The `[vk_dispatch]` lens derives `readonly` from the class family's accesses {#vk-readonly-lens}
 
 Every `@ssbo` member on a binding no `[spirv_kernel]` method of the class writes gains
 `readonly`, which the emitter decorates NonWritable, so the driver orders no load of that

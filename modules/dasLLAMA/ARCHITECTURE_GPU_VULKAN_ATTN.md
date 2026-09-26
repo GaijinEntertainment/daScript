@@ -1,13 +1,13 @@
 # dasLLAMA Architecture - the Vulkan resident driver's attention
 
-Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This document
+Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document
 carries sections 2.2al and 2.2am: the token command's attention key split, and the attention-side
 planes the resident driver uploads beside its norms - the q/k/v projection bias, gpt-oss's sink
 logits and its output bias - with the flash tiles' sink stamps. The window chain the flash tiles
-serve is `ARCHITECTURE_GPU_VULKAN.md` sec.2.2j; the token command the decode pass sits in is
-`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2v.
+serve is `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`; the token command the decode pass sits in is
+`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`.
 
-### 2.2al The token command's attention splits a head's keys across workgroups {#vk-decode-attn-split}
+### The token command's attention splits a head's keys across workgroups {#vk-decode-attn-split}
 
 **The decode attention dispatches a workgroup per (kv head, slab of its q heads, key split), and
 the group's last piece combines.** A workgroup reads its kv head's K and V rows once and scores
@@ -100,11 +100,11 @@ mask, the 8-row tile serving any other capped shape. Every kernel that stages a 
 `resident_layer_decline` names a layer outside the served head sizes.
 
 **A sink model (gpt-oss) runs the pass's `SINK` twins.** The head's sink logit is a phantom key with
-no value row, read off the sink plane (sec.2.2am) bound past the pass's eight bindings: the unsplit
+no value row, read off the sink plane (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes`) bound past the pass's eight bindings: the unsplit
 store folds it into the row's max and denominator once, a split piece carries none, and the last
 piece's combine (the pass's own `SINK` stamp) seeds its aligned max and denominator with it.
 
-### 2.2am The attention-side planes: the q/k/v bias, the sink logits and the output bias {#vk-attn-planes}
+### The attention-side planes: the q/k/v bias, the sink logits and the output bias {#vk-attn-planes}
 
 **A q/k/v projection bias (qwen2) folds into the rope stage.** The biased models' bias rows
 upload once as one row per layer in the projection buffer's own `[q | k | v]` layout
@@ -118,7 +118,7 @@ binds the norms buffer in that slot as a placeholder the kernel never reads (`ha
 installs separately (`install_moe_gpu_resident_bias`), so a tier without it names the bias in its
 decline instead of serving the model unbiased. The per-op tier carries the same rows through its
 hooks: the decode block binds the layer's row to the same rope kernels
-(`ARCHITECTURE_GPU_VULKAN_DECODE.md` sec.2.2r), and the prefill chain's `AtPrep` stage adds the q
+(`ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block`), and the prefill chain's `AtPrep` stage adds the q
 and k rows before its norm and rope and runs a third pass over the raw v window - `AtPrep` with no
 rope and no norm is a copy plus bias, in place - so the attention and the v rows that come home both
 carry it (`ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op chain).
@@ -136,7 +136,7 @@ upload wherever no flash arm serves the f16 mirrors, before any weight lands.
 without it names the sinks in its decline, and the upload itself declines - naming the reason -
 where no flash arm serves the f16 mirrors or the head is not 64 wide, the sink stamps' one size,
 pre-flighting the sink stamps the way the prepare pre-flights the plain ones. The token command's
-sink twins (sec.2.2al) and the flash tiles' sink stamps read the plane at the layer's row
+sink twins (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`) and the flash tiles' sink stamps read the plane at the layer's row
 (`sinkoff`).
 
 **An attention output bias (gpt-oss) rides the norms plane, and the residual step adds it.** The

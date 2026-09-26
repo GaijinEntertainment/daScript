@@ -1,14 +1,13 @@
 # dasLLAMA architecture - text to speech, the memory a synthesis holds
 
 The companion `ARCHITECTURE.md` indexes: the mechanisms that decide what a StyleTTS2-lineage
-synthesis (Kitten, Kokoro) allocates, holds and gives back (sec.2.31, 2.51-2.53).
+synthesis (Kitten, Kokoro) allocates, holds and gives back (`ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier`, 2.51-2.53).
 `ARCHITECTURE_COMMON.md` (repo root) is the contract. The block home, the facade and the phoneme
-families are `ARCHITECTURE_TTS.md`; the Pocket family's own memory law is `ARCHITECTURE_POCKET.md`
-sec.2.46.
+families are `ARCHITECTURE_TTS.md`; the Pocket family's own memory law is `ARCHITECTURE_POCKET.md#pocket-codec-stream`.
 
-## 2. Mechanisms
+## Mechanisms
 
-### 2.31 One carrier per synthesis {#tts-scratch-carrier}
+### One carrier per synthesis {#tts-scratch-carrier}
 
 `styletts2_synthesize` carries `[hot_path]`: nothing on the synthesis path allocates. Every
 stage activation is a `@scratch @exact_size` field of the `St2Scratch` carrier the facade's
@@ -21,7 +20,7 @@ and grows to its working size once", which only a field or a global can promise.
 noise lives in the carrier too, and `TtsNoise.captured` decides whether a synthesis draws it:
 a reused carrier is never empty after the first chunk, so emptiness cannot.
 
-### 2.51 The generator runs on six buffers {#tts-generator-buffers}
+### The generator runs on six buffers {#tts-generator-buffers}
 
 The iSTFTNet generator is where a synthesis holds its memory. Its activations are token-major
 `[t][c]` rows at the stage's width, every one the size of the stage's whole stream (the last
@@ -53,25 +52,25 @@ oracle and the facade's streaming cell against itself. A buffer added to the gen
 justified against this table: a new role names the field whose holder is dead at that point,
 or says which three-operand site forces a seventh.
 
-### 2.52 The peak is the chunk's, and idle memory is given back {#tts-idle-release}
+### The peak is the chunk's, and idle memory is given back {#tts-idle-release}
 
 A synthesis runs one chunk at a time (`tts_chunks`), so what it holds is the largest chunk's
 working set, linear in the chunk's length: the carrier's rows fields at the sample count the
-chunk speaks (the source's tables excepted, sec.2.53), the block home's scratch globals at the
+chunk speaks (the source's tables excepted, `ARCHITECTURE_TTS_MEMORY.md#tts-source-stream`), the block home's scratch globals at the
 largest rows GEMM the chunk ran. The chunker's cap is the ceiling -
 `TTS_CHUNK_CHARS` codepoints, a sentence of about twenty-five seconds - and a platform where
 memory is the scarce resource lowers it per model with `tts_set_chunk_chars`: the same text
 speaks in more, shorter pieces, each its own synthesis with its own prosody (a phrase split
 across two chunks is read as two phrases), and the peak scales with the cap. Pocket takes no
-cap: its peak is its window's (sec.2.46), not its chunk's. What a say leaves behind stays
-sized to the largest chunk it saw, so the next chunk allocates nothing (sec.2.31);
+cap: its peak is its window's (`ARCHITECTURE_POCKET.md#pocket-codec-stream`), not its chunk's. What a say leaves behind stays
+sized to the largest chunk it saw, so the next chunk allocates nothing (`ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier`);
 `tts_release_scratch` gives it all back - the carrier, the Pocket carrier and the block home's
 globals - for a caller that says idle memory matters more than the allocation the next run then
 pays. The carrier's source noise goes with it: a synthesis draws its noise from the seed and the
 chunk index, so nothing is lost, except on the parity rail, whose captured noise the release
 keeps by leaving that carrier alone.
 
-### 2.53 The harmonic source streams in frame windows {#tts-source-stream}
+### The harmonic source streams in frame windows {#tts-source-stream}
 
 The source's tables sit at samples times harmonics - the cycles per sample, the phase
 upsampled back from frame rate, the noise draw, the sine rows - four tables the size of nine
@@ -90,7 +89,7 @@ carry, because the upsample's taps reach one frame each way - and the sine rows 
 implementation each, the window form; the whole-row `resize_linear` runs it over every column,
 which is the form the kernel tests hold to the reference arithmetic, and the block test holds the
 window form at offsets and strides off the whole row bit-equal to it. The window knob is a
-`TtsStreamWindow`, the record Pocket's codec window is too (`ARCHITECTURE_POCKET.md` sec.2.46):
+`TtsStreamWindow`, the record Pocket's codec window is too (`ARCHITECTURE_POCKET.md#pocket-codec-stream`):
 a set is announced, a negative count refused. The noise stream is the reference's one stream: `styletts2_draw_noise` opens
 it for the initial phases, and the source reopens it from the same seed, skips those draws, and
 takes the normals in row order a window at a time; a captured stream (the parity rail's) is

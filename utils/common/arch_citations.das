@@ -151,10 +151,44 @@ def private resolve_pointer_doc(folder, rel : string) : string {
 }
 
 
+// The pointers one line makes from `from0` on: `<path>.md#<anchor>`, the path the longest run of
+// path characters before `.md`, the anchor the run of anchor characters after `#`.
+def private pointers_in_line(line : string; from0, lineno : int; folder : string; var out : array<ArchCitation>) {
+    peek_data(line) $(d) {
+        let len = length(d)
+        var from = from0
+        while (true) {
+            let ext = find(line, ".md#", from)
+            break if (ext < 0)
+            let hash = ext + 3
+            var start = ext
+            while (start > from && is_path_char(int(d[start - 1]))) {
+                start --
+            }
+            var stop = hash + 1
+            while (stop < len && is_anchor_char(int(d[stop]))) {
+                stop ++
+            }
+            from = stop
+            // `.md#` with no name after it or no path before it is prose (`<doc>.md#<anchor>` in a
+            // contract's text); a URL to a document on the web is not a pointer either: the walk
+            // back through `https://host/...` stops at the colon and leaves a path opening with `/`,
+            // and a bare `host.tld/...` opens with a dotted first segment - a tree path's first
+            // segment carries no dot and never a leading slash
+            continue if (stop == hash + 1 || start == ext || int(d[start]) == '/')
+            let first_slash = find(line, "/", start)
+            continue if (first_slash > start && first_slash < ext && find(line, ".", start) < first_slash)
+            out |> push(ArchCitation(line = lineno, raw = slice(d, start, stop),
+                anchor = slice(d, hash + 1, stop),
+                doc = resolve_pointer_doc(folder, slice(d, start, hash))))
+        }
+    }
+}
+
+
 // Every pointer a C or C++ source makes, in file order: `<path>.md#<anchor>` inside a `//`
-// comment, the path the longest run of path characters before `.md`, the anchor the run of
-// anchor characters after `#`. The `//` test inverts the .das rule's: here only text INSIDE the
-// comment is a citation. A block comment is not read.
+// comment. The `//` test inverts the .das rule's: here only text INSIDE the comment is a
+// citation. A block comment is not read.
 def public collect_arch_pointers(file, text : string) : array<ArchCitation> {
     var out : array<ArchCitation>
     let folder = dir_name(file)
@@ -163,34 +197,24 @@ def public collect_arch_pointers(file, text : string) : array<ArchCitation> {
         lineno ++
         let slashes = find(line, "//")
         continue if (slashes < 0)
-        peek_data(line) $(d) {
-            let len = length(d)
-            var from = slashes + 2
-            while (true) {
-                let ext = find(line, ".md#", from)
-                break if (ext < 0)
-                let hash = ext + 3
-                var start = ext
-                while (start > from && is_path_char(int(d[start - 1]))) {
-                    start --
-                }
-                var stop = hash + 1
-                while (stop < len && is_anchor_char(int(d[stop]))) {
-                    stop ++
-                }
-                from = stop
-                // `.md#` with no name after it is prose; a URL to a document on the web is not a
-                // pointer either: the walk back through `https://host/...` stops at the colon and
-                // leaves a path opening with `/`, and a bare `host.tld/...` opens with a dotted
-                // first segment - a tree path's first segment carries no dot and never a leading slash
-                continue if (stop == hash + 1 || int(d[start]) == '/')
-                let first_slash = find(line, "/", start)
-                continue if (first_slash > start && first_slash < ext && find(line, ".", start) < first_slash)
-                out |> push(ArchCitation(line = lineno, raw = slice(line, start, stop),
-                    anchor = slice(line, hash + 1, stop),
-                    doc = resolve_pointer_doc(folder, slice(line, start, hash))))
-            }
-        }
+        pointers_in_line(line, slashes + 2, lineno, folder, out)
+    }
+    return <- out
+}
+
+
+// Every citation a markdown document makes, in file order: `<path>.md#<anchor>` anywhere on a
+// line - a rule document or a ledger names the section it leans on this way, and the path
+// resolves as a C++ pointer's does, walking up from the citing document's folder. A heading's
+// own `{#anchor}` carries no `.md#` and is never a citation of itself.
+def public collect_md_citations(file, text : string) : array<ArchCitation> {
+    var out : array<ArchCitation>
+    let folder = dir_name(file)
+    var lineno = 0
+    for (line in split(text, "\n")) {
+        lineno ++
+        continue if (find(line, ".md#") < 0)
+        pointers_in_line(line, 0, lineno, folder, out)
     }
     return <- out
 }

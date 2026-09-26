@@ -379,7 +379,7 @@ def private codec_scratch_bytes(sc : PocketScratch) : int64 {
 
 let STREAM_BAR = 1.0e-5   // absolute, on a waveform or a latent frame: float noise of the same sums in another batching
 
-//! the codec stream (ARCHITECTURE_POCKET.md sec.2.46): a chunk decoded and a clip encoded a
+//! the codec stream (ARCHITECTURE_POCKET.md#pocket-codec-stream): a chunk decoded and a clip encoded a
 //! window of frames per step give the whole run's output on the f32 lane, one frame per step
 //! included, with the activations scaling with the window
 [test]

@@ -1,13 +1,13 @@
 # dasLLAMA Architecture - the Metal prefill driver's routed block
 
-Companion to `ARCHITECTURE_GPU_PREFILL.md`; section numbers are `ARCHITECTURE.md`'s. This
+Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. This
 document carries section 2.2g, the routed block of the Metal prefill driver: the atomics-free
 bucket rail, the tensor-twin scaffold the gathered expert sites ride, and the split-format
-expert twins. The GEMM form ladder those sites pick from (sec.2.2c), the dev-W panel knee map
-(sec.2.2d) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (sec.2.2aa)
+expert twins. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
+(`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`)
 stay in `ARCHITECTURE_GPU_PREFILL.md`.
 
-### 2.2g The prefill MoE bucket rail {#prefill-moe-buckets}
+### The prefill MoE bucket rail {#prefill-moe-buckets}
 
 Routing is atomics-free: a router GEMV and a select pass, then a per-expert count kernel, then
 one bucket kernel that computes the padded prefix and fills the buckets. Each expert's bucket
@@ -41,7 +41,7 @@ form a tensor view, which is why every tensor twin of the MoE family serves cont
 only.
 
 The split-format expert twins (k3, q40 and the iquants) do not derive from that scaffold: they
-derive from the format's DENSE split class (sec.2.2aa) with the base's `MOE` axis set and run its
+derive from the format's DENSE split class (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`) with the base's `MOE` axis set and run its
 `stage16` under the dense base's `moe_kernel` entry, whose expert plane rides `nBase` -
 `(e*ndim + n)*nsb + sb` is the plane's superblock, so the decode is one source for both the dense
 and the routed site, and a table format's threadgroup prologue is one override serving both.

@@ -1,9 +1,9 @@
 # dasLLAMA Architecture - format, load and CPU-tier file charters
 
-Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers are
-`ARCHITECTURE.md`'s.
+Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; a section is cited by its
+anchor.
 
-### 1.2 Formats and data movement
+### Formats and data movement {#formats-and-data-movement}
 
 - **`dasllama_plane.das`** - the borrowed-plane vocabulary: a plane is a pointer into a prepared
   image plus its element count; the image owns the bytes, a carrier owns nothing but its backing.
@@ -68,10 +68,10 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   a `string` the tokenizers and the TTS front end share: classification, `cpt_count`, the
   decode/encode of one codepoint.
 - **`dasllama_spm.das`** - the SentencePiece backend: score-greedy merges over vocab pieces (Llama-2, Phi-3, Gemma),
-  the unigram Viterbi arm over the same pieces (`unigram_encode`, GGUF `"t5"`, sec.1.7d's tokenizer), `<0xXX>` byte fallback.
+  the unigram Viterbi arm over the same pieces (`unigram_encode`, GGUF `"t5"`, `ARCHITECTURE_POCKET.md#pocket-tts`'s tokenizer), `<0xXX>` byte fallback.
 - **`dasllama_bpe.das`** - the byte-level BPE backend (Llama-3 / tiktoken family): vocab load, the
   GPT-2 byte alphabet, ranked merges, encode/decode. Split from SPM because the two algorithms
-  share no state (their twin merge heaps are sec.1.2a's); a third merge algorithm gets a fourth file. Two sanctioned family-name tests
+  share no state (their twin merge heaps are `ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`'s); a third merge algorithm gets a fourth file. Two sanctioned family-name tests
   live here rather than in `dasllama_pretok`: the `pre`-name selector inside `bpe_encode`, and the
   gemma-4 newline-run split in `bpe_encode_spm_space`; `load_bpe_tokenizer_gguf`'s per-family
   metadata defaults are the third and last. A GGUF without `tokenizer.ggml.add_bos_token` takes
@@ -87,19 +87,19 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   `test_tokenizer.das` (llama3, qwen2, qwen35, gpt-2); tekken has no corpus case, and gpt-4o is
   pinned by frozen ids in `test_parity.das` only.
 
-### 1.2a The two tokenizer backends carry twin merge heaps {#bpe-merge-heap}
+### The two tokenizer backends carry twin merge heaps {#bpe-merge-heap}
 
 `bigram_merge_heap` (`dasllama_bpe.das`) and `spm_merge_heap` (`dasllama_spm.das`) each merge a whole symbol run through a max-heap over candidate pairs, O(n log n) where the sequential rescan is O(n^2): BPE's priority is the negated merge rank (lowest rank first), SPM's the piece score; an entry whose endpoint merged since it was pushed fails the adjacency+id guard and is skipped, so the ids are the rescan's exactly, `-2` dead slots compact out and SPM's `-1` survives. The two bodies stay twins on a measurement: served from `dasllama_bpe.das`'s JIT partition - as one function, and as a generic stamped per backend with its helpers left in that module - SPM encode read 5% to 19% slower than its own copy; each heap lives in the partition of the encode that runs it.
 
-### 1.2b The RoPE table builders are one fill over a position source {#rope-one-fill}
+### The RoPE table builders are one fill over a position source {#rope-one-fill}
 
 Every materialized cos/sin table is the same fill; the position source is what differs. A source answers two questions - which axis half-dim j reads (`rope_axis`, once per j) and what position row pi sits at on that axis (`rope_pos`) - and the vision grid adds a third, its restarted frequency ladder (`rope_freq_of`). `freq[j]` and the axis hoist out of the row loop and `mscale` folds in at the fill, for NORM and NEOX alike.
 
-### 1.2c The per-format plane table is the Model's only fixed-size array {#model-plane-table-dim}
+### The per-format plane table is the Model's only fixed-size array {#model-plane-table-dim}
 
 `Model.kq : KqPlanes[KQ_FMT_COUNT]` is the one `dim` field a `Model` carries, so every `apply` walk over it - the finalizer, the image build, the image parse, the layout describe - spells its plane-table arm as the `typeinfo is_dim(field)` branch and reaches each element's arrays from there. The table's interleaves serialize in enum order, so an appended `KqFmt` member lands last and no earlier slot moves.
 
-### 1.3 The load and image rail
+### The load and image rail {#the-load-and-image-rail}
 
 **`dasllama_load.das`** is the GGUF load walk: metadata to `Config`, the plane layout, disk-format
 detection, the eager and streamed conversion ladders, and the load entry points. It owns nothing the
@@ -115,7 +115,7 @@ decoded scale row, an f32 copy of a quantized token table - and it is read as a 
 inferred from image sizes.
 
 - **`dasllama_image.das`** - the prepared-model `.dlim` rail, and it is ONE rail
-  (`ARCHITECTURE_IMAGE.md` sec.2.1). Nothing
+  (`ARCHITECTURE_IMAGE.md#there-is-one-way-to-load-a`). Nothing
   outside this file may read weights into a live carrier; image backings are released only
   through the single release path in `dasllama_common` that the carrier finalizers call - never
   an ad-hoc unmap.
@@ -129,7 +129,7 @@ classifier and final norm are dead by construction (tensor lookup is first-match
 is last). The prepared image folds the head's name and size into its path hash, so the
 trunk-only and trunk+head images never collide and one image file serves both trunk and head.
 
-### 1.4 CPU kernel tiers
+### CPU kernel tiers
 
 - **`dasllama_math.das`** - the numeric ABSTRACTION: typedefs, active backend pointers, public
   wrappers, dispatch shaping, and the array-sizing helpers every tier and the engine share
@@ -143,11 +143,11 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   the `idot4` builtin is plain das that every target lowers for itself.
 - **`dasllama_math_aarch64_neon.das`** - the arm64 lane-indexed SDOT tier: the `sdot4_laneq` /
   `tbl16` composers only, plus the registration of the idot4 stamps as "arm64-sdot". Its `[init]`
-  never fires off-arch (`ARCHITECTURE_INVARIANTS.md` sec.3, three-layer safety model), so an
+  never fires off-arch (`ARCHITECTURE_INVARIANTS.md#inherited-invariants`, three-layer safety model), so an
   intrinsic here needs a correct scalar fallback body, not a guard at the call site.
 - **`dasllama_math_accelerate.das`** - the Accelerate/BNNS float tier (AMX on M1-M3, SME on M4+),
   for genuinely-float planes only. BLAS-for-quant is ruled out structurally
-  (`ARCHITECTURE_INVARIANTS.md` sec.3).
+  (`ARCHITECTURE_INVARIANTS.md#inherited-invariants`).
 - **`dasllama_math_gen.das`** / **`dasllama_gemm_gen.das`** / **`dasllama_gemm_schema.das`** /
   **`dasllama_gemm_register.das`** - the generated GEMM tier: the runtime registration, the tile
   generator, the layout/perm schema shared by generator and runtime, and the `[tune]` family

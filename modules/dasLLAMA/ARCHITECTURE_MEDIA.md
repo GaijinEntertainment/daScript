@@ -1,8 +1,8 @@
 # dasLLAMA Architecture - encoder tower, audio, and vision file charters
 
-Companion to `ARCHITECTURE.md`; section numbers are that document's.
+Companion to `ARCHITECTURE.md`; a section is cited by its anchor.
 
-### 1.7 Encoder towers, audio, and ASR
+### Encoder towers, audio, and ASR
 
 - **`dasllama_asr_types.das`** - the ASR floor: the capability/segment/timestamp types every
   family file and the facade share (`AsrCaps`/`AsrTimestamps`/`TranscribeSegment`, plus
@@ -28,14 +28,16 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
   leg the TTS facade hands out: f32 samples -> 16-bit PCM bytes / a RIFF WAV file. The only file
   that talks to miniaudio.
 - **`dasllama_asr.das`** - the ASR facade: capability declaration, timestamp granularity, the
-  backend-neutral entry points.
+  backend-neutral entry points. It and `dasllama_audio_embedder.das` are the union carriers that
+  route each facade function to one family; a family appears in a carrier at four places only -
+  its union field, its finalize line, its kind value, and its one-line arms.
 - **`dasllama_whisper.das`** / **`dasllama_parakeet.das`** / **`dasllama_canary.das`** /
   **`dasllama_qwen3a.das`** / **`dasllama_gemma4a.das`** - one file per model family, each owning its
   weights, its decode loop, and its quirks. Shared tower pieces go up into `dasllama_tower`, not
   sideways between families.
 - **`dasllama_vad.das`** - Silero-VAD weights and per-stream state.
 
-### 1.7b Vision
+### Vision
 
 - **`dasllama_vision.das`** - the image preprocessing rail: dynamic-resolution geometry, the
   letterbox resize (aspect-preserving bilinear onto a centered black canvas), u8->f32 normalize,
@@ -110,8 +112,8 @@ Companion to `ARCHITECTURE.md`; section numbers are that document's.
   DELETED layer measures less - the gate cannot discriminate; the weights themselves
   quantize fine at 0.007 x rms, and a float-activation q8 GEMM wins nothing on these
   compute-bound shapes since the CPU speedup IS the int8xint8 dot). It stages every GEMM
-  f32-in-blob at the served padded widths (sec.2.13) whatever the file's element type, and
-  bakes the halfword twin (`ARCHITECTURE_IMAGE.md` sec.2.1i) when the block and merger GEMMs
+  f32-in-blob at the served padded widths (`ARCHITECTURE_MEDIA.md#tower-padded-widths`) whatever the file's element type, and
+  bakes the halfword twin (`ARCHITECTURE_IMAGE.md#image-tower-twin-plane`) when the block and merger GEMMs
   share one halfword type; the Metal tower serves stem, blocks and merger tail off `s.x0`
   through `register_qwen25v_gpu`.
 - **`dasllama_vision_embedder.das`** - the vision carrier: `VisionEmbedder` / `VisionState`, the
@@ -151,14 +153,14 @@ reference's Metal "f32" GEMM stages half operands, its flash-attention path cast
 and the shipped bf16 mmproj rounds activations to bf16; its own four arms spread
 <= 6.5e-3 on the gemma4v tokens).
 
-### 1.7c Text-to-speech front end
+### Text-to-speech front end
 
 `ARCHITECTURE_TTS.md` carries this section - the TTS family mirrors the ASR one (a types floor,
 a shared block home, a facade, one file per model family) and adds the text front end no ASR
 family needs; every stage is data-driven from the model store, and nothing under `models/`
 carries TTS data.
 
-### 2.13 Towers serve padded GEMM widths {#tower-padded-widths}
+### Towers serve padded GEMM widths {#tower-padded-widths}
 
 A tower's served GEMM widths round UP to 64 - the Metal mm tile - while the tensor-shape verify
 keeps the file's own widths. The gated FFN pair pads with zero weight ROWS and the down GEMM with
@@ -171,7 +173,7 @@ both. `q25v_patch_pad` / `gemma3v_patch_pad` and the `ff_pad` fields are the ser
 The qwen25v tower stages every GEMM f32-in-blob at those widths whatever the file's element type -
 blocks and merger alike - because the Metal tower reads f32 planes or the baked halfword twin.
 
-### 2.14 Family GPU hooks install from the driver and always decline {#tower-gpu-hook}
+### Family GPU hooks install from the driver and always decline {#tower-gpu-hook}
 
 A family file owns the hook SLOT for a stage the GPU can serve - a `var private` function pointer
 plus a `register_*` entry - and a tower driver fills it at `[init]`: the Metal driver on a Metal
@@ -211,7 +213,7 @@ A family whose hook takes a whole stage splits its encode at the seam the driver
 driver writes into), and a `*_stem_finish` half only the CPU route runs. The driver reads the
 column buffer (`s.x0`, `st.xw`) and never the residual stream the CPU half would have filled.
 
-### 2.15 The tower weight lane is a policy, not a default {#tower-weight-lane}
+### The tower weight lane is a policy, not a default {#tower-weight-lane}
 
 A tower serves its GEMMs on one of two lanes: q8 planes (the CPU serving format) or the file's
 exact f32 planes. Un-pinned, the lane follows the fastest GEMM path on the box - a serving Metal
@@ -229,7 +231,7 @@ driver, or the CPU default - because the lane changes what the load mints and se
 caller hands the lane in (parakeet, canary), the line names the caller's pick beside the reason
 the policy gives, so a caller that overrides the policy shows as a pick its reason does not match.
 
-### 2.16 An ASR decoder that is a plain Model session rides the box decode policy {#asr-decoder-session}
+### An ASR decoder that is a plain Model session rides the box decode policy {#asr-decoder-session}
 
 The gemma4a, canary and qwen3a routes drive their decoders as ordinary `Model` sessions - embed
 rows, then eval - so they load with no planar pin and take whatever decode form the box has armed,

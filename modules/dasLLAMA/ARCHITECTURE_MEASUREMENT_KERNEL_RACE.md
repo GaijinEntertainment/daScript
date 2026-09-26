@@ -1,13 +1,46 @@
 # dasLLAMA Architecture - the kernel race and bench instruments
 
-Companion to `ARCHITECTURE_MEASUREMENT.md`; section numbers are `ARCHITECTURE.md`'s. This
+Companion to `ARCHITECTURE_MEASUREMENT.md`; a section is cited by its anchor. This
 document carries sections 2.21, 2.26 and 2.27, the instruments that time a kernel away from the
 served graph and the conditions their verdict holds under: what makes an isolated race predict
 the graph it imitates, how the gemv earns a second tune seat, and the fixture the CPU kernel
-bench times on. The rig that produces recorded numbers, the tune gate, the Vulkan GEMM probe's
-axes and the instrumentation rails stay in `ARCHITECTURE_MEASUREMENT.md`.
+bench times on. It also carries the vocabulary of the timing-race checklist. The rig that
+produces recorded numbers, the tune gate, the Vulkan GEMM probe's axes and the instrumentation
+rails stay in `ARCHITECTURE_MEASUREMENT.md`.
 
-### 2.21 An isolated kernel race is only as good as the graph it imitates {#kernel-race-fidelity}
+### The timing-race vocabulary
+
+`REVIEW_GPU_RACE.md` reviews code that times kernels to rank them. A hazard between serving
+dispatches - a data race - is not its subject. Its terms:
+
+- **Race** - two candidates for one computation, timed in one process, either of which the run
+  could adopt.
+- **Knockout** - a timing that skips a stage to measure that stage's cost. A run of the serving
+  code under a stage-drop knob - a knob whose runs do not serve correct output - is a knockout:
+  the branch that reads the knob and drops the stage is arm code, whoever sets the knob, and the
+  stage it drops stays serving code, reviewed as such.
+- **Overhead measurement** - one chain timed with and without an interposed stage (a timestamp,
+  a barrier, a flush) to measure that stage. It is not a race.
+- **Timing arm** (arm) - one timed run of a race, a knockout or an overhead measurement: code
+  that dispatches a kernel to measure it rather than to serve a call. A same-build knob A/B -
+  two runs of the serving code under an environment override, both serving correct output - is
+  not an arm; its knob is serving code, reviewed under `REVIEW_GPU_VULKAN.md` or
+  `REVIEW_TOWER.md`.
+- **Chain** - the dispatches an arm times.
+- **Ranking input** - a value a ranking's selection reads: a shape dimension (a head width, a
+  batch width, a row count, a lane split, a tile's own width, the workgroups one row dispatches
+  relative to the device's compute-unit count) or a layer kind (dense, MoE, per-layer-embedding).
+- **Decided ranking** - an arm's ranking is decided while a checked-in document, box profile or
+  sidecar records the arm's figure or names the arm as the shipped form. Decided is a state of
+  the tree; a diff decides a ranking when it adds that record.
+- **Retained-reference arm** - an arm ledgered as a retained reference: in
+  `ARCHITECTURE_GPU_RACE_SHAPES.md#tensor-gemm-shapes-that-measured-out-m5` for Metal, in the
+  Vulkan arm ledger for Vulkan.
+- **Vulkan arm ledger** - the GEMM probe's arms in
+  `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`, the decode rulers' in
+  `ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`.
+
+### An isolated kernel race is only as good as the graph it imitates {#kernel-race-fidelity}
 
 A kernel A/B race times two spellings of one compute on a synthetic fixture. Its winner is
 minted as a crown - the family's name in the box sidecar's `runtime.metal_tensor` set, which
@@ -30,7 +63,7 @@ crown:
   the slower kernel.
 
 A race arm owns a transient command queue for its timed pairs and releases it before returning -
-the one exception to the family's shared device and queue (`ARCHITECTURE_GPU.md` sec.1.5) - so
+the one exception to the family's shared device and queue (`ARCHITECTURE_GPU.md#gpu-backends`) - so
 the tune-time race never queues behind served work.
 
 Even a race meeting all three can be structurally blind. `kq_gemv_iq2xxs_f4` is the standing
@@ -58,7 +91,7 @@ chain every dispatch through ONE shared output buffer on purpose - the serialize
 the instrument's probe shape, imitating the reference tool it is compared against - and its
 numbers reach the engine only through a human porting decision, never a minted crown.
 
-### 2.26 The gemv takes its own tune seat {#gemv-seat}
+### The gemv takes its own tune seat {#gemv-seat}
 
 A kq family's manifest entry is its tile-best row, and the gemv gets a SECOND entry when a
 different row serves the streamed decode better. Only same-mr rows can differ, because the
@@ -74,7 +107,7 @@ and the seat takes the MEDIAN of seven rounds, which discards a round that finds
 L3. In normal mode `llvm_tune` stamps a companion from its own manifest entry when one exists
 and is a perm this box can run, else from the tile's.
 
-### 2.27 The CPU kernel bench's fixture conditions {#cpu-kernel-bench-fixture}
+### The CPU kernel bench's fixture conditions {#cpu-kernel-bench-fixture}
 
 `benchmarks/matmul/kq_kernel_bench.das` times raw kernels on synthetic planes, and three
 fixture properties decide whether its numbers mean anything. Every plane of one format lives in
