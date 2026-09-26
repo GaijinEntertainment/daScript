@@ -9,6 +9,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_blocks   // eval_embd_: the embedding-input forward the generator drives
 require dasllama/dasllama_math   // softmax/softcap on the logits row
 require daslib/random
+require daslib/sort_boost   // the top-k selection heap
 require math
 
 // Token sampling and the generation drivers on top of forward()/eval_batch. The engine reaches
@@ -77,10 +78,115 @@ def sample_(var s : Session; params : SamplingParams) : int64 {
     return sample_logits_row(s, params, s.logits, 0l, vocab)
 }
 
-//! sample_'s row form: the same sampler over the `vocab`-wide logits row at `off` in `row`
-//! (consumed in place). The accept walk draws each verify row through it.
-def sample_logits_row(var s : Session; params : SamplingParams; var row : array<float>; off, vocab : int64) : int64 { // nolint:STYLE037,STYLE038 — a flat dispatch over the sampling modes; each arm is independent and splitting it just hides the menu
+//! The widest top-k the candidate-list sampler serves; a wider (or absent) top-k takes the
+//! vocab-wide reference path.
+let SAMPLE_TOPK_FAST_CAP = 1024l
+
+//! sample_'s row form over the `vocab`-wide logits row at `off` in `row` (the sampler's scratch
+//! afterwards); the accept walk draws each verify row through it. A top-k within
+//! SAMPLE_TOPK_FAST_CAP runs every cut and the draw over its k survivors alone.
+def sample_logits_row(var s : Session; params : SamplingParams; var row : array<float>; off, vocab : int64) : int64 {
     apply_penalties_(s, params, row, off)
+    if (params.temp > 0.0 && params.top_k > 0l && params.top_k < vocab && params.top_k <= SAMPLE_TOPK_FAST_CAP) {
+        select_top_k_(s, row, off, vocab, params.top_k)
+        return sample_candidates_(s, params)
+    }
+    return sample_logits_row_reference(s, params, row, off, vocab)
+}
+
+def private cand_precedes_(x, y : SampleCand) : bool => x.v > y.v   // the heap's root is the smallest survivor
+
+//! Fill `s.cand` with every id whose logit is >= the k-th largest in the row, ascending by id
+//! (ties at the k-th value all survive, as the reference's `< kth` mask keeps them).
+def private select_top_k_(var s : Session; row : array<float>; off, vocab, k : int64) {
+    s.cand |> clear()
+    for (i in range64(vocab)) {
+        let v = row[off + i]
+        if (long_length(s.cand) < k) {
+            s.cand |> push(SampleCand(id = i, v = v))
+            push_heap(s.cand) $(x, y : SampleCand) : bool { return cand_precedes_(x, y) }
+        } elif (v > s.cand[0].v) {
+            pop_heap(s.cand) $(x, y : SampleCand) : bool { return cand_precedes_(x, y) }
+            s.cand[length(s.cand) - 1] = SampleCand(id = i, v = v)
+            push_heap(s.cand) $(x, y : SampleCand) : bool { return cand_precedes_(x, y) }
+        }
+    }
+    let kth = s.cand[0].v
+    s.cand |> clear()
+    for (i in range64(vocab)) {
+        if (row[off + i] >= kth) {
+            s.cand |> push(SampleCand(id = i, v = row[off + i]))
+        }
+    }
+}
+
+//! Temperature, softmax, the nucleus and min-p cuts and one draw over `s.cand` (logits in `v` on
+//! entry, probabilities on exit); the same arithmetic as the reference over the survivors alone.
+def private sample_candidates_(var s : Session; params : SamplingParams) : int64 {
+    let inv = 1.0 / params.temp
+    var mx = -1.0e30
+    for (c in s.cand) {
+        c.v *= inv
+        mx = max(mx, c.v)
+    }
+    var sum = 0.0
+    for (c in s.cand) {
+        c.v = exp(max(c.v - mx, -80.0))
+        sum += c.v
+    }
+    let inv_sum = 1.0 / sum
+    for (c in s.cand) {
+        c.v *= inv_sum
+    }
+    if (params.top_p < 1.0) {
+        // the survivors sorted by probability, largest first: the smallest prefix whose mass reaches top_p sets the cut
+        sort(s.cand) $(x, y : SampleCand) : bool { return cand_precedes_(x, y) }
+        let target = max(params.top_p, 0.0)
+        var mass = 0.0
+        var cut = 0.0
+        for (c in s.cand) {
+            cut = c.v
+            mass += cut
+            break if (mass >= target)
+        }
+        for (c in s.cand) {
+            if (c.v < cut) {
+                c.v = 0.0
+            }
+        }
+        sort(s.cand) $(x, y : SampleCand) : bool { return x.id < y.id }
+    }
+    if (params.min_p > 0.0) {
+        var maxp = 0.0
+        for (c in s.cand) {
+            maxp = max(maxp, c.v)
+        }
+        let thr = min(params.min_p, 1.0) * maxp
+        for (c in s.cand) {
+            if (c.v < thr) {
+                c.v = 0.0
+            }
+        }
+    }
+    var total = 0.0
+    for (c in s.cand) {
+        total += c.v
+    }
+    let r = random_float(s.rng) * total
+    var cdf = 0.0
+    for (c in s.cand) {
+        cdf += c.v
+        if (r < cdf) {
+            return c.id
+        }
+    }
+    return s.cand[length(s.cand) - 1].id
+}
+
+//! The vocab-wide sampler: temperature over the row, top-k as k max passes, softmax over the row,
+//! the nucleus cut over a sorted copy, min-p, and a CDF walk over the row. Serves a top-k the
+//! candidate list does not (off, or past SAMPLE_TOPK_FAST_CAP) and is the fast path's oracle.
+def sample_logits_row_reference(var s : Session; params : SamplingParams; var row : array<float>; off, vocab : int64) : int64 { // nolint:STYLE037,STYLE038 — a flat dispatch over the sampling modes; each arm is independent and splitting it just hides the menu
     if (params.temp <= 0.0) {
         var mi = 0l
         for (i in range64(1l, vocab)) {

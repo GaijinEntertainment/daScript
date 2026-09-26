@@ -11,6 +11,17 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-26) - the sampler is a candidate list when top-k is set
+  (`ARCHITECTURE_ENGINE.md`, `dasllama_sampling.das`): one pass over the row selects the k
+  largest logits into a heap, and the temperature, softmax, nucleus and min-p cuts and the draw run
+  over those survivors; top-k off or past `SAMPLE_TOPK_FAST_CAP` keeps the vocab-wide reference.**
+  Before, a sampled decode paid k full-vocab max passes, a vocab-wide softmax, a full sort for
+  top-p and a vocab-wide CDF walk per token - 3.6 ms at Qwen3.5's 248K vocab. Measured on this
+  box (M5 Max, `dasllama-cli complete` on Qwen3.5-4B-Q8_0 under Metal, `-n 256 --seed 7`, five
+  reps each, one process a run; the CLI's stats line): greedy 105 t/s before and 104-105 after;
+  the chat preset (temp 0.7 / top-k 20 / top-p 0.95) 74-75 t/s before, 101-103 after.
+  Prediction on record before the change: sampled within 5% of greedy. llama.cpp's candidate-list
+  sampler reads 93 t/s both ways on the same model and box.
 - **LANDED (2026-09-25) - the Pocket TTS frame loop rides the Metal tower as the family's second
   seat (`ARCHITECTURE_GPU_TOWER.md` sec.2.2aw): the backbone step and the flow head for every
   frame, eight frames a command buffer over a per-voice device K/V slot, the EOS rule on the host

@@ -7,6 +7,8 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
 require daslib/jobque_boost
 require daslib/fio
+require daslib/random
+require math
 require _model_tier
 
 // Phase-3 sampling API. Greedy (SamplingParams default: temp=0, penalty=1.0) must reproduce the
@@ -186,6 +188,154 @@ def test_sampler_units(t : T?) {   // nolint:STYLE038 — flat unit list, one t 
             delete s
         }
         t |> success(ids_equal(a, b) && length(a) == 32, "same seed => identical draws")
+    }
+}
+
+// ===== The candidate-list fast path against the vocab-wide reference =====
+
+let PARITY_VOCAB = 4096
+let PARITY_ROWS = 512
+let REF_MASKED_MASS = 1.0e-30   // above exp(-80) * inv_sum, below any survivor at this vocab
+
+//! A seeded logits row; every other row is quantized to a 0.5 grid so ties at the k-th value and
+//! at the nucleus cut occur by construction.
+def private parity_row(trial : int) : array<float> {
+    var rng = random_seed(9000 + trial)
+    var row : array<float>
+    row |> resize(PARITY_VOCAB)
+    for (i in range(PARITY_VOCAB)) {
+        let v = random_float(rng) * 20.0 - 10.0
+        row[i] = (trial % 2 == 0) ? v : float(int(v * 2.0)) * 0.5
+    }
+    return <- row
+}
+
+//! The draw the reference makes on `row` under `seed`: `r` on the reference's own CDF, and its
+//! distance to the nearest CDF boundary as a fraction of the surviving mass.
+def private ref_draw_margin(seed : int; probs : array<float>; picked : int64) : float {
+    var rng = random_seed(seed)
+    var total = 0.0
+    for (p in probs) {
+        total += p
+    }
+    let r = random_float(rng) * total
+    var cdf_lo = 0.0
+    for (i in range64(picked)) {
+        cdf_lo += probs[i]
+    }
+    let cdf_hi = cdf_lo + probs[picked]
+    return min(r - cdf_lo, cdf_hi - r) / total
+}
+
+struct ParityCount {
+    rows : int
+    clear_rows : int
+    mismatches : int
+}
+
+def private parity_sweep(t : T?; params : SamplingParams) : ParityCount {
+    var pc : ParityCount
+    for (trial in range(PARITY_ROWS)) {
+        let seed = 100 + trial
+        let row <- parity_row(trial)
+        var sf = mk_sampler(PARITY_VOCAB)
+        var sr = mk_sampler(PARITY_VOCAB)
+        set_logits(sf, row)
+        set_logits(sr, row)
+        set_seed(sf, seed)
+        set_seed(sr, seed)
+        let id_fast = sample(sf, params)
+        let id_ref = sample_logits_row_reference(sr, params, sr.logits, 0l, int64(PARITY_VOCAB))
+        // the survivor sets: the reference leaves a probability on every survivor; a token its
+        // top-k masked keeps exp(-80) of the mass (the softmax clamp), a nucleus or min-p cut leaves 0
+        var n_ref = 0
+        for (i in range(PARITY_VOCAB)) {
+            if (sr.logits[i] > REF_MASKED_MASS) {
+                n_ref++
+            }
+        }
+        var n_fast = 0
+        var probs_ok = true
+        for (c in sf.cand) {
+            if (c.v > 0.0) {
+                n_fast++
+                let want = sr.logits[c.id]
+                if (want <= REF_MASKED_MASS || abs(c.v - want) > 1.0e-6 + 1.0e-5 * want) {
+                    probs_ok = false
+                }
+            }
+        }
+        t |> equal(n_fast, n_ref, "trial {trial}: survivor count")
+        t |> success(probs_ok, "trial {trial}: survivor probabilities match the reference")
+        t |> success(sf.rng == sr.rng, "trial {trial}: one draw on each path leaves the same RNG state")
+        pc.rows++
+        if (ref_draw_margin(seed, sr.logits, id_ref) > 1.0e-5) {
+            pc.clear_rows++
+            if (id_fast != id_ref) {
+                pc.mismatches++
+            }
+        }
+        delete sf
+        delete sr
+    }
+    return pc
+}
+
+[test]
+def test_fast_path_parity(t : T?) {
+    t |> run("the chat preset: temp 0.7, top-k 20, top-p 0.95") @(t : T?) {
+        let pc = parity_sweep(t, SamplingParams(temp = 0.7, top_k = 20l, top_p = 0.95))
+        t |> equal(pc.rows, PARITY_ROWS)
+        t |> success(pc.clear_rows >= 500, "{pc.clear_rows} rows draw clear of a CDF boundary")
+        t |> equal(pc.mismatches, 0, "the same token on every clear row")
+    }
+    t |> run("temp 1.0, top-k 40, top-p 0.9, min-p 0.05") @(t : T?) {
+        let pc = parity_sweep(t, SamplingParams(temp = 1.0, top_k = 40l, top_p = 0.9, min_p = 0.05))
+        t |> success(pc.clear_rows >= 500, "{pc.clear_rows} rows draw clear of a CDF boundary")
+        t |> equal(pc.mismatches, 0, "the same token on every clear row")
+    }
+    t |> run("top-k alone keeps every survivor") @(t : T?) {
+        let pc = parity_sweep(t, SamplingParams(temp = 0.8, top_k = 40l))
+        t |> equal(pc.mismatches, 0, "the same token on every clear row")
+    }
+}
+
+[test]
+def test_fast_path_ties(t : T?) {
+    t |> run("k+3 equal top logits all survive a top-k of k") @(t : T?) {
+        let k = 20
+        var s = mk_sampler(256)
+        for (i in range(256)) {
+            s.logits[i] = i < k + 3 ? 5.0 : -1.0 - float(i % 7)
+        }
+        let params = SamplingParams(temp = 1.0, top_k = int64(k))
+        var seen : table<int64; void>
+        for (draw in range(400)) {
+            for (i in range(256)) {
+                s.logits[i] = i < k + 3 ? 5.0 : -1.0 - float(i % 7)
+            }
+            let id = sample(s, params)
+            t |> success(id < int64(k + 3), "draw {draw} lands inside the tie set")
+            seen |> insert(id)
+            if (draw == 0) {
+                t |> equal(length(s.cand), k + 3, "every tied token is a candidate")
+                for (c in s.cand) {
+                    t |> success(c.v > 0.0, "candidate {c.id} keeps a probability")
+                }
+            }
+        }
+        t |> equal(length(seen), k + 3, "every tied token is drawn over 400 draws")
+        delete s
+    }
+    t |> run("a top-k past the fast cap takes the reference path") @(t : T?) {
+        var s = mk_sampler(2048)
+        for (i in range(2048)) {
+            s.logits[i] = float(i % 13)
+        }
+        let id = sample(s, SamplingParams(temp = 1.0, top_k = 1500l))
+        t |> success(id >= 0l && id < 2048l, "a token was drawn")
+        t |> equal(length(s.cand), 0, "the candidate list stays empty on the reference path")
+        delete s
     }
 }
 

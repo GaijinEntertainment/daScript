@@ -1944,6 +1944,12 @@ struct SamplingParams {
     penalty_last_n : int64 = 64l   // penalty window (most recent N generated tokens)
 }
 
+//! One survivor of the sampler's top-k selection: the token and its logit, then its probability.
+struct SampleCand {
+    id : int64
+    v : float
+}
+
 //! A Session's identity for its device-resident deltanet state; the finalizer drops the GPU tier's
 //! copies that state owns before its addresses can be reused.
 struct DnOwner {
@@ -1970,7 +1976,8 @@ struct Session {
     attn_uniform_lo : int64   // meaningful only while attn_uniform_end > 0
     rng : int4                // sampling RNG state (seeded in make_run_state; reseed via set_seed)
     recent : array<int64>     // recently generated tokens, for the repetition penalty
-    sample_scratch : array<float>  // vocab-sized scratch for top-k selection
+    sample_scratch : array<float>  // vocab-sized scratch for the reference sampler (top-k off)
+    cand : array<SampleCand>       //! the top-k sampler's candidate list: the k largest logits (ties at the k-th kept), ascending by id after selection
     sampled : bool            //! the last sample_'s pick can differ from the raw argmax (a temperature, or a penalty at temp 0 - not a bare argmax): the Metal driver's greedy chain stands down
     @do_not_delete spec_params : SamplingParams?   //! the caller's sampler, set before a speculative round for its accept walk to draw with; null or a bare argmax (temp <= 0, penalties off) keeps the argmax-match walk
     mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
@@ -2410,6 +2417,7 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
         s.value_cache |> reserve_resize(c.seq_len * vrow)
     }
     s.sample_scratch |> resize(c.vocab_size)
+    s.cand |> reserve(64)
     s.rng = random_seed(1234)
     return <- s
 }
