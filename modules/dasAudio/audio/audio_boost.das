@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options persistent_heap
+require daslib/runtime_memory public
 options gc
 options no_global_variables = false
 options no_unused_block_arguments = false
@@ -85,7 +86,28 @@ struct public AudioChannelStatus {
     //! Number of pending PCM chunks in the stream queue.
 }
 
-//! Snapshot of the audio system's recent CPU utilization and HRTF/simulated routing split, published to a caller-provided ``SeqBox``.
+struct public PlaybackBufferStats {
+    //! Threaded browser audio-device counters, timings and buffering state; unavailable fields are zero.
+    callbacks : uint64 //! AudioWorklet callback count.
+    underrun_frames : uint64 //! Frames requested while PCM was unavailable.
+    underruns : uint64 //! Callbacks that entered recovery after a ring read ran short.
+    recovery_frames : uint64 //! Output frames held in recovery while the PCM ring refills.
+    recoveries : uint64 //! Transitions from unavailable PCM back to playback.
+    refills : uint64 //! Producer refill count.
+    wait_timeouts : uint64 //! Producer waits that timed out.
+    max_mix_us : uint64 //! Largest producer mix duration in microseconds.
+    max_wake_us : uint64 //! Largest producer wake delay in microseconds.
+    max_callback_gap_us : uint64 //! Largest interval between device callbacks in microseconds.
+    queued_frames : uint64 //! Queued PCM frames sampled at the start of the last device callback.
+    capacity_frames : uint64 //! PCM ring capacity in frames.
+}
+def public get_playback_diagnostics() : PlaybackBufferStats {
+    //! Samples threaded browser device counters; unavailable counters are zero.
+    //! Values are read independently and do not form an atomic transaction.
+    let snapshot = sound_playback_diagnostics()
+    return PlaybackBufferStats(callbacks = snapshot.callbacks, underrun_frames = snapshot.underrun_frames, underruns = snapshot.underruns, recovery_frames = snapshot.recovery_frames, recoveries = snapshot.recoveries, refills = snapshot.refills, wait_timeouts = snapshot.wait_timeouts, max_mix_us = snapshot.max_mix_us, max_wake_us = snapshot.max_wake_us, max_callback_gap_us = snapshot.max_callback_gap_us, queued_frames = snapshot.queued_frames, capacity_frames = snapshot.capacity_frames)
+}
+
 struct public AudioSystemStats {
     callbacks : uint64
     //! Number of audio callbacks observed since the current stats-box registration began.
@@ -856,6 +878,7 @@ variant AudioCommand {
     global_volume           : float
     ignore_global_volume    : tuple<sid : SID; value : bool>
     hrtf_budget             : int
+    system_memory_box       : uint64
     system_stats_box        : uint64       //! opaque SeqBox? (archive-safe)
 }
 
@@ -903,6 +926,7 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             if (g_stats_box != null) {
                 g_stats_box |> seq_box_release
             }
+            if (g_memory_box != null){g_memory_box |> seq_box_release}
             g_command_stream |> release
         } elif (cmd is add_decoder) {
             assume dcmd = cmd as add_decoder
@@ -1020,6 +1044,9 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             }
         } elif (cmd is hrtf_budget) {
             g_hrtf_budget = max(0, cmd as hrtf_budget)
+        } elif (cmd is system_memory_box) {
+            if (g_memory_box != null){g_memory_box |> seq_box_release}
+            g_memory_box = unsafe(reinterpret<SeqBox?>(cmd as system_memory_box))
         } elif (cmd is system_stats_box) {
             let sbox = cmd as system_stats_box
             if (g_stats_box != null) {
@@ -1111,6 +1138,7 @@ var g_volume : float = 1.  //! global master volume multiplier (1.0 = full, 0.0 
 
 // AudioSystemStats publication state (audio-context-side; main side holds the LockBox handle and read-grabs it).
 var g_stats_box : SeqBox? = null
+var g_memory_box : SeqBox? = null
 var g_stats_callbacks = 0ul
 var g_stats_last_callback = 0l
 var g_stats_max_mix_ms = 0.0lf
@@ -1164,7 +1192,7 @@ def mixer(var data : array<float>#; channels, rate : int; dt : float) {
 // Accumulate per-callback time + samples into a 1-second rolling window. On window flush, compute
 // utilization (= mixer time / real time) and update the caller's stats LockBox so main thread can read it.
 def private publish_audio_stats(dt_ms : double; frames : uint64) {
-    return if (g_stats_box == null)
+    return if (g_stats_box == null && g_memory_box == null)
     if (g_stats_last_callback != 0l) { g_stats_max_callback_gap_ms = max(g_stats_max_callback_gap_ms, double(get_time_nsec(g_stats_last_callback)) / 1000000.lf) }
     g_stats_last_callback = ref_time_ticks(); g_stats_callbacks++
     g_stats_max_mix_ms = max(g_stats_max_mix_ms, dt_ms)
@@ -1179,7 +1207,8 @@ def private publish_audio_stats(dt_ms : double; frames : uint64) {
     let snap = g_stats_recent_util_pct
     let hrtfCount = g_stats_hrtf_count
     let total3D = g_stats_3d_count
-    g_stats_box |> publish(AudioSystemStats(callbacks = g_stats_callbacks, max_mix_ms = g_stats_max_mix_ms, max_callback_gap_ms = g_stats_max_callback_gap_ms, utilization_pct = snap, hrtf_count = hrtfCount, total_3d = total3D))
+    if (g_memory_box != null){g_memory_box |> publish(context_memory())}
+    if (g_stats_box != null){g_stats_box |> publish(AudioSystemStats(callbacks = g_stats_callbacks, max_mix_ms = g_stats_max_mix_ms, max_callback_gap_ms = g_stats_max_callback_gap_ms, utilization_pct = snap, hrtf_count = hrtfCount, total_3d = total3D))}
 }
 
 [init]
@@ -1539,6 +1568,13 @@ def public set_hrtf_budget(n : int) {
     //! (constant-power pan + distance attenuation, no convolution). Use 0 for all-simulated, or a large
     //! value (e.g. 999) for all-HRTF. Default is 32. The closest-to-head channels win the HRTF slots.
     push_cmd(AudioCommand(hrtf_budget = n))
+}
+
+def public set_audio_memory_box(var box : SeqBox?) {
+    //! Publish ContextMemory once per second, independently of the optional stats box.
+    if (box == null){push_cmd(AudioCommand(system_memory_box = 0ul)); return }
+    box |> add_ref; box |> publish(ContextMemory())
+    push_cmd(AudioCommand(system_memory_box = intptr(box)))
 }
 
 def public set_audio_stats_box(var box : SeqBox?) {

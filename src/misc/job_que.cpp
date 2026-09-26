@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/misc/job_que.h"
+#include "job_que_spin.h"
 #include "daScript/misc/performance_time.h"
 #include "daScript/simulate/debug_info.h"
 #include "daScript/simulate/aot_builtin_jobque.h"
@@ -617,7 +618,7 @@ namespace das {
             int spinUs = mSpinUs.load(std::memory_order_relaxed);
             bool teamMode = mTeamMode.load(std::memory_order_relaxed) != 0;
             if ( (spinUs > 0 || teamMode) && !mShutdown.load(std::memory_order_relaxed) ) {
-                auto deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(spinUs);
+                detail::JobQueSpinDeadline<detail::JobQueSpinClock> deadline(spinUs);
                 const uint32_t deadlineStride = spinUs > 0 ? JOBQUE_SPIN_DEADLINE_STRIDE : 1u;
                 uint32_t spinPasses = 0;
                 bool sawTeamOp = false;
@@ -658,13 +659,8 @@ namespace das {
                     }
                     jobque_spin_pause();
                     if ( ++spinPasses % deadlineStride == 0 ) {
-                        auto spinNow = std::chrono::steady_clock::now();
-                        if ( sawTeamOp && spinUs > 0 ) {
-                            deadline = spinNow + std::chrono::microseconds(spinUs);
-                            sawTeamOp = false;
-                        } else if ( spinNow >= deadline ) {
-                            break;
-                        }
+                        if ( deadline.expired(sawTeamOp) ) break;
+                        sawTeamOp = false;
                     }
                 }
             }

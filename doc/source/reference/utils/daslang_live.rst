@@ -907,3 +907,20 @@ Tips and gotchas
    `Running It Live <https://borisbat.github.io/dascf-blog/2026/03/20/running-it-live/>`_ -- blog post on live-coding philosophy
 
    :ref:`utils_mcp` -- MCP server with live-reload control tools (``live_*`` tools)
+
+
+Capture serialization and image adapters
+----------------------------------------
+
+``live/live_capture`` serializes a snapshot once for both its saved file and mailbox
+response. Capture responses include artifact, snapshot, serialization and write timings;
+``capture_completed`` and ``capture_timings`` let consumers identify diagnostic frames.
+In browser storage only the latest generated capture file is retained. Native saved
+capture files are preserved.
+
+An artifact callback normally writes PNG. It may instead set ``capture_artifact_file``,
+``capture_artifact_format``, ``capture_artifact_width`` and ``capture_artifact_height``.
+The browser adapter's optional ``window.dasLiveCaptureImage(reply)`` hook can asynchronously
+encode that immutable image payload and return the usual image object. Without a hook,
+the existing PNG path is unchanged. Consumers must bound work, clean up intermediate
+image storage and retain the snapshot's frame rather than sampling a later canvas.

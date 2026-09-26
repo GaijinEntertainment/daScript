@@ -21,6 +21,12 @@
 #include "daScript/misc/gc_node.h"
 #include "daScript/ast/ast_typedecl.h"
 #include <inttypes.h>
+#if defined(__EMSCRIPTEN__)
+#include <malloc.h>
+#include <emscripten/stack.h>
+#include <unistd.h>
+extern "C" char __heap_base;
+#endif
 #include "daScript/simulate/debug_print.h"
 #include "../parser/parser_impl.h"
 
@@ -1046,6 +1052,34 @@ namespace das
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         auto uhash = hash_value(context, args[0], call->types[0]);
         return cast<uint64_t>::from(uhash);
+    }
+
+    // src/builtin/ARCHITECTURE.md#native-memory-metrics
+    uint64_t native_thread_stack_size() {
+#if defined(__EMSCRIPTEN__)
+        return uint64_t(emscripten_stack_get_base() - emscripten_stack_get_end());
+#else
+        return 0;
+#endif
+    }
+    urange64 native_allocator_stats() {
+#if defined(__EMSCRIPTEN__)
+        auto info = mallinfo();
+        return urange64(uint64_t(info.uordblks), uint64_t(info.fordblks));
+#else
+        return urange64(0, 0);
+#endif
+    }
+    urange64 native_allocator_extent() {
+#if defined(__EMSCRIPTEN__)
+        return urange64(uint64_t(uintptr_t(&__heap_base)), uint64_t(uintptr_t(sbrk(0))));
+#else
+        return urange64(0, 0);
+#endif
+    }
+    urange64 context_idle_fork_memory(int kind, Context * context) { return context->getIdleForkMemory(kind); }
+    urange64 context_memory_sizes(Context * context) {
+        return urange64(context->stack.size(), context->getGlobalSize());
     }
 
     void heap_stats ( Context & ctx, uint64_t * bytes ) {
@@ -2532,6 +2566,11 @@ namespace das
             SideEffects::modifyExternal, "string_heap_depth")
                 ->arg("context");
         addExternInline<DAS_BIND_FUN(gc_collection_stats)>(*this, lib, "gc_collection_stats", SideEffects::accessExternal, "gc_collection_stats")->arg("context");
+        addExternInline<DAS_BIND_FUN(native_thread_stack_size)>(*this, lib, "native_thread_stack_size", SideEffects::accessExternal, "native_thread_stack_size");
+        addExternInline<DAS_BIND_FUN(native_allocator_stats)>(*this, lib, "native_allocator_stats", SideEffects::accessExternal, "native_allocator_stats");
+        addExternInline<DAS_BIND_FUN(native_allocator_extent)>(*this, lib, "native_allocator_extent", SideEffects::accessExternal, "native_allocator_extent");
+        addExternInline<DAS_BIND_FUN(context_idle_fork_memory)>(*this, lib, "context_idle_fork_memory", SideEffects::accessExternal, "context_idle_fork_memory")->args({"kind", "context"});
+        addExternInline<DAS_BIND_FUN(context_memory_sizes)>(*this, lib, "context_memory_sizes", SideEffects::accessExternal, "context_memory_sizes")->arg("context");
         addExternInline<DAS_BIND_FUN(gc_pause_stats)>(*this, lib, "gc_pause_stats", SideEffects::accessExternal, "gc_pause_stats")->arg("context");
         addExternInline<DAS_BIND_FUN(gc_reclaimed_stats)>(*this, lib, "gc_reclaimed_stats", SideEffects::accessExternal, "gc_reclaimed_stats")->arg("context");
         addExternInline<DAS_BIND_FUN(gc_last_collection_tick)>(*this, lib, "gc_last_collection_tick", SideEffects::accessExternal, "gc_last_collection_tick")->arg("context");

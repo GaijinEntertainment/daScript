@@ -13,7 +13,9 @@ Texture binding cache keys combine the texture unit and target, so bindings on
 different units or targets do not alias.
 
 Material-state filtering owns culling enable and mode, blend enable, and the standard
-alpha blend function. It leaves all other GL capabilities to the caller.
+straight-alpha blend function. RGB uses source alpha; destination alpha accumulates
+coverage with source factor one, so opacity is not squared in RGBA targets.
+It leaves all other GL capabilities to the caller.
 
 The element-buffer binding is VAO state. Switching VAOs invalidates only cached
 element-buffer knowledge.
