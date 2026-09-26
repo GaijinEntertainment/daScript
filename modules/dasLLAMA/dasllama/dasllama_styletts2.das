@@ -1476,6 +1476,28 @@ def styletts2_generator_gpu_stats() : tuple<calls : int; served : int> => stylet
 [cold_path]
 def styletts2_gpu_seats() : array<string> => tts_seat_names(g_st2_seats)
 
+//! Whether the registered driver fills the seat `stage` names (a driver ported seat by seat leaves the rest empty).
+[cold_path]
+def styletts2_gpu_seat_present(stage : string) : bool {
+    if (stage == "albert") {
+        return g_st2_drv.albert != null
+    } elif (stage == "text") {
+        return g_st2_drv.text != null
+    } elif (stage == "dur_enc") {
+        return g_st2_drv.dur_enc != null
+    } elif (stage == "durations") {
+        return g_st2_drv.durations != null
+    } elif (stage == "prosody") {
+        return g_st2_drv.prosody != null
+    } elif (stage == "decode") {
+        return g_st2_drv.decode != null
+    } elif (stage == "generator") {
+        return g_st2_drv.gen != null
+    }
+    panic("dasLLAMA styletts2: no seat named '{stage}'")
+    return false
+}
+
 //! The iSTFTNet generator on token-major rows x [t][c]: two upsampling stages, each adding the
 //! source spectrum through its noise branch and refining through Snake residual blocks, then the
 //! inverse STFT into `wave`; a registered driver gets the first refusal, except on the trace rail.

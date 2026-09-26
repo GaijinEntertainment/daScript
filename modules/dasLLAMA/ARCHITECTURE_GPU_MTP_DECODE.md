@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the Metal decode driver's kernel forms and layer encoder
 
 Companion to `ARCHITECTURE_GPU_MTP.md`; a section is cited by its anchor. This document
-carries sections 2.30-2.32, 2.38, 2.38a, 2.39a and 2.39b: the argument-alignment contract a kernel declares on
+carries the argument-alignment contract a kernel declares on
 its `[metal_dispatch]` - the contract the batch driver's fixed-B mul_mv forms carry - the
 K-quant small-batch form and the row-buffer pad a multi-row verify dispatches under, the
 single-row driver's greedy chain, the batch driver's pre-encoded step, the decode layer encoder,

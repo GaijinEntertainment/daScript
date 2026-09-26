@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the Metal prefill driver's routed block
 
 Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. This
-document carries section 2.2g, the routed block of the Metal prefill driver: the atomics-free
+document carries the routed block of the Metal prefill driver: the atomics-free
 bucket rail, the tensor-twin scaffold the gathered expert sites ride, and the split-format
 expert twins. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
 (`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`)

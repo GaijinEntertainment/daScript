@@ -8996,6 +8996,183 @@ class F32GemmB : F32GemmT {
 //! the f32 tile's workgroup count over rows x d
 def f32_gemm_wgs(rows, d : int64) : int64 => ((rows + int64(F32G_TP) - 1l) / int64(F32G_TP)) * ((d + int64(F32G_TD) - 1l) / int64(F32G_TD))
 
+// ===== the TTS tower's row classes =====
+
+struct TtsGatherArgs {
+    c : uint          //! the row width
+    rows : uint       //! the positions
+    word_off : uint   //! the word-embedding rows' element base in slab
+    pos_off : uint    //! the position rows' element base in slab
+    type_off : uint   //! the token-type row's element base in slab
+    out_off : uint    //! the output rows' element base in out
+}
+
+//! out[t][j] = word[ids[t]][j] + pos[t][j] + type[j], added in that order - the PL-BERT embedding sum of the CPU
+//! `styletts2_albert`, one element an invocation
+[vk_dispatch(name = "tts_row_gather_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsRowGather {
+    @ssbo @binding = 0 @role = "weight" slab : array<float>
+    @ssbo @binding = 1 ids : array<int>
+    @ssbo @binding = 2 out : array<float>
+    @push_constant pa : TtsGatherArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let g = gl_GlobalInvocationID.x
+        if (g < pa.rows * pa.c) {
+            let r = g / pa.c
+            let j = g % pa.c
+            out[pa.out_off + g] = slab[pa.word_off + uint(ids[r]) * pa.c + j] + slab[pa.pos_off + g] + slab[pa.type_off + j]
+        }
+    }
+}
+
+//! the row gather's workgroup count over `total` elements
+def tts_row_gather_wgs(total : int64) : int64 => (total + 255l) / 256l
+
+struct TtsElemArgs {
+    nelem : uint   //! the elements mapped
+    off : uint     //! their element base in x
+    slope : float  //! the leaky stamp's negative slope
+}
+
+//! an in-place elementwise map of x[off .. off + nelem), four elements an invocation; a stamp supplies `act`
+[ |> template_struct_instance]
+class template TtsElemT {
+    @ssbo @binding = 0 x : array<float>
+    @push_constant pa : TtsElemArgs
+
+    def abstract act(v : float) : float   //! the map of one element
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let e = gl_GlobalInvocationID.x * 4u
+        let b = pa.off + e
+        if (e + 4u <= pa.nelem) {
+            let v0 = act(x[b])
+            let v1 = act(x[b + 1u])
+            let v2 = act(x[b + 2u])
+            let v3 = act(x[b + 3u])
+            x[b] = v0
+            x[b + 1u] = v1
+            x[b + 2u] = v2
+            x[b + 3u] = v3
+        } else {
+            var i = e
+            while (i < pa.nelem) {
+                let vi = act(x[pa.off + i])
+                x[pa.off + i] = vi
+                i++
+            }
+        }
+    }
+}
+
+//! the CPU `gelu`'s tanh form in f32 (not the f16 LUT form `tower_act` spells - its roundings would move the front end's
+//! durations); the clamp keeps a device tanh off its exp overflow and changes no f32 result
+[vk_dispatch(name = "tts_gelu_tanh_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsGeluTanh : TtsElemT {
+    def override act(v : float) : float => 0.5 * v * (1.0 + tanh(clamp(0.7978845608028654 * (v + 0.044715 * v * v * v), -15.0, 15.0)))
+}
+
+//! the CPU `leaky_relu`: v > 0 ? v : v * slope
+[vk_dispatch(name = "tts_leaky_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsLeaky : TtsElemT {
+    def override act(v : float) : float => v > 0.0 ? v : v * pa.slope
+}
+
+//! the elementwise maps' workgroup count over `nelem` elements (four an invocation)
+def tts_elem_wgs(nelem : int64) : int64 => (nelem + 1023l) / 1024l
+
+struct TtsAttnArgs {
+    t : uint       //! the rows, queries and keys alike
+    d : uint       //! the planes' row stride
+    hs : uint      //! the head size
+    heads : uint
+    scale : float  //! the score scale, 1 / sqrt(hs)
+    qoff : uint    //! each plane's element base
+    koff : uint
+    voff : uint
+    ooff : uint
+}
+
+let TTS_ATTN_TCAP = 512u   //! the staged score row's capacity
+
+//! bidirectional multi-head attention in f32 over q, k, v [t][d] (head h at columns h * hs) into out - the CPU
+//! `attention_rows` per (query row, head) workgroup: every key's scaled dot, the softmax as max, exp clamped at -80, sum,
+//! then the value sum of the normalized weights, 256 / hs invocations a value column. The driver dispatches it only at
+//! t <= TTS_ATTN_TCAP (the staged score row) and hs 64 or 128 (the value split's lattice); the class declines nothing
+[vk_dispatch(name = "tts_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsAttn : WgReduceBase {
+    @ssbo @binding = 0 q : array<float>
+    @ssbo @binding = 1 k : array<float>
+    @ssbo @binding = 2 v : array<float>
+    @ssbo @binding = 3 out : array<float>
+    @push_constant pa : TtsAttnArgs
+    @workgroup sc : float[int(TTS_ATTN_TCAP)]   //! the row's scores, then its exp weights
+    @workgroup vpart : float[256]                //! the value sums' partials, one an invocation
+
+    //! the scaled dot of the query row at `qb` and the key row at `kb`, one mad a column in column order
+    def score(qb, kb : uint) : float {
+        var acc = 0.0
+        var e = 0u
+        while (e < pa.hs) {
+            acc = mad(q[qb + e], k[kb + e], acc)
+            e++
+        }
+        return acc * pa.scale
+    }
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let tid = gl_LocalInvocationID.x
+        let h = gl_WorkGroupID.x / pa.t
+        let i = gl_WorkGroupID.x % pa.t
+        let col = h * pa.hs
+        let qb = pa.qoff + i * pa.d + col
+        var m0 = -3.0e38
+        var j = tid
+        while (j < pa.t) {
+            let s = score(qb, pa.koff + j * pa.d + col)
+            sc[j] = s
+            m0 = max(m0, s)
+            j += 256u
+        }
+        let m = wg_max(m0, 0u)
+        var l0 = 0.0
+        j = tid
+        while (j < pa.t) {
+            let p = exp(max(sc[j] - m, -80.0))
+            sc[j] = p
+            l0 += p
+            j += 256u
+        }
+        let inv = 1.0 / wg_sum(l0, 1u)
+        let parts = 256u / pa.hs
+        let vb = pa.voff + col + tid % pa.hs
+        var acc = 0.0
+        j = tid / pa.hs
+        while (j < pa.t) {
+            acc = mad(sc[j] * inv, v[vb + j * pa.d], acc)
+            j += parts
+        }
+        vpart[tid] = acc
+        barrier()
+        if (tid < pa.hs) {
+            var o = vpart[tid]
+            var pp = 1u
+            while (pp < parts) {
+                o += vpart[pp * pa.hs + tid]
+                pp++
+            }
+            out[pa.ooff + i * pa.d + col + tid] = o
+        }
+    }
+}
+
+//! the attention's workgroup count: one a (query row, head)
+def tts_attn_wgs(t, heads : int64) : int64 => t * heads
+
 // ===== rope + KV store + qk-norm =====
 
 struct QkRmsArgs {
@@ -13052,5 +13229,145 @@ def vt_feed_enc(raw : VkCommandBuffer; var h : VkHaz; cm2 : bool; var s_rq : VkD
         enc_tower_clamp_cvt_cls(raw, h, s_rq, pc, (nelem / 4l + 255l) / 256l)
     } else {
         enc_tower_clamp_rq_cls(raw, h, s_rq, pc_rq, rq_wgs(false, nelem))
+    }
+}
+
+// ===== the TTS tower's sequence classes =====
+
+struct TtsIm2colArgs {
+    cin : uint          //! the input channels
+    tin : uint          //! the input positions: x is channel-major [cin][tin]
+    tout : uint         //! the output positions, the column rows
+    k : uint            //! the taps
+    stride : uint
+    pad_l : uint        //! the forward conv's left pad; the transposed conv's cropped left edge
+    dilation : uint
+    transposed : uint   //! 1 = the transposed conv's source positions
+    kdim : uint         //! the column row's width: k * cin on the GEMM's 32 lattice, the columns past k * cin zero
+    xoff : uint         //! x's element base
+    coloff : uint       //! col's element base
+}
+
+//! the 1-D conv's im2col, the F32Gemm's feed: col [tout][kdim] at coloff, column j = tap * cin + ci - the slab's weight-row
+//! order, so one weight row [cout][kdim] multiplies it - zero where the tap falls off x and in the columns past k * cin;
+//! a forward tap reads x at t * stride + tap * dilation - pad_l, a transposed one the input position whose stride lands
+//! the tap on t, (t + pad_l - tap * dilation) / stride where that divides exactly (the CPU `conv1d_transposed_dense`'s
+//! scatter read as a gather); one element an invocation, wgs = `tts_im2col_wgs`
+[vk_dispatch(name = "tts_im2col_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsIm2col {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 col : array<float>
+    @push_constant pa : TtsIm2colArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.tout * pa.kdim) {
+            let r = gid / pa.kdim
+            let j = gid % pa.kdim
+            var v = 0.0
+            if (j < pa.k * pa.cin) {
+                let tap = j / pa.cin
+                let ci = j % pa.cin
+                var st = -1
+                if (pa.transposed != 0u) {
+                    let q = int(r + pa.pad_l) - int(tap * pa.dilation)
+                    if (q >= 0 && uint(q) % pa.stride == 0u && uint(q) / pa.stride < pa.tin) {
+                        st = int(uint(q) / pa.stride)
+                    }
+                } else {
+                    let p = int(r * pa.stride + tap * pa.dilation) - int(pa.pad_l)
+                    if (p >= 0 && uint(p) < pa.tin) {
+                        st = p
+                    }
+                }
+                if (st >= 0) {
+                    v = x[pa.xoff + ci * pa.tin + uint(st)]
+                }
+            }
+            col[pa.coloff + gid] = v
+        }
+    }
+}
+
+//! the im2col's workgroup count over `total` = tout * kdim column elements
+def tts_im2col_wgs(total : int64) : int64 => (total + 255l) / 256l
+
+struct TtsLstmArgs {
+    t : uint          //! the steps
+    hidden : uint     //! H, at most `TTS_LSTM_LANES`
+    goff : uint       //! the input gates' element base: [t][4H] rows in gate order i, f, g, o
+    gstride : uint    //! ... and their row stride (4H on the GEMM's 64 lattice)
+    hhoff : uint      //! w_hh's element base: [4H][H], dense
+    hoff : uint       //! the h rows' element base
+    hstride : uint    //! ... and their row stride: 2H where the two directions share a row
+    backward : uint   //! 1 = the steps walk t - 1 down to 0
+}
+
+let TTS_LSTM_LANES = 256u   //! one invocation a hidden unit: a direction past it declines at the driver
+
+//! tanh clamped to +-15, where it already saturates in f32: past that a device tanh built from exp answers NaN, the CPU +-1
+def tts_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
+
+//! the CPU `sigmoid_f`
+def tts_sigmoid(v : float) : float => 1.0 / (1.0 + exp(-v))
+
+//! one LSTM direction end to end in one workgroup (the CPU `lstm_direction`, wgs = 1 a direction): per step invocation
+//! j < H takes its four gates - the input gate row (x w_ih^T + b, an F32GemmB ahead of it) plus the w_hh row's dot with
+//! h_prev in k order - then c = f c + i g and h = o tanh(c); h lives in `hs` between steps, c in the invocation.
+//! A direction over `TTS_LSTM_LANES` hidden units declines at the driver
+[vk_dispatch(name = "tts_lstm_dir_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsLstmDir {
+    @ssbo @binding = 0 gates : array<float>
+    @ssbo @binding = 1 @role = "weight" whh : array<float>
+    @ssbo @binding = 2 h : array<float>
+    @push_constant pa : TtsLstmArgs
+    @workgroup hs : float[int(TTS_LSTM_LANES)]
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let j = gl_LocalInvocationID.x
+        let hd = pa.hidden
+        let live = j < hd
+        if (live) {
+            hs[j] = 0.0
+        }
+        var cst = 0.0
+        let t_first = pa.backward != 0u ? pa.t - 1u : 0u   //! the direction, decided once: the step loop walks t_first -/+ step
+        let hh = hd * hd
+        var step = 0u
+        while (step < pa.t) {
+            barrier()
+            var ai = 0.0
+            var af = 0.0
+            var ag = 0.0
+            var ao = 0.0
+            if (live) {
+                let ri = pa.hhoff + j * hd
+                var i = 0u
+                while (i < hd) {
+                    let hv = hs[i]
+                    ai = mad(whh[ri + i], hv, ai)
+                    af = mad(whh[ri + hh + i], hv, af)
+                    ag = mad(whh[ri + 2u * hh + i], hv, ag)
+                    ao = mad(whh[ri + 3u * hh + i], hv, ao)
+                    i++
+                }
+            }
+            barrier()
+            if (live) {
+                let ti = pa.backward != 0u ? t_first - step : t_first + step
+                let gb = pa.goff + ti * pa.gstride + j
+                let gi = tts_sigmoid(gates[gb] + ai)
+                let gf = tts_sigmoid(gates[gb + hd] + af)
+                let gg = tts_tanh(gates[gb + 2u * hd] + ag)
+                let go = tts_sigmoid(gates[gb + 3u * hd] + ao)
+                cst = gf * cst + gi * gg
+                let hn = go * tts_tanh(cst)
+                hs[j] = hn
+                h[pa.hoff + ti * pa.hstride + j] = hn
+            }
+            step++
+        }
     }
 }

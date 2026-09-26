@@ -1,11 +1,11 @@
 # dasLLAMA Architecture - the Metal prefill driver
 
 Companion to `ARCHITECTURE.md`; a section is cited by its anchor. This document carries
-sections 2.2c-2.2f, 2.2h-2.2i, 2.2u-2.2v and 2.2aa: the GEMM form ladder, the dev-W panel knee
-map, the GEMV tail peel, the attention slab, the pad-row and cooperative-op constraints, chunked
-submission, the f16 twin dual-store, the last-layer FFN tail, and the dense-KQ tensor mul_mm
-scaffold. The driver's routed block - the MoE bucket rail, its tensor-twin scaffold and the
-split-format expert twins - is `ARCHITECTURE_GPU_PREFILL_MOE.md` section 2.2g.
+the GEMM form ladder, the dev-W panel knee map, the GEMV tail peel, the attention slab, the
+pad-row and cooperative-op constraints, chunked submission, the f16 twin dual-store, the
+last-layer FFN tail, and the dense-KQ tensor mul_mm scaffold. The driver's routed block - the
+MoE bucket rail, its tensor-twin scaffold and the split-format expert twins - is
+`ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-buckets`.
 
 ### The prefill GEMM form ladder {#prefill-gemm-ladder}
 
@@ -167,7 +167,7 @@ SLIDING class; the loader guarantees at most two. Buffers size to the class maxi
 binds its own class's uniform set - a uniform model leaves the sliding twins null and binds the
 base set everywhere.
 
-Section 2.2g, the prefill MoE bucket rail, is `ARCHITECTURE_GPU_PREFILL_MOE.md`.
+The prefill MoE bucket rail is `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-buckets`.
 
 ### Pad rows and cooperative-op constraints {#prefill-pad-rows-and-coop}
 

@@ -240,6 +240,7 @@ var private GPU_ROLES_METAL <- {
 }
 
 var private GPU_ROLES_VULKAN <- {
+    "tts",
     "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec"
 }
 
@@ -1574,6 +1575,16 @@ def private check_arch_cites_by_name {
                     continue if (at + 4 >= length(d) || !is_number(int(d[at + 4])))
                     let named = md_name_before(line, at)
                     continue if (find(named, "/") >= 0 || named |> starts_with("followup_") || named |> starts_with("BRINGUP") || named |> starts_with("HOW_TO"))
+                    gate_finding(path, line_no, "cites an architecture section by number - the set is cited by `<doc>.md#<anchor>` (ARCHITECTURE_COMMON.md); name the heading's anchor")
+                    break
+                }
+                //! the bare form: `ARCHITECTURE_X.md` 2.2b - a document name, a space and a section number with no prefix
+                var from2 = 0
+                while (true) {
+                    let tick = find(line, ".md` ", from2)
+                    break if (tick < 0)
+                    from2 = tick + 5
+                    continue if (tick + 5 >= length(d) || !is_number(int(d[tick + 5])) || find(md_name_before(line, tick + 4), "ARCHITECTURE") < 0)
                     gate_finding(path, line_no, "cites an architecture section by number - the set is cited by `<doc>.md#<anchor>` (ARCHITECTURE_COMMON.md); name the heading's anchor")
                     break
                 }

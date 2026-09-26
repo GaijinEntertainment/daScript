@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the kernel race and bench instruments
 
 Companion to `ARCHITECTURE_MEASUREMENT.md`; a section is cited by its anchor. This
-document carries sections 2.21, 2.26 and 2.27, the instruments that time a kernel away from the
+document carries the instruments that time a kernel away from the
 served graph and the conditions their verdict holds under: what makes an isolated race predict
 the graph it imitates, how the gemv earns a second tune seat, and the fixture the CPU kernel
 bench times on. It also carries the vocabulary of the timing-race checklist. The rig that

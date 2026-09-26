@@ -1,23 +1,22 @@
 # dasLLAMA Architecture - the Vulkan resident driver
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
-carries sections 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai and 2.2aj: the prefill window
-chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer, the tile probe's
-shared descriptor set layout, the recurrent block of the prefill window, the roster of Vulkan
-capabilities the tier keys its routes on, and how the `[vk_dispatch]` lens derives `readonly` from a
-class family's accesses. The token command's attention key split and the attention-side planes
-(the q/k/v bias, the sink logits, the output bias) are `ARCHITECTURE_GPU_VULKAN_ATTN.md`'s
-sections 2.2al and 2.2am. The MoE block of that
-window, the token command's routed twin and their gemma-4 form are `ARCHITECTURE_GPU_VULKAN_MOE.md`'s
-sections 2.2af, 2.2ag and 2.2ak. The cooperative-matrix tiles the chain's GEMMs run on - the cm2
-decode spelling, the tile pick and the coopmat mode ladder, the class-pipeline build seat, the MoE
-expert chain on those tiles, and the KHR arm's hand-staged kq tile - are `ARCHITECTURE_GPU_VULKAN_GEMM.md`'s
-sections 2.2k-2.2m, 2.2q and 2.2ae, and the decode GEMV family's lane split by row length its
-section 2.2ah. What a model has to fit on the card before any of this runs - the residency plan,
-and the marks swap that lets one GPU slot serve many models - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s
-sections 2.2n-2.2o and 2.2an, and the N-row token command a batched step's rows go through is
-`ARCHITECTURE_GPU_VULKAN_NROW.md`'s 2.2ao-2.2ap. The decode-era mechanisms of the per-op tier are `ARCHITECTURE_GPU_VULKAN_DECODE.md`'s
-sections 2.2r-2.2v. The GPU backend role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
+carries the prefill window chain, the Q8 requant byte store, the decode GEMV family's grid
+codebook buffer, the tile probe's shared descriptor set layout, the recurrent block of the
+prefill window, the roster of Vulkan capabilities the tier keys its routes on, and how the
+`[vk_dispatch]` lens derives `readonly` from a class family's accesses. The token command's
+attention key split and the attention-side planes (the q/k/v bias, the sink logits, the output
+bias) are in `ARCHITECTURE_GPU_VULKAN_ATTN.md`. The MoE block of that window, the token
+command's routed twin and their gemma-4 form are in `ARCHITECTURE_GPU_VULKAN_MOE.md`. The
+cooperative-matrix tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and
+the coopmat mode ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and
+the KHR arm's hand-staged kq tile - are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, and the decode GEMV
+family's lane split by row length is `ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes`. What a
+model has to fit on the card before any of this runs - the residency plan, and the marks swap
+that lets one GPU slot serve many models - is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, and the
+N-row token command a batched step's rows go through is in `ARCHITECTURE_GPU_VULKAN_NROW.md`.
+The decode-era mechanisms of the per-op tier are in `ARCHITECTURE_GPU_VULKAN_DECODE.md`. The GPU
+backend role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 The module gate's seven Vulkan checks (`REVIEW.das`) read these files. `check_khr_stage16_abstract`
 reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses no names: its

@@ -195,7 +195,8 @@ measurements behind this section and each refuted attempt.
 
 SMT siblings share the FMA and load ports, so the default pool is (physical cores - 1) workers -
 a cap the engine's `[init]` sets on every platform but a browser, where the reported count can be
-a fingerprint cap of two and the runtime's own floor and cap size the pool (2.18a). A box
+a fingerprint cap of two and the runtime's own floor and cap size the pool
+(`ARCHITECTURE_RUNTIME.md#browser-workers-spin`). A box
 with two core tiers splits on the SECOND tier's KIND: a compute tier (an M5's Super plus Performance
 cores) extends the pool to every core with GEMV capped to the fast tier, while an efficiency tier
 (M1, M4) makes batch barriers wait and gets no worker at all. A compute-grade second tier only

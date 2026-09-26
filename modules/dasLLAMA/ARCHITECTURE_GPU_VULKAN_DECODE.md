@@ -1,16 +1,16 @@
 # dasLLAMA Architecture - the Vulkan per-op tier's decode era
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
-document carries sections 2.2r-2.2v: the decode attention block over per-layer K/V mirrors, the
-streamed expert layer's GPU/CPU split, the whole-token decode span, the deltanet decode step's
-per-session resident state, and the whole-model driver's hybrid token command. The prefill
-window chain and byte stores these build on are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j,
-2.2p, 2.2ab, 2.2ac and 2.2ad; the routed block an MoE layer takes in either era - the prefill
-window's and the token command's - is `ARCHITECTURE_GPU_VULKAN_MOE.md` sections 2.2af and
-2.2ag; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq tile and the decode GEMV
-family's lane split are `ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q, 2.2ae and
-2.2ah; the residency plan and
-the marks swap under them, the token command's logits landing on the transfer queue and the N-row token command are `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sections 2.2n-2.2o and 2.2an, and `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`.
+document carries the decode attention block over per-layer K/V mirrors, the streamed expert
+layer's GPU/CPU split, the whole-token decode span, the deltanet decode step's per-session
+resident state, and the whole-model driver's hybrid token command. The prefill window chain
+and byte stores these build on are in `ARCHITECTURE_GPU_VULKAN.md`; the routed block an MoE
+layer takes in either era - the prefill window's and the token command's - is in
+`ARCHITECTURE_GPU_VULKAN_MOE.md`; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq
+tile and the decode GEMV family's lane split are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the
+residency plan and the marks swap under them and the token command's logits landing on the
+transfer queue are in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, and the N-row token command is
+`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`.
 
 ### The per-op tier's decode attention block {#decode-attention-block}
 

@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the Vulkan tier's GEMM tile family
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
-document carries sections 2.2k-2.2m, 2.2q, 2.2ae and 2.2ah, the cooperative-matrix tiles the
+document carries the cooperative-matrix tiles the
 Vulkan tier's GEMMs run on and the decode GEMV family's lane split: how a cm2 tile decodes its
 quant bytes, how a tile and the served GEMM mode are picked, the class-pipeline build seat both
 shader instruments hang on, the MoE expert chain on those tiles, the KHR arm's hand-staged
@@ -9,8 +9,8 @@ tile, and how a GEMV subgroup splits across short rows. `ARCHITECTURE_GPU_VULKAN
 the prefill window chain that dispatches them (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`) and its recurrent block (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`),
 the Q8 requant byte store (`ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store`), the decode GEMV family's grid codebook buffer
 (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`), and the tile probe's shared descriptor set layout (`ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout`). What a model has to
-fit on the card first is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`-2.2o and 2.2an; the per-op
-tier's decode-era mechanisms are `ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block`-2.2v; the GPU
+fit on the card first is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; the per-op
+tier's decode-era mechanisms are in `ARCHITECTURE_GPU_VULKAN_DECODE.md`; the GPU
 backend role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The cm2 decode callbacks read their quant bytes as 16-bit lanes {#cm2-decode-16bit-lanes}

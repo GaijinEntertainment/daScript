@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the Vulkan resident driver's attention
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document
-carries sections 2.2al and 2.2am: the token command's attention key split, and the attention-side
+carries the token command's attention key split, and the attention-side
 planes the resident driver uploads beside its norms - the q/k/v projection bias, gpt-oss's sink
 logits and its output bias - with the flash tiles' sink stamps. The window chain the flash tiles
 serve is `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`; the token command the decode pass sits in is
