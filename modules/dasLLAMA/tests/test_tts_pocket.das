@@ -41,7 +41,7 @@ let GPU_CODEC_BAR = 1e-5   //! the codec seat against the CPU chain on the f32 l
 let GPU_FRAME_BAR = 2e-5   //! the frames seat against the CPU chain on the f32 lane, teacher-forced: reads 2e-6 on the latents (M5 Max, -jit)
 let GPU_CODEC_SERVED_BAR = 2e-1   //! the codec seat on the served planes: reads 1.3e-2 / 7.7e-3 (q8 / kq) on the M5 Max and 9.2e-2 / 1.5e-1 on the pod's x64 CPU chain, all of it the CPU's Q8_0 activation blocks of the first layer's rows (the tower reads the same quants dequantized and feeds f32: it sits at 3e-6 of the CPU f32 chain on either box)
 let GPU_FRAME_SERVED_BAR = 1e-1   //! the frames seat on the served planes, teacher-forced: reads 1.9e-2 / 3.7e-2 on the q8 file, 3.8e-2 / 7.1e-2 on the kq file (alba / caro_davy) on the M5 Max
-let GPU_FRAME_FREE_BAR = 1e-3   //! the frames seat free-running on the f32 lane, its own noise from the same seed, every frame fed its own output: reads 1.5e-4 and 1.1e-4 on the two stage cases on the M5 Max
+let GPU_FRAME_FREE_BAR = 5e-3   //! the frames seat free-running on the f32 lane, its own noise from the same seed, every frame fed its own output: reads 1.5e-4 and 1.1e-4 on the two stage cases on the M5 Max, 7e-5 and 1.8e-3 on the pod (lj028's 150 frames compound the f16 GEMM feed's rounding)
 
 //! The tower knob off for a cell that holds the CPU chain; the knob it found, for the restore.
 def private tower_pin_off() : bool {
@@ -817,7 +817,7 @@ def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs,
                 let eb1 = gpu_encodes()
                 var inscope b3 <- frame_rows(m, sc, f3)
                 t |> equal(f3, fc, "{tag}: batches of three make the frame count")
-                t |> equal(eb1 - eb0, (fc + 3l) / 3l + 1l, "{tag}: one tower encode a batch of three, and the codec's")
+                t |> equal(eb1 - eb0, (fc + 2l) / 3l + 1l, "{tag}: one tower encode a batch of three, and the codec's")
                 t |> success(rel_rms(b3.lat, leg.cpu.lat) <= GPU_FRAME_BAR, "{tag}: batches of three land within {GPU_FRAME_BAR}")
                 set_gpu_pocket_frame_batch(0l)
                 t |> equal(gpu_pocket_frame_batch(), 1l, "{tag}: a batch below one clamps to one")
