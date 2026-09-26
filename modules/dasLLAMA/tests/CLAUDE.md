@@ -287,8 +287,9 @@ row against `attention_causal_rows` over a `TtsKvCache` (every key and an 8-key 
 unseen key's poison staying silent), the rope-and-store kernel's f32 stamp at the frame loop's
 binds (no bias, the whole head, the tables and the caches at the position's row) against
 `rope_rows` with the caches' sentinel rows, the add-and-norm at a width under the threadgroup and one past it, and the row
-GEMV's ten stamps (f32 rows and a q8 blob, each under the bare dot, the normed and modulated x
-with the SiLU out, the gated residual, the SiLU over the slab vector and the frame tail) against
+GEMV's nine stamps (f32 rows under the bare dot, f32 rows and a q8 blob under the normed and
+modulated x with the SiLU out, the gated residual, the SiLU over the slab vector and the frame tail;
+the bare q8 dot rides the decode GEMV) against
 an fp64 oracle with x, y and the latent row bound at offsets. The census row is one Pocket
 codec pass over synthetic latents and one spoken line on the f16 file, then one spoken line on
 the kq file so the q8 GEMV stamps count (`cov_tower_pocket`). Shared fixtures

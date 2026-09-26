@@ -4825,7 +4825,11 @@ def private pk_gemv(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin; ki
     let qoff = p.q8 ? p.qoff : 0ul
     if (p.q8) {
         if (kind == PK_GEMV_DOT) {
-            enc_pk_gemv_q8(enc, c.slab, boff, bq, qoff, bq, s.bx, s.xoff, s.by, s.yoff, ka, p.nout)
+            //! the bare q8 dot rides the decode GEMV, bias added after: the row stamp's fused bias measured 20% slower a frame
+            enc_gemv(enc, bq, qoff, s.bx, s.by, p.u_nin, p.u_nout, p.nout, s.yoff, s.xoff)
+            if (p.has_b) {
+                enc_add_bias_rows(enc, s.by, s.yoff, c.slab, boff, p.u_nout, p.u_nout, p.nout)
+            }
         } elif (kind == PK_GEMV_LN_SILU) {
             enc_pk_gemv_q8_ln_silu(enc, c.slab, boff, bq, qoff, bq, s.bx, s.xoff, s.by, s.yoff, s.bmod, s.mod_off, c.slab, s.ln_w_off, c.slab, s.ln_b_off, ka, p.nout)
         } elif (kind == PK_GEMV_GATE) {
@@ -4851,14 +4855,7 @@ def private pk_gemv(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin; ki
 }
 
 def private pk_lin(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin; var bx : MetalBuffer?; xoff : uint64; var by : MetalBuffer?; yoff : uint64) {
-    if (p.q8) {
-        enc_gemv(enc, g_tw_pk_frames.blob, p.qoff, bx, by, p.u_nin, p.u_nout, p.nout, yoff, xoff)
-        if (p.has_b) {
-            enc_add_bias_rows(enc, by, yoff, c.slab, p.boff, p.u_nout, p.u_nout, p.nout)
-        }
-    } else {
-        pk_gemv(enc, c, p, PK_GEMV_DOT, pk_site(c, bx, xoff, by, yoff))
-    }
+    pk_gemv(enc, c, p, PK_GEMV_DOT, pk_site(c, bx, xoff, by, yoff))
 }
 
 def private pk_add_ln(enc : MetalComputeEncoder?; var c : St2GpuCtx; bx, ba : MetalBuffer?; ns : St2NormSlot; by : MetalBuffer?; yoff : uint64; d : int64; eps : float) {

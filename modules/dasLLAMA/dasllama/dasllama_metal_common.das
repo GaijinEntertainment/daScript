@@ -277,7 +277,6 @@ var g_pso_pk_gemv_f32_ln_silu : MetalComputePipeline?
 var g_pso_pk_gemv_f32_gate : MetalComputePipeline?
 var g_pso_pk_gemv_f32_add_silu : MetalComputePipeline?
 var g_pso_pk_gemv_f32_tail : MetalComputePipeline?
-var g_pso_pk_gemv_q8 : MetalComputePipeline?
 var g_pso_pk_gemv_q8_ln_silu : MetalComputePipeline?
 var g_pso_pk_gemv_q8_gate : MetalComputePipeline?
 var g_pso_pk_gemv_q8_add_silu : MetalComputePipeline?

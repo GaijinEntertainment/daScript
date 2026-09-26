@@ -3616,7 +3616,6 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_pk_gemv_f32_gate = compile_stamp(metal_pk_gemv_f32_gate_msl, ok)
     g_pso_pk_gemv_f32_add_silu = compile_stamp(metal_pk_gemv_f32_add_silu_msl, ok)
     g_pso_pk_gemv_f32_tail = compile_stamp(metal_pk_gemv_f32_tail_msl, ok)
-    g_pso_pk_gemv_q8 = compile_stamp(metal_pk_gemv_q8_msl, ok)
     g_pso_pk_gemv_q8_ln_silu = compile_stamp(metal_pk_gemv_q8_ln_silu_msl, ok)
     g_pso_pk_gemv_q8_gate = compile_stamp(metal_pk_gemv_q8_gate_msl, ok)
     g_pso_pk_gemv_q8_add_silu = compile_stamp(metal_pk_gemv_q8_add_silu_msl, ok)
@@ -4513,7 +4512,7 @@ def metal_kernels_release {
     release_handles(g_pso_st2_attn)
     release_handles(g_pso_pk_rows, g_pso_pk_rows_elu, g_pso_pk_row_scale, g_pso_pk_attn)
     release_handles(g_pso_pk_add_ln, g_pso_pk_gemv_f32, g_pso_pk_gemv_f32_ln_silu, g_pso_pk_gemv_f32_gate, g_pso_pk_gemv_f32_add_silu)
-    release_handles(g_pso_pk_gemv_f32_tail, g_pso_pk_gemv_q8, g_pso_pk_gemv_q8_ln_silu, g_pso_pk_gemv_q8_gate, g_pso_pk_gemv_q8_add_silu, g_pso_pk_gemv_q8_tail)
+    release_handles(g_pso_pk_gemv_f32_tail, g_pso_pk_gemv_q8_ln_silu, g_pso_pk_gemv_q8_gate, g_pso_pk_gemv_q8_add_silu, g_pso_pk_gemv_q8_tail)
     release_handles(g_pso_st2_adain_leaky, g_pso_row_gather, g_pso_st2_concat, g_pso_st2_pool_dw, g_pso_st2_lstm, g_pso_st2_sigsum, g_pso_st2_gelu_tanh,
         g_pso_st2_src_low_torch, g_pso_st2_src_low_onnx, g_pso_st2_src_cumsum_torch, g_pso_st2_src_cumsum_onnx, g_pso_st2_src_noise,
         g_pso_st2_src_sines_torch, g_pso_st2_src_sines_onnx, g_pso_st2_stft_reflect, g_pso_st2_stft_edge, g_pso_st2_istft)
@@ -11432,16 +11431,6 @@ class MetalPkGemvF32Tail : MetalPkGemvT {
 
     [metal_kernel(name="metal_pk_gemv_f32_tail_msl")]
     def metal_pk_gemv_f32_tail {
-        pk_gemv_body()
-    }
-}
-
-[metal_dispatch(name = "enc_pk_gemv_q8", pso = "g_pso_pk_gemv_q8", tgmem = "metal_pk_gemv_q8_msl_tgmem", tg = 128, grid = "rows/4", params = "rows : int64", requires = "ka.nin % 32")]
-class MetalPkGemvQ8 : MetalPkGemvT {
-    override Q8 = true
-
-    [metal_kernel(name="metal_pk_gemv_q8_msl")]
-    def metal_pk_gemv_q8 {
         pk_gemv_body()
     }
 }

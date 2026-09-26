@@ -15,7 +15,12 @@ what it costs today and what the fix would change.
   seat (`ARCHITECTURE_GPU_TOWER.md` sec.2.2aw): the backbone step and the flow head for every
   frame, eight frames a command buffer over a per-voice device K/V slot, the EOS rule on the host
   between batches, the q8 backbone on the decode GEMV, the head's GEMVs carrying their norm and
-  activations, the attention row a threadgroup a head with its scores staged.** Box, flags and
+  activations, the attention row a threadgroup a head with its scores staged.** The bare q8
+  dot's route was A/B'd on this box (`harness/pocket_stage_probe.das`, the q8 file, one sentence,
+  best of 5, `DASLLAMA_ALLOW_UNTUNED=1` on both arms - the tower's stamps carry no crown): the
+  decode split-K GEMV plus a bias add 1.228 ms a frame (backbone 40.8 ms of 51.6), the row stamp
+  with the bias fused 1.477 (backbone 53.3) - the row stamp's one-lane-a-block dot loses to the
+  split-K walk, so the fused-bias q8 stamp is gone and every q8 linear takes the decode GEMV. Box, flags and
   the 20-sentence walls as the codec seat's entry below; `direction-grade` - the CPU arm a second
   process, the codec-seat column and the rig's before-rows the previous commit's readings; both
   seats serve in these rows.

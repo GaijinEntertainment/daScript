@@ -2532,9 +2532,7 @@ def private pk_add_ln_gate(t : T?; dev, queue; dim : int) {
 
 def private pk_gemv_pso(dev; q8 : bool; kind : int; var err : string&) {
     if (q8) {
-        if (kind == 0) {
-            return pipeline_from_source(dev, metal_pk_gemv_q8_msl, metal_pk_gemv_q8_msl_entry, metal_pk_gemv_q8_msl_fastmath, err)
-        } elif (kind == 1) {
+        if (kind == 1) {
             return pipeline_from_source(dev, metal_pk_gemv_q8_ln_silu_msl, metal_pk_gemv_q8_ln_silu_msl_entry, metal_pk_gemv_q8_ln_silu_msl_fastmath, err)
         } elif (kind == 2) {
             return pipeline_from_source(dev, metal_pk_gemv_q8_gate_msl, metal_pk_gemv_q8_gate_msl_entry, metal_pk_gemv_q8_gate_msl_fastmath, err)
@@ -2557,7 +2555,7 @@ def private pk_gemv_pso(dev; q8 : bool; kind : int; var err : string&) {
 
 def private pk_gemv_tgmem(dev; q8 : bool; kind : int) : uint64 {   //! `dev` untyped: the module behind `?das_metal` may be absent
     if (q8) {
-        return kind == 0 ? metal_pk_gemv_q8_msl_tgmem : (kind == 1 ? metal_pk_gemv_q8_ln_silu_msl_tgmem : (kind == 2 ? metal_pk_gemv_q8_gate_msl_tgmem
+        return (kind == 1 ? metal_pk_gemv_q8_ln_silu_msl_tgmem : (kind == 2 ? metal_pk_gemv_q8_gate_msl_tgmem
             : (kind == 3 ? metal_pk_gemv_q8_add_silu_msl_tgmem : metal_pk_gemv_q8_tail_msl_tgmem)))
     }
     return kind == 0 ? metal_pk_gemv_f32_msl_tgmem : (kind == 1 ? metal_pk_gemv_f32_ln_silu_msl_tgmem : (kind == 2 ? metal_pk_gemv_f32_gate_msl_tgmem
@@ -3450,7 +3448,7 @@ def test_metal_prefill_kernels(t : T?) {
                 pk_add_ln_gate(t, dev, queue, 300)
                 pk_add_ln_gate(t, dev, queue, 512)   //! two whole 256-lane strides
                 for (q8 in [false, true]) {
-                    for (kind in range(5)) {
+                    for (kind in range(q8 ? 1 : 0, 5)) {   //! the bare q8 dot rides the decode GEMV, gated in test_metal_gemv_kernels
                         pk_gemv_gate(t, dev, queue, q8, kind, 96)
                         pk_gemv_gate(t, dev, queue, q8, kind, 256)   //! a whole stage stride
                         pk_gemv_gate(t, dev, queue, q8, kind, 1024)   //! several stage strides, several row strides
