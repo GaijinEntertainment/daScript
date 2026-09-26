@@ -613,9 +613,9 @@ def private cov_tower(t : T?) {
     }
 }
 
-[unused_argument(t)]   // off-Apple the gated body is empty
+[unused_argument(t)]   // without a GPU module the gated body is empty
 def private cov_tower_styletts2(t : T?) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         for (name in ["kitten-nano.gguf", "kokoro-82m.gguf"]) {   //! the ONNX law's stamps and the torch law's
             let path = path_join(models_dir(), name)
             continue if (!family_on(t, name == "kokoro-82m.gguf" ? "kokoro" : "kitten") || !model_available(t, path))
@@ -640,9 +640,9 @@ def private cov_tower_styletts2(t : T?) {
     }
 }
 
-[unused_argument(t)]   //! off-Apple the gated body is empty
+[unused_argument(t)]   //! without a GPU module the gated body is empty
 def private cov_tower_pocket(t : T?) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         let path = path_join(models_dir(), "pocket-tts-en.gguf")
         if (family_on(t, "pocket") && model_available(t, path)) {
             var inscope m <- load_pocket(path)   //! the Pocket loader stages in memory: no .dlim
@@ -932,41 +932,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das
     "router_gemm_cls_spv",
-    // the f32-exact tile GEMM (plain and biased): the TTS front end's feed, dispatched by the Vulkan
-    // StyleTTS2 driver alone, which no zoo carrier reaches. Its coverage is test_vkt_f32_gemm in
-    // test_vulkan_tts_kernels.das
-    "f32_gemm_cls_spv", "f32_gemm_b_cls_spv",
-    // the PL-BERT seat's row classes (the embedding gather, the tanh GELU, the leaky ReLU, the bidirectional
-    // attention): the Vulkan StyleTTS2 driver's alone, which no zoo carrier reaches. Their coverage is
-    // test_vkt_row_gather, test_vkt_gelu_tanh, test_vkt_leaky and test_vkt_attn in test_vulkan_tts_kernels.das
-    "tts_row_gather_cls_spv", "tts_gelu_tanh_cls_spv", "tts_leaky_cls_spv", "tts_attn_cls_spv",
-    // the TTS tower's conv im2col and LSTM direction: the text encoder's and the predictors' sequence classes, dispatched
-    // by the Vulkan StyleTTS2 driver alone, which no zoo carrier reaches. Their coverage is test_vkt_tts_im2col and
-    // test_vkt_tts_lstm_dir in test_vulkan_tts_conv_kernels.das
-    "tts_im2col_cls_spv", "tts_lstm_dir_cls_spv",
-    // the predictor and decoder row classes (the concat, the duration sigmoid sums, the AdaIN column statistics and its
-    // leaky and Snake stamps, the residual join): the Vulkan StyleTTS2 driver's alone, which no zoo carrier reaches. Their
-    // coverage is test_vkt_concat, test_vkt_sigsum, test_vkt_colstats, test_vkt_adain and test_vkt_add_scale in
-    // test_vulkan_tts_kernels.das
-    "tts_concat_cls_spv", "tts_sigsum_cls_spv", "tts_colstats_cls_spv", "tts_adain_leaky_cls_spv", "tts_adain_snake_cls_spv",
-    "tts_add_scale_cls_spv",
-    // the depthwise transposed pool: the decoder's upsampling residual block, the Vulkan StyleTTS2 driver's alone. Its
-    // coverage is test_vkt_tts_pool_dw in test_vulkan_tts_conv_kernels.das
-    "tts_pool_dw_cls_spv",
-    // the decoder tail (the stage sum's axpy, the last stage's reflect pad, the harmonic source's increments, cumsum,
-    // noise draw and sines on both resample laws, the STFT on both pad laws, the inverse STFT): the Vulkan StyleTTS2
-    // driver's alone, which no zoo carrier reaches. Their coverage is test_vkt_axpy, test_vkt_reflect1, test_vkt_source,
-    // test_vkt_stft and test_vkt_istft in test_vulkan_tts_source_kernels.das
-    "tts_axpy_cls_spv", "tts_reflect1_cls_spv", "tts_src_low_torch_cls_spv", "tts_src_low_onnx_cls_spv",
-    "tts_src_cumsum_torch_cls_spv", "tts_src_cumsum_onnx_cls_spv", "tts_src_noise_cls_spv", "tts_src_sines_torch_cls_spv",
-    "tts_src_sines_onnx_cls_spv", "tts_stft_reflect_cls_spv", "tts_stft_edge_cls_spv", "tts_istft_cls_spv",
-    // the Pocket TTS classes (the codec stream's row copies with and without the ELU, the layer scale, the causal cached
-    // attention row, the row GEMV's five stamps, the rows rope): the Vulkan Pocket driver's alone, which no zoo carrier
-    // reaches. Their coverage is test_vkt_pk_rows, test_vkt_pk_row_scale, test_vkt_pk_attn, test_vkt_pk_gemv and
-    // test_vkt_pk_rope in test_vulkan_tts_pocket_kernels.das
-    "tts_pk_rows_cls_spv", "tts_pk_rows_elu_cls_spv", "tts_pk_row_scale_cls_spv", "tts_pk_attn_cls_spv",
-    "tts_pk_gemv_dot_cls_spv", "tts_pk_gemv_ln_silu_cls_spv", "tts_pk_gemv_gate_cls_spv", "tts_pk_gemv_add_silu_cls_spv",
-    "tts_pk_gemv_tail_cls_spv", "tts_pk_rope_cls_spv",
+    // the TTS classes (the f32-exact tile, the StyleTTS2 and Pocket row, sequence, source and STFT classes) are dispatched by the
+    // TTS census rows cov_tower_styletts2 and cov_tower_pocket on their carriers; their kernel cells are the test_vulkan_tts_*
+    // files. A box without the TTS carriers reads them at zero - a warning, never an entry here
     // the scalar beta/alpha GEMM: the same route split for a hybrid's f32 beta/alpha rows on the f16
     // feed; off the f16 feed (DASLLAMA_COOPMAT=sdot4) it runs. Its coverage is the dn_ba run of
     // test_vkd_dn_family in test_vulkan_kernels.das
