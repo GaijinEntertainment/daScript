@@ -13266,36 +13266,86 @@ class template TtsIm2colT {
     @ssbo @binding = 2 @template_gate = HALF col16 : array<float16>
     @push_constant pa : TtsIm2colArgs
 
+    //! the input position tap `tap` reads for output row r, or -1 where it falls off x
+    def src_pos(r, tap : uint) : int {
+        if (pa.transposed != 0u) {
+            let q = int(r + pa.pad_l) - int(tap * pa.dilation)
+            if (q >= 0 && uint(q) % pa.stride == 0u && uint(q) / pa.stride < pa.tin) {
+                return int(uint(q) / pa.stride)
+            }
+            return -1
+        }
+        let p = int(r * pa.stride + tap * pa.dilation) - int(pa.pad_l)
+        return p >= 0 && uint(p) < pa.tin ? p : -1
+    }
+
+    //! column j of output row r
+    def elem(r, j : uint) : float {
+        var v = 0.0
+        if (j < pa.k * pa.cin) {
+            let st = src_pos(r, j / pa.cin)
+            if (st >= 0) {
+                let ci = j % pa.cin
+                v = pa.rows != 0u ? x[pa.xoff + uint(st) * pa.cin + ci] : x[pa.xoff + ci * pa.tin + uint(st)]
+            }
+        }
+        return v
+    }
+
+    def put16(e : uint; v : float) {
+        static_if (HALF) {
+            col16[pa.coloff + e] = float16(clamp(v, -65504.0, 65504.0))
+        }
+    }
+
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.tout * pa.kdim) {
-            let r = gid / pa.kdim
-            let j = gid % pa.kdim
-            var v = 0.0
-            if (j < pa.k * pa.cin) {
-                let tap = j / pa.cin
-                let ci = j % pa.cin
-                var st = -1
-                if (pa.transposed != 0u) {
-                    let q = int(r + pa.pad_l) - int(tap * pa.dilation)
-                    if (q >= 0 && uint(q) % pa.stride == 0u && uint(q) / pa.stride < pa.tin) {
-                        st = int(uint(q) / pa.stride)
+        static_if (HALF) {
+            // four consecutive columns an invocation (kdim sits on the 32 lattice): where cin sits on the four lattice the four share
+            // one tap and one source position, so the index arithmetic runs once and the reads are one 16-byte span
+            let e = gl_GlobalInvocationID.x * 4u
+            if (e < pa.tout * pa.kdim) {
+                let r = e / pa.kdim
+                let j0 = e % pa.kdim
+                var v0 = 0.0
+                var v1 = 0.0
+                var v2 = 0.0
+                var v3 = 0.0
+                if (pa.cin % 4u == 0u) {
+                    if (j0 < pa.k * pa.cin) {
+                        let st = src_pos(r, j0 / pa.cin)
+                        if (st >= 0) {
+                            let ci0 = j0 % pa.cin
+                            if (pa.rows != 0u) {
+                                let b = pa.xoff + uint(st) * pa.cin + ci0
+                                v0 = x[b]
+                                v1 = x[b + 1u]
+                                v2 = x[b + 2u]
+                                v3 = x[b + 3u]
+                            } else {
+                                let b = pa.xoff + ci0 * pa.tin + uint(st)
+                                v0 = x[b]
+                                v1 = x[b + pa.tin]
+                                v2 = x[b + 2u * pa.tin]
+                                v3 = x[b + 3u * pa.tin]
+                            }
+                        }
                     }
                 } else {
-                    let p = int(r * pa.stride + tap * pa.dilation) - int(pa.pad_l)
-                    if (p >= 0 && uint(p) < pa.tin) {
-                        st = p
-                    }
+                    v0 = elem(r, j0)
+                    v1 = elem(r, j0 + 1u)
+                    v2 = elem(r, j0 + 2u)
+                    v3 = elem(r, j0 + 3u)
                 }
-                if (st >= 0) {
-                    v = pa.rows != 0u ? x[pa.xoff + uint(st) * pa.cin + ci] : x[pa.xoff + ci * pa.tin + uint(st)]
-                }
+                put16(e, v0)
+                put16(e + 1u, v1)
+                put16(e + 2u, v2)
+                put16(e + 3u, v3)
             }
-            static_if (HALF) {
-                col16[pa.coloff + gid] = float16(clamp(v, -65504.0, 65504.0))
-            } else {
-                col[pa.coloff + gid] = v
+        } else {
+            let gid = gl_GlobalInvocationID.x
+            if (gid < pa.tout * pa.kdim) {
+                col[pa.coloff + gid] = elem(gid / pa.kdim, gid % pa.kdim)
             }
         }
     }
@@ -13312,6 +13362,9 @@ class TtsIm2col16 : TtsIm2colT {
 
 //! the im2col's workgroup count over `total` = tout * kdim column elements
 def tts_im2col_wgs(total : int64) : int64 => (total + 255l) / 256l
+
+//! ... and the half stamp's, four columns an invocation
+def tts_im2col16_wgs(total : int64) : int64 => (total / 4l + 255l) / 256l
 
 struct TtsLstmArgs {
     t : uint          //! the steps

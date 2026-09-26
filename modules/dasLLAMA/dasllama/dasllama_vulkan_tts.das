@@ -422,7 +422,7 @@ def private ts_conv16(raw : VkCommandBuffer; var h : VkHaz; slab, slab16 : TsRow
     var sc = set_tts_im2col16_cls(fixed_array(x.dev, col16.dev), fixed_array(x.bytes, col16.bytes), fixed_array(x.bit, col16.bit))
     var pc = TtsIm2colArgs(cin = uint(cv.cin), tin = uint(tin), tout = uint(tout), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(cv.pad_l),
         dilation = uint(cv.dilation), transposed = cv.transposed ? 1u : 0u, kdim = uint(slot.kdim_p), xoff = 0u, coloff = 0u, rows = 1u)
-    enc_tts_im2col16_cls(raw, h, sc, pc, tts_im2col_wgs(tout * slot.kdim_p))
+    enc_tts_im2col16_cls(raw, h, sc, pc, tts_im2col16_wgs(tout * slot.kdim_p))
     vt_pt(raw, VtProfRole.tts_im2col)
     let khr = ts_khr()
     var sm = f16_gemm_set(khr, fixed_array(slab16.dev, col16.dev, y.dev), fixed_array(slab16.bytes, col16.bytes, y.bytes), fixed_array(0u, col16.bit, y.bit))
