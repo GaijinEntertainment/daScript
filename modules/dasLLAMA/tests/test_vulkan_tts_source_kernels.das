@@ -237,8 +237,8 @@ let private SRC_GAP = 3         //! poisoned slots between the weight row and th
 let private LOWC_REL = 1.2e-7   //! one ulp of a phase frame: the device's increments and sums in the CPU carry's operation order
 let private HAR_REL = 2e-6      //! the mixed signal: the device sin, tanh and the linear's reassociation against the CPU's
 let private HAR_ABS = 2e-7
-let private NOISE_REL = 1e-5    //! the own draw: the device log, sqrt and cos against the CPU's on the same hashed uniforms, under 5 in magnitude
-let private NOISE_ABS = 1e-6
+let private NOISE_REL = 1e-4    //! the own draw: the device log, sqrt and cos - the driver's approximations, 2.8e-5 at most on the RTX PRO 4500 - against the CPU's on the same hashed uniforms, under 5 in magnitude
+let private NOISE_ABS = 1e-5
 
 struct private SrcFixture {
     up : int
@@ -694,8 +694,8 @@ let private IS_HOP = 4
 let private IS_PAD = 2
 let private IS_REOFF = 5      //! the real basis in the slab plane, poisoned slots before it
 let private IS_GAP = 3        //! poisoned slots between the planes
-let private WAVE_REL = 1e-4   //! the device exp, sin, cos and f32 overlap-add against the double sum rounded once
-let private WAVE_ABS = 1e-5
+let private WAVE_REL = 5e-4   //! the device exp, sin, cos (the driver's approximations: 1.2e-4 at most with the envelope, 3.7e-4 without, on the RTX PRO 4500) and f32 overlap-add against the double sum rounded once
+let private WAVE_ABS = 5e-5
 
 def private is_n : int => (IS_TT - 1) * IS_HOP + IS_K - 2 * IS_PAD
 

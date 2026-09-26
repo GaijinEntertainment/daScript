@@ -13703,17 +13703,26 @@ struct TtsTaps {
     l1 : float
 }
 
+//! a / b rounded as the CPU's IEEE division rounds it: the device's own division may sit 2.5 ulp off, which the source's
+//! cumulative sums carry into every later phase frame; the reciprocal refined once, the quotient corrected by its exact remainder
+def tts_div(a, b : float) : float {
+    var r = 1.0 / b
+    r = mad(mad(-b, r, 1.0), r, r)
+    let q = a * r
+    return mad(mad(-q, b, a), r, q)
+}
+
 //! the cycles at sample i of harmonic h off its frame's f0 `f0v`, the harmonic's initial phase `nu` folded into sample 0
 //! of the overtones - the CPU `sine_phase_frames`' rad
 def tts_src_rad(f0v, nu : float; i, h : uint; sr : float) : float {
-    let cyc = f0v * float(h + 1u) / sr
+    let cyc = tts_div(f0v * float(h + 1u), sr)
     let r = cyc - floor(cyc)
     return (i == 0u && h > 0u) ? r + nu : r
 }
 
 //! torch's linear resample taps at output index `to` over `n` inputs: the source position, its floor and the next
 def tts_resize_taps_torch(n, to : uint; scale : float) : TtsTaps {
-    let src = max(0.0, mad(1.0 / scale, float(to) + 0.5, -0.5))
+    let src = max(0.0, mad(tts_div(1.0, scale), float(to) + 0.5, -0.5))
     let i0 = min(uint(src), n - 1u)
     let l1 = src - float(i0)
     return TtsTaps(i0 = i0, i1 = min(i0 + 1u, n - 1u), l0 = 1.0 - l1, l1 = l1)
@@ -13721,7 +13730,7 @@ def tts_resize_taps_torch(n, to : uint; scale : float) : TtsTaps {
 
 //! onnxruntime's taps: the clamped source position, equal weights where the two taps coincide
 def tts_resize_taps_onnx(n, to : uint; scale : float) : TtsTaps {
-    let in_x = clamp((float(to) + 0.5) / scale - 0.5, 0.0, float(n - 1u))
+    let in_x = clamp(tts_div(float(to) + 0.5, scale) - 0.5, 0.0, float(n - 1u))
     let i0 = min(uint(in_x), n - 1u)
     let i1 = min(i0 + 1u, n - 1u)
     let same = i0 == i1
