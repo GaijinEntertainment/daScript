@@ -23,6 +23,7 @@ require dasllama/dasllama_env
 // gpt-oss-20b additionally rides the >6 GiB tier gate (DASLLAMA_PARITY_FULL=1). GLM-4 (the other
 // symmetric-<think> family) has no small model — its live leg runs on the zen2 box (see THINKING.md);
 // the symmetric matcher itself is pinned model-free in modules/dasLLAMA/tests/test_think_split.das.
+// The gemma-4 media cell also skips on the E2B mmproj and the cats jpg being absent.
 
 let TEST_PORT = 18120
 let TEST_CTX = 2048l   // room for a thinking span + the answer; keeps the KV cache small

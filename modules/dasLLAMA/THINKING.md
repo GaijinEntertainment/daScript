@@ -41,12 +41,13 @@ family-blind.
    ChatSession checks `turn_stop_ids(chat)` and then the `make_nothink_guard(chat)` guard, never
    `chat.stop_ids` alone; `effective_stop_ids(chat)` is the merged view for callers that only
    need the set.
-5. **Arming is vocab-gated and gate-aware** (`think_turn_active`): the reply matcher, the
-   alternate opener, and the stop merge all key on one predicate - toggle on, the reply markers
-   resolve in the vocab (an inert declaration like Qwen2.5's shared ChatML template never arms),
-   and a gate family's gate rendered on a consumed turn or renders this turn. A mid-conversation
+5. **Arming is vocab-gated and gate-aware** (`think_turn_active`): the alternate opener and the
+   stop merge key on one predicate - toggle on, the reply markers resolve in the vocab (an inert
+   declaration like Qwen2.5's shared ChatML template never arms), and a gate family's gate
+   rendered on a consumed turn or renders this turn - and the reply matcher arms on that
+   predicate or on a `stop_nothink` family's instruct turn (item 4). A mid-conversation
    `set_thinking(true)` on gemma-4 therefore stays instruct-shaped (the gate cannot enter an
-   already-rendered context) with the framing stops still armed.
+   already-rendered context) with the framing stops still guarded.
 
 **Reply side - the per-family matcher** (`think_mode` + `think_open`/`think_close`):
 

@@ -60,6 +60,7 @@ def private apply_penalties_(s : Session; params : SamplingParams; var row : arr
 //! Sample the next token from `s.logits` per `params`: penalties, then temp + top-k, softmax,
 //! top-p/min-p, and a CDF draw (or greedy argmax when temp <= 0). Consumes `s.logits` in place.
 //! A token the speculative round's accept walk already drew (s.mtp_pre_tok) is returned instead.
+[hot_path]   // once per generated token
 def sample_(var s : Session; params : SamplingParams) : int64 {
     s.sampled = !sampler_is_argmax(params)   // any non-argmax draw (a temperature, or a penalty at temp 0) stands the greedy chain down: it predicts the raw argmax, the sampler picks something else
     if (s.mtp_pre_drawn) {
@@ -276,6 +277,7 @@ def sample_logits_row_reference(var s : Session; params : SamplingParams; var ro
     return vocab - 1l
 }
 
+[hot_path]   // the accept walk's row sampler, reached through the registry once per verify row
 def private mtp_sample_row(var s : Session; var rows : array<float>; off, vocab : int64) : int64 {
     return sample_logits_row(s, deref(s.spec_params), rows, off, vocab)
 }

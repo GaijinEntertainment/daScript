@@ -229,12 +229,23 @@ def private ref_draw_margin(seed : int; probs : array<float>; picked : int64) : 
 
 struct ParityCount {
     rows : int
-    clear_rows : int
+    clear_rows : int         // draws further than PARITY_MARGIN from a CDF boundary
+    wide_clear_rows : int    // the same count at a margin no draw can clear: the floor's control
     mismatches : int
 }
 
+let PARITY_MARGIN = 1.0e-5
+let PARITY_WIDE_MARGIN = 0.5   // half the mass: no draw sits that far from both boundaries
+let PROB_ABS = 1.0e-6
+let PROB_REL = 1.0e-5
+
+def private prob_within(got, want : float) : bool => abs(got - want) <= PROB_ABS + PROB_REL * want
+
+[cold_path]   // a test driver over the sampler's entry
 def private parity_sweep(t : T?; params : SamplingParams) : ParityCount {
     var pc : ParityCount
+    // the tolerance's control: a probability poisoned by more than the bound must miss it
+    t |> success(!prob_within(0.25 + 1.0e-4, 0.25), "a 1e-4 poison on a 0.25 probability misses the bound")
     for (trial in range(PARITY_ROWS)) {
         let seed = 100 + trial
         let row <- parity_row(trial)
@@ -256,23 +267,36 @@ def private parity_sweep(t : T?; params : SamplingParams) : ParityCount {
         }
         var n_fast = 0
         var probs_ok = true
+        var worst_gap = 0.0
+        var worst_id = -1l
         for (c in sf.cand) {
             if (c.v > 0.0) {
                 n_fast++
                 let want = sr.logits[c.id]
-                if (want <= REF_MASKED_MASS || abs(c.v - want) > 1.0e-6 + 1.0e-5 * want) {
+                let gap = want <= REF_MASKED_MASS ? 1.0 : abs(c.v - want)
+                if (gap > worst_gap) {
+                    worst_gap = gap
+                    worst_id = c.id
+                }
+                if (want <= REF_MASKED_MASS || !prob_within(c.v, want)) {
                     probs_ok = false
+                    to_log(LOG_ERROR, "trial {trial} id {c.id}: fast {c.v} reference {want}\n")
                 }
             }
         }
         t |> equal(n_fast, n_ref, "trial {trial}: survivor count")
-        t |> success(probs_ok, "trial {trial}: survivor probabilities match the reference")
+        t |> success(probs_ok, "trial {trial}: survivor probabilities match the reference (worst gap {worst_gap} at id {worst_id})")
         t |> success(sf.rng == sr.rng, "trial {trial}: one draw on each path leaves the same RNG state")
         pc.rows++
-        if (ref_draw_margin(seed, sr.logits, id_ref) > 1.0e-5) {
+        let margin = ref_draw_margin(seed, sr.logits, id_ref)
+        if (margin > PARITY_WIDE_MARGIN) {
+            pc.wide_clear_rows++
+        }
+        if (margin > PARITY_MARGIN) {
             pc.clear_rows++
             if (id_fast != id_ref) {
                 pc.mismatches++
+                to_log(LOG_ERROR, "trial {trial}: fast path drew {id_fast}, the reference {id_ref} (margin {margin})\n")
             }
         }
         delete sf
@@ -287,11 +311,13 @@ def test_fast_path_parity(t : T?) {
         let pc = parity_sweep(t, SamplingParams(temp = 0.7, top_k = 20l, top_p = 0.95))
         t |> equal(pc.rows, PARITY_ROWS)
         t |> success(pc.clear_rows >= 500, "{pc.clear_rows} rows draw clear of a CDF boundary")
+        t |> success(pc.wide_clear_rows < 500, "the floor's control: {pc.wide_clear_rows} rows clear a half-mass margin")
         t |> equal(pc.mismatches, 0, "the same token on every clear row")
     }
     t |> run("temp 1.0, top-k 40, top-p 0.9, min-p 0.05") @(t : T?) {
         let pc = parity_sweep(t, SamplingParams(temp = 1.0, top_k = 40l, top_p = 0.9, min_p = 0.05))
         t |> success(pc.clear_rows >= 500, "{pc.clear_rows} rows draw clear of a CDF boundary")
+        t |> success(pc.wide_clear_rows < 500, "the floor's control: {pc.wide_clear_rows} rows clear a half-mass margin")
         t |> equal(pc.mismatches, 0, "the same token on every clear row")
     }
     t |> run("top-k alone keeps every survivor") @(t : T?) {

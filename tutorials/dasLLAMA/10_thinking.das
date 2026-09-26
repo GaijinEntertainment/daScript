@@ -13,7 +13,7 @@ require strings
 //   - split_reasoning — split a complete reply into (reasoning, content)
 //   - Streaming the split live: make_think_stream + think_feed / think_finish
 //   - think_drain — the same splitter over a reply already in hand
-//   - set_thinking(false) — answer directly; effective_stop_ids for schedulers
+//   - set_thinking(false) — answer directly; turn_stop_ids + the nothink guard for a loop of your own
 //
 // Prerequisites: tutorial 02; a thinking-family GGUF (Qwen3-0.6B-Q8_0 works:
 // https://huggingface.co/Qwen/Qwen3-0.6B-GGUF).
@@ -135,15 +135,15 @@ def section_streamed_split(m : Model) {
 //
 // Hybrid families answer directly when the turn opens with the template's
 // empty think block. set_thinking(false) renders exactly that (a no-op for
-// models with no think specials in the vocab); the default is on. Schedulers
-// that cut streams themselves read effective_stop_ids — the template's stops
-// plus the thinking-off extras while thinking is off — rather than the
-// template's raw stop list; a loop that samples the tokens itself splits the
-// two: turn_stop_ids end the turn outright, the extras ride the guard
-// (make_nothink_guard / nothink_stop_here) — a channel marker before the
-// reply's first content piece is a leading thought the reply matcher splits
-// (gemma-4's E-series opens a media turn with one even in instruct mode), a
-// marker after content ends the turn.
+// models with no think specials in the vocab); the default is on.
+// effective_stop_ids is the merged view of every stop in force — the
+// template's stops plus the thinking-off extras while thinking is off. A loop
+// that samples the tokens itself (a scheduler) splits the two: turn_stop_ids
+// end the turn outright, the extras ride the guard (make_nothink_guard /
+// nothink_stop_here) — a channel marker before the reply's first content
+// piece is a leading thought the reply matcher splits (gemma-4's E-series
+// opens a media turn with one even in instruct mode), a marker after content
+// ends the turn.
 
 def section_thinking_off(m : Model; var chat : ChatSession) {
     let stops_on <- effective_stop_ids(chat)

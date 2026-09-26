@@ -14,14 +14,17 @@ what it costs today and what the fix would change.
 - **LANDED (2026-09-26) - the sampler is a candidate list when top-k is set
   (`ARCHITECTURE_ENGINE.md`, `dasllama_sampling.das`): one pass over the row selects the k
   largest logits into a heap, and the temperature, softmax, nucleus and min-p cuts and the draw run
-  over those survivors; top-k off or past `SAMPLE_TOPK_FAST_CAP` keeps the vocab-wide reference.**
-  Before, a sampled decode paid k full-vocab max passes, a vocab-wide softmax, a full sort for
-  top-p and a vocab-wide CDF walk per token - 3.6 ms at Qwen3.5's 248K vocab. Measured on this
-  box (M5 Max, `dasllama-cli complete` on Qwen3.5-4B-Q8_0 under Metal, `-n 256 --seed 7`, five
-  reps each, one process a run; the CLI's stats line): greedy 105 t/s before and 104-105 after;
-  the chat preset (temp 0.7 / top-k 20 / top-p 0.95) 74-75 t/s before, 101-103 after.
-  Prediction on record before the change: sampled within 5% of greedy. llama.cpp's candidate-list
-  sampler reads 93 t/s both ways on the same model and box.
+  over those survivors; top-k off or past `SAMPLE_TOPK_FAST_CAP` (a design bound, not a timed
+  pick) keeps the vocab-wide reference.** Before, a sampled decode paid k full-vocab max passes, a
+  vocab-wide softmax, a full sort for top-p and a vocab-wide CDF walk per token. `direction-grade`,
+  `debug-jit` (two commits, one process a run): `bin/daslang -jit utils/dasllama-server/cli.das --
+  complete --model Qwen3.5-4B-Q8_0.gguf -p "<a story prompt>" -n 256 --seed 7`, once greedy and once
+  with `--temp 0.7 --top-k 20 --top-p 0.95`, five reps each, the CLI's own stats line, this box
+  (M5 Max, Metal, the box's tune profile, no environment overrides): greedy 105 t/s before and
+  104-105 after; the chat preset 74-75 t/s before, 101-103 after - the sampler's per-token cost
+  from 4.0 ms (the difference of the two rates) to under the run's noise. Prediction on record
+  before the change: sampled within 5% of greedy. `lcpp_bench` carries no sampler flag (its
+  `--mtp-temp` sets a temperature alone), so no board row holds the sampled rate.
 - **LANDED (2026-09-25) - the Pocket TTS frame loop rides the Metal tower as the family's second
   seat (`ARCHITECTURE_GPU_TOWER.md` sec.2.2aw): the backbone step and the flow head for every
   frame, eight frames a command buffer over a per-voice device K/V slot, the EOS rule on the host

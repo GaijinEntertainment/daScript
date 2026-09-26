@@ -120,15 +120,19 @@ def section_by_hand(m : Model; decoder_mmproj : string; image_path : string; pro
     // prefill with the image span non-causal, then sample like any session
     var s = create_session(m)
     eval_embd_span(m, s, rows, np, n_head, n_head + n_img)
-    let stop_ids <- effective_stop_ids(chat)
+    // the stops a loop of your own checks: the template's own end the turn outright, the
+    // thinking-off extras ride the guard (a leading thought block passes, a marker after content stops)
+    let stop_ids <- turn_stop_ids(chat)
+    var guard <- make_nothink_guard(chat)
     var one : array<int64>
     one |> resize(1)
     for (_step in range64(N_GEN)) {
         let tok = sample(s, SamplingParams())
-        if (find_index(stop_ids, tok) >= 0) {
+        let text = piece(m, tok)
+        if (find_index(stop_ids, tok) >= 0 || nothink_stop_here(guard, tok, text)) {
             break
         }
-        print("{piece(m, tok)}")
+        print("{text}")
         one[0] = tok
         eval(m, s, one)
     }
@@ -196,9 +200,10 @@ def section_mrope(m : Model; decoder_mmproj : string; image_path : string; promp
     // the one-call form: generate_embd prefills the same spliced turn (grid included) and
     // streams the reply - what respond() runs under the hood for a media turn
     var s2 = create_session(m)
-    let stop_ids <- effective_stop_ids(chat)
+    let stop_ids <- turn_stop_ids(chat)
+    var guard <- make_nothink_guard(chat)
     generate_embd(m, s2, rows, np, SamplingParams(), N_GEN, n_head, n_head + n_img, grid) $(id, piece_text) {
-        if (find_index(stop_ids, id) >= 0) {
+        if (find_index(stop_ids, id) >= 0 || nothink_stop_here(guard, id, piece_text)) {
             return false
         }
         print("{piece_text}")

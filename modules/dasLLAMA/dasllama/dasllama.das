@@ -459,9 +459,9 @@ def split_reasoning(chat : ChatSession; reply : string) : ThinkSplit {
 }
 
 def make_think_stream(chat : ChatSession) : ThinkStream {
-    //! The incremental reasoning/content splitter for ``chat``'s next turn — feed streamed pieces
-    //! through ``think_feed``, flush with ``think_finish``. Armed only when the turn actually
-    //! thinks (toggle on, markers in the vocab, gate rendered) — else a pass-through stream.
+    //! The incremental reasoning/content splitter for ``chat``'s next turn (``think_feed`` per
+    //! piece, ``think_finish`` at the end). Armed when the turn thinks, and on an instruct turn of
+    //! a family with guarded channel markers (gemma-4); else a pass-through stream.
     return make_think_stream_(chat)
 }
 

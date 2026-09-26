@@ -612,8 +612,19 @@ snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB,
 every draft accepted plus the parked bonus draw, the first miss, RNG state equality (one draw
 per emitted token), the restored recent window, and the repetition penalty seeing the accepted
 drafts (a walk that forgot the window would accept the repeated draft).
+`test_sampling.das` - stocked suite; the greedy oracle and the seeded-determinism cell on
+gemma-2-2b (skip without it, `-jit` only), and model-free: the sampler units (cutoffs, penalties,
+seeded draws on a bare session) plus the candidate-list fast path against the vocab-wide
+reference - three presets over 512 seeded rows (half quantized to plant ties): the survivor set
+and probabilities within the bound (a poisoned probability as the bound's control), one RNG
+draw on each path, the same token wherever the draw clears a CDF boundary (at least 500 of 512;
+a half-mass margin as the floor's control), the k+3 tie set surviving a top-k of k, and a top-k
+past the fast cap taking the reference.
 `test_think_split.das` - the reply-side reasoning matcher, model-free: every
-thinking family's wire shape, whole-string and per-chunk down to 1 byte.
+thinking family's wire shape, whole-string and per-chunk down to 1 byte, and the
+instruct-mode stop guard (`nothink_stop_here_`): a channel marker before the reply's first
+content piece passes as a leading thought, whitespace is not content, the first marker after
+content stops, an unarmed guard never stops.
 `test_tool_formats.das` - the per-ToolMode wire codecs (dasllama_tools), model-free: defs
 serializers and call parsers for harmony/gemma4/mistral/llama_json against verbatim fixtures.
 `test_scheduler.das` - stocked suite; the continuous-batching scheduler (dasllama_scheduler) against
@@ -1235,7 +1246,8 @@ arms - the no-audio refusals and the probe's 0-not-panic contract; model-gated: 
 the E2B mmproj, carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft
 token); the pre-encoded rows seam on a plain chat (`add_user_audio_rows`: a second's clip lands
 25 rows, two clips append, the turn answers and consumes them, a short row block and a queued
-image panic - gated on the E2B Q4_K_M decoder + its bf16 mmproj, loaded staged, no `.dlim`), and
+image panic, and the same turn with thinking off under the chat sampler preset answers - gated
+on the E2B Q4_K_M decoder + its bf16 mmproj, loaded staged, no `.dlim`), and
 the no-audio-arm refusal (SmolLM2-135M: a family with no audio markers panics).
 `test_vision_embedder.das` - stocked suite; model-free cells: the `VisionEmbedder` carrier's own
 arms over constructed carriers - the text-only (none) shape, the loader's refusals by name
@@ -1574,6 +1586,9 @@ plain dastest only.
 `test_vision_chat.das` - stocked suite; the image chat turn end to end, one pair per vision
 carrier plus the showcase: the 12B gemma4uv pair (the cats fixture, so `DASLLAMA_PARITY_FULL=1`),
 the E2B gemma4v pair (E2B Q8 decoder + bf16 mmproj - small tier, runs without the flag), the
+E2B instruct-mode cell (the Q4_K_M decoder + the same mmproj, thinking off, the image on the
+first turn under the chat sampler preset at seed 1234: the turn answers with the cats in the
+content half and the history holds no thought - red without the channel-marker guard), the
 gemma-3-4b gemma3v pair (small tier), the gemma-3-12b pair (the same SigLIP tower at projection
 3840 - large tier, `DASLLAMA_PARITY_FULL=1`), and the Qwen3-Omni qwen3v pair (large tier - the
 mrope leg: grid reaches the chat, the session's rope delta reflects the grid advance), the

@@ -97,10 +97,9 @@ Turning thinking off
 
 Hybrid families answer directly when the turn opens with the template's empty
 think block. ``set_thinking(false)`` renders exactly that (a no-op for models
-with no think specials in the vocabulary); the default is on. Schedulers that
-cut streams themselves read ``effective_stop_ids`` — the template's stops plus
-the thinking-off extras while thinking is off — rather than the template's raw
-stop list:
+with no think specials in the vocabulary); the default is on.
+``effective_stop_ids`` is the merged view of every stop in force — the
+template's stops plus the thinking-off extras while thinking is off:
 
 .. code-block:: das
 

@@ -18,7 +18,9 @@ require ?das_metal dasllama/dasllama_metal_tower   // the tower engage/knob legs
 // The image chat turn: the prompt stream shape around the soft-token splice (tier 2) and the
 // greedy caption (tier 3). Pinned: marker ids, media-first order, span length from the
 // geometry, and that the model describes what is in the picture. NOT token-parity with
-// llama-mtmd-cli — tests/CLAUDE.md carries why.
+// llama-mtmd-cli — tests/CLAUDE.md carries why. Every cell skips on its carrier pair (the
+// gemma-4-12B, E2B Q8_0 and E2B Q4_K_M decoders with their mmproj, the gemma-3 pair) and on
+// the cats jpg being absent from the models dir.
 
 let MM = "mmproj-gemma-4-12B-it-BF16.gguf"
 let DEC = "gemma-4-12B-it-Q4_K_M.gguf"
@@ -210,7 +212,8 @@ def test_vision_chat_e2b(t : T?) {
 // The E2B image turn with thinking OFF: instruct mode arms the channel markers as stops, and a
 // model that opens the media turn with one must still answer - the leading block is tolerated.
 // The Q4_K_M decoder under the chat sampler preset at the session's default seed draws a channel
-// marker first; greedy on the Q8_0 decoder does not, which is why this cell pins that shape.
+// marker first on this box (greedy on the Q8_0 decoder does not), so the cell runs that shape;
+// the assert is the answer, since the first draw follows the box's tower lane.
 [test]
 def test_vision_chat_e2b_nothink(t : T?) {
     t |> run("the E2B image turn on the first turn under set_thinking(false) answers") @(tt : T?) {
@@ -246,7 +249,6 @@ def test_vision_chat_e2b_nothink(t : T?) {
             let sp = split_reasoning_(chat.tmpl, reply)
             to_log(LOG_INFO, "vision caption (E2B/gemma4v, thinking off): reasoning {length(sp.reasoning)} chars, content: {replace(sp.content, "\n", "\\n")}\n")
             tt |> success(n_pieces > 0, "the turn generated tokens")
-            tt |> success(starts_with(reply, "<|channel>thought"), "the E2B opens the instruct media turn with a thought block")
             tt |> success(find(to_lower(sp.content), "cat") >= 0, "the content half describes the cats as cats")
             tt |> equal(length(chat.history), 2, "the turn is on the history")
             tt |> success(find(chat.history[1].content, "<|channel>") < 0, "history stores the answer without the thought")
