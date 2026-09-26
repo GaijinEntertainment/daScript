@@ -240,7 +240,9 @@ def private ts_rows_alloc(var r : TsRows; floats : int64; bit : uint) : bool {
     return !oom && r.dev != 0ul
 }
 
-//! the slots sized for this call at least, each in 256 KB steps (so a call a little wider reuses them); false when an allocation failed
+//! the slots sized for this call at least, each in 256 KB steps (so a call a little wider reuses them); false when an allocation
+//! failed or a slot would bind past the device's storage range (a binding past it wraps its range at 32 bits, and the rows past
+//! the wrap read as zeros)
 [cold_path]
 def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, stats_floats : int64) : bool {
     ts_scratch_release(s)
@@ -249,6 +251,7 @@ def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, s
     for (i in range(TS_SCRATCH_BUFS)) {
         if (floats[i] > 0l) {
             let n = tts_round_up(floats[i], TS_SCRATCH_GRAIN)
+            return false if (n * 4l > vk_max_storage_range())
             s.bytes[i] = n * 4l
             s.devs[i] = soft_device_buf(oom, s.bytes[i])
             widest = max(widest, n)
@@ -846,9 +849,12 @@ let private TS_PR_N = 14     //! ... and the energy branch's
 struct private TsShape {
     t_max : int64
     c_max : int64
-    kdim_max : int64
+    col : int64      //! the widest im2col a conv takes: its output rows x its padded row
     aux : int64
 }
+
+//! the im2col floats a conv over `rows` output rows takes
+def private ts_col_of(c : TtsConv1d; rows : int64) : int64 => rows * ts_conv_kdim(c)
 
 def private ts_conv_kdim(c : TtsConv1d) : int64 => tts_round_up(c.k * c.cin, 32l)
 
@@ -867,9 +873,9 @@ def private ts_res_shape(var sh : TsShape; b : St2AdainResBlk; t : int64) : int6
     return -1l if (conv1d_out_len(b.conv1, t1) != t1 || conv1d_out_len(b.conv2, t1) != t1 || (b.learned_sc && conv1d_out_len(b.conv1x1, t1) != t1))
     sh.t_max = max(sh.t_max, t1)
     sh.c_max = max(sh.c_max, max(b.dim_in_s, b.dim_out))
-    sh.kdim_max = max(sh.kdim_max, max(ts_conv_kdim(b.conv1), ts_conv_kdim(b.conv2)))
+    sh.col = max(sh.col, max(ts_col_of(b.conv1, t1), ts_col_of(b.conv2, t1)))
     if (b.learned_sc) {
-        sh.kdim_max = max(sh.kdim_max, ts_conv_kdim(b.conv1x1))
+        sh.col = max(sh.col, ts_col_of(b.conv1x1, t1))
     }
     sh.aux += 2l * (b.dim_in_s + b.dim_out) + 8l
     return t1
@@ -887,7 +893,7 @@ def private ts_branch_shape(var sh : TsShape; blocks : array<St2AdainResBlk>; pr
         c = b.dim_out
     }
     return -1l if (proj.cin != c || conv1d_out_len(proj, t) != t)
-    sh.kdim_max = max(sh.kdim_max, ts_conv_kdim(proj))
+    sh.col = max(sh.col, ts_col_of(proj, t))
     sh.c_max = max(sh.c_max, c)
     return t
 }
@@ -972,7 +978,7 @@ def private ts_pr_floats(sh : TsShape; cc, hd, frames : int64) : TsFloats {
     for (i in range(TS_PR_A, TS_PR_SC2 + 1)) {
         fl[i] = tm * cm
     }
-    fl[TS_PR_COL] = tm * sh.kdim_max
+    fl[TS_PR_COL] = sh.col
     fl[TS_PR_IDX] = tm
     fl[TS_PR_F0] = tm
     fl[TS_PR_N] = tm
@@ -1002,7 +1008,7 @@ def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fr
     }
     let hd = p.shared_lstm.fwd.hidden
     let sd = long_length(s)
-    var sh = TsShape(t_max = frames, c_max = max(cc, 2l * hd), kdim_max = 32l, aux = 4l)
+    var sh = TsShape(t_max = frames, c_max = max(cc, 2l * hd), col = 32l, aux = 4l)
     if (frames < 1l || cc % 32l != 0l || !tts_lstm_ok(p.shared_lstm, cc, TS_LSTM_MAX_HIDDEN) || empty(p.f0) || long_length(en) < cc * frames
         || !tts_pred_ok(p, TS_LSTM_MAX_HIDDEN)) {
         return ts_decline("prosody", VulkanTtsDecline.shape)
@@ -1148,7 +1154,7 @@ def private ts_gen_block_shape(var sh : TsShape; b : St2GenResBlock; t, c : int6
         return false if (!tts_conv_ok(c1) || !tts_conv_ok(c2) || c1.transposed || c2.transposed || c1.cin != c || c1.cout != c || c2.cin != c || c2.cout != c
             || conv1d_out_len(c1, t) != t || conv1d_out_len(c2, t) != t || long_length(b.alpha1[j].a) < c || long_length(b.alpha2[j].a) < c
             || !tts_lin_ok(b.adain1[j].fc) || b.adain1[j].fc.nout != 2l * c || !tts_lin_ok(b.adain2[j].fc) || b.adain2[j].fc.nout != 2l * c)
-        sh.kdim_max = max(sh.kdim_max, max(ts_conv_kdim(c1), ts_conv_kdim(c2)))
+        sh.col = max(sh.col, max(ts_col_of(c1, t), ts_col_of(c2, t)))
     }
     sh.aux += int64(n) * (4l * c + 16l)
     return true
@@ -1176,15 +1182,15 @@ def private ts_gen_shape(d : St2Decoder; c, t, har_frames : int64; var sh : TsDe
         for (j in range64(d.n_kernels)) {
             return false if (!ts_gen_block_shape(sh.blk, d.resblocks[i * d.n_kernels + j], t2, c2))
         }
-        sh.blk.kdim_max = max(sh.blk.kdim_max, max(ts_conv_kdim(up), ts_conv_kdim(nc)))
+        sh.blk.col = max(sh.blk.col, max(ts_col_of(up, t2), ts_col_of(nc, t2)))
         sh.blk.t_max = max(sh.blk.t_max, t2)
         sh.blk.c_max = max(sh.blk.c_max, c2)
         tt = t2
         cc = c2
     }
     return false if (!tts_conv_ok(d.conv_post) || d.conv_post.transposed || d.conv_post.cin != cc || d.conv_post.cout < 2l * d.bins)
-    sh.blk.kdim_max = max(sh.blk.kdim_max, ts_conv_kdim(d.conv_post))
     sh.t_post = conv1d_out_len(d.conv_post, tt)
+    sh.blk.col = max(sh.blk.col, ts_col_of(d.conv_post, sh.t_post))
     sh.t_last = tt
     sh.c_last = cc
     return true
@@ -1215,7 +1221,7 @@ def private ts_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceC
         || bwd.cin != d.bins || bwd.cout != 1l || !bwd.transposed || empty(bwd.wt) || d.stft_bwd_im.k != bwd.k
         || (d.istft_envelope && long_length(d.window.a) < bwd.k) || (noise.captured && long_length(noise.normal) < sh.samples * source.n_harm)
         || long_length(noise.uniform) < source.n_harm || d.encode.norm1.fc.nin != sd || d.encode.norm2.fc.nin != sd || !tts_dec_ok(d))
-    sh.blk = TsShape(t_max = frames, c_max = max(text_c, d.encode.dim_in_s), kdim_max = max(ts_conv_kdim(d.f0_conv), max(ts_conv_kdim(d.n_conv), ts_conv_kdim(d.asr_res))), aux = 8l)
+    sh.blk = TsShape(t_max = frames, c_max = max(text_c, d.encode.dim_in_s), col = max(ts_col_of(d.f0_conv, frames), max(ts_col_of(d.n_conv, frames), ts_col_of(d.asr_res, frames))), aux = 8l)
     sh.dec_rows = ts_res_shape(sh.blk, d.encode, frames)
     return false if (sh.dec_rows < 0l || length(d.decode) > TS_MAX_RES_BLOCKS)
     sh.dec_width = d.encode.dim_out
@@ -1254,7 +1260,7 @@ def private ts_dec_floats(d : St2Decoder; sh : TsDecShape; nh, text_c, frames, f
     for (i in range(TS_D_BY, TS_D_SC2 + 1)) {
         fl[i] = rows
     }
-    fl[TS_D_COL] = sh.blk.t_max * sh.blk.kdim_max
+    fl[TS_D_COL] = sh.blk.col
     fl[TS_D_IDX] = sh.blk.t_max
     return fl
 }
@@ -1571,7 +1577,7 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
         return ts_decline("generator", VulkanTtsDecline.knob)
     }
     var sh = TsDecShape()
-    sh.blk = TsShape(t_max = t, c_max = cx, kdim_max = 32l, aux = 8l)
+    sh.blk = TsShape(t_max = t, c_max = cx, col = 32l, aux = 8l)
     let spec_floats = har_frames * (empty(d.noise_convs) ? 0l : d.noise_convs[0].cin)
     if (cx % 32l != 0l || !ts_gen_shape(d, cx, t, har_frames, sh) || !tts_dec_ok(d) || long_length(x_rows) < t * cx || long_length(har_spec) < spec_floats) {
         return ts_decline("generator", VulkanTtsDecline.shape)
@@ -1590,7 +1596,7 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
     for (i in range(TS_D_BY, TS_D_SC2 + 1)) {
         fl[i] = rows
     }
-    fl[TS_D_COL] = sh.blk.t_max * sh.blk.kdim_max
+    fl[TS_D_COL] = sh.blk.col
     if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, 2l * sh.blk.c_max)) {
         return ts_decline("generator", VulkanTtsDecline.memory)
     }
@@ -1980,15 +1986,13 @@ def private ts_pk_codec_floats(mm : PocketMimi; frames : int64) : TsFloats {
     fl[TS_C_K] = t1 * d
     fl[TS_C_V] = t1 * d
     var stage = t1 * mm.dec_in.cout
-    var kdim = max(ts_conv_kdim(mm.quant_proj), max(ts_conv_kdim(mm.dec_in), ts_conv_kdim(mm.dec_out)))
     var col = max(frames * ts_conv_kdim(mm.quant_proj), t1 * ts_conv_kdim(mm.dec_in))
     for (i in range64(long_length(mm.ratios))) {
         let tn = g_ts_pk_rows[2l + i]
         let up & = unsafe(mm.dec_up[i])
         let rb & = unsafe(mm.dec_res[i])
         stage = max(stage, tn * max(up.cout, rb.conv1.cout))
-        kdim = max(kdim, max(ts_conv_kdim(up), max(ts_conv_kdim(rb.conv1), ts_conv_kdim(rb.conv2))))
-        col = max(col, tn * kdim)
+        col = max(col, tn * max(ts_conv_kdim(up), max(ts_conv_kdim(rb.conv1), ts_conv_kdim(rb.conv2))))
     }
     let samples = g_ts_pk_rows[long_length(g_ts_pk_rows) - 1l]
     for (i in range(TS_C_A, TS_C_CP + 1)) {
