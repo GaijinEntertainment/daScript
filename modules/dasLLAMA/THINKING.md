@@ -34,7 +34,7 @@ family-blind.
 4. **`stop_nothink`** - guarded stop tokens in force whenever the next turn is NOT a thinking
    turn. gemma-4 lists its channel markers: an instruct-mode E-series model rambles past its
    answer through a stray `<channel|>` (`...4.<channel|>4`), and the same model opens a media
-   turn with a whole `<|channel>thought…<channel|>` block even with the closed empty thought
+   turn with a whole `<|channel>thought...<channel|>` block even with the closed empty thought
    prefilled. So the marker is position-aware (`nothink_stop_here`): before the reply's first
    content piece it is a leading thought the reply matcher splits - `make_think_stream` arms on
    these turns too - and after content it ends the turn. Anything that generates from a
