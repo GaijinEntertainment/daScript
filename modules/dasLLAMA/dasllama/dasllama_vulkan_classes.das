@@ -13825,7 +13825,7 @@ class template TtsSrcLowT : TtsSrcLawT {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.nh * pa.nlow) {
             let h = gid / pa.nlow
-            let tp = law_taps(pa.n, gid % pa.nlow, 1.0 / float(pa.up))
+            let tp = law_taps(pa.n, gid % pa.nlow, tts_div(1.0, float(pa.up)))
             let r0 = tts_src_rad(f0[tp.i0 / pa.up], noise_u[h], tp.i0, h, pa.sr)
             let r1 = tts_src_rad(f0[tp.i1 / pa.up], noise_u[h], tp.i1, h, pa.sr)
             low[gid] = law_mix(r0, r1, tp.l0, tp.l1, h + 1u == pa.nh)
