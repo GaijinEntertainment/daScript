@@ -428,11 +428,8 @@ def test_tray_status_item_macos(t : T?) {
                 return
             }
             let pid = unsafe(process_pid(wd))
-            var help = ""
-            let started = ref_time_ticks()
-            while (find(help, "running") < 0 && get_time_usec(started) < 5000000) {
-                help = apple_script("tell application \"System Events\" to tell (first process whose unix id is {pid}) to get help of menu bar item 1 of menu bar 1")
-                sleep(50u)
+            let help = apple_script_until("tell application \"System Events\" to tell (first process whose unix id is {pid}) to get help of menu bar item 1 of menu bar 1", 30.0) $(dump) {
+                return find(dump, "running") >= 0
             }
             dump_has(t, help, "wdtray - running", "the tooltip")
             stop_parked_run(t, wd, root)
