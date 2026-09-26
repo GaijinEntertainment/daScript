@@ -85,7 +85,6 @@ def private vulkan_tower_serves_exact() : bool => false
 let private VT_KEY_SAMPLE_WORDS = 64l        //! words sampled from each plane region folded into the residency key beside its address and size
 let VT_NO_CLAMP = 3.4028235e38 //! an inactive ClippableLinear bound: the CPU chain skips the clamp, the device clamps to the float range
 let private VT_MAX_ENCODE_ROWS = 4096l
-let private VT_GATHER_SLICE_ROWS = 64l   //! the cold q8 gather's parallel slice, where a region's rows divide by it
 let private VT_WIN_HS = 80l              //! the window stamp's head width (`TowerWinAttnT` HS)
 
 //! the hazard bits of the per-encode scratch (the weights and the schedule are unbit: the host writes them before the submit)
@@ -825,16 +824,12 @@ struct VtRegion {
     rows : int64
 }
 
-//! the gather's parallel slice of a region: the fixed slice where it divides the rows and the group, else the whole region
-def vt_gather_slice(rows, mr : int64) : int64
-    => rows % VT_GATHER_SLICE_ROWS == 0l && VT_GATHER_SLICE_ROWS % mr == 0l ? VT_GATHER_SLICE_ROWS : rows
-
 //! the q8 planes' regions gathered into the device layout (`wq` the quants, `ws` the halfword scales)
 [cold_path]
 def vt_gather_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>; lay : Q8RepackLayout; var wq, ws : array<uint8>) {
     let q8e = kq_elems(KqFmt.q8)
     for (reg in regions) {
-        q8_gather_rows(plane_at(qblob, reg.woff), null, plane_at(qscales, reg.woff / q8e), reg.n, reg.rows, vt_gather_slice(reg.rows, lay.mr), lay.mr, lay.kgroup, lay.wbias,
+        q8_gather_rows(plane_at(qblob, reg.woff), null, plane_at(qscales, reg.woff / q8e), reg.n, reg.rows, q8_gather_slice(reg.rows, lay.mr), lay.mr, lay.kgroup, lay.wbias,
             wq, ws, reg.woff, reg.woff / q8e)
     }
 }

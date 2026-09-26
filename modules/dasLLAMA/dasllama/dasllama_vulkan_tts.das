@@ -196,9 +196,9 @@ let private TS_AUX_BIT = 1u << 30u       //! the hazard bit of a scratch's aux r
 let private TS_STATS_BIT = 1u << 31u     //! ... and of its column stats
 let private TS_SCRATCH_GRAIN = 65536l    //! a slot grows in 256 KB steps, so a call a little wider reuses it
 
-//! a seat's activation rows: one device buffer a slot sized in floats (0 = no buffer), the host readback buffer the
-//! widest slot fills, and two more row sets - `aux`, the per-call uploads (a style vector, fc(style) per norm), and
-//! `stats`, the AdaIN column stats the device writes
+//! a seat's activation rows: one device buffer a slot sized in floats (0 = no buffer), the host readback buffer sized to
+//! what the seat reads back (the widest slot unless the seat says less), and two more row sets - `aux`, the per-call
+//! uploads (a style vector, fc(style) per norm), and `stats`, the AdaIN column stats the device writes
 struct private TsScratch {
     devs : uint64[TS_SCRATCH_BUFS]
     bytes : int64[TS_SCRATCH_BUFS]
@@ -242,15 +242,23 @@ def private ts_scratch_release(var s : TsScratch) {
     s.hb_bytes = 0l
 }
 
-//! every slot holds its floats, the readback buffer the widest of them
-def private ts_scratch_fits(s : TsScratch; floats : TsFloats; aux_floats, stats_floats : int64) : bool {
-    return false if (s.aux.bytes < aux_floats * 4l || s.stats.bytes < stats_floats * 4l)
+//! the floats the readback buffer holds: `hb_floats` where the seat names its readback, else the widest slot
+def private ts_hb_floats(floats : TsFloats; hb_floats : int64) : int64 {
+    return hb_floats if (hb_floats >= 0l)
     var widest = 0l
     for (i in range(TS_SCRATCH_BUFS)) {
-        return false if (s.bytes[i] < floats[i] * 4l)
         widest = max(widest, floats[i])
     }
-    return s.hb_bytes >= widest * 4l
+    return widest
+}
+
+//! every slot holds its floats, the readback buffer its floats
+def private ts_scratch_fits(s : TsScratch; floats : TsFloats; aux_floats, stats_floats, hb_floats : int64) : bool {
+    return false if (s.aux.bytes < aux_floats * 4l || s.stats.bytes < stats_floats * 4l)
+    for (i in range(TS_SCRATCH_BUFS)) {
+        return false if (s.bytes[i] < floats[i] * 4l)
+    }
+    return s.hb_bytes >= ts_hb_floats(floats, hb_floats) * 4l
 }
 
 //! `floats` floats on the device under `bit`, none at zero; false when the allocation failed
@@ -264,34 +272,37 @@ def private ts_rows_alloc(var r : TsRows; floats : int64; bit : uint) : bool {
     return !oom && r.dev != 0ul
 }
 
-//! the slots sized for this call at least, each in 256 KB steps (so a call a little wider reuses them); false when an allocation
-//! failed or a slot would bind past the device's storage range (a binding past it wraps its range at 32 bits, and the rows past
-//! the wrap read as zeros)
+//! the slots sized for this call at least, each in 256 KB steps (so a call a little wider reuses them), the readback buffer
+//! at `hb_floats` (-1: the widest slot); false when an allocation failed or a slot would bind past the device's storage range
+//! (a binding past it wraps its range at 32 bits, and the rows past the wrap read as zeros)
 [cold_path]
-def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, stats_floats : int64) : bool {
+def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, stats_floats, hb_floats : int64) : bool {
     ts_scratch_release(s)
+    let t0 = ref_time_ticks()
     var oom = false
-    var widest = 1l
+    var total = 0l
     for (i in range(TS_SCRATCH_BUFS)) {
         if (floats[i] > 0l) {
             let n = tts_round_up(floats[i], TS_SCRATCH_GRAIN)
             return false if (n * 4l > vk_max_storage_range())
             s.bytes[i] = n * 4l
             s.devs[i] = soft_device_buf(oom, s.bytes[i])
-            widest = max(widest, n)
+            total += n
         }
     }
-    s.hb_bytes = widest * 4l
+    let dev_us = get_time_usec(t0)
+    s.hb_bytes = tts_round_up(max(ts_hb_floats(floats, hb_floats), 1l), TS_SCRATCH_GRAIN) * 4l
     s.hb = make_host_buf(s.hb_bytes, false, [cached = true, soft = true])
     if (oom || s.hb.buf == 0ul || !ts_rows_alloc(s.aux, aux_floats, TS_AUX_BIT) || !ts_rows_alloc(s.stats, stats_floats, TS_STATS_BIT)) {
         ts_scratch_release(s)
         return false
     }
+    to_log(LOG_INFO, "vk tts scratch: {total * 4l / 1048576l} MB over the slots in {dev_us / 1000} ms, the {s.hb_bytes / 1048576l} MB readback buffer in {(get_time_usec(t0) - dev_us) / 1000} ms\n")
     return true
 }
 
-def private ts_scratch_ready(var s : TsScratch; floats : TsFloats; aux_floats, stats_floats : int64) : bool
-    => ts_scratch_fits(s, floats, aux_floats, stats_floats) || ts_scratch_build(s, floats, aux_floats, stats_floats)
+def private ts_scratch_ready(var s : TsScratch; floats : TsFloats; aux_floats, stats_floats : int64; hb_floats : int64 = -1l) : bool
+    => ts_scratch_fits(s, floats, aux_floats, stats_floats, hb_floats) || ts_scratch_build(s, floats, aux_floats, stats_floats, hb_floats)
 
 //! the scratch's slot as a dispatch binds it; the hazard bit is the slot's
 def private ts_rows(s : TsScratch; slot : int) : TsRows => TsRows(dev = s.devs[slot], bytes = s.bytes[slot], bit = 1u << uint(slot))
@@ -518,7 +529,7 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     }
     fl[TS_A_FFN] = t * ff
     fl[TS_A_F2] = t * d
-    if (!ts_albert_attach(a) || !ts_scratch_ready(g_ts_albert_scratch, fl, 0l, 0l)) {
+    if (!ts_albert_attach(a) || !ts_scratch_ready(g_ts_albert_scratch, fl, 0l, 0l, t * d)) {
         return ts_decline("albert", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_albert_slots
@@ -634,7 +645,7 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     fl[TS_T_GF] = t * 4l * hd
     fl[TS_T_GB] = t * 4l * hd
     fl[TS_T_Y] = t * 2l * hd
-    if (!ts_text_attach(te) || !ts_scratch_ready(g_ts_text_scratch, fl, 0l, 0l)) {
+    if (!ts_text_attach(te) || !ts_scratch_ready(g_ts_text_scratch, fl, 0l, 0l, t * cc)) {
         return ts_decline("text", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_text_slots
@@ -820,7 +831,7 @@ def private vulkan_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : 
     fl[TS_DE_Y] = t * cc
     fl[TS_DE_GF] = t * 4l * hd
     fl[TS_DE_GB] = t * 4l * hd
-    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_de_scratch, fl, 4l + sd + int64(nl) * (2l * cc + 4l), 0l)) {
+    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_de_scratch, fl, 4l + sd + int64(nl) * (2l * cc + 4l), 0l, t * width)) {
         return ts_decline("dur_enc", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_pred_slots
@@ -893,7 +904,7 @@ def private vulkan_styletts2_durations(p : St2Predictor; d : array<float>; t : i
     fl[TS_DU_GB] = t * 4l * hd
     fl[TS_DU_LOG] = t * nb
     fl[TS_DU_RAW] = t
-    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_du_scratch, fl, 0l, 0l)) {
+    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_du_scratch, fl, 0l, 0l, t)) {
         return ts_decline("durations", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_pred_slots
@@ -1135,7 +1146,7 @@ def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fr
         return ts_decline("prosody", VulkanTtsDecline.device)
     }
     let fl = ts_pr_floats(sh, cc, hd, frames)
-    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_pr_scratch, fl, sh.aux, tts_stats_floats(sh.t_max, sh.c_max))) {
+    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_pr_scratch, fl, sh.aux, tts_stats_floats(sh.t_max, sh.c_max), max(tf, tn))) {
         return ts_decline("prosody", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_pred_slots
@@ -1645,7 +1656,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
     }
     let nh = source.n_harm
     let fl = ts_dec_floats(d, sh, nh, text_c, frames, f2)
-    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, tts_stats_floats(sh.blk.t_max, sh.blk.c_max))) {
+    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, tts_stats_floats(sh.blk.t_max, sh.blk.c_max), sh.n_out)) {
         return ts_decline("decode", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_dec_slots
@@ -1723,7 +1734,7 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
     }
     fl[TS_D_COL] = sh.blk.col
     fl[TS_D_COL16] = ts_col16_floats(sh.blk)
-    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, tts_stats_floats(sh.blk.t_max, sh.blk.c_max))) {
+    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, tts_stats_floats(sh.blk.t_max, sh.blk.c_max), fl[TS_D_POST])) {
         return ts_decline("generator", VulkanTtsDecline.memory)
     }
     let sc_ & = g_ts_dec_scratch
@@ -1789,13 +1800,35 @@ def private ts_pk_codec_attach(mm : PocketMimi) : bool {
 def private ts_pk_codec_rebuild(mm : PocketMimi; key : uint64) : bool {
     var slots : TtsPkCodecSlab
     let rope_rows = TS_PK_CODEC_MAX_FRAMES * mm.frame_steps
+    let t0 = ref_time_ticks()
     let host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsPkCodecSlab) {
         tts_pk_codec_write(w, mm, rope_rows, s)
     }
+    let built = get_time_usec(t0)
     return false if (!ts_slab_upload(g_ts_pk_codec, key, host, false))
+    ts_attach_log("pocket codec slab", long_length(host), built, get_time_usec(t0) - built)
     delete g_ts_pk_codec_slots
     g_ts_pk_codec_slots <- slots
     return true
+}
+
+//! the attach ledger under the info log: a slab's floats, its host build and its upload
+[cold_path]
+def private ts_attach_log(what : string; floats : int64; build_us, upload_us : int) {
+    to_log(LOG_INFO, "vk tts {what}: {floats * 4l / 1048576l} MB, built in {build_us / 1000} ms, uploaded in {upload_us / 1000} ms\n")
+}
+
+//! ... and a seat's pipelines, logged when the ensure built something (an ensured set returns in microseconds): the wall, and
+//! the driver's share of it (the shader modules and the pipelines) from `drv0`, the tier's build counter before the ensure;
+//! `arms_us` the tier's arm before it - the device bring-up when this seat is the process's first device call
+[cold_path]
+def private ts_ensure_log(seat : string; us, drv0, arms_us : int) {
+    if (arms_us >= 1000) {
+        to_log(LOG_INFO, "vk tts {seat}: the device up in {arms_us / 1000} ms\n")
+    }
+    if (us >= 1000) {
+        to_log(LOG_INFO, "vk tts {seat} pipelines: built in {us / 1000} ms, the driver's {(g_vkd_pipe_build_us - drv0) / 1000} ms of it\n")
+    }
 }
 
 def private ts_pk_frames_attach(m : PocketModel) : bool {
@@ -1807,10 +1840,13 @@ def private ts_pk_frames_attach(m : PocketModel) : bool {
 [cold_path]
 def private ts_pk_frames_rebuild(m : PocketModel; key : uint64) : bool {
     var slots : TtsPkFramesSlab
+    let t0 = ref_time_ticks()
     let host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsPkFramesSlab) {
         tts_pk_frames_write(w, m, s)
     }
+    let built = get_time_usec(t0)
     return false if (!ts_slab_upload(g_ts_pk_frames, key, host, false))
+    ts_attach_log("pocket frames slab", long_length(host), built, get_time_usec(t0) - built)
     delete g_ts_pk_frames_slots
     g_ts_pk_frames_slots <- slots
     return true
@@ -1896,6 +1932,7 @@ def private ts_pk_voice_attach(vs : PocketVoiceState; tf : PocketTransformer) : 
 def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer; key : uint64; cap : int64) : bool {
     var v & = g_ts_pk_voice
     ts_pk_voice_drop()
+    let t0 = ref_time_ticks()
     let d = tf.d
     let half = d / tf.heads / 2l
     v.k |> reserve(length(vs.caches))
@@ -1926,6 +1963,7 @@ def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer; k
     v.cap = cap
     v.len = vs.len
     v.d = d
+    to_log(LOG_INFO, "vk tts pocket voice slot: {vs.len} of {cap} rows over {length(vs.caches)} layers, up in {get_time_usec(t0) / 1000} ms\n")
     return true
 }
 
@@ -2262,9 +2300,16 @@ def private vulkan_pocket_codec(m : PocketModel; latents : array<float>; frames 
         || long_length(latents) < frames * mm.quant_proj.cin) {
         return ts_decline("codec", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_pk_codec_ensure()) {
+    let te = ref_time_ticks()
+    let drv0 = g_vkd_pipe_build_us
+    if (!vulkan_tower_arms()) {
         return ts_decline("codec", VulkanTtsDecline.device)
     }
+    let arms_us = get_time_usec(te)
+    if (!ts_pk_codec_ensure()) {
+        return ts_decline("codec", VulkanTtsDecline.device)
+    }
+    ts_ensure_log("pocket codec", get_time_usec(te) - arms_us, drv0, arms_us)
     ts_pk_stage_rows(mm, frames)
     let samples = g_ts_pk_rows[long_length(g_ts_pk_rows) - 1l]
     if (!ts_pk_codec_attach(mm)) {
@@ -2272,7 +2317,7 @@ def private vulkan_pocket_codec(m : PocketModel; latents : array<float>; frames 
     }
     let sl & = g_ts_pk_codec_slots
     let fl = ts_pk_codec_floats(mm, frames)
-    if (!ts_scratch_ready(g_ts_pkc_scratch, fl, 0l, 0l)) {
+    if (!ts_scratch_ready(g_ts_pkc_scratch, fl, 0l, 0l, samples)) {
         return ts_decline("codec", VulkanTtsDecline.memory)
     }
     let sc_ & = g_ts_pkc_scratch
@@ -2522,14 +2567,22 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
         ts_decline("frames", VulkanTtsDecline.shape)
         return none
     }
-    if (!vulkan_tower_arms() || !ts_pk_frames_ensure()) {
+    let te = ref_time_ticks()
+    let drv0 = g_vkd_pipe_build_us
+    if (!vulkan_tower_arms()) {
         ts_decline("frames", VulkanTtsDecline.device)
         return none
     }
+    let arms_us = get_time_usec(te)
+    if (!ts_pk_frames_ensure()) {
+        ts_decline("frames", VulkanTtsDecline.device)
+        return none
+    }
+    ts_ensure_log("pocket frames", get_time_usec(te) - arms_us, drv0, arms_us)
     let batch = min(g_ts_pk_batch, max_frames)
     let forced_rows = long_length(forced) / ld
     let fl = ts_pk_frames_floats(m, max_frames, batch, forced_rows)
-    if (!ts_pk_frames_attach(m) || !ts_pk_voice_attach(vs, tf) || !ts_scratch_ready(g_ts_pkf_scratch, fl, 0l, 0l)) {
+    if (!ts_pk_frames_attach(m) || !ts_pk_voice_attach(vs, tf) || !ts_scratch_ready(g_ts_pkf_scratch, fl, 0l, 0l, (max_frames + 1l) * d)) {
         ts_decline("frames", VulkanTtsDecline.memory)
         return none
     }

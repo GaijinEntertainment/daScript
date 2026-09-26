@@ -1738,6 +1738,19 @@ module) is independent and can land any time - it is pure structure.
     folded into the flash tile's load on the padded route and K and V staged in workgroup memory on
     the f32 window route (it reads them off the compact rows). The instrument is `lcpp_bench
     --image` on the E2B / gemma-3-4b / Qwen3-VL-4B / Qwen2.5-Omni-3B pairs beside their CPU rows.
+108. **The Pocket codec's scratch runs at sample rate.** A 6 s chunk's codec seat holds about a
+    gigabyte of device slots on the pod: the transposed upsample convs' im2col columns are laid
+    out per output sample (the last stage 146 thousand rows of k x cin floats), and every slot is
+    sized to the chunk. The CPU chain runs the same codec in windows of sixteen latent frames
+    (`ARCHITECTURE_POCKET.md#pocket-codec-stream`). The lever is the seat windowed the same way,
+    or the sample-rate convs' columns gathered inside the tile so no column slot exists; the
+    instrument is the attach ledger's `vk tts scratch` line and the codec served cells.
+107. **The Pocket prompt stays on the CPU.** A steady Pocket sentence on the pod reads prompt 27 ms
+    of 99 (backbone 62, codec 10): the text rows' backbone prefill over the voice's caches runs the
+    CPU chain, since the family's hook record carries a codec and a frames seat only (the Metal
+    twin's too). A prompt seat is the frames seat's layer chain at t = n_txt rows on the f32 tile,
+    writing the caches' rows the frames seat reads; the instrument is `harness/tts_synth.das`'s
+    prompt bucket beside the two rows.
 106. **The TTS LSTM recurrence walks one SM.** `TtsLstmDir` runs a direction in one workgroup
     (four lanes a hidden unit over the recurrence transposed to [H][4H]), and at kokoro's H = 256 a
     step costs 14 us whatever the k loop's shape (four independent accumulators read the same as

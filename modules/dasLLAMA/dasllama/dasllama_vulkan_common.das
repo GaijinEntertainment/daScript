@@ -3231,6 +3231,7 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
         g_vkd_spv_kept[kernel] := spv
     }
     spv_override_load(kernel, spv)
+    let t0 = ref_time_ticks()
     var shader : ShaderModule
     if (g_gpu.decvec_on) {
         shader <- create_shader_module(g_gpu.device, spv)
@@ -3247,10 +3248,15 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
         ? create_compute_pipeline_full_subgroups(g_gpu.device, c.pipe_layout, shader)
         : create_compute_pipeline(g_gpu.device, c.pipe_layout, shader))
     c.pipe_epochs[ord] = g_vkd_pipe_epoch
+    g_vkd_pipe_build_us += get_time_usec(t0)
+    g_vkd_pipe_builds++
     let pk = intptr(boost_value_to_vk(c.pipes[ord]))
     g_pipe_access[pk] = uint2(rmask, wmask)
     g_pipe_names[pk] = kernel
 }
+
+var g_vkd_pipe_build_us : int   //! the driver's share of every class pipeline built so far: the shader module and the pipeline
+var g_vkd_pipe_builds : int
 
 def vkd_alloc_set(c : VkdClass; family : string) : VkDescriptorSet {
     if (intptr(boost_value_to_vk(c.set_layout)) == 0ul) {

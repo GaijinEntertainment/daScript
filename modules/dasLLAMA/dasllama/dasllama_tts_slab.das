@@ -11,6 +11,7 @@ require daslib/f16_cvt
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_layout
 require dasllama/dasllama_math
+require dasllama/dasllama_par
 require dasllama/dasllama_convert
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_styletts2
@@ -143,7 +144,7 @@ struct TtsDecSlab {
 }
 
 //! q8 rows dequantized into the slab rows [rows][stride]: the quants gathered through the active repack, so the
-//! served lane's numbers land, not the disk order's
+//! served lane's numbers land, not the disk order's; the gather over its parallel slice and the rows over the pool
 def private tsw_put_q8(var w : TtsSlabWriter; q : array<int8>; qs : array<float>; rows, cols, w0, stride : int64) {
     return if (w.measure)
     var wq : array<uint8>
@@ -152,11 +153,21 @@ def private tsw_put_q8(var w : TtsSlabWriter; q : array<int8>; qs : array<float>
     ws |> reserve_resize(rows * cols / 32l * 2l)
     let lay = active_q8_repack_layout(g_active_needs_repack)
     unsafe {
-        q8_gather_rows(addr<int8 const?>(q[0]), null, addr<float const?>(qs[0]), cols, rows, rows, lay.mr, lay.kgroup, lay.wbias, wq, ws)
+        q8_gather_rows(addr<int8 const?>(q[0]), null, addr<float const?>(qs[0]), cols, rows, q8_gather_slice(rows, lay.mr), lay.mr, lay.kgroup, lay.wbias, wq, ws)
         let sp = addr<uint16 const?>(ws[0])
-        for (r in range64(rows)) {
-            for (j in range64(cols)) {
-                w.host[w0 + r * stride + j] = float(int8(wq[r * cols + j])) * f16_to_f32(uint(sp[(r * cols + j) / 32l]))
+        let qp = addr<uint8 const?>(wq[0])
+        var hp = addr(w.host[w0])
+        let ncols = int(cols)
+        maybe_parallel_for(0, int(rows), lanes_for_work(rows * cols, 0)) $(rb, re) {
+            unsafe {
+                for (r in range64(int64(rb), int64(re))) {
+                    var dst = hp + r * stride
+                    let src = qp + r * cols
+                    let srow = sp + (r * cols) / 32l
+                    for (j in range(ncols)) {
+                        dst[j] = float(int8(src[j])) * f16_to_f32(uint(srow[j / 32]))
+                    }
+                }
             }
         }
     }

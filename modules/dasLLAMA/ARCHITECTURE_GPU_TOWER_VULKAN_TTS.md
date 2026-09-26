@@ -21,11 +21,17 @@ with column j = tap*cin + ci and its bias row beside it, every norm as a scale a
 an LSTM direction as its input linear and its recurrence transposed to [H][4H], so the
 recurrence kernel's lanes read a step's column as consecutive floats; the q8 lane's quants and a
 K-quant linear are dequantized into the slab through the active repack, so the served lane's
-numbers land. The slab uploads once to one device buffer and stays resident under a key that
-folds the part's weight addresses and the q8 lane's repack layout; the model-drop sweep releases
-it, and a reload or another lane keys differently and rebuilds. The seats' activation rows are
-a scratch per seat, one device buffer a slot sized in floats and grown in 256 KB steps, kept
-across calls and rebuilt only when a call needs a slot wider than it holds.
+numbers land - the q8 rows gathered over the cold gather's slice and dequantized over the job
+pool, a row range a lane. The slab uploads once to one device buffer and stays resident under a
+key that folds the part's weight addresses and the q8 lane's repack layout; the model-drop sweep
+releases it, and a reload or another lane keys differently and rebuilds. The seats' activation
+rows are a scratch per seat, one device buffer a slot sized in floats and grown in 256 KB steps,
+kept across calls and rebuilt only when a call needs a slot wider than it holds, with one host
+readback buffer sized to the rows the seat copies out (the wave, the post rows, the encoder
+rows), never to the widest slot - a decoder's sample-rate column slot runs to hundreds of MB, and
+a host-visible buffer that wide costs a tenth of a second to map. Each seat's attach - the slab's build and upload, the pipelines' build, the scratch -
+reports its wall under the info log, and the process's first seat call reports the device
+bring-up it paid.
 
 The decoder slab uploads twice: its f32 rows, and a halfword twin of the whole slab at the same
 element offsets. A decoder or generator conv whose width sits on the bias pass's four lattice
