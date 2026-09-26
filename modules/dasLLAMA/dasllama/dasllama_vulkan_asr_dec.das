@@ -658,14 +658,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
     let p0 = ds.n_past
     let te0 = ref_time_ticks()
     unsafe {
-        var p = reinterpret<float?>(r.xhost.mapped)
-        for (rr in range64(n)) {
-            let te = w.d_te_off + int64(toks[int(rr)]) * d
-            let pe = w.d_pe_off + (p0 + rr) * d
-            for (j in range64(d)) {
-                p[rr * d + j] = w.dblob[te + j] + w.dblob[pe + j]
-            }
-        }
+        whisper_embed_rows(w, toks, n, p0, reinterpret<float?>(r.xhost.mapped))
         var logits_site_meta = reinterpret<uint?>(r.site_meta[int(nl * WD_LAYER_SITES)].mapped)
         logits_site_meta[1] = uint((n - 1l) * (d / q8e))
     }

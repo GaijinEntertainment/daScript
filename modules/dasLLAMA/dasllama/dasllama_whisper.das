@@ -1319,6 +1319,20 @@ def private dec_cross_attn(w : WhisperModel; var ds : DecoderState; l, n : int64
 //! Decode a batch of tokens at positions n_past..n_past+n-1 (prompt prefill and single-step
 //! generation share this path). Leaves next-token logits (for the LAST row, tied token
 //! embedding) in ``ds.logits`` and advances ``ds.n_past``.
+//! the decoder's input rows: each token's embedding plus its learned absolute position row, `n` rows from position `p0` into `dst`
+def whisper_embed_rows(w : WhisperModel; toks : int const?; n, p0 : int64; var dst : float?) {
+    let d = w.n_text_state
+    unsafe {
+        for (r in range64(n)) {
+            let te = w.d_te_off + int64(toks[int(r)]) * d
+            let pe = w.d_pe_off + (p0 + r) * d
+            for (j in range64(d)) {
+                dst[r * d + j] = w.dblob[te + j] + w.dblob[pe + j]
+            }
+        }
+    }
+}
+
 [hot_path]
 def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array<int> | #) {
     let n = long_length(tokens)
@@ -1338,14 +1352,7 @@ def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array
         return
     }
 
-    // token embedding + learned absolute position rows
-    for (r in range64(n)) {
-        let te = w.d_te_off + int64(tokens[int(r)]) * d
-        let pe = w.d_pe_off + (p0 + r) * d
-        for (j in range64(d)) {
-            ds.x[r * d + j] = w.dblob[te + j] + w.dblob[pe + j]
-        }
-    }
+    whisper_embed_rows(w, unsafe(addr(tokens[0])), n, p0, unsafe(addr(ds.x[0])))
 
     let kq_scale = 1.0 / sqrt(sqrt(float(hs)))
     for (l in range64(w.n_text_layer)) {

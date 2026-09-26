@@ -1155,10 +1155,10 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     delete need
     if (!reserve_ok) return rdec_decline("an arena reserve failed (the formats above)")
-    let repacked = kernel_backend_needs_repack(active_kernel_backend())
-    let mr = repacked ? active_q8_layout_mr() : 1l
-    let kg = repacked ? active_q8_kgroup() : 4l
-    let wb = repacked ? active_q8_wbias() : 0l
+    let lay = active_q8_repack_layout(g_active_needs_repack)
+    let mr = lay.mr
+    let kg = lay.kgroup
+    let wb = lay.wbias
     let rot = resident_rot(c)
     if (!rdec_prepare(c.n_layers, n_attn, dim, qd, kvd, hs, c.n_heads, resident_hidden(t), c.vocab_size, seq_cap, neox,
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
@@ -2538,10 +2538,10 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     let has_experts = ne > 0l
     let want = has_experts ? (want_raw < 0l ? layers : min(want_raw, layers)) : 0l   // -1 = auto: fill the budget
     set_moe_gpu_layer_count(want)   // publish the resolved count — downstream status reads it
-    let repacked = kernel_backend_needs_repack(active_kernel_backend())
-    let mr = repacked ? active_q8_layout_mr() : 1l
-    let kgroup = repacked ? active_q8_kgroup() : 4l
-    let wbias = repacked ? active_q8_wbias() : 0l
+    let lay = active_q8_repack_layout(g_active_needs_repack)
+    let mr = lay.mr
+    let kgroup = lay.kgroup
+    let wbias = lay.wbias
     var from_l = layers
     var wq : array<uint8>
     var ws : array<uint8>

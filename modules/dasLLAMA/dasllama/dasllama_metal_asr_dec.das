@@ -364,14 +364,7 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
     let nl = w.n_text_layer
     let p0 = ds.n_past
     unsafe {
-        var p = reinterpret<float?>(metal_buffer_contents(g_wd_sx))
-        for (r in range64(n)) {   // token embedding + learned position rows, straight into the mapped buffer
-            let te = w.d_te_off + int64(toks[int(r)]) * d
-            let pe = w.d_pe_off + (p0 + r) * d
-            for (j in range64(d)) {
-                p[r * d + j] = w.dblob[te + j] + w.dblob[pe + j]
-            }
-        }
+        whisper_embed_rows(w, toks, n, p0, reinterpret<float?>(metal_buffer_contents(g_wd_sx)))   // straight into the mapped buffer
     }
     let mapped = w.image_map != null
     var bblobf = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(w.dblob, 0l))), uint64(length(w.dblob) * 4l), mapped)
