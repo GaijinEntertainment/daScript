@@ -212,6 +212,7 @@ Run any tutorial from the project root::
    tutorials/macros/18_with_boost.rst
    tutorials/macros/19_add_module_option.rst
    tutorials/macros/20_template_struct_instance.rst
+   tutorials/macros/21_build_program.rst
 
 .. _tutorials_dashv:
 

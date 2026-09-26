@@ -3428,6 +3428,7 @@ The RTTI module exposes runtime type information and program introspection facil
 - `Program.getThisModule` - Property-like accessor that returns the `Module` pointer for the module currently being inferred in the given `Program`.
 - `Program.getDebugger` - Property-like accessor that returns `true` if the debugger is attached and enabled for the given `Program`.
 - `Program.getOptimize` - Property-like accessor that returns `true` when the optimizer runs for the given `Program`: false under the host's `no_optimizations` policy or any of the program's `options optimize = false`, `options no_optimization`, `options no_optimizations`.
+- `Program.failed` - Property-like accessor that returns `true` when the `Program` failed to compile; its errors are in `Program.errors`.
 - `Program` - Object representing full information about Daslang program during and after compilation (but not the simulated result of the program).
 - `AnnotationArgumentInfo` - One argument of an annotation, deep-copied into the context debug heap (never points into the AST).
 - `CodeOfPolicies` - Object which holds compilation and simulation settings and restrictions.
@@ -4032,6 +4033,12 @@ The AST module provides access to the abstract syntax tree representation of das
 - `parse_file` - Parses a daslang file and stops there — no type inference, no optimization, no simulation.
 - `parse_file_no_prerequisites` - Parses one file alone and stops there: no prerequisite walk, no type inference, no macro run, and the host's module-cache stream is hidden for the duration.
 - `require_module_now` - Compiles `module_name` - a `shared` module, named by its file - and its prerequisites into the process at the point of the call, or answers the module already there, under `codeOfPolicies`; a null `fileAccess` means the compiling program's own.
+
+### Building programs from AST nodes
+
+- `make_main_module` - Inside `make_program`, builds the program's own module in the block and compiles it as an executable; returns the program, ready for `simulate`, or failed with its errors in `Program.errors`.
+- `make_module` - Inside `make_program`, builds a named module in the block and compiles it at once, like a required file; returns the module for `add_module_require`, or null when it failed (the errors come back on the program `make_main_module` returns).
+- `make_program` - Opens a scope for building a program from AST nodes instead of source text: loads `builtin.das` into its own module group, then runs the block, where `make_module` and `make_main_module` build the modules.
 
 ### Call generation
 

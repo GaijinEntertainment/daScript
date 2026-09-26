@@ -29,7 +29,7 @@
   context, whether this program's JIT selected it - is a defect; the value goes into `Program`'s
   symbol tables (`usedFunctions`, `functionIndices`, `usedVariables`, `variableIndices`,
   `jitSelected`) instead.** A shared module's objects are one instance for every program in the
-  process, and a compile that runs inside another - a macro's `compile`, a late `require`, the
-  folding program - would otherwise overwrite the outer program's answer mid-simulate.
+  process, and a compile that runs inside another would otherwise overwrite the outer program's
+  answer mid-simulate.
   `src/ast/ARCHITECTURE.md` sec.4 lists the per-compile fields that remain and why each is
   tolerated.

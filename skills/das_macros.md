@@ -77,6 +77,35 @@ twice (an overload, a same-named function in a required module) is an error, not
 macros stay out of the caller - which is the point when the callee is expensive to bring up and
 only sometimes needed: a hit on a cache decides in the caller, and the emitter comes in on a miss.
 
+## Programs built from nodes - `make_program`
+
+A host script can build a whole program without source text. `make_program(cop) $ { ... }` is the
+scope every build call runs in: it loads `builtin.das` into its own module group and holds the
+policies `cop`. `make_module(name) $(mod) { ... }` builds and compiles one named module and
+returns it, or null on failure. `make_main_module() $(mod) { ... }` builds the program's own
+module and returns the finished `ProgramPtr` for `simulate` (tutorial:
+`tutorials/macros/21_build_program.das`).
+
+- Build every node inside the block of the module that uses it. A function built outside that
+  block fails the build; a node one block built and did not attach is freed when that module
+  ends.
+- `add_module_require(mod, other, false)` lets `mod` reach `other` - a module built earlier in
+  the same `make_program`, or a loaded C++ module from `get_module("math")`. `false` keeps the
+  require private; `true` also exposes `other` to any module that requires `mod`. It returns
+  false for a null `other` (`get_module` on a module that is not loaded) and for `other == mod`.
+  Every module reaches `builtin.das` without a require.
+- `add_function` moves the `FunctionPtr` out of its argument: pass a `var`, set every flag on it
+  first, and do not touch it after - it is null.
+- A function the host calls by name needs `fn.flags.exports = true` - the compile removes every
+  function nothing in the program calls, unless `cop.export_all` is set.
+- Once one `make_module` fails, every later `make_module` returns null and `make_main_module`
+  returns the failed program, neither running its block - so check `program.failed` /
+  `program.errors` once, on the program `make_main_module` returns.
+- Simulate and run the program inside the `make_program` block that built it - its modules are
+  freed when that block returns, and a program still referenced then makes `make_program` panic.
+  `invoke_in_context` on the simulated context needs `cop.threadlock_context = true` passed to
+  `make_program`.
+
 ## Pass macros - which hook sees what
 
 - `[infer_macro]` fires only AFTER inference succeeds - it never sees a program with errors, so it

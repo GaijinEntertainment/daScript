@@ -1,0 +1,1 @@
+Opens a scope for building a program from AST nodes instead of source text: loads ``builtin.das`` into its own module group, then runs the block, where ``make_module`` and ``make_main_module`` build the modules. The program is simulated and run inside the block, because its modules are freed when the block returns; a program still referenced then makes ``make_program`` panic.
