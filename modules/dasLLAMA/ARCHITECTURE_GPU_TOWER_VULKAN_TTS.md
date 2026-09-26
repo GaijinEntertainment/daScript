@@ -22,7 +22,8 @@ K-quant linear are dequantized into the slab through the active repack, so the s
 numbers land. The slab uploads once to one device buffer and stays resident under a key that
 folds the part's weight addresses and the q8 lane's repack layout; the model-drop sweep releases
 it, and a reload or another lane keys differently and rebuilds. The seats' activation rows are
-a scratch sized once for the widest call seen, in steps of 256 positions, kept across calls.
+a scratch per seat, one device buffer a slot sized in floats and grown in 256 KB steps, kept
+across calls and rebuilt only when a call needs a slot wider than it holds.
 
 The front end - the PL-BERT encoder, the text encoder, the duration encoder, the duration head
 and prosody - runs on the f32-exact tile GEMM (`F32GemmT`: 64 positions by 64 weight rows a
@@ -48,8 +49,24 @@ conv stack ping-ponging two row sets as the CPU chain does; then the BiLSTM as t
 each its input gates on the biased tile ([t][4H], gate order i, f, g, o) and one workgroup
 walking the recurrence (`TtsLstmDir`, the backward direction writing the second half of the
 shared [t][2H] rows). The rows read back and transpose on the host into the channel-major
-[c][t] the CPU stage answers. Every seat's scratch is one width list: a slot a row set, the
-seat's own slot table naming them.
+[c][t] the CPU stage answers. Every seat's scratch is one float-count list, a slot a row set,
+the seat's own slot table naming them, plus two more row sets - the aux rows a call uploads
+(the style vector, then fc(style) per norm: gamma then beta, gamma + 1 where a layernorm reads
+it as its weight) and the AdaIN column stats the device writes.
+
+The predictor's three seats share one slab (`tts_pred_write`). The duration encoder: the BERT
+projection on the biased tile, the style appended as a broadcast residual of stride 0
+(`TtsConcat`), then per LSTM the BiLSTM, the AdaLayerNorm as the layernorm stamp reading the
+aux rows, and the style appended again; the rows come back [t][c + style]. The durations: the
+BiLSTM, the projection, then the sigmoid sum a token over speed (`TtsSigSum`), one float a
+token back. Prosody: the encoder rows transposed on the host into the rows form, the shared
+BiLSTM, then each branch's residual blocks pinging between two row sets - the AdaIN as the
+column stats (`TtsColStats`, one workgroup a channel) and the fold with the leaky ReLU
+(`TtsAdainLeaky`, the CPU `adain_affine`'s scale and shift), the upsampling block's depthwise
+transposed pool (`TtsPoolDw`) and its nearest shortcut as the row gather over a r / 2 map, the
+convs on the im2col and the biased tile, the learned shortcut the same, the join as the scaled
+add (`TtsAddScale` at 1 / sqrt 2) - and the branch's one-channel projection; F0 and energy
+read back a float a frame.
 
 The declines: `knob`, `shape` (a width off the 64 lattice, a head width other than 64 or 128,
 more than 512 tokens for the attention stage, an LSTM direction over 256 hidden), `device` (the

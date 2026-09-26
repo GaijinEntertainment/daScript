@@ -79,6 +79,8 @@ var private g_ts_albert : TsSlab
 var private g_ts_albert_slots : TtsAlbertSlab
 var private g_ts_text : TsSlab
 var private g_ts_text_slots : TtsTextSlab
+var private g_ts_pred : TsSlab
+var private g_ts_pred_slots : TtsPredSlab
 
 def private ts_slab_release(var sl : TsSlab) {
     if (sl.dev != 0ul) {
@@ -142,22 +144,59 @@ def private ts_text_rebuild(te : St2TextEncoder; key : uint64) : bool {
     return true
 }
 
+def private ts_pred_attach(p : St2Predictor) : bool {
+    let key = tts_pred_key(p)
+    return true if (g_ts_pred.dev != 0ul && g_ts_pred.key == key)
+    return ts_pred_rebuild(p, key)
+}
+
+[cold_path]
+def private ts_pred_rebuild(p : St2Predictor; key : uint64) : bool {
+    var slots : TtsPredSlab
+    let host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsPredSlab) {
+        tts_pred_write(w, p, s)
+    }
+    return false if (!ts_slab_upload(g_ts_pred, key, host))
+    delete g_ts_pred_slots
+    g_ts_pred_slots <- slots
+    return true
+}
+
 // ----- the seats' scratch: device rows sized once for the widest call, kept across calls -----
 
-let private TS_SCRATCH_BUFS = 10
+let private TS_SCRATCH_BUFS = 30
+let private TS_AUX_BIT = 1u << 30u       //! the hazard bit of a scratch's aux rows
+let private TS_STATS_BIT = 1u << 31u     //! ... and of its column stats
+let private TS_SCRATCH_GRAIN = 65536l    //! a slot grows in 256 KB steps, so a call a little wider reuses it
 
-//! a seat's activation rows: one device buffer a slot, `widths[i]` elements a position (0 = no buffer), and the host
-//! readback buffer the widest row set fills
+//! a seat's activation rows: one device buffer a slot sized in floats (0 = no buffer), the host readback buffer the
+//! widest slot fills, and two more row sets - `aux`, the per-call uploads (a style vector, fc(style) per norm), and
+//! `stats`, the AdaIN column stats the device writes
 struct private TsScratch {
     devs : uint64[TS_SCRATCH_BUFS]
     bytes : int64[TS_SCRATCH_BUFS]
-    widths : int64[TS_SCRATCH_BUFS]
     hb : HostBuf
-    cap_t : int64
+    hb_bytes : int64
+    aux : TsRows
+    stats : TsRows
 }
+
+//! a seat's slot sizes in floats, filled by slot name
+typedef TsFloats = int64[TS_SCRATCH_BUFS]
 
 var private g_ts_albert_scratch : TsScratch
 var private g_ts_text_scratch : TsScratch
+var private g_ts_de_scratch : TsScratch
+var private g_ts_du_scratch : TsScratch
+var private g_ts_pr_scratch : TsScratch
+
+def private ts_rows_release(var r : TsRows) {
+    if (r.dev != 0ul) {
+        destroy_device_buf(r.dev)
+    }
+    r.dev = 0ul
+    r.bytes = 0l
+}
 
 def private ts_scratch_release(var s : TsScratch) {
     for (i in range(TS_SCRATCH_BUFS)) {
@@ -166,49 +205,63 @@ def private ts_scratch_release(var s : TsScratch) {
         }
         s.devs[i] = 0ul
         s.bytes[i] = 0l
-        s.widths[i] = 0l
     }
+    ts_rows_release(s.aux)
+    ts_rows_release(s.stats)
     if (s.hb.buf != 0ul) {
         destroy_host_buf(s.hb)
     }
     s.hb = HostBuf()
-    s.cap_t = 0l
+    s.hb_bytes = 0l
 }
 
-def private ts_scratch_fits(s : TsScratch; t : int64; widths : int64[TS_SCRATCH_BUFS]) : bool {
-    return false if (s.cap_t < t)
+//! every slot holds its floats, the readback buffer the widest of them
+def private ts_scratch_fits(s : TsScratch; floats : TsFloats; aux_floats, stats_floats : int64) : bool {
+    return false if (s.aux.bytes < aux_floats * 4l || s.stats.bytes < stats_floats * 4l)
+    var widest = 0l
     for (i in range(TS_SCRATCH_BUFS)) {
-        return false if (s.widths[i] != widths[i])
+        return false if (s.bytes[i] < floats[i] * 4l)
+        widest = max(widest, floats[i])
     }
-    return true
+    return s.hb_bytes >= widest * 4l
 }
 
-//! the rows sized for `t` positions at least (256 at a time, so a sentence a few tokens longer reuses them); false when an allocation failed
+//! `floats` floats on the device under `bit`, none at zero; false when the allocation failed
 [cold_path]
-def private ts_scratch_build(var s : TsScratch; t : int64; widths : int64[TS_SCRATCH_BUFS]) : bool {
+def private ts_rows_alloc(var r : TsRows; floats : int64; bit : uint) : bool {
+    r = TsRows(bit = bit)
+    return true if (floats <= 0l)
+    var oom = false
+    r.bytes = floats * 4l
+    r.dev = soft_device_buf(oom, r.bytes)
+    return !oom && r.dev != 0ul
+}
+
+//! the slots sized for this call at least, each in 256 KB steps (so a call a little wider reuses them); false when an allocation failed
+[cold_path]
+def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, stats_floats : int64) : bool {
     ts_scratch_release(s)
-    let cap = (t + 255l) / 256l * 256l
     var oom = false
     var widest = 1l
     for (i in range(TS_SCRATCH_BUFS)) {
-        s.widths[i] = widths[i]
-        if (widths[i] > 0l) {
-            s.bytes[i] = cap * widths[i] * 4l
+        if (floats[i] > 0l) {
+            let n = tts_round_up(floats[i], TS_SCRATCH_GRAIN)
+            s.bytes[i] = n * 4l
             s.devs[i] = soft_device_buf(oom, s.bytes[i])
-            widest = max(widest, widths[i])
+            widest = max(widest, n)
         }
     }
-    s.hb = make_host_buf(cap * widest * 4l, false, [cached = true, soft = true])
-    if (oom || s.hb.buf == 0ul) {
+    s.hb_bytes = widest * 4l
+    s.hb = make_host_buf(s.hb_bytes, false, [cached = true, soft = true])
+    if (oom || s.hb.buf == 0ul || !ts_rows_alloc(s.aux, aux_floats, TS_AUX_BIT) || !ts_rows_alloc(s.stats, stats_floats, TS_STATS_BIT)) {
         ts_scratch_release(s)
         return false
     }
-    s.cap_t = cap
     return true
 }
 
-def private ts_scratch_ready(var s : TsScratch; t : int64; widths : int64[TS_SCRATCH_BUFS]) : bool
-    => ts_scratch_fits(s, t, widths) || ts_scratch_build(s, t, widths)
+def private ts_scratch_ready(var s : TsScratch; floats : TsFloats; aux_floats, stats_floats : int64) : bool
+    => ts_scratch_fits(s, floats, aux_floats, stats_floats) || ts_scratch_build(s, floats, aux_floats, stats_floats)
 
 //! the scratch's slot as a dispatch binds it; the hazard bit is the slot's
 def private ts_rows(s : TsScratch; slot : int) : TsRows => TsRows(dev = s.devs[slot], bytes = s.bytes[slot], bit = 1u << uint(slot))
@@ -217,8 +270,55 @@ def private ts_rows(s : TsScratch; slot : int) : TsRows => TsRows(dev = s.devs[s
 def private ts_forget {
     ts_slab_release(g_ts_albert)
     ts_slab_release(g_ts_text)
+    ts_slab_release(g_ts_pred)
     ts_scratch_release(g_ts_albert_scratch)
     ts_scratch_release(g_ts_text_scratch)
+    ts_scratch_release(g_ts_de_scratch)
+    ts_scratch_release(g_ts_du_scratch)
+    ts_scratch_release(g_ts_pr_scratch)
+}
+
+// ----- the aux rows a seat uploads per call: the style vector, then fc(style) per norm (gamma, then beta; +1 on gamma in the LN form) -----
+
+var private @scratch g_ts_aux_host : array<float>   //! the staged rows, `g_ts_aux_n` of them live; grow-only
+var private g_ts_aux_n = 0l
+var private @scratch g_ts_h_tmp : array<float>
+var private @scratch g_ts_idx_host : array<int>
+
+def private ts_aux_reset {
+    g_ts_aux_n = 0l
+}
+
+//! `n` floats of `src` at the next 16-byte boundary of the staged rows; the element offset
+def private ts_aux_push(src : array<float>; n : int64) : int64 {
+    let at = tts_round_up(g_ts_aux_n, 4l)
+    g_ts_aux_host |> ensure_length(at + n)
+    for (i in range64(n)) {
+        g_ts_aux_host[at + i] = src[i]
+    }
+    g_ts_aux_n = at + n
+    return at
+}
+
+//! fc(style) as the norm's rows: gamma [c] then beta [c], gamma + 1 where the norm applies it as a layernorm weight; the element offset
+def private ts_style_rows(fc : TtsLinear; s : array<float>; c : int64; ln_form : bool) : int64 {
+    linear_vec(fc, s, g_ts_h_tmp)
+    let at = ts_aux_push(g_ts_h_tmp, 2l * c)
+    if (ln_form) {
+        for (i in range64(c)) {
+            g_ts_aux_host[at + i]++
+        }
+    }
+    return at
+}
+
+//! the staged rows onto the scratch's aux buffer; false where the seat sized it short
+def private ts_aux_upload(s : TsScratch) : bool {
+    let n = g_ts_aux_n
+    return true if (n == 0l)
+    return false if (n * 4l > s.aux.bytes)
+    upload_region_at(s.aux.dev, 0l, unsafe(addr<uint8 const?>(g_ts_aux_host[0])), n * 4l)
+    return true
 }
 
 // ----- the dispatches -----
@@ -337,8 +437,15 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     let d = a.hidden
     let hs = d / a.heads
     let ff = a.ffn.nout
-    let widths = fixed_array<int64>(1l, a.emb_dim, d, d, d, d, d, d, ff, d)
-    if (!ts_albert_attach(a) || !ts_scratch_ready(g_ts_albert_scratch, t, widths)) {
+    var fl : TsFloats
+    fl[TS_A_IDS] = t
+    fl[TS_A_E] = t * a.emb_dim
+    for (i in range(TS_A_X, TS_A_V + 1)) {
+        fl[i] = t * d
+    }
+    fl[TS_A_FFN] = t * ff
+    fl[TS_A_F2] = t * d
+    if (!ts_albert_attach(a) || !ts_scratch_ready(g_ts_albert_scratch, fl, 0l, 0l)) {
         return ts_decline("albert", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_albert_slots
@@ -443,8 +550,15 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
         return ts_decline("text", VulkanTtsDecline.device)
     }
     let hd = te.lstm.fwd.hidden
-    let widths = fixed_array<int64>(1l, cc, cc, ts_text_kdim(te), 4l * hd, 4l * hd, 2l * hd, 0l, 0l, 0l)
-    if (!ts_text_attach(te) || !ts_scratch_ready(g_ts_text_scratch, t, widths)) {
+    var fl : TsFloats
+    fl[TS_T_IDS] = t
+    fl[TS_T_A] = t * cc
+    fl[TS_T_B] = t * cc
+    fl[TS_T_COL] = t * ts_text_kdim(te)
+    fl[TS_T_GF] = t * 4l * hd
+    fl[TS_T_GB] = t * 4l * hd
+    fl[TS_T_Y] = t * 2l * hd
+    if (!ts_text_attach(te) || !ts_scratch_ready(g_ts_text_scratch, fl, 0l, 0l)) {
         return ts_decline("text", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_text_slots
@@ -483,10 +597,451 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     return true
 }
 
+// ----- the predictor's dispatches -----
+
+let private TS_JOIN = 0.70710678118654752   //! the AdaIN residual blocks' join: (out + shortcut) / sqrt 2
+let private TS_MAX_DE_LSTMS = 8              //! the duration encoder's LSTM stack the seat holds style rows for
+let private TS_MAX_RES_BLOCKS = 8            //! ... and a prosody branch's residual blocks
+
+//! layernorm rows in place against scale and shift rows at `woff` / `boff` of `wn` (the slab, or the aux rows fc(style) landed in)
+def private ts_ln_rows(raw : VkCommandBuffer; var h : VkHaz; wn : TsRows; woff, boff : int64; x : TsRows; rows, d : int64; eps : float) {
+    var s = set_tower_ln_cls(fixed_array(x.dev, x.dev, wn.dev), fixed_array(x.bytes, x.bytes, wn.bytes), fixed_array(x.bit, x.bit, wn.bit))
+    var pa = TowerLnArgs(d = uint(d), rows = uint(rows), woff = uint(woff), boff = uint(boff), eps = eps, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
+    enc_tower_ln_cls(raw, h, s, pa, rows)
+}
+
+//! o [rows][width] = cat(x [rows][c], the res rows of `res`) zero-padded, as `pa` lays them (rs = 0 broadcasts one res row)
+def private ts_concat(raw : VkCommandBuffer; var h : VkHaz; x, res, o : TsRows; pa : TtsConcatArgs) {
+    var s = set_tts_concat_cls(fixed_array(x.dev, res.dev, res.dev, res.dev, o.dev), fixed_array(x.bytes, res.bytes, res.bytes, res.bytes, o.bytes),
+        fixed_array(x.bit, res.bit, res.bit, res.bit, o.bit))
+    var pc = pa
+    enc_tts_concat_cls(raw, h, s, pc, tts_concat_wgs(int64(pa.rows) * int64(pa.width)))
+}
+
+//! raw[t] = the sigmoid sum of nb logits a row over speed
+def private ts_sigsum(raw : VkCommandBuffer; var h : VkHaz; logits, out : TsRows; t, nb : int64; speed : float) {
+    var s = set_tts_sigsum_cls(fixed_array(logits.dev, out.dev), fixed_array(logits.bytes, out.bytes), fixed_array(logits.bit, out.bit))
+    var pa = TtsSigSumArgs(t = uint(t), nb = uint(nb), ls = uint(nb), speed = speed)
+    enc_tts_sigsum_cls(raw, h, s, pa, tts_sigsum_wgs(t))
+}
+
+//! AdaIN then leaky(0.2) from x into y (y may be x): the column stats over t, then the fold with the norm slot's rows and the style rows at `hoff`
+def private ts_adain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; x, y : TsRows; t, c : int64; ns : TtsNormSlot; hoff : int64) {
+    var s1 = set_tts_colstats_cls(fixed_array(x.dev, sc_.stats.dev), fixed_array(x.bytes, sc_.stats.bytes), fixed_array(x.bit, sc_.stats.bit))
+    var p1 = TtsStatsArgs(t = uint(t), c = uint(c))
+    enc_tts_colstats_cls(raw, h, s1, p1, c)
+    var s2 = set_tts_adain_leaky_cls(fixed_array(x.dev, y.dev, sc_.stats.dev, sc_.aux.dev, slab.dev), fixed_array(x.bytes, y.bytes, sc_.stats.bytes, sc_.aux.bytes, slab.bytes),
+        fixed_array(x.bit, y.bit, sc_.stats.bit, sc_.aux.bit, 0u))
+    var p2 = TtsAdainArgs(c = uint(c), t = uint(t), eps = ST2_ADAIN_EPS, xoff = 0u, yoff = 0u, hoff = uint(hoff), gwoff = uint(ns.gwoff), gboff = uint(ns.gboff), aoff = 0u)
+    enc_tts_adain_leaky_cls(raw, h, s2, p2, tts_adain_wgs(t * c))
+}
+
+//! the depthwise transposed pool on rows: y [t_out][c] from x [t_in][c] over the slab's w [c][k] at `woff` and b [c] at `boff`
+def private ts_pool_dw(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; cv : TtsConv1d; woff, boff : int64; x, y : TsRows; t_in, t_out : int64) {
+    var s = set_tts_pool_dw_cls(fixed_array(x.dev, y.dev, slab.dev), fixed_array(x.bytes, y.bytes, slab.bytes), fixed_array(x.bit, y.bit, 0u))
+    var pa = TtsPoolArgs(c = uint(cv.cin), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(cv.pad_l), dil = uint(cv.dilation), t_in = uint(t_in),
+        t_out = uint(t_out), woff = uint(woff), boff = uint(boff))
+    enc_tts_pool_dw_cls(raw, h, s, pa, tts_pool_dw_wgs(t_out * cv.cin))
+}
+
+//! out [rows][c] = src[idx[r]] - the nearest x2 upsample with idx = r / 2
+def private ts_gather_rows(raw : VkCommandBuffer; var h : VkHaz; src, idx, out : TsRows; rows, c : int64) {
+    var s = set_tts_row_gather_cls(fixed_array(src.dev, idx.dev, out.dev), fixed_array(src.bytes, idx.bytes, out.bytes), fixed_array(src.bit, idx.bit, out.bit))
+    var pa = TtsGatherArgs(c = uint(c), rows = uint(rows), word_off = 0u, pos_off = 0u, type_off = 0u, out_off = 0u, adds = 0u)
+    enc_tts_row_gather_cls(raw, h, s, pa, tts_row_gather_wgs(rows * c))
+}
+
+//! o = (a + b) * scale over n elements (o may be a)
+def private ts_add_scale(raw : VkCommandBuffer; var h : VkHaz; a, b, o : TsRows; n : int64; scale : float) {
+    var s = set_tts_add_scale_cls(fixed_array(a.dev, b.dev, o.dev), fixed_array(a.bytes, b.bytes, o.bytes), fixed_array(a.bit, b.bit, o.bit))
+    var pa = TtsAddScaleArgs(nelem = uint(n), scale = scale, aoff = 0u, boff = 0u, ooff = 0u)
+    enc_tts_add_scale_cls(raw, h, s, pa, tts_add_scale_wgs(n))
+}
+
+def private ts_pred_ensure : bool {
+    return (ensure_f32_gemm_b_cls() && ensure_tower_ln_cls() && ensure_tts_row_gather_cls() && ensure_tts_im2col_cls() && ensure_tts_lstm_dir_cls()
+        && ensure_tts_concat_cls() && ensure_tts_sigsum_cls() && ensure_tts_colstats_cls() && ensure_tts_adain_leaky_cls()
+        && ensure_tts_pool_dw_cls() && ensure_tts_add_scale_cls())
+}
+
+// ----- the duration encoder seat -----
+
+let private TS_DE_BERT = 0
+let private TS_DE_DEN = 1
+let private TS_DE_X = 2
+let private TS_DE_Y = 3
+let private TS_DE_GF = 4
+let private TS_DE_GB = 5
+
+def private ts_dur_enc_shape_ok(p : St2Predictor; t, sd : int64) : bool {
+    let cc = p.bert_encoder.nout
+    let width = cc + sd
+    return false if (t < 1l || cc % 64l != 0l || p.bert_encoder.nin % 32l != 0l || width % 32l != 0l || empty(p.lstms)
+        || length(p.lns) != length(p.lstms) || length(p.lstms) > TS_MAX_DE_LSTMS)
+    for (l in p.lstms) {
+        return false if (!tts_lstm_ok(l, width, TS_LSTM_MAX_HIDDEN) || 2l * l.fwd.hidden != cc)
+    }
+    for (ln in p.lns) {
+        return false if (!tts_lin_ok(ln.fc) || ln.fc.nin != sd || ln.fc.nout != 2l * cc)
+    }
+    return tts_pred_ok(p, TS_LSTM_MAX_HIDDEN)
+}
+
+//! The duration encoder seat: the BERT projection, the style appended, then per LSTM the BiLSTM, the AdaLayerNorm and the style appended again; out [t][c + style]
+[hot_path, unused_argument(sc), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
+def private vulkan_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : int64; s : array<float>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) : bool {
+    if (!vulkan_tower_on()) {
+        return ts_decline("dur_enc", VulkanTtsDecline.knob)
+    }
+    let cc = p.bert_encoder.nout
+    let hidden = p.bert_encoder.nin
+    let sd = long_length(s)
+    let width = cc + sd
+    if (!ts_dur_enc_shape_ok(p, t, sd) || long_length(bert) < t * hidden) {
+        return ts_decline("dur_enc", VulkanTtsDecline.shape)
+    }
+    if (!vulkan_tower_arms() || !ts_pred_ensure()) {
+        return ts_decline("dur_enc", VulkanTtsDecline.device)
+    }
+    let hd = cc / 2l
+    let nl = length(p.lstms)
+    var fl : TsFloats
+    fl[TS_DE_BERT] = t * hidden
+    fl[TS_DE_DEN] = t * cc
+    fl[TS_DE_X] = t * width
+    fl[TS_DE_Y] = t * cc
+    fl[TS_DE_GF] = t * 4l * hd
+    fl[TS_DE_GB] = t * 4l * hd
+    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_de_scratch, fl, 4l + sd + int64(nl) * (2l * cc + 4l), 0l)) {
+        return ts_decline("dur_enc", VulkanTtsDecline.memory)
+    }
+    let sl & = g_ts_pred_slots
+    let sc_ & = g_ts_de_scratch
+    let slab = ts_slab_rows(g_ts_pred)
+    let r_bert = ts_rows(sc_, TS_DE_BERT)
+    let r_den = ts_rows(sc_, TS_DE_DEN)
+    let r_x = ts_rows(sc_, TS_DE_X)
+    let r_y = ts_rows(sc_, TS_DE_Y)
+    let r_gf = ts_rows(sc_, TS_DE_GF)
+    let r_gb = ts_rows(sc_, TS_DE_GB)
+    let aux = sc_.aux
+    ts_aux_reset()
+    ts_aux_push(s, sd)
+    var hoff : int64[TS_MAX_DE_LSTMS]
+    for (i in range(nl)) {
+        hoff[i] = ts_style_rows(p.lns[i].fc, s, cc, true)
+    }
+    if (!ts_aux_upload(sc_)) {
+        return ts_decline("dur_enc", VulkanTtsDecline.memory)
+    }
+    upload_region_at(r_bert.dev, 0l, unsafe(addr<uint8 const?>(bert[0])), t * hidden * 4l)
+    //! the style appended as a broadcast residual of stride 0; the width holds the f0/n columns out
+    let pa_cat = TtsConcatArgs(c = uint(cc), rc = uint(sd), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(width), rows = uint(t))
+    vt_chain_one_shot("dur_enc", int64(nl), t) $(raw : VkCommandBuffer; var h : VkHaz) {
+        ts_lin(raw, h, slab, sl.bert_enc, hidden, cc, r_bert, r_den, t)
+        ts_concat(raw, h, r_den, aux, r_x, pa_cat)
+        for (i in range(nl)) {
+            ts_bilstm(raw, h, slab, sl.de_lstm[i], p.lstms[i], t, r_x, r_gf, r_gb, r_y)
+            ts_ln_rows(raw, h, aux, hoff[i], hoff[i] + cc, r_y, t, cc, ST2_ADAIN_EPS)
+            ts_concat(raw, h, r_y, aux, r_x, pa_cat)
+        }
+    }
+    unsafe(scratch_resize(out, t * width))
+    var dst = unsafe(addr(out[0]))
+    readback_range(r_x.dev, r_x.bit, sc_.hb, dst, t * width * 4l)
+    g_ts_encodes++
+    return true
+}
+
+// ----- the durations seat -----
+
+let private TS_DU_D = 0
+let private TS_DU_Y = 1
+let private TS_DU_GF = 2
+let private TS_DU_GB = 3
+let private TS_DU_LOG = 4
+let private TS_DU_RAW = 5
+
+//! The durations seat: the BiLSTM, the duration projection, the sigmoid sum a token over speed; raw [t]
+[hot_path, unused_argument(sc), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
+def private vulkan_styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : float; @scratch @exact_size var raw : array<float>; var sc : St2Scratch) : bool {
+    if (!vulkan_tower_on()) {
+        return ts_decline("durations", VulkanTtsDecline.knob)
+    }
+    let width = p.lstm.fwd.nin
+    let hd = p.lstm.fwd.hidden
+    let nb = p.duration_proj.nout
+    if (t < 1l || width % 32l != 0l || !tts_lstm_ok(p.lstm, width, TS_LSTM_MAX_HIDDEN) || p.duration_proj.nin != 2l * hd || nb < 1l || nb > 64l
+        || speed <= 0.0 || long_length(d) < t * width || !tts_pred_ok(p, TS_LSTM_MAX_HIDDEN)) {
+        return ts_decline("durations", VulkanTtsDecline.shape)
+    }
+    if (!vulkan_tower_arms() || !ts_pred_ensure()) {
+        return ts_decline("durations", VulkanTtsDecline.device)
+    }
+    var fl : TsFloats
+    fl[TS_DU_D] = t * width
+    fl[TS_DU_Y] = t * 2l * hd
+    fl[TS_DU_GF] = t * 4l * hd
+    fl[TS_DU_GB] = t * 4l * hd
+    fl[TS_DU_LOG] = t * nb
+    fl[TS_DU_RAW] = t
+    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_du_scratch, fl, 0l, 0l)) {
+        return ts_decline("durations", VulkanTtsDecline.memory)
+    }
+    let sl & = g_ts_pred_slots
+    let sc_ & = g_ts_du_scratch
+    let slab = ts_slab_rows(g_ts_pred)
+    let r_d = ts_rows(sc_, TS_DU_D)
+    let r_y = ts_rows(sc_, TS_DU_Y)
+    let r_gf = ts_rows(sc_, TS_DU_GF)
+    let r_gb = ts_rows(sc_, TS_DU_GB)
+    let r_log = ts_rows(sc_, TS_DU_LOG)
+    let r_raw = ts_rows(sc_, TS_DU_RAW)
+    upload_region_at(r_d.dev, 0l, unsafe(addr<uint8 const?>(d[0])), t * width * 4l)
+    vt_chain_one_shot("durations", 1l, t) $(raw_ : VkCommandBuffer; var h : VkHaz) {
+        ts_bilstm(raw_, h, slab, sl.dur_lstm, p.lstm, t, r_d, r_gf, r_gb, r_y)
+        ts_lin(raw_, h, slab, sl.dur_proj, 2l * hd, nb, r_y, r_log, t)
+        ts_sigsum(raw_, h, r_log, r_raw, t, nb, speed)
+    }
+    unsafe(scratch_resize(raw, t))
+    var dst = unsafe(addr(raw[0]))
+    readback_range(r_raw.dev, r_raw.bit, sc_.hb, dst, t * 4l)
+    g_ts_encodes++
+    return true
+}
+
+// ----- the prosody seat -----
+
+let private TS_PR_EN = 0     //! the encoder rows [frames][c]
+let private TS_PR_Y = 1      //! the shared BiLSTM's rows [frames][2H]
+let private TS_PR_GF = 2
+let private TS_PR_GB = 3
+let private TS_PR_A = 4      //! a branch's ping-pong rows
+let private TS_PR_B = 5
+let private TS_PR_R = 6      //! a block's normed rows
+let private TS_PR_POOL = 7   //! ... its pooled rows
+let private TS_PR_C1 = 8     //! ... its first conv's rows
+let private TS_PR_SC = 9     //! ... its shortcut rows (the nearest copy)
+let private TS_PR_SC2 = 10   //! ... and the learned shortcut's
+let private TS_PR_COL = 11   //! the im2col columns
+let private TS_PR_IDX = 12   //! the nearest upsample's row map, r / 2
+let private TS_PR_F0 = 13    //! the F0 branch's projection [t][1]
+let private TS_PR_N = 14     //! ... and the energy branch's
+
+//! a prosody branch's geometry: the widest row count and width its blocks reach, the widest im2col row, the aux floats its norms take
+struct private TsPrShape {
+    t_max : int64
+    c_max : int64
+    kdim_max : int64
+    aux : int64
+}
+
+def private ts_conv_kdim(c : TtsConv1d) : int64 => tts_round_up(c.k * c.cin, 32l)
+
+//! a residual block's rows form on the seat, or -1: the block's output row count, the shape noted
+def private ts_res_shape(var sh : TsPrShape; b : St2AdainResBlk; t : int64) : int64 {
+    return -1l if (b.dim_in_s % 32l != 0l || b.dim_out % 64l != 0l || b.dim_in_s < b.dim_in || !tts_res_ok(b) || b.conv1.transposed || b.conv2.transposed
+        || b.conv1.cin != b.dim_in_s || b.conv1.cout != b.dim_out || b.conv2.cin != b.dim_out || b.conv2.cout != b.dim_out
+        || (b.learned_sc && (b.conv1x1.transposed || b.conv1x1.cout != b.dim_out || b.conv1x1.cin != b.dim_in_s))
+        || !tts_lin_ok(b.norm1.fc) || b.norm1.fc.nout != 2l * b.dim_in_s || !tts_lin_ok(b.norm2.fc) || b.norm2.fc.nout != 2l * b.dim_out)
+    var t1 = t
+    if (b.upsample) {
+        return -1l if (b.pool.groups != b.pool.cin || b.pool.cin != b.pool.cout || !b.pool.transposed || empty(b.pool.w) || b.pool.cin != b.dim_in_s)
+        t1 = conv1d_out_len(b.pool, t)
+        return -1l if (t1 != 2l * t)
+    }
+    return -1l if (conv1d_out_len(b.conv1, t1) != t1 || conv1d_out_len(b.conv2, t1) != t1 || (b.learned_sc && conv1d_out_len(b.conv1x1, t1) != t1))
+    sh.t_max = max(sh.t_max, t1)
+    sh.c_max = max(sh.c_max, max(b.dim_in_s, b.dim_out))
+    sh.kdim_max = max(sh.kdim_max, max(ts_conv_kdim(b.conv1), ts_conv_kdim(b.conv2)))
+    if (b.learned_sc) {
+        sh.kdim_max = max(sh.kdim_max, ts_conv_kdim(b.conv1x1))
+    }
+    sh.aux += 2l * (b.dim_in_s + b.dim_out) + 8l
+    return t1
+}
+
+//! a branch's blocks then its projection on the seat, or -1: the projection's row count
+def private ts_branch_shape(var sh : TsPrShape; blocks : array<St2AdainResBlk>; proj : TtsConv1d; frames, cin : int64) : int64 {
+    return -1l if (length(blocks) > TS_MAX_RES_BLOCKS || !tts_conv_ok(proj) || proj.transposed || proj.cout != 1l)
+    var t = frames
+    var c = cin
+    for (b in blocks) {
+        return -1l if (b.dim_in_s != c)
+        t = ts_res_shape(sh, b, t)
+        return -1l if (t < 0l)
+        c = b.dim_out
+    }
+    return -1l if (proj.cin != c || conv1d_out_len(proj, t) != t)
+    sh.kdim_max = max(sh.kdim_max, ts_conv_kdim(proj))
+    sh.c_max = max(sh.c_max, c)
+    return t
+}
+
+//! the CPU adain_res_blk, dispatch for dispatch, from bin [t][dim_in_s] into bout [t1][dim_out]; t1 back
+def private ts_res_blk(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; b : St2AdainResBlk; sl : TtsResSlots; hoff1, hoff2 : int64;
+                       bin : TsRows; t : int64; bout : TsRows) : int64 {
+    let r_r = ts_rows(sc_, TS_PR_R)
+    let r_pool = ts_rows(sc_, TS_PR_POOL)
+    let r_c1 = ts_rows(sc_, TS_PR_C1)
+    let r_sc = ts_rows(sc_, TS_PR_SC)
+    let r_sc2 = ts_rows(sc_, TS_PR_SC2)
+    let r_col = ts_rows(sc_, TS_PR_COL)
+    ts_adain(raw, h, slab, sc_, bin, r_r, t, b.dim_in_s, sl.n1, hoff1)
+    var t1 = t
+    if (b.upsample) {
+        t1 = conv1d_out_len(b.pool, t)
+        ts_pool_dw(raw, h, slab, b.pool, sl.pool_w, sl.pool_b, r_r, r_pool, t, t1)
+        ts_conv(raw, h, slab, sl.c1, b.conv1, t1, t1, r_pool, r_col, r_c1)
+    } else {
+        ts_conv(raw, h, slab, sl.c1, b.conv1, t1, t1, r_r, r_col, r_c1)
+    }
+    ts_adain(raw, h, slab, sc_, r_c1, r_c1, t1, b.dim_out, sl.n2, hoff2)
+    ts_conv(raw, h, slab, sl.c2, b.conv2, t1, t1, r_c1, r_col, bout)
+    let n = t1 * b.dim_out
+    if (b.upsample) {
+        ts_gather_rows(raw, h, bin, ts_rows(sc_, TS_PR_IDX), r_sc, t1, b.dim_in_s)
+        if (b.learned_sc) {
+            ts_conv(raw, h, slab, sl.c1x1, b.conv1x1, t1, t1, r_sc, r_col, r_sc2)
+            ts_add_scale(raw, h, bout, r_sc2, bout, n, TS_JOIN)
+        } else {
+            ts_add_scale(raw, h, bout, r_sc, bout, n, TS_JOIN)
+        }
+    } elif (b.learned_sc) {
+        ts_conv(raw, h, slab, sl.c1x1, b.conv1x1, t1, t1, bin, r_col, r_sc2)
+        ts_add_scale(raw, h, bout, r_sc2, bout, n, TS_JOIN)
+    } else {
+        ts_add_scale(raw, h, bout, bin, bout, n, TS_JOIN)
+    }
+    return t1
+}
+
+//! a prosody branch's blocks, pinging between the A and B rows, then its single-channel projection into `out` [t][1]; t back
+def private ts_branch(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; blocks : array<St2AdainResBlk>; slots : array<TtsResSlots>;
+                      proj : TtsConv1d; pslot : TtsConvSlot; hoffs : int64[TS_MAX_RES_BLOCKS * 4]; hbase : int; x : TsRows; frames : int64; out : TsRows) : int64 {
+    let r_a = ts_rows(sc_, TS_PR_A)
+    let r_b = ts_rows(sc_, TS_PR_B)
+    var t = frames
+    let nb = length(blocks)
+    for (i in range(nb)) {
+        let src = i == 0 ? x : (i % 2 == 1 ? r_a : r_b)
+        let dst = i % 2 == 0 ? r_a : r_b
+        t = ts_res_blk(raw, h, slab, sc_, blocks[i], slots[i], hoffs[hbase + 2 * i], hoffs[hbase + 2 * i + 1], src, t, dst)
+    }
+    let fin = nb == 0 ? x : (nb % 2 == 1 ? r_a : r_b)
+    ts_conv(raw, h, slab, pslot, proj, t, t, fin, ts_rows(sc_, TS_PR_COL), out)
+    return t
+}
+
+//! the prosody seat's slots for this call's geometry
+def private ts_pr_floats(sh : TsPrShape; cc, hd, frames : int64) : TsFloats {
+    let cm = sh.c_max
+    let tm = sh.t_max
+    var fl : TsFloats
+    fl[TS_PR_EN] = frames * cc
+    fl[TS_PR_Y] = frames * 2l * hd
+    fl[TS_PR_GF] = frames * 4l * hd
+    fl[TS_PR_GB] = frames * 4l * hd
+    for (i in range(TS_PR_A, TS_PR_SC2 + 1)) {
+        fl[i] = tm * cm
+    }
+    fl[TS_PR_COL] = tm * sh.kdim_max
+    fl[TS_PR_IDX] = tm
+    fl[TS_PR_F0] = tm
+    fl[TS_PR_N] = tm
+    return fl
+}
+
+//! the style rows on the device: per branch (the energy branch's from `nbase`), per block, its two norms' fc(style); false where the aux rows ran short
+def private ts_pr_style_rows(p : St2Predictor; s : array<float>; var hoffs : int64[TS_MAX_RES_BLOCKS * 4]; nbase : int; sc_ : TsScratch) : bool {
+    ts_aux_reset()
+    for (i in range(length(p.f0))) {
+        hoffs[2 * i] = ts_style_rows(p.f0[i].norm1.fc, s, p.f0[i].dim_in_s, false)
+        hoffs[2 * i + 1] = ts_style_rows(p.f0[i].norm2.fc, s, p.f0[i].dim_out, false)
+    }
+    for (i in range(length(p.n))) {
+        hoffs[nbase + 2 * i] = ts_style_rows(p.n[i].norm1.fc, s, p.n[i].dim_in_s, false)
+        hoffs[nbase + 2 * i + 1] = ts_style_rows(p.n[i].norm2.fc, s, p.n[i].dim_out, false)
+    }
+    return ts_aux_upload(sc_)
+}
+
+//! The prosody seat: the shared BiLSTM over the aligned rows, then each branch's residual blocks and projection; f0 and n [f2]
+[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
+def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, frames : int64; s : array<float>;
+                                     @scratch @exact_size var f0 : array<float>; @scratch @exact_size var n : array<float>; var f2 : int64&; var sc : St2Scratch) : bool {
+    if (!vulkan_tower_on()) {
+        return ts_decline("prosody", VulkanTtsDecline.knob)
+    }
+    let hd = p.shared_lstm.fwd.hidden
+    let sd = long_length(s)
+    var sh = TsPrShape(t_max = frames, c_max = max(cc, 2l * hd), kdim_max = 32l, aux = 4l)
+    if (frames < 1l || cc % 32l != 0l || !tts_lstm_ok(p.shared_lstm, cc, TS_LSTM_MAX_HIDDEN) || empty(p.f0) || long_length(en) < cc * frames
+        || !tts_pred_ok(p, TS_LSTM_MAX_HIDDEN)) {
+        return ts_decline("prosody", VulkanTtsDecline.shape)
+    }
+    let tf = ts_branch_shape(sh, p.f0, p.f0_proj, frames, 2l * hd)
+    let tn = ts_branch_shape(sh, p.n, p.n_proj, frames, 2l * hd)
+    if (tf < 0l || tn < 0l || tf != tn) {
+        return ts_decline("prosody", VulkanTtsDecline.shape)
+    }
+    for (b in p.f0) {
+        return ts_decline("prosody", VulkanTtsDecline.shape) if (b.norm1.fc.nin != sd || b.norm2.fc.nin != sd)
+    }
+    for (b in p.n) {
+        return ts_decline("prosody", VulkanTtsDecline.shape) if (b.norm1.fc.nin != sd || b.norm2.fc.nin != sd)
+    }
+    if (!vulkan_tower_arms() || !ts_pred_ensure()) {
+        return ts_decline("prosody", VulkanTtsDecline.device)
+    }
+    let fl = ts_pr_floats(sh, cc, hd, frames)
+    if (!ts_pred_attach(p) || !ts_scratch_ready(g_ts_pr_scratch, fl, sh.aux, 2l * sh.c_max)) {
+        return ts_decline("prosody", VulkanTtsDecline.memory)
+    }
+    let sl & = g_ts_pred_slots
+    let sc_ & = g_ts_pr_scratch
+    let slab = ts_slab_rows(g_ts_pred)
+    let r_en = ts_rows(sc_, TS_PR_EN)
+    let r_y = ts_rows(sc_, TS_PR_Y)
+    let r_gf = ts_rows(sc_, TS_PR_GF)
+    let r_gb = ts_rows(sc_, TS_PR_GB)
+    let r_idx = ts_rows(sc_, TS_PR_IDX)
+    let r_f0 = ts_rows(sc_, TS_PR_F0)
+    let r_n = ts_rows(sc_, TS_PR_N)
+    var hoffs : int64[TS_MAX_RES_BLOCKS * 4]
+    let nbase = TS_MAX_RES_BLOCKS * 2
+    if (!ts_pr_style_rows(p, s, hoffs, nbase, sc_)) {
+        return ts_decline("prosody", VulkanTtsDecline.memory)
+    }
+    g_ts_idx_host |> ensure_length(sh.t_max)
+    for (i in range64(sh.t_max)) {
+        g_ts_idx_host[i] = int(i / 2l)
+    }
+    upload_region_at(r_idx.dev, 0l, unsafe(addr<uint8 const?>(g_ts_idx_host[0])), sh.t_max * 4l)
+    var en_tm & = unsafe(sc.pr_en_tm)
+    transpose_ct(en, cc, frames, en_tm)
+    upload_region_at(r_en.dev, 0l, unsafe(addr<uint8 const?>(en_tm[0])), frames * cc * 4l)
+    vt_chain_one_shot("prosody", int64(length(p.f0) + length(p.n)), frames) $(raw : VkCommandBuffer; var h : VkHaz) {
+        ts_bilstm(raw, h, slab, sl.sh_lstm, p.shared_lstm, frames, r_en, r_gf, r_gb, r_y)
+        ts_branch(raw, h, slab, sc_, p.f0, sl.f0b, p.f0_proj, sl.f0_proj, hoffs, 0, r_y, frames, r_f0)
+        ts_branch(raw, h, slab, sc_, p.n, sl.nb, p.n_proj, sl.n_proj, hoffs, nbase, r_y, frames, r_n)
+    }
+    unsafe(scratch_resize(f0, tf))
+    unsafe(scratch_resize(n, tn))
+    var dst_f0 = unsafe(addr(f0[0]))
+    readback_range(r_f0.dev, r_f0.bit, sc_.hb, dst_f0, tf * 4l)
+    var dst_n = unsafe(addr(n[0]))
+    readback_range(r_n.dev, r_n.bit, sc_.hb, dst_n, tn * 4l)
+    f2 = tf
+    g_ts_encodes++
+    return true
+}
+
 [init]
 def dasllama_vulkan_tts_register {
     register_vk_drop_hook(@@ts_forget)
     static_if (!typeinfo builtin_module_exists(das_metal)) {
-        register_styletts2_gpu(St2GpuDriver(albert = @@vulkan_styletts2_albert, text = @@vulkan_styletts2_text))
+        register_styletts2_gpu(St2GpuDriver(albert = @@vulkan_styletts2_albert, text = @@vulkan_styletts2_text, dur_enc = @@vulkan_styletts2_dur_enc,
+            durations = @@vulkan_styletts2_durations, prosody = @@vulkan_styletts2_prosody))
     }
 }

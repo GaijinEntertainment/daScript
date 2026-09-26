@@ -339,7 +339,10 @@ under poisoned weights, the columns at an offset) and a transposed k4 stride-2 o
 offset); `test_vkt_tts_lstm_dir` holds one LSTM direction (`TtsLstmDir`) at hidden 64 and 200 over
 gates the CPU `linear_rows` computed, both directions into one shared row set (the backward w_hh
 and gates at offsets) against the CPU `bilstm`, and the forward weights walked backward against the
-CPU's backward walk, which must move the output off the forward walk; every output under a NaN
+CPU's backward walk, which must move the output off the forward walk; `test_vkt_tts_pool_dw` holds
+the depthwise transposed pool (`TtsPoolDw`, k3 stride 2 pad 1 over 22 channels, the output pad
+reaching past the input on the last row) against the CPU `conv1d_rows_transposed_depthwise`, the
+weight and bias rows at offsets in one slab plane between poisoned slots; every output under a NaN
 fill, every compare with its poisoned element.
 `test_vulkan_tts_kernels.das` - model-free (a Vulkan device, else skips): the TTS tower's Vulkan
 kernel classes against their CPU oracles - `test_vkt_f32_gemm` holds the f32-exact tile GEMM's two
@@ -354,7 +357,19 @@ three-element tail and inputs past the tanh clamp (control: the bar tells the f1
 positive one passed) - both maps leaving the elements outside their run untouched - and
 `test_vkt_attn` the bidirectional attention against `attention_rows` at the 1e-5 bar at t 37 /
 4 x 64, t 130 / 2 x 128 and the full 512-key row / 2 x 64 (control: zeroing the last key moves the
-first query row).
+first query row); and the predictor and decoder row classes - `test_vkt_concat` the concat rows
+(`TtsConcat`) bit-exact against the CPU concat on two arms, one style row broadcast to every position
+(`rs = 0`) and the f0 and noise columns at their strides with a zero pad past them (control: the
+columns follow their strides), `test_vkt_sigsum` the duration sigmoid sums (`TtsSigSum`, 50 of 64
+columns, the pad columns carrying garbage) against the in-test f32 sum at the approx bar (control:
+the pad columns stay out of the sum), `test_vkt_colstats` the column statistics (`TtsColStats`) against
+double-precision sums at t 45 / 72 channels and t 300 / 20 (a lane's second row),
+`test_vkt_adain` the statistics then both fused AdaIN stamps (`TtsAdainLeaky`, `TtsAdainSnake`) against
+the CPU `adain_rows_into` followed by `leaky_relu` or `snake_rows`, every plane at an element base
+off zero, plus the leaky stamp in place (bit for bit the out-of-place rows, the input overwritten),
+the prefixes before the bases kept, and `test_vkt_add_scale` the residual join (`TtsAddScale`)
+bit-exact against (a + b) / sqrt(2) in f32 over 1030 elements at offsets, out of place and in place,
+the elements outside the run kept.
 
 `test_vulkan_tower_kernels.das` - model-free (a Vulkan device, else skips): the vision and audio towers'
 kernel classes against their CPU oracles - the bidirectional flash tiles (h64 and the padded h128

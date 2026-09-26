@@ -13374,3 +13374,253 @@ class TtsLstmDir {
         }
     }
 }
+
+struct TtsConcatArgs {
+    c : uint          //! x's row width
+    rc : uint         //! the residual columns, read only under `with_res`
+    rs : uint         //! the residual rows' stride: 0 broadcasts one row to every position
+    f0s : uint        //! the F0 column's row stride
+    ns : uint         //! the noise column's row stride
+    with_res : uint   //! 1 = the residual columns follow x
+    width : uint      //! the output row width, the columns past the last input zero
+    rows : uint
+}
+
+//! o [rows][width] = cat(x [rows][c], res at stride rs under `with_res`, f0 at stride f0s, nd at stride ns), zero-padded to
+//! width - the CPU `concat_rows`; one element an invocation
+[vk_dispatch(name = "tts_concat_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsConcat {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 res : array<float>
+    @ssbo @binding = 2 f0 : array<float>
+    @ssbo @binding = 3 nd : array<float>
+    @ssbo @binding = 4 o : array<float>
+    @push_constant pa : TtsConcatArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.rows * pa.width) {
+            let r = gid / pa.width
+            let j = gid % pa.width
+            let rc = pa.with_res != 0u ? pa.rc : 0u
+            var v = 0.0
+            if (j < pa.c) {
+                v = x[r * pa.c + j]
+            } elif (j < pa.c + rc) {
+                v = res[r * pa.rs + (j - pa.c)]
+            } elif (j == pa.c + rc) {
+                v = f0[r * pa.f0s]
+            } elif (j == pa.c + rc + 1u) {
+                v = nd[r * pa.ns]
+            }
+            o[gid] = v
+        }
+    }
+}
+
+//! the concat's workgroup count over `total` = rows * width elements
+def tts_concat_wgs(total : int64) : int64 => (total + 255l) / 256l
+
+struct TtsSigSumArgs {
+    t : uint       //! the rows
+    nb : uint      //! the logits summed a row
+    ls : uint      //! the logit rows' stride
+    speed : float  //! the divisor of each row's sum
+}
+
+//! raw[r] = (the sum of sigmoid(logits[r][j]) over j < nb, in j order) / speed - the CPU `styletts2_durations`' raw
+//! durations; one row an invocation
+[vk_dispatch(name = "tts_sigsum_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsSigSum {
+    @ssbo @binding = 0 logits : array<float>
+    @ssbo @binding = 1 raw : array<float>
+    @push_constant pa : TtsSigSumArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let r = gl_GlobalInvocationID.x
+        if (r < pa.t) {
+            var acc = 0.0
+            var j = 0u
+            while (j < pa.nb) {
+                acc += 1.0 / (1.0 + exp(-logits[r * pa.ls + j]))
+                j++
+            }
+            raw[r] = acc / pa.speed
+        }
+    }
+}
+
+//! the sigmoid sums' workgroup count over `t` rows
+def tts_sigsum_wgs(t : int64) : int64 => (t + 255l) / 256l
+
+struct TtsStatsArgs {
+    t : uint   //! the rows
+    c : uint   //! the channels, x's row width
+}
+
+//! the instance norm's column statistics of x [t][c]: stats[ch] = the channel's mean, stats[c + ch] = its sum of squared
+//! deviations from that mean - the CPU `column_stats`; one workgroup a channel, wgs = c
+[vk_dispatch(name = "tts_colstats_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsColStats : WgReduceBase {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 stats : array<float>
+    @push_constant pa : TtsStatsArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let ch = gl_WorkGroupID.x
+        let lid = gl_LocalInvocationID.x
+        var s = 0.0
+        var r = lid
+        while (r < pa.t) {
+            s += x[r * pa.c + ch]
+            r += 256u
+        }
+        let tot = wg_sum(s, 0u)
+        let mean = tot / float(pa.t)
+        var q = 0.0
+        r = lid
+        while (r < pa.t) {
+            let dv = x[r * pa.c + ch] - mean
+            q += dv * dv
+            r += 256u
+        }
+        let qtot = wg_sum(q, 1u)
+        if (lid == 0u) {
+            stats[ch] = mean
+            stats[pa.c + ch] = qtot
+        }
+    }
+}
+
+struct TtsAdainArgs {
+    c : uint       //! the channels
+    t : uint       //! the rows the statistics ran over
+    eps : float
+    xoff : uint    //! x's element base
+    yoff : uint    //! y's element base
+    hoff : uint    //! the style fc rows' base in h: gamma [c], then beta [c]
+    gwoff : uint   //! the norm's scale row in wn
+    gboff : uint   //! the norm's shift row in wn
+    aoff : uint    //! Snake's alpha row in wn, read by the Snake stamp alone
+}
+
+//! AdaIN as the CPU `adain_affine` folds it - the column statistics, the norm's own scale and shift, then (1 + gamma) and
+//! beta - followed by Snake or LeakyReLU(0.2); y may be x itself; one element an invocation over t * c
+[ |> template_struct_instance]
+class template TtsAdainT {
+    @template_constant SNAKE : bool = false
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 y : array<float>
+    @ssbo @binding = 2 stats : array<float>
+    @ssbo @binding = 3 h : array<float>
+    @ssbo @binding = 4 @role = "weight" wn : array<float>
+    @push_constant pa : TtsAdainArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.t * pa.c) {
+            let ci = gid % pa.c
+            let rs = 1.0 / sqrt(stats[pa.c + ci] / float(pa.t) + pa.eps)
+            let g = wn[pa.gwoff + ci]
+            let g1 = 1.0 + h[pa.hoff + ci]
+            let scale = rs * g * g1
+            let shift = (wn[pa.gboff + ci] - stats[ci] * rs * g) * g1 + h[pa.hoff + pa.c + ci]
+            let v = mad(x[pa.xoff + gid], scale, shift)
+            static_if (SNAKE) {
+                let a = wn[pa.aoff + ci]
+                let sn = sin(a * v)
+                y[pa.yoff + gid] = mad(1.0 / a, sn * sn, v)
+            } else {
+                y[pa.yoff + gid] = v > 0.0 ? v : v * 0.2
+            }
+        }
+    }
+}
+
+[vk_dispatch(name = "tts_adain_leaky_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsAdainLeaky : TtsAdainT {}
+
+[vk_dispatch(name = "tts_adain_snake_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsAdainSnake : TtsAdainT {
+    override SNAKE = true
+}
+
+//! the AdaIN stamps' workgroup count over `total` = t * c elements
+def tts_adain_wgs(total : int64) : int64 => (total + 255l) / 256l
+
+struct TtsPoolArgs {
+    c : uint       //! the channels, one tap row each
+    k : uint       //! the taps
+    stride : uint
+    pad_l : uint   //! the cropped left edge
+    dil : uint
+    t_in : uint
+    t_out : uint
+    woff : uint    //! w [c][k]'s element base in wn
+    boff : uint    //! the bias row's element base in wn
+}
+
+//! the depthwise transposed pool on rows: y [t_out][c] gathers the rows of x [t_in][c] its taps reach, w [c][k] - the CPU
+//! `conv1d_rows_transposed_depthwise`; one element an invocation
+[vk_dispatch(name = "tts_pool_dw_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsPoolDw {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 y : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @push_constant pa : TtsPoolArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.t_out * pa.c) {
+            let p = gid / pa.c
+            let j = gid % pa.c
+            var acc = wn[pa.boff + j]
+            var kk = 0u
+            while (kk < pa.k) {
+                let num = int(p + pa.pad_l) - int(kk * pa.dil)
+                if (num >= 0 && uint(num) % pa.stride == 0u && uint(num) / pa.stride < pa.t_in) {
+                    acc = mad(wn[pa.woff + j * pa.k + kk], x[(uint(num) / pa.stride) * pa.c + j], acc)
+                }
+                kk++
+            }
+            y[gid] = acc
+        }
+    }
+}
+
+//! the pool's workgroup count over `total` = t_out * c elements
+def tts_pool_dw_wgs(total : int64) : int64 => (total + 255l) / 256l
+
+struct TtsAddScaleArgs {
+    nelem : uint
+    scale : float
+    aoff : uint    //! each plane's element base
+    boff : uint
+    ooff : uint
+}
+
+//! o = (a + b) * scale over nelem elements - the residual join's 1 / sqrt(2) and the averaged stage sums; o may be a;
+//! one element an invocation
+[vk_dispatch(name = "tts_add_scale_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsAddScale {
+    @ssbo @binding = 0 a : array<float>
+    @ssbo @binding = 1 b : array<float>
+    @ssbo @binding = 2 o : array<float>
+    @push_constant pa : TtsAddScaleArgs
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        if (i < pa.nelem) {
+            o[pa.ooff + i] = (a[pa.aoff + i] + b[pa.boff + i]) * pa.scale
+        }
+    }
+}
+
+//! the add-and-scale's workgroup count over `nelem` elements
+def tts_add_scale_wgs(nelem : int64) : int64 => (nelem + 255l) / 256l

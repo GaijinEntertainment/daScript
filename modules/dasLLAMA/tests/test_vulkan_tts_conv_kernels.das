@@ -17,8 +17,8 @@ require daslib/jobque_boost
 
 //! The TTS tower's sequence classes on Vulkan against the CPU chain (a Vulkan device, else the cells skip): the conv
 //! im2col in both directions, fed through F32GemmB and held to the CPU `conv1d` end to end, and one LSTM direction
-//! held to the CPU `bilstm` on both walks, at channel and hidden widths off every lattice, with the poisoned-element
-//! control on every compare.
+//! held to the CPU `bilstm` on both walks, and the depthwise transposed pool held to its CPU rows form, at channel and
+//! hidden widths off every lattice, with the poisoned-element control on every compare.
 
 let private POISON = 7.5   //! the pads a kernel must never read: a large finite value, so a stray read lands in the sum
 
@@ -414,6 +414,102 @@ def test_vkt_tts_lstm_dir(t0 : T?) {
             } else {
                 t |> skip("dasVulkan not present")
             }
+        }
+    }
+}
+
+let private PD_C = 22
+let private PD_K = 3
+let private PD_TIN = 19
+let private PD_TOUT = 38     //! (19 - 1) * 2 - 2 + 2 + 1 + 1: the output pad's last row reaches past t_in on its first tap
+let private PD_WOFF = 5      //! the slab's weight rows' element base, poisoned slots before it
+let private PD_GAP = 3       //! poisoned slots between the weight rows and the bias row
+
+//! the pool's slab plane: w [c][k] at PD_WOFF, the bias row after PD_GAP poisoned slots, four poisoned slots past it
+def private pool_slab(c : TtsConv1d) : array<float> {
+    let nw = PD_C * PD_K
+    let boff = PD_WOFF + nw + PD_GAP
+    var wn : array<float>
+    wn |> resize(boff + PD_C + 4)
+    for (v in wn) {
+        v = POISON
+    }
+    for (i in range(nw)) {
+        wn[PD_WOFF + i] = c.w[i]
+    }
+    for (j in range(PD_C)) {
+        wn[boff + j] = c.b[j]
+    }
+    return <- wn
+}
+
+//! the depthwise transposed pool against the CPU rows form: the output under a NaN fill first
+def private pool_dw_arm(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let tag = "tts_pool_dw k3 s2 c22"
+        let B_Y = 1u
+        var c = TtsConv1d(cin = int64(PD_C), cout = int64(PD_C), k = int64(PD_K), stride = 2l, pad_l = 1l, pad_r = 1l, dilation = 1l,
+            groups = int64(PD_C), output_padding = 1l, transposed = true)
+        c.w <- row_fill(PD_C * PD_K, 37, 5, 0.02, 0.9)
+        c.b <- row_fill(PD_C, 29, 11, 0.02, 0.9)
+        let tout = int(conv1d_out_len(c, int64(PD_TIN)))
+        t |> equal(tout, PD_TOUT, "{tag}: the output length")
+        var x <- row_fill(PD_TIN * PD_C, 41, 7, 0.05, 2.1)
+        var want : array<float>
+        with_job_que() {
+            setup_dasllama_jobque_()
+            conv1d_rows_transposed_depthwise(c, x, int64(PD_TIN), want)
+        }
+        var wn <- pool_slab(c)
+        let ny = tout * PD_C
+        let bx = long_length(x) * 4l
+        let bw = long_length(wn) * 4l
+        let by = int64(ny) * 4l
+        let xd = make_device_buf(bx)
+        let wd = make_device_buf(bw)
+        let yd = make_device_buf(by)
+        var host = make_host_buf(by, true, [cached = true])
+        unsafe {
+            upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
+            upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
+        }
+        nan_sentinel_upload(yd, by)
+        var s = set_tts_pool_dw_cls(fixed_array(xd, yd, wd), fixed_array(bx, by, bw), fixed_array(0u, B_Y, 0u))
+        var pa = TtsPoolArgs(c = uint(PD_C), k = uint(PD_K), stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(PD_TIN), t_out = uint(tout),
+            woff = uint(PD_WOFF), boff = uint(PD_WOFF + PD_C * PD_K + PD_GAP))
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            enc_tts_pool_dw_cls(raw, h, s, pa, tts_pool_dw_wgs(int64(ny)))
+            cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
+        }
+        var y_dev <- staged(host.mapped, 0l, ny, type<float>)
+        // `approx`'s 2e-3: both sides f32 over at most two taps a channel
+        let bad = mismatch_approx(y_dev, want)
+        log_maxdiff(tag, y_dev, want, PD_C)
+        t |> success(bad == 0, "{tag}: the pool == the CPU conv1d_rows_transposed_depthwise over {tout} x {PD_C} ({bad} of {ny} off)")
+        t |> success(!approx(y_dev[ny - 1], want[ny - 1] + 0.5), "{tag}: the bar reds a poisoned element")
+        destroy_device_buf(xd)
+        destroy_device_buf(wd)
+        destroy_device_buf(yd)
+        destroy_host_buf(host)
+        delete c
+        delete x
+        delete want
+        delete wn
+        delete y_dev
+    }
+}
+
+[test]
+def test_vkt_tts_pool_dw(t0 : T?) {
+    t0 |> run("the depthwise transposed pool k3 s2 p1 over 22 channels == the CPU conv1d_rows_transposed_depthwise") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tts_pool_dw_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            pool_dw_arm(t)
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }
