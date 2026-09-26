@@ -20,11 +20,12 @@ stripped through `vkd_pipes_rebuild`) interleaved in one process, two rounds eac
 `DECVEC` verdict comes from one instrument; every arm of the sweep dispatches over two alternating
 output planes under a fresh hazard each, the form the served graph overlaps (the RTX 5080 rows the
 ledger carries read the one-plane form, which serialized a chain on the plane's write-after-write
-hazard). Two forms hold one output plane and one hazard rail on purpose: the `serial` rows
+hazard). Three forms hold one output plane and one hazard rail on purpose: the `serial` rows
 (`cm2g:<fmt>`) read a single dispatch's latency - the cost a dependent decode chain pays a hop -
-not the overlapped throughput, and the `lastwg` arm (an f32 row GEMV then `cls_ar` against the
+not the overlapped throughput, the `lastwg` arm (an f32 row GEMV then `cls_ar` against the
 GEMV whose last workgroup runs the epilogue) is the hand-off's retained reference beside the
-shipped `Q8GemvAr`. The `khrx` arm is the second axis for the KHR kq
+shipped `Q8GemvAr`, and the `wh` arm reads the serialized cost of the whisper encoder's GEMMs the
+way its chain pays them, one dependent dispatch after another. The `khrx` arm is the second axis for the KHR kq
 tile. It runs eight arms: a resync copy of the shipped k4 tile with no lever moved
 (`khrpx_ship`), five copies each with one lever moved back - the weight stage as a constant fill
 or as the four-wide callback on the plane element, f32 accumulators, a 16-row strip tiling, and
@@ -33,7 +34,17 @@ The resync copy is the row a lever's arm is read against, and its bit-exact read
 shipped class is what says the copies still track the shipped body. The sweep runs three whole
 windows and one partial window of 300 tokens, the row that takes the edge store; the copies
 stage and store whole tiles, so on the partial window only the two controls run.
-`khrprof:<arm>` submits one arm alone for a GPU profiler. The `mmqx` arm is the first axis for
+`khrprof:<arm>` submits one arm alone for a GPU profiler. `wh` times the whisper large-v3-turbo
+encoder's role shapes over one 30 s chunk (1500 rows, d 1280, ff 5120: q / k / v / o, fc1, fc2,
+fc2 under the split-k ladder and q / k / v / o under split 2), then the same shapes at 1536 rows,
+where every l column is whole - the alternate that reads what the 1500 rows' partial last column
+costs the l stamp. The l and m columns are its race: their rounds alternate, each figure its best
+round, each on its own row. Its feed carries `TILE_READ_SLACK` rows past the last, which the m
+column's unclamped partial load reads; it skips the sdot4 mm tile, which stalls at 1500 rows on
+the fc1 shape, and it needs a coopmat2 device in cm2 mode, exiting non-zero otherwise. Its
+third-party row is ggml's per-op `MUL_MAT` on the same shapes, read off whisper-cli's logger -
+`GGML_VK_PERF_LOGGER=1 whisper-cli -m ggml-large-v3-turbo-q8_0.bin -f jfk.wav -t 16 -bs 1 -bo 1
+-nf`, the whisper.cpp build sec.2.20 of `ARCHITECTURE_MEASUREMENT.md` pins. The `mmqx` arm is the first axis for
 the integer tile: the sdot4 k4 tile against register-block prototypes over the same planes. Both
 sweeps time the served graph's shape first: sixteen dispatches per submit over two alternating
 outputs with a fresh hazard each, the arms interleaved round by round, an arm's figure its best

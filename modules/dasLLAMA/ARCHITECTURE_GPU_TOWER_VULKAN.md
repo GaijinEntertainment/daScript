@@ -13,7 +13,7 @@ the Q8_0 batch tile (or the f16 GEMM class) and the flash tile. The row operatio
 `[vk_dispatch]` classes in `dasllama_vulkan_classes.das`, each the device twin of one CPU tower
 helper (`rms_rows`, `clamp_rows`, `requant_rows_q8_sized`, `rope_neox_2d_rows`,
 `rope_neox_tab_rows`, `layernorm`, `add_inplace_rows`) or of one closed form (the clamped
-GEGLU-quick, the tanh GELU with the CPU LUT's f16 rounding, silu(g + bg) . (u + bu)); the CPU
+GEGLU-quick, the tanh GELU with the CPU LUT's f16 rounding); the CPU
 helper is each class's oracle in `tests/test_vulkan_tower_kernels.das`. The seams fold what the
 CPU loop spells as two calls: a post-add writes x += y (+ b) and, in the same workgroup, the next
 branch's pre-norm off the updated row.
@@ -72,7 +72,10 @@ the chain runs it (gemma4a's projector tail). Where a chain and its family part 
   into a stash read back beside x, and the tap mergers run on the CPU off those rows, a tap past
   a truncated tower's blocks skipped as the CPU loop skips it. **qwen25v** has no q8 lane, so its
   blocks-only seat (`register_qwen25v_gpu_blocks`) runs after the CPU stem and before the CPU
-  tail over the baked halfword twin through the f16 GEMM class; a bf16-sourced twin declines.
+  tail over the baked halfword twin through the f16 GEMM class; a bf16-sourced twin declines. Its
+  gated hidden, silu(g + bg) . (u + bu), runs on the LLM's biased f16 act stamp (`ActF16B`) at a
+  zero row map (`rex_dev`: every row the one expert), with the norms plane bound as both bias
+  planes, so the halves the down GEMM reads land in one dispatch.
 - **The whisper-class towers** (whisper, qwen2audio, voxtral, ultravox, the Omni audio towers,
   Qwen3-ASR through its conv front) share one chain with gemma3v: the pre-LN block loop
   `vt_ln_chain` over one offsets record a block (`LayerOffs`; gemma3v's block offsets mapped onto
@@ -100,7 +103,11 @@ the chain runs it (gemma4a's projector tail). Where a chain and its family part 
   the front hook runs the window's chunk convs (im2col to f16 and the f16 GEMM a stage, the
   bias + activation as a row class), the feature shuffle, `conv_out` on the cm2 q8 tile and the
   bias + positions, read back into the state the block loop then serves - so a second window on
-  the same residency recomputes every stage's offsets from its own chunk count.
+  the same residency recomputes every stage's offsets from its own chunk count. A position plane
+  adds through the bias class as one bias row as wide as the rows it covers (the class repeats its
+  bias row every `d` elements): the whisper stem's row is its whole plane, so each position row
+  lands once, and qwen3a's is one chunk's 13 position rows, so every chunk takes them - qwen3a's
+  finish is two bias passes, the `conv_out` bias row, then those positions.
 - **gemma4a** serves the whole chunk (`vulkan_gemma4a_chunk`: the DFT with the magnitude arm and a
   frame-major store, the mel, both subsample convs as im2col + the f16 GEMM + a LayerNorm-ReLU row
   class, the input projection on the cm2 q8 tile) and hands the residual rows to its blocks chain,
@@ -126,7 +133,8 @@ the chain runs it (gemma4a's projector tail). Where a chain and its family part 
   (2 npos - 1 rows) and a row class builds it on the device ahead of the blocks (the CPU table stays
   the CPU chain's), so the rel quartet is sized by the scratch and the table's projection is a
   batch GEMM over those rows. The attention does not walk the projected table per row: per head
-  the (q + v) and rel-table panels are gathered as f16, the plane R = (q + v) P^T runs on the f16
+  the (q + v) and rel-table panels are the restride stamps at one head - unpadded f16 panels, the
+  (q + v) one on the biased stamp with the head's slice of `bias_v` as its bias row - the plane R = (q + v) P^T runs on the f16
   coopmat GEMM, and a tiled online-softmax kernel (`TowerCnAttnRT`, a workgroup per 64 query rows
   of one head) scores ((q_i + u) . k_j + R[i][npos - 1 - i + j]) x scale, reading R beside the keys
   and values staged 32 a tile through workgroup memory - the plane's [cap x 2 cap - 1] f32 rows are
@@ -142,6 +150,32 @@ the q8 batch variant off cm2), one clamp + halfword store class feeds every inpu
 table, and the Conformer sets are bound per tile. The f16 feed (`xh_dev`) keeps stale rows past
 the encode's live count by design: the feed's rows past the live count reach no live row, because
 every restride reads `rows` and the GEMM output rows past npos those stale rows produce are dead.
+Each block family lists its GEMM regions once, in record order (`vt_g4a_regions`,
+`vt_cn_regions`, `vt_ln_regions`, `vt_q3v_regions`): the upload gathers the regions in that order,
+and the schedule walk maps its records in the same order beside a per-record tile or group list,
+so a record's index names one region in both walks.
+A GEMM record on the l column carries the encode's rows rounded up to 256 (`vt_tile_rows`), and
+the scratch's row cap is a multiple of the l column (`vt_cap_rows`, so every plane the scratch
+sizes holds a record's rounded rows), so the l stamp's last column is whole and takes its fast path: a partial column runs its clamped edge path at a third of the
+rate (whisper's 1500-row chunk read q/k/v/o 95 us against 52 at 1536, fc2 357 against 185, on the
+RTX PRO 4500 - `debug-jit`, the whisper parity pass's bullet in `PERF_LEDGER.md`). A record on the
+s or m column keeps the raw count - those stamps load a partial column unclamped and clamp the
+store - and so does gemma4a's rel record on every column: its 13-row planes are sized to it, and a
+forced l column would read and write past them. The rounded rows past the live count are the same dead rows.
+
+The whisper-class stem leaves its rows on the device (`x_ready`, a pending readback naming the
+encoder state's `x`), and the block chain takes them there; a block hook that declines after the
+stem served lands them first (`vt_x_flush`), so the CPU block loop reads what the stem computed
+and the served loop never copies them out. A pending never outlives its encode, so the resident's
+release and the device's drop only forget the mark. The whisper encode asks the
+blocks-with-post-norm seat (`register_tower_blocks_ln_post_gpu`) and, off it, runs the CPU block
+loop itself: on the seat the chain folds the tower's post-norm into the last block's post-add (the
+f32 post-add over the post-norm's rows, which ride the norms plane behind the layers'), reads the
+normed rows back into `xb` instead of `x`, and records the device plane holding them
+(`vulkan_tower_enc_out`), which the whisper cross-KV chain copies device to device in place of the
+host upload. The record names the encode in flight alone: every audio hook entry clears it, the
+scratch's forget drops it with the plane, and the whisper decoder hooks stand down with the
+encoder's under the stage-diff rail (`g_audio_ref_dir`) - a CPU-encoded window never reads a served one's plane.
 Under `DASLLAMA_GPU_PROF=1` every dispatch of an
 audio chain writes a timestamp with a role (`VtProfRole`), and `vt_prof_report` prints the chain's
 device time per role beside the host wall after the encode - the ledger the levers are read from.
@@ -150,9 +184,9 @@ The rel quartet is the resident's relative-position scratch, the device buffers 
 `rel_cap_rows` and grown by `vt_rel_bufs`: the table's f32 rows, the table's GEMM feed
 refreshed once per encode - Q8_0 quants and scales for the mul_mm tiles, f16 halfwords with the
 tile read slack behind the rows for the cm2 tiles - and the projected rows one layer at a time;
-its projection sets are cached per batch variant (`vt_rel_proj_set`) and, on the cm2 feed, per
-token column over the f16 feed (`vt_rel_proj_set_cm2`), and dropped with the scratch or the
-quartet, because they bind the scratch's schedule buffer beside the weights and the quartet. The two attention classes are stamped per head width (64 and 128, the widths
+its projection sets are cached per tile key (`vt_rel_proj_set`: the batch variant, or the token
+column over the f16 feed on cm2), and dropped with the scratch or the quartet, because they bind
+the scratch's schedule buffer beside the weights and the quartet. The two attention classes are stamped per head width (64 and 128, the widths
 the served carriers carry; the driver declines another) and the residual seam per post-norm
 (`TowerPostAdd`, `TowerPostAddPlain` for the conv module's plain add), so no kernel loop
 bound or branch reads a push constant. gemma4a and canary upload
@@ -212,24 +246,43 @@ classes read at rebased offsets, and the K/V planes and the step scratch are siz
 the cross K/V as f16 [layer][head][ta][hs] (unscaled; the attention carries the whole hs^-0.5),
 the self cache as f16 [layer][head][tmax][hs].
 
-The cross-KV chain is one command buffer per window: the encoder rows fed once (the halfword
+The cross-KV chain is one command buffer per window: the encoder rows fed once (copied device to
+device off the tower's plane when the tower landed exactly these rows in the encode in flight -
+`vulkan_tower_enc_out`, counted as a handoff - else uploaded from the host, a miss said once per
+resident; then the halfword
 store on the cm2 feed, the Q8_0 requant on the mul_mm tiles), then per layer the ck and cv GEMMs on
 the tile the tower chains ride (`VtTile`, the schedule records written as the tower's) and the
 K/V store class (`TowerWdecKv`), which writes a projection's [rows x d] output - a head's hs
 columns a row - into head-major planes, run twice off each projection - the f16 resident plane, and the CPU chain's f32
-layout (kx pre-scaled and transposed, vx with its bias) read back into the decoder state, so the
-CPU chain has the window's memory whenever the step declines its first batch. The decode step is
+layout (kx pre-scaled and transposed, vx with its bias) on device planes of its own. That layout is
+read back into the decoder state only when that state's own CPU reader can need it - the step's
+`rows` decline on a window's first batch, and the step called on it while it is not the live
+window (`wd_flush_cross_kv`, into the state in hand, over a pending mark the cross-KV chain leaves
+naming the state by the driver's own serial, `DecoderState.gpu_uid`, never its address) - so the
+served loop never pays the 61 MB copy a turbo window's layouts make, and a state's next window,
+served or declined, supersedes its pending one unread. The driver stores no pointer into a state and
+never writes into another one, which may already be gone: another state's window, the release and the
+model drop mark the pending owner, whose next decode step panics until it starts a window of its own. The decode step is
 one command buffer per batch: the token and position rows summed on the host and uploaded, then
-per layer the LN, the Q8_0 feed, the fused q|k|v GEMV (three regions of one dispatch, the N-column
-form over a batch's rows), the two f16 appends with the v bias folded, the chunked self attention
-(the q bias folded at the load), the o
-GEMV and the post-add with the next norm, the same over the cross memory, the fc1 GEMV, the bias +
-tanh-LUT GELU, the fc2 GEMV and the post-add with the next layer's first norm (the final norm on
-the last layer), then the tied-embedding logits GEMV over the last row alone and the logits
-readback - the CPU filter and sampler stay the parity anchor. A partial's workgroup
+per layer the LN with its Q8_0 feed in one dispatch (`TowerLnRq`, the first layer), the fused
+q|k|v GEMV (three regions of one dispatch, the N-column form over a batch's rows), the two f16
+appends with the v bias folded, the chunked self attention (the q bias folded at the load; its
+combine quantizes the row's head slice in place of storing it, `TowerWdecAttnCombRq`), the o GEMV
+and the post-add with the next norm and its feed (`TowerPostAddLnRq`), the same over the cross
+memory, the fc1 GEMV, the bias + tanh-LUT GELU with its feed (`TowerBiasActRq`), the fc2 GEMV and
+the post-add with the next layer's first norm and its feed (the final norm on the last layer,
+whose feed is the logits GEMV's), then the tied-embedding logits GEMV over the last row alone and
+the logits readback - the CPU filter and sampler stay the parity anchor. The fused passes land
+the same Q8_0 bytes as the row pass and the separate requant (`TowerClampRq`) - the block store is
+`Q8BlockStoreT`'s, the one text every requant stamp shares, eight consecutive lanes a block, and the
+fused passes are their f32 templates' `OUT_Q8` stamps - and cost a token 66 dispatches where the separate
+passes cost 91 (55 and 80 stamps on the GPU ledger's `vk tower whisper decode gpu:` line under `DAS_LOG_LEVEL=info
+DASLLAMA_GPU_PROF=1`, the K/V stores sharing one stamp and the attention pair another), the dispatch floor of a decode
+step being its own launch and barrier. A partial's workgroup
 (`TowerWdecAttnPart`) is one chunk of 256 keys, one head and one row - the chunk's scores off the
 f16 keys, its own max and exp-sum, its unnormalized weighted values - so a 1500-key cross window
-spreads over six workgroups a row. The combine's workgroup (`TowerWdecAttnComb`) is one head and
+spreads over six workgroups a row. The combine's workgroup (`TowerWdecAttnCombRq`; the f32-storing
+`TowerWdecAttnComb` is the kernel cells' reference form) is one head and
 one row: it merges the chunks' partials by log-sum-exp into the row's head slice of the [rows x
 dim] output. A batch wider than the step's row
 cap (`WD_ROW_CAP`) at the window's first batch hands the window to the CPU chain (`rows`);

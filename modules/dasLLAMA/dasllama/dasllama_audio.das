@@ -1279,9 +1279,8 @@ def private enc_gelu_batch(t : AudioTower; var x : array<float>; d, npos : int64
     }
 }
 
-//! Shared Whisper-encoder core over one 30 s mel chunk (conv frontend + pre-LN blocks); leaves
-//! the residual stream in ``s.x``. Model-specific tail (ln_post, pooling, projector) is the caller's.
-def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
+//! the conv stem into `s.x` - on the conv hook its rows may stay on the device until the block hook takes or lands them
+def private audio_encode_stem(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     if (mel.n_len != AUDIO_CHUNK_FRAMES || mel.n_mel != t.n_mel) {
         panic("audio_encode: mel chunk is {mel.n_mel}x{mel.n_len}, want {t.n_mel}x{AUDIO_CHUNK_FRAMES}")
     }
@@ -1293,7 +1292,6 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     trace_tag(TRACE_TAG_ENC_CONV)
     if (g_tw_conv_gpu_set && empty(g_audio_ref_dir) && invoke(g_tw_conv_gpu, t, s, mel)) {
         asr_prof_add("enc.conv", tc)
-        encoder_blocks(t, s, tt)
         return
     }
 
@@ -1333,8 +1331,44 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     }
     asr_prof_add("enc.conv", tc)
     diff_stage("after_conv_pos", s.x, tt * d)
+}
 
-    encoder_blocks(t, s, tt)
+//! Shared Whisper-encoder core over one 30 s mel chunk (conv frontend + pre-LN blocks); leaves
+//! the residual stream in ``s.x``. Model-specific tail (ln_post, pooling, projector) is the caller's.
+def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
+    audio_encode_stem(t, s, mel)
+    encoder_blocks(t, s, t.n_ctx)
+}
+
+//! the stem, then the blocks with the tower's post-norm folded where the blocks-with-post-norm seat serves (true: `s.xb` holds the
+//! normed rows), else the blocks alone (false: `s.x` holds their output and the caller norms it) - a driver with no post-norm
+//! seat (Metal) serves them at the blocks seat; a post-norm seat that declines asks no second seat, its blocks seat declines alike
+def audio_encode_blocks_ln_post(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {
+    audio_encode_stem(t, s, mel)
+    let tt = t.n_ctx
+    if (!g_tw_blocks_ln_post_set) {
+        encoder_blocks(t, s, tt)
+        return false
+    }
+    dispatch_phase_encode(tt)
+    if (empty(g_audio_ref_dir)) {
+        let te = ref_time_ticks()
+        if (invoke(g_tw_blocks_ln_post, t, s, tt)) {
+            asr_prof_add("enc.blocks.gpu", te)
+            return true
+        }
+    }
+    encoder_blocks_cpu(t, s, tt)
+    return false
+}
+
+var private g_tw_blocks_ln_post : TowerBlocksGpuFn
+var private g_tw_blocks_ln_post_set = false
+
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_tower_blocks_ln_post_gpu(fn : TowerBlocksGpuFn) {
+    g_tw_blocks_ln_post = fn
+    g_tw_blocks_ln_post_set = true
 }
 
 typedef TowerBlocksGpuFn = function<(t : AudioTower; var s : EncoderState; npos : int64) : bool>
@@ -1381,6 +1415,10 @@ def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
             return
         }
     }
+    encoder_blocks_cpu(t, s, npos)
+}
+
+def private encoder_blocks_cpu(t : AudioTower; var s : EncoderState; npos : int64) {
     let tt = npos
     let d = t.d_model
     for (l in range64(t.n_layer)) {

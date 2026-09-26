@@ -10311,11 +10311,8 @@ def private vkd_run_copy(var raw; var h; dev : uint64; host; bytes : int64; bits
 
 //! the device: the recorded dispatches over `raw`, then each plane - `sizes[p]` bytes of `devs[p]` from its start - into `host` at `ats[p]` (`array` or `fixed_array` lists alike)
 def private vkd_run_copy(var raw; var h; devs; host; ats, sizes; bits : uint) {
-    assert(length(devs) == length(ats) && length(devs) == length(sizes), "vkd_run_copy: one host offset and one byte count per device plane")
-    vhz_dep(raw, h, bits, 0u, true)
-    for (dev, at, bytes in devs, ats, sizes) {
-        cmd_copy_range(raw, dev, 0l, host.buf, at, bytes)
-    }
+    assert(length(devs) == length(ats), "vkd_run_copy: one host offset per device plane")
+    cmd_copy_planes(raw, h, devs, host, ats, sizes, bits)
     vk_check(vkEndCommandBuffer(raw), null)
     submit_wait(raw)
 }

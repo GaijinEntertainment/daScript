@@ -18,21 +18,20 @@ evidence, applies `REVIEW_PINNED_GATES.md` (beside this file) together with this
 
 **Weakening `test_metal_float_a_gate.das` - the gate that checks the MSL emitter refuses a float A operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without the `[metal_kernel(float_a_ok=true)]` license - is a defect.**
 
-**Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
-the models stocked, plus every test here the change reaches - never the whole directory.** A
-change reaches a test when it alters anything the test's result depends on - the test file, a
-shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name it
-asserts on; a comment-only edit reaches none.
+**Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the models
+stocked (the stocked files of the areas the change reaches; a core module with no `MODULE_AREAS` row
+reaches every area), plus every test here the change reaches - never the whole directory, never the
+whole `stocked` suite for its own sake.** A change reaches a test when it alters anything the test's
+result depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture or
+corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
 **A PR that adds or changes a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
 `_model_tier.das`) also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
-stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when
-`run.das` accepts `--arm` for that suite (every suite but `model-free` and `stocked`) - and names
-the box in the PR body.** A run without `DASLLAMA_PARITY_FULL=1` skips every such cell and
-passes.
+stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when `run.das`
+accepts `--arm` for that suite (every suite but `model-free` and `stocked`) - and names the box in the
+PR body.** A run without `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
-**The `stocked` run every PR owes carries no `--exclude`** - an excluding run is the iteration form
-between PRs; a PR that ships on it never ran the coverage it dropped.
+**The `--changed` or `stocked` run a PR cites carries no `--exclude`** - an excluding run is the iteration form between PRs; a PR that ships on it never ran the coverage it dropped.
 
 **A test file - a `.das` in this folder that dastest runs: one carrying at least one `[test]`
 function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion -
@@ -42,9 +41,9 @@ the same change; weakening that gate is a defect.** `DASLLAMA_CPU_PREFILL=1` is 
 arms for every suite.
 
 **`run.das` declares no global whose initializer spawns, logs, writes the environment or
-touches the filesystem; a diff that adds one is a defect, and weakening `test_run_suites.das`'s
-no-`[init]` check is a defect.** `test_run_suites.das` and `test_run_summary.das` require `run` by
-bare same-dir name, so anything that fires on require fires inside every one of those test processes.
+touches the filesystem, and weakening `test_run_suites.das`'s no-`[init]` check is a defect.**
+`test_run_suites.das` and `test_run_summary.das` require `run` by bare same-dir name, so anything
+that fires on require fires inside every one of those test processes.
 
 **A diff that gives `_model_tier.das`, or a `tests/` fixture it requires, an `[init]` that
 declares the CPU-prefill intent (`allow_cpu_prefill`) is a defect - the intent is declared in
@@ -118,15 +117,15 @@ other stocked fixture gates on its own presence.
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
 cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
-calls no loader that bakes a `.dlim` - a loader that, with `DASLLAMA_IMAGE` unset, writes a
-`.dlim` beside the model: `load_model`, `load_model_cached`, `load_model_image`,
-`load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
-`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2` (`load_pocket`, and `load_tts_model` on a
-Pocket file, bake nothing), and a new loader of that kind joins this list in the same change; such a test loads a media carrier in
-memory from the family's `stage_*` staging - its `mint_*` twin, or `cache_via_image_staged` with
-an empty image path.** A disk bake under a lane pin (a `set_<family>_q8`-class knob or a Metal
-tensor-crowns pin) purges the serving lane's `.dlim` beside the model, and the next direct-image
-load in another suite panics on the wrong identity.
+calls no loader that, with `DASLLAMA_IMAGE` unset, writes a `.dlim` beside the model - `load_model`,
+`load_model_cached`, `load_model_image`, `load_<family>_tower`, `load_<family>_encoder`,
+`load_<family>_embedder`, `load_<carrier>_model`, `load_asr_model`, `load_whisper_model`,
+`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2` (`load_pocket`, and
+`load_tts_model` on a Pocket file, bake nothing), a diff adding such a loader adding it here; such a
+test loads a media carrier in memory from the family's `stage_*` staging - its `mint_*` twin, or
+`cache_via_image_staged` with an empty image path.** A disk bake under a lane pin (a
+`set_<family>_q8`-class knob or a Metal tensor-crowns pin) purges the serving lane's `.dlim` beside
+the model, and the next direct-image load in another suite panics on the wrong identity.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -195,9 +194,10 @@ through - `reset_<name>_q8` for a `set_<name>_q8` (`reset_tts_q8` for the TTS fa
 the other lane, instead of pinning, measures whichever lane the box's policy picked.
 
 **A cell that sets a family pin or a driver setter - directly, through a helper it calls, or
-through a loader parameter that takes the lane - returns with that pin unset through the unset
-call paired with the setter it pinned through, and that setter back where it found it.** A pin
-left set makes the next cell measure this cell's lane, not its own.
+through a loader parameter that takes the lane - returns with every pin it set unset through its
+paired unset call, and every setter it set back where it found it; where the driver exposes no
+getter, back at the value the file's `[init]` sets, else at its default.** A pin left set makes
+the next cell measure this cell's lane, not its own.
 
 **A cell asserting the unpinned default lane compares against the predicates the family's
 `*_serves_q8` accessor reads for its unpinned default (whatever its body calls), never against a

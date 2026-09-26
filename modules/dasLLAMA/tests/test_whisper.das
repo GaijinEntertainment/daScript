@@ -27,6 +27,7 @@ require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the 
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
 require ?vulkan dasllama/dasllama_vulkan_tower
 require ?vulkan dasllama/dasllama_vulkan_asr_dec   // set_vulkan_wdec / vulkan_wdec_stats - the decoder twin's seat
+require ?vulkan dasllama/dasllama_math_vulkan   // vk_drop_model - the lifetime cell's model drop between two windows
 require _tower_twin
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
@@ -255,46 +256,6 @@ def test_asr_surface(t : T?) {
     }
 }
 
-//! the Vulkan tower knob where the build carries the driver, true elsewhere; `restore_gpu_tower` reads it back
-def private vulkan_tower_was_on() : bool {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return vulkan_tower_on()
-    } else {
-        return true
-    }
-}
-
-//! the Vulkan ASR-decoder knob where the build carries the driver, true elsewhere; `restore_gpu_wdec` reads it back
-def private vulkan_wdec_was_on() : bool {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return vulkan_wdec_on()
-    } else {
-        return true
-    }
-}
-
-//! the Metal tower knob back to its default (it has no getter), the Vulkan one back to what the cell found
-[unused_argument(vulkan_was_on)]
-def private restore_gpu_tower(vulkan_was_on : bool) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(true)
-    }
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        set_vulkan_tower(vulkan_was_on)
-    }
-}
-
-//! the Metal ASR-decoder knob back to its default (it has no getter), the Vulkan one back to what the cell found
-[unused_argument(vulkan_was_on)]
-def private restore_gpu_wdec(vulkan_was_on : bool) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_wdec(true)
-    }
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        set_vulkan_wdec(vulkan_was_on)
-    }
-}
-
 [test]
 def test_qwen3a_tower(t : T?) {
     t |> run("qwen3a tower: conv2d frontend + windowed encode matches mtmd on jfk") @(t : T?) {
@@ -311,10 +272,10 @@ def test_qwen3a_tower(t : T?) {
         }
         // reference-parity cell: pinned to the f32 rail (the q8 rail has its own A/B cell below)
         // and to the CPU conv chain — the documented ~1e-4 reorder bars are CPU claims
-        let tower_was_on = vulkan_tower_was_on()
+        let tower_was_on = vulkan_tower_knob()
         {
             defer() {
-                restore_gpu_tower(tower_was_on)
+                restore_every_gpu_tower(tower_was_on)
             }
             set_every_gpu_tower(false)
             set_qwen3a_q8(false)
@@ -372,10 +333,7 @@ def test_parakeet_oracle(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope s <- create_session(m)
-            var inscope segs : array<TranscribeSegment>
-            transcribe(m, s, samples) $(seg) {
-                segs |> push_clone(seg)
-            }
+            var inscope segs <- session_segs(m, s, samples)
             // parakeet-cli -ng -ps (CPU, f32 self-convert): 33 tokens, these exact ends
             t |> equal(length(segs), 1)
             to_log(LOG_INFO, "parakeet-v2 jfk eyeball: '{segs[0].text}'\n")
@@ -431,10 +389,7 @@ def test_parakeet_v3_oracle(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope s <- create_session(m, "de")   // any of the 25; parakeet has no conditioning
-            var inscope segs : array<TranscribeSegment>
-            transcribe(m, s, samples) $(seg) {
-                segs |> push_clone(seg)
-            }
+            var inscope segs <- session_segs(m, s, samples)
             //! parakeet-cli -ng -ps (CPU, f32 self-convert) gives these 38 tokens; either lane stays id-exact on jfk
             t |> equal(length(segs), 1)
             to_log(LOG_INFO, "parakeet-v3 jfk eyeball: '{segs[0].text}'\n")
@@ -568,6 +523,20 @@ def private mint_whisper(path : string; enc_q8, dec_q8 : bool; zero_from : int64
     return <- w
 }
 
+//! the served whisper model behind the ASR facade, minted in memory on the q8 lanes the Vulkan cells pin - the facade loader would
+//! bake the serving lane's `.dlim` beside the file
+def private mint_asr_whisper(path : string) : AsrModel {
+    var m = AsrModel(kind = AsrKind.whisper)
+    m.whisper <- mint_whisper(path, true, true, -1l)
+    return <- m
+}
+
+def private whisper_rows_encode(enc : AudioTower; var es : EncoderState; win : MelChunk; var out : array<float>) : int64 {
+    whisper_encode(enc, es, win)
+    out := es.xb
+    return long_length(out)
+}
+
 //! the rows are `whisper_encode`'s `xb` over jfk's first 30 s window three ways - the exact f32 encoder minted in memory, `w`'s q8 encoder on the CPU and on the device - then the input poison: a q8 encoder with every block's GEMM planes from the middle one on zeroed, through the device chain, must EXCEED the bar
 [cold_path]
 def private whisper_rows_twin(tt : T?; name, model_path : string; w : WhisperModel; samples : array<float>) {
@@ -579,36 +548,22 @@ def private whisper_rows_twin(tt : T?; name, model_path : string; w : WhisperMod
         var win = MelChunk(n_mel = w.enc.n_mel, n_len = AUDIO_CHUNK_FRAMES)
         win.data |> resize(w.enc.n_mel * AUDIO_CHUNK_FRAMES)
         whisper_mel_window(mel, 0l, win)
-        set_vulkan_tower(false)
-        var rows_exact : array<float>
-        {
-            var inscope wx <- mint_whisper(model_path, false, false, -1l)
-            tt |> success(!wx.enc.q8, "{tag}: the exact encoder minted for the compare")
-            var esx <- make_encoder_state(wx.enc)
-            whisper_encode(wx.enc, esx, win)
-            rows_exact := esx.xb
-            delete esx
-        }
         var es <- make_encoder_state(w.enc)
-        whisper_encode(w.enc, es, win)
-        var rows_cpu := es.xb
-        set_vulkan_tower(true)
-        let r0 = vulkan_tower_stats()
-        whisper_encode(w.enc, es, win)
-        tt |> equal(vulkan_tower_stats().encodes - r0.encodes, 1l, "{tag}: the device encode served")
-        let bar = tower_twin_bar(tt, tag, rows_exact, rows_cpu, es.xb, w.enc.n_layer, double(TWIN_SLACK_VK), TWIN_REL_L2_FLOOR)
+        let spec = TwinSpec(family = "whisper", tag = tag, n_layer = w.enc.n_layer, metric = TwinMetric.rel_l2)
+        var wx <- mint_whisper(model_path, false, false, -1l)
+        tt |> success(!wx.enc.q8, "{tag}: the exact encoder minted for the compare")
+        var esx <- make_encoder_state(wx.enc)
+        var r <- twin_three_way(tt, spec, w.enc, es, wx.enc, esx, $(e; var s; var out) => whisper_rows_encode(e, s, win, out)) $(legs) {
+            tt |> equal(legs.dev.encodes - legs.cpu.encodes, 1l, "{tag}: the device encode served")
+        }
+        delete esx
+        delete wx
         var inscope wz <- mint_whisper(model_path, true, true, w.enc.n_layer / 2l)
         tt |> success(wz.enc.q8, "{tag}: the poisoned encoder is on the q8 lane")
         var esz <- make_encoder_state(wz.enc)
-        let z0 = vulkan_tower_stats()
-        whisper_encode(wz.enc, esz, win)
-        tt |> equal(vulkan_tower_stats().encodes - z0.encodes, 1l, "{tag}: the poisoned device encode served")
-        if (bar > 0.0lf) {
-            tower_twin_poison(tt, tag, rows_exact, esz.xb, bar)
-        }
+        twin_poison(tt, r, w.enc.n_layer / 2l, wz.enc, esz) $(e; var s; var out) => whisper_rows_encode(e, s, win, out)
         delete esz
-        delete rows_cpu
-        delete rows_exact
+        delete r
         delete es
         delete win
         delete mel
@@ -621,71 +576,44 @@ def test_whisper_vulkan_twin(t : T?) {
     for (name in ["ggml-tiny.bin", "ggml-large-v3-turbo.bin"]) {
         t |> run("{name}: the Vulkan block loop vs the CPU q8 chain on jfk, token for token") @(tt : T?) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
-                if (!jit_enabled()) {
-                    tt |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                    return
-                }
                 let model_path = path_join(whisper_dir(), name)
-                if (!model_available(tt, model_path)) {
-                    return
-                }
-                let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
-                if (empty(samples)) {
-                    tt |> skip("jfk.wav not present")
-                    return
-                }
-                if (!vulkan_twin_seat(tt)) {
-                    return
-                }
-                let tower_was_on = vulkan_tower_on()
-                let wdec_was_on = vulkan_wdec_on()
-                defer() {
-                    set_vulkan_tower(tower_was_on)
-                    set_vulkan_wdec(wdec_was_on)
-                }
-                set_vulkan_wdec(false)   // the decoder rail stays on the CPU so only the encoder varies between the legs
-                set_asr_fp32(false)
-                set_asr_tower_fp32(false)
-                var inscope m <- load_asr_model(model_path)
-                tt |> success(m.whisper.enc.q8, "default load is q8")
-                with_job_que() {
-                    setup_dasllama_jobque_()
-                    set_vulkan_tower(false)
-                    let d0 = vulkan_tower_stats()
-                    var inscope s <- create_session(m)
-                    var inscope cpu_segs : array<TranscribeSegment>
-                    transcribe(m, s, samples) $(seg) {
-                        cpu_segs |> push_clone(seg)
+                jfk_twin_cell(tt, model_path, true) $(samples) {
+                    set_vulkan_wdec(false)   // the decoder rail stays on the CPU so only the encoder varies between the legs
+                    set_asr_fp32(false)
+                    set_asr_tower_fp32(false)
+                    var inscope m <- mint_asr_whisper(model_path)
+                    tt |> success(m.whisper.enc.q8, "the served mint is q8")
+                    with_job_que() {
+                        setup_dasllama_jobque_()
+                        set_vulkan_tower(false)
+                        let d0 = vulkan_tower_stats()
+                        var inscope cpu_segs <- transcribe_segs(m, samples)
+                        let d1 = vulkan_tower_stats()
+                        set_vulkan_tower(true)
+                        var inscope dev_segs <- transcribe_segs(m, samples)
+                        let d2 = vulkan_tower_stats()
+                        if (d2.encodes == d1.encodes) {
+                            to_log(LOG_INFO, "{name} vulkan twin: the driver declined - {vulkan_tower_declines()}\n")
+                        }
+                        let n_enc = d2.encodes - d1.encodes
+                        tt |> equal(d1.encodes - d0.encodes, 0l, "the knob-off leg never dispatched")
+                        tt |> success(d1.declines - d0.declines >= 1l, "the knob-off leg recorded the knob decline")
+                        tt |> success(n_enc >= 1l, "the device served the chunk encodes ({n_enc})")
+                        tt |> equal(d2.blocks - d1.blocks, n_enc * m.whisper.enc.n_layer, "every block of every served encode ran on the driver")
+                        tt |> equal(d2.rows - d1.rows, n_enc * m.whisper.enc.n_ctx, "the rows delta is the chunks' positions")
+                        front_served(tt, "{name} jfk conv stem", d2.convs - d1.convs, n_enc, d2.declines - d1.declines)
+                        let cpu_text = segs_text(cpu_segs)
+                        let dev_text = segs_text(dev_segs)
+                        let f = segs_token_flips(cpu_segs, dev_segs)
+                        to_log(LOG_INFO, "{name} cpu q8 jfk: '{cpu_text}'\n")
+                        to_log(LOG_INFO, "{name} vulkan jfk: '{dev_text}' ({f.flips}/{f.total} token flips against the CPU q8 chain)\n")
+                        tt |> equal(length(cpu_segs), length(dev_segs), "{name} jfk: segment count")
+                        tt |> success(cpu_text == dev_text, "{name} jfk cpu q8 / vulkan: the same text (two q8 chains, the device's summation order its own: a near-tie token may flip, the words do not)")
+                        whisper_rows_twin(tt, name, model_path, m.whisper, samples)
                     }
-                    let d1 = vulkan_tower_stats()
-                    set_vulkan_tower(true)
-                    var inscope sg <- create_session(m)
-                    var inscope dev_segs : array<TranscribeSegment>
-                    transcribe(m, sg, samples) $(seg) {
-                        dev_segs |> push_clone(seg)
-                    }
-                    let d2 = vulkan_tower_stats()
-                    if (d2.encodes == d1.encodes) {
-                        to_log(LOG_INFO, "{name} vulkan twin: the driver declined - {vulkan_tower_declines()}\n")
-                    }
-                    let n_enc = d2.encodes - d1.encodes
-                    tt |> equal(d1.encodes - d0.encodes, 0l, "the knob-off leg never dispatched")
-                    tt |> success(d1.declines - d0.declines >= 1l, "the knob-off leg recorded the knob decline")
-                    tt |> success(n_enc >= 1l, "the device served the chunk encodes ({n_enc})")
-                    tt |> equal(d2.blocks - d1.blocks, n_enc * m.whisper.enc.n_layer, "every block of every served encode ran on the driver")
-                    tt |> equal(d2.rows - d1.rows, n_enc * m.whisper.enc.n_ctx, "the rows delta is the chunks' positions")
-                    front_served(tt, "{name} jfk conv stem", d2.convs - d1.convs, n_enc, d2.declines - d1.declines)
-                    let cpu_text = segs_text(cpu_segs)
-                    let dev_text = segs_text(dev_segs)
-                    let f = segs_token_flips(cpu_segs, dev_segs)
-                    to_log(LOG_INFO, "{name} cpu q8 jfk: '{cpu_text}'\n")
-                    to_log(LOG_INFO, "{name} vulkan jfk: '{dev_text}' ({f.flips}/{f.total} token flips against the CPU q8 chain)\n")
-                    tt |> equal(length(cpu_segs), length(dev_segs), "{name} jfk: segment count")
-                    tt |> success(cpu_text == dev_text, "{name} jfk cpu q8 / vulkan: the same text (two q8 chains, the device's summation order its own: a near-tie token may flip, the words do not)")
-                    whisper_rows_twin(tt, name, model_path, m.whisper, samples)
+                    delete m
+                    vulkan_tower_shutdown()
                 }
-                delete m
-                vulkan_tower_shutdown()
             } else {
                 tt |> skip("dasVulkan not present")
             }
@@ -698,78 +626,255 @@ def test_whisper_vulkan_wdec(t : T?) {
     for (name in ["ggml-tiny.bin", "ggml-large-v3-turbo.bin"]) {
         t |> run("{name}: the Vulkan decoder vs the CPU q8 decoder on jfk, token for token") @(tt : T?) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
-                if (!jit_enabled()) {
-                    tt |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                    return
-                }
                 let model_path = path_join(whisper_dir(), name)
-                if (!model_available(tt, model_path)) {
-                    return
-                }
-                let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
-                if (empty(samples)) {
-                    tt |> skip("jfk.wav not present")
-                    return
-                }
-                if (!vulkan_twin_seat(tt)) {
-                    return
-                }
-                let tower_was_on = vulkan_tower_on()
-                let wdec_was_on = vulkan_wdec_on()
-                defer() {
-                    set_vulkan_tower(tower_was_on)
-                    set_vulkan_wdec(wdec_was_on)
-                }
-                set_vulkan_tower(true)   // the tower serves the encoder on both legs, so only the decoder varies
-                set_asr_fp32(false)
-                set_asr_tower_fp32(false)
-                var inscope m <- load_asr_model(model_path)
-                tt |> success(m.whisper.dq8, "default load is the q8 decoder")
-                var cpu_segs : array<TranscribeSegment>
-                var dev_segs : array<TranscribeSegment>
-                with_job_que() {
-                    setup_dasllama_jobque_()
-                    set_vulkan_wdec(false)
-                    let d0 = vulkan_wdec_stats()
-                    var inscope s <- create_session(m)
-                    transcribe(m, s, samples) $(seg) {
-                        cpu_segs |> push_clone(seg)
+                jfk_twin_cell(tt, model_path, true) $(samples) {
+                    set_vulkan_tower(true)   // the tower serves the encoder on both legs, so only the decoder varies
+                    set_asr_fp32(false)
+                    set_asr_tower_fp32(false)
+                    var inscope m <- mint_asr_whisper(model_path)
+                    tt |> success(m.whisper.dq8, "the served mint carries the q8 decoder")
+                    with_job_que() {
+                        setup_dasllama_jobque_()
+                        set_vulkan_wdec(false)
+                        let d0 = vulkan_wdec_stats()
+                        var inscope cpu_segs <- transcribe_segs(m, samples)
+                        let d1 = vulkan_wdec_stats()
+                        tt |> equal(d1.windows - d0.windows, 0l, "the knob-off leg never served a window")
+                        tt |> equal(d1.steps - d0.steps, 0l, "the knob-off leg never served a decode step")
+                        tt |> success(key_exists(vulkan_wdec_declines(), "knob"), "the knob-off leg recorded the knob decline")
+                        set_vulkan_wdec(true)
+                        var inscope dev_segs <- transcribe_segs(m, samples)
+                        let d2 = vulkan_wdec_stats()
+                        if (d2.windows == d1.windows) {
+                            to_log(LOG_INFO, "{name} vulkan wdec: the driver declined - {vulkan_wdec_declines()}\n")
+                        }
+                        tt |> success(d2.windows - d1.windows >= 1l, "the device served the window's cross-KV ({d2.windows - d1.windows})")
+                        tt |> success(d2.steps - d1.steps >= 20l, "the decode batches served on the device ({d2.steps - d1.steps})")
+                        tt |> success(d2.tokens - d1.tokens >= d2.steps - d1.steps, "the token rows cover the steps")
+                        tt |> equal(d2.declines, d1.declines, "the device leg recorded no decline")
+                        tt |> equal(d2.handoffs - d1.handoffs, d2.windows - d1.windows, "every served window took the encoder rows off the tower's plane, device to device")
+                        tt |> equal(d1.handoffs, d0.handoffs, "and the knob-off leg took none")
+                        let cpu_text = segs_text(cpu_segs)
+                        let dev_text = segs_text(dev_segs)
+                        let f = segs_token_flips(cpu_segs, dev_segs)
+                        to_log(LOG_INFO, "{name} cpu q8 decoder jfk: '{cpu_text}'\n")
+                        to_log(LOG_INFO, "{name} vulkan decoder jfk: '{dev_text}' ({f.flips}/{f.total} token flips against the CPU q8 decoder)\n")
+                        assert_segs_token_identical(tt, cpu_segs, dev_segs, "{name} jfk cpu q8 / vulkan decoder")
                     }
-                    let d1 = vulkan_wdec_stats()
-                    tt |> equal(d1.windows - d0.windows, 0l, "the knob-off leg never served a window")
-                    tt |> equal(d1.steps - d0.steps, 0l, "the knob-off leg never served a decode step")
-                    tt |> success(key_exists(vulkan_wdec_declines(), "knob"), "the knob-off leg recorded the knob decline")
-                    set_vulkan_wdec(true)
-                    var inscope sg <- create_session(m)
-                    transcribe(m, sg, samples) $(seg) {
-                        dev_segs |> push_clone(seg)
-                    }
-                    let d2 = vulkan_wdec_stats()
-                    if (d2.windows == d1.windows) {
-                        to_log(LOG_INFO, "{name} vulkan wdec: the driver declined - {vulkan_wdec_declines()}\n")
-                    }
-                    tt |> success(d2.windows - d1.windows >= 1l, "the device served the window's cross-KV ({d2.windows - d1.windows})")
-                    tt |> success(d2.steps - d1.steps >= 20l, "the decode batches served on the device ({d2.steps - d1.steps})")
-                    tt |> success(d2.tokens - d1.tokens >= d2.steps - d1.steps, "the token rows cover the steps")
-                    tt |> equal(d2.declines, d1.declines, "the device leg recorded no decline")
+                    delete m
+                    wdec_f32_declines(tt, name, model_path, samples)
+                    vulkan_wdec_shutdown()
+                    vulkan_tower_shutdown()
                 }
-                let cpu_text = segs_text(cpu_segs)
-                let dev_text = segs_text(dev_segs)
-                let f = segs_token_flips(cpu_segs, dev_segs)
-                to_log(LOG_INFO, "{name} cpu q8 decoder jfk: '{cpu_text}'\n")
-                to_log(LOG_INFO, "{name} vulkan decoder jfk: '{dev_text}' ({f.flips}/{f.total} token flips against the CPU q8 decoder)\n")
-                assert_segs_token_identical(tt, cpu_segs, dev_segs, "{name} jfk cpu q8 / vulkan decoder")
-                delete cpu_segs
-                delete dev_segs
-                delete m
-                wdec_f32_declines(tt, name, model_path, samples)
-                vulkan_wdec_shutdown()
-                vulkan_tower_shutdown()
             } else {
                 tt |> skip("dasVulkan not present")
             }
         }
     }
+}
+
+[test]
+def test_whisper_vulkan_stem_flush(t : T?) {
+    t |> run("ggml-tiny.bin: the stem's pending readback lands at the block hooks' decline; the CPU blocks over it match the all-CPU chain") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+            jfk_twin_cell(tt, model_path, true) $(samples) {
+                set_vulkan_wdec(false)
+                set_asr_fp32(false)
+                set_asr_tower_fp32(false)
+                var inscope m <- mint_asr_whisper(model_path)
+                with_job_que() {
+                    setup_dasllama_jobque_()
+                    set_vulkan_tower(false)
+                    var inscope cpu_segs <- transcribe_segs(m, samples)
+                    set_vulkan_tower(true)
+                    set_vulkan_audio_blocks(false)
+                    let s0 = vulkan_tower_stats()
+                    let blocks0 = vulkan_tower_declines()?["blocks"] ?? 0l
+                    var inscope stem_segs <- transcribe_segs(m, samples)
+                    let s1 = vulkan_tower_stats()
+                    tt |> success(s1.convs > s0.convs, "the stem served on the device ({s1.convs - s0.convs} dispatches)")
+                    tt |> equal(s1.encodes, s0.encodes, "the block hooks served nothing")
+                    tt |> equal((vulkan_tower_declines()?["blocks"] ?? 0l) - blocks0, s1.convs - s0.convs, "and recorded one `blocks` decline a window, the one the stem's rows landed at")
+                    to_log(LOG_INFO, "ggml-tiny.bin stem flush: all-CPU '{segs_text(cpu_segs)}' / device stem + CPU blocks '{segs_text(stem_segs)}'\n")
+                    assert_segs_token_identical(tt, cpu_segs, stem_segs, "ggml-tiny.bin jfk all-CPU / device stem + CPU blocks")
+                }
+                delete m
+                vulkan_tower_shutdown()
+            }
+        } else {
+            tt |> skip("dasVulkan not present")
+        }
+    }
+}
+
+let private WDEC_FLUSH_LOGIT_BAR = 0.05   //! the flushed memory's logits within this fraction of the knob-off chain's peak: the device's cross-KV planes are the f16 feed's GEMM, the knob-off chain's the q8 dot; the reading is `PERF_LEDGER.md`'s
+
+//! the same token and logits within `WDEC_FLUSH_LOGIT_BAR` of the peak; `cpu_moved` - the knob-off chain over the batch with its last
+//! token changed - is the bar's control: the changed input must land outside it
+def private wdec_flush_compare(tt : T?; w : WhisperModel; cpu, dev, cpu_moved : array<float>) {
+    tt |> equal(long_length(dev), long_length(cpu), "both chains landed the last row's logits")
+    let maxc = logits_maxabs(cpu)
+    let max_diff = logits_maxdiff(dev, cpu)
+    let top_cpu = int(parallel_argmax(cpu, long_length(cpu)))
+    let top_dev = int(parallel_argmax(dev, long_length(dev)))
+    let bar = WDEC_FLUSH_LOGIT_BAR * maxc
+    let moved = logits_maxdiff(cpu_moved, cpu)
+    to_log(LOG_INFO, "ggml-tiny.bin wdec flush: the CPU chain over the flushed memory vs the knob-off chain - max diff {max_diff} of {maxc} (bar {bar}), argmax '{w.vocab[top_dev]}' ({top_dev}) vs '{w.vocab[top_cpu]}' ({top_cpu}); the changed last token moves the knob-off logits by {moved}\n")
+    tt |> equal(top_dev, top_cpu, "the CPU chain over the flushed memory picks the knob-off chain's token")
+    tt |> success(max_diff <= bar, "and its logits sit within the bar ({max_diff} vs {bar})")
+    tt |> success(moved > bar, "the bar's control: the batch with its last token changed lands outside it ({moved} vs {bar})")
+}
+
+[test]
+def test_whisper_vulkan_wdec_flush(t : T?) {
+    t |> run("ggml-tiny.bin: the pending cross-KV readback lands at the step's rows decline; the CPU chain over it matches the knob-off chain") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+            jfk_twin_cell(tt, model_path, true) $(samples) {
+                set_vulkan_tower(true)
+                set_asr_fp32(false)
+                set_asr_tower_fp32(false)
+                var inscope m <- mint_asr_whisper(model_path)
+                let batch <- [for (i in range(int(WD_ROW_CAP) + 1)); m.whisper.tok_sot + i]   // one past the step's cap, the first batch of a window
+                var batch_moved := batch
+                batch_moved[length(batch_moved) - 1]++
+                var cpu_logits : array<float>
+                var cpu_moved : array<float>
+                var dev_logits : array<float>
+                with_job_que() {
+                    setup_dasllama_jobque_()
+                    set_vulkan_wdec(false)
+                    var inscope sc <- create_session(m)
+                    transcribe(m, sc, samples) $(_seg) {}
+                    sc.w.ds.n_past = 0l
+                    whisper_decode_batch(m.whisper, sc.w.ds, batch)
+                    cpu_logits := sc.w.ds.logits
+                    sc.w.ds.n_past = 0l
+                    whisper_decode_batch(m.whisper, sc.w.ds, batch_moved)
+                    cpu_moved := sc.w.ds.logits
+                    set_vulkan_wdec(true)
+                    let d0 = vulkan_wdec_stats()
+                    var inscope sg <- create_session(m)
+                    transcribe(m, sg, samples) $(_seg) {}
+                    let d1 = vulkan_wdec_stats()
+                    tt |> success(d1.windows - d0.windows >= 1l, "the device served the window's cross-KV ({d1.windows - d0.windows})")
+                    let rows0 = vulkan_wdec_declines()?["rows"] ?? 0l
+                    sg.w.ds.n_past = 0l
+                    sg.w.ds.gpu_kv_gen = 0l
+                    whisper_decode_batch(m.whisper, sg.w.ds, batch)
+                    let rows1 = vulkan_wdec_declines()?["rows"] ?? 0l
+                    tt |> equal(rows1 - rows0, 1l, "a first batch past the row cap declined `rows`")
+                    tt |> equal(vulkan_wdec_stats().steps, d1.steps, "and the device served no step: the CPU chain decoded it over the flushed memory")
+                    dev_logits := sg.w.ds.logits
+                    wdec_flush_compare(tt, m.whisper, cpu_logits, dev_logits, cpu_moved)   // inside the queue: the argmax is the parallel one
+                }
+                delete cpu_logits
+                delete cpu_moved
+                delete dev_logits
+                delete m
+                vulkan_wdec_shutdown()
+                vulkan_tower_shutdown()
+            }
+        } else {
+            tt |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! a lifetime cell's seat: tiny on jfk, both drivers on, the q8 default load, one session created for `body` the way a serving
+//! worker reuses one - the decoder's window lifetime across that session's transcriptions is the claim
+def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrSession; samples : array<float>) : void>) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+        jfk_twin_cell(tt, model_path, true) $(samples) {
+            set_vulkan_tower(true)
+            set_vulkan_wdec(true)
+            set_asr_fp32(false)
+            set_asr_tower_fp32(false)
+            var inscope m <- mint_asr_whisper(model_path)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var inscope s <- create_session(m)
+                invoke(body, m, s, samples)
+            }
+            delete m
+            vulkan_wdec_shutdown()
+            vulkan_tower_shutdown()
+        }
+    } else {
+        tt |> skip("dasVulkan not present")
+    }
+}
+
+[test]
+def test_whisper_vulkan_wdec_lifetime(t : T?) {
+    t |> run("ggml-tiny.bin: a model drop between two transcriptions of one session - the second serves again and reads the same") @(tt : T?) {
+        wdec_lifetime_cell(tt) $(m; var s; samples) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                var inscope first <- session_segs(m, s, samples)
+                let d0 = vulkan_wdec_stats()
+                vk_drop_model()   // the server's LLM slot switch: every device object swept, the decoder's waiting layouts with them
+                var inscope again <- session_segs(m, s, samples)
+                let d1 = vulkan_wdec_stats()
+                tt |> success(d1.windows - d0.windows >= 1l, "the device served the window again after the drop ({d1.windows - d0.windows})")
+                assert_segs_token_identical(tt, first, again, "ggml-tiny.bin jfk before / after the drop")
+            }
+        }
+    }
+    t |> run("ggml-tiny.bin: the decoder knob turned off between two transcriptions of one session - the second reads as a fresh knob-off session") @(tt : T?) {
+        wdec_lifetime_cell(tt) $(m; var s; samples) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                var inscope served <- session_segs(m, s, samples)
+                let d0 = vulkan_wdec_stats()
+                set_vulkan_wdec(false)
+                var inscope again <- session_segs(m, s, samples)
+                let d1 = vulkan_wdec_stats()
+                tt |> equal(d1.windows, d0.windows, "the knob-off transcription served no window")
+                var inscope fresh <- transcribe_segs(m, samples)
+                tt |> equal(length(served), length(again), "ggml-tiny.bin jfk served / knob-off on one session: segment count")
+                assert_segs_token_identical(tt, fresh, again, "ggml-tiny.bin jfk a fresh knob-off session / the served session turned off")
+            }
+        }
+    }
+    t |> run("ggml-tiny.bin: the block hooks pinned off after a served window of one session - no stale handoff, the text of the CPU-encoder chain") @(tt : T?) {
+        wdec_lifetime_cell(tt) $(m; var s; samples) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                var inscope served <- session_segs(m, s, samples)
+                let d0 = vulkan_wdec_stats()
+                tt |> success(d0.handoffs >= 1l, "the served transcription took its encoder rows device to device ({d0.handoffs})")
+                set_vulkan_audio_blocks(false)
+                var inscope again <- session_segs(m, s, samples)
+                let d1 = vulkan_wdec_stats()
+                tt |> equal(d1.handoffs, d0.handoffs, "the CPU-encoded windows took no handoff: the served window's plane is not theirs")
+                tt |> success(d1.windows > d0.windows, "the decoder still served the windows over the host-uploaded rows ({d1.windows - d0.windows})")
+                set_vulkan_audio_blocks(true)
+                set_vulkan_tower(false)
+                var inscope cpu_enc <- transcribe_segs(m, samples)
+                assert_segs_token_identical(tt, cpu_enc, again, "ggml-tiny.bin jfk the CPU-encoder chain / the served session with the blocks pinned off")
+            }
+        }
+    }
+}
+
+//! a fresh session over `m` (an `AsrModel` or a `WhisperModel`) transcribing `samples`, its segments collected; `lang` names the
+//! session's language where the cell sets one
+def private transcribe_segs(m; samples : array<float>; lang : string = "") : array<TranscribeSegment> {
+    if (empty(lang)) {
+        var inscope s <- create_session(m)
+        return <- session_segs(m, s, samples)
+    }
+    var inscope s <- create_session(m, lang)
+    return <- session_segs(m, s, samples)
+}
+
+//! `s` transcribing `samples` - a cell reuses one session across transcriptions the way a serving worker does
+def private session_segs(m; var s; samples : array<float>) : array<TranscribeSegment> {
+    var segs : array<TranscribeSegment>
+    transcribe(m, s, samples) $(seg) {
+        segs |> push_clone(seg)
+    }
+    return <- segs
 }
 
 def private segs_text(segs : array<TranscribeSegment>) : string {
@@ -818,12 +923,12 @@ def test_whisper_q8_gate(t : T?) {
             t |> skip("jfk.wav not present")
             return
         }
-        let tower_was_on = vulkan_tower_was_on()
-        let wdec_was_on = vulkan_wdec_was_on()
+        let tower_was_on = vulkan_tower_knob()
+        let wdec_was_on = vulkan_wdec_knob()
         {
             defer() {
-                restore_gpu_tower(tower_was_on)
-                restore_gpu_wdec(wdec_was_on)
+                restore_every_gpu_tower(tower_was_on)
+                restore_every_gpu_wdec(wdec_was_on)
             }
             set_every_gpu_tower(false)
             set_every_gpu_wdec(false)
@@ -835,16 +940,8 @@ def test_whisper_q8_gate(t : T?) {
             t |> success(!mf.whisper.enc.q8, "knob forces fp32")
             with_job_que() {
                 setup_dasllama_jobque_()
-                var inscope s <- create_session(m)
-                var inscope segs : array<TranscribeSegment>
-                transcribe(m, s, samples) $(seg) {
-                    segs |> push_clone(seg)
-                }
-                var inscope sf <- create_session(mf)
-                var inscope fsegs : array<TranscribeSegment>
-                transcribe(mf, sf, samples) $(seg) {
-                    fsegs |> push_clone(seg)
-                }
+                var inscope segs <- transcribe_segs(m, samples)
+                var inscope fsegs <- transcribe_segs(mf, samples)
                 to_log(LOG_INFO, "whisper-tiny q8 jfk eyeball: '{segs[0].text}'\n")
                 to_log(LOG_INFO, "whisper-tiny f32 jfk eyeball: '{fsegs[0].text}'\n")
                 assert_segs_token_identical(t, segs, fsegs, "q8/fp32")
@@ -891,16 +988,8 @@ def test_whisper_tower_fp32_knob(t : T?) {
         var inscope m <- load_asr_model(model_path)   // the q8/q8 default = the transcript truth
         with_job_que() {
             setup_dasllama_jobque_()
-            var inscope s <- create_session(m)
-            var inscope segs : array<TranscribeSegment>
-            transcribe(m, s, samples) $(seg) {
-                segs |> push_clone(seg)
-            }
-            var inscope sm <- create_session(mm)
-            var inscope msegs : array<TranscribeSegment>
-            transcribe(mm, sm, samples) $(seg) {
-                msegs |> push_clone(seg)
-            }
+            var inscope segs <- transcribe_segs(m, samples)
+            var inscope msegs <- transcribe_segs(mm, samples)
             t |> equal(length(segs), length(msegs), "segment count")
             t |> success(!empty(segs), "q8-default produced segments")
             t |> success(!empty(msegs), "f32/q8 produced segments")
@@ -1049,10 +1138,7 @@ def private check_canary_clip(t : T?; m : AsrModel; wav : string; expected : arr
         return
     }
     var inscope s <- create_session(m, "en")
-    var inscope segs : array<TranscribeSegment>
-    transcribe(m, s, samples) $(seg) {
-        segs |> push_clone(seg)
-    }
+    var inscope segs <- session_segs(m, s, samples)
     t |> equal(length(segs), 1, "{base_name(wav)}: one segment")
     to_log(LOG_INFO, "canary {base_name(wav)} eyeball: '{segs[0].text}'\n")
     t |> equal(length(segs[0].tokens), length(expected), "{base_name(wav)}: token count")
@@ -1135,10 +1221,7 @@ def test_gemma4a_audio_oracle(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope s <- create_session(m, "en")
-            var inscope segs : array<TranscribeSegment>
-            transcribe(m, s, samples) $(seg) {
-                segs |> push_clone(seg)
-            }
+            var inscope segs <- session_segs(m, s, samples)
             t |> equal(length(segs), 1, "one segment")
             to_log(LOG_INFO, "gemma4a eyeball: '{segs[0].text}'\n")
             // frozen llama-mtmd-cli no-think greedy ids (first 40 tokens — the confident prefix
@@ -1171,11 +1254,7 @@ def private check_q3omni_clip(t : T?; m : AsrModel; wav : string; expected : arr
         t |> skip("{base_name(wav)} not present")
         return
     }
-    var inscope s <- create_session(m, "auto")
-    var inscope segs : array<TranscribeSegment>
-    transcribe(m, s, samples) $(seg) {
-        segs |> push_clone(seg)
-    }
+    var inscope segs <- transcribe_segs(m, samples, "auto")
     t |> equal(length(segs), 1, "{base_name(wav)}: one segment")
     to_log(LOG_INFO, "qwen3omni {base_name(wav)} eyeball: '{segs[0].text}'\n")
     t |> equal(length(segs[0].tokens), length(expected), "{base_name(wav)}: token count")

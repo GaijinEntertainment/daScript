@@ -164,10 +164,9 @@ def private wdec_attach(w : WhisperModel) : bool {
     var staging : array<uint8>
     staging |> reserve_resize((blen / 32l) * 34l + (g_wd_nvpad - w.n_vocab) * (d / 32l) * 34l + 16l * (nl * WD_MATS + 1l))
     // PURE read (the resident rail's form): re-running selection here desyncs from the load-time repack
-    let rep = kernel_backend_needs_repack(active_kernel_backend())
-    let lay = active_q8_repack_layout(rep)
+    let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
     var cur = 0ul
-    g_wd_te_boff = wd_region(w, w.d_te_q_off, d, w.n_vocab, rep, lay.mr, lay.kgroup, lay.wbias, staging, cur)
+    g_wd_te_boff = wd_region(w, w.d_te_q_off, d, w.n_vocab, lay.repacked, lay.mr, lay.kgroup, lay.wbias, staging, cur)
     let te_pad = (g_wd_nvpad - w.n_vocab) * (d / 32l) * 34l
     for (i in range64(te_pad)) {   // zero rows: the prompt-batch GEMM's floor-tiling needs them, their logits go unread
         staging[int64(cur) + i] = 0u8
@@ -178,11 +177,11 @@ def private wdec_attach(w : WhisperModel) : bool {
         let lo = dec_layer_offsets(w, l)
         var mi = 0l
         for (woff in [lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.cq_w, lo.ck_w, lo.cv_w, lo.co_w]) {
-            g_wd_boffs[l * WD_MATS + mi] = wd_region(w, woff, d, d, rep, lay.mr, lay.kgroup, lay.wbias, staging, cur)
+            g_wd_boffs[l * WD_MATS + mi] = wd_region(w, woff, d, d, lay.repacked, lay.mr, lay.kgroup, lay.wbias, staging, cur)
             mi++
         }
-        g_wd_boffs[l * WD_MATS + 8l] = wd_region(w, lo.fc1_w, d, 4l * d, rep, lay.mr, lay.kgroup, lay.wbias, staging, cur)
-        g_wd_boffs[l * WD_MATS + 9l] = wd_region(w, lo.fc2_w, 4l * d, d, rep, lay.mr, lay.kgroup, lay.wbias, staging, cur)
+        g_wd_boffs[l * WD_MATS + 8l] = wd_region(w, lo.fc1_w, d, 4l * d, lay.repacked, lay.mr, lay.kgroup, lay.wbias, staging, cur)
+        g_wd_boffs[l * WD_MATS + 9l] = wd_region(w, lo.fc2_w, 4l * d, d, lay.repacked, lay.mr, lay.kgroup, lay.wbias, staging, cur)
         // the fused-QKV GEMV reads q..v as ONE 3d-row region — d%64 keeps the cursor gap-free
         assert(g_wd_boffs[l * WD_MATS + 2l] == g_wd_boffs[l * WD_MATS] + 2ul * uint64((d * d / 32l) * 34l),
             "wdec attach: q/k/v regions are not contiguous")
@@ -363,16 +362,7 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
     let tmax = w.n_text_ctx
     let nl = w.n_text_layer
     let p0 = ds.n_past
-    unsafe {
-        var p = reinterpret<float?>(metal_buffer_contents(g_wd_sx))
-        for (r in range64(n)) {   // token embedding + learned position rows, straight into the mapped buffer
-            let te = w.d_te_off + int64(toks[int(r)]) * d
-            let pe = w.d_pe_off + (p0 + r) * d
-            for (j in range64(d)) {
-                p[r * d + j] = w.dblob[te + j] + w.dblob[pe + j]
-            }
-        }
-    }
+    whisper_embed_rows(w, toks, n, p0, unsafe(reinterpret<float?>(metal_buffer_contents(g_wd_sx))))
     let mapped = w.image_map != null
     var bblobf = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(w.dblob, 0l))), uint64(length(w.dblob) * 4l), mapped)
     var u_d = uniform_u32(uint(d))

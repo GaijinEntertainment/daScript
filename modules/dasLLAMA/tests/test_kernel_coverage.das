@@ -855,31 +855,30 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "tower_im2col_cls_spv",
     // the qwen3a front's conv-out shuffle; its coverage is test_vkt_tower_front_movers
     "tower_q3a_shuffle_cls_spv",
-    // the qwen3a front's bias + position rows finish; its coverage is test_vkt_tower_front_movers
-    "tower_q3a_finish_cls_spv",
     // the LayerNorm + ReLU rows of the gemma4a subsample convs; its coverage is test_vkt_tower_front_movers
     "tower_ln_relu_cls_spv",
     // canary's per-feature mel normalization; its coverage is test_vkt_tower_front_mel
     "tower_mel_norm_cls_spv",
-    // canary's length mask (the zero rows); its coverage is test_vkt_tower_front_movers
-    "tower_zero_rows_cls_spv",
     // canary's front depthwise conv; its coverage is test_vkt_tower_front_mel
     "tower_dw_conv_cls_spv",
     // canary's feature rows (the feature shuffle); its coverage is test_vkt_tower_front_movers
     "tower_feat_shuffle_cls_spv",
     // canary's sinusoid rel table; its coverage is test_vkt_tower_front_mel
     "tower_rel_sincos_cls_spv",
-    // the Conformer chains' cm2 feed (the clamp + halfword store) and canary's rel-plane attention (the head gather ahead of
-    // the rel GEMM, the tiled online softmax at both head widths): the two twins dispatch the feed, the gather and the
-    // 128-wide stamp (canary's head width); the 64-wide stamp serves no stocked carrier; their kernel coverage is
-    // test_vkt_tower_front_movers (the feed and the gather) and test_vkt_tower_cn_attn_rel_plane (both stamps) in
+    // canary's rel-plane attention (the tiled online softmax at both head widths; the head panels ahead of the rel GEMM are the
+    // restride stamps at one head): the canary twin dispatches the 128-wide stamp (canary's head width); the 64-wide stamp
+    // serves no stocked carrier; their kernel coverage is test_vkt_tower_cn_attn_rel_plane (both stamps) in
     // test_vulkan_tower_kernels.das
-    "tower_head_gather_cls_spv", "tower_cn_attn_r_cls_spv", "tower_cn_attn_r64_cls_spv",
+    "tower_cn_attn_r_cls_spv", "tower_cn_attn_r64_cls_spv",
     // the whisper decoder's classes (the Vulkan ASR-decoder driver - no zoo row, no whisper carrier in the census): the K/V
     // stores and the chunked attention's two halves, the stocked ggml-tiny.bin and ggml-large-v3-turbo.bin via
     // test_whisper_vulkan_wdec in test_whisper.das; their kernel coverage is test_vkt_wdec_classes in
     // test_vulkan_tower_kernels.das
     "tower_wdec_kv_cls_spv", "tower_wdec_attn_part_cls_spv", "tower_wdec_attn_comb_cls_spv",
+    // the decode step's fused row passes (the layernorm, the post-add with its next norm, the bias + tanh GELU and the attention
+    // combine, each landing its Q8_0 feed): the same two stocked files via test_whisper_vulkan_wdec; their kernel coverage is
+    // test_vkt_wdec_fused_rq in test_vulkan_tower_kernels.das
+    "tower_ln_rq_cls_spv", "tower_post_add_ln_rq_cls_spv", "tower_bias_act_rq_cls_spv", "tower_wdec_attn_comb_rq_cls_spv",
     // the whisper-class conv stem's classes (the tower driver's conv seat - no zoo row): the k3 im2col and the position rows'
     // add, the same two stocked whisper files via test_whisper_vulkan_twin in test_whisper.das; their kernel coverage is
     // test_vkt_tower_front_movers in test_vulkan_tower_kernels.das
@@ -901,10 +900,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // in test_qwen3v.das); their kernel coverage is test_vkt_tower_ln_rows
     "tower_ln_cls_spv", "tower_post_add_ln_cls_spv", "tower_bias_act_cls_spv", "tower_hpad_cls_spv", "tower_hpad16_cls_spv",
     "tower_hunpad_cls_spv", "tower_rope_tab_cls_spv",
-    // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows, the gated FFN's
-    // hidden and the rms seam (the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf, dispatched by test_qwen25v_vulkan_twin in
-    // test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
-    "tower_win_attn_cls_spv", "tower_glu_act_cls_spv", "tower_post_add_rms_cls_spv",
+    // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows and the rms seam (the
+    // gated hidden is the LLM's biased f16 act stamp at a zero row map; the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf,
+    // dispatched by test_qwen25v_vulkan_twin in test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
+    "tower_win_attn_cls_spv", "tower_post_add_rms_cls_spv",
     // the audio towers' classes - no zoo row runs an audio tower: the Conformer's silu rows (the bias class's unbiased stamp),
     // GLU, causal depthwise taps, windowed RPE attention (the 128-wide stamp serves the stocked mmproj-gemma-4-E2B-it-bf16.gguf's
     // audio encoder through test_gemma4a_vulkan_twin in test_audio.das) and the plain residual seam; the FastConformer's

@@ -344,19 +344,12 @@ let private POISON_BLOCK = 8l   //! the whole-tower input poison's block: mid-st
 //! a tower minted in memory from the staged planes under the lane pin (pinned, staged, the pin restored): `nl` blocks (0 = the
 //! file's count); `zero_block` >= 0 zeroes that block's q8 GEMM planes - the input poison of the device-side bars (q8 lane).
 //! Never `load_gemma4v_tower`, which bakes a `.dlim` under the pin.
-def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l) : Gemma4vTower {
-    set_gemma4v_q8(q8)
-    var inscope stg <- stage_gemma4v_tower(mm)
-    reset_gemma4v_q8()
-    truncate_and_poison(stg, nl, zero_block)
-    var tw = Gemma4vTower()
-    mint_gemma4v_tower(stg, tw)
-    return <- tw
-}
+def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l) : Gemma4vTower
+    => mint_twin_tower(mm, q8, nl, zero_block, @@set_gemma4v_q8, @@reset_gemma4v_q8, @@stage_gemma4v_tower, @@mint_gemma4v_tower)
 
 //! the input poison of a device-side dump bar: the q8 tower with `POISON_BLOCK` zeroed, served by the driver, must EXCEED the
 //! bar its dump holds - a bar the poison clears measures nothing
-def private poison_device_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; rel : float) {
+def private dump_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var o = OracleEncode()
         if (!load_oracle_encode(path_join(path_join(models_dir(), "gemma4-vision-oracle"), logname), o)) {
@@ -366,17 +359,8 @@ def private poison_device_leg(tt : T?; mm : string; kind : string; w, h : int; l
         var twp <- mint_tower(mm, true, 0l, POISON_BLOCK)
         var stp = Gemma4vState()
         let planes <- make_planes(kind, w, h)
-        var out : array<float>
-        set_vulkan_tower(true)
-        let e0 = vulkan_tower_stats().encodes
-        with_job_que() {
-            setup_dasllama_jobque_()
-            gemma4v_encode(twp, stp, planes, int64(w), int64(h), out)
-        }
-        tt |> equal(vulkan_tower_stats().encodes - e0, 1l, "{kind} {w}x{h} poison: device-served (encodes delta)")
-        let excess = encode_excess(out, int(twp.proj_dim), o, TIER1_ABS, rel)
-        to_log(LOG_INFO, "gemma4v vulkan poison leg {kind} {w}x{h}: block {POISON_BLOCK} zeroed -> excess {excess} over the {rel} x rms bar\n")
-        tt |> success(excess > 0.0, "{kind} {w}x{h}: a zeroed block through the device chain reds the bar (excess {excess})")
+        dump_poison(tt, "gemma4v", "{kind} {w}x{h}", POISON_BLOCK, bar_rms, twp, stp,
+            $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)) $(out) => encode_excess(out, int(twp.proj_dim), o, TIER1_ABS, bar_rms)
         delete stp
         delete twp
     }
@@ -408,7 +392,7 @@ def test_gemma4v_tier1_vulkan(t : T?) {
             }
             delete st
             delete tw
-            poison_device_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
+            dump_poison_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
         } else {
             tt |> skip("dasVulkan not present")
         }
@@ -418,17 +402,9 @@ def test_gemma4v_tier1_vulkan(t : T?) {
 //! one canvas three ways on the shared instrument; `zero_block` >= 0 adds the input poison over a fresh q8 tower
 def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; tw_exact : Gemma4vTower; var st_exact : Gemma4vState;
                         kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let planes <- make_planes(kind, w, h)
-        let r <- twin_three_way(tt, "gemma4v", kind, w, h, 16l, "", tw, st, tw_exact, st_exact) $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
-        if (zero_block >= 0l) {
-            var twp <- mint_tower(mm, true, tw.n_layer, zero_block)
-            var stp = Gemma4vState()
-            twin_poison(tt, "gemma4v", kind, w, h, zero_block, twp, stp, r) $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
-            delete stp
-            delete twp
-        }
-    }
+    let planes <- make_planes(kind, w, h)
+    twin_canvas(tt, "gemma4v", kind, w, h, 16l, "", tw, st, tw_exact, st_exact, zero_block,
+        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb) }) $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
@@ -466,7 +442,7 @@ def test_gemma4v_vulkan_twin(t : T?) {
             delete st
             delete tw
             let planes <- make_planes("cb", 96, 96)
-            exact_lane_declines(tt, tw_exact, st_exact, 4l * tw_exact.proj_dim) $(t; var s; var out) => gemma4v_encode(t, s, planes, 96l, 96l, out)
+            exact_lane_declines(tt, "gemma4v cb 96x96", tw_exact, st_exact, 4l * tw_exact.proj_dim) $(t; var s; var out) => gemma4v_encode(t, s, planes, 96l, 96l, out)
             delete st_exact
             delete tw_exact
             vulkan_tower_shutdown()
@@ -531,7 +507,7 @@ def test_gemma4v_tier1_e4b(t : T?) {
                         tt |> equal(vulkan_tower_stats().encodes - v0.encodes, 1l, "E4B q8: device-served (encodes delta)")
                         tt |> equal(vulkan_tower_stats().blocks - v0.blocks, twq.n_layer, "E4B q8: every block ran on the driver (blocks delta)")
                     }
-                    poison_device_leg(tt, mm, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
+                    dump_poison_leg(tt, mm, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
                 }
             }
         }

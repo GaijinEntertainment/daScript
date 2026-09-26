@@ -1538,10 +1538,10 @@ def clear_bake_backend_override() {
 //! KernelBackend.q8_layout (4 for every hand tier; the stamped mr on the gen backend).
 def active_q8_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.q8_mr : g_active_q8_layout_mr
 
-typedef Q8RepackLayout = tuple<mr : int64; kgroup : int64; wbias : int64>
+typedef Q8RepackLayout = tuple<repacked : bool; mr : int64; kgroup : int64; wbias : int64>
 
 //! The q8 repack layout a gather and its residency key share: the active one when repacked, the disk-order rows (mr 1, kgroup 4, no bias) when not.
-def active_q8_repack_layout(repacked : bool) : Q8RepackLayout => (mr = repacked ? active_q8_layout_mr() : 1l, kgroup = repacked ? active_q8_kgroup() : 4l, wbias = repacked ? active_q8_wbias() : 0l)
+def active_q8_repack_layout(repacked : bool) : Q8RepackLayout => (repacked = repacked, mr = repacked ? active_q8_layout_mr() : 1l, kgroup = repacked ? active_q8_kgroup() : 4l, wbias = repacked ? active_q8_wbias() : 0l)
 
 //! The active backend's kq plane interleave for `fmt` (4/5/6) — per-format since the kq v2
 //! family split; the loader freezes these onto the Model at repack time.

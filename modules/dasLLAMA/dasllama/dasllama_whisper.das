@@ -985,8 +985,9 @@ def private whisper_index(bytes : array<uint8> | #; n_bytes : int64; var st : Wh
 //! decoder's cross-attention reads (via whisper_cross_kv).
 [hot_path]
 def whisper_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
-    audio_encode_blocks(t, s, mel)
-    layernorm_batch(s.xb, s.x, t.fblob, t.lnp_w_off, t.lnp_b_off, t.d_model, t.n_ctx, t.eps)
+    if (!audio_encode_blocks_ln_post(t, s, mel)) {
+        layernorm_batch(s.xb, s.x, t.fblob, t.lnp_w_off, t.lnp_b_off, t.d_model, t.n_ctx, t.eps)
+    }
 }
 
 // ===== decoder =====
@@ -1006,6 +1007,7 @@ struct DecoderState {
     n_past : int64
     gpu_kv_gen : int64      // 0 until the GPU decode step serves this window's KV (the Metal
                             // driver stamps it; a mid-window eviction then panics loud)
+    gpu_uid : uint64        //! the GPU decoder driver's identity for this state (0 until its first cross-KV window, served or declined): an address is not identity
     kcache : array<float>   // [L][H][hs][Tmax]
     vcache : array<float>   // [L][H][Tmax][hs]
     kx : array<float>       // [L][H][hs][Ta] cross keys (from the encoder output, per window)
@@ -1100,7 +1102,7 @@ def register_whisper_decode_gpu(fn : WhisperDecodeGpuFn) {
 //! hs^-0.25), V = W_v·enc + b. Resets the sequence.
 [hot_path]
 def whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) {
-    if (g_wh_cross_kv_gpu_set && invoke(g_wh_cross_kv_gpu, w, ds, enc_out)) {
+    if (g_wh_cross_kv_gpu_set && empty(g_audio_ref_dir) && invoke(g_wh_cross_kv_gpu, w, ds, enc_out)) {
         ds.n_past = 0l
         return
     }
@@ -1315,6 +1317,20 @@ def private dec_cross_attn(w : WhisperModel; var ds : DecoderState; l, n : int64
     }
 }
 
+//! the decoder's input rows: each token's embedding plus its learned absolute position row, `n` rows from position `p0` into `dst`
+def whisper_embed_rows(w : WhisperModel; toks : int const?; n, p0 : int64; var dst : float?) {
+    let d = w.n_text_state
+    unsafe {
+        for (r in range64(n)) {
+            let te = w.d_te_off + int64(toks[int(r)]) * d
+            let pe = w.d_pe_off + (p0 + r) * d
+            for (j in range64(d)) {
+                dst[r * d + j] = w.dblob[te + j] + w.dblob[pe + j]
+            }
+        }
+    }
+}
+
 //! Decode a batch of tokens at positions n_past..n_past+n-1 (prompt prefill and single-step
 //! generation share this path). Leaves next-token logits (for the LAST row, tied token
 //! embedding) in ``ds.logits`` and advances ``ds.n_past``.
@@ -1332,19 +1348,12 @@ def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array
     if (p0 + n > tmax) {
         panic("whisper_decode_batch: {p0}+{n} tokens exceed n_text_ctx {tmax}")
     }
-    if (g_wh_decode_gpu_set && invoke(g_wh_decode_gpu, w, ds, unsafe(addr(tokens[0])), n)) {
+    if (g_wh_decode_gpu_set && empty(g_audio_ref_dir) && invoke(g_wh_decode_gpu, w, ds, unsafe(addr(tokens[0])), n)) {
         ds.n_past += n
         return
     }
 
-    // token embedding + learned absolute position rows
-    for (r in range64(n)) {
-        let te = w.d_te_off + int64(tokens[int(r)]) * d
-        let pe = w.d_pe_off + (p0 + r) * d
-        for (j in range64(d)) {
-            ds.x[r * d + j] = w.dblob[te + j] + w.dblob[pe + j]
-        }
-    }
+    whisper_embed_rows(w, unsafe(addr(tokens[0])), n, p0, unsafe(addr(ds.x[0])))
 
     let kq_scale = 1.0 / sqrt(sqrt(float(hs)))
     for (l in range64(w.n_text_layer)) {

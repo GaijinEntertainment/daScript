@@ -39,6 +39,45 @@ def fill_upload(dev : uint64; off, bytes : int64; word : uint) {
 //! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
 def nan_sentinel_upload(dev : uint64; bytes : int64; off : int64 = 0l) => fill_upload(dev, off, bytes, NAN_SENTINEL_BITS)
 
+//! each plane's host offset when the planes stage back to back - the sum of the sizes before it - and the total bytes last
+def staged_offsets(sizes) : array<int64> {
+    var at : array<int64>
+    at |> reserve(length(sizes) + 1)
+    var sum = 0l
+    for (bytes in sizes) {
+        at |> push(sum)
+        sum += bytes
+    }
+    at |> push(sum)
+    return <- at
+}
+
+//! the copy half of a readback: the hazard on `bits`, then each plane - `sizes[p]` bytes of `devs[p]` from its start - into `host` at `ats[p]` (`array` or `fixed_array` lists alike)
+def cmd_copy_planes(raw; var h; devs; host; ats, sizes; bits : uint) {
+    assert(length(devs) == length(sizes) && length(ats) >= length(devs), "cmd_copy_planes: one host offset and one byte count per device plane")
+    vhz_dep(raw, h, bits, 0u, true)
+    for (dev, at, bytes in devs, ats, sizes) {
+        cmd_copy_range(raw, dev, 0l, host.buf, at, bytes)
+    }
+}
+
+//! `cmd_copy_planes` with the planes back to back in `host` at `staged_offsets(sizes)`
+def cmd_copy_planes(raw; var h; devs; host; sizes; bits : uint) {
+    let ats <- staged_offsets(sizes)
+    cmd_copy_planes(raw, h, devs, host, ats, sizes, bits)
+}
+
+//! `n` elements of `TT` read back from a mapped staging, `byte_off` bytes past its start: `staged(host.mapped, at, n, type<float>)`
+[unused_argument(elem)]
+def staged(mapped : void?; byte_off : int64; n : int; elem : auto(TT)) : array<TT -const> {
+    var a : array<TT -const>
+    a |> resize(n)
+    unsafe {
+        memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n) * int64(typeinfo sizeof(type<TT>)))
+    }
+    return <- a
+}
+
 def to_u4(w : array<uint>) : array<uint4> {
     var out : array<uint4>
     out |> resize(length(w) / 4)

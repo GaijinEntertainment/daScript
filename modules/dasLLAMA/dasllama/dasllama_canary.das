@@ -413,9 +413,7 @@ def private cn_repack_all(var st : CanaryStaging) {
     let d = st.e.d_model
     let ff = st.e.n_ff
     let nch = st.e.n_sub_ch
-    let w1 = (st.e.n_mel - 1l) / 2l + 1l
-    let w2 = (w1 - 1l) / 2l + 1l
-    let w3 = (w2 - 1l) / 2l + 1l
+    let w3 = conv_s2_out(conv_s2_out(conv_s2_out(st.e.n_mel)))
     let feat = w3 * nch
     cn_repack(st, st.e.c3_w, nch, nch)
     cn_repack(st, st.e.c6_w, nch, nch)
@@ -798,14 +796,11 @@ def private cn_mask_rows(var a : array<float>; from_row, n_rows, row_stride : in
     }
 }
 
-// output valid length of a k3/s2/p1 conv stage
-def private cn_conv_out_len(l : int64) : int64 => (l - 1l) / 2l + 1l
-
 // regular conv2d k3 s2 p1, cin=1: im2col (9 taps, guarded) then mm + bias + relu
 def private cn_conv0(m : CanaryEncoder; var st : CanaryState; ih, iw : int64) {
     let cout = m.n_sub_ch
-    let ow = (iw - 1l) / 2l + 1l
-    let oh = (ih - 1l) / 2l + 1l
+    let ow = conv_s2_out(iw)
+    let oh = conv_s2_out(ih)
     let rows = oh * ow
     ensure_length(st.col, rows * 9l)
     for (oy in range64(oh)) {
@@ -831,8 +826,8 @@ def private cn_conv0(m : CanaryEncoder; var st : CanaryState; ih, iw : int64) {
 def private cn_conv_dw(m : CanaryEncoder; var out : array<float>; x : array<float>;
                        w_off, b_off : int64; iw, ih : int64) {
     let ch = m.n_sub_ch
-    let ow = (iw - 1l) / 2l + 1l
-    let oh = (ih - 1l) / 2l + 1l
+    let ow = conv_s2_out(iw)
+    let oh = conv_s2_out(ih)
     ensure_length(out, oh * ow * ch)
     for (oy in range64(oh)) {
         for (ox in range64(ow)) {
@@ -872,21 +867,21 @@ def private cn_front_cpu(m : CanaryEncoder; var st : CanaryState) : int64 {
     let nch = m.n_sub_ch
     let n_mel = m.n_mel
     // conv subsampling: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]
-    let t1 = (st.n_len - 1l) / 2l + 1l
-    let w1 = (n_mel - 1l) / 2l + 1l
+    let t1 = conv_s2_out(st.n_len)
+    let w1 = conv_s2_out(n_mel)
     // valid time lengths propagate through the stride-2 convs (the length mask)
-    let l0 = cn_conv_out_len(st.n_valid)
-    let l2 = cn_conv_out_len(l0)
+    let l0 = conv_s2_out(st.n_valid)
+    let l2 = conv_s2_out(l0)
     cn_conv0(m, st, st.n_len, n_mel)                              // -> y0 [t1 × w1 × nch]
     cn_mask_rows(st.y0, l0, t1, w1 * nch)                         // mask before conv2 (depthwise)
     cn_conv_dw(m, st.y2, st.y0, m.c2_w, m.c2_b, w1, t1)          // -> y2 [t2 × w2 × nch]
-    let t2 = (t1 - 1l) / 2l + 1l
-    let w2 = (w1 - 1l) / 2l + 1l
+    let t2 = conv_s2_out(t1)
+    let w2 = conv_s2_out(w1)
     cn_conv_pw(m, st.y3, st.y2, st.xqi, st.xsi, m.c3_w, m.c3_b, t2 * w2)   // -> y3
     cn_mask_rows(st.y3, l2, t2, w2 * nch)                        // mask before conv5 (depthwise)
     cn_conv_dw(m, st.y5, st.y3, m.c5_w, m.c5_b, w2, t2)         // -> y5 [t3 × w3 × nch]
-    let t3 = (t2 - 1l) / 2l + 1l
-    let w3 = (w2 - 1l) / 2l + 1l
+    let t3 = conv_s2_out(t2)
+    let w3 = conv_s2_out(w2)
     cn_conv_pw(m, st.y6, st.y5, st.xqi, st.xsi, m.c6_w, m.c6_b, t3 * w3)   // -> y6
 
     let tt = t3
@@ -1182,7 +1177,7 @@ def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int6
 def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     let d = m.d_model
     // the conformer block loop walks the thrice-subsampled frame count
-    dispatch_phase_encode(cn_conv_out_len(cn_conv_out_len(cn_conv_out_len(st.n_len))))
+    dispatch_phase_encode(conv_s2_out(conv_s2_out(conv_s2_out(st.n_len))))
 
     var tt = -1l
     if (g_cn_front_set) {
