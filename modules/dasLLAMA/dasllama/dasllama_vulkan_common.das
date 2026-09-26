@@ -46,7 +46,7 @@ let DESKTOP_RESERVE = 2_147_483_648l   // raw-heap leave-behind for the desktop 
 let VRAM_RESERVE = 805_306_368l    // headroom below the queried heap budget when it clamps
                                            // the cap down: the tier's own scratch (~210MB batch
                                            // planes) + eviction slack
-let STAGING_BYTES = 268_435_456l   // one upload chunk (largest single memcpy)
+let STAGING_BYTES = 67_108_864l   //! one upload chunk: the pinned staging buffer costs the device bring-up 0.4 ms a MB, and a chunk past this size buys no upload rate
 let XQ_BYTES = 1_048_576l          // per-stack activation quants capacity
 let XS_BYTES = 262_144l            // ... their scales
 let Y_BYTES = 1_048_576l           // per-stack output capacity
@@ -1287,6 +1287,7 @@ def vk_moe_init : bool {
         return true
     }
     g_init_failed = true   // cleared only on full success
+    let t0 = ref_time_ticks()
     vk_arm_moltenvk_env()
     if (volkInitialize() != 0) {
         to_log(LOG_ERROR, "dasLLAMA vulkan tier: no Vulkan loader\n")
@@ -1295,6 +1296,7 @@ def vk_moe_init : bool {
     g_gpu = new GpuState()
     g_gpu.instance <- create_instance("dasLLAMA vulkan tier", make_api_version(1u, 3u, 0u))
     volkLoadInstance(boost_value_to_vk(g_gpu.instance))
+    let t_inst = get_time_usec(t0)
     g_gpu.phys = select_physical_device(g_gpu.instance)
     if (!storage_8_16_supported(g_gpu.phys) || !subgroup_compute_ops_supported(g_gpu.phys)
             || !integer_dot_product_supported(g_gpu.phys)) {
@@ -1316,6 +1318,7 @@ def vk_moe_init : bool {
             && timeline_semaphore_supported(g_gpu.phys)) {
         xfam = select_transfer_queue_family(g_gpu.phys)
     }
+    let t_pick = get_time_usec(t0)
     if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2) {
         // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
         g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam, g_env_vulkan.vk_decvec)
@@ -1331,6 +1334,7 @@ def vk_moe_init : bool {
         g_gpu.device <- create_device_storage_8_16_int_dot(g_gpu.phys, g_gpu.fam)
     }
     volkLoadDevice(dev_raw())
+    let t_dev = get_time_usec(t0)
     g_gpu.queue = get_device_queue(g_gpu.device, g_gpu.fam, 0u)
     if (xfam >= 0) {
         g_gpu.xfer_fam = xfam
@@ -1383,6 +1387,7 @@ def vk_moe_init : bool {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {heap.budget / 1000000l} MB (used {heap.used / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
     }
 
+    let t_heap = get_time_usec(t0)
     if (g_env_vulkan.vk_rebar) {
         g_gpu.rebar_type = rebar_memory_type(g_gpu.phys)
         if (g_gpu.rebar_type >= 0) {
@@ -1412,11 +1417,13 @@ def vk_moe_init : bool {
 
     var fence <- create_fence(g_gpu.device, FenceCreateInfo())   // never finalized (process-lifetime)
     g_gpu.fence = boost_value_to_vk(fence)
+    let t_pool = get_time_usec(t0)
     g_gpu.staging = make_host_buf(STAGING_BYTES, false)
     g_gpu.host_mem |> erase(g_gpu.staging.buf)   // process-lifetime — exempt from the model-drop sweep
     g_init_failed = false
     g_gpu.full_sg_on = g_env_vulkan.vk_fullsg && compute_full_subgroups_supported(g_gpu.phys)
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""}{g_gpu.decvec_on ? ", four-wide decode (DASLLAMA_VK_DECVEC)" : ""})\n")
+    let t_up = get_time_usec(t0)
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""}{g_gpu.decvec_on ? ", four-wide decode (DASLLAMA_VK_DECVEC)" : ""}) in {t_up / 1000} ms: the instance {t_inst / 1000}, the device pick {(t_pick - t_inst) / 1000}, the device {(t_dev - t_pick) / 1000}, the queues and the heap query {(t_heap - t_dev) / 1000}, the pools {(t_pool - t_heap) / 1000}, the staging buffer {(t_up - t_pool) / 1000}\n")
     vk_log_ext_roster()
     if (g_gpu.has_coopmat2 && g_env_vulkan.vk_decvec && !g_gpu.decvec_on) {
         to_log(LOG_WARNING, "dasLLAMA vulkan tier: the driver reports no VK_NV_cooperative_matrix_decode_vector, so the cm2 tiles run the scalar decode arm - a MoE prefill window runs about half again as long as on a driver with the four-wide arm\n")
