@@ -1,12 +1,13 @@
 # dasLLAMA Architecture - the tower attention routes and encode chains
 
 Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2w-2.2y - the three routes that serve tower attention on Metal, the
+carries sections 2.2w-2.2x and 2.2au - the three routes that serve tower attention on Metal, the
 one-command-buffer encode chain each family the Metal tower driver serves gets, and the StyleTTS2
-synthesis chain - and sections
-2.2aq-2.2ar, the Vulkan tower driver's row classes and attention routes, and its encode chains. The
-GPU backend role table these sections build on - the tower driver's role row included - stays in
-`ARCHITECTURE_GPU.md` sec.1.5.
+synthesis chain, and sections 2.2av-2.2aw - the Pocket TTS codec and frames seats. The GPU backend role table these sections build on - the tower driver's role row
+included - stays in `ARCHITECTURE_GPU.md` sec.1.5.
+
+- `ARCHITECTURE_GPU_TOWER_VULKAN.md` - sec.2.2aq-2.2ar, 2.2at: the Vulkan tower driver's row
+  classes and attention routes, and its encode chains, and the Vulkan ASR-decoder driver.
 
 ### 2.2w The tower attention routes {#tower-attn-routes}
 
@@ -53,7 +54,7 @@ output. The score slabs are per-head scratch reused head after head - each head'
 encoded after the previous head's reader. The head size is held to a multiple of 64 (the AV
 GEMM's column lattice) and the head count to the per-head uniform seats.
 
-### 2.2y The tower driver's StyleTTS2 synthesis chain {#tower-tts-chain}
+### 2.2au The tower driver's StyleTTS2 synthesis chain {#tower-tts-chain}
 
 The whole StyleTTS2 synthesis of the kitten and kokoro families rides the tower driver as seven
 seats of the family's hook record (`ARCHITECTURE_MEDIA.md` sec.2.14): PL-BERT, the text encoder,
@@ -62,23 +63,35 @@ seat is one command buffer of 2.2x's shape over a per-part weight slab the drive
 and keys on a fold of the part's weight addresses - the address of the form each conv serves, the
 q8 quants or the f32 operand - and of the q8 lane's active repack layout, so a reload serving
 another lane or another layout keys differently; the addresses stand for the model because a
-reload never reuses them before the weights epoch drops every slab, which shutdown does too. The decode seat takes the aligned features, F0 and N up and runs the front convs, the
+reload never reuses them before the weights epoch drops every slab, which shutdown does too. Every
+family attaches its slab through one guard and one rebuild (`st2_slab_current`, `st2_slab_rebuild`):
+a slab whose key matches stays resident and the call returns on the guard; otherwise the cold
+rebuild runs the family's drop, then the family's writer twice - the measuring pass
+writes into a probe slab to size the host copy, the second fills the resident - and the copy
+uploads, the drop running again when the upload fails. A slab releases through one walk over its
+fields by type (`st2_release_any`): a conv slot's and a Pocket linear's pooled uniforms, a buffer
+the slab owns, the elements of an array of them and the fields of a struct of them go back to their
+homes, so a slot field a slab gains frees itself. The walk releases and never deletes;
+`st2_slab_free` then deletes the slab whole, which frees every array once, nested ones included,
+and zeroes the fields the walk reached by value (a buffer field is released through a copy of its
+pointer). The decode seat takes the aligned features, F0 and N up and runs the front convs, the
 AdaIN residual blocks, the harmonic source, the generator and the inverse STFT as ONE command
 buffer, the samples back; the generator seat behind it - reached only by the CPU chain a
 declined decode falls into - runs the generator through conv_post as one command buffer and reads
 conv_post's rows back for the CPU's inverse STFT (`styletts2_istft`). The CPU chain is the specification, dispatch for dispatch, and every
 seat serves both weight lanes: the q8 lane's stacked quants are read row-major through the
-active repack's gather and dequantized into the slab, so the lane policy does not flip for the
-tower.
+active repack's gather and dequantized into the slab, and a K-quant linear (the Pocket small
+form's codec transformer) row by row through the active K-quant layout's group gather, its tail
+rows superblock by superblock, so the lane policy does not flip for the tower.
 
 Every conv is the f32 tile GEMM over the slab - each conv dense as [cout padded to 64 x k*cin
 padded to 32] with column j = tap*cin + ci and its bias row beside it. A conv whose channel
-count is a multiple of 8 runs the GEMM's gathering instance (the `CONV` stamp): the X loader
-reads each row's 8-run of k through the conv's geometry, forward or transposed, so no im2col
-is materialized; the noise convs (22 channels) take the im2col kernel in 32-aligned row chunks,
+count is a multiple of 8 runs the GEMM's gathering instance (the `CONV` stamps, one a direction -
+`MetalSt2ConvMm` gathers a forward conv, `MetalSt2ConvTrMm` a transposed one): the X loader
+reads each row's 8-run of k through the conv's geometry, so no im2col is materialized; the noise convs (22 channels) take the im2col kernel in 32-aligned row chunks,
 each chunk's column buffer under a 64 MB ceiling (`ST2_IM2COL_CHUNK_MAX_BYTES`).
-The GEMM template stamps twice more as the f32-EXACT twins (`MetalF32ExactMm`, `MetalSt2ConvExactMm`: float tiles,
-twice the threadgroup memory) and the FRONT END - the five seats before the decoder - runs on
+The GEMM template stamps again as the f32-EXACT twins (`MetalF32ExactMm`, `MetalSt2ConvExactMm`,
+`MetalSt2ConvTrExactMm`: float tiles, twice the threadgroup memory) and the FRONT END - the five seats before the decoder - runs on
 it, because its outputs round to integer durations and its F0 drives a phase (the f16-staged
 stamp moved one raw duration in a sentence across a half; on the exact stamp the durations
 agree token for token and every front-end stage reads within 3e-6 of the CPU's). The ALBERT
@@ -88,12 +101,17 @@ stamp (the decoder rows read within 7e-3 of the CPU's on kitten-nano, 5e-4 on ko
 seam form of the generator alone within 1.2e-3).
 
 The harmonic source is the CPU's `sine_source` on the device, operation for operation (sec.2.33
-of `ARCHITECTURE_TTS.md`): the three source kernels compile without fast math, the resample taps
-and mixes follow the reference's law - the torch law's double source coordinate as one fma, the
-ONNX law's seven-term trilinear mix - the cumulative phase runs as the torch law's double
-accumulator (a two-float sum in the CPU's frame order, every add's exact error carried) or the
-ONNX law's plain float sum in that order, and the sine of a phase in the hundred thousands of radians reduces it by 2 pi in four
-exact-product pieces. The mirror holds to a few ulps, not bit for bit: Metal contracts a
+of `ARCHITECTURE_TTS.md`): the three source kernels compile without fast math and stamp once a
+law (`MetalSt2Src*Torch`, `MetalSt2Src*Onnx`), the resample taps and mixes the stamp's law - the
+torch law's double source coordinate as one fma, the ONNX law's seven-term trilinear mix - the
+cumulative phase the torch stamp's double accumulator (a two-float sum in the CPU's frame order,
+every add's exact error carried) or the ONNX stamp's plain float sum in that order, and the sine
+of a phase in the hundred thousands of radians reduces it by 2 pi in four exact-product pieces.
+The noise rows the sines read are the captured stream uploaded, or the driver's own draw hashed
+into the same rows by a fill kernel (`MetalSt2SrcNoise`, a counter-keyed normal per sample and
+harmonic, within 1e-5 of its CPU twin under the default fast math) - the sines kernel reads one
+buffer either way. The STFT's pad law is its stamp's too
+(`MetalSt2StftReflect`, `MetalSt2StftEdge`). The mirror holds to a few ulps, not bit for bit: Metal contracts a
 product-sum into an fma where the CPU rounds twice, and its sine is the fast form. The mixed
 signal reads within 4e-7 of the CPU's; a phase off by one f32 ulp would read at the percent level.
 A chunk past 2^23 samples declines, where the torch law's tap coordinate parts from the CPU's double form. The BiLSTMs run one direction a threadgroup (the input
@@ -111,93 +129,65 @@ the slab allocation), `gpu_error`. Engage is each seat's `served` counter beside
 cells on identical inputs on the f32 lane (`tests/CLAUDE.md`, the kitten file) and the served
 synthesis across the knob.
 
-### 2.2aq The Vulkan tower's row classes and attention routes {#vk-tower-routes}
+### 2.2av The tower driver's Pocket codec seat {#tower-pocket-codec}
 
-Every vision block is a handful of row operations around two tiles the LLM rails already own -
-the Q8_0 batch tile (or the f16 GEMM class) and the flash tile. The row operations are
-`[vk_dispatch]` classes in `dasllama_vulkan_classes.das`, each the device twin of one CPU tower
-helper (`rms_rows`, `clamp_rows`, `requant_rows_q8_sized`, `rope_neox_2d_rows`,
-`rope_neox_tab_rows`, `layernorm`, `add_inplace_rows`) or of one closed form (the clamped
-GEGLU-quick, the tanh GELU with the CPU LUT's f16 rounding, silu(g + bg) . (u + bu)); the CPU
-helper is each class's oracle in `tests/test_vulkan_tower_kernels.das`. The seams fold what the
-CPU loop spells as two calls: a post-add writes x += y (+ b) and, in the same workgroup, the next
-branch's pre-norm off the updated row.
+The Pocket TTS codec decoder rides the tower driver as the first seat of the family's hook record
+(`register_pocket_gpu`, `ARCHITECTURE_MEDIA.md` sec.2.14): the latents of a chunk go up, the
+samples come back, one command buffer. The chain is the CPU's `pocket_decode_latents` run as its
+first window over the whole chunk - the stream's carries are the first window's zero rows, and the
+CPU's windows equal that one shot to float noise (`ARCHITECTURE_POCKET.md` sec.2.46) - so no carry
+crosses a dispatch: the 1x1 latent projection and every dense conv on the conv-gathering GEMM stamp
+(a forward conv behind `k - stride` zero rows, a transposed conv's first `t * stride` output rows;
+the input row stride `xs` of `St2ConvArgs` lets a conv read the padded width its producer wrote),
+the depthwise upsample on the residual pool kernel, the two codec transformer layers on the dense
+GEMM stamp with the layer scale, the prefill rows rope over the layer's row stride with the CPU's own
+cos and sin tables (no device trigonometry) and a windowed causal attention kernel over device K/V
+rows, ELU and the row copies on one row kernel, the sample column picked out of the last conv's
+padded rows. Every GEMM is the
+f32-exact stamp: the codec reads within 1e-6 of the CPU chain on the f32 lane that way on the M5
+Max (1e-2 on the served q8 and K-quant lanes, whose CPU chains quantize their activations), and the f16-staged twins
+bought no time on this chain (the row kernels and the attention, not the GEMMs, carry its cost)
+at three orders of magnitude of agreement. The slab holds every codec weight, keyed on the
+addresses and the lane as the StyleTTS2 slabs are, and drops with them. A chunk past
+`PK_CODEC_MAX_FRAMES` latent frames declines on its row budget (the one-shot rows scale with the
+chunk) and the CPU's windows serve it; the other declines are `knob`, `shape` (a channel count off
+the 8-run lattice, a head over 128 wide, a transformer width off the 32 lattice), `device` and
+`gpu_error`. The frame loop is the family's second seat (sec.2.2aw).
 
-The flash tile is stamped at head sizes 64 and 128, causal (the LLM stamps) and bidirectional, and
-the towers take three routes:
+### 2.2aw The tower driver's Pocket frames seat {#tower-pocket-frames}
 
-- **The compact route** serves a head size of exactly 64 (gemma4v): q, the f16 K/V shadows and the
-  output ride the compact rows straight into the h64 bidirectional tile.
-- **The padded route** serves the 72- and 80-wide heads (gemma3v, qwen3v, qwen25v's full
-  layers): a restride writes each head into a 128-wide slot with zero pads - the q panel f32, the
-  K/V shadows f16 - the h128 bidirectional tile runs at the head's own scale (the zero pads add
-  nothing to the dot), and the unpad reads the compact rows back off the padded f32 output. A
-  fused [q | k | v] row (qwen3v) is read through the restride's slot stride and offset, so no
-  copy splits it.
-- **The window route** serves qwen25v's block-diagonal layers in f32 on the compact rows, as the
-  Metal per-window route does (2.2w): one workgroup a (window, head), the window's rows (64 at
-  most, `wlo` the row starts) attend each other and nothing else, the scores in workgroup memory.
-  No restride and no f16 shadow: the coopmat tile's f16 staging noise compounds over the 28
-  window layers of a 32-block tower - a slotted f16 tile reads 0.16 to 1.5 x rms against the
-  exact chain at 32 blocks, the f32 window route 0.02 to 0.09, the Metal rung's order.
-
-The Metal driver keeps the compact 72-wide heads on its own flash kernel (2.2w); the Vulkan
-driver pays the restride instead, because the flash template's coopmat typedefs size on the head
-and 72 is off every fragment lattice. Per family, both drivers:
-
-| family | head | Metal attention (2.2w) | Vulkan attention | Vulkan weights |
-|---|---|---|---|---|
-| gemma4v | 64 | the slab trio | the compact route, h64 tile | the q8 image, gathered on upload |
-| gemma3v | 72 | the flash route (rows a multiple of 64), else the slab trio | the padded route, h128 tile | the q8 image, gathered on upload |
-| qwen3v | 72 | the flash route (rows a multiple of 64), else the slab trio | the padded route off the fused row | the q8 image, gathered on upload |
-| qwen25v full layers | 80 | the slab trio | the padded route, h128 tile | the baked halfword twin |
-| qwen25v window layers | 80 | the per-window route | the window route, f32 | the baked halfword twin |
-
-### 2.2ar The Vulkan tower driver's encode chains {#vk-tower-encode-chains}
-
-`dasllama_vulkan_tower.das` fills the gemma4v, gemma3v, qwen3v and qwen25v hook slots on a build
-without das_metal (the Metal driver owns them there). Each chain is 2.2x's shape: one command
-buffer per encode walks the blocks dispatch for dispatch as the family's CPU loop does, the CPU
-loop is the specification, the stem and the tail stay on the CPU, and the residual stream comes
-back into the family's state. Where a chain and its family part on the seat:
-
-- **gemma4v** serves the hook after the CPU stem, whole. **gemma3v**'s hook fires before the CPU
-  stem (the Metal driver runs the stem itself), so `gemma3v_encode` finishes the stem on the CPU
-  first when the tower is q8 and the driver serves the blocks alone. **qwen3v**'s hook is
-  exact-lane and whole-chain (Metal's), so the driver takes the blocks-only q8 seat
-  (`register_qwen3v_gpu_blocks`): after each deepstack tap block the residual is copied on the device
-  into a stash read back beside x, and the tap mergers run on the CPU off those rows, a tap past
-  a truncated tower's blocks skipped as the CPU loop skips it. **qwen25v** has no q8 lane, so its
-  blocks-only seat (`register_qwen25v_gpu_blocks`) runs after the CPU stem and before the CPU
-  tail over the baked halfword twin through the f16 GEMM class; a bf16-sourced twin declines.
-
-The q8 families ride the q8 image the CPU lane reads: the driver's `serves` answer to the lane
-policy is no, so a box with the driver keeps the q8 lane, and the device chain's parity
-instrument is the three-way twin cell - the exact CPU chain, the CPU q8 chain and the device
-chain on the same canvas, the device's distance from the exact chain held within 1.5x the CPU q8
-chain's own. The x64 q8 plane is the active backend's grp interleave, which the tiles do not
-read, so the upload gathers each block's GEMM rows row-major through `q8_gather_rows` with f16
-scales - the resident MoE driver's precedent - once per tower into device memory, beside the
-per-block norm rows with a ones row appended (the weightless per-head norms read it). qwen25v's
-upload copies the twin's block GEMM region verbatim - IEEE halves, the GEMM offsets rebased to
-the region's start - beside the block rows; the family has no scale plane. The residency key -
-over the q8 plane, or over qwen25v's halfword twin - folds every plane the upload reads: the
-weight plane's address, size and sampled words, the scale plane's, the norm rows' region, the
-served block count and offsets, and the active repack layout. An address is not an identity: a
-truncated tower minted from the same bytes lands at the freed address, and a resident sized for
-fewer blocks reads past its rows under a deeper chain. The
-model drop's sweep tells the driver to forget its handles through `register_vk_drop_hook`
-(every buffer and set is model-owned); `vulkan_tower_shutdown` is the tests' release. The
-per-encode scratch is sized to the canvas and grown when a taller one arrives; every batch
-schedule of an encode sits in one meta buffer sized by the encode (a record and a map a
-dispatch), so nothing the command reads moves under it; the batch tile's variant is picked per
-output width - d, ff and qwen3v's fused 3d can each pick a different tile.
-
-The declines: `quant_mode` on an exact-lane tower (or the bf16 twin), `shape` off the tile's head
-sizes, past the row cap, or with a weight plane or scratch buffer over `vk_max_storage_range()`,
-`knob` (`DASLLAMA_VK_TOWER`), `device` where the tier's want (`DASLLAMA_GPU`, read before any
-device init) or a class declines, `memory` where an allocation fails (the partial upload or
-scratch is released, the CPU chain serves). Each decline is logged once per reason per model.
-Engage is
-`vulkan_tower_stats` and `vulkan_tower_declines` deltas, and the bench's image cell prints them
-around its timed turn.
+The Pocket frame loop - the backbone step and the flow head for every frame of a chunk - rides
+the tower driver as the family's second seat once the prompt's rows sit in the voice's caches:
+the CPU's `pocket_synthesize` loop, dispatch for dispatch, in batches of `g_tw_pk_batch` frames
+(eight) per command buffer, the EOS logits read back and the stop rule walked on the host between
+batches, the latents and the conditioning rows read back once at the end. A voice slot holds the
+device K/V rows `[cap][d]` per backbone layer, keyed on the caches' addresses, their fill and
+capacity and a sample of the rows they hold: the voice's prompt rows are transposed in once at
+attach, a chunk's text rows behind them every chunk, and the frames append after those - nothing
+comes back to the host, since the CPU chain forgets a chunk's rows by resetting the fill. The
+key samples the rows because an address alone outlives the voice that held it: a later voice's
+caches can land at the freed address with the same fill and capacity. The
+backbone's q8 linears (a K-quant linear requantized to q8 from its dequantized rows, so the small
+form serves) ride the decode GEMV over a 34B-block blob with their bias rows in the slab, the bias
+a row add after the GEMV (the row GEMV's fused-bias q8 form as it stood before the lane-map fold,
+one lane a block, ran a frame 20% slower than the decode GEMV's split-K walk - `PERF_LEDGER.md`'s
+Pocket frame loop entry; the folded row stamp keeps the epilogue kinds only); every
+f32 linear rides the row GEMV over the slab's rows - a simdgroup a row, x staged in threadgroup
+memory - so the parity lane runs exact. Per layer: the first norm (the layer before's residual
+joined in the same dispatch - the tower LayerNorm's ADD stamp), the fused q/k/v projection, the
+decode rail's rope-and-store kernel rotating q and k and storing k and v into the voice slot's row
+(its f32 stamp, the rope tables and the caches bound at the position's row), the attention row (a
+threadgroup per head, the scores staged, one softmax, the value sum in parts), the out projection,
+the residual join with the second norm, the two ffn projections around the tanh GELU. The out norm writes the conditioning row straight
+into the readback rows, and the head's GEMVs carry their norm, modulation and activations as
+prologue and epilogue stamps (the LayerNorm and adaLN modulation in, the SiLU, the gated
+residual, the SiLU over the time constant, the tail that adds the noise and denormalizes the
+latent). The noise is drawn a batch ahead in the frame order the CPU draws it, so a teacher-forced
+run reads the same stream, and the last batch's draws past the frames made are rewound so the
+generator ends where the CPU loop's does; a command buffer that fails declines the loop as
+`gpu_error`, the generator is put back to where the chunk found it, and the CPU loop reruns the
+chunk from the caches and the stream as they were. The other declines are `knob`, `shape` (the
+backbone and head widths off the 32 lattice, a head size other than the 64 the attention row is
+stamped for, a cache past 2048 rows, a width past the GEMV's 4096-wide stage) and `device`. On the served lanes the seat reads within the CPU chain's own
+distance from the reference: the CPU quantizes the activations it feeds a q8 or K-quant plane, the
+tower feeds them f32.

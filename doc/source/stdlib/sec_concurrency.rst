@@ -11,6 +11,7 @@ Job queues, coroutines, asynchronous operations, and cross-context invocation.
    generated/jobque.rst
    generated/jobque_boost.rst
    generated/jobque_profile.rst
+   generated/runtime_memory.rst
    generated/apply_in_context.rst
    generated/coroutines.rst
    generated/async_boost.rst

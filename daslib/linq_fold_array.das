@@ -255,7 +255,7 @@ class ArrayJoinAdapter : SourceAdapter {
         let srcAName = shape.srcAName
         let srcBName = shape.srcBName
         return <- qmacro_block() {
-            var $i(jhashName) : table<$t(keyType); array<$t(tupBType)>>
+            $e(join_hash_decl(jhashName, keyType, tupBType))
             for ($i(tupBName) in $i(srcBName)) {
                 $e(pieces.collectInner)
             }

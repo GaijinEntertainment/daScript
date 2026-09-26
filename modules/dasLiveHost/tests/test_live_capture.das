@@ -45,3 +45,68 @@ def test_capture_validation_precedes_mutation(t : T?) {
     t |> equal(value, 77)
     delete_json(snapshot); delete_json(result)
 }
+
+[test]
+def test_capture_flush_roundtrip_and_timings(t : T?) {
+    setup_capture_fixture()
+    let directory = "/tmp/das-capture-timing-test"
+    live_capture_configure("fixture", "build-A", directory)
+    capture_request_id = "quoted-\"-identifier"
+    capture_pending = true
+    let before = capture_completed
+    live_capture_flush(123)
+    var error : string
+    let response_text = fread("{directory}/response.json")
+    var response = read_json(response_text, error)
+    t |> equal(error, "", "transport JSON remains valid with escaped metadata")
+    t |> equal(response?.id ?? "", "quoted-\"-identifier")
+    t |> equal(response?.snapshot?.frame ?? 0, 123)
+    t |> equal(response?.snapshot?.providers?.state?.state?.number ?? 0, 7)
+    t |> success(key_exists(response, "timings"))
+    t |> success(capture_timings.total_ms >= capture_timings.snapshot_ms)
+    t |> equal(capture_completed, before + 1)
+    var saved = read_json(fread(capture_last_file), error)
+    value = 99
+    var result = live_capture_restore(saved)
+    t |> success(result?.ok ?? false)
+    t |> equal(value, 7, "saved and transported snapshot retain restoration state")
+    delete_json(saved); delete_json(result); delete_json(response)
+    remove(capture_last_file); remove("{directory}/response.json")
+    capture_last_file = ""
+}
+
+def custom_capture_artifact(_file : string) : bool {
+    capture_artifact_file = "custom.rgba"; capture_artifact_format = "rgba"
+    capture_artifact_width = 17; capture_artifact_height = 9
+    return true
+}
+def failed_capture_artifact(_file : string) : bool { return false }
+[test]
+def test_capture_artifact_metadata_and_failure(t : T?) {
+    setup_capture_fixture()
+    let directory = "/tmp/das-capture-artifact-test"
+    live_capture_configure("fixture", "build-A", directory)
+    let previous_artifact = capture_artifact
+    capture_artifact = @@custom_capture_artifact
+    live_capture_request(); live_capture_flush(124)
+    let first_file = clone(capture_last_file)
+    var error : string
+    var response = read_json(fread("{directory}/response.json"), error)
+    t |> equal(error, "")
+    t |> equal(response?.image ?? "", "custom.rgba")
+    t |> equal(response?.image_format ?? "", "rgba")
+    t |> equal(response?.image_width ?? 0, 17)
+    t |> equal(response?.image_height ?? 0, 9)
+    delete_json(response)
+    capture_artifact = @@failed_capture_artifact
+    live_capture_request(); live_capture_flush(125)
+    response = read_json(fread("{directory}/response.json"), error)
+    t |> equal(error, "")
+    t |> equal(response?.image ?? "", "", "failed image capture still yields a usable report")
+    t |> equal(response?.image_width ?? -1, 0, "metadata from earlier capture is cleared")
+    t |> equal(response?.snapshot?.frame ?? 0, 125)
+    t |> equal(fexist(first_file), get_running_platform_name() != "emscripten", "browser keeps only the latest file; native retains earlier captures")
+    delete_json(response)
+    remove(first_file); remove(capture_last_file); remove("{directory}/response.json")
+    capture_last_file = ""; capture_artifact = previous_artifact
+}

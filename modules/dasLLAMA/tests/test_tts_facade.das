@@ -14,28 +14,12 @@ require dasllama/dasllama_unicode   // the chunker counts codepoints, so the cel
 require dasllama/dasllama_math   // setup_dasllama_jobque_ + the batch lane cap
 require daslib/jobque_boost
 require daslib/defer
-require daslib/rtti   // this_context().last_exception: the voice refusals are read as text
 require daslib/fio
 require strings
 require daslib/strings_boost
 require math
 require _model_tier
 require _tts_corpus   // the 200-sentence front-end fixture: the phonemes arm E was scored against
-
-def private cpt_count(s : string) : int {
-    var inscope c <- utf8_to_cpts(s)
-    return length(c)
-}
-
-def private panic_text_of(blk : block<() : void>) : string {
-    var why = ""
-    try {
-        invoke(blk)
-    } recover {
-        why = this_context().last_exception |> rtrim
-    }
-    return why
-}
 
 // The TTS facade above the families. Model-free: the sentence chunker (the reference driver's
 // boundary rule - abbreviations, decimals, a.m./p.m. - the 400-CODEPOINT cap, the hard split of
@@ -168,7 +152,7 @@ def test_voice_refusal_without_a_language(t : T?) {
         m.kind = TtsKind.kokoro
         var inscope pack : array<float>
         m.model.voices["emma"] <- pack   // the model HAS the voice; what it does not have is a language for it
-        let why = panic_text_of() {
+        let why = panic_text() {
             feint("{tts_voice_lang(m, "emma")}")
         }
         t |> success(find(why, "unknown voice 'emma'") >= 0, "the refusal names the voice: {why}")
@@ -258,10 +242,7 @@ let private PINNED_CORPUS_ROWS <- {"lj000", "lj002", "lj003"}
 def test_facade_phonemizer(t : T?) {
     t |> run("the facade phonemizes into the front end's own inventory, on the corpus rail") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")
-        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
-            t |> skip("kitten-nano.gguf or the front-end packs not present")
-            return
-        }
+        return if (tts_data_missing(t, gguf, false))
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope m <- load_tts_model(gguf)
@@ -278,10 +259,7 @@ def test_facade_phonemizer(t : T?) {
     }
     t |> run("the language form answers for a language the model declares and panics for one it does not") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")
-        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
-            t |> skip("kitten-nano.gguf or the front-end packs not present")
-            return
-        }
+        return if (tts_data_missing(t, gguf, false))
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope m <- load_tts_model(gguf)
@@ -314,10 +292,7 @@ def test_facade_phonemizer(t : T?) {
 def test_chunker_model_rule(t : T?) {
     t |> run("a Kitten model's chunks gain the driver's comma") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")
-        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
-            t |> skip("kitten-nano.gguf or the front-end packs not present")
-            return
-        }
+        return if (tts_data_missing(t, gguf, false))
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope m <- load_tts_model(gguf)
@@ -336,10 +311,7 @@ def test_chunker_model_rule(t : T?) {
 def test_streaming(t : T?) {
     t |> run("chunks concatenate to the buffered synthesis, at a different worker count") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")
-        if (!stat(gguf).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
-            t |> skip("kitten-nano.gguf or the front-end packs not present")
-            return
-        }
+        return if (tts_data_missing(t, gguf, false))
         with_job_que() {
             setup_dasllama_jobque_()
             let cap0 = get_batch_lane_cap()
@@ -395,7 +367,7 @@ def test_chunk_cap_knob(t : T?) {
     t |> run("a cap under one codepoint is refused by name") @(t : T?) {
         var inscope m = TtsModel()
         m.kind = TtsKind.kokoro
-        let why = panic_text_of() {
+        let why = panic_text() {
             tts_set_chunk_chars(m, 0)
         }
         t |> success(find(why, "chunk cap") >= 0, "the refusal names the knob: {why}")
@@ -504,7 +476,7 @@ def test_source_stream_contract(t : T?) {
         }
     }
     t |> run("a negative window is refused by name") @(t : T?) {
-        let why = panic_text_of() {
+        let why = panic_text() {
             set_styletts2_source_window(-1l)
         }
         t |> success(find(why, "set_styletts2_source_window") >= 0, "the refusal names the knob: {why}")
@@ -516,11 +488,7 @@ def test_source_stream_contract(t : T?) {
 def test_release_and_cap_on_a_model(t : T?) {
     t |> run("the release empties the carrier and the next synthesis speaks the same samples; a cap makes more chunks") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")
-        return if (!model_available(t, gguf))
-        if (!stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
-            t |> skip("the front-end packs not present")
-            return
-        }
+        return if (tts_data_missing(t, gguf, false))
         with_job_que() {
             setup_dasllama_jobque_()
             // the source window is process state: the cell establishes the default it claims against and puts back what it found

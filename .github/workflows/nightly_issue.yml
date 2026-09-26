@@ -19,14 +19,17 @@ jobs:
     timeout-minutes: 5
     permissions:
       issues: write
+      actions: read
     steps:
-      - name: "File the nightly failure issue, unless one is already open"
+      - name: "File the nightly failure issue, or comment on the one already open"
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           LANE: ${{ inputs.lane }}
           TITLE: "The nightly is red"
           RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
 
@@ -38,22 +41,34 @@ jobs:
                    --json number,title \
                    --jq '[.[] | select(.title == env.TITLE)] | .[0].number // empty')
 
-          if [ -n "$OPEN" ]; then
-            echo "#$OPEN is still open - filing nothing for $LANE"
-            exit 0
-          fi
+          JOBS="$RUNNER_TEMP/nightly_failed_jobs.md"
+          gh api --paginate "repos/$GH_REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled")
+                  | "* [\(.name)](\(.html_url)) - \(.conclusion)"' > "$JOBS"
+          [ -s "$JOBS" ] || printf -- '* no job of the run reports a failure yet - see the run\n' > "$JOBS"
 
           BODY="$RUNNER_TEMP/nightly_issue_body.md"
           {
             printf -- '`%s` failed on the nightly cron.\n\n' "$LANE"
             printf -- '* run: %s\n' "$RUN_URL"
             printf -- '* commit: `%s`\n\n' "$GITHUB_SHA"
-            printf 'One issue for the whole nightly: while this one is open nothing else '
-            printf 'is filed, whichever lane fails. Close it once the nightly is green again.\n\n'
+            printf 'Failed jobs:\n\n'
+            cat "$JOBS"
+            printf '\n'
+          } > "$BODY"
+
+          if [ -n "$OPEN" ]; then
+            gh issue comment "$OPEN" --body-file "$BODY"
+            exit 0
+          fi
+
+          {
+            printf 'One issue for the whole nightly: while this one is open, every other lane that '
+            printf 'fails comments here with its own jobs. Close it once the nightly is green again.\n\n'
             printf 'A PR that closes this issue runs the nightly shape of CI on itself, so the fix '
             printf 'is proved by the lane that failed. Say `Closes #<this issue>` in the PR body '
             printf 'before opening it, put `#nightly` anywhere in the body, or add the '
             printf '`run-nightly` label and push again.\n'
-          } > "$BODY"
+          } >> "$BODY"
 
           gh issue create --title "$TITLE" --label nightly-failure --body-file "$BODY"

@@ -50,9 +50,10 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   the metal tensor crowns, and the three metal prefill raced-constant knobs beside them - both are
   applied by `apply_box_profile_runtime` and CONSUMED by the Metal backends at their own init.
   `REVIEW.das`'s `check_fastmath_default` licensed set names each kernel that opts out of fastmath
-  against the test that reds under it - the three StyleTTS2 harmonic-source kernels
-  (`metal_st2_src_low_msl`, `metal_st2_src_cumsum_msl`, `metal_st2_src_sines_msl`, gated by
-  `st2_source_gate`) - and an entrant ships its failing-under-fastmath test with the kernel.
+  against the test that reds under it - the StyleTTS2 harmonic-source stamps, a resample law each
+  (`metal_st2_src_low_torch_msl` / `_onnx_msl`, `metal_st2_src_cumsum_torch_msl` / `_onnx_msl`,
+  `metal_st2_src_sines_torch_msl` / `_onnx_msl`, gated by `st2_source_gate`) - and an entrant
+  ships its failing-under-fastmath test with the kernel.
 - **`dasllama_transformer.das`** - the block-composition seam, and the require umbrella: the
   `[init]`-only side-effect requires (arch registrations, GPU tiers, and any module that
   requires the engine back, which the umbrella therefore hosts to break the cycle).

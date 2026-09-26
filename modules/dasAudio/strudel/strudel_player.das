@@ -1,4 +1,5 @@
 options gen2
+require daslib/runtime_memory public
 options indenting = 4
 options persistent_heap
 options gc
@@ -64,6 +65,7 @@ var private g_sf2 : SF2File?
 var private g_sf2_path : string
 var private g_cmd_fn : function<(cmd : string) : void>
 var private g_playback_box : SeqBox?
+var private g_memory_box : SeqBox?
 var private g_diagnostics_box : SeqBox?
 var private g_tracks : array<StrudelTrack?>
 var private g_look_ahead : float = 0.1
@@ -148,6 +150,13 @@ def private strudel_record_refill(usec : double; frames : int) {
     g_last_refill = ref_time_ticks()
     g_diagnostics.refills++; g_diagnostics.generated_frames += uint64(frames)
     g_diagnostics.max_refill_ms = max(g_diagnostics.max_refill_ms, float(usec / 1000.lf))
+}
+
+def public strudel_get_worker_memory() : ContextMemory {
+    //! Worker-owned heaps; zero in main-thread mode to avoid counting that heap twice.
+    var result = ContextMemory()
+    if (g_memory_box != null){g_memory_box |> read() $(m : ContextMemory){result = m}}
+    return result
 }
 
 def public strudel_get_worker_heap_bytes() : uint64 {
@@ -846,6 +855,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
             g_playback_box |> publish(PlaybackTime(wall_time = g_wall_time, cps = g_cps, worker_heap_bytes = heap_bytes_allocated()))
         }
         if (g_diagnostics_box != null) { g_diagnostics_box |> publish(g_diagnostics) }
+        if (g_memory_box != null){g_memory_box |> publish(context_memory())}
         if (que_len >= TARGET_CHUNKS) {
             sleep(50u)
         } elif (que_len >= LOW_WATERMARK) {
@@ -917,6 +927,8 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
         panic("strudel_init: audio system not initialized. Call audio_system_create() first.")
     }
     g_cmd_fn = cmd_fn
+    if (g_memory_box == null){g_memory_box = seq_box_create()}
+    g_memory_box |> publish(ContextMemory())
     if (g_diagnostics_box == null) { g_diagnostics_box = seq_box_create() }
     g_diagnostics_box |> publish(StrudelDiagnostics(threaded = true))
     if (g_playback_box == null) {
@@ -938,10 +950,11 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
     var done_st = g_done_status
     var pb_box = g_playback_box
     var diag_box = g_diagnostics_box
+    var memory_box = g_memory_box
     let wt = g_wall_time
     let cps = g_cps
     let la = g_look_ahead
-    new_thread() <| @capture(= fn, = bank_ptr, = sf2_ptr, = audio_ch, = cmd_st, = done_st, = pb_box, = diag_box, = wt, = cps, = la, = thread_sid) {
+    new_thread() <| @capture(= fn, = bank_ptr, = sf2_ptr, = audio_ch, = cmd_st, = done_st, = pb_box, = diag_box, = memory_box, = wt, = cps, = la, = thread_sid) {
         // name it
         this_context().name := "strudel_thread"
         // inject shared resources into thread context
@@ -953,6 +966,7 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
         g_done_status = done_st
         g_playback_box = pb_box
         g_diagnostics_box = diag_box
+        g_memory_box = memory_box
         g_wall_time = wt
         g_cps = cps
         g_look_ahead = la
@@ -962,6 +976,7 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
         cmd_st |> release()
         pb_box |> seq_box_release
         diag_box |> seq_box_release
+        memory_box |> seq_box_release
         done_st |> notify_and_release
     }
 }
@@ -978,6 +993,7 @@ def private shutdown_worker_thread() {
         to_log(LOG_ERROR, "strudel: worker thread did not exit within {WORKER_EXIT_TIMEOUT_MS}ms; leaking its stream and done status\n")
     }
     if (g_diagnostics_box != null) { g_diagnostics_box |> seq_box_release }
+    if (g_memory_box != null){g_memory_box |> seq_box_release}
     if (g_playback_box != null) {
         g_playback_box |> seq_box_release
     }

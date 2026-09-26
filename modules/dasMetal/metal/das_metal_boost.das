@@ -10,6 +10,45 @@ options indenting = 4
 module das_metal_boost shared public
 
 require das_metal public
+require math
+
+//! upload a das array into a fresh shared-memory MTLBuffer
+def public buf_upload(dev; arr : array<auto(TT)>) : auto {
+    var buf = metal_new_buffer(dev, uint64(long_length(arr)) * uint64(typeinfo sizeof(arr[0])))
+    buf_store(buf, arr)
+    return buf
+}
+
+//! a das array's elements into an existing shared-memory MTLBuffer
+def public buf_store(buf; arr : array<auto(TT)>) {
+    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
+    for (k in range(length(arr))) {
+        unsafe(p[k]) = arr[k]
+    }
+}
+
+//! a fresh shared-memory MTLBuffer holding `nn` copies of `value` (zero-fill or sentinel-fill)
+def public buf_fill(dev; nn : int; value : auto(TT)) : auto {
+    var buf = metal_new_buffer(dev, uint64(nn) * uint64(typeinfo sizeof(value)))
+    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
+    for (k in range(nn)) {
+        unsafe(p[k]) = value
+    }
+    return buf
+}
+
+//! copy `nn` elements of a shared-memory MTLBuffer into a fresh das array (`t` fixes TT; the
+//! parameter position appends const to TT, so every use strips it back with -const)
+[unused_argument(t)]
+def public buf_download(buf; nn : int; t : type<auto(TT)>) : array<TT -const> {
+    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
+    var res : array<TT -const>
+    res |> resize(nn)
+    for (k in range(nn)) {
+        res[k] = unsafe(p[k])
+    }
+    return <- res
+}
 
 //! Scoped system-default device: creates, invokes, releases. `dev` is null when the box has no
 //! Metal device — the block decides whether that is a skip or a failure.
@@ -226,8 +265,14 @@ def public submit_trace_log(cb : MetalCommandBuffer?; gpu_ms, encode_ms : double
 //! buffer, measured from block entry through end_encoding (captured just before commit) — for the
 //! encode-CPU vs GPU-window split. The metal_commit hand-off itself falls in neither number.
 def public with_compute_encoder_timed(queue : MetalCommandQueue?; var error : string&; var gpu_ms : double&; var encode_ms : double&; blk : block<(enc : MetalComputeEncoder?) : void>) : bool {
+    return with_compute_encoder_timed(queue, error, gpu_ms, encode_ms, false, blk)
+}
+
+//! The concurrent-dispatch twin: `concurrent` opens the encoder with concurrent dispatch, where the caller
+//! sequences its own hazards.
+def public with_compute_encoder_timed(queue : MetalCommandQueue?; var error : string&; var gpu_ms : double&; var encode_ms : double&; concurrent : bool; blk : block<(enc : MetalComputeEncoder?) : void>) : bool {
     let cb = metal_new_command_buffer(queue)
-    let enc = metal_new_compute_encoder(cb)
+    let enc = concurrent ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
     let ts_enc = ref_time_ticks()
     invoke(blk, enc)
     metal_end_encoding(enc)

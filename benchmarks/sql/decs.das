@@ -8,12 +8,11 @@ require _common public
 
 let N = 100000
 
-var g_ys : array<int>
+var g_ys <- make_ints(N)
 
 [init]
 def decs_bench_init {
     fixture_decs_all(N)
-    g_ys <- make_ints(N)
 }
 
 [finalize]
@@ -89,7 +88,7 @@ def bare_last_m4(b : B?) {
 [benchmark]
 def bare_order_where_m4(b : B?) {
     b |> run("bare_order_where", N) {
-        let rows <- _fold(from_decs_template(type<DecsCar>)._where(_.price > 500)
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._where(_.price > 500)
                                    ._order_by(_.price)
                                    .to_array())
         b |> accept(rows)
@@ -148,12 +147,10 @@ def count_aggregate_m4(b : B?) {
 [benchmark]
 def decs_count_bare_pred_m4(b : B?) {
     b |> run("decs_count_bare_pred", N) {
-        unsafe {
-            let c = _fold(from_decs_template(type<DecsCar>) |> count($(c) => c.price > 500))
-            b |> accept(c)
-            if (c == 0) {
-                b->failNow()
-            }
+        let c = _fold(from_decs_template(type<DecsCar>) |> count($(c) => c.price > 500))
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
         }
     }
 }
@@ -172,12 +169,10 @@ def distinct_by_count_m4(b : B?) {
 [benchmark]
 def distinct_by_order_take_m4(b : B?) {
     b |> run("distinct_by_order_take", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsCar>)._distinct_by(_.dealer_id)._order_by(_.price).take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._distinct_by(_.dealer_id)._order_by(_.price).take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -185,12 +180,10 @@ def distinct_by_order_take_m4(b : B?) {
 [benchmark]
 def distinct_by_order_to_array_m4(b : B?) {
     b |> run("distinct_by_order_to_array", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsCar>)._distinct_by(_.dealer_id)._order_by(_.price).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._distinct_by(_.dealer_id)._order_by(_.price).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -198,7 +191,7 @@ def distinct_by_order_to_array_m4(b : B?) {
 [benchmark]
 def distinct_count_m4(b : B?) {
     b |> run("distinct_count", N) {
-        let rows <- _fold(from_decs_template(type<DecsCar>)._select(_.brand).distinct().to_array())
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._select(_.brand).distinct().to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -209,12 +202,10 @@ def distinct_count_m4(b : B?) {
 [benchmark]
 def distinct_count_pred_m4(b : B?) {
     b |> run("distinct_count_pred", N) {
-        unsafe {
-            let c = _fold(from_decs_template(type<DecsCar>) |> _distinct_by(_.brand) |> count($(c) => c.year > 2009))
-            b |> accept(c)
-            if (c == 0) {
-                b->failNow()
-            }
+        let c = _fold(from_decs_template(type<DecsCar>) |> _distinct_by(_.brand) |> count($(c) => c.year > 2009))
+        b |> accept(c)
+        if (c == 0) {
+            b->failNow()
         }
     }
 }
@@ -222,12 +213,10 @@ def distinct_count_pred_m4(b : B?) {
 [benchmark]
 def distinct_take_m4(b : B?) {
     b |> run("distinct_take", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsCar>)._select(_.brand).distinct().take(3).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._select(_.brand).distinct().take(3).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -269,7 +258,7 @@ def first_or_default_match_m4(b : B?) {
 [benchmark]
 def groupby_average_m4(b : B?) {
     b |> run("groupby_average", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       AvgPrice = _._1 |> _select(_.price) |> average()))
@@ -284,7 +273,7 @@ def groupby_average_m4(b : B?) {
 [benchmark]
 def groupby_count_m4(b : B?) {
     b |> run("groupby_count", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._select((Brand = _._0, N = _._1 |> length))
                             .to_array())
@@ -298,7 +287,7 @@ def groupby_count_m4(b : B?) {
 [benchmark]
 def groupby_first_m4(b : B?) {
     b |> run("groupby_first", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       FirstCar = _._1 |> first()))
@@ -313,7 +302,7 @@ def groupby_first_m4(b : B?) {
 [benchmark]
 def groupby_having_count_m4(b : B?) {
     b |> run("groupby_having_count", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._having(_._1 |> length >= 5)
                             ._select((Brand = _._0, N = _._1 |> length))
@@ -328,7 +317,7 @@ def groupby_having_count_m4(b : B?) {
 [benchmark]
 def groupby_having_hidden_sum_m4(b : B?) {
     b |> run("groupby_having_hidden_sum", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._having(_._1 |> _select(_.price) |> sum > 50000)
                             ._select((Brand = _._0, N = _._1 |> length))
@@ -343,7 +332,7 @@ def groupby_having_hidden_sum_m4(b : B?) {
 [benchmark]
 def groupby_having_post_where_m4(b : B?) {
     b |> run("groupby_having_post_where", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       Total = _._1 |> _select(_.price) |> sum()))
@@ -359,7 +348,7 @@ def groupby_having_post_where_m4(b : B?) {
 [benchmark]
 def groupby_max_m4(b : B?) {
     b |> run("groupby_max", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       MaxPrice = _._1 |> _select(_.price) |> max()))
@@ -374,7 +363,7 @@ def groupby_max_m4(b : B?) {
 [benchmark]
 def groupby_min_m4(b : B?) {
     b |> run("groupby_min", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       MinPrice = _._1 |> _select(_.price) |> min()))
@@ -389,7 +378,7 @@ def groupby_min_m4(b : B?) {
 [benchmark]
 def groupby_multi_reducer_m4(b : B?) {
     b |> run("groupby_multi_reducer", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       N = _._1 |> length,
@@ -406,7 +395,7 @@ def groupby_multi_reducer_m4(b : B?) {
 [benchmark]
 def groupby_select_order_m4(b : B?) {
     b |> run("groupby_select_order", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       Total = _._1 |> _select(_.price) |> sum()))
@@ -422,7 +411,7 @@ def groupby_select_order_m4(b : B?) {
 [benchmark]
 def groupby_select_sum_m4(b : B?) {
     b |> run("groupby_select_sum", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._select(_.price)
                             ._group_by(_ % 100)
                             ._select((K = _._0, S = _._1 |> sum()))
@@ -437,7 +426,7 @@ def groupby_select_sum_m4(b : B?) {
 [benchmark]
 def groupby_sum_m4(b : B?) {
     b |> run("groupby_sum", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
                                       TotalPrice = _._1 |> _select(_.price) |> sum()))
@@ -452,7 +441,7 @@ def groupby_sum_m4(b : B?) {
 [benchmark]
 def groupby_where_count_m4(b : B?) {
     b |> run("groupby_where_count", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._where(_.price > 500)
                             ._group_by(_.brand)
                             ._select((Brand = _._0, N = _._1 |> length))
@@ -467,7 +456,7 @@ def groupby_where_count_m4(b : B?) {
 [benchmark]
 def groupby_where_sum_m4(b : B?) {
     b |> run("groupby_where_sum", N) {
-        let groups <- _fold(from_decs_template(type<DecsCar>)
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
                             ._where(_.price > 500)
                             ._group_by(_.brand)
                             ._select((Brand = _._0,
@@ -497,18 +486,16 @@ def join_count_m4(b : B?) {
 [benchmark]
 def join_groupby_count_m4(b : B?) {
     b |> run("join_groupby_count", N) {
-        unsafe {
-            let groups <- _fold(from_decs_template(type<DecsCar>)
-                |> _join(from_decs_template(type<DecsDealer>),
-                         $(l, r) => l.dealer_id == r.id,
-                         $(l, r) => (Brand = l.brand, DealerId = r.id))
-                |> _group_by(_.Brand)
-                |> _select((Brand = _._0, N = _._1 |> count()))
-                |> to_array())
-            b |> accept(groups)
-            if (empty(groups)) {
-                b->failNow()
-            }
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
+            |> _join(from_decs_template(type<DecsDealer>),
+                     $(l, r) => l.dealer_id == r.id,
+                     $(l, r) => (Brand = l.brand, DealerId = r.id))
+            |> _group_by(_.Brand)
+            |> _select((Brand = _._0, N = _._1 |> count()))
+            |> to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
         }
     }
 }
@@ -516,19 +503,17 @@ def join_groupby_count_m4(b : B?) {
 [benchmark]
 def join_groupby_to_array_m4(b : B?) {
     b |> run("join_groupby_to_array", N) {
-        unsafe {
-            let groups <- _fold(from_decs_template(type<DecsCar>)
-                |> _join(from_decs_template(type<DecsDealer>),
-                         $(l, r) => l.dealer_id == r.id,
-                         $(l, r) => (Brand = l.brand, Price = l.price))
-                |> _group_by(_.Brand)
-                |> _select((Brand = _._0,
-                            Total = _._1 |> _select(_.Price) |> sum()))
-                |> to_array())
-            b |> accept(groups)
-            if (empty(groups)) {
-                b->failNow()
-            }
+        var inscope groups <- _fold(from_decs_template(type<DecsCar>)
+            |> _join(from_decs_template(type<DecsDealer>),
+                     $(l, r) => l.dealer_id == r.id,
+                     $(l, r) => (Brand = l.brand, Price = l.price))
+            |> _group_by(_.Brand)
+            |> _select((Brand = _._0,
+                        Total = _._1 |> _select(_.Price) |> sum()))
+            |> to_array())
+        b |> accept(groups)
+        if (empty(groups)) {
+            b->failNow()
         }
     }
 }
@@ -536,16 +521,14 @@ def join_groupby_to_array_m4(b : B?) {
 [benchmark]
 def join_select_m4(b : B?) {
     b |> run("join_select", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsCar>) |> _join(from_decs_template(type<DecsDealer>),
-                                                                          $(l, r) => l.dealer_id == r.id,
-                                                                          $(l, r) => (CarName = l.name, DealerId = r.id))
-                                                                 |> _select(_.CarName)
-                                                                 |> to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>) |> _join(from_decs_template(type<DecsDealer>),
+                                                                      $(l, r) => l.dealer_id == r.id,
+                                                                      $(l, r) => (CarName = l.name, DealerId = r.id))
+                                                             |> _select(_.CarName)
+                                                             |> to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -556,7 +539,7 @@ def join_where_count_m4(b : B?) {
         let c = _fold(from_decs_template(type<DecsCar>) |> _join(from_decs_template(type<DecsDealer>),
                                                                   $(l, r) => l.dealer_id == r.id,
                                                                   $(l, r) => (CarPrice = l.price, DealerId = r.id))
-                                                         |> _where(_.CarPrice > 500)  // nolint:PERF013 macro-generated `+= 1`
+                                                         |> _where(_.CarPrice > 500)
                                                          |> count())
         b |> accept(c)
         if (c == 0) {
@@ -612,7 +595,7 @@ def min_aggregate_m4(b : B?) {
 [benchmark]
 def order_by_multi_key_m4(b : B?) {
     b |> run("order_by_multi_key", N) {
-        let rows <- _fold(from_decs_template(type<DecsCar>)._where(_.price > 500)
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._where(_.price > 500)
                                    ._order_by_keys((_.brand, _.price), 0u)
                                    .to_array())
         b |> accept(rows)
@@ -625,12 +608,10 @@ def order_by_multi_key_m4(b : B?) {
 [benchmark]
 def order_distinct_take_m4(b : B?) {
     b |> run("order_distinct_take", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsBrand>)._order_by(_.value).distinct().take(5).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsBrand>)._order_by(_.value).distinct().take(5).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -638,12 +619,10 @@ def order_distinct_take_m4(b : B?) {
 [benchmark]
 def order_reverse_normalized_m4(b : B?) {
     b |> run("order_reverse_normalized", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsCar>)._order_by(_.price).reverse().take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._order_by(_.price).reverse().take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -651,7 +630,7 @@ def order_reverse_normalized_m4(b : B?) {
 [benchmark]
 def order_take_desc_m4(b : B?) {
     b |> run("order_take_desc", N) {
-        let rows <- _fold(from_decs_template(type<DecsCar>)._order_by_descending(_.price).take(10).to_array())
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._order_by_descending(_.price).take(10).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -662,12 +641,10 @@ def order_take_desc_m4(b : B?) {
 [benchmark]
 def reverse_distinct_by_m4(b : B?) {
     b |> run("reverse_distinct_by", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsCar>).reverse()._distinct_by(_.brand).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>).reverse()._distinct_by(_.brand).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -675,12 +652,10 @@ def reverse_distinct_by_m4(b : B?) {
 [benchmark]
 def reverse_take_m4(b : B?) {
     b |> run("reverse_take", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsCar>).reverse().take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>).reverse().take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -688,12 +663,10 @@ def reverse_take_m4(b : B?) {
 [benchmark]
 def reverse_take_select_m4(b : B?) {
     b |> run("reverse_take_select", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsCar>).reverse().take(10)._select(_.name).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>).reverse().take(10)._select(_.name).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -712,7 +685,7 @@ def select_count_m4(b : B?) {
 [benchmark]
 def select_where_m4(b : B?) {
     b |> run("select_where", N) {
-        let rows <- _fold(from_decs_template(type<DecsCar>)._where(_.price > 500).to_array())
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._where(_.price > 500).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -734,7 +707,7 @@ def select_where_count_m4(b : B?) {
 [benchmark]
 def select_where_order_take_m4(b : B?) {
     b |> run("select_where_order_take", N) {
-        let rows <- _fold(from_decs_template(type<DecsCar>)._where(_.price > 500)
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._where(_.price > 500)
                                    ._order_by(_.price)
                                    .take(10)
                                    .to_array())
@@ -770,7 +743,7 @@ def single_match_m4(b : B?) {
 [benchmark]
 def skip_take_m4(b : B?) {
     b |> run("skip_take", N) {
-        let rows <- _fold(from_decs_template(type<DecsCar>).skip(1000).take(100).to_array())
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>).skip(1000).take(100).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -803,12 +776,10 @@ def sort_first_m4(b : B?) {
 [benchmark]
 def sort_take_m4(b : B?) {
     b |> run("sort_take", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsCar>)._order_by(_.price).take(10).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._order_by(_.price).take(10).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -816,12 +787,10 @@ def sort_take_m4(b : B?) {
 [benchmark]
 def sort_take_select_m4(b : B?) {
     b |> run("sort_take_select", N) {
-        unsafe {
-            let rows <- _fold(from_decs_template(type<DecsCar>)._order_by(_.price).take(10)._select(_.name).to_array())
-            b |> accept(rows)
-            if (empty(rows)) {
-                b->failNow()
-            }
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>)._order_by(_.price).take(10)._select(_.name).to_array())
+        b |> accept(rows)
+        if (empty(rows)) {
+            b->failNow()
         }
     }
 }
@@ -851,7 +820,7 @@ def sum_where_m4(b : B?) {
 [benchmark]
 def take_count_m4(b : B?) {
     b |> run("take_count", N) {
-        let rows <- _fold(from_decs_template(type<DecsCar>).take(1000).to_array())
+        var inscope rows <- _fold(from_decs_template(type<DecsCar>).take(1000).to_array())
         b |> accept(rows)
         if (empty(rows)) {
             b->failNow()
@@ -906,7 +875,7 @@ def take_while_match_m4(b : B?) {
 [benchmark]
 def to_array_filter_m4(b : B?) {
     b |> run("to_array_filter", N) {
-        let prices <- _fold(from_decs_template(type<DecsCar>)._where(_.price > 500)._select(_.price).to_array())
+        var inscope prices <- _fold(from_decs_template(type<DecsCar>)._where(_.price > 500)._select(_.price).to_array())
         b |> accept(prices)
         if (empty(prices)) {
             b->failNow()

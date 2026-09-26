@@ -92,6 +92,17 @@ def apple_script(script : string) : string {
     }
 }
 
+//! A status item reaches System Events a moment after its process creates it, later on a loaded machine; on timeout the last dump returns.
+def apple_script_until(script : string; seconds : float; done : block<(dump : string) : bool>) : string {
+    let started = ref_time_ticks()
+    var dump = apple_script(script)
+    while (!invoke(done, dump) && get_time_usec(started) < int(seconds * 1000000.0)) {
+        sleep(100u)
+        dump = apple_script(script)
+    }
+    return dump
+}
+
 def dump_has(t : T?; haystack : string; needle : string; what : string) {
     t |> success(find(haystack, needle) >= 0, "{what}: expected '{needle}' in\n{haystack}")
 }

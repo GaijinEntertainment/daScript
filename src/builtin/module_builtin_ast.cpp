@@ -1022,6 +1022,7 @@ namespace das {
     }
 
     bool addModuleRequire ( Module * module, Module * reqModule, bool publ ) {
+        if ( !module || !reqModule || module == reqModule ) return false;
         auto it = module->requireModule.find(reqModule);
         if ( it != module->requireModule.end() ) {
             if ( !publ || it->second ) {
@@ -1479,10 +1480,118 @@ namespace das {
         if ( cres.saveFailed ) issues << "ser: cannot write '" << moduleCache.path << "'\n";
         invokeProgramBlock("rtti_compile", program, issues, program && !program->failed(), block, context, at);
     }
+
+    // src/ast/ARCHITECTURE_BUILT.md#built-programs
+    struct BuiltProgramScope {
+        FileAccessPtr           access;
+        ModuleGroup             libGroup;
+        CodeOfPolicies          policies;
+        TextWriter              logs;
+        ProgramPtr              firstFailure;
+        vector<ProgramPtr>      returnedPrograms;
+        BuiltProgramScope *     outer = nullptr;
+    };
+
+    static DAS_THREAD_LOCAL(BuiltProgramScope *) builtProgramScope;
+
+    static BuiltProgramScope * currentBuiltProgramScope ( const char * who, Context * context, LineInfoArg * at ) {
+        auto scope = *builtProgramScope;
+        if ( !scope ) context->throw_error_at(at, "%s is only valid inside make_program", who);
+        return scope;
+    }
+
+    static void flushBuildLogs ( BuiltProgramScope & scope, Context * context, LineInfoArg * at ) {
+        auto text = scope.logs.str();
+        if ( text.empty() ) return;
+        context->to_out(at, LogLevel::warning, text.c_str());
+        scope.logs.clear();
+    }
+
+    static ProgramPtr buildWithBlock ( BuiltProgramScope * scope, const char * moduleName,
+            const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
+        bool ok = true;
+        auto fill = [&]( Program * program ) {
+            ok = context->runWithCatch([&]() {
+                das_invoke<void>::invoke<Module *>(context, at, block, program->thisModule.get());
+            });
+            if ( !ok ) {
+                auto title = moduleName[0] ? "module '" + string(moduleName) + "'" : string("the main module");
+                program->error("the block building " + title + " panicked", "", "", LineInfo(), CompilationError::internal_module);
+            }
+        };
+        auto program = moduleName[0]
+            ? buildDaScriptModule(moduleName, scope->access, scope->logs, scope->libGroup, scope->policies, fill)
+            : buildDaScriptProgram(scope->access, scope->logs, scope->libGroup, scope->policies, fill);
+        flushBuildLogs(*scope, context, at);
+        if ( !ok ) {
+            program.reset();
+            context->rethrow();
+        }
+        return program;
+    }
+
+    void rtti_builtin_make_program ( const CodeOfPolicies & cop, const TBlock<void> & block, Context * context, LineInfoArg * at ) {
+        bool ok;
+        bool programEscaped = false;
+        {
+            BuiltProgramScope scope;
+            scope.access = make_smart<FsFileAccess>();
+            scope.policies = cop;
+            scope.outer = *builtProgramScope;
+            SerializerSlotsHidden hidden;
+            gc_guard program_gc_scope;
+            scope.firstFailure = requireDefaultModules(scope.access, scope.logs, scope.libGroup, scope.policies);
+            flushBuildLogs(scope, context, at);
+            *builtProgramScope = &scope;
+            ok = context->runWithCatch([&]() {
+                das_invoke<void>::invoke(context, at, block);
+            });
+            *builtProgramScope = scope.outer;
+            scope.firstFailure.reset();
+            for ( auto & program : scope.returnedPrograms ) {
+                programEscaped |= program->use_count() > 1;
+            }
+        }
+        if ( !ok ) context->rethrow();
+        if ( programEscaped ) {
+            context->throw_error_at(at, "a program built by make_program outlives it - simulate and run the program inside the make_program block, its modules are freed when the block returns");
+        }
+    }
+
+    Module * rtti_builtin_make_module ( const char * name, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
+        auto scope = currentBuiltProgramScope("make_module", context, at);
+        if ( !name || !name[0] ) context->throw_error_at(at, "make_module: expecting a module name");
+        if ( scope->firstFailure ) return nullptr;
+        auto program = buildWithBlock(scope, name, block, context, at);
+        if ( program->failed() ) {
+            scope->firstFailure = program;
+            return nullptr;
+        }
+        return scope->libGroup.findModule(name);
+    }
+
+    smart_ptr<Program> rtti_builtin_make_main_module ( const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
+        auto scope = currentBuiltProgramScope("make_main_module", context, at);
+        auto program = scope->firstFailure ? scope->firstFailure : buildWithBlock(scope, "", block, context, at);
+        auto & returned = scope->returnedPrograms;
+        if ( find(returned.begin(), returned.end(), program) == returned.end() ) returned.push_back(program);
+        return program;
+    }
 #else
     void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies &,
             const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+    }
+    void rtti_builtin_make_program ( const CodeOfPolicies &, const TBlock<void> &, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+    }
+    Module * rtti_builtin_make_module ( const char *, const TBlock<void,Module *> &, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+        return nullptr;
+    }
+    smart_ptr<Program> rtti_builtin_make_main_module ( const TBlock<void,Module *> &, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+        return nullptr;
     }
 #endif
 
@@ -1557,6 +1666,15 @@ namespace das {
         addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
             SideEffects::modifyExternal, "rtti_builtin_compile_file")
                 ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_make_program)>(*this, lib, "make_program",
+            SideEffects::modifyExternal, "rtti_builtin_make_program")
+                ->args({"codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_make_module)>(*this, lib, "make_module",
+            SideEffects::modifyExternal, "rtti_builtin_make_module")
+                ->args({"name","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_make_main_module)>(*this, lib, "make_main_module",
+            SideEffects::modifyExternal, "rtti_builtin_make_main_module")
+                ->args({"block","context","line"});
         addExtern<DAS_BIND_FUN(rtti_builtin_parse_file)>(*this, lib, "parse_file",
             SideEffects::modifyExternal, "rtti_builtin_parse_file")
                 ->args({"file_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});

@@ -15,8 +15,10 @@ After an edit: `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed` 
 the changed files reach (areas `audio | vision | tts | llm | infra`; `--area <a,b>` names them
 directly). A changed file in a model suite (decode | mtp | prefill | matrix | image) reaches no
 area - `--changed` names it and runs nothing for it; run that suite with `--arm` scoped to the
-change. Before a PR: `--suite model-free`, then `--suite stocked` on a box with models - a PR's
-`stocked` run carries no `--exclude`; `--exclude test_ple_modes` is the between-PR iteration
+change. Before a PR: `--suite model-free`, then `--changed` on a box with models - the areas the
+changed files reach, never the whole `stocked` suite for its own sake (a core module with no
+`MODULE_AREAS` row reaches every area, and `--changed` then runs the whole model-gated set); a
+PR's run carries no `--exclude` - `--exclude test_ple_modes` is the between-PR iteration
 form. `--no-tune` runs any suite but the image suites on the reference kernel bodies
 (`DAS_TUNE_POLICY=reference`, the image rail off) - the portable tier's arm. The runner's `REPORT`
 and `NEXT` lines say what ran, what the run skipped (a filtered arm, an absent device, or a

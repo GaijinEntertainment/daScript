@@ -1,0 +1,1 @@
+Samples idle fork contexts retained by the caller under the pool lock. ``kind`` selects heap used/reserved bytes (0), string heap used/reserved bytes (1), stack/global bytes (2), or retained count in ``x`` (3); other values return zero. Active forks are excluded; join jobs before sampling the complete retained pool.

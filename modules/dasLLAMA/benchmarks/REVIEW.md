@@ -77,7 +77,8 @@ body.** What a cell times changes when a change inside its timed body, to its in
 to the pinned reference build (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else
 deciding which reference binary or environment the run measures) moves the measured quantity; a
 change that alters nothing the timed body loads, runs, or counts does not. The new rows or
-the withdrawal land in `../performance/records/<box>.json`, the file the affected rows live in.
+the withdrawal land in the file the affected rows live in - `../performance/records/<box>.json`
+or `../PERF_LEDGER.md`.
 
 **A diff that changes a GPU kernel emitter under this folder - a `[vk_dispatch]` or
 `[metal_kernel]` body or a `*_msl` source global - and ships no before/after rows for a board
@@ -105,7 +106,8 @@ that silently no-ops prints a 1.00x row nobody can tell from a real tie.
 report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the
 lever helps, so a per-prompt loss hides inside a winning mean.
 
-**A diff that adds or changes a row measured over reps reports one number over ALL of them - a
-rep that refuses (its run cannot produce the rep's figure: a decline, a failed load, a session
-too small for its prompt) drops the whole row, and the row reports the refusal and no number.** A
-partial row reads like a measured one and is a different quantity.
+**A diff that adds or changes a row measured over reps reports one number over ALL of them. A rep
+refuses when it produced no figure, or when it ran on a backend other than the row's backend
+stamp - the backend name the row records as having served the row. One refusing rep drops the
+whole row, and the row reports the refusal and its reason and no number.** A partial row reads
+like a measured one and is a different quantity.

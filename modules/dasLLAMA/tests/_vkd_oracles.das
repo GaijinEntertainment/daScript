@@ -18,6 +18,7 @@ require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_decode   // RDEC_MIR_SLACK_ROWS: the flash fixtures pad their shadows as the driver's mirrors do
 require dasllama/dasllama_vulkan_common   // upload_region_at: the sentinel fills
 require _compares   // NAN_SENTINEL_BITS
+require _attn_oracle public
 
 //! the flash tiles' shadow planes carry sixteen zero rows past the last position: the KHR tile's last key step loads a whole 16-row fragment
 let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad their shadows the rows the driver's mirrors carry past their planes
@@ -37,6 +38,45 @@ def fill_upload(dev : uint64; off, bytes : int64; word : uint) {
 
 //! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
 def nan_sentinel_upload(dev : uint64; bytes : int64; off : int64 = 0l) => fill_upload(dev, off, bytes, NAN_SENTINEL_BITS)
+
+//! each plane's host offset when the planes stage back to back - the sum of the sizes before it - and the total bytes last
+def staged_offsets(sizes) : array<int64> {
+    var at : array<int64>
+    at |> reserve(length(sizes) + 1)
+    var sum = 0l
+    for (bytes in sizes) {
+        at |> push(sum)
+        sum += bytes
+    }
+    at |> push(sum)
+    return <- at
+}
+
+//! the copy half of a readback: the hazard on `bits`, then each plane - `sizes[p]` bytes of `devs[p]` from its start - into `host` at `ats[p]` (`array` or `fixed_array` lists alike)
+def cmd_copy_planes(raw; var h; devs; host; ats, sizes; bits : uint) {
+    assert(length(devs) == length(sizes) && length(ats) >= length(devs), "cmd_copy_planes: one host offset and one byte count per device plane")
+    vhz_dep(raw, h, bits, 0u, true)
+    for (dev, at, bytes in devs, ats, sizes) {
+        cmd_copy_range(raw, dev, 0l, host.buf, at, bytes)
+    }
+}
+
+//! `cmd_copy_planes` with the planes back to back in `host` at `staged_offsets(sizes)`
+def cmd_copy_planes(raw; var h; devs; host; sizes; bits : uint) {
+    let ats <- staged_offsets(sizes)
+    cmd_copy_planes(raw, h, devs, host, ats, sizes, bits)
+}
+
+//! `n` elements of `TT` read back from a mapped staging, `byte_off` bytes past its start: `staged(host.mapped, at, n, type<float>)`
+[unused_argument(elem)]
+def staged(mapped : void?; byte_off : int64; n : int; elem : auto(TT)) : array<TT -const> {
+    var a : array<TT -const>
+    a |> resize(n)
+    unsafe {
+        memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n) * int64(typeinfo sizeof(type<TT>)))
+    }
+    return <- a
+}
 
 def to_u4(w : array<uint>) : array<uint4> {
     var out : array<uint4>
@@ -956,40 +996,3 @@ def sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedShape; bas
     delete cursor
 }
 
-//! single-query causal attention oracle: one output row per (query row, head) - plain two-pass softmax over [kstart, cnt)
-//! (a sliding layer's window starts past 0), the cap in the exp form the kernels take; the device's online form reassociates,
-//! so approx bars. `has_sink` / `sink`: the head's attention sink logit (gpt-oss) joins the softmax's max and denominator as
-//! a phantom key with no value row
-def attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kbase0 : int;
-                    vv : array<float>; vbase0 : int; kvd, hh, hs, kv_mul, cnt : int;
-                    scale : float; var out : array<float>; obase : int; kstart : int = 0; cap : float = 0.0;
-                    has_sink : bool = false; sink : float = 0.0) {
-    let khoff = (hh / kv_mul) * hs
-    var sc : array<float>
-    sc |> resize(cnt)
-    var mm = has_sink ? sink : -3.0e38
-    for (j in range(kstart, cnt)) {
-        var s = 0.0
-        for (e in range(hs)) {
-            s += q[qbase + e] * kk[kbase0 + j * kvd + khoff + e]
-        }
-        sc[j] = s * scale
-        if (cap != 0.0) {
-            sc[j] = softcap_exp(sc[j], cap)
-        }
-        mm = max(mm, sc[j])
-    }
-    var tot = has_sink ? exp(sink - mm) : 0.0
-    for (j in range(kstart, cnt)) {
-        sc[j] = exp(sc[j] - mm)
-        tot += sc[j]
-    }
-    for (e in range(hs)) {
-        var acc = 0.0
-        for (j in range(kstart, cnt)) {
-            acc += sc[j] * vv[vbase0 + j * kvd + khoff + e]
-        }
-        out[obase + e] = acc / tot
-    }
-    delete sc
-}

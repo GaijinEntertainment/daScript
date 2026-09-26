@@ -8,12 +8,11 @@ name: Nightly dasVulkan
 # Nightly + on-demand only; the per-PR gate is vulkan_checks.yml (paths-filtered).
 
 on:
-  schedule:
-    - cron: '0 4 * * *'
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: nightly-vulkan-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -113,11 +112,3 @@ jobs:
         # Proves das_volkInitialize finds the Homebrew loader.
         run: cmake --build ./build --target run_vulkan_smoke
 
-  nightly_issue:
-    needs: [integration_linux, build_macos]
-    if: failure() && github.event_name == 'schedule'
-    permissions:
-      issues: write
-    uses: ./.github/workflows/nightly_issue.yml
-    with:
-      lane: nightly_vulkan.yml

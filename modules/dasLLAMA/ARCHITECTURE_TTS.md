@@ -59,7 +59,8 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   parity rails for all three stages.
 - **`dasllama_tts_types.das`** - the TTS floor: `TtsCaps`, `TtsAudio` (f32 PCM + rate), `TtsNoise`
   (the source noise a synthesis consumed - captured from the oracle, or drawn into a reused
-  carrier), and the two family data records the shared carrier serializes - `KittenFamily` (speed
+  carrier), `TtsGpuSeats` (a family's GPU hook seats - the names in dispatch order, the calls and
+  the serves per seat - behind `tts_seat_*`; the family keeps its own record), and the two family data records the shared carrier serializes - `KittenFamily` (speed
   priors, voice aliases) and `KokoroFamily` (the symbol vocabulary) - plain data, no family logic.
   Family files require this, never each other.
 - **`dasllama_tts_blocks.das`** - the TTS block home, the TTS twin of `dasllama_tower.das`, in
@@ -100,7 +101,7 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   decoder through the source, the generator and the inverse STFT) and the generator seat the CPU
   chain reaches after a declined decode - each fed the stage's inputs and answering with its
   rows or declining; the trace rail keeps the CPU chain, and engage is read from the counters.
-  The Metal tower driver fills every seat on both lanes (`ARCHITECTURE_GPU_TOWER.md` sec.2.2y). The carrier also holds each family's DATA - the `KittenFamily` /
+  The Metal tower driver fills every seat on both lanes (`ARCHITECTURE_GPU_TOWER.md` sec.2.2au). The carrier also holds each family's DATA - the `KittenFamily` /
   `KokoroFamily` records of `dasllama_tts_types.das`, read from the GGUF's `kitten.*` /
   `kokoro.symbol_*` metadata by `stage_family_data` - because the image meta serializes them and a
   `.dlim` load has no GGUF to read them from (sec.2.32); the family LOGIC that interprets those
@@ -158,8 +159,8 @@ Every local container on the TTS path is `var inscope`: the persistent heap free
 scope exit, and a bare local holding a per-sentence buffer is a per-sentence leak that ends in
 the OS killing a long run.
 
-The product surfaces sit outside the module: `utils/dasllama-server/txt2wav.das` (text or a
-file -> a WAV, the timings line on stderr) and the server's `/v1/audio/speech` route (a
+The product surfaces sit outside the module: `dasllama-cli speak` (`utils/dasllama-server/cli.das`;
+text or a file -> a WAV, the timings line on stderr) and the server's `/v1/audio/speech` route (a
 dedicated TTS worker thread, one synthesis at a time, the audio served from a temp file the
 route reaps a minute after the wire closes - dasHV writes string bodies only). The rig that
 scores the whole chain is `harness/tts_rig.py` over `harness/tts_synth.das` (sec.2.35).
@@ -257,7 +258,7 @@ operation order - the cumulative sum, the resampler's arithmetic, the multiply b
 index - reproduces its phase, so `sine_source` and `source_resize` keep it exactly and the
 scalar sine stays on libm. The GPU route keeps the same order on the device: its source kernels
 compile without fast math, the torch law's double accumulator runs as a two-float sum, and the
-sine reduces its argument in exact pieces (`ARCHITECTURE_GPU_TOWER.md` sec.2.2y).
+sine reduces its argument in exact pieces (`ARCHITECTURE_GPU_TOWER.md` sec.2.2au).
 
 ### 2.34 What a word sees around it {#tts-heteronym-context}
 

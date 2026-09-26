@@ -333,7 +333,8 @@ class private AccessVisitor : AstVisitor {
                 || cname |> ends_with("tmm2d_tg_begin_deva")
                 || cname |> ends_with("tmm2d_tg_begin_nt") || cname |> ends_with("tmm2d_tg_step_nt")
                 || cname |> ends_with("tmm2d_tile_tg") || cname |> ends_with("tmm2d_tg_rowscale")
-                || cname |> ends_with("i_das_ptr_add")) {
+                || cname |> ends_with("i_das_ptr_add")
+                || cname == "q8_quad_dot" || cname == "q8_oct_dot") {
             // plain reads (the generic pass records them) — or, for the staged-GEMM protocol
             // begin/step, only untracked locals/@workgroup tiles. Pointer arithmetic is neither:
             // the RESULT's use decides, and write_root_name peels back through it

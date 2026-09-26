@@ -29,6 +29,8 @@ def private run_at(level, script : string) : string {
     var prefix = ""
     if (!empty(level)) {
         prefix = get_platform_name() == "windows" ? "set \"DAS_LOG_LEVEL={level}\"&& " : "DAS_LOG_LEVEL=\"{level}\" "
+    } else {   //! the default floor is the child's own: a caller's floor (preflight runs its gates at info) must not reach it
+        prefix = get_platform_name() == "windows" ? "set \"DAS_LOG_LEVEL=\"&& " : "env -u DAS_LOG_LEVEL "
     }
     unsafe(popen_timeout("{prefix}{das_exe()} {script}", 120.0) $(f) {
         if (f != null) {

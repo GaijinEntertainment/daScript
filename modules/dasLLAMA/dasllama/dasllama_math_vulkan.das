@@ -329,12 +329,25 @@ def private vk_dlim_source(var v : DlimVulkanConfig) : bool {
     if (g_gpu != null) {
         vk_caps_fill(g_gpu.phys, v)
     } else {
-        var inscope instance <- create_instance("dasLLAMA dlim config", make_api_version(1u, 3u, 0u))
-        volkLoadInstance(boost_value_to_vk(instance))
-        vk_caps_fill(select_physical_device(instance), v)
+        if (!g_vk_probe_done) {
+            var inscope instance <- create_instance("dasLLAMA dlim config", make_api_version(1u, 3u, 0u))
+            volkLoadInstance(boost_value_to_vk(instance))
+            vk_caps_fill(select_physical_device(instance), g_vk_probe_caps)
+            g_vk_probe_done = true
+        }
+        v.coopmat_mode = g_vk_probe_caps.coopmat_mode
+        v.subgroup_size = g_vk_probe_caps.subgroup_size
+        v.max_storage_range = g_vk_probe_caps.max_storage_range
+        v.vram_mb = g_vk_probe_caps.vram_mb
     }
     return true
 }
+
+//! the caps probe's answer, read once per process ahead of the tier's own device: a probe instance reloads the ICD, and
+//! glibc's static TLS pool runs out after about a hundred reloads (libnvidia-tls: "cannot allocate memory in static TLS
+//! block"), after which every vkCreateInstance answers ERROR_INCOMPATIBLE_DRIVER for the rest of the process
+var private g_vk_probe_caps : DlimVulkanConfig
+var private g_vk_probe_done = false
 
 def private vk_bake_tag : string {
     var v : DlimVulkanConfig

@@ -427,6 +427,18 @@ def tower_stage_f32_pad_row_stride(var blob : array<float>; src : array<float>;
     }
 }
 
+//! The plane form: ``rows`` rows of ``src_stride`` floats read from ``src`` at ``src_off``, each landing at its padded pitch.
+def tower_stage_f32_pad_row_stride(var blob : array<float>; src : PlaneF; src_off,
+                                   wo, rows, src_stride, dst_stride : int64) {
+    unsafe {
+        var dp = addr(blob[wo])
+        let sp = plane_at(src, src_off)
+        for (r in range64(rows)) {
+            copy_floats(dp + r * dst_stride, sp + r * src_stride, src_stride)
+        }
+    }
+}
+
 //! Zero ``n`` floats at ``at`` — pad tails of staged planes.
 def tower_zero_span(var a : array<float>; at, n : int64) {
     if (n <= 0l) {
@@ -615,6 +627,9 @@ def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : 
         }
     }
 }
+
+//! the output length of a k3 / stride-2 / pad-1 conv stage over an axis of `l`
+def conv_s2_out(l : int64) : int64 => (l - 1l) / 2l + 1l
 
 //! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in [C][KH][KW]
 //! order (row index c·p² + ky·p + kx), one row per non-overlapping p×p patch walking the canvas

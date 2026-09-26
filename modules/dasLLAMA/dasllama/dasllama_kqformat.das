@@ -282,6 +282,7 @@ struct KqDesc {
 //! the two stride units a device plane strides its rows and activations by: the Q8_K-form superblock and the Q8_0-form block
 let KQ_SB_ELEMS = 256l
 let KQ_B32_ELEMS = 32l
+let KQ_B32_ELEMS_U = 32u   //! the Q8_0 block width as a kernel body reads it (a module `let` is a stamp; the int64 form is the host's)
 
 //! The descriptor row of a format - a new format is one row here plus its planes; every
 //! per-format accessor below is a field of this row.

@@ -76,7 +76,9 @@ def test_program_roots(t : T?) {
                     // MetalMode.off leaves the CPU-prefill guard armed, so only a literal GPU mode counts as intent
                     let gpu_pin = (find(code, "set_metal_mode(") >= 0
                         && (find(code, "MetalMode.when_available") >= 0 || find(code, "MetalMode.required") >= 0))
-                    has_intent ||= find(code, "allow_cpu_prefill(") >= 0 || gpu_pin
+                    // the server folder's shared pick (serving_knobs.das) lands the mode for both
+                    // programs; a root that calls it has declared its intent through the one seam
+                    has_intent ||= find(code, "allow_cpu_prefill(") >= 0 || gpu_pin || find(code, "apply_gpu_backend(") >= 0
                 }
                 continue if (!requires_dasllama || !(has_main || has_export_c))
                 checked++

@@ -647,6 +647,24 @@ def take_cursor(use_alt : bool; var o : int64&; var alt : int64&; size : int64) 
     return at
 }
 
+//! The tensor's index, or a panic naming the family that needed it.
+def gguf_need_tensor(m : GGUFMeta; name, who : string) : int {
+    let ti = gguf_find_tensor(m, name)
+    if (ti < 0) {
+        panic("dasLLAMA {who}: tensor '{name}' missing from the model")
+    }
+    return ti
+}
+
+//! A whole tensor as f32, whatever its on-disk type.
+def gguf_read_f32_arr(m : GGUFMeta; bytes : array<uint8> | #; name, who : string) : array<float> {
+    let ti = gguf_need_tensor(m, name, who)
+    var inscope @exact_size a : array<float>
+    a |> reserve_resize(m.tensors[ti].n_elem)
+    gguf_read_tensor_f32(m, bytes, name, a, 0l, m.tensors[ti].n_elem)
+    return <- a
+}
+
 //! Index of tensor `name` in m.tensors, or -1 if absent.
 def gguf_find_tensor(m : GGUFMeta; name : string) : int {
     for (i in range(length(m.tensors))) {

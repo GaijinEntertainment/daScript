@@ -377,6 +377,18 @@ namespace das
         restart();
     }
 
+    urange64 Context::getIdleForkMemory(int kind) {
+        lock_guard<mutex> guard(forkContextPoolMutex);
+        if (kind == 3) return urange64(forkContextPool.size(), 0);
+        urange64 result(0, 0);
+        for (auto * fork : forkContextPool) {
+            if (kind == 0) { result.from += fork->heap->bytesAllocated(); result.to += fork->heap->totalAlignedMemoryAllocated(); }
+            else if (kind == 1) { result.from += fork->stringHeap->bytesAllocated(); result.to += fork->stringHeap->totalAlignedMemoryAllocated(); }
+            else if (kind == 2) { result.from += fork->stack.size(); result.to += fork->getGlobalSize(); }
+        }
+        return result;
+    }
+
     Context * Context::acquireForkContext ( uint32_t category_ ) {
         forkContextsBorrowed.fetch_add(1, std::memory_order_relaxed);
         Context * fork = nullptr;

@@ -16,21 +16,22 @@ must be kept in step with something maintained outside the cell (a document, a c
 committed artifact's form, a roster, a knob list) or that a checked-in table names as its
 evidence, applies `REVIEW_PINNED_GATES.md` (beside this file) together with this list.**
 
-**Every PR runs `run.das -- --suite model-free` and `run.das -- --suite stocked` on a box with
-the models stocked, plus every test here the change reaches - never the whole directory.** A
-change reaches a test when it alters anything the test's result depends on - the test file, a
-shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or a name it
-asserts on; a comment-only edit reaches none.
+**Weakening `test_metal_float_a_gate.das` - the gate that checks the MSL emitter refuses a float A operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without the `[metal_kernel(float_a_ok=true)]` license - is a defect.**
+
+**Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the models
+stocked (the stocked files of the areas the change reaches; a core module with no `MODULE_AREAS` row
+reaches every area), plus every test here the change reaches - never the whole directory, never the
+whole `stocked` suite for its own sake.** A change reaches a test when it alters anything the test's
+result depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture or
+corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
 **A PR that adds or changes a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
 `_model_tier.das`) also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
-stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when
-`run.das` accepts `--arm` for that suite (every suite but `model-free` and `stocked`) - and names
-the box in the PR body.** A run without `DASLLAMA_PARITY_FULL=1` skips every such cell and
-passes.
+stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when `run.das`
+accepts `--arm` for that suite (every suite but `model-free` and `stocked`) - and names the box in the
+PR body.** A run without `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
-**The `stocked` run every PR owes carries no `--exclude`** - an excluding run is the iteration form
-between PRs; a PR that ships on it never ran the coverage it dropped.
+**The `--changed` or `stocked` run a PR cites carries no `--exclude`** - an excluding run is the iteration form between PRs; a PR that ships on it never ran the coverage it dropped.
 
 **A test file - a `.das` in this folder that dastest runs: one carrying at least one `[test]`
 function, or one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion -
@@ -40,9 +41,9 @@ the same change; weakening that gate is a defect.** `DASLLAMA_CPU_PREFILL=1` is 
 arms for every suite.
 
 **`run.das` declares no global whose initializer spawns, logs, writes the environment or
-touches the filesystem; a diff that adds one is a defect, and weakening `test_run_suites.das`'s
-no-`[init]` check is a defect.** `test_run_suites.das` and `test_run_summary.das` require `run` by
-bare same-dir name, so anything that fires on require fires inside every one of those test processes.
+touches the filesystem, and weakening `test_run_suites.das`'s no-`[init]` check is a defect.**
+`test_run_suites.das` and `test_run_summary.das` require `run` by bare same-dir name, so anything
+that fires on require fires inside every one of those test processes.
 
 **A diff that gives `_model_tier.das`, or a `tests/` fixture it requires, an `[init]` that
 declares the CPU-prefill intent (`allow_cpu_prefill`) is a defect - the intent is declared in
@@ -116,15 +117,15 @@ other stocked fixture gates on its own presence.
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
 cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
-calls no loader that bakes a `.dlim` (`load_model`, `load_model_cached`, `load_model_image`,
-`load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
-`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2`; the exact name
-`load_model_`, the plain GGUF load, bakes nothing); such a test loads a media carrier in memory
-from the family's `stage_*` staging - its `mint_*` twin, or `cache_via_image_staged` with an empty
-image path.** A cell that loads under a lane pin - a `set_<family>_q8`-class knob, or a
-`set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - is where the rule matters: a disk bake
-under a pinned lane GC-purges the serving lane's `.dlim` beside the model, and the next
-direct-image load in another suite panics on the wrong identity.
+calls no loader that, with `DASLLAMA_IMAGE` unset, writes a `.dlim` beside the model - `load_model`,
+`load_model_cached`, `load_model_image`, `load_<family>_tower`, `load_<family>_encoder`,
+`load_<family>_embedder`, `load_<carrier>_model`, `load_asr_model`, `load_whisper_model`,
+`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2` (`load_pocket`, and
+`load_tts_model` on a Pocket file, bake nothing), a diff adding such a loader adding it here; such a
+test loads a media carrier in memory from the family's `stage_*` staging - its `mint_*` twin, or
+`cache_via_image_staged` with an empty image path.** A disk bake under a lane pin (a
+`set_<family>_q8`-class knob or a Metal tensor-crowns pin) purges the serving lane's `.dlim` beside
+the model, and the next direct-image load in another suite panics on the wrong identity.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -193,9 +194,10 @@ through - `reset_<name>_q8` for a `set_<name>_q8` (`reset_tts_q8` for the TTS fa
 the other lane, instead of pinning, measures whichever lane the box's policy picked.
 
 **A cell that sets a family pin or a driver setter - directly, through a helper it calls, or
-through a loader parameter that takes the lane - returns with that pin unset through the unset
-call paired with the setter it pinned through, and that setter back where it found it.** A pin
-left set makes the next cell measure this cell's lane, not its own.
+through a loader parameter that takes the lane - returns with every pin it set unset through its
+paired unset call, and every setter it set back where it found it; where the driver exposes no
+getter, back at the value the file's `[init]` sets, else at its default.** A pin left set makes
+the next cell measure this cell's lane, not its own.
 
 **A cell asserting the unpinned default lane compares against the predicates the family's
 `*_serves_q8` accessor reads for its unpinned default (whatever its body calls), never against a
@@ -212,9 +214,10 @@ selects on that model's blob twin (`blob_twin(t, path, seq_cap)`, `_metal_blob_t
 session.** The planar model and its blob twin share one shape, so one session serves both.
 
 **A diff that adds a model-loading block to a file of a `run.das` suite that accepts `--arm` -
-every suite but `model-free` and `stocked` - tags it with its family.** The family tag is the
-token passed to `family_on(t, name)` (`_model_tier.das`). An untagged block runs under every
-`--family` filter.
+every suite but `model-free` and `stocked` - tags it with the carrier family it loads: one `family_on(t, name)` check
+per carrier family (`_model_tier.das`), the token that family's entry in `CLAUDE.md`'s family filter list (a family with
+no entry adds one in the same change), the checks in sequence so a block loading several families runs only under a
+filter naming every one of them.** Kitten and kokoro are two families of one architecture; an untagged block runs under every `--family` filter.
 
 **A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
 stack against a per-session sequential forward - onto a carrier above `LARGE_TIER_BYTES`
@@ -246,8 +249,10 @@ dump, with no exact-value generator - one whose values are exactly representable
 every box produces the same bytes - is a defect.** A generator running libm transcendentals is
 not exact-value: it is not float-portable.
 
-**An embedder-parity cell that does not name its fixture, or does not log the measured
-maxdiff on green as well as red, is a defect.**
+**An embedder-parity cell - one comparing an encoder's output rows against a second source, another
+encode chain (the CPU exact, the CPU q8 or the device chain) or an oracle dump - that does not
+name its fixture in its label or a logged line, or does not log the measured maxdiff on green as
+well as red, is a defect.**
 
 **A diff that adds or loosens an assert holding a figure the run measures - the difference
 between two computed sides, a rate, an error, or a count the run decides - within a nonzero
@@ -270,13 +275,18 @@ reads passes on a broken kernel.
 
 **An ASR cell comparing transcripts across two serving lanes - a lane is a weight format the
 family serves, one chain (CPU or device) over one format, or one kernel form of one format -
-asserts WORD equality when the pair is a crowned kernel form and its tensor twin, and TOKEN
-equality otherwise.** A crowned kernel form is the one the tuner measured fastest and armed as the
-serving one; its tensor twin is the same kernel written on Metal's tensor primitives, and the
-twins' rounding legitimately flips tokens.
+asserts WORD equality when the pair is a crowned kernel form and its tensor twin; TOKEN equality
+when the two sides differ only in the decoder (one encoder's rows feed both); and otherwise TOKEN
+equality, or the transcripts' text equal with the encoder output rows held either within a
+tolerance of the other side's or by the twin bar - the device chain's distance from the exact
+chain within a stated multiple of the CPU q8 chain's own.** A crowned kernel form is the one the tuner measured fastest and
+armed as the serving one; its tensor twin is the same kernel written on Metal's tensor primitives,
+and the twins' rounding legitimately flips tokens.
 
 **An ASR transcript cell that cannot assert the equality its comparison calls for converts to
-a forced-feed logits compare within a tolerance bar - never to a looser text compare.**
+a forced-feed logits compare within a tolerance bar, or to equal transcript text with the encoder
+output rows held within a tolerance of the other side's or by the twin bar - never to a text
+compare alone.**
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`
 never names that module's types in its signature - leave a parameter that would carry one

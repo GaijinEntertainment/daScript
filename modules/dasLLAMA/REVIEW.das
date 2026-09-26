@@ -143,6 +143,8 @@ var private AUDIO_SEAM_EXEMPT <- {
     "modules/dasLLAMA/dasllama/dasllama_asr.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_asr_dec.das",
+    "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das",
+    "modules/dasLLAMA/dasllama/dasllama_vulkan_asr_dec.das",
     "modules/dasLLAMA/benchmarks/asr/asr_bench.das",
     "utils/dasllama-convert/main.das"
 }
@@ -238,7 +240,7 @@ var private GPU_ROLES_METAL <- {
 }
 
 var private GPU_ROLES_VULKAN <- {
-    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower"
+    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec"
 }
 
 // the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false reds unless
@@ -248,9 +250,12 @@ var private GPU_ROLES_VULKAN <- {
 // `st2_source_gate` in tests/test_metal_prefill_kernels.das reds on both resample laws (the
 // divisions approximate, the two-float cumsum's compensation folds away).
 var private FASTMATH_OFF_EXEMPT <- {
-    "metal_st2_src_low_msl" => "st2_source_gate",
-    "metal_st2_src_cumsum_msl" => "st2_source_gate",
-    "metal_st2_src_sines_msl" => "st2_source_gate"
+    "metal_st2_src_low_torch_msl" => "st2_source_gate",
+    "metal_st2_src_low_onnx_msl" => "st2_source_gate",
+    "metal_st2_src_cumsum_torch_msl" => "st2_source_gate",
+    "metal_st2_src_cumsum_onnx_msl" => "st2_source_gate",
+    "metal_st2_src_sines_torch_msl" => "st2_source_gate",
+    "metal_st2_src_sines_onnx_msl" => "st2_source_gate"
 }
 
 //! The `name="..."` a [metal_kernel] line declares, or "" where the line carries none.

@@ -125,17 +125,17 @@ struct TowerParityStats {
     norm_dev : double
 }
 
-def private tower_parity_stats(t : T?; tag : string; cpu, gpu : array<float>; var st : TowerParityStats) : bool {
-    t |> equal(long_length(cpu), long_length(gpu), "{tag}: length")
-    if (long_length(cpu) != long_length(gpu) || empty(cpu)) {
+def tower_parity_stats(t : T?; tag : string; ref, got : array<float>; var st : TowerParityStats) : bool {
+    t |> equal(long_length(ref), long_length(got), "{tag}: length")
+    if (long_length(ref) != long_length(got) || empty(ref)) {
         return false
     }
     var l2n = 0.0lf
     var na = 0.0lf
     var nb = 0.0lf
     var dot = 0.0lf
-    for (cv, gv in cpu, gpu) {
-        let a = double(cv)
+    for (rv, gv in ref, got) {
+        let a = double(rv)
         let b = double(gv)
         st.max_ad = max(st.max_ad, abs(a - b))
         l2n += (a - b) * (a - b)
@@ -143,12 +143,12 @@ def private tower_parity_stats(t : T?; tag : string; cpu, gpu : array<float>; va
         nb += b * b
         dot += a * b
     }
-    st.rms = sqrt(na / double(long_length(cpu)))
+    st.rms = sqrt(na / double(long_length(ref)))
     st.rel_elem = st.max_ad / max(st.rms, 1e-30lf)
     st.rel_l2 = sqrt(l2n) / max(sqrt(na), 1e-30lf)
     st.cos = dot / max(sqrt(na) * sqrt(nb), 1e-30lf)
     st.norm_dev = abs(sqrt(nb) - sqrt(na)) / max(sqrt(na), 1e-30lf)
-    to_log(LOG_INFO, "{tag}: rel_elem={st.rel_elem} rel_l2={st.rel_l2} cos={st.cos} norm_dev={st.norm_dev} maxdiff={st.max_ad} rms={st.rms} n={long_length(cpu)}\n")
+    to_log(LOG_INFO, "{tag}: rel_elem={st.rel_elem} rel_l2={st.rel_l2} cos={st.cos} norm_dev={st.norm_dev} maxdiff={st.max_ad} rms={st.rms} n={long_length(ref)}\n")
     return true
 }
 
@@ -213,6 +213,20 @@ def read_wav_pcm16_mono(path : string) : array<float> {
     }
     fclose(f)
     return <- out
+}
+
+//! The TTS cells' data gate: the model, then the g2p pack (and the tagger pack when `postag`); a missing one skips loudly and answers true.
+def tts_data_missing(t : T?; gguf : string; postag : bool = true) : bool {
+    if (!model_available(t, gguf)) {
+        return true
+    }
+    for (pack in (postag ? ["tts_g2p.bin", "tts_postag.bin"] : ["tts_g2p.bin"])) {
+        if (!stat(path_join(models_dir(), pack)).is_valid) {
+            t |> skip("{pack} not present")
+            return true
+        }
+    }
+    return false
 }
 
 // Presence + tier gate for a model-loading test. Returns true if the caller should proceed to

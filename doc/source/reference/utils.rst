@@ -32,6 +32,7 @@ built-in leak-detection mechanism.
    utils/jobque_timeline.rst
    utils/profiler.rst
    utils/dasllama_server.rst
+   utils/dasllama_cli.rst
    utils/dasllama_convert.rst
    utils/watchdog.rst
    utils/vscode_daslang_test.rst

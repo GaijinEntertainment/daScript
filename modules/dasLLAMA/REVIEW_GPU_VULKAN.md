@@ -23,8 +23,9 @@ the stamps of one `[vk_dispatch]` class template, picked by a shape argument - t
 stamp list in `ARCHITECTURE_GPU.md` sec.1.5, in the same change.**
 
 **Never size a buffer bound as one SSBO (shader storage buffer) range above
-`vk_max_storage_range()` - check the size at the site that computes it, not at the site that
-binds it.** The bind site cannot shrink a buffer that was sized wrong.
+`vk_max_storage_range()` - compare it where its size is computed: at the site that computes that
+buffer's size, or once at the function that starts the encode chain binding it, against a size no
+buffer of that chain can exceed.** The bind site cannot shrink a buffer that was sized wrong.
 
 **Never cache a descriptor set or a host address - a pointer into CPU memory - across
 dispatches in state that `vk_drop_model_state` does not clear** - hold it in
@@ -63,12 +64,12 @@ calling it; a serving hook that keeps a decline counter counts that decline unde
 reason.** `vk_moe_init` reads no knob, so a caller that skips the test serves on a box whose
 `DASLLAMA_GPU` says no.
 
-**A diff that changes what a device limit decides for the tier - which path serves, how much
-it arms, whether it declines - adds that limit to `vk_ext_roster`
+**A diff that changes what a device limit or extension decides for the tier - which path
+serves, how much it arms, whether it declines - adds that limit or extension to `vk_ext_roster`
 (`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what serves without
-it, or adds the new route to the entry it already has, in the same change.** An extension or a
-`*_supported` probe the roster omits is `check_vk_extension_roster`'s finding (`REVIEW.das`); the
-device-init log prints the roster, so a box's log says which route each capability decided.
+it, or adds the new route to the entry it already has, in the same change.** A caller family - the
+functions that reach the tier through one serving hook - whose serving or declining the diff makes
+a limit or extension decide is a new route.
 
 **The coordinate a k loop's counter feeds to `coopmatLoadTensor` / `coopmatLoadTensorDecode`
 starts at a literal or at a value rounded down to the loop's step - never at a bare runtime
@@ -77,7 +78,8 @@ columns, `r0` where it runs along rows. The shader compiler vectorizes the decod
 where it can prove the coordinate's alignment, and an unproven start runs the same loop at half
 the rate (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l).
 
-**A per-loop hint on a kernel loop in `dasllama/dasllama_vulkan_classes.das` carries a name
+**A per-loop hint on a kernel loop - in `dasllama/dasllama_vulkan_classes.das` or a helper a
+kernel body reaches (`dasllama/dasllama_gpu_math.das`) - carries a name
 `append_loop_hint_operand` (`modules/dasLLVM/daslib/llvm_jit.das`) knows.** A kernel body compiles
 for the CPU oracle too, and the JIT fails a hint name it does not know.
 
@@ -177,7 +179,7 @@ whatever their number (`ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
 
 **Never let a reduce write a workgroup slot while the previous reduce's partials still occupy it -
 pass the other slot, or put a `barrier()` between the two reduces.** A reduce sums a value across
-the workgroup through a `@workgroup` staging array - every `RmsWgBase` reduce that takes a `slot`
+the workgroup through a `@workgroup` staging array - every `WgReduceBase` reduce that takes a `slot`
 argument, 0 or 1 (`dasllama/dasllama_vulkan_classes.das`); a slot is the run of partials one
 reduce writes into that array. A reduce carries one barrier, so a thread still summing the first
 reduce's partials would read the second's writes out of the same slot.
@@ -233,12 +235,16 @@ form that leaves its list installed sends every later one-row profile to another
 returned before it submits any command that writes the buffer that copy reads.** The host's wait
 is the only order between the copy's read and that write.
 
-**An integer division or modulo in a kernel body in `dasllama/dasllama_vulkan_classes.das` whose
-divisor is not a literal or a template constant - a push-constant field, bare or computed from -
-clamps the divisor to at least one (`max(1u, ...)`) before it divides, unless an enclosing `if`
-the zero case cannot enter guards the division; a `?:` select on the field is not a guard.** Some
-drivers evaluate both arms of a select, and an integer division by zero is undefined in SPIR-V,
-so the selected arm can carry the undefined result.
+**An integer division or modulo in `dasllama/dasllama_vulkan_classes.das` kernel code - a kernel
+body or any method it reaches through calls, `dasllama/dasllama_gpu_math.das`'s helpers included -
+whose divisor is not a literal or a template constant (a push-constant field, bare or computed
+from one)
+either clamps the divisor to at least one (`max(1u, ...)`) before it divides, or sits inside an
+`if` whose condition tests the divisor expression as the division reads it and is false when
+that expression is zero; a test on any other field, one the divisor is computed from included,
+is no guard, and a `?:` select is neither.** Some drivers evaluate both arms of a select, and an
+integer division by zero is undefined in SPIR-V, so the selected arm can carry the undefined
+result.
 
 **A path under `dasllama/` that re-records the one-row token command's split form - the chain
 recorded with the attention at `RD_SPLIT_PIECES` key pieces - or replaces a descriptor set it

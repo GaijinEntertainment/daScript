@@ -230,9 +230,7 @@ class JsonAdapter : SourceAdapter {
         var pieces = build_join_standalone_pieces(joinCall, whereLam, selectLam, leadWhereLam, countOnly, keyaBody, tupAName, hashName, tupBType, false, "jjoin", at)
         if (pieces == null) return null
         var allStmts := pieces.preludeStmts
-        allStmts |> push <| qmacro_expr() {
-            var $i(hashName) : table<$t(keyType); array<$t(tupBType)>>
-        }
+        allStmts |> push(join_hash_decl(hashName, keyType, tupBType))
         allStmts |> push <| qmacro_expr() {
             for ($i(tupBName) in $i(srcBName)) {
                 $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
@@ -380,7 +378,7 @@ class JsonJoinAdapter : SourceAdapter {
         let tupBType = shape.tupBType
         let srcBName = shape.srcBName
         return <- qmacro_block() {
-            var $i(jhashName) : table<$t(keyType); array<$t(tupBType)>>
+            $e(join_hash_decl(jhashName, keyType, tupBType))
             for ($i(tupBName) in $i(srcBName)) {
                 $e(pieces.collectInner)
             }

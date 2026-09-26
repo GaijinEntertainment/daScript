@@ -129,6 +129,26 @@ def private check_shadow_filters(t : T?; var renderer : GltfPbrRenderer; model :
     t |> equal(uint(GL_NO_ERROR), glGetError())
 }
 
+def private check_draw_opacity(t : T?; renderer : GltfPbrRenderer; var model : GltfGlModel; var scene : GltfScene){
+    var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
+    scene.materials <- [GltfMaterial()]
+    let light = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(0.0), intensity = 0.0, ambient = float3(1.0), environment = 0.0)
+    for (mode in range(-1, 3)){
+        model.meshes[0].primitives[0].material = mode < 0 ? -1 : 0
+        scene.materials[0].alphaMode = mode == 1 ? GltfAlphaMode.mask : mode == 2 ? GltfAlphaMode.blend : GltfAlphaMode.opaque
+        for (opacity in fixed_array(-.5, .5, 1.5)){
+            for (root in fixed_array(false, true)){
+                glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+                if (root){gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), light, opacity)}
+                else{gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), light, opacity)}
+                let pixel = read_rgba(GL_COLOR_ATTACHMENT0)
+                t |> success(abs(pixel.w - clamp(opacity, 0.0, 1.0)) < .01, "draw opacity clamps and retains alpha for compositing")
+            }
+        }
+    }
+    model.meshes[0].primitives[0].material = -1
+}
+
 [test]
 def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
     if (glfwInit() == 0){t |> skip("GLFW display unavailable"); return }
@@ -180,5 +200,6 @@ def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
 
     check_surface_motion(t, renderer, model, scene)
 
+    check_draw_opacity(t, renderer, model, scene)
     check_shadow_filters(t, renderer, model, scene)
 }

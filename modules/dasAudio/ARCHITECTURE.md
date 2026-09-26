@@ -3,7 +3,7 @@
 **Who reads this: me.** Durable facts about why the audio system is shaped the way it is -
 readable cold, no history, no PR numbers.
 
-## Threaded WebAssembly output
+## 1. Threaded WebAssembly output {#threaded-webassembly-output}
 
 The AudioWorklet only consumes float PCM from a preallocated single-producer,
 single-consumer ring and zero-fills an underrun. A regular pthread runs `mix_audio`,
@@ -16,12 +16,20 @@ newly triggered sound waits behind. Depth is therefore a budget, not a safety ma
 raised when underruns appear - 20 ms of the DEVICE's own rate (`ma_device.sampleRate`, which a
 browser may resolve away from the rate that was asked for; floored 512 frames, capped 4096).
 
-What that 20 ms buys is one producer turnaround: the worst time `mix_audio` takes for a block
-plus the wake in front of it. That turnaround is BOUNDED, not measured - with the producer woken
-on the drain rather than a clock, 10 ms of depth still corrupts and 20 ms plays clean on the box
-this was fixed on, which puts the worst case above 10 ms and at or under 20. A measurement would
-replace the bound with a number and is the right way to move this depth; another A/B is not. What
-the depth no longer covers is any property of the host, which is what the drain-wake removed.
+Before the 512-4096 frame bounds, the requested depth rounds up to a whole
+128-frame WebAudio render quantum. A batch of whole callbacks can consume a
+partial-quantum remainder before the producer runs. This rounding is the sanctioned
+depth-increase exception: it adds less than one 128-frame block (960 to1024 frames
+at48kHz, or1.33ms), not another recovery margin. The 512-4096 frame bounds remain.
+Rounding down would represent a smaller latency budget than the requested20ms.
+
+The buffer covers producer turnaround: mixing plus scheduling after a drain notification.
+`sound_playback_diagnostics` measures queued frames, callbacks, refill work, notification-to-
+producer delay, callback gaps and timeout wakeups. Focus suspension can explain long gaps;
+lifetime maxima alone do not identify an active underrun. Producer mix timing is monotonic.
+Notification/callback timestamps use the realtime clock because AudioWorkletGlobalScope
+provides `Date.now()` but not `performance.now()`; these have millisecond resolution and
+backward clock corrections are clamped to zero.
 
 A full ring parks the producer on `emscripten_futex_wait` against `g_playback_drain_seq`, and the
 worklet bumps that counter and wakes it on every block it frees. The wake, not a timeout, is what
@@ -37,10 +45,18 @@ latency a game will accept. The wait keeps a timeout only as a backstop against 
 
 The ring is FILLED before the device starts - a device started against an empty one
 underruns on its first callback every time, and priming costs no latency that the steady
-state was not going to hold anyway. `sound_playback_underrun_frames` counts the frames the
-worklet filled with silence, the playback twin of `sound_record_overflow_frames`. Without it an
-underrun has no symptom a caller can read: a zero-fill is heard as a click inside the clip,
-not as a device error, so the count is how this failure is told from a bad mix.
+state was not going to hold anyway. After starvation, the device leaves partial refills
+untouched until the full margin is restored. It emits silence and continues notifying the
+producer during this recovery. The ring never grows and the worklet never waits.
+`sound_playback_underrun_frames` still counts all unavailable-PCM frames, including concealment ramps, including recovery;
+`recovery_frames` is a subset, while `underruns` counts transitions into recovery. Native,
+null-device and single-threaded backends expose zero buffered-output counters.
+
+`get_playback_diagnostics` returns a serializable script value. `set_audio_memory_box`
+is an optional companion to the stats box and publishes `ContextMemory` on the same
+cadence; its separate SeqBox preserves the 64-byte wait-free payload limit. Strudel
+publishes its own worker memory box, returning zero in main-thread mode to prevent
+double accounting.
 
 This separation is required for correctness: an Emscripten AudioWorklet is a Wasm
 Worker, and the hybrid runtime can initialize it with no pthread pointer. C++ mutex

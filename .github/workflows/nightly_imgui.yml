@@ -21,10 +21,7 @@ name: nightly dasImgui integration
 # CI runners (macOS: NSGL "Failed to find a suitable pixel format").
 
 on:
-  schedule:
-    # 03:00 UTC — staggered after build.yml's 02:00 nightly and the 02:30
-    # daspkg-index sweep so the three never compete for runners.
-    - cron: '0 3 * * *'
+  workflow_call:
   workflow_dispatch:
 
 defaults:
@@ -32,7 +29,7 @@ defaults:
     shell: bash
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: nightly-imgui-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -113,11 +110,3 @@ jobs:
           DASLIVE_HV_LOG_LEVEL: DEBUG
         run: cmake --build ./build --target run_tests_imgui_integration
 
-  nightly_issue:
-    needs: [integration]
-    if: failure() && github.event_name == 'schedule'
-    permissions:
-      issues: write
-    uses: ./.github/workflows/nightly_issue.yml
-    with:
-      lane: nightly_imgui.yml

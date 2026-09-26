@@ -44,6 +44,21 @@ namespace das {
     using ::ma_sf2_envelope_tick;
     using ::ma_sf2_envelope_release;
 
+    struct PlaybackDiagnostics {
+        uint64_t callbacks = 0;
+        uint64_t underrun_frames = 0;
+        uint64_t underruns = 0;
+        uint64_t recovery_frames = 0;
+        uint64_t recoveries = 0;
+        uint64_t refills = 0;
+        uint64_t wait_timeouts = 0;
+        uint64_t max_mix_us = 0;
+        uint64_t max_wake_us = 0;
+        uint64_t max_callback_gap_us = 0;
+        uint64_t queued_frames = 0;
+        uint64_t capacity_frames = 0;
+    };
+    PlaybackDiagnostics dasAudio_playback_diagnostics();
     bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float> mixer, int32_t rate, int32_t channels, Context & context );
     void dasAudio_finalize ( void );
     void dasAudio_set_null_device ( bool enabled );

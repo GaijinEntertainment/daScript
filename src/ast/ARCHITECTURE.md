@@ -1,7 +1,8 @@
 # src/ast - the front end's AST
 
 Contract: `ARCHITECTURE_COMMON.md` (repo root). This document carries the mechanisms of this
-folder that a rule cites; `ARCHITECTURE_INFER.md` carries the inference mechanisms code cites.
+folder that a rule cites; `ARCHITECTURE_INFER.md` carries the inference mechanisms code cites,
+and `ARCHITECTURE_BUILT.md` the programs a host builds from AST nodes.
 The rest of inference, with parsing and simulation, is in `skills/internal/cpp_codebase_notes.md` (repo-only).
 
 ## 1. The module-cache read in `trySerializeProgramModule` (`ast_parse.cpp`) {#module-cache-read}
@@ -259,7 +260,7 @@ the JIT's emitter is it. A late require nested in a compile - a macro during a p
 program's `isCompiling`), a macro module's `[init]` during its record's read (the reader's
 `readingRecord`) - would write its records ahead of the requirer's, which the reader meets at
 the requirer's position, or read mid-record; so a nested walk hides the stream for its duration
-(`LateRequireEnvScope`), parses its modules from source, once per process, and pushes no
+(`CompileEnvScope`), parses its modules from source, once per process, and pushes no
 record. A module whose parse failed pushes no record either, whatever the walk.
 
 ## 4. Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`) {#program-scoped-symbol-state}

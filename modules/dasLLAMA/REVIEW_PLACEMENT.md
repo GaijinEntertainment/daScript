@@ -16,10 +16,12 @@ not), a named constant or a `require` under `dasllama/` lands in the file whose 
 an `ARCHITECTURE_*.md` companion's sec.1, or a role row of `ARCHITECTURE_GPU.md` sec.1.5 - names
 its concern, unless that charter row carries a `must not hold` cell - the concerns that file
 never holds - naming the concern; a diff may instead change that charter line in the same
-change. Another file's charter naming the same kind of code does not license the landing.** `ARCHITECTURE.md`'s sec.1 routing
-block names the companion that holds each file's charter line. A driver arm is host code that
-ensures, binds, or encodes a dispatch; a backend capability is a function a driver registers in
-a hook or capability registry.
+change. Another file's charter naming the same kind of code does not license the landing.**
+`ARCHITECTURE.md`'s sec.1 routing block names the companion that holds each file's charter line.
+
+**A concern that a two-file role row of `ARCHITECTURE_GPU.md` sec.1.5 scopes to one backend
+("on Vulkan ...", "Metal's ...", "on a build without das_metal" - the Vulkan file) licenses only
+that backend's file; a concern the row names without a backend licenses both.**
 
 **A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
 adding a family, format or arm the parenthetical does not name lands it in the file whose
@@ -46,9 +48,12 @@ and in `dasllama/dasllama_vulkan_prefill.das` when the prefill pass calls it.**
 **A host-side ensure/set/encode chain on any backend that only switches on a stamp it is handed
 lands in the file of the function that decides that stamp.**
 
-**A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`; a kernel-side
-decode helper lands in its backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
-`dasllama/dasllama_vulkan_classes.das`).**
+**A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`.**
+
+**A kernel-side decode helper one backend's kernels splice lands in that backend's kernel file
+(`dasllama/dasllama_metal_kernels.das`, `dasllama/dasllama_vulkan_classes.das`); one both
+backends' kernels splice - pure arithmetic, no codebook table - lands in
+`dasllama/dasllama_gpu_math.das`, never as a copy per home.**
 
 **A disk-order -> compute-order transform lands by its consumer: a transform into the layout
 the CPU kernels read row by row in `dasllama/dasllama_repack.das`, a transform into the layout a

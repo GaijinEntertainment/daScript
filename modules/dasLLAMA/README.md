@@ -42,9 +42,10 @@ bin/daslang -jit examples/dasLLAMA/chat.das -- <model.gguf>
 # audio chat (omni models: decoder GGUF + audio mmproj)
 bin/daslang -jit examples/dasLLAMA/audio_chat.das -- <decoder.gguf> <mmproj.gguf> <audio-file> [prompt]
 
-# ask about an image (gemma-4 dense or E-series: decoder GGUF + vision mmproj)
-bin/daslang -jit utils/dasllama-server/ask.das -- --model <decoder.gguf> --image-mmproj <mmproj.gguf> \
-    --image <picture.jpg|png|...> --prompt "describe this image"
+# ask about an image (gemma-4 dense or E-series: decoder GGUF + vision mmproj) - dasllama-cli,
+# the shell front end beside the server (chat, transcribe, speak, the talk chain, embed, bench)
+bin/daslang -jit utils/dasllama-server/cli.das -- complete --model <decoder.gguf> --image-mmproj <mmproj.gguf> \
+    --image <picture.jpg|png|...> "describe this image"
 
 # speech-to-text: whisper / parakeet / canary ggml bins, or qwen3-asr GGUF pairs
 bin/daslang -jit examples/dasLLAMA/transcribe.das -- <ggml-model.bin | decoder.gguf mmproj.gguf> <audio-file>
@@ -155,6 +156,7 @@ modules/dasLLAMA/
     dasllama_vulkan_decode.das #   Vulkan resident DECODE driver + decode arms (FFN GEMV, qkv, cls, dnd step, heat cache)
     dasllama_vulkan_prefill.das #  Vulkan resident PREFILL driver + batch arms (FFN batch, dense, dn, attention, streamed mirrors)
     dasllama_kernel_access.das #  the shared body-walk read/write classifier the GPU lenses run on
+    dasllama_gpu_math.das     #   the ALU helpers both kernel homes splice into shader bodies (ksign7, iq3s_signed, softcap_exp)
     dasllama_gpu_resident.das #   the vulkan MoE GPU-resident expert tier — bake plan, upload/stream slots, per-layer placement
     dasllama_math_gen.das     #   the generated GEMM tier — registers "arm64-gen"/"x64-gen" (load-select repack backends; traversals read the stamped layout)
     dasllama_gemm_schema.das  #   tune_perm grid + layout schema shared by the generator and the runtime

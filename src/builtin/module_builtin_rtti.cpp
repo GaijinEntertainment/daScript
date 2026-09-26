@@ -549,6 +549,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(getThisModule)>("getThisModule");
             addProperty<DAS_BIND_MANAGED_PROP(getDebugger)>("getDebugger");
             addProperty<DAS_BIND_MANAGED_PROP(getOptimize)>("getOptimize");
+            addProperty<DAS_BIND_MANAGED_PROP(failed)>("failed");
             addField<DAS_BIND_MANAGED_FIELD(errors)>("errors");
             addField<DAS_BIND_MANAGED_FIELD(options)>("_options","options");
             addField<DAS_BIND_MANAGED_FIELD(policies)>("policies","policies");

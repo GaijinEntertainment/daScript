@@ -4,16 +4,13 @@ on:
   push:
     branches: [master]
   pull_request:
-  # 04:00 UTC — after build.yml (02:00), the daspkg index (02:30) and imgui (03:00).
-  # The nightly is what SEEDS the sccache slots below. Their save is master-only,
-  # but the master PUSH run is usually skipped by pre_job as a concurrent duplicate
-  # of the PR that just merged (4 of 15 recent merges actually ran), so seeding was
-  # left to chance. A cron run is on master, has no concurrent twin, and lands the
-  # slot every night. It also hosts the checks too slow to sit on every PR,
-  # and the whole windows lane (nightly-only — see the matrix).
-  schedule:
-    - cron: '0 4 * * *'
   workflow_dispatch:
+  # nightly.yml calls it with lane extended_nightly; its cron run is what seeds the master slots
+  workflow_call:
+    inputs:
+      lane:
+        type: string
+        default: extended
 defaults:
   run:
     shell: bash
@@ -49,8 +46,7 @@ jobs:
         # two statements: a substitution inside echo would hide the script's exit code
         run: |
           set -eu
-          lane=extended
-          if [ '${{ github.event_name }}' = 'schedule' ] || [ '${{ github.event_name }}' = 'workflow_dispatch' ]; then lane=extended_nightly; fi
+          lane='${{ inputs.lane || 'extended' }}'
           matrix=$(python3 ci/ci_matrix.py "$lane")
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
@@ -288,11 +284,3 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: cmake --build ./build --config Release --target run_extended_${{ matrix.role }} --parallel
 
-  nightly_issue:
-    needs: [pre_job, extended_checks]
-    if: failure() && github.event_name == 'schedule'
-    permissions:
-      issues: write
-    uses: ./.github/workflows/nightly_issue.yml
-    with:
-      lane: extended_checks.yml

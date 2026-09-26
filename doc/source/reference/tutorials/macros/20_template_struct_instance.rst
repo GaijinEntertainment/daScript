@@ -268,6 +268,8 @@ Output
 
    Previous tutorial: :ref:`tutorial_macro_add_module_option`
 
+   Next tutorial: :ref:`tutorial_macro_build_program`
+
    Related: :ref:`Macro Tutorial 16 <tutorial_macro_template_type_macro>` —
    ``[template_structure]`` generates parameterized structs from type-position
    macros; this tutorial's annotation serves the inheritance-spelled,

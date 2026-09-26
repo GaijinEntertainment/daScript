@@ -209,7 +209,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 - `utils/aot/` - AOT generation driver (`bin/daslang utils/aot/main.das -- -aot <in.das> <out.cpp>`; `-ctx` emits a standalone context dir - the integration tutorial scaffolds invoke it)
 - `utils/fix-lint-errors/` - auto-fixer for mechanical lint findings (`--dry-run` to preview)
 - `utils/benchctl/` - benchmark result database + statistical comparison (needs the sqlite module)
-- `utils/dasllama-server/` - OpenAI-compatible dasLLAMA inference server (JIT-only; `deploy-jit.ps1` builds a standalone bundle)
+- `utils/dasllama-server/` - OpenAI-compatible dasLLAMA inference server (JIT-only; `deploy-jit.ps1` builds a standalone bundle), and `cli.das` - dasllama-cli, the shell front end on the same facade: `bin/daslang -jit utils/dasllama-server/cli.das -- complete | chat | transcribe | speak | talk | embed | tokenize | bench ...`
 - `utils/dasllama-convert/` - offline GGUF -> `.dlim` model prep
 - `utils/watchdog/` - supervisor for long-running daslang programs: the static `bin/watchdog --cwd <program-dir>` (no compiler, no shared module, no lock on the files a deploy replaces), or `daslang utils/watchdog/main.das -- --cwd <program-dir>` under the interpreter
 - `utils/jobque-timeline/` - per-lane jobque trace viewer (ImGui)

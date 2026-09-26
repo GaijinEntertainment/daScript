@@ -509,11 +509,6 @@ def private last_cp(s : string) : int {
     return empty(c) ? -1 : c[length(c) - 1]
 }
 
-def private cp_count(s : string) : int {
-    var inscope c <- utf8_to_cpts(s)
-    return length(c)
-}
-
 def private drop_last_cp(s : string) : string {
     var inscope c <- utf8_to_cpts(s)
     return cpts_to_utf8(c, 0, max(0, length(c) - 1))
@@ -647,7 +642,7 @@ def private head_to(w : string; n : int) : string {
     return cpts_to_utf8(c, 0, clamp(n, 0, length(c)))
 }
 
-def private chop_end(w : string; n : int) : string => head_to(w, cp_count(w) - n)
+def private chop_end(w : string; n : int) : string => head_to(w, cpt_count(w) - n)
 
 // ---------------------------------------------------------------- the lexicon
 
@@ -723,7 +718,7 @@ def private lex_find_part(g : G2pModel; t : LexTable; word : string; british : b
 def private grown_find(g : G2pModel; t : LexTable; word : string; british : bool) : int {
     let i = lex_find_part(g, t, word, british)
     return i if (i >= 0)
-    return -1 if (cp_count(word) < 2)
+    return -1 if (cpt_count(word) < 2)
     let lower = lower_word(word)
     let cap = capitalize_word(word)
     if (word == cap && lower != cap) {
@@ -842,7 +837,7 @@ def private lookup(g : G2pModel; word_in : string; tag : string; stress : float;
 def private is_known(g : G2pModel; word : string; _tag : string; british : bool) : bool {
     return true if (in_golds(g, word, british) || key_exists(SYMBOLS, word) || in_silvers(g, word, british))
     return false if (!is_alpha_word(word) || !all_lexicon_cps(word))
-    return true if (cp_count(word) == 1 || (is_upper_word(word) && in_golds(g, lower_word(word), british)))
+    return true if (cpt_count(word) == 1 || (is_upper_word(word) && in_golds(g, lower_word(word), british)))
     let rest = tail_from(word, 1)
     return rest == upper_word(rest)
 }
@@ -865,7 +860,7 @@ def private suffix_ed(stem : string; british : bool) : string {
         return british ? "{stem}ɪd" : "{stem}ᵻd"   // nolint:STYLE039
     }
     return "{stem}d" if (last != 't')
-    return "{stem}ɪd" if (british || cp_count(stem) < 2)   // nolint:STYLE039
+    return "{stem}ɪd" if (british || cpt_count(stem) < 2)   // nolint:STYLE039
     return "{drop_last_cp(stem)}ɾᵻd" if (key_exists(US_TAUS, second_last_cp(stem)))   // nolint:STYLE039
     return "{stem}ᵻd"   // nolint:STYLE039
 }
@@ -878,7 +873,7 @@ def private suffix_ing(stem : string; british : bool) : string {
         return "" if (last_cp(stem) == SCHWA || last_cp(stem) == LENGTH_MARK)
         return "{stem}ɪŋ"   // nolint:STYLE039
     }
-    if (cp_count(stem) > 1 && last_cp(stem) == 't' && key_exists(US_TAUS, second_last_cp(stem))) {
+    if (cpt_count(stem) > 1 && last_cp(stem) == 't' && key_exists(US_TAUS, second_last_cp(stem))) {
         return "{drop_last_cp(stem)}ɾɪŋ"   // nolint:STYLE039
     }
     return "{stem}ɪŋ"   // nolint:STYLE039
@@ -887,13 +882,13 @@ def private suffix_ing(stem : string; british : bool) : string {
 def private suffixed_ps(ps : string; rating : int) : PsResult => empty(ps) ? none_ps() : some_ps(ps, rating)
 
 def private stem_s(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext; has_ctx, british : bool) : PsResult {
-    return none_ps() if (cp_count(word) < 3 || !ends_with(word, "s"))
+    return none_ps() if (cpt_count(word) < 3 || !ends_with(word, "s"))
     var stem = ""
     if (!ends_with(word, "ss") && is_known(g, chop_end(word, 1), tag, british)) {
         stem = chop_end(word, 1)
-    } elif ((ends_with(word, "'s") || (cp_count(word) > 4 && ends_with(word, "es") && !ends_with(word, "ies"))) && is_known(g, chop_end(word, 2), tag, british)) {
+    } elif ((ends_with(word, "'s") || (cpt_count(word) > 4 && ends_with(word, "es") && !ends_with(word, "ies"))) && is_known(g, chop_end(word, 2), tag, british)) {
         stem = chop_end(word, 2)
-    } elif (cp_count(word) > 4 && ends_with(word, "ies") && is_known(g, "{chop_end(word, 3)}y", tag, british)) {
+    } elif (cpt_count(word) > 4 && ends_with(word, "ies") && is_known(g, "{chop_end(word, 3)}y", tag, british)) {
         stem = "{chop_end(word, 3)}y"
     } else {
         return none_ps()
@@ -904,11 +899,11 @@ def private stem_s(g : G2pModel; word : string; tag : string; stress : float; ct
 }
 
 def private stem_ed(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext; has_ctx, british : bool) : PsResult {
-    return none_ps() if (cp_count(word) < 4 || !ends_with(word, "d"))
+    return none_ps() if (cpt_count(word) < 4 || !ends_with(word, "d"))
     var stem = ""
     if (!ends_with(word, "dd") && is_known(g, chop_end(word, 1), tag, british)) {
         stem = chop_end(word, 1)
-    } elif (cp_count(word) > 4 && ends_with(word, "ed") && !ends_with(word, "eed") && is_known(g, chop_end(word, 2), tag, british)) {
+    } elif (cpt_count(word) > 4 && ends_with(word, "ed") && !ends_with(word, "eed") && is_known(g, chop_end(word, 2), tag, british)) {
         stem = chop_end(word, 2)
     } else {
         return none_ps()
@@ -930,13 +925,13 @@ def private doubled_before_ing(word : string) : bool {
 }
 
 def private stem_ing(g : G2pModel; word : string; tag : string; stress : float; ctx : TokenContext; has_ctx, british : bool) : PsResult {
-    return none_ps() if (cp_count(word) < 5 || !ends_with(word, "ing"))
+    return none_ps() if (cpt_count(word) < 5 || !ends_with(word, "ing"))
     var stem = ""
-    if (cp_count(word) > 5 && is_known(g, chop_end(word, 3), tag, british)) {
+    if (cpt_count(word) > 5 && is_known(g, chop_end(word, 3), tag, british)) {
         stem = chop_end(word, 3)
     } elif (is_known(g, "{chop_end(word, 3)}e", tag, british)) {
         stem = "{chop_end(word, 3)}e"
-    } elif (cp_count(word) > 5 && doubled_before_ing(word) && is_known(g, chop_end(word, 4), tag, british)) {
+    } elif (cpt_count(word) > 5 && doubled_before_ing(word) && is_known(g, chop_end(word, 4), tag, british)) {
         stem = chop_end(word, 4)
     } else {
         return none_ps()
@@ -1033,7 +1028,7 @@ def private longest_dot_piece(w : string) : int {
     var best = 0
     var inscope pieces <- split(w, ".")
     for (p in pieces) {
-        best = max(best, cp_count(p))
+        best = max(best, cpt_count(p))
     }
     return best
 }
@@ -1045,7 +1040,7 @@ def private get_word(g : G2pModel; word_in : string; tag : string; stress : floa
     return sp if (sp.ok)
     var word = word_in
     let wl = lower_word(word)
-    if (cp_count(word) > 1 && is_alpha_word(replace(word, "'", "")) && word != wl && (tag != "NNP" || cp_count(word) > 7)
+    if (cpt_count(word) > 1 && is_alpha_word(replace(word, "'", "")) && word != wl && (tag != "NNP" || cpt_count(word) > 7)
             && !in_golds(g, word, british) && !in_silvers(g, word, british) && (is_upper_word(word) || is_lower_word(tail_from(word, 1)))) {
         if (in_golds(g, wl, british) || in_silvers(g, wl, british) || stem_s(g, wl, tag, stress, ctx, true, british).ok
                 || stem_ed(g, wl, tag, stress, ctx, true, british).ok || stem_ing(g, wl, tag, stress, ctx, true, british).ok) {
@@ -1123,7 +1118,7 @@ def private is_number_word(word_in : string; is_head : bool) : bool {
     var word = word_in
     for (s in ["ing", "'d", "ed", "'s", "st", "nd", "rd", "th", "s"]) {
         if (ends_with(word, s)) {
-            word = chop_end(word, cp_count(s))
+            word = chop_end(word, cpt_count(s))
             break
         }
     }
@@ -1597,7 +1592,7 @@ def private demote_weak_half(var toks : array<G2pToken>; a, b : int) {
         weight |> push(stress_weight(toks[i].phonemes))
     }
     let n = length(idx)
-    if (n == 2 && cp_count(toks[idx[0]].text) == 1) {
+    if (n == 2 && cpt_count(toks[idx[0]].text) == 1) {
         toks[idx[1]].phonemes = apply_stress(toks[idx[1]].phonemes, -0.5)
         return
     }
@@ -1624,7 +1619,7 @@ def private resolve_group(var toks : array<G2pToken>; a, b : int) {
     let prespace = group_prespace(group_text(toks, a, b))
     for (i in range(a, b)) {
         if (!toks[i].has_ps) {
-            if (i + 1 == b && cp_count(toks[i].text) == 1 && key_exists(NON_QUOTE_PUNCTS, last_cp(toks[i].text))) {
+            if (i + 1 == b && cpt_count(toks[i].text) == 1 && key_exists(NON_QUOTE_PUNCTS, last_cp(toks[i].text))) {
                 toks[i].phonemes = toks[i].text
                 toks[i].has_ps = true
                 toks[i].rating = 3

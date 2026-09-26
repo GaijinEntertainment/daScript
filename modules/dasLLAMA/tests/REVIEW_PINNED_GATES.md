@@ -26,8 +26,8 @@ and this list is the only test of whether a cell is one:**
 filter); `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill
 intent); `test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`
 (`../performance/model_specs.das`'s model-set table); `test_metal_prefill_kernels.das`'s
-`test_metal_prefill_kernels` cell (its `attn_trio_gate` calls passing `softcap =` or `hass =`,
-and its `attn_trio_span_gate` calls); `test_site_records.das` (the byte-compare of
+`test_metal_prefill_kernels` cell (its `attn_trio_gate` calls whose `AttnKeys` sets `softcap`,
+`hass`, `uend` or `ulo` - the softcap, sink, uniform-span and mixed-span arms); `test_site_records.das` (the byte-compare of
 `site/files/dasllama/bench_records.json` (repo root) against a fresh `merge_site_records`
 run); `test_exchange_schema.das` (the exchange validator's corpus sweeps, and the `[tune_scope]`
 wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and
@@ -41,7 +41,7 @@ on the stock cpu arm alone, the metal leg at `-npp 512` with neither);
 `prefix_attach` and donates no pages at `donate_stream`); `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick`
 (which tile the Vulkan matmul picks and whether that dispatch splits its reduction across
 partial planes, on every input of the prefill's tile-and-split pick) and its `test_vkd_ext_roster` cell (the device-init roster's entries
-against the arming's fields); `test_tts_pocket.das`'s `test_pocket_q8_file`,
+against the arming's fields); `test_tts_pocket.das`'s `test_pocket_seat_stats` (`pocket_gpu_seats()`'s stage names in dispatch order, and `pocket_gpu_stats` panicking on a name it does not list), `test_pocket_q8_file`,
 `test_pocket_kq_file` and `test_pocket_quiet_floor` cells (the published file's tensor formats
 against the f16 load-time quants, the kq lane against the q8 lane, the served lane's quiet floor
 against the f32 lane's); `utils/dasllama-server/test_worker_dispatch.das` (repo root) -

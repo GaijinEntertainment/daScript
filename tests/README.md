@@ -527,6 +527,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | File | Description | Expects errors |
 |---|---|---|
 | atomics.das | Atomic32/atomic64 set/get/inc/dec | |
+| test_runtime_memory.das | Owning context allocations, native allocator observations, and retained idle-fork memory | |
 | test_jobque_atomics.das | with_atomic32/atomic64 - set, get, inc, dec, initial value | |
 | test_jobque_channels.das | Channel boost - push_clone, for_each_clone, with_channel | |
 | test_jobque_edge.das | Channel edge cases - single-item, large batch | |
@@ -1159,5 +1160,5 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 ## Summary
 
 - **47** test directories (2 empty: `_dasHV/`, `jitted_scripts/`)
-- **491** `.das` files total (~20 helper/module files, ~471 test files)
+- **492** `.das` files total (~20 helper/module files, ~472 test files)
 - **26** files with `expect` directives (expected compile errors), plus ~46 `failed_*` variants in `language/`

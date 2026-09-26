@@ -52,10 +52,13 @@ the `daslib/builtin.das` (repo root) helpers they name are the other side of a r
   takes with no module behind it, and a member the calls take but the require did not is a call
   into a module that is not there.
 
-- **A diff that makes `requireModuleNow` (`ast_parse.cpp`) rebind another environment field
-  the walk must put back puts that field in `LateRequireEnvScope`, in the same change.** The
-  late walk runs mid-parse of another module, and a field restored by a plain statement after
-  the walk is not restored by an unwind through it.
+- **A diff that makes a compile entry point in `ast_parse.cpp` rebind a `daScriptEnvironment`
+  field has that entry point hold a `CompileEnvScope` for the whole compile and puts that field in
+  it, in the same change. A compile entry point is any
+  function there that daslang code reaches through a builtin that compiles, builds or requires a
+  module (`src/builtin/module_builtin_ast.cpp`, repo root).** A macro can start such a compile
+  inside another module's parse or build, and a field restored by a plain statement after the
+  compile is not restored when an exception unwinds through it.
 
 - **A diff that changes the bytes the module-cache record header `writebackModules` writes and
   `trySerializeProgramModule` reads (`ast_parse.cpp`) - their content, order or encoding - bumps

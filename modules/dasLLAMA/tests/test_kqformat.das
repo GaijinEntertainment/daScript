@@ -12,7 +12,8 @@ require dastest/testing_boost public
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_common   // kq_fmt_row_ok - the dense-row demotion
 require dasllama/dasllama_blocks   // kq_bytes_per_weight - the split estimate's per-format price
-require dasllama/dasllama_gguf   // ggml_type_bytes - the disk-byte oracle of the descriptor rows
+require dasllama/dasllama_gguf   // ggml_type_bytes - the disk-byte oracle of the descriptor rows; gguf_need_tensor's refusal
+require strings
 require dasllama/dasllama_gemm_schema   // the int-id delegation under test
 require ?vulkan dasllama/dasllama_vulkan_common   // DAT_KEY_FMTS, the decode block's layer-key radix
 require daslib/enum_trait   // the radix guard walks the whole KqFmt enum
@@ -334,5 +335,16 @@ def test_kq_fmt_stamp(t : T?) {
                 t |> equal("other:dasllama_kqformat::KqTag_{f} const", stamped_family(f), "{f}")
             }
         }
+    }
+}
+
+[test]
+def test_gguf_need_tensor_refuses(t : T?) {
+    t |> run("gguf_need_tensor: a tensor the file lacks panics naming the family and the tensor") @(t : T?) {
+        let m : GGUFMeta
+        let why = panic_text() ${
+            gguf_need_tensor(m, "absent.weight", "probe")
+        }
+        t |> success(find(why, "probe") >= 0 && find(why, "absent.weight") >= 0, "the refusal names both: {why}")
     }
 }

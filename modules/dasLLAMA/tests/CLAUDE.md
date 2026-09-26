@@ -9,9 +9,9 @@ full-suite run turns a one-arm fix into an afternoon.
 ```
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|mtp|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate that needs no models - runs the same on a bare box, no --arm
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # the per-PR gate on a box with models: the model-gated files, no --arm
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # the per-PR run on a box with models, and after an edit: the areas the changed files reach
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # every model-gated file, no --arm: what --changed runs when a core module changed
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the PLE file
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # after an edit: the areas the changed files reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | llm | infra (comma list)
 ```
 
@@ -265,7 +265,7 @@ child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` cl
 `test_lens_stamp_gate` and `test_lens_call_macro_gates` spawn the same way. The StyleTTS2
 chain's kernel cells (the prefill file): the gathering conv GEMM on a forward conv (40
 channels - the k-run tail past the taps, dilation 3 with pads off both ends, 45 rows padded to
-64) and a stride-6 transposed one on both stamps - the f16-staged one on f16-exact operands (every
+64) and a stride-6 transposed one, each direction's own stamp, on both precisions - the f16-staged one on f16-exact operands (every
 product exact, so the 1e-3 bar covers the accumulation order alone) and the f32-exact one on
 operands off the f16 lattice at 2e-6, where the f16-staged stamp on the same operands must miss
 the bar (the stamp's control); the im2col route at 22 channels on a whole chunk and an offset
@@ -275,14 +275,27 @@ gather with its adds off and on; the concat rows with and without the residual c
 depthwise transposed pool; both LSTM directions on one gate set against a CPU recurrence (the
 fixture centred off tanh's saturation, asserted); the ALBERT attention rows against the CPU
 `attention_rows` at 37 and 100 rows; the sigmoid sums; the tanh GELU past its clamp; the harmonic
-source trio on either resample law against the CPU source chain itself - the phase frames within
-one ulp of its carry, the mixed signal within 2e-6 - a 40000-frame cumsum against a double
-accumulator where the two laws part by whole cycles, and the driver's own noise draw (finite,
-repeatable per seed, moving with it); the STFT on either pad law and the inverse STFT with and
-without the window envelope. Each carries a poisoned input. The census row is one kitten-nano
-synthesis on the file's planes (`cov_tower_styletts2`). Shared fixtures
-(buf helpers, the mismatch compares that dump both sides, kq plane + q8 blob builders) live
-in `_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
+source trio on either resample law's stamps against the CPU source chain itself - the phase frames
+within one ulp of its carry, the mixed signal within 2e-6 - a 40000-frame cumsum against a double
+accumulator where the two laws part by whole cycles, and the driver's own noise draw through the
+fill kernel (finite, repeatable per seed, moving with it); the STFT on either pad law's stamp and
+the inverse STFT with and without the window envelope. Each carries a poisoned input. The census row is one synthesis each
+on kitten-nano (the ONNX law's stamps) and kokoro-82m (the torch law's) on the file's planes (`cov_tower_styletts2`). The Pocket chain's cells (the same
+file): the row copies with and without the ELU, the layer scale, the rows rope over a row stride
+from a column with the tables bound at a position's row, the attention
+row against `attention_causal_rows` over a `TtsKvCache` (every key and an 8-key window, an
+unseen key's poison staying silent), the rope-and-store kernel's f32 stamp at the frame loop's
+binds (no bias, the whole head, the tables and the caches at the position's row) against
+`rope_rows` with the caches' sentinel rows, the add-and-norm at a width under the threadgroup and one past it, and the row
+GEMV's nine stamps (f32 rows under the bare dot, f32 rows and a q8 blob under the normed and
+modulated x with the SiLU out, the gated residual, the SiLU over the slab vector and the frame tail;
+the bare q8 dot rides the decode GEMV) against
+an fp64 oracle with x, y and the latent row bound at offsets. The census row is one Pocket
+codec pass over synthetic latents and one spoken line on the f16 file, then one spoken line on
+the kq file so the q8 GEMV stamps count (`cov_tower_pocket`). Shared fixtures - the buffer
+helpers of `metal/das_metal_boost`, re-exported, the mismatch compares that dump both sides, the
+kq plane and q8 blob builders, the 64-lane dispatch and the fp64 scalars - live in
+`_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
 compares local - a same-arity twin would collide with the shared tagged one. `_mtl_toy.das`
 is the `[metal_dispatch]` multi-kernel (kernel=) fixture; its gate in the misc file
 dispatches through the GENERATED builders (kn_ rail), not hand binds.
@@ -296,14 +309,15 @@ dispatch that skips `metal_set_threadgroup_memory_length` for a kernel with `@wo
 reads garbage silently - no error, a plausible wrong number - which is why the lens makes the
 omission a compile refusal (`test_lens_tgmem_gate` above).
 
-## The per-PR suites - model-free and stocked
+## The per-PR runs - model-free whole, the stocked files by area
 
 The split between the `model-free` and `stocked` suites: a file that reaches a machine-local
 fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`, `whisper_dir()`) is `stocked`,
 every other suite-less file is `model-free`, and `test_run_suites.das` reads the files and fails a
 misfiled one (the pinned gate `REVIEW.md` names for the split). A `stocked` cell skips honestly
-when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box it is
-the model coverage the per-PR gate owes - `test_ple_modes` alone is ~10 min. The runner sets
+when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box a PR
+owes the stocked files of the areas its change reaches (`--changed`), never the whole suite for
+its own sake - `test_ple_modes` alone is ~10 min, the suite hours. The runner sets
 `DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride either
 suite: the runner disarms the guard that tripwire asserts. The map below is partial. `run.das`'s
 two lists together are the census.
@@ -317,7 +331,7 @@ gated (the shared q8 triple beside the routed pair, its gate logit past the rout
 and ungated (the same at unit gate, a second span record after a reset; the reference without the
 shared expert must miss the device row in both) - plus the `vulkan_moe_span` override reached
 through its registry.
-`test_vulkan_tower_kernels.das` - model-free (a Vulkan device, else skips): the vision towers'
+`test_vulkan_tower_kernels.das` - model-free (a Vulkan device, else skips): the vision and audio towers'
 kernel classes against their CPU oracles - the bidirectional flash tiles (h64 and the padded h128
 on the cm2 and KHR arms) against `attn_row_oracle` over every key, the causal twin as the control
 that the mask switch moves the output while the last row agrees, sentinel slack rows past kvlen as
@@ -329,13 +343,98 @@ helper it mirrors (`rms_rows`, `clamp_rows`, `requant_rows_q8_sized`, `rope_neox
 sentinel fill before its dispatch (NaN words; a NaN in both halves for the f16 panels, -128 bytes
 for the Q8_0 quants), with a poisoned-element control per bar, and the flag arms - the post-add
 classes at `ln_on = 0` (the seam alone, the pre-norm output proven untouched by its sentinel) and
-the bias class at `gelu_on = 0`; the biased-block classes (the layernorm, the bias with its tanh
+at `ascale = 0.5` (the branch at half weight, the CPU form weighted the same), the plain seam stamp
+(`TowerPostAddPlain` at `ascale = 0.5` and at `ln_on = 0`: the branch added at half weight with no
+post-norm, told apart from the post-norm stamp), the bias class at `act = BIAS_ACT_NONE` (the bias
+alone against `add_bias_rows`) and its relu arm against `max(x + b, 0)`; the biased-block classes (the layernorm, the bias with its tanh
 GELU, the seam with its next layernorm, the head restrides to the tile's 128 and the rope on a
-fused row's k slot) the same way;
+fused row's k slot) the same way, and their f16-feed twins (`test_vkt_tower_f16_feeds`: the
+layernorm and the seam storing half, the biased restrides (the bias row added as the pad reads),
+the half unpad and the bias + activation storing half on its tanh, erf and relu arms, and the seam
+storing half at `ln_on = 0` - each bit for bit the f32 stamp's rows on the same input rounded to
+half, the seam's against the CPU form, every bar with its poisoned element; the guards the
+fixtures reach carry garbage past the live region and sentinel rows past the live rows - the
+rel-plane attention's idle lanes, the depthwise convs' rows past the image - and assert them
+untouched); the whisper decoder's classes
+(`test_vkt_wdec_classes`: the K/V store's three layouts - the f16 plane at a position with the v
+bias folded, the CPU chain's scaled transposed keys and its biased values - bit for bit, the
+positions past the batch left at the sentinel, then the chunked attention pair over the planes
+the store wrote against the CPU decoder form: the causal rows across a chunk boundary, the cross
+rows inside the first chunk with the second chunk's partial empty, the scaled-keys and
+causal-versus-cross controls), and its fused row passes (`test_vkt_wdec_fused_rq`: the layernorm, the post-add with its next
+norm, the bias + tanh GELU and the attention combine, each fused with the Q8_0 requant, byte for byte and scale for scale
+against the pass followed by `TowerClampRq` at three shapes - the 256-wide row of the other cells, the 384-wide row of whisper
+tiny (the strided loops' partial tail) and turbo's 1280 (the block pass's second trip), the combine at one chunk and at two -
+the bias arm and the combine held to their CPU forms at the approx bar as well, the residual rows in place the same and moved
+off their input, a poisoned input moving each one's bytes); the row-count rule of the GEMM records (`test_vkt_tile_rows`: a
+record on the l column rounds to it, the s and m columns and the batch tile keep the raw count - a CPU helper, no dispatch,
+no poisoned element);
+the audio fronts' classes - `test_vkt_tower_front_movers` (the k3
+s2 p1 im2col over two chunks with its pad and zero tail, the stem's im2col1d on both source
+layouts and strides, the qwen3a and canary feature shuffles, canary's rel-plane head panels (the
+restride stamps at one head, with and without the bias row), the clamp + halfword feed, the
+position-plane add (the bias class at `d = nelem`: one bias row the width of the rows, nothing past
+it touched), the qwen3a finish as its two bias passes (the conv_out bias row, then the chunk's
+position rows as one bias row the width of a chunk) and the subsample LayerNorm + ReLU - the data movers bit for bit as halves or floats, the
+rest at the approx bar), `test_vkt_tower_front_mel` (the spectrum on both arms and the log
+filterbank in its three forms - gemma4a's max floor, canary's added floor, the whisper
+preprocessors' mel-major log10 - against double-precision sums with the quiet frame flooring on
+the max arm and reading under it on the add arm, canary's per-feature normalization with its zero
+tail, the depthwise conv and the sinusoid rel table with its (0, 1) zero row) and
+`test_vkt_tower_cn_attn_rel_plane` (canary's rel-plane attention on both head widths over planes
+the CPU built as the f16 GEMM lands them, against `cn_attn_ref` - the full rel-pos loop with the
+u/v biases - the scaled keys and the scaled rel table as controls);
 the padded attention route end to end (pad, the h128 bidirectional tile, unpad over sixteen 72-wide
 heads) against `attention_bidir`; and the window classes - the f32 per-window attention over the
 compact rows on sixteen windows (one ragged) against `attention_bidir_windows` with full attention
-over the same rows as the leak control, the rms seam and the gated hidden against their CPU forms. The attention and GEMM classes the towers ride are the kernel file's.
+over the same rows as the leak control, the rms seam and the gated hidden (the LLM's biased f16 act
+stamp at a zero row map, the qwen25v hidden's stamp) against their CPU forms;
+the bias class's erf arm (the whisper-class towers' GELU) against `gelu_erf_batch` at 1e-5
+relative - the f32 evaluation of the CPU's double erfc - with the tanh arm missing that bar as the
+told-apart control, and its silu arm (canary's FFN) against `silu` with the tanh arm as its
+control; the Conformer classes (the silu rows - the bias class's silu arm with no bias row - the
+GLU, the causal depthwise taps, the chunk-12 relative-position attention on both head-width stamps,
+the 128-wide one over scaled queries with the oracle at four times the cap as the softcap's
+control) and the FastConformer conv module tail (`test_vkt_tower_fastconformer`: the centered
+depthwise conv with the folded BatchNorm and silu) against the CPU loops' forms, the attention
+controls scaling the keys (a uniform shift leaves a softmax alone). Every compare in the file
+carries its own poisoned-element control - a value added to the expected element that must red
+the bar. The attention and GEMM classes the towers ride are the kernel file's.
+The audio towers' Vulkan twins: `test_whisper_vulkan_twin` (`test_whisper.das`; whisper tiny and
+large-v3-turbo on jfk, the q8 default load: the same text on the CPU q8 chain and the device chain,
+the token flips logged, the counters proving every chunk's blocks and conv stem served, the decoder
+driver pinned off for the legs, then the encoder's rows over the first chunk three ways against the
+exact model minted in memory at the audio bar, with the input poison - a q8 encoder minted with half
+its blocks' GEMM planes zeroed, through the device chain, must EXCEED the bar), and in `test_audio.das`
+the three-way twins - the exact f32 tower on the CPU the reference, the q8 tower on the CPU q8
+chain and on the device chain, the device's rel_l2 from the exact chain within 1.5x the CPU q8
+chain's own plus a 1e-4 floor (`tower_twin_bar` over `tower_parity_stats`), each with the input
+poison (a fresh q8 tower with the GEMM planes of an eighth of its blocks - one on a shallow tower -
+zeroed from the middle block on, through the device chain, must
+EXCEED the bar): `test_encoder_blocks_vulkan` (qwen2audio, voxtral, omni-3b over the synthetic mel
+of the Metal blocks cell), `test_gemma4a_vulkan_twin` (the E2B audio encoder over jfk through
+`gemma4a_encode_all`) and `test_canary_vulkan_twin` (the canary encoder over jfk's log-mel through
+`canary_encode`), the last two also holding the bar on a second, longer encode after a short one on
+the same residency (the scratch regrown under it) and on a fresh residency after a shutdown, and
+both running their fronts on the device (gemma4a's whole chunk, canary's front) beside the blocks,
+so the bar covers the front chains too - the front counter (`convs`) asserted beside the block
+counters, and an exact-lane leg (the f32 tower on the device knob) recording the `quant_mode`
+decline; `test_qwen3a_vulkan_front` (the Qwen3-ASR bf16 mmproj over jfk): the device mel against
+the CPU mel within 1e-3, its counter (`mels`) asserted and no decline counted, then window 0 and
+the clip's shorter tail window three ways through `qwen3a_encode` on one residency - the second
+window has fewer chunks than the scratch holds - the rows leg fed the device mel, the soft-token
+rows at the twin bar, the conv counter proving the front served every chunk and the encode counter
+the block loop and the input poison (a q8 tower with zeroed blocks through the device chain must
+exceed the bar). Every tower but the whisper twins' is
+staged and minted in memory (the qwen3a pair through `stage_qwen3a_tower`); the whisper cells mint
+the served model in memory behind the ASR facade (`mint_asr_whisper`), as do their rows compare
+and the f32-decoder leg. The three-way twins skip without their carriers, without a Vulkan device under
+`DASLLAMA_GPU=1` and on a das_metal build; the jfk-driven cells (gemma4a, canary, qwen3a, whisper)
+also skip without jfk.wav, and the whisper twin and the qwen3a front when interpreted. Off the f16
+GEMM feed (`DASLLAMA_COOPMAT=sdot4`) every front declines `device` by design while the block chains
+serve, so each twin's front witness follows the route (`front_served` in `_tower_twin.das` over
+`vulkan_tower_front_route`): on the feed the front's counter rose by every dispatch, off it the
+counter stayed and the `device` decline was recorded.
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
 device-side f16 gather, the streamed-group slot hand-off, the streamed split's async head, and
 the shared expert's call shape - one region over every position, the identity slot map at unit
@@ -344,7 +443,10 @@ weight.
 `test_vkd_readonly_stamp` and `test_vkd_lens_readonly_gate`, and the flash ladders' refusal cell
 `test_vkd_fa_stamp_refusals` need only the dasVulkan module): the
 per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
-oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture). The per-format tile cells
+oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture; `_vk_kq_fixtures.das` holds the
+synthetic K-quant expert stacks in the tier's device layout for `test_vulkan_tier` and `test_vulkan_moe_cm2`,
+and `../harness/_vk_probe_fixture.das` re-exports it for the Vulkan probes with the word-hash quant
+bytes, the packed f16-pair scale word and the device-timestamp scaffold around a recorded command). The per-format tile cells
 (`test_vkd_<fmt>_cm2_batch`, one per `kq_sb` format; q8's cm2 tiles ride their own fmt-0 cells
 `test_vkd_cm2l_batch` / `test_vkd_cm2m_batch` / `test_vkd_cm2s_batch` / `test_vkd_cm2e_batch`,
 and its KHR arm is `test_vkd_q8_khr_batch`, the per-32 plane through the hand-staged KHR tile over the
@@ -840,9 +942,30 @@ window, mel filterbank, log-mel chunking, swapped swiglu); model-gated: the towe
 gates (ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles - CPU-claim cells, tower
 knob pinned OFF) and the `test_encoder_blocks_gpu` cell, the qwen2audio + voxtral 32-layer
 CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas - Apple builds, `-jit`;
-skips honestly without the qwen2audio / voxtral mmprojs.
+skips honestly without the qwen2audio / voxtral mmprojs; and the Vulkan twins
+`test_encoder_blocks_vulkan`, `test_gemma4a_vulkan_twin`, `test_canary_vulkan_twin` and
+`test_qwen3a_vulkan_front` (the three-way cells described under `test_vulkan_tower_kernels.das`),
+which skip without their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16
+mmproj, the canary f32 encoder, the Qwen3-ASR bf16 mmproj), without jfk.wav, without a Vulkan
+device under `DASLLAMA_GPU=1`, and on a das_metal build.
 `test_whisper.das` - stocked suite; model-gated: the whisper/parakeet/canary/gemma4a/omni
-oracle cells, the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
+oracle cells, the Vulkan twin `test_whisper_vulkan_twin` (whisper tiny and large-v3-turbo; the
+cell described under `test_vulkan_tower_kernels.das`, skipping without the ggml files, without
+jfk.wav, without a Vulkan device under `DASLLAMA_GPU=1`, on a das_metal build, and when
+interpreted), the decoder twin `test_whisper_vulkan_wdec` (tiny and large-v3-turbo on jfk, the q8
+default load: the decoder pinned to the CPU chain and then on the Vulkan ASR-decoder driver, the
+tower serving the encoder on both legs, the texts token for token with the flips logged, the
+counters proving the window's cross-KV and twenty or more decode batches served with no decline,
+the knob-off leg's knob decline with zero windows and zero steps counted, then the f32 decoder rail's `quant_mode` decline with the CPU
+still transcribing; the same skips as the tower twin, plus the handoff count: every served window took the encoder rows
+off the tower's plane device to device), `test_whisper_vulkan_wdec_flush` (tiny: a nine-row first batch through a served
+window declines `rows`, the pending cross-KV readback lands, and the CPU chain's logits over it match the knob-off chain's
+token and bar, the batch with its last token changed landing outside the bar as the control), `test_whisper_vulkan_stem_flush`
+(tiny: the block hooks pinned off through `set_vulkan_audio_blocks`, the stem's device rows land at the `blocks` decline and the
+CPU blocks over them transcribe the all-CPU chain's text), `test_whisper_vulkan_wdec_lifetime` (tiny, one session reused the way a
+serving worker reuses one: a model drop between two transcriptions - the second serves again and reads the same; the decoder knob
+turned off between two - the second reads as a fresh knob-off session; the block hooks pinned off after a served window - no
+handoff for the CPU-encoded windows, the text of the CPU-encoder chain), the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
 f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp; the strict token-identity cell
 pins the simdgroup lane, and its tolerance-graded twin pins the crowns ON and asserts WORD
 equality - the tensor twins' quality gate), the q8-gate CPU-vs-CPU claims
@@ -1066,10 +1189,12 @@ chain's own, the input poison on the one-block cb96 leg (a fresh q8 tower with i
 through the device chain must EXCEED the bar), then the exact-lane tower's `quant_mode` decline
 (the blocks seat is the driver's, which declines the exact planes once and leaves the encode to
 the CPU chain). Skips without the mmproj, without a Vulkan device under `DASLLAMA_GPU=1`, and on
-a build with das_metal, where the Metal driver owns the tower hooks. The four families' Vulkan
-twins share one instrument, `_tower_twin.das`: the seat guard (the tier's want and the device,
-`vulkan_tower_arms`), the three-way encode with its counters and bar, the input poison, the
-exact-lane decline and the staged tower's truncate-and-zero.
+a build with das_metal, where the Metal driver owns the tower hooks. The vision and audio families'
+Vulkan twins share one instrument, `_tower_twin.das`: the seat guard (the tier's want and the device,
+`vulkan_tower_arms`) and the jfk cells' seat, the three-way encode with the family's counters and
+the bar by metric (the vision canvases' maxdiff in rms, the audio towers' rel_l2), the input
+poison, the exact-lane decline, the vision canvas and dump-poison legs, and the staged tower's
+truncate-and-zero and in-memory mint.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - stocked suite; the qwen25v tower (Qwen2.5-Omni's window-attention ViT,
@@ -1108,7 +1233,10 @@ over-bar scorer (the must-EXCEED half of a poison leg) all vision tier-1 tests u
 `test_audio_embedder.das` - stocked suite; model-free cells: the `AudioEmbedder` carrier's own
 arms - the no-audio refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on
 the E2B mmproj, carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft
-token).
+token); the pre-encoded rows seam on a plain chat (`add_user_audio_rows`: a second's clip lands
+25 rows, two clips append, the turn answers and consumes them, a short row block and a queued
+image panic - gated on the E2B Q4_K_M decoder + its bf16 mmproj, loaded staged, no `.dlim`), and
+the no-audio-arm refusal (SmolLM2-135M: a family with no audio markers panics).
 `test_vision_embedder.das` - stocked suite; model-free cells: the `VisionEmbedder` carrier's own
 arms over constructed carriers - the text-only (none) shape, the loader's refusals by name
 (missing file, audio-only mmproj), and the `vision_exec_fmt` lane stamp (the qwen3v q8 flag
@@ -1170,9 +1298,10 @@ run the parity rail of `_tts_parity.das` per size and a facade smoke cell that s
 sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings;
 `test_kitten_synthesis_metal` (nano) is the synthesis across the tower knob through
 `tts_gpu_synthesis` (`_tts_parity.das`; kokoro's twin is `test_kokoro_synthesis_metal`): on the
-served lane every chunk's decode seat served, one tower encode per seat per chunk, the knob-off
-chunks declined by name at every seat (the generator seat's included), the generator seat never
-reached while the decode seat serves, the tower leg audible, the sample counts within a twentieth
+served lane every chunk served at every seat but the generator's, one tower encode per seat per
+chunk, the knob-off chunks reaching every seat (the generator seat's included), serving nothing and
+declining by name at each, the generator seat never reached while the decode seat serves, the
+tower leg audible, the sample counts within a twentieth
 (the q8 CPU chain quantizes its activations, so its durations can round a frame apart); on the
 reference lane, one captured noise stream on both legs, the sample counts equal - the durations
 token for token. The sample-wise figures are logged, not gated: an uncaptured synthesis draws its
@@ -1221,7 +1350,32 @@ multi-sentence texts, one sentence spoken with the family's own timing stages, a
 joining the roster and speaking, and the refusals (an unknown voice, a speed, a phoneme request,
 a clip at another rate); the q8 lane (the served default: the GEMMs minted q8, every codec
 conv f32, teacher-forced frames logged against the f32 oracle at an rms figure, the free run's
-frame count and speech - the rig is the lane's quality gate); the published Q8_0 file
+frame count and speech - the rig is the lane's quality gate); the Metal cells - the codec seat
+against the CPU chain over the oracle's latents on the f32 lane within `GPU_CODEC_BAR` (1e-5;
+reads 1e-6 on the exact stamps on the M5 Max, 9e-4 on the f16-staged route, which is why the seat runs exact)
+with the bar's one-sample control and the x3-scaled latents as the compare's control, one tower
+encode a call, the knob-off leg bit-equal to the CPU chain with its decline recorded; the codec seat
+on the served planes of the q8 and kq files against each file's own CPU chain within
+`GPU_CODEC_SERVED_BAR` (5e-2; reads 1.3e-2 and 7.7e-3) with the x3-scaled latents as the compare's
+control; the frames
+seat against the CPU chain teacher-forced on the oracle's noise and frames, on the f32 lane: the
+latents, conditioning rows and EOS logits within `GPU_FRAME_BAR` (2e-5; reads 2e-6 on the M5 Max) with the
+bar's one-element control and the x3-scaled noise as the compare's control, the generator left
+where the CPU loop leaves it (the last batch's draws past the frames made rewound), one hook
+call, one encode a batch of frames, the knob-off leg bit-equal with its decline, then the free
+run - its own noise, every frame fed its own output - against the CPU chain's on the same seed
+within `GPU_FRAME_FREE_BAR` (1e-3; reads 1.5e-4) with the generator check, batches of three
+(one encode a batch, the latents within the bar, a batch below one clamping to one), and the
+seats taken by an empty record and given back (`register_pocket_gpu` / `unregister_pocket_gpu`,
+the hook unreached then serving again); the served frames cell takes both oracle voices in turn
+on each file, so the second voice's slot displaces the first's, within `GPU_FRAME_SERVED_BAR` (1e-1; reads 1.9e-2 to 7.1e-2)
+with the x3-scaled noise as the compare's control; the seat record's refusal of a
+name no seat carries and its seat names in order (`test_pocket_seat_stats`, model-free); the
+long chunk's codec seat declining by shape; and the served synthesis across the knob, every
+chunk's codec and frame loop served, the encodes
+past one a chunk, the knob-off chunks declining at both seats - where no Metal device serves all
+three skip loudly, a present device that declines is a red; the parity, stream and frames cells
+pin the tower off, since the CPU chain is what they hold; the published Q8_0 file
 (`pocket-tts-en-q8.gguf`) against the f16 file's load-time quants - every backbone GEMM arrived
 as Q8_0 and no codec conv did, the same lane within a few percent; the quiet floor
 (`pocket-tts-en-kq.gguf` alone): the served lane's differenced quiet-window floor within 6 dB of
@@ -1447,8 +1601,11 @@ The loader obligation is `REVIEW.md`'s. The mechanism: the `.dlim` image rail st
 mint with the box identity (backend pin, wscale, tune manifest), and GC-purges sibling
 flavors. A suite child's pinned identity differs from the serving rig's. So a suite on the
 rail both re-mints multi-GB images the rig cannot use and purges the flavors the rig depends
-on. Image-rail coverage (mint, map, GC, flavors) lives in the image suites alone
-(`test_model_image`, `test_model_image_vulkan`).
+on. A cell that loads under a lane pin - a `set_<family>_q8`-class knob, or a
+`set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - is the sharpest case: a disk bake
+under the pinned lane purges the serving lane's `.dlim` beside the model, and the next
+direct-image load in another suite panics on the wrong identity. Image-rail coverage (mint, map,
+GC, flavors) lives in the image suites alone (`test_model_image`, `test_model_image_vulkan`).
 
 ## Metal fixtures - driver knobs and the two-model pattern
 

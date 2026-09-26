@@ -260,19 +260,7 @@ def tts_register_voice_prompt(var m : TtsModel; name : string; prompt : TtsVoice
     //! the prompt is copied and its backbone state is built lazily at the first synthesis.
     if (empty(name) || !tts_voice_prompt_valid(m, prompt)) { return false }
     var latents <- clone(prompt.latents)
-    if (!pocket_has_voice(m.pocket, name)) { m.pocket.voice_names |> push(clone_string(name)) }
-    if (key_exists(m.pocket.voice_states, name)) {
-        m.pocket.voice_states |> get(name) $(var old) { delete old }
-        m.pocket.voice_states |> erase(name)
-    }
-    if (key_exists(m.pocket.voices, name)) {
-        m.pocket.voices |> get(name) $(var old) { delete old }
-        m.pocket.voices |> erase(name)
-    }
-    if (key_exists(m.pocket.voice_latents, name)) {
-        m.pocket.voice_latents |> get(name) $(var old) { delete old }
-        m.pocket.voice_latents |> erase(name)
-    }
+    pocket_voice_clear(m.pocket, name)
     m.pocket.voice_latents[name] <- latents
     return true
 }
@@ -342,10 +330,6 @@ let TTS_CHUNK_CHARS = 400
 let private NON_BOUNDARY_ABBREVIATIONS <- {"dr", "prof", "mr", "mrs", "ms", "fig", "figs", "pp", "p", "ch", "sec",
     "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec", "al"}
 
-def private is_space_cpt(c : int) : bool {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r'
-}
-
 // the letters running up to index `i` (exclusive), lowercased
 def private word_before(cps : array<int>; i : int) : string {
     var j = i
@@ -377,6 +361,9 @@ def private is_sentence_boundary(cps : array<int>; i : int) : bool {
     return i + 1 >= n || is_space_cpt(cps[i + 1])
 }
 
+//! the splitter's whitespace: the four the reference driver splits on, not `is_white_space`'s form feed and vertical tab
+def private is_space_cpt(c : int) : bool => c == ' ' || c == '\t' || c == '\n' || c == '\r'
+
 // a chunk ends on prosodic punctuation when the family's driver says so (Kitten's appends a comma
 // where the split left none; Kokoro's pipeline sends the text as it is)
 def private finish_chunk(chunk : string; punct : bool) : string {
@@ -385,13 +372,6 @@ def private finish_chunk(chunk : string; punct : bool) : string {
     var inscope cps <- utf8_to_cpts(s)
     let last = cps[length(cps) - 1]
     return (last == '.' || last == '!' || last == '?' || last == ',' || last == ';' || last == ':') ? s : "{s},"
-}
-
-// the cap counts what a reader says, so codepoints - `length()` on a string is BYTES, and an
-// em dash or a curly quote costs three of them
-def private cpt_length(s : string) : int {
-    var inscope c <- utf8_to_cpts(s)
-    return length(c)
 }
 
 // a whitespace-free run longer than the cap has no word boundary to split on, so it splits at
@@ -412,7 +392,7 @@ def private push_words(sentence : string; max_len : int; punct : bool; var out :
     var cur_len = 0
     for (w in split(sentence, " ")) {
         continue if (empty(w))
-        let wl = cpt_length(w)
+        let wl = cpt_count(w)
         if (!empty(cur) && cur_len + 1 + wl > max_len) {
             out |> push(finish_chunk(join(cur, " "), punct))
             cur |> clear()
@@ -450,7 +430,7 @@ def tts_chunks(norm : string; max_len : int = TTS_CHUNK_CHARS; ensure_punct : bo
     for (sent in sentences) {
         let st = strip(sent)
         continue if (empty(st))
-        if (cpt_length(st) <= max_len) {
+        if (cpt_count(st) <= max_len) {
             out |> push(finish_chunk(st, ensure_punct))
         } else {
             push_words(st, max_len, ensure_punct, out)

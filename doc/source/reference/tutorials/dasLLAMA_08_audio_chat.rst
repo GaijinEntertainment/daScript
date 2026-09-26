@@ -114,6 +114,24 @@ probes the mmproj first: a carrier-served file (the gemma-4 E-series) takes the
 carrier rail — ``section_render_spans`` plus ``section_carrier_encode`` — while
 every ``load_audio_tower`` pair takes the chat rail above.
 
+The carrier rail closes the loop at the chat layer with the pre-encoded-rows
+seam, ``add_user_image_rows``'s audio twin: ``add_user_audio_rows`` moves the
+encoder's rows onto a *plain* chat — no tower attached — and ``respond`` runs
+the spliced turn, the audio span rendered around the rows. That is how a
+carrier-served family hears in a conversation at all, and the path for a
+scheduler that owns its own encoder; the rows are ``dim``-wide on every family
+and the call length-checks them:
+
+.. code-block:: das
+
+   var chat <- create_chat(m, "", 96l)
+   add_user_audio_rows(m, chat, rows, n)   // moves the rows in
+   add_user(chat, prompt)
+   respond(m, chat, SamplingParams()) $(piece) {
+       print("{piece}")
+       return true
+   }
+
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/08_audio_chat.das <../../../../tutorials/dasLLAMA/08_audio_chat.das>`

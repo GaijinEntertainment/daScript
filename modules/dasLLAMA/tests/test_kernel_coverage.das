@@ -1,5 +1,6 @@
 // The parakeet tower row needs ggml-parakeet-tdt-0.6b-v2-f32.bin under whisper_dir() and skips without it; the
-// StyleTTS2 tower row needs kitten-nano.gguf under models_dir() and the kitten family on, and skips without them.
+// StyleTTS2 tower row needs kitten-nano.gguf (and kokoro-82m.gguf for the torch-law stamps) under models_dir() and the kitten
+// family on, and skips without them; the Pocket row needs pocket-tts-en.gguf (and pocket-tts-en-kq.gguf for the q8 head stamps) and the pocket family on.
 options gen2
 options persistent_heap   // + explicit deletes: the models free before the process exits
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
@@ -26,6 +27,7 @@ require dasllama/dasllama_parakeet  // the cov_tower parakeet row
 require dasllama/dasllama_qwen25v   // the cov_tower window-ViT row
 require dasllama/dasllama_qwen3v    // the cov_tower GPU-stem row
 require dasllama/dasllama_styletts2
+require dasllama/dasllama_pocket   // nolint:STYLE030,LINT019 — the Pocket census leg sits in the das_metal static_if half
 require dasllama/dasllama_tts_types   // nolint:STYLE030,LINT019 — read only inside the Apple half
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
 require ?das_metal dasllama/dasllama_metal_prefill // metal_prefill_shutdown — the crowned twin-W leg re-arms PSOs
@@ -157,14 +159,19 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the PLE token-table gather twins: the census's only E-series carrier is the E4B Q8_0, whose
     // table sits on the q8 plane and takes the q8 stamp. A k4/k5/q40 table needs an E-series file
     // whose per_layer_token_embd is K-quant or Q4_0, and the zoo stocks none. Their coverage is
-    // ple_gather_kq_gate in test_metal_prefill_kernels.das
+    // ple_gather_gate in test_metal_prefill_kernels.das
     "MetalPleGatherK4_metal_ple_gather_kq", "MetalPleGatherK5_metal_ple_gather_kq",
     "MetalPleGatherQ40_metal_ple_gather_kq",
     // the unconverted geglu arm of the bound-total MoE activation: the gemma4moe row picks the
     // geglu family on moe_dense_shexp, and its panel always clears CVT_MIN_ROWS, so the HX twin
-    // serves and this one never does. Its coverage is ew2_totb_gate(geglu = true) in
+    // serves and this one never does. Its coverage is ew2_hx_gate(geglu = true, bounded = true) in
     // test_metal_misc_kernels.das
-    "MetalGegluB"
+    "MetalGegluB",
+    // the transposed im2col: only a transposed conv whose channel count is off the GEMM's 8-run
+    // lattice takes it, and every stocked StyleTTS2 and Pocket transposed conv sits on the lattice,
+    // so the gathering CONV stamp serves. Its coverage is st2_im2col_gate(transposed = true) in
+    // test_metal_prefill_kernels.das
+    "metal_st2_im2col_tr"
 ]
 
 def private counting_prompt(start, last : int) : string {
@@ -602,14 +609,16 @@ def private cov_tower(t : T?) {
         cov_tower_qwen25v(t)
         cov_tower_qwen3v(t)
         cov_tower_styletts2(t)
+        cov_tower_pocket(t)
     }
 }
 
 [unused_argument(t)]   // off-Apple the gated body is empty
 def private cov_tower_styletts2(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        let path = path_join(models_dir(), "kitten-nano.gguf")
-        if (family_on(t, "kitten") && model_available(t, path)) {
+        for (name in ["kitten-nano.gguf", "kokoro-82m.gguf"]) {   //! the ONNX law's stamps and the torch law's
+            let path = path_join(models_dir(), name)
+            continue if (!family_on(t, name == "kokoro-82m.gguf" ? "kokoro" : "kitten") || !model_available(t, path))
             var inscope stg <- stage_styletts2(path, false)   // stage+mint: no .dlim written, no sibling-lane GC
             var inscope m = StyleTts2Model()
             mint_styletts2(stg, m)
@@ -626,6 +635,36 @@ def private cov_tower_styletts2(t : T?) {
             with_job_que() {
                 setup_dasllama_jobque()
                 styletts2_synthesize(m, ids, style, 1.0, noise, 0x5eedul, null, tm, sc)
+            }
+        }
+    }
+}
+
+[unused_argument(t)]   //! off-Apple the gated body is empty
+def private cov_tower_pocket(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), "pocket-tts-en.gguf")
+        if (family_on(t, "pocket") && model_available(t, path)) {
+            var inscope m <- load_pocket(path)   //! the Pocket loader stages in memory: no .dlim
+            var inscope sc = PocketScratch()
+            let frames = 24l
+            var inscope lat : array<float>
+            lat |> resize(frames * m.latent_dim)
+            for (i in range(length(lat))) {
+                lat[i] = 0.1 * float(i % 17) - 0.8
+            }
+            var inscope wave : array<float>
+            var tm = TtsTimings()
+            with_job_que() {
+                setup_dasllama_jobque()
+                pocket_decode_latents(m, lat, frames, sc, wave)
+                pocket_speak(m, "The census row speaks one short line.", m.default_voice, m.default_temperature, 1ul, tm, sc)
+                let kq = path_join(models_dir(), "pocket-tts-en-kq.gguf")   //! the small form: its head's q8 linears take the q8 stamps
+                if (model_available(t, kq)) {
+                    var inscope mk <- load_pocket(kq)
+                    var inscope sck = PocketScratch()
+                    pocket_speak(mk, "The small form speaks the same line.", mk.default_voice, mk.default_temperature, 1ul, tm, sck)
+                }
             }
         }
     }
@@ -804,9 +843,55 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // gemma3v / qwen3v towers' (mmproj-gemma-3-4b-it-F16.gguf via test_gemma3v_vulkan_twin, mmproj-Qwen3VL-4B-Instruct-F16.gguf
     // via test_qwen3v_vulkan_twin) - no zoo row; their kernel coverage is test_vkt_fa_bidir in test_vulkan_tower_kernels.das
     "fa_cm2_h64_bidir_cls_spv", "fa_cm2_h128_bidir_cls_spv", "fa_khr_h64_bidir_cls_spv", "fa_khr_h128_bidir_cls_spv",
+    // the audio fronts' classes (the Vulkan tower driver's mel and conv seats - no zoo row, no audio carrier in the census);
+    // the carriers are the stocked mmproj-Qwen3-ASR-0.6B-bf16.gguf (test_qwen3a_vulkan_front in test_audio.das),
+    // mmproj-gemma-4-E2B-it-bf16.gguf (test_gemma4a_vulkan_twin) and canary-qwen-2.5b-encoder-f32.bin (test_canary_vulkan_twin);
+    // every covering cell below is in test_vulkan_tower_kernels.das
+    // the spectrum pair (Qwen3-ASR's mel); its coverage is test_vkt_tower_front_mel
+    "tower_spec_dft_cls_spv",
+    // the mel-major log store (Qwen3-ASR's mel); its coverage is test_vkt_tower_front_mel
+    "tower_mel_log_cls_spv",
+    // the qwen3a front's k3 s2 p1 im2col; its coverage is test_vkt_tower_front_movers
+    "tower_im2col_cls_spv",
+    // the qwen3a front's conv-out shuffle; its coverage is test_vkt_tower_front_movers
+    "tower_q3a_shuffle_cls_spv",
+    // the LayerNorm + ReLU rows of the gemma4a subsample convs; its coverage is test_vkt_tower_front_movers
+    "tower_ln_relu_cls_spv",
+    // canary's per-feature mel normalization; its coverage is test_vkt_tower_front_mel
+    "tower_mel_norm_cls_spv",
+    // canary's front depthwise conv; its coverage is test_vkt_tower_front_mel
+    "tower_dw_conv_cls_spv",
+    // canary's feature rows (the feature shuffle); its coverage is test_vkt_tower_front_movers
+    "tower_feat_shuffle_cls_spv",
+    // canary's sinusoid rel table; its coverage is test_vkt_tower_front_mel
+    "tower_rel_sincos_cls_spv",
+    // canary's rel-plane attention (the tiled online softmax at both head widths; the head panels ahead of the rel GEMM are the
+    // restride stamps at one head): the canary twin dispatches the 128-wide stamp (canary's head width); the 64-wide stamp
+    // serves no stocked carrier; their kernel coverage is test_vkt_tower_cn_attn_rel_plane (both stamps) in
+    // test_vulkan_tower_kernels.das
+    "tower_cn_attn_r_cls_spv", "tower_cn_attn_r64_cls_spv",
+    // the whisper decoder's classes (the Vulkan ASR-decoder driver - no zoo row, no whisper carrier in the census): the K/V
+    // stores and the chunked attention's two halves, the stocked ggml-tiny.bin and ggml-large-v3-turbo.bin via
+    // test_whisper_vulkan_wdec in test_whisper.das; their kernel coverage is test_vkt_wdec_classes in
+    // test_vulkan_tower_kernels.das
+    "tower_wdec_kv_cls_spv", "tower_wdec_attn_part_cls_spv", "tower_wdec_attn_comb_cls_spv",
+    // the decode step's fused row passes (the layernorm, the post-add with its next norm, the bias + tanh GELU and the attention
+    // combine, each landing its Q8_0 feed): the same two stocked files via test_whisper_vulkan_wdec; their kernel coverage is
+    // test_vkt_wdec_fused_rq in test_vulkan_tower_kernels.das
+    "tower_ln_rq_cls_spv", "tower_post_add_ln_rq_cls_spv", "tower_bias_act_rq_cls_spv", "tower_wdec_attn_comb_rq_cls_spv",
+    // the whisper-class conv stem's classes (the tower driver's conv seat - no zoo row): the k3 im2col and the position rows'
+    // add, the same two stocked whisper files via test_whisper_vulkan_twin in test_whisper.das; their kernel coverage is
+    // test_vkt_tower_front_movers in test_vulkan_tower_kernels.das
+    "tower_im2col1d_cls_spv",
+    // the pre-LN chain's f16-feed stamps (the cm2 arm: the norms and seams storing the feed, the biased restrides, the unpad and
+    // the bias + GELU storing it): the whisper twin and the gemma3v twin (mmproj-gemma-3-4b-it-F16.gguf) dispatch them; their
+    // kernel coverage is test_vkt_tower_f16_feeds in test_vulkan_tower_kernels.das
+    "tower_ln16_cls_spv", "tower_post_add_ln16_cls_spv", "tower_hpad_b_cls_spv", "tower_hpad16_b_cls_spv", "tower_hunpad16_cls_spv",
+    "tower_bias_act_cvt16_cls_spv",
     // the gemma4v tower's row classes (the norms, clamps, feeds, the two-axis rope, the post-add and the GEGLU): the stocked
     // mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in test_gemma4v.das - no zoo row; their kernel
-    // coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das
+    // coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das (the clamp + halfword feed also serves every audio
+    // chain's cm2 feed, dispatched by the audio twins; test_vkt_tower_front_movers covers it too)
     "tower_rms_cls_spv", "tower_clamp_cls_spv", "tower_clamp_cvt_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
     "tower_post_add_cls_spv", "tower_geglu_cls_spv",
     // the biased-block (SigLIP) row classes: the layernorm, the bias with its GELU, the seam, the head restrides to the
@@ -815,10 +900,18 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // in test_qwen3v.das); their kernel coverage is test_vkt_tower_ln_rows
     "tower_ln_cls_spv", "tower_post_add_ln_cls_spv", "tower_bias_act_cls_spv", "tower_hpad_cls_spv", "tower_hpad16_cls_spv",
     "tower_hunpad_cls_spv", "tower_rope_tab_cls_spv",
-    // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows, the gated FFN's
-    // hidden and the rms seam (the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf, dispatched by test_qwen25v_vulkan_twin in
-    // test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
-    "tower_win_attn_cls_spv", "tower_glu_act_cls_spv", "tower_post_add_rms_cls_spv",
+    // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows and the rms seam (the
+    // gated hidden is the LLM's biased f16 act stamp at a zero row map; the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf,
+    // dispatched by test_qwen25v_vulkan_twin in test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
+    "tower_win_attn_cls_spv", "tower_post_add_rms_cls_spv",
+    // the audio towers' classes - no zoo row runs an audio tower: the Conformer's silu rows (the bias class's unbiased stamp),
+    // GLU, causal depthwise taps, windowed RPE attention (the 128-wide stamp serves the stocked mmproj-gemma-4-E2B-it-bf16.gguf's
+    // audio encoder through test_gemma4a_vulkan_twin in test_audio.das) and the plain residual seam; the FastConformer's
+    // centered depthwise conv (the stocked canary-qwen-2.5b-encoder-f32.bin through test_canary_vulkan_twin); the 64-wide
+    // attention stamp serves no stocked carrier; their kernel coverage is test_vkt_tower_conformer,
+    // test_vkt_tower_fastconformer and test_vkt_tower_rows
+    "tower_act_cls_spv", "tower_glu_sig_cls_spv", "tower_dw_conv5_cls_spv", "tower_g4a_attn_cls_spv", "tower_g4a_attn64_cls_spv",
+    "tower_post_add_plain_cls_spv", "tower_cn_dw_cls_spv",
     // the KHR f16 GEMM (the E-series projection off cm2): no zoo row carries a per-layer embedding; its coverage is
     // test_vkd_f16_gemm_khr
     "f16_gemm_khr_cls_spv",

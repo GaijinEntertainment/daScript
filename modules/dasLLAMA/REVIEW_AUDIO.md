@@ -1,7 +1,7 @@
 # dasLLAMA audio and ASR Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_MEDIA.md`. Planned work: `followup_general.md`.
+doc: `ARCHITECTURE_MEDIA.md`. Planned work: `followup_general.md`, `followup_vulkan.md`.
 
 **Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with
 `REVIEW.md`'s.**
@@ -13,9 +13,11 @@ family check that picks the arm is the dispatch, not an arm. A diff that adds a 
 the carrier only at the union field, the finalize line, the kind value, and the one-line arms;
 a prompt, a decode loop, a caps value, or a language rule in the carrier is a defect.
 
-**A GEMM against model weights in an ASR family file - one `dasllama/dasllama_<family>.das`
-holding a single speech-recognition family - that does not go through a `*_mm` wrapper or
-`mm_blob_b` is a defect, hand-written dot-product loops included.**
+**A GEMM against model weights in an ASR family file - `dasllama/dasllama_whisper.das`,
+`dasllama/dasllama_parakeet.das`, `dasllama/dasllama_canary.das`, `dasllama/dasllama_qwen3a.das`,
+`dasllama/dasllama_gemma4a.das`, and a new file that holds one speech-recognition family's CPU
+model - that does not go through a `*_mm` wrapper or `mm_blob_b` is a defect, hand-written
+dot-product loops included.**
 
 **An activation-by-activation product in an ASR family file that does not go through
 `gemm_f32_jo` is a defect, hand-written loops included.**

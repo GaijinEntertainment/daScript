@@ -773,6 +773,28 @@ def add_user_image_rows_(m : Model; var c : ChatSession; var rows : array<float>
     c.image_grid = grid
 }
 
+//! Queue PRE-ENCODED audio soft-token rows (what `encode_audio` emits — `dim`-wide on every
+//! family, length-checked) for the next respond(). MOVES `rows`; works on a plain chat — no
+//! tower needed: the carrier path for a model whose audio arm the AudioEmbedder serves.
+def add_user_audio_rows_(m : Model; var c : ChatSession; var rows : array<float>; n_rows : int64) {
+    if (c.n_image_rows > 0l) {
+        panic("dasLLAMA chat: an image is already queued this turn - one media kind per turn")
+    }
+    if (empty(c.tmpl.audio_pre.parts) || !audio_vocab_ok(m, c.tmpl)) {
+        panic("dasLLAMA chat: this model's chat template declares no usable audio span markers - it has no audio arm")
+    }
+    if (long_length(rows) != n_rows * m.config.dim) {
+        panic("dasLLAMA chat: {n_rows} audio rows need {n_rows * m.config.dim} floats (dim {m.config.dim}), got {length(rows)}")
+    }
+    if (c.n_audio_rows > 0l) {   // a second clip in the same turn appends its rows
+        c.audio_rows |> push_from(rows)
+        delete rows
+    } else {
+        c.audio_rows <- rows
+    }
+    c.n_audio_rows += n_rows
+}
+
 //! Queue audio (16 kHz mono f32 PCM) for the next respond() — encoded to soft tokens NOW,
 //! spliced at the head of the next user turn (before its text). Composes with add_user in the
 //! same turn; call inside with_job_que() (the encoder threads its kernels).

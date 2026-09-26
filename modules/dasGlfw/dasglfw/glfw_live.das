@@ -49,9 +49,10 @@ def private ensure_no_hdpi_parsed() {
     g_no_hdpi = (raw |> unwrap_or("false")) == "true"
 }
 
-def public live_create_window(title : string; width, height : int) : GLFWwindow? {
+def public live_create_window(title : string; width, height : int; samples : int = 4) : GLFWwindow? {
     //! Creates a GLFW window (or reuses the preserved one on reload).
-    //! Call this from init().
+    //! Call this from init(). `samples` controls the new framebuffer: 0 disables MSAA, default 4.
+    //! A preserved window keeps its existing framebuffer configuration.
     //!
     //! Pass ``--no-hdpi-framebuffer`` (after the daslang ``--`` separator)
     //! to force the framebuffer to match the requested logical dimensions
@@ -63,7 +64,7 @@ def public live_create_window(title : string; width, height : int) : GLFWwindow?
         panic("glfw_live: can't init glfw")
     }
     glfwInitOpenGL(3, 3)
-    glfwWindowHint(int(GLFW_SAMPLES), 4)
+    glfwWindowHint(int(GLFW_SAMPLES), samples)
     ensure_no_hdpi_parsed()
     if (g_no_hdpi) {
         // macOS: disable retina backing so framebuffer == window size in

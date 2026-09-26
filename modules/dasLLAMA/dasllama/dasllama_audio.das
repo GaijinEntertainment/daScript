@@ -1279,9 +1279,8 @@ def private enc_gelu_batch(t : AudioTower; var x : array<float>; d, npos : int64
     }
 }
 
-//! Shared Whisper-encoder core over one 30 s mel chunk (conv frontend + pre-LN blocks); leaves
-//! the residual stream in ``s.x``. Model-specific tail (ln_post, pooling, projector) is the caller's.
-def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
+//! the conv stem into `s.x` - on the conv hook its rows may stay on the device until the block hook takes or lands them
+def private audio_encode_stem(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     if (mel.n_len != AUDIO_CHUNK_FRAMES || mel.n_mel != t.n_mel) {
         panic("audio_encode: mel chunk is {mel.n_mel}x{mel.n_len}, want {t.n_mel}x{AUDIO_CHUNK_FRAMES}")
     }
@@ -1293,7 +1292,6 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     trace_tag(TRACE_TAG_ENC_CONV)
     if (g_tw_conv_gpu_set && empty(g_audio_ref_dir) && invoke(g_tw_conv_gpu, t, s, mel)) {
         asr_prof_add("enc.conv", tc)
-        encoder_blocks(t, s, tt)
         return
     }
 
@@ -1333,13 +1331,46 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     }
     asr_prof_add("enc.conv", tc)
     diff_stage("after_conv_pos", s.x, tt * d)
-
-    encoder_blocks(t, s, tt)
 }
 
-// ===== the GPU tower hook (registered by dasllama_metal_tower at [init]; requires-back, so it
-// cannot be required from here). Serves the whole block loop or declines; the CPU loop below
-// stays the correct fallback. The diff-stage rail keeps the CPU loop (its dumps ARE the point).
+//! Shared Whisper-encoder core over one 30 s mel chunk (conv frontend + pre-LN blocks); leaves
+//! the residual stream in ``s.x``. Model-specific tail (ln_post, pooling, projector) is the caller's.
+def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
+    audio_encode_stem(t, s, mel)
+    encoder_blocks(t, s, t.n_ctx)
+}
+
+//! the stem, then the blocks with the tower's post-norm folded where the blocks-with-post-norm seat serves (true: `s.xb` holds the
+//! normed rows), else the blocks alone (false: `s.x` holds their output and the caller norms it) - a driver with no post-norm
+//! seat (Metal) serves them at the blocks seat; a post-norm seat that declines asks no second seat, its blocks seat declines alike
+def audio_encode_blocks_ln_post(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {
+    audio_encode_stem(t, s, mel)
+    let tt = t.n_ctx
+    if (!g_tw_blocks_ln_post_set) {
+        encoder_blocks(t, s, tt)
+        return false
+    }
+    dispatch_phase_encode(tt)
+    if (empty(g_audio_ref_dir)) {
+        let te = ref_time_ticks()
+        if (invoke(g_tw_blocks_ln_post, t, s, tt)) {
+            asr_prof_add("enc.blocks.gpu", te)
+            return true
+        }
+    }
+    encoder_blocks_cpu(t, s, tt)
+    return false
+}
+
+var private g_tw_blocks_ln_post : TowerBlocksGpuFn
+var private g_tw_blocks_ln_post_set = false
+
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_tower_blocks_ln_post_gpu(fn : TowerBlocksGpuFn) {
+    g_tw_blocks_ln_post = fn
+    g_tw_blocks_ln_post_set = true
+}
+
 typedef TowerBlocksGpuFn = function<(t : AudioTower; var s : EncoderState; npos : int64) : bool>
 typedef TowerServesFn = function<() : bool>
 var private g_tw_blocks_gpu : TowerBlocksGpuFn
@@ -1355,8 +1386,7 @@ def register_tower_blocks_gpu(fn : TowerBlocksGpuFn; serves : TowerServesFn) {
     g_tw_serves_set = true
 }
 
-//! Would the Metal tower serve a block loop — the lane policies ask (a serving driver wants
-//! f32 planes, so the family lane defaults to exact); false on CPU builds or with the knob off.
+//! the lane policies' question - would a GPU driver serve the exact block loop: false with no driver, with the knob off, or under the Vulkan driver, which serves q8
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def audio_tower_gpu_serves() : bool => g_tw_serves_set && invoke(g_tw_serves)
 
@@ -1375,6 +1405,7 @@ def register_tower_conv_gpu(fn : TowerConvGpuFn) {
 //! The pre-LN transformer block loop over ``npos`` positions of the residual stream in ``s.x``
 //! (token-major). Shared by the whisper conv frontend above and the qwen3a conv2d frontend —
 //! any frontend that leaves ``npos × d_model`` rows in ``s.x`` can run the blocks.
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
     dispatch_phase_encode(npos)
     if (g_tw_blocks_gpu_set && empty(g_audio_ref_dir)) {
@@ -1384,6 +1415,10 @@ def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
             return
         }
     }
+    encoder_blocks_cpu(t, s, npos)
+}
+
+def private encoder_blocks_cpu(t : AudioTower; var s : EncoderState; npos : int64) {
     let tt = npos
     let d = t.d_model
     for (l in range64(t.n_layer)) {

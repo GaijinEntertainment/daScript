@@ -94,3 +94,12 @@ Outputs land in `web/output/samples/examples/`. CI builds these in the
 **Build fails with SIGSEGV / stack overflow** - use Release build or increase stack size; Debug stack is much larger.
 
 **Browser shows blank page** - must serve via HTTP, not `file://`.
+
+## Worker spin-clock regression
+
+Activate the Emscripten SDK environment, then run `node web/test/jobque_spin_clock.cjs`
+from the repository root with Node available. `EMXX` can select another `em++` executable. It compiles a small fixture
+with the lowered 64-bit memory ABI and full assertions/safe-heap checks, verifies the
+clock uses a direct floating-point import, and tests fractional-millisecond deadlines
+at a large time origin, zero windows, expiration and renewal. Output is temporary
+and removed on completion; no browser, audio model or installed runtime is required.

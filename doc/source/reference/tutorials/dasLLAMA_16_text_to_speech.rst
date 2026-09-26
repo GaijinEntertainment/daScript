@@ -359,5 +359,5 @@ out resets it, a panic included.
 
    Serving speech over HTTP: :ref:`tutorial_dasLLAMA_serving`
 
-   The speech CLI: ``utils/dasllama-server/txt2wav.das``; a client for the
+   The speech CLI: ``dasllama-cli speak`` (:ref:`utils_dasllama_cli`); a client for the
    server's ``/v1/audio/speech`` route: ``examples/dasLLAMA/speak_server.das``

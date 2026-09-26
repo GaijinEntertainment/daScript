@@ -11,8 +11,14 @@ measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup
 `dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das`, or the special-token or template
 strings any of them look up - applies `REVIEW_TOKENIZER.md` (beside this file) too.**
 
-**A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, or adds a
-file under `dasllama/` - the charter lines - applies `REVIEW_DOCS.md` (beside this file) too.**
+**A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, adds a file
+under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this folder applies
+`REVIEW_DOCS.md` (beside this file) too.**
+
+**A diff that lands the work a `followup_*.md` row names deletes the row - or, when the row lists
+several items, only the landed item - and repoints every checked-in citation naming the landed
+item to where the landed fact now lives (the architecture doc or the code) or drops it, dated
+`PERF_LEDGER.md` entries included.**
 
 **Code that times a run itself and hands the wall or rate back as its result - a file that
 prints it, or a function that returns it to whichever file calls it - a kernel race (a run timing
@@ -48,10 +54,15 @@ downloads tune winners to a box and submits that box's winners back - its schema
 tune-boot path (a startup path that loads a tune sidecar) that reaches it, applies
 `performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
 
-**A diff that adds a module under `dasllama/` whose changes reach some of `tests/run.das`'s
-areas but not all - `audio`, `vision`, `tts`, `llm`, `infra` - gives it a `MODULE_AREAS` row
-naming those areas, in the same change.** A module with no row reaches every area, so the
-omission costs every later `run.das -- --changed` the whole suite, never coverage.
+**A diff that adds a module under `dasllama/` whose code only some of `tests/run.das`'s areas
+(`audio`, `vision`, `tts`, `llm`, `infra`) run in their tests gives it a `MODULE_AREAS` row
+naming those areas, in the same change.** `run.das -- --changed` maps a module with no row to
+every area, so a missing row costs every later run the whole suite.
+
+**A diff after which an area's tests run an existing module's code, and that module's
+`MODULE_AREAS` row omits the area, adds the area to the row in the same change.** A new caller of
+the module counts, wherever it sits. A row missing an area makes `run.das -- --changed` skip that
+area's tests, so a regression there goes unrun.
 
 **A dasLLAMA `[test]` file, wherever the diff puts it, and every `dasllama/` change answer to this
 folder's `tests/REVIEW.md` - open it; the walk does not surface it for a `dasllama/`-only diff.**
@@ -75,8 +86,9 @@ the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.**
 
 **A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`,
 `dasllama_audio_embedder.das`, `dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das`
-(all under `dasllama/`), or to an ASR family file - one `dasllama/dasllama_<family>.das` holding
-one speech-recognition family - applies `REVIEW_AUDIO.md`.**
+(all under `dasllama/`), or to an ASR family file - `dasllama_whisper.das`, `dasllama_parakeet.das`,
+`dasllama_canary.das`, `dasllama_gemma4a.das` or `dasllama_qwen3a.das`, each one speech-recognition
+family - applies `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file - one `dasllama/dasllama_<family>.das`
@@ -271,6 +283,8 @@ or `var`).** A team lane never runs global initializers, so the global reads zer
 file sets - is declared `@exact_size`, and every `resize` of it follows a `reserve` of the SAME
 count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`, `grow_resize`,
 `ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the
-pair spelled out - however small the count looks.** PERF032 flags a `resize` with no `reserve` or
-`ensure_capacity` earlier in the function and never compares the counts; a bare grow past the
-heap's unreserved-size cap panics the load on the first big model, not at the call site.
+pair spelled out - however small the count looks.** PERF032 checks only `@exact_size` arrays - it
+flags a `resize` with no `reserve` or `ensure_capacity` earlier in the function, and never
+compares the counts - so an undeclared buffer gets no lint; a bare grow past the heap's
+unreserved-size cap panics the load on the first big model,
+not at the call site.

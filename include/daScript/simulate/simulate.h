@@ -862,6 +862,7 @@ namespace das
         // Job-fork context pooling (opt-in via keepForkContexts). Forks are reused across new_job
         // dispatches instead of cloned/destroyed each time; acquire runs on the dispatching thread,
         // release on the worker thread, so the pool is mutex-guarded. Only safe for pure-data jobs.
+        urange64 getIdleForkMemory(int kind);
         Context * acquireForkContext ( uint32_t category );
         void releaseForkContext ( Context * forkContext );
     public:

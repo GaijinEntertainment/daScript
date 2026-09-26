@@ -6,6 +6,11 @@ logic stays in daslang. The JavaScript layer supplies report UI, browser/GPU met
 console diagnostics, upload/download and a file picker. F8 requests a capture; the
 application can also call `live_capture_request()` from its own UI.
 
+A host may set `window.dasLiveCaptureBrowserInfo` to a function returning its browser
+metadata object. It is called only when a report is captured, so hosts can attach
+bounded diagnostic histories without expanding ordinary state probes. Missing or
+throwing providers retain the built-in browser metadata fallback.
+
 Configure `/live-capture` as the WASM mailbox. Call `live_capture_poll()` before
 simulation and `live_capture_flush(frame)` after rendering. The latter pairs provider
 state with an application-supplied framebuffer PNG from that same frame. Do not call
@@ -32,3 +37,10 @@ any modifiers held when entering the dialog.
 
 The transport regression test runs without a browser: `node --test modules/dasLiveHost/tests/test_capture_transport.cjs`.
 It covers request correlation, timeouts, native capture notifications and loading guards.
+
+In a browser, the virtual filesystem retains only the newest capture JSON file.
+Copy or download a report before the next capture if it must remain available;
+restoring an earlier report uses its snapshot, not an expired virtual-file path.
+Native hosts retain their individual capture files. Image encoders can return a
+Promise; transport polling continues while it resolves, and an expired request
+cannot replace the current report. A metadata provider returns a synchronous object.

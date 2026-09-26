@@ -14,6 +14,7 @@ require math
 //   - Audio towers: load_audio_tower reads a multimodal projector (mmproj) GGUF
 //   - create_chat(model, tower) — a conversation that can hear
 //   - add_user_audio + add_user composing one turn; respond() streams the reply
+//   - add_user_audio_rows: pre-encoded carrier rows onto a plain chat (the gemma-4 E-series rail)
 //   - caps(model) — LlmCaps, the chat layer's honesty contract
 //
 // Audio-capable chat models pair a normal text decoder with a whisper-family audio
@@ -91,8 +92,11 @@ def section_render_spans(m : Model; prompt : string) {
 // scheduler owns — probe the mmproj first (0 = no carrier-served audio tower; the
 // load_audio_tower families above are served by the chat's own tower instead), then
 // load_audio_embedder + encode_audio turn the PCM into the soft-token rows that splice
-// between the two spans.
-def section_carrier_encode(mmproj_path : string; samples : array<float>) {
+// between the two spans. The pre-encoded-rows seam closes the loop: add_user_audio_rows
+// moves those rows onto a PLAIN chat (no tower attached) and respond() runs the spliced
+// turn - the shape a scheduler that owns its encoder uses, and how a carrier-served
+// family hears at the chat layer at all.
+def section_carrier_encode(m : Model; mmproj_path : string; samples : array<float>; prompt : string) {
     if (audio_probe_proj_dim(mmproj_path) == 0l) {
         print("carrier: {mmproj_path} carries no carrier-served audio tower (gemma4a) - skipping the encode demo\n")
         return
@@ -102,7 +106,16 @@ def section_carrier_encode(mmproj_path : string; samples : array<float>) {
     var rows : array<float>
     let n = encode_audio(e, st, samples, rows)
     print("encode_audio ({audio_family(e)}): {float(length(samples)) / 16000.0}s -> {n} soft tokens x {audio_proj_dim(e)} wide\n")
-    delete rows
+    var chat <- create_chat(m, "", 96l)
+    add_user_audio_rows(m, chat, rows, n)   // moves the rows in; the turn renders its audio span around them
+    add_user(chat, prompt)
+    print("carrier chat > {prompt}\n")
+    respond(m, chat, SamplingParams()) $(piece_text) {
+        print("{piece_text}")
+        return true
+    }
+    print("\n\n")
+    delete chat
     delete st
 }
 
@@ -184,7 +197,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough; the carrier ra
         with_job_que() {
             setup_dasllama_jobque()
             section_render_spans(m, prompt)
-            section_carrier_encode(ggufs[1], carrier_samples)
+            section_carrier_encode(m, ggufs[1], carrier_samples, prompt)
         }
         print("this mmproj serves through the AudioEmbedder carrier (the server rail) - the create_chat sections need a load_audio_tower pair (qwen2a / omni / ultravox / voxtral)\n")
         return

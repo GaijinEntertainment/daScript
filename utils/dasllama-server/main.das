@@ -25,6 +25,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 
 require openai_server           // the server + route handlers (this directory)
 require model_catalog           // catalog_models_dir — the models-dir resolution
+require cli_args                // discover_config — the one dasllama-server.toml lookup both programs share
 require dasllama/dasllama       // load_model / QuantMode / load_asr_model
 require daslib/tune             // [tune_policy] + log_tune_status (the injected guard resolves here)
 require [tune_framework]   // nolint:STYLE030,LINT019 — OPTIONAL: tune_suppress_mint, reached under module_exists(llvm_tune)
@@ -222,32 +223,6 @@ var private g_exit_code = 0
 var private g_last_memory_log_at = 0l
 var private g_last_gc_at = 0l
 let GC_MIN_INTERVAL_SECONDS = 60l
-
-def pick_kv_dtype(s : string) : KVDtype {
-    let l = to_lower(s)   // same normalization as pick_quant — F16/Q8_0/TQ4 spellings accepted
-    if (l == "f32") {
-        return KVDtype.f32
-    } elif (l == "q8_0") {
-        return KVDtype.q8_0
-    } elif (l == "tq4") {
-        return KVDtype.tq4
-    } elif (!empty(l) && l != "f16") {
-        to_log(LOG_WARNING, "dasllama-server: unknown --kv-dtype '{s}', using f16 (valid: f32 | f16 | q8_0 | tq4)\n")
-    }
-    return KVDtype.f16
-}
-
-def pick_metal_mode(s : string) : MetalMode {
-    let l = to_lower(s)
-    if (l == "required") {
-        return MetalMode.required
-    } elif (l == "auto" || l == "when_available") {
-        return MetalMode.when_available
-    } elif (!empty(l) && l != "off") {
-        to_log(LOG_WARNING, "dasllama-server: unknown --metal '{s}', using off (valid: off | auto | required)\n")
-    }
-    return MetalMode.off
-}
 
 def private cli_has_flag(flag : string) : bool {
     var args <- get_user_args()
@@ -547,49 +522,21 @@ def private apply_models_roster(root : JsonValue?) {
     g_cfg_sources["models"] = "toml"
 }
 
-def private gpu_auto_pick(metal_ok, vulkan_ok : bool) : string {
-    if (metal_ok) {
-        return "metal"
-    }
-    return vulkan_ok ? "vulkan" : "off"
-}
+//! The backend knobs as this boot read them: the flag spellings plus, per Vulkan detail knob,
+//! whether the CLI or the config set it (the shared pick treats an unset one as the blessed shape)
+def private gpu_knobs(cfg : ServerArgs) : GpuKnobs
+    => GpuKnobs(gpu = cfg.gpu, metal = cfg.metal,
+                layers = cfg.gpu_layers, layers_set = cfg_sourced("gpu_layers"),
+                stream = cfg.gpu_stream, stream_set = cfg_sourced("gpu_stream"),
+                dn = cfg.gpu_dn, dn_set = cfg_sourced("gpu_dn"),
+                attn = cfg.gpu_attn, attn_set = cfg_sourced("gpu_attn"),
+                dense = cfg.gpu_dense, vram_mb = cfg.gpu_vram_mb)
 
-var private g_gpu_detected = ""   // cached auto-pick ("" = not probed yet; the probes cache too)
+def private gpu_pick_is_auto(cfg : ServerArgs) : bool
+    => gpu_pick_is_auto(gpu_knobs(cfg))
 
-def private detected_gpu() : string {
-    if (empty(g_gpu_detected)) {
-        // an explicit DASLLAMA_GPU=0 stays the opt-out: the env master only overrides the
-        // auto_tier field of an explicit want, so arming the blessed shape would out-vote it
-        g_gpu_detected = (gpu_env_master_off() ? "off"
-                          : gpu_auto_pick(kernel_backend_available("metal"), kernel_backend_available("vulkan")))
-    }
-    return g_gpu_detected
-}
-
-// the ONE derivation of "does the pick fall to auto-detection" — effective_gpu and the boot
-// announce both read it, so the log can never disagree with the pick (an unknown --gpu
-// spelling falls through to auto exactly like unset)
-def private gpu_pick_is_auto(cfg : ServerArgs) : bool {
-    let l = to_lower(cfg.gpu)
-    if (l == "off" || l == "metal" || l == "metal-required" || l == "vulkan") {
-        return false
-    }
-    return l == "auto" || empty(cfg.metal)
-}
-
-// --gpu selector: one knob over the metal mode and the vulkan tier. Defaults-first: unset
-// (with no legacy --metal flag) and the explicit "auto" spelling both serve on the detected
-// backend — `gpu = off` is the opt-out. A set --metal keeps the legacy env-driven path.
-def private effective_gpu(cfg : ServerArgs) : string {
-    let l = to_lower(cfg.gpu)
-    if (l == "off" || l == "metal" || l == "metal-required" || l == "vulkan") {
-        return l
-    }
-    if (!empty(l) && l != "auto") {
-        to_log(LOG_WARNING, "dasllama-server: unknown --gpu '{cfg.gpu}', ignoring (valid: auto | off | metal | metal-required | vulkan)\n")
-    }
-    return gpu_pick_is_auto(cfg) ? detected_gpu() : ""
-}
+def private effective_gpu(cfg : ServerArgs) : string
+    => effective_gpu(gpu_knobs(cfg))
 
 def private cfg_sourced(key : string) : bool
     => key_exists(g_cfg_sources, key)
@@ -622,30 +569,20 @@ def private roster_entry_json(ent : ModelEntry) : JsonValue? {
     return JV(etab)
 }
 
-// vulkan detail knobs — explicit config/CLI wins; unset gets the blessed serving shape
-// (K=2 resident + S=35 streamed + DN + ATTN) under gpu = vulkan
-// 0 / unset = auto (-1): the loader fills the VRAM budget and streams the rest; a positive value
-// pins it exactly. The old hardcoded K=2/S=35 was tuned to one 3060 Ti, and auto measured slightly
-// BETTER there (4/36, 26.30 vs 26.11 tg-real256). Treating 0 as auto also removes the control-page
-// trap where saving the raw unset sentinels wrote explicit zeros and disarmed the tier on restart.
 def private gpu_detail_layers(cfg : ServerArgs) : int64
-    => int64(cfg_sourced("gpu_layers") && cfg.gpu_layers > 0 ? cfg.gpu_layers : -1)
+    => gpu_detail_layers(gpu_knobs(cfg))
 
 def private gpu_detail_stream(cfg : ServerArgs) : int64
-    => int64(cfg_sourced("gpu_stream") && cfg.gpu_stream > 0 ? cfg.gpu_stream : -1)
+    => gpu_detail_stream(gpu_knobs(cfg))
 
 def private gpu_detail_dn(cfg : ServerArgs) : bool
-    => cfg_sourced("gpu_dn") ? cfg.gpu_dn : true
+    => gpu_detail_dn(gpu_knobs(cfg))
 
 def private gpu_detail_attn(cfg : ServerArgs) : bool
-    => cfg_sourced("gpu_attn") ? cfg.gpu_attn : true
+    => gpu_detail_attn(gpu_knobs(cfg))
 
-[arch(at = "README.md#gpu-key")]
 def vulkan_serving_want(cfg : ServerArgs) : GpuTierWant
-    => GpuTierWant(resident = true,
-                   moe_layers = gpu_detail_layers(cfg), moe_stream = gpu_detail_stream(cfg),
-                   vram_mb = int64(cfg.gpu_vram_mb), dn = gpu_detail_dn(cfg),
-                   attn = gpu_detail_attn(cfg), dense = cfg.gpu_dense, shexp = true)
+    => vulkan_serving_want(gpu_knobs(cfg))
 
 // The GET /config surface: RESOLVED effective values (what init actually uses) + per-key
 // provenance. Sentinel-is-meaning keys stay raw: ctx 0 = model default, prefix 0 = auto /
@@ -740,13 +677,7 @@ def parse_args() {
     if (empty(g_cfg.config)) {
         // dictation-bot convention: a same-name config next to the program (or in cwd) loads
         // automatically, so a release bundle configures itself with no flags at all
-        let here = "dasllama-server.toml"
-        let beside = path_join(get_this_module_dir(), "dasllama-server.toml")
-        if (stat(here).is_valid) {
-            g_cfg.config = here
-        } elif (stat(beside).is_valid) {
-            g_cfg.config = beside
-        }
+        g_cfg.config = discover_config(get_this_module_dir())
         if (!empty(g_cfg.config)) {
             print("using config {g_cfg.config}\n")
         }
@@ -903,39 +834,12 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     if (gpu_pick_is_auto(g_cfg)) {
         to_log(LOG_INFO, "dasllama-server: gpu backend auto-detected: {gpu} (set gpu = off | metal | vulkan to pin)\n")
     }
-    var metal_mode = pick_metal_mode(g_cfg.metal)
     if (!empty(gpu) && !from_cli("gpu") && from_cli("metal")) {
         // gpu is the master backend switch, but an explicit CLI --metal losing to a config-file
         // key silently would invert the documented precedence — say so
         to_log(LOG_WARNING, "dasllama-server: config key gpu = '{gpu}' overrides the explicit --metal flag (drop one of them)\n")
     }
-    if (gpu == "metal") {
-        metal_mode = MetalMode.when_available
-    } elif (gpu == "metal-required") {
-        metal_mode = MetalMode.required
-    } elif (!empty(gpu)) {
-        metal_mode = MetalMode.off   // gpu = off | vulkan both keep metal out
-    }
-    set_metal_mode(metal_mode)
-    if (metal_mode == MetalMode.off) {
-        // the Metal-build CPU-prefill guard is a profiling tripwire; its panic would drop every
-        // live stream, and serving on the CPU arm is a legitimate configuration
-        allow_cpu_prefill()
-        if (gpu != "vulkan") {
-            to_log(LOG_INFO, "dasllama-server: prefill runs on the CPU arm - pass --gpu metal for the Metal rails\n")
-        }
-    }
-    to_log(LOG_INFO, "dasllama-server: metal mode {get_metal_mode()}\n")
-    if (gpu == "vulkan") {
-        set_gpu_tier_want(vulkan_serving_want(g_cfg))
-        if (moe_gpu_tier_arm()) {
-            let ktag = gpu_detail_layers(g_cfg) < 0l ? "auto" : "{gpu_detail_layers(g_cfg)}"
-            let stag = gpu_detail_stream(g_cfg) < 0l ? "auto" : "{gpu_detail_stream(g_cfg)}"
-            to_log(LOG_INFO, "dasllama-server: vulkan GPU tier armed (K={ktag}, S={stag}, dn={gpu_detail_dn(g_cfg)}, attn={gpu_detail_attn(g_cfg)})\n")
-        } else {
-            to_log(LOG_WARNING, "dasllama-server: gpu = vulkan requested but the tier did not arm (no vulkan device, or this build lacks the vulkan module)\n")
-        }
-    }
+    apply_gpu_backend(gpu_knobs(g_cfg), gpu)
     // resolve the model roster: [[models]] entries, else the single legacy model key
     if (empty(g_models) && !empty(g_cfg.model)) {
         g_models |> push(ModelEntry(path = g_cfg.model, is_default = true))

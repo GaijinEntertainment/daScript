@@ -26,6 +26,32 @@ class IncKernel {
     }
 }
 
+//! `dispatches` increments in ONE submit - on the default encoder the hazard tracking orders them, on the
+//! concurrent one the caller owns the hazards (none here); every element reads k + `times` after it, and
+//! both time windows are reported.
+def private inc_leg(t : T?; queue; pso1; ba; pu; dispatches : int; concurrent : bool; times : uint) {
+    let tag = concurrent ? "concurrent" : "tracked"
+    var derr : string
+    var gpu_ms = 0.0lf
+    var enc_ms = 0.0lf
+    let ran = with_compute_encoder_timed(queue, derr, gpu_ms, enc_ms, concurrent) $(enc) {
+        metal_set_pipeline(enc, pso1)
+        metal_set_buffer(enc, ba, 0ul, 0)
+        for (_d in range(dispatches)) {
+            metal_dispatch_threadgroups(enc, uint3(uint(N) / TPG, 1u, 1u), uint3(TPG, 1u, 1u))
+        }
+    }
+    t |> success(ran, "with_compute_encoder_timed ({tag}): {derr}")
+    t |> success(gpu_ms > 0.0lf && enc_ms > 0.0lf, "the {tag} submit reports its GPU and encode windows")
+    var bad = 0
+    for (k in range(N)) {
+        if (unsafe(pu[k]) != uint(k) + times) {
+            bad++
+        }
+    }
+    t |> equal(bad, 0, "{tag}: every element incremented {times} times")
+}
+
 [test]
 def test_host_plumbing(t : T?) {
     t |> run("pipeline cache + buffer pool + multi-dispatch encoder") <| @(t : T?) {
@@ -66,30 +92,13 @@ def test_host_plumbing(t : T?) {
                 bu = pool_acquire_untracked(upool, dev, uint64(N * 4))
                 t |> equal(metal_live_object_count(), after_untracked)  // reused from its own pool
 
-                // multi-dispatch: three increments in ONE submit — hazard tracking orders them
                 var pu = unsafe(reinterpret<uint?>(metal_buffer_contents(ba)))
                 for (k in range(N)) {
                     unsafe(pu[k]) = uint(k)
                 }
                 var queue = metal_new_command_queue(dev)
-                var derr : string
-                var gpu_ms = 0.0lf
-                let ran = with_compute_encoder_timed(queue, derr, gpu_ms) $(enc : MetalComputeEncoder?) {
-                    metal_set_pipeline(enc, pso1)
-                    metal_set_buffer(enc, ba, 0ul, 0)
-                    metal_dispatch_threadgroups(enc, uint3(uint(N) / TPG, 1u, 1u), uint3(TPG, 1u, 1u))
-                    metal_dispatch_threadgroups(enc, uint3(uint(N) / TPG, 1u, 1u), uint3(TPG, 1u, 1u))
-                    metal_dispatch_threadgroups(enc, uint3(uint(N) / TPG, 1u, 1u), uint3(TPG, 1u, 1u))
-                }
-                t |> success(ran, "with_compute_encoder_timed: {derr}")
-                t |> success(gpu_ms > 0.0lf, "GPUStartTime/GPUEndTime bracket the completed work")
-                var bad = 0
-                for (k in range(N)) {
-                    if (unsafe(pu[k]) != uint(k) + 3u) {
-                        bad++
-                    }
-                }
-                t |> equal(bad, 0)
+                inc_leg(t, queue, pso1, ba, pu, 3, false, 3u)
+                inc_leg(t, queue, pso1, ba, pu, 1, true, 4u)
 
                 // teardown: caller releases what it holds, drains give the rest back
                 pool_release(pool, ba, uint64(N * 4))

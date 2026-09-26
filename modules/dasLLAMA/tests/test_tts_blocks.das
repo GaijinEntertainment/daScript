@@ -1102,6 +1102,19 @@ def private split_arms(t : T?; axis : SplitAxis) {
     }
 }
 
+[test]
+def test_conv1d_dims_of(t : T?) {
+    t |> run("conv1d_dims_of: the GGUF dims to (cin, cout) on both orientations, the groups folded into the grouped axis") @(t : T?) {
+        let dims <- [3l, 8l, 20l]
+        let fwd = conv1d_dims_of(dims, false, 2l)
+        t |> equal(fwd.cin, 16l, "forward: cin = dims[1] * groups")
+        t |> equal(fwd.cout, 20l, "forward: cout = dims[2]")
+        let tr = conv1d_dims_of(dims, true, 2l)
+        t |> equal(tr.cin, 20l, "transposed: cin = dims[2]")
+        t |> equal(tr.cout, 16l, "transposed: cout = dims[1] * groups")
+    }
+}
+
 // ARCHITECTURE_TTS.md sec.2.28: a rows kernel's result never depends on how its rows split
 // across the parallel workers. Two axes move that split, and every kernel runs both. The batch
 // lane cap: 1 collapses every rows GEMM to one inline chunk, 0 gives the box's lanes times the

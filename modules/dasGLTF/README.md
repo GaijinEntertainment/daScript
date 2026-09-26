@@ -126,6 +126,14 @@ prepass. It shares the regular skinning, material-normal and alpha-cutoff paths.
 caller owns the framebuffer and depth texture; encoded world normals are written as
 `normal * 0.5 + 0.5`. Blended materials are excluded.
 
+Both `gltf_pbr_render` overloads accept an optional final `opacity` argument,
+defaulting to one. It multiplies output alpha without modifying scene materials;
+values below one enable blending while preserving masked-material cutoffs. The
+caller owns depth comparison and pass ordering. For a single-layer fade of opaque
+or masked geometry, draw the background first, render model depth, then render its
+colour with equal-depth testing and no depth writes. Particles and inherently
+blended materials need their own transparency ordering.
+
 A caller-owned viewport-sized SSAO texture can be supplied through `GltfPbrRenderer.aoTex`
 and `aoInverseSize`. Texture zero disables it. Visibility multiplies ambient/environment
 lighting only, leaving direct lights and emission intact. The adapter does not own the AO

@@ -123,9 +123,7 @@ zoo. Facts that decide the order:
   byte-identical per stamp before and after.
 - Then: the decode-side `MetalKqMulMmK45T` 12-bool `static_if` ladder (its prefill twins now
   derive the split tensor base's decode; the coupled-bool trap where `MetalKqMulMmIq4nl` must
-  set `IQ4XS` and `IQ4NL` lives on in the kernels file); the bias pair that folds,
-  `MetalAddBiasRows` with `MetalBiasGeluLut` - field for field at 0-3, the map and `x`'s offset
-  apart - while `MetalBiasAddRes`'s residual plane at 1 keeps it out. Two classes fold only when
+  set `IQ4XS` and `IQ4NL` lives on in the kernels file). Two classes fold only when
   their (binding number -> field type, `@off`) maps agree: the
   SqAttn single/batched pairs (the layer slab through `@off`, the kargs at 4 vs 5 under `rt`),
   the rope-store single/batched pairs (the single form's raw-V buffer at 1 shifts every later
@@ -616,14 +614,6 @@ only from the lens's `compile_stamp` / `race_pso_pair_stamp` expansions: the two
 left are the race shells whose sources arrive as parameters, and a hand-spelled triple can pair
 one kernel's source with another's entry and compile clean.
 
-## 17. `ksign7m` and Vulkan's `ksign7` are one function under two homes
-
-`ksign7m` (`dasllama/dasllama_metal_kernels.das`) and `ksign7` (`dasllama/dasllama_vulkan_classes.das`)
-are five identical lines of pure ALU - no table, no backend lowering. `ARCHITECTURE_GPU.md`
-sec.1.5's role table keeps the codebook TABLES per kernel home; it does not reach a helper with
-no table in it. The shared-grammar precedent is `dasllama_kernel_access.das`, one owner after two
-private copies drifted. One home for the sign helper, both backends calling it.
-
 ## 18. A kargs-bearing builder cannot be taken by address, so `enc_kq_mvb` stays a ladder
 
 `enc_kq_mvb` (`dasllama/dasllama_metal_kernels.das`) walks thirteen formats by three arms each to
@@ -737,7 +727,7 @@ CPU stack.
 
 ## 27. The StyleTTS2 chain's remaining cost and precision
 
-The chain (`ARCHITECTURE_GPU_TOWER.md` sec.2.2y) serves the whole synthesis; the measured record
+The chain (`ARCHITECTURE_GPU_TOWER.md` sec.2.2au) serves the whole synthesis; the measured record
 is `PERF_LEDGER.md`'s landed entry, and the walls this section names are `debug-jit` readings of a
 scratch probe over the seats on one kokoro sentence of 200 synthetic tokens on the M5 Max (no
 board row covers a synthesis). The items, each an A/B on `harness/tts_synth.das --prof` with the
@@ -755,14 +745,20 @@ Snake blocks at 512 channels, where a wider N tile or the AdaIN pass folded into
 loader are the A/Bs. The served-lane synthesis cell (`tests/_tts_parity.das`,
 `tts_gpu_synthesis`) gates counters and sample counts and logs its sample-wise waveform figure
 without a bar; a phase-insensitive instrument - a per-window spectral compare tolerant of one
-frame of shift - would gate the served lane end to end. Four host-fixed selects sit inside hot
-loops, which `REVIEW_GPU_KERNEL_BODY.md` names defects: the conv stamps' `transposed` in the X
-loader's source-index helper, the sines kernel's `torch_math` law and `captured`-noise selects,
-the STFT's `reflect`. Done = a forward and a transposed conv stamp (the exact twins too), a torch
-and an ONNX sines stamp reading noise from a buffer a noise-fill kernel hashes so the captured
-select goes, a reflect and a clamp STFT stamp - each with its census key, its gate and, for the
-source stamps, its fast-math exemption row - landing with the Pocket TTS driver PR. Pocket TTS
-has no driver yet - its generator is not a StyleTTS2 chain and needs its own hook slot first.
+frame of shift - would gate the served lane end to end. Pocket TTS rides the tower in two seats
+(`ARCHITECTURE_GPU_TOWER.md` sec.2.2av and sec.2.2aw); what its frame loop still costs is the
+GPU's own time, `debug-jit` on the M5 Max 0.6 ms a frame on the q8 file against the CPU's 1.3
+(`PERF_LEDGER.md`, `harness/pocket_stage_probe.das`), 0.44 of it the backbone's 57 dispatches
+and 0.19 the head's 22, the encode under 0.03: the levers are
+the head as one threadgroup over q8 weights (nine million parameters, one dispatch in place of
+22 - where the CPU's head is q8 already, the kq files), the first norm folded into the q8 GEMV's
+prologue as the f32 route already folds it, and the text prompt's rows on the tower (the
+`prompt` stage clock of `test_pocket_synthesis_metal`, six milliseconds a chunk on the CPU). The frames' K/V never return to the host, so a chunk
+whose command buffer fails reruns whole on the CPU. The codec transformer's layer
+(`pk_transformer`) and the frame loop's (`pk_fr_layer`) are two bodies of one layer: one body
+waits on a rows form of the rope-and-store (`MetalRopeStoreBKvT` with a row table is the
+candidate) and one K/V home for both loops (the codec's per-chunk rows buffers against the frames'
+per-voice slot).
 
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 

@@ -943,33 +943,15 @@ def private rl_torch_ref(x : array<float>; scale : float; var want : array<doubl
     return t_out
 }
 
-def private resize_onnx_case(scale : float; poison : bool) : KCase {
+def private resize_case(torch : bool; scale : float; poison : bool) : KCase {
     var x : array<float>
     rs_fixture(x, scale)
     var want : array<double>
     var env : array<double>
-    let want_t = rl_onnx_ref(x, scale, want, env)
+    let want_t = torch ? rl_torch_ref(x, scale, want, env) : rl_onnx_ref(x, scale, want, env)
     var y : array<float>
-    let got_t = resize_linear(false, x, RS_C, RS_T, scale, y)
-    let nm = "resize_linear (ONNX half-pixel) scale={scale}"
-    if (got_t != want_t) {
-        return KCase(name = nm, bad = 1000000)
-    }
-    if (poison) {
-        return score_poison(nm, y, want, env, RS_REL, RS_FLOOR, 0.001lf)
-    }
-    return score(nm, y, want, env, RS_REL, RS_FLOOR)
-}
-
-def private resize_torch_case(scale : float; poison : bool) : KCase {
-    var x : array<float>
-    rs_fixture(x, scale)
-    var want : array<double>
-    var env : array<double>
-    let want_t = rl_torch_ref(x, scale, want, env)
-    var y : array<float>
-    let got_t = resize_linear(true, x, RS_C, RS_T, scale, y)
-    let nm = "resize_linear_torch (align_corners false) scale={scale}"
+    let got_t = resize_linear(torch, x, RS_C, RS_T, scale, y)
+    let nm = torch ? "resize_linear_torch (align_corners false) scale={scale}" : "resize_linear (ONNX half-pixel) scale={scale}"
     if (got_t != want_t) {
         return KCase(name = nm, bad = 1000000)
     }
@@ -1234,16 +1216,16 @@ def test_audio_fft_and_dft_tables(t : T?) {
 [test]
 def test_tts_linear_resamplers(t : T?) {
     t |> run("both interpolation conventions against an fp64 two-tap reference") @(t : T?) {
-        report(t, resize_onnx_case(2.0, false))
-        report(t, resize_onnx_case(1.5, false))
-        report(t, resize_onnx_case(0.5, false))
-        report(t, resize_torch_case(2.0, false))
-        report(t, resize_torch_case(1.5, false))
-        report(t, resize_torch_case(0.5, false))
+        report(t, resize_case(false, 2.0, false))
+        report(t, resize_case(false, 1.5, false))
+        report(t, resize_case(false, 0.5, false))
+        report(t, resize_case(true, 2.0, false))
+        report(t, resize_case(true, 1.5, false))
+        report(t, resize_case(true, 0.5, false))
     }
     t |> run("the resampler bars' must-red controls") @(t : T?) {
-        report_poison(t, resize_onnx_case(1.5, true))
-        report_poison(t, resize_torch_case(1.5, true))
+        report_poison(t, resize_case(false, 1.5, true))
+        report_poison(t, resize_case(true, 1.5, true))
     }
 }
 

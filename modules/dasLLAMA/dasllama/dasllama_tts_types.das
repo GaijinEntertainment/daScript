@@ -76,6 +76,50 @@ def timings_line(t : TtsTimings; sample_rate : int) : string {
     return "{double(t.samples) / double(sample_rate)} s of audio in {ms_of(t.total_us)} ms (rtf {rtf(t, sample_rate)}): {join(parts, ", ")}"
 }
 
+//! A family's GPU hook seats: the names in dispatch order and, per seat, the hook invocations and the ones
+//! that served since the process started - engage is read from these counters, never inferred from a
+//! synthesis having run.
+struct TtsGpuSeats {
+    names : array<string>
+    calls : array<int>
+    served : array<int>
+}
+
+def tts_seats(names : array<string>) : TtsGpuSeats {
+    var s = TtsGpuSeats()
+    s.names := names
+    s.calls |> resize(length(names))
+    s.served |> resize(length(names))
+    return <- s
+}
+
+//! The seat's index, or a panic naming the family - a misspelt key never reads as zero counters.
+[cold_path]
+def tts_seat_index(s : TtsGpuSeats; stage, who : string) : int {
+    for (i in range(length(s.names))) {
+        return i if (s.names[i] == stage)
+    }
+    panic("dasLLAMA {who}: no GPU seat named '{stage}'")
+    return -1
+}
+
+def tts_seat_call(var s : TtsGpuSeats; i : int) {
+    s.calls[i]++
+}
+
+def tts_seat_served(var s : TtsGpuSeats; i : int) {
+    s.served[i]++
+}
+
+[cold_path]
+def tts_seat_stats(s : TtsGpuSeats; stage, who : string) : tuple<calls : int; served : int> {
+    let i = tts_seat_index(s, stage, who)
+    return (calls = s.calls[i], served = s.served[i])
+}
+
+[cold_path]
+def tts_seat_names(s : TtsGpuSeats) : array<string> => clone_to_move(s.names)
+
 struct TtsAudio {
     //! Synthesized speech: mono f32 PCM at ``sample_rate``, with the time it took.
     pcm : array<float>     //! mono samples in [-1, 1]

@@ -276,7 +276,7 @@ let TESTS_DIR = "modules/dasLLAMA/tests"
 def area_tests(area : string) : array<string> {
     if (area == "audio") {
         return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_dasllama_lint_contracts.das",
-                    "test_parrot.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das", "test_whisper.das" ]
+                    "test_parrot.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das", "test_vulkan_tower_kernels.das", "test_whisper.das" ]
     } elif (area == "vision") {
         return <- [ "test_attn_span.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
@@ -332,10 +332,10 @@ def area_image_arms(area : string) : string {
 //! engine module stem -> the areas a change to it reaches. A module not in the table is CORE and
 //! reaches every area (the safe default for a new module until it gets a row)
 let MODULE_AREAS <- {
-    "dasllama_tower" => "audio,vision", "dasllama_metal_tower" => "audio,vision,tts", "dasllama_vulkan_tower" => "vision",
+    "dasllama_tower" => "audio,vision", "dasllama_metal_tower" => "audio,vision,tts", "dasllama_vulkan_tower" => "audio,vision",
     "dasllama_asr" => "audio", "dasllama_asr_types" => "audio", "dasllama_audio" => "audio",
     "dasllama_audio_embedder" => "audio", "dasllama_audio_io" => "audio", "dasllama_canary" => "audio",
-    "dasllama_gemma4a" => "audio", "dasllama_metal_asr_dec" => "audio", "dasllama_parakeet" => "audio",
+    "dasllama_gemma4a" => "audio", "dasllama_metal_asr_dec" => "audio", "dasllama_vulkan_asr_dec" => "audio", "dasllama_parakeet" => "audio",
     "dasllama_qwen3a" => "audio", "dasllama_vad" => "audio", "dasllama_whisper" => "audio",
     "dasllama_gemma3v" => "vision", "dasllama_gemma4uv" => "vision", "dasllama_gemma4v" => "vision",
     "dasllama_qwen25v" => "vision", "dasllama_qwen3v" => "vision", "dasllama_vision" => "vision",
@@ -353,12 +353,14 @@ let MODULE_AREAS <- {
     "dasllama_arch_qwen3moe" => "llm", "dasllama_attn_prefill" => "llm", "dasllama_batch" => "llm",
     "dasllama_bpe" => "llm", "dasllama_gpu_resident" => "llm", "dasllama_gpu_tier" => "llm",
     "dasllama_kv_dtype" => "llm", "dasllama_kv_codec" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
-    "dasllama_metal_prefill" => "llm", "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
+    "dasllama_metal_prefill" => "llm,tts",   // its rope serves the Pocket codec transformer
+    "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
     "dasllama_rope" => "llm", "dasllama_sampling" => "llm", "dasllama_scheduler" => "llm",
     "dasllama_spm" => "llm,tts",   // the unigram arm is the Pocket tokenizer (test_tts_pocket)
     "dasllama_bench" => "llm,infra",   // the rows serve lcpp_bench (llm) and the server's /bench (infra's tooling)
-    "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm", "dasllama_unicode" => "llm",
+    "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm",
+    "dasllama_unicode" => "llm,tts",   // cpt_count serves the TTS front end and its chunker
     "dasllama_vulkan_decode" => "llm", "dasllama_vulkan_prefill" => "llm", "dasllama_vulkan_seams" => "llm"
 }
 
@@ -386,8 +388,10 @@ def areas_for_path(path : string) : array<string> {
         if (name |> starts_with("_")) {
             if (name |> starts_with("_tts_")) {
                 return <- ["tts"]
-            } elif (name == "_vision_oracle.das" || name == "_tower_twin.das") {
+            } elif (name == "_vision_oracle.das") {
                 return <- ["vision"]
+            } elif (name == "_tower_twin.das") {
+                return <- ["audio", "vision"]
             } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das") {
                 return <- ["llm"]
             }
@@ -698,14 +702,19 @@ def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_exclud
         if (find_index(areas, "llm") >= 0) {
             to_log(LOG_INFO, "NEXT the model suites (decode | prefill | matrix) take --arm scoped to the change: run.das -- --arm <arms> --suite <name>\n")
         }
-        to_log(LOG_INFO, "NEXT before the PR: run.das -- --suite model-free, then --suite stocked on a box with models (preflight --full runs both when the module changed)\n")
+        to_log(LOG_INFO, "NEXT before the PR: run.das -- --suite model-free, then this --changed run on a box with models\n")
     } elif (cfg.suite == "model-free") {
-        to_log(LOG_INFO, "NEXT before the PR: run.das -- --suite stocked on a box with models\n")
+        to_log(LOG_INFO, "NEXT before the PR: run.das -- --changed on a box with models (the stocked files of the areas the change reaches)\n")
     }
 }
 
 [export]
 def main() : int {
+    //! the runner's lines (AREAS, START, CHANGED, REPORT, NEXT) are its output: the to_log floor is info
+    //! unless the environment set one, and the children it spawns inherit it
+    if (empty(g_env_core.log_level)) {
+        set_env_variable("DAS_LOG_LEVEL", "info")
+    }
     var r <- parse_args(type<RunArgs>)
     if (r |> is_err) {
         to_log(LOG_ERROR, "error: {r |> unwrap_err}\n\n")

@@ -12,7 +12,6 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
 require daslib/fio
-require math
 require _tts_corpus
 require _tts_parity
 require _model_tier
@@ -75,9 +74,7 @@ def private kitten_ids_of(ps : string) : array<int> {
 
 // text in, speech out through the facade: the front end's packs sit beside the GGUF in the store
 def private facade_smoke(t : T?; size : string) {
-    if (!stat(gguf_path(size)).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid ||
-        !stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
-        t |> skip("kitten-{size}.gguf or the front-end packs not present")
+    if (tts_data_missing(t, gguf_path(size))) {
         return
     }
     with_job_que() {
@@ -91,13 +88,7 @@ def private facade_smoke(t : T?; size : string) {
         t |> equal(audio.sample_rate, 24000)
         // 51 characters of text: well over a second of speech, under ten
         t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
-        var finite = true
-        var peak = 0.0
-        for (v in audio.pcm) {
-            finite = finite && abs(v) < 10.0   // a NaN fails the comparison too
-            peak = max(peak, abs(v))
-        }
-        t |> success(finite, "every sample finite")
+        let peak = speech_peak(t, audio)
         t |> success(peak > 0.05, "peak {peak}: the model spoke")
         let tm & = audio.timings
         let gen_on_tower = tm.generator_us == 0l && tm.source_us == 0l && styletts2_gpu_stats("decode").served > served0
@@ -151,20 +142,12 @@ def private hook_probe(path : string) : HookProbe {
     let s1 = styletts2_generator_gpu_stats()
     r.calls_after_decline = s1.calls - s0.calls
     r.served_after_decline = s1.served - s0.served
-    var peak = 0.0
-    for (v in a.pcm) {
-        peak = max(peak, abs(v))
-    }
-    r.spoke_after_decline = peak > 0.05
+    r.spoke_after_decline = logits_maxabs(a.pcm) > 0.05
     g_hook_serves = true
     var inscope b <- synthesize(m, "The hook serves silence.", "Bella")
     let s2 = styletts2_generator_gpu_stats()
     r.served_after_serve = s2.served - s1.served
-    peak = 0.0
-    for (v in b.pcm) {
-        peak = max(peak, abs(v))
-    }
-    r.silent_after_serve = peak == 0.0 && !empty(b.pcm)
+    r.silent_after_serve = logits_maxabs(b.pcm) == 0.0 && !empty(b.pcm)
     g_hook_serves = false
     return r
 }
@@ -172,8 +155,7 @@ def private hook_probe(path : string) : HookProbe {
 [test]
 def test_kitten_generator_hook(t : T?) {
     t |> run("nano: the generator hook declines into the CPU chain and serves when it answers") @(t : T?) {
-        if (!stat(gguf_path("nano")).is_valid || !stat(path_join(models_dir(), "tts_g2p.bin")).is_valid) {
-            t |> skip("kitten-nano.gguf or the front-end packs not present")
+        if (tts_data_missing(t, gguf_path("nano"), false)) {
             return
         }
         with_job_que() {
@@ -223,8 +205,7 @@ def test_tts_lane_pin(t : T?) {
 [test]
 def test_kitten_over_long_chunk(t : T?) {
     t |> run("nano: a chunk past the encoder's positions is truncated, not refused") @(t : T?) {
-        if (!stat(gguf_path("nano")).is_valid) {
-            t |> skip("kitten-nano.gguf not present")
+        if (!model_available(t, gguf_path("nano"))) {
             return
         }
         with_job_que() {

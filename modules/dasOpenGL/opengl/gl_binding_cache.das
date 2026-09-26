@@ -85,7 +85,7 @@ def gl_material_state_filtered(double_sided, blend : bool){
     }
     if (!gl_binding_filter_active || binding_blend != (blend ? 1 : 0)){if (blend){glEnable(GL_BLEND)}else{glDisable(GL_BLEND)}; binding_blend = (blend ? 1 : 0)}
     if (blend && (!gl_binding_filter_active || !binding_blend_func_known || binding_blend_src != GL_SRC_ALPHA || binding_blend_dst != GL_ONE_MINUS_SRC_ALPHA)){
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); binding_blend_src = GL_SRC_ALPHA; binding_blend_dst = GL_ONE_MINUS_SRC_ALPHA; binding_blend_func_known = true
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, uint(GL_ONE), GL_ONE_MINUS_SRC_ALPHA); binding_blend_src = GL_SRC_ALPHA; binding_blend_dst = GL_ONE_MINUS_SRC_ALPHA; binding_blend_func_known = true
     }
 }
 [arch(at="../ARCHITECTURE.md#binding-cache")]

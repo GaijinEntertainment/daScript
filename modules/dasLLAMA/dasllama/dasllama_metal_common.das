@@ -178,7 +178,6 @@ var g_pso_f32mm : MetalComputePipeline?
 var g_pso_cross_kx : MetalComputePipeline?   // whisper cross-KV: K transpose+prescale shuffle
 var g_pso_cross_vx : MetalComputePipeline?   // whisper cross-KV: V head-major re-tile (+ the KV append)
 var g_pso_cross_vx_h : MetalComputePipeline?  // the f16-store twin — the resident K/V memory
-var g_pso_im2col3 : MetalComputePipeline?     // the whisper conv-frontend im2col (k=3, same pad)
 var g_pso_im2col2d : MetalComputePipeline?    // the qwen3a conv2d im2col (k=3, s=2, p=1)
 var g_pso_wdec_attn_part : MetalComputePipeline?  // the chunked online-softmax partial
 var g_pso_wdec_attn_comb : MetalComputePipeline?  // the log-sum-exp chunk merge
@@ -237,9 +236,13 @@ var g_mx4_vtab : MetalBuffer?                   // [16] signed doubled-e2m1 valu
 var g_pso_dn_conv : MetalComputePipeline?      // deltanet (Wave D): causal conv + SiLU
 var g_pso_dn_hist : MetalComputePipeline?      // conv-history advance
 var g_pso_st2_im2col : MetalComputePipeline?
+var g_pso_st2_im2col_tr : MetalComputePipeline?
+var g_pso_st2_im2col_cm : MetalComputePipeline?
 var g_pso_st2_conv_mm : MetalComputePipeline?
+var g_pso_st2_conv_tr_mm : MetalComputePipeline?
 var g_pso_f32_exact_mm : MetalComputePipeline?
 var g_pso_st2_conv_exact_mm : MetalComputePipeline?
+var g_pso_st2_conv_tr_exact_mm : MetalComputePipeline?
 var g_pso_st2_colstats : MetalComputePipeline?
 var g_pso_st2_adain_snake : MetalComputePipeline?
 var g_pso_st2_leaky : MetalComputePipeline?
@@ -247,18 +250,37 @@ var g_pso_st2_axpy : MetalComputePipeline?
 var g_pso_st2_add : MetalComputePipeline?
 var g_pso_st2_reflect1 : MetalComputePipeline?
 var g_pso_st2_adain_leaky : MetalComputePipeline?
-var g_pso_st2_gather : MetalComputePipeline?
+var g_pso_row_gather : MetalComputePipeline?
 var g_pso_st2_concat : MetalComputePipeline?
 var g_pso_st2_pool_dw : MetalComputePipeline?
 var g_pso_st2_lstm : MetalComputePipeline?
 var g_pso_st2_sigsum : MetalComputePipeline?
 var g_pso_st2_gelu_tanh : MetalComputePipeline?
 var g_pso_st2_attn : MetalComputePipeline?
-var g_pso_st2_src_low : MetalComputePipeline?
-var g_pso_st2_src_cumsum : MetalComputePipeline?
-var g_pso_st2_src_sines : MetalComputePipeline?
-var g_pso_st2_stft : MetalComputePipeline?
+var g_pso_st2_src_low_torch : MetalComputePipeline?
+var g_pso_st2_src_low_onnx : MetalComputePipeline?
+var g_pso_st2_src_cumsum_torch : MetalComputePipeline?
+var g_pso_st2_src_cumsum_onnx : MetalComputePipeline?
+var g_pso_st2_src_noise : MetalComputePipeline?
+var g_pso_st2_src_sines_torch : MetalComputePipeline?
+var g_pso_st2_src_sines_onnx : MetalComputePipeline?
+var g_pso_st2_stft_reflect : MetalComputePipeline?
+var g_pso_st2_stft_edge : MetalComputePipeline?
 var g_pso_st2_istft : MetalComputePipeline?
+var g_pso_pk_rows : MetalComputePipeline?
+var g_pso_pk_rows_elu : MetalComputePipeline?
+var g_pso_pk_row_scale : MetalComputePipeline?
+var g_pso_pk_attn : MetalComputePipeline?
+var g_pso_pk_add_ln : MetalComputePipeline?
+var g_pso_pk_gemv_f32 : MetalComputePipeline?
+var g_pso_pk_gemv_f32_ln_silu : MetalComputePipeline?
+var g_pso_pk_gemv_f32_gate : MetalComputePipeline?
+var g_pso_pk_gemv_f32_add_silu : MetalComputePipeline?
+var g_pso_pk_gemv_f32_tail : MetalComputePipeline?
+var g_pso_pk_gemv_q8_ln_silu : MetalComputePipeline?
+var g_pso_pk_gemv_q8_gate : MetalComputePipeline?
+var g_pso_pk_gemv_q8_add_silu : MetalComputePipeline?
+var g_pso_pk_gemv_q8_tail : MetalComputePipeline?
 var g_pso_dn_l2 : MetalComputePipeline?        // q/k per-head L2 norm + q pre-scale
 var g_pso_dn_scan : MetalComputePipeline?      // the fused sequential delta rule
 var g_pso_dn_gate : MetalComputePipeline?      // z-gated out-norm

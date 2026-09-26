@@ -63,7 +63,7 @@ reference lane.
 
 ```
 dasllama-server --tts kitten-nano.gguf          # POST /v1/audio/speech, the OpenAI shape
-daslang utils/dasllama-server/txt2wav.das -- --tts kitten-nano.gguf --voice expr-voice-2-f --text "Hello." --out hello.wav
+daslang -jit utils/dasllama-server/cli.das -- speak --tts kitten-nano.gguf --voice expr-voice-2-f -o hello.wav "Hello."
 ```
 
 Pocket TTS English is the cloning model: 137 MB, 19 voices (`alba` the default, `bill_boerst`,

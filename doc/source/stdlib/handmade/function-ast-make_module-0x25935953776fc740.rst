@@ -1,0 +1,1 @@
+Inside ``make_program``, builds a named module in the block and compiles it at once, like a required file; returns the module for ``add_module_require``, or null when it failed (the errors come back on the program ``make_main_module`` returns).

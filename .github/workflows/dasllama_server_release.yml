@@ -167,9 +167,9 @@ jobs:
         run: |
           set -eux
           case "${{ runner.os }}" in
-            macOS)   APP=dist/dasllama-server.app/Contents/MacOS; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench" ;;
-            Windows) APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog.exe"; BENCH="$APP/dasllama-bench.exe" ;;
-            *)       APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench.exe" ;;
+            macOS)   APP=dist/dasllama-server.app/Contents/MacOS; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench"; CLI="$APP/dasllama-cli" ;;
+            Windows) APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog.exe"; BENCH="$APP/dasllama-bench.exe"; CLI="$APP/dasllama-cli.exe" ;;
+            *)       APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench.exe"; CLI="$APP/dasllama-cli.exe" ;;
           esac
           test -f "$APP/control.html"
           test -f "$APP/tray.ico"
@@ -178,6 +178,12 @@ jobs:
           # the companion loads the same runtime and modules the server does; -m is required, so
           # the help form carries a placeholder
           "$BENCH" -m none.gguf --help
+          # the CLI: the usage exits 0, a subcommand's help exits 0, and a run with no model is
+          # a refusal that names the flag, not a crash
+          "$CLI" --help
+          "$CLI" talk --help
+          if "$CLI" complete "hi" > smoke_cli.log 2>&1; then echo "the CLI completed with no model"; cat smoke_cli.log; exit 1; fi
+          grep -q -- "--model" smoke_cli.log
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             grep -A1 CFBundleExecutable dist/dasllama-server.app/Contents/Info.plist | grep -q '<string>watchdog</string>'
             grep -A1 LSUIElement dist/dasllama-server.app/Contents/Info.plist | grep -q '<true'

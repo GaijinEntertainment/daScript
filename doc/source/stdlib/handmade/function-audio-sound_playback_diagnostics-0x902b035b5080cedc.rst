@@ -1,0 +1,1 @@
+Samples threaded browser audio-device counters and ring occupancy. Unsupported backends return zero; counters and peak timings cover the current device lifetime and are sampled independently, not as one synchronized transaction.
