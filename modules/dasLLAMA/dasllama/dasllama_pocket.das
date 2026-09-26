@@ -1030,14 +1030,14 @@ def pocket_register_voice(var m : PocketModel; name : string; pcm : array<float>
         panic("dasLLAMA pocket: voice '{name}' is a {long_length(pcm) / int64(m.sample_rate)} s clip; a voice is cloned from at most {POCKET_MAX_VOICE_SECONDS} s")
     }
     var inscope vs <- pocket_voice_state(m, pcm, sc)
-    pocket_voice_erase(m, name)
+    pocket_voice_clear(m, name)
     m.voices[name] := pcm
     m.voice_states[name] <- vs
 }
 
 //! A voice's slots freed and erased from every table, its name kept on the roster (joined when new) - the
 //! replace half of an add-or-replace; erase frees a slot, never the frames, so each is deleted first.
-def pocket_voice_erase(var m : PocketModel; name : string) {
+def pocket_voice_clear(var m : PocketModel; name : string) {
     if (!pocket_has_voice(m, name)) {
         m.voice_names |> push(clone_string(name))
     }

@@ -14,7 +14,7 @@ require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_kqformat
-require dasllama/dasllama_gpu_math   // ksign7 / iq3s_signed / softcap_exp - the ALU helpers shared with the Vulkan kernels
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_lens
 
@@ -306,9 +306,7 @@ def public tg_fold_max(red : auto(RR); n : uint) : float {
     return mm
 }
 
-//! The threadgroup sum (max) of v that every lane holds after one barrier: each simdgroup's fold lands in
-//! red[gl_SubgroupID], the cross-simdgroup fold runs on every lane. A lane may still be reading red[] when
-//! the next fold writes it, so two folds in a row take a barrier between them.
+//! Every lane holds the threadgroup sum (max) of v after one barrier; every lane rereads red[], so two folds in a row take a barrier between them.
 def public tg_sum_all(v : float; var red : auto(RR)) : float {
     let s = simd_sum(v)
     if (gl_SubgroupInvocationID == 0u) {
@@ -329,9 +327,7 @@ def public tg_max_all(v : float; var red : auto(RR)) : float {
     return mm
 }
 
-//! The single-threadgroup softmax over the staged scores with the head's attention sink folded in: the weights
-//! in place, the sum returned; sinkv is the sink's logit (the caller reads it only when hass), joining the max
-//! and the sum.
+//! The staged scores' softmax with the sink logit sinkv (read only when hass) joining the max and the sum: the weights in place, the sum returned.
 def private sq_softmax_sink(var scores : auto(SS); var red : float[16]; n, lid, nt, hass : uint; sinkv : float) : float {
     barrier()
     var mm = sq_score_max(scores, red, n, lid, nt)
@@ -346,7 +342,6 @@ def private sq_softmax_sink(var scores : auto(SS); var red : float[16]; n, lid, 
     return tot
 }
 
-// Softmax half 1: row max — strided local, then the threadgroup fold through red[].
 def private sq_score_max(scores : auto(SS); var red : float[16]; n, lid, nt : uint) : float {
     var m = -3.0e38
     var j = lid
@@ -1261,7 +1256,7 @@ class MetalTgReduceBase {
     def tg_max(v : float) : float => tg_max_all(v, partial)
 
     //! rsqrt(mean + eps) of the squares summed into ss - the RMS norm's inverse scale
-    def tg_rms_inv(ss : float; dim : uint; eps : float) : float => rsqrt(tg_sum_all(ss, partial) / float(dim) + eps)
+    def tg_rms_inv(sum_sq : float; dim : uint; eps : float) : float => rsqrt(tg_sum_all(sum_sq, partial) / float(dim) + eps)
 }
 
 // Fused residual-add + rmsnorm, one threadgroup per row: x += a in place, then y = rms(x)·w
@@ -1353,7 +1348,7 @@ class MetalPreAddRms : MetalTgReduceBase {
             ssx += xv * xv
             k += gl_WorkGroupSize.x
         }
-        barrier()   // partial[] free again: the first fold's reads are done
+        barrier()
         let invx = tg_rms_inv(ssx, dim, eps)
         k = lid
         while (k < dim) {
@@ -1373,7 +1368,7 @@ class template MetalRopeStoreKvT {
     @ssbo @binding = 1 @role = "alias" @off = "vsoff" vs : array<float>    // raw v (the QKV buffer at the v offset)
     @ssbo @binding = 2 @off = "koff" kd : array<KT>  // mirror K row (bound at the (layer, pos) row offset)
     @ssbo @binding = 3 @off = "voff" vd : array<KT>
-    @ssbo @binding = 4 @role = "weight" @off = "toff" tcos : array<float>  // [head_size/2] this position's rope row, bound at its row offset
+    @ssbo @binding = 4 @role = "weight" @off = "toff" tcos : array<float>  //!< [head_size/2] this position's rope row, bound at its row offset
     @ssbo @binding = 5 @role = "weight" @off = "toff" tsin : array<float>
     @ssbo @binding = 6 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
     @uniform @binding = 7 ka : RopeStoreArgs
@@ -2279,8 +2274,6 @@ class MetalQ8Gemm64BT : MetalQ8GemmTensorT {
 // The shared 32x64 GEMM tile stage: every mul_mm-family kernel (dense, MoE, attention, KV-quant)
 // stages A into ta (4 k-tiles x 8 row-tiles of 8x8) and B into tb (4 k-tiles x 4 token-tiles),
 // then walks 4 k-steps of 4 A-loads / 2 B-loads / 8 MACs. The method splices flat at emission.
-// TILET / SGT are the staged element and the simdgroup tile type the deriving class declares: half tiles
-// (float16, simdgroup_half8x8) everywhere but the f32-exact GEMM stamps' float ones.
 [ |> template_struct_instance]
 class template MetalMmTileBase {
     @workgroup ta : TILET[2048]
@@ -4075,8 +4068,7 @@ def enc_kq_mvb_k4_pairs(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : ui
     }
 }
 
-// fused rope + KV-row store: the v source binds the SAME QKV buffer at its v byte offset; toff = the
-// position's row in the rope tables (0 where the caller binds the row's own buffer)
+//! toff = the position's row in the rope tables (0 where the caller binds the row's own buffer); vsoff = v's byte offset in the one QKV buffer.
 def enc_rope_store(enc : MetalComputeEncoder?; f16 : bool; bqkv : MetalBuffer?; vsoff : uint64;
                    kmb, vmb : MetalBuffer?; koff, voff : uint64;
                    bcos, bsin : MetalBuffer?; toff : uint64; bbias : MetalBuffer?; var ka : RopeStoreArgs; npairs : int64) {
@@ -4763,7 +4755,7 @@ def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; fa
     var res = p.verdict
     let base_pso = p.base_pso
     let twin_pso = p.twin_pso
-    var rig <- kq_race_rig(dev, qu_per_sb, KqRaceScaleForm.split_d, kdim, ndim)   //! the split-scale fixture, one x row read
+    var rig <- kq_race_rig(dev, qu_per_sb, KqRaceScaleForm.split_d, kdim, ndim)
     let tg = uint3(64u, 1u, 1u)
     race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
         kn_pipeline(enc, base_pso)
@@ -4850,10 +4842,7 @@ class MetalRmsNormHX : MetalRmsNormT {
     override HX = true
 }
 
-// LayerNorm (weight + bias) over rows, the tower/embedder norm: two-pass mean then POPULATION variance,
-// affine out; the ADD stamp folds a residual add into the first pass (x += a in place, the norm of the sum).
-// In-place safe: the write loop's x read is per-element by its owner, after both reduction barriers
-// (gemma4uv calls it in place). The leaves declare the bindings; the body reads dim and eps through the accessors.
+//! Row LayerNorm (w + b), POPULATION variance; the ADD stamp norms x += a in place; y may alias x (a lane rereads only its own x, after both folds).
 [ |> template_struct_instance]
 class template MetalLayerNormT : MetalTgReduceBase {
     @template_constant ADD : bool = false
@@ -4887,7 +4876,7 @@ class template MetalLayerNormT : MetalTgReduceBase {
             vs += dv * dv
             k += gl_WorkGroupSize.x
         }
-        barrier()   // partial[] free again: the mean fold's reads are done
+        barrier()
         let inv = tg_rms_inv(vs, n, ln_eps())
         k = lid
         while (k < n) {
@@ -5271,8 +5260,8 @@ class MetalWdecAttnPart {
             ss += e
             t += gl_WorkGroupSize.x
         }
-        barrier()   // partial[] free again: the max fold's reads are done
-        let tot = tg_sum_all(ss, partial)   // its barrier also fences the exp pass for the V loop
+        barrier()
+        let tot = tg_sum_all(ss, partial)   // its barrier also fences the exp pass's scores for the V loop
         if (lid == 0u) {
             pms[slot * 2u] = nloc > 0u ? m : -3.0e38
             pms[slot * 2u + 1u] = tot
@@ -6766,8 +6755,7 @@ class MetalMoeWScale {
     }
 }
 
-//! Four quants at qb against a float4 of x, and a q8 block's eight-quant chunk against two: the q8 dot's inner
-//! forms, spelled once - the sum order is the one every q8 kernel's parity holds.
+//! The q8 dot's inner forms (four quants against a float4, a block's eight against two), spelled once: this sum order is the one every q8 kernel's parity holds.
 def private q8_quad_dot(qv : array<int8>; qb : uint; x0 : float4) : float {
     return float(qv[qb]) * x0.x + float(qv[qb + 1u]) * x0.y + float(qv[qb + 2u]) * x0.z + float(qv[qb + 3u]) * x0.w
 }
@@ -6814,7 +6802,6 @@ class template MetalGemvSiteT {
         y[i] = v
     }
 
-    //! the two rows' sums to y from lane 0, the pad row past y_rows dropped
     def put_rows2(first_row, y0, lane : uint; s0, s1 : float) {
         if (lane == 0u && first_row < y_rows()) {
             y_put(y0 + first_row, s0)
@@ -9669,7 +9656,7 @@ class template MetalEw2T {
     @ssbo @binding = 4 @role = "write" @template_gate = HX gh : array<float16>   // f16 twin of g (the dual-store stamps)
     @ssbo @binding = 5 @role = "read" @off = "toff" @template_gate = TOTB totb : array<uint>   // the device-side row count (the bucket rail's padded total)
     @uniform @binding = 6 @template_gate = TOTB row_elems : uint
-    @ssbo @binding = 7 @role = "write" @off = "ooff" @template_gate = OUT o : array<float>   // the out-of-place result (the in-place stamps erase it)
+    @ssbo @binding = 7 @role = "write" @off = "ooff" @template_gate = OUT o : array<float>   //!< the out-of-place result (the in-place stamps erase it)
     @template_constant HAS_ASCALE : bool = false
     @template_constant HX : bool = false
     @template_constant TOTB : bool = false
@@ -10126,7 +10113,6 @@ class template MetalSt2Im2colT {
     @ssbo @binding = 1 @role = "write" cols : array<float>   //!< [mp x kdim]
     @uniform @binding = 2 ka : St2ConvArgs
 
-    //! the source element at input row `st`, channel `ci`: rows of cin, or (CHMAJOR) channels of t_in
     def src_at(st, ci : uint) : float {
         static_if (CHMAJOR) {
             return x[ci * ka.t_in + st]
@@ -10218,7 +10204,7 @@ class MetalSt2ColStats : MetalTgReduceBase {
             q += dv * dv
             r += nt
         }
-        barrier()   // partial[] free again: the mean fold's reads are done
+        barrier()
         let qtot = tg_sum(q)
         if (lid == 0u) {
             stats[ch] = mean
@@ -10350,7 +10336,6 @@ class MetalSt2Reflect1 {
     }
 }
 
-//! out[r] = a[idx[r]] (+ b[r] when add_b) (+ cvec when add_c) over c columns.
 //! o [t x c] = a[idx[r]] (+ b [t x c] when add_b) (+ cvec [c] when add_c): the row gather - a stem's
 //! window-sort reorder with the adds off, an embedding lookup with its position and type rows on.
 struct RowGatherArgs {
@@ -11170,7 +11155,7 @@ class MetalPkAttn {
             l += pw
             j += 256u
         }
-        barrier()   // red[] free again, and the exp pass fenced for the V loop
+        barrier()   // also fences the exp pass's sc[] for the V loop
         let tot = tg_sum_all(l, red)
         if (lid == 0u) {
             lsum = tot
@@ -11304,7 +11289,7 @@ class template MetalPkGemvT {
                 vs += dv * dv
                 k += 128u
             }
-            barrier()   // red[] free again: the mean fold's reads are done
+            barrier()
             let vtot = tg_sum_all(vs, red)
             let inv = rsqrt(vtot / float(ka.nin) + ka.eps)
             k = lid

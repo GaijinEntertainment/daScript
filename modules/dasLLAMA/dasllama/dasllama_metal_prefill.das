@@ -14,7 +14,7 @@ require daslib/typemacro_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_metal_common
-require dasllama/dasllama_gpu_math   // softcap_exp
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_metal_kernels  // the shared kq decode helpers (grid tables, ksign7m) for the tensor twins
 require dasllama/dasllama_metal_lens
 require dasllama/dasllama_load   // register_devw_kq_mirror: the image bake's CPU twin of the split-scale dequant passes
@@ -2778,7 +2778,7 @@ class MetalAttnRowstat {
             sum += exp((ka.softcap > 0.0 ? softcap_exp(sr, ka.softcap) : sr) - rowmax)
             j += nthreads
         }
-        barrier()   // red[] free again: the max fold's reads are done
+        barrier()
         var tot = tg_sum_all(sum, red)
         if (lid == 0u) {
             if (ka.hass != 0u) {
@@ -3636,7 +3636,7 @@ class MetalFcSoftmax : MetalTgReduceBase {
             l += e
             k += nt
         }
-        barrier()   // partial[] free again: the max fold's reads are done
+        barrier()
         let tot = tg_sum(l)
         let inv = 1.0 / tot
         k = lid

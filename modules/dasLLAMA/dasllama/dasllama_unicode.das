@@ -202,14 +202,14 @@ def cpt_is_mark(cpt : int) : bool {
 //! True if codepoint is whitespace (regex \s), per the upstream whitespace set.
 def cpt_is_whitespace(cpt : int) : bool => find_index(WS, cpt) >= 0
 
-//! Decode a UTF-8 string into an array of codepoints. Malformed leads pass through
-//! as a single byte (latin-1 style) — matches lenient tokenizer decoding.
 //! The codepoints a string holds - `length()` on a string is BYTES, and an em dash costs three of them.
 def cpt_count(s : string) : int {
     var inscope c <- utf8_to_cpts(s)
     return length(c)
 }
 
+//! Decode a UTF-8 string into an array of codepoints. Malformed leads pass through
+//! as a single byte (latin-1 style) — matches lenient tokenizer decoding.
 def utf8_to_cpts(s : string) : array<int> {
     var cpts : array<int>
     peek_data(s) $(d : array<uint8> const#) {

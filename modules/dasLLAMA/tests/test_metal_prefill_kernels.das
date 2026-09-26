@@ -16,11 +16,11 @@ require ?das_metal _metal_kernel_common   // shared buf helpers + fixtures; only
 require ?das_metal _metal4_probe
 require daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
 require dasllama/dasllama_tts_blocks
-require dasllama/dasllama_tower   // layernorm, attention_bidir(_windows) - the tower cells' CPU oracles
-require dasllama/dasllama_moe     // moe_select_core - the select cell's oracle
-require dasllama/dasllama_common  // MoeGate - the select cell's gate modes
+require dasllama/dasllama_tower
+require dasllama/dasllama_moe
+require dasllama/dasllama_common
 require dasllama/dasllama_rope   // build_rope_tabs - the Pk rope gates' tables
-require _attn_oracle             // attn_row_oracle - the attention trio's oracle
+require _attn_oracle
 require daslib/jobque_boost
 require math
 
@@ -179,10 +179,7 @@ struct private AttnKeys {
     hass : int
 }
 
-// The tiled sgmat attention trio (QK^T -> rowstat -> P.V) vs `attn_row_oracle` over each query row's key range at one
-// (head_size, heads, kv_heads, npos) shape. Buffers carry the driver's padded rows (whole-tile sgmat stores + staging
-// reads walk them): queries padded to 32, keys (the existing context + the chunk) to 64; rows past the live ones are
-// pad. GENERIC (untyped dev/queue) so it instantiates only inside the Apple static_if.
+//! The sgmat attention trio (QK^T -> rowstat -> P.V) vs `attn_row_oracle` over the driver's padded rows: queries to 32, keys (context + chunk) to 64.
 def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, npos : int; mm : bool; keys : AttnKeys = AttnKeys()) {
     let kv_mul = n_heads / n_kv_heads
     let qd = n_heads * head_size
@@ -240,7 +237,6 @@ def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, n
     var batt = buf_fill(dev, n_heads * qp * nkp, float16(1000.0))
     var bstat = buf_fill(dev, n_heads * qp * 2, 0.0)
     var bxb = buf_fill(dev, qp * qd, 0.0)
-    // ONE AttnArgs serves all three stages (each ignores the fields it does not read)
     var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kv_dim), head_size = uint(head_size),
         kv_mul = uint(kv_mul), npos = uint(nk), np32 = uint(nkp), scale = scale,
         qoff = uint(keys.qoff), qrows = uint(qp), window = uint(keys.window), softcap = keys.softcap, hass = uint(keys.hass),
@@ -2034,8 +2030,7 @@ def private pk_attn_gate(t : T?; dev, queue; ctx, n_old : int) {
 
 //! one row of q, k, v at position 5 over a 64-wide model of two heads: q and k rotated as
 //! `rope_rows` rotates them, the rotated k and the v landing on the caches' row 5
-//! The frame loop's rope-and-store: MetalRopeStoreKvT's f32 stamp at neox 0, no bias, the whole head rotated,
-//! the tables bound at the position's row and the caches at its row
+//! MetalRopeStoreKvT's f32 stamp at the frame loop's binds: neox 0, no bias, the whole head, the tables and the caches at the position's row
 def private rope_store_pocket_gate(t : T?; dev, queue) {
     let tag = "rope_store f32 pocket"
     var err : string
@@ -2948,14 +2943,13 @@ def private rope_arm_gate(t : T?; dev, queue; pso; arm : RopeArm) {
     delete rvwant
 }
 
-//! one `_metal_ew2_msl` stamp - y's op into x in place over a flat span, the scale slot bound at its identity - against
-//! its CPU op: `approx` bars, or bit-exact where the op is one rounding on both sides; returns the device's x
+//! One `_metal_ew2_msl` stamp, y's op into x in place, against its CPU op: `approx` bars, or bit-exact where the op is one rounding on both sides.
 def private ew2_gate(t : T?; dev, queue; tag : string; pso; x, y, want : array<float>; exact : bool) : array<float> {
     let total = length(x)
     var bx = buf_upload(dev, x)
     var by = buf_upload(dev, y)
     var btot = buf_u32(dev, uint(total))
-    var bone = buf_f32(dev, 1.0)   // the wave-B ascale slot at its identity (exact: *1.0); the stamps without it erase the slot
+    var bone = buf_f32(dev, 1.0)   // the ascale slot at its identity (exact: *1.0); a stamp without the slot erases it
     var bufs <- [bx, by, btot, bone]
     var err : string
     let ran = run_compute_1d(queue, pso, bufs, uint(total), 64u, err)
@@ -3030,8 +3024,6 @@ def test_metal_prefill_kernels(t : T?) {
                 metal_release(breps)
                 metal_release(pso_rms)
 
-                // ===== rope (table-driven) — the q-width dispatch: NORM pairs, NEOX pairs (j, j+half), and partial
-                // NEOX (rot < head_size, Wave D: the table rows rot/2 wide, dims >= rot pass through untouched) =====
                 var pso_rope = pipeline_from_source(dev, metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath, err)
                 t |> success(pso_rope != null, "rope pipeline: {err}")
                 let rope_arms <- [
@@ -3192,7 +3184,7 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_select_gate(t, dev, queue, 300, 8, 2, true)    // past 256 with pad lanes and exact ties, two stream rows
                 moe_select_gate(t, dev, queue, 128, 8, 3, false)   // batch: one stream row per tg
                 moe_select_gate(t, dev, queue, 32, 4, 1, false, 1)  // gpt-oss softmax_weight mode
-                moe_router_gate(t, dev, queue, 64, 128, 1, false)   // the single-stream stamp
+                moe_router_gate(t, dev, queue, 64, 128, 1, false)
                 moe_gemv_gate(t, dev, queue, MoeGemvFmt.q8, 96, 24, 5, 3, 1, false)   // shared x (the gate/up sites)
                 moe_gemv_gate(t, dev, queue, MoeGemvFmt.q8, 64, 32, 7, 4, 1, true)    // per-slot x rows (the down site)
                 moe_gemv_gate(t, dev, queue, MoeGemvFmt.q8, 64, 24, 5, 3, 3, false)   // batch streams, shared-x form
@@ -3239,7 +3231,7 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_reduce_gate(t, dev, queue, 96, 9, 2)
 
                 // ===== prefill misc (PLE pre-step, bias epilogue, MTP cat, deltanet ba) =====
-                ple_gather_gate(t, dev, queue, 0, 11, 3, 32, 5, 0)   // the q8 table
+                ple_gather_gate(t, dev, queue, 0, 11, 3, 32, 5, 0)
                 // the kq table twins: 300 superblocks of table past a non-zero base, one row per
                 // token = 3 superblocks, so every arm walks the row-stride and sub-block math
                 ple_gather_gate(t, dev, queue, 4, 100, 3, 256, 5, 7)
@@ -3459,9 +3451,7 @@ def private moe_wscale_gate(t : T?; dev, queue; rows, nk, ne : int) {
     delete want
 }
 
-// the router GEMV: logits[st][e] = w[e]·x[st] (+ rb[e]) on exact dyadic data (every fma partial exact), BIT-exact.
-// npos 1 = the single-stream stamp (MetalMoeRouter, whose @template_gate = BATCHED erases slot 8); past one = the
-// batched prefill stamp (MetalMoeRouterB), 8 streams per tg column, pad streams clamp and their stores gate
+//! The router GEMV BIT-exact on dyadic data: npos 1 = MetalMoeRouter (BATCHED gates slot 8 out); past one MetalMoeRouterB, 8 streams a column, pad stores gated.
 def private moe_router_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bool) {
     let tag = "moe_router{npos > 1 ? "_b" : ""} dim={dim} ne={ne} np={npos}{hasb ? " bias" : ""}"
     var err : string
@@ -3539,8 +3529,7 @@ def private moe_router_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bool
     delete want
 }
 
-//! the padded-CSR prefix over per-expert row counts: each expert's rows start at a 32-aligned base (the route prefix
-//! contract); `pad` = the padded total
+//! The padded-CSR prefix: each expert's rows from a 32-aligned base (the route prefix contract); `pad` = the padded total.
 def private padded_bases(counts : array<int>) : tuple<cnt : array<uint>; base : array<uint>; pad : int> {
     var cnt : array<uint>
     var base : array<uint>
@@ -3555,9 +3544,7 @@ def private padded_bases(counts : array<int>) : tuple<cnt : array<uint>; base : 
     return <- (cnt = cnt, base = base, pad = pad)
 }
 
-//! the CPU twin of the count -> bucket CSR pair over a selection's idx halves ([k idx u32][k w f32] per row): the
-//! per-expert counts, the padded bases with the padded total past the last expert, the bucket rows (each expert's
-//! slots in serial order, its pad tail at the 0xFFFFFFFF stamp) and each slot's bucket row
+//! The CPU twin of the count -> bucket CSR pair: counts, padded bases (the total past the last expert), bucket rows (pad tails at 0xFFFFFFFF), each slot's row.
 def private csr_ref(sel : array<uint>; npos, ne, nk : int) : tuple<cnt : array<uint>; base : array<uint>; bkt : array<uint>; inv : array<uint>; pad : int> {
     let total = npos * nk
     var counts : array<int>
@@ -3683,7 +3670,7 @@ def private moe_gather_x_gate(t : T?; dev, queue; npos, ne, nk, dim : int) {
             sel[r * 2 * nk + j] = uint((r * 3 + j * 5 + 1) % ne)
         }
     }
-    var (cntw, basew, bktw, invw, pad) <- csr_ref(sel, npos, ne, nk)   // the pad tails at the bucket kernel's 0xFFFFFFFF stamp
+    var (cntw, basew, bktw, invw, pad) <- csr_ref(sel, npos, ne, nk)
     let mpad = pad + 32   // a trailing gap past the last expert's stamped tail
     bktw |> resize(mpad)
     // the gap: recycled-pool flavors — total (>= total boundary: MUST zero; the old equality
@@ -3815,12 +3802,7 @@ def private moe_reduce_gate(t : T?; dev, queue; dim, npos, nk : int) {
 
 // ===== prefill misc gates (PLE pre-step, bias epilogue, MTP cat, deltanet ba GEMV) =====
 
-// PLE stage 1 (MetalPleGatherQ8 / K4 / K5 / Q40): the token-row gather into the layer-major side panel, sqrt(ple)
-// folded into the scale. fmt 0 = the 34B-block q8 table (bound twice: the half-scale and the byte view), the row's truth
-// its exact dequant; a kq format id = the table off the format's native planes bound at the table's own superblock base
-// (sb0) - the production shape, where kq_quants_of/kq_scales_of offset the binds by the table's element offset - the
-// row's truth kq_row_ref, the same per-superblock dequant ple_gather_row runs. Pow2/quarter scales and small-int quants:
-// every product and difference is exact in fp32 on both sides.
+//! PLE stage 1: fmt 0 the q8 table bound twice vs its exact dequant; a kq id its native planes bound at sb0, as production binds them, vs kq_row_ref; exact in fp32.
 def private ple_gather_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npos, sb0 : int) {
     let tag = "ple_gather f={fmt} v={vocab} nl={nlayers} ple={ple} np={npos} sb0={sb0}"
     var err : string
@@ -3834,15 +3816,15 @@ def private ple_gather_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npos, 
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let rowlen = nlayers * ple
-    let rowsb = rowlen / 256          // superblocks per token row - the kq gate's `all % 256` clause
+    let rowsb = rowlen / 256          // superblocks per token row - the quants gate's `all % 256` clause
     let nsb = sb0 + vocab * rowsb
-    var kq : array<uint8>             // fmt 0: the q8 blob
+    var quants : array<uint8>             // fmt 0: the q8 blob
     var ks : array<uint8>
     var wdeq : array<float>
     if (fmt == 0) {
-        q8_blob_fill(1, vocab * rowlen / 32, kq, wdeq)
+        q8_blob_fill(1, vocab * rowlen / 32, quants, wdeq)
     } else {
-        kq_fill_planes(fmt, nsb, kq, ks)
+        kq_fill_planes(fmt, nsb, quants, ks)
     }
     var tok : array<uint>
     tok |> resize(npos)
@@ -3860,7 +3842,7 @@ def private ple_gather_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npos, 
                 wrow[i] = wdeq[int(tok[p]) * rowlen + i]
             }
         } else {
-            kq_row_ref(fmt, sb0 + int(tok[p]) * rowsb, rowsb, nsb, kq, ks, wrow)
+            kq_row_ref(fmt, sb0 + int(tok[p]) * rowsb, rowsb, nsb, quants, ks, wrow)
         }
         for (l in range(nlayers)) {
             for (i in range(ple)) {
@@ -3870,7 +3852,7 @@ def private ple_gather_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npos, 
     }
     var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sc0,
         inv_sd = 1.0, eps = 1.0e-6, inv_s2 = 1.0)
-    var bkq = buf_upload(dev, kq)
+    var bkq = buf_upload(dev, quants)
     var bks = fmt == 0 ? bkq : buf_upload(dev, ks)
     var btok = buf_upload(dev, tok)
     var by = buf_fill(dev, nlayers * npos * ple, -1000.0)
@@ -3880,7 +3862,7 @@ def private ple_gather_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npos, 
         metal_set_pipeline(enc, pso)
         metal_set_buffer(enc, bks, soff, 0)
         if (fmt != 40) {
-            metal_set_buffer(enc, bks, soff, 1)   // the byte (q8) / uint4 (kq) view of the same blocks - `@template_gate = "!Q40"` drops it on q40
+            metal_set_buffer(enc, bks, soff, 1)   // the byte (q8) / uint4 (quants) view of the same blocks - `@template_gate = "!Q40"` drops it on q40
         }
         metal_set_buffer(enc, btok, 0ul, 2)
         metal_set_buffer(enc, by, 0ul, 3)
@@ -3907,7 +3889,7 @@ def private ple_gather_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npos, 
     metal_release(btok)
     metal_release(by)
     metal_release(pso)
-    delete kq
+    delete quants
     delete ks
     delete wdeq
     delete tok
@@ -4297,8 +4279,7 @@ def private moe_select_gate(t : T?; dev, queue; ne, k, nst : int; ties : bool; g
         lg[19] = 9.5
         lg[33] = 9.5
     }
-    // gmode 0: softmax over all ne, top-k, the norm_topk renorm; gmode 1 (gpt-oss softmax_weight): top-k on the raw
-    // logits, softmax over just the selected k, no renorm
+    // gmode 0: softmax over all ne, top-k, the norm_topk renorm; gmode 1 (gpt-oss softmax_weight): top-k on the raw logits, softmax over the k, no renorm
     var lgc := lg
     var sidx : array<int64>
     var ww : array<float>
@@ -4364,9 +4345,7 @@ enum private MoeGemvFmt {
 let private MX4_VT = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,
                                  0.0, -1.0, -2.0, -3.0, -4.0, -6.0, -8.0, -12.0)
 
-//! an expert stack's planes in `fmt` for `rows` rows of `n` - plane 0, plane 1 (q8: empty, the blob's two views are the
-//! one blob) - and their exact dequant, row-major: pow2 scales and small-int / dyadic quants, so the CPU float
-//! reference is BIT-exact under any GPU reduction order
+//! An expert stack's planes in `fmt` (q8: plane 1 empty, one blob serves both views) and their exact dequant, BIT-exact under any GPU reduction order.
 def private moe_gemv_planes(fmt : MoeGemvFmt; rows, n : int) : tuple<p0 : array<uint8>; p1 : array<uint8>; wref : array<float>> {
     var p0 : array<uint8>
     var p1 : array<uint8>
@@ -4396,10 +4375,7 @@ def private moe_gemv_planes(fmt : MoeGemvFmt; rows, n : int) : tuple<p0 : array<
     return <- (p0 = p0, p1 = p1, wref = wref)
 }
 
-// The expert-indexed GEMV on exact-arithmetic expert planes, BIT-exact: a net-expert stack of [d x n] rows in `fmt`
-// (q8 = the 34B blob; q51 = the plane pair; mx4 = the nibble plane over the value table with E8M0 scales, and the
-// bias rows), sel rows pick k expert planes per stream, grid (rows, k slots, nst streams). perslot exercises the down
-// site's per-slot x stride; nst > 1 the batch strides (ss/bxs/bys).
+//! The expert-indexed GEMV BIT-exact over a net-expert stack in `fmt`, sel picking k planes a stream; `perslot` the down site's x stride, nst > 1 the batch strides.
 def private moe_gemv_gate(t : T?; dev, queue; fmt : MoeGemvFmt; n, d, net, k, nst : int; perslot : bool; bias : bool = false) {
     let tag = "moe gemv {fmt} n={n} d={d} net={net} k={k} nst={nst}{bias ? " bias" : ""}"
     var err : string
@@ -4450,7 +4426,7 @@ def private moe_gemv_gate(t : T?; dev, queue; fmt : MoeGemvFmt; n, d, net, k, ns
         }
     }
     var bw = buf_upload(dev, p0)
-    var bs = fmt == MoeGemvFmt.q8 ? bw : buf_upload(dev, p1)   // q8: the blob's half-scale and byte views
+    var bs = fmt == MoeGemvFmt.q8 ? bw : buf_upload(dev, p1)
     var bx = buf_upload(dev, xv)
     var by = buf_fill(dev, nst * k * d, -1000.0)
     var bsel = buf_upload(dev, sel)

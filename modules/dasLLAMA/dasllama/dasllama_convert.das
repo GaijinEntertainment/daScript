@@ -1174,9 +1174,7 @@ def quantize_q8_0(src : array<float> | #; n : int64) : Q8Tensor {
     return <- qt
 }
 
-//! One row of a K-quant plane pair as f32: a repacked plane's packed rows through the active layout's group
-//! gather, a disk-order plane's or a repacked plane's tail row superblock by superblock. `sb0` is the plane's
-//! first superblock inside a larger pair (a model blob's region), `metal_blob` the split GPU scale form.
+//! Row r of a K-quant plane pair as f32 into dst[doff..]: `sb0` = the plane's first superblock inside a larger pair (a model blob's region), `metal_blob` = the split GPU scale form.
 def kq_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout : int64; repacked : bool; r : int64; var dst : array<float>; doff : int64;
                      sb0 : int64 = 0l; metal_blob : bool = false) {
     let nsb = nin / kq_elems(f)

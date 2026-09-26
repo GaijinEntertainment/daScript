@@ -12,9 +12,6 @@ module das_metal_boost shared public
 require das_metal public
 require math
 
-// ===== the test suites' buffer helpers: generic (untyped `dev`/`buf`) so a consumer behind
-// `require ?das_metal` instantiates them only inside its static_if(builtin_module_exists(das_metal)) =====
-
 //! relative-tolerance float compare for fastmath GPU results vs a CPU oracle
 def public fapprox(x, y : float) : bool {
     return abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))

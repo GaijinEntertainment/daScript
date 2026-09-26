@@ -9,7 +9,7 @@ require daslib/fio public
 require strings public
 require math
 require dasllama/dasllama_styletts2
-require dasllama/dasllama_pocket   // pocket_gpu_stats / pocket_gpu_seats: the served-lane counters read either family's seats
+require dasllama/dasllama_pocket
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_tts   // nolint:STYLE029,LINT019 — the facade synthesis, read only inside the Apple half
@@ -19,7 +19,7 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_
 require ?das_metal dasllama/dasllama_metal_tower
 require daslib/jobque_boost
 require daslib/defer
-require daslib/linq   // sequence_equal; reverse inside the Apple half
+require daslib/linq
 require _tts_oracle
 require _model_tier
 
@@ -87,8 +87,7 @@ struct TtsParityRig {
     ids : function<(ps : string) : array<int>>
 }
 
-//! `ours` against `ref` within `bar` - absolute, or relative to the reference's peak - logged on green and red
-//! alike, with the bar's control: one expected element moved by twice the bar must land outside it.
+//! `ours` against `ref` within `bar` (absolute, or of the reference's peak), logged either way, with the control: one element moved by twice the bar must fail.
 def bar_diff(t : T?; tag : string; ours, ref : array<float>; bar : float; absolute : bool) {
     if (length(ours) != length(ref)) {
         t |> failure("{tag}: {length(ours)} elements against the reference's {length(ref)}")
@@ -245,9 +244,7 @@ def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : ar
     }
 }
 
-//! The knob-off leg: `run` with the tower knob off still reaches the seat `stats` reads - one call, none served -
-//! records `declines` knob declines, and is the CPU chain (`run` answers whether its output equals the CPU chain's).
-//! The knob stays off after.
+//! `run` with the tower knob off: one call and no serve at `stats`' seat, `declines` knob declines, `run` answering CPU-equal; the knob stays off after.
 [unused_argument(t, tag, declines, stats, run)]   // off-Apple the gated body is empty
 def knob_off_leg(t : T?; tag : string; declines : int64; stats : block<() : tuple<calls : int; served : int>>; run : block<() : bool>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -277,8 +274,7 @@ def one_wrong(g, cpu : array<float>; bar : float) : array<float> {
     return <- w
 }
 
-//! Asserts one hook call, one tower encode, the served leg's length and its rel-rms within `bar`, the poisoned leg
-//! and the one-wrong-element leg past it; false where the tower did not serve once.
+//! One hook call, one encode, the length, rel-rms within `bar`, the poisoned and one-wrong legs past it; false where the tower did not serve once.
 def gpu_stage_verdict(t : T?; tag, stage : string; g, cpu, gp : array<float>; bar : float; calls, served : int; encodes : int64; declines : string) : bool {
     return tower_served(t, "{tag} GPU {stage}", declines) if (served != 1)
     let d = rel_rms(g, cpu)
@@ -309,8 +305,7 @@ enum TowerLeg {
     poisoned   //! the knob on over a scaled or reversed input: the compare's control
 }
 
-//! One StyleTTS2 stage on its seat: `run` writes the stage's output for each leg - the CPU leg's into `cpu`, which the
-//! caller keeps - the served leg counted at the `stage` seat and in the tower's encodes, then the verdict. The knob stays on.
+//! One StyleTTS2 stage on its seat: `run` fills each leg (the CPU leg's into `cpu`, which the caller keeps), then the verdict; the knob stays on.
 [unused_argument(t, tag, stage, bar, cpu, run)]   // off-Apple the gated body is empty
 def private seat_leg(t : T?; tag, stage : string; bar : float; var cpu : array<float>; run : block<(leg : TowerLeg; var out : array<float>) : void>) : bool {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -530,20 +525,15 @@ def private gpu_served_lane(t : T?; path, text, voice : string) : bool {
     }
 }
 
-//! A seat's counters on the family `kind` names.
 def private seat_stats(kind : TtsKind; seat : string) : tuple<calls : int; served : int> {
     return kind == TtsKind.pocket ? pocket_gpu_stats(seat) : styletts2_gpu_stats(seat)
 }
 
-//! Every seat's counters of the family `kind` names, in the order `seats` lists them.
 def private seat_counters(kind : TtsKind; seats : array<string>) : array<tuple<calls : int; served : int>> {
     return <- [for (s in seats); seat_stats(kind, s)]
 }
 
-//! The served synthesis across the tower knob, read at every seat of the model family's record: the knob-off leg reaches
-//! each seat once a chunk, serves nothing and records one knob decline per seat per chunk; the knob-on leg serves every
-//! seat once a chunk but `unserved`, which it never reaches. `extra` holds the family's own asserts over both legs' audio,
-//! the chunk count and the knob-on leg's tower encodes. False where the tower served nothing.
+//! Knob off: each seat reached once a chunk, none served, one knob decline each; knob on: each but `unserved` served once a chunk; false where none served.
 [unused_argument(t, m, text, voice, msg, unserved, extra)]   // off-Apple the gated body is empty
 def served_lane_counters(t : T?; var m : TtsModel; text, voice, msg, unserved : string;
                          extra : block<(a, b : TtsAudio; chunks : int; encodes : int64) : void>) : bool {

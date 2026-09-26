@@ -647,7 +647,6 @@ def take_cursor(use_alt : bool; var o : int64&; var alt : int64&; size : int64) 
     return at
 }
 
-//! Index of tensor `name` in m.tensors, or -1 if absent.
 //! The tensor's index, or a panic naming the family that needed it.
 def gguf_need_tensor(m : GGUFMeta; name, who : string) : int {
     let ti = gguf_find_tensor(m, name)
@@ -666,6 +665,7 @@ def gguf_read_f32_arr(m : GGUFMeta; bytes : array<uint8> | #; name, who : string
     return <- a
 }
 
+//! Index of tensor `name` in m.tensors, or -1 if absent.
 def gguf_find_tensor(m : GGUFMeta; name : string) : int {
     for (i in range(length(m.tensors))) {
         if (m.tensors[i].name == name) {

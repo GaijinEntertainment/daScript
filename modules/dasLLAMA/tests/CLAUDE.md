@@ -292,9 +292,10 @@ modulated x with the SiLU out, the gated residual, the SiLU over the slab vector
 the bare q8 dot rides the decode GEMV) against
 an fp64 oracle with x, y and the latent row bound at offsets. The census row is one Pocket
 codec pass over synthetic latents and one spoken line on the f16 file, then one spoken line on
-the kq file so the q8 GEMV stamps count (`cov_tower_pocket`). Shared fixtures
-(buf helpers, the mismatch compares that dump both sides, kq plane + q8 blob builders) live
-in `_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
+the kq file so the q8 GEMV stamps count (`cov_tower_pocket`). Shared fixtures - the buffer
+helpers of `metal/das_metal_boost`, re-exported, the mismatch compares that dump both sides, the
+kq plane and q8 blob builders, the 64-lane dispatch and the fp64 scalars - live in
+`_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
 compares local - a same-arity twin would collide with the shared tagged one. `_mtl_toy.das`
 is the `[metal_dispatch]` multi-kernel (kernel=) fixture; its gate in the misc file
 dispatches through the GENERATED builders (kn_ rail), not hand binds.

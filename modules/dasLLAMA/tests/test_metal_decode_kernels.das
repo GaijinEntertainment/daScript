@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
-require ?das_metal _metal_kernel_common   // the buffer helpers and the eyeball-dump compares
+require ?das_metal _metal_kernel_common
 require math
 
 // The single-query attention kernels vs a direct CPU oracle on synthetic data — the model-less

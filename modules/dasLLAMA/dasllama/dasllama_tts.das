@@ -260,7 +260,7 @@ def tts_register_voice_prompt(var m : TtsModel; name : string; prompt : TtsVoice
     //! the prompt is copied and its backbone state is built lazily at the first synthesis.
     if (empty(name) || !tts_voice_prompt_valid(m, prompt)) { return false }
     var latents <- clone(prompt.latents)
-    pocket_voice_erase(m.pocket, name)
+    pocket_voice_clear(m.pocket, name)
     m.pocket.voice_latents[name] <- latents
     return true
 }

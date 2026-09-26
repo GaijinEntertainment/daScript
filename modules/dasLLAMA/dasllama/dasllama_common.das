@@ -1360,7 +1360,6 @@ def mb_delta(now, base : int64) : string {
     return "{sign}{abs(d) >> 20l} MB, {pct}"
 }
 
-//! Array form of the tuned pointer copy in dasllama_math: n floats from src[soff..] into dst[doff..].
 //! A family's serving-lane pin for subsequent loads: q8 quants or the file's own exact planes, the family's
 //! policy deciding while unset. `set_<family>_q8` pins, `reset_<family>_q8` unpins.
 enum GemmLane {
@@ -1373,6 +1372,7 @@ def lane_serves_q8(pin : GemmLane; policy : bool) : bool => pin != GemmLane.unse
 
 def lane_pin(on : bool) : GemmLane => on ? GemmLane.q8 : GemmLane.exact
 
+//! Array form of the tuned pointer copy in dasllama_math: n floats from src[soff..] into dst[doff..].
 def copy_floats(src : array<float> | #; soff : int64; var dst : array<float>; doff, n : int64) {
     if (n <= 0l) {
         return
@@ -3981,8 +3981,7 @@ def embed_row(t : Model; token : int64; var dst : float?) {
             dequant_q8_row(t, t.emb_q8_off + token * dim, dim, dst)
         }
     } elif (cls_kq(t)) {
-        // the row off the plane pair: trimmed, embq/embs hold the region's pair verbatim, rebased to 0; else the
-        // pair sits at wcls_off inside the model's plane, in the GPU's split scale form when metal_blob
+        // trimmed: embq/embs hold the region's pair verbatim, rebased to 0; else the pair sits at wcls_off in the model's plane, split-scale when metal_blob
         let fmt = t.emb_fmt
         unsafe {
             var row = temp_array(dst, dim, type<float>)

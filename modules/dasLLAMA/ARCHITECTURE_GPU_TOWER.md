@@ -63,7 +63,17 @@ seat is one command buffer of 2.2x's shape over a per-part weight slab the drive
 and keys on a fold of the part's weight addresses - the address of the form each conv serves, the
 q8 quants or the f32 operand - and of the q8 lane's active repack layout, so a reload serving
 another lane or another layout keys differently; the addresses stand for the model because a
-reload never reuses them before the weights epoch drops every slab, which shutdown does too. The decode seat takes the aligned features, F0 and N up and runs the front convs, the
+reload never reuses them before the weights epoch drops every slab, which shutdown does too. Every
+family attaches its slab through one path (`st2_slab_attach`): a slab whose key matches stays
+resident; otherwise the family's drop runs, the family's writer runs twice - the measuring pass
+writes into a probe slab to size the host copy, the second fills the resident - and the copy
+uploads, the drop running again when the upload fails. A slab releases through one walk over its
+fields by type (`st2_release_any`): a conv slot's and a Pocket linear's pooled uniforms, a buffer
+the slab owns, the elements of an array of them and the fields of a struct of them go back to their
+homes, so a slot field a slab gains frees itself. The walk releases and never deletes;
+`st2_slab_free` then deletes the slab whole, which frees every array once, nested ones included,
+and zeroes the fields the walk reached by value (a buffer field is released through a copy of its
+pointer). The decode seat takes the aligned features, F0 and N up and runs the front convs, the
 AdaIN residual blocks, the harmonic source, the generator and the inverse STFT as ONE command
 buffer, the samples back; the generator seat behind it - reached only by the CPU chain a
 declined decode falls into - runs the generator through conv_post as one command buffer and reads
@@ -157,7 +167,9 @@ comes back to the host, since the CPU chain forgets a chunk's rows by resetting 
 key samples the rows because an address alone outlives the voice that held it: a later voice's
 caches can land at the freed address with the same fill and capacity. The
 backbone's q8 linears (a K-quant linear requantized to q8 from its dequantized rows, so the small
-form serves) ride the decode GEMV over a 34B-block blob with their bias rows in the slab; every
+form serves) ride the decode GEMV over a 34B-block blob with their bias rows in the slab, the bias
+a row add after the GEMV (the row GEMV's fused-bias q8 form, one lane a block, runs a frame 20%
+slower than the decode GEMV's split-K walk - `PERF_LEDGER.md`'s Pocket frame loop entry); every
 f32 linear rides the row GEMV over the slab's rows - a simdgroup a row, x staged in threadgroup
 memory - so the parity lane runs exact. Per layer: the first norm (the layer before's residual
 joined in the same dispatch - the tower LayerNorm's ADD stamp), the fused q/k/v projection, the

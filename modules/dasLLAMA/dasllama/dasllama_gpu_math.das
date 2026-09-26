@@ -5,8 +5,7 @@ module dasllama_gpu_math shared public
 require dasllama/dasllama_lint public
 require math
 
-//! ksigns_iq2xs without the table: bit 7 of the sign byte is the EVEN PARITY of the 7-bit index, so the
-//! byte is idx | (parity << 7) - five ALU ops, nothing staged.
+//! ksigns_iq2xs without the table: bit 7 of the sign byte is the EVEN PARITY of the 7-bit index - five ALU ops, nothing staged.
 def ksign7(v : uint) : uint {
     var t = v ^ (v >> 4u)
     t = t ^ (t >> 2u)
@@ -21,6 +20,5 @@ def iq3s_signed(g, nib : uint) : uint {
     return (g ^ mask) + m1
 }
 
-//! gemma's soft cap cap * tanh(v / cap) in the exp form the CPU's softcap4 takes: a shader tanh NaNs past ~44,
-//! exp saturates - exp(INF) makes the denominator INF and the term 0
+//! gemma's soft cap cap * tanh(v / cap) in softcap4's exp form: a shader tanh NaNs past ~44, while exp(INF) zeroes the term and saturates.
 def softcap_exp(v, cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / cap)))

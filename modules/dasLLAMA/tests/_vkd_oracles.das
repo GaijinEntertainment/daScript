@@ -18,7 +18,7 @@ require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_decode   // RDEC_MIR_SLACK_ROWS: the flash fixtures pad their shadows as the driver's mirrors do
 require dasllama/dasllama_vulkan_common   // upload_region_at: the sentinel fills
 require _compares   // NAN_SENTINEL_BITS
-require _attn_oracle public   // attn_row_oracle - the causal attention oracle every backend's cells share
+require _attn_oracle public
 
 //! the flash tiles' shadow planes carry sixteen zero rows past the last position: the KHR tile's last key step loads a whole 16-row fragment
 let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad their shadows the rows the driver's mirrors carry past their planes

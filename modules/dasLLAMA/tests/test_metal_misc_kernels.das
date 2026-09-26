@@ -5,13 +5,13 @@ options _cyclomatic_complexity = 0  // same — the arm ladders follow the kerne
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_math      // rmsnorm, swiglu, geglu, gelu - the decode-side CPU oracles
+require dasllama/dasllama_math
 require dasllama/dasllama_tower     // layernorm + the shipped gelu flavors + the gemma4v pieces — the tower oracles
 require dasllama/dasllama_rope      // build_rope_tabs_rows — the rope2d gate's tables
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // shared buf helpers + eyeball-dump compares
-require _attn_oracle                      // attn_row_oracle - the whisper decoder attention's oracle
+require _attn_oracle
 require ?das_metal _mtl_toy               // the [metal_dispatch] multi-kernel fixture
 require ?das_metal dasllama/dasllama_metal_lens   // set_metal_requires_hook - the requires= tripwire observer
 require daslib/f16_cvt              // f32_to_f16 — packing the synthetic scale planes
@@ -155,7 +155,6 @@ def private embed_q8_gate(t : T?; dev, queue; dim, vocab, tok : int) {
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let escale = 2.0
-    // the embed blob: vocab rows of 34-byte q8 blocks over the whole int8 range (pow2 scales -> the gather is exact)
     var blob : array<uint8>
     var wdeq : array<float>
     q8_blob_fill(vocab, dim / 32, blob, wdeq, 256)
@@ -200,7 +199,6 @@ def private embed_k6_gate(t : T?; dev, queue; dim, vocab, tok : int) {
     let nb = dim / 256
     let nsb = vocab * nb
     let escale = 2.0
-    // the k6 split planes ([16B strips x nsb][f16 d tail]) and row tok's dequant - every product exact under the safe scales
     var kq : array<uint8>
     var ks : array<uint8>
     kq_fill_planes(6, nsb, kq, ks)
@@ -824,8 +822,7 @@ def private gelu_form_delta(t : T?) {
     delete erfv
 }
 
-//! the HX twin's compare: the half panel `bh` holds the RNE narrow of each value the same thread stored to the f32 panel
-//! `bf`, and the sentinel past `live`
+//! The HX twin's compare: `bh` holds the RNE narrow of each value the same thread stored to `bf`, the sentinel past `live`.
 def private hx_narrow_mismatch(bh, bf; n, live : int; tag : string) : int {
     var fgpu <- buf_download(bf, n, type<float>)
     var wanth : array<float16>
@@ -839,9 +836,7 @@ def private hx_narrow_mismatch(bh, bf; n, live : int; tag : string) : int {
     return bad
 }
 
-// The rms stamps at the meta eps: `weighted` off runs a ones vector (the gemma4uv chain's weightless idiom, against the
-// weightless CPU norm); `hx` takes the dual-store stamp (MetalRmsNormHX), whose f16 twin must be the RNE narrow of
-// exactly the value the same thread wrote to the f32 panel.
+//! `weighted` off: a ones vector against the weightless CPU norm (gemma4uv's idiom); `hx`: MetalRmsNormHX, its f16 twin the RNE narrow of the f32 store.
 def private rms_gate(t : T?; dev, queue; dim, nrows : int; eps : float; weighted, hx : bool) {
     let tag = "rms{hx ? "_hx" : ""}{weighted ? "" : "_weightless"} dim={dim} nrows={nrows}"
     var err : string
@@ -908,9 +903,7 @@ def private rms_gate(t : T?; dev, queue; dim, nrows : int; eps : float; weighted
     delete want
 }
 
-// The dual-store and bound-total ew2 stamps. HX: g must match the base combine and gh must be the RNE narrow of the value
-// the same thread stored. Bounded (TOTB): a launch over the CPU's padded bound touches nothing past totb[0] * row_elems -
-// the tail keeps its sentinel on both g and gh. An unbounded launch is the HX stamp over rows == bound_rows.
+//! HX: g the base combine, gh its RNE narrow; TOTB: a launch over the padded bound writes nothing past totb[0] * row_elems; unbounded is HX at rows == bound_rows.
 def private ew2_hx_gate(t : T?; dev, queue; geglu, hx, bounded : bool; rows, row_elems, bound_rows : int) {
     let tag = "{geglu ? "geglu" : "swiglu"}{hx ? "_hx" : ""}{bounded ? "_b" : ""} rows={rows} elems={row_elems} bound={bound_rows}"
     var err : string
@@ -940,7 +933,7 @@ def private ew2_hx_gate(t : T?; dev, queue; geglu, hx, bounded : bool; rows, row
         sg[k] = 0.21 * float(k % 43) - 4.3
         su[k] = 0.31 * float(k % 17) - 2.5
     }
-    var want := sg   // past the rail's live rows: untouched
+    var want := sg
     if (geglu) {
         geglu(want, su, int64(live))   // the tanh form; the GPU's exp identity agrees inside the approx bar
     } else {
@@ -1237,8 +1230,7 @@ def private wdec_attn_pc_gate(t : T?; dev, queue; n, dim, hh, tstride, len0 : in
         kv[i] = f16_to_f32(uint(kvh[i]))
         vv[i] = f16_to_f32(uint(vvh[i]))
     }
-    // the oracle over the [hh][tstride][hs] planes: one head's plane at h * tstride * hs, key stride hs, the q bias folded
-    // into the query rows as the kernel folds it
+    // the oracle over [hh][tstride][hs] planes (head h at h * tstride * hs, key stride hs), the q bias folded into the query rows as the kernel folds it
     var qq : array<float>
     qq |> resize(n * dim)
     for (i in range(n * dim)) {
@@ -1330,8 +1322,7 @@ def private wdec_attn_pc_gate(t : T?; dev, queue; n, dim, hh, tstride, len0 : in
     delete want
 }
 
-// The row-bias epilogues, in place on x: the residual form x += y + b[i % dim] (y bound at 1, the rest one slot up) or the
-// LUT GELU form x = gelu_lut(x + b[i % dim]) against the CPU LUT form, its fixture spanning the LUT clamp on both sides.
+//! In place on x: x += y + b[i % dim] (y at slot 1, the rest one up), or x = gelu_lut(x + b[i % dim]) against the CPU LUT form over a fixture spanning its clamp.
 def private bias_rows_gate(t : T?; dev, queue; nrows, dim : int; gelu : bool) {
     let tag = "bias_{gelu ? "gelu_lut" : "add_res"} nrows={nrows} dim={dim}"
     var err : string
@@ -1395,8 +1386,7 @@ def private bias_rows_gate(t : T?; dev, queue; nrows, dim : int; gelu : bool) {
 // The conv-frontend im2col vs the CPU walk — bit-exact scatter with the "same"-pad zero
 // edges; both source layouts (chmajor mel vs row-major y1) and both strides.
 // Negative control recorded 2026-08-16: dropping the -1 pad shift redded all four cells.
-//! The whisper conv stem's im2col shapes on the shared stamps: k=3, "same" pad, the source channel-major
-//! (conv1, the CHMAJOR stamp) or row-major (conv2), the panel padded to the GEMM's 32 lattice with zeros.
+//! k=3 on the shared stamps (conv1 on CHMAJOR, conv2 row-major), the panel padded to the GEMM's 32 lattice with zeros.
 def private im2col3_gate(t : T?; dev, queue; rows, nch, srclen, stride : int; chmajor : bool) {
     let tag = "im2col3 rows={rows} nch={nch} stride={stride} chmajor={chmajor}"
     var err : string
@@ -1713,8 +1703,8 @@ def test_metal_misc_kernels(t : T?) {
                 gelu_flavor_gate(t, dev, queue, 800, false)
                 gelu_flavor_gate(t, dev, queue, 5120, false)
                 gelu_form_delta(t)
-                rms_gate(t, dev, queue, 3840, 3, 1.0e-6, false, false)   // weightless: MetalRmsNorm + a ones vector
-                rms_gate(t, dev, queue, 2048, 3, 1.0e-6, true, true)     // the dual-store stamp
+                rms_gate(t, dev, queue, 3840, 3, 1.0e-6, false, false)
+                rms_gate(t, dev, queue, 2048, 3, 1.0e-6, true, true)
                 ew2_hx_gate(t, dev, queue, false, true, false, 3, 2048, 3)
                 ew2_hx_gate(t, dev, queue, true, true, false, 3, 2048, 3)
                 // the bound-total stamps: 40 live rows of 64 inside a 96-row launch, all four combine/twin arms
@@ -1726,8 +1716,7 @@ def test_metal_misc_kernels(t : T?) {
                 pos_add_gate(t, dev, queue, 49, 64, 7, 1120)    // square control
                 clamp_gate(t, dev, queue, 1000, CLAMP_IN, false)    // separate dst, %64 tail
                 clamp_gate(t, dev, queue, 1000, CLAMP_OUT, true)    // in place
-                // GEGLU-quick through the CPU's f16-table form: the in-kernel binary16 round-trips land on the same
-                // table values, so the bar is the approx one (one f16 ulp of form slack at the boundary)
+                // the CPU's f16-table GEGLU-quick: the kernel's binary16 round trips land on its table values, so the approx bar (one f16 ulp of form slack)
                 ew2_act_gate(t, dev, queue, "geglu_quick", MetalGegluQuick_metal_ew2_msl, MetalGegluQuick_metal_ew2_msl_entry, MetalGegluQuick_metal_ew2_msl_fastmath, 3072 * 3) $(var want : array<float>; g, u : array<float>) {
                     geglu_quick_lut_rows(want, g, u, 3072l, 3l)   // the E2B ffn width
                 }

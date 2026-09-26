@@ -11,7 +11,7 @@ require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
-require dasllama/dasllama_gpu_math   // ksign7 / iq3s_signed / softcap_exp - the ALU helpers shared with the Metal kernels
+require dasllama/dasllama_gpu_math
 require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
 require daslib/math_bits   // uint_bits_to_float: the KHR tile's f32 store bounce read back through its uint staging array
 require daslib/enum_trait   // kq_gemv_fmts walks the enum

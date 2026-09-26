@@ -8,7 +8,7 @@ module _attn_oracle shared public
 
 require dasllama/dasllama_lint public
 require math
-require dasllama/dasllama_gpu_math   // softcap_exp - the cap in the exp form both kernel homes take
+require dasllama/dasllama_gpu_math
 
 //! single-query causal attention oracle: one output row per (query row, head) - plain two-pass softmax over [kstart, cnt)
 //! (a sliding layer's window starts past 0), the cap in the exp form the kernels take; the device's online form reassociates,

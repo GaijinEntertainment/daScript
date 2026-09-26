@@ -598,8 +598,7 @@ def test_pocket_codec_metal_served(t : T?) {
     }
 }
 
-//! The codec seat over `latents`: the CPU chain with the knob off into `cpu`, then the served leg, with the x3-scaled
-//! latents as the compare's control, judged by `gpu_stage_verdict` at `bar`. The knob stays on.
+//! The codec seat over `latents`: the CPU leg (knob off) into `cpu`, the served leg, x3-scaled latents the control, `gpu_stage_verdict` at `bar`; the knob stays on.
 [unused_argument(t, m, tag, stage, latents, frames, bar, sc, cpu)]   // off-Apple the gated body is empty
 def private codec_served_leg(t : T?; m : PocketModel; tag, stage : string; latents : array<float>; frames : int64; bar : float; var sc : PocketScratch;
                              var cpu : array<float>) : bool {
@@ -676,11 +675,7 @@ def private same_rng(a, b : TtsRng) : bool {
 
 typedef FrameRows = tuple<lat : array<float>; conds : array<float>; eos : array<float>>
 
-//! The frames seat teacher-forced on `k` against the CPU chain: the CPU leg with the knob off, then the served leg - one
-//! hook call, one encode a batch and the codec's, the frame count and the generator where the CPU loop leaves them, the
-//! latents within `bar` with the bar's one-element control and the x3-scaled noise as the compare's control; with
-//! `all_rows` the conditioning rows and EOS logits too, the x3-scaled forced frames their control. The knob stays on.
-//! The CPU leg's frame count (-1 where the seat did not serve) and rows.
+//! The frames seat teacher-forced on `k` against the CPU leg, `all_rows` adding conds and EOS; the CPU leg's frame count (-1 unserved) and rows; the knob stays on.
 [unused_argument(t, m, k, tag, bar, all_rows, sc)]   // off-Apple the gated body is empty
 def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : string; bar : float; all_rows : bool;
                             var sc : PocketScratch) : tuple<fc : int64; cpu : FrameRows> {

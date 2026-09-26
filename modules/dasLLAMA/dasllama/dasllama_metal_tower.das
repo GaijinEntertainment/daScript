@@ -31,7 +31,7 @@ require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_layout
 require daslib/f16_cvt
-require daslib/apply   // the slab release walks a slab's fields by type
+require daslib/apply
 require dasllama/dasllama_tower   // Clamp — the calibration record the gemma4a sites carry
 require metal/das_metal_boost
 require dasllama/dasllama_metal_common
@@ -147,7 +147,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tw_ceil(npos, 32l)
+    let mp = tw_round_up(npos, 32l)
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
     var bx0 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.patch_dim * 4l))
@@ -231,8 +231,8 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tw_ceil(npos, 32l)
-    let nk64 = tw_ceil(npos, 64l)
+    let mp = tw_round_up(npos, 32l)
+    let nk64 = tw_round_up(npos, 64l)
     let ff = t.n_ff
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.fblob, 0l))), uint64(length(t.fblob) * 4l), mapped)
@@ -385,7 +385,7 @@ struct private TwGpuCtx {
 
 def private tw_ctx_make(var c : TwGpuCtx; blob : void?; blob_bytes : uint64; mapped : bool;
                         npos, d, n_ff : int64; eps, half : float; bytes_pos : uint64) {
-    c.mp = tw_ceil(npos, 32l)
+    c.mp = tw_round_up(npos, 32l)
     c.np64 = (npos + 63l) / 64l
     c.npos = npos
     c.bblob = plane_buffer(g_dev, blob, blob_bytes, mapped)
@@ -625,8 +625,8 @@ struct private FcGpuCtx : TwGpuCtx {
 def private fc_ctx_make(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk : int64; eps : float;
                         pos_emb : array<float>; npos, ww : int64; tap_major : bool) : FcGpuCtx {
     let dh = d / n_head
-    var c = FcGpuCtx(wwp = tw_ceil(ww, 32l), ww = ww, n_head = n_head, tap_major = tap_major,
-        nkp = tw_ceil(npos, 64l), wwpad = tw_ceil(ww, 64l))
+    var c = FcGpuCtx(wwp = tw_round_up(ww, 32l), ww = ww, n_head = n_head, tap_major = tap_major,
+        nkp = tw_round_up(npos, 64l), wwpad = tw_round_up(ww, 64l))
     tw_ctx_make(c, unsafe(reinterpret<void?>(plane_at(blob, 0l))), uint64(length(blob) * 4l), mapped,
         npos, d, n_ff, eps, 0.5, uint64(c.wwp * d * 4l))
     c.bposl = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
@@ -763,8 +763,6 @@ def private fc_shape_ok(d, n_ff, n_head, nk, npos, ww : int64) : bool {
         && dh % 64l == 0l && n_head <= int64(FC_MAX_HEADS) && nk % 2l == 1l && npos >= 1l && ww == 2l * npos - 1l)
 }
 
-//! A served encode's tail: the residual rows back to the host and the engage counters; false when the command buffer failed.
-//! A served encode counted: its rows, its blocks, and whether it ran on a half-precision weight route.
 def private tw_count_encode(npos, n_layer : int64; f16 : bool) {
     g_tower_encodes++
     g_tower_rows += npos
@@ -774,6 +772,7 @@ def private tw_count_encode(npos, n_layer : int64; f16 : bool) {
     }
 }
 
+//! A served encode's tail: the residual rows back to the host and the engage counters; false when the command buffer failed.
 def private tw_readback(c : TwGpuCtx; ran : bool; var x : array<float>; d, n_layer : int64) : bool {
     if (!ran) {
         return false
@@ -882,16 +881,16 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     }
     residency_flush()
     let d = t.d_model
-    let mpd = tw_ceil(n_len, 32l)
-    let dft_out_pad = tw_ceil(2l * n_bins, 64l)
-    let mag_k_pad = tw_ceil(n_bins, 32l)
+    let mpd = tw_round_up(n_len, 32l)
+    let dft_out_pad = tw_round_up(2l * n_bins, 64l)
+    let mag_k_pad = tw_round_up(n_bins, 32l)
     let rows0 = t1 * w1
-    let mp0 = tw_ceil(rows0, 32l)
+    let mp0 = tw_round_up(rows0, 32l)
     let conv0_k_pad = 32l
     let rows1 = t2 * w2
-    let mp1 = tw_ceil(rows1, 32l)
+    let mp1 = tw_round_up(rows1, 32l)
     let kd1 = t.sub_ch0 * 9l
-    let conv1_cout_pad = tw_ceil(t.sub_ch1, 64l)
+    let conv1_cout_pad = tw_round_up(t.sub_ch1, 64l)
     var c <- g4a_ctx_make(t, npos)
     let bytes_xw = uint64(mpd * n_fft * 4l)
     let bytes_tw = uint64(dft_out_pad * n_fft * 4l)
@@ -1083,8 +1082,8 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tw_ceil(npos, 32l)
-    let nk64 = tw_ceil(npos, 64l)
+    let mp = tw_round_up(npos, 32l)
+    let nk64 = tw_round_up(npos, 64l)
     let pairs = hs / 4l   // rotated pairs per rope axis = one packed table row
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
@@ -1233,7 +1232,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     let d = t.n_embd
     let hs = d / t.n_head
     let ff = t.ff_pad
-    let hs_pad = max(64l, tw_ceil(hs, 32l))
+    let hs_pad = max(64l, tw_round_up(hs, 32l))
     if (d % 64l != 0l || ff % 64l != 0l || hs > 128l) {
         return tw_decline(MetalTowerDecline.shape)
     }
@@ -1241,8 +1240,8 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tw_ceil(npos, 32l)
-    let nk64 = tw_ceil(npos, 64l)
+    let mp = tw_round_up(npos, 32l)
+    let nk64 = tw_round_up(npos, 64l)
     let dp = t.n_head * hs_pad   // the padded attention width
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
@@ -1421,7 +1420,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     let hs = d / t.n_head
     let ff = t.ff_pad
     let proj = t.proj_dim
-    let hs_pad = max(64l, tw_ceil(hs, 32l))
+    let hs_pad = max(64l, tw_round_up(hs, 32l))
     //! %4 npos: the x4 merge reshape is the tap/tail GEMMs' row view; %64 patch_dim: the stem GEMM's K
     if (d % 64l != 0l || ff % 64l != 0l || hs > 128l || hs % 2l != 0l || proj % 64l != 0l || npos % 4l != 0l || t.patch_dim % 64l != 0l) {
         return tw_decline(MetalTowerDecline.shape)
@@ -1430,12 +1429,12 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tw_ceil(npos, 32l)
-    let nk64 = tw_ceil(npos, 64l)
+    let mp = tw_round_up(npos, 32l)
+    let nk64 = tw_round_up(npos, 64l)
     let dp = t.n_head * hs_pad   // the padded attention width
     let half = hs / 2l
     let nout = npos / 4l
-    let mp4 = tw_ceil(nout, 32l)
+    let mp4 = tw_round_up(nout, 32l)
     let rows_ext = max(mp, mp4 * 4l)   // bx/bxb double as the [nout x 4d] merged view - pad rows beyond mp
     let mapped = t.image_map != null
     let blob_ptr = unsafe(reinterpret<void?>(plane_at(t.blob, 0l)))
@@ -1641,7 +1640,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     let hs = d / t.n_head
     let ff = t.ff_pad
     let proj = t.proj_dim
-    let hs_pad = max(64l, tw_ceil(hs, 32l))
+    let hs_pad = max(64l, tw_round_up(hs, 32l))
     let nwin = long_length(s.win_lo) - 1l
     let max_wr = qwen25v_window_widest(s)
     let pd = q25v_patch_pad(t)
@@ -1654,12 +1653,12 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tw_ceil(npos, 32l)
-    let nk64 = tw_ceil(npos, 64l)
+    let mp = tw_round_up(npos, 32l)
+    let nk64 = tw_round_up(npos, 64l)
     let dp = t.n_head * hs_pad   // the padded attention width (the full layers' slab)
     let half = hs / 2l
     let nout = npos / 4l
-    let mp4 = tw_ceil(nout, 32l)
+    let mp4 = tw_round_up(nout, 32l)
     let rows_ext = max(mp, mp4 * 4l)   //! bx/bxb double as the [nout x 4d] merged view - pad rows beyond mp
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
@@ -1862,8 +1861,8 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     if ((3l * nm) % 32l != 0l || d % 64l != 0l || (3l * d) % 32l != 0l || !metal_tower_init()) {
         return false
     }
-    let mp1 = tw_ceil(tin, 32l)
-    let mp2 = tw_ceil(tt, 32l)
+    let mp1 = tw_round_up(tin, 32l)
+    let mp2 = tw_round_up(tt, 32l)
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.fblob, 0l))), uint64(length(t.fblob) * 4l), mapped)
     let bytes_mel = uint64(nm * tin * 4l)
@@ -1888,7 +1887,7 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     var k2 = St2ConvArgs(cin = uint(d), k = 3u, stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(tin), r0 = 0u, rows = uint(tt), xs = uint(d))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        enc_st2_im2col_cm(enc, bmel, bx1, k1, mp1 * 3l * nm)   // the mel is [c][t]
+        enc_st2_im2col_cm(enc, bmel, bx1, k1, mp1 * 3l * nm)
         enc_f32_mm(enc, bblob, uint64(t.conv1_w_off * 4l), bx1, by1, 0ul, u_nm3, u_d, mp1, d)
         enc_add_bias_rows(enc, by1, 0ul, bblob, uint64(t.conv1_b_off * 4l), u_d, u_totd1, tin * d)
         if (t.gelu_tanh) {
@@ -1896,7 +1895,7 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
         } else {
             enc_gelu_erf(enc, by1, 0ul, u_totd1, tin * d)
         }
-        enc_st2_im2col(enc, by1, bx2, k2, mp2 * 3l * d)   // y1 is [t][c]
+        enc_st2_im2col(enc, by1, bx2, k2, mp2 * 3l * d)
         enc_f32_mm(enc, bblob, uint64(t.conv2_w_off * 4l), bx2, bxo, 0ul, u_3d, u_d, mp2, d)
         enc_add_bias_rows(enc, bxo, 0ul, bblob, uint64(t.conv2_b_off * 4l), u_d, u_totd2, tt * d)
         if (t.gelu_tanh) {
@@ -2009,8 +2008,8 @@ def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     }
     let xin_n = QWEN3A_CHUNK * nm
     let y3_rows = 16l * QWEN3A_TOK_PER_CHUNK   // 208 per chunk
-    let mp3 = tw_ceil(y3_rows, 32l)      // the stage-3 GEMM pads to 224 rows
-    let mpn = tw_ceil(npos, 32l)
+    let mp3 = tw_round_up(y3_rows, 32l)      // the stage-3 GEMM pads to 224 rows
+    let mpn = tw_round_up(npos, 32l)
     let o2 = ncp * 32l
     let o3 = o2 + ncp * k2
     let o4 = o3 + ncp * k2
@@ -2134,10 +2133,10 @@ def private metal_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64
     if (n_mel % 64l != 0l || n_len < 1l || !g_tw_env_tower || !metal_tower_init() || !pf_q3a_mel_ready()) {
         return false
     }
-    let mp = tw_ceil(n_len, 32l)
-    let kfp = tw_ceil(n_fft, 32l)
-    let dft_out_pad = tw_ceil(2l * n_bins, 64l)
-    let ldpow = tw_ceil(n_bins, 32l)
+    let mp = tw_round_up(n_len, 32l)
+    let kfp = tw_round_up(n_fft, 32l)
+    let dft_out_pad = tw_round_up(2l * n_bins, 64l)
+    let ldpow = tw_round_up(n_bins, 32l)
     let bytes_xw = uint64(mp * kfp * 4l)
     let bytes_tw = uint64(dft_out_pad * kfp * 4l)
     let bytes_re = uint64(mp * dft_out_pad * 4l)
@@ -2287,7 +2286,7 @@ struct private St2SlabWriter {
 
 //! `count` floats at the next 16-byte boundary (every item is a float4 read for some kernel).
 def private sw_alloc(var w : St2SlabWriter; count : int64) : int64 {
-    let at = tw_ceil(w.n, 4l)
+    let at = tw_round_up(w.n, 4l)
     w.n = at + count
     return at
 }
@@ -2299,7 +2298,7 @@ def private sw_put(var w : St2SlabWriter; i : int64; v : float) {
 }
 
 //! n rounded up to a multiple of m - the tile lattices the GEMM panels and the row pads take
-def private tw_ceil(n, m : int64) : int64 => (n + m - 1l) / m * m
+def private tw_round_up(n, m : int64) : int64 => (n + m - 1l) / m * m
 
 def private st2_conv_key(c : TtsConv1d) : uint64 {
     unsafe {
@@ -2364,7 +2363,7 @@ def private st2_slot_uniforms(w : St2SlabWriter; var s : St2ConvSlot) {
 
 def private st2_slab_conv(var w : St2SlabWriter; c : TtsConv1d) : St2ConvSlot {
     let kc = c.k * c.cin
-    var s = St2ConvSlot(cout_p = tw_ceil(c.cout, 64l), kdim_p = tw_ceil(kc, 32l), gathers = c.cin % 8l == 0l)
+    var s = St2ConvSlot(cout_p = tw_round_up(c.cout, 64l), kdim_p = tw_round_up(kc, 32l), gathers = c.cin % 8l == 0l)
     let w0 = sw_alloc(w, s.cout_p * s.kdim_p)
     s.woff = uint64(w0 * 4l)
     if (c.q8) {
@@ -2390,7 +2389,7 @@ def private st2_slab_conv(var w : St2SlabWriter; c : TtsConv1d) : St2ConvSlot {
 }
 
 def private st2_slab_linear(var w : St2SlabWriter; l : TtsLinear) : St2ConvSlot {
-    var s = St2ConvSlot(cout_p = tw_ceil(l.nout, 64l), kdim_p = tw_ceil(l.nin, 32l), gathers = false)
+    var s = St2ConvSlot(cout_p = tw_round_up(l.nout, 64l), kdim_p = tw_round_up(l.nin, 32l), gathers = false)
     let w0 = sw_alloc(w, s.cout_p * s.kdim_p)
     s.woff = uint64(w0 * 4l)
     if (l.q8) {
@@ -2666,11 +2665,6 @@ def private st2_slab_upload(var base : St2SlabBase; var w : St2SlabWriter; key :
     return true
 }
 
-//! A slab's handles back to their homes, by field type: a conv slot's and a Pocket linear's pooled uniforms, a
-//! buffer the slab owns, the elements of an array of any of them, the fields of a struct of them - so a slab's new
-//! slot field frees itself. The walk releases and never deletes: `st2_slab_free` deletes the slab whole after it,
-//! which frees every array (nested ones included, once) and zeroes the fields the walk reached by value (a buffer
-//! field is released through a copy of its pointer).
 def private st2_release_any(var s : St2ConvSlot) {
     st2_slot_release(s)
 }
@@ -2697,6 +2691,7 @@ def private st2_release_any(var x : auto(TT)) {
     }
 }
 
+[arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
 def private st2_slab_free(var base : auto(TT)) {
     st2_release_any(base)
     unsafe {
@@ -2705,11 +2700,7 @@ def private st2_slab_free(var base : auto(TT)) {
     base.key = 0ul
 }
 
-//! The slab attach every family shares: a hit on the key keeps the resident; otherwise the family's drop runs,
-//! the slab is written twice through the writer - the measuring pass sizes the host copy, the second fills it -
-//! and uploaded, the drop running again on a failed upload. `write` fills a slab through the writer, into a probe
-//! on the measuring pass and into the resident on the second.
-[cold_path]
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
 def private st2_slab_attach(var base : St2SlabBase; key : uint64; write : block<(var w : St2SlabWriter; measuring : bool) : void>; drop : function<void>) : bool {
     if (base.buf != null && base.key == key) {
         return true
@@ -2979,7 +2970,7 @@ def private st2_ctx_make(var c : St2GpuCtx; var slab : MetalBuffer?; h_floats, s
 
 //! `rows` rows of `width` floats, the rows up to the 32 lattice zeroed.
 def private st2_rows_buf(var c : St2GpuCtx; rows, width : int64) : MetalBuffer? {
-    let mp = tw_ceil(rows, 32l)
+    let mp = tw_round_up(rows, 32l)
     let bytes = uint64(mp * width * 4l)
     assert(c.n_bufs < ST2_MAX_BUFS)
     var b = pool_acquire_pinned(g_tw_pool, g_dev, bytes)
@@ -3062,7 +3053,7 @@ def private st2_chunk_rows(kdim_p : int64) : int64 => clamp(ST2_IM2COL_CHUNK_MAX
 
 def private st2_cols_bytes(c : TtsConv1d) : uint64 {
     return 0ul if (c.cin % 8l == 0l)
-    let kdim_p = tw_ceil(c.k * c.cin, 32l)
+    let kdim_p = tw_round_up(c.k * c.cin, 32l)
     return uint64(st2_chunk_rows(kdim_p) * kdim_p * 4l)
 }
 
@@ -3073,7 +3064,7 @@ def private st2_conv_args(cv : TtsConv1d; t_in, r0, rows : int64) : St2ConvArgs 
 
 //! One rows conv and its bias into rows of stride slot.cout_p; the output row count.
 def private st2_conv_mm(enc : MetalComputeEncoder?; c : St2GpuCtx; slot : St2ConvSlot; transposed : bool; bx, by : MetalBuffer?; var ka : St2ConvArgs; rows : int64) {
-    let mp = tw_ceil(rows, 32l)
+    let mp = tw_round_up(rows, 32l)
     if (transposed) {
         if (c.exact) {
             enc_st2_conv_tr_exact_mm(enc, c.slab, slot.woff, bx, by, 0ul, slot.u_cout, ka, mp, slot.cout_p)
@@ -3099,7 +3090,7 @@ def private st2_conv(enc : MetalComputeEncoder?; var c : St2GpuCtx; slot : St2Co
     while (r0 < t_out) {
         let rows = min(chunk, t_out - r0)
         var ka = st2_conv_args(cv, t_in, r0, rows)
-        let mp = tw_ceil(rows, 32l)
+        let mp = tw_round_up(rows, 32l)
         if (cv.transposed) {
             enc_st2_im2col_tr(enc, bx, c.bcols, ka, mp * slot.kdim_p)
         } else {
@@ -3128,7 +3119,7 @@ def private st2_mm(enc : MetalComputeEncoder?; c : St2GpuCtx; woff : uint64; bx,
 }
 
 def private st2_lin(enc : MetalComputeEncoder?; var c : St2GpuCtx; slot : St2ConvSlot; bx : MetalBuffer?; rows : int64; by : MetalBuffer?) {
-    st2_mm(enc, c, slot.woff, bx, by, 0ul, slot.u_kdim, slot.u_cout, tw_ceil(rows, 32l), slot.cout_p)
+    st2_mm(enc, c, slot.woff, bx, by, 0ul, slot.u_kdim, slot.u_cout, tw_round_up(rows, 32l), slot.cout_p)
     let n = rows * slot.cout_p
     let u_n = st2_u(c, uint(n))
     enc_add_bias_rows(enc, by, 0ul, c.slab, slot.boff, slot.u_cout, u_n, n)
@@ -3341,7 +3332,7 @@ def private st2_gen_shape(d : St2Decoder; c, t, har_frames : int64; var sh : St2
     var tt = t
     var cc = c
     sh.c_max = max(sh.c_max, c)
-    sh.row_buf_floats = max(sh.row_buf_floats, tw_ceil(t, 32l) * c)
+    sh.row_buf_floats = max(sh.row_buf_floats, tw_round_up(t, 32l) * c)
     for (i in range64(nst)) {
         let up & = unsafe(d.ups[i])
         let nc & = unsafe(d.noise_convs[i])
@@ -3356,7 +3347,7 @@ def private st2_gen_shape(d : St2Decoder; c, t, har_frames : int64; var sh : St2
         for (j in range64(d.n_kernels)) {
             return false if (!st2_note_block(sh, d.resblocks[i * d.n_kernels + j], t2, c2))
         }
-        sh.row_buf_floats = max(sh.row_buf_floats, tw_ceil(t2, 32l) * c2)
+        sh.row_buf_floats = max(sh.row_buf_floats, tw_round_up(t2, 32l) * c2)
         sh.c_max = max(sh.c_max, c2)
         tt = t2
         cc = c2
@@ -3364,7 +3355,7 @@ def private st2_gen_shape(d : St2Decoder; c, t, har_frames : int64; var sh : St2
     return false if (!st2_note_conv(sh, d.conv_post) || d.conv_post.cin != cc || d.conv_post.cout > ST2_POST_WIDTH
         || d.conv_post.cout < 2l * d.bins)
     sh.t_post = conv1d_out_len(d.conv_post, tt)
-    sh.row_buf_floats = max(sh.row_buf_floats, tw_ceil(sh.t_post, 32l) * ST2_POST_WIDTH)
+    sh.row_buf_floats = max(sh.row_buf_floats, tw_round_up(sh.t_post, 32l) * ST2_POST_WIDTH)
     sh.t_last = tt
     sh.c_last = cc
     return true
@@ -3456,7 +3447,7 @@ def private st2_res_shape(var sh : St2Shape; b : St2AdainResBlk; t : int64) : in
     return -1l if (conv1d_out_len(b.conv1, t1) != t1 || conv1d_out_len(b.conv2, t1) != t1)
     sh.style_fc_floats += 2l * (b.dim_in_s + b.dim_out)
     sh.c_max = max(sh.c_max, max(b.dim_in_s, b.dim_out))
-    sh.row_buf_floats = max(sh.row_buf_floats, tw_ceil(t1, 32l) * max(b.dim_in_s, b.dim_out))
+    sh.row_buf_floats = max(sh.row_buf_floats, tw_round_up(t1, 32l) * max(b.dim_in_s, b.dim_out))
     return t1
 }
 
@@ -3538,7 +3529,7 @@ def private st2_decode_shape(d : St2Decoder; text_c : int64; source : SineSource
         sh.dec_width = b.dim_out
     }
     return false if (!st2_gen_shape(d, sh.dec_width, sh.dec_rows, sh.ss.spec_frames, sh))
-    sh.row_buf_floats = max(sh.row_buf_floats, tw_ceil(frames, 32l) * max(d.encode.dim_in_s, text_c))
+    sh.row_buf_floats = max(sh.row_buf_floats, tw_round_up(frames, 32l) * max(d.encode.dim_in_s, text_c))
     sh.n_out = conv1d_out_len(bwd, sh.t_post) - 2l * ST2_STFT_PAD
     return sh.n_out >= 1l
 }
@@ -3724,7 +3715,7 @@ def private metal_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fra
     }
     return tw_decline(MetalTowerDecline.shape) if (tf != tn || p.f0_proj.cin != p.f0[length(p.f0) - 1].dim_out || p.n_proj.cin != p.n[length(p.n) - 1].dim_out
         || conv1d_out_len(p.f0_proj, tf) != tf || conv1d_out_len(p.n_proj, tn) != tn)
-    sh.row_buf_floats = max(sh.row_buf_floats, tw_ceil(frames, 32l) * max(cc, 2l * hd))
+    sh.row_buf_floats = max(sh.row_buf_floats, tw_round_up(frames, 32l) * max(cc, 2l * hd))
     if (!st2_pred_ok(p)) {
         return tw_decline(MetalTowerDecline.shape)
     }
@@ -4137,7 +4128,6 @@ def private pk_conv_ok(c : TtsConv1d) : bool {
     return st2_conv_ok(c) && c.cin % 8l == 0l && !c.q8 && c.stride >= 1l && (!c.transposed || c.k > c.stride)
 }
 
-//! A transformer layer at the shapes the seats stamp: in_proj [3d x d], out_proj [d x d], ffn1 [ffn x d], ffn2 [d x ffn], the norms d wide.
 def private pk_layer_dims_ok(l : PocketLayer; d, ffn : int64) : bool {
     return (l.in_proj.nin == d && l.in_proj.nout == 3l * d && l.out_proj.nin == d && l.out_proj.nout == d
         && l.ffn1.nin == d && l.ffn1.nout == ffn && l.ffn2.nin == ffn && l.ffn2.nout == d
@@ -4817,6 +4807,7 @@ def private pk_site(var c : St2GpuCtx; var bx : MetalBuffer?; xoff : uint64; var
 }
 
 //! The row GEMV at a site under one of the five stamp kinds.
+[arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames")]
 def private pk_gemv(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin; kind : int; s : PkGemvSite) {
     var ka = PkGemvArgs(nin = uint(p.nin), nout = uint(p.nout), stride = p.q8 ? 0u : uint(p.f.kdim_p), eps = POCKET_HEAD_LN_EPS)
     let woff = p.q8 ? 0ul : p.f.woff
@@ -4825,7 +4816,6 @@ def private pk_gemv(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin; ki
     let qoff = p.q8 ? p.qoff : 0ul
     if (p.q8) {
         if (kind == PK_GEMV_DOT) {
-            //! the bare q8 dot rides the decode GEMV, bias added after: the row stamp's fused bias measured 20% slower a frame
             enc_gemv(enc, bq, qoff, s.bx, s.by, p.u_nin, p.u_nout, p.nout, s.yoff, s.xoff)
             if (p.has_b) {
                 enc_add_bias_rows(enc, s.by, s.yoff, c.slab, boff, p.u_nout, p.u_nout, p.nout)
@@ -5065,7 +5055,6 @@ def private metal_styletts2_driver : St2GpuDriver {
         gen = @@metal_styletts2_generator)
 }
 
-//! The qwen3a padded conv weights and their key, dropped.
 def private q3a_wpad_drop {
     release_handle(g_tw_q3a_wpad)
     g_tw_q3a_key = 0ul

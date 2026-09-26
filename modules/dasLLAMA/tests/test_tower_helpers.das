@@ -8,7 +8,7 @@ require dasllama/dasllama_math    // setup_dasllama_jobque_
 require dasllama/dasllama_rope    // build_rope_tabs_rows — the 2-axis rope's table source
 require dasllama/dasllama_plane
 require daslib/jobque_boost
-require _attn_oracle   // attn_row_oracle - the naive attention the bidir core answers to
+require _attn_oracle
 require daslib/f16_cvt   // the binary16 round-trip the geglu table property checks
 require math
 
@@ -240,8 +240,7 @@ def test_avg_pool2d_rows(t : T?) {
     }
 }
 
-// the oracle stays naive on purpose: no blocking, no packing - nothing the kernel does; every key is in range, so
-// the causal row oracle attends bidirectionally
+//! naive on purpose (no blocking, no packing); every key in range (cnt = tt) makes the causal row oracle attend bidirectionally
 def private attention_ref(qq, kk, vv : array<float>; tt, d, n_head : int64; scale : float) : array<float> {
     let (nt, dim, nh) = (int(tt), int(d), int(n_head))   // the oracle indexes in 32 bits; the fixture is a few dozen floats
     let hs = dim / nh

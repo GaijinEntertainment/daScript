@@ -11,10 +11,8 @@ require math
 require dasllama/dasllama_convert   // dequant_k{4,5,6}_plane_superblock — the kq reference dequant
 require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-plane stride source
 require daslib/f16_cvt              // f32_to_f16 — packing synthetic scale planes
-require dastest/testing_boost   // dispatch_64_lanes reports the dispatch
-require ?das_metal metal/das_metal_boost public   // the buffer helpers every kernel cell reaches through this module
-
-// ===== device buffers: the shared helpers ride metal/das_metal_boost; the one-value uniforms =====
+require dastest/testing_boost
+require ?das_metal metal/das_metal_boost public
 
 def buf_u32(dev; v : uint) : auto => buf_fill(dev, 1, v)
 
@@ -31,8 +29,6 @@ def dispatch_64_lanes(t : T?; queue; tag : string; pso; total : int; blk : block
     t |> success(ran, "{tag} dispatch: {err2}")
     return ran
 }
-
-// ===== the fp64 scalar oracles the activation cells share =====
 
 def sigmoid_d(x : double) : double => 1.0lf / (1.0lf + exp(-x))
 
@@ -185,8 +181,7 @@ def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>)
 
 // one 34B-block q8 blob (nrows x nkb blocks) + its exact dequant: pow2 scales and small-int
 // quants keep every staged f16/f32 value exact, leaving only accumulation order to the envelope
-//! a 34B-block q8 blob of `nrows` x `nkb` blocks with pow2 scales and quants patterned over `span` values (16 = the small
-//! range exact under f16 staging, 256 = the whole int8 range), and its exact dequant
+//! `span`: the quants' value count - 16 stays exact under f16 staging, 256 covers the whole int8 range
 def q8_blob_fill(nrows, nkb : int; var blob : array<uint8>; var wdeq : array<float>; span : int = 16) {
     let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
     blob |> resize(nrows * nkb * 34)
@@ -215,8 +210,7 @@ def q8_x_fill(nn : int; var xf : array<float>) {
     }
 }
 
-// reference dequant of one row (nb superblocks starting at superblock sb_base) off the planes in the GPU's split
-// scale form - the engine's own plane-row dequant, the scale tail found from the plane's length (nsb_total's planes)
+//! One row's reference dequant (nb superblocks from sb_base) off split-scale planes, through the engine's own plane-row dequant.
 def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wrow : array<float>) {
     let tail = fmt == 2 ? 4l : 2l   //! the engine finds the d tail from the plane's length: the fixture's plane holds nsb_total superblocks exactly
     assert(fmt == 4 || fmt == 5 || fmt == 40 || fmt == 45 || long_length(ks) == int64(nsb_total) * (16l + tail), "kq_row_ref: the scale plane holds nsb_total superblocks")
