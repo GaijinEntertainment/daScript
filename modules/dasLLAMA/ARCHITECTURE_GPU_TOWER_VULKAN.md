@@ -167,9 +167,9 @@ The rel quartet is the resident's relative-position scratch, the device buffers 
 `rel_cap_rows` and grown by `vt_rel_bufs`: the table's f32 rows, the table's GEMM feed
 refreshed once per encode - Q8_0 quants and scales for the mul_mm tiles, f16 halfwords with the
 tile read slack behind the rows for the cm2 tiles - and the projected rows one layer at a time;
-its projection sets are cached per batch variant (`vt_rel_proj_set`) and, on the cm2 feed, per
-token column over the f16 feed (`vt_rel_proj_set_cm2`), and dropped with the scratch or the
-quartet, because they bind the scratch's schedule buffer beside the weights and the quartet. The two attention classes are stamped per head width (64 and 128, the widths
+its projection sets are cached per tile key (`vt_rel_proj_set`: the batch variant, or the token
+column over the f16 feed on cm2), and dropped with the scratch or the quartet, because they bind
+the scratch's schedule buffer beside the weights and the quartet. The two attention classes are stamped per head width (64 and 128, the widths
 the served carriers carry; the driver declines another) and the residual seam per post-norm
 (`TowerPostAdd`, `TowerPostAddPlain` for the conv module's plain add), so no kernel loop
 bound or branch reads a push constant. gemma4a and canary upload

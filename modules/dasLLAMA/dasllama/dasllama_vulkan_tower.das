@@ -182,10 +182,6 @@ struct private VtResident {
     f16w : bool           //! the halfword-twin family (qwen25v): the f16 feed rows and the window table
     xh_dev : uint64       //! the f16 feed, [cap x max(d, ff)] (the halfword twin), or [cap + TILE_READ_SLACK x max(d, ff)] on the cm2 feed
     cm2 : bool            //! the q8 chains' GEMMs ride the cm2 f16 feed (a coopmat device): xh_dev is the feed
-    cm2_tc_d : int64      //! the token column the bound d-wide cm2 sets were built for (0 = none)
-    cm2_tc_ff : int64     //! the token column the bound ff-wide cm2 sets were built for
-    @scratch sets_cm2_d : table<int; VtBatchSetsD>    //! the cm2 sets per token column: built once at the scratch's capacity, rebound on a column switch
-    @scratch sets_cm2_ff : table<int; VtBatchSetsFf>
     sk_dev : uint64       //! the split-k partial planes, [nsplit x cap x d] floats, made at the first pick that splits and grown to the widest
     sk_bytes : int64
     @scratch sets_sk : table<int; VkDescriptorSet>   //! the fc2 GEMM's set into the planes per token column
@@ -236,13 +232,13 @@ struct private VtResident {
     win_cap : int64       //! the window table's capacity (windows)
     host : HostBuf        //! the x readback staging (the tap stashes behind it)
     oom : bool            //! a soft allocation of the batch under way failed
-    bvar_d : int          //! the q8 batch class variant the bound d-wide sets were built for (-1 = none)
-    bvar_ff : int         //! the variant the ff-wide sets (gate, up) were built for: the tile pick reads the output width
-    bvar_qkv : int        //! the variant the fused qkv sets (3d wide) were built for
-    @scratch sets_d : table<int; VtBatchSetsD>     //! the batch sets per variant: built once at the scratch's capacity, rebound on a variant switch
+    bound_d : int         //! the tile key (`vt_tile_key`) the bound d-wide GEMM sets were built for (-1 = none)
+    bound_ff : int        //! the tile key of the bound ff-wide sets (gate, up): the tile pick reads the output width
+    bound_qkv : int       //! the tile key of the bound fused qkv set (3d wide)
+    @scratch sets_d : table<int; VtBatchSetsD>     //! the GEMM sets per tile key: built once at the scratch's capacity, rebound on a tile switch
     @scratch sets_ff : table<int; VtBatchSetsFf>
     @scratch sets_qkv : table<int; VkDescriptorSet>
-    @scratch sets_rel_proj : table<int; VkDescriptorSet>   //! the rel-table projection's set per variant (its feed the table's own Q8_0 rows)
+    @scratch sets_rel_proj : table<int; VkDescriptorSet>   //! the rel-table projection's set per tile key (its feed the table's own rows)
     family : string       //! the family name the counter and the announce carry
     served_said : bool    //! the serves-on-the-device line said for the model the key names
     s_qkv : VkDescriptorSet
@@ -385,12 +381,15 @@ def private vt_announce(var r : VtResident) {
 }
 
 def private vt_unbind_batch_sets(var r : VtResident) {
-    r.bvar_d = -1
-    r.bvar_ff = -1
-    r.bvar_qkv = -1
-    r.cm2_tc_d = 0l
-    r.cm2_tc_ff = 0l
+    r.bound_d = -1
+    r.bound_ff = -1
+    r.bound_qkv = -1
 }
+
+let private VT_TILE_CM2_KEY = 1000   //! a cm2 tile's key in the set caches: the token column past the q8 batch variants' 0..5
+
+//! the key a GEMM tile's sets live under in the residency's caches
+def private vt_tile_key(t : VtTile) : int => t.tc > 0l ? VT_TILE_CM2_KEY + int(t.tc) : t.v
 
 //! `k` folded with `VT_KEY_SAMPLE_WORDS` words sampled evenly over the `bytes` at `p`
 def private vt_fold_words(k : uint64; p : uint8 const?; bytes : int64) : uint64 {
@@ -556,8 +555,6 @@ def private vt_scratch_forget(var r : VtResident) {
     r.sets_ff |> clear()
     r.sets_qkv |> clear()
     r.sets_rel_proj |> clear()
-    r.sets_cm2_d |> clear()
-    r.sets_cm2_ff |> clear()
     r.sets_sk |> clear()
     r.sets_front |> clear()
     vt_unbind_batch_sets(r)
@@ -646,49 +643,28 @@ def private vt_rel_release(var r : VtResident) {
     r.sets_rel_proj |> clear()
 }
 
-[cold_path]
-def private vt_build_rel_proj_set(var r : VtResident; v : int) {
-    let q8e = kq_elems(KqFmt.q8)
-    let b_relq = r.rel_cap_rows * r.d
-    let b_rel = b_relq * 4l
-    r.sets_rel_proj[v] = q8_batch_cls_set(v, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.rel_tabq_dev, r.rel_tabs_dev, r.rel_proj_dev),
-        fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, b_relq, b_relq / q8e * 4l, b_rel), fixed_array(0u, 0u, 0u, VT_REL_TABQ, VT_REL_TABQ, VT_REL_PROJ))
-}
-
-def private vt_rel_proj_set(var r : VtResident; v : int) : VkDescriptorSet {
-    if (!key_exists(r.sets_rel_proj, v)) {
-        vt_build_rel_proj_set(r, v)
-    }
-    return r.sets_rel_proj[v]
-}
-
-let private VT_REL_CM2_KEY = 1000   //! the cm2 rel-projection sets' key base in `sets_rel_proj`: the token column past the q8 variants' 0..5
-
-[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_rel_proj_set_cm2(var r : VtResident; tc : int64) : VkDescriptorSet {
-    let key = VT_REL_CM2_KEY + int(tc)
+//! the rel-table projection's set over its tile: the feed is the table's own rows (the Q8_0 pair on the batch tiles, the halfwords on cm2)
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def private vt_rel_proj_set(var r : VtResident; t : VtTile) : VkDescriptorSet {
+    let key = vt_tile_key(t)
     if (!key_exists(r.sets_rel_proj, key)) {
-        let b_rel = r.rel_cap_rows * r.d * 4l
-        let b_relh = (r.rel_cap_rows + TILE_READ_SLACK) * r.d * 2l
-        r.sets_rel_proj[key] = cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.rel_tabh_dev, r.rel_proj_dev),
-            fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, b_relh, b_rel), fixed_array(0u, 0u, 0u, VT_REL_TABQ, VT_REL_PROJ))
+        let b_relq = r.rel_cap_rows * r.d
+        let b_rel = b_relq * 4l
+        if (t.tc > 0l) {
+            let b_relh = (r.rel_cap_rows + TILE_READ_SLACK) * r.d * 2l
+            r.sets_rel_proj[key] = cm2_cls_set(int(KqFmt.q8), t.tc, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.rel_tabh_dev, r.rel_proj_dev),
+                fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, b_relh, b_rel), fixed_array(0u, 0u, 0u, VT_REL_TABQ, VT_REL_PROJ))
+        } else {
+            r.sets_rel_proj[key] = q8_batch_cls_set(t.v, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.rel_tabq_dev, r.rel_tabs_dev, r.rel_proj_dev),
+                fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, b_relq, b_relq / kq_elems(KqFmt.q8) * 4l, b_rel), fixed_array(0u, 0u, 0u, VT_REL_TABQ, VT_REL_TABQ, VT_REL_PROJ))
+        }
     }
     return r.sets_rel_proj[key]
 }
 
 def private vt_conformer_sets(var r : VtResident; v, vff, v2d, v_rel : VtTile) : tuple<s_h2 : VkDescriptorSet; s_rel : VkDescriptorSet> {
-    if (v.tc > 0l) {
-        vt_cm2_sets(r, v.tc, vff.tc)
-        if (!key_exists(r.sets_cm2_ff, int(v2d.tc))) {
-            vt_build_cm2_sets_ff(r, v2d.tc)
-        }
-        return (s_h2 = r.sets_cm2_ff[int(v2d.tc)].s_hg, s_rel = vt_rel_proj_set_cm2(r, v_rel.tc))
-    }
-    vt_batch_sets(r, v.v, vff.v)
-    if (!key_exists(r.sets_ff, v2d.v)) {
-        vt_build_sets_ff(r, v2d.v)
-    }
-    return (s_h2 = r.sets_ff[v2d.v].s_hg, s_rel = vt_rel_proj_set(r, v_rel.v))
+    vt_tile_sets(r, v, vff)
+    return (s_h2 = vt_sets_ff(r, v2d).s_hg, s_rel = vt_rel_proj_set(r, v_rel))
 }
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
@@ -1778,48 +1754,6 @@ def private vt_cm2_set(r : VtResident; tc : int64; y_dev : uint64; y_bytes : int
         fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bxh, y_bytes), fixed_array(0u, 0u, 0u, VT_XQ, y_bit))
 }
 
-[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_build_cm2_sets_d(var r : VtResident; tc : int64) {
-    let bx = r.cap_rows * r.d * 4l
-    r.sets_cm2_d[int(tc)] = VtBatchSetsD(s_q = vt_cm2_set(r, tc, r.q_dev, bx, VT_Q), s_k = vt_cm2_set(r, tc, r.k_dev, bx, VT_K),
-        s_v = vt_cm2_set(r, tc, r.v_dev, bx, VT_V), s_o = vt_cm2_set(r, tc, r.yo_dev, bx, VT_YO), s_down = vt_cm2_set(r, tc, r.yd_dev, bx, VT_YD))
-    to_log(LOG_INFO, "dasLLAMA vulkan tower: d-wide cm2 sets at {r.cap_rows} rows - token column {tc} (d {r.d})\n")
-}
-
-[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_build_cm2_sets_ff(var r : VtResident; tc : int64) {
-    let bff = r.cap_rows * r.ff * 4l
-    r.sets_cm2_ff[int(tc)] = VtBatchSetsFf(s_hg = vt_cm2_set(r, tc, r.hg_dev, bff, VT_HG), s_hu = vt_cm2_set(r, tc, r.hu_dev, bff, VT_HU))
-    to_log(LOG_INFO, "dasLLAMA vulkan tower: ff-wide cm2 sets at {r.cap_rows} rows - token column {tc} (ff {r.ff})\n")
-}
-
-//! the cm2 sets of the encode's token columns bound: a column seen before is reused, a new one built once
-def private vt_cm2_sets(var r : VtResident; tc_d, tc_ff : int64) {
-    if (r.cm2_tc_d != tc_d) {
-        if (!key_exists(r.sets_cm2_d, int(tc_d))) {
-            vt_build_cm2_sets_d(r, tc_d)
-        }
-        var sd = r.sets_cm2_d[int(tc_d)]
-        r.s_q = sd.s_q
-        r.s_k = sd.s_k
-        r.s_v = sd.s_v
-        r.s_o = sd.s_o
-        r.s_down = sd.s_down
-        r.cm2_tc_d = tc_d
-        r.bvar_d = -1
-    }
-    if (r.cm2_tc_ff != tc_ff) {
-        if (!key_exists(r.sets_cm2_ff, int(tc_ff))) {
-            vt_build_cm2_sets_ff(r, tc_ff)
-        }
-        var sf = r.sets_cm2_ff[int(tc_ff)]
-        r.s_hg = sf.s_hg
-        r.s_hu = sf.s_hu
-        r.cm2_tc_ff = tc_ff
-        r.bvar_ff = -1
-    }
-}
-
 [cold_path]
 def private vt_batch_set(r : VtResident; v : int; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
     let bq = r.cap_rows * max(r.d, r.ff)
@@ -1827,57 +1761,71 @@ def private vt_batch_set(r : VtResident; v : int; y_dev : uint64; y_bytes : int6
         fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bq, bq / kq_elems(KqFmt.q8) * 4l, y_bytes), fixed_array(0u, 0u, 0u, VT_XQ, VT_XQ, y_bit))
 }
 
+//! a GEMM set over its tile: the weights, the schedule, the tile's feed (the halfwords on cm2, the Q8_0 pair on the batch tiles) and `y`
+[cold_path]
+def private vt_tile_set(r : VtResident; t : VtTile; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet
+    => t.tc > 0l ? vt_cm2_set(r, t.tc, y_dev, y_bytes, y_bit) : vt_batch_set(r, t.v, y_dev, y_bytes, y_bit)
+
+def private vt_tile_words(t : VtTile) : string => t.tc > 0l ? "token column {t.tc}" : "variant {t.v}"
+
+//! the d-wide sets (q, k, v, o, down) of a tile, built once at the scratch's capacity
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_build_sets_d(var r : VtResident; v : int) {
-    let bx = r.cap_rows * r.d * 4l
-    r.sets_d[v] = VtBatchSetsD(s_q = vt_batch_set(r, v, r.q_dev, bx, VT_Q), s_k = vt_batch_set(r, v, r.k_dev, bx, VT_K),
-        s_v = vt_batch_set(r, v, r.v_dev, bx, VT_V), s_o = vt_batch_set(r, v, r.yo_dev, bx, VT_YO), s_down = vt_batch_set(r, v, r.yd_dev, bx, VT_YD))
-    to_log(LOG_INFO, "dasLLAMA vulkan tower: d-wide batch sets at {r.cap_rows} rows - variant {v} (d {r.d}), tile {q8_batch_tile_for(r.d, r.cap_rows)}\n")
+def private vt_sets_d(var r : VtResident; t : VtTile) : VtBatchSetsD {
+    let key = vt_tile_key(t)
+    if (!key_exists(r.sets_d, key)) {
+        let bx = r.cap_rows * r.d * 4l
+        r.sets_d[key] = VtBatchSetsD(s_q = vt_tile_set(r, t, r.q_dev, bx, VT_Q), s_k = vt_tile_set(r, t, r.k_dev, bx, VT_K),
+            s_v = vt_tile_set(r, t, r.v_dev, bx, VT_V), s_o = vt_tile_set(r, t, r.yo_dev, bx, VT_YO), s_down = vt_tile_set(r, t, r.yd_dev, bx, VT_YD))
+        to_log(LOG_INFO, "dasLLAMA vulkan tower: d-wide sets at {r.cap_rows} rows - {vt_tile_words(t)} (d {r.d})\n")
+    }
+    return r.sets_d[key]
 }
 
+//! the ff-wide sets (gate, up) of a tile
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_build_sets_ff(var r : VtResident; vff : int) {
-    let bff = r.cap_rows * r.ff * 4l
-    r.sets_ff[vff] = VtBatchSetsFf(s_hg = vt_batch_set(r, vff, r.hg_dev, bff, VT_HG), s_hu = vt_batch_set(r, vff, r.hu_dev, bff, VT_HU))
-    to_log(LOG_INFO, "dasLLAMA vulkan tower: ff-wide batch sets at {r.cap_rows} rows - variant {vff} (ff {r.ff}), tile {q8_batch_tile_for(r.ff, r.cap_rows)}\n")
+def private vt_sets_ff(var r : VtResident; t : VtTile) : VtBatchSetsFf {
+    let key = vt_tile_key(t)
+    if (!key_exists(r.sets_ff, key)) {
+        let bff = r.cap_rows * r.ff * 4l
+        r.sets_ff[key] = VtBatchSetsFf(s_hg = vt_tile_set(r, t, r.hg_dev, bff, VT_HG), s_hu = vt_tile_set(r, t, r.hu_dev, bff, VT_HU))
+        to_log(LOG_INFO, "dasLLAMA vulkan tower: ff-wide sets at {r.cap_rows} rows - {vt_tile_words(t)} (ff {r.ff})\n")
+    }
+    return r.sets_ff[key]
 }
 
+//! the fused qkv set (3d wide) of a tile
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_build_sets_qkv(var r : VtResident; vqkv : int) {
-    let bx = r.cap_rows * r.d * 4l
-    r.sets_qkv[vqkv] = vt_batch_set(r, vqkv, r.qkv_dev, 3l * bx, VT_QKV)
-    to_log(LOG_INFO, "dasLLAMA vulkan tower: fused qkv batch set at {r.cap_rows} rows - variant {vqkv} (3d {3l * r.d})\n")
+def private vt_set_qkv(var r : VtResident; t : VtTile) : VkDescriptorSet {
+    let key = vt_tile_key(t)
+    if (!key_exists(r.sets_qkv, key)) {
+        r.sets_qkv[key] = vt_tile_set(r, t, r.qkv_dev, 3l * r.cap_rows * r.d * 4l, VT_QKV)
+        to_log(LOG_INFO, "dasLLAMA vulkan tower: fused qkv set at {r.cap_rows} rows - {vt_tile_words(t)} (3d {3l * r.d})\n")
+    }
+    return r.sets_qkv[key]
 }
 
-//! the batch sets of the encode's variants bound: a variant seen before is reused, a new one built once
-def private vt_batch_sets(var r : VtResident; v, vff : int; vqkv : int = -1) {
-    if (r.bvar_d != v) {
-        if (!key_exists(r.sets_d, v)) {
-            vt_build_sets_d(r, v)
-        }
-        var sd = r.sets_d[v]
+let private VT_NO_TILE = VtTile(v = -1, tc = 0l)
+
+//! the GEMM sets of the encode's tiles bound: a tile seen before is reused, a new one built once
+def private vt_tile_sets(var r : VtResident; v, vff : VtTile; vqkv : VtTile = VT_NO_TILE) {
+    if (r.bound_d != vt_tile_key(v)) {
+        var sd = vt_sets_d(r, v)
         r.s_q = sd.s_q
         r.s_k = sd.s_k
         r.s_v = sd.s_v
         r.s_o = sd.s_o
         r.s_down = sd.s_down
-        r.bvar_d = v
+        r.bound_d = vt_tile_key(v)
     }
-    if (r.bvar_ff != vff) {
-        if (!key_exists(r.sets_ff, vff)) {
-            vt_build_sets_ff(r, vff)
-        }
-        var sf = r.sets_ff[vff]
+    if (r.bound_ff != vt_tile_key(vff)) {
+        var sf = vt_sets_ff(r, vff)
         r.s_hg = sf.s_hg
         r.s_hu = sf.s_hu
-        r.bvar_ff = vff
+        r.bound_ff = vt_tile_key(vff)
     }
-    if (r.fused && r.bvar_qkv != vqkv) {
-        if (!key_exists(r.sets_qkv, vqkv)) {
-            vt_build_sets_qkv(r, vqkv)
-        }
-        r.s_qkv = r.sets_qkv[vqkv]
-        r.bvar_qkv = vqkv
+    if (r.fused && r.bound_qkv != vt_tile_key(vqkv)) {
+        r.s_qkv = vt_set_qkv(r, vqkv)
+        r.bound_qkv = vt_tile_key(vqkv)
     }
 }
 
@@ -2065,11 +2013,7 @@ def private vt_ln_scratch(var r : VtResident; nl, npos, d, ff, hs, dp, g_d, g_ff
         }
         vt_sets_ln(r)
     }
-    if (cm2) {
-        vt_cm2_sets(r, tc_d, tc_ff)
-    } else {
-        vt_batch_sets(r, v, vff)
-    }
+    vt_tile_sets(r, VtTile(v = v, tc = tc_d), VtTile(v = vff, tc = tc_ff))
     return true
 }
 
@@ -2676,7 +2620,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         }
         vt_sets_q3v(r)
     }
-    vt_batch_sets(r, v, vff, vqkv)
+    vt_tile_sets(r, VtTile(v = v, tc = 0l), VtTile(v = vff, tc = 0l), VtTile(v = vqkv, tc = 0l))
     g_vt_maps |> reserve(nrec)
     g_vt_maps |> resize(nrec)
     var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
@@ -3002,7 +2946,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
         }
         vt_sets_g4v(r)
     }
-    vt_batch_sets(r, v, vff)
+    vt_tile_sets(r, VtTile(v = v, tc = 0l), VtTile(v = vff, tc = 0l))
     g_vt_maps |> reserve(nrec)
     g_vt_maps |> resize(nrec)
     unsafe {
