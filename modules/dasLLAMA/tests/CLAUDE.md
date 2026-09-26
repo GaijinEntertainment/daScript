@@ -1400,7 +1400,9 @@ on the q8 slab writes. Each cell carries a scaled or
 reversed input as the compare's control. The seam check carries the generator seat alone on the
 oracle's own inputs within `GPU_SEAM_BAR` (5e-3; 1.2e-3 at most), the knob-off leg bit-equal to
 the CPU chain with its decline recorded. The models for these cells mint in memory from the GGUF's
-staging on the lane each cell names, no `.dlim` baked. Where no Metal device serves, every cell
+staging on the lane each cell names, no `.dlim` baked. The GPU cells read the serving driver
+through the rail's helpers (`gpu_knob`, `set_gpu`, `gpu_encodes`, `gpu_declines`): the Metal
+tower on an Apple build, the Vulkan TTS driver elsewhere. Where no GPU device serves, every cell
 skips loudly; a device that declines a stage is a red.
 The kitten image rail is the `image` suite's `kitten` arm (the TTS area's), not a cell here.
 `test_tts_kokoro.das` - stocked suite; model-free cells: the symbol map over a synthetic phoneme
@@ -1414,7 +1416,7 @@ phonemized in both dialects, every British symbol proven to be in the model's ow
 the token count, `bf_emma` speaking, and the sample count of that synthesis held against the model
 driven straight from each dialect's string, which is what proves the VOICE's dialect reached the
 synthesis - and the voice refusals (a pack whose language the front end lacks names that language;
-a voice the model has never heard of refuses first, with no language to name); the Metal cells of
+a voice the model has never heard of refuses first, with no language to name); the GPU cells of
 `_tts_parity.das` - the seam check, the per-stage cells with the q8 decode cell, and the served
 synthesis across the tower knob on both lanes - as the kitten entry describes them; and, model-free,
 the seat-name refusal of `styletts2_gpu_stats`.
@@ -1431,7 +1433,8 @@ multi-sentence texts, one sentence spoken with the family's own timing stages, a
 joining the roster and speaking, and the refusals (an unknown voice, a speed, a phoneme request,
 a clip at another rate); the q8 lane (the served default: the GEMMs minted q8, every codec
 conv f32, teacher-forced frames logged against the f32 oracle at an rms figure, the free run's
-frame count and speech - the rig is the lane's quality gate); the Metal cells - the codec seat
+frame count and speech - the rig is the lane's quality gate); the GPU cells (the Metal tower on an
+Apple build, the Vulkan TTS driver elsewhere, through the rail's helpers) - the codec seat
 against the CPU chain over the oracle's latents on the f32 lane within `GPU_CODEC_BAR` (1e-5;
 reads 1e-6 on the exact stamps on the M5 Max, 9e-4 on the f16-staged route, which is why the seat runs exact)
 with the bar's one-sample control and the x3-scaled latents as the compare's control, one tower
@@ -1454,7 +1457,7 @@ with the x3-scaled noise as the compare's control; the seat record's refusal of 
 name no seat carries and its seat names in order (`test_pocket_seat_stats`, model-free); the
 long chunk's codec seat declining by shape; and the served synthesis across the knob, every
 chunk's codec and frame loop served, the encodes
-past one a chunk, the knob-off chunks declining at both seats - where no Metal device serves all
+past one a chunk, the knob-off chunks declining at both seats - where no GPU device serves all
 three skip loudly, a present device that declines is a red; the parity, stream and frames cells
 pin the tower off, since the CPU chain is what they hold; the published Q8_0 file
 (`pocket-tts-en-q8.gguf`) against the f16 file's load-time quants - every backbone GEMM arrived
