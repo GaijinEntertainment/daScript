@@ -146,6 +146,9 @@ def documented_flag(flag_name : string) : string {
 def cli_flags(info : CommandInfo; owner : string; var out : array<tuple<flag : string; owner : string>>) {
     out |> reserve(length(out) + length(info.args))
     for (a in info.args) {
+        if (empty(a.doc_string)) {
+            gate_finding(CLI_ARGS_DAS, "flag {documented_flag(a.flag_name)} of {owner} has no @clarg_doc - the help text is the first copy every other copy states the same as")
+        }
         out |> push((flag = documented_flag(a.flag_name), owner = owner))
     }
 }
@@ -155,6 +158,7 @@ def cli_flags(info : CommandInfo; owner : string; var out : array<tuple<flag : s
 def server_flags(var out : array<tuple<flag : string; owner : string>>) {
     var inside = false
     var named = ""
+    var documented = false
     for (raw in split(fread(MAIN_DAS), "\n")) {
         let line = strip(raw)
         if (!inside) {
@@ -168,12 +172,21 @@ def server_flags(var out : array<tuple<flag : string; owner : string>>) {
             named = slice(line, q1 + 1, q2)
             continue
         }
+        if (line |> starts_with("@clarg_doc")) {
+            documented = true
+            continue
+        }
         continue if (empty(line) || (line |> starts_with("@")) || (line |> starts_with("//")))
         let colon = find(line, " : ")
         continue if (colon <= 0)
         let field = slice(line, 0, colon)
-        out |> push((flag = documented_flag(empty(named) ? replace(field, "_", "-") : named), owner = "ServerArgs"))
+        let flag = documented_flag(empty(named) ? replace(field, "_", "-") : named)
+        if (!documented) {
+            gate_finding(MAIN_DAS, "flag {flag} of ServerArgs has no @clarg_doc - the help text is the first copy every other copy states the same as")
+        }
+        out |> push((flag = flag, owner = "ServerArgs"))
         named = ""
+        documented = false
     }
 }
 

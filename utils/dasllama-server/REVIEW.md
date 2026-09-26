@@ -53,9 +53,9 @@ produce, hand-compose the fixture and name it as hand-composed, with why, in its
 `tests/fixtures/README.md`.**
 
 **A diff that adds a key to what a route answers, or changes the condition under which the route
-answers one, updates every `README.md` passage that names the key or its condition - the route's
-row and any section on it - in the same change.** The row is where a consumer learns the key
-exists and when to expect it.
+answers one, names the key and that condition in the route's `README.md` row and updates every
+other `README.md` passage that names the key or the condition, in the same change.** The row is
+where a consumer learns the key exists and when to expect it.
 
 **A `served` or `served_note` value a diff adds or changes in `openai_server.das` - all of it
 but the engine text it quotes - uses only words a user understands without knowing how the
@@ -91,7 +91,8 @@ and a scheduler left in device mode admits a session that has none.
 **A reference in this folder to a symbol of a module the folder requires conditionally - a
 `require ?<guard>` or a `require [<group>]` line - outside a `static_if (typeinfo module_exists(M))`
 arm, where M is that module or a module whose own `require` brings it in, is a defect - wrap the
-reference in that arm.** The unguarded reference fails the compile of a build without dasLLVM.
+reference in that arm.** The unguarded reference fails the compile of every build that lacks that
+module.
 
 **A function signature in this folder never names a type from a module this folder requires
 conditionally - those types stay inside the guarded arm, and plain types cross the boundary.** A
