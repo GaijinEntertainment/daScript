@@ -39,7 +39,7 @@ require _model_tier
 
 let GPU_CODEC_BAR = 1e-5   //! the codec seat against the CPU chain on the f32 lane: reads 9e-7 on the exact stamps (M5 Max, -jit)
 let GPU_FRAME_BAR = 2e-5   //! the frames seat against the CPU chain on the f32 lane, teacher-forced: reads 2e-6 on the latents (M5 Max, -jit)
-let GPU_CODEC_SERVED_BAR = 5e-2   //! the codec seat on the served planes: reads 1.3e-2 on the q8 file, 7.7e-3 on the kq file on the M5 Max (the CPU quantizes its activations, the tower feeds them f32)
+let GPU_CODEC_SERVED_BAR = 2e-1   //! the codec seat on the served planes: reads 1.3e-2 / 7.7e-3 (q8 / kq) on the M5 Max and 9.2e-2 / 1.5e-1 on the pod's x64 CPU chain, all of it the CPU's Q8_0 activation blocks of the first layer's rows (the tower reads the same quants dequantized and feeds f32: it sits at 3e-6 of the CPU f32 chain on either box)
 let GPU_FRAME_SERVED_BAR = 1e-1   //! the frames seat on the served planes, teacher-forced: reads 1.9e-2 / 3.7e-2 on the q8 file, 3.8e-2 / 7.1e-2 on the kq file (alba / caro_davy) on the M5 Max
 let GPU_FRAME_FREE_BAR = 1e-3   //! the frames seat free-running on the f32 lane, its own noise from the same seed, every frame fed its own output: reads 1.5e-4 and 1.1e-4 on the two stage cases on the M5 Max
 
