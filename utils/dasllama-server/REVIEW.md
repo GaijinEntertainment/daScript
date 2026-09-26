@@ -40,10 +40,10 @@ before - a new route requires all of its fields - adds that field to every `cont
 request to that route, in the same change.**
 
 **A diff that changes the shape a route answers - a key, an item in a list it answers, or a value
-the code sets itself rather than one the traffic since boot, the configuration, the loaded model or
-the machine decides, including one a `dasllama/*` module supplies - re-captures every fixture under
-`tests/fixtures/` that records that route, in the same change.** The fixtures are the recorded
-response shape.
+the code sets itself, whether this folder's code or a `dasllama/*` module's - re-captures every
+fixture under `tests/fixtures/` that records that route, in the same change; a value the traffic
+since boot, the configuration, the loaded model or the machine decides is not shape.** The
+fixtures are the recorded response shape.
 
 **A diff that adds a read of a response key in `control.html` or in a Playwright `.spec.js`,
 wherever the diff puts it, or edits a line that reads one, and no fixture under
@@ -84,9 +84,9 @@ the diff opens included, at or below the regions the driver armed (`gpu_device_s
 scheduler in device mode counts as its `max_streams`.** The driver panics on the session that
 finds no region.
 
-**A diff in this folder that calls `moe_gpu_drop_model` turns off every device mode this folder
-armed before the dropped slot's next step, in the same change.** The regions go with the model,
-and a scheduler left in device mode admits a session that has none.
+**A diff in this folder that calls `moe_gpu_drop_model` turns off, before the dropped slot's next
+step, every scheduler device mode (`set_device_kv`) this folder turned on, in the same change.**
+The regions go with the model, and a scheduler left in device mode admits a session that has none.
 
 **A reference in this folder to a symbol of a module the folder requires conditionally - a
 `require ?<guard>` or a `require [<group>]` line - outside a `static_if (typeinfo module_exists(M))`
