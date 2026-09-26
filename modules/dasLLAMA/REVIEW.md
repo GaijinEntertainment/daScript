@@ -20,28 +20,27 @@ several items, only the landed item - and repoints every checked-in citation nam
 item to where the landed fact now lives (the architecture doc or the code) or drops it, dated
 `PERF_LEDGER.md` entries included.**
 
-**Code that times a run itself and hands the wall or rate back as its result - a file that
-prints it, or a function that returns it to whichever file calls it - a kernel race (a run timing
-two kernel variants - arms - against each other in one process), or a file
-`benchmarks/lcpp_bench.das` requires directly, wherever it lives, answers to this folder's
-`benchmarks/REVIEW.md` beside its own folder's checklist.** A driver reading a child's clock is
-not one.
+**Code that times a run itself and hands the wall or rate back as its result - a file that prints
+it, or a function that returns it to whichever file calls it - a kernel race (a run timing two
+kernel variants - arms - against each other in one process), or a file `benchmarks/lcpp_bench.das`
+requires directly, wherever it lives, answers to this folder's `benchmarks/REVIEW.md` beside its
+own folder's checklist.** A driver reading a child's clock is not one.
 
-**A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc, a
-code comment, checked-in data a run produced, or a PR body - or adds a serving path or moves
-an existing one onto other code, or changes what a measured or served run with no flags and no
-environment overrides computes, applies `REVIEW_MEASUREMENT.md`.** A serving path is the
-end-to-end route a run takes from prompt to tokens; its compile tier (interpreted, JIT, AOT)
-and its cross target (a build for another platform) are part of it.
+**A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc outside
+`site*/` (repo root), a code comment, checked-in data a run produced, a commit message, or a PR
+body - or adds a serving path or moves an existing one onto other code, or changes what a
+measured or served run with no flags and no environment overrides computes, applies
+`REVIEW_MEASUREMENT.md`.** A serving path is the end-to-end route a run takes from prompt to
+tokens; its compile tier (interpreted, JIT, AOT) and its cross target (a build for another
+platform) are part of it.
 
 **A diff that adds a kernel, loop or call path the runtime re-enters per token, per frame, per
 prefill quantum - one batch of prompt tokens the prefill path processes in a single pass - or per
 media encode (an image, a video frame, an audio chunk), adds, moves, renames or removes a
-`[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]` annotation, changes a
-measurement driver under `benchmarks/`, `harness/` or `performance/`, or adds or changes a
-function under `tests/`, `harness/`, `benchmarks/` or `performance/` that calls into a region
-entry, wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file) together with
-this list.**
+`[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]` annotation, or adds or
+changes a test, harness, benchmark or performance-rig function that calls into a region entry,
+wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file) together with this
+list.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
@@ -67,17 +66,18 @@ area's tests, so a regression there goes unrun.
 **A dasLLAMA `[test]` file, wherever the diff puts it, and every `dasllama/` change answer to this
 folder's `tests/REVIEW.md` - open it; the walk does not surface it for a `dasllama/`-only diff.**
 
-**A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]` declares),
-or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes) change, a GPU kernel
-A/B race, a call that makes, arms or tears down device-home serving (`create_device_session`,
-`set_device_kv`, `moe_gpu_drop_model`), a knockout (an arm that skips a stage to measure that
-stage's cost), a hand-binding arm (one that writes buffer or kargs (kernel-argument struct)
-binding numbers as literals), or a kernel cell or probe that fills or binds a `TokMeta` block,
-wherever the diff puts it - applies `REVIEW_GPU.md`.**
+**A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]`
+declares), or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes)
+change, a GPU kernel timing race (two kernels timed against each other to pick one - not a data
+race), a call that makes, arms or tears down device-home serving - a session whose K/V region
+lives only on the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`) - a
+knockout (an arm that skips a stage to measure that stage's cost), a hand-binding arm (one that
+writes buffer or kernel-argument (kargs) binding numbers as literals), or a kernel cell or probe
+that fills or binds a `TokMeta` block, wherever the diff puts it - applies `REVIEW_GPU.md`.**
 
 **A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
-`[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture either emitter compiles - wherever
-the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.**
+`[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture the Metal or SPIR-V emitter
+compiles - wherever the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.**
 
 **A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it, a
 `.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a flavor
@@ -86,9 +86,8 @@ the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.**
 
 **A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`,
 `dasllama_audio_embedder.das`, `dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das`
-(all under `dasllama/`), or to an ASR family file - `dasllama_whisper.das`, `dasllama_parakeet.das`,
-`dasllama_canary.das`, `dasllama_gemma4a.das` or `dasllama_qwen3a.das`, each one speech-recognition
-family - applies `REVIEW_AUDIO.md`.**
+(all under `dasllama/`), or to an ASR family file - a `dasllama/` file holding one
+speech-recognition family's CPU model - applies `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
 `dasllama/dasllama_vision_embedder.das`, a vision family file - one `dasllama/dasllama_<family>.das`
@@ -111,30 +110,38 @@ file - one stage of the pass that turns text into phonemes (`dasllama/dasllama_t
 `harness/tts_model_card.md`), or a call that pins a TTS weight lane (`set_tts_q8` /
 `set_styletts2_q8` / `set_pocket_q8`), wherever the diff puts it, applies `REVIEW_TTS.md`.**
 
-**A diff that adds a file under `dasllama/`, or adds or moves a def, a `require`, or a module
-global in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the what-lands-where rules.
+**A diff that adds a file under `dasllama/`, or adds or moves a def, a class, a module global or
+named constant, or a `require` in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
+what-lands-where rules.
 
-**A diff that turns a weight-format id - a `KqFmt` member, a GGUF type number, or the int a generated
-kernel takes as its format parameter - into plane strides, or reads a per-block or per-element byte
-count of one format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
+**A diff that adds or changes a def in a file `REVIEW.das`'s `FACADE_FILES` lists, or makes
+another file's defs reach a consumer through `require dasllama/dasllama`, or adds an
+`[EnvConfig]` area struct, applies `REVIEW_FACADE.md` too.**
+
+**A diff that turns a weight-format id - a `KqFmt` member, a GGUF type number, or the int a
+generated kernel takes as its format parameter - into plane strides, or reads a per-block or
+per-element byte count of one format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
 
 **A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
-maintainer's ruling that rows measured before it can no longer be compared with rows after it; a
-change that invalidates only images never bumps it.** Every recorded row, tune sidecar and
-exchange entry carries the release, so a bump voids them all.
+maintainer's ruling that rows measured before it can no longer be compared with rows after it.**
+Every recorded row, tune sidecar and exchange entry carries the release, so a bump voids them all.
 
-**A function-typed global that a job (a forked context) invokes, or that a serialized exe must
-re-establish and no other file's `[init]` arms, lands in a `dasllama/` file beside the `[init]`
-that establishes it.** The `[init]` is the only code that runs where the global arrives unset.
+**A change that invalidates only images never bumps `DASLLAMA_RELEASE`.**
 
 **The `[init]` that establishes a function-typed global that a job (a forked context) invokes,
 or that a serialized exe must re-establish, re-establishes it when it reads null.** A serialized
 exe and a forked context restore globals as data, so a declaration initializer alone arrives null
 and dies at the first invoke while every `-jit` gate stays green.
 
-**Never reorder or merge the float multiplies in a function that builds a RoPE angle table
-(`dasllama/dasllama_rope.das`).** A regrouping moves the angles in the last bits and flips
-token-exact fixtures.
+**A function in `dasllama/dasllama_common.das` that performs work through a hook another module
+registers panics on the unset hook, with a message naming the module to require.** A function
+that returns quietly hides which registration a program root forgot.
+
+**A function in `dasllama/dasllama_common.das` that reports whether a hook another module
+registers is installed returns false when the hook is unset - never a panic.**
+
+**Weakening the token-exact RoPE fixtures - the tests that pin the angle tables
+`dasllama/dasllama_rope.das` builds - is a defect.**
 
 **A diff that sets a constant in `dasllama/` to the value a timing of candidate values chose, or
 that adds or changes a predicate there that picks among kernel variants computing the same result
@@ -147,10 +154,10 @@ else that changed between the runs, so they cannot pick a candidate.
 **A diff that adds an allocation whose size grows with a scaling count states that size in bytes
 in a `PERF_LEDGER.md` row: at the largest shape the code path accepts, or, where the path accepts
 any value of the count, as a formula in the count with its value at two shapes that differ in
-it - a shape being one setting of the scaling counts.** A scaling count is a count
-the model file sets, how many tokens one step computes at once, how many rows one media encode
-feeds (an image's patches, a clip's frames), or how many regions one buffer is split into (the K/V
-cache's device copy, one region per request served at once; an MoE dispatch's expert regions).
+it - a shape being one setting of the scaling counts.** A scaling count is a count the model file
+sets, how many tokens one step computes at once, how many rows one media encode feeds (an image's
+patches, a clip's frames), or how many regions one buffer is split into (the K/V cache's device
+copy, one region per request served at once; an MoE dispatch's expert regions).
 
 **A diff after which an existing allocation's size starts or stops growing with a scaling count
 ships the measured pair - peak footprint and wall-clock - in `PERF_LEDGER.md`, with the decision
@@ -160,9 +167,9 @@ it settles.**
 `mm_fblob_b`, per-head `gemm_f32` / `gemm_f32_jo`, or an f32 GPU mm - outside a
 correctness-comparison path (one whose only job is to produce a reference result to check another
 against), where a faster-format twin on the same backend already serves the same weights and
-shape, is a defect - call that twin instead.** A site that must stay f32 for another reason is ledgered on its own file's
-sec.1 charter line - the line naming what that file holds - in an `ARCHITECTURE_*.md` companion; a
-comment at the call site does not discharge this.
+shape, is a defect - call that twin instead.** A site that must stay f32 for another reason is
+ledgered on its file's charter line (the line, in the companion `ARCHITECTURE.md#file-charters`
+routes to, that says what the file holds); a comment at the call site does not discharge this.
 
 **A caller never re-checks a guard its callee checks - drop the caller's copy.** An edit to either
 copy leaves the caller testing a condition the callee no longer applies.
@@ -175,7 +182,8 @@ a `@sidecar` event instead.** A supervised or piped boot must never block on inp
 the profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the Vulkan
 tier's `vk_prof()`-gated ledgers and logs), a cold one-shot load, bake, map or tokenizer-build
 progress log, or the first-start kernel race report of a fat exe (one built `DAS_TUNE_MODE=fat`,
-shipping its tune profile), is a defect - route it through a rail (`ARCHITECTURE_MEASUREMENT.md` sec.2.10).**
+shipping its tune profile), is a defect - route it through a rail
+(`ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails`).**
 
 **In an engine file (`dasllama/`), a clock value that changes what the program DOES - control
 flow, eviction, a generated name; not a reported wall-clock time or a best-of reduction over
@@ -196,11 +204,11 @@ or file key, the setter's name - and, for one on unless turned off, the spelling
 
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, or any other checked-in
 document, all outside this folder, left showing the old call, flag, default, or stated behaviour
-after a change to user-facing API is the change's defect, not the docs'.** User-facing is
-anything a consumer outside this repo can depend on - what it calls, types, requires or parses
-(facade functions, CLI flags, environment knobs, file formats, defaults, what the installed SDK
-lets a program `require`) - plus the in-repo rig and tool surface: any output another tool
-parses. A console-only diagnostic is not user-facing.
+after a change to user-facing API is the change's defect.** User-facing is anything a consumer
+outside this repo can depend on - what it calls, types, requires or parses (facade functions, CLI
+flags, environment knobs, file formats, defaults, what the installed SDK lets a program
+`require`) - plus the in-repo rig and tool surface: any output another tool parses. A
+console-only diagnostic is not user-facing.
 
 **A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
 `//` comments, or string data, any language - or in a document outside this folder whose own
@@ -217,27 +225,28 @@ naming it beside the facade. The allowed set is the table in the lint.
 
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
-owns, or a consumer `ARCHITECTURE_ENGINE.md` sec.1.8 names as ruled** - a symbol the facade
-lacks is added to `dasllama/dasllama.das`, not obtained by adding this option to the consumer. A
-`require ... public` that re-exports an engine module OUT of a file carrying this option,
-beyond what that consumer's ruled charter grants, breaks this rule too.
+owns, or a consumer `ARCHITECTURE_ENGINE.md#instrumentation-and-support` names as ruled** - a
+symbol the facade lacks is added to `dasllama/dasllama.das`, not obtained by adding this option to
+the consumer. A `require ... public` that re-exports an engine module OUT of a file carrying this
+option, beyond what that consumer's ruled charter grants, breaks this rule too.
 
 **An edit that stops a check of any `REVIEW.das` under this folder firing without fixing what it
 flagged is a defect:** dropping a check, narrowing what the gate walks - a file or folder it stops
-reading - rewriting a finding text so it no longer names what failed, adding a name to a check's licensed
-set - the names that check does not flag - or re-stamping a pinned
-hash, count or list, where that check's own finding text does not sanction the addition or the
-re-stamp; the gate itself says what it enforces.
+reading - rewriting a finding text so it no longer names what failed, adding a name to a check's
+licensed set - the names that check does not flag - or re-stamping a pinned hash, count or list,
+where that check's own finding text does not sanction the addition or the re-stamp; the gate
+itself says what it enforces.
 
 **A new check in any `REVIEW.das` under this folder, or a check whose licensed set gains a name,
 names in its finding text the rule it enforces and ships its line in the `ARCHITECTURE_*.md`
 companion section carrying the charter of the feature the check guards - not the file its sites
-sit in; never `ARCHITECTURE.md` - in the same change.** The
-line names the check and the names it licenses; when the check licenses no names, the line says so.
+sit in; never `ARCHITECTURE.md` - in the same change.** The line names the check and the names it
+licenses; when the check licenses no names, the line says so.
 
-**Checked-in text - docs, comments, or string data, any language - that
-describes a reference-build mechanism, or names that build, its binaries or symbols, wherever the
-diff puts it - and the commit message or PR body of such a diff - applies `REVIEW_UPSTREAM.md`.**
+**Checked-in text - docs, comments, or string data, any language - that describes a mechanism of
+the reference build (any third-party engine, library or runtime whose figure a sentence compares
+with this module's own), or names that build, its binaries or symbols, wherever the diff puts it -
+and the commit message or PR body of such a diff - applies `REVIEW_UPSTREAM.md`.**
 
 **A diff that changes what authoring a new weight format entails - a step added or dropped, a
 file the author must touch, a fixture or probe entry the format must supply, or a gate it must
@@ -249,24 +258,13 @@ a model card (the provenance-and-licence page beside a released model or pack), 
 `THIRD_PARTY_NOTICES.md`, the `LICENSE.*` files, or a ledger row naming a licence as a reason to
 adopt or reject a model, a dataset, or a dependency; anywhere else in prose it is a defect.**
 
-**A def of a facade file - one whose defs reach a consumer through `require dasllama/dasllama`;
-`REVIEW.das`'s `FACADE_FILES` is the list - and a new OVERLOAD of one, is TAUGHT: demonstrated in
-runnable code in a `tutorials/dasLLAMA/*.das` source that calls that def - for an overload, with
-that overload's argument types - (a mention that only names it - a comment, a passing reference -
-does not count) and narrated on a `doc/source/reference/tutorials/dasLLAMA_*.rst` page.**
-`REVIEW.das`'s `check_tutorial_floor` matches def NAMES only, so an overload passes it on a
-sibling's tutorial.
-
-**A diff that makes another file's defs reach a consumer through `require dasllama/dasllama`
-adds that file to `REVIEW.das`'s `FACADE_FILES` in the same change.**
-
-**A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A struct
-the renderer never emits is absent from `ENVIRONMENT.md` and every test; one it emits but the
-registry does not, `tests/test_env_registry.das` catches.
-
 **A diff that moves a family encode stage - a `dasllama/dasllama_<family>.das` stage that turns
-input into embeddings - onto a GPU hook leaves the CPU form in place and
-changes none of its arithmetic.** The CPU form serves every box with no driver.
+input into embeddings - onto a GPU hook leaves the CPU form in place and changes none of its
+arithmetic.** The CPU form serves every box with no driver.
+
+**A call to a `set_*_q8` lane setter - one that picks whether a model family's weights run the
+q8 or the float path - is followed at once by a `defer()` calling its `reset_*_q8` twin.** A pin
+still set after its caller returns silently changes the lane of the next model the process loads.
 
 **A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
 `TUNE_KNOWN_FEATURES` (`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it
@@ -286,5 +284,4 @@ count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`, `grow_re
 pair spelled out - however small the count looks.** PERF032 checks only `@exact_size` arrays - it
 flags a `resize` with no `reserve` or `ensure_capacity` earlier in the function, and never
 compares the counts - so an undeclared buffer gets no lint; a bare grow past the heap's
-unreserved-size cap panics the load on the first big model,
-not at the call site.
+unreserved-size cap panics the load on the first big model, not at the call site.

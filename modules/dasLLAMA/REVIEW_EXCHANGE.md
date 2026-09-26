@@ -3,11 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_ENGINE.md`.
 
-**Routed from `REVIEW.md`: a change to the sidecar-exchange client
-(`dasllama/dasllama_exchange.das`), or to a tune-boot path that reaches it, applies this
-list together with `REVIEW.md`'s.** A `dashv` call under `harness/` answers to
-`harness/REVIEW.md`; the gate that keeps the engine to one exchange client answers to
-`performance/REVIEW.md`.
+A `dashv` call under `harness/` answers to `harness/REVIEW.md`; the gate that keeps the engine to
+one exchange client answers to `performance/REVIEW.md`.
 
 **Never add a second HTTP path to the sidecar exchange - every HTTP call (lookup, download,
 submit) goes through `dasllama/dasllama_exchange.das`.**

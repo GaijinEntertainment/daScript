@@ -3,8 +3,6 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_ENGINE_FORMATS.md`. Planned work: `followup_general.md`.
 
-**Routed from `REVIEW.md`: a diff that checklist routes here applies this list together with it.**
-
 **A change to `encode`/`bpe_encode`, or to a function they call at encode time (not one that only
 supplies a metadata default at load) in `dasllama/dasllama_spm.das`, `dasllama/dasllama_bpe.das`
 or `dasllama/dasllama_pretok.das` - `encode` being `dasllama_spm.das`'s and `bpe_encode`

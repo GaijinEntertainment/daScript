@@ -29,7 +29,7 @@
    deletes.** `finish_pending_step` (dasllama_metal_common) lands the in-flight batch step by
    memcpy-ing KV rows and logits through `BatchLanding.sessions[i]` - raw borrowed pointers - and
    the batch driver's pre-encoded step parks the same pointers, uncommitted, in the other slot
-   (`ARCHITECTURE_GPU_MTP_DECODE.md` sec.2.38a). Nothing
+   (`ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode`). Nothing
    quiesces on session death, `metal_decode_flush` (the public landing call) has zero callers,
    and every test helper deletes its sessions right after `eval_batch_` with a step potentially
    pending - a landing after those deletes writes into freed heap. Empirically quiet today
@@ -898,7 +898,7 @@
     `trace_marker`, `JOBQUE_PROFILING`-compiled, `utils/jobque-timeline` with per-category stats),
     the `prof_add` / `forward_profile_*` decode buckets (197 sites in 17 files) and the
     `asr_prof_add` encode buckets (147 sites in 12 files, the TTS generator's `tts.gen.*` among
-    them) - and `REVIEW.md`'s clock rule plus `ARCHITECTURE_MEASUREMENT.md` sec.2.10 name all
+    them) - and `REVIEW.md`'s clock rule plus `ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails` name all
     three, which is how the second and third were built without anyone noticing. Done, as its own
     PR: (1) every `prof_add` / `asr_prof_add` site becomes a marker category (a `TRACE_TAG_*` block
     per family beside the ASR ones); (2) the consumers of the bucket tables - the `PROF` rows in
@@ -1334,7 +1334,7 @@
    or `lint.rst` section whose id no module still emits). (g) `utils/REVIEW.das`: a test file under
    `utils/` named in no workflow row, or only in a `--compile-only` row. (h) `site-dasllama`: a
    `_stories/*.md` entry with neither a figures comment nor a date and sha. (i) `dasLLVM`: every
-   `[EnvConfig]` field of `llvm_env.das` named in `ARCHITECTURE.md` sec.3; every `requires=` /
+   `[EnvConfig]` field of `llvm_env.das` named in `ARCHITECTURE.md#inherited-invariants`; every `requires=` /
    `g_target_x64_*` feature name present in `das_cpu_supports`. (j) `dasllama-server`: a fixture's
    top-level key absent from `README.md`. (k) `REVIEW_IMAGE`: an addition on the left of a
    `> msize` compare in `dasllama_image.das`; `REVIEW_TTS`: `styletts2_synthesize` carries
@@ -1619,7 +1619,7 @@
     here.
 146. **ACCEPTED, not planned: the dev-W bake set follows the minting program, not the box.** The
     split-scale `devwf16` panels bake only where the Metal prefill module registered its CPU
-    mirror (`ARCHITECTURE_IMAGE.md` sec.2.1h), so a program on the same box built without that
+    mirror (`ARCHITECTURE_IMAGE.md#image-devw-plane`), so a program on the same box built without that
     module mints a thinner image at the SAME identity and every site it skipped serves off the
     runtime dequant until a program carrying the mirror re-mints. Ruled acceptable: a `.dlim` is
     a box-local cache, so the thinner image costs a dequant pass and never a different answer.
@@ -1767,7 +1767,7 @@
     `dasllama_config.das`) is a global, a setter with its clamp and a getter written by hand,
     and `apply_box_profile_runtime_at` walks the same facts a third time. Done looks like: one
     knob declaration (name, default, clamp, env name, JSON key) generating the pair and the
-    profile apply, the `[EnvConfig]` shape `ARCHITECTURE_RUNTIME.md` sec.2.9 uses; the unused
+    profile apply, the `[EnvConfig]` shape `ARCHITECTURE_RUNTIME.md#env-knobs` uses; the unused
     `set/get_embed_par_threshold` pair goes with it.
 161. **`kq_fmt_of`'s native-knob gates branch on the format by hand.** Which formats a box's knobs
     admit natively is an if-ladder over the enum where every other lookup walks `kq_desc`. Done
@@ -1813,3 +1813,10 @@
    Done = `lcpp_bench --tts -m <gguf>` serves the g2p corpus's first N sentences at a named
    voice and prints the per-sentence wall and the real-time factor as its other modalities do,
    `gen_bench_records` carries a `tts` workload, and the StyleTTS2 ledger entry cites the row.
+
+167. **`harness/tune_kernels.das`'s validation re-times CPU benches after the backend pin.**
+   `run_validation` re-runs the changed CPU benches after `dot_q8q8_laneq4x4` has pinned one
+   matmul backend for the rest of the process, so a re-timed bench runs against the pinned
+   backend instead of the one it would have picked - the ordering `harness/REVIEW.md`'s timing
+   rule forbids for a new timing. Done = the validation pass orders its re-runs ahead of the
+   pinning bench, or re-runs them in a child process, and a cell holds the order.

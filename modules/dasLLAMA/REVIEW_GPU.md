@@ -4,32 +4,17 @@
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned
 work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
 
-**A diff that files GPU planned work - work that would change a kernel, a GPU driver, or a
-dispatch - in `followup_general.md` is a defect** - it goes to `followup_metal.md` or
-`followup_vulkan.md`.
-
 **A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather
-than to serve a call - wherever the diff puts it, applies `REVIEW_GPU_RACE.md` too.**
+than to serve a call: a timing race between kernels, a knockout, an overhead measurement -
+wherever the diff puts it, applies `REVIEW_GPU_RACE.md`, the timing-race checklist, too.** A data
+race between serving dispatches is not a timing race.
 
 **A diff changing a property of a kernel class that a timing arm or a test-side dispatcher
-restates rather than reads - a binding number, the kargs (kernel-argument struct) layout, the
-layout of a struct a bound buffer holds, threadgroup memory, a staging shape, the grid or
-threadgroup geometry - or a kernel class's branch selection or the precision it computes a step
-at, applies the `tests/` subfolder's `REVIEW_KERNEL_CELLS.md` for the test-side dispatchers that
-dispatch or bind the class.**
-
-**A diff that changes a kernel's binding numbers, its kernel-argument struct or push-constant
-layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
-into that memory before it computes), or its grid, threadgroup or workgroup geometry resyncs or
-deletes, in the same change, every timing arm that mirrors that kernel's binding order by hand or
-by an ordered setter list and every arm ledgered as that kernel's retained reference.** An arm
-left dispatching stale geometry measures the wrong kernel silently.
-
-**A diff that changes what a kernel's body computes resyncs or deletes, in the same change, every
-timing arm that carries that body as a hand-written twin, and every arm ledgered as that kernel's
-retained reference; a diff that routes a shape to a sibling kernel class resyncs, in the same
-change, the arms that dispatch the old class at that shape.** An arm timing a body the shipped
-kernel no longer runs at that shape measures the wrong kernel silently.
+restates rather than reads - a binding number, the kargs (kernel-argument struct) or
+push-constant layout, the layout of a struct a bound buffer holds, threadgroup or workgroup
+memory, a staging shape, the grid, threadgroup or workgroup geometry - or a kernel class's branch
+selection or the precision it computes a step at, applies the `tests/` subfolder's
+`REVIEW_KERNEL_CELLS.md` for the test-side dispatchers that dispatch or bind the class.**
 
 **A diff touching a tower driver (`dasllama/dasllama_metal_tower.das`,
 `dasllama/dasllama_vulkan_tower.das`), a kernel class or builder a tower dispatches, a
@@ -59,32 +44,60 @@ loop with its guards and bounds, a cooperative op, a staged or padded operand, a
 fill, a chunk step and its alignment gate, a bucket-ordered read - wherever the diff puts it,
 applies `REVIEW_GPU_KERNEL_BODY.md` too.**
 
-**A device buffer a dispatch writes is sized to every element the dispatch's full grid writes,
-never to the live count of rows, keys or chunks.** A dispatch writes whole tiles past the live
+**A diff that changes the bound a dispatch hands a kernel (a row, key or element count a record
+or kargs field carries) or the size a buffer the kernel reads is allocated at, wherever the diff
+puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.** A kernel read's range
+depends on both, and a host-only change reaches no kernel file.
+
+**A diff that names GPU-vs-CPU parity evidence - a run, a log, a claim - or changes the text of
+a Vulkan serving log line (`resident driver armed`, a `GPU MoE tier:` line, `resident override
+passed a call`) applies `REVIEW_GPU_PARITY.md` too.**
+
+**A diff that files GPU planned work - work that would change a kernel, a GPU driver, or a
+dispatch - in `followup_general.md` is a defect** - it goes to `followup_metal.md` or
+`followup_vulkan.md`.
+
+**A diff that changes a kernel's binding numbers, its kernel-argument struct or push-constant
+layout, its threadgroup or workgroup memory, its staging shape (the operand tile a kernel copies
+into that memory before it computes), or its grid, threadgroup or workgroup geometry resyncs or
+deletes, in the same change, every timing arm that mirrors that kernel's binding order by hand or
+by an ordered setter list and every arm ledgered as that kernel's retained reference.** An arm
+left dispatching stale geometry measures the wrong kernel silently.
+
+**A diff that changes what a kernel's body computes resyncs or deletes, in the same change, every
+timing arm that carries that body as a hand-written twin, and every arm ledgered as that kernel's
+retained reference; a diff that routes a shape to a sibling kernel class resyncs, in the same
+change, the arms that dispatch the old class at that shape.** An arm timing a body the shipped
+kernel no longer runs at that shape measures the wrong kernel silently.
+
+**Never size a device buffer a dispatch writes to the live count of rows, keys or chunks - size
+it to every element the dispatch's full grid writes.** A dispatch writes whole tiles past the live
 rows, and a batched attention writes, for every row, as many key chunks as the row at the largest
 position has, so a buffer sized to the live count is overrun silently into whatever the pool put
 next to it.
 
-**A row-splitting GEMM encoder - one that dispatches a subset of a site's output rows at an
-offset - is called only where the width it is given equals the row stride the site writes with,
-so a wider-row site passes the full stride as that width or dispatches the padded tile instead
-of splitting.** A split row writes at `row x dispatched-width`, so a wider-row caller lands its
+**Never call a row-splitting GEMM encoder - one that dispatches a subset of a site's output rows
+at an offset - where the width it is given differs from the row stride the site writes with; a
+wider-row site passes the full stride as that width or dispatches the padded tile instead of
+splitting.** A split row writes at `row x dispatched-width`, so a wider-row caller lands its
 split rows on the row beside them.
 
-**A scratch buffer a dispatch writes is never rebound for a new write before the reader of
-its previous write is encoded - rotate through as many buffers as the chain has dispatches in
-flight between a write and its read.** One shared scratch serializes the whole chain through
-its write-after-read hazards.
+**Never rebind a scratch buffer a dispatch writes for a new write before the reader of its
+previous write is encoded - rotate through as many buffers as the chain has dispatches in flight
+between a write and its read.** One shared scratch serializes the whole chain through its
+write-after-read hazards.
 
-**A diff that divides one op's work across two or more dispatches at a work size where one
-dispatch's scratch buffer fits under the path's byte ceiling - the largest scratch buffer the path
-lets one dispatch allocate - on a new path or on one that had a single dispatch - gates the path
-in the same change on the quantity the split divides (its K, key span or row count), or on the path's work size when it divides none of these. The gate's threshold,
-or the decision to ship no gate, comes from measurements at the smallest and the largest value the
-quantity takes on the workloads the path serves, both in the PR body; no gate ships only where the
-split wins at both ends.** The small-work regression hides behind the big-work win.
+**A diff that raises a path's dispatch count for the same result - it divides one op's work
+across two or more dispatches - at a work size where one dispatch's scratch buffer fits under the
+path's byte ceiling (the largest scratch buffer the path lets one dispatch allocate), on a new
+path or on one that had a single dispatch, gates the path in the same change on the quantity the
+split divides (its K, key span or row count), or on the path's work size when it divides none of
+these. The gate's threshold, or the decision to ship no gate, comes from measurements at the
+smallest and the largest value the quantity takes on the workloads the path serves, both in the
+PR body; the path ships ungated only where the split wins at both ends.** The small-work
+regression hides behind the big-work win.
 
-**A diff that changes a tile, grid, threadgroup, or uniform constant shows the value at every
+**A diff that changes a tile, grid, threadgroup, or uniform constant sets the new value at every
 authoritative site its kind has, in the same change.** The sites per kind: the generated `*_msl`
 global for a Metal in-body tile, the `@workgroup` declaration or `local_size_x` for a Vulkan one;
 a `@template_constant`'s default and each stamp's `override` for a constant a template stamps;
@@ -99,18 +112,17 @@ function - by showing that for every shape the encoder dispatches that class on,
 picks is the one that function's value names.** The `grid=` spec carries no number for these
 classes, so nothing else ties the two.
 
-**A key that decides whether uploaded bytes, a cached descriptor set or bind list, or encoded GPU
-work may be reused compares every input that content was built from - every span, element type,
-layout, position, offset and model shape, the row count, and each row's session by its `uid`,
-never by a session pointer.** The scheduler moves sessions in memory as it admits and erases
-streams, so a pointer key reuses stale content silently.
+**Never let a key that decides whether uploaded bytes, a cached descriptor set or bind list, or
+encoded GPU work may be reused skip an input that content was built from - it compares every
+span, element type, layout, position, offset and model shape, the row count, and each row's
+session, or any other state the content was built for, by a stable id (a session's `uid`) or a
+generation, never by its address.** The scheduler moves sessions in memory as it admits and erases
+streams, so an address key reuses stale content silently.
 
-**A reuse key over content that reads a device buffer that growing frees and allocates again
-also compares a counter bumped on each reallocation, or the reallocation drops every cached entry
-built over the old buffer - never a host address, an offset or a handle alone.** An address, offset or handle names whatever occupies it now.
-
-**A `dasllama/` file that creates its own GPU device or queue is a defect - a GPU family shares
-the one device and queue from `dasllama/dasllama_<gpu>_common.das`'s init.**
+**Never key reuse of content that reads a device buffer that growing frees and allocates again
+on a host address, an offset or a handle alone - also compare a counter bumped on each
+reallocation, or drop every cached entry built over the old buffer at the reallocation.** An
+address, offset or handle names whatever occupies it now.
 
 **Weakening `REVIEW.das`'s device-creation check is a defect - a new name in
 `DEVICE_CREATION_FILES` or `DEVICE_CREATION_FUNCTIONS`, or a device- or queue-creating call
@@ -139,7 +151,7 @@ readiness, whether this window's rope tables are staged, is asked by `prefill_de
 `set_*_hook(s)` slot in `dasllama/dasllama_gpu_tier.das`), a hook a GPU driver registers in a
 model family's registry, or a prefill builder a tower driver borrows names it - a seat by its
 `install_*` / `set_*` name, a registered hook by the seat's register function, a builder by its
-name - in the same change, in the row of `ARCHITECTURE_GPU.md` sec.1.5's role table for the file
+name - in the same change, in the row of `ARCHITECTURE_GPU.md#gpu-backends`'s role table for the file
 that fills, registers or borrows it.**
 
 **A diff that adds or removes a registered override only one GPU backend files
@@ -148,7 +160,7 @@ aside); a `dasllama/dasllama_gpu_tier.das` seat Metal fills; a function one back
 no counterpart under the other backend's prefix - the same name after the prefix, the same role -
 called by code outside that backend's files; a `[metal_dispatch]` or `[vk_dispatch]` argument or
 field annotation the other lens lacks; or a decode or prefill behavior only one backend's drivers
-provide - lands its own entry in `ARCHITECTURE_GPU.md` sec.1.5's closed asymmetry list in the
+provide - lands its own entry in `ARCHITECTURE_GPU.md#gpu-backends`'s closed asymmetry list in the
 same change, even when the list already carries one of the same class.** One backend serving the
 same path faster or slower is not such a change.
 
@@ -164,11 +176,8 @@ seams (`dasllama/dasllama_vulkan_seams.das`) the call routes through.
 ships no parity runs names both compares in the PR body: its emitted kernels byte-identical
 before and after - the `*_msl` globals or the AIR (Metal's compiled shader IR) they build into,
 the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes - and the host's stamp and dispatch selection
-unchanged on every input.** Only both compares
-together show the change cannot alter what the path computes or selects.
-
-**A diff that names GPU-vs-CPU parity evidence - a run, a log, a claim - applies
-`REVIEW_GPU_PARITY.md` (beside this file) for what counts as evidence, together with this list.**
+unchanged on every input.** Only both compares together show the change cannot alter what the
+path computes or selects.
 
 **A diff that adds a call site handing a whole GPU decode or prefill call the device served before
 the diff to the CPU path is a defect - it ships the device path in the same change.** A call that
@@ -178,9 +187,9 @@ runs on the CPU gives the user who selected the GPU a fraction of its speed.
 reads a weight plane once per row rather than once for all the step's rows, for any model it
 serves, is a defect: it ships that plane's batched read - one read serving every row of the
 step - in the same change, or the arm declines that model by name and that backend's
-architecture doc - `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao for Vulkan,
-`ARCHITECTURE_GPU_MTP.md` sec.2.37a for Metal - gains the kinds of layer the batched step does
-not serve.** The weight stream is what the batch amortizes.
+architecture doc - `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command` for Vulkan,
+`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify` for Metal - gains the kinds of layer the batched step
+does not serve.** The weight stream is what the batch amortizes.
 
 **A diff in `dasllama/` that calls `create_device_session`, or turns a scheduler's device mode
 on (`set_device_kv`), shows at that call site that the live device-home sessions - a device-home
@@ -210,10 +219,10 @@ bakes.** Parity runs never reach it.
 **An f16 store into any device buffer holding K or V rows that does not clamp to the f16 finite
 range (+/-65504) is a defect.**
 
-**A per-layer K/V panel (the per-layer device K/V slab the prefill GEMMs write; the Vulkan
-resident mirror is one) or mirror slab that aliases another layer's is gathered, stored and
-released only through its source layer.** An aliasing layer that gathers, stores or releases
-a second time double-frees the panel or overwrites the source's rows.
+**Never gather, store or release a per-layer K/V panel (the per-layer device K/V slab the prefill
+GEMMs write; the Vulkan resident mirror is one) or mirror slab that aliases another layer's
+through the aliasing layer - do it only through its source layer.** An aliasing layer that
+gathers, stores or releases a second time double-frees the panel or overwrites the source's rows.
 
 **A resident override that touches the mirror before gating the session on the armed mirror
 codec and on the flat (non-paged) cache is a defect** - a resident override is a
@@ -224,19 +233,20 @@ decode/prefill hook `dasllama/dasllama_gpu_resident.das` registers in
 same-codec session rows and mirror rows.** A cross-codec copy corrupts the host's authoritative
 cache.
 
-**A GPU path that runs a recurrent (deltanet) forward itself zeroes the deltanet state on a
-call at position zero, and declines every call at a nonzero position other than the next
-position the state it advances expects - `Session.dn_pos` for the host state, `DnMirror.pos`
-for a device mirror.** It runs the whole forward itself, so the engine's own forward-only guard
-never runs.
+**A diff that adds or changes a GPU path that runs a recurrent (deltanet) forward itself makes it
+zero the deltanet state on a call at position zero, and decline every call at a nonzero position
+other than the next position the state it advances expects - `Session.dn_pos` for the host
+state, `DnMirror.pos` for a device mirror.** It runs the whole forward itself, so the engine's
+own forward-only guard never runs.
 
-**A module-level variable in a GPU driver file whose value derives from any loaded model's weights
-(a served model, a draft or tower model, a TTS voice) gets a model-swap discharge in the same
-change that adds it: a path the unload or reload of those weights runs that returns the variable
-to its no-model value.** The discharge paths: for a Vulkan driver file, a reset
-`moe_gpu_model_marks_restore_` or `moe_gpu_drop_model_` runs - in its body, or in a listener the
-file registers with `register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`), which the
-drop runs; for every Metal driver file, the tower driver included, `register_reload_prep`
+**A module-level variable in a GPU driver file whose value derives from a loaded model's weights,
+or names, sizes or points at device content built from a loaded model (a served model, a draft
+or tower model, a TTS voice), gets a model-swap discharge in the same change that adds it: a path
+the unload or reload of that model runs that returns the variable to its no-model value.** The
+discharge paths: for a Vulkan driver file, a reset `moe_gpu_model_marks_restore_` or
+`moe_gpu_drop_model_` runs - in its body, or in a listener the file registers with
+`register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`), which the drop runs; for every
+Metal driver file, the tower driver included, `register_reload_prep`
 (`dasllama/dasllama_metal_common.das`). A global with no discharge survives a model swap and
 routes the next model's dispatches at the old model's planes.
 
@@ -258,11 +268,9 @@ format to `kq_fmt_gpu_supported`, or, for an expert plane, to `moe_fmt_metal_ser
 `dasllama/dasllama_metal_shapes.das`), in the same change.** Those predicates are what declines
 an unserved format, so an unlisted format decodes under whatever the pick's default arm holds.
 
-**A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format lands,
-in the same change, the format's compiled pipeline (its `g_pf_pso_ple_gather*` global with its
-compile and release lines), its arm in the PSO pick `ple_gather_pso_of` and its arm in the
-encode ladder `pf_enc_ple_gather_fmt` (all in `dasllama/dasllama_metal_prefill.das`), and
-`metal_ple_pre_gpu_gate` admits the format only where the table's base and row stride are whole
-superblocks of that format's own block size.** A format with a pick and no pipeline declines to
-the CPU gather silently; one with a pipeline and no encode arm, or a base off its own lattice,
-is gathered under a layout that is not its own.
+**A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format makes
+`metal_ple_pre_gpu_gate` admit that format only where the table's base and row stride are whole
+superblocks of the format's own block size.** A base off the format's own block grid is gathered
+under a layout that is not its own.
+
+**Weakening `check_ple_gather_sites` in `REVIEW.das` is a defect.**

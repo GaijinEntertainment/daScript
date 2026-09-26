@@ -1606,7 +1606,7 @@ GC, flavors) lives in the image suites alone (`test_model_image`, `test_model_im
 
 ## Metal fixtures - driver knobs and the two-model pattern
 
-The establish-and-restore obligation is `REVIEW.md`'s. The mechanism: the hooks are on by
+The establish-and-restore obligation is `REVIEW_LANE_PINS.md`'s. The mechanism: the hooks are on by
 default. They flip a q8 leg to the GPU silently, and an f32 leg records a quant_mode decline
 that panics under required mode. Either way the cell stops measuring what its name says. The
 family serving-lane pins (`set_<family>_q8`) are the same trap in the other direction: an

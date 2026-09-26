@@ -34,7 +34,7 @@ of `|w|*|x|` feeding it - in the same change.** The channel-major form is what t
 any GPU driver are checked against.
 
 **A rows kernel whose result depends on how its row blocks split across the parallel workers
-is a defect.** How a rows kernel stays split-invariant is `ARCHITECTURE_TTS.md` sec.2.28.
+is a defect.** How a rows kernel stays split-invariant is `ARCHITECTURE_TTS.md#tts-two-layouts`.
 
 **A new arithmetic path in `dasllama/dasllama_tts_blocks.das` - a kernel, a weight lane of one,
 a layout, or a window form of one (a form that computes one window of the whole-row result at a
@@ -55,12 +55,9 @@ pass the consumer (`rows`, `rows_only`) so `conv1d_prepare` / `linear_prepare` d
 layout nobody reads.**
 
 **A caller that pins a TTS weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8`)
-around a load resets it (`reset_tts_q8` / `reset_styletts2_q8` / `reset_pocket_q8`) before
-returning, on every path out, panics included - pin through `defer()` - and pins in the context
-that loads: a `new_thread` context starts every module global at its declared default, so a
-worker that wants a lane pins where it loads, never through the context that spawned it.** A pin
-that outlives its load silently changes the lane of the next model loaded in the process; a pin
-set in another context never arrives.
+for a load pins in the context that loads, never through the context that spawned it.** A
+`new_thread` context starts every module global at its declared default, so a pin set in another
+context never arrives.
 
 **A diff that reorders the float operations, or changes the rounding of any step, of the phase
 the CPU harmonic source builds in `dasllama/dasllama_tts_blocks.das` - the cycles, the resamples,
@@ -78,7 +75,7 @@ step - implemented in a TTS family file is a defect; it goes in
 **Family BEHAVIOR in `dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` -
 a family-keyed branch, a tensor quirk, a symbol or token rule - is a defect; the quirk goes in
 its family file.** Family DATA is not: the shared carrier holds each family's data record and
-the reader that fills it from the gguf or the image (`ARCHITECTURE_TTS.md` sec.2.32).
+the reader that fills it from the gguf or the image (`ARCHITECTURE_TTS.md#tts-image-rail`).
 
 **A diff that adds a field to a family's data record on the shared carrier (`KittenFamily`,
 `KokoroFamily`) also serializes that field in `serialize_image_meta` and grows the field-count
@@ -103,8 +100,8 @@ the call site instead.**
 **A diff that makes a windowed stage a family file assembles from kernels - one that runs its
 input a window at a time over a carry, the state one window hands to the next - produce a result
 on the f32 lane that differs from the same stage run over the whole input in one pass by more
-than float rounding (a few ulp per element) is a defect** (`ARCHITECTURE_TTS_MEMORY.md` sec.2.53,
-`ARCHITECTURE_POCKET.md` sec.2.46).
+than float rounding (a few ulp per element) is a defect** (`ARCHITECTURE_TTS_MEMORY.md#tts-source-stream`,
+`ARCHITECTURE_POCKET.md#pocket-codec-stream`).
 
 **A diff that adds a windowed stage a family file assembles from kernels ships, in the same
 change, the cell that runs that stage windowed and over the whole input in one pass and holds the
@@ -112,7 +109,7 @@ two together within float rounding, in the `tests/` file that holds that stage's
 
 **A Pocket codec conv (`dasllama/dasllama_pocket.das`) carries its causal context as the
 stream's carry - the rows its taps reach before a window, zero or edge-replicated ahead of the
-first (`ARCHITECTURE_POCKET.md` sec.2.46) - and a diff that pads one symmetrically or trims the
+first (`ARCHITECTURE_POCKET.md#pocket-codec-stream`) - and a diff that pads one symmetrically or trims the
 final output by hand is a defect.**
 
 **A change to which quant format a published file stores a Pocket tensor in, or to its layout

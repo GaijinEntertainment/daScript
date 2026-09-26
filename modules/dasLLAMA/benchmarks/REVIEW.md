@@ -5,8 +5,21 @@ docs: `../ARCHITECTURE_MEASUREMENT.md`, `../ARCHITECTURE_MEASUREMENT_KERNEL_RACE
 work: `../followup_metal.md` for Metal, `../followup_vulkan.md` for Vulkan,
 `../followup_general.md` otherwise.
 
-**A GPU kernel timing arm - code that dispatches a kernel to measure it rather than to serve a
-call - wherever the diff puts it, applies `../REVIEW_GPU_RACE.md` too.**
+An instrument is a file that times a run itself and reports a wall-clock time or rate as its
+result, printed or returned to a caller that prints it; a file that reads a child process's clock
+is not one, and a serving path's profiler-gated report (a run whose result is the served output,
+the numbers a side report) is not one. A race times two candidates for one computation in one
+process, either of which the run could adopt; an arm is one candidate's timed run; a compared arm
+is one whose output the run reads back and measures against another arm's output or a CPU
+reference; the baseline arm is the arm running the implementation already in use. A served turn
+is one whole request the engine serves - a prefill-plus-decode run, or a transcription or
+synthesis end to end; a board cell is a timed cell whose rows land in `../performance/records/`
+or `../PERF_LEDGER.md`. A result row is a row carrying a time, a rate, or a per-kernel occupancy
+count. An A/B arm is one of two timed runs an instrument makes in ONE process that differ only in
+one flag or environment switch - the lever - set to a different value in each; off/on or graded.
+
+**Code that dispatches a GPU kernel to measure it rather than to serve a call, wherever the diff
+puts it, applies `../REVIEW_GPU_RACE.md` too.**
 
 **A diff that adds or changes an instrument that dispatches a `[tune]` kernel - one whose body
 the engine's tune selection picks, not one the instrument compiled itself and not a reference
@@ -14,32 +27,25 @@ tool's own runtime - calls `tune_gate()` (`../performance/profile_common.das`) b
 instrument's first timed rep, or - where the instrument cannot require this module's
 performance tree - stamps its rows with the tune manifest (`DAS_TUNE_MANIFEST`) or the class
 profile (`../performance/defaults/<class>.tune-defaults.json`) the run compiled
-against.** An instrument is a file that times a run itself and reports a wall-clock time or rate
-as its result, printed or returned to a caller that prints it; a file that reads a child process's
-clock is not one, and a serving path's profiler-gated report (a run whose result is the served
-output, the numbers a side report) is not one. Without the gate or the stamp the instrument
-measures fallback kernels silently.
+against.** Without the gate or the stamp the instrument measures fallback kernels silently.
 
 **A diff that adds or changes a race alternates its arms - one timed round per arm, best-of
-across rounds.** A race times two candidates for one computation in one process, either of which
-the run could adopt; an arm is one candidate's timed run; a compared arm is one whose output the
-run reads back and measures against another arm's output or a CPU reference. An instrument is
-reviewed arm by arm.
+across rounds.**
 
 **A diff that adds or changes a race reports each arm's row on its own - never two arms' numbers
 on one row.**
 
-**A diff that adds or changes a compared arm proves that output on its report line:** an arm
-whose result is bit-identical to the baseline's prints the bit-exact compare over the sampled
-region - the set of output elements the run compares - on the report's `bit-exact vs ...` line;
-every other arm prints a bounded-difference compare (against the baseline arm or the CPU
-reference) plus the bound it passed. How the arm orders its sums, and whether its multiply-adds
-fuse, decide bit-identity - not the declared precision.
+**A diff that adds or changes a compared arm prints on its report line either the bit-exact
+compare over the sampled region (the output elements the run compares), on a `bit-exact vs ...`
+line, when the arm's result is bit-identical to the baseline's, or else a bounded-difference
+compare against the baseline arm or the CPU reference plus the bound it passed.** How the arm
+orders its sums, and whether its multiply-adds fuse, decide bit-identity - not the declared
+precision.
 
 **A diff that adds or changes a race with a compared arm also checks the race's baseline arm
-against a CPU reference.** The baseline arm is the arm running the implementation already in
-use. The reference check runs in the same process, on the same output elements the arms are
-judged on. Two arms can agree and both be wrong; only the reference makes the winner right.
+against a CPU reference.** The reference check runs in the same process, on the same output
+elements the arms are judged on. Two arms can agree and both be wrong; only the reference makes
+the winner right.
 
 **A diff that adds or changes a race arm that is not a compared arm makes that arm carry the
 literal token `timing-only` on its report line.**
@@ -51,10 +57,7 @@ run of the file, chosen by its own flag or argument; a file with no mode flag is
 the line a reader takes the mode's arms for an adoption decision it never made.
 
 **A new instrument that puts its own clock around a served turn is a defect: add a board cell
-instead.** A served turn is one whole request the engine serves - a prefill-plus-decode run, or a
-transcription or synthesis end to end; a board cell is a timed cell whose rows land in
-`../performance/records/` or `../PERF_LEDGER.md`. A second instrument's numbers
-cannot be compared to any row the board already carries.
+instead.** A second instrument's numbers cannot be compared to any row the board already carries.
 
 **An out-of-process observer - a script watching a benchmark process from outside - never
 measures what that process can measure about itself; that measurement goes inside the process
@@ -90,17 +93,14 @@ into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes** (the engine's own emit
 **A diff that adds a result-row mode - to a new or an existing instrument - or changes how such
 a mode reports or exits, makes every result-row mode of that instrument exit non-zero on a run
 that reports no result row, whatever stopped it - wrong flags, a failed load, a device that
-declines.** A result row is a row carrying a time, a rate, or a per-kernel occupancy count. A run
-that matched nothing and reported success leaves a sidecar or a record untouched, and its caller
-cannot tell.
+declines.** A run that matched nothing and reported success leaves a sidecar or a record
+untouched, and its caller cannot tell.
 
-**A diff that adds an A/B arm, adds or changes a lever an instrument's A/B arm reads (wherever
-the lever lives - an engine file the bench requires included), or changes how such an arm reports
-or exits, makes that instrument exit non-zero when the lever does not change what the run
-executes - or, when the check runs before the arm, print a warning naming the inert lever.** An
-A/B arm is one of two timed runs an instrument makes in ONE process that differ only in one flag
-or environment switch - the lever - set to a different value in each; off/on or graded. A lever
-that silently no-ops prints a 1.00x row nobody can tell from a real tie.
+**A diff that adds an A/B arm, adds or changes a lever an instrument's A/B arm reads - a lever in
+a file under this folder or one `lcpp_bench.das` requires directly - or changes how such an arm
+reports or exits, makes that instrument exit non-zero when the lever does not change what the run
+executes - or, when the check runs before the arm, print a warning naming the inert lever.** A
+lever that silently no-ops prints a 1.00x row nobody can tell from a real tie.
 
 **A diff that adds or changes an A/B arm of an instrument over a prompt corpus makes that arm
 report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the
