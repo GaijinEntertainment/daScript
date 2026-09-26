@@ -77,7 +77,8 @@ body.** What a cell times changes when a change inside its timed body, to its in
 to the pinned reference build (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else
 deciding which reference binary or environment the run measures) moves the measured quantity; a
 change that alters nothing the timed body loads, runs, or counts does not. The new rows or
-the withdrawal land in `../performance/records/<box>.json`, the file the affected rows live in.
+the withdrawal land in the file the affected rows live in - `../performance/records/<box>.json`,
+or `../PERF_LEDGER.md` for the rows it holds (the Vulkan audio rows among them).
 
 **A diff that changes a GPU kernel emitter under this folder - a `[vk_dispatch]` or
 `[metal_kernel]` body or a `*_msl` source global - and ships no before/after rows for a board

@@ -51,11 +51,9 @@ let private WD_SITE_META_BYTES = 64l      //! a GEMV site's region pairs
 
 //! the hazard bits of the driver's buffers
 let private WD_X = 0x1u
-let private WD_XB = 0x2u
 let private WD_XQ = 0x4u
 let private WD_QKV = 0x8u
 let private WD_CQ = 0x10u
-let private WD_ATT = 0x20u
 let private WD_YO = 0x40u
 let private WD_H = 0x80u
 let private WD_PARTIALS = 0x100u
@@ -94,13 +92,11 @@ struct private WdResident {
     vxr_dev : uint64
     kc_dev : uint64
     vc_dev : uint64
-    x_dev : uint64        //! the step's rows: the residual stream, the normed rows, the Q8_0 feed
-    xb_dev : uint64
+    x_dev : uint64        //! the step's rows: the residual stream, its Q8_0 feed (the row passes quantize their output in place of storing it)
     xq_dev : uint64
     xs_dev : uint64
     qkv_dev : uint64
     cq_dev : uint64
-    att_dev : uint64
     yo_dev : uint64
     h_dev : uint64
     pms_dev : uint64
@@ -134,20 +130,30 @@ struct private WdResident {
     s_kvx_v : VkDescriptorSet
     oom : bool
     served_said : bool
+    handoff_miss_said : bool   //! the host-upload arm of the cross-KV chain said once: the tower landed no device plane for this window's rows
 }
 
 var private g_wd : WdResident
-var private g_wd_window_key = 0ul     //! the live window: ONE DecoderState at a time, claimed by a served cross-KV
+var private g_wd_window_uid = 0ul     //! the live window: ONE DecoderState at a time, claimed by a served cross-KV
 var private g_wd_window_live = false
-var private g_wd_pend_kx : float?
-var private g_wd_pend_vx : float?
+var private g_wd_pend_uid = 0ul       //! the state whose cross-KV CPU layouts wait on the device, `g_wd_pend_bytes` a plane's bytes (0 = none)
 var private g_wd_pend_bytes = 0l
-var private g_wd_pend_key = 0ul
-var private g_wd_dropped_key = 0ul   //! the state whose pending readback another state's window dropped; cleared when it starts a window
+var private g_wd_dropped : table<uint64>   //! the states whose waiting layouts were lost unread (another state's window, a release, a model drop); a state leaves it at its next window
+var private g_wd_uid_next = 1ul
 var private @scratch @exact_size g_wd_maps : array<uint>
 
+//! the driver's identity for a decoder state, minted at its first window: an address is not identity - a state freed and
+//! re-created at the same address inherits no window, no pending layouts and no mark
+def private wd_uid(var ds : DecoderState) : uint64 {
+    if (ds.gpu_uid == 0ul) {
+        ds.gpu_uid = g_wd_uid_next++
+    }
+    return ds.gpu_uid
+}
+
 //! Engage / decline counters: `windows` = cross-KV windows served, `steps` = decode batches, `tokens` = rows across them,
-//! `declines` = every decline but the knob's (a pinned-off driver is policy, not a failure).
+//! `declines` = every decline but the knob's (a pinned-off driver is policy, not a failure), `handoffs` = the served windows
+//! whose encoder rows came off the tower's device plane, no host upload.
 def vulkan_wdec_stats : tuple<windows : int64; steps : int64; tokens : int64; declines : int64; handoffs : int64> {
     let policy = (g_wd_declines.counts?["{VulkanWdecDecline.knob}"] ?? 0l)
     return (windows = g_wd_windows, steps = g_wd_steps, tokens = g_wd_tokens, declines = g_wd_declines.total - policy, handoffs = g_wd_handoffs)
@@ -196,28 +202,35 @@ def private wd_dev_buf(bytes : int64) : uint64 => soft_device_buf(g_wd.oom, byte
 [cold_path]
 def private wd_host_buf(bytes : int64; cached : bool) : HostBuf => soft_host_buf(g_wd.oom, bytes, cached)
 
+//! the waiting cross-KV layouts of `ds` (the caller matched `g_wd_pend_uid`) landed in its `kx` / `vx` - the state in hand, so the
+//! write lands in live memory
 [cold_path]
-def private wd_flush_cross_kv {
-    if (g_wd_pend_bytes == 0l) {
-        return
-    }
+def private wd_flush_cross_kv(var ds : DecoderState) {
     let r & = g_wd
-    readback_range(r.kx_dev, WD_KX, r.kvhost, g_wd_pend_kx, g_wd_pend_bytes)
-    readback_range(r.vx_dev, WD_VX, r.kvhost, g_wd_pend_vx, g_wd_pend_bytes)
+    var kxp = unsafe(addr(ds.kx[0]))
+    var vxp = unsafe(addr(ds.vx[0]))
+    readback_range(r.kx_dev, WD_KX, r.kvhost, kxp, g_wd_pend_bytes)
+    readback_range(r.vx_dev, WD_VX, r.kvhost, vxp, g_wd_pend_bytes)
     g_wd_pend_bytes = 0l
-    g_wd_pend_kx = null
-    g_wd_pend_vx = null
 }
 
-def private wd_release {
-    var r & = g_wd
+//! the waiting layouts lost unread (their planes released, or another window's about to overwrite them): the owner is marked,
+//! and its next decode step panics until it starts a window of its own
+[cold_path]
+def private wd_drop_pending {
     if (g_wd_pend_bytes > 0l) {
-        g_wd_dropped_key = g_wd_pend_key
+        g_wd_dropped |> insert(g_wd_pend_uid)
         g_wd_pend_bytes = 0l
     }
+}
+
+[cold_path]
+def private wd_release {
+    var r & = g_wd
+    wd_drop_pending()
     if (r.key != 0ul) {
-        for (b in fixed_array(r.wq_dev, r.ws_dev, r.norms_dev, r.kxr_dev, r.vxr_dev, r.kc_dev, r.vc_dev, r.x_dev, r.xb_dev, r.xq_dev, r.xs_dev,
-                              r.qkv_dev, r.cq_dev, r.att_dev, r.yo_dev, r.h_dev, r.pms_dev, r.py_dev, r.logits_dev, r.xin_dev, r.xh_dev, r.xkv_q_dev,
+        for (b in fixed_array(r.wq_dev, r.ws_dev, r.norms_dev, r.kxr_dev, r.vxr_dev, r.kc_dev, r.vc_dev, r.x_dev, r.xq_dev, r.xs_dev,
+                              r.qkv_dev, r.cq_dev, r.yo_dev, r.h_dev, r.pms_dev, r.py_dev, r.logits_dev, r.xin_dev, r.xh_dev, r.xkv_q_dev,
                               r.xkv_s_dev, r.xkv_proj_dev, r.kx_dev, r.vx_dev)) {
             if (b != 0ul) {
                 destroy_device_buf(b)
@@ -233,17 +246,20 @@ def private wd_release {
     wd_forget()
 }
 
-//! the handles forgotten (the model drop's sweep destroys the objects); the next served window uploads again
+//! the handles forgotten (the model drop's sweep destroys the objects, the waiting layouts with them); the next served window
+//! uploads again
 [cold_path]
 def private wd_forget {
     var r & = g_wd
+    wd_drop_pending()
     r.key = 0ul
     r.oom = false
     r.served_said = false
+    r.handoff_miss_said = false
     r.site_meta |> clear()
     r.s_site |> clear()
     r.xkv_meta_bytes = 0l
-    g_wd_window_key = 0ul
+    g_wd_window_uid = 0ul
     g_wd_window_live = false
 }
 
@@ -268,7 +284,7 @@ def private wd_site_meta(woffs : array<int64>) : HostBuf {
     let hb = wd_host_buf(WD_SITE_META_BYTES, false)
     if (hb.buf != 0ul) {
         for (i in range(length(woffs))) {
-            gemv_region_pair(hb, i, uint(woffs[i] / q8e))
+            fill_gemv_region(hb, i, uint(woffs[i] / q8e))
         }
     }
     return hb
@@ -462,12 +478,10 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     r.kc_dev = wd_dev_buf(nl * d * r.tmax * 2l)
     r.vc_dev = wd_dev_buf(nl * d * r.tmax * 2l)
     r.x_dev = wd_dev_buf(bx)
-    r.xb_dev = wd_dev_buf(bx)
     r.xq_dev = wd_dev_buf(bq)
     r.xs_dev = wd_dev_buf(bq / q8e * 4l)
     r.qkv_dev = wd_dev_buf(3l * bx)
     r.cq_dev = wd_dev_buf(bx)
-    r.att_dev = wd_dev_buf(bx)
     r.yo_dev = wd_dev_buf(bx)
     r.h_dev = wd_dev_buf(4l * bx)
     r.pms_dev = wd_dev_buf(nch_cap * r.hh * WD_ROW_CAP * 2l * 4l)
@@ -500,6 +514,12 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
 }
 
 [cold_path]
+def private wd_say_handoff_miss {
+    g_wd.handoff_miss_said = true
+    to_log(LOG_INFO, "dasLLAMA vulkan wdec: the encoder rows arrive by host upload - the tower landed no device plane for this window (the encoder ran on the CPU, or declined)\n")
+}
+
+[cold_path]
 def private wd_announce {
     g_wd.served_said = true
     to_log(LOG_INFO, "dasLLAMA vulkan wdec: the whisper decoder serves on the device (d {g_wd.d}, {g_wd.nl} layers)\n")
@@ -507,10 +527,13 @@ def private wd_announce {
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
 def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) : bool {   // nolint:STYLE038 - the dispatch chain is the shape
+    let uid = wd_uid(ds)
     g_wd_window_live = false
-    if (g_wd_dropped_key == intptr(unsafe(addr(ds)))) {
-        g_wd_dropped_key = 0ul
+    g_wd_dropped |> erase(uid)
+    if (g_wd_pend_uid == uid) {
+        g_wd_pend_bytes = 0l   //! this window supersedes the state's waiting one, served or not: the CPU chain recomputes on a decline
     }
+    ds.gpu_kv_gen = 0l
     if (!g_wd_env) {
         return wd_decline(VulkanWdecDecline.knob)
     }
@@ -536,10 +559,7 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     let bt = ta * d * 4l
     let bkxf = nl * d * ta * 4l
     assert(long_length(ds.kx) >= nl * d * ta && long_length(ds.vx) >= nl * d * ta)
-    if (g_wd_pend_bytes > 0l && g_wd_pend_key != intptr(unsafe(addr(ds)))) {
-        g_wd_dropped_key = g_wd_pend_key
-    }
-    g_wd_pend_bytes = 0l
+    wd_drop_pending()
     let groups = vt_tile_groups(r.xkv_tile, d, ta)
     g_wd_maps |> reserve(2l * nl)
     g_wd_maps |> resize(2l * nl)
@@ -553,6 +573,9 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     let enc_dev = vulkan_tower_enc_out(unsafe(addr<float const?>(enc_out[0])), bt)
     if (enc_dev == 0ul) {
         upload_region_at(r.xin_dev, 0l, unsafe(addr<uint8 const?>(enc_out[0])), bt)
+        if (!r.handoff_miss_said) {
+            wd_say_handoff_miss()
+        }
     } else {
         g_wd_handoffs++
     }
@@ -568,7 +591,7 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     pc_v16.bias_on = 1u
     var pc_vx = pc_v16
     pc_vx.mode = WDEC_KV_VX
-    vt_prof_chain("whisper cross-kv", nl, ta) $(raw : VkCommandBuffer; var h : VkHaz) {
+    vt_chain_one_shot("whisper cross-kv", nl, ta) $(raw : VkCommandBuffer; var h : VkHaz) {
         if (enc_dev != 0ul) {
             vhz_dep(raw, h, 0u, WD_XIN, true)
             cmd_copy_range(raw, enc_dev, 0l, r.xin_dev, 0l, bt)
@@ -599,16 +622,11 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
             vt_pt(raw, VtProfRole.kv_store)
         }
     }
-    unsafe {
-        g_wd_pend_kx = addr(ds.kx[0])
-        g_wd_pend_vx = addr(ds.vx[0])
-    }
+    g_wd_pend_uid = uid
     g_wd_pend_bytes = bkxf
-    g_wd_pend_key = intptr(unsafe(addr(ds)))
     g_wd_windows++
-    g_wd_window_key = g_wd_pend_key
+    g_wd_window_uid = uid
     g_wd_window_live = true
-    ds.gpu_kv_gen = 0l
     if (!r.served_said) {
         wd_announce()
     }
@@ -623,12 +641,13 @@ def private wd_gemv(raw : VkCommandBuffer; var h : VkHaz; site : int; n_in, d_ou
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
 def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks : int const?; n : int64) : bool {   // nolint:STYLE038 - the dispatch chain is the shape
-    if (intptr(unsafe(addr(ds))) == g_wd_dropped_key) {
-        panic("dasLLAMA vulkan wdec: this decoder window's memory was superseded by another state's window before it was read - ONE live decoder window per process")
+    let uid = ds.gpu_uid
+    if (uid != 0ul && key_exists(g_wd_dropped, uid)) {
+        panic("dasLLAMA vulkan wdec: this decoder window's cross-attention memory was lost before it was read back - another state's window, a release or a model drop took its device planes; ONE live decoder window per process, and a state decodes only a window it started after the loss")
     }
-    if (!g_wd_window_live || g_wd_window_key != intptr(unsafe(addr(ds)))) {
-        if (g_wd_pend_key == intptr(unsafe(addr(ds)))) {
-            wd_flush_cross_kv()
+    if (!g_wd_window_live || g_wd_window_uid != uid) {
+        if (uid != 0ul && g_wd_pend_uid == uid && g_wd_pend_bytes > 0l) {
+            wd_flush_cross_kv(ds)
         }
         if (ds.gpu_kv_gen != 0l && ds.n_past > 0l) {
             panic("dasLLAMA vulkan wdec: the device decoder window was evicted mid-window - ONE live decoder window per process (a second DecoderState may not interleave whisper_cross_kv/whisper_decode_batch)")
@@ -638,7 +657,9 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
     if (n > WD_ROW_CAP) {
         if (ds.n_past == 0l) {
             g_wd_window_live = false
-            wd_flush_cross_kv()
+            if (g_wd_pend_uid == uid && g_wd_pend_bytes > 0l) {
+                wd_flush_cross_kv(ds)
+            }
             return wd_decline(VulkanWdecDecline.rows)
         }
         panic("dasLLAMA vulkan wdec: decode batch of {n} exceeds the {WD_ROW_CAP}-row step cap mid-window")
@@ -675,12 +696,12 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
     var pc_cs = TowerWdecCombArgs(dim = uint(d), nchunks = uint(nch_s), nheads = uint(hh), nrows = uint(n))
     var pc_cc = pc_cs
     pc_cc.nchunks = uint(nch_c)
-    var pc_gelu = TowerBiasRqArgs(d = uint(4l * d), nblk = uint(nff / q8e), boff = 0u, act = BIAS_ACT_GELU_TANH)
+    var pc_gelu = TowerBiasRqArgs(d = uint(4l * d), nblk = uint(nff / q8e), boff = 0u)
     let wg_attn_s = nch_s * hh * n
     let wg_attn_c = nch_c * hh * n
     let wg_comb = hh * n
     let t0 = ref_time_ticks()
-    vt_prof_chain("whisper decode", nl, n) $(raw : VkCommandBuffer; var h : VkHaz) {
+    vt_chain_one_shot("whisper decode", nl, n) $(raw : VkCommandBuffer; var h : VkHaz) {
         for (l in range64(nl)) {
             let lo = dec_layer_offsets(w, l)
             let site = int(l * WD_LAYER_SITES)

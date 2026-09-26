@@ -184,189 +184,246 @@ def test_vkt_fa_bidir(t0 : T?) {
     }
 }
 
+//! the chunked attention's combine on the CPU: a row's head slice over `nch` chunk partials (max, exp-sum) and their unnormalized values
+def private wdec_comb_ref(pms, py : array<float>; rows, heads, nch : int) : array<float> {
+    let hs = int(WDEC_HS)
+    var y : array<float>
+    y |> resize(rows * heads * hs)
+    for (r in range(rows)) {
+        for (h in range(heads)) {
+            var mg = -3.0e38
+            for (c in range(nch)) {
+                mg = max(mg, pms[((c * heads + h) * rows + r) * 2])
+            }
+            var tot = 0.0
+            for (c in range(nch)) {
+                let slot = (c * heads + h) * rows + r
+                tot += pms[slot * 2 + 1] * exp(pms[slot * 2] - mg)
+            }
+            for (j in range(hs)) {
+                var acc = 0.0
+                for (c in range(nch)) {
+                    let slot = (c * heads + h) * rows + r
+                    acc += py[slot * hs + j] * exp(pms[slot * 2] - mg)
+                }
+                y[r * heads * hs + h * hs + j] = acc / max(tot, 1.0e-30)
+            }
+        }
+    }
+    return <- y
+}
+
+//! the four fused row passes at one shape: `d` the row width (a 64-multiple), `rows` the batch, `nch` the combine's chunks - each
+//! byte for byte and scale for scale against the pass then `TowerClampRq`, the bias arm and the combine against their CPU forms
+def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE038 — one flat gate over the four fused classes: the fixture, one command buffer, the pairs, the oracles and their poisons
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let B_X = 1u
+        let B_XB = 2u
+        let B_Y = 4u
+        let B_H = 8u
+        let B_P = 16u
+        let B_YC = 32u
+        let B_Q = 64u
+        let q8e = int(kq_elems(KqFmt.q8))
+        let ff = 4 * d
+        let heads = d / int(WDEC_HS)
+        let nd = rows * d
+        let nff = rows * ff
+        let shape = "d {d}, {rows} rows, {nch} chunks"
+        var x <- row_fill(nd, 29, 3, 0.03, 1.4)
+        var y <- row_fill(nd, 17, 11, 0.05, 2.1)
+        var hrows <- row_fill(nff, 13, 5, 0.06, 2.8)
+        var wn <- row_fill(5 * d + ff, 7, 2, 0.02, 0.9)   // the layernorm's w at 0 and b at d, the post-add bias at 2d, the next norm's w at 3d and b at 4d, the activation's bias row at 5d
+        var pms <- row_fill(nch * heads * rows * 2, 19, 1, 0.01, 0.3)
+        var py <- row_fill(nch * heads * rows * int(WDEC_HS), 23, 9, 0.04, 1.9)
+        let bx = int64(nd) * 4l
+        let bh = int64(nff) * 4l
+        let bw = int64(5 * d + ff) * 4l
+        let bpms = int64(nch * heads * rows) * 2l * 4l
+        let bpy = int64(nch * heads * rows) * int64(WDEC_HS) * 4l
+        let bq = int64(nd)
+        let bs = int64(nd / q8e) * 4l
+        let bqh = int64(nff)
+        let bsh = int64(nff / q8e) * 4l
+        let xd = make_device_buf(bx)
+        let x2d = make_device_buf(bx)
+        let x3d = make_device_buf(bx)
+        let xbd = make_device_buf(bx)
+        let xb2d = make_device_buf(bx)
+        let yd = make_device_buf(bx)
+        let ycd = make_device_buf(bx)
+        let hd = make_device_buf(bh)
+        let h2d = make_device_buf(bh)
+        let wnd = make_device_buf(bw)
+        let pmsd = make_device_buf(bpms)
+        let pyd = make_device_buf(bpy)
+        var qd : uint64[8]   // the pairs' Q8_0 planes: the separate pass at an even index, the fused stamp at the odd one after it; 4 and 5 the ff-wide bias arm's
+        var sd : uint64[8]
+        let sentinels <- @(fused_only : bool) {
+            for (i in range(8)) {
+                if (fused_only && i % 2 == 0) {
+                    continue
+                }
+                let wide = i == 4 || i == 5
+                fill_upload(qd[i], 0l, wide ? bqh : bq, I8_SENTINEL_BITS)
+                nan_sentinel_upload(sd[i], wide ? bsh : bs)
+            }
+        }
+        for (i in range(8)) {
+            let wide = i == 4 || i == 5
+            qd[i] = make_device_buf(wide ? bqh : bq)
+            sd[i] = make_device_buf(wide ? bsh : bs)
+        }
+        invoke(sentinels, false)
+        unsafe {
+            upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
+            upload_region_at(x2d, 0l, addr<uint8 const?>(x[0]), bx)
+            upload_region_at(x3d, 0l, addr<uint8 const?>(x[0]), bx)
+            upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
+            upload_region_at(hd, 0l, addr<uint8 const?>(hrows[0]), bh)
+            upload_region_at(h2d, 0l, addr<uint8 const?>(hrows[0]), bh)
+            upload_region_at(wnd, 0l, addr<uint8 const?>(wn[0]), bw)
+            upload_region_at(pmsd, 0l, addr<uint8 const?>(pms[0]), bpms)
+            upload_region_at(pyd, 0l, addr<uint8 const?>(py[0]), bpy)
+        }
+        nan_sentinel_upload(xbd, bx)
+        nan_sentinel_upload(xb2d, bx)
+        nan_sentinel_upload(ycd, bx)
+        var s_ln = set_tower_ln_cls(fixed_array(xd, xbd, wnd), fixed_array(bx, bx, bw), fixed_array(B_X, B_XB, 0u))
+        var s_rq1 = set_tower_clamp_rq_cls(fixed_array(xbd, qd[0], sd[0]), fixed_array(bx, bq, bs), fixed_array(B_XB, B_Q, B_Q))
+        var s_lnrq = set_tower_ln_rq_cls(fixed_array(xd, wnd, qd[1], sd[1]), fixed_array(bx, bw, bq, bs), fixed_array(B_X, 0u, B_Q, B_Q))
+        var s_post = set_tower_post_add_ln_cls(fixed_array(x2d, yd, xb2d, wnd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB, 0u))
+        var s_rq2 = set_tower_clamp_rq_cls(fixed_array(xb2d, qd[2], sd[2]), fixed_array(bx, bq, bs), fixed_array(B_XB, B_Q, B_Q))
+        var s_postrq = set_tower_post_add_ln_rq_cls(fixed_array(x3d, yd, wnd, qd[3], sd[3]), fixed_array(bx, bx, bw, bq, bs), fixed_array(B_X, B_Y, 0u, B_Q, B_Q))
+        var s_bias = set_tower_bias_act_cls(fixed_array(hd, wnd), fixed_array(bh, bw), fixed_array(B_H, 0u))
+        var s_rq3 = set_tower_clamp_rq_cls(fixed_array(hd, qd[4], sd[4]), fixed_array(bh, bqh, bsh), fixed_array(B_H, B_Q, B_Q))
+        var s_biasrq = set_tower_bias_act_rq_cls(fixed_array(h2d, wnd, qd[5], sd[5]), fixed_array(bh, bw, bqh, bsh), fixed_array(B_H, 0u, B_Q, B_Q))
+        var s_comb = set_tower_wdec_attn_comb_cls(fixed_array(pmsd, pyd, ycd), fixed_array(bpms, bpy, bx), fixed_array(B_P, B_P, B_YC))
+        var s_rq4 = set_tower_clamp_rq_cls(fixed_array(ycd, qd[6], sd[6]), fixed_array(bx, bq, bs), fixed_array(B_YC, B_Q, B_Q))
+        var s_combrq = set_tower_wdec_attn_comb_rq_cls(fixed_array(pmsd, pyd, qd[7], sd[7]), fixed_array(bpms, bpy, bq, bs), fixed_array(B_P, B_P, B_Q, B_Q))
+        var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(d), eps = ROWS_EPS)   // nolint:LINT003 - the encoders take the push block by value, and the lambda below captures it
+        var pa_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003 - the same
+        var pa_rqh = TowerClampRqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003 - the same
+        var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(4 * d), ascale = 1.0)   // nolint:LINT003 - the same
+        var pa_bias = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = uint(5 * d), act = BIAS_ACT_GELU_TANH)   // nolint:LINT003 - the same
+        var pa_biasrq = TowerBiasRqArgs(d = uint(ff), nblk = uint(nff / q8e), boff = uint(5 * d))   // nolint:LINT003 - the same
+        var pa_c = TowerWdecCombArgs(dim = uint(d), nchunks = uint(nch), nheads = uint(heads), nrows = uint(rows))   // nolint:LINT003 - the same
+        let wg4 = int64((nd / 4 + 255) / 256)
+        let wg4h = int64((nff / 4 + 255) / 256)
+        let wg_comb = int64(heads * rows)
+        let planes = fixed_array(qd[0], sd[0], qd[1], sd[1], qd[2], sd[2], qd[3], sd[3], qd[4], sd[4], qd[5], sd[5], qd[6], sd[6], qd[7], sd[7], x2d, x3d, hd, ycd)
+        let sizes = fixed_array(bq, bs, bq, bs, bq, bs, bq, bs, bqh, bsh, bqh, bsh, bq, bs, bq, bs, bx, bx, bh, bx)
+        let at <- staged_offsets(sizes)
+        var host = make_host_buf(at[length(sizes)], true, [cached = true])
+        let run_all <- @() {
+            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tower_ln_cls(raw, h, s_ln, pa_ln, int64(rows))
+                enc_tower_clamp_rq_cls(raw, h, s_rq1, pa_rq, wg4)
+                enc_tower_ln_rq_cls(raw, h, s_lnrq, pa_ln, int64(rows))
+                enc_tower_post_add_ln_cls(raw, h, s_post, pa_post, int64(rows))
+                enc_tower_clamp_rq_cls(raw, h, s_rq2, pa_rq, wg4)
+                enc_tower_post_add_ln_rq_cls(raw, h, s_postrq, pa_post, int64(rows))
+                enc_tower_bias_act_cls(raw, h, s_bias, pa_bias, wg4h)
+                enc_tower_clamp_rq_cls(raw, h, s_rq3, pa_rqh, wg4h)
+                enc_tower_bias_act_rq_cls(raw, h, s_biasrq, pa_biasrq, wg4h)
+                enc_tower_wdec_attn_comb_cls(raw, h, s_comb, pa_c, wg_comb)
+                enc_tower_clamp_rq_cls(raw, h, s_rq4, pa_rq, wg4)
+                enc_tower_wdec_attn_comb_rq_cls(raw, h, s_combrq, pa_c, wg_comb)
+                cmd_copy_planes(raw, h, planes, host, sizes, B_X | B_Q | B_H | B_YC)
+            }
+        }
+        invoke(run_all)
+        var qs : array<array<int8>>
+        var ss : array<array<float>>
+        qs |> reserve(8)
+        ss |> reserve(8)
+        for (i in range(8)) {
+            qs |> emplace(staged(host.mapped, at[2 * i], int(sizes[2 * i]), type<int8>))
+            ss |> emplace(staged(host.mapped, at[2 * i + 1], int(sizes[2 * i + 1] / 4l), type<float>))
+        }
+        var x2 <- staged(host.mapped, at[16], nd, type<float>)
+        var x3 <- staged(host.mapped, at[17], nd, type<float>)
+        var h_dev <- staged(host.mapped, at[18], nff, type<float>)
+        var yc_dev <- staged(host.mapped, at[19], nd, type<float>)
+        let names <- ["layernorm", "post-add + next norm", "bias + tanh GELU", "attention combine"]
+        for (i in range(4)) {
+            let off = mismatch_q8(qs[2 * i + 1], ss[2 * i + 1], qs[2 * i], ss[2 * i], 0.0, 0)
+            t |> equal(off, 0, "{names[i]} ({shape}) fused with the requant lands the separate pass's Q8_0 bytes and scales ({off} differ)")
+            t |> equal(count(qs[2 * i + 1], $(v) => int(v) == -128), 0, "{names[i]} ({shape}): every block written (no sentinel bytes left)")
+        }
+        t |> equal(mismatch_exact(x3, x2), 0, "the fused post-add ({shape}) updates the residual rows in place as the separate pass does")
+        t |> success(mismatch_exact(x2, x) > 0, "the post-add ({shape}) moved the residual rows off their input")
+        var h_ref := hrows
+        add_bias_rows(h_ref, wn, int64(5 * d), int64(ff), int64(rows))
+        gelu_tanh_lut_batch(h_ref, int64(ff), int64(rows))
+        let bad_bias = mismatch_approx(h_dev, h_ref)
+        t |> success(bad_bias == 0, "the bias + tanh GELU ({shape}) matches add_bias_rows + gelu_tanh_lut_batch ({bad_bias} of {nff} off)")
+        t |> success(!approx(h_dev[nff - 1], h_ref[nff - 1] + 0.5), "the bias + tanh GELU ({shape}): the bar reds a poisoned element")
+        var yc_ref <- wdec_comb_ref(pms, py, rows, heads, nch)
+        let bad_comb = mismatch_approx(yc_dev, yc_ref)
+        t |> success(bad_comb == 0, "the attention combine ({shape}) matches the CPU combine over the chunk partials ({bad_comb} of {nd} off)")
+        t |> success(!approx(yc_dev[nd - 1], yc_ref[nd - 1] + 0.5), "the attention combine ({shape}): the bar reds a poisoned element")
+        unsafe {
+            x[7]++
+            y[7 + d]++
+            hrows[3]++
+            py[5]++
+            upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
+            upload_region_at(x3d, 0l, addr<uint8 const?>(x[0]), bx)
+            upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
+            upload_region_at(h2d, 0l, addr<uint8 const?>(hrows[0]), bh)
+            upload_region_at(pyd, 0l, addr<uint8 const?>(py[0]), bpy)
+        }
+        invoke(sentinels, true)
+        invoke(run_all)
+        for (i in range(8)) {
+            if (i % 2 == 1) {
+                var qp <- staged(host.mapped, at[2 * i], int(sizes[2 * i]), type<int8>)
+                var sp <- staged(host.mapped, at[2 * i + 1], int(sizes[2 * i + 1] / 4l), type<float>)
+                let moved = mismatch_q8(qp, sp, qs[i], ss[i], 0.0, 0)
+                t |> success(moved > 0, "{names[i / 2]} ({shape}): the poisoned input moves the fused bytes ({moved} differ)")
+                t |> equal(count(qp, $(v) => int(v) == -128), 0, "{names[i / 2]} ({shape}): the poisoned run rewrote every block over the sentinel")
+                delete qp
+                delete sp
+            }
+        }
+        for (i in range(8)) {
+            destroy_device_buf(qd[i])
+            destroy_device_buf(sd[i])
+        }
+        for (b in fixed_array(xd, x2d, x3d, xbd, xb2d, yd, ycd, hd, h2d, wnd, pmsd, pyd)) {
+            destroy_device_buf(b)
+        }
+        destroy_host_buf(host)
+        delete qs
+        delete ss
+        delete x2
+        delete x3
+        delete h_dev
+        delete yc_dev
+        delete h_ref
+        delete yc_ref
+        delete x
+        delete y
+        delete hrows
+        delete wn
+        delete pms
+        delete py
+    }
+}
+
 [test]
-def test_vkt_wdec_fused_rq(t0 : T?) {   // nolint:STYLE038 — one flat gate over the four fused classes: the fixture, one command buffer, the pairs and their poisons
-    t0 |> run("the layernorm, the post-add, the bias-activation and the attention combine fused with the Q8_0 requant == the pass then TowerClampRq") <| @(t : T?) {
+def test_vkt_wdec_fused_rq(t0 : T?) {
+    t0 |> run("the layernorm, the post-add, the bias-activation and the attention combine fused with the Q8_0 requant == the pass then TowerClampRq, at the other cells' width, whisper tiny's and turbo's") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tower_ln_rq_cls() || !ensure_tower_post_add_ln_rq_cls() || !ensure_tower_bias_act_rq_cls() || !ensure_tower_wdec_attn_comb_rq_cls()
                 || !ensure_tower_ln_cls() || !ensure_tower_post_add_ln_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_wdec_attn_comb_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_X = 1u
-            let B_XB = 2u
-            let B_Y = 4u
-            let B_H = 8u
-            let B_P = 16u
-            let B_YC = 32u
-            let B_Q = 64u
-            let d = ROWS_D
-            let rows = ROWS_N
-            let ff = ROWS_FF
-            let heads = d / int(WDEC_HS)
-            let nch = 2
-            let nd = rows * d
-            let nff = rows * ff
-            var x <- row_fill(nd, 29, 3, 0.03, 1.4)
-            var y <- row_fill(nd, 17, 11, 0.05, 2.1)
-            var hrows <- row_fill(nff, 13, 5, 0.06, 2.8)
-            var wn <- row_fill(5 * d + ff, 7, 2, 0.02, 0.9)   //! the layernorm's w at 0 and b at d, the post-add bias at 2d, the next norm's w at 3d and b at 4d, the activation's bias row at 5d
-            var pms <- row_fill(nch * heads * rows * 2, 19, 1, 0.01, 0.3)
-            var py <- row_fill(nch * heads * rows * int(WDEC_HS), 23, 9, 0.04, 1.9)
-            let bx = int64(nd) * 4l
-            let bh = int64(nff) * 4l
-            let bw = int64(5 * d + ff) * 4l
-            let bpms = int64(nch * heads * rows * 2) * 4l
-            let bpy = int64(nch * heads * rows * int(WDEC_HS)) * 4l
-            let bq = int64(nd)
-            let bs = int64(nd / 32) * 4l
-            let bqh = int64(nff)
-            let bsh = int64(nff / 32) * 4l
-            let xd = make_device_buf(bx)
-            let x2d = make_device_buf(bx)
-            let x3d = make_device_buf(bx)
-            let xbd = make_device_buf(bx)
-            let xb2d = make_device_buf(bx)
-            let yd = make_device_buf(bx)
-            let ycd = make_device_buf(bx)
-            let hd = make_device_buf(bh)
-            let h2d = make_device_buf(bh)
-            let wnd = make_device_buf(bw)
-            let pmsd = make_device_buf(bpms)
-            let pyd = make_device_buf(bpy)
-            var qd : uint64[8]
-            var sd : uint64[8]
-            for (i in range(8)) {
-                let wide = i == 4 || i == 5
-                qd[i] = make_device_buf(wide ? bqh : bq)
-                sd[i] = make_device_buf(wide ? bsh : bs)
-                fill_upload(qd[i], 0l, wide ? bqh : bq, I8_SENTINEL_BITS)
-                nan_sentinel_upload(sd[i], wide ? bsh : bs)
-            }
-            unsafe {
-                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x2d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x3d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
-                upload_region_at(hd, 0l, addr<uint8 const?>(hrows[0]), bh)
-                upload_region_at(h2d, 0l, addr<uint8 const?>(hrows[0]), bh)
-                upload_region_at(wnd, 0l, addr<uint8 const?>(wn[0]), bw)
-                upload_region_at(pmsd, 0l, addr<uint8 const?>(pms[0]), bpms)
-                upload_region_at(pyd, 0l, addr<uint8 const?>(py[0]), bpy)
-            }
-            nan_sentinel_upload(xbd, bx)
-            nan_sentinel_upload(xb2d, bx)
-            nan_sentinel_upload(ycd, bx)
-            var s_ln = set_tower_ln_cls(fixed_array(xd, xbd, wnd), fixed_array(bx, bx, bw), fixed_array(B_X, B_XB, 0u))
-            var s_rq1 = set_tower_clamp_rq_cls(fixed_array(xbd, qd[0], sd[0]), fixed_array(bx, bq, bs), fixed_array(B_XB, B_Q, B_Q))
-            var s_lnrq = set_tower_ln_rq_cls(fixed_array(xd, wnd, qd[1], sd[1]), fixed_array(bx, bw, bq, bs), fixed_array(B_X, 0u, B_Q, B_Q))
-            var s_post = set_tower_post_add_ln_cls(fixed_array(x2d, yd, xb2d, wnd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB, 0u))
-            var s_rq2 = set_tower_clamp_rq_cls(fixed_array(xb2d, qd[2], sd[2]), fixed_array(bx, bq, bs), fixed_array(B_XB, B_Q, B_Q))
-            var s_postrq = set_tower_post_add_ln_rq_cls(fixed_array(x3d, yd, wnd, qd[3], sd[3]), fixed_array(bx, bx, bw, bq, bs), fixed_array(B_X, B_Y, 0u, B_Q, B_Q))
-            var s_bias = set_tower_bias_act_cls(fixed_array(hd, wnd), fixed_array(bh, bw), fixed_array(B_H, 0u))
-            var s_rq3 = set_tower_clamp_rq_cls(fixed_array(hd, qd[4], sd[4]), fixed_array(bh, bqh, bsh), fixed_array(B_H, B_Q, B_Q))
-            var s_biasrq = set_tower_bias_act_rq_cls(fixed_array(h2d, wnd, qd[5], sd[5]), fixed_array(bh, bw, bqh, bsh), fixed_array(B_H, 0u, B_Q, B_Q))
-            var s_comb = set_tower_wdec_attn_comb_cls(fixed_array(pmsd, pyd, ycd), fixed_array(bpms, bpy, bx), fixed_array(B_P, B_P, B_YC))
-            var s_rq4 = set_tower_clamp_rq_cls(fixed_array(ycd, qd[6], sd[6]), fixed_array(bx, bq, bs), fixed_array(B_YC, B_Q, B_Q))
-            var s_combrq = set_tower_wdec_attn_comb_rq_cls(fixed_array(pmsd, pyd, qd[7], sd[7]), fixed_array(bpms, bpy, bq, bs), fixed_array(B_P, B_P, B_Q, B_Q))
-            var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(d), eps = ROWS_EPS)   // nolint:LINT003 - the encoders take the push block by value, and the lambda below captures it
-            var pa_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / 32), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003 - the same
-            var pa_rqh = TowerClampRqArgs(inbase = 0u, nblk = uint(nff / 32), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003 - the same
-            var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(4 * d), ascale = 1.0)   // nolint:LINT003 - the same
-            var pa_bias = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = uint(5 * d), act = BIAS_ACT_GELU_TANH)   // nolint:LINT003 - the same
-            var pa_biasrq = TowerBiasRqArgs(d = uint(ff), nblk = uint(nff / 32), boff = uint(5 * d), act = BIAS_ACT_GELU_TANH)   // nolint:LINT003 - the same
-            var pa_c = TowerWdecCombArgs(dim = uint(d), nchunks = uint(nch), nheads = uint(heads), nrows = uint(rows))   // nolint:LINT003 - the same
-            let wg4 = int64((nd / 4 + 255) / 256)
-            let wg4h = int64((nff / 4 + 255) / 256)
-            let wg_comb = int64(heads * rows)
-            let planes = fixed_array(qd[0], sd[0], qd[1], sd[1], qd[2], sd[2], qd[3], sd[3], qd[4], sd[4], qd[5], sd[5], qd[6], sd[6], qd[7], sd[7], x2d, x3d)
-            let sizes = fixed_array(bq, bs, bq, bs, bq, bs, bq, bs, bqh, bsh, bqh, bsh, bq, bs, bq, bs, bx, bx)
-            let at <- staged_offsets(sizes)
-            var host = make_host_buf(at[length(sizes)], true, [cached = true])
-            let run_all <- @(poison : bool) {
-                cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_tower_ln_cls(raw, h, s_ln, pa_ln, int64(rows))
-                    enc_tower_clamp_rq_cls(raw, h, s_rq1, pa_rq, wg4)
-                    enc_tower_ln_rq_cls(raw, h, s_lnrq, pa_ln, int64(rows))
-                    enc_tower_post_add_ln_cls(raw, h, s_post, pa_post, int64(rows))
-                    enc_tower_clamp_rq_cls(raw, h, s_rq2, pa_rq, wg4)
-                    enc_tower_post_add_ln_rq_cls(raw, h, s_postrq, pa_post, int64(rows))
-                    enc_tower_bias_act_cls(raw, h, s_bias, pa_bias, wg4h)
-                    enc_tower_clamp_rq_cls(raw, h, s_rq3, pa_rqh, wg4h)
-                    enc_tower_bias_act_rq_cls(raw, h, s_biasrq, pa_biasrq, wg4h)
-                    enc_tower_wdec_attn_comb_cls(raw, h, s_comb, pa_c, wg_comb)
-                    enc_tower_clamp_rq_cls(raw, h, s_rq4, pa_rq, wg4)
-                    enc_tower_wdec_attn_comb_rq_cls(raw, h, s_combrq, pa_c, wg_comb)
-                    cmd_copy_planes(raw, h, planes, host, sizes, B_X | B_Q)
-                }
-                if (poison) {
-                    return
-                }
-            }
-            invoke(run_all, false)
-            var qs : array<array<int8>>
-            var ss : array<array<float>>
-            qs |> reserve(8)
-            ss |> reserve(8)
-            for (i in range(8)) {
-                qs |> emplace(staged(host.mapped, at[2 * i], int(sizes[2 * i]), type<int8>))
-                ss |> emplace(staged(host.mapped, at[2 * i + 1], int(sizes[2 * i + 1] / 4l), type<float>))
-            }
-            var x2 <- staged(host.mapped, at[16], nd, type<float>)
-            var x3 <- staged(host.mapped, at[17], nd, type<float>)
-            let names <- ["layernorm", "post-add + next norm", "bias + tanh GELU", "attention combine"]
-            for (i in range(4)) {
-                let off = q8_off(qs[2 * i + 1], ss[2 * i + 1], qs[2 * i], ss[2 * i], 0.0, 0)
-                t |> equal(off, 0, "{names[i]} fused with the requant lands the separate pass's Q8_0 bytes and scales ({off} differ)")
-                t |> equal(count(qs[2 * i + 1], $(v) => int(v) == -128), 0, "{names[i]}: every block written (no sentinel bytes left)")
-            }
-            var xoff = 0
-            for (a, b in x2, x3) {
-                if (a != b) {
-                    xoff++
-                }
-            }
-            t |> equal(xoff, 0, "the fused post-add updates the residual rows in place as the separate pass does")
-            unsafe {
-                x[7]++
-                y[7 + d]++
-                hrows[3]++
-                py[5]++
-                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x3d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
-                upload_region_at(h2d, 0l, addr<uint8 const?>(hrows[0]), bh)
-                upload_region_at(pyd, 0l, addr<uint8 const?>(py[0]), bpy)
-            }
-            invoke(run_all, true)
-            for (i in range(8)) {
-                if (i % 2 == 1) {
-                    var qp <- staged(host.mapped, at[2 * i], int(sizes[2 * i]), type<int8>)
-                    var sp <- staged(host.mapped, at[2 * i + 1], int(sizes[2 * i + 1] / 4l), type<float>)
-                    let moved = q8_off(qp, sp, qs[i], ss[i], 0.0, 0)
-                    t |> success(moved > 0, "{names[i / 2]}: the poisoned input moves the fused bytes ({moved} differ)")
-                    delete qp
-                    delete sp
-                }
-            }
-            for (i in range(8)) {
-                destroy_device_buf(qd[i])
-                destroy_device_buf(sd[i])
-            }
-            for (b in fixed_array(xd, x2d, x3d, xbd, xb2d, yd, ycd, hd, h2d, wnd, pmsd, pyd)) {
-                destroy_device_buf(b)
-            }
-            destroy_host_buf(host)
-            delete qs
-            delete ss
-            delete x2
-            delete x3
-            delete x
-            delete y
-            delete hrows
-            delete wn
-            delete pms
-            delete py
+            wdec_fused_rq_shape(t, ROWS_D, ROWS_N, 2)   // the row classes' width; two chunks
+            wdec_fused_rq_shape(t, 384, ROWS_N, 1)      // whisper tiny: the strided loops' partial tail; one chunk
+            wdec_fused_rq_shape(t, 1280, ROWS_N, 1)     // large-v3-turbo: the block pass's second trip (d > 1024)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -590,11 +647,11 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             var xq_ref : array<int8>
             var xs_ref : array<float>
             requant_rows_q8_sized(clamped_x, int64(d), int64(rows), xq_ref, xs_ref)
-            let bad_rq = q8_off(xq_dev, xs_dev, xq_ref, xs_ref, APPROX_REL, 1)
+            let bad_rq = mismatch_q8(xq_dev, xs_dev, xq_ref, xs_ref, APPROX_REL, 1)   // the device rounds a half-step value apart: one quant step, the scales at the approx bar
             t |> success(bad_rq == 0, "tower_clamp_rq: the Q8_0 feed is the clamped rows requantized as the CPU does ({bad_rq} off)")
             var xs_poison := xs_ref
             xs_poison[0] += 0.5
-            t |> success(q8_off(xq_dev, xs_dev, xq_ref, xs_poison, APPROX_REL, 1) > 0, "tower_clamp_rq: the bar reds a poisoned scale")
+            t |> success(mismatch_q8(xq_dev, xs_dev, xq_ref, xs_poison, APPROX_REL, 1) > 0, "tower_clamp_rq: the bar reds a poisoned scale")
             var q_ref := q
             var cos_x : array<float>
             var sin_x : array<float>
@@ -1366,7 +1423,7 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 enc_tower_ln16_cls(raw, h, s_ln16, pa_ln, int64(rows))
                 for (arm, s_act, s_act16 in act_arms, s_acts, s_acts16) {
                     var pa_act = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = arm.act)
-                    enc_tower_bias_act_cvt16_cls(raw, h, s_act16, pa_act, wg4)   //! reads the rows before the in-place stamp rewrites them
+                    enc_tower_bias_act_cvt16_cls(raw, h, s_act16, pa_act, wg4)   // reads the rows before the in-place stamp rewrites them
                     enc_tower_bias_act_cls(raw, h, s_act, pa_act, wg4)
                 }
                 enc_tower_hpad_b_cls(raw, h, s_padb, pa_rs, wg_rs)
@@ -1904,8 +1961,8 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             let wd = make_device_buf(bw)
             let bxh = int64(nd) * 2l
             let brex = int64(nrows) * 4l
-            let gated_h16d = make_device_buf(bxh)    // the gated hidden's f16 rows
-            let rexd = make_device_buf(brex)  //! the row map: every row the one expert, so the bias rows are the layer's
+            let gated_h16d = make_device_buf(bxh)
+            let rexd = make_device_buf(brex)  // the row map: every row the one expert, so the bias rows are the layer's
             let sizes = fixed_array(bc, bx, bx, bxh, bx, bx)
             let at <- staged_offsets(sizes)
             var host = make_host_buf(at[length(sizes)], true, [cached = true])
@@ -2031,8 +2088,8 @@ let private FM_IW = 7          //! the k3 s2 p1 conv over the 7 x 5 image gives 
 let private FM_IH = 5
 let private FM_CIN = 3
 let private FM_CHUNKS = 2
-let private FM_OW = (FM_IW - 1) / 2 + 1
-let private FM_OH = (FM_IH - 1) / 2 + 1
+let private FM_OW = int(conv_s2_out(int64(FM_IW)))
+let private FM_OH = int(conv_s2_out(int64(FM_IH)))
 let private FM_KDP = 64        //! the column row's padded width: cin x 9 = 27 live columns, the rest zero
 
 [test]
@@ -2084,7 +2141,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             var y3 <- row_fill(FM_CHUNKS * 16 * q3_tok * q3_nch, 11, 2, 0.06, 2.9)
             var fs_src <- row_fill(fs_t * fs_w * fs_c, 13, 9, 0.05, 1.5)
             var x <- row_fill(nd, 41, 7, 0.05, 2.1)
-            var wn <- row_fill((3 + q3_tok) * d, 7, 1, 0.01, -0.6)   //! the panel's bias row at 0, the add plane at d, the finish's bias at 2d and its tok position rows at 3d, the ln weight at 0
+            var wn <- row_fill((3 + q3_tok) * d, 7, 1, 0.01, -0.6)   // the panel's bias row at 0, the add plane at d, the finish's bias at 2d and its tok position rows at 3d, the ln weight at 0
             let bsrc = int64(n_src) * 4l
             let bcol = int64(n_col) * 2l
             let bmel1 = int64(nch1 * len1) * 4l

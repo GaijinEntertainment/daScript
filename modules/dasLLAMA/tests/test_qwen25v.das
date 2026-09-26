@@ -136,7 +136,7 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
         if (d2.encodes == d1.encodes) {
             to_log(LOG_INFO, "qwen25v vulkan twin {kind} {w}x{h}: the driver declined - {vulkan_tower_declines()}\n")
         }
-        twin_counters(tt, "{kind} {w}x{h}", TwinLegs(exact = d0, cpu = d1, dev = d2, ncpu = ncpu, ndev = ngpu), tw.n_layer, int64(w / 14) * int64(h / 14))
+        twin_counters(tt, "{kind} {w}x{h}", TwinLegs(exact = d0, cpu = d1, dev = d2, n_cpu = ncpu, n_dev = ngpu), tw.n_layer, int64(w / 14) * int64(h / 14))
         let rms = rms_of(cpu)
         let dev_ex = logits_maxdiff(gpu, cpu)
         let rel = tw.n_layer <= 8l ? TWIN_REL_VK_SHALLOW : TWIN_REL_VK_DEEP
@@ -169,7 +169,7 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
         if (zero_block >= 0l) {
             var twp <- mint_tower(mm, tw.n_layer, -1l, zero_block)
             var stp = Qwen25vState()
-            var r = TwinResult(spec = TwinSpec(family = "qwen25v", lbl = "{kind} {w}x{h}", n_layer = tw.n_layer, metric = TwinMetric.maxdiff), rms = rms, bar = double(bar))
+            var r = TwinResult(spec = TwinSpec(family = "qwen25v", tag = "{kind} {w}x{h}", n_layer = tw.n_layer, metric = TwinMetric.maxdiff), rms = rms, bar = double(bar))
             r.reference <- cpu
             twin_poison(tt, r, zero_block, twp, stp) $(t; var s; var out) => qwen25v_encode(t, s, planes, int64(w), int64(h), out)
             delete stp
@@ -180,10 +180,11 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
 
 let private SHALLOW_ABS_BAR = 0.1   //! one layer of GPU noise measures ~2.6e-2 abs peak on quad (f16-operand GEMMs + the K=5120 merger on |~70| values), a routing defect mixes quadrants at >= 1.0
 let private WA_WINDOW_ONLY = 99l   //! the one-block tower's full-attention period: (0 + 1) % 99 != 0 puts the block on the window arm
-let private WA_FULL_ONLY = 1l      //! ... and (0 + 1) % 1 == 0 on the full-attention arm
+let private WA_FULL_ONLY = 1l      //! the one-block tower's full-attention period: (0 + 1) % 1 == 0 puts the block on the full-attention arm
 
-//! the one-block `lane` chain (`set_on` its knob, `encodes` its counter) against the CPU chain on quad within `SHALLOW_ABS_BAR`; `poison`: a zeroed block must EXCEED it
-def private shallow_routing_cell(t : T?; mm, name, lane : string; wa : int64; poison : bool; set_on : block<(on : bool) : void>;
+//! the one-block `backend` chain (`set_on` its knob, `encodes` its counter) against the CPU chain on quad within `SHALLOW_ABS_BAR`; `poison`: a zeroed block must EXCEED it
+[cold_path]
+def private shallow_routing_cell(t : T?; mm, name, backend : string; wa : int64; poison : bool; set_on : block<(on : bool) : void>;
                                  encodes : block<() : int64>) {
     var tw <- mint_tower(mm, 1l, wa)
     let planes <- make_planes("quad", 448, 448)
@@ -196,7 +197,7 @@ def private shallow_routing_cell(t : T?; mm, name, lane : string; wa : int64; po
         setup_dasllama_jobque_()
         ng = qwen25v_encode(tw, sg, planes, 448l, 448l, og)
     }
-    t |> equal(invoke(encodes) - e0, 1l, "shallow {name}: {lane}-served")
+    t |> equal(invoke(encodes) - e0, 1l, "shallow {name}: {backend}-served")
     var sc = Qwen25vState()
     var oc : array<float>
     invoke(set_on, false)
@@ -208,8 +209,8 @@ def private shallow_routing_cell(t : T?; mm, name, lane : string; wa : int64; po
     invoke(set_on, true)
     t |> equal(int(ng), int(nc), "shallow {name}: token counts agree")
     let md = logits_maxdiff(og, oc)
-    to_log(LOG_INFO, "qwen25v shallow {name} on the driver: {lane} vs CPU on quad maxdiff {md} (bar {SHALLOW_ABS_BAR} abs)\n")
-    t |> success(md < SHALLOW_ABS_BAR, "shallow {name}: {lane} == CPU on quad within {SHALLOW_ABS_BAR} abs (measured {md})")
+    to_log(LOG_INFO, "qwen25v shallow {name} on the driver: {backend} vs CPU on quad maxdiff {md} (bar {SHALLOW_ABS_BAR} abs)\n")
+    t |> success(md < SHALLOW_ABS_BAR, "shallow {name}: {backend} == CPU on quad within {SHALLOW_ABS_BAR} abs (measured {md})")
     if (poison) {
         var twp <- mint_tower(mm, 1l, wa, 0l)
         var sp = Qwen25vState()
@@ -219,10 +220,10 @@ def private shallow_routing_cell(t : T?; mm, name, lane : string; wa : int64; po
             setup_dasllama_jobque_()
             qwen25v_encode(twp, sp, planes, 448l, 448l, op)
         }
-        t |> equal(invoke(encodes) - p0, 1l, "shallow {name} poison: {lane}-served")
+        t |> equal(invoke(encodes) - p0, 1l, "shallow {name} poison: {backend}-served")
         let mdp = logits_maxdiff(op, oc)
-        to_log(LOG_INFO, "qwen25v shallow {name} poison: the zeroed block on the {lane} vs the clean CPU chain maxdiff {mdp}\n")
-        t |> success(mdp >= SHALLOW_ABS_BAR, "shallow {name}: a zeroed block through the {lane} chain EXCEEDS the {SHALLOW_ABS_BAR} abs bar (measured {mdp})")
+        to_log(LOG_INFO, "qwen25v shallow {name} poison: the zeroed block on the {backend} vs the clean CPU chain maxdiff {mdp}\n")
+        t |> success(mdp >= SHALLOW_ABS_BAR, "shallow {name}: a zeroed block through the {backend} chain EXCEEDS the {SHALLOW_ABS_BAR} abs bar (measured {mdp})")
         delete op
         delete sp
         delete twp

@@ -119,14 +119,14 @@ other stocked fixture gates on its own presence.
 cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
 calls no loader that bakes a `.dlim` - a loader that, with `DASLLAMA_IMAGE` unset, writes a
-`.dlim` beside the model: `load_model`, `load_model_cached`, `load_model_image`,
-`load_<family>_tower`, `load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`,
-`load_vision_embedder`, `load_audio_embedder`, `load_tts_model`, `load_styletts2` (`load_pocket`, and `load_tts_model` on a
-Pocket file, bake nothing), and a new loader of that kind joins this list in the same change; such a test loads a media carrier in
-memory from the family's `stage_*` staging - its `mint_*` twin, or `cache_via_image_staged` with
-an empty image path.** A disk bake under a lane pin (a `set_<family>_q8`-class knob or a Metal
-tensor-crowns pin) purges the serving lane's `.dlim` beside the model, and the next direct-image
-load in another suite panics on the wrong identity.
+`.dlim` beside the model (the property decides: `load_model`, `load_model_cached`,
+`load_model_image`, `load_<family>_tower` / `_encoder` / `_embedder`, `load_<carrier>_model`,
+`load_asr_model`, `load_whisper_model`, `load_vision_embedder`, `load_audio_embedder`,
+`load_tts_model`, `load_styletts2`; `load_pocket`, and `load_tts_model` on a Pocket file, bake
+nothing); such a test loads a media carrier in memory from the family's `stage_*` staging - its
+`mint_*` twin, or `cache_via_image_staged` with an empty image path.** A disk bake under a lane
+pin (a `set_<family>_q8`-class knob or a Metal tensor-crowns pin) purges the serving lane's `.dlim`
+beside the model, and the next direct-image load in another suite panics on the wrong identity.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -196,8 +196,8 @@ the other lane, instead of pinning, measures whichever lane the box's policy pic
 
 **A cell that sets a family pin or a driver setter - directly, through a helper it calls, or
 through a loader parameter that takes the lane - returns with that pin unset through the unset
-call paired with the setter it pinned through, and that setter back where it found it.** A pin
-left set makes the next cell measure this cell's lane, not its own.
+call paired with the setter it pinned through, and that setter back where it found it, or to its
+default where the driver exposes no getter.** A pin left set makes the next cell measure this cell's lane, not its own.
 
 **A cell asserting the unpinned default lane compares against the predicates the family's
 `*_serves_q8` accessor reads for its unpinned default (whatever its body calls), never against a

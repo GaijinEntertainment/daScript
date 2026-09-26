@@ -14,7 +14,8 @@ the carrier only at the union field, the finalize line, the kind value, and the 
 a prompt, a decode loop, a caps value, or a language rule in the carrier is a defect.
 
 **A GEMM against model weights in an ASR family file - `dasllama/dasllama_whisper.das`,
-`dasllama_parakeet.das`, `dasllama_canary.das`, `dasllama_qwen3a.das` or `dasllama_gemma4a.das`,
+`dasllama/dasllama_parakeet.das`, `dasllama/dasllama_canary.das`, `dasllama/dasllama_qwen3a.das` or
+`dasllama/dasllama_gemma4a.das`,
 and a new file that holds one speech-recognition family's CPU model - that does not go through a
 `*_mm` wrapper or `mm_blob_b` is a defect, hand-written dot-product loops included.**
 

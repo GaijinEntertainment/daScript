@@ -190,12 +190,12 @@ served some clips but not all. The cell prints, per clip, the tower's encode and
 and, on whisper, the decoder's window and decode-batch deltas, plus one closing line counting
 the fully served clips - the engage witness behind the stamp. The Vulkan readings live in
 `PERF_LEDGER.md`, not in the records, against these references, each run on the pod: whisper.cpp's
-own Vulkan build, `whisper-cli -m ggml-<model>-q8_0.bin -f <clip> -t 16 -bs 1 -bo 1 -nf`, timestamps on (under
-`-nt` it advances a whole 30 s a window: fewer encoder runs than the das loop's timestamp-seeking windows), each
-clip behind jfk in one process with the jfk-only process subtracted (the first clip carries the pipeline builds;
-`-ng` for its CPU arm; `GGML_VK_PERF_LOGGER=1` for the per-op table); llama-mtmd-cli b10660
-(Vulkan), `llama-mtmd-cli -m <model Q8_0> --mmproj <mmproj bf16> --audio <clip> -p "Transcribe
-the audio." --temp 0 --jinja -ngl 99 -t 16` (E2B with `-n 256`), its encode the sum of the clip's
+own Vulkan build (the pod's checkout, commit d09f61a, version 1.9.4-dev, GCC 13.3), `whisper-cli -m
+ggml-<model>-q8_0.bin -f <clip> -t 16 -bs 1 -bo 1 -nf`, timestamps on (under `-nt` it advances a whole
+30 s a window: fewer encoder runs than the das loop's timestamp-seeking windows), each clip behind jfk in one
+process with the jfk-only process subtracted (the first clip carries the pipeline builds; `-ng` for its CPU arm;
+`GGML_VK_PERF_LOGGER=1` for the per-op table); llama-mtmd-cli b10660 (Vulkan), `llama-mtmd-cli -m <model Q8_0>
+--mmproj <mmproj bf16> --audio <clip> -p "Transcribe the audio." --temp 0 --jinja -ngl 99 -t 16` (E2B with `-n 256`), its encode the sum of the clip's
 `encoding done in N ms` lines; NeMo's `generate()` through `benchmarks/asr/canary_qwen_bench.py --device cuda`.
 
 Three reference tools carry a GPU arm the board pairs against a das Metal row, each with its

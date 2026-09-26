@@ -178,8 +178,10 @@ plus a `register_*` entry - and a tower driver fills it at `[init]`: the Metal d
 build, the Vulkan driver (`dasllama_vulkan_tower.das`) on a build without das_metal, for the
 blocks seats it serves and the front seats it fills (qwen3a's mel and conv front, gemma4a's
 whole chunk, canary's front, and the whisper-class blocks-with-post-norm seat
-`register_tower_blocks_final_gpu`, which the whisper encode asks before the blocks seat and the
-CPU norm). The direction is forced: the driver requires the family file for its
+`register_tower_blocks_ln_post_gpu`, which the whisper encode asks ahead of its CPU block loop and
+post-norm - a decline asks no second seat; the seat serves the family whose post-norm follows the
+blocks with nothing between, whisper, while the families that pool before it, and ultravox, keep
+the CPU post-norm). The direction is forced: the driver requires the family file for its
 types, so the family cannot require the driver back. A box with no driver leaves the slot empty
 and the CPU form runs. A seat taken over a filled slot (a test's stub through
 `register_styletts2_gpu` or `register_pocket_gpu`, a record of seats whose names and per-seat call

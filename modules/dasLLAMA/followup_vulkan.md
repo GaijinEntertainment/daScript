@@ -400,7 +400,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
 18. **`rsqrt` vs `1.0/sqrt` - the RMS-norm parity spelling (ledgered 2026-08-07, found by
    the cross-backend similarity audit).** The three rails spell the same inverse norm two
    ways: CPU `1.0 / sqrt(ss)` (`dasllama_math.das` rmsnorm_template), Vulkan pinned to that
-   exact form for CPU==GPU bit-parity (`dasllama_vulkan_classes.das` RmsWgBase, the comment
+   exact form for CPU==GPU bit-parity (`dasllama_vulkan_classes.das` WgReduceBase, the comment
    says so), Metal `rsqrt(..)` - and Metal's divergence SURVIVES its token-for-token decode
    parity arms, so the bit-pin may be softer than assumed. Until settled, any shared or
    reified RMS body must carry the spelling as an explicit policy knob - never silently
@@ -1744,7 +1744,8 @@ module) is independent and can land any time - it is pure structure.
     --image` on the E2B / gemma-3-4b / Qwen3-VL-4B / Qwen2.5-Omni-3B pairs beside their CPU rows.
 105. **The prefill window's partial token column on the l stamp.** The l tile takes its clamped
     edge path on a partial 256-token column, at about a third of the rate: the probe's `wh` arm
-    read q / k / v / o 95 us at 1500 rows against 52 at 1536, fc2 357 against 185 (RTX PRO 4500).
+    read q / k / v / o 95 us at 1500 rows against 52 at 1536, fc2 357 against 185 (RTX PRO 4500,
+    `debug-jit`; the whisper parity pass's bullet in `PERF_LEDGER.md` carries the row).
     The tower chains round their records to the column (`vt_tile_rows`); the resident prefill's
     window chain does not, so a prompt whose last window has between 256 and 512 rows pays the
     path on every dense GEMM the wave model sends to the l column. The lever is the same
@@ -1756,8 +1757,13 @@ module) is independent and can land any time - it is pure structure.
     `memory` rejection arms (`vulkan_audio_tower_blocks`, `vulkan_audio_conv_front`,
     `vulkan_gemma4a_blocks`, `vulkan_gemma4a_chunk`, `vulkan_canary_blocks`,
     `vulkan_canary_front`, `vulkan_q3a_front`, `vulkan_q3a_mel`, the ASR decoder's `wd_attach`)
-    and the decoder's `rows` decline with its two live-window panics - a synthetic shell per
-    decline, the way `test_gpu_serving_declines.das` decides the whole-model driver's; the drivers'
+    and the decoder's two live-window panics (a second state's window then the first's decode
+    step; a decode step past a release) - a synthetic shell per decline, the way
+    `test_gpu_serving_declines.das` decides the whole-model driver's, a must-panic child for the
+    panics; canary's length-mask fill (`vt_zero_elems`, one masked row a stage on jfk) held by the
+    canary twin's bar alone since its exact cell left with `TowerZeroRows`; the vision chains'
+    pad fills at the 256-row cap (up to 192 dead rows a plane over the 64-row cap they left; a
+    `vt_chain_one_shot` reading of the hpad role at 257 rows prices it); the drivers'
     pick of the 64-wide attention stamps (no stocked carrier has 64-wide heads - a truncated tower
     minted at that width, or a kernel-cell pair); the GPU ledger (`vt_pt`, `vt_prof_report`, the
     `vk_prof()` reports) under `DASLLAMA_GPU_PROF=1` - one cell reading the report text; the
@@ -1774,8 +1780,9 @@ module) is independent and can land any time - it is pure structure.
     weakest fold of the census - deferred. `TowerRms` against `ClsArAddRms` at `add_on = 0`: the
     residual class reads a zero add partner, rewrites the row in place and stashes it in a 32 KB
     workgroup array where the tower class reads the row once, so the fold adds two plane passes and
-    a workgroup array to a role that reads 1% of the gemma4a chain (176 us over 36 dispatches at
-    275 rows) - a fold only a ledger showing no loss admits, and the shape says loss. The qwen3v
+    a workgroup array to a role that reads 1% of the gemma4a chain (176 us over 36 stamps at
+    275 rows on the pod's gemma4a jfk ledger, `debug-jit`) - a fold only a ledger showing no loss
+    admits, and the shape says loss. The qwen3v
     block chain against `vt_ln_chain`'s mul_mm arm: the fold puts the fused qkv GEMM, its bias row
     and the rope tables under branches in the whisper and gemma3v hot chain, and no differ gates
     it (the dispatch order changes) - the qwen3v twin alone does; left as the family's own chain.
@@ -1786,17 +1793,19 @@ module) is independent and can land any time - it is pure structure.
     clamp-convert; the arena's did not). The seam pair `TowerPostAddLnT` / `ClsArAddRms`: the
     residual class computes (x + partner) . ascale and the tower x + ascale . branch, and the
     `pre_on` mad rounds differently - a fold with an ascale-placement axis, ruled separately.
-102. **The whisper decode step's remaining dispatches.** A token is 55 dispatches over a
-    four-layer turbo decoder after the row passes took their Q8_0 feed (`TowerLnRq`,
+102. **The whisper decode step's remaining dispatches.** A token is 66 dispatches (55 ledger
+    stamps) over a four-layer turbo decoder after the row passes took their Q8_0 feed (`TowerLnRq`,
     `TowerPostAddLnRq`, `TowerBiasActRq`, `TowerWdecAttnCombRq`; 0.77 ms on the device and 1.0 ms
-    of host wall for a three-row batch, ~9 us a dispatch the floor for separate dispatches with
+    of host wall for a three-row batch on the pod's turbo jfk ledger, `debug-jit`, the dedup tip's
+    bullet in `PERF_LEDGER.md` - ~12 us a dispatch, the floor for separate dispatches with
     barriers). What is left to fold: the two f16 appends (`TowerWdecKv` twice a layer) into one
     dispatch or the fused qkv GEMV's epilogue; the attention's partial and combine as one class
     where the row's keys fit one chunk (a window's 1500 cross keys are six chunks, so the self
     attention alone qualifies); the instrument `DASLLAMA_GPU_PROF=1` on the turbo jfk row beside
     `test_whisper_vulkan_wdec` and `test_vkt_wdec_fused_rq`. The reference is ahead on nothing
-    here (whisper-cli's decode reads 1.05 to 1.10 ms a token against 0.87), so this is a margin
-    row, not a parity one.
+    here (whisper-cli's `whisper_print_timings` decode line reads 1.05 to 1.10 ms a token on jfk
+    under the recipe's flags, whisper.cpp d09f61a, against the ledger's 0.87 ms host wall a
+    token, `debug-jit`), so this is a margin row, not a parity one.
 101. **The Vulkan whisper decoder's host phases.** The driver serves the cross-KV and the decode
     step (`ARCHITECTURE_GPU_TOWER_VULKAN.md` 2.2at); the cross-KV's CPU layouts stay on the device
     until a CPU reader needs them, and the encoder rows arrive device to device. What stays on the

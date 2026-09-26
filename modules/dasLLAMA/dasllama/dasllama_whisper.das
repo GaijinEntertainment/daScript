@@ -985,7 +985,7 @@ def private whisper_index(bytes : array<uint8> | #; n_bytes : int64; var st : Wh
 //! decoder's cross-attention reads (via whisper_cross_kv).
 [hot_path]
 def whisper_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
-    if (!audio_encode_blocks_final(t, s, mel)) {
+    if (!audio_encode_blocks_ln_post(t, s, mel)) {
         layernorm_batch(s.xb, s.x, t.fblob, t.lnp_w_off, t.lnp_b_off, t.d_model, t.n_ctx, t.eps)
     }
 }
@@ -1007,6 +1007,7 @@ struct DecoderState {
     n_past : int64
     gpu_kv_gen : int64      // 0 until the GPU decode step serves this window's KV (the Metal
                             // driver stamps it; a mid-window eviction then panics loud)
+    gpu_uid : uint64        //! the GPU decoder driver's identity for this state (0 until it serves one): an address is not identity
     kcache : array<float>   // [L][H][hs][Tmax]
     vcache : array<float>   // [L][H][Tmax][hs]
     kx : array<float>       // [L][H][hs][Ta] cross keys (from the encoder output, per window)
@@ -1101,7 +1102,7 @@ def register_whisper_decode_gpu(fn : WhisperDecodeGpuFn) {
 //! hs^-0.25), V = W_v·enc + b. Resets the sequence.
 [hot_path]
 def whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) {
-    if (g_wh_cross_kv_gpu_set && invoke(g_wh_cross_kv_gpu, w, ds, enc_out)) {
+    if (g_wh_cross_kv_gpu_set && empty(g_audio_ref_dir) && invoke(g_wh_cross_kv_gpu, w, ds, enc_out)) {
         ds.n_past = 0l
         return
     }
@@ -1347,7 +1348,7 @@ def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array
     if (p0 + n > tmax) {
         panic("whisper_decode_batch: {p0}+{n} tokens exceed n_text_ctx {tmax}")
     }
-    if (g_wh_decode_gpu_set && invoke(g_wh_decode_gpu, w, ds, unsafe(addr(tokens[0])), n)) {
+    if (g_wh_decode_gpu_set && empty(g_audio_ref_dir) && invoke(g_wh_decode_gpu, w, ds, unsafe(addr(tokens[0])), n)) {
         ds.n_past += n
         return
     }

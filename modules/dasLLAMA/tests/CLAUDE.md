@@ -362,7 +362,12 @@ the store wrote against the CPU decoder form: the causal rows across a chunk bou
 rows inside the first chunk with the second chunk's partial empty, the scaled-keys and
 causal-versus-cross controls), and its fused row passes (`test_vkt_wdec_fused_rq`: the layernorm, the post-add with its next
 norm, the bias + tanh GELU and the attention combine, each fused with the Q8_0 requant, byte for byte and scale for scale
-against the pass followed by `TowerClampRq`, the residual rows in place the same, a poisoned input moving each one's bytes);
+against the pass followed by `TowerClampRq` at three shapes - the 256-wide row of the other cells, the 384-wide row of whisper
+tiny (the strided loops' partial tail) and turbo's 1280 (the block pass's second trip), the combine at one chunk and at two -
+the bias arm and the combine held to their CPU forms at the approx bar as well, the residual rows in place the same and moved
+off their input, a poisoned input moving each one's bytes); the row-count rule of the GEMM records (`test_vkt_tile_rows`: a
+record on the l column rounds to it, the s and m columns and the batch tile keep the raw count - a CPU helper, no dispatch,
+no poisoned element);
 the audio fronts' classes - `test_vkt_tower_front_movers` (the k3
 s2 p1 im2col over two chunks with its pad and zero tail, the stem's im2col1d on both source
 layouts and strides, the qwen3a and canary feature shuffles, canary's rel-plane head panels (the
@@ -954,8 +959,12 @@ the knob-off leg's knob decline with zero windows and zero steps counted, then t
 still transcribing; the same skips as the tower twin, plus the handoff count: every served window took the encoder rows
 off the tower's plane device to device), `test_whisper_vulkan_wdec_flush` (tiny: a nine-row first batch through a served
 window declines `rows`, the pending cross-KV readback lands, and the CPU chain's logits over it match the knob-off chain's
-token and bar), `test_whisper_vulkan_stem_flush` (tiny: the block hooks pinned off through `set_vulkan_tower_blocks`, the
-stem's device rows land at the `knob` decline and the CPU blocks over them transcribe the all-CPU chain's text), the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
+token and bar, the batch with its last token changed landing outside the bar as the control), `test_whisper_vulkan_stem_flush`
+(tiny: the block hooks pinned off through `set_vulkan_audio_blocks`, the stem's device rows land at the `blocks` decline and the
+CPU blocks over them transcribe the all-CPU chain's text), `test_whisper_vulkan_wdec_lifetime` (tiny, one session reused the way a
+serving worker reuses one: a model drop between two transcriptions - the second serves again and reads the same; the decoder knob
+turned off between two - the second reads as a fresh knob-off session; the block hooks pinned off after a served window - no
+handoff for the CPU-encoded windows, the text of the CPU-encoder chain), the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
 f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp; the strict token-identity cell
 pins the simdgroup lane, and its tolerance-graded twin pins the crowns ON and asserts WORD
 equality - the tensor twins' quality gate), the q8-gate CPU-vs-CPU claims

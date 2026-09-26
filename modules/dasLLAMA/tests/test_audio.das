@@ -282,7 +282,8 @@ def private vulkan_blocks_twin(t : T?; family, file : string; layers_claimed : i
         }
         var encx <- make_encoder_state(twx)
         var enc <- make_encoder_state(tw)
-        let spec = TwinSpec(family = family, lbl = tag, n_layer = tw.n_layer, metric = TwinMetric.rel_l2)
+        let spec = TwinSpec(family = family, tag = tag, n_layer = tw.n_layer, metric = TwinMetric.rel_l2)
+        set_vulkan_audio_blocks(true)
         let r <- twin_three_way(t, spec, tw, enc, twx, encx, $(e; var s; var out) => aud_twin_encode(e, s, mel, out)) $(legs) {
             t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: exactly the device leg dispatched")
             t |> equal(legs.dev.blocks - legs.pre.blocks, tw.n_layer, "{tag}: blocks delta = n_layer")
@@ -373,10 +374,12 @@ def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto
         var encp <- invoke(mint_poisoned)
         var stp = ST()
         var poisoned : array<float>
+        let p0 = vulkan_tower_stats().encodes
         with_job_que() {
             setup_dasllama_jobque_()
             invoke(encode, encp, stp, samples, poisoned)
         }
+        t |> success(vulkan_tower_stats().encodes > p0, "{tag} poison: device-served (encodes delta)")
         tower_twin_poison(t, tag, r.reference, poisoned, r.bar)
         delete poisoned
         delete stp
@@ -399,15 +402,15 @@ def test_gemma4a_vulkan_twin(tst : T?) {
                 var stx = Gemma4aState()
                 var st = Gemma4aState()
                 var n_exact = 0l
-                let spec = TwinSpec(family = "gemma4a", lbl = "gemma4a jfk", n_layer = enc.n_layer, metric = TwinMetric.rel_l2)
+                let spec = TwinSpec(family = "gemma4a", tag = "gemma4a jfk", n_layer = enc.n_layer, metric = TwinMetric.rel_l2)
                 let r <- twin_three_way(t, spec, enc, st, encx, stx, $(e; var s; var out) => gemma4a_encode_all(e, s, samples, out)) $(legs) {
-                    n_exact = legs.nexact
+                    n_exact = legs.n_exact
                     let n_chunks = legs.dev.encodes - legs.pre.encodes
-                    t |> equal(legs.ncpu, legs.nexact, "gemma4a jfk: the q8 chain's token count")
-                    t |> equal(legs.ndev, legs.nexact, "gemma4a jfk: the device chain's token count")
+                    t |> equal(legs.n_cpu, legs.n_exact, "gemma4a jfk: the q8 chain's token count")
+                    t |> equal(legs.n_dev, legs.n_exact, "gemma4a jfk: the device chain's token count")
                     t |> success(n_chunks >= 1l, "gemma4a jfk: the device served the chunk encodes ({n_chunks})")
                     t |> equal(legs.dev.blocks - legs.pre.blocks, n_chunks * enc.n_layer, "gemma4a jfk: every block of every served encode ran on the driver")
-                    front_served(t, "gemma4a jfk", legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.pre.declines)
+                    front_served(t, "gemma4a jfk", legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.cpu.declines)
                 }
                 if (r.bar > 0.0lf) {
                     var st2 = Gemma4aState()
@@ -455,6 +458,7 @@ def private mint_cn(path : string; q8 : bool; zero_block : int64) : CanaryEncode
     return <- enc
 }
 
+[cold_path]
 def private cn_twin_encode(enc : CanaryEncoder; var st : CanaryState; clip : array<float>; var out : array<float>) : int64 {
     canary_log_mel(enc, clip, st)
     let n = canary_encode(enc, st)
@@ -474,14 +478,14 @@ def test_canary_vulkan_twin(tst : T?) {
                 var stx = CanaryState()
                 var st = CanaryState()
                 var n_exact = 0l
-                let spec = TwinSpec(family = "canary", lbl = "canary jfk", n_layer = enc.n_layer, metric = TwinMetric.rel_l2)
+                let spec = TwinSpec(family = "canary", tag = "canary jfk", n_layer = enc.n_layer, metric = TwinMetric.rel_l2)
                 let r <- twin_three_way(t, spec, enc, st, encx, stx, $(e; var s; var out) => cn_twin_encode(e, s, samples, out)) $(legs) {
-                    n_exact = legs.nexact
-                    t |> equal(legs.ncpu, legs.nexact, "canary jfk: the q8 chain's frame count")
-                    t |> equal(legs.ndev, legs.nexact, "canary jfk: the device chain's frame count")
+                    n_exact = legs.n_exact
+                    t |> equal(legs.n_cpu, legs.n_exact, "canary jfk: the q8 chain's frame count")
+                    t |> equal(legs.n_dev, legs.n_exact, "canary jfk: the device chain's frame count")
                     t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "canary jfk: the device served the encode")
                     t |> equal(legs.dev.blocks - legs.pre.blocks, enc.n_layer, "canary jfk: every block ran on the driver")
-                    front_served(t, "canary jfk", legs.dev.convs - legs.pre.convs, 1l, legs.dev.declines - legs.pre.declines)
+                    front_served(t, "canary jfk", legs.dev.convs - legs.pre.convs, 1l, legs.dev.declines - legs.cpu.declines)
                 }
                 if (r.bar > 0.0lf) {
                     var st2 = CanaryState()
@@ -541,7 +545,7 @@ def private mint_q3a(path : string; q8 : bool; zero_block : int64) : Qwen3aTower
 //! a qwen3a twin leg's two states over one tower
 struct Q3aLegState {
     enc : EncoderState
-    cs : Qwen3aConvState
+    conv : Qwen3aConvState
 }
 
 def private q3a_leg_state(tw : Qwen3aTower) : Q3aLegState {
@@ -551,11 +555,12 @@ def private q3a_leg_state(tw : Qwen3aTower) : Q3aLegState {
 }
 
 //! the device leg (the knob on) encodes the device mel's `dev_win`, the CPU legs the CPU mel's `win`
+[cold_path]
 def private q3a_twin_encode(tw : Qwen3aTower; var s : Q3aLegState; win, dev_win : MelChunk; var out : array<float>) : int64 {
     if (vulkan_tower_knob()) {
-        qwen3a_encode(tw, s.enc, s.cs, dev_win)
+        qwen3a_encode(tw, s.enc, s.conv, dev_win)
     } else {
-        qwen3a_encode(tw, s.enc, s.cs, win)
+        qwen3a_encode(tw, s.enc, s.conv, win)
     }
     out := s.enc.out
     return long_length(out)
@@ -590,12 +595,12 @@ def test_qwen3a_vulkan_front(tst : T?) {
                     let win <- qwen3a_mel_window(mel, off)
                     let dev_win <- qwen3a_mel_window(dev_mel, off)
                     let n_chunks = dev_win.n_len / QWEN3A_CHUNK
-                    let spec = TwinSpec(family = "qwen3a", lbl = tag, n_layer = tw.core.n_layer, metric = TwinMetric.rel_l2)
+                    let spec = TwinSpec(family = "qwen3a", tag = tag, n_layer = tw.core.n_layer, metric = TwinMetric.rel_l2)
                     let r <- twin_three_way(t, spec, tw, sq, twx, sx, $(e; var s; var out) => q3a_twin_encode(e, s, win, dev_win, out)) $(legs) {
                         if (legs.dev.convs == legs.pre.convs) {
                             to_log(LOG_INFO, "{tag}: the driver declined - {vulkan_tower_declines()}\n")
                         }
-                        front_served(t, tag, legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.pre.declines)
+                        front_served(t, tag, legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.cpu.declines)
                         t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: the block loop served the window")
                     }
                     if (off == 0l && r.bar > 0.0lf) {

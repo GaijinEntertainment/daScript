@@ -2699,7 +2699,7 @@ def arena_planes(fmt : int; blk : int64) : tuple<wq : uint64; ws : uint64; wqb :
 }
 
 //! a class-GEMV region record: region `i` of the meta at `hb` reads weight block `wblk` and its activation rows at block 0
-def gemv_region_pair(hb : HostBuf; i : int; wblk : uint) {
+def fill_gemv_region(hb : HostBuf; i : int; wblk : uint) {
     unsafe {
         var mp = reinterpret<uint?>(hb.mapped)
         mp[i * 2] = wblk
@@ -2708,14 +2708,14 @@ def gemv_region_pair(hb : HostBuf; i : int; wblk : uint) {
 }
 
 def fill_gemv_regions(hb : HostBuf; blk : int64) {
-    gemv_region_pair(hb, 0, uint(arena_local_blk(blk)))
+    fill_gemv_region(hb, 0, uint(arena_local_blk(blk)))
 }
 
 // two-region form: regions land contiguously in y at ybase, ybase+d (the r*d+row rule).
 // Both blocks must live in ONE slab (one set binds one plane pair) — the caller guards.
 def fill_gemv_regions2(hb : HostBuf; blk_a, blk_b : int64) {
-    gemv_region_pair(hb, 0, uint(arena_local_blk(blk_a)))
-    gemv_region_pair(hb, 1, uint(arena_local_blk(blk_b)))
+    fill_gemv_region(hb, 0, uint(arena_local_blk(blk_a)))
+    fill_gemv_region(hb, 1, uint(arena_local_blk(blk_b)))
 }
 
 //! the q+k+v form: q as `qpieces` regions of `piece_blocks` blocks each, then k, then v (off under with_v = false) - every
@@ -2723,12 +2723,12 @@ def fill_gemv_regions2(hb : HostBuf; blk_a, blk_b : int64) {
 def fill_gemv_regions_qkv(hb : HostBuf; blk_q, blk_k, blk_v : int64; qpieces, piece_blocks : int64; with_v : bool) {
     var r = 0
     for (p in range64(qpieces)) {
-        gemv_region_pair(hb, r, uint(arena_local_blk(blk_q) + p * piece_blocks))
+        fill_gemv_region(hb, r, uint(arena_local_blk(blk_q) + p * piece_blocks))
         r++
     }
-    gemv_region_pair(hb, r, uint(arena_local_blk(blk_k)))
+    fill_gemv_region(hb, r, uint(arena_local_blk(blk_k)))
     if (with_v) {
-        gemv_region_pair(hb, r + 1, uint(arena_local_blk(blk_v)))
+        fill_gemv_region(hb, r + 1, uint(arena_local_blk(blk_v)))
     }
 }
 
@@ -3484,17 +3484,17 @@ def vt_prof_report(chain : string; nl, npos : int64; wall_us : int) {
         sum[int(g_vt_prof_roles[i])] += us
         cnt[int(g_vt_prof_roles[i])]++
     }
-    to_log(LOG_INFO, "vk tower {chain} gpu: {nl} blocks x {npos} rows, {int(g_pfq_n) - 1} dispatches, {int(tot)} us on the device, {wall_us} us host wall\n")
+    to_log(LOG_INFO, "vk tower {chain} gpu: {nl} blocks x {npos} rows, {int(g_pfq_n) - 1} stamps, {int(tot)} us on the device, {wall_us} us host wall\n")
     for (r in type<VtProfRole>) {
         if (cnt[int(r)] > 0) {
-            to_log(LOG_INFO, "  {r}: {int(sum[int(r)])} us over {cnt[int(r)]} dispatches ({int(sum[int(r)] * 100.0lf / max(tot, 1.0lf))}%)\n")
+            to_log(LOG_INFO, "  {r}: {int(sum[int(r)])} us over {cnt[int(r)]} stamps ({int(sum[int(r)] * 100.0lf / max(tot, 1.0lf))}%)\n")
         }
     }
 }
 
-//! a chain recorded, submitted and waited under the GPU ledger: stamp 0 is its baseline, `vt_pt` names the rest, and the report
-//! follows the wait under DASLLAMA_GPU_PROF=1
-def vt_prof_chain(chain : string; nl, npos : int64; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+//! a chain recorded, submitted and waited under the GPU ledger: stamp 0 is its baseline, `vt_pt` names the rest (a stamp may
+//! cover several dispatches), and the report follows the wait under DASLLAMA_GPU_PROF=1
+def vt_chain_one_shot(chain : string; nl, npos : int64; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
     let t0 = ref_time_ticks()
     cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
         pfq_begin(raw)

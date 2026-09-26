@@ -11,6 +11,8 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP g3|gemma|splitk - the gemma role shapes and the down's split-k ladder, whole against split.
 // ATTRIBUTION SWEEP khrsk - the KHR arm's q8 race (DASLLAMA_COOPMAT=mm): the q8 mul_mm tile against the KHR kq tile whole and split, one process.
 // ATTRIBUTION SWEEP small|barform - the token command's one-workgroup row kernels alone, chained, and by barrier form.
+// ATTRIBUTION SWEEP wh - the whisper large-v3-turbo encoder's role shapes at the chunk's 1500 rows and at 1536 (whole l columns):
+// the cm2 l and m stamps as a race, and fc2's split-k ladder; the sdot4 mm tile skipped (it stalls at 1500 rows on fc1).
 // RefGemmArgs mirrors that blob's push block byte for byte - its constant fields are dead by design.
 // Every arm records once, then times over repeated submits; the serving kernels' oracle gate
 // is tests/test_vulkan_kernels.das.
@@ -23,7 +25,7 @@ options _dasllama_internal = true
 // skew; ts:<fmt> a timestamp or a barrier between two of its m stamps; cold:<fmt> its l, m and s
 // stamps warm and cold, the host schedule, the deep slab, the wide plan and the flush; cm2x|k6x|ref
 // the bisect and reference arms; khrx the KHR kq tile's weight-stage and structural bisect; mmqx the
-// integer tile prototypes.
+// integer tile prototypes; wh the whisper encoder's shapes at 1500 and 1536 rows.
 // Shapes default to Llama-3.2-3B Q8 geometry (dim 3072, hidden 8192, kv_dim 1024).
 
 require math
@@ -2813,12 +2815,13 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
     let xq_bytes = int64(rows * nbb) * 32l
     let xs_bytes = int64(rows * nbb) * 4l
     let xf_bytes = int64(rows * nbb) * 64l
+    let xf_dev_bytes = int64((rows + READ_SLACK) * nbb) * 64l   //! the m stamp loads a partial last column unclamped: the feed carries the slack rows
     let y_bytes = int64(rows * d) * 4l
     let wqd = make_device_buf(wq_bytes)
     let wsd = make_device_buf(ws_bytes)
     let xqd = make_device_buf(xq_bytes)
     let xsd = make_device_buf(xs_bytes)
-    let xfd = make_device_buf(xf_bytes)
+    let xfd = make_device_buf(xf_dev_bytes)
     let yd = make_device_buf(y_bytes)
     var sched : array<uint>
     sched |> resize(4 + wgs)
@@ -2856,7 +2859,7 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
         if (g_gpu.coopmat_mode == COOPMAT_CM2) {
             // the cm2 tiles at the serving no-split config (f16-fed, decode-in-load); off cm2 mode the device enabled no cm2 extension
             let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
-            let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
+            let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_dev_bytes, y_bytes)
             let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
             var scl = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
             var rawl = alloc_cmd()
@@ -2866,7 +2869,6 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
                 enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
             }
             vk_check(vkEndCommandBuffer(rawl), null)
-            cm2l_us = usec_per_dispatch(rawl)
             var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
             var rawm = alloc_cmd()
             vk_check(vkBeginCommandBuffer(rawm, begin), null)
@@ -2875,7 +2877,10 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
                 enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
             }
             vk_check(vkEndCommandBuffer(rawm), null)
-            cm2m_us = usec_per_dispatch(rawm)
+            var lm <- [rawl, rawm]
+            let best <- sweep_best_us(lm)   //! the two columns are a race: their rounds alternate, each figure its best round
+            cm2l_us = best[0]
+            cm2m_us = best[1]
         }
     }
     let flop = 2.0lf * double(rows) * double(d) * double(n)
@@ -2906,10 +2911,11 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
     let wq_bytes = int64(totblk) * 32l
     let ws_bytes = int64(totblk) * 2l
     let xf_bytes = int64(rows * nbb) * 64l
+    let xf_dev_bytes = int64((rows + READ_SLACK) * nbb) * 64l   //! the m stamp's unclamped partial column reads the slack rows
     let y_bytes = int64(nsplit) * int64(rows * d) * 4l
     let wqd = make_device_buf(wq_bytes)
     let wsd = make_device_buf(ws_bytes)
-    let xfd = make_device_buf(xf_bytes)
+    let xfd = make_device_buf(xf_dev_bytes)
     let yd = make_device_buf(y_bytes)
     let mwgs = ((cnt + 127) / 128) * ((d + 127) / 128) * nsplit
     let lwgs = khr ? mwgs : ((cnt + 255) / 256) * ((d + 127) / 128) * nsplit   //! the KHR tile has the m column's 128-token geometry
@@ -2934,7 +2940,7 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
         let scd = make_device_buf(sc_bytes)
         upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
         let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
-        let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
+        let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_dev_bytes, y_bytes)
         let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
         let begin = VkCommandBufferBeginInfo()
@@ -2961,7 +2967,6 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
                 enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
             }
             vk_check(vkEndCommandBuffer(rawl), null)
-            cm2l_us = usec_per_dispatch(rawl)
             var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
             var rawm = alloc_cmd()
             vk_check(vkBeginCommandBuffer(rawm, begin), null)
@@ -2970,7 +2975,10 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
                 enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
             }
             vk_check(vkEndCommandBuffer(rawm), null)
-            cm2m_us = usec_per_dispatch(rawm)
+            var lm <- [rawl, rawm]
+            let best <- sweep_best_us(lm)   //! the two columns are a race: their rounds alternate, each figure its best round
+            cm2l_us = best[0]
+            cm2m_us = best[1]
             let tr = time_split_reduce(yd, y_bytes, rows, d, nsplit, scl, pc, lwgs)
             red_us = tr.red
             chain_us = tr.chain
@@ -2978,10 +2986,12 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
     }
     let flop = 2.0lf * double(rows) * double(d) * double(n)
     if (khr) {
-        print("{name} khr split{nsplit} (chunk {ck}): khr wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | reduce {red_us} us, tile + reduce chained {chain_us} us | timing-only\n")
+        print("{name} khr split{nsplit} (chunk {ck}): khr wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s  timing-only\n")
     } else {
-        print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s | cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s | reduce {red_us} us, l + reduce chained {chain_us} us | timing-only\n")
+        print("{name} split{nsplit} (chunk {ck}): cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {flop / (cm2l_us * 1000000.0lf)} TFLOP/s  timing-only\n")
+        print("{name} split{nsplit} (chunk {ck}): cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s  timing-only\n")
     }
+    print("{name} split{nsplit} (chunk {ck}): reduce {red_us} us, {khr ? "tile" : "l"} + reduce chained {chain_us} us  timing-only\n")
     delete sched
     delete b
 }
@@ -4064,6 +4074,11 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         return
     }
     if (only == "wh") {
+        if (!g_gpu.has_coopmat2 || g_gpu.coopmat_mode != COOPMAT_CM2) {
+            print("wh reads the cm2 stamps alone - it needs a coopmat2 device in cm2 mode (DASLLAMA_COOPMAT=cm2)\n")
+            g_probe_exit = 1
+            return
+        }
         run_shape("wh qkvo", 1280, 1280, 1500, with_sdot4_mm = false)
         run_shape("wh fc1 ", 5120, 1280, 1500, with_sdot4_mm = false)
         run_shape("wh fc2 ", 1280, 5120, 1500, with_sdot4_mm = false)

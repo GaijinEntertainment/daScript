@@ -159,18 +159,23 @@ the scratch's row cap is a multiple of the l column (`vt_cap_rows`, so every pla
 sizes holds a record's rounded rows), so the l stamp's last column is whole and takes its fast path: a partial column runs its clamped edge path at a third of the
 rate (whisper's 1500-row chunk read q/k/v/o 95 us against 52 at 1536, fc2 357 against 185, on the
 RTX PRO 4500). A record on the s or m column keeps the raw count - those stamps load a partial
-column unclamped and clamp the store, and a plane sized to the record (gemma4a's 13-row rel
-projection) holds nothing past it. The rounded rows past the live count are the same dead rows.
+column unclamped and clamp the store - and so does gemma4a's rel record on every column: its
+13-row planes are sized to it, and a forced l column would read and write past them. The rounded
+rows past the live count are the same dead rows.
 
 The whisper-class stem leaves its rows on the device (`x_ready`, a pending readback naming the
 encoder state's `x`), and the block chain takes them there; a block hook that declines after the
-stem served lands them first (`vt_x_flush`), as does the resident's release, so the CPU block loop
-reads what the stem computed and the served loop never copies them out. The whisper encode asks
-the blocks-with-post-norm seat (`register_tower_blocks_final_gpu`) before the blocks seat: on it
-the chain folds the tower's post-norm into the last block's post-add (the f32 post-add over the
-post-norm's rows, which ride the norms plane behind the layers'), reads the normed rows back into
-`xb` instead of `x`, and records the device plane holding them (`vulkan_tower_enc_out`), which the
-whisper cross-KV chain copies device to device in place of the host upload.
+stem served lands them first (`vt_x_flush`), so the CPU block loop reads what the stem computed
+and the served loop never copies them out. A pending never outlives its encode, so the resident's
+release and the device's drop only forget the mark. The whisper encode asks the
+blocks-with-post-norm seat (`register_tower_blocks_ln_post_gpu`) and, off it, runs the CPU block
+loop itself: on the seat the chain folds the tower's post-norm into the last block's post-add (the
+f32 post-add over the post-norm's rows, which ride the norms plane behind the layers'), reads the
+normed rows back into `xb` instead of `x`, and records the device plane holding them
+(`vulkan_tower_enc_out`), which the whisper cross-KV chain copies device to device in place of the
+host upload. The record names the encode in flight alone: every audio hook entry clears it, the
+scratch's forget drops it with the plane, and the whisper decoder hooks stand down with the
+encoder's under the stage-diff rail (`g_audio_ref_dir`) - a CPU-encoded window never reads a served one's plane.
 Under `DASLLAMA_GPU_PROF=1` every dispatch of an
 audio chain writes a timestamp with a role (`VtProfRole`), and `vt_prof_report` prints the chain's
 device time per role beside the host wall after the encode - the ledger the levers are read from.
@@ -242,8 +247,9 @@ the cross K/V as f16 [layer][head][ta][hs] (unscaled; the attention carries the 
 the self cache as f16 [layer][head][tmax][hs].
 
 The cross-KV chain is one command buffer per window: the encoder rows fed once (copied device to
-device off the tower's plane when the tower landed exactly these rows - `vulkan_tower_enc_out`,
-counted as a handoff - else uploaded from the host; then the halfword
+device off the tower's plane when the tower landed exactly these rows in the encode in flight -
+`vulkan_tower_enc_out`, counted as a handoff - else uploaded from the host, a miss said once per
+resident; then the halfword
 store on the cm2 feed, the Q8_0 requant on the mul_mm tiles), then per layer the ck and cv GEMMs on
 the tile the tower chains ride (`VtTile`, the schedule records written as the tower's) and the
 K/V store class (`TowerWdecKv`), which writes a projection's [rows x d] output - a head's hs
@@ -251,11 +257,12 @@ columns a row - into head-major planes, run twice off each projection - the f16 
 layout (kx pre-scaled and transposed, vx with its bias) on device planes of its own. That layout is
 read back into the decoder state only when that state's own CPU reader can need it - the step's
 `rows` decline on a window's first batch, and the step called on it while it is not the live
-window (`wd_flush_cross_kv`, over a pending mark the cross-KV chain leaves) - so the served loop
-never pays the 61 MB copy a turbo window's layouts make, and a state's next window supersedes its
-pending one unread. The driver never writes into another state, which may already be gone: another
-state's window, and the release, drop the pending readback and mark the superseded state, whose
-next decode step panics under the one-live-window rule until it starts a window of its own. The decode step is
+window (`wd_flush_cross_kv`, into the state in hand, over a pending mark the cross-KV chain leaves
+naming the state by the driver's own serial, `DecoderState.gpu_uid`, never its address) - so the
+served loop never pays the 61 MB copy a turbo window's layouts make, and a state's next window,
+served or declined, supersedes its pending one unread. The driver stores no pointer into a state and
+never writes into another one, which may already be gone: another state's window, the release and the
+model drop mark the pending owner, whose next decode step panics until it starts a window of its own. The decode step is
 one command buffer per batch: the token and position rows summed on the host and uploaded, then
 per layer the LN with its Q8_0 feed in one dispatch (`TowerLnRq`, the first layer), the fused
 q|k|v GEMV (three regions of one dispatch, the N-column form over a batch's rows), the two f16
@@ -269,7 +276,9 @@ the logits readback - the CPU filter and sampler stay the parity anchor. The fus
 the same Q8_0 bytes as the row pass and the separate requant (`TowerClampRq`) - the block store is
 `Q8BlockStoreT`'s, the one text every requant stamp shares, eight consecutive lanes a block, and the
 fused passes are their f32 templates' `OUT_Q8` stamps - and cost a token 66 dispatches where the separate
-passes cost 91, the dispatch floor of a decode step being its own launch and barrier. A partial's workgroup
+passes cost 91 (55 and 80 stamps on the GPU ledger's `vk tower whisper decode gpu:` line under `DAS_LOG_LEVEL=info
+DASLLAMA_GPU_PROF=1`, the K/V stores sharing one stamp and the attention pair another), the dispatch floor of a decode
+step being its own launch and barrier. A partial's workgroup
 (`TowerWdecAttnPart`) is one chunk of 256 keys, one head and one row - the chunk's scores off the
 f16 keys, its own max and exp-sum, its unnormalized weighted values - so a 1500-key cross window
 spreads over six workgroups a row. The combine's workgroup (`TowerWdecAttnCombRq`; the f32-storing

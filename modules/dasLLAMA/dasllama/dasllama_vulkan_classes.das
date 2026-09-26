@@ -86,9 +86,8 @@ def private q8k_amax5(m0 : float) : float {
 }
 
 //! the Q8_0 block store every requant stamp shares - under OUT_Q8 the stamp binds `outq` and `outs`, and the store's text lives
-//! (a stamp off the gate carries no such binding and none of the text): eight consecutive lanes hold a 32-block, four elements
-//! each, and `q8_amax3`'s xor fold spans exactly those lanes; `blk_pass` quantizes a row's blocks from `normed_at`, the value the
-//! stamp names for a plane element under the row's statistics
+//! (a stamp off the gate carries no such binding and none of the text): eight consecutive lanes hold a block, `blk_pass` quantizing
+//! a row's blocks from `normed_at`, the stamp's value for a plane element under the row's statistics
 [ |> template_struct_instance]
 class template Q8BlockStoreT {
     @template_constant OUT_Q8 : bool = false   //!< the stamp quantizes its rows into Q8_0 blocks: `outq` and the block scales `outs`
@@ -102,7 +101,7 @@ class template Q8BlockStoreT {
             if (lane8 == 0u) {
                 outs[b] = d
             }
-            let qb = b * 32u + lane8 * 4u
+            let qb = b * KQ_B32_ELEMS_U + lane8 * 4u
             outq[qb] = q8_quant1(v.x, id)
             outq[qb + 1u] = q8_quant1(v.y, id)
             outq[qb + 2u] = q8_quant1(v.z, id)
@@ -119,7 +118,7 @@ class template Q8BlockStoreT {
             let lane = tid % 32u
             var b = (tid / 32u) * 4u + lane / 8u
             while (b < nblk) {
-                let e = base + b * 32u + (lane % 8u) * 4u
+                let e = base + b * KQ_B32_ELEMS_U + (lane % 8u) * 4u
                 let v = float4(normed_at(e, mean, inv), normed_at(e + 1u, mean, inv), normed_at(e + 2u, mean, inv), normed_at(e + 3u, mean, inv))
                 blk_store(qb0 + b, lane % 8u, v)
                 b += 32u
@@ -128,10 +127,10 @@ class template Q8BlockStoreT {
     }
 }
 
-// the workgroup-rms the row kernels share (one wg reduces one row): one barrier a reduce, every
-// thread summing the subgroup partials in the same order, so every thread holds the same inverse
+// the workgroup reduces the row kernels share (one wg reduces one row): one barrier a reduce, every
+// thread summing the subgroup partials in the same order, so every thread holds the same sum, max or inverse rms
 [ |> template_struct_instance]
-class template RmsWgBase : Q8BlockStoreT {
+class template WgReduceBase : Q8BlockStoreT {
     @workgroup part : float[128]   //! two slots of 64 partials, one per subgroup (subgroupSize >= 4 floor)
 
     //! `slot` alternates 0 / 1 between consecutive reduces of one kernel
@@ -186,7 +185,7 @@ class template RmsWgBase : Q8BlockStoreT {
 
 //! the residual step's shell (ARCHITECTURE_GPU_VULKAN_NROW.md sec.2.2ap): a stamp supplies the accessors below and a `pa` carrying the step's fields under these names
 [ |> template_struct_instance]
-class template ResidualT : RmsWgBase {
+class template ResidualT : WgReduceBase {
     @template_constant NORM_SWITCH : bool = false   //!< the runtime `no_norm` arm of `pa`: the requant stamps and the GEMV epilogue read it, the store and combine stamps carry no such call and no branch for it
 
     def abstract width : uint                         //! the row's width
@@ -295,7 +294,7 @@ class template ResidualT : RmsWgBase {
     //! the normed row quantized out of the stash into Q8_0 blocks from block `qb0` (the block pass over the stash's columns)
     def quant32(qb0 : uint; inv : float) {
         static_if (OUT_Q8) {
-            blk_pass(0u, width() / 32u, qb0, 0.0, inv)
+            blk_pass(0u, width() / KQ_B32_ELEMS_U, qb0, 0.0, inv)
         }
     }
 
@@ -2355,7 +2354,7 @@ struct DnStepArgs {
 }
 
 [vk_dispatch(name = "dn_step_cls", grid = "wgs", params = "wgs : int64")]
-class DnStepFused : RmsWgBase {
+class DnStepFused : WgReduceBase {
     @ssbo @binding = 0 proj : array<float>     // the fresh projection row (+ z rows at cd)
     @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state (in place)
     @ssbo @binding = 2 smalls : array<float>   // beta/g/taps/wnorm/a/dt + the conv HISTORY ring (rw)
@@ -2371,7 +2370,7 @@ class DnStepFused : RmsWgBase {
     @workgroup dout : float[128]
     @workgroup partk : float[256]   //! each row part's k.S column partials (part-major, ds wide: the thread's own slot)
     @workgroup partq : float[256]   //! ... and q.S
-    @workgroup sg_sumsq : float[16]   //! per-subgroup partial squared sums (q and k); the out-norm's reduce is `RmsWgBase`'s
+    @workgroup sg_sumsq : float[16]   //! per-subgroup partial squared sums (q and k); the out-norm's reduce is `WgReduceBase`'s
     @workgroup sg_qk : float[16]      //! per-subgroup partials of the raw q.k
     @workgroup ds8 : float[8]
 
@@ -8855,7 +8854,7 @@ struct QkRmsArgs {
 // element at tid + 256. Under vfk the k groups write V beside their norm; under vnorm nkvh
 // groups past the k ones scale the V rows by their own rms with no weight.
 [vk_dispatch(name = "qk_rms_cls", grid = "wgs", params = "wgs : int64")]
-class QkRms : RmsWgBase {
+class QkRms : WgReduceBase {
     @ssbo @binding = 0 qrows : array<float>   // q rows, normed in place
     @ssbo @binding = 1 krows : array<float>   // k rows, normed in place (the V rows sit at vbase in the same buffer)
     @ssbo @binding = 2 wn : array<float>      // the q/k norm weight rows
@@ -8927,7 +8926,7 @@ struct TowerRowArgs {
 //! rms rows against a weight row: out[r] = rmsnorm(x[r]) . w in the CPU `rmsnorm`'s (x . inv) . w order - one workgroup
 //! a row; a per-head norm is this with `d` = the head width and `rows` = tokens x heads (a weightless one reads a ones row)
 [vk_dispatch(name = "tower_rms_cls", grid = "wgs", params = "wgs : int64")]
-class TowerRms : RmsWgBase {
+class TowerRms : WgReduceBase {
     @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 outx : array<float>
     @ssbo @binding = 2 @role = "weight" wn : array<float>
@@ -8969,7 +8968,7 @@ class template TowerClampT {
     @ssbo @binding = 1 @template_gate = OUT16 outh : array<float16>
     @push_constant pa : TowerClampArgs
 
-    def clamped(e : uint) : void {
+    def store_clamped(e : uint) : void {
         static_if (OUT16) {
             outh[e] = float16(clamp(x[e], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
         } else {
@@ -8981,10 +8980,10 @@ class template TowerClampT {
     def run {
         let e = gl_GlobalInvocationID.x * 4u
         if (e < pa.nelem) {
-            clamped(e)
-            clamped(e + 1u)
-            clamped(e + 2u)
-            clamped(e + 3u)
+            store_clamped(e)
+            store_clamped(e + 1u)
+            store_clamped(e + 2u)
+            store_clamped(e + 3u)
         }
     }
 }
@@ -9421,7 +9420,7 @@ struct TowerWdecAttnArgs {
 }
 
 [vk_dispatch(name = "tower_wdec_attn_part_cls", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
-class TowerWdecAttnPart : RmsWgBase {
+class TowerWdecAttnPart : WgReduceBase {
     @ssbo @binding = 0 q : array<float>
     @ssbo @binding = 1 kk : array<float16>
     @ssbo @binding = 2 vv : array<float16>
@@ -9478,7 +9477,7 @@ class TowerWdecAttnPart : RmsWgBase {
             ss += e
             t += 128u
         }
-        let tot = wg_sum(ss, 1u)   //! its barrier also lands every lane's exponentials before the output loop reads them across lanes
+        let tot = wg_sum(ss, 1u)   // its barrier also lands every lane's exponentials before the output loop reads them across lanes
         if (lid == 0u) {
             pms[slot * 2u] = nloc > 0u ? m : -3.0e38
             pms[slot * 2u + 1u] = tot
@@ -9548,8 +9547,8 @@ class template TowerWdecAttnCombT : Q8BlockStoreT {
         static_if (OUT_Q8) {
             slice[lid] = acc * inv
             barrier()
-            if (lid < 16u) {
-                let b0 = (r * pa.dim + h * WDEC_HS) / 32u
+            if (lid < WDEC_HS / 4u) {
+                let b0 = (r * pa.dim + h * WDEC_HS) / KQ_B32_ELEMS_U
                 let v = float4(slice[lid * 4u], slice[lid * 4u + 1u], slice[lid * 4u + 2u], slice[lid * 4u + 3u])
                 blk_store(b0 + lid / 8u, lid % 8u, v)
             }
@@ -9992,7 +9991,7 @@ struct TowerLnArgs {
 //! its mean and variance as workgroup sums - one workgroup a row; the OUT_Q8 stamp quantizes the normed row into Q8_0 blocks
 //! (`outq`, `outs`) in place of storing it, so the value never lands in f32
 [ |> template_struct_instance]
-class template TowerLnT : RmsWgBase {
+class template TowerLnT : WgReduceBase {
     @template_constant OUT16 : bool = false   //! the normed rows as f16 (the cm2 tile's feed), else f32
     @template_constant OUT32 : bool = true
     @ssbo @binding = 0 x : array<float>
@@ -10024,11 +10023,11 @@ class template TowerLnT : RmsWgBase {
         }
         let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
         static_if (OUT_Q8) {
-            blk_pass(base, pa.d / 32u, gl_WorkGroupID.x * (pa.d / 32u), mean, inv)
+            blk_pass(base, pa.d / KQ_B32_ELEMS_U, gl_WorkGroupID.x * (pa.d / KQ_B32_ELEMS_U), mean, inv)
         } else {
             i = tid
             while (i < pa.d) {
-                let o = (x[base + i] - mean) * inv * wn[pa.woff + i] + wn[pa.boff + i]
+                let o = mad((x[base + i] - mean) * inv, wn[pa.woff + i], wn[pa.boff + i])
                 static_if (OUT16) {
                     outh[base + i] = float16(clamp(o, -65504.0, 65504.0))
                 } else {
@@ -10039,7 +10038,7 @@ class template TowerLnT : RmsWgBase {
         }
     }
 
-    def override normed_at(e : uint; mean, inv : float) : float => (x[e] - mean) * inv * wn[pa.woff + e % pa.d] + wn[pa.boff + e % pa.d]
+    def override normed_at(e : uint; mean, inv : float) : float => mad((x[e] - mean) * inv, wn[pa.woff + e % max(1u, pa.d)], wn[pa.boff + e % max(1u, pa.d)])
 }
 
 [vk_dispatch(name = "tower_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -10063,7 +10062,7 @@ class TowerLnRq : TowerLnT {
 //! `lnboff`, or rms(x[r]) . wln on an RMS stamp (POST_NORM implies RMS: the two reduces take slots 0 and 1); the OUT_Q8 stamp (the
 //! layernorm arm) quantizes the next norm into Q8_0 blocks in place of storing it
 [ |> template_struct_instance]
-class template TowerPostAddLnT : RmsWgBase {
+class template TowerPostAddLnT : WgReduceBase {
     @template_constant RMS : bool = false   //! the next pre-norm is the weighted rms (qwen25v, the gemma towers), not the layernorm
     @template_constant POST_NORM : bool = false  //! the branch rows carry their post-norm before the add
     @template_constant BIAS : bool = true   //! the branch rows carry their output bias before the add
@@ -10154,12 +10153,13 @@ class template TowerPostAddLnT : RmsWgBase {
                 }
                 let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
                 static_if (OUT_Q8) {
-                    barrier()   //! every lane's x writes visible before the block pass reads the row across lanes
-                    blk_pass(base, pa.d / 32u, gl_WorkGroupID.x * (pa.d / 32u), mean, inv)
+                    memoryBarrierBuffer()   // every lane's in-place x writes visible before the block pass reads the row across lanes
+                    barrier()
+                    blk_pass(base, pa.d / KQ_B32_ELEMS_U, gl_WorkGroupID.x * (pa.d / KQ_B32_ELEMS_U), mean, inv)
                 } else {
                     i = tid
                     while (i < pa.d) {
-                        store(base + i, (x[base + i] - mean) * inv * wn[pa.lnoff + i] + wn[pa.lnboff + i])
+                        store(base + i, mad((x[base + i] - mean) * inv, wn[pa.lnoff + i], wn[pa.lnboff + i]))
                         i += 256u
                     }
                 }
@@ -10167,7 +10167,7 @@ class template TowerPostAddLnT : RmsWgBase {
         }
     }
 
-    def override normed_at(e : uint; mean, inv : float) : float => (x[e] - mean) * inv * wn[pa.lnoff + e % pa.d] + wn[pa.lnboff + e % pa.d]
+    def override normed_at(e : uint; mean, inv : float) : float => mad((x[e] - mean) * inv, wn[pa.lnoff + e % max(1u, pa.d)], wn[pa.lnboff + e % max(1u, pa.d)])
 }
 
 [vk_dispatch(name = "tower_post_add_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -10261,10 +10261,10 @@ struct TowerBiasRqArgs {
     d : uint        //! the row width, a 32-multiple
     nblk : uint     //! the plane's Q8_0 blocks
     boff : uint     //! the bias row's base in wn
-    act : uint
 }
 
-//! the bias + activation of a plane and its Q8_0 requant in one dispatch (`RqT`'s grid: eight lanes a block), the source read alone
+//! the bias + tanh GELU of a plane and its Q8_0 requant in one dispatch (`RqT`'s grid: eight lanes a block), the source read alone -
+//! the whisper decoder's fc1 epilogue, whose activation the architecture fixes
 [vk_dispatch(name = "tower_bias_act_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerBiasActRq : RqT {
     @ssbo @binding = 0 x : array<float>
@@ -10273,14 +10273,12 @@ class TowerBiasActRq : RqT {
     @ssbo @binding = 3 outs : array<float>
     @push_constant pa : TowerBiasRqArgs
 
-    def biased(e : uint) : float => tower_act(x[e] + wn[pa.boff + e % max(1u, pa.d)], pa.act)
+    def biased(e : uint) : float => tower_gelu_tanh(x[e] + wn[pa.boff + e % max(1u, pa.d)])
     def override load4(eb : uint) : float4 => float4(biased(eb), biased(eb + 1u), biased(eb + 2u), biased(eb + 3u))
     def override load1(e : uint) : float => biased(e)
 }
 
-//! a GEMM output's bias row added in place, then the activation `pa.act` names (`BIAS_ACT_*`): the tanh GELU is the CPU
-//! `gelu_tanh_lut`'s form with its f16 rounding of the input and the output (the LUT is the f16-domain twin of this), the
-//! erf GELU the CPU `gelu_erf`'s rational erfc in f32
+//! a GEMM output's bias row added in place, then the activation `pa.act` names (`tower_act`)
 [ |> template_struct_instance]
 class template TowerBiasActT {
     @template_constant OUT16 : bool = false   //! the biased, activated rows stored as f16 into `outh` (the cm2 tile's feed), x read alone; else in place
@@ -10337,7 +10335,7 @@ class TowerAct : TowerBiasActT {
 
 struct TowerRestrideArgs {
     rows : uint
-    rows_pad : uint //! the padded panel's row cap (the flash tile's 64-row alignment): PAD writes zero rows past `rows` up to it, the unpad reads `rows`
+    rows_pad : uint //! the padded panel's row cap (the scratch's, a multiple of the l column - `vt_cap_rows`): PAD writes zero rows past `rows` up to it, the unpad reads `rows`
     nheads : uint
     hs : uint
     hsp : uint
@@ -10775,7 +10773,7 @@ struct QknRopeArgs {
 // qk_rms + rope_kv_store in ONE dispatch (qk_norm models); KT/CLAMP16 as in RopeKvStoreT.
 // A head past 256 (gemma-4's global layers, 512) gives each thread a second element at tid + 256.
 [ |> template_struct_instance]
-class template QknRopeKvT : RmsWgBase {
+class template QknRopeKvT : WgReduceBase {
     @ssbo @binding = 0 qrows : array<float>    // q rows, normed + roped in place
     @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
     @ssbo @binding = 2 kmir : array<KT>
@@ -12870,9 +12868,8 @@ def vt_tile_ensure(t : VtTile) : bool => t.tc > 0l ? cm2_cls_ensure(int(KqFmt.q8
 
 def vt_tile_groups(t : VtTile; width, rows : int64) : int64 => t.tc > 0l ? cm2_tiles_at(width, rows, t.tc) : vt_gemm_groups(width, rows)
 
-//! the rows a GEMM record carries: on the l column the encode's rounded up to 256, so the l stamp's last column is whole and takes its
-//! fast path (a partial column runs its clamped edge path; the s and m stamps load a partial column unclamped and clamp the store, and a
-//! record on them keeps the raw count, as does the batch tile off cm2)
+//! the rows a GEMM record carries: on the l column the encode's rounded up to the column, else the raw count
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def vt_tile_rows(t : VtTile; rows : int64) : int64 => t.tc == 256l ? (rows + 255l) / 256l * 256l : rows
 
 def vt_tile_enc(raw : VkCommandBuffer; var h : VkHaz; t : VtTile; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {

@@ -1,8 +1,8 @@
 # dasLLAMA GPU Tower Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU_TOWER.md`, `ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`,
-`followup_vulkan.md`.
+docs: `ARCHITECTURE_GPU_TOWER.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`, `ARCHITECTURE_MEDIA.md`.
+Planned work: `followup_metal.md`, `followup_vulkan.md`.
 
 **Routed from `REVIEW_GPU.md`: a diff that checklist routes here applies this list together
 with `REVIEW_GPU.md`'s and `REVIEW.md`'s.**
@@ -69,11 +69,9 @@ specific canvas sizes.
 running the operations of the CPU code the family's GPU hook replaces, in the same order and at
 the same operand shapes - a chain may fuse consecutive operations into one dispatch; a diff that
 changes what the chain computes changes that CPU code in the same diff.** That CPU code is what the
-hook's call site runs when the hook declines: for a blocks hook `encoder_blocks` or
-`audio_encode_blocks` in `dasllama/dasllama_audio.das`, the block loop inside `gemma4a_encode`,
-`cn_blocks_cpu`, or a vision family's own block loop; for a front or tail hook the CPU front or
-tail beside its call (`cn_front_cpu`, `g4a_projector_tail`, the CPU conv stem in
-`dasllama/dasllama_audio.das`, `log_mel_qwen3a`'s CPU mel).
+hook's call site runs when the hook declines - the CPU block loop, front, tail or mel beside the
+call, with whatever the caller adds after the hook's stage (the whisper encode's post-norm on
+the blocks-with-post-norm seat).
 
 **A diff to the harmonic-source kernels (`MetalSt2SrcLow*`, `MetalSt2SrcCumsum*`,
 `MetalSt2SrcSines*` in `dasllama/dasllama_metal_kernels.das`) computes the CPU `sine_source`'s
@@ -89,14 +87,14 @@ kernel's rows in place of a noise stream recorded from the reference run; `st2_s
 holds it to `st2_hash_normal` evaluated on the host, bit-equal when repeated under one seed and
 different under another.
 
-**A diff to `dasllama/dasllama_vulkan_tower.das` after which the whisper-class blocks hook
-(`vulkan_audio_tower_blocks`) and the conv stem (`vulkan_audio_conv_front`) no longer both -
-directly or through `vt_ln_chain` - key the resident through `vt_aud_attach` (the residency key
-and the weight upload), build their kernel classes through `vt_aud_ensure`, and size the scratch
-and its schedule meta through `vt_ln_scratch` is a defect - route the new path through those
-three.** The
-stem leaves its residual rows in the chain's x buffer; a resident or scratch the chain rebuilds on
-sizing of its own drops them, and the chain uploads them again.
+**A diff to `dasllama/dasllama_vulkan_tower.das` after which the whisper-class block hooks
+(`vt_aud_blocks`, behind `vulkan_audio_tower_blocks` and `vulkan_audio_tower_blocks_ln_post`) and
+the conv stem (`vulkan_audio_conv_front`) no longer both - directly or through `vt_ln_chain` - key
+the resident through `vt_aud_attach` (the residency key and the weight upload), build their kernel
+classes through `vt_ln_chain_ensure`, and size the scratch and its schedule meta through
+`vt_ln_scratch` is a defect - route the new path through those three.** The stem leaves its
+residual rows on the device, pending in the chain's x buffer; a resident or scratch the chain
+rebuilds on sizing of its own drops them unread, and the CPU block loop reads stale rows.
 
 **A driver route that dispatches a borrowed kernel set - the builders one driver borrows from
 another driver - is gated on every pipeline of that set having compiled, never on a subset; one

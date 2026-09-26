@@ -3094,43 +3094,62 @@ other overrides alike.
   reduce 0.52 ms a chunk over 32 blocks, the wave model's four chunks) against **3674** with the
   split off (`DASLLAMA_CM2_SPLITK=1`, fc2 11.80 ms).
 - **The whisper parity pass (the same rig, `vk`, wall / encode over jfk / jfk3 / gb1 / hp0 /
-  hp0x2):** turbo **61 / 31**, **151 / 62**, **771 / 248**, **981 / 371**, **1941 / 719**, the
-  loop 1 / 2 / 8 / 12 / 23 windows a clip. The reference is whisper-cli on the pod's own Vulkan
-  build with its timestamps on (`external`, the recipe `ARCHITECTURE_MEASUREMENT.md` 2.20 carries:
-  each clip behind jfk in one process, the jfk-only process subtracted, the min of two): encode
-  36 / 70 / 342 / 444 / 886, total 101 / 252 / 1302 / 1646 / 3409, over 1 / 2 / 10 / 13 / 26
-  encoder runs - so the encoder reads 1.12x to 1.38x ahead a clip (31.2 ms a window against 34.5)
-  and the transcription 1.67x to 1.76x. Under `-nt` the reference decodes no timestamp tokens
-  and advances a whole 30 s a window (19 runs on hp0x2, encode 649, total 3170), a shape the das
-  loop does not run. The four levers, read on the jfk ledger (`DASLLAMA_GPU_PROF=1`): the block
-  chain 39.3 -> 29.0 ms - the l stamp's clamped edge path on the chunk's partial last token
-  column (1500 rows = five columns and 220), lifted by the GEMM records rounded to the column
-  (the probe's `wh` arm: q / k / v / o 95 -> 52 us, fc1 241 -> 173, fc2 357 -> 185 whole, split4
-  240 -> 158 + 16, against ggml's `MUL_MAT` 84 / 166 / 221; the m stamp 62 / 194 / 229 at either
-  count) - the cross-KV chain 15.8 -> 0.7 ms (the 61 MB CPU-layout readback made lazy), the stem
-  chain 2.1 -> 0.3 ms with the encoder rows handed to the decoder device to device and the
-  post-norm folded into the chain, the decode step 80 -> 55 dispatches a token (the row passes
+  hp0x2; the walls the best of two timed reps, the provenance above) [direction-grade - two
+  processes, and the pass's tip against the arc's]:** turbo **61 / 31**, **151 / 62**,
+  **771 / 248**, **981 / 371**, **1941 / 719**, the loop 1 / 2 / 8 / 12 / 23 windows a clip. The
+  reference is whisper-cli with its timestamps on (`external`: whisper.cpp d09f61a, version
+  1.9.4-dev, the pod's Vulkan build; `whisper-cli -m ggml-large-v3-turbo-q8_0.bin -f <clip> -t 16
+  -bs 1 -bo 1 -nf`, the recipe `ARCHITECTURE_MEASUREMENT.md` 2.20 carries: each clip behind jfk in
+  one process, the jfk-only process subtracted, two reps and the min - the reps' pairs sit in the
+  run logs, not here): encode 36 / 70 / 342 / 444 / 886, total 101 / 252 / 1302 / 1646 / 3409, over
+  1 / 2 / 10 / 13 / 26 encoder runs - so the encoder reads 1.12x to 1.38x ahead a clip (31.2 ms a
+  window against 34.5) and the transcription 1.67x to 1.76x. Under `-nt` the same reference
+  (`external`, the same build and flags plus `-nt`) decodes no timestamp tokens and advances a
+  whole 30 s a window (19 runs on hp0x2, encode 649, total 3170), a shape the das loop does not
+  run. The four levers, read on the jfk ledger (`DASLLAMA_GPU_PROF=1`): the block chain 39.3 ->
+  29.0 ms - the l stamp's clamped edge path on the chunk's partial last token column (1500 rows =
+  five columns and 220), lifted by the GEMM records rounded to the column (the probe's `wh` arm,
+  `daslang -jit harness/vk_gemm_probe.das -- wh` on the pod's RTX PRO 4500 under `DASLLAMA_GPU=1`
+  in cm2 mode, the l column at 1500 rows against 1536 - the arm's alternate is the same shape at
+  the whole column: q / k / v / o 95 -> 52 us, fc1 241 -> 173, fc2 357 -> 185 whole, split4
+  240 -> 158 + 16, the m column 62 / 194 / 229 at either count; ggml's `MUL_MAT` on the same
+  shapes reads 84 / 166 / 221 - `external`, `GGML_VK_PERF_LOGGER=1 whisper-cli -m
+  ggml-large-v3-turbo-q8_0.bin -f jfk.wav -t 16 -bs 1 -bo 1 -nf`, the same build) - the cross-KV
+  chain 15.8 -> 0.7 ms (the 61 MB CPU-layout readback made lazy), the stem chain 2.1 -> 0.3 ms
+  with the encoder rows handed to the decoder device to device and the post-norm folded into the
+  chain, the decode step 91 -> 66 dispatches a token (80 -> 55 ledger stamps: the row passes
   carrying their Q8_0 feed; a three-row prompt batch 0.84 -> 0.77 ms on the device). The
   served-row check the pass opened with: the resident prefill's tile pick beats both forced
-  columns on every model measured (pp512, `DASLLAMA_CM2_TILE` unset / 128 / 256: Llama-3.2-3B Q8
-  14792 / 11007 / 12442, gemma-3-1b 34671 / 34280 / 32909, E2B 16313 / 13196 / 14920, E4B 9804 /
-  8918 / 9496, gemma-2-2b 19540 / 18044 / 17533), and the wave model picks the faster column on
-  every 512-row shape the probe's `g3`, `gemma`, `tl` and default arms time.
-- **The tower dedup pass's tip (the same rig, `vk`, wall / encode over the five clips):** turbo
-  **61 / 31**, **149 / 61**, **772 / 249**, **988 / 371**, **1934 / 721** - within noise of the
-  parity pass's rows; the jfk ledger the same (the stem 0.28 ms, the blocks 29.9, the cross-KV
-  0.73, the decode 55 dispatches at 0.77 ms for the three-row batch). The pass's gate for a
-  stamp it left alone is `harness/vk_spv_diff.das` over the dump before and after (the kernel
-  files and every twin): 256 stamps byte-identical, 18 moved, none appeared, and the moved set
-  is the fold set - the six residual seams (`cls_ar_rq`, `cls_ar_rq_b`, `cls_ar_rqx`,
-  `cls_ar_comb_rq`, `cls_ar_comb_g4_rq`, `q8_gemv_ar`) on the shared block pass, the two clamp
-  arms, the seven post-add and Q8 norm stamps on the seam template, the decoder's attention
-  partial on the shared reduces and its two combines on one template; the f32 and f16
-  layer-norm stamps and every requant stamp stayed identical. The residual seams' own gate is a
-  decode row: E2B Q8_0 flat tg128 **198.45 +/- 0.09** against the ledger's 198.5 to 198.8 (pp512
-  16352 +/- 43 against 16313). The four classes the pass deleted
-  (`TowerHeadGather`, `TowerZeroRows`, `TowerQ3aFinish`, `TowerGluAct`) are the four that
-  vanish, the family twins holding their chains' bars on the pod.
+  columns on every model measured (pp512 tok/s, the rig's `lcpp_bench -p 512 -n 0 -r 2`, the best
+  of two, the tile through `DASLLAMA_CM2_TILE` unset / 128 / 256: Llama-3.2-3B Q8 14792 / 11007 /
+  12442, gemma-3-1b 34671 / 34280 / 32909, E2B 16313 / 13196 / 14920, E4B 9804 / 8918 / 9496,
+  gemma-2-2b 19540 / 18044 / 17533), and the wave model picks the faster column on every 512-row
+  shape the probe's `g3`, `gemma`, `tl` and default arms time.
+- **The tower dedup pass's tip (the same rig, `vk`, wall / encode over the five clips, the best
+  of two) [direction-grade - the dedup tip against the parity pass's]:** turbo **61 / 31**,
+  **149 / 61**, **772 / 249**, **988 / 371**, **1934 / 721** against the parity pass's 61 / 31,
+  151 / 62, 771 / 248, 981 / 371, 1941 / 719 - within noise; the jfk ledger the same (the stem
+  0.28 ms, the blocks 29.9, the cross-KV 0.73, the decode 66 dispatches - 55 stamps - at 0.77 ms
+  for the three-row batch). The pass's gate for a stamp it left alone is `harness/vk_spv_diff.das`
+  over the dump before and after (the kernel files and every twin): 256 stamps byte-identical, 18
+  moved, none appeared, and the moved set is the fold set - the six residual seams (`cls_ar_rq`,
+  `cls_ar_rq_b`, `cls_ar_rqx`, `cls_ar_comb_rq`, `cls_ar_comb_g4_rq`, `q8_gemv_ar`) on the shared
+  block pass, the two clamp arms, the seven post-add and Q8 norm stamps on the seam template, the
+  decoder's attention partial on the shared reduces and its two combines on one template; the f32
+  and f16 layer-norm stamps and every requant stamp stayed identical. The residual seams' own gate
+  is a decode row: E2B Q8_0 flat tg128 **198.45 +/- 0.09** against the ledger's 198.5 to 198.8
+  (pp512 16352 +/- 43 against 16313), the rig's `lcpp_bench -m gemma-4-E2B-it-Q8_0.gguf -p 512 -n
+  128 -r 3 -t 16` under `DASLLAMA_GPU=1`, `DASLLAMA_COOPMAT` unset (cm2), `DAS_TUNE_POLICY` unset,
+  three reps and their spread. The four classes the pass deleted (`TowerHeadGather`,
+  `TowerZeroRows`, `TowerQ3aFinish`, `TowerGluAct`) are the four that vanish, the family twins
+  holding their chains' bars on the pod: `test_gemma4a_vulkan_twin`, `test_canary_vulkan_twin`,
+  `test_qwen3a_vulkan_front`, `test_encoder_blocks_vulkan` (`tests/test_audio.das`),
+  `test_whisper_vulkan_twin`, `test_whisper_vulkan_wdec` (`tests/test_whisper.das`),
+  `test_gemma4v_vulkan_twin`, `test_gemma3v_vulkan_twin`, `test_qwen3v_vulkan_twin`,
+  `test_qwen25v_vulkan_twin`, and `tests/test_vulkan_tower_kernels.das` whole, each run through
+  dastest's `--test-names` filter on the pod at the tip. The whisper decoder's flushed-memory bar
+  (`test_whisper_vulkan_wdec_flush`, `WDEC_FLUSH_LOGIT_BAR` = 5% of the knob-off chain's peak
+  logit) reads WDEC_FLUSH_READING on tiny on the pod.
 - **The driver's allocations at the largest shape the path serves, the 4096-row encode cap
   (`VT_MAX_ENCODE_ROWS`; whisper-class chunks stop at 1500 rows, gemma4a's at 768; canary has no
   row cap and declines `shape` only past the device's storage-buffer range):** the rel quartet
@@ -3138,7 +3157,8 @@ other overrides alike.
   - the f32 table 8192 x 1024 x 4 = 33,554,432 bytes, its Q8_0 quants 8,388,608, their scales 8192 x
   1024 / 32 x 4 = 1,048,576, the projected rows another 33,554,432 - about 76 MB; gemma4a's quartet
   is 13 rows, under 60 KB. The per-encode device scratch follows the vision arc's list above at each
-  family's d and ff with no padded panels (every audio head is 64 or 128 wide): about 441 MB for
+  family's d and ff with no padded panels (every audio head is 64 or 128 wide), plus the qwen25v
+  hidden's zero row map (`rex_dev`, cap x 4 bytes: 16 KiB at 4096 rows): about 441 MB for
   turbo at 4096 rows (d 1280, ff 5120: eleven f32 row buffers 230 MB, two hidden buffers 168 MB, the
   f16 K/V shadows 21 MB, the Q8_0 feed 22 MB) and about 353 MB for canary and E2B (d 1024, ff 4096).
   The weights uploaded whole: turbo's Q8_0 plane 32 x (4 x 1280^2 + 2 x 1280 x 5120) = 629 M

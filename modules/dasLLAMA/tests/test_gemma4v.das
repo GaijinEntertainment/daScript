@@ -349,7 +349,7 @@ def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int
 
 //! the input poison of a device-side dump bar: the q8 tower with `POISON_BLOCK` zeroed, served by the driver, must EXCEED the
 //! bar its dump holds - a bar the poison clears measures nothing
-def private poison_device_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; rel : float) {
+def private dump_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; rel : float) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var o = OracleEncode()
         if (!load_oracle_encode(path_join(path_join(models_dir(), "gemma4-vision-oracle"), logname), o)) {
@@ -359,7 +359,7 @@ def private poison_device_leg(tt : T?; mm : string; kind : string; w, h : int; l
         var twp <- mint_tower(mm, true, 0l, POISON_BLOCK)
         var stp = Gemma4vState()
         let planes <- make_planes(kind, w, h)
-        poison_dump_leg(tt, "gemma4v", "{kind} {w}x{h}", POISON_BLOCK, rel, twp, stp,
+        dump_poison(tt, "gemma4v", "{kind} {w}x{h}", POISON_BLOCK, rel, twp, stp,
             $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)) $(out) => encode_excess(out, int(twp.proj_dim), o, TIER1_ABS, rel)
         delete stp
         delete twp
@@ -392,7 +392,7 @@ def test_gemma4v_tier1_vulkan(t : T?) {
             }
             delete st
             delete tw
-            poison_device_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
+            dump_poison_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
         } else {
             tt |> skip("dasVulkan not present")
         }
@@ -507,7 +507,7 @@ def test_gemma4v_tier1_e4b(t : T?) {
                         tt |> equal(vulkan_tower_stats().encodes - v0.encodes, 1l, "E4B q8: device-served (encodes delta)")
                         tt |> equal(vulkan_tower_stats().blocks - v0.blocks, twq.n_layer, "E4B q8: every block ran on the driver (blocks delta)")
                     }
-                    poison_device_leg(tt, mm, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
+                    dump_poison_leg(tt, mm, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
                 }
             }
         }

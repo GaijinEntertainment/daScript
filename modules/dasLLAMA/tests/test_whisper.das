@@ -27,6 +27,7 @@ require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the 
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
 require ?vulkan dasllama/dasllama_vulkan_tower
 require ?vulkan dasllama/dasllama_vulkan_asr_dec   // set_vulkan_wdec / vulkan_wdec_stats - the decoder twin's seat
+require ?vulkan dasllama/dasllama_math_vulkan   // vk_drop_model - the lifetime cell's model drop between two windows
 require _tower_twin
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
@@ -332,10 +333,7 @@ def test_parakeet_oracle(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope s <- create_session(m)
-            var inscope segs : array<TranscribeSegment>
-            transcribe(m, s, samples) $(seg) {
-                segs |> push_clone(seg)
-            }
+            var inscope segs <- session_segs(m, s, samples)
             // parakeet-cli -ng -ps (CPU, f32 self-convert): 33 tokens, these exact ends
             t |> equal(length(segs), 1)
             to_log(LOG_INFO, "parakeet-v2 jfk eyeball: '{segs[0].text}'\n")
@@ -391,10 +389,7 @@ def test_parakeet_v3_oracle(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope s <- create_session(m, "de")   // any of the 25; parakeet has no conditioning
-            var inscope segs : array<TranscribeSegment>
-            transcribe(m, s, samples) $(seg) {
-                segs |> push_clone(seg)
-            }
+            var inscope segs <- session_segs(m, s, samples)
             //! parakeet-cli -ng -ps (CPU, f32 self-convert) gives these 38 tokens; either lane stays id-exact on jfk
             t |> equal(length(segs), 1)
             to_log(LOG_INFO, "parakeet-v3 jfk eyeball: '{segs[0].text}'\n")
@@ -546,7 +541,7 @@ def private whisper_rows_twin(tt : T?; name, model_path : string; w : WhisperMod
         win.data |> resize(w.enc.n_mel * AUDIO_CHUNK_FRAMES)
         whisper_mel_window(mel, 0l, win)
         var es <- make_encoder_state(w.enc)
-        let spec = TwinSpec(family = "whisper", lbl = tag, n_layer = w.enc.n_layer, metric = TwinMetric.rel_l2)
+        let spec = TwinSpec(family = "whisper", tag = tag, n_layer = w.enc.n_layer, metric = TwinMetric.rel_l2)
         var wx <- mint_whisper(model_path, false, false, -1l)
         tt |> success(!wx.enc.q8, "{tag}: the exact encoder minted for the compare")
         var esx <- make_encoder_state(wx.enc)
@@ -575,7 +570,7 @@ def test_whisper_vulkan_twin(t : T?) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 let model_path = path_join(whisper_dir(), name)
                 jfk_twin_cell(tt, model_path, true) $(samples) {
-                    set_vulkan_wdec(false)   //! the decoder rail stays on the CPU so only the encoder varies between the legs
+                    set_vulkan_wdec(false)   // the decoder rail stays on the CPU so only the encoder varies between the legs
                     set_asr_fp32(false)
                     set_asr_tower_fp32(false)
                     var inscope m <- load_asr_model(model_path)
@@ -625,7 +620,7 @@ def test_whisper_vulkan_wdec(t : T?) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 let model_path = path_join(whisper_dir(), name)
                 jfk_twin_cell(tt, model_path, true) $(samples) {
-                    set_vulkan_tower(true)   //! the tower serves the encoder on both legs, so only the decoder varies
+                    set_vulkan_tower(true)   // the tower serves the encoder on both legs, so only the decoder varies
                     set_asr_fp32(false)
                     set_asr_tower_fp32(false)
                     var inscope m <- load_asr_model(model_path)
@@ -676,9 +671,6 @@ def test_whisper_vulkan_stem_flush(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
             jfk_twin_cell(tt, model_path, true) $(samples) {
-                defer() {
-                    set_vulkan_tower_blocks(true)
-                }
                 set_vulkan_wdec(false)
                 set_asr_fp32(false)
                 set_asr_tower_fp32(false)
@@ -688,14 +680,14 @@ def test_whisper_vulkan_stem_flush(t : T?) {
                     set_vulkan_tower(false)
                     var inscope cpu_segs <- transcribe_segs(m, samples)
                     set_vulkan_tower(true)
-                    set_vulkan_tower_blocks(false)
+                    set_vulkan_audio_blocks(false)
                     let s0 = vulkan_tower_stats()
-                    let knob0 = vulkan_tower_declines()?["knob"] ?? 0l
+                    let blocks0 = vulkan_tower_declines()?["blocks"] ?? 0l
                     var inscope stem_segs <- transcribe_segs(m, samples)
                     let s1 = vulkan_tower_stats()
                     tt |> success(s1.convs > s0.convs, "the stem served on the device ({s1.convs - s0.convs} dispatches)")
                     tt |> equal(s1.encodes, s0.encodes, "the block hooks served nothing")
-                    tt |> success((vulkan_tower_declines()?["knob"] ?? 0l) > knob0, "and recorded the knob decline the stem's rows landed at")
+                    tt |> equal((vulkan_tower_declines()?["blocks"] ?? 0l) - blocks0, s1.convs - s0.convs, "and recorded one `blocks` decline a window, the one the stem's rows landed at")
                     to_log(LOG_INFO, "ggml-tiny.bin stem flush: all-CPU '{segs_text(cpu_segs)}' / device stem + CPU blocks '{segs_text(stem_segs)}'\n")
                     assert_segs_token_identical(tt, cpu_segs, stem_segs, "ggml-tiny.bin jfk all-CPU / device stem + CPU blocks")
                 }
@@ -708,28 +700,22 @@ def test_whisper_vulkan_stem_flush(t : T?) {
     }
 }
 
-//! the same token and logits within 5% of the peak - the device's cross-KV planes are the f16 feed's GEMM, the knob-off chain's the q8 dot - with the bar's poison
-def private wdec_flush_compare(tt : T?; cpu, dev : array<float>) {
+let private WDEC_FLUSH_LOGIT_BAR = 0.05   //! the flushed memory's logits within this fraction of the knob-off chain's peak: the device's cross-KV planes are the f16 feed's GEMM, the knob-off chain's the q8 dot; the reading is `PERF_LEDGER.md`'s
+
+//! the same token and logits within `WDEC_FLUSH_LOGIT_BAR` of the peak; `cpu_moved` - the knob-off chain over the batch with its last
+//! token changed - is the bar's control: the changed input must land outside it
+def private wdec_flush_compare(tt : T?; w : WhisperModel; cpu, dev, cpu_moved : array<float>) {
     tt |> equal(long_length(dev), long_length(cpu), "both chains landed the last row's logits")
-    var maxc = 0.0
-    var md = 0.0
-    var argc = 0
-    var argd = 0
-    for (i in range(length(cpu))) {
-        maxc = max(maxc, abs(cpu[i]))
-        md = max(md, abs(dev[i] - cpu[i]))
-        if (cpu[i] > cpu[argc]) {
-            argc = i
-        }
-        if (dev[i] > dev[argd]) {
-            argd = i
-        }
-    }
-    let bar = 0.05 * maxc
-    to_log(LOG_INFO, "ggml-tiny.bin wdec flush: the CPU chain over the flushed memory vs the knob-off chain - max diff {md} of {maxc} (bar {bar}), argmax {argd} vs {argc}\n")
-    tt |> equal(argd, argc, "the CPU chain over the flushed memory picks the knob-off chain's token")
-    tt |> success(md <= bar, "and its logits sit within the bar ({md} vs {bar})")
-    tt |> success(md + 3.0 > bar, "the bar's poison: a logit moved by 3 must exceed it")
+    let maxc = logits_maxabs(cpu)
+    let max_diff = logits_maxdiff(dev, cpu)
+    let top_cpu = int(parallel_argmax(cpu, long_length(cpu)))
+    let top_dev = int(parallel_argmax(dev, long_length(dev)))
+    let bar = WDEC_FLUSH_LOGIT_BAR * maxc
+    let moved = logits_maxdiff(cpu_moved, cpu)
+    to_log(LOG_INFO, "ggml-tiny.bin wdec flush: the CPU chain over the flushed memory vs the knob-off chain - max diff {max_diff} of {maxc} (bar {bar}), argmax '{w.vocab[top_dev]}' ({top_dev}) vs '{w.vocab[top_cpu]}' ({top_cpu}); the changed last token moves the knob-off logits by {moved}\n")
+    tt |> equal(top_dev, top_cpu, "the CPU chain over the flushed memory picks the knob-off chain's token")
+    tt |> success(max_diff <= bar, "and its logits sit within the bar ({max_diff} vs {bar})")
+    tt |> success(moved > bar, "the bar's control: the batch with its last token changed lands outside it ({moved} vs {bar})")
 }
 
 [test]
@@ -742,8 +728,11 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
                 set_asr_fp32(false)
                 set_asr_tower_fp32(false)
                 var inscope m <- load_asr_model(model_path)
-                let batch <- [for (i in range(int(WD_ROW_CAP) + 1)); m.whisper.tok_sot + i]   //! one past the step's cap, the first batch of a window
+                let batch <- [for (i in range(int(WD_ROW_CAP) + 1)); m.whisper.tok_sot + i]   // one past the step's cap, the first batch of a window
+                var batch_moved := batch
+                batch_moved[length(batch_moved) - 1]++
                 var cpu_logits : array<float>
+                var cpu_moved : array<float>
                 var dev_logits : array<float>
                 with_job_que() {
                     setup_dasllama_jobque_()
@@ -753,6 +742,9 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
                     sc.w.ds.n_past = 0l
                     whisper_decode_batch(m.whisper, sc.w.ds, batch)
                     cpu_logits := sc.w.ds.logits
+                    sc.w.ds.n_past = 0l
+                    whisper_decode_batch(m.whisper, sc.w.ds, batch_moved)
+                    cpu_moved := sc.w.ds.logits
                     set_vulkan_wdec(true)
                     let d0 = vulkan_wdec_stats()
                     var inscope sg <- create_session(m)
@@ -768,8 +760,9 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
                     tt |> equal(vulkan_wdec_stats().steps, d1.steps, "and the device served no step: the CPU chain decoded it over the flushed memory")
                     dev_logits := sg.w.ds.logits
                 }
-                wdec_flush_compare(tt, cpu_logits, dev_logits)
+                wdec_flush_compare(tt, m.whisper, cpu_logits, dev_logits, cpu_moved)
                 delete cpu_logits
+                delete cpu_moved
                 delete dev_logits
                 delete m
                 vulkan_wdec_shutdown()
@@ -781,9 +774,94 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
     }
 }
 
-//! a fresh session over `m` (an `AsrModel` or a `WhisperModel`) transcribing `samples`, its segments collected
-def private transcribe_segs(m; samples : array<float>) : array<TranscribeSegment> {
-    var inscope s <- create_session(m)
+//! a lifetime cell's seat: tiny on jfk, both drivers on, the q8 default load, one session created for `body` the way a serving
+//! worker reuses one - the decoder's window lifetime across that session's transcriptions is the claim
+def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrSession; samples : array<float>) : void>) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+        jfk_twin_cell(tt, model_path, true) $(samples) {
+            set_vulkan_tower(true)
+            set_vulkan_wdec(true)
+            set_asr_fp32(false)
+            set_asr_tower_fp32(false)
+            var inscope m <- load_asr_model(model_path)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                var inscope s <- create_session(m)
+                invoke(body, m, s, samples)
+            }
+            delete m
+            vulkan_wdec_shutdown()
+            vulkan_tower_shutdown()
+        }
+    } else {
+        tt |> skip("dasVulkan not present")
+    }
+}
+
+[test]
+def test_whisper_vulkan_wdec_lifetime(t : T?) {
+    t |> run("ggml-tiny.bin: a model drop between two transcriptions of one session - the second serves again and reads the same") @(tt : T?) {
+        wdec_lifetime_cell(tt) $(m; var s; samples) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                var inscope first <- session_segs(m, s, samples)
+                let d0 = vulkan_wdec_stats()
+                vk_drop_model()   // the server's LLM slot switch: every device object swept, the decoder's waiting layouts with them
+                var inscope again <- session_segs(m, s, samples)
+                let d1 = vulkan_wdec_stats()
+                tt |> success(d1.windows - d0.windows >= 1l, "the device served the window again after the drop ({d1.windows - d0.windows})")
+                assert_segs_token_identical(tt, first, again, "ggml-tiny.bin jfk before / after the drop")
+            }
+        }
+    }
+    t |> run("ggml-tiny.bin: the decoder knob turned off between two transcriptions of one session - the second reads as a fresh knob-off session") @(tt : T?) {
+        wdec_lifetime_cell(tt) $(m; var s; samples) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                var inscope served <- session_segs(m, s, samples)
+                let d0 = vulkan_wdec_stats()
+                set_vulkan_wdec(false)
+                var inscope again <- session_segs(m, s, samples)
+                let d1 = vulkan_wdec_stats()
+                tt |> equal(d1.windows, d0.windows, "the knob-off transcription served no window")
+                var inscope fresh <- transcribe_segs(m, samples)
+                tt |> equal(length(served), length(again), "ggml-tiny.bin jfk served / knob-off on one session: segment count")
+                assert_segs_token_identical(tt, fresh, again, "ggml-tiny.bin jfk a fresh knob-off session / the served session turned off")
+            }
+        }
+    }
+    t |> run("ggml-tiny.bin: the block hooks pinned off after a served window of one session - no stale handoff, the text of the CPU-encoder chain") @(tt : T?) {
+        wdec_lifetime_cell(tt) $(m; var s; samples) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                var inscope served <- session_segs(m, s, samples)
+                let d0 = vulkan_wdec_stats()
+                tt |> success(d0.handoffs >= 1l, "the served transcription took its encoder rows device to device ({d0.handoffs})")
+                set_vulkan_audio_blocks(false)
+                var inscope again <- session_segs(m, s, samples)
+                let d1 = vulkan_wdec_stats()
+                tt |> equal(d1.handoffs, d0.handoffs, "the CPU-encoded windows took no handoff: the served window's plane is not theirs")
+                tt |> success(d1.windows > d0.windows, "the decoder still served the windows over the host-uploaded rows ({d1.windows - d0.windows})")
+                set_vulkan_audio_blocks(true)
+                set_vulkan_tower(false)
+                var inscope cpu_enc <- transcribe_segs(m, samples)
+                assert_segs_token_identical(tt, cpu_enc, again, "ggml-tiny.bin jfk the CPU-encoder chain / the served session with the blocks pinned off")
+            }
+        }
+    }
+}
+
+//! a fresh session over `m` (an `AsrModel` or a `WhisperModel`) transcribing `samples`, its segments collected; `lang` names the
+//! session's language where the cell sets one
+def private transcribe_segs(m; samples : array<float>; lang : string = "") : array<TranscribeSegment> {
+    if (empty(lang)) {
+        var inscope s <- create_session(m)
+        return <- session_segs(m, s, samples)
+    }
+    var inscope s <- create_session(m, lang)
+    return <- session_segs(m, s, samples)
+}
+
+//! `s` transcribing `samples` - a cell reuses one session across transcriptions the way a serving worker does
+def private session_segs(m; var s; samples : array<float>) : array<TranscribeSegment> {
     var segs : array<TranscribeSegment>
     transcribe(m, s, samples) $(seg) {
         segs |> push_clone(seg)
@@ -1052,10 +1130,7 @@ def private check_canary_clip(t : T?; m : AsrModel; wav : string; expected : arr
         return
     }
     var inscope s <- create_session(m, "en")
-    var inscope segs : array<TranscribeSegment>
-    transcribe(m, s, samples) $(seg) {
-        segs |> push_clone(seg)
-    }
+    var inscope segs <- session_segs(m, s, samples)
     t |> equal(length(segs), 1, "{base_name(wav)}: one segment")
     to_log(LOG_INFO, "canary {base_name(wav)} eyeball: '{segs[0].text}'\n")
     t |> equal(length(segs[0].tokens), length(expected), "{base_name(wav)}: token count")
@@ -1138,10 +1213,7 @@ def test_gemma4a_audio_oracle(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             var inscope s <- create_session(m, "en")
-            var inscope segs : array<TranscribeSegment>
-            transcribe(m, s, samples) $(seg) {
-                segs |> push_clone(seg)
-            }
+            var inscope segs <- session_segs(m, s, samples)
             t |> equal(length(segs), 1, "one segment")
             to_log(LOG_INFO, "gemma4a eyeball: '{segs[0].text}'\n")
             // frozen llama-mtmd-cli no-think greedy ids (first 40 tokens — the confident prefix
@@ -1174,11 +1246,7 @@ def private check_q3omni_clip(t : T?; m : AsrModel; wav : string; expected : arr
         t |> skip("{base_name(wav)} not present")
         return
     }
-    var inscope s <- create_session(m, "auto")
-    var inscope segs : array<TranscribeSegment>
-    transcribe(m, s, samples) $(seg) {
-        segs |> push_clone(seg)
-    }
+    var inscope segs <- transcribe_segs(m, samples, "auto")
     t |> equal(length(segs), 1, "{base_name(wav)}: one segment")
     to_log(LOG_INFO, "qwen3omni {base_name(wav)} eyeball: '{segs[0].text}'\n")
     t |> equal(length(segs[0].tokens), length(expected), "{base_name(wav)}: token count")
