@@ -944,6 +944,15 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // by the Vulkan StyleTTS2 driver alone, which no zoo carrier reaches. Their coverage is test_vkt_tts_im2col and
     // test_vkt_tts_lstm_dir in test_vulkan_tts_conv_kernels.das
     "tts_im2col_cls_spv", "tts_lstm_dir_cls_spv",
+    // the predictor and decoder row classes (the concat, the duration sigmoid sums, the AdaIN column statistics and its
+    // leaky and Snake stamps, the residual join): the Vulkan StyleTTS2 driver's alone, which no zoo carrier reaches. Their
+    // coverage is test_vkt_concat, test_vkt_sigsum, test_vkt_colstats, test_vkt_adain and test_vkt_add_scale in
+    // test_vulkan_tts_kernels.das
+    "tts_concat_cls_spv", "tts_sigsum_cls_spv", "tts_colstats_cls_spv", "tts_adain_leaky_cls_spv", "tts_adain_snake_cls_spv",
+    "tts_add_scale_cls_spv",
+    // the depthwise transposed pool: the decoder's upsampling residual block, the Vulkan StyleTTS2 driver's alone. Its
+    // coverage is test_vkt_tts_pool_dw in test_vulkan_tts_conv_kernels.das
+    "tts_pool_dw_cls_spv",
     // the scalar beta/alpha GEMM: the same route split for a hybrid's f32 beta/alpha rows on the f16
     // feed; off the f16 feed (DASLLAMA_COOPMAT=sdot4) it runs. Its coverage is the dn_ba run of
     // test_vkd_dn_family in test_vulkan_kernels.das
