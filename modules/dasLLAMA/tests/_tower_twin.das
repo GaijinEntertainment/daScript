@@ -14,7 +14,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
-require daslib/fio   // path_join: the twin cells' jfk.wav
+require daslib/fio   // nolint:STYLE030,LINT019 — path_join: the twin cells' jfk.wav, inside the GPU arms alone
 require math
 require _compares   // logits_maxdiff
 require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twins' bar reads

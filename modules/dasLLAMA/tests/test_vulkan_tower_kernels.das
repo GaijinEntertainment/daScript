@@ -185,8 +185,7 @@ def test_vkt_fa_bidir(t0 : T?) {
 }
 
 //! the chunked attention's combine on the CPU: a row's head slice over `nch` chunk partials (max, exp-sum) and their unnormalized values
-def private wdec_comb_ref(pms, py : array<float>; rows, heads, nch : int) : array<float> {
-    let hs = int(WDEC_HS)
+def private wdec_comb_ref(pms, py : array<float>; rows, heads, hs, nch : int) : array<float> {
     var y : array<float>
     y |> resize(rows * heads * hs)
     for (r in range(rows)) {
@@ -360,7 +359,7 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
         let bad_bias = mismatch_approx(h_dev, h_ref)
         t |> success(bad_bias == 0, "the bias + tanh GELU ({shape}) matches add_bias_rows + gelu_tanh_lut_batch ({bad_bias} of {nff} off)")
         t |> success(!approx(h_dev[nff - 1], h_ref[nff - 1] + 0.5), "the bias + tanh GELU ({shape}): the bar reds a poisoned element")
-        var yc_ref <- wdec_comb_ref(pms, py, rows, heads, nch)
+        var yc_ref <- wdec_comb_ref(pms, py, rows, heads, int(WDEC_HS), nch)
         let bad_comb = mismatch_approx(yc_dev, yc_ref)
         t |> success(bad_comb == 0, "the attention combine ({shape}) matches the CPU combine over the chunk partials ({bad_comb} of {nd} off)")
         t |> success(!approx(yc_dev[nd - 1], yc_ref[nd - 1] + 0.5), "the attention combine ({shape}): the bar reds a poisoned element")

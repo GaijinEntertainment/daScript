@@ -38,6 +38,7 @@ require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_gpu_tier   // TILE_READ_SLACK: the rows the moe: arm's gathered plane carries past its last region
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_vulkan_classes
+require dasllama/dasllama_gpu_math   // ksign7: the iq probe classes inherit their decode bodies, compiled in this module
 require dasllama/dasllama_kqformat
 require daslib/typemacro_boost
 require _vk_probe_fixture   // hash_word, cool_f16_pair: the synthetic planes both probes build
