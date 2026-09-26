@@ -132,7 +132,8 @@ struct EmitCtx {
     mesh_max_primitives : int                   // mesh-output array sizing: gl_PrimitiveTriangleIndicesEXT length
     mesh_topology : MeshOutputTopology          // declared output topology; the index-array builtin must match it (triangles -> gl_PrimitiveTriangleIndicesEXT)
     local_size : int3                           // the declared workgroup size (LocalSize execution mode); gl_WorkGroupSize folds to it
-    task_payload_id : uint                      // the @task_payload TaskPayloadWorkgroupEXT variable id (0 = none); EmitMeshTasksEXT appends it as the 4th operand
+    precise : bool                              // `precise = true` on the shader annotation: every float arithmetic result NoContraction-decorated
+    task_payload_id : uint                     // the @task_payload TaskPayloadWorkgroupEXT variable id (0 = none); EmitMeshTasksEXT appends it as the 4th operand
     nonuniform_ids : table<uint>                // set of result ids that carry the NonUniform decoration (nonuniformEXT marker + cascade through OpAccessChain / OpLoad on descriptor arrays)
     spec_ids      : table<uint>                 // SpecId decorations already used (@constant_id globals + local_size_*_id axes) -> duplicate ids rejected
     user_funcs    : table<uint64; UserFunc>     // intptr(Function) -> emittable user-defined shader function
@@ -2299,6 +2300,20 @@ def private binop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> 
     return (ok = false, code = SpvOp.Nop)
 }
 
+//! the float arithmetic opcodes a `precise` shader decorates
+def private precise_float_op(code : SpvOp) : bool {
+    return (code == SpvOp.FAdd || code == SpvOp.FSub || code == SpvOp.FMul || code == SpvOp.FDiv || code == SpvOp.FRem || code == SpvOp.FNegate ||
+        code == SpvOp.VectorTimesScalar || code == SpvOp.MatrixTimesScalar || code == SpvOp.VectorTimesMatrix ||
+        code == SpvOp.MatrixTimesVector || code == SpvOp.MatrixTimesMatrix)
+}
+
+[arch(at="../ARCHITECTURE.md#precise-no-contraction")]
+def private mark_precise(var m : SpirvModule; precise : bool; code : SpvOp; res : uint) {
+    if (precise && precise_float_op(code)) {
+        emit(m, SEC_DECOR, SpvOp.Decorate, res, uint(SpvDecoration.NoContraction))
+    }
+}
+
 // daslang unary op -> SPIR-V opcode. `-` negates (FNegate/SNegate); `~` is bitwise Not (int/uint).
 def private unop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> {
     if (cls < 0) return (ok = false, code = SpvOp.Nop)   // unsupported scalar class
@@ -3016,7 +3031,7 @@ def private splat_type(var m : SpirvModule; scalar : TypeDecl?; n : int) : uint 
 // matrix*vector, vector*matrix, float vector*scalar (OpVectorTimesScalar, either order), and integer
 // vector*scalar (splat + OpIMul, either order). daslang has no matrix*scalar operator, so that
 // SPIR-V op is intentionally absent.
-def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, r : uint; var errors : array<string>) : tuple<handled : bool; id : uint> {
+def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, r : uint; precise : bool; var errors : array<string>) : tuple<handled : bool; id : uint> {
     let lmat = matrix_info(op2.left._type)
     let rmat = matrix_info(op2.right._type)
     let lcc = arith_lanes(op2.left._type.baseType)
@@ -3029,14 +3044,19 @@ def private emit_mul(var m : SpirvModule; op2 : ExprOp2?; e : ExpressionPtr; l, 
     let res = alloc_id(m)
     if (lmat.ok && rmat.ok) {
         emit(m, SEC_FUNCS, SpvOp.MatrixTimesMatrix, rt, res, l, r)
+        mark_precise(m, precise, SpvOp.MatrixTimesMatrix, res)
     } elif (lmat.ok && rcc > 1) {
         emit(m, SEC_FUNCS, SpvOp.MatrixTimesVector, rt, res, l, r)
+        mark_precise(m, precise, SpvOp.MatrixTimesVector, res)
     } elif (rmat.ok && lcc > 1) {
         emit(m, SEC_FUNCS, SpvOp.VectorTimesMatrix, rt, res, l, r)
+        mark_precise(m, precise, SpvOp.VectorTimesMatrix, res)
     } elif (lcc > 1 && rcc == 1 && lcls == 2 && rcls == 2) {
         emit(m, SEC_FUNCS, SpvOp.VectorTimesScalar, rt, res, l, r)
+        mark_precise(m, precise, SpvOp.VectorTimesScalar, res)
     } elif (rcc > 1 && lcc == 1 && lcls == 2 && rcls == 2) {
         emit(m, SEC_FUNCS, SpvOp.VectorTimesScalar, rt, res, r, l)   // SPIR-V wants the vector first
+        mark_precise(m, precise, SpvOp.VectorTimesScalar, res)
     } elif (lcc > 1 && rcc == 1 && lcls == rcls && lcls >= 0 && lcls != 2) {
         // integer vector * integer scalar: there is no OpVectorTimesScalar for ints, so splat the
         // scalar to the vec width and do a component-wise OpIMul (sign-agnostic, valid for int + uint).
@@ -4114,6 +4134,7 @@ class SpirvEmit : AstVisitor {
                 emit(bm, SEC_FUNCS, SpvOp.Load, p.pty, cur, p.id)
                 let res = alloc_id(bm)
                 emit(bm, SEC_FUNCS, bo.code, p.pty, res, cur, one)
+                mark_precise(bm, ctx.precise, bo.code, res)
                 emit(bm, SEC_FUNCS, SpvOp.Store, p.id, res)
             }
             return expr
@@ -4146,6 +4167,7 @@ class SpirvEmit : AstVisitor {
         let rt = emit_type(bm, expr._type)
         let res = alloc_id(bm)
         emit(bm, SEC_FUNCS, uo.code, rt, res, v)
+        mark_precise(bm, ctx.precise, uo.code, res)
         e2id[intptr(expr)] = res
         return expr
     }
@@ -4208,7 +4230,7 @@ class SpirvEmit : AstVisitor {
                 // OpMatrixTimes* exactly like the `*` binop — a component-wise OpFMul(vec, scalar) is
                 // illegal SPIR-V. Route multiply through emit_mul; same-shape falls back to bo.code below.
                 if (compound_base(op) == "*") {
-                    let mr = emit_mul(bm, expr, expr.left, cur, rhs, errs)
+                    let mr = emit_mul(bm, expr, expr.left, cur, rhs, ctx.precise, errs)
                     if (mr.handled) {
                         if (mr.id == 0u) return expr      // unsupported mix; error already pushed
                         res = mr.id
@@ -4228,6 +4250,7 @@ class SpirvEmit : AstVisitor {
                     }
                     res = alloc_id(bm)
                     emit(bm, SEC_FUNCS, bo.code, p.pty, res, cur, rhs2)
+                    mark_precise(bm, ctx.precise, bo.code, res)
                 }
                 emit(bm, SEC_FUNCS, SpvOp.Store, p.id, res)
             }
@@ -4239,7 +4262,7 @@ class SpirvEmit : AstVisitor {
         let r = value_of(expr.right)
         if (l == 0u || r == 0u || fold_unrolled_op2(op, cls, lbt, l, r, intptr(expr))) return expr
         if (op == "*") {
-            let mr = emit_mul(bm, expr, expr, l, r, errs)
+            let mr = emit_mul(bm, expr, expr, l, r, ctx.precise, errs)
             if (mr.handled) {
                 if (mr.id != 0u) {
                     e2id[intptr(expr)] = mr.id
@@ -4297,6 +4320,7 @@ class SpirvEmit : AstVisitor {
         }
         let res = alloc_id(bm)
         emit(bm, SEC_FUNCS, bo.code, rt, res, lid, rid)
+        mark_precise(bm, ctx.precise, bo.code, res)
         e2id[intptr(expr)] = res
         return expr
     }
@@ -8185,7 +8209,7 @@ def private execution_model(stage : ShaderStage) : SpvExecutionModel {
 }
 
 [macro_function]
-def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3; local_size_ids : int3; mesh_config : MeshOutputConfig; early_fragment_tests : bool; var reflection : SpirvReflection; kernel_self : Structure const? = null) : array<uint> {
+def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderStage; local_size : int3; local_size_ids : int3; mesh_config : MeshOutputConfig; early_fragment_tests : bool; precise : bool; var reflection : SpirvReflection; kernel_self : Structure const? = null) : array<uint> {
     var m = make_module()
     var ctx : EmitCtx
     ctx.stage = stage
@@ -8234,6 +8258,7 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     ctx.mesh_topology = mesh_config.topology
     // gl_WorkGroupSize folds to this, so it has to be on ctx before the globals are classified.
     ctx.local_size = local_size
+    ctx.precise = precise
 
     // class-kernel frontend: classify the annotated members ahead of the module globals so
     // `self.member` resolves through member_vars at every emission site (member_var_of).

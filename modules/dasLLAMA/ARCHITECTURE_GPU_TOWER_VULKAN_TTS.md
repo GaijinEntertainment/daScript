@@ -76,7 +76,8 @@ and landing in the first; then the source - the noise rows drawn on the device (
 a counter-keyed normal, not the CPU's PCG32 stream) unless the call carries a captured stream,
 the phase increments and the phase per frame on the resample law's stamps (`TtsSrcLowTorch` /
 `TtsSrcLowOnnx`, `TtsSrcCumsumTorch` / `TtsSrcCumsumOnnx` - the torch law's double
-accumulator as a compensated two-float sum), the harmonics' sines at the interpolated phases
+accumulator as a compensated two-float sum, the kernel marked `precise` so the device compiler
+keeps the correction terms it would otherwise fold to zero), the harmonics' sines at the interpolated phases
 through the source linear and its tanh (`TtsSrcSinesTorch` / `TtsSrcSinesOnnx`, the sine of a
 phase past a hundred thousand radians reduced by 2 pi in exact pieces), and its spectrum rows
 on the pad law's stamp (`TtsStftReflect` / `TtsStftEdge`: the magnitude and the phase); then

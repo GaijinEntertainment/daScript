@@ -82,6 +82,54 @@ def public farith_words : array<uint> {
     return clone_to_move(farith_spv)
 }
 
+// ===== the `precise` property: a two-float sum's correction terms, every float op decorated NoContraction,
+// against the same body plain; the class-kernel form carries the property too =====
+var @ssbo @binding = 0 pr_x : array<float>
+var @ssbo @binding = 1 pr_y : array<float2>
+
+def private two_float_step(acc, x : float) : float {
+    let s = acc + x
+    let bv = s - acc
+    return s + ((acc - (s - bv)) + (x - bv))
+}
+
+[compute_shader(local_size_x=64, name="precise_spv", precise=true), marker(no_coverage)]
+def precise_sum {
+    let i = gl_GlobalInvocationID.x
+    let s = two_float_step(pr_y[i].x, pr_x[i])
+    pr_y[i] = pr_y[i] * 0.5 - float2(-s, s / 4.0 % 3.0)
+}
+
+[compute_shader(local_size_x=64, name="plain_sum_spv"), marker(no_coverage)]
+def plain_sum {
+    let i = gl_GlobalInvocationID.x
+    let s = two_float_step(pr_y[i].x, pr_x[i])
+    pr_y[i] = pr_y[i] * 0.5 - float2(-s, s / 4.0 % 3.0)
+}
+
+class PreciseKern {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+
+    [spirv_kernel(local_size_x=64, name="precise_kern_spv", precise=true)]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        ys[i] = two_float_step(ys[i], xs[i])
+    }
+}
+
+def public precise_words : array<uint> {
+    return clone_to_move(precise_spv)
+}
+
+def public plain_sum_words : array<uint> {
+    return clone_to_move(plain_sum_spv)
+}
+
+def public precise_kern_words : array<uint> {
+    return clone_to_move(precise_kern_spv)
+}
+
 // ===== Phase-2 control-flow fixtures: mutable locals (Function OpVariables), compound assignment,
 // ++/--, comparisons (signed/unsigned/float), logical &&/||/!, and if/else (OpSelectionMerge +
 // OpBranchConditional). One fixture per scalar class so every comparison-opcode flavor is covered. =====
