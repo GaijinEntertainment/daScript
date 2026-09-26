@@ -272,9 +272,18 @@ def private ts_rows_alloc(var r : TsRows; floats : int64; bit : uint) : bool {
     return !oom && r.dev != 0ul
 }
 
-//! the slots sized for this call at least, each in 256 KB steps (so a call a little wider reuses them), the readback buffer
-//! at `hb_floats` (-1: the widest slot); false when an allocation failed or a slot would bind past the device's storage range
-//! (a binding past it wraps its range at 32 bits, and the rows past the wrap read as zeros)
+let private TS_SCRATCH_HEADROOM = 4l   //! a slot is sized this fraction past the call's need: a longer sentence reuses it
+
+//! `floats` grown by the headroom and rounded to the grain; the exact round-up where the grown size would bind past the
+//! device's storage range
+def private ts_grown(floats : int64) : int64 {
+    let grown = tts_round_up(floats + floats / TS_SCRATCH_HEADROOM, TS_SCRATCH_GRAIN)
+    return grown * 4l <= vk_max_storage_range() ? grown : tts_round_up(floats, TS_SCRATCH_GRAIN)
+}
+
+//! the slots sized a quarter past this call's need in 256 KB steps (a longer sentence reuses them), the readback buffer at
+//! `hb_floats` (-1: the widest slot); false when an allocation failed or a slot would bind past the device's storage
+//! range (a binding past it wraps its range at 32 bits, and the rows past the wrap read as zeros)
 [cold_path]
 def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, stats_floats, hb_floats : int64) : bool {
     ts_scratch_release(s)
@@ -283,7 +292,7 @@ def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, s
     var total = 0l
     for (i in range(TS_SCRATCH_BUFS)) {
         if (floats[i] > 0l) {
-            let n = tts_round_up(floats[i], TS_SCRATCH_GRAIN)
+            let n = ts_grown(floats[i])
             return false if (n * 4l > vk_max_storage_range())
             s.bytes[i] = n * 4l
             s.devs[i] = soft_device_buf(oom, s.bytes[i])
@@ -291,9 +300,9 @@ def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, s
         }
     }
     let dev_us = get_time_usec(t0)
-    s.hb_bytes = tts_round_up(max(ts_hb_floats(floats, hb_floats), 1l), TS_SCRATCH_GRAIN) * 4l
+    s.hb_bytes = ts_grown(max(ts_hb_floats(floats, hb_floats), 1l)) * 4l
     s.hb = make_host_buf(s.hb_bytes, false, [cached = true, soft = true])
-    if (oom || s.hb.buf == 0ul || !ts_rows_alloc(s.aux, aux_floats, TS_AUX_BIT) || !ts_rows_alloc(s.stats, stats_floats, TS_STATS_BIT)) {
+    if (oom || s.hb.buf == 0ul || !ts_rows_alloc(s.aux, ts_grown(aux_floats), TS_AUX_BIT) || !ts_rows_alloc(s.stats, ts_grown(stats_floats), TS_STATS_BIT)) {
         ts_scratch_release(s)
         return false
     }

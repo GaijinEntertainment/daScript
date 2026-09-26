@@ -25,8 +25,10 @@ numbers land - the q8 rows gathered over the cold gather's slice and dequantized
 pool, a row range a lane. The slab uploads once to one device buffer and stays resident under a
 key that folds the part's weight addresses and the q8 lane's repack layout; the model-drop sweep
 releases it, and a reload or another lane keys differently and rebuilds. The seats' activation
-rows are a scratch per seat, one device buffer a slot sized in floats and grown in 256 KB steps,
-kept across calls and rebuilt only when a call needs a slot wider than it holds, with one host
+rows are a scratch per seat, one device buffer a slot sized in floats a quarter past the call's
+need in 256 KB steps, kept across calls and rebuilt only when a call needs a slot wider than it
+holds (a decoder's scratch runs to gigabytes and a rebuild costs tens of ms, so the headroom is
+what lets the longer sentence after a short one reuse it), with one host
 readback buffer sized to the rows the seat copies out (the wave, the post rows, the encoder
 rows), never to the widest slot - a decoder's sample-rate column slot runs to hundreds of MB, and
 a host-visible buffer that wide costs a tenth of a second to map. Each seat's attach - the slab's build and upload, the pipelines' build, the scratch -
