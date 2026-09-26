@@ -426,9 +426,9 @@ window has fewer chunks than the scratch holds - the rows leg fed the device mel
 rows at the twin bar, the conv counter proving the front served every chunk and the encode counter
 the block loop and the input poison (a q8 tower with zeroed blocks through the device chain must
 exceed the bar). Every tower but the whisper twins' is
-staged and minted in memory (the qwen3a pair through `stage_qwen3a_tower`); the whisper twins load
-the served model through the ASR facade, and their rows compare and the f32-decoder leg stage and
-mint in memory. The three-way twins skip without their carriers, without a Vulkan device under
+staged and minted in memory (the qwen3a pair through `stage_qwen3a_tower`); the whisper cells mint
+the served model in memory behind the ASR facade (`mint_asr_whisper`), as do their rows compare
+and the f32-decoder leg. The three-way twins skip without their carriers, without a Vulkan device under
 `DASLLAMA_GPU=1` and on a das_metal build; the jfk-driven cells (gemma4a, canary, qwen3a, whisper)
 also skip without jfk.wav, and the whisper twin and the qwen3a front when interpreted. Off the f16
 GEMM feed (`DASLLAMA_COOPMAT=sdot4`) every front declines `device` by design while the block chains

@@ -523,6 +523,14 @@ def private mint_whisper(path : string; enc_q8, dec_q8 : bool; zero_from : int64
     return <- w
 }
 
+//! the served whisper model behind the ASR facade, minted in memory on the q8 lanes the Vulkan cells pin - the facade loader would
+//! bake the serving lane's `.dlim` beside the file
+def private mint_asr_whisper(path : string) : AsrModel {
+    var m = AsrModel(kind = AsrKind.whisper)
+    m.whisper <- mint_whisper(path, true, true, -1l)
+    return <- m
+}
+
 def private whisper_rows_encode(enc : AudioTower; var es : EncoderState; win : MelChunk; var out : array<float>) : int64 {
     whisper_encode(enc, es, win)
     out := es.xb
@@ -573,8 +581,8 @@ def test_whisper_vulkan_twin(t : T?) {
                     set_vulkan_wdec(false)   // the decoder rail stays on the CPU so only the encoder varies between the legs
                     set_asr_fp32(false)
                     set_asr_tower_fp32(false)
-                    var inscope m <- load_asr_model(model_path)
-                    tt |> success(m.whisper.enc.q8, "default load is q8")
+                    var inscope m <- mint_asr_whisper(model_path)
+                    tt |> success(m.whisper.enc.q8, "the served mint is q8")
                     with_job_que() {
                         setup_dasllama_jobque_()
                         set_vulkan_tower(false)
@@ -623,8 +631,8 @@ def test_whisper_vulkan_wdec(t : T?) {
                     set_vulkan_tower(true)   // the tower serves the encoder on both legs, so only the decoder varies
                     set_asr_fp32(false)
                     set_asr_tower_fp32(false)
-                    var inscope m <- load_asr_model(model_path)
-                    tt |> success(m.whisper.dq8, "default load is the q8 decoder")
+                    var inscope m <- mint_asr_whisper(model_path)
+                    tt |> success(m.whisper.dq8, "the served mint carries the q8 decoder")
                     with_job_que() {
                         setup_dasllama_jobque_()
                         set_vulkan_wdec(false)
@@ -674,7 +682,7 @@ def test_whisper_vulkan_stem_flush(t : T?) {
                 set_vulkan_wdec(false)
                 set_asr_fp32(false)
                 set_asr_tower_fp32(false)
-                var inscope m <- load_asr_model(model_path)
+                var inscope m <- mint_asr_whisper(model_path)
                 with_job_que() {
                     setup_dasllama_jobque_()
                     set_vulkan_tower(false)
@@ -727,7 +735,7 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
                 set_vulkan_tower(true)
                 set_asr_fp32(false)
                 set_asr_tower_fp32(false)
-                var inscope m <- load_asr_model(model_path)
+                var inscope m <- mint_asr_whisper(model_path)
                 let batch <- [for (i in range(int(WD_ROW_CAP) + 1)); m.whisper.tok_sot + i]   // one past the step's cap, the first batch of a window
                 var batch_moved := batch
                 batch_moved[length(batch_moved) - 1]++
@@ -784,7 +792,7 @@ def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrS
             set_vulkan_wdec(true)
             set_asr_fp32(false)
             set_asr_tower_fp32(false)
-            var inscope m <- load_asr_model(model_path)
+            var inscope m <- mint_asr_whisper(model_path)
             with_job_que() {
                 setup_dasllama_jobque_()
                 var inscope s <- create_session(m)
