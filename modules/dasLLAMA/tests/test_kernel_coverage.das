@@ -855,26 +855,21 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "tower_im2col_cls_spv",
     // the qwen3a front's conv-out shuffle; its coverage is test_vkt_tower_front_movers
     "tower_q3a_shuffle_cls_spv",
-    // the qwen3a front's bias + position rows finish; its coverage is test_vkt_tower_front_movers
-    "tower_q3a_finish_cls_spv",
     // the LayerNorm + ReLU rows of the gemma4a subsample convs; its coverage is test_vkt_tower_front_movers
     "tower_ln_relu_cls_spv",
     // canary's per-feature mel normalization; its coverage is test_vkt_tower_front_mel
     "tower_mel_norm_cls_spv",
-    // canary's length mask (the zero rows); its coverage is test_vkt_tower_front_movers
-    "tower_zero_rows_cls_spv",
     // canary's front depthwise conv; its coverage is test_vkt_tower_front_mel
     "tower_dw_conv_cls_spv",
     // canary's feature rows (the feature shuffle); its coverage is test_vkt_tower_front_movers
     "tower_feat_shuffle_cls_spv",
     // canary's sinusoid rel table; its coverage is test_vkt_tower_front_mel
     "tower_rel_sincos_cls_spv",
-    // the Conformer chains' cm2 feed (the clamp + halfword store) and canary's rel-plane attention (the head gather ahead of
-    // the rel GEMM, the tiled online softmax at both head widths): the two twins dispatch the feed, the gather and the
-    // 128-wide stamp (canary's head width); the 64-wide stamp serves no stocked carrier; their kernel coverage is
-    // test_vkt_tower_front_movers (the feed and the gather) and test_vkt_tower_cn_attn_rel_plane (both stamps) in
+    // canary's rel-plane attention (the tiled online softmax at both head widths; the head panels ahead of the rel GEMM are the
+    // restride stamps at one head): the canary twin dispatches the 128-wide stamp (canary's head width); the 64-wide stamp
+    // serves no stocked carrier; their kernel coverage is test_vkt_tower_cn_attn_rel_plane (both stamps) in
     // test_vulkan_tower_kernels.das
-    "tower_head_gather_cls_spv", "tower_cn_attn_r_cls_spv", "tower_cn_attn_r64_cls_spv",
+    "tower_cn_attn_r_cls_spv", "tower_cn_attn_r64_cls_spv",
     // the whisper decoder's classes (the Vulkan ASR-decoder driver - no zoo row, no whisper carrier in the census): the K/V
     // stores and the chunked attention's two halves, the stocked ggml-tiny.bin and ggml-large-v3-turbo.bin via
     // test_whisper_vulkan_wdec in test_whisper.das; their kernel coverage is test_vkt_wdec_classes in

@@ -783,9 +783,9 @@ def private vt_sets_q25v(var r : VtResident) {
     let btab = cap * (r.hs / 2l) * 4l
     let bwl = (r.win_cap + 1l) * 4l
     r.s_rms = set_tower_rms_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
-    r.s_cvt_xb = set_f16cvt_cls(fixed_array(r.xb_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_XB, VT_XQ))
-    r.s_cvt_att = set_f16cvt_cls(fixed_array(r.att_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_ATT, VT_XQ))
-    r.s_cvt_hg = set_f16cvt_cls(fixed_array(r.hg_dev, r.xh_dev), fixed_array(bff, bxh), fixed_array(VT_HG, VT_XQ))
+    r.s_cvt_xb = set_tower_clamp_cvt_cls(fixed_array(r.xb_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_XB, VT_XQ))
+    r.s_cvt_att = set_tower_clamp_cvt_cls(fixed_array(r.att_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_ATT, VT_XQ))
+    r.s_cvt_hg = set_tower_clamp_cvt_cls(fixed_array(r.hg_dev, r.xh_dev), fixed_array(bff, bxh), fixed_array(VT_HG, VT_XQ))
     r.s_q = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.q_dev), fixed_array(r.wq_bytes, bxh, bx), fixed_array(0u, VT_XQ, VT_Q))
     r.s_k = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.k_dev), fixed_array(r.wq_bytes, bxh, bx), fixed_array(0u, VT_XQ, VT_K))
     r.s_v = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.v_dev), fixed_array(r.wq_bytes, bxh, bx), fixed_array(0u, VT_XQ, VT_V))
@@ -1447,8 +1447,8 @@ def private vt_cn_rel_plane(var r : VtResident; cap, hs : int64; gemm_khr : bool
         return false
     }
     r.cn_plane_rows = cap
-    r.s_cn_gq = set_tower_head_gather_cls(fixed_array(r.q_dev, r.norms_dev, r.cn_qh_dev), fixed_array(bx, r.norms_bytes, bqh), fixed_array(VT_Q, 0u, VT_CN_QV_PANEL))
-    r.s_cn_gp = set_tower_head_gather_cls(fixed_array(r.rel_proj_dev, r.norms_dev, r.cn_ph_dev), fixed_array(b_rel, r.norms_bytes, bph), fixed_array(VT_REL_PROJ, 0u, VT_CN_REL_PANEL))
+    r.s_cn_gq = set_tower_hpad16_b_cls(fixed_array(r.q_dev, r.cn_qh_dev, r.norms_dev), fixed_array(bx, bqh, r.norms_bytes), fixed_array(VT_Q, VT_CN_QV_PANEL, 0u))
+    r.s_cn_gp = set_tower_hpad16_cls(fixed_array(r.rel_proj_dev, r.cn_ph_dev), fixed_array(b_rel, bph), fixed_array(VT_REL_PROJ, VT_CN_REL_PANEL))
     r.s_cn_rg = f16_gemm_set(gemm_khr, fixed_array(r.cn_ph_dev, r.cn_qh_dev, r.cn_r_dev), fixed_array(bph, bqh, br), fixed_array(VT_CN_REL_PANEL, VT_CN_QV_PANEL, VT_CN_REL_PLANE))
     if (hs == 64l) {
         r.s_cn_attn_r = set_tower_cn_attn_r64_cls(fixed_array(r.q_dev, r.k_dev, r.v_dev, r.att_dev, r.cn_r_dev, r.norms_dev),
@@ -1460,13 +1460,27 @@ def private vt_cn_rel_plane(var r : VtResident; cap, hs : int64; gemm_khr : bool
     return true
 }
 
+//! `nelem` floats of a plane as halves (the f16 GEMM feeds): the clamp-convert with the half range as its bounds
+def private vt_cvt16(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; nelem : int64) {
+    var pc = TowerClampArgs(nelem = uint(nelem), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    enc_tower_clamp_cvt_cls(raw, h, s, pc, (nelem / 4l + 255l) / 256l)
+}
+
+//! the elements [from, to) of a plane zeroed by the fill command (the length mask's rows past a stage's valid length)
+def private vt_zero_rows(raw : VkCommandBuffer; var h : VkHaz; dev : uint64; bit : uint; from, to : int64) {
+    if (from < to) {
+        vhz_dep(raw, h, 0u, bit, true)
+        cmd_fill_zero(raw, dev, from * 4l, (to - from) * 4l)
+    }
+}
+
 def private vt_bias_act(raw : VkCommandBuffer; var h : VkHaz; var s_bias : VkDescriptorSet; dout, nout, boff : int64; act : uint) {
     var pc_b = TowerBiasArgs(d = uint(dout), nelem = uint(nout), boff = uint(boff), act = act)
     enc_tower_bias_act_cls(raw, h, s_bias, pc_b, rq_wgs(false, nout))
 }
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, ww : int64) : bool {   // nolint:STYLE037,STYLE038 — the dispatch chain is the shape
+def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, ww : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_cn
     if (!g_vt_env_tower) {
         return vt_decline(r, VulkanTowerDecline.knob)
@@ -1491,7 +1505,7 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     }
     if (!ensure_tower_ln_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_post_add_ln_cls()
             || !ensure_tower_glu_sig_cls() || !ensure_tower_cn_dw_cls() || !(hs == 64l ? ensure_tower_cn_attn_r64_cls() : ensure_tower_cn_attn_r_cls())
-            || !ensure_tower_head_gather_cls() || !ensure_tower_rel_sincos_cls() || !f16_gemm_ensure(arm.gemm_khr)) {
+            || !ensure_tower_hpad16_cls() || !ensure_tower_hpad16_b_cls() || !ensure_tower_rel_sincos_cls() || !f16_gemm_ensure(arm.gemm_khr)) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
     let cm2 = vt_cm2_feed()
@@ -1607,10 +1621,11 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
             vt_pt(raw, VtProfRole.gemm_rel)
             for (hh in range64(t.n_head)) {
                 let hoff = hh * hs
-                var pc_gq = TowerHeadGatherArgs(d = uint(d), hs = uint(hs), hoff = uint(hoff), rows = uint(npos), boff = uint(lo.bias_v), bias_on = 1u)
-                enc_tower_head_gather_cls(raw, h, r.s_cn_gq, pc_gq, (npos * hs + 255l) / 256l)
-                var pc_gp = TowerHeadGatherArgs(d = uint(d), hs = uint(hs), hoff = uint(hoff), rows = uint(ww), boff = 0u, bias_on = 0u)
-                enc_tower_head_gather_cls(raw, h, r.s_cn_gp, pc_gp, (ww * hs + 255l) / 256l)
+                var pc_gq = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d), soff = uint(hoff),
+                    boff = uint(lo.bias_v + hoff))   //! one head's slice as an unpadded panel: the restride at one head, its bias row the head's slice of bias_v
+                enc_tower_hpad16_b_cls(raw, h, r.s_cn_gq, pc_gq, (npos * hs + 255l) / 256l)
+                var pc_gp = TowerRestrideArgs(rows = uint(ww), rows_pad = uint(ww), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d), soff = uint(hoff))
+                enc_tower_hpad16_cls(raw, h, r.s_cn_gp, pc_gp, (ww * hs + 255l) / 256l)
                 var pc_rg = F16GemmArgs(n = uint(hs), d = uint(ww), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(ww), ksplit = 0u)
                 f16_gemm_enc(arm.gemm_khr, raw, h, r.s_cn_rg, pc_rg, npos, ww)
                 pc_attn_r.buoff = uint(lo.bias_u)
@@ -1698,8 +1713,8 @@ def private vt_sets_g4v(var r : VtResident) {
     r.s_hrms_v = set_tower_rms_cls(fixed_array(r.v_dev, r.v2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_V, VT_V2, 0u))
     r.s_rope_q = set_tower_rope2d_cls(fixed_array(r.q2_dev, r.tabs_dev), fixed_array(bx, btabs), fixed_array(VT_Q2, 0u))
     r.s_rope_k = set_tower_rope2d_cls(fixed_array(r.k2_dev, r.tabs_dev), fixed_array(bx, btabs), fixed_array(VT_K2, 0u))
-    r.s_cvt_k = set_f16cvt_cls(fixed_array(r.k2_dev, r.k16_dev), fixed_array(bx, bh), fixed_array(VT_K2, VT_K16))
-    r.s_cvt_v = set_f16cvt_cls(fixed_array(r.v2_dev, r.v16_dev), fixed_array(bx, bh), fixed_array(VT_V2, VT_V16))
+    r.s_cvt_k = set_tower_clamp_cvt_cls(fixed_array(r.k2_dev, r.k16_dev), fixed_array(bx, bh), fixed_array(VT_K2, VT_K16))
+    r.s_cvt_v = set_tower_clamp_cvt_cls(fixed_array(r.v2_dev, r.v16_dev), fixed_array(bx, bh), fixed_array(VT_V2, VT_V16))
     r.s_fa = fa_stamp_set(khr, fixed_array(r.q2_dev, r.k16_dev, r.v16_dev, r.att_dev), fixed_array(bx, bh, bh, bx), fixed_array(VT_Q2, VT_K16, VT_V16, VT_ATT))
     r.s_post_o = set_tower_post_add_cls(fixed_array(r.x_dev, r.yo_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YO, VT_XB, 0u))
     r.s_post_d = set_tower_post_add_cls(fixed_array(r.x_dev, r.yd_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YD, VT_XB, 0u))
@@ -1733,9 +1748,6 @@ def private vt_sets_ln(var r : VtResident) {
     r.s_post_d_ln = set_tower_post_add_ln_cls(fixed_array(r.x_dev, r.yd_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YD, VT_XB, 0u))
     if (r.cm2) {
         let bxh = (cap + TILE_READ_SLACK) * max(r.d, r.ff) * 2l
-        r.s_cvt_xb = set_f16cvt_cls(fixed_array(r.xb_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_XB, VT_XQ))
-        r.s_cvt_att = set_f16cvt_cls(fixed_array(r.att_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_ATT, VT_XQ))
-        r.s_cvt_hg = set_f16cvt_cls(fixed_array(r.hg_dev, r.xh_dev), fixed_array(bff, bxh), fixed_array(VT_HG, VT_XQ))
         r.s_ln16 = set_tower_ln16_cls(fixed_array(r.x_dev, r.norms_dev, r.xh_dev), fixed_array(bx, r.norms_bytes, bxh), fixed_array(VT_X, 0u, VT_XQ))
         r.s_post_o_ln16 = set_tower_post_add_ln16_cls(fixed_array(r.x_dev, r.yo_dev, r.norms_dev, r.xh_dev), fixed_array(bx, bx, r.norms_bytes, bxh), fixed_array(VT_X, VT_YO, 0u, VT_XQ))
         r.s_post_d_ln16 = set_tower_post_add_ln16_cls(fixed_array(r.x_dev, r.yd_dev, r.norms_dev, r.xh_dev), fixed_array(bx, bx, r.norms_bytes, bxh), fixed_array(VT_X, VT_YD, 0u, VT_XQ))
@@ -2031,7 +2043,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     let cm2 = vt_cm2_feed()
     let tc_d = cm2 ? cm2_tile_cols(d, npos) : 0l
     let tc_ff = cm2 ? cm2_tile_cols(ff, npos) : 0l
-    if (cm2 && (!cm2_cls_ensure(int(KqFmt.q8), tc_d) || !cm2_cls_ensure(int(KqFmt.q8), tc_ff) || !ensure_f16cvt_cls() || !vt_ln16_ensure())) {
+    if (cm2 && (!cm2_cls_ensure(int(KqFmt.q8), tc_d) || !cm2_cls_ensure(int(KqFmt.q8), tc_ff) || !vt_ln16_ensure())) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
     let g_d = cm2 ? cm2_tiles_at(d, npos, tc_d) : vt_gemm_groups(d, npos)
@@ -2436,7 +2448,7 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
     let tc_d = cm2_tile_cols(d, tt)
     let tc_ff = cm2_tile_cols(ff, tt)
     if (!vt_aud_ensure(khr, hsp, v, vff) || !f16_gemm_ensure(arm.gemm_khr) || !ensure_tower_im2col1d_cls() || !ensure_tower_bias_act_cls()
-            || !cm2_cls_ensure(int(KqFmt.q8), tc_d) || !cm2_cls_ensure(int(KqFmt.q8), tc_ff) || !ensure_f16cvt_cls()) {
+            || !cm2_cls_ensure(int(KqFmt.q8), tc_d) || !cm2_cls_ensure(int(KqFmt.q8), tc_ff)) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
     if (!vt_aud_attach(r, t) || (!r.front && !vt_aud_front_slab(r, t))) {
@@ -2766,7 +2778,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hsp, false, false, false, false, true)
-    if (!fa_ok || !f16_gemm_ensure(gemm_khr) || !ensure_f16cvt_cls() || !ensure_tower_rms_cls() || !ensure_tower_bias_act_cls()
+    if (!fa_ok || !f16_gemm_ensure(gemm_khr) || !ensure_tower_clamp_cvt_cls() || !ensure_tower_rms_cls() || !ensure_tower_bias_act_cls()
             || !ensure_tower_rope_tab_cls() || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls()
             || !ensure_tower_win_attn_cls() || !ensure_tower_post_add_rms_cls() || !ensure_tower_glu_act_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
@@ -2807,8 +2819,6 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
     var pc_rs = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)
     var pc_rope = TowerRopeTabArgs(sstride = uint(d), soff = 0u, nheads = uint(t.n_head), hs = uint(hs), rows = uint(npos))
-    var pc_cvt = ActArgs(nelem = uint(nd), nblk = 0u)
-    var pc_cvth = ActArgs(nelem = uint(nff), nblk = 0u)
     var pc_gd = F16GemmArgs(n = uint(d), d = uint(d), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
     var pc_gff = F16GemmArgs(n = uint(d), d = uint(ff), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(ff), ksplit = 0u)
     var pc_dn = F16GemmArgs(n = uint(ff), d = uint(d), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
@@ -2823,7 +2833,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
                 var pc = TowerRowArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - norms_base), eps = t.eps)
                 enc_tower_rms_cls(raw, h, r.s_rms, pc, npos)
             }
-            enc_f16cvt_cls(raw, h, r.s_cvt_xb, pc_cvt, wg_nd)
+            vt_cvt16(raw, h, r.s_cvt_xb, nd)
             pc_gd.woff = uint(o.w[QWEN25V_GEMM_Q] - w_off)
             f16_gemm_enc(gemm_khr, raw, h, r.s_q, pc_gd, npos, d)
             pc_bias.boff = uint(o.b[QWEN25V_GEMM_Q] - norms_base)
@@ -2847,13 +2857,13 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
             } else {
                 enc_tower_win_attn_cls(raw, h, r.s_win, pc_win, nwin * t.n_head)
             }
-            enc_f16cvt_cls(raw, h, r.s_cvt_att, pc_cvt, wg_nd)
+            vt_cvt16(raw, h, r.s_cvt_att, nd)
             pc_gd.woff = uint(o.w[QWEN25V_GEMM_O] - w_off)
             f16_gemm_enc(gemm_khr, raw, h, r.s_o, pc_gd, npos, d)
             var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), boff = uint(o.b[QWEN25V_GEMM_O] - norms_base), eps = t.eps, ln_on = 1u, lnoff = uint(o.ln2_w - norms_base), lnboff = 0u,
                 ascale = 1.0)
             enc_tower_post_add_rms_cls(raw, h, r.s_post_o_ln, pc_post, npos)
-            enc_f16cvt_cls(raw, h, r.s_cvt_xb, pc_cvt, wg_nd)
+            vt_cvt16(raw, h, r.s_cvt_xb, nd)
             pc_gff.woff = uint(o.w[QWEN25V_GEMM_GATE] - w_off)
             f16_gemm_enc(gemm_khr, raw, h, r.s_hg, pc_gff, npos, ff)
             pc_gff.woff = uint(o.w[QWEN25V_GEMM_UP] - w_off)
@@ -2861,7 +2871,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
             pc_glu.bgoff = uint(o.b[QWEN25V_GEMM_GATE] - norms_base)
             pc_glu.buoff = uint(o.b[QWEN25V_GEMM_UP] - norms_base)
             enc_tower_glu_act_cls(raw, h, r.s_glu, pc_glu, wg_nff)
-            enc_f16cvt_cls(raw, h, r.s_cvt_hg, pc_cvth, wg_nff)
+            vt_cvt16(raw, h, r.s_cvt_hg, nff)
             pc_dn.woff = uint(o.w[QWEN25V_GEMM_DOWN] - w_off)
             f16_gemm_enc(gemm_khr, raw, h, r.s_down, pc_dn, npos, d)
             let last = l + 1l == t.n_layer
@@ -2923,7 +2933,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
     }
     let fa_ok = fa_stamp_ensure(khr, hs, false, false, false, false, true)
     if (!fa_ok || !ensure_tower_rms_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_rope2d_cls()
-            || !ensure_tower_post_add_cls() || !ensure_tower_geglu_cls() || !ensure_f16cvt_cls()) {
+            || !ensure_tower_post_add_cls() || !ensure_tower_geglu_cls() || !ensure_tower_clamp_cvt_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
     let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
@@ -2977,7 +2987,6 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
     let wg_fa = fa_stamp_wgs(khr, t.n_head, npos)
     let norms_base = t.layer_f
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(d), kvd = uint(d), kv_mul = 1u, kvbase = 0u, scale = 1.0, window = 0u, sinkoff = 0u)
-    var pc_cvt = ActArgs(nelem = uint(nd), nblk = 0u)
     var pc_rope = TowerRopeArgs(nheads = uint(t.n_head), hs = uint(hs), rows = uint(npos))
     var pc_gff = BatchArgs(n = uint(d), d = uint(ff), map_off = 0u)
     var pc_dn = BatchArgs(n = uint(ff), d = uint(d), map_off = 0u)
@@ -3008,8 +3017,8 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
             enc_tower_rms_cls(raw, h, r.s_hrms_v, pc_h, npos * t.n_head)
             enc_tower_rope2d_cls(raw, h, r.s_rope_q, pc_rope, wg_rope)
             enc_tower_rope2d_cls(raw, h, r.s_rope_k, pc_rope, wg_rope)
-            enc_f16cvt_cls(raw, h, r.s_cvt_k, pc_cvt, wg_nd)
-            enc_f16cvt_cls(raw, h, r.s_cvt_v, pc_cvt, wg_nd)
+            vt_cvt16(raw, h, r.s_cvt_k, nd)
+            vt_cvt16(raw, h, r.s_cvt_v, nd)
             fa_stamp_enc(khr, hs, false, false, false, false, raw, h, r.s_fa, pc_fa, wg_fa, true)
             vt_mm_clamped(raw, h, co, r.s_rq_att, nd, r.s_o, tile, d, d, g_vt_maps[rb + GEMMA4V_GEMM_O], g_d, r.s_clamp_yo, nd)
             var pc_post = TowerRowArgs(d = uint(d), rows = uint(npos), woff = uint(o.attn_post - norms_base), eps = t.eps, ln_on = 1u, lnoff = uint(o.ln2 - norms_base),
@@ -3189,7 +3198,7 @@ def private vt_q3a_scratch(var r : VtResident; cap_chunks, nm, d : int64; gemm_k
         r.s_fb[s] = set_tower_bias_act_cls(fixed_array(ys[s], r.norms_dev), fixed_array(by[s], r.norms_bytes), fixed_array(y_bits[s], 0u))
     }
     r.s_fshuf = set_tower_q3a_shuffle_cls(fixed_array(r.fy3_dev, r.ffeat_dev), fixed_array(by[2], bfeat), fixed_array(VTF_Y3, VTF_FEAT))
-    r.s_ffin = set_tower_q3a_finish_cls(fixed_array(r.fx_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VTF_X, 0u))
+    r.s_ffin = set_tower_bias_act_cls(fixed_array(r.fx_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VTF_X, 0u))
     r.sets_rel_proj |> clear()   //! the conv_out cm2 sets per token column live here (the front has no rel table)
     return true
 }
@@ -3218,7 +3227,7 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
         return false
     }
     if (!vt_cm2_feed() || !f16_gemm_ensure(arm.gemm_khr) || !ensure_tower_im2col_cls() || !ensure_tower_bias_act_cls()
-            || !ensure_tower_q3a_shuffle_cls() || !ensure_tower_q3a_finish_cls()) {
+            || !ensure_tower_q3a_shuffle_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
     let tc = cm2_tile_cols(d, npos)
@@ -3282,8 +3291,8 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
         cm2_cls_enc(int(KqFmt.q8), tc, raw, h, s_cout, pc_cout, g_cout)
         vt_pt(raw, VtProfRole.gemm_pw)
         let lo = vt_q3a_norm_span(t).lo
-        var pc_fin = TowerQ3aFinishArgs(d = uint(d), npos = uint(npos), boff = uint(t.cout_b_off - lo), poff = uint(t.pos_off - lo))
-        enc_tower_q3a_finish_cls(raw, h, r.s_ffin, pc_fin, (npos * d + 255l) / 256l)
+        vt_bias_act(raw, h, r.s_ffin, d, npos * d, t.cout_b_off - lo, BIAS_ACT_NONE)
+        vt_bias_act(raw, h, r.s_ffin, QWEN3A_TOK_PER_CHUNK * d, npos * d, t.pos_off - lo, BIAS_ACT_NONE)   //! the chunk's position rows as one bias row the width of a chunk
         vt_pt(raw, VtProfRole.post_add)
         vhz_dep(raw, h, VTF_X, 0u, true)
         cmd_copy_range(raw, r.fx_dev, 0l, r.host.buf, 0l, bx)
@@ -3393,7 +3402,7 @@ def private vt_g4a_front_scratch(var r : VtResident; t : Gemma4aEncoder; cap : i
     r.s_fim[1] = set_tower_im2col_cls(fixed_array(r.fy1_dev, r.fcol_dev), fixed_array(by0, bcol), fixed_array(VTF_Y1, VTF_COL))
     r.s_fg[1] = f16_gemm_set(gemm_khr, fixed_array(r.fw16_dev, r.fcol_dev, r.fy2_dev), fixed_array(r.fw16_bytes, bcol, by1), fixed_array(0u, VTF_COL, VTF_Y2))
     r.s_fb[1] = set_tower_ln_relu_cls(fixed_array(r.fy2_dev, r.norms_dev), fixed_array(by1, r.norms_bytes), fixed_array(VTF_Y2, 0u))
-    r.s_fcvt = set_f16cvt_cls(fixed_array(r.fy2_dev, r.ffeat_dev), fixed_array(by1, bfeat), fixed_array(VTF_Y2, VTF_FEAT))
+    r.s_fcvt = set_tower_clamp_cvt_cls(fixed_array(r.fy2_dev, r.ffeat_dev), fixed_array(by1, bfeat), fixed_array(VTF_Y2, VTF_FEAT))
     return true
 }
 
@@ -3434,7 +3443,7 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
     }
     let tc = cm2_tile_cols(d, npos)
     if (!vt_cm2_feed() || !f16_gemm_ensure(arm.gemm_khr) || !ensure_tower_im2col_cls() || !ensure_tower_spec_dft_cls() || !ensure_tower_mel_log_cls()
-            || !ensure_tower_ln_relu_cls() || !ensure_f16cvt_cls() || !cm2_cls_ensure(int(KqFmt.q8), tc)) {
+            || !ensure_tower_ln_relu_cls() || !ensure_tower_clamp_cvt_cls() || !cm2_cls_ensure(int(KqFmt.q8), tc)) {
         vt_decline(r, VulkanTowerDecline.device)
         return -1l
     }
@@ -3493,8 +3502,7 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
         var pc_ln1 = TowerLnReluArgs(cout = uint(ch1), rows = uint(rows1), woff = uint(t.norm1_w), eps = t.eps)
         enc_tower_ln_relu_cls(raw, h, r.s_fb[1], pc_ln1, (rows1 + 255l) / 256l)
         vt_pt(raw, VtProfRole.bias)
-        var pc_cvt = ActArgs(nelem = uint(npos * feat))
-        enc_f16cvt_cls(raw, h, r.s_fcvt, pc_cvt, (npos * feat / 4l + 255l) / 256l)
+        vt_cvt16(raw, h, r.s_fcvt, npos * feat)
         vt_pt(raw, VtProfRole.hpad)
         var pc_in = BatchArgs(n = uint(feat), d = uint(d), map_off = map_off)
         cm2_cls_enc(int(KqFmt.q8), tc, raw, h, s_in, pc_in, g_in)
@@ -3607,16 +3615,14 @@ def private vt_cn_front_scratch(var r : VtResident; t : CanaryEncoder; cap : int
     r.s_fim[0] = set_tower_im2col_cls(fixed_array(r.fmel_dev, r.fcol_dev), fixed_array(bmel, bcol), fixed_array(VTF_MEL, VTF_COL))
     r.s_fg[0] = f16_gemm_set(gemm_khr, fixed_array(r.fw16_dev, r.fcol_dev, r.fy1_dev), fixed_array(r.fw16_bytes, bcol, by0), fixed_array(0u, VTF_COL, VTF_Y1))
     r.s_fb[0] = set_tower_bias_act_cls(fixed_array(r.fy1_dev, r.norms_dev), fixed_array(by0, r.norms_bytes), fixed_array(VTF_Y1, 0u))
-    r.s_fim[1] = set_tower_zero_rows_cls(fixed_array(r.fy1_dev), fixed_array(by0), fixed_array(VTF_Y1))
-    r.s_fim[2] = set_tower_zero_rows_cls(fixed_array(r.fcn_pw3_dev), fixed_array(by2), fixed_array(VTF_Y4))
     r.s_fg[1] = set_tower_dw_conv_cls(fixed_array(r.fy1_dev, r.fy2_dev, r.norms_dev), fixed_array(by0, by2, r.norms_bytes), fixed_array(VTF_Y1, VTF_Y2, 0u))
     r.s_fg[2] = set_tower_dw_conv_cls(fixed_array(r.fcn_pw3_dev, r.fcn_dw5_dev, r.norms_dev), fixed_array(by2, by3, r.norms_bytes), fixed_array(VTF_Y4, VTF_Y5, 0u))
     r.s_fb[1] = set_tower_bias_act_cls(fixed_array(r.fcn_pw3_dev, r.norms_dev), fixed_array(by2, r.norms_bytes), fixed_array(VTF_Y4, 0u))
-    r.s_fcvt = set_f16cvt_cls(fixed_array(r.fy2_dev, r.fcn_feed16_dev), fixed_array(by2, bh), fixed_array(VTF_Y2, VTF_H))
+    r.s_fcvt = set_tower_clamp_cvt_cls(fixed_array(r.fy2_dev, r.fcn_feed16_dev), fixed_array(by2, bh), fixed_array(VTF_Y2, VTF_H))
     r.s_fshuf = set_tower_feat_shuffle_cls(fixed_array(r.ffeat_dev, r.fcn_feat_dev), fixed_array(by3, bxf), fixed_array(VTF_FEAT, VTF_XF))
     r.s_ffin = set_tower_bias_act_cls(fixed_array(r.fx_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VTF_X, 0u))
-    r.s_fcn_feed16_dw5 = set_f16cvt_cls(fixed_array(r.fcn_dw5_dev, r.fcn_feed16_dev), fixed_array(by3, bh), fixed_array(VTF_Y5, VTF_H))
-    r.s_fcn_feed16_feat = set_f16cvt_cls(fixed_array(r.fcn_feat_dev, r.fcn_feed16_dev), fixed_array(bxf, bh), fixed_array(VTF_XF, VTF_H))
+    r.s_fcn_feed16_dw5 = set_tower_clamp_cvt_cls(fixed_array(r.fcn_dw5_dev, r.fcn_feed16_dev), fixed_array(by3, bh), fixed_array(VTF_Y5, VTF_H))
+    r.s_fcn_feed16_feat = set_tower_clamp_cvt_cls(fixed_array(r.fcn_feat_dev, r.fcn_feed16_dev), fixed_array(bxf, bh), fixed_array(VTF_XF, VTF_H))
     r.s_fcn_bias_pw6 = set_tower_bias_act_cls(fixed_array(r.ffeat_dev, r.norms_dev), fixed_array(by3, r.norms_bytes), fixed_array(VTF_FEAT, 0u))
     return true
 }
@@ -3669,8 +3675,8 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
     let tc3 = cm2_tile_cols(nch, rows3)
     let tcx = cm2_tile_cols(d, tt)
     if (!vt_cm2_feed() || !f16_gemm_ensure(arm.gemm_khr) || !ensure_tower_im2col_cls() || !ensure_tower_spec_dft_cls() || !ensure_tower_mel_log_cls()
-            || !ensure_tower_mel_norm_cls() || !ensure_tower_zero_rows_cls() || !ensure_tower_dw_conv_cls() || !ensure_tower_feat_shuffle_cls()
-            || !ensure_tower_bias_act_cls() || !ensure_f16cvt_cls() || !cm2_cls_ensure(int(KqFmt.q8), tc2) || !cm2_cls_ensure(int(KqFmt.q8), tc3)
+            || !ensure_tower_mel_norm_cls() || !ensure_tower_dw_conv_cls() || !ensure_tower_feat_shuffle_cls()
+            || !ensure_tower_bias_act_cls() || !ensure_tower_clamp_cvt_cls() || !cm2_cls_ensure(int(KqFmt.q8), tc2) || !cm2_cls_ensure(int(KqFmt.q8), tc3)
             || !cm2_cls_ensure(int(KqFmt.q8), tcx)) {
         vt_decline(r, VulkanTowerDecline.device)
         return -1l
@@ -3729,29 +3735,21 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
         vt_pt(raw, VtProfRole.gemm_pw)
         vt_bias_act(raw, h, r.s_fb[0], nch, rows0 * nch, t.c0_b, BIAS_ACT_RELU)
         vt_pt(raw, VtProfRole.bias)
-        var pc_z0 = TowerZeroRowsArgs(from_elem = uint(l0 * g.w1 * nch), to_elem = uint(rows0 * nch))
-        if (l0 * g.w1 < rows0) {
-            enc_tower_zero_rows_cls(raw, h, r.s_fim[1], pc_z0, ((rows0 - l0 * g.w1) * nch + 255l) / 256l)
-        }
+        vt_zero_rows(raw, h, r.fy1_dev, VTF_Y1, l0 * g.w1 * nch, rows0 * nch)
         var pc_dw2 = TowerDwConvArgs(iw = uint(g.w1), ih = uint(g.t1), ch = uint(nch), woff = uint(t.c2_w), boff = uint(t.c2_b))
         enc_tower_dw_conv_cls(raw, h, r.s_fg[1], pc_dw2, (rows2 * nch + 255l) / 256l)
         vt_pt(raw, VtProfRole.dwconv)
-        var pc_cv2 = ActArgs(nelem = uint(rows2 * nch))
-        enc_f16cvt_cls(raw, h, r.s_fcvt, pc_cv2, (rows2 * nch / 4l + 255l) / 256l)
+        vt_cvt16(raw, h, r.s_fcvt, rows2 * nch)
         var pc_pw3 = BatchArgs(n = uint(nch), d = uint(nch), map_off = map3)
         cm2_cls_enc(int(KqFmt.q8), tc2, raw, h, s_pw3, pc_pw3, g_pw3)
         vt_pt(raw, VtProfRole.gemm_pw)
         vt_bias_act(raw, h, r.s_fb[1], nch, rows2 * nch, t.c3_b, BIAS_ACT_RELU)
         vt_pt(raw, VtProfRole.bias)
-        var pc_z2 = TowerZeroRowsArgs(from_elem = uint(l2 * g.w2 * nch), to_elem = uint(rows2 * nch))
-        if (l2 * g.w2 < rows2) {
-            enc_tower_zero_rows_cls(raw, h, r.s_fim[2], pc_z2, ((rows2 - l2 * g.w2) * nch + 255l) / 256l)
-        }
+        vt_zero_rows(raw, h, r.fcn_pw3_dev, VTF_Y4, l2 * g.w2 * nch, rows2 * nch)
         var pc_dw5 = TowerDwConvArgs(iw = uint(g.w2), ih = uint(g.t2), ch = uint(nch), woff = uint(t.c5_w), boff = uint(t.c5_b))
         enc_tower_dw_conv_cls(raw, h, r.s_fg[2], pc_dw5, (rows3 * nch + 255l) / 256l)
         vt_pt(raw, VtProfRole.dwconv)
-        var pc_cv5 = ActArgs(nelem = uint(rows3 * nch))
-        enc_f16cvt_cls(raw, h, r.s_fcn_feed16_dw5, pc_cv5, (rows3 * nch / 4l + 255l) / 256l)
+        vt_cvt16(raw, h, r.s_fcn_feed16_dw5, rows3 * nch)
         var pc_pw6 = BatchArgs(n = uint(nch), d = uint(nch), map_off = map6)
         cm2_cls_enc(int(KqFmt.q8), tc3, raw, h, s_pw6, pc_pw6, g_pw6)
         vt_pt(raw, VtProfRole.gemm_pw)
@@ -3760,8 +3758,7 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
         var pc_sh = TowerFeatShuffleArgs(w = uint(g.w3), ch = uint(nch), t = uint(tt))
         enc_tower_feat_shuffle_cls(raw, h, r.s_fshuf, pc_sh, (tt * feat + 255l) / 256l)
         vt_pt(raw, VtProfRole.shuffle)
-        var pc_cvx = ActArgs(nelem = uint(tt * feat))
-        enc_f16cvt_cls(raw, h, r.s_fcn_feed16_feat, pc_cvx, (tt * feat / 4l + 255l) / 256l)
+        vt_cvt16(raw, h, r.s_fcn_feed16_feat, tt * feat)
         var pc_pre = BatchArgs(n = uint(feat), d = uint(d), map_off = mapx)
         cm2_cls_enc(int(KqFmt.q8), tcx, raw, h, s_pre, pc_pre, g_pre)
         vt_pt(raw, VtProfRole.gemm_pw)

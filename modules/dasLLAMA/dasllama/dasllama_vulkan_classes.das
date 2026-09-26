@@ -8936,42 +8936,42 @@ struct TowerClampArgs {
     hi : float
 }
 
-//! rows clamped in place to [lo, hi] - a gemma4v ClippableLinear's output bounds
-[vk_dispatch(name = "tower_clamp_cls", grid = "wgs", params = "wgs : int64")]
-class TowerClamp {
+//! rows clamped to [lo, hi] in place (a gemma4v ClippableLinear's output bounds), or under OUT16 stored as halves into `outh`
+//! with the bounds cut to the half range - the f16 feed of a clamped GEMM input, the input bounds applied on the way into the
+//! tile so the normed rows stay whole for the next GEMM's own bounds (at the float range's bounds: the plain f32 -> f16 rows)
+[ |> template_struct_instance]
+class template TowerClampT {
+    @template_constant OUT16 : bool = false
     @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 @template_gate = OUT16 outh : array<float16>
     @push_constant pa : TowerClampArgs
 
-    [spirv_kernel(local_size_x = 256, name = "tower_clamp_cls_spv")]
+    def clamped(e : uint) : void {
+        static_if (OUT16) {
+            outh[e] = float16(clamp(x[e], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
+        } else {
+            x[e] = clamp(x[e], pa.lo, pa.hi)
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let e = gl_GlobalInvocationID.x * 4u
         if (e < pa.nelem) {
-            x[e] = clamp(x[e], pa.lo, pa.hi)
-            x[e + 1u] = clamp(x[e + 1u], pa.lo, pa.hi)
-            x[e + 2u] = clamp(x[e + 2u], pa.lo, pa.hi)
-            x[e + 3u] = clamp(x[e + 3u], pa.lo, pa.hi)
+            clamped(e)
+            clamped(e + 1u)
+            clamped(e + 2u)
+            clamped(e + 3u)
         }
     }
 }
 
-//! the f16 feed of a clamped GEMM input: outh = f16(clamp(src, lo, hi)) - the input bounds applied on the way into the
-//! tile, so the normed rows stay whole for the next GEMM's own bounds
-[vk_dispatch(name = "tower_clamp_cvt_cls", grid = "wgs", params = "wgs : int64")]
-class TowerClampCvt {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 outh : array<float16>
-    @push_constant pa : TowerClampArgs
+[vk_dispatch(name = "tower_clamp_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerClamp : TowerClampT {}
 
-    [spirv_kernel(local_size_x = 256, name = "tower_clamp_cvt_cls_spv")]
-    def run {
-        let e = gl_GlobalInvocationID.x * 4u
-        if (e < pa.nelem) {
-            outh[e] = float16(clamp(src[e], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
-            outh[e + 1u] = float16(clamp(src[e + 1u], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
-            outh[e + 2u] = float16(clamp(src[e + 2u], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
-            outh[e + 3u] = float16(clamp(src[e + 3u], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
-        }
-    }
+[vk_dispatch(name = "tower_clamp_cvt_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerClampCvt : TowerClampT {
+    override OUT16 = true
 }
 
 struct TowerClampRqArgs {
@@ -9182,26 +9182,6 @@ class TowerMelNorm {
             for (i in urange(pa.valid, pa.n_frames)) {
                 mel[i * nm + j] = 0.0
             }
-        }
-    }
-}
-
-struct TowerZeroRowsArgs {
-    from_elem : uint
-    to_elem : uint
-}
-
-//! the time rows past a conv stage's valid length zeroed: elements [from, to) of the image
-[vk_dispatch(name = "tower_zero_rows_cls", grid = "wgs", params = "wgs : int64")]
-class TowerZeroRows {
-    @ssbo @binding = 0 x : array<float>
-    @push_constant pa : TowerZeroRowsArgs
-
-    [spirv_kernel(local_size_x = 256, name = "tower_zero_rows_cls_spv")]
-    def run {
-        let e = pa.from_elem + gl_GlobalInvocationID.x
-        if (e < pa.to_elem) {
-            x[e] = 0.0
         }
     }
 }
@@ -9600,32 +9580,6 @@ class TowerLnRelu {
     }
 }
 
-struct TowerQ3aFinishArgs {
-    d : uint
-    npos : uint
-    boff : uint    //! the conv_out bias row's base in wn
-    poff : uint    //! the position rows' base in wn (Q3A_TOK_PER_CHUNK rows of d, reset each chunk)
-}
-
-//! the qwen3a residual rows off the conv_out GEMM: x += bias[e] + pos[(row % tok)][e]
-[vk_dispatch(name = "tower_q3a_finish_cls", grid = "wgs", params = "wgs : int64")]
-class TowerQ3aFinish {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @role = "weight" wn : array<float>
-    @push_constant pa : TowerQ3aFinishArgs
-
-    [spirv_kernel(local_size_x = 256, name = "tower_q3a_finish_cls_spv")]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.npos * pa.d) {
-            let d = max(1u, pa.d)
-            let e = gid % d
-            let row = gid / d
-            x[gid] = x[gid] + wn[pa.boff + e] + wn[pa.poff + (row % Q3A_TOK_PER_CHUNK) * d + e]
-        }
-    }
-}
-
 struct TowerRopeArgs {
     nheads : uint
     hs : uint       //! the head width: the compact row is nheads x hs wide, the rotated pairs per axis hs / 4
@@ -9866,40 +9820,6 @@ class TowerDwConv5 {
                 kk++
             }
             y[e] = acc
-        }
-    }
-}
-
-struct TowerHeadGatherArgs {
-    d : uint        //! the source row width
-    hs : uint       //! the head width
-    hoff : uint     //! the head's element base in a row
-    rows : uint
-    boff : uint     //! the bias row's base in wn, added first when `bias_on`
-    bias_on : uint
-}
-
-//! one head's slice of f32 rows as an f16 panel [rows x hs], a bias row added first where the site names one: the rel GEMM's
-//! (q + v) feed and its rel-table feed
-[vk_dispatch(name = "tower_head_gather_cls", grid = "wgs", params = "wgs : int64")]
-class TowerHeadGather {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 @role = "weight" wn : array<float>
-    @ssbo @binding = 2 dst : array<float16>
-    @push_constant pa : TowerHeadGatherArgs
-
-    [spirv_kernel(local_size_x = 256, name = "tower_head_gather_cls_spv")]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        let hs = max(1u, pa.hs)
-        if (gid < pa.rows * pa.hs) {
-            let r = gid / hs
-            let n = gid % hs
-            var val = src[r * pa.d + pa.hoff + n]
-            if (pa.bias_on != 0u) {
-                val += wn[pa.boff + pa.hoff + n]
-            }
-            dst[gid] = float16(val)
         }
     }
 }
