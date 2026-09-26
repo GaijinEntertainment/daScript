@@ -43,3 +43,35 @@ def main_thread_playback_reports_consumption_and_resets(t : T?){
     }
     sound_set_null_device(false)
 }
+
+[test]
+def paused_consumer_bounds_threaded_generation(t : T?){
+    sound_set_null_device(true)
+    with_audio_system() $ {
+        for (global in fixed_array(false, true)){
+            strudel_init(@@telemetry_worker)
+            sleep(300u); if (global){set_global_pause(true)}else{strudel_set_pause(true)}; sleep(1000u)
+            let before = strudel_get_diagnostics()
+            sleep(1000u)
+            let after = strudel_get_diagnostics()
+            if (global){set_global_pause(false)}else{strudel_set_pause(false)}; strudel_shutdown()
+            t |> success(after.generated_frames - before.generated_frames <= 4800ul, "paused stream must stop generation when its bounded queue is full (global={global})")
+            t |> success(after.generated_frames - after.consumed_frames <= 14400ul, "at most six 50ms chunks including in-flight output")
+        }
+    }
+    sound_set_null_device(false)
+}
+
+require strudel/strudel_pattern
+[test]
+def track_controls_survive_playback_restart(t : T?){
+    strudel_shutdown()
+    for (_cycle in range(2)){
+        let pat <- silence(); let track = strudel_add_track_immediate(pat, .75)
+        t |> equal(strudel_track_gain(track), .75)
+        strudel_fade_track(track, .25, 0.0)
+        t |> equal(strudel_track_gain(track), .25)
+        strudel_shutdown()
+        t |> equal(strudel_track_gain(track), 0.0)
+    }
+}
