@@ -15,7 +15,9 @@ def private float_results_and_no_contraction(words : array<uint>) : tuple<result
     var no_contraction_targets : array<uint>
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
         if (opcode == uint(SpvOp.FAdd) || opcode == uint(SpvOp.FSub) || opcode == uint(SpvOp.FMul) || opcode == uint(SpvOp.FDiv) ||
-                opcode == uint(SpvOp.FRem) || opcode == uint(SpvOp.FNegate) || opcode == uint(SpvOp.VectorTimesScalar)) {
+                opcode == uint(SpvOp.FRem) || opcode == uint(SpvOp.FMod) || opcode == uint(SpvOp.FNegate) || opcode == uint(SpvOp.Dot) ||
+                opcode == uint(SpvOp.VectorTimesScalar) || opcode == uint(SpvOp.MatrixTimesScalar) || opcode == uint(SpvOp.VectorTimesMatrix) ||
+                opcode == uint(SpvOp.MatrixTimesVector) || opcode == uint(SpvOp.MatrixTimesMatrix)) {
             let result_id = w[s + 1]
             result_ids |> insert(result_id)
         } elif (opcode == uint(SpvOp.Decorate) && n >= 2 && w[s + 1] == uint(SpvDecoration.NoContraction)) {

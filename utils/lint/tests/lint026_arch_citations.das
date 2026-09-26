@@ -255,6 +255,22 @@ def private test_arch_forward_control_tail(t : T?) {
         t |> equal(count_of(fixed, "LINT026"), 0, "both anchors cited from prose, nothing dangling\n{fixed}")
         t |> equal(rc2, 0, "and the run is clean\n{fixed}")
     }
+    t |> run("a markdown citation led by `../` or `./` resolves against the citing file's folder: it keeps the anchor alive, and a dangling one is a finding") @(t : T?) {
+        let dir = path_join(tmp_root(), "mdrel")
+        let sub = path_join(dir, "sub")
+        mkdir_rec(sub)
+        plant_doc(dir, "ARCHITECTURE.md", ["alpha", "beta"])
+        plant(dir, "ok.das", "options gen2\n\n[export]\ndef main \{\n    print(\"ok\\n\")\n\}\n")
+        plant(sub, "REVIEW.md", "# rules\n\nA rule leaning on `../ARCHITECTURE.md#alpha` and on `../ARCHITECTURE.md#gamma`.\n")
+        plant(dir, "NOTES.md", "# notes\n\nA note leaning on `./ARCHITECTURE.md#beta`.\n")
+        var out : string
+        let rc = run_lint(dir, out)
+        t |> equal(count_of(out, "REVIEW.md:3: LINT026: citation does not resolve - no such anchor"), 1, "the dangling `../` citation fires at its line\n{out}")
+        t |> equal(count_of(out, "#alpha"), 0, "the `../` cited anchor is alive\n{out}")
+        t |> equal(count_of(out, "#beta"), 0, "the `./` cited anchor is alive\n{out}")
+        t |> equal(count_of(out, "LINT026"), 1, "one finding, no more\n{out}")
+        t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
+    }
     t |> run("a structure's citation is shape-checked by lint - the compiler never sees it") @(t : T?) {
         let dir = path_join(tmp_root(), "malformed")
         mkdir_rec(dir)

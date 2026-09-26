@@ -47,8 +47,8 @@ that a question answered for one backend has an obvious address in the other. Th
   (`metal_tensor_race`, `metal_tensor_race_decode`), which run before the driver inits.
 - **`REVIEW.das`'s `check_gpu_role_partition` licenses this table's roles** - Metal's `kernels`,
   `common`, `decode`, `prefill`, `gemm`, `shapes`, `tower`, `asr_dec`, `lens`, `mtp_gemma`;
-  Vulkan's `classes`, `common`, `decode`, `prefill`, `seams`, `dispatch`, `tower`, `asr_dec` -
-  and finds a `dasllama_<backend>_<role>.das` with any other role.
+  Vulkan's `classes`, `common`, `decode`, `prefill`, `seams`, `dispatch`, `tower`, `asr_dec`,
+  `tts` - and finds a `dasllama_<backend>_<role>.das` with any other role.
 - **Backend-only capabilities live in their matching ROLE file, not in new grab-bags** - vulkan's
   weight arena, streamed mirrors, heat cache, host-import, coopmat; metal's blob transform and MTP.
 - **The tower driver owns NO PSOs.** Its kernels (LN, f32 mul_mm, the two gelu flavors,
@@ -66,9 +66,9 @@ that a question answered for one backend has an obvious address in the other. Th
   its scratch pool, the qwen3a padded-weight slab) release through `metal_tower_shutdown`,
   and the slab additionally drops with the weights epoch through the tower's reload prep.
 - **The Vulkan tower driver serves the vision ViT chains, the audio block loops and the audio
-  fronts, and the Vulkan ASR-decoder driver serves the whisper decoder** - TTS towers stay CPU on
-  Vulkan; the towers serve their q8 lanes on the CPU chain and on the driver alike, so its
-  `serves` answer to the lane policy is no. Likewise the
+  fronts, the Vulkan ASR-decoder driver the whisper decoder, and the Vulkan TTS driver the StyleTTS2
+  and Pocket seats** (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`); the towers serve their q8
+  lanes on the CPU chain and on the driver alike, so its `serves` answer to the lane policy is no. Likewise the
   non-causal media span: Metal serves it through `AttnArgs.uend` - including the FUSED image turn
   (head + media rows + tail as ONE eval, the per-query mask through `AttnArgs.ulo`); the Vulkan
   resident prefill declines span evals (`followup_general.md` #23's remaining half) and registers
@@ -172,9 +172,8 @@ that a question answered for one backend has an obvious address in the other. Th
   Metal drivers it is required from the transformer umbrella, never from common.
 - **A dry bake runs the whole resident arm with no device.** `vulkan_bake_role` puts the tier in
   bake mode, and each `rdec_*` device seam answers for itself so the arm walk reaches the end: a
-  seam that only records a layout (`vk_rdec_set_emb`) answers true, a seam that would allocate
-  device memory (`vk_rdec_upload_emb_f32`) answers false without touching a device. The split is
-  what keeps a baked `.dlim` layout equal to the one a real arm produces.
+  seam that only records a layout (`vk_rdec_set_emb`) answers true, one that would allocate device
+  memory (`vk_rdec_upload_emb_f32`) answers false without touching a device - which keeps a baked `.dlim` layout equal to the one a real arm produces.
 - **`dasllama_gpu_math.das`** - the ALU helpers both kernel homes splice into their shader bodies
   (`ksign7`, `iq3s_signed`, `softcap_exp`): pure arithmetic, no table, no backend lowering, so one
   owner serves the Metal and the Vulkan bodies alike; the codebook tables stay per kernel home.
@@ -209,7 +208,7 @@ decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both pat
 **The allowed asymmetries between the backends - this list is closed; a new one lands with its entry here:**
 
 - **The whisper-class block-hook pin is Vulkan-only** (`set_vulkan_audio_blocks`: the block hooks pinned off while the conv stem still serves, the stem-flush and lifetime cells' seat; the Metal tower serves stem and blocks as one chain, nothing to pin apart).
-- **The Pocket frame batch knob is Metal-only** (`set_metal_pocket_frame_batch` / `metal_pocket_frame_batch`; the Vulkan tower has no Pocket seat). **The `dasllama_gpu_tier` cooperation SPI is Vulkan-only**: every hook seat the tier exposes (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the
+- **The `dasllama_gpu_tier` cooperation SPI is Vulkan-only**: every hook seat the tier exposes (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the
   Vulkan family alone, and the role row above enumerates the seats; a new seat lands in that
   row, not as a new entry here. The one seat outside that rule is the entry below.
 - **The deltanet mirror room seat is Metal-only.** `set_moe_gpu_dn_room_hook` (the engine half
@@ -228,11 +227,15 @@ decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both pat
   heartbeat (`DASLLAMA_METAL_HEARTBEAT_S`, a dasMetal background re-request that stops the OS
   collecting the set over a CPU-only window, `ARCHITECTURE_RUNTIME.md#the-post-cpu-burn-gpu-ramp-and`) - a
   driver-cost shield, not a placement mechanism; memory is still memory.
-- **The weights-epoch drop is Metal-only.** `bump_weights_epoch`'s listener seat
-  (`register_weights_epoch_listener`) has one subscriber: `_common`'s `metal_weights_drop`, which runs the
-  registered reload preps (`register_reload_prep`; the decode driver registers `discard_pre_encoded_steps`),
-  quiesces, and releases the address-keyed region caches. Vulkan's reload story is the unmap notify
-  (`set_moe_gpu_unmap_notify`) - a different seam for a different ownership model.
+- **The weights-epoch drop reaches the two tiers through different seams.** `bump_weights_epoch`'s
+  listener seat (`register_weights_epoch_listener`) has two subscribers: `_common`'s `metal_weights_drop`,
+  which runs the registered reload preps (`register_reload_prep`; the decode driver registers
+  `discard_pre_encoded_steps`, the tower `tw_weights_drop`, dropping its TTS slabs), quiesces, and releases
+  the address-keyed region caches; and the Vulkan TTS driver's `ts_forget`, dropping its slabs and the Pocket
+  state - both TTS drivers listen because a TTS slab's key is weight addresses a reload reuses. Vulkan's LLM
+  reload story stays the unmap notify (`set_moe_gpu_unmap_notify`) - a different seam for a different ownership model.
+- **`vulkan_tts_stats` / `vulkan_tts_declines` have no Metal twin**: the Vulkan TTS driver counts its encodes
+  and its declines by reason in its own pair, where Metal's TTS seats report through `metal_tower_stats` beside `styletts2_gpu_stats`.
 - **The batched pre-encoded step is Metal-only**: the batch driver encodes the next step under the
   current one's GPU run (`ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode`, `DASLLAMA_METAL_BATCH_PRE`);
   Vulkan's N-row token command records once and resubmits, so it has no encode to move.

@@ -33,23 +33,26 @@ marked as a probe's, never as evidence.
 prompt's tokens, served ids against the host's `parallel_argmax` over the same logits, a
 transcript, a frame count) other than exactly, is a defect.**
 
-**A diff that adds or changes a `PERF_LEDGER.md`, `followup_metal.md` or `followup_vulkan.md`
-entry offering a GPU-vs-CPU parity reading as evidence names in it the run it came from -
+**A diff that adds a parity reading to a `PERF_LEDGER.md`, `followup_metal.md` or
+`followup_vulkan.md` entry, or changes one, offering it as GPU-vs-CPU evidence names in the
+entry the run it came from -
 `harness/parity.das`, `benchmarks/lcpp_bench.das --parity` or a `tests/run.das` run - and, for a
 `tests/run.das` run, the cell that read it; an entry crediting a reading to a cell that does not
 produce it is a defect.**
 
-**A diff that cites Metal parity evidence, or Metal driver-against-itself evidence, with no cell
-assert or logged before/after reading of the Metal driver's own step counters rising across each
-changed call - `metal_decode_stats`, `metal_batch_decode_stats` and `metal_prefill_stats` - is a
-defect.** Without the counter the run may have measured the CPU.
+**A diff that cites Metal parity evidence, or Metal driver-against-itself evidence, whose GPU
+side is a decode or prefill step, with no cell assert or logged before/after reading of the Metal
+driver's own step counters rising across each changed call - `metal_decode_stats`,
+`metal_batch_decode_stats` and `metal_prefill_stats` - is a defect.** Without the counter the run
+may have measured the CPU.
 
 **A diff that cites Metal parity or driver-against-itself evidence of the tower driver (the
 driver serving a family's encoder and synthesis stages through hook seats - stage slots the CPU
 chain calls and a GPU driver fills) or the ASR-decoder driver with no cell assert or logged
-before/after reading of that driver's counter rising is a defect - `metal_tower_stats`' counter
-of the stage the change touches (`encodes` or `blocks` for the blocks, `convs` for a front),
-`metal_wdec_stats`' windows.**
+before/after reading of that driver's counter rising is a defect - the `metal_tower_stats`
+counter that rises when the stage the change touches serves (`encodes` on every served seat, a
+TTS stage's included; `blocks` for the blocks, `convs` for a front), `metal_wdec_stats`'
+windows.**
 
 **A diff that cites as parity evidence a Vulkan run armed by anything but `DASLLAMA_GPU=1`
 (`--ngl` included) is a defect.**
@@ -62,11 +65,12 @@ on the CPU) a `GPU MoE tier:` line reporting a rail (one operation family the ti
 `resident` - the rail and its layers, with any text after them - never one reading `declined`,
 `stopped at layer` or `stays on the CPU`.
 
-**A diff that cites as parity evidence a Vulkan run of the tower driver or the ASR-decoder driver
-whose cell asserts no rise in that driver's counter is a defect - for the tower driver
-`vulkan_tower_stats`'s counter of the stage the change touches (`encodes` for the blocks, `convs`
-for a front or the stem, `mels` for the mel), for the ASR-decoder driver `vulkan_wdec_stats`'s
-windows.**
+**A diff that cites as parity evidence a Vulkan run of a tower driver (a driver serving a
+family's encoder or synthesis stages through hook seats) or the ASR-decoder driver whose cell
+asserts no rise in that driver's own stats counter - the counter its `*_stats()` accessor
+returns for the stage the change touches (`vulkan_tower_stats`: `encodes` for the blocks, `convs`
+for a front or the stem, `mels` for the mel; `vulkan_tts_stats`: `encodes` for a TTS seat;
+`vulkan_wdec_stats`: windows) - is a defect.**
 
 **A diff that cites as parity evidence, or as driver-against-itself evidence, a Vulkan run that
 did not arm the mirror codec the changed path reads - the element type, f16 or f32, of the K/V

@@ -42,20 +42,19 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   into the British inventory through a table derived from aligning the two lexicons (the
   non-rhotic rule keyed on whether a vowel follows, the goat, trap, lot and reduced vowels
   onto their British symbols, the length marks) - the lexicon's own reading is already British
-  and takes no rewrite, which matters because the rewrite is not the identity on one: it reads
-  the DRESS vowel before a linking rhotic as SQUARE, having nothing in the string to tell merry
-  from Mary. A vowel the two lexicons give no evidence for before a dropped rhotic keeps that
-  rhotic rather than losing it. The bath-trap split reaches only lexicon words. Loads a phoneme
+  and takes no rewrite, which matters because the rewrite is not the identity: it reads the
+  DRESS vowel before a linking rhotic as SQUARE, having nothing in the string to tell merry from
+  Mary. A vowel the two lexicons give no evidence for before a dropped rhotic keeps that
+  rhotic. The bath-trap split reaches only lexicon words. Loads a phoneme
   pack - `tts_g2p.bin` (both dialect tiers) or `tts_g2p_en_us.bin` (the American tier alone,
   `ARCHITECTURE_TTS.md#tts-g2p-pack-tiers`) - pack version 2 (`harness/build_g2p_data.py`: the gold tier extended by
   `harness/g2p_local_additions.json`, the US and GB keys merged into one string table per
   tier, the GRU stored as f16, CMUdict pruned of the words both dialects' lexicons carry -
   safe because the fallback reads the lexicon first), searched in place as byte-sorted string
-  tables; a version 1 pack is refused by name. The
-  200-sentence fixtures under `tests/_tts_fixtures/` (American, minted by
-  `harness/mint_tts_g2p_fixture.py` from the G2P fidelity experiment; British, minted by
-  `harness/mint_tts_g2p_gb_fixture.py` from the reference's own British front end) are the
-  parity rails for all three stages.
+  tables; a version 1 pack is refused by name. The 200-sentence fixtures under
+  `tests/_tts_fixtures/` (American, minted by `harness/mint_tts_g2p_fixture.py` from the G2P
+  fidelity experiment; British, by `harness/mint_tts_g2p_gb_fixture.py` from the reference's own
+  British front end) are the parity rails for all three stages.
 - **`dasllama_tts_types.das`** - the TTS floor: `TtsCaps`, `TtsAudio` (f32 PCM + rate), `TtsNoise`
   (the source noise a synthesis consumed - captured from the oracle, or drawn into a reused
   carrier), `TtsGpuSeats` (a family's GPU hook seats - the names in dispatch order, the calls and
@@ -84,6 +83,11 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   binds them as borrowed views over a served plane (`dasllama_common.das`'s `release_plane` is the
   one teardown). One
   home: the block home holds the operators, and it names no family type.
+- **`dasllama_tts_slab.das`** - the shared slab writer both GPU tower drivers build their TTS
+  slabs through: the writer struct and its allocator, the q8 and K-quant dequant into f32 rows
+  over the job pool, the conv, linear and norm row writers, the residual and generator block slot
+  writers, the two-pass build (a measuring pass, then the fill), and every slab key and shape
+  check. Element offsets only - a driver turns them into its own binding offsets - and no device call.
 - **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share: the weight
   map of the converted GGUF (conv geometry rides as `styletts2.conv.<weight>` metadata, so the
   assembly hardcodes the wiring and reads the shapes; the STFT convention - replicate or reflect
@@ -100,7 +104,7 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   decoder through the source, the generator and the inverse STFT) and the generator seat the CPU
   chain reaches after a declined decode - each fed the stage's inputs and answering with its
   rows or declining; the trace rail keeps the CPU chain, and engage is read from the counters.
-  The Metal tower driver fills every seat on both lanes (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`). The carrier also holds each family's DATA - the `KittenFamily` /
+  The Metal and the Vulkan tower drivers each fill every seat on both lanes (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`, `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`). The carrier also holds each family's DATA - the `KittenFamily` /
   `KokoroFamily` records of `dasllama_tts_types.das`, read from the GGUF's `kitten.*` /
   `kokoro.symbol_*` metadata by `stage_family_data` - because the image meta serializes them and a
   `.dlim` load has no GGUF to read them from (`ARCHITECTURE_TTS.md#tts-image-rail`); the family LOGIC that interprets those
@@ -155,8 +159,7 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   set); none of the three is a name a tutorial could call, so none carries a teaching duty.
 
 Every local container on the TTS path is `var inscope`: the persistent heap frees nothing at
-scope exit, and a bare local holding a per-sentence buffer is a per-sentence leak that ends in
-the OS killing a long run.
+scope exit, so a bare local holding a per-sentence buffer leaks once a sentence until the OS kills a long run.
 
 The product surfaces sit outside the module: `dasllama-cli speak` (`utils/dasllama-server/cli.das`;
 text or a file -> a WAV, the timings line on stderr) and the server's `/v1/audio/speech` route (a
@@ -191,8 +194,7 @@ box's lanes on both axes that move the split - the batch lane cap, which clamps 
 reaches the shapers that pass no cap (the AdaIN column stats, every bare `lanes_for_work(work,
 0)` site) - and asserts bit equality, each axis carrying its own witness that it moved the
 split, since a leg pair whose shaper answers the same lane count compares nothing; the facade's
-streaming cell does the same for a whole synthesis. Per-dispatch-slot partials and an off-tile
-GEMM base each broke it once.
+streaming cell does the same for a whole synthesis.
 
 ### Tap stacking: one GEMM per chunk, nothing accumulates across taps {#tts-tap-stacking}
 
@@ -205,10 +207,9 @@ while the chunk is still in cache. The strided f32 convs (the generator's noise 
 weight as [k*cin][cout_s]. The chunk stays inside a 4 MB budget, so the stacked rows live in
 cache while the kernel reads them.
 
-The per-tap alternative - one short-K GEMM per tap that stores a fresh output, then a pass that
-adds it into the accumulator - paid three sweeps of the output plane per tap and, on a bias128
-stamp, a fresh token block-sum pass per call. Stacking removes both without touching the kernel
-backends: the TTS convs are consumers of the LLM's Q8*Q8 batch entry, never a variant of it.
+The per-tap alternative - one short-K GEMM per tap, then a pass adding it into the accumulator -
+costs three sweeps of the output plane per tap and, on a bias128 stamp, a token block-sum pass per
+call. Stacking touches no kernel backend: the TTS convs consume the LLM's Q8*Q8 batch entry.
 
 ### The decoder's concat rows pad to the q8 lane's 32 {#tts-padded-input-width}
 

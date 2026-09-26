@@ -195,6 +195,11 @@ Cross-GPU parity of one source is secondary. Current entries:
   and grid quant kernels on Vulkan therefore pack their tables into `uint4` words by hand.
   Done = the SPIR-V twin (a constant-storage array for the same shape) or a lint on a
   dynamically indexed fixed-array local inside a kernel class.
+- **No-contraction is a compile option on Metal and a decoration on Vulkan; deliberate.** Metal
+  carries it by `[metal_kernel(fastmath=false)]`, the library's `fastmath=false` compile option,
+  and writes no MSL text for it; the SPIR-V emitter's `precise` mark decorates each float result
+  `NoContraction` (`modules/dasSpirv/ARCHITECTURE.md`, the `precise` section), so the mark has no
+  Metal twin - a body ported between the emitters carries the property on its annotation.
 
 ## 7. `@uniform` structs - the kargs form
 

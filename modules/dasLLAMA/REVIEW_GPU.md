@@ -17,15 +17,17 @@ selection or the precision it computes a step at, applies the `tests/` subfolder
 `REVIEW_KERNEL_CELLS.md` for the test-side dispatchers that dispatch or bind the class.**
 
 **A diff touching a tower driver (`dasllama/dasllama_metal_tower.das`,
-`dasllama/dasllama_vulkan_tower.das`), a kernel class or builder a tower dispatches, a
+`dasllama/dasllama_vulkan_tower.das`, `dasllama/dasllama_vulkan_tts.das`), a kernel class or
+builder a tower dispatches, a
 kernel-argument struct the Metal tower fills for a dispatch (`dasllama/dasllama_metal_prefill.das`),
 the `[metal_dispatch]` emission those builders are generated from (`dasllama/dasllama_metal_lens.das`),
 a module-level `g_tw_*` seat outside `dasllama/dasllama_metal_tower.das` and
 `dasllama/dasllama_vulkan_tower.das`, an ASR decoder (`dasllama/dasllama_metal_asr_dec.das`,
 `dasllama/dasllama_vulkan_asr_dec.das`), a kernel class an ASR decoder dispatches or a builder it
 borrows, `dasllama/dasllama_metal_common.das`, a `register_*` function that
-`dasllama_metal_tower_register` or `dasllama_vulkan_tower_register` calls with a hook, or a site
-that calls the hook such a function stores - applies `REVIEW_TOWER.md` too.**
+`dasllama_metal_tower_register`, `dasllama_vulkan_tower_register` or `dasllama_vulkan_tts_register`
+calls with a hook, or a site that calls the hook such a function stores - applies
+`REVIEW_TOWER.md` too.**
 
 **A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_gpu_math.das`,
 `dasllama/dasllama_gpu_resident.das`, `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a
@@ -247,8 +249,11 @@ discharge paths: for a Vulkan driver file, a reset `moe_gpu_model_marks_restore_
 `moe_gpu_drop_model_` runs - in its body, or in a listener the file registers with
 `register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`), which the drop runs; for every
 Metal driver file, the tower driver included, `register_reload_prep`
-(`dasllama/dasllama_metal_common.das`). A global with no discharge survives a model swap and
-routes the next model's dispatches at the old model's planes.
+(`dasllama/dasllama_metal_common.das`). A TTS model's reload runs neither reset but
+`bump_weights_epoch` (`dasllama/dasllama_common.das`), so a global built from a TTS model also
+discharges in a listener the file registers with `register_weights_epoch_listener`. A global with
+no discharge survives a model swap and routes the next model's dispatches at the old model's
+planes.
 
 **A diff that changes how a dev-W resident panel's cache key is built - a dev-W panel is a
 weight plane dequantized once into a device f16 panel - changes both the seed site and the

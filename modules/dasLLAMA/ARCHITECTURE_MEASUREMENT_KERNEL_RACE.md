@@ -8,7 +8,7 @@ bench times on. It also carries the vocabulary of the timing-race checklist. The
 produces recorded numbers, the tune gate, the Vulkan GEMM probe's axes and the instrumentation
 rails stay in `ARCHITECTURE_MEASUREMENT.md`.
 
-### The timing-race vocabulary
+### The timing-race vocabulary {#timing-race-vocabulary}
 
 `REVIEW_GPU_RACE.md` reviews code that times kernels to rank them. A hazard between serving
 dispatches - a data race - is not its subject. Its terms:

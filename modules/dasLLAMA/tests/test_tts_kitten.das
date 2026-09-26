@@ -21,9 +21,10 @@ require _model_tier
 // token rule. Model-gated (`kitten-<size>.gguf` + `tts_oracle/kitten_<size>/` under models_dir(),
 // both minted by performance/build_tts_data.das through harness/convert_kitten.py and
 // harness/kitten_oracle.py): the parity rail of `_tts_parity.das` per size, and a facade smoke
-// cell that speaks one sentence. The facade and Metal cells also need the front-end packs
-// (`tts_g2p.bin`, `tts_postag.bin`) beside the models; the Metal cells skip where no Metal
-// device serves, and red where a present device declines a stage.
+// cell that speaks one sentence. The facade and GPU cells also need the front-end packs
+// (`tts_g2p.bin`, `tts_postag.bin`) beside the models; the GPU cells run on Metal or Vulkan, skip
+// where no device serves or the driver registers no seat for the stage, and red where a present
+// seat declines a stage.
 
 [test]
 def test_symbol_map(t : T?) {

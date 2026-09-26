@@ -46,7 +46,7 @@ let DESKTOP_RESERVE = 2_147_483_648l   // raw-heap leave-behind for the desktop 
 let VRAM_RESERVE = 805_306_368l    // headroom below the queried heap budget when it clamps
                                            // the cap down: the tier's own scratch (~210MB batch
                                            // planes) + eviction slack
-let STAGING_BYTES = 67_108_864l   //! one upload chunk: the pinned staging buffer costs the device bring-up 0.4 ms a MB, and a chunk past this size buys no upload rate
+let STAGING_BYTES = 67_108_864l   //! one upload chunk: the pinned staging buffer's cost to the device bring-up grows with its size and a chunk past this one buys no upload rate (PERF_LEDGER.md, the Vulkan TTS seats entry's bring-up split)
 let XQ_BYTES = 1_048_576l          // per-stack activation quants capacity
 let XS_BYTES = 262_144l            // ... their scales
 let Y_BYTES = 1_048_576l           // per-stack output capacity
@@ -575,6 +575,7 @@ struct GpuState {
     host_bytes : int64       // every live host-visible buffer of ours (make_host_buf's tally) - shared usage past base + this is demotion
     dry : bool               // OFFLINE BAKE: accept/refuse arithmetic runs, every device call is gated off
     msr : int64              // maxStorageBufferRange — device-queried at init, config-supplied when dry
+    max_wg_invocations : int64   // maxComputeWorkGroupInvocations — device-queried at init; a class whose workgroup is wider declines its seat
     @do_not_delete stacks : array<VkStack>
     // the resident driver's weight arenas, one per format present (see the arena section). Separate
     // from `stacks` on purpose: the two tiers never co-arm on one model, and the arena has no
@@ -1198,7 +1199,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, and the tower driver's KHR route (the vision and whisper-class bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a and canary fronts); without it the sdot4 tiles and the chunked attention serve, a MoE stays per op in mm mode, and the tower driver declines `device` off cm2"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision and whisper-class bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a and canary fronts), and the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32); without it the sdot4 tiles and the chunked attention serve, a MoE stays per op in mm mode, the tower driver declines `device` off cm2, and the TTS decoder convs ride the f32 tile"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
             rides = "the cm2 decode-in-load prefill tiles, the served default; without it the KHR tiles serve (DASLLAMA_COOPMAT picks a mode by name)"),
@@ -1229,7 +1230,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             knob = "DASLLAMA_VK_REBAR", off = !g_env_vulkan.vk_rebar,
             rides = "uploads write straight into VRAM; without it every upload stages through host memory"),
         VkExtEntry(name = "maxStorageBufferRange", present = props.limits.maxStorageBufferRange > 0u,
-            rides = "one side of the whole-model driver's K/V mirror binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context; a mirror past it declines the driver and the per-op tier serves; the tower driver (the vision and audio towers) binds a tower's gathered weights, its largest scratch buffer and canary's rel table as one range each, and declines `shape` past it"),
+            rides = "one side of the whole-model driver's K/V mirror binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context; a mirror past it declines the driver and the per-op tier serves; the tower driver (the vision and audio towers) binds a tower's gathered weights, its largest scratch buffer and canary's rel table as one range each, and declines `shape` past it; the TTS seats bind each weight slab and each scratch slot as one range and decline a slot past it (the Pocket codec's column slots at a long chunk)"),
         VkExtEntry(name = "maxComputeSharedMemorySize of 33024 B or more", present = props.limits.maxComputeSharedMemorySize >= 33024u,
             rides = "the 8192-float row slabs of the add+rms family and the prefill-attention prep ({int(props.limits.maxComputeSharedMemorySize)} B here); without them the deltanet and prefill-attention chains stay on the CPU rail"),
         VkExtEntry(name = "VK_NV_cooperative_vector", present = cooperative_vector_supported(phys),
@@ -1370,6 +1371,7 @@ def vk_moe_init : bool {
     var pdp : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, pdp)
     g_gpu.msr = int64(pdp.limits.maxStorageBufferRange)
+    g_gpu.max_wg_invocations = int64(pdp.limits.maxComputeWorkGroupInvocations)
     // env-vs-auto resolution shared with the DlimConfiguration source (resolve_weight_cap)
     let heap = query_heap_info(g_gpu.phys)
     g_gpu.weight_budget = resolve_weight_cap(heap)
@@ -3111,15 +3113,15 @@ def private vkd_set_entry_matches(e : VkdSetEntry; layout : uint64; bufs : uint6
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
 def vkd_cached_set(c : VkdClass; family : string; bufs : uint64 const[]; sizes : int64 const[]; gbits : uint const[]) : VkDescriptorSet {
     let layout = intptr(boost_value_to_vk(c.set_layout))
-    var k = layout * 0x9E3779B97F4A7C15ul
+    var k = hash_combine64(0x9E3779B97F4A7C15ul, layout)
     for (b in bufs) {
-        k = (k ^ b) * 0xBF58476D1CE4E5B9ul
+        k = hash_combine64(k, b)
     }
     for (s in sizes) {
-        k = (k ^ uint64(s)) * 0x94D049BB133111EBul
+        k = hash_combine64(k, uint64(s))
     }
     for (g in gbits) {
-        k = (k ^ uint64(g)) * 0x9E3779B97F4A7C15ul
+        k = hash_combine64(k, uint64(g))
     }
     var hit : VkDescriptorSet
     g_vkd_set_cache |> get(k) $(e) {
@@ -3605,9 +3607,14 @@ def vt_chain_one_shot(chain : string; nl, npos : int64; rec : block<(raw : VkCom
 
 //! a device range landed in host memory on its own submit through `hb`, `bits` naming the writer it waits: the cold seams' pending readbacks
 def readback_range(dev : uint64; bits : uint; hb : HostBuf; var dst : float?; bytes : int64) {
+    readback_range(dev, bits, 0l, hb, dst, bytes)
+}
+
+//! the same from byte `off` of the device buffer
+def readback_range(dev : uint64; bits : uint; off : int64; hb : HostBuf; var dst : float?; bytes : int64) {
     cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
         vhz_dep(raw, h, bits, 0u, true)
-        cmd_copy_range(raw, dev, 0l, hb.buf, 0l, bytes)
+        cmd_copy_range(raw, dev, off, hb.buf, 0l, bytes)
     }
     unsafe {
         memcpy(reinterpret<void?>(dst), hb.mapped, bytes)

@@ -2,8 +2,10 @@
 
 Companion to `ARCHITECTURE.md`; a section is cited by its anchor. The instruments that time a
 kernel away from the served graph - kernel-race fidelity, the gemv's own tune seat, the CPU kernel
-bench's fixture - are `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`; the Vulkan GEMM probe's arms,
-shapes and alternates are `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`.
+bench's fixture - and the timing-race vocabulary
+(`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#timing-race-vocabulary`) are
+`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`; the Vulkan GEMM probe's arms, shapes and alternates are
+`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`.
 
 ### There is ONE benchmark rig, and the records are the baseline {#one-benchmark-rig}
 
@@ -119,9 +121,7 @@ complete, noise-gated mint, tracked in git (the `*.tune.json` ignore rule delibe
 match it). Point `DAS_TUNE_MANIFEST` at it and the framework never retunes; on a different box
 the identity mismatch just serves fallbacks, and a copy minted before the current
 `DASLLAMA_RELEASE` serves fallbacks on any box - the compile says which with one
-`WARNING DAS_TUNE_MANIFEST` line per scope. That is the whole contract - it suppresses the
-re-exec, it does not tune the box, and a number measured under it is not a benchmark. Benches
-and the rig keep minting their own.
+`WARNING DAS_TUNE_MANIFEST` line per scope. It suppresses the re-exec and tunes nothing: a number measured under it is not a benchmark, and the benches and the rig keep minting their own.
 
 **A warm re-run that reads slower than the cold one is heat, not map warming.**
 `gen_bench_records.das` re-runs a cell whose cv exceeds 3% once, warm, and compares the two runs
@@ -129,8 +129,7 @@ per board axis - pp against pp, tg against tg, because one summed rate IS a pp n
 let pp carry a tg regression. The warm cell is kept only when it reads at least as fast on BOTH
 axes; slower on either keeps the COLD cell and logs `HEAT`. That rate verdict is taken BEFORE the
 variance break, because a heat-soaked re-run lands low with a clean cv and a cv-first break would
-keep it. Map warming can only make a re-run faster, so a slower axis says the box was still
-shedding the previous cell's heat and `--das-settle` is short for that tier.
+keep it; map warming can only make a re-run faster, so a slower axis says the box was still shedding the previous cell's heat and `--das-settle` is short for that tier.
 
 **The two decode rulers beside the GEMV probe read against rows of their own run.** Every figure
 of ours in this paragraph is the pod's (Linux, RTX PRO 4500, `daslang -jit`, the vulkan tier in
@@ -145,11 +144,10 @@ splits of the same run, and the reference-engine row is llama.cpp's `FLASH_ATTN_
 (b10660 on the RTX PRO 4500 at Llama-3.2-1B's shape, four rows: 15.7 us a layer, its split-k
 reduce inside). The ruler reproduces the token command's stamps for the shipped pass and is the
 only clock that separates a change's fixed cost from its per-key cost; the token profile
-(`DASLLAMA_GPU_PROF=1`, which itself takes ~5% of the rate) stays the number a kernel is judged
-by, since the ruler's static fixture has read a retired pass three times off its profile.
-`harness/vk_dma_probe.das` times one device-to-host copy at four sizes on the compute queue by
-the device clock and on the transfer queue by the host clock in the same run: each queue's row
-is the other's alternate, and the pod's 4.3 GB/s against 19-27 is the whole verdict.
+(`DASLLAMA_GPU_PROF=1`, itself ~5% of the rate) stays the number a kernel is judged by, since the
+ruler's static fixture has read a retired pass three times off its profile. `harness/vk_dma_probe.das`
+times one device-to-host copy at four sizes on the compute queue by the device clock and on the
+transfer queue by the host clock in one run: each queue's row is the other's alternate, and the pod's 4.3 GB/s against 19-27 is the whole verdict.
 
 ### Sanctioned instrumentation rails {#sanctioned-instrumentation-rails}
 
@@ -162,11 +160,10 @@ a report leg, never the served path) with the resident prefill's host-side repor
 interval bypasses the aggregation - it measures one call site once, is not filterable, and rots
 where a rail entry would keep serving. Where a timed line IS the deliverable - `benchmarks/`,
 `performance/`, `harness/`, and cold one-shot load/mint progress logs (image bake/map, load
-stages, tokenizer build) - the rails do not apply. A timing that is part of an API's answer -
-the facade's `TtsTimings`, the per-stage walls a synthesis returns to its caller and the
-server logs per request - is a deliverable of the same kind, not instrumentation. A clock whose
-value feeds logic is control flow, not instrumentation; it is marked `// clock: control` so the
-sweep and any future lint leave it alone.
+stages, tokenizer build) - the rails do not apply, and a timing that is part of an API's answer -
+the facade's `TtsTimings`, the per-stage walls a synthesis returns to its caller and the server
+logs per request - is a deliverable of the same kind, not instrumentation. A clock whose value
+feeds logic is control flow, not instrumentation; it is marked `// clock: control` so the sweep and any future lint leave it alone.
 
 The override-announce rule (REVIEW.md) draws its boundary here: a knob or setter whose purpose
 is timing still counts as an override when it moves computed numerics - two GEMM forms of the
@@ -197,39 +194,43 @@ process with the jfk-only process subtracted (the first clip carries the pipelin
 --mmproj <mmproj bf16> --audio <clip> -p "Transcribe the audio." --temp 0 --jinja -ngl 99 -t 16` (E2B with `-n 256`), its encode the sum of the clip's
 `encoding done in N ms` lines; NeMo's `generate()` through `benchmarks/asr/canary_qwen_bench.py --device cuda`.
 
-Three reference tools carry a GPU arm the board pairs against a das Metal row, each with its
-own spelling: the whisper reference exe takes `-ngl`, the media-chat reference exe takes
-`-ngl 99`, and the NeMo bench script takes `--device mps`. The remaining two reference legs
-have no pair - the rig runs the parakeet exe with `-ng`, though its Metal arm is the faster one
-(`PERF_LEDGER.md`), and the ONNX export is CPU-only - so their das rows stand alone in the CPU
-category.
+Three reference tools carry a GPU arm the board pairs against a das Metal row, each with its own
+spelling: the whisper reference exe takes `-ngl`, the media-chat reference exe `-ngl 99`, and the
+NeMo bench script `--device mps`. The remaining two reference legs have no pair - the rig runs the
+parakeet exe with `-ng`, though its Metal arm is the faster one (`PERF_LEDGER.md`), and the ONNX
+export is CPU-only - so their das rows stand alone in the CPU category.
 
 The media-chat reference exe is built as the bench exe's sibling in one reference worktree:
-`benchmarks/setup_lcpp_ref.das` builds both targets, because a bench-only build leaves the
-image and audio-chat cells with no binary and the board quietly mints das-only rows. That
-sibling needs the timing patch beside it (`benchmarks/asr/patches/`) - the record parser reads
-its per-rep timing lines, and an unpatched sibling mints "no rep parsed" failures. The apply
-is guarded on the patched marker already being in the tree, and runs three-way, so it still
-applies after the reference pin moves. On Apple boxes `performance/setup_asr_rig.das` builds a
-second, Metal-ON copy of the same patched checkout, because `-ngl` on a Metal-OFF build is
-inert; `mtmd_bin_metal()` returns "" when it is absent and the GPU reference leg skips loudly.
+`benchmarks/setup_lcpp_ref.das` builds both targets, since a bench-only build leaves the image and
+audio-chat cells with no binary and the board quietly mints das-only rows. The sibling needs the
+timing patch beside it (`benchmarks/asr/patches/`): the record parser reads its per-rep timing
+lines, an unpatched sibling mints "no rep parsed" failures, and the apply - guarded on the patched
+marker already being in the tree, three-way - still applies after the reference pin moves. On Apple
+boxes `performance/setup_asr_rig.das` builds a second, Metal-ON copy of the same patched checkout,
+because `-ngl` on a Metal-OFF build is inert; `mtmd_bin_metal()` returns "" when it is absent and the GPU reference leg skips loudly.
 
 ### The TTS reference instrument {#the-tts-reference-instrument}
 
-`harness/tts_ref_bench.py` is the reference number-maker every das TTS wall in `PERF_LEDGER.md`
-is held against: it feeds the g2p corpus's `ps_espeak` phoneme strings to the kokoro and KittenTTS
-packages' own models (`hexgrad/Kokoro-82M` through `kokoro`'s `KModel`; the KittenTTS ONNX
-files through `onnxruntime`'s CPU provider with the package's tokenizer, style rows and per-voice
-speed prior), times generation only - the front end is out of the compare on both sides - and
-prints the mean wall a sentence and the real-time factor, each sentence timed `--passes` times
-with the best kept, after one untimed warm-up call. It runs under the g2p experiment's venv
-(`~/Work/tts-ab/g2p/.venv-g2p`, with `HF_HOME` at that experiment's hub cache) and prints the
-torch, kokoro, kittentts and onnxruntime versions it ran with, so a ledger entry names them beside
-the command. Its kitten audio runs shorter than das's for the same phonemes (the package's speed
-prior and its 5000-sample trim), so a das row is compared on the wall a sentence, never on the
-real-time factor. No board cell covers a synthesis (`followup_general.md` 166 plans the bench's
-`--tts` path), so the das side of the compare is `harness/tts_synth.das` under
-`REVIEW_MEASUREMENT.md`'s harness rule.
+Every das TTS wall in `PERF_LEDGER.md` is held against a reference row of the family's own
+package, one recipe per family. StyleTTS2 (kokoro, kitten): `harness/tts_ref_bench.py` feeds the
+g2p corpus's `ps_espeak` phoneme strings to the packages' own models, times generation only - the
+front end is out of the compare on both sides - and prints the mean wall a sentence and the
+real-time factor, each sentence timed `--passes` times with the best kept, after one untimed
+warm-up call. Kokoro runs `hexgrad/Kokoro-82M` through `kokoro`'s `KModel` on the torch device
+`--device` names (`cuda` on the pod, `mps` on a Mac, `cpu` for the CPU row). Kitten runs the
+KittenTTS ONNX files through `onnxruntime` with the package's tokenizer, style rows and per-voice
+speed prior; `--device cuda` asks for the CUDA execution provider (`onnxruntime-gpu`) ahead of the
+CPU one, any other device the CPU provider alone, and the run prints the providers the session
+took, so a row names the one that ran. The script runs under the g2p experiment's venv
+(`~/Work/tts-ab/g2p/.venv-g2p`, `HF_HOME` at that experiment's hub cache - the pinned snapshots
+`harness/kitten_graph.py` names) and prints the torch, kokoro, kittentts and onnxruntime versions
+it ran with, so a ledger entry names them beside the command. Its kitten audio runs shorter than
+das's for the same phonemes (the package's speed prior and its 5000-sample trim), so a das row is
+compared on the wall a sentence, never on the real-time factor. Pocket: `harness/pocket_synth.py`
+runs the corpus through Kyutai's `pocket-tts` package on the CPU (the package pins torch to one
+thread) and writes the timings in `harness/tts_synth.das`'s shape. No board cell covers a synthesis
+(`followup_general.md` 166 plans the bench's `--tts` path), so the das side of every compare is
+`harness/tts_synth.das` under `REVIEW_MEASUREMENT.md`'s harness rule.
 
 ### A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
 
@@ -279,8 +280,7 @@ keeps the crowns for the process and says so; `DAS_TUNE_MANIFEST` moves the file
 What a first start never does: load a model, spawn a child, or race a kernel. The tuner's
 confirms - the generator half's end-to-end prefill A/B, the kernel half's serving and MTP depth
 confirms - each spawn a daslang child on a harness script and a vehicle model, and they are the
-harness's alone; under `harness/dasllama_tuner.das` on the M5 Max the confirms take 147 s of the
-metal_crowns family's 161 s, the twin race itself 14 s.
+harness's alone; under `harness/dasllama_tuner.das` on the M5 Max the confirms take 147 s of the metal_crowns family's 161 s, the twin race itself 14 s.
 
 ### The speculative round's cell is a ruler record {#ruler-records}
 

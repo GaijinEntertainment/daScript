@@ -21,28 +21,8 @@ require daslib/jobque_boost
 //! the row GEMV's five stamps and the frame loop's four fused stamps, and the rows rope; every written-only output under a
 //! NaN fill, every compare with its poisoned element.
 
-let private POISON = 7.5   //! the slots a kernel must never read or write: a large finite value
 let private SLACK = 5      //! the elements past a run, left at their fill
 let private GAP = 3        //! the poisoned slots between two runs of one slab plane
-
-def private row_fill(n : int; mul, add : int; scale, off : float) : array<float> {
-    var a : array<float>
-    a |> resize(n)
-    for (i in range(n)) {
-        a[i] = float((i * mul + add) % 97) * scale - off
-    }
-    return <- a
-}
-
-//! `n` slots of `POISON`
-def private poison_plane(n : int) : array<float> {
-    var a : array<float>
-    a |> resize(n)
-    for (v in a) {
-        v = POISON
-    }
-    return <- a
-}
 
 //! `a` behind `base` slots of `POISON` and followed by `SLACK` more: a device plane whose run starts at an element base
 def private with_base(a : array<float>; base : int) : array<float> {
@@ -64,53 +44,6 @@ def private put(var plane : array<float>; a : array<float>) : int {
         plane[off + i] = a[i]
     }
     return off
-}
-
-//! the index of the largest |got - want| (0 when every element agrees)
-def private maxdiff_at(got, want : array<float>) : int {
-    var m = 0.0
-    var at = 0
-    for (i in range(length(got))) {
-        let dd = abs(got[i] - want[i])
-        if (dd > m) {
-            m = dd
-            at = i
-        }
-    }
-    return at
-}
-
-//! the NaN elements of `a`: the sentinel words a dispatch left
-def private nan_count(a : array<float>) : int {
-    var n = 0
-    for (v in a) {
-        if (is_nan(v)) {
-            n++
-        }
-    }
-    return n
-}
-
-//! true when every element of `a` is bit-equal to `v`
-def private elem_all(a : array<float>; v : float) : bool {
-    for (e in a) {
-        if (e != v) {
-            return false
-        }
-    }
-    return true
-}
-
-//! a device buffer holding `a` whole
-def private dev_upload(a : array<auto(TT)>) : uint64 {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let bytes = long_length(a) * int64(typeinfo sizeof(type<TT>))
-        let dev = make_device_buf(bytes)
-        upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(a[0])), bytes)
-        return dev
-    } else {
-        return 0ul
-    }
 }
 
 let private PR_SROWS = 30

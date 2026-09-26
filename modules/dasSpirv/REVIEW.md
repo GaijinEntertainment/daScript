@@ -26,24 +26,24 @@ end refuses first is reachable from no `.das` program, so no fixture can drive i
 **A diff that adds an emitter capability - a name the emitter recognizes, an opcode it emits,
 or a type it accepts - that a downstream consumer uses leaves a device cell covering that
 capability after the change.** A device cell runs a kernel using the capability on a device, in
-`modules/dasVulkan/tests/integration/` or `modules/dasLLAMA/tests/test_vulkan_kernels.das`. A
-fixture asserts words; only a device run shows the words compute.
+the tests of the module whose kernel the capability serves. A fixture asserts words; only a
+device run shows the words compute.
 
 **A diff that adds a per-loop hint name to this emitter's accepted set leaves that name known to
 `append_loop_hint_operand` in `modules/dasLLVM/daslib/llvm_jit.das` - lowered or accepted by
 name - in the same change.** A kernel body also compiles for the CPU through the JIT, and the JIT
 fails a hint name it does not know.
 
-**A diff under this folder that adds or changes a device cell for a capability of this emitter -
-wherever the diff puts that cell - judges the cell's result against a CPU result computed
+**A diff that adds or changes a device cell for a capability of this emitter - wherever the diff
+puts that cell - judges the cell's result against a CPU result computed
 independently of the emitter: the kernel body run on the CPU, a CPU body that returns what the
 builtin's emitted form returns, or a plain CPU reference of the same arithmetic, never an
 expectation re-spelled inline in the test.** An inline expectation is read off the emitter's own
 output, so it passes whatever the emitter does.
 
 **A diff under `modules/dasSpirv` that adds a `require` of a module under `modules/dasGlsl` or
-`modules/dasOpenGL`, or that adds code to a file under either module that a file under
-`modules/dasSpirv` names, is a defect - that code lands under `modules/dasSpirv` instead.**
+`modules/dasOpenGL`, or that makes a file under `modules/dasSpirv` name code that lives under
+either module, is a defect - that code lands under `modules/dasSpirv` instead.**
 dasSpirv copies dasGlsl's design, not its code.
 
 **A diff that adds an `OpVariable` emit to an emitted function's entry block puts it ahead of

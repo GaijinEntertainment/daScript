@@ -10451,9 +10451,6 @@ class MetalSt2PoolDw {
     }
 }
 
-//! tanh clamped to +-15, where it already saturates: past that the fast-math tanh answers NaN, the CPU +-1.
-def st2_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
-
 //! One LSTM direction on 4 x hidden lanes; xg holds the GEMM's input gates x . w_ih^T + b as [t x xgs].
 struct St2LstmArgs {
     t : uint
@@ -10508,8 +10505,8 @@ class MetalSt2Lstm {
                 let si = 1.0 / (1.0 + exp(-gi))
                 let sf = 1.0 / (1.0 + exp(-gf))
                 let so = 1.0 / (1.0 + exp(-go))
-                cst = sf * cst + si * st2_tanh(gg)
-                let hn = so * st2_tanh(cst)
+                cst = sf * cst + si * tts_tanh(gg)
+                let hn = so * tts_tanh(cst)
                 hsh[j] = hn
                 y[ti * ka.ystride + ka.yoff + j] = hn
             }
@@ -10592,7 +10589,7 @@ class MetalSt2Attn {
 //! The CPU gelu's tanh form at full precision: the LUT form's two f16 roundings would move the front end's durations.
 [metal_dispatch(name = "enc_st2_gelu_tanh", pso = "g_pso_st2_gelu_tanh", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSt2GeluTanh : MetalEw1BaseT {
-    def override map(a : float) : float => 0.5 * a * (1.0 + st2_tanh(0.7978845608028654 * (a + 0.044715 * a * a * a)))
+    def override map(a : float) : float => 0.5 * a * (1.0 + tts_tanh(0.7978845608028654 * (a + 0.044715 * a * a * a)))
 
     [metal_kernel(name="metal_st2_gelu_tanh_msl")]
     def metal_st2_gelu_tanh {
@@ -10668,38 +10665,6 @@ def st2_resize_taps_onnx(n, to : uint; scale : float; var i0, i1 : uint&; var l0
     }
 }
 
-def st2_resize_mix_torch(x0, x1, l0, l1 : float) : float => mad(l0, x0, l1 * x1)
-
-//! onnxruntime's trilinear mix in the reference's operation order: the last channel averages itself at quarter weights
-//! through all seven fma terms, every other channel carries only its two nonzero terms (the zero-weight fmas are exact).
-def st2_resize_mix_onnx(x0, x1, l0, l1 : float; last : bool) : float {
-    if (last) {
-        let q0 = (l0 * 0.5) * 0.5
-        let q1 = (l1 * 0.5) * 0.5
-        var acc = mad(q0, x0, q1 * x1)
-        acc = mad(q0, x0, acc)
-        acc = mad(q1, x1, acc)
-        acc = mad(q0, x0, acc)
-        acc = mad(q1, x1, acc)
-        acc = mad(q0, x0, acc)
-        return mad(q1, x1, acc)
-    }
-    let w0 = l0 * 0.5
-    let w1 = l1 * 0.5
-    var acc = mad(w0, x0, w1 * x1)
-    acc = mad(w0, x0, acc)
-    return mad(w1, x1, acc)
-}
-
-def st2_sin_big(phase : float) : float {
-    let k = round(phase * 0.15915493667125702)
-    var r = mad(-k, 6.25, phase)   //! 2 pi in pieces of five significant bits, so k times a piece is exact past a million radians
-    r = mad(-k, 0.033203125, r)
-    r = mad(-k, -1.781781975296326e-05, r)
-    r = mad(-k, -6.608047442568932e-13, r)
-    return sin(r)
-}
-
 //! The low-rate phase increments per harmonic on either resample law (TORCH: the torch taps and
 //! mix; else onnxruntime's), the first sample's initial phases folded in.
 [ |> template_struct_instance]
@@ -10729,9 +10694,9 @@ class template MetalSt2SrcLowT {
         let r0 = st2_src_rad(f0, noise_u, i0, h, ka.up, ka.sr)
         let r1 = st2_src_rad(f0, noise_u, i1, h, ka.up, ka.sr)
         static_if (TORCH) {
-            low[gid] = st2_resize_mix_torch(r0, r1, l0, l1)
+            low[gid] = tts_resize_mix_torch(r0, r1, l0, l1)
         } else {
-            low[gid] = st2_resize_mix_onnx(r0, r1, l0, l1, h + 1u == ka.nh)
+            low[gid] = tts_resize_mix_onnx(r0, r1, l0, l1, h + 1u == ka.nh)
         }
     }
 }
@@ -10807,26 +10772,6 @@ class MetalSt2SrcCumsumOnnx : MetalSt2SrcCumsumT {
     }
 }
 
-//! The source's own noise: a counter-keyed normal, two hashed uniforms through Box-Muller, not the CPU's PCG32 stream.
-def st2_hash_u32(x : uint) : uint {
-    var v = x * 0x9E3779B1u
-    v ^= v >> 15u
-    v *= 0x85EBCA77u
-    v ^= v >> 13u
-    v *= 0xC2B2AE3Du
-    v ^= v >> 16u
-    return v
-}
-
-def st2_hash_normal(seed, idx : uint) : float {
-    let sh = st2_hash_u32(seed)   //! the seed hashed first: xor-ing a raw seed into the counter aliases seeds a multiple of four apart
-    let a = st2_hash_u32(sh ^ (idx * 2u + 1u))
-    let b = st2_hash_u32(sh ^ (idx * 2u + 2u) ^ 0x6A09E667u)
-    let u1 = (float(a >> 8u) + 1.0) * (1.0 / 16777217.0)
-    let u2 = float(b >> 8u) * (1.0 / 16777216.0)
-    return sqrt(-2.0 * log(u1)) * cos(6.28318530717959 * u2)
-}
-
 //! The source's own noise draw, one normal per (sample, harmonic), into the rows the sines
 //! kernel reads - the captured stream's seat when no stream was captured.
 [metal_dispatch(name = "enc_st2_src_noise", pso = "g_pso_st2_src_noise", tg = 64, grid = "total/64", params = "total : int64")]
@@ -10840,7 +10785,7 @@ class MetalSt2SrcNoise {
         if (gid >= ka.n * ka.nh) {
             return
         }
-        noise_n[gid] = st2_hash_normal(ka.seed, gid)
+        noise_n[gid] = tts_hash_normal(ka.seed, gid)
     }
 }
 
@@ -10878,15 +10823,15 @@ class template MetalSt2SrcSinesT {
         while (h < ka.nh) {
             var phase = 0.0
             static_if (TORCH) {
-                phase = st2_resize_mix_torch(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1)
+                phase = tts_resize_mix_torch(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1)
             } else {
-                phase = st2_resize_mix_onnx(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1, h + 1u == ka.nh)
+                phase = tts_resize_mix_onnx(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1, h + 1u == ka.nh)
             }
-            let s = st2_sin_big(phase) * ka.sine_amp
+            let s = tts_sin_big(phase) * ka.sine_amp
             acc += lw[h] * (s * uv + noise_amp * noise_n[i * ka.nh + h])
             h++
         }
-        har[i] = st2_tanh(acc)
+        har[i] = tts_tanh(acc)
     }
 }
 

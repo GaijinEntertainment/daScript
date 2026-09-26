@@ -28,8 +28,9 @@ module whether to contract a multiply-add into one fma, so two bodies spelled al
 apart.
 
 **A value that no model file and no request can change - a tile width, a math constant, a cap
-fixed by the model architecture the class serves, which shows as one value every dispatch site
-passes identically - never reaches a kernel class through a per-dispatch argument channel (a
+fixed by the model architecture the class serves, which shows as one value every production
+dispatch site (a site outside `tests/`, `harness/`, `benchmarks/` and `performance/`) passes
+identically - never reaches a kernel class through a per-dispatch argument channel (a
 uniform, a `@push_constant` field, a kargs field, an `@off` bind offset): stamp it into the class
 as a `@template_constant` where the class's stamps differ on it, or write it as a literal or a
 module `let` in the body - never a module `var`.**
@@ -67,7 +68,10 @@ after arming - a binding filled before the first encode and never written again 
 
 **`@role = "weight"` on per-encode data the kernel reads - a pooled buffer the host refills
 each encode - is a defect; a per-encode field either omits `@role` or names the access its body
-performs.** `weight` tells the generated builder the buffer needs no per-encode hazard tracking.
+performs.** On both lenses `weight` is a declared claim the lens only cross-checks - it refuses
+a body that writes the binding and admits one that never reads it, while the hazard masks derive
+from the body alone - so a per-encode buffer under `weight` passes the lens with its access
+unchecked.
 
 **A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
 `[vk_dispatch]` declaration, or a new instance of a template carrying one - that a census row of

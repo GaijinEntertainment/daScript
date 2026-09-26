@@ -16,21 +16,12 @@ require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_math
 require daslib/jobque_boost
 
-//! The TTS tower's sequence classes on Vulkan against the CPU chain (a Vulkan device, else the cells skip): the conv
-//! im2col in both directions, fed through F32GemmB and held to the CPU `conv1d` end to end, and one LSTM direction
-//! held to the CPU `bilstm` on both walks, and the depthwise transposed pool held to its CPU rows form, at channel and
-//! hidden widths off every lattice, with the poisoned-element control on every compare.
+//! The TTS tower's sequence classes on Vulkan against the CPU chain (a Vulkan device, else the cells skip; the half
+//! im2col cell also skips where the device serves no f16 tile): the conv im2col in both directions, fed through
+//! F32GemmB and held to the CPU `conv1d` end to end, the half im2col through the f16 tile and the bias pass, one LSTM
+//! direction held to the CPU `bilstm` on both walks, and the depthwise transposed pool held to its CPU rows form, at
+//! channel and hidden widths off every lattice, with the poisoned-element control on every compare.
 
-let private POISON = 7.5   //! the pads a kernel must never read: a large finite value, so a stray read lands in the sum
-
-def private row_fill(n : int; mul, add : int; scale, off : float) : array<float> {
-    var a : array<float>
-    a |> resize(n)
-    for (i in range(n)) {
-        a[i] = float((i * mul + add) % 97) * scale - off
-    }
-    return <- a
-}
 
 //! logs the widest |got - want| with the row and the column it sits at, rows `width` wide
 def private log_maxdiff(tag : string; got, want : array<float>; width : int) {
@@ -203,7 +194,7 @@ def private im2col16_arm(t : T?; tag : string; g : ConvGeom) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let B_COL = 1u
         let B_Y = 2u
-        let khr = g_gpu.coopmat_mode != COOPMAT_CM2
+        let khr = g_gpu.coopmat_mode != COOPMAT_CM2   //! the pick the driver makes where an f16 tile serves at all (the cell skipped otherwise)
         var c <- make_conv16(g)
         let tout = int(conv1d_out_len(c, int64(g.tin)))
         t |> equal(tout, g.tout, "{tag}: the output length")
@@ -280,8 +271,12 @@ def private im2col16_arm(t : T?; tag : string; g : ConvGeom) {
 def test_vkt_tts_im2col16(t0 : T?) {
     t0 |> run("the f16 tile: forward k5 s1 p2 over 22 channels into 40, transposed k4 s2 p1 over 16 into 32, forward k3 over 32 into 64 (a 96-wide row)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_tts_im2col16_cls() || !ensure_tower_bias_act_cls() || !f16_gemm_ensure(g_gpu.coopmat_mode != COOPMAT_CM2)) {
-                t |> skip("no Vulkan device with an f16 tile")
+            if (!vk_moe_init() || (g_gpu.coopmat_mode != COOPMAT_CM2 && !khr_kq_tile_on())) {
+                t |> skip("no Vulkan device with an f16 tile (neither cm2 nor the KHR tile at subgroup 32)")
+                return
+            }
+            if (!ensure_tts_im2col16_cls() || !ensure_tower_bias_act_cls() || !f16_gemm_ensure(g_gpu.coopmat_mode != COOPMAT_CM2)) {
+                t |> skip("the f16 tile's classes did not build")
                 return
             }
             im2col16_arm(t, "im2col16 forward k5 cin22", ConvGeom(cin = 22, cout = 40, k = 5, stride = 1, pad = 2, tin = 37, tout = 37,

@@ -93,6 +93,15 @@ def set_gpu(on : bool) {
     }
 }
 
+//! conv dispatches since the process started on the Metal tower; the Vulkan driver keeps no conv counter, so 0 there
+def gpu_convs() : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return metal_tower_stats().convs
+    } else {
+        return 0l
+    }
+}
+
 //! seats served since the process started (the Metal tower's encodes; the Vulkan TTS driver's)
 def gpu_encodes() : int64 {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -143,10 +152,11 @@ def set_gpu_pocket_frame_batch(n : int64) {
     }
 }
 
+//! both drivers register every StyleTTS2 seat, so a stage no seat serves is a lost registration: a red, never a skip
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private seat_present(t : T?; tag, stage : string) : bool {
     return true if (styletts2_gpu_seat_present(stage))
-    t |> skip("{tag} GPU {stage}: the driver registers no {stage} seat on this backend")
+    t |> success(false, "{tag} GPU {stage}: the driver registers no {stage} seat on this backend")
     return false
 }
 
@@ -311,15 +321,20 @@ def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : ar
         var inscope wave : array<float>
         let h0 = styletts2_generator_gpu_stats()
         let e0 = gpu_encodes()
+        let c0 = gpu_convs()
         set_gpu(true)
         styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, null, wave, sc)
         let h1 = styletts2_generator_gpu_stats()
         let e1 = gpu_encodes()
+        let c1 = gpu_convs()
         var inscope gen_x <- scaled(gen_in, 3.0)
         var inscope wave_p : array<float>
         styletts2_generator(m.decoder, gen_x, cw, f2, s_ref, spec, frames, null, wave_p, sc)
         return if (!gpu_stage_verdict(t, tag, "SEAM", wave, wave_cpu, wave_p, GPU_SEAM_BAR, h1.calls - h0.calls, h1.served - h0.served,
                                       e1 - e0, "{gpu_declines()}"))
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            t |> success(c1 - c0 > 0l, "{tag} GPU SEAM: the convs rode the tower")
+        }
         knob_off_leg(t, "{tag} GPU SEAM", 1l, $ => styletts2_generator_gpu_stats()) $ {
             var inscope wave_off : array<float>
             styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, null, wave_off, sc)

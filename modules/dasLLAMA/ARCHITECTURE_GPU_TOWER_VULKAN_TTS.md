@@ -1,10 +1,12 @@
 # dasLLAMA Architecture - the Vulkan tower's TTS seats
 
 Companion to `ARCHITECTURE_GPU_TOWER_VULKAN.md`; a section is cited by its anchor. This document
-carries the StyleTTS2 synthesis seats the Vulkan TTS driver serves. The Metal twin of every seat
-is `ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`, and the CPU chain is the specification, dispatch
-for dispatch. The GPU backend role table these sections build on stays in
-`ARCHITECTURE_GPU.md#gpu-backends`.
+carries the seats the Vulkan TTS driver serves: the StyleTTS2 synthesis seats of the kitten and
+kokoro families, and the Pocket TTS codec and frames seats. The Metal twin of every StyleTTS2 seat
+is `ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`, of the Pocket seats
+`ARCHITECTURE_GPU_TOWER.md#tower-pocket-codec` and `ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`,
+and the CPU chain is the specification, dispatch for dispatch. The GPU backend role table these
+sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The StyleTTS2 seats on Vulkan {#vk-tts-chain}
 
@@ -39,11 +41,14 @@ The decoder slab uploads twice: its f32 rows, and a halfword twin of the whole s
 element offsets. A decoder or generator conv whose width sits on the bias pass's four lattice
 gathers its columns as halves (`TtsIm2col16`, the same column order) into the half column slot,
 runs the f16 tile the device serves over the twin's weight rows (`F16GemmCm2`, or `F16GemmKhr`
-off a cm2 device) into f32 rows, and adds its bias row in place (`TowerBiasAct`, no activation),
-since the tile carries no epilogue. The half column slot holds 64 rows of slack past the widest
-conv's rows at its padded row width: the KHR tile loads whole 16-row blocks and the slack is what
-those reads land in. The narrow F0, energy and post convs and every conv of the front end and
-the predictor stay on the f32 tile.
+off a cm2 device - the KHR route is taken only where `khr_kq_tile_on()` holds, cooperative
+matrices at subgroup 32; a device with neither cm2 nor that runs the decoder convs on the f32
+tile) into f32 rows, and adds its bias row in place (`TowerBiasAct`, no activation), since the
+tile carries no epilogue. The half column slot holds 64 rows of slack past the widest conv's rows
+at its padded row width: the KHR tile loads whole 16-row blocks, reading up to 15 rows past the
+last output row of the col16 slot (its stores are masked past `rows`; the cm2 tile clamps its
+loads), and the slack is what those reads land in. The narrow F0, energy and post convs and every
+conv of the front end and the predictor stay on the f32 tile.
 
 The front end - the PL-BERT encoder, the text encoder, the duration encoder, the duration head
 and prosody - runs on the f32-exact tile GEMM (`F32GemmT`: 64 positions by 64 weight rows a

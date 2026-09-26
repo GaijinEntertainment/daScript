@@ -9,6 +9,7 @@ require math
 require ?vulkan vulkan
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
+require ?vulkan dasllama/dasllama_gpu_math   // tts_hash_normal: the own noise draw's CPU form
 require ?vulkan _vkd_oracles
 require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
 require dasllama/dasllama_tts_blocks
@@ -21,7 +22,6 @@ require daslib/jobque_boost
 //! inverse STFT with and without the envelope held to their double-precision forms; every output under a NaN fill,
 //! every compare with its poisoned element.
 
-let private POISON = 7.5   //! the slots a kernel must never read or write: a large finite value
 let private SLACK = 5      //! the elements past a run, left at their fill
 
 //! `n` f16-exact patterned values: (i * seed_mul) % 47 scaled and biased, rounded through f16 - the Metal gates' fixtures
@@ -30,16 +30,6 @@ def private f16_fill(n, seed_mul : int; scale, bias : float) : array<float> {
     a |> resize(n)
     for (i in range(n)) {
         a[i] = float(float16(scale * float((i * seed_mul) % 47) + bias))
-    }
-    return <- a
-}
-
-//! `n` slots of `POISON`
-def private poison_plane(n : int) : array<float> {
-    var a : array<float>
-    a |> resize(n)
-    for (v in a) {
-        v = POISON
     }
     return <- a
 }
@@ -77,39 +67,6 @@ def private bars_bad(tag : string; got, want : array<float>; rel, absf : float; 
     }
     to_log(LOG_INFO, "{tag}: max |gpu - cpu| {worst} at row {at / width} column {at % width}\n")
     return bad
-}
-
-//! the NaN elements of `a`: the sentinel words a dispatch left
-def private nan_count(a : array<float>) : int {
-    var n = 0
-    for (v in a) {
-        if (is_nan(v)) {
-            n++
-        }
-    }
-    return n
-}
-
-//! true when every element of `a` is bit-equal to `v`
-def private elem_all(a : array<float>; v : float) : bool {
-    for (e in a) {
-        if (e != v) {
-            return false
-        }
-    }
-    return true
-}
-
-//! a device buffer holding `a` whole
-def private dev_upload(a : array<auto(TT)>) : uint64 {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let bytes = long_length(a) * int64(typeinfo sizeof(type<TT>))
-        let dev = make_device_buf(bytes)
-        upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(a[0])), bytes)
-        return dev
-    } else {
-        return 0ul
-    }
 }
 
 let private AX_N = 1030        //! four whole workgroups and six more

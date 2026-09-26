@@ -1640,7 +1640,7 @@ def private check_require_bans {
         }
         for (m in required_modules(TOWER_FILE)) {
             if (key_exists(banned, m)) {
-                gate_finding(TOWER_FILE, "requires `{m}` - the tower helper file requires no carrier and no family file (REVIEW_PLACEMENT.md); the shared shape lands in dasllama_asr_types.das, the family-specific helper in the family's file")
+                gate_finding(TOWER_FILE, "requires `{m}` - the tower helper file requires no carrier and no family file (ARCHITECTURE_MEDIA.md#tower-audio-charters); the shared shape lands in dasllama_asr_types.das, the family-specific helper in the family's file")
             }
         }
     }
@@ -1650,9 +1650,9 @@ def private check_require_bans {
         let base = base_name(path)
         for (m in required_modules(path)) {
             if (m == "audio" && base != "dasllama_audio_io.das") {
-                gate_finding(path, "requires `audio` - only dasllama_audio_io.das decodes audio containers (REVIEW_PLACEMENT.md); decode through that file")
+                gate_finding(path, "requires `audio` - only dasllama_audio_io.das decodes audio containers (ARCHITECTURE_MEDIA.md#tower-audio-charters); decode through that file")
             } elif (m == "stbimage" && base != "dasllama_vision_io.das") {
-                gate_finding(path, "requires `stbimage` - only dasllama_vision_io.das decodes images (REVIEW_PLACEMENT.md); decode through that file")
+                gate_finding(path, "requires `stbimage` - only dasllama_vision_io.das decodes images (ARCHITECTURE_MEDIA.md#tower-audio-charters); decode through that file")
             }
         }
     }
@@ -1669,7 +1669,7 @@ def private check_harness_dashv {
         }
         continue if (!speaks_http)
         if (find(read_lf(path), "dasllama.io") >= 0) {
-            gate_finding(path, "requires dashv and names dasllama.io - a harness tool reaches the sidecar exchange through dasllama/dasllama_exchange, never with its own HTTP call (harness/REVIEW.md)")
+            gate_finding(path, "requires dashv and names dasllama.io - a harness tool reaches the sidecar exchange through dasllama/dasllama_exchange, never with its own HTTP call (ARCHITECTURE_ENGINE.md#instrumentation-and-support)")
         }
     }
 }

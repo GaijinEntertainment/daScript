@@ -39,6 +39,14 @@ def fill_upload(dev : uint64; off, bytes : int64; word : uint) {
 //! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
 def nan_sentinel_upload(dev : uint64; bytes : int64; off : int64 = 0l) => fill_upload(dev, off, bytes, NAN_SENTINEL_BITS)
 
+//! a device buffer holding `a` whole
+def dev_upload(a : array<auto(TT)>) : uint64 {
+    let bytes = long_length(a) * int64(typeinfo sizeof(type<TT>))
+    let dev = make_device_buf(bytes)
+    upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(a[0])), bytes)
+    return dev
+}
+
 //! each plane's host offset when the planes stage back to back - the sum of the sizes before it - and the total bytes last
 def staged_offsets(sizes) : array<int64> {
     var at : array<int64>

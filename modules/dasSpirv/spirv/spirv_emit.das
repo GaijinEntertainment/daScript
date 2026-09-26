@@ -2302,9 +2302,9 @@ def private binop_code(op : string; cls : int) : tuple<ok : bool; code : SpvOp> 
 
 [arch(at="../ARCHITECTURE.md#precise-no-contraction")]
 def private precise_float_op(code : SpvOp) : bool {
-    return (code == SpvOp.FAdd || code == SpvOp.FSub || code == SpvOp.FMul || code == SpvOp.FDiv || code == SpvOp.FRem || code == SpvOp.FNegate ||
-        code == SpvOp.VectorTimesScalar || code == SpvOp.MatrixTimesScalar || code == SpvOp.VectorTimesMatrix ||
-        code == SpvOp.MatrixTimesVector || code == SpvOp.MatrixTimesMatrix)
+    return (code == SpvOp.FAdd || code == SpvOp.FSub || code == SpvOp.FMul || code == SpvOp.FDiv || code == SpvOp.FRem || code == SpvOp.FMod ||
+        code == SpvOp.FNegate || code == SpvOp.Dot || code == SpvOp.VectorTimesScalar || code == SpvOp.MatrixTimesScalar ||
+        code == SpvOp.VectorTimesMatrix || code == SpvOp.MatrixTimesVector || code == SpvOp.MatrixTimesMatrix)
 }
 
 [arch(at="../ARCHITECTURE.md#precise-no-contraction")]
@@ -5672,6 +5672,7 @@ class SpirvEmit : AstVisitor {
             let op = origin_name == "coopmatAdd" ? SpvOp.FAdd : (origin_name == "coopmatSub" ? SpvOp.FSub : SpvOp.FMul)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, op, dst.pty, res, va, vb)
+            mark_precise(bm, ctx.precise, op, res)
             emit(bm, SEC_FUNCS, SpvOp.Store, dst.id, res)
             return expr
         }
@@ -5736,6 +5737,7 @@ class SpirvEmit : AstVisitor {
                 let cur = alloc_id(bm)
                 emit(bm, SEC_FUNCS, SpvOp.Load, dst.pty, cur, dst.id)
                 emit(bm, SEC_FUNCS, SpvOp.MatrixTimesScalar, dst.pty, res, cur, sv)
+                mark_precise(bm, ctx.precise, SpvOp.MatrixTimesScalar, res)
             } else {
                 emit(bm, SEC_FUNCS, SpvOp.CompositeConstruct, dst.pty, res, sv)
             }
@@ -6472,6 +6474,7 @@ class SpirvEmit : AstVisitor {
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.FRem, rt, res, a, b)
+            mark_precise(bm, ctx.precise, SpvOp.FRem, res)
             e2id[k] = res
             return expr
         }
@@ -6489,6 +6492,7 @@ class SpirvEmit : AstVisitor {
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.FMod, rt, res, a, b)
+            mark_precise(bm, ctx.precise, SpvOp.FMod, res)
             e2id[k] = res
             return expr
         }
@@ -6504,6 +6508,7 @@ class SpirvEmit : AstVisitor {
             let rt = emit_type(bm, expr._type)
             let res = alloc_id(bm)
             emit(bm, SEC_FUNCS, SpvOp.Dot, rt, res, a, b)
+            mark_precise(bm, ctx.precise, SpvOp.Dot, res)
             e2id[k] = res
             return expr
         }

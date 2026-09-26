@@ -227,8 +227,10 @@ naming it beside the facade. The allowed set is the table in the lint.
 internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
 owns, or a consumer `ARCHITECTURE_ENGINE.md#instrumentation-and-support` names as ruled** - a
 symbol the facade lacks is added to `dasllama/dasllama.das`, not obtained by adding this option to
-the consumer. A `require ... public` that re-exports an engine module OUT of a file carrying this
-option, beyond what that consumer's ruled charter grants, breaks this rule too.
+the consumer.
+
+**A `require ... public` that re-exports an engine module out of a file carrying
+`options _dasllama_internal`, beyond what that consumer's ruled charter grants, is a defect.**
 
 **An edit that stops a check of any `REVIEW.das` under this folder firing without fixing what it
 flagged is a defect:** dropping a check, narrowing what the gate walks - a file or folder it stops
@@ -238,10 +240,11 @@ where that check's own finding text does not sanction the addition or the re-sta
 itself says what it enforces.
 
 **A new check in any `REVIEW.das` under this folder, or a check whose licensed set gains a name,
-names in its finding text the rule it enforces and ships its line in the `ARCHITECTURE_*.md`
-companion section carrying the charter of the feature the check guards - not the file its sites
-sit in; never `ARCHITECTURE.md` - in the same change.** The line names the check and the names it
-licenses; when the check licenses no names, the line says so.
+names in its finding text the `ARCHITECTURE_*.md#<anchor>` section holding the statement it
+enforces and ships its line in that section - the companion section carrying the charter of the
+feature the check guards, not the file its sites sit in; never `ARCHITECTURE.md` - in the same
+change.** The line names the check and the names it licenses; when the check licenses no names,
+the line says so.
 
 **Checked-in text - docs, comments, or string data, any language - that describes a mechanism of
 the reference build (any third-party engine, library or runtime whose figure a sentence compares

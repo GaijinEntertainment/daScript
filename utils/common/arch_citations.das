@@ -116,7 +116,7 @@ def public is_cpp_source(name : string) : bool {
 }
 
 
-// True for a file an [arch] walk reads for citations: a .das, or a C/C++ source.
+// True for a file an [arch] walk reads for citations: a .das, or a C/C++ source (a markdown document cites too; the lint walks those on its own list).
 def public arch_cites_source(name : string) : bool {
     return name |> ends_with(".das") || is_cpp_source(name)
 }
@@ -168,10 +168,11 @@ def private pointers_in_line(line : string; scan_start, lineno : int; folder : s
                 stop ++
             }
             from = stop
-            //! prose `.md#` (no path or no name) and a web URL (`/`-led, or a dotted first segment) are not pointers
+            //! prose `.md#` (no path or no name) and a web URL (`/`-led, or a dotted first segment) are not pointers; `./` and `../` lead a relative path
             continue if (stop == hash + 1 || start == ext || int(d[start]) == '/')
             let first_slash = find(line, "/", start)
-            continue if (first_slash > start && first_slash < ext && find(line, ".", start) < first_slash)
+            let first_seg = first_slash > start ? slice(d, start, first_slash) : ""
+            continue if (first_slash > start && first_slash < ext && first_seg != "." && first_seg != ".." && find(line, ".", start) < first_slash)
             out |> push(ArchCitation(line = lineno, raw = slice(d, start, stop),
                 anchor = slice(d, hash + 1, stop),
                 doc = resolve_pointer_doc(folder, slice(d, start, hash))))
@@ -214,6 +215,7 @@ def public collect_md_citations(file, text : string) : array<ArchCitation> {
 // it may name a file that is no longer on disk.
 def public collect_arch_citations(file, text : string) : array<ArchCitation> {
     return <- collect_arch_pointers(file, text) if (is_cpp_source(file))
+    return <- collect_md_citations(file, text) if (file |> ends_with(".md"))
     var out : array<ArchCitation>
     var raws : array<string>
     var offsets : array<int>

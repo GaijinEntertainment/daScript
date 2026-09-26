@@ -40,7 +40,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    upstream; was 11.1 on the per-op rails). The PREFILL half followed: the window chain carries
    the recurrent block (conv + chunked scan on the layer's device state), gated attention and
    partial rotary on the batch kernels, and hands the device state to the session for the decode
-   (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`, `_DECODE.md` sec.2.2v; gate
+   (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`, `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`; gate
    `tests/test_gpu_resident_hybrid.das`, one- and two-window cells). Every figure in this item:
    `benchmarks/lcpp_bench.das -m Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf -r 3` (`-p 512 -n 128`) through
    `bin/Release/daslang.exe -jit` under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1
@@ -900,7 +900,7 @@ module) is independent and can land any time - it is pure structure.
 43. **The Vulkan tier covers every carrier the module already serves.** Ruled 2026-09-08 (Boris,
     after the MoE fit survey, `followup_general.md` item 122): after the 0.6.4 release and before
     any new family, every carrier dasLLAMA serves today gets its Vulkan arm at parity - the
-    existing families, and the vision, audio and TTS towers, whose GPU drivers are Metal today.
+    existing families, and the vision and audio towers, whose GPU drivers are Metal today.
     The known gaps on the family side are this ledger's items 3 (the quant KV codecs), 4 (batched
     decode), 5 (the speculative round), 6 (the mx4 and q51 device kernels behind gpt-oss and
     gemma-4-26B), the gemma4 pre/post-norm attention decline, and the fully-resident MoE chain:
@@ -1738,34 +1738,74 @@ module) is independent and can land any time - it is pure structure.
     folded into the flash tile's load on the padded route and K and V staged in workgroup memory on
     the f32 window route (it reads them off the compact rows). The instrument is `lcpp_bench
     --image` on the E2B / gemma-3-4b / Qwen3-VL-4B / Qwen2.5-Omni-3B pairs beside their CPU rows.
-108. **The Pocket codec's scratch runs at sample rate.** A 6 s chunk's codec seat holds about a
-    gigabyte of device slots on the pod: the transposed upsample convs' im2col columns are laid
-    out per output sample (the last stage 146 thousand rows of k x cin floats), and every slot is
-    sized to the chunk. The CPU chain runs the same codec in windows of sixteen latent frames
-    (`ARCHITECTURE_POCKET.md#pocket-codec-stream`). The lever is the seat windowed the same way,
-    or the sample-rate convs' columns gathered inside the tile so no column slot exists; the
-    instrument is the attach ledger's `vk tts scratch` line and the codec served cells.
-107. **The Pocket prompt stays on the CPU.** A steady Pocket sentence on the pod reads prompt 27 ms
-    of 99 (backbone 62, codec 10): the text rows' backbone prefill over the voice's caches runs the
-    CPU chain, since the family's hook record carries a codec and a frames seat only (the Metal
-    twin's too). A prompt seat is the frames seat's layer chain at t = n_txt rows on the f32 tile,
-    writing the caches' rows the frames seat reads; the instrument is `harness/tts_synth.das`'s
-    prompt bucket beside the two rows.
+114. **The Vulkan TTS driver is required into every Vulkan-build LLM program.**
+    `dasllama_transformer.das` requires `dasllama/dasllama_vulkan_tts` under `?vulkan` beside the
+    tower and ASR-decoder drivers, so a program that never speaks compiles the TTS seats' classes -
+    a cold-compile cost on every Vulkan build; the Metal tower's TTS half rides the same precedent
+    through `dasllama_metal_tower`. The lever is a registration seam the TTS facade pulls in, so
+    only a program that requires `dasllama_tts` carries a TTS driver.
+113. **MoltenVK compiles MSL with fast math unless `MVK_CONFIG_FAST_MATH_ENABLED=0`.**
+    `vk_arm_moltenvk_env` forces discrete bindings and sets nothing else, so on a Mac under MoltenVK
+    the `precise` kernels' NoContraction decorations reach a Metal library compiled fast-math, and
+    the compensated sums they protect can fold. Done = the arm sets the knob where the user has not,
+    and the source kernels' cells run green on the Mac.
+112. **`tts_div`'s Newton step relies on `mad` being fused.** The source kernels divide as the
+    CPU's IEEE division rounds through `tts_div` (`dasllama_vulkan_classes.das`): a reciprocal
+    refined once and the quotient corrected by its exact remainder, each correction a `mad` whose
+    exactness needs one rounding. `mad` lowers to `Fma`, which the `precise` mark does not decorate
+    and which Vulkan lets a driver evaluate as a multiply then an add
+    (`modules/dasSpirv/ARCHITECTURE.md`), so the correctly rounded quotient is the driver's
+    courtesy, not a contract. Done = a cell that reds where a driver splits the `Fma`, and the
+    correction on a form the emitter guarantees fused where one exists.
+111. **The descriptor-set cache's clear orphans every cached set until the pool reset.** Any
+    buffer's destruction empties `vkd_cached_set`'s table whole
+    (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build`), and the sets rebuilt after each
+    clear are new pool allocations until the model drop resets the pools; a server alternating
+    voices, whose scratch rebuilds free and allocate buffers between sentences, grows the pools
+    sentence by sentence. Done = an evict-by-handle that drops only the sets binding the destroyed
+    buffer, keeping the pools flat between drops.
+110. **`khr_kq_tile_on()` never checks the tile's shape.** The KHR route's gate reads the
+    cooperative-matrix feature bit and a subgroup of 32 (`dasllama_vulkan_common.das`), never that
+    the device lists the 16x16x16 f16 -> f32 subgroup shape the KHR tiles are stamped for; a device
+    carrying the extension at another shape passes the gate and fails at pipeline creation or
+    computes wrong. Done = the gate walks the device's cooperative-matrix properties for the shape
+    and declines by name without it.
+109. **A TTS model unloaded without a reload keeps its Vulkan slabs.** No unload event reaches the
+    Vulkan TTS driver: its slabs and the Pocket state drop on the LLM model drop's sweep and on a
+    weights-epoch bump (`ts_forget`), so a TTS model a process unloads and does not replace leaves
+    its slabs and scratch resident - the Pocket frames slab and the kokoro decoder's scratch among
+    them, their sizes the `PERF_LEDGER.md` Vulkan TTS seats entry's - until an LLM drop or the next
+    reload. Done = the TTS facade's unload notifies the driver, or the slab keys count their model
+    and a stale key's slab drops on the next seat call.
+108. **The Pocket codec's scratch runs at sample rate.** The transposed upsample convs' im2col
+    columns are laid out per output sample and every slot is sized to the chunk, so a chunk's codec
+    seat holds device slots to the gigabyte - the one-shot column slot's size at the 512-frame cap
+    is the `PERF_LEDGER.md` Vulkan TTS seats entry's. The CPU chain runs the same codec in windows
+    of sixteen latent frames (`ARCHITECTURE_POCKET.md#pocket-codec-stream`). The lever is the seat
+    windowed the same way, or the sample-rate convs' columns gathered inside the tile so no column
+    slot exists; the instrument is the attach ledger's `vk tts scratch` line and the codec served
+    cells.
+107. **The Pocket prompt stays on the CPU.** The text rows' backbone prefill over the voice's
+    caches runs the CPU chain, since the family's hook record carries a codec and a frames seat
+    only (the Metal twin's too); its share of a steady Pocket sentence on the pod is the prompt
+    bucket of the `PERF_LEDGER.md` Vulkan TTS seats entry. A prompt seat is the frames seat's layer
+    chain at t = n_txt rows on the f32 tile, writing the caches' rows the frames seat reads; the
+    instrument is `harness/tts_synth.das`'s prompt bucket beside the two rows.
 106. **The TTS LSTM recurrence walks one SM.** `TtsLstmDir` runs a direction in one workgroup
-    (four lanes a hidden unit over the recurrence transposed to [H][4H]), and at kokoro's H = 256 a
-    step costs 14 us whatever the k loop's shape (four independent accumulators read the same as
-    one): the workgroup re-reads the 1 MB recurrence from L2 every step, the SM's own bandwidth
-    the bound. A kokoro sentence pays 22 ms of it - dur_enc's six directions over ~145 steps 12 ms,
-    prosody's two over ~356 frames 10 ms - of its 69 ms on the pod against the 52 ms torch CUDA
-    row; kitten's narrower hidden pays 1 ms. f16 weights halve the traffic and break the
+    (four lanes a hidden unit over the recurrence transposed to [H][4H]), and a step costs the same
+    whatever the k loop's shape (four independent accumulators read the same as one): the
+    workgroup re-reads the recurrence from L2 every step, the SM's own bandwidth the bound. The
+    step's cost at kokoro's hidden width and its share of a kokoro sentence on the pod, beside the
+    torch CUDA reference row, are the `PERF_LEDGER.md` Vulkan TTS seats entry's; kitten's narrower
+    hidden pays little. f16 weights halve the traffic and break the
     predictor's 2e-5 bars (the front end is f32-exact by ruling). The form that removes the bound
     is a persistent walk over several workgroups, each owning a slice of the 4H rows small enough
     to stay in its L1, the step's h exchanged through a `@coherent` buffer under a per-step spin
     barrier on an atomic counter, the one-workgroup walk the fallback where the device cannot hold
     the slices resident (Vulkan promises no forward progress across workgroups, so the walk is a
     device-count guess, not a contract). Boris's ruling: after the other levers - the ledger under
-    `DASLLAMA_GPU_PROF=1` names them (the column stats' strided reads, 6 ms of the decode chain's
-    22; the AdaIN fold; the Pocket codec's 250 ms against the Metal row's 81) - so this row waits.
+    `DASLLAMA_GPU_PROF=1` names them (the column stats' strided reads, the AdaIN fold, the Pocket
+    codec against the Metal row) - so this row waits.
 105. **The prefill window's partial token column on the l stamp.** The l tile takes its clamped
     edge path on a partial 256-token column, at about a third of the rate: the probe's `wh` arm
     read q / k / v / o 95 us at 1500 rows against 52 at 1536, fc2 357 against 185 (RTX PRO 4500,

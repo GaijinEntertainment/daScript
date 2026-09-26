@@ -17,7 +17,8 @@ sizes or fills, or that model load fills for syntheses to reuse, in a TTS source
 `dasllama/`, that is not `@scratch` on its declaration or on the callee parameter it grows
 through, is a defect.** The annotation is what lets `[hot_path]` hold through every stage the
 entry point drives. A TTS source file is `dasllama_tts.das`, `dasllama_tts_types.das`,
-`dasllama_tts_blocks.das`, `dasllama_styletts2.das`, a TTS family file, or a text front-end file.
+`dasllama_tts_blocks.das`, `dasllama_tts_slab.das`, `dasllama_styletts2.das`, a TTS family file
+(one `dasllama_<family>.das` holding a single speech-synthesis family), or a text front-end file.
 
 **A function that exists only for tests, debugging or profiling - a stats, trace or dump reader
 no synthesis entry point calls - in a TTS source file under `dasllama/`, that is not
@@ -55,9 +56,9 @@ pass the consumer (`rows`, `rows_only`) so `conv1d_prepare` / `linear_prepare` d
 layout nobody reads.**
 
 **A caller that pins a TTS weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8`)
-for a load pins in the context that loads, never through the context that spawned it.** A
-`new_thread` context starts every module global at its declared default, so a pin set in another
-context never arrives.
+for a load pins in the context that runs the load, never in the context that spawned that loading
+context.** A `new_thread` context starts every module global at its declared default, so a pin set
+in another context never arrives.
 
 **A diff that reorders the float operations, or changes the rounding of any step, of the phase
 the CPU harmonic source builds in `dasllama/dasllama_tts_blocks.das` - the cycles, the resamples,

@@ -1825,3 +1825,11 @@
    backend instead of the one it would have picked - the ordering `harness/REVIEW.md`'s timing
    rule forbids for a new timing. Done = the validation pass orders its re-runs ahead of the
    pinning bench, or re-runs them in a child process, and a cell holds the order.
+169. **`generate_spirv` gained a positional `precise : bool` ahead of `var reflection`.** The
+   `precise` shader property (`modules/dasSpirv/ARCHITECTURE.md`, the `precise` section) landed
+   as a positional parameter before `var reflection : SpirvReflection` in `generate_spirv`'s
+   signature, so every external caller of the emitter - a module repo compiling kernels against
+   dasSpirv - stops compiling until it passes the flag: the sweep `skills/internal/abi_break_sweep.md`
+   describes is owed. A trailing defaulted parameter (after `kernel_self`) would have kept every
+   caller compiling. Done = the sweep run over the external module repos, or the parameter moved
+   to the defaulted tail before the next release.

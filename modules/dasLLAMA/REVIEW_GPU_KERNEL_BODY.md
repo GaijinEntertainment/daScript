@@ -9,13 +9,15 @@ the choice at compile time instead.** A `class template` / `def abstract` / `def
 splice is compile-time and conforms - check the emission, not the das spelling.
 
 **A host-fixed branch inside the body of a kernel's main loop whose deciding value is not a
-per-call extent (a row, key or frame count) is a defect - stamp that value as a
-`@template_constant`, a literal or a module `let` instead, never a module `var`, push constant,
-uniform or kargs field.** The main loop is a loop whose trip count grows with the work one
-thread of the dispatch does, per element or per row; a host-fixed branch in it is a bounds
+per-call extent is a defect - stamp that value as a `@template_constant`, a literal or a module
+`let` instead, never a module `var`, push constant, uniform or kargs field.** A per-call extent
+is a push-constant, uniform or kargs value that changes between two dispatches of the same class
+in the served chain - a row, key or frame count; a value every served dispatch passes the same is
+a constant channel, not an extent. The main loop is a loop whose trip count grows with the work
+one thread of the dispatch does, per element or per row; a host-fixed branch in it is a bounds
 guard, a tail guard, a nested loop's own bound, or an `[unroll]` count whose live iterations run
-different bodies, when its answer is the same for every thread and the host fixes its deciding
-value before it records the dispatch. A module `let` is a stamp; a module `var` is not, because
+different bodies, whose deciding value the host fixes before it records the dispatch - its answer
+may differ per thread, as a tail guard's does. A module `let` is a stamp; a module `var` is not, because
 its value at stamp time is whatever the host last wrote. An `[unroll]` count whose every live
 iteration runs the same body is no such branch - the GPU compiler hoists it.
 

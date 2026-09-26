@@ -2324,7 +2324,7 @@ def private st2_slab_norm_rows(var w : TtsSlabWriter; n : TtsNorm; c : int64) : 
 def private st2_slab_norm(var w : TtsSlabWriter; a : TtsAdaIn; alpha : TtsWeight; c : int64) : St2NormSlot => st2_norm_of(tts_slab_norm(w, a, alpha, c))
 
 def private st2_slab_block(var w : TtsSlabWriter; b : St2GenResBlock) : St2BlockSlots {
-    let t <- tts_slab_block(w, b)
+    var inscope t <- tts_slab_block(w, b)
     var s : St2BlockSlots
     s.c1 <- [for (c in t.c1); st2_slot_of(w, c)]
     s.c2 <- [for (c in t.c2); st2_slot_of(w, c)]
@@ -2474,7 +2474,7 @@ def private st2_slab_current(base : St2SlabBase; key : uint64) : bool => base.bu
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
 def private st2_slab_rebuild(var base : auto(SS); key : uint64; write : block<(var w : TtsSlabWriter; var s : SS) : void>) : bool {
     st2_slab_free(base)
-    let host <- tts_slab_build(base, write)
+    var inscope host <- tts_slab_build(base, write)
     if (!st2_slab_upload(base, host, key)) {
         st2_slab_free(base)
         return false
@@ -3145,30 +3145,15 @@ def private st2_res_shape(var sh : St2Shape; b : St2AdainResBlk; t : int64) : in
     return t1
 }
 
-//! The source's geometry for `f2` frames.
-struct private St2SourceShape {
-    samples : int64
-    nlow : int64
-    spec_frames : int64
-}
-
 let private ST2_MAX_DE_LSTMS = 8   //!< the duration encoder's LSTM stack the seat holds buffers for
-let private ST2_SRC_MAX_SAMPLES = 1l << 23   //!< past it `float(to) + 0.5` rounds, and the torch law's tap coordinate parts from the CPU's double form
 
-def private st2_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64; var ss : St2SourceShape) : bool {
-    ss.samples = f2 * cfg.upsample
-    ss.nlow = resize_len(ss.samples, 1.0 / float(cfg.upsample))
-    return false if (ss.samples < 1l || ss.samples >= ST2_SRC_MAX_SAMPLES || ss.nlow < 1l || cfg.n_harm < 1l || cfg.n_harm > 64l || resize_len(ss.nlow, float(cfg.upsample)) != ss.samples)
-    let re & = unsafe(d.stft_fwd_re)
-    let im & = unsafe(d.stft_fwd_im)
-    return false if (re.cin != 1l || re.cout != d.bins || re.transposed || im.k != re.k || im.cout != d.bins || im.cin != 1l || im.transposed
-        || re.pad_l != 0l || re.pad_r != 0l || re.dilation != 1l || im.pad_l != 0l || im.pad_r != 0l || im.dilation != 1l || im.stride != re.stride
-        || d.source_linear.nin != cfg.n_harm || d.source_linear.nout != 1l || empty(d.source_linear.b) || empty(re.w) || empty(im.w))
-    ss.spec_frames = conv1d_out_len(re, ss.samples + 2l * ST2_STFT_PAD)
-    return ss.spec_frames >= 1l
+//! the shared source geometry into the seat's shape; false where the source parts do not fit the stamps
+def private st2_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64; var ss : TtsSourceShape) : bool {
+    ss = tts_source_shape(d, cfg, f2)
+    return ss.ok
 }
 
-def private st2_source_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Decoder; cfg : SineSourceCfg; ss : St2SourceShape;
+def private st2_source_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Decoder; cfg : SineSourceCfg; ss : TtsSourceShape;
                              bf0, bnu, bnoise, blow, blowc, bhar, bspec : MetalBuffer?; captured : bool; seed : uint64) {
     let nh = cfg.n_harm
     var ka = St2SourceArgs(n = uint(ss.samples), nlow = uint(ss.nlow), nh = uint(nh), up = uint(cfg.upsample), sr = cfg.sample_rate,
@@ -3199,7 +3184,7 @@ def private st2_source_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : 
 //! The decode chain's shape: the front convs and the residual as the concat rows ask, the AdaIN
 //! residual blocks, the source, the generator, the inverse STFT.
 struct private St2DecShape : St2Shape {
-    ss : St2SourceShape = St2SourceShape()
+    ss : TtsSourceShape
     dec_rows : int64
     dec_width : int64
     n_out : int64
@@ -3745,18 +3730,12 @@ var private g_tw_pk_codec : PkCodecSlab
 
 let private PK_CODEC_MAX_FRAMES = 512l   //!< the one-shot chain's row budget: past this the CPU's windows serve
 
+//! the shared writer's layer slots as the Metal chain binds them: byte offsets, the linears' uniforms hung
 def private pk_layer_write(var w : TtsSlabWriter; l : PocketLayer; d : int64) : PkLayerSlots {
-    var s = PkLayerSlots(n1 = st2_slab_norm_rows(w, l.norm1, d), in_proj = st2_slab_linear(w, l.in_proj), out_proj = st2_slab_linear(w, l.out_proj),
-        n2 = st2_slab_norm_rows(w, l.norm2, d), ffn1 = st2_slab_linear(w, l.ffn1), ffn2 = st2_slab_linear(w, l.ffn2))
-    s.has_s1 = !empty(l.scale1.a)
-    s.has_s2 = !empty(l.scale2.a)
-    if (s.has_s1) {
-        s.scale1_off = st2_slab_raw(w, l.scale1.a, d)
-    }
-    if (s.has_s2) {
-        s.scale2_off = st2_slab_raw(w, l.scale2.a, d)
-    }
-    return s
+    let t = tts_pk_layer_write(w, l, d)
+    return PkLayerSlots(n1 = st2_norm_of(t.n1), in_proj = st2_slot_of(w, t.in_proj), out_proj = st2_slot_of(w, t.out_proj),
+        scale1_off = uint64(t.scale1_off * 4l), has_s1 = t.has_s1, n2 = st2_norm_of(t.n2), ffn1 = st2_slot_of(w, t.ffn1), ffn2 = st2_slot_of(w, t.ffn2),
+        scale2_off = uint64(t.scale2_off * 4l), has_s2 = t.has_s2)
 }
 
 def private pk_codec_write(var w : TtsSlabWriter; mm : PocketMimi; var s : PkCodecSlab) {
@@ -3787,22 +3766,13 @@ def private pk_conv_ok(c : TtsConv1d) : bool {
     return tts_conv_ok(c) && c.cin % 8l == 0l && !c.q8 && c.stride >= 1l && (!c.transposed || c.k > c.stride)
 }
 
+//! the shared codec admission, then the gathering stamps' own rule over every codec conv
 def private pk_codec_ok(mm : PocketMimi) : bool {
-    let tf & = unsafe(mm.dec_tf)
-    let d = tf.d
-    return false if (!tts_pk_tf_ok(tf, int64(PK_ATTN_HS)) || tf.context < 1l || tf.context > PK_ATTN_MAX_KEYS)   //! the attention row stages `context` scores
-    for (l in tf.layers) {
-        return false if (!tts_pk_layer_ok(l, d, tf.ffn))
-    }
-    let up & = unsafe(mm.upsample)
-    return false if (!up.transposed || up.groups != up.cin || up.cin != up.cout || up.cin != d || mm.frame_steps != up.stride
-        || !pk_conv_ok(mm.quant_proj) || mm.quant_proj.cout != d || !pk_conv_ok(mm.dec_in) || mm.dec_in.cin != d
-        || length(mm.dec_up) != length(mm.ratios) || length(mm.dec_res) != length(mm.ratios))
+    return false if (!tts_pk_codec_ok(mm, int64(PK_ATTN_HS), PK_ATTN_MAX_KEYS) || !pk_conv_ok(mm.quant_proj) || !pk_conv_ok(mm.dec_in))
     for (i, c in iter_range(mm.dec_up), mm.dec_up) {
-        return false if (!pk_conv_ok(c) || !c.transposed || c.stride != mm.ratios[i] || !pk_conv_ok(mm.dec_res[i].conv1) || !pk_conv_ok(mm.dec_res[i].conv2)
-            || mm.dec_res[i].conv1.cin != c.cout || mm.dec_res[i].conv2.cout != c.cout)
+        return false if (!pk_conv_ok(c) || !pk_conv_ok(mm.dec_res[i].conv1) || !pk_conv_ok(mm.dec_res[i].conv2))
     }
-    return pk_conv_ok(mm.dec_out) && mm.dec_out.cout >= 1l
+    return pk_conv_ok(mm.dec_out)
 }
 
 def private pk_codec_attach(mm : PocketMimi) : bool {
@@ -3819,7 +3789,7 @@ def private pk_codec_rebuild(mm : PocketMimi; key : uint64) : bool {
         bytes = long_length(w.host) * 4l
     }
     return false if (!ok)
-    pk_stage_rows(mm, PK_CODEC_MAX_FRAMES, g_tw_pk_sc.rows)
+    tts_pk_stage_rows(mm, PK_CODEC_MAX_FRAMES, g_tw_pk_sc.rows)
     if (!pk_rope_tables(mm.dec_tf, g_tw_pk_sc.rows[1], g_tw_pk_codec.bcos, g_tw_pk_codec.bsin)) {
         st2_slab_free(g_tw_pk_codec)
         return false
@@ -3852,15 +3822,13 @@ struct private PkGpuScratch {
 }
 
 var private g_tw_pk_sc : PkGpuScratch
-var private g_tw_no_freqs : array<float>   //!< the rope builder's absent frequency table
 
 //! The engine's rope tables for positions 0..cap-1 at the transformer's period, into two once-written buffers.
 def private pk_rope_tables(tf : PocketTransformer; cap : int64; var bcos, bsin : MetalBuffer?&) : bool {
-    let dh = tf.d / tf.heads
-    let half = dh / 2l
+    let half = tf.d / tf.heads / 2l
     var inscope @exact_size tcos : array<float>
     var inscope @exact_size tsin : array<float>
-    build_rope_tabs(tcos, tsin, tf.period, 1.0, 1.0, g_tw_no_freqs, false, 0l, cap, dh)
+    tts_pk_rope_tabs(tf, cap, tcos, tsin)
     bcos = metal_new_buffer_untracked(g_dev, uint64(cap * half * 4l))
     bsin = metal_new_buffer_untracked(g_dev, uint64(cap * half * 4l))
     return false if (bcos == null || bsin == null)
@@ -3932,16 +3900,6 @@ def private pk_transformer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
     }
 }
 
-//! The row counts the chain reaches: the frames, the 200 Hz rows, each stage's rows.
-def private pk_stage_rows(mm : PocketMimi; frames : int64; @scratch var rows : array<int64>) {
-    unsafe(scratch_resize(rows, 2l + long_length(mm.ratios)))
-    rows[0] = frames
-    rows[1] = frames * mm.frame_steps
-    for (i in range64(long_length(mm.ratios))) {
-        rows[2l + i] = rows[1l + i] * mm.ratios[i]
-    }
-}
-
 //! One ELU-conv-ELU-conv residual block over x [t][w] (a stage's rows) into y, through cc and cp.
 def private pk_res_block(enc : MetalComputeEncoder?; var c : St2GpuCtx; b : PocketResConv; s1, s2 : St2ConvSlot;
                          bx, bcc, bcp, by : MetalBuffer?; t, w : int64) {
@@ -4009,7 +3967,7 @@ def private metal_pocket_codec(m : PocketModel; latents : array<float>; frames :
     tc = ref_time_ticks()
     residency_flush()
     var sl & = g_tw_pk_codec
-    pk_stage_rows(mm, frames, g_tw_pk_sc.rows)
+    tts_pk_stage_rows(mm, frames, g_tw_pk_sc.rows)
     let samples = g_tw_pk_sc.rows[long_length(g_tw_pk_sc.rows) - 1l]
     var c = St2GpuCtx()
     st2_ctx_make(c, sl.buf, 1l, 1l, 0ul)
@@ -4286,45 +4244,18 @@ def private pk_frames_rebuild(m : PocketModel; key : uint64) : bool {
     return true
 }
 
+//! Host rows [r0, r1) of one cache as the device's [pos][d] rows, written straight into the shared buffers.
 [arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames")]
-def private pk_voice_key(vs : PocketVoiceState) : uint64 {
-    var key = 29ul + uint64(vs.len) * 7ul
-    for (kc in vs.caches) {
-        key = hash_combine64(key, tts_arr_key(kc.k) + uint64(kc.cap) * 3ul)
-        key = hash_combine64(hash_combine64(hash_combine64(key, tts_arr_key(kc.v)), uint64(kc.heads)), uint64(kc.dh))
-        let d = kc.heads * kc.dh
-        let rows = max(vs.len, 1l)
-        for (i in range64(64l)) {
-            let kv = kc.k[((i * 131l) % d) * kc.cap + (i * 17l) % rows]
-            key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(kv))))
-            let vv = kc.v[(((i * 131l) % d) / kc.dh * kc.cap + (i * 17l) % rows) * kc.dh + (i * 131l) % kc.dh]
-            key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(vv))))
-        }
-    }
-    return key
-}
-
-//! Host rows [r0, r1) of one cache - keys [d][cap], values [heads][cap][dh] - as the device's [pos][d] rows.
 def private pk_kv_rows(kc : TtsKvCache; bk, bv : MetalBuffer?; r0, r1 : int64) {
-    let dh = kc.dh
-    let d = kc.heads * dh
-    let cap = kc.cap
     unsafe {
         var kp = reinterpret<float?>(metal_buffer_contents(bk))
         var vp = reinterpret<float?>(metal_buffer_contents(bv))
-        for (pos in range64(r0, r1)) {
-            for (h in range64(kc.heads)) {
-                for (e in range64(dh)) {
-                    kp[pos * d + h * dh + e] = kc.k[(h * dh + e) * cap + pos]
-                    vp[pos * d + h * dh + e] = kc.v[(h * cap + pos) * dh + e]
-                }
-            }
-        }
+        tts_pk_kv_rows(kc, r0, r1, r0, kp, vp)
     }
 }
 
 def private pk_voice_attach(vs : PocketVoiceState; tf : PocketTransformer) : bool {
-    let key = pk_voice_key(vs)
+    let key = tts_pk_voice_key(vs)
     let cap = vs.caches[0].cap
     var v & = g_tw_pk_voice
     if (v.key == key && v.cap == cap && v.len == vs.len && length(v.bk) == length(vs.caches)) {

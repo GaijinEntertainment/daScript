@@ -173,7 +173,9 @@ the whole module. Without the decoration a device compiler may contract and reas
 folds a two-float sum's correction terms - `(acc - (s - bv)) + (x - bv)` - to zero, so a
 compensated accumulator reads as a plain float sum there, cycles off after forty thousand frames.
 It is the twin of `[metal_kernel(fastmath=false)]` (`modules/dasMetal/ARCHITECTURE.md` section 2,
-decision 8). The `mad` builtin lowers to the explicit `Fma` and needs no mark.
+decision 8). The `mad` builtin lowers to the explicit `Fma`, which the mark does not decorate;
+Vulkan's precision rules let a driver evaluate `Fma` as a multiply then an add, so a kernel whose
+correction step depends on a fused multiply-add does not rest it on `mad`.
 
 ## 4. Test architecture - "every emitted instruction has a test"
 

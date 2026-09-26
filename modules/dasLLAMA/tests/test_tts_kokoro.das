@@ -22,9 +22,10 @@ require _model_tier
 // performance/build_tts_data.das through harness/convert_kokoro.py and harness/kokoro_oracle.py):
 // the token rule against the reference pipeline, the parity rail of `_tts_parity.das` against
 // the PyTorch reference with captured noise, and a facade smoke cell that speaks one sentence
-// through the front end's own inventory. The facade and Metal cells also need the front-end
-// packs (`tts_g2p.bin`, `tts_postag.bin`) beside the model; the Metal cells skip where no Metal
-// device serves, and red where a present device declines a stage.
+// through the front end's own inventory. The facade and GPU cells also need the front-end
+// packs (`tts_g2p.bin`, `tts_postag.bin`) beside the model; the GPU cells run on Metal or Vulkan,
+// skip where no device serves or the driver registers no seat for the stage, and red where a
+// present seat declines a stage.
 
 def private gguf_path() : string {
     return path_join(models_dir(), "kokoro-82m.gguf")

@@ -8918,7 +8918,7 @@ class template F32GemmT {
     [spirv_kernel(local_size_x = 256)]
     def run {
         let tid = gl_LocalInvocationID.x
-        let dgroups = (pa.d + F32G_TD - 1u) / F32G_TD
+        let dgroups = max((pa.d + F32G_TD - 1u) / F32G_TD, 1u)
         let p0 = (gl_WorkGroupID.x / dgroups) * F32G_TP
         let o0 = (gl_WorkGroupID.x % dgroups) * F32G_TD
         let tp = (tid / 16u) * 4u
@@ -9008,7 +9008,7 @@ struct TtsGatherArgs {
 //! `styletts2_albert` - or the word row alone under `adds = 0` (the CPU `gather_rows`), one element an invocation
 [vk_dispatch(name = "tts_row_gather_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TtsRowGather {
-    @ssbo @binding = 0 @role = "weight" slab : array<float>
+    @ssbo @binding = 0 slab : array<float>
     @ssbo @binding = 1 ids : array<int>
     @ssbo @binding = 2 out : array<float>
     @push_constant pa : TtsGatherArgs
@@ -9017,8 +9017,9 @@ class TtsRowGather {
     def run {
         let g = gl_GlobalInvocationID.x
         if (g < pa.rows * pa.c) {
-            let r = g / pa.c
-            let j = g % pa.c
+            let c = max(pa.c, 1u)
+            let r = g / c
+            let j = g % c
             let wv = slab[pa.word_off + uint(ids[r]) * pa.c + j]
             out[pa.out_off + g] = pa.adds != 0u ? wv + slab[pa.pos_off + g] + slab[pa.type_off + j] : wv
         }
@@ -9124,8 +9125,10 @@ class TtsAttn : WgReduceBase {
     [spirv_kernel(local_size_x = 256)]
     def run {
         let tid = gl_LocalInvocationID.x
-        let h = gl_WorkGroupID.x / pa.t
-        let i = gl_WorkGroupID.x % pa.t
+        let t = max(pa.t, 1u)
+        let hs = max(pa.hs, 1u)
+        let h = gl_WorkGroupID.x / t
+        let i = gl_WorkGroupID.x % t
         let col = h * pa.hs
         let qb = pa.qoff + i * pa.d + col
         var m0 = -3.0e38
@@ -9146,10 +9149,10 @@ class TtsAttn : WgReduceBase {
             j += 256u
         }
         let inv = 1.0 / wg_sum(l0, 1u)
-        let parts = 256u / pa.hs
-        let vb = pa.voff + col + tid % pa.hs
+        let parts = 256u / hs
+        let vb = pa.voff + col + tid % hs
         var acc = 0.0
-        j = tid / pa.hs
+        j = tid / hs
         while (j < pa.t) {
             acc = mad(sc[j] * inv, v[vb + j * pa.d], acc)
             j += parts
@@ -13263,9 +13266,10 @@ class template TtsIm2colT {
     //! the input position tap `tap` reads for output row r, or -1 where it falls off x
     def src_pos(r, tap : uint) : int {
         if (pa.transposed != 0u) {
+            let stride = max(pa.stride, 1u)
             let q = int(r + pa.pad_l) - int(tap * pa.dilation)
-            if (q >= 0 && uint(q) % pa.stride == 0u && uint(q) / pa.stride < pa.tin) {
-                return int(uint(q) / pa.stride)
+            if (q >= 0 && uint(q) % stride == 0u && uint(q) / stride < pa.tin) {
+                return int(uint(q) / stride)
             }
             return -1
         }
@@ -13277,9 +13281,10 @@ class template TtsIm2colT {
     def elem(r, j : uint) : float {
         var v = 0.0
         if (j < pa.k * pa.cin) {
-            let st = src_pos(r, j / pa.cin)
+            let cin = max(pa.cin, 1u)
+            let st = src_pos(r, j / cin)
             if (st >= 0) {
-                let ci = j % pa.cin
+                let ci = j % cin
                 v = pa.rows != 0u ? x[pa.xoff + uint(st) * pa.cin + ci] : x[pa.xoff + ci * pa.tin + uint(st)]
             }
         }
@@ -13298,17 +13303,19 @@ class template TtsIm2colT {
             //! four columns an invocation: on a cin four-lattice they share one tap and source position, one 16-byte read
             let e = gl_GlobalInvocationID.x * 4u
             if (e < pa.tout * pa.kdim) {
-                let r = e / pa.kdim
-                let j0 = e % pa.kdim
+                let kdim = max(pa.kdim, 1u)
+                let cin = max(pa.cin, 1u)
+                let r = e / kdim
+                let j0 = e % kdim
                 var v0 = 0.0
                 var v1 = 0.0
                 var v2 = 0.0
                 var v3 = 0.0
                 if (pa.cin % 4u == 0u) {
                     if (j0 < pa.k * pa.cin) {
-                        let st = src_pos(r, j0 / pa.cin)
+                        let st = src_pos(r, j0 / cin)
                         if (st >= 0) {
-                            let ci0 = j0 % pa.cin
+                            let ci0 = j0 % cin
                             if (pa.rows != 0u) {
                                 let b = pa.xoff + uint(st) * pa.cin + ci0
                                 v0 = x[b]
@@ -13338,7 +13345,8 @@ class template TtsIm2colT {
         } else {
             let gid = gl_GlobalInvocationID.x
             if (gid < pa.tout * pa.kdim) {
-                col[pa.coloff + gid] = elem(gid / pa.kdim, gid % pa.kdim)
+                let kdim = max(pa.kdim, 1u)
+                col[pa.coloff + gid] = elem(gid / kdim, gid % kdim)
             }
         }
     }
@@ -13371,12 +13379,6 @@ struct TtsLstmArgs {
 }
 
 let TTS_LSTM_LANES = 256u   //! the hidden units a direction's workgroup holds (four invocations each): a direction past it declines at the driver
-
-//! tanh clamped to +-15, where it already saturates in f32: past that a device tanh built from exp answers NaN, the CPU +-1
-def tts_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
-
-//! the CPU `sigmoid_f`
-def tts_sigmoid(v : float) : float => 1.0 / (1.0 + exp(-v))
 
 //! one LSTM direction end to end in one workgroup (the CPU `lstm_direction`, wgs = 1 a direction): four invocations a
 //! hidden unit j, one a gate g, each taking its gate's input row (x w_ih^T + b, an F32GemmB ahead of it) plus the dot
@@ -13534,12 +13536,11 @@ def tts_sigsum_wgs(t : int64) : int64 => (t + 255l) / 256l
 struct TtsStatsArgs {
     t : uint      //! the rows
     c : uint      //! the channels, x's row width
-    rb : uint     //! the rows a block sums
-    nblk : uint   //! the blocks: ceil(t / rb)
+    nblk : uint   //! the blocks: ceil(t / TTS_STATS_ROWS)
     poff : uint   //! the block partials' element base in `part`: [nblk][c]
 }
 
-let TTS_STATS_ROWS = 128u   //! the rows a column-statistics block sums
+let TTS_STATS_ROWS = 128u   //! the rows a column-statistics block sums, the kernel body's literal
 
 //! the block partials of the instance norm's column statistics of x [t][c]: workgroup `blk` sums rows blk rb .. + rb of every
 //! channel, a lane a channel reading the rows as they lie (the lanes of a row consecutive) - the plain sum, or under SQ the
@@ -13549,15 +13550,15 @@ let TTS_STATS_ROWS = 128u   //! the rows a column-statistics block sums
 class template TtsColPartT {
     @template_constant SQ : bool = false
     @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 stats : array<float>
+    @ssbo @binding = 1 @template_gate = SQ stats : array<float>
     @ssbo @binding = 2 part : array<float>
     @push_constant pa : TtsStatsArgs
 
     [spirv_kernel(local_size_x = 256)]
     def run {
         let blk = gl_WorkGroupID.x
-        let r0 = blk * pa.rb
-        let r1 = min(r0 + pa.rb, pa.t)
+        let r0 = blk * TTS_STATS_ROWS
+        let r1 = min(r0 + TTS_STATS_ROWS, pa.t)
         var ch = gl_LocalInvocationID.x
         while (ch < pa.c) {
             var m = 0.0
@@ -13635,10 +13636,11 @@ def tts_colreduce_wgs(c : int64) : int64 => (c + 255l) / 256l
 //! the stats rows a seat holds for `c_max` channels over `t_max` rows: the mean and squared-deviation rows, then the partials
 def tts_stats_floats(t_max, c_max : int64) : int64 => 2l * c_max + tts_stats_blocks(t_max) * c_max
 
+let TTS_ADAIN_EPS = 1e-5   //! the instance norms' eps, the kernel body's literal; the driver holds it to the model's `ST2_ADAIN_EPS`
+
 struct TtsAdainArgs {
     c : uint       //! the channels
     t : uint       //! the rows the statistics ran over
-    eps : float
     xoff : uint    //! x's element base
     yoff : uint    //! y's element base
     hoff : uint    //! the style fc rows' base in h: gamma [c], then beta [c]
@@ -13663,8 +13665,8 @@ class template TtsAdainT {
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.t * pa.c) {
-            let ci = gid % pa.c
-            let rs = 1.0 / sqrt(stats[pa.c + ci] / float(pa.t) + pa.eps)
+            let ci = gid % max(pa.c, 1u)
+            let rs = 1.0 / sqrt(stats[pa.c + ci] / float(pa.t) + TTS_ADAIN_EPS)
             let g = wn[pa.gwoff + ci]
             let g1 = 1.0 + h[pa.hoff + ci]
             let scale = rs * g * g1
@@ -13717,14 +13719,16 @@ class TtsPoolDw {
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.t_out * pa.c) {
-            let p = gid / pa.c
-            let j = gid % pa.c
+            let c = max(pa.c, 1u)
+            let stride = max(pa.stride, 1u)
+            let p = gid / c
+            let j = gid % c
             var acc = wn[pa.boff + j]
             var kk = 0u
             while (kk < pa.k) {
                 let num = int(p + pa.pad_l) - int(kk * pa.dil)
-                if (num >= 0 && uint(num) % pa.stride == 0u && uint(num) / pa.stride < pa.t_in) {
-                    acc = mad(wn[pa.woff + j * pa.k + kk], x[(uint(num) / pa.stride) * pa.c + j], acc)
+                if (num >= 0 && uint(num) % stride == 0u && uint(num) / stride < pa.t_in) {
+                    acc = mad(wn[pa.woff + j * pa.k + kk], x[(uint(num) / stride) * pa.c + j], acc)
                 }
                 kk++
             }
@@ -13875,56 +13879,6 @@ def tts_resize_taps_onnx(n, to : uint; scale : float) : TtsTaps {
     return TtsTaps(i0 = i0, i1 = i1, l0 = same ? 0.5 : abs(in_x - float(i1)), l1 = same ? 0.5 : abs(in_x - float(i0)))
 }
 
-def tts_resize_mix_torch(x0, x1, l0, l1 : float) : float => mad(l0, x0, l1 * x1)
-
-//! onnxruntime's trilinear mix in its operation order: the last channel through all seven fma terms, the rest their two nonzero ones
-def tts_resize_mix_onnx(x0, x1, l0, l1 : float; last : bool) : float {
-    if (last) {
-        let q0 = (l0 * 0.5) * 0.5
-        let q1 = (l1 * 0.5) * 0.5
-        var acc = mad(q0, x0, q1 * x1)
-        acc = mad(q0, x0, acc)
-        acc = mad(q1, x1, acc)
-        acc = mad(q0, x0, acc)
-        acc = mad(q1, x1, acc)
-        acc = mad(q0, x0, acc)
-        return mad(q1, x1, acc)
-    }
-    let w0 = l0 * 0.5
-    let w1 = l1 * 0.5
-    var acc = mad(w0, x0, w1 * x1)
-    acc = mad(w0, x0, acc)
-    return mad(w1, x1, acc)
-}
-
-//! sin of a phase past a million radians: 2 pi in pieces of five significant bits, so k times a piece is exact
-def tts_sin_big(phase : float) : float {
-    let k = round(phase * 0.15915493667125702)
-    var r = mad(-k, 6.25, phase)
-    r = mad(-k, 0.033203125, r)
-    r = mad(-k, -1.781781975296326e-05, r)
-    r = mad(-k, -6.608047442568932e-13, r)
-    return sin(r)
-}
-
-//! the own noise draw's counter hash
-def tts_hash_u32(x : uint) : uint {
-    let a = x * 0x9E3779B1u
-    let b = (a ^ (a >> 15u)) * 0x85EBCA77u
-    let c = (b ^ (b >> 13u)) * 0xC2B2AE3Du
-    return c ^ (c >> 16u)
-}
-
-//! a counter-keyed Box-Muller normal, not the CPU's PCG32 stream; the seed hashed first, else seeds four apart alias
-def tts_hash_normal(seed, idx : uint) : float {
-    let sh = tts_hash_u32(seed)
-    let a = tts_hash_u32(sh ^ (idx * 2u + 1u))
-    let b = tts_hash_u32(sh ^ (idx * 2u + 2u) ^ 0x6A09E667u)
-    let u1 = (float(a >> 8u) + 1.0) * (1.0 / 16777217.0)
-    let u2 = float(b >> 8u) * (1.0 / 16777216.0)
-    return sqrt(-2.0 * log(u1)) * cos(6.28318530717959 * u2)
-}
-
 //! the source's resample law - TORCH: torch's taps and mix, else onnxruntime's - the base of the source stamps
 [ |> template_struct_instance]
 class template TtsSrcLawT {
@@ -13960,10 +13914,12 @@ class template TtsSrcLowT : TtsSrcLawT {
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.nh * pa.nlow) {
-            let h = gid / pa.nlow
-            let tp = law_taps(pa.n, gid % pa.nlow, tts_div(1.0, float(pa.up)))
-            let r0 = tts_src_rad(f0[tp.i0 / pa.up], noise_u[h], tp.i0, h, pa.sr)
-            let r1 = tts_src_rad(f0[tp.i1 / pa.up], noise_u[h], tp.i1, h, pa.sr)
+            let nlow = max(pa.nlow, 1u)
+            let up = max(pa.up, 1u)
+            let h = gid / nlow
+            let tp = law_taps(pa.n, gid % nlow, tts_div(1.0, float(pa.up)))
+            let r0 = tts_src_rad(f0[tp.i0 / up], noise_u[h], tp.i0, h, pa.sr)
+            let r1 = tts_src_rad(f0[tp.i1 / up], noise_u[h], tp.i1, h, pa.sr)
             low[gid] = law_mix(r0, r1, tp.l0, tp.l1, h + 1u == pa.nh)
         }
     }
@@ -14057,7 +14013,7 @@ class template TtsSrcSinesT : TtsSrcLawT {
         let i = gl_GlobalInvocationID.x
         if (i < pa.n) {
             let tp = law_taps(pa.nlow, i, float(pa.up))
-            let uv = f0[i / pa.up] > pa.voiced_thr ? 1.0 : 0.0
+            let uv = f0[i / max(pa.up, 1u)] > pa.voiced_thr ? 1.0 : 0.0
             let noise_amp = uv * pa.noise_std + (1.0 - uv) * pa.sine_amp / 3.0
             var acc = wn[pa.boff]
             var h = 0u
@@ -14177,12 +14133,13 @@ class TtsIstft {
         let i = gl_GlobalInvocationID.x
         if (i < pa.n) {
             let m = i + pa.pad
+            let hop = max(pa.hop, 1u)
             var acc = 0.0
             var env = 0.0
             var tap = 0u
             while (tap < pa.k) {
-                if (m >= tap && (m - tap) % pa.hop == 0u) {
-                    let q = (m - tap) / pa.hop
+                if (m >= tap && (m - tap) % hop == 0u) {
+                    let q = (m - tap) / hop
                     if (q < pa.tt) {
                         var b = 0u
                         while (b < pa.bins) {
@@ -14345,8 +14302,9 @@ class TtsPkAttn : WgReduceBase {
     [spirv_kernel(local_size_x = 256)]
     def run {
         let wg = gl_WorkGroupID.x
-        let h = wg / pa.t
-        let i = wg % pa.t
+        let t = max(pa.t, 1u)
+        let h = wg / t
+        let i = wg % t
         let lid = gl_LocalInvocationID.x
         let p = pa.pos0 + i
         let j0 = (pa.ctx != 0u && p + 1u > pa.ctx) ? p + 1u - pa.ctx : 0u
@@ -14538,7 +14496,8 @@ class template TtsPkGemvT {
             s += x[pa.xoff + k]
             k += 128u
         }
-        let mean = gemv_wg_sum(s) / float(pa.nin)
+        let total = gemv_wg_sum(s)
+        let mean = total / float(pa.nin)
         var vs = 0.0
         k = tid
         while (k < pa.nin) {
@@ -14546,7 +14505,8 @@ class template TtsPkGemvT {
             vs += dv * dv
             k += 128u
         }
-        let inv = 1.0 / sqrt(gemv_wg_sum(vs) / float(pa.nin) + pa.eps)
+        let var_sum = gemv_wg_sum(vs)
+        let inv = 1.0 / sqrt(var_sum / float(pa.nin) + pa.eps)
         k = tid
         while (k < pa.nin) {
             let nv = (x[pa.xoff + k] - mean) * inv * wn[pa.lwoff + k] + wn[pa.lboff + k]
@@ -14625,11 +14585,13 @@ class template TtsPkGemvT {
     //! row p, the v span copied into the v cache's
     def rope_store(row : uint; r0, r1 : float) {
         static_if (ROPE_STORE) {
-            let sp = row / pa.span
-            let c = row % pa.span
+            let span = max(pa.span, 1u)
+            let dh = max(pa.dh, 2u)
+            let sp = row / span
+            let c = row % span
             if (sp < 2u) {
-                let hh = pa.dh / 2u
-                let tb = pa.p * hh + (c % pa.dh) / 2u
+                let hh = dh / 2u
+                let tb = pa.p * hh + (c % dh) / 2u
                 let cv = tabs[pa.coff + tb]
                 let sv = tabs[pa.soff + tb]
                 let o0 = r0 * cv - r1 * sv
@@ -14732,9 +14694,9 @@ class TtsPkRope {
         let gid = gl_GlobalInvocationID.x
         let half = pa.d / 2u
         if (gid < pa.rows * half) {
-            let r = gid / half
-            let pi = gid % half
-            let hh = pa.dh / 2u
+            let r = gid / max(half, 1u)
+            let pi = gid % max(half, 1u)
+            let hh = max(pa.dh / 2u, 1u)
             let j = pi % hh
             let i = pa.xoff + r * pa.qs + pa.col + (pi / hh) * pa.dh + 2u * j
             let tb = (pa.pos0 + r) * hh + j

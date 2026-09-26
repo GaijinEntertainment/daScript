@@ -106,8 +106,8 @@ starts with a root directory the folder does not contain (`modules/...`, `daslib
 "`(repo root)`"; when both readings exist - a `tests/` beside the checklist and one at the
 root - the rule must say which.
 
-**Cite files by name; cite the folder's own architecture doc by section, and never require
-that section to be read before the rule can be applied.** No file cites a checklist rule by
+**Cite files by name; cite the folder's own architecture doc by anchor (`<doc>.md#<anchor>`),
+and never require that section to be read before the rule can be applied.** No file cites a checklist rule by
 number, position, or nickname. A file outside the rule documents - source, commit message,
 doc - quotes the rule's words; a rule document routes to the checklist instead, and never
 quotes or restates its rule. A criterion whose home is another folder's architecture doc is

@@ -146,8 +146,8 @@ struct TtsDecSlab {
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private tsw_put_q8(var w : TtsSlabWriter; q : array<int8>; qs : array<float>; rows, cols, w0, stride : int64) {
     return if (w.measure)
-    var wq : array<uint8>
-    var ws : array<uint8>
+    var @exact_size wq : array<uint8>
+    var @exact_size ws : array<uint8>
     wq |> reserve_resize(rows * cols)
     ws |> reserve_resize(rows * cols / 32l * 2l)
     let lay = active_q8_repack_layout(g_active_needs_repack)
@@ -616,16 +616,90 @@ struct TtsPkCodecSlab {
 
 var private g_tts_no_freqs : array<float>   //! the rope builder's absent frequency table
 
-//! the engine's rope tables for positions 0..rows-1 at the transformer's period, cos then sin, each [rows][dh / 2]; the cos row's element offset
+//! the engine's rope tables for positions 0..rows-1 at the transformer's period, cos and sin, each [rows][dh / 2]
+def tts_pk_rope_tabs(tf : PocketTransformer; rows : int64; @exact_size var tcos, tsin : array<float>) {
+    build_rope_tabs(tcos, tsin, tf.period, 1.0, 1.0, g_tts_no_freqs, false, 0l, rows, tf.d / tf.heads)
+}
+
+//! the same tables into the slab, cos then sin; the cos row's element offset
 def tts_pk_rope_rows(var w : TtsSlabWriter; tf : PocketTransformer; rows : int64; var sin_off : int64&) : int64 {
-    let dh = tf.d / tf.heads
-    let half = dh / 2l
+    let half = tf.d / tf.heads / 2l
     var inscope @exact_size tcos : array<float>
     var inscope @exact_size tsin : array<float>
-    build_rope_tabs(tcos, tsin, tf.period, 1.0, 1.0, g_tts_no_freqs, false, 0l, rows, dh)
+    tts_pk_rope_tabs(tf, rows, tcos, tsin)
     let at = tts_slab_raw(w, tcos, rows * half)
     sin_off = tts_slab_raw(w, tsin, rows * half)
     return at
+}
+
+//! the row counts a codec chain reaches for `frames`: the frames, the 200 Hz rows, each stage's rows
+def tts_pk_stage_rows(mm : PocketMimi; frames : int64; @scratch var rows : array<int64>) {
+    unsafe(scratch_resize(rows, 2l + long_length(mm.ratios)))
+    rows[0] = frames
+    rows[1] = frames * mm.frame_steps
+    for (i in range64(long_length(mm.ratios))) {
+        rows[2l + i] = rows[1l + i] * mm.ratios[i]
+    }
+}
+
+//! a voice's residency key: the caches' addresses and shapes, and 64 sampled words of their live rows
+def tts_pk_voice_key(vs : PocketVoiceState) : uint64 {
+    var key = 29ul + uint64(vs.len) * 7ul
+    for (kc in vs.caches) {
+        key = hash_combine64(key, tts_arr_key(kc.k) + uint64(kc.cap) * 3ul)
+        key = hash_combine64(hash_combine64(hash_combine64(key, tts_arr_key(kc.v)), uint64(kc.heads)), uint64(kc.dh))
+        let d = kc.heads * kc.dh
+        let rows = max(vs.len, 1l)
+        for (i in range64(64l)) {
+            let kv = kc.k[((i * 131l) % d) * kc.cap + (i * 17l) % rows]
+            key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(kv))))
+            let vv = kc.v[(((i * 131l) % d) / kc.dh * kc.cap + (i * 17l) % rows) * kc.dh + (i * 131l) % kc.dh]
+            key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(vv))))
+        }
+    }
+    return key
+}
+
+//! host rows [r0, r1) of one cache - keys [d][cap], values [heads][cap][dh] - as [pos][d] rows at kp / vp, row r0 landing at row `at`
+def tts_pk_kv_rows(kc : TtsKvCache; r0, r1, at : int64; var kp, vp : float?) {
+    let dh = kc.dh
+    let d = kc.heads * dh
+    let cap = kc.cap
+    unsafe {
+        for (pos in range64(r0, r1)) {
+            for (h in range64(kc.heads)) {
+                for (e in range64(dh)) {
+                    kp[(at + pos - r0) * d + h * dh + e] = kc.k[(h * dh + e) * cap + pos]
+                    vp[(at + pos - r0) * d + h * dh + e] = kc.v[(h * cap + pos) * dh + e]
+                }
+            }
+        }
+    }
+}
+
+//! the harmonic source's geometry for `f2` frames: the samples, the low-rate rows and the STFT frames; `ok` false where the decoder's source parts do not fit the stamps
+struct TtsSourceShape {
+    ok : bool
+    samples : int64
+    nlow : int64
+    spec_frames : int64
+}
+
+let TTS_SRC_MAX_SAMPLES = 1l << 23   //! past it `float(to) + 0.5` rounds, and the torch law's tap coordinate parts from the CPU's double form
+
+def tts_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64) : TtsSourceShape {
+    let samples = f2 * cfg.upsample
+    var sh = TtsSourceShape(samples = samples, nlow = resize_len(samples, 1.0 / float(cfg.upsample)))
+    return sh if (sh.samples < 1l || sh.samples >= TTS_SRC_MAX_SAMPLES || sh.nlow < 1l || cfg.n_harm < 1l || cfg.n_harm > 64l
+        || resize_len(sh.nlow, float(cfg.upsample)) != sh.samples)
+    let re & = unsafe(d.stft_fwd_re)
+    let im & = unsafe(d.stft_fwd_im)
+    return sh if (re.cin != 1l || re.cout != d.bins || re.transposed || im.k != re.k || im.cout != d.bins || im.cin != 1l || im.transposed
+        || re.pad_l != 0l || re.pad_r != 0l || re.dilation != 1l || im.pad_l != 0l || im.pad_r != 0l || im.dilation != 1l || im.stride != re.stride
+        || d.source_linear.nin != cfg.n_harm || d.source_linear.nout != 1l || empty(d.source_linear.b) || empty(re.w) || empty(im.w))
+    sh.spec_frames = conv1d_out_len(re, sh.samples + 2l * ST2_STFT_PAD)
+    sh.ok = sh.spec_frames >= 1l
+    return sh
 }
 
 //! a row of `n` zeros; the element offset
@@ -662,7 +736,8 @@ struct TtsPkFramesSlab {
     zero : int64          //! a zero row as wide as the backbone, the residual seams' bias
 }
 
-def private tts_pk_layer_write(var w : TtsSlabWriter; l : PocketLayer; d : int64) : TtsPkLayerSlots {
+//! a transformer layer's slots written: the two norms, the four linears, the layer scale rows where the layer carries them
+def tts_pk_layer_write(var w : TtsSlabWriter; l : PocketLayer; d : int64) : TtsPkLayerSlots {
     var s = TtsPkLayerSlots(n1 = tts_slab_norm_rows(w, l.norm1, d), in_proj = tts_slab_linear(w, l.in_proj), out_proj = tts_slab_linear(w, l.out_proj),
         n2 = tts_slab_norm_rows(w, l.norm2, d), ffn1 = tts_slab_linear(w, l.ffn1), ffn2 = tts_slab_linear(w, l.ffn2))
     s.has_s1 = !empty(l.scale1.a)

@@ -173,9 +173,6 @@ forward loop.
   it touches no tune state (`tune_policy(missing="fallback")`). BRINGUP.md sec.2 is the runbook.
 - **`dasllama/dasllama_exchange_schema.das`** - engine-free validation for exchange submissions
   (record stores + tune sidecars); the dasllama.io ladder service builds on it.
-- **`REVIEW.das`'s `check_harness_dashv`** walks `harness/` and reds a tool that requires `dashv`
-  and names `dasllama.io`: the exchange module is the sidecar exchange host's one client, and a
-  harness tool reaches it through `dasllama/dasllama_exchange`. It licenses no names.
 - **`dasllama/dasllama_exchange.das`** - the sidecar-exchange client (a sanctioned public entry
   point, and the engine's only `dashv` requirer: `performance/REVIEW.das` walks `dasllama/` for a
   second one; a measurement harness under `harness/` talking HTTP to a reference engine's server
@@ -197,6 +194,10 @@ forward loop.
 - **`benchmarks/asr/mem_census.sh`** - the peak-memory census (`/usr/bin/time -l` around one
   asr_bench process per cell; macOS only) - the interim footprint instrument until a footprint
   leg lands in `gen_bench_records`; its numbers live in `PERF_LEDGER.md`, never the stores.
+
+`REVIEW.das`'s `check_harness_dashv` walks `harness/` and reds a tool that requires `dashv` and
+names `dasllama.io`: the exchange module is the sidecar exchange host's one client, and a harness
+tool reaches it through `dasllama/dasllama_exchange`. It licenses no names.
 
 ### Serving {#scheduler-step}
 

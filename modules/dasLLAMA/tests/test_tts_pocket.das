@@ -12,6 +12,7 @@ require dasllama/dasllama_audio_io
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama   // moe_gpu_drop_model: the LLM tier's model drop between two syntheses
 require daslib/jobque_boost
 require daslib/defer   // defer() { reset_pocket_q8() } - a lane pin never outlives its cell
 require daslib/fio
@@ -818,7 +819,8 @@ def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs,
                 var inscope b3 <- frame_rows(m, sc, f3)
                 t |> equal(f3, fc, "{tag}: batches of three make the frame count")
                 let batches3 = (fc + 2l) / 3l + 1l   //! the frames in threes and the codec's encode; the batch the EOS frame lands in may split the tail into one more
-                t |> success(abs(eb1 - eb0 - batches3) <= 1l, "{tag}: one tower encode a batch of three, and the codec's ({eb1 - eb0} encodes over {fc} frames, {batches3} or one more)")
+                let extra = eb1 - eb0 - batches3
+                t |> success(extra >= 0l && extra <= 1l, "{tag}: one tower encode a batch of three, and the codec's ({eb1 - eb0} encodes over {fc} frames, {batches3} or one more)")
                 t |> success(rel_rms(b3.lat, leg.cpu.lat) <= GPU_FRAME_BAR, "{tag}: batches of three land within {GPU_FRAME_BAR}")
                 set_gpu_pocket_frame_batch(0l)
                 t |> equal(gpu_pocket_frame_batch(), 1l, "{tag}: a batch below one clamps to one")
@@ -885,6 +887,45 @@ def test_pocket_frames_metal_served(t : T?) {
             if (files == 0) {
                 t |> skip("neither served file is stocked")
             }
+        }
+    } else {
+        t |> skip("no GPU module in this build")
+    }
+}
+
+//! The frames seat after the LLM tier's model drop in the same process (a slot switch, a reload): the seat serves again on
+//! the same voice and reads the same frames, the slabs, the scratch and the voice slot rebuilt behind the drop.
+[test]
+def test_pocket_frames_after_model_drop(t : T?) {
+    var inscope man <- load_manifest()
+    if (empty(man.cases)) {
+        t |> skip("no oracle dumps under {oracle_dir()}")
+        return
+    }
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let knob_found = gpu_knob()
+            defer() {
+                set_gpu(knob_found)
+            }
+            reset_pocket_q8()
+            let path = q8_gguf_path()
+            return if (!model_available(t, path))
+            var inscope m <- load_pocket(path)
+            var inscope sc = PocketScratch()
+            for (c in man.cases) {
+                continue if (!c.stages)
+                var inscope k <- forced_case(m, c, man, sc)
+                var inscope before <- frames_seat_leg(t, m, k, "{c.id} {c.voice} frames before the model drop", GPU_FRAME_SERVED_BAR, false, sc)
+                return if (before.fc < 0l)
+                moe_gpu_drop_model()
+                var inscope after <- frames_seat_leg(t, m, k, "{c.id} {c.voice} frames after the model drop", GPU_FRAME_SERVED_BAR, false, sc)
+                return if (after.fc < 0l)
+                t |> equal(after.fc, before.fc, "{c.id}: the frame count after the drop")
+                return
+            }
+            t |> skip("the oracle carries no stage case")
         }
     } else {
         t |> skip("no GPU module in this build")

@@ -337,8 +337,10 @@ def area_image_arms(area : string) : string {
 //! engine module stem -> the areas a change to it reaches. A module not in the table is CORE and
 //! reaches every area (the safe default for a new module until it gets a row)
 let MODULE_AREAS <- {
-    "dasllama_tower" => "audio,vision", "dasllama_metal_tower" => "audio,vision,tts", "dasllama_vulkan_tower" => "audio,vision",
-    "dasllama_tts_slab" => "tts", "dasllama_vulkan_tts" => "tts",
+    "dasllama_tower" => "audio,vision", "dasllama_metal_tower" => "audio,vision,tts",
+    "dasllama_vulkan_tower" => "audio,vision,tts",   // the Vulkan TTS driver rides the tower's classes
+    "dasllama_tts_slab" => "audio,vision,tts",   // the Metal tower requires it for every seat
+    "dasllama_vulkan_tts" => "tts",
     "dasllama_asr" => "audio", "dasllama_asr_types" => "audio", "dasllama_audio" => "audio",
     "dasllama_audio_embedder" => "audio", "dasllama_audio_io" => "audio", "dasllama_canary" => "audio",
     "dasllama_gemma4a" => "audio", "dasllama_metal_asr_dec" => "audio", "dasllama_vulkan_asr_dec" => "audio", "dasllama_parakeet" => "audio",
@@ -362,7 +364,8 @@ let MODULE_AREAS <- {
     "dasllama_metal_prefill" => "llm,tts",   // its rope serves the Pocket codec transformer
     "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
-    "dasllama_rope" => "llm", "dasllama_sampling" => "llm,vision,audio", "dasllama_scheduler" => "llm",
+    "dasllama_rope" => "llm,tts",   // the TTS slab builds its rope tables through it
+    "dasllama_sampling" => "llm,vision,audio", "dasllama_scheduler" => "llm",
     "dasllama_spm" => "llm,tts",   // the unigram arm is the Pocket tokenizer (test_tts_pocket)
     "dasllama_bench" => "llm,infra",   // the rows serve lcpp_bench (llm) and the server's /bench (infra's tooling)
     "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm",

@@ -46,9 +46,9 @@ def annotated_symbol(lines : array<string>; line : int) : string {
     return ""
 }
 
-// Every .das and C/C++ source under `path`, pruned the way LINT026's reverse walk prunes:
-// `_`-prefixed and dot-prefixed names are fixtures and tooling, and `builtin.das` is not source
-// anyone cites.
+// Every .das, C/C++ source and markdown document under `path` (the three citing spellings LINT026 reads), pruned the way
+// LINT026's reverse walk prunes: `_`-prefixed and dot-prefixed names are fixtures and tooling, and `builtin.das` is not
+// source anyone cites.
 def scan_das_tree(path : string; var out : array<string>) {
     fio::dir(path) $(name) {
         return if (arch_walk_skips(name))
@@ -57,7 +57,7 @@ def scan_das_tree(path : string; var out : array<string>) {
         return if (!fst.is_valid)
         if (fst.is_dir) {
             scan_das_tree(full, out)
-        } elif (fst.is_reg && arch_cites_source(name)) {
+        } elif (fst.is_reg && (arch_cites_source(name) || name |> ends_with(".md"))) {
             out |> push(full)
         }
     }

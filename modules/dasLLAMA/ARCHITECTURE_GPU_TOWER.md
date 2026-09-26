@@ -71,7 +71,9 @@ rebuild runs the family's drop, then the family's writer twice through the share
 layouts are the same here, the slots adapted to byte offsets with the GEMM's uniforms hung on
 each, and an LSTM recurrence written unturned, as the Metal recurrence kernel reads it) - the
 measuring pass writes into a probe slab to size the host copy, the second fills the resident -
-and the copy uploads, the drop running again when the upload fails. A slab releases through one walk over its
+and the copy uploads, the drop running again when the upload fails. The measuring pass hangs no
+device handle - uniforms and buffers are created on the fill pass alone - so the probe slab is
+deleted without the release walk. A slab releases through one walk over its
 fields by type (`st2_release_any`): a conv slot's and a Pocket linear's pooled uniforms, a buffer
 the slab owns, the elements of an array of them and the fields of a struct of them go back to their
 homes, so a slot field a slab gains frees itself. The walk releases and never deletes;

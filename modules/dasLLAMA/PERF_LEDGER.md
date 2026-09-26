@@ -11,6 +11,57 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-26) - the StyleTTS2 and Pocket seats ride the Vulkan TTS driver
+  (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`): the kitten and kokoro families' seven
+  seats and the Pocket codec and frames seats on the Vulkan tower's knob, the front end on the
+  f32-exact tile, the decoder and generator convs on the f16 tile, every slab through the shared
+  host writer.** Box: the pod - the RunPod RTX PRO 4500 Blackwell, Linux - every das figure
+  `-jit` on this tree under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16
+  DAS_LOG_LEVEL=info`, no other overrides unless named, one process at a time. The served rows:
+  the first 20 sentences of the g2p corpus through `./bin/daslang -jit
+  modules/dasLLAMA/harness/tts_synth.das -- --model <gguf> --voice <voice> --out <dir> --limit
+  20`, the mean generation wall a sentence over the 20 with the first sentence's wall apart (it
+  pays the device bring-up and the slab builds; of the spread only the min named below is in the
+  record, the rest is the run's log). Pocket q8 (`pocket-tts-en-q8.gguf`, alba): 132 ms a
+  sentence, the first 641, a steady sentence about 99 - the prompt 27 ms of it on the CPU chain
+  (`followup_vulkan.md` 107), the backbone 62, the codec 10. kokoro (`kokoro-82m.gguf`): 98 ms,
+  the first 785, min 36, the steady sentences about 62, against the torch CUDA reference row of
+  52 ms a sentence (`external`: `harness/tts_ref_bench.py --device cuda --models
+  kokoro-82m:af_heart --limit 20` on the pod under
+  `ARCHITECTURE_MEASUREMENT.md#the-tts-reference-instrument`'s recipe; the package versions that
+  run printed are not in this branch's record). kitten-nano: 54 ms. The LSTM recurrence's share,
+  from the same run's per-role GPU ledger under `DASLLAMA_GPU_PROF=1`: a `TtsLstmDir` step 14 us
+  at kokoro's H = 256, 22 ms of a kokoro sentence (`followup_vulkan.md` 106). The device
+  bring-up - the process's first seat call, reported under the info log - 254..257 ms at the 64
+  MB upload staging chunk against 322..349 at 256 MB, `direction-grade` (a process a chunk
+  size): the pinned staging buffer costs 0.4 ms a MB (101 ms at 256 MB, 26 at 64) and a chunk
+  past 64 MB buys no rate - the Pocket frames slab's 322 MB uploads in 27 ms on either, a 1.3 GB
+  Llama file's resident upload reads 129 and 156 ms at 64 MB against 196 and 127 at 256 (two runs
+  a size, the run-to-run noise: `benchmarks/lcpp_bench.das -p 32 -n 0 -r 1`,
+  `Llama-3.2-1B-Instruct-Q8_0`), the Pocket first sentence 708 -> 641 ms with the chunk. The
+  attach costs, same box and flags, `direction-grade` (two commits a pair): a seat's scratch is
+  sized a quarter past the call's need, so a longer sentence after a shorter one reuses it -
+  kokoro's scratch builds over the 20 sentences 9 -> 6, the second sentence's decoder 154 -> 23
+  ms; each seat's host readback buffer is sized to the rows it copies out, never the widest slot
+  - the Pocket codec's 765 MB -> 0.6 MB for a wave, the kokoro decoder's up to 717 MB before; the
+  Pocket frames slab (322 MB) builds in 70 ms against 201 with the q8 rows dequantized over the
+  job pool. What the seats hold: the Pocket frames slab 322 MB, the kokoro decoder's scratch past
+  3 GB at its widest sentence, the Pocket codec's one-shot column slot about 4 GB at the 512-frame
+  cap (`followup_vulkan.md` 108, 109).
+- **LANDED (2026-09-26) - three TTS parity bars widened to cover the pod's x64 CPU chain beside
+  the M5 Max's.** Every reading `-jit` through `tests/run.das -- --area tts` on the named box: the
+  pod (the RunPod RTX PRO 4500, Linux; its x64 CPU chain is the arm under compare) and the M5 Max
+  (Metal). `SOURCE_BAR` (`tests/_tts_parity.das`) 5e-3, absolute - the harmonic source against
+  the oracle's, where the phase past 1e5 radians turns a ulp of an increment into radians: the M5
+  Max reads under 1e-4, the pod's x64 chain 2.5e-3 on kitten's ONNX law. `GPU_CODEC_SERVED_BAR`
+  (`tests/test_tts_pocket.das`) 2e-1 - the codec seat on the served planes against each file's
+  own CPU chain: the M5 Max 1.3e-2 / 7.7e-3 (q8 / kq), the pod 9.2e-2 / 1.5e-1, all of it the
+  CPU's Q8_0 activation blocks of the first layer's rows while the tower sits at 3e-6 of the CPU
+  f32 chain on either box. `GPU_FRAME_FREE_BAR` (the same file) 5e-3 - the frames seat
+  free-running on the f32 lane against the CPU chain's free run on the same seed: the M5 Max
+  1.5e-4 and 1.1e-4 on the two stage cases, the pod 7e-5 and 1.8e-3 (lj028's 150 frames compound
+  the f16 feed's rounding); the 1.8e-3 reading predates the fixes this arc landed after it, and
+  the bar stands over both readings.
 - **LANDED (2026-09-26) - the sampler is a candidate list when top-k is set
   (`ARCHITECTURE_ENGINE.md`, `dasllama_sampling.das`): one pass over the row selects the k
   largest logits into a heap, and the temperature, softmax, nucleus and min-p cuts and the draw run
@@ -67,7 +118,7 @@ what it costs today and what the fix would change.
   lane's latents, conditioning rows and EOS logits at 2e-6 rel-rms, the cell asserting the
   tower's encodes rose one a batch, and its free run - the loop's own noise, every frame fed its
   own output - at 1.5e-4 and 1.1e-4 on the two stage cases against the CPU chain's free run on
-  the same seed (`GPU_FRAME_FREE_BAR` 1e-3, the M5 Max); on the served lanes (`test_pocket_frames_metal_served`, which
+  the same seed (`GPU_FRAME_FREE_BAR`, the M5 Max; the bar's value since the pod's reading, and that reading, are the widened-bars entry above); on the served lanes (`test_pocket_frames_metal_served`, which
   logs both distances) the tower reads nearer the f32 oracle than the CPU chain does - the q8
   file's latents 0.012 against the CPU chain's 0.025, the kq file's 0.10 against 0.11 - since the
   CPU quantizes the activations it feeds a q8 or K-quant plane and the tower feeds them f32. Quality,
@@ -238,7 +289,7 @@ what it costs today and what the fix would change.
   bounds; the generator itself cannot window, because every Snake block's AdaIN takes its
   statistics over the whole stream.
 - **LANDED (2026-09-18) - the StyleTTS2 generator runs on six buffers, the idle release covers
-  its carrier, and the chunk cap is a knob (`ARCHITECTURE_TTS_MEMORY.md#tts-generator-buffers`, 2.52).** A
+  its carrier, and the chunk cap is a knob (`ARCHITECTURE_TTS_MEMORY.md#tts-generator-buffers`).** A
   Kitten or Kokoro say holds its memory in the iSTFTNet generator's `[t][c]` rows, every buffer
   the stage's whole stream and the count of them live at once the footprint: nine same-size
   fields, three of which held values dead by the time the next was written. Six fields now

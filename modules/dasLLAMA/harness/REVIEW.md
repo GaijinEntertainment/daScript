@@ -10,7 +10,8 @@ anything about the Vulkan backend, `../followup_general.md` for everything else.
 the process, so a CPU timing after it runs against the pinned backend instead of the one it would
 have picked.
 
-**Weakening `REVIEW.das`'s last-row check (beside this file) is a defect.**
+**Weakening `check_last_bench_row` (`REVIEW.das` beside this file) or `check_harness_dashv`
+(`../REVIEW.das`) is a defect.**
 
 **A diff that points a `dashv` call in this folder at the sidecar exchange - dasllama.io's
 tune-sidecar service: sidecar lookup, download, or submit - is a defect; it calls the exchange

@@ -334,7 +334,8 @@ gated (the shared q8 triple beside the routed pair, its gate logit past the rout
 and ungated (the same at unit gate, a second span record after a reset; the reference without the
 shared expert must miss the device row in both) - plus the `vulkan_moe_span` override reached
 through its registry.
-`test_vulkan_tts_conv_kernels.das` - model-free (a Vulkan device, else skips): the TTS tower's
+`test_vulkan_tts_conv_kernels.das` - model-free (a Vulkan device, else skips; the half im2col cell
+also skips where the device serves no f16 tile - neither cm2 nor the KHR tile at subgroup 32): the TTS tower's
 Vulkan sequence classes against the CPU chain - `test_vkt_tts_im2col` feeds the conv im2col
 (`TtsIm2col`) through the biased f32 GEMM over the slab-layout weight rows and holds the result to
 the CPU `conv1d` end to end, a forward k5 conv at 22 channels (the column rows' pad past k x cin
@@ -1442,7 +1443,8 @@ the CPU chain with its decline recorded. The models for these cells mint in memo
 staging on the lane each cell names, no `.dlim` baked. The GPU cells read the serving driver
 through the rail's helpers (`gpu_knob`, `set_gpu`, `gpu_encodes`, `gpu_declines`): the Metal
 tower on an Apple build, the Vulkan TTS driver elsewhere. Where no GPU device serves, every cell
-skips loudly; a device that declines a stage is a red.
+skips loudly, and a driver that registers no seat for a cell's stage skips that cell; a device
+whose seat declines a stage is a red.
 The kitten image rail is the `image` suite's `kitten` arm (the TTS area's), not a cell here.
 `test_tts_kokoro.das` - stocked suite; model-free cells: the symbol map over a synthetic phoneme
 string, the out-of-vocabulary drop, the style-row clamps, and the pack-name language rule
@@ -1457,8 +1459,8 @@ driven straight from each dialect's string, which is what proves the VOICE's dia
 synthesis - and the voice refusals (a pack whose language the front end lacks names that language;
 a voice the model has never heard of refuses first, with no language to name); the GPU cells of
 `_tts_parity.das` - the seam check, the per-stage cells with the q8 decode cell, and the served
-synthesis across the tower knob on both lanes - as the kitten entry describes them; and, model-free,
-the seat-name refusal of `styletts2_gpu_stats`.
+synthesis across the tower knob on both lanes - as the kitten entry describes them, the seat-absent
+skip included; and, model-free, the seat-name refusal of `styletts2_gpu_stats`.
 `test_tts_pocket.das` - stocked suite (`pocket-tts-en.gguf` + `tts_oracle/pocket_english_2026-04/`
 under the models dir, minted by `harness/convert_pocket.py` and `harness/pocket_oracle.py`): the
 unigram tokenizer id for id against the package on the 200-sentence corpus and the byte-fallback
@@ -1479,18 +1481,24 @@ reads 1e-6 on the exact stamps on the M5 Max, 9e-4 on the f16-staged route, whic
 with the bar's one-sample control and the x3-scaled latents as the compare's control, one tower
 encode a call, the knob-off leg bit-equal to the CPU chain with its decline recorded; the codec seat
 on the served planes of the q8 and kq files against each file's own CPU chain within
-`GPU_CODEC_SERVED_BAR` (5e-2; reads 1.3e-2 and 7.7e-3) with the x3-scaled latents as the compare's
-control; the frames
+`GPU_CODEC_SERVED_BAR` (2e-1; reads 1.3e-2 and 7.7e-3 on the M5 Max, 9.2e-2 and 1.5e-1 on the pod's
+x64 CPU chain - the CPU's Q8_0 activation blocks, the tower at 3e-6 of the CPU f32 chain on either
+box) with the x3-scaled latents as the compare's control; the frames
 seat against the CPU chain teacher-forced on the oracle's noise and frames, on the f32 lane: the
 latents, conditioning rows and EOS logits within `GPU_FRAME_BAR` (2e-5; reads 2e-6 on the M5 Max) with the
 bar's one-element control and the x3-scaled noise as the compare's control, the generator left
 where the CPU loop leaves it (the last batch's draws past the frames made rewound), one hook
 call, one encode a batch of frames, the knob-off leg bit-equal with its decline, then the free
 run - its own noise, every frame fed its own output - against the CPU chain's on the same seed
-within `GPU_FRAME_FREE_BAR` (1e-3; reads 1.5e-4) with the generator check, batches of three
-(one encode a batch, the latents within the bar, a batch below one clamping to one), and the
+within `GPU_FRAME_FREE_BAR` (5e-3; reads 1.5e-4 and 1.1e-4 on the M5 Max, 7e-5 and 1.8e-3 on the
+pod) with the generator check, batches of three (the encode count within one of the batch count -
+the batch the EOS frame lands in may split the tail - the latents within the bar, a batch below
+one clamping to one), and the
 seats taken by an empty record and given back (`register_pocket_gpu` / `unregister_pocket_gpu`,
-the hook unreached then serving again); the served frames cell takes both oracle voices in turn
+the hook unreached then serving again); the frames seat after the LLM tier's model drop in the same
+process (`test_pocket_frames_after_model_drop`: one served leg on the q8 file, `moe_gpu_drop_model`,
+the same leg again serving and reading the same frame count - the slabs, the scratch and the voice
+slot rebuilt behind the drop); the served frames cell takes both oracle voices in turn
 on each file, so the second voice's slot displaces the first's, within `GPU_FRAME_SERVED_BAR` (1e-1; reads 1.9e-2 to 7.1e-2)
 with the x3-scaled noise as the compare's control; the seat record's refusal of a
 name no seat carries and its seat names in order (`test_pocket_seat_stats`, model-free); the
@@ -1568,7 +1576,9 @@ and a drawn noise stream, its mix through `linear_rows` in windows bit-equal to 
 run's on both split axes, and a window past the carry's reset refused.
 `_tts_parity.das` - the rail both families run: token ids against the reference driver on every
 oracle case, identical durations on every case, and on the bring-up set every stage through the
-decoder output within 1e-4 of the oracle's peak, the sine source within 1e-4 fed the oracle's F0,
+decoder output within 1e-4 of the oracle's peak, the sine source within `SOURCE_BAR` (5e-3, absolute:
+the phase past 1e5 radians turns a ulp of an increment into radians; the pod's x64 chain reads
+2.5e-3 on kitten's ONNX law, the M5 Max under 1e-4) fed the oracle's F0,
 the source spectrum's magnitude within 1e-4 of its peak and its phase within 1e-2 rad where the
 magnitude carries signal, and the generator (its stage-0 internals included) within 1e-4 fed the
 oracle's spectrum and decoder output; the end-to-end waveform difference is logged, not gated (the
@@ -1760,7 +1770,8 @@ carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`
 `qwen2`, `qwen3`, `phi3`,
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe` (the support-matrix family cells), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
-`gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows),
+`gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows), `kitten` (the image suite's
+kitten arm), `kokoro`, `pocket` (the coverage census TTS rows),
 `gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0 and
 Q4_K_M small-tier always-on, carrying the per-layer-FFN-width and blob-kq-PLE-gather coverage.
 Both E2B rows assert parity through their forced-feed cells, not token equality, because

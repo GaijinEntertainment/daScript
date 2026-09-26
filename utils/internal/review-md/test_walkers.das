@@ -308,6 +308,66 @@ let DASLLAMA_RED_NEEDLE_CENSUS <- [
     "dasllama_toyvis.das: absent from modules/dasLLAMA/.das_module",
     "names dasllama_gone, but no census dir (modules/dasLLAMA/dasllama) holds dasllama_gone.das"]
 
+//! the citation, require-ban and harness-dashv gates on the same planted tree: the green run carries a clean control per gate
+//! (every citation form the rule licenses, the tower file on a shape helper, the two decoder files on their containers, a harness
+//! tool on the exchange module and one naming the site without dashv), the red run one plant per finding arm
+[test]
+def test_dasllama_cite_require_gates(t : T?) {
+    let tree = getcwd()
+    if (!fexist(path_join(tree, "modules/dasLLAMA/REVIEW.das"))) {
+        t |> skip("not run from the repo root")
+        return
+    }
+    let fixture_r = create_temp_directory_result("review_dasllama_bans")
+    t |> success(fixture_r is value, "temp fixture dir created")
+    if (!(fixture_r is value)) return
+    let fixture = unsafe(fixture_r.value)
+    make_dasllama_fixture(t, tree, fixture)
+    restamp_dasllama_gate(t, fixture)
+    let gate = path_join(fixture, "modules/dasLLAMA/REVIEW.das")
+
+    write_at(t, fixture, "modules/dasLLAMA/ARCHITECTURE_CONTROL.md",
+        "a ledger row followup_vulkan.md sec.3, a HOW_TO_ADD_A_FORMAT.md sec.2 step and another folder's modules/dasVulkan/ARCHITECTURE.md sec.1 stay citable by number\nthe set is cited as `ARCHITECTURE_GPU.md#gpu-backends`, and `ARCHITECTURE_GPU.md` names the document alone\n")
+    write_at(t, fixture, "modules/dasLLAMA/harness/cite_ok.das", "options gen2\n\n// ARCHITECTURE_GPU.md#gpu-backends owns the role table\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_tower.das", "options gen2\n\nrequire dasllama/dasllama_asr_types\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_audio_io.das", "options gen2\n\nrequire audio\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_vision_io.das", "options gen2\n\nrequire stbimage\n")
+    write_at(t, fixture, "modules/dasLLAMA/.das_module", "\"dasllama_tower\", \"dasllama_audio_io\", \"dasllama_vision_io\", " + DASLLAMA_MODULE_LIST)
+    write_at(t, fixture, "modules/dasLLAMA/harness/exchange_ok.das", "options gen2\n\nrequire dashv\nrequire dasllama/dasllama_exchange\n")
+    write_at(t, fixture, "modules/dasLLAMA/harness/site_ok.das", "options gen2\n\nlet SITE = \"https://dasllama.io\"\n")
+    let green = spawn_at(fixture, [gate])
+    t |> equal(0, green.rc, "the licensed citations and requires are green: {green.out}")
+
+    write_at(t, fixture, "modules/dasLLAMA/ARCHITECTURE_SECNUM.md", "the slab rule sits in ARCHITECTURE_IMAGE.md sec.2\n")
+    write_at(t, fixture, "modules/dasLLAMA/REVIEW_BARENUM.md", "the tile rule sits in `ARCHITECTURE_GPU_VULKAN.md` 2.2b\n")
+    write_at(t, fixture, "modules/dasLLAMA/harness/cite_probe.das", "options gen2\n\n// the tile rule: ARCHITECTURE_GPU_VULKAN.md sec.4\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_tower.das",
+        "options gen2\n\nrequire dasllama/dasllama_audio\nrequire dasllama/dasllama_toyfam\nrequire dasllama/dasllama_kokoro\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_audio_probe.das", "options gen2\n\nrequire audio\n")
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_vision_probe.das", "options gen2\n\nrequire stbimage\n")
+    write_at(t, fixture, "modules/dasLLAMA/harness/exchange_probe.das", "options gen2\n\nrequire dashv\n\nlet SITE = \"https://dasllama.io/exchange\"\n")
+    let red = spawn_at(fixture, [gate])
+    t |> equal(1, red.rc, "planted fixture is red")
+    let by_number = "cites an architecture section by number - the set is cited by `<doc>.md#<anchor>` (ARCHITECTURE_COMMON.md); name the heading's anchor"
+    let tower_ban = "the tower helper file requires no carrier and no family file (ARCHITECTURE_MEDIA.md#tower-audio-charters)"
+    for (needle in ["ARCHITECTURE_SECNUM.md:1: {by_number}",
+                    "REVIEW_BARENUM.md:1: {by_number}",
+                    "cite_probe.das:3: {by_number}",
+                    "dasllama_tower.das: requires `dasllama_audio` - {tower_ban}",
+                    "dasllama_tower.das: requires `dasllama_toyfam` - {tower_ban}",
+                    "dasllama_tower.das: requires `dasllama_kokoro` - {tower_ban}",
+                    "dasllama_audio_probe.das: requires `audio` - only dasllama_audio_io.das decodes audio containers (ARCHITECTURE_MEDIA.md#tower-audio-charters)",
+                    "dasllama_vision_probe.das: requires `stbimage` - only dasllama_vision_io.das decodes images (ARCHITECTURE_MEDIA.md#tower-audio-charters)",
+                    "exchange_probe.das: requires dashv and names dasllama.io - a harness tool reaches the sidecar exchange through dasllama/dasllama_exchange, never with its own HTTP call (ARCHITECTURE_ENGINE.md#instrumentation-and-support)"]) {
+        t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
+    }
+    for (quiet in ["ARCHITECTURE_CONTROL.md", "cite_ok.das", "dasllama_audio_io.das:", "dasllama_vision_io.das:", "exchange_ok.das", "site_ok.das"]) {
+        t |> success(find(red.out, quiet) < 0, "the control drew no finding beside the plants: {quiet}")
+    }
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
 def make_vulkan_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasVulkan/daslib/vulkan_toy.das", "options gen2\n")
     write_at(t, root, "modules/dasVulkan/daslib/vulkan_toy_boost.das", "options gen2\n")

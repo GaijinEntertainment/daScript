@@ -14,6 +14,8 @@ require ?das_metal dasllama/dasllama_metal_common  // the coverage census rail
 require ?das_metal dasllama/dasllama_metal_decode  // decode stats + shutdown rails
 require ?das_metal metal/das_metal_boost  // device probe
 require ?vulkan dasllama/dasllama_vulkan_common  // the vulkan census rail (spec-only here)
+require ?vulkan dasllama/dasllama_vulkan_tower   // set_vulkan_tower - the serving census pins the TTS rows' knob ON
+require daslib/defer
 require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model_ — the census's model-switch drops
 require dasllama/dasllama_whisper   // the cov_tower whisper row
 require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GELU carrier
@@ -1085,6 +1087,11 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"), "qwen2moe", none)
             // the UD-IQ2_XXS 30B: the resident MoE block's s and e stamps over iq2xxs expert planes, whole on a 16 GB card
             vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "qwen3moe", none)
+            let tower_found = vulkan_tower_on()   //! the TTS rows serve on the tower knob: pinned on, restored after
+            set_vulkan_tower(true)
+            defer() {
+                set_vulkan_tower(tower_found)
+            }
             cov_tower_styletts2(t)
             cov_tower_pocket(t)
             vk_kernel_coverage_report()

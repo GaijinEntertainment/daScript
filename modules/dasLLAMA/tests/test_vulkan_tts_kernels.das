@@ -22,15 +22,6 @@ require math
 //! the duration sigmoid sums, the column statistics with the fused AdaIN stamps and the residual join - with the
 //! poisoned-element control on every compare.
 
-def private row_fill(n : int; mul, add : int; scale, off : float) : array<float> {
-    var a : array<float>
-    a |> resize(n)
-    for (i in range(n)) {
-        a[i] = float((i * mul + add) % 97) * scale - off
-    }
-    return <- a
-}
-
 //! y[rows x d] = x[rows x n] w[d x n]^T (+ b) summed in k order - the tile's own order, so the compare is tight
 def private f32_gemm_ref(x, w, b : array<float>; rows, d, n, wstride, xstride : int; bias : bool) : array<float> {
     var y : array<float>
@@ -129,31 +120,6 @@ let private GARBAGE = 7.5       //! the prefix before a plane's element base: a 
 //! within `bar` relative of the larger magnitude, floored at 1 - `mismatch_rel`'s test on one element
 def private rel_ok(x, y, bar : float) : bool => abs(x - y) <= bar * max(1.0, max(abs(x), abs(y)))
 
-//! the index of the largest |got - want| (0 when every element agrees)
-def private maxdiff_at(got, want : array<float>) : int {
-    var m = 0.0
-    var at = 0
-    for (i in range(length(got))) {
-        let dd = abs(got[i] - want[i])
-        if (dd > m) {
-            m = dd
-            at = i
-        }
-    }
-    return at
-}
-
-//! the NaN elements of `a`: the sentinel words a dispatch left
-def private nan_count(a : array<float>) : int {
-    var n = 0
-    for (v in a) {
-        if (is_nan(v)) {
-            n++
-        }
-    }
-    return n
-}
-
 //! `a` behind `base` elements of `GARBAGE`: a device plane whose rows start at an element base
 def private with_base(a : array<float>; base : int) : array<float> {
     var out : array<float>
@@ -165,18 +131,6 @@ def private with_base(a : array<float>; base : int) : array<float> {
         out[base + i] = a[i]
     }
     return <- out
-}
-
-//! a device buffer holding `a` whole
-def private dev_upload(a : array<auto(TT)>) : uint64 {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let bytes = long_length(a) * int64(typeinfo sizeof(type<TT>))
-        let dev = make_device_buf(bytes)
-        upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(a[0])), bytes)
-        return dev
-    } else {
-        return 0ul
-    }
 }
 
 let private GA_C = 72       //! the row width: a row straddles the 256-element workgroups
@@ -677,12 +631,13 @@ def private colstats_ref(x : array<float>; rows, c : int) : array<float> {
     return <- st
 }
 
-//! the four column-statistics passes over x [rows][c] into `std`'s stats rows, the partials past them
-def private colstats_enc(raw : VkCommandBuffer; var h : VkHaz; xd : uint64; bx : int64; std : uint64; bst : int64; rows, c : int; bit : uint) {
+//! the four column-statistics passes over x [rows][c] into `std`'s stats rows, the partials past them (the command buffer and
+//! hazard set untyped: the file compiles with no vulkan module, where nothing instantiates this)
+def private colstats_enc(raw; var h; xd : uint64; bx : int64; std : uint64; bst : int64; rows, c : int; bit : uint) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nblk = tts_stats_blocks(int64(rows))
-        var pa = TtsStatsArgs(t = uint(rows), c = uint(c), rb = TTS_STATS_ROWS, nblk = uint(nblk), poff = uint(2 * c))
-        var s1 = set_tts_colpart_sum_cls(fixed_array(xd, std, std), fixed_array(bx, bst, bst), fixed_array(0u, bit, bit))
+        var pa = TtsStatsArgs(t = uint(rows), c = uint(c), nblk = uint(nblk), poff = uint(2 * c))
+        var s1 = set_tts_colpart_sum_cls(fixed_array(xd, std), fixed_array(bx, bst), fixed_array(0u, bit))
         enc_tts_colpart_sum_cls(raw, h, s1, pa, nblk)
         var s2 = set_tts_colreduce_mean_cls(fixed_array(std, std), fixed_array(bst, bst), fixed_array(bit, bit))
         enc_tts_colreduce_mean_cls(raw, h, s2, pa, tts_colreduce_wgs(int64(c)))
@@ -694,10 +649,21 @@ def private colstats_enc(raw : VkCommandBuffer; var h : VkHaz; xd : uint64; bx :
 }
 
 //! the stats plane's bytes for `rows` x `c`: the two stats rows and the block partials
-def private colstats_bytes(rows, c : int) : int64 => tts_stats_floats(int64(rows), int64(c)) * 4l
+def private colstats_bytes(rows, c : int) : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return tts_stats_floats(int64(rows), int64(c)) * 4l
+    } else {
+        return 0l
+    }
+}
 
-def private ensure_colstats : bool
-    => ensure_tts_colpart_sum_cls() && ensure_tts_colreduce_mean_cls() && ensure_tts_colpart_sq_cls() && ensure_tts_colreduce_sq_cls()
+def private ensure_colstats : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return ensure_tts_colpart_sum_cls() && ensure_tts_colreduce_mean_cls() && ensure_tts_colpart_sq_cls() && ensure_tts_colreduce_sq_cls()
+    } else {
+        return false
+    }
+}
 
 //! one statistics shape: x [rows][c] off a mean, the stats plane under a NaN fill
 def private colstats_arm(t : T?; rows, c : int) {
@@ -860,7 +826,8 @@ def test_vkt_adain(t0 : T?) {
             var s_l = set_tts_adain_leaky_cls(fixed_array(xpd, yld, std, hd, wnd), fixed_array(bxp, by, bst, bh, bwn), fixed_array(0u, B_YL, B_ST, 0u, 0u))
             var s_s = set_tts_adain_snake_cls(fixed_array(xpd, ysd, std, hd, wnd), fixed_array(bxp, by, bst, bh, bwn), fixed_array(0u, B_YS, B_ST, 0u, 0u))
             var s_i = set_tts_adain_leaky_cls(fixed_array(xid, xid, std, hd, wnd), fixed_array(bxp, bxp, bst, bh, bwn), fixed_array(B_XI, B_XI, B_ST, 0u, 0u))
-            var pa = TtsAdainArgs(c = uint(c), t = uint(AD_T), eps = AD_EPS, xoff = uint(AD_XOFF), yoff = uint(AD_YOFF), hoff = uint(AD_HOFF),
+            static_assert(AD_EPS == TTS_ADAIN_EPS, "the CPU oracle's eps is the stamps' literal")
+            var pa = TtsAdainArgs(c = uint(c), t = uint(AD_T), xoff = uint(AD_XOFF), yoff = uint(AD_YOFF), hoff = uint(AD_HOFF),
                 gwoff = uint(AD_GWOFF), gboff = uint(f.gboff), aoff = uint(f.aoff))
             var pi = pa
             pi.yoff = uint(AD_XOFF)
@@ -899,16 +866,6 @@ def test_vkt_adain(t0 : T?) {
             t |> skip("dasVulkan not present")
         }
     }
-}
-
-//! true when every element of `a` is bit-equal to `v`
-def private elem_all(a : array<float>; v : float) : bool {
-    for (e in a) {
-        if (e != v) {
-            return false
-        }
-    }
-    return true
 }
 
 let private AS_N = 1030     //! four whole workgroups and six more
