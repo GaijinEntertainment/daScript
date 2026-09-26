@@ -1274,9 +1274,10 @@ run the parity rail of `_tts_parity.das` per size and a facade smoke cell that s
 sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings;
 `test_kitten_synthesis_metal` (nano) is the synthesis across the tower knob through
 `tts_gpu_synthesis` (`_tts_parity.das`; kokoro's twin is `test_kokoro_synthesis_metal`): on the
-served lane every chunk's decode seat served, one tower encode per seat per chunk, the knob-off
-chunks declined by name at every seat (the generator seat's included), the generator seat never
-reached while the decode seat serves, the tower leg audible, the sample counts within a twentieth
+served lane every chunk served at every seat but the generator's, one tower encode per seat per
+chunk, the knob-off chunks reaching every seat (the generator seat's included), serving nothing and
+declining by name at each, the generator seat never reached while the decode seat serves, the
+tower leg audible, the sample counts within a twentieth
 (the q8 CPU chain quantizes its activations, so its durations can round a frame apart); on the
 reference lane, one captured noise stream on both legs, the sample counts equal - the durations
 token for token. The sample-wise figures are logged, not gated: an uncaptured synthesis draws its

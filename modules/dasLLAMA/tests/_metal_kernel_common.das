@@ -19,7 +19,7 @@ def buf_u32(dev; v : uint) : auto => buf_fill(dev, 1, v)
 def buf_f32(dev; v : float) : auto => buf_fill(dev, 1, v)
 
 //! One 64-lane 1-D dispatch of `total` threads: the pipeline set, the block binds, the threadgroups dispatched.
-def dispatch_64_lanes(t : T?; queue; tag : string; pso; total : int; blk : block<(enc : MetalComputeEncoder?)>) : bool {
+def dispatch_64_lanes(t : T?; queue; tag : string; pso; total : int; blk : block<(enc : MetalComputeEncoder?)>) : bool {   //! the block's type is what lets a caller write `$(enc)`; every consumer loads this module behind `?das_metal`
     var err2 : string
     let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)

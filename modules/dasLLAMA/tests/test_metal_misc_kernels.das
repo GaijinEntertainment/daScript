@@ -1383,10 +1383,9 @@ def private bias_rows_gate(t : T?; dev, queue; nrows, dim : int; gelu : bool) {
     delete want
 }
 
-// The conv-frontend im2col vs the CPU walk — bit-exact scatter with the "same"-pad zero
-// edges; both source layouts (chmajor mel vs row-major y1) and both strides.
-// Negative control recorded 2026-08-16: dropping the -1 pad shift redded all four cells.
-//! k=3 on the shared stamps (conv1 on CHMAJOR, conv2 row-major), the panel padded to the GEMM's 32 lattice with zeros.
+//! The conv-frontend im2col against the CPU walk - a bit-exact scatter with the "same"-pad zero edges, both source
+//! layouts (chmajor mel, row-major y1) and both strides: k=3 on the shared stamps (conv1 on CHMAJOR, conv2 row-major),
+//! the panel padded to the GEMM's 32 lattice with zeros; a poisoned source element must red the panel.
 def private im2col3_gate(t : T?; dev, queue; rows, nch, srclen, stride : int; chmajor : bool) {
     let tag = "im2col3 rows={rows} nch={nch} stride={stride} chmajor={chmajor}"
     var err : string
@@ -1425,6 +1424,19 @@ def private im2col3_gate(t : T?; dev, queue; rows, nch, srclen, stride : int; ch
     }
     if (ran) {
         t |> equal(buf_mismatch_exact(bcol, want, tag), 0)
+        src[0] += 2.0   // row 0's centre tap reads it, on both layouts
+        var bsrc2 = buf_upload(dev, src)
+        var bcol2 = buf_fill(dev, total, -333.0)
+        let ran2 = dispatch_64_lanes(t, queue, "{tag} poison", pso, total) $(enc) {
+            metal_set_buffer(enc, bsrc2, 0ul, 0)
+            metal_set_buffer(enc, bcol2, 0ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
+        }
+        if (ran2) {
+            t |> success(buf_mismatch_exact(bcol2, want, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned source element reds the panel")
+        }
+        metal_release(bsrc2)
+        metal_release(bcol2)
     }
     metal_release(bsrc)
     metal_release(bcol)

@@ -1869,7 +1869,7 @@ def private pk_row_scale_gate(t : T?; dev, queue) {
 }
 
 //! rows [7][96] rotated over 64 columns from column 16 (two heads of 32) at positions 5..: the CPU's `rope_rows` on the same columns
-//! The codec's rope: MetalRope over rows at a stride from a column, the tables bound at a position's row
+//! The codec's rope: MetalRope over rows at a stride from a column, the tables' first row position 0
 def private rope_stride_gate(t : T?; dev, queue) {
     let tag = "rope stride"
     var err : string
@@ -3518,6 +3518,17 @@ def private moe_router_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bool
     }
     t |> success(ran, "{tag}: encode: {err}")
     t |> equal(buf_mismatch_exact(by, want), 0)
+    let got <- buf_download(by, npos * ne, type<float>)
+    var mx = 0.0
+    var at = 0
+    for (i in range(npos * ne)) {
+        let d = abs(got[i] - want[i])
+        if (d > mx) {
+            mx = d
+            at = i
+        }
+    }
+    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {mx} at stream {at / ne} expert {at % ne}\n")
     metal_release(bw)
     metal_release(bx)
     metal_release(by)
@@ -4350,7 +4361,7 @@ let private MX4_VT = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,
                                  0.0, -1.0, -2.0, -3.0, -4.0, -6.0, -8.0, -12.0)
 
 //! An expert stack's planes in `fmt` (q8: plane 1 empty, one blob serves both views) and their exact dequant, BIT-exact under any GPU reduction order.
-def private moe_gemv_planes(fmt : MoeGemvFmt; rows, n : int) : tuple<p0 : array<uint8>; p1 : array<uint8>; wref : array<float>> {
+def private moe_gemv_planes(fmt : MoeGemvFmt; rows, n) : tuple<p0 : array<uint8>; p1 : array<uint8>; wref : array<float>> {   //! `rows`, `n` untyped: q8_blob_fill sits behind the optional das_metal require
     var p0 : array<uint8>
     var p1 : array<uint8>
     var wref : array<float>
