@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the refuted kernel shapes
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
-carries section 2.2b: the tensor-GEMM and fused-attention shapes that measured out, the retained
+carries the tensor-GEMM and fused-attention shapes that measured out, the retained
 reference arms beside them, and the sanctioned float-A stamps. The GPU backend role table this
 section builds on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 

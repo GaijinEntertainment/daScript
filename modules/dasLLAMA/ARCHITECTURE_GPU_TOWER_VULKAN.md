@@ -1,10 +1,10 @@
 # dasLLAMA Architecture - the Vulkan tower and ASR-decoder drivers
 
 Companion to `ARCHITECTURE_GPU_TOWER.md`; a section is cited by its anchor. This document
-carries sections 2.2aq-2.2ar, the Vulkan tower driver's row classes and attention routes, and its
-encode chains, and section 2.2at, the Vulkan ASR-decoder driver. The Metal sections they cite by
-number - 2.2w, the tower attention routes, and 2.2x, the encode chain's shape - stay in
-`ARCHITECTURE_GPU_TOWER.md`.
+carries the Vulkan tower driver's row classes and attention routes, its encode chains, and the
+Vulkan ASR-decoder driver; the StyleTTS2 seats are `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`. The
+Metal sections cited - the attention routes (`ARCHITECTURE_GPU_TOWER.md#tower-attn-routes`) and
+the encode chain's shape (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`) - stay in that file.
 
 ### The Vulkan tower's row classes and attention routes {#vk-tower-routes}
 
@@ -30,17 +30,17 @@ the towers take three routes:
   fused [q | k | v] row (qwen3v) is read through the restride's slot stride and offset, so no
   copy splits it.
 - **The window route** serves qwen25v's block-diagonal layers in f32 on the compact rows, as the
-  Metal per-window route does (2.2w): one workgroup a (window, head), the window's rows (64 at
+  Metal per-window route does (`ARCHITECTURE_GPU_TOWER.md#tower-attn-routes`): one workgroup a (window, head), the window's rows (64 at
   most, `wlo` the row starts) attend each other and nothing else, the scores in workgroup memory.
   No restride and no f16 shadow: the coopmat tile's f16 staging noise compounds over the 28
   window layers of a 32-block tower - a slotted f16 tile reads 0.16 to 1.5 x rms against the
   exact chain at 32 blocks, the f32 window route 0.02 to 0.09, the Metal rung's order.
 
-The Metal driver keeps the compact 72-wide heads on its own flash kernel (2.2w); the Vulkan
+The Metal driver keeps the compact 72-wide heads on its own flash kernel (`ARCHITECTURE_GPU_TOWER.md#tower-attn-routes`); the Vulkan
 driver pays the restride instead, because the flash template's coopmat typedefs size on the head
 and 72 is off every fragment lattice. Per family, both drivers:
 
-| family | head | Metal attention (2.2w) | Vulkan attention | Vulkan weights |
+| family | head | Metal attention (`ARCHITECTURE_GPU_TOWER.md#tower-attn-routes`) | Vulkan attention | Vulkan weights |
 |---|---|---|---|---|
 | gemma4v | 64 | the slab trio | the compact route, h64 tile | the q8 image, gathered on upload |
 | gemma3v | 72 | the flash route (rows a multiple of 64), else the slab trio | the padded route, h128 tile | the q8 image, gathered on upload |
@@ -53,9 +53,9 @@ and 72 is off every fragment lattice. Per family, both drivers:
 `dasllama_vulkan_tower.das` fills the gemma4v, gemma3v, qwen3v and qwen25v hook slots, the three
 audio blocks seats - the whisper-class block loop (`register_tower_blocks_gpu`), gemma4a's
 (`register_gemma4a_gpu`) and canary's (`register_canary_gpu`) - and the audio front seats
-(qwen3a's mel and conv front, gemma4a's whole chunk, canary's front; 2.14 in
-`ARCHITECTURE_MEDIA.md`) on a build without das_metal (the Metal driver owns them there). Each
-blocks chain is 2.2x's shape: one command buffer per encode walks the blocks dispatch for dispatch
+(qwen3a's mel and conv front, gemma4a's whole chunk, canary's front;
+`ARCHITECTURE_MEDIA.md#tower-gpu-hook`) on a build without das_metal (the Metal driver owns them there). Each
+blocks chain is the Metal encode chain's shape (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`): one command buffer per encode walks the blocks dispatch for dispatch
 as the family's CPU loop does, the CPU loop is the specification, and the residual stream comes
 back into the family's state. A front chain is the same shape over the family's front: it starts
 from the CPU-windowed frames (`canary_window_frames`, gemma4a's and qwen3a's windowing halves - the

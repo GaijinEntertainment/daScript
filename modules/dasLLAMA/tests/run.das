@@ -166,6 +166,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vision.das",
                     "modules/dasLLAMA/tests/test_vulkan_dec_tail.das",
                     "modules/dasLLAMA/tests/test_vulkan_tower_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tts_conv_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_tts_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
@@ -285,7 +286,8 @@ def area_tests(area : string) : array<string> {
     } elif (area == "tts") {
         return <- [ "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
                     "test_tts_g2p.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
-                    "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_voice_prompts.das", "test_vulkan_tts_kernels.das" ]
+                    "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_voice_prompts.das", "test_vulkan_tts_conv_kernels.das",
+                    "test_vulkan_tts_kernels.das" ]
     } elif (area == "infra") {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das", "test_bench_rows.das",
                     "test_box_ident.das", "test_box_profile.das", "test_dasllama_lint_contracts.das",
@@ -334,6 +336,7 @@ def area_image_arms(area : string) : string {
 //! reaches every area (the safe default for a new module until it gets a row)
 let MODULE_AREAS <- {
     "dasllama_tower" => "audio,vision", "dasllama_metal_tower" => "audio,vision,tts", "dasllama_vulkan_tower" => "audio,vision",
+    "dasllama_tts_slab" => "tts", "dasllama_vulkan_tts" => "tts",
     "dasllama_asr" => "audio", "dasllama_asr_types" => "audio", "dasllama_audio" => "audio",
     "dasllama_audio_embedder" => "audio", "dasllama_audio_io" => "audio", "dasllama_canary" => "audio",
     "dasllama_gemma4a" => "audio", "dasllama_metal_asr_dec" => "audio", "dasllama_vulkan_asr_dec" => "audio", "dasllama_parakeet" => "audio",

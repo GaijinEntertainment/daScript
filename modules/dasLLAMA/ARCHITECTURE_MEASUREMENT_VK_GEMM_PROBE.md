@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the Vulkan GEMM probe
 
 Companion to `ARCHITECTURE_MEASUREMENT.md`; a section is cited by its anchor. This
-document carries section 2.5a: the arms `harness/vk_gemm_probe.das` times, the shapes they run
+document carries the arms `harness/vk_gemm_probe.das` times, the shapes they run
 at and the alternates they are read against. The benchmark rig that produces recorded numbers,
 the tune gate and the instrumentation rails stay in `ARCHITECTURE_MEASUREMENT.md`.
 

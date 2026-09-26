@@ -61,6 +61,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   encode chains, the StyleTTS2 synthesis chain, and the Pocket TTS codec and frames seats.
 - `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower's row classes and attention routes, the
   Vulkan tower driver's encode chains, and the Vulkan ASR-decoder driver.
+- `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md` - the StyleTTS2 synthesis seats on the Vulkan tower: the
+  shared weight slab, the f32-exact front end, the seats' scratch and declines.
 - `ARCHITECTURE_GPU_QUANT_PLANES.md` - the Metal kq split scale plane, the iquant GEMV grid read
   with its f4-slab twin, and the Metal GEMV site abstraction.
 - `ARCHITECTURE_GPU_PREFILL.md` - the Metal prefill driver's GEMM form ladder, dev-W knee map,

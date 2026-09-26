@@ -331,10 +331,30 @@ gated (the shared q8 triple beside the routed pair, its gate logit past the rout
 and ungated (the same at unit gate, a second span record after a reset; the reference without the
 shared expert must miss the device row in both) - plus the `vulkan_moe_span` override reached
 through its registry.
+`test_vulkan_tts_conv_kernels.das` - model-free (a Vulkan device, else skips): the TTS tower's
+Vulkan sequence classes against the CPU chain - `test_vkt_tts_im2col` feeds the conv im2col
+(`TtsIm2col`) through the biased f32 GEMM over the slab-layout weight rows and holds the result to
+the CPU `conv1d` end to end, a forward k5 conv at 22 channels (the column rows' pad past k x cin
+under poisoned weights, the columns at an offset) and a transposed k4 stride-2 one at 16 (x at an
+offset); `test_vkt_tts_lstm_dir` holds one LSTM direction (`TtsLstmDir`) at hidden 64 and 200 over
+gates the CPU `linear_rows` computed, both directions into one shared row set (the backward w_hh
+and gates at offsets) against the CPU `bilstm`, and the forward weights walked backward against the
+CPU's backward walk, which must move the output off the forward walk; every output under a NaN
+fill, every compare with its poisoned element.
 `test_vulkan_tts_kernels.das` - model-free (a Vulkan device, else skips): the TTS tower's Vulkan
 kernel classes against their CPU oracles - `test_vkt_f32_gemm` holds the f32-exact tile GEMM's two
 stamps (plain, biased) at shapes off every tile and workgroup multiple against the k-ordered sum,
-with the weight pad past K poisoned and a poisoned-element control on each compare.
+with the weight pad past K poisoned and a poisoned-element control on each compare; and the PL-BERT
+seat's row classes - `test_vkt_row_gather` holds the embedding gather bit-exact against the CPU
+word + position + type sum at element bases off zero (controls: the id-0 sum misses the device, two
+positions on one word differ, the prefix before the output base keeps its sentinel),
+`test_vkt_gelu_tanh` the tanh GELU against the CPU `gelu` at the 1e-5 f32 bar over a run with a
+three-element tail and inputs past the tanh clamp (control: the bar tells the f16 LUT form apart),
+`test_vkt_leaky` the leaky ReLU bit-exact against `leaky_relu` (a negative element scaled, a
+positive one passed) - both maps leaving the elements outside their run untouched - and
+`test_vkt_attn` the bidirectional attention against `attention_rows` at the 1e-5 bar at t 37 /
+4 x 64, t 130 / 2 x 128 and the full 512-key row / 2 x 64 (control: zeroing the last key moves the
+first query row).
 
 `test_vulkan_tower_kernels.das` - model-free (a Vulkan device, else skips): the vision and audio towers'
 kernel classes against their CPU oracles - the bidirectional flash tiles (h64 and the padded h128

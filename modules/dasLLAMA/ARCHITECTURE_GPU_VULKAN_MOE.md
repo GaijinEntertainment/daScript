@@ -1,20 +1,20 @@
 # dasLLAMA Architecture - the Vulkan resident driver's MoE block
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
-document carries sections 2.2af, 2.2ag and 2.2ak - the resident driver's routed block in its two eras:
+document carries the resident driver's routed block in its two eras:
 the MoE block of the prefill window, and the whole-model driver's MoE token command, and the
 gemma-4 form both eras take. The window
 chain the prefill block runs inside (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`), the recurrent block beside it (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`), the Q8
 requant byte store (`ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store`), the decode GEMV family's grid codebook buffer (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`) and the
 tile probe's shared descriptor set layout (`ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout`) are `ARCHITECTURE_GPU_VULKAN.md`'s. The
 token command's attention and recurrent heads this block's tail follows, and the per-op tier's
-decode era - the decode span whose kernels the routed block runs - are
-`ARCHITECTURE_GPU_VULKAN_DECODE.md`'s sections 2.2r-2.2v. The cooperative-matrix tiles the
-expert GEMMs run on and the per-op tier's MoE expert chain are
-`ARCHITECTURE_GPU_VULKAN_GEMM.md`'s sections 2.2k-2.2m, 2.2q and 2.2ae, and the lane split of
-the decode GEMV family the token command's expert GEMVs take is its section 2.2ah. What a model has to fit
-on the card before any of this runs - the residency plan that sizes the expert planes, and the
-marks swap - is `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`'s sections 2.2n-2.2o and 2.2an. The GPU backend
+decode era - the decode span whose kernels the routed block runs - are in
+`ARCHITECTURE_GPU_VULKAN_DECODE.md`. The cooperative-matrix tiles the expert GEMMs run on and
+the per-op tier's MoE expert chain are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, and the lane split
+of the decode GEMV family the token command's expert GEMVs take is
+`ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes`. What a model has to fit on the card before any
+of this runs - the residency plan that sizes the expert planes, and the marks swap - is in
+`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. The GPU backend
 role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The MoE block of the prefill window {#vk-prefill-moe-block}

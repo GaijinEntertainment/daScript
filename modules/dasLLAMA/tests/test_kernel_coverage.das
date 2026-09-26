@@ -936,6 +936,14 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // StyleTTS2 driver alone, which no zoo carrier reaches. Its coverage is test_vkt_f32_gemm in
     // test_vulkan_tts_kernels.das
     "f32_gemm_cls_spv", "f32_gemm_b_cls_spv",
+    // the PL-BERT seat's row classes (the embedding gather, the tanh GELU, the leaky ReLU, the bidirectional
+    // attention): the Vulkan StyleTTS2 driver's alone, which no zoo carrier reaches. Their coverage is
+    // test_vkt_row_gather, test_vkt_gelu_tanh, test_vkt_leaky and test_vkt_attn in test_vulkan_tts_kernels.das
+    "tts_row_gather_cls_spv", "tts_gelu_tanh_cls_spv", "tts_leaky_cls_spv", "tts_attn_cls_spv",
+    // the TTS tower's conv im2col and LSTM direction: the text encoder's and the predictors' sequence classes, dispatched
+    // by the Vulkan StyleTTS2 driver alone, which no zoo carrier reaches. Their coverage is test_vkt_tts_im2col and
+    // test_vkt_tts_lstm_dir in test_vulkan_tts_conv_kernels.das
+    "tts_im2col_cls_spv", "tts_lstm_dir_cls_spv",
     // the scalar beta/alpha GEMM: the same route split for a hybrid's f32 beta/alpha rows on the f16
     // feed; off the f16 feed (DASLLAMA_COOPMAT=sdot4) it runs. Its coverage is the dn_ba run of
     // test_vkd_dn_family in test_vulkan_kernels.das

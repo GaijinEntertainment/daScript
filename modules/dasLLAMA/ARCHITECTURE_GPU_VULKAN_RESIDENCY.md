@@ -1,15 +1,13 @@
 # dasLLAMA Architecture - the Vulkan tier's model residency
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
-document carries sections 2.2n-2.2o and 2.2an: the residency plan that sizes a whole model
-before a byte uploads, the marks swap that lets one GPU slot serve many models, and the token
-command's logits landing on the transfer queue. The N-row token command a batched step's rows go
-through, and the residual step's two forms it holds bit for bit, are `ARCHITECTURE_GPU_VULKAN_NROW.md`
-sections 2.2ao and 2.2ap. The prefill chain and byte
-stores that run once a model is resident are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j, 2.2p,
-2.2ab, 2.2ac and 2.2ad, and the cooperative-matrix GEMM tiles under them are
-`ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q and 2.2ae; the per-op tier's decode era is
-`ARCHITECTURE_GPU_VULKAN_DECODE.md` sections 2.2r-2.2v. The GPU backend role table these
+document carries the residency plan that sizes a whole model before a byte uploads, the marks
+swap that lets one GPU slot serve many models, and the token command's logits landing on the
+transfer queue. The N-row token command a batched step's rows go through, and the residual
+step's two forms it holds bit for bit, are in `ARCHITECTURE_GPU_VULKAN_NROW.md`. The prefill
+chain and byte stores that run once a model is resident are in `ARCHITECTURE_GPU_VULKAN.md`, and
+the cooperative-matrix GEMM tiles under them are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the per-op
+tier's decode era is in `ARCHITECTURE_GPU_VULKAN_DECODE.md`. The GPU backend role table these
 sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The residency plan sizes a whole model before a byte uploads {#resident-plan}

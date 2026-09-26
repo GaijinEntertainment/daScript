@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the tower attention routes and encode chains
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
-carries sections 2.2w-2.2x and 2.2au - the three routes that serve tower attention on Metal, the
+carries the three routes that serve tower attention on Metal, the
 one-command-buffer encode chain each family the Metal tower driver serves gets, and the StyleTTS2
 synthesis chain, and the Pocket TTS codec and frames seats. The GPU backend role table these
 sections build on - the tower driver's role row included - stays in `ARCHITECTURE_GPU.md#gpu-backends`.
@@ -59,7 +59,7 @@ GEMM's column lattice) and the head count to the per-head uniform seats.
 The whole StyleTTS2 synthesis of the kitten and kokoro families rides the tower driver as seven
 seats of the family's hook record (`ARCHITECTURE_MEDIA.md#tower-gpu-hook`): PL-BERT, the text encoder,
 the duration encoder, the duration head, prosody, the decode seat and the generator seat. Each
-seat is one command buffer of 2.2x's shape over a per-part weight slab the driver builds once
+seat is one command buffer of the encode chain's shape (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`) over a per-part weight slab the driver builds once
 and keys on a fold of the part's weight addresses - the address of the form each conv serves, the
 q8 quants or the f32 operand - and of the q8 lane's active repack layout, so a reload serving
 another lane or another layout keys differently; the addresses stand for the model because a

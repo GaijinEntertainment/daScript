@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the Metal quant plane reads
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
-carries sections 2.2y-2.2z and 2.2an: the split scale plane a Metal blob stores a superblock
+carries the split scale plane a Metal blob stores a superblock
 format's scale row in, the iquant GEMV codebook grid read with its per-box f4-slab twin, and
 the GEMV site abstraction the decode families share. The GPU
 backend role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.

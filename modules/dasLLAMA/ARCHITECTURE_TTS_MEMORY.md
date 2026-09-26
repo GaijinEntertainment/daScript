@@ -1,7 +1,7 @@
 # dasLLAMA architecture - text to speech, the memory a synthesis holds
 
 The companion `ARCHITECTURE.md` indexes: the mechanisms that decide what a StyleTTS2-lineage
-synthesis (Kitten, Kokoro) allocates, holds and gives back (`ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier`, 2.51-2.53).
+synthesis (Kitten, Kokoro) allocates, holds and gives back (`ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier`).
 `ARCHITECTURE_COMMON.md` (repo root) is the contract. The block home, the facade and the phoneme
 families are `ARCHITECTURE_TTS.md`; the Pocket family's own memory law is `ARCHITECTURE_POCKET.md#pocket-codec-stream`.
 
