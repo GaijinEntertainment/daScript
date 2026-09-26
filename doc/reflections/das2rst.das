@@ -1443,7 +1443,7 @@ def document_module_logger(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Setup", mod, %regex~.*(logger_init|logger_init_tee|logger_set_name|logger_set_path|logger_get_path|logger_get_name)$%%),
         group_by_regex("Level filters", mod, %regex~.*(logger_set_min_level|logger_get_min_level|logger_set_category_level|logger_clear_category_levels)$%%),
-        group_by_regex("Output control", mod, %regex~.*(logger_set_stderr_fallback|logger_set_tee|logger_flush|logger_close|logger_capture_diagnostics)$%%),
+        group_by_regex("Output control", mod, %regex~.*(logger_set_stderr_fallback|logger_set_tee|logger_set_echo_stderr|logger_flush|logger_close|logger_capture_diagnostics)$%%),
         group_by_regex("Log calls", mod, %regex~.*(logger_log|logger_trace|logger_debug|logger_info|logger_warning|logger_error|logger_critical)$%%),
         group_by_regex("Stdout hook", mod, %regex~.*(logger_install_hook)$%%)
     )
