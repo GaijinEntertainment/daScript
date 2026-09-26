@@ -9005,10 +9005,11 @@ struct TtsGatherArgs {
     pos_off : uint    //! the position rows' element base in slab
     type_off : uint   //! the token-type row's element base in slab
     out_off : uint    //! the output rows' element base in out
+    adds : uint       //! 1 = the position and type rows added (PL-BERT), 0 = the word row alone (the text encoder)
 }
 
 //! out[t][j] = word[ids[t]][j] + pos[t][j] + type[j], added in that order - the PL-BERT embedding sum of the CPU
-//! `styletts2_albert`, one element an invocation
+//! `styletts2_albert` - or the word row alone under `adds = 0` (the CPU `gather_rows`), one element an invocation
 [vk_dispatch(name = "tts_row_gather_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TtsRowGather {
     @ssbo @binding = 0 @role = "weight" slab : array<float>
@@ -9022,7 +9023,8 @@ class TtsRowGather {
         if (g < pa.rows * pa.c) {
             let r = g / pa.c
             let j = g % pa.c
-            out[pa.out_off + g] = slab[pa.word_off + uint(ids[r]) * pa.c + j] + slab[pa.pos_off + g] + slab[pa.type_off + j]
+            let wv = slab[pa.word_off + uint(ids[r]) * pa.c + j]
+            out[pa.out_off + g] = pa.adds != 0u ? wv + slab[pa.pos_off + g] + slab[pa.type_off + j] : wv
         }
     }
 }

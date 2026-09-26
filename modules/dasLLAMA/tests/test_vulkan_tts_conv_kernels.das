@@ -56,6 +56,7 @@ struct private ConvGeom {
     xoff : int
     coloff : int
     transposed : bool
+    rows_x : bool   //! x uploaded row-major [tin][cin] (the tower's rows form) and the im2col told so
 }
 
 //! a raw conv - the ONNX weight ([cout][cin][k] forward, [cin][cout][k] transposed) and the bias off `row_fill`
@@ -127,7 +128,11 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom) {
         let kdim = (g.k * g.cin + 31) / 32 * 32
         var w <- slab_rows(c, kdim)
         var x <- row_fill(g.cin * g.tin, 41, 7, 0.05, 2.1)
-        var xdev <- at_offset(x, g.xoff)
+        var x_rows : array<float>
+        if (g.rows_x) {
+            transpose_ct(x, int64(g.cin), int64(g.tin), x_rows)
+        }
+        var xdev <- at_offset(g.rows_x ? x_rows : x, g.xoff)
         var y_ref <- conv_ref(c, x, g.tin)
         let ny = tout * g.cout
         let bx = long_length(xdev) * 4l
@@ -152,7 +157,7 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom) {
         var s_mm = set_f32_gemm_b_cls(fixed_array(wd, cold, yd, bd), fixed_array(bw, bcol, by, bb), fixed_array(0u, B_COL, B_Y, 0u))
         var pc = TtsIm2colArgs(cin = uint(g.cin), tin = uint(g.tin), tout = uint(tout), k = uint(g.k), stride = uint(g.stride),
             pad_l = uint(g.pad), dilation = 1u, transposed = g.transposed ? 1u : 0u, kdim = uint(kdim), xoff = uint(g.xoff),
-            coloff = uint(g.coloff), rows = 0u)
+            coloff = uint(g.coloff), rows = g.rows_x ? 1u : 0u)
         var pm = F32GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, wstride = uint(kdim), boff = 0u,
             xoff = uint(g.coloff), xstride = uint(kdim), yoff = 0u, ystride = uint(g.cout))
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -175,6 +180,7 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom) {
         delete c
         delete w
         delete x
+        delete x_rows
         delete xdev
         delete y_ref
         delete y_dev
@@ -203,6 +209,18 @@ def test_vkt_tts_im2col(t0 : T?) {
             }
             im2col_arm(t, "im2col transposed k4 s2 cin16", ConvGeom(cin = 16, cout = 24, k = 4, stride = 2, pad = 1, tin = 19, tout = 38,
                 xoff = 13, coloff = 0, transposed = true))
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t0 |> run("forward k5 s1 p2 over 22 channels off row-major x: im2col + F32GemmB == the CPU conv1d") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tts_im2col_cls() || !ensure_f32_gemm_b_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            im2col_arm(t, "im2col forward k5 cin22 rows x", ConvGeom(cin = 22, cout = 40, k = 5, stride = 1, pad = 2, tin = 37, tout = 37,
+                xoff = 5, coloff = 0, transposed = false, rows_x = true))
         } else {
             t |> skip("dasVulkan not present")
         }
