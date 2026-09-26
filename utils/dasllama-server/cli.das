@@ -30,6 +30,7 @@ require cli_repl                // the chat loop's logic
 require serving_knobs           // the spellings shared with the server + the --gpu pick
 require model_catalog           // catalog_models_dir
 require dasllama/dasllama_bench // the llama-bench rows - the same rows dasllama-bench and the server's in-process bench run
+require audio/audio_boost       // --play: the spoken reply through the speaker (dasAudio ships with the facade's audio decoding)
 
 let TOOL = "dasllama-cli"
 
@@ -266,16 +267,20 @@ def private queue_audio(m : Model; var chat : ChatSession; var h : Hearing; path
     return true
 }
 
-//! The speech model a run speaks through; `armed` false when none was asked for.
+//! The speech model a run speaks through; `armed` false when none was asked for. `play` asks for
+//! the speaker beside the WAV; the audio system opens on the first clip and closes with the run.
 struct private Speech {
     model : TtsModel = TtsModel()
     voice : string
     speed : float
     armed : bool
+    play : bool
+    speaker : AudioSystemChannels
+    speaker_armed : bool
 }
 
-def private load_speech(rig : Rig; spec, voice : string; speed : float; var why : string&) : Speech {
-    var sp = Speech(speed = speed > 0.0 ? speed : 1.0)
+def private load_speech(rig : Rig; spec, voice : string; speed : float; play : bool; var why : string&) : Speech {
+    var sp = Speech(speed = speed > 0.0 ? speed : 1.0, play = play)
     if (empty(spec)) {
         return <- sp
     }
@@ -328,7 +333,60 @@ def private ensure_dir_for(out : string; var why : string&) : bool {
     return true
 }
 
-//! Speak `text` into `out`; false with the reason when the file did not land.
+//! The audio system, opened on the first clip; a box with no device says so once and the run
+//! keeps writing its files.
+def private arm_speaker(var sp : Speech) : bool {
+    if (sp.speaker_armed || !sp.play) {
+        return sp.speaker_armed
+    }
+    try {
+        sp.speaker = audio_system_create()   // reads --null-audio and --volume off the user args itself
+        sp.speaker_armed = true
+    } recover {
+        note("no audio device for --play ({this_context().last_exception}) - the WAV files still land")
+        sp.play = false
+    }
+    return sp.speaker_armed
+}
+
+def private close_speaker(var sp : Speech) {
+    if (sp.speaker_armed) {
+        audio_system_finalize(sp.speaker.command, sp.speaker.next_sid)
+        sp.speaker_armed = false
+    }
+}
+
+//! Play one clip and block until the mixer reports it stopped - or its length plus half a second
+//! passed, the guard behind that clock.
+def private play_clip(var sp : Speech; rate : int; pcm : array<float>) {
+    if (!arm_speaker(sp)) {
+        return
+    }
+    let seconds = double(length(pcm)) / double(max(rate, 1))
+    var samples := pcm
+    let sid = play_sound_from_pcm(rate, 1, samples)
+    if (sid == INVALID_SID) {
+        note("the speaker refused the clip")
+        return
+    }
+    var status_box = seq_box_create()   // one box per clip: a shared box reads the last clip's stop as this one's
+    set_status_update(sid, status_box)
+    let t0 = ref_time_ticks()
+    var stopped = false
+    while (!stopped && double(get_time_usec(t0)) / 1.0e6lf < seconds + 0.5lf) {
+        status_box |> read() $(s : AudioChannelStatus) {
+            stopped ||= s.state == AudioChannelState.stopped
+        }
+        sleep(20u)
+    }
+    unset_status_update(sid)
+    status_box |> seq_box_release
+    let tenths = int(seconds * 10.0lf)
+    note("played {tenths / 10}.{tenths % 10} s{stopped ? "" : " (the mixer did not report the stop in time)"}")
+}
+
+//! Speak `text` into `out`, then through the speaker when asked; false with the reason when the
+//! file did not land.
 def private speak_to(var sp : Speech; text : string; out : string; var why : string&) : bool {
     if (!ensure_dir_for(out, why)) {
         return false
@@ -339,6 +397,9 @@ def private speak_to(var sp : Speech; text : string; out : string; var why : str
         return false
     }
     note("wrote {out} - {sp.voice}, {timings_line(audio.timings, audio.sample_rate)}")
+    if (sp.play) {
+        play_clip(sp, audio.sample_rate, audio.pcm)
+    }
     return true
 }
 
@@ -543,7 +604,7 @@ def private run_chat(plan : CliPlan; cfg : CliConfig) : int {
             rc = fail(why)
             return
         }
-        eng.sp <- load_speech(rig, !empty(plan.chat.tts) ? plan.chat.tts : cfg.tts, plan.chat.voice, plan.chat.speed, why)
+        eng.sp <- load_speech(rig, !empty(plan.chat.tts) ? plan.chat.tts : cfg.tts, plan.chat.voice, plan.chat.speed, plan.playback.play, why)
         if (!empty(why)) {
             rc = fail(why)
             return
@@ -554,6 +615,7 @@ def private run_chat(plan : CliPlan; cfg : CliConfig) : int {
             eng->emit("{TOOL}: {base_name(plan.common.model)} ready - /help lists the commands, /exit quits\n")
         }
         repl_run(st, eng)
+        close_speaker(eng.sp)
         delete eng.chat
     }
     unsafe {
@@ -654,7 +716,7 @@ def private run_speak(plan : CliPlan; cfg : CliConfig) : int {
     }
     let t_load = ref_time_ticks()
     var why = ""
-    var sp <- load_speech(rig, !empty(plan.speak.tts) ? plan.speak.tts : cfg.tts, plan.speak.voice, plan.speak.speed, why)
+    var sp <- load_speech(rig, !empty(plan.speak.tts) ? plan.speak.tts : cfg.tts, plan.speak.voice, plan.speak.speed, plan.playback.play, why)
     if (!empty(why)) return fail(why)
     note("TTS load {double(get_time_usec(t_load)) / 1.0e6lf} s")
     let out = empty(plan.speak.out) ? "out.wav" : plan.speak.out
@@ -665,6 +727,7 @@ def private run_speak(plan : CliPlan; cfg : CliConfig) : int {
         if (!speak_to(sp, text, out, why)) {
             rc = fail(why)
         }
+        close_speaker(sp)
         if (plan.speak.prof) {
             asr_prof_report()
         }
@@ -693,7 +756,7 @@ def private run_talk(plan : CliPlan; cfg : CliConfig) : int {
     if (!empty(in_file) && empty(samples)) return fail("could not decode audio: {in_file}")
     var m <- load_llm(rig, plan.common.model, why)
     if (!empty(why)) return fail(why)
-    var sp <- load_speech(rig, !empty(plan.talk.tts) ? plan.talk.tts : cfg.tts, plan.talk.voice, plan.talk.speed, why)
+    var sp <- load_speech(rig, !empty(plan.talk.tts) ? plan.talk.tts : cfg.tts, plan.talk.voice, plan.talk.speed, plan.playback.play, why)
     if (!empty(why)) return fail(why)
     let out = empty(plan.talk.out) ? "reply.wav" : plan.talk.out
     let params = sampling_of(plan.sampler, true)
@@ -733,6 +796,7 @@ def private run_talk(plan : CliPlan; cfg : CliConfig) : int {
             rc = fail(why)
         }
         let spoke_s = double(get_time_usec(t2)) / 1.0e6lf
+        close_speaker(sp)
         if (!plan.talk.quiet) {
             note("{stats_line(stats(chat.session))}")
             note("heard {heard_s} s | replied {reply_s} s | spoke {spoke_s} s")

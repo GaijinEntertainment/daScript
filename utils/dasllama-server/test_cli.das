@@ -226,6 +226,19 @@ def test_speak(t : T?) {
         remove(out)
         rmdir(dir_name(out))
     }
+    t |> run("speak --play: the clip plays after the WAV lands (the null backend on this box)") @(t : T?) {
+        return if (model_missing(t, model(KITTEN)))
+        let out = scratch("play.wav")
+        let r = run_cli(["speak", "--tts", model(KITTEN), "-o", out, "--play", "--null-audio", "Played from the command line."])
+        return if (!pass_cell(t, r, "speak --play"))
+        t |> success(fexist(out), "the WAV landed first")
+        t |> success(find(r.out, "dasllama-cli: played ") >= 0, "the run reports the playback: {tail_of(r.out)}")
+        t |> success(find(r.out, "did not report the stop") < 0, "the mixer reported the clip's stop")
+        let plain = run_cli(["speak", "--tts", model(KITTEN), "-o", out, "Not played."])
+        return if (!pass_cell(t, plain, "speak"))
+        t |> success(find(plain.out, "dasllama-cli: played ") < 0, "without --play nothing plays")
+        remove(out)
+    }
     t |> run("speak: an unknown lane spelling still speaks (warned, served q8)") @(t : T?) {
         return if (model_missing(t, model(KITTEN)))
         let out = scratch("lane.wav")
@@ -317,6 +330,15 @@ def test_talk_chain(t : T?) {
         t |> success(find(to_lower(r.out), "fellow americans") >= 0, "and it is the clip's words")
         t |> success(fexist(out), "the spoken reply landed")
         t |> success(wav_seconds(t, out) > 0.5lf, "with speech in it")
+        remove(out)
+    }
+    t |> run("talk --play: the spoken reply plays after its WAV lands") @(t : T?) {
+        return if (model_missing(t, model(SMOL)) || model_missing(t, model(KITTEN)))
+        let out = scratch("reply_play.wav")
+        let r = run_cli(["talk", "-m", model(SMOL), "--tts", model(KITTEN), "-p", "Say hello.", "-o", out, "-n", "16", "--play", "--null-audio"])
+        return if (!pass_cell(t, r, "talk --play"))
+        t |> success(fexist(out), "the spoken reply landed")
+        t |> success(find(r.out, "dasllama-cli: played ") >= 0, "the run reports the playback: {tail_of(r.out)}")
         remove(out)
     }
     t |> run("talk: a text prompt -> Qwen3.5-0.8B -> kokoro") @(t : T?) {
