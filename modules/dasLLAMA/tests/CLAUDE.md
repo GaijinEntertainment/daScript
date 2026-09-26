@@ -1233,7 +1233,10 @@ over-bar scorer (the must-EXCEED half of a poison leg) all vision tier-1 tests u
 `test_audio_embedder.das` - stocked suite; model-free cells: the `AudioEmbedder` carrier's own
 arms - the no-audio refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on
 the E2B mmproj, carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft
-token).
+token); the pre-encoded rows seam on a plain chat (`add_user_audio_rows`: a second's clip lands
+25 rows, two clips append, the turn answers and consumes them, a short row block and a queued
+image panic - gated on the E2B Q4_K_M decoder + its bf16 mmproj, loaded staged, no `.dlim`), and
+the no-audio-arm refusal (SmolLM2-135M: a family with no audio markers panics).
 `test_vision_embedder.das` - stocked suite; model-free cells: the `VisionEmbedder` carrier's own
 arms over constructed carriers - the text-only (none) shape, the loader's refusals by name
 (missing file, audio-only mmproj), and the `vision_exec_fmt` lane stamp (the qwen3v q8 flag

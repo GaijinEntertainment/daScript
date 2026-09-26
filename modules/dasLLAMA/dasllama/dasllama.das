@@ -307,6 +307,13 @@ def add_user_image_rows(model : Model; var chat : ChatSession; var rows : array<
     add_user_image_rows_(model, chat, rows, n_rows, grid)
 }
 
+def add_user_audio_rows(model : Model; var chat : ChatSession; var rows : array<float>; n_rows : int64) {
+    //! Queue PRE-ENCODED audio soft-token rows (what ``encode_audio`` emits — ``dim``-wide on
+    //! every family, length-checked) for the next ``respond``. MOVES ``rows``; works on a plain
+    //! chat — no tower needed: the carrier-served families (the gemma-4 E-series) hear this way.
+    add_user_audio_rows_(model, chat, rows, n_rows)
+}
+
 def encode_image(embedder : VisionEmbedder; var scratch : VisionState; img : VisionImage;
                  tag : string; var out : array<float>) : int64 {
     //! The whole image path in one call — geometry, letterbox, normalize, encode — into ``out`` =

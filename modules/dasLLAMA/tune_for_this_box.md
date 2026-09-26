@@ -28,11 +28,10 @@ directly and logs the tune status. `--tune` forces a full re-mint, `--tune-only 
 re-mints one family; `DAS_TUNE_POLICY=error` skips per-start tuning while developing (it
 prints the tuner command instead).
 
-The sibling CLI tools need no per-app scope declaration either, since requiring dasLLAMA pulls
-in its `[tune_scope]`: `ask` (prompt -> completion, reporting ttft + prefill/decode t/s) and
-`wav2txt` (audio -> text, reporting decode/transcribe time + real-time factor) get the same
-`auto` policy by default. The sidecar is per app, so each app mints what the shipped profile
-leaves unanswered on its own first start.
+`dasllama-cli` (`utils/dasllama-server/cli.das`) needs no per-app scope declaration either,
+since requiring dasLLAMA pulls in its `[tune_scope]`: every subcommand gets the same `auto`
+policy by default. The sidecar is per app, so each app mints what the shipped profile leaves
+unanswered on its own first start.
 
 The profiling suite drivers (`performance/gen_profile.das`, `performance/gen_asr_profile.das`)
 carry the same policy - an untuned box tunes itself before the first measurement, and the

@@ -90,6 +90,58 @@ of yours), then either allow it under System Settings > Privacy & Security after
 refused start, or clear the flag once - `xattr -dr com.apple.quarantine dasllama-server.app`.
 Windows SmartScreen shows an unknown publisher: *More info*, *Run anyway*.
 
+## The command line: dasllama-cli
+
+`dasllama-cli` sits beside the server in every bundle (`dasllama-cli.exe` on Linux and Windows,
+`dasllama-server.app/Contents/MacOS/dasllama-cli` on a Mac) and from the source tree runs as
+`bin/daslang -jit utils/dasllama-server/cli.das -- <command> ...`. It is the same engine, the
+same facade and the same backend pick as the server, without the HTTP layer: one model, one
+conversation, one process, so a shell script or a cron job can ask a model, hear a clip or speak
+a line without a server up.
+
+| Command | What it does |
+|---|---|
+| `complete` | complete a prompt, streamed; `--image <file>` with `--image-mmproj` asks about a picture |
+| `chat` | a conversation from the terminal (/help lists the slash commands: /image, /audio, /read, /save, /load, /regen, /clear, /system, /stats, /speak on), or from `--script <file>` one message per line; `--tts` speaks every reply to `reply_<n>.wav` |
+| `transcribe` | an audio file to text through an ASR model (`--asr`, `--mmproj` for a GGUF pair) |
+| `speak` | text to a 16-bit WAV through a TTS model (`--tts`, `--voice`, `--speed`) |
+| `talk` | the chain: `--in <audio>` heard by `--asr`, answered by `--model`, spoken by `--tts` into `--out`; `--prompt <text>` skips the hearing |
+| `embed` | a text's embedding vector, one float per line or `--json` |
+| `tokenize` | a text's token ids and pieces |
+| `bench` | the llama-bench rows on a model - `pp512`, `tg128`, and `tg128@N` with `--npl N` - `-o md` for the table; `dasllama-bench` stays the records instrument |
+
+Every example below runs as written on a box whose models directory carries the named files
+(`utils/dasllama-server/test_cli.das` runs each one):
+
+```sh
+dasllama-cli complete -m SmolLM2-135M-Instruct-Q8_0.gguf --quiet "The capital of France is"
+dasllama-cli speak --tts kitten-nano.gguf -o hello.wav "Hello from the command line."
+dasllama-cli transcribe --asr Qwen3-ASR-0.6B-Q8_0.gguf --mmproj mmproj-Qwen3-ASR-0.6B-bf16.gguf question.wav
+dasllama-cli talk --asr Qwen3-ASR-0.6B-Q8_0.gguf --mmproj mmproj-Qwen3-ASR-0.6B-bf16.gguf --model Qwen3.5-0.8B-Q8_0.gguf --tts kokoro-82m.gguf --in question.wav --out answer.wav
+dasllama-cli chat -m gemma-4-E2B-it-Q4_K_M.gguf --image-mmproj mmproj-gemma-4-E2B-it-bf16.gguf --audio-mmproj mmproj-gemma-4-E2B-it-bf16.gguf
+dasllama-cli bench -m SmolLM2-135M-Instruct-Q8_0.gguf --npl 2 -o md
+```
+
+Every command takes the shared flags the server takes for the same knobs - `--gpu auto | off |
+metal | metal-required | vulkan` (the same auto pick: Metal on a Mac, Vulkan on a card, CPU
+otherwise; `--gpu vulkan` serves a model that fits the card whole from the device, the
+conversation's cache with it), `--quant`, `--kv-dtype`, `--ctx`, `--threads`, `--models-dir` -
+and `<command> --help` lists them with the command's own (from the source tree, `-?` or
+`--show-help`: the daslang host takes `--help` for itself). A bare model name resolves under
+`--models-dir` (`~/.dasllama/models`, where the catalog downloads land). The `dasllama-server.toml`
+in the current directory, else beside the program - the server's own lookup - fills whatever
+the flags leave empty - the
+model (a `[[models]]` roster's default entry included), its `image_mmproj`, the `asr` and `tts`
+models, the backend, the lane cap - so on a box the setup page configured, `dasllama-cli chat`
+with no flags talks to the served model on the served backend; explicit flags win, `--config`
+names another file. The answer goes to stdout alone, so it pipes; the CLI's progress lines and
+the token counters go to stderr (`--quiet` drops the counters); the engine's own notices - a
+missing Metal profile, a GPU decline - land in `logs/dasllama-cli.log` under the das root, the
+way the server's do (from the source tree the tune policy guard still prints its one status line
+first). A fat bundle's first `dasllama-cli` run on a Mac races the Metal crowns once into
+`dasllama-cli.tune.json` beside it, like the server's does, and never again; from the source
+tree it shares the box's tune sidecar with every dasLLAMA program.
+
 ## Run from the source tree
 
 ```sh
@@ -556,6 +608,17 @@ absent; set `DASLLAMA_MODELS_DIR`):
   `/v1/audio/phonemes` document against the facade's own normalizer and chunker, and a
   second boot on the `f32` lane proving the pin reaches the worker. Needs `kitten-nano.gguf` and
   the front-end packs beside it.
+- `test_cli_args.das` - dasllama-cli's model-free half, run everywhere: the plan a command line
+  parses to, the bare-token walk, the help surfaces, the config file's keys and roster, the
+  model-path resolution, and the chat loop's line logic (commands, the `"""` block, the saved
+  transcript).
+- `test_cli.das` - dasllama-cli end to end, one child process per cell as a user runs it: every
+  command on the fastest small models (`SmolLM2-135M-Instruct-Q8_0.gguf`, `kitten-nano.gguf`,
+  `Qwen3-ASR-0.6B-Q8_0.gguf` with its mmproj), the `talk` chain on those and on
+  `Qwen3.5-0.8B-Q8_0.gguf` + `kokoro-82m.gguf`, and the tower cell on `gemma-4-E2B-it-Q4_K_M.gguf`
+  with `mmproj-gemma-4-E2B-it-bf16.gguf` (the picture through the vision tower, the JFK clip
+  through the audio tower, spoken back by `pocket-tts-en-q8.gguf`). Runs on the stocked box at
+  release time.
 - `test_openai_server_mtp.das` - the self-speculation default: a NextN-headed slot drafts at one
   stream and decodes plain at four, an explicit `mtp` wins either way, and a head-less model
   serves plain under the default; read off `/v1/stats`'s `mtp_drafted`. Needs

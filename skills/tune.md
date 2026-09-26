@@ -714,5 +714,5 @@ same-direction twin flips = an estimator change.
 `modules/dasLLAMA/tune_for_this_box.md` - a worked application of this
 framework (the dasLLAMA gen GEMM family), including the measurement
 discipline that separates a real win from a benchmark artifact, and the
-`dasllama-server` / `ask` / `wav2txt` trio sharing one box's winners.
+`dasllama-server` / `dasllama-cli` pair sharing one box's winners.
 ```

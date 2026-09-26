@@ -159,8 +159,8 @@ Every local container on the TTS path is `var inscope`: the persistent heap free
 scope exit, and a bare local holding a per-sentence buffer is a per-sentence leak that ends in
 the OS killing a long run.
 
-The product surfaces sit outside the module: `utils/dasllama-server/txt2wav.das` (text or a
-file -> a WAV, the timings line on stderr) and the server's `/v1/audio/speech` route (a
+The product surfaces sit outside the module: `dasllama-cli speak` (`utils/dasllama-server/cli.das`;
+text or a file -> a WAV, the timings line on stderr) and the server's `/v1/audio/speech` route (a
 dedicated TTS worker thread, one synthesis at a time, the audio served from a temp file the
 route reaps a minute after the wire closes - dasHV writes string bodies only). The rig that
 scores the whole chain is `harness/tts_rig.py` over `harness/tts_synth.das` (sec.2.35).

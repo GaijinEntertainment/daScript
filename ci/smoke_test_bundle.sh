@@ -75,6 +75,7 @@ COMPILE_TESTS=(
     "dascov|utils/dascov/main.das"
     "dasllama-convert|utils/dasllama-convert/main.das"
     "dasllama-server|utils/dasllama-server/main.das"
+    "dasllama-cli|utils/dasllama-server/cli.das"
     "dasllama-server-bench|utils/dasllama-server/server_bench.das"
     "daspkg|utils/daspkg/main.das"
     "detect-dupe|utils/detect-dupe/main.das"

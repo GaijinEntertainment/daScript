@@ -501,8 +501,9 @@
     image row (hand-minted in the gemma3v arc; still stamps `parsec` + a pre-branch sha, and
     the image sweep's catalog does not reach it).
 
-41. **Audio-in-chat serves the whisper-class `AudioTower` families only - the qwen3a conformer
-    (Qwen3-Omni) and gemma4a have no chat splice.** Surfaced by the omni showcase test (the
+41. **`add_user_audio` (samples in) serves the whisper-class `AudioTower` families only - the
+    qwen3a conformer (Qwen3-Omni) has no chat splice, and gemma4a hears only through the
+    pre-encoded rows seam (`add_user_audio_rows` off an `AudioEmbedder`).** Surfaced by the omni showcase test (the
     vision arc): `add_user_audio_`/`create_chat_(model, tower)` ride `AudioTower`
     (qwen2a/ultravox/voxtral); `load_audio_tower` reads the legacy `clip.projector_type` key
     the dual-tower Omni mmproj does not carry, and the qwen3a conformer is a different type
@@ -990,8 +991,7 @@
     kitten's tail trim (`TRIM_TAIL`, 5000 samples) runs per chunk, as the reference runs it per
     `generate` call - a listening-test item, since a chunked paragraph loses 208 ms per chunk;
     (2) `st2_bind` runs at three call sites instead of a post-bind hook in `parse_image`, so a
-    fourth `load_image` path would get an unbound carrier that dies at the first GEMM; (3)
-    `utils/dasllama-server/txt2wav.das` has no test (the `wav2txt.das` precedent); (4) the
+    fourth `load_image` path would get an unbound carrier that dies at the first GEMM; (4) the
     server caps `input` at 4096 characters but nothing caps the normalized length or the chunk
     count, and normalization expands numbers and currency about tenfold; (5)
     `tests/jit_tests/intrinsics.das` keeps its exp2/log2/pow JIT-vs-interpreter comparisons
@@ -1813,3 +1813,19 @@
    Done = `lcpp_bench --tts -m <gguf>` serves the g2p corpus's first N sentences at a named
    voice and prints the per-sentence wall and the real-time factor as its other modalities do,
    `gen_bench_records` carries a `tts` workload, and the StyleTTS2 ledger entry cites the row.
+
+167. **The dasllama-cli follow-up bundle (one PR).** (1) `--verbose`: tee the engine's log
+    records (`logs/dasllama-cli.log` - a missing Metal profile, a GPU decline) to stderr, so a
+    user who never opens the log still sees them; (2) the sampler cost: a sampled decode runs
+    `sample_logits_row` over the whole vocab per token - a k-pass top-k scan, a full sort for
+    top-p, a CDF walk - which on Qwen3.5-4B Q8 under Metal turns 105 tok/s greedy into 76 sampled
+    while llama.cpp's candidate-list sampler costs nothing measurable (93 both ways); done = a
+    partial top-k selection, nucleus and the draw over the k survivors, sampled decode back at
+    greedy speed on that model, `test_sampling.das`'s arms green; (3) a gemma-4 image turn under
+    `set_thinking(false)` stops at its first channel marker with zero tokens (the marker is a stop
+    id in instruct mode), which is why `complete --image` keeps the family's thinking default -
+    done = the instruct-mode media turn answers, or the toggle refuses by name on a media turn;
+    (4) speaker playback for `chat` and `talk` beside the WAV, through the audio device rail;
+    (5) a `REVIEW.das` gate in `utils/dasllama-server/` that checks every `main.das` and
+    `cli_args.das` flag has its README entry and its rst row, after which the two flag-copies
+    rules in that folder's `REVIEW.md` keep only the wording duty.
