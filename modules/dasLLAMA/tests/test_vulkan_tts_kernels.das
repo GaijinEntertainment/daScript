@@ -225,7 +225,7 @@ def test_vkt_row_gather(t0 : T?) {
             nan_sentinel_upload(outd, bout)
             var s = set_tts_row_gather_cls(fixed_array(slabd, idsd, outd), fixed_array(long_length(slab) * 4l, long_length(ids) * 4l, bout), fixed_array(0u, 0u, B_OUT))
             var pa = TtsGatherArgs(c = uint(c), rows = uint(rows), word_off = uint(GA_WORD), pos_off = uint(pos_off), type_off = uint(type_off),
-                out_off = uint(GA_OUT))
+                out_off = uint(GA_OUT), adds = 1u)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tts_row_gather_cls(raw, h, s, pa, tts_row_gather_wgs(int64(total)))
                 cmd_copy_planes(raw, h, fixed_array(outd), host, sizes, B_OUT)
@@ -250,6 +250,23 @@ def test_vkt_row_gather(t0 : T?) {
             }
             t |> success(parted > 0, "tts_row_gather control: two positions on one word differ by their position rows")
             t |> equal(nan_count(prefix), GA_OUT, "tts_row_gather: the prefix before out_off keeps its sentinel")
+            // the text encoder's form: the word rows alone, the position and type rows left out of the sum
+            nan_sentinel_upload(outd, bout)
+            pa.adds = 0u
+            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tts_row_gather_cls(raw, h, s, pa, tts_row_gather_wgs(int64(total)))
+                cmd_copy_planes(raw, h, fixed_array(outd), host, sizes, B_OUT)
+            }
+            let got_plain <- staged(host.mapped, at[0] + int64(GA_OUT) * 4l, total, type<float>)
+            var want_plain : array<float>
+            want_plain |> resize(total)
+            for (r in range(rows)) {
+                for (j in range(c)) {
+                    want_plain[r * c + j] = slab[GA_WORD + ids[r] * c + j]
+                }
+            }
+            t |> equal(mismatch_exact(got_plain, want_plain), 0, "tts_row_gather adds = 0: every element == the word row alone")
+            t |> success(mismatch_exact(got_plain, want) > 0, "tts_row_gather adds = 0 control: the position rows are out of the sum")
             destroy_device_buf(slabd)
             destroy_device_buf(idsd)
             destroy_device_buf(outd)

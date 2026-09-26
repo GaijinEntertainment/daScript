@@ -39,6 +39,18 @@ post-LN block orders them), the norms on the tower's layernorm stamp reading the
 The rows come back to the host through the scratch's own readback buffer; one seat call is one
 submit.
 
+The text seat runs on rows [t][c] where the CPU chain runs channel-major: the embedding rows
+gathered (`TtsRowGather` with the position and type rows switched off), then per conv the
+im2col over the rows form (`TtsIm2col`, column j = tap*cin + ci, the slab's weight-row order)
+and the biased tile over the slot's rows, the layernorm over the row (the CPU's channel
+layernorm per position) on the tower's layernorm stamp, and the leaky ReLU (`TtsLeaky`), the
+conv stack ping-ponging two row sets as the CPU chain does; then the BiLSTM as two directions,
+each its input gates on the biased tile ([t][4H], gate order i, f, g, o) and one workgroup
+walking the recurrence (`TtsLstmDir`, the backward direction writing the second half of the
+shared [t][2H] rows). The rows read back and transpose on the host into the channel-major
+[c][t] the CPU stage answers. Every seat's scratch is one width list: a slot a row set, the
+seat's own slot table naming them.
+
 The declines: `knob`, `shape` (a width off the 64 lattice, a head width other than 64 or 128,
 more than 512 tokens for the attention stage, an LSTM direction over 256 hidden), `device` (the
 tier has no device, or a class failed to build), `memory` (a slab or scratch allocation failed),
