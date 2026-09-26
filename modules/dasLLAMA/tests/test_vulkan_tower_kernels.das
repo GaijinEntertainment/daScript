@@ -257,22 +257,23 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
         let wnd = make_device_buf(bw)
         let pmsd = make_device_buf(bpms)
         let pyd = make_device_buf(bpy)
-        var qd : uint64[8]   // the pairs' Q8_0 planes: the separate pass at an even index, the fused stamp at the odd one after it; 4 and 5 the ff-wide bias arm's
+        let BIAS_PAIR = 2   // the pairs' Q8_0 planes: the separate pass at an even index, the fused stamp at the odd one after it; the bias arm's pair is ff-wide
+        var qd : uint64[8]
         var sd : uint64[8]
-        let sentinels <- @(fused_only : bool) {
+        for (i in range(8)) {
+            let wide = i / 2 == BIAS_PAIR
+            qd[i] = make_device_buf(wide ? bqh : bq)
+            sd[i] = make_device_buf(wide ? bsh : bs)
+        }
+        let sentinels <- @(fused_only : bool) {   // declared after the planes exist: a lambda copies what it captures
             for (i in range(8)) {
                 if (fused_only && i % 2 == 0) {
                     continue
                 }
-                let wide = i == 4 || i == 5
+                let wide = i / 2 == BIAS_PAIR
                 fill_upload(qd[i], 0l, wide ? bqh : bq, I8_SENTINEL_BITS)
                 nan_sentinel_upload(sd[i], wide ? bsh : bs)
             }
-        }
-        for (i in range(8)) {
-            let wide = i == 4 || i == 5
-            qd[i] = make_device_buf(wide ? bqh : bq)
-            sd[i] = make_device_buf(wide ? bsh : bs)
         }
         invoke(sentinels, false)
         unsafe {

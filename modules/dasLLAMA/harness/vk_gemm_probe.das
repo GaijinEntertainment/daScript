@@ -2815,7 +2815,7 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
     let xq_bytes = int64(rows * nbb) * 32l
     let xs_bytes = int64(rows * nbb) * 4l
     let xf_bytes = int64(rows * nbb) * 64l
-    let xf_dev_bytes = int64((rows + READ_SLACK) * nbb) * 64l   //! the m stamp loads a partial last column unclamped: the feed carries the slack rows
+    let xf_dev_bytes = int64((rows + READ_SLACK) * nbb) * 64l   // the m stamp loads a partial last column unclamped: the feed carries the slack rows
     let y_bytes = int64(rows * d) * 4l
     let wqd = make_device_buf(wq_bytes)
     let wsd = make_device_buf(ws_bytes)
@@ -2878,7 +2878,7 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
             }
             vk_check(vkEndCommandBuffer(rawm), null)
             var lm <- [rawl, rawm]
-            let best <- sweep_best_us(lm)   //! the two columns are a race: their rounds alternate, each figure its best round
+            let best <- sweep_best_us(lm)   // the two columns are a race: their rounds alternate, each figure its best round
             cm2l_us = best[0]
             cm2m_us = best[1]
         }
@@ -2911,7 +2911,7 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
     let wq_bytes = int64(totblk) * 32l
     let ws_bytes = int64(totblk) * 2l
     let xf_bytes = int64(rows * nbb) * 64l
-    let xf_dev_bytes = int64((rows + READ_SLACK) * nbb) * 64l   //! the m stamp's unclamped partial column reads the slack rows
+    let xf_dev_bytes = int64((rows + READ_SLACK) * nbb) * 64l   // the m stamp loads a partial last column unclamped: the feed carries the slack rows
     let y_bytes = int64(nsplit) * int64(rows * d) * 4l
     let wqd = make_device_buf(wq_bytes)
     let wsd = make_device_buf(ws_bytes)
@@ -2976,7 +2976,7 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
             }
             vk_check(vkEndCommandBuffer(rawm), null)
             var lm <- [rawl, rawm]
-            let best <- sweep_best_us(lm)   //! the two columns are a race: their rounds alternate, each figure its best round
+            let best <- sweep_best_us(lm)   // the two columns are a race: their rounds alternate, each figure its best round
             cm2l_us = best[0]
             cm2m_us = best[1]
             let tr = time_split_reduce(yd, y_bytes, rows, d, nsplit, scl, pc, lwgs)

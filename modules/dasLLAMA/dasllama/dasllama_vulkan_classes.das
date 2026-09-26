@@ -127,8 +127,8 @@ class template Q8BlockStoreT {
     }
 }
 
-// the workgroup reduces the row kernels share (one wg reduces one row): one barrier a reduce, every
-// thread summing the subgroup partials in the same order, so every thread holds the same sum, max or inverse rms
+//! the workgroup reduces the row kernels share (one wg reduces one row): one barrier a reduce, every
+//! thread summing the subgroup partials in the same order, so every thread holds the same sum, max or inverse rms
 [ |> template_struct_instance]
 class template WgReduceBase : Q8BlockStoreT {
     @workgroup part : float[128]   //! two slots of 64 partials, one per subgroup (subgroupSize >= 4 floor)

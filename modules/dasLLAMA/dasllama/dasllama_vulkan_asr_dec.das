@@ -202,10 +202,13 @@ def private wd_dev_buf(bytes : int64) : uint64 => soft_device_buf(g_wd.oom, byte
 [cold_path]
 def private wd_host_buf(bytes : int64; cached : bool) : HostBuf => soft_host_buf(g_wd.oom, bytes, cached)
 
-//! the waiting cross-KV layouts of `ds` (the caller matched `g_wd_pend_uid`) landed in its `kx` / `vx` - the state in hand, so the
-//! write lands in live memory
+//! the waiting cross-KV layouts of `ds`, where they are its own, landed in its `kx` / `vx` - the state in hand, so the write lands in
+//! live memory
 [cold_path]
 def private wd_flush_cross_kv(var ds : DecoderState) {
+    if (g_wd_pend_bytes == 0l || g_wd_pend_uid != ds.gpu_uid) {
+        return
+    }
     let r & = g_wd
     var kxp = unsafe(addr(ds.kx[0]))
     var vxp = unsafe(addr(ds.vx[0]))
@@ -531,7 +534,7 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     g_wd_window_live = false
     g_wd_dropped |> erase(uid)
     if (g_wd_pend_uid == uid) {
-        g_wd_pend_bytes = 0l   //! this window supersedes the state's waiting one, served or not: the CPU chain recomputes on a decline
+        g_wd_pend_bytes = 0l   // this window supersedes the state's waiting one, served or not: the CPU chain recomputes on a decline
     }
     ds.gpu_kv_gen = 0l
     if (!g_wd_env) {
@@ -646,9 +649,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
         panic("dasLLAMA vulkan wdec: this decoder window's cross-attention memory was lost before it was read back - another state's window, a release or a model drop took its device planes; ONE live decoder window per process, and a state decodes only a window it started after the loss")
     }
     if (!g_wd_window_live || g_wd_window_uid != uid) {
-        if (uid != 0ul && g_wd_pend_uid == uid && g_wd_pend_bytes > 0l) {
-            wd_flush_cross_kv(ds)
-        }
+        wd_flush_cross_kv(ds)
         if (ds.gpu_kv_gen != 0l && ds.n_past > 0l) {
             panic("dasLLAMA vulkan wdec: the device decoder window was evicted mid-window - ONE live decoder window per process (a second DecoderState may not interleave whisper_cross_kv/whisper_decode_batch)")
         }
@@ -657,9 +658,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
     if (n > WD_ROW_CAP) {
         if (ds.n_past == 0l) {
             g_wd_window_live = false
-            if (g_wd_pend_uid == uid && g_wd_pend_bytes > 0l) {
-                wd_flush_cross_kv(ds)
-            }
+            wd_flush_cross_kv(ds)
             return wd_decline(VulkanWdecDecline.rows)
         }
         panic("dasLLAMA vulkan wdec: decode batch of {n} exceeds the {WD_ROW_CAP}-row step cap mid-window")

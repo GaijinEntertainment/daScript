@@ -21,8 +21,9 @@ what the file holds - to an `ARCHITECTURE_*.md` companion in the same change, ne
 file's charter line.
 
 **A `followup_*.md` row's number never changes and is never reused: a row a diff adds takes a
-number higher than every number that file has ever carried, deleted rows included; a row keeps
-its number while its text narrows to what remains of its own work.** Text cites rows by number.
+number higher than every number that file has ever carried, deleted rows included; a diff that
+lands part of a row's work edits that row's text down to the remaining work under its number -
+never deletes the row and adds the rest under a new one.** Text cites rows by number.
 
 **A diff that adds, removes, or moves a section of an `ARCHITECTURE_*.md` companion, or adds
 or removes a companion, lands, in the same change, every text that states the companion's

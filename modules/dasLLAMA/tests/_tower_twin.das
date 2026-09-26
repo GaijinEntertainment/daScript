@@ -291,11 +291,11 @@ def twin_poison(tt : T?; r : TwinResult; zero_block : int64; twp : auto(TW); var
 
 //! a vision canvas three ways on the patch grid's counters, then - `zero_block` >= 0 - the input poison over the q8 tower
 //! `mint_poisoned` returns with that block zeroed; `encode` is the family's encode of the canvas
-def twin_canvas(tt : T?; family, kind : string; w, h : int; patch : int64; extra : string; tw : auto(TW); var st : auto(ST);
+def twin_canvas(tt : T?; family, kind : string; w, h : int; patch : int64; log_suffix : string; tw : auto(TW); var st : auto(ST);
                 tw_exact : TW; var st_exact : ST; zero_block : int64; mint_poisoned : block<(zb : int64) : TW>;
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let spec = TwinSpec(family = family, tag = "{kind} {w}x{h}", n_layer = tw.n_layer, log_suffix = extra, metric = TwinMetric.maxdiff)
+        let spec = TwinSpec(family = family, tag = "{kind} {w}x{h}", n_layer = tw.n_layer, log_suffix = log_suffix, metric = TwinMetric.maxdiff)
         let npos = (int64(w) / patch) * (int64(h) / patch)
         let r <- twin_three_way(tt, spec, tw, st, tw_exact, st_exact, encode) $(legs) {
             twin_counters(tt, spec.tag, legs, spec.n_layer, npos)

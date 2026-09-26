@@ -387,7 +387,7 @@ def private vt_unbind_batch_sets(var r : VtResident) {
     r.bound_qkv = -1
 }
 
-let private VT_TILE_CM2_KEY_BASE = 1000   //! a cm2 tile's key in the set caches: the token column past the q8 batch variants' 0..5
+let private VT_TILE_CM2_KEY_BASE = 1000   //! the cm2 tiles' key base in the set caches, past the q8 batch variants' 0..5 (a tile's key adds its token column)
 
 def private vt_tile_key(t : VtTile) : int => t.tc > 0l ? VT_TILE_CM2_KEY_BASE + int(t.tc) : t.v
 
@@ -538,8 +538,7 @@ def private vt_release_scratch(var r : VtResident) {
 //! the objects) alone; the stem's pending rows and the encoder-output handoff go with the planes they name
 [cold_path]
 def private vt_forget_scratch(var r : VtResident) {
-    r.x_pend_bytes = 0l
-    r.x_pend_ptr = null
+    vt_x_drop_pending(r)
     g_vt_aud_out_bytes = 0l
     r.cap_rows = 0l
     r.pad_dp = 0l
@@ -1220,7 +1219,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
             vt_g4a_regions(t.layers[l], d, ff, recs)
             for (g in range64(VT_G4A_GEMMS)) {
                 let rid = l * VT_G4A_GEMMS + g
-                let rows = g == VT_G4A_REL ? rel_cap_rows : vt_tile_rows(rec_tiles[g], npos)   //! the rel record keeps its raw rows: its planes are sized to them, and a forced l column would read past them
+                let rows = g == VT_G4A_REL ? rel_cap_rows : vt_tile_rows(rec_tiles[g], npos)   // the rel record keeps its raw rows: its planes are sized to them, and a forced l column would read past them
                 let groups = g == VT_G4A_REL ? g_rel : (g == VT_G4A_PW1 ? g_2d : ((g == VT_G4A_FF_UP || g == VT_G4A_FF_UP_1) ? g_ff : g_d))
                 g_vt_maps[rid] = vt_sched_map(mp, cur, rid, recs[g].woff / q8e, rows, groups)
             }
@@ -2079,9 +2078,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     }
     let bx = npos * d * 4l
     if (r.x_ready) {
-        r.x_ready = false   //! the stem's rows taken on the device: nothing pending any more
-        r.x_pend_bytes = 0l
-        r.x_pend_ptr = null
+        vt_x_drop_pending(r)
     } else {
         upload_region_at(r.x_dev, 0l, unsafe(addr<uint8 const?>(x[0])), bx)
     }
@@ -2253,9 +2250,14 @@ def private vt_x_flush(var r : VtResident) {
         return
     }
     readback_range(r.x_dev, VT_X, r.host, r.x_pend_ptr, r.x_pend_bytes)
+    vt_x_drop_pending(r)
+}
+
+//! the stem's rows no longer pending: taken on the device, landed, or gone with their plane
+def private vt_x_drop_pending(var r : VtResident) {
+    r.x_ready = false
     r.x_pend_bytes = 0l
     r.x_pend_ptr = null
-    r.x_ready = false
 }
 
 //! a decline after the stem served: the stem's rows land in `s.x` first, since the CPU block loop reads them
@@ -2325,7 +2327,7 @@ def private vt_aud_attach(var r : VtResident; t : AudioTower) : bool {
         g_vt_ln_offs[l] = enc_layer_offsets(t, l)
     }
     let lay = active_q8_repack_layout(g_active_needs_repack)
-    let lnp_rows = 2l * t.d_model   //! the post-norm's weight and bias rows ride the norms plane behind the layers'
+    let lnp_rows = 2l * t.d_model
     let rows_n = t.n_layer * t.layer_stride + lnp_rows
     let key = vt_key(t.qblob, t.qscales, t.fblob, t.layers_off, rows_n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     if (r.key == key) {

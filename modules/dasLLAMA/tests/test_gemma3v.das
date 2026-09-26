@@ -246,7 +246,7 @@ def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int
 
 //! the input poison of a device-side dump bar: the q8 tower with `POISON_BLOCK` zeroed, served by the driver, must EXCEED the
 //! bar its dump holds - a bar the poison clears measures nothing
-def private dump_poison_leg(tt : T?; mm : string; kind : string; logname : string; rel : float) {
+def private dump_poison_leg(tt : T?; mm : string; kind : string; logname : string; bar_rms : float) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var o = OracleEncode()
         if (!load_oracle_encode(path_join(path_join(models_dir(), "gemma3-vision-oracle"), logname), o)) {
@@ -257,8 +257,8 @@ def private dump_poison_leg(tt : T?; mm : string; kind : string; logname : strin
         var stp = Gemma3vState()
         let px = int(twp.image_px)
         let planes <- make_planes(kind, px, px)
-        dump_poison(tt, "gemma3v", kind, POISON_BLOCK, rel, twp, stp,
-            $(t; var s; var out) => gemma3v_encode(t, s, planes, t.image_px, t.image_px, out)) $(out) => encode_excess(out, int(twp.proj_dim), o, TIER1_ABS, rel)
+        dump_poison(tt, "gemma3v", kind, POISON_BLOCK, bar_rms, twp, stp,
+            $(t; var s; var out) => gemma3v_encode(t, s, planes, t.image_px, t.image_px, out)) $(out) => encode_excess(out, int(twp.proj_dim), o, TIER1_ABS, bar_rms)
         delete stp
         delete twp
     }

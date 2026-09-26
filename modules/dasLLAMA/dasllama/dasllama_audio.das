@@ -1413,7 +1413,6 @@ def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
     encoder_blocks_cpu(t, s, npos)
 }
 
-//! the pre-LN block loop on the CPU
 def private encoder_blocks_cpu(t : AudioTower; var s : EncoderState; npos : int64) {
     let tt = npos
     let d = t.d_model

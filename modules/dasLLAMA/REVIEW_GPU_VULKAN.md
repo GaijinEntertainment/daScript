@@ -23,9 +23,9 @@ the stamps of one `[vk_dispatch]` class template, picked by a shape argument - t
 stamp list in `ARCHITECTURE_GPU.md` sec.1.5, in the same change.**
 
 **Never size a buffer bound as one SSBO (shader storage buffer) range above
-`vk_max_storage_range()` - check the size at the site that computes it, not at the site that
-binds it; a chain entry's one check of the largest size any of its buffers takes satisfies this
-for every buffer that size covers.** The bind site cannot shrink a buffer that was sized wrong.
+`vk_max_storage_range()` - compare it where its size is computed: at the site that computes that
+buffer's size, or once at the function that starts the encode chain binding it, against a size no
+buffer of that chain can exceed.** The bind site cannot shrink a buffer that was sized wrong.
 
 **Never cache a descriptor set or a host address - a pointer into CPU memory - across
 dispatches in state that `vk_drop_model_state` does not clear** - hold it in
@@ -235,10 +235,10 @@ form that leaves its list installed sends every later one-row profile to another
 returned before it submits any command that writes the buffer that copy reads.** The host's wait
 is the only order between the copy's read and that write.
 
-**An integer division or modulo in a kernel body - in `dasllama/dasllama_vulkan_classes.das`, in
-any method the body calls, or in a helper a kernel body reaches (`dasllama/dasllama_gpu_math.das`) -
-whose
-divisor is not a literal or a template constant - a push-constant field, bare or computed from -
+**An integer division or modulo in `dasllama/dasllama_vulkan_classes.das` kernel code - a kernel
+body or any method it reaches through calls, `dasllama/dasllama_gpu_math.das`'s helpers included -
+whose divisor is not a literal or a template constant (a push-constant field, bare or computed
+from one)
 either clamps the divisor to at least one (`max(1u, ...)`) before it divides, or sits inside an
 `if` whose condition tests the divisor expression as the division reads it and is false when
 that expression is zero; a test on any other field, one the divisor is computed from included,

@@ -759,8 +759,8 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
                     tt |> equal(rows1 - rows0, 1l, "a first batch past the row cap declined `rows`")
                     tt |> equal(vulkan_wdec_stats().steps, d1.steps, "and the device served no step: the CPU chain decoded it over the flushed memory")
                     dev_logits := sg.w.ds.logits
+                    wdec_flush_compare(tt, m.whisper, cpu_logits, dev_logits, cpu_moved)   // inside the queue: the argmax is the parallel one
                 }
-                wdec_flush_compare(tt, m.whisper, cpu_logits, dev_logits, cpu_moved)
                 delete cpu_logits
                 delete cpu_moved
                 delete dev_logits

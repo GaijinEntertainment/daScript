@@ -117,28 +117,28 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let planes <- make_planes(kind, w, h)
         var cpu : array<float>
-        var gpu : array<float>
-        var ncpu = 0l
-        var ngpu = 0l
+        var dev : array<float>
+        var n_cpu = 0l
+        var n_dev = 0l
         set_vulkan_tower(false)
         let d0 = vulkan_tower_stats()
         with_job_que() {
             setup_dasllama_jobque_()
-            ncpu = qwen25v_encode(tw, st, planes, int64(w), int64(h), cpu)
+            n_cpu = qwen25v_encode(tw, st, planes, int64(w), int64(h), cpu)
         }
         let d1 = vulkan_tower_stats()
         set_vulkan_tower(true)
         with_job_que() {
             setup_dasllama_jobque_()
-            ngpu = qwen25v_encode(tw, st, planes, int64(w), int64(h), gpu)
+            n_dev = qwen25v_encode(tw, st, planes, int64(w), int64(h), dev)
         }
         let d2 = vulkan_tower_stats()
         if (d2.encodes == d1.encodes) {
             to_log(LOG_INFO, "qwen25v vulkan twin {kind} {w}x{h}: the driver declined - {vulkan_tower_declines()}\n")
         }
-        twin_counters(tt, "{kind} {w}x{h}", TwinLegs(exact = d0, cpu = d1, dev = d2, n_cpu = ncpu, n_dev = ngpu), tw.n_layer, int64(w / 14) * int64(h / 14))
+        twin_counters(tt, "{kind} {w}x{h}", TwinLegs(exact = d0, cpu = d1, dev = d2, n_cpu = n_cpu, n_dev = n_dev), tw.n_layer, int64(w / 14) * int64(h / 14))
         let rms = rms_of(cpu)
-        let dev_ex = logits_maxdiff(gpu, cpu)
+        let dev_ex = logits_maxdiff(dev, cpu)
         let rel = tw.n_layer <= 8l ? TWIN_REL_VK_SHALLOW : TWIN_REL_VK_DEEP
         let bar = TWIN_ABS_VK + rel * rms
         // the error's shape: NaNs the maxdiff cannot see, the worst token, the tokens past the bar
@@ -150,7 +150,7 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
         for (tok in range(length(cpu) / pd)) {
             var m = 0.0
             for (i in range(pd)) {
-                let a = gpu[tok * pd + i]
+                let a = dev[tok * pd + i]
                 if (is_nan(a)) {
                     nans++
                 }

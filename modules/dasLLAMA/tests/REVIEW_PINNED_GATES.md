@@ -18,8 +18,7 @@ roster, a knob list; not a value the cell's own claim defines - or that a checke
 its evidence, adds the cell carrying it to the pinned set in the same change** - as a named cell;
 or, when every cell of its file is pinned, as that file's entry naming what it pins; or, when the
 file already has an entry, by adding each axis the new cell or assert asserts to that entry's
-parenthetical where it is missing. A new entry in an existing cell's expectation list is not a
-new assert.
+parenthetical where it is missing.
 
 **The pinned set - a cell listed here, or every cell of a listed file, is a pinned test cell,
 and this list is the only test of whether a cell is one:**

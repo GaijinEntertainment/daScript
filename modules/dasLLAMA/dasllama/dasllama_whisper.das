@@ -1007,7 +1007,7 @@ struct DecoderState {
     n_past : int64
     gpu_kv_gen : int64      // 0 until the GPU decode step serves this window's KV (the Metal
                             // driver stamps it; a mid-window eviction then panics loud)
-    gpu_uid : uint64        //! the GPU decoder driver's identity for this state (0 until it serves one): an address is not identity
+    gpu_uid : uint64        //! the GPU decoder driver's identity for this state (0 until its first cross-KV window, served or declined): an address is not identity
     kcache : array<float>   // [L][H][hs][Tmax]
     vcache : array<float>   // [L][H][Tmax][hs]
     kx : array<float>       // [L][H][hs][Ta] cross keys (from the encoder output, per window)
