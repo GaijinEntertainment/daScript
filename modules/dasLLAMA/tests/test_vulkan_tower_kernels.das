@@ -18,11 +18,11 @@ require ?vulkan vulkan
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
-require _compares
+require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
 require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan arms alone
 require dasllama/dasllama_math
 require daslib/jobque_boost
-require daslib/linq   // count - the sentinel words a dispatch left, the pads' zero tails
+require daslib/linq   // nolint:STYLE030,LINT019 — count: the sentinel words a dispatch left, the pads' zero tails, inside the vulkan arms alone
 
 //! The vision and audio towers' Vulkan kernel classes against their CPU oracles (a Vulkan device,
 //! else the cells skip): the bidirectional flash tiles, the tower row classes, the Conformer and

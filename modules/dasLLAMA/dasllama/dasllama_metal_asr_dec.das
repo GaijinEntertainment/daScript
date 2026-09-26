@@ -362,9 +362,7 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
     let tmax = w.n_text_ctx
     let nl = w.n_text_layer
     let p0 = ds.n_past
-    unsafe {
-        whisper_embed_rows(w, toks, n, p0, reinterpret<float?>(metal_buffer_contents(g_wd_sx)))
-    }
+    whisper_embed_rows(w, toks, n, p0, unsafe(reinterpret<float?>(metal_buffer_contents(g_wd_sx))))
     let mapped = w.image_map != null
     var bblobf = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(w.dblob, 0l))), uint64(length(w.dblob) * 4l), mapped)
     var u_d = uniform_u32(uint(d))
