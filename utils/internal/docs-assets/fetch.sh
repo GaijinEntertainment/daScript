@@ -14,6 +14,18 @@
 
 set -eu
 
+# The GitHub API answers a 5xx now and then; one bad response must not red a three-hour nightly.
+retry() {
+    local attempt=1 delay=5
+    until "$@"; do
+        [ "$attempt" -lt 5 ] || return 1
+        echo "[docs_assets] attempt $attempt failed, retrying in ${delay}s" >&2
+        sleep "$delay"
+        attempt=$((attempt + 1))
+        delay=$((delay * 2))
+    done
+}
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../../.." && pwd)"
 dest="$repo_root/doc/source/_static/tutorials"
@@ -23,7 +35,7 @@ mkdir -p "$dest"
 # A staged file's mtime is when it was downloaded, so the release held its then-current bytes at
 # that moment: an asset uploaded since reads newer, and nothing else does. One metadata call
 # answers it for the whole set, and a staged set that is already current costs no download.
-remote="$(gh release view docs-assets \
+remote="$(retry gh release view docs-assets \
     --repo GaijinEntertainment/daScript \
     --json assets \
     -q '.assets[] | select(.name | endswith(".mp4")) | "\(.name) \(.updatedAt)"')"
@@ -50,7 +62,7 @@ if [ "$stale" -eq 0 ]; then
     exit 0
 fi
 
-gh release download docs-assets \
+retry gh release download docs-assets \
     --repo GaijinEntertainment/daScript \
     --pattern '*.mp4' \
     --dir "$dest" \
