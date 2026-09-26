@@ -46,7 +46,7 @@ foreach ($m in @("dasLLAMA","dasLLVM","dasVulkan","dasHV","dasSpirv","dasAudio",
 # 4. server sources + control page + watchdog at the bundle root (main.das's require siblings
 #    live beside it; SERVE_FILE reads control.html from the main.das dir). The watchdog is the
 #    shared supervisor, the static bin\Release\watchdog.exe; watchdog.json pins the deployment name.
-foreach ($f in @("main.das","openai_server.das","llm_scheduler.das","ask.das","wav2txt.das","control.html","watchdog.json","tray.ico",".das_package")) {
+foreach ($f in @("main.das","openai_server.das","model_catalog.das","serving_knobs.das","cli.das","cli_args.das","cli_repl.das","control.html","watchdog.json","tray.ico",".das_package")) {
     Copy-Item (Join-Path $PSScriptRoot $f) $Dest -Force
 }
 Copy-Item (Join-Path $Repo "bin\Release\watchdog.exe") $Dest -Force

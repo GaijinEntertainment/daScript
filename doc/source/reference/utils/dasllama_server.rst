@@ -334,15 +334,10 @@ skips per-start tuning while developing (it prints the tuner command instead of
 running it).
 
 The winners live at ``<das_root>/dasllama.tune.json`` and are shared by every
-dasLLAMA application on the box. Three sibling CLI tools ship alongside the
-server, each with the same ``[tune_policy(missing = "auto")]`` and reading the
-same manifest: ``ask`` (a one-shot ``--prompt`` to completion, reporting ttft
-and prefill/decode t/s), ``wav2txt`` (an ``--file`` audio to transcript,
-reporting decode/transcribe time and the real-time factor) and ``txt2wav`` (a
-``--tts`` model plus ``--text`` or ``--file`` to a WAV, reporting the per-stage
-synthesis time and the real-time factor). Whichever of the four you run first
-tunes the box; the rest are then instant. See :ref:`Kernel tuning <tune>` for
-the framework.
+dasLLAMA application on the box. :ref:`dasllama-cli <utils_dasllama_cli>` ships
+beside the server with the same ``[tune_policy(missing = "auto")]`` and reads
+the same manifest: whichever of the two you run first tunes the box, the other
+is then instant. See :ref:`Kernel tuning <tune>` for the framework.
 
 The sidecar exchange - dasllama.io's tune-sidecar service - is closed by
 default: the three config-only keys ``exchange_accept`` (``verified`` | ``any``

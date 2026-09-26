@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require openai_server                                   // configure_tts / run_server (sibling)
+require _server_rig                                     // child_daslang_argv (sibling)
 require dasllama/dasllama_common
 require daslib/jobque_boost                             // with_job_status / with_channel (server-thread lifecycle, the burst fan-out)
 require daslib/json_boost                               // read_json — the /v1/stats tts block
@@ -12,7 +13,6 @@ require daslib/fio                                      // run_and_capture — t
 require daslib/module_path                              // get_this_module_dir: main.das sits beside this test
 require math                                            // max: the child's captured tail is clamped to its last bytes
 require strings
-require dasllama/dasllama_env
 require dasllama/dasllama_tts                           // tts_normalize / tts_chunks — the /v1/audio/phonemes answer is compared against the facade itself
 
 // /v1/audio/speech on a TTS-only boot (no LLM slot): a WAV answer of speech length with a RIFF
@@ -44,9 +44,6 @@ let TTS_BURST = 24      // past the server's queue cap (16): the overflow must b
 let CHILD_TIMEOUT_SEC = 420.0   // the child parses, JITs and loads before it listens
 let BOOT_POLL_ATTEMPTS = 720    // x 500 ms — inside the child's own timeout, so a hung boot still joins
 
-def private models_dir() : string {
-    return models_dir_resolved()
-}
 let TTS_PATH = path_join(models_dir(), "kitten-nano.gguf")
 let KOKORO_PATH = path_join(models_dir(), "kokoro-82m.gguf")   // the multi-language front end: two dialects to be wrong about
 let POCKET_PATH = path_join(models_dir(), "pocket-tts-en-q8.gguf")   // the text-reading, voice-cloning family: no packs, no phonemes, no speed
@@ -756,29 +753,10 @@ def test_phonemes_on_a_multi_language_model(t : T?) {
 // the child boots from the SAME tree this test runs from: the parent's -dasroot / -module-cache
 // carry over, so a worktree run never compiles main.das against the binary's tree
 def private child_launch_args(server_das : string; port : int; tts_path : string; config : string) : array<string> {
-    var out : array<string>
-    out |> reserve(14)   // argv[0] + -jit + at most two forwarded flag pairs + the script + seven own args
-    var carry = ""   // a forwarded flag, held until its value arrives on the next argv entry
-    for (a in get_command_line_arguments()) {   // a LOCKED array: iterate it, never bind or delete it
-        if (empty(out)) {
-            out |> push(clone_string(a))   // argv[0] = the running daslang binary
-            out |> push("-jit")
-        } elif (!empty(carry)) {
-            out |> push(clone_string(carry))
-            out |> push(clone_string(a))
-            carry = ""
-        } elif (a == "-dasroot" || a == "-module-cache") {
-            carry = clone_string(a)
-        }
-    }
-    out |> push(clone_string(server_das))
     // --config PINS the child's configuration: main.das otherwise auto-discovers a
     // dasllama-server.toml in the cwd or beside itself, and a developer's own (which may be
     // `authoritative = true`, outranking the flags) would decide what this child serves
-    for (a in ["--", "--tts", tts_path, "--port", "{port}", "--config", config]) {
-        out |> push(clone_string(a))
-    }
-    return <- out
+    return <- child_daslang_argv(server_das, ["--", "--tts", tts_path, "--port", "{port}", "--config", config])
 }
 
 // a config carrying one harmless key: the child needs a READABLE one to be pinned to it, and

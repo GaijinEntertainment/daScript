@@ -3167,6 +3167,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `add_assistant` - Inject a KNOWN assistant reply (no generation): prefill the pending user turn and `text` into the KV cache, then close the turn — like `respond` but with a supplied reply.
 - `add_user` - Queue a user message for the next `respond`.
 - `add_user_audio` - Queue audio (16 kHz mono f32 PCM) for the next `respond` — encoded to soft tokens immediately and spliced at the head of the turn before any `add_user` text.
+- `add_user_audio_rows` - Queue PRE-ENCODED audio soft-token rows (what `encode_audio` emits — `dim`-wide on every family, length-checked) for the next `respond`.
 - `add_user_image` - Queue an image for the next `respond` — geometry, letterbox and the embedder run NOW, spliced at the head of the next user turn.
 - `add_user_image_rows` - Queue PRE-ENCODED image soft-token rows (what `encode_image` emits — deepstack models: `(1+n)·dim`-wide, length-checked) with the family's mrope `grid` ((0,0) = sequential) for the next `respond`.
 - `create_chat` - Start a conversation over `model`: resolves the chat template (GGUF-embedded, falling back to the arch registry) and creates the session.
@@ -3244,7 +3245,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 ## dasllama_tts
 
-Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenTTS nano and mini, Kokoro-82M), run text through the das-native front end (normalizer, part-of-speech tagger, grapheme-to-phoneme), and synthesize mono f32 PCM per sentence chunk, timed per model stage. Run with `-jit`; `utils/dasllama-server/txt2wav.das` is the canonical program shape, and the server's `/v1/audio/speech` route serves the same facade.
+Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenTTS nano and mini, Kokoro-82M), run text through the das-native front end (normalizer, part-of-speech tagger, grapheme-to-phoneme), and synthesize mono f32 PCM per sentence chunk, timed per model stage. Run with `-jit`; `dasllama-cli speak` (`utils/dasllama-server/cli.das`) is the canonical program shape, and the server's `/v1/audio/speech` route serves the same facade.
 
 
 ### Constants
