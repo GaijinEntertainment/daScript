@@ -1,12 +1,12 @@
 # dasLLAMA architecture - the Pocket TTS family
 
-The companion `ARCHITECTURE.md` indexes: the Pocket TTS charter (sec.1.7d) and the mechanisms
-the family implements (sec.2.46-2.50). `ARCHITECTURE_COMMON.md` (repo root) is the contract.
+The companion `ARCHITECTURE.md` indexes: the Pocket TTS charter (`ARCHITECTURE_POCKET.md#pocket-tts`)
+and the mechanisms the family implements. `ARCHITECTURE_COMMON.md` (repo root) is the contract.
 The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
 
-## 1. File charters
+## File charters
 
-### 1.7d Pocket TTS
+### Pocket TTS {#pocket-tts}
 
 - **`dasllama_pocket.das`** - the Pocket TTS family (Kyutai; the reference is the `pocket-tts`
   package at 3.1.0, the weights `kyutai/pocket-tts`): a continuous-audio
@@ -19,9 +19,9 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   `pocket.cloning` says whether the codec encoder is inside), the model (`PocketModel`: the
   causal backbone, the one-step flow head, the Mimi-derived codec with or without its encoder,
   the roster and its voice states built from the stored frames), the activation carrier
-  (`PocketScratch`), and the assembly - the voice prompt (sec.2.47), the text prompt, the frame
-  loop (sec.2.48), the codec stream over a chunk's latents or a clip (sec.2.46) - plus the reference
-  driver's text preparation and chunker (sec.2.49). `pocket_speak` is the facade's entry; the
+  (`PocketScratch`), and the assembly - the voice prompt (`ARCHITECTURE_POCKET.md#pocket-voice-state`), the text prompt, the frame
+  loop (`ARCHITECTURE_POCKET.md#pocket-one-step-head`), the codec stream over a chunk's latents or a clip (`ARCHITECTURE_POCKET.md#pocket-codec-stream`) - plus the reference
+  driver's text preparation and chunker (`ARCHITECTURE_POCKET.md#pocket-chunker`). `pocket_speak` is the facade's entry; the
   seams `pocket_encode_latents`, `pocket_decode_latents`, `pocket_voice_state`, `pocket_head`
   and `pocket_synthesize` (with the oracle's noise draws and teacher-forced frames) are what
   `tests/test_tts_pocket.das` holds against `harness/pocket_oracle.py`. Every operator is the
@@ -29,17 +29,17 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   `attention_causal_rows` over a `TtsKvCache`, `gelu`, `layer_scale_rows`; the codec on
   `conv1d_rows`, `conv1d_rows_transposed_depthwise` and `elu_rows`. The codec decoder and the
   frame loop are the two seats of the family's hook record (`PocketGpuDriver`,
-  `register_pocket_gpu`, `pocket_gpu_stats`; `ARCHITECTURE_GPU_TOWER.md` sec.2.2av and
-  sec.2.2aw): a registered driver gets the first refusal of `pocket_decode_latents` and of the
+  `register_pocket_gpu`, `pocket_gpu_stats`; `ARCHITECTURE_GPU_TOWER.md#tower-pocket-codec` and
+  `ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`): a registered driver gets the first refusal of `pocket_decode_latents` and of the
   loop inside `pocket_synthesize` (once the prompt's rows sit in the caches), and the CPU form
   serves a decline; a served loop's wall reads as the backbone's timing, its head timing zero.
   One language per file:
   `pocket.language` names the package config the GGUF came from, and `lang` the code `caps`
   reports; every roster voice speaks that language.
 
-## 2. Mechanisms
+## Mechanisms
 
-### 2.46 The codec runs a chunk in windows, every conv carrying its rows {#pocket-codec-stream}
+### The codec runs a chunk in windows, every conv carrying its rows {#pocket-codec-stream}
 
 The codec's activations sit at audio rate - about 20 MB per second of audio across the chain's
 ping-pong rows, on the encoder and the decoder alike - so a chunk or a clip run in one pass is
@@ -70,7 +70,7 @@ lift, a cache-sized block of input rows at a time, the attention head rows, the 
 grows them back, for a platform where idle memory matters more than the allocation a run then
 pays.
 
-### 2.47 A voice is the backbone's memory of a clip {#pocket-voice-state}
+### A voice is the backbone's memory of a clip {#pocket-voice-state}
 
 There is no speaker vector. A clip at 24 kHz runs through the codec encoder to 32-float latent
 frames at 12.5 Hz, through `speaker_proj` into the backbone's width, and - with the BOS row in
@@ -93,7 +93,7 @@ path over a caller's clip (`tts_register_voice`), so it needs the encoder: a fil
 by 1.5e-2 (they come from another checkpoint revision; `harness/pocket_oracle.py` dumps both and
 `test_pocket_parity`'s voice cell compares the clip path); the clip path is the reference.
 
-### 2.48 One flow step makes the timestep embeddings constants {#pocket-one-step-head}
+### One flow step makes the timestep embeddings constants {#pocket-one-step-head}
 
 The head samples a frame as `x1 = x0 + v(0, 1, x0 | cond)`: one Lagrangian self-distillation
 step from noise `x0 ~ N(0, temperature)`. Its conditioning is `cond_embed(cond)` plus the mean of
@@ -108,7 +108,7 @@ learned BOS latent; for the next, the previous frame's normalized `x1`; the code
 -4.0) plus `frames_after_eos` (the config's, else the text-length guess plus 2), capped at
 `ceil((tokens / 3 + 2) * 12.5)`.
 
-### 2.49 The chunker is the package's, at its released version {#pocket-chunker}
+### The chunker is the package's, at its released version {#pocket-chunker}
 
 `pocket_chunks` reproduces `split_into_best_sentences` of pocket-tts 3.1.0 on the tokenizer's
 ids: the whole text prepared (whitespace folded, a capital first letter, a period after a
@@ -122,7 +122,7 @@ parity matter. The English facade path normalizes the text first (numbers, units
 become words) - the reference does not, which is where its numeric WER comes from; a model in
 another language takes the text as it is, since the normalizer reads English.
 
-### 2.50 The published file carries the served quants {#pocket-q8-file}
+### The published file carries the served quants {#pocket-q8-file}
 
 A file has three lanes and its formats decide which it can take. A K-quant dense layer
 (`convert_pocket.py --kq`: the backbone's and the codec transformers' matrices as Q4_K, the flow

@@ -208,7 +208,7 @@ def finalize(var m : PocketModel) {
     delete m.tok
 }
 
-//! The activation carrier one synthesis reuses (`ARCHITECTURE_TTS_MEMORY.md` sec.2.31's discipline): every stage buffer a
+//! The activation carrier one synthesis reuses (`ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier`'s discipline): every stage buffer a
 //! `@scratch` field grown once, the waveform the output.
 struct PocketScratch {
     @scratch @exact_size rows : array<float>     // the transformer's residual rows

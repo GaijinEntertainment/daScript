@@ -202,7 +202,7 @@ def test_arch_forward_control(t : T?) {
         var out : string
         run_lint(dir, out)
         t |> equal(count_of(out, "does not resolve"), 1, "the dangling citation fires\n{out}")
-        t |> equal(count_of(out, "has no [arch] citation"), 1, "and the anchor it missed is uncited\n{out}")
+        t |> equal(count_of(out, "has no citation"), 1, "and the anchor it missed is uncited\n{out}")
         // mutate: the same citation, pointed at a section the document declares
         plant_code(dir, "ok.das", [Cite(doc = "ARCHITECTURE.md", anchor = "alpha", fn = "only")])
         var fixed : string
@@ -227,8 +227,33 @@ def test_arch_forward_control(t : T?) {
         var out : string
         let rc = run_lint(dir, out)
         t |> equal(count_of(out, "does not resolve"), 0, "a `//` line is prose, not a citation\n{out}")
-        t |> equal(count_of(out, "has no [arch] citation"), 1, "so the document's anchor has no citer\n{out}")
+        t |> equal(count_of(out, "has no citation"), 1, "so the document's anchor has no citer\n{out}")
         t |> equal(rc, 2, "the uncited anchor sets the issue exit code\n{out}")
+    }
+    test_arch_forward_control_tail(t)
+}
+
+
+def private test_arch_forward_control_tail(t : T?) {
+    t |> run("a rule document's `<doc>.md#<anchor>` is a citation: it keeps the anchor alive, and a dangling one is a finding") @(t : T?) {
+        let dir = path_join(tmp_root(), "mdcite")
+        mkdir_rec(dir)
+        plant_doc(dir, "ARCHITECTURE.md", ["alpha", "beta"])
+        plant(dir, "ok.das", "options gen2\n\n[export]\ndef main \{\n    print(\"ok\\n\")\n\}\n")
+        plant(dir, "REVIEW.md", "# rules\n\nA rule leaning on `ARCHITECTURE.md#alpha` and on `ARCHITECTURE.md#gamma`.\n")
+        var out : string
+        let rc = run_lint(dir, out)
+        t |> equal(count_of(out, "REVIEW.md:3: LINT026: citation does not resolve - no such anchor"), 1, "the dangling markdown citation fires at its line\n{out}")
+        t |> equal(count_of(out, "#alpha"), 0, "the cited anchor is alive\n{out}")
+        t |> equal(count_of(out, "#beta"), 1, "the uncited one is the reverse finding\n{out}")
+        t |> equal(count_of(out, "LINT026"), 2, "two findings, no more\n{out}")
+        t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
+        // mutate: the dangling citation fixed
+        plant(dir, "REVIEW.md", "# rules\n\nA rule leaning on `ARCHITECTURE.md#alpha` and on `ARCHITECTURE.md#beta`.\n")
+        var fixed : string
+        let rc2 = run_lint(dir, fixed)
+        t |> equal(count_of(fixed, "LINT026"), 0, "both anchors cited from prose, nothing dangling\n{fixed}")
+        t |> equal(rc2, 0, "and the run is clean\n{fixed}")
     }
     t |> run("a structure's citation is shape-checked by lint - the compiler never sees it") @(t : T?) {
         let dir = path_join(tmp_root(), "malformed")
@@ -302,7 +327,7 @@ def test_arch_roots(t : T?) {
         var out : string
         let rc = run_lint(path_join(root, "ARCHITECTURE.md"), out)
         t |> success(find(out, "0 files") >= 0, "no .das is compiled for a document positional\n{out}")
-        t |> equal(count_of(out, "has no [arch] citation"), 1, "the folder's orphan anchor is found through the document\n{out}")
+        t |> equal(count_of(out, "has no citation"), 1, "the folder's orphan anchor is found through the document\n{out}")
         t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
     }
     t |> run("nested roots fold into one walk - a subfolder's citer satisfies the parent's anchor, and nothing reports twice") @(t : T?) {
@@ -329,7 +354,7 @@ def test_arch_reverse(t : T?) {
         var out : string
         let rc = run_lint(root, out)
         t |> equal(count_of(out, "LINT026"), 2, "the orphan and the sibling's loose anchor are the findings\n{out}")
-        t |> success(find(out, "armed/ARCHITECTURE.md:6: LINT026: anchor \{#orphan\} has no [arch] citation") >= 0,
+        t |> success(find(out, "armed/ARCHITECTURE.md:6: LINT026: anchor \{#orphan\} has no citation") >= 0,
             "the finding names the anchor at its heading line\n{out}")
         t |> success(find(out, "NOTES.md") >= 0, "a sibling folder's loose anchor is owed too\n{out}")
         t |> success(find(out, "\{#cited\}") < 0, "two citations satisfy one anchor\n{out}")

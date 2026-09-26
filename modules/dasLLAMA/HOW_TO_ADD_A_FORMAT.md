@@ -19,7 +19,7 @@ Three questions decide which existing family the format rides; answer them from
 1. **Block geometry.** 256-weight superblock (every K-quant, every i-quant) or 32-weight block
    (`Q4_0`, `Q5_1`, `IQ4_NL`)? A superblock format joins the `kq_sb` lattice (Q8_K activations,
    `% 256` rows, the grp<mr> repack, the stamped kq kernels); a 32-block format rides per-32
-   planes like `q51`. `ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2 owns the lattice split.
+   planes like `q51`. `ARCHITECTURE_ENGINE_FORMATS.md#formats-and-data-movement` owns the lattice split.
 2. **Weight reconstruction.** Shift/mask nibbles (`q4_0`, K-quants), a 16-entry codebook on the
    nibble (`IQ4_XS`, `IQ4_NL`), or a grid gather (`IQ2_*`, `IQ3_*`)? Shift/mask and codebook
    formats keep the k4 nibble tiling and add an unpack step; grid formats decode to bytes first
@@ -272,7 +272,7 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    side of that rule the format sits on - grid or k-lattice - is decided by the
    `harness/vk_gemv_probe.das <n> <d>` sweep, its three lane splits per format (0 = the whole
    subgroup, 16, 8) over the row lengths the families serve; the rule itself is
-   `ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ah (`kq-gemv-lanes`).
+   `ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes` (`kq-gemv-lanes`).
 6. Tests: `tests/_vkd_oracles.das` `kq_cls_ref` arm (the class-on-CPU oracle - the replay never
    runs the kernel head, so any workgroup state the kernel stages, a grid table among them, is
    filled there or the device compares against zeros), the family cells in
@@ -314,7 +314,7 @@ once per word into the host image) and its GEMV template sets `override GRID = t
 literal `GRID_WORDS` / `GRID_OFF` twins of that chain (`check_kq_gemv_grid_literals` holds them), so
 `KqGemvLeafT`'s `stage_grid` stages `gridb[GRID_OFF + idx]` into its `@workgroup` table ahead of
 either shell - never the `*_grid_word` accessor, which the batch and cm2 tiles keep
-(`REVIEW_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN.md` sec.2.2ab).
+(`REVIEW_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`).
 
 ### 6b. The cm2 prefill tile - a decode method on the template
 
@@ -323,7 +323,7 @@ On an NV_coopmat2 device the f16 feed serves every kq format through ONE tile te
 the DEVICE forms (quants as the gather lays them out - k4/k5 re-paired k/k+16, q40/iq4xs/k3
 verbatim; scales the `kq_dev_ssb(fmt)` row - 20 B decoded, or the codebook formats' two words) in
 PAIR form - every shared read derived from `e & ~1u`, both elements computed, the element selected
-last (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k; iq2xxs's `decode` is the model) - plus its width
+last (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`; iq2xxs's `decode` is the model) - plus its width
 stamps (the l, m and s columns, and on a 32-step decode the expert schedule's e column - the m
 column at the format's k step; each names its `BN`, `STILE`, the k step `BK` where it is not the
 template's 64 with the unroll `UNR` that keeps the unrolled block at one superblock (`override UNR
@@ -342,7 +342,7 @@ never select codes out of a register vector per element inside a decode callback
 sub-block scale takes an unpack per element raises the `SCACHE` axis and reads its sub-block's
 premultiplied pair from `sc_cache` in the decode, as k4 and k5 (the five-word K-quant scale row)
 and iq4xs (`SCIQ4`, its two-word row) do; a third scale-row shape adds its fill arm to `sc_fill`
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k), and a scale-caching stamp keeps `BLKW` at
+(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`), and a scale-caching stamp keeps `BLKW` at
 `BK x UNR` so the cache refills once per unrolled block - the module gate holds it on the engine's
 stamps and on the probe's twins in `harness/vk_gemm_probe.das` alike. The four-wide decode twin is
 the format's own: a second `[spirv_decode] def decode_v4` returning `half4` under
@@ -356,7 +356,7 @@ process): a format whose four-wide row loses to its scalar row ships a twin that
 both axes off. Gate: a device-form CPU oracle (`<fmt>f16_gemm_oracle`) and an l/m/s/e cell in
 `tests/test_vulkan_kernels.das`.
 
-The KHR instantiation adds one method (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2ae, its first
+The KHR instantiation adds one method (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`, its first
 paragraph): on the format template a `def override khr_stage16(blk, e0, sbase : uint) : void`
 under `static_if (KHR)` that writes the weight row's 16 values `e0 .. e0 + 16` of block `blk`
 into `khr_ao[sbase .. sbase + 8)` as f16 pairs, reading the plane as words - `wq4[...]` (`uint4`,
@@ -412,7 +412,7 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
 4. **Ladders:** `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`,
    `enc_site_gemv` (the classifier site prefill and decode share), `moe_site_ok` + the `sb1/2/3`
    predicates (shapes), and last the gate. The tensor side is one class: a `stage16` override on
-   `MetalKqMulMmSplitTensorBase` (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2aa) gives the format its T/TH
+   `MetalKqMulMmSplitTensorBase` (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`) gives the format its T/TH
    mul_mm twins, its dev-W dequant pass (`MetalKqDequant<Fmt>`, plus the bake mirror and the split
    set in `pf_kq_split_fmt`), and its routed expert twins (`MetalMoeMulMm<Fmt>SplitT`,
    `ARCHITECTURE_GPU_PREFILL_MOE.md`); the decode GEMV derives from `MetalGemvSiteT` so the

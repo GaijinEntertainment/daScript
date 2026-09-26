@@ -1123,7 +1123,7 @@ def private rd_form_at(pos : int64) : RdForm {
     return (g_rd.wide_on && pos >= RD_WIDE_POS) ? RdForm.wide : RdForm.split
 }
 
-//! the wide twin: the same chain at RD_SPLIT_WIDE_PIECES into `cmd_wide`, its stamp names kept apart (sec.2.2al)
+//! the wide twin: the same chain at RD_SPLIT_WIDE_PIECES into `cmd_wide`, its stamp names kept apart (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
 [cold_path]
 def private rd_record_wide_twin {
     var split_names <- g_rdq_stamp_names
@@ -2347,7 +2347,7 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
         maxpos = max(maxpos, poss[i])
     }
     //! the rows' form is the batch's furthest row's: the unsplit twin while every row sits under RD_UNSPLIT_POS, the split
-    //! form past it at every span (the ruler reads the wide form slower at four rows, sec.2.2al)
+    //! form past it at every span (the ruler reads the wide form slower at four rows, ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
     let unsplit = g_rd.unsplit_on && maxpos < RD_UNSPLIT_POS
     let form = unsplit ? RdForm.unsplit : RdForm.split
     let prof = vk_prof()

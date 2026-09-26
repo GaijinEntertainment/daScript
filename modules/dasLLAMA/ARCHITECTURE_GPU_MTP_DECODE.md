@@ -1,15 +1,15 @@
 # dasLLAMA Architecture - the Metal decode driver's kernel forms and layer encoder
 
-Companion to `ARCHITECTURE_GPU_MTP.md`; section numbers are `ARCHITECTURE.md`'s. This document
+Companion to `ARCHITECTURE_GPU_MTP.md`; a section is cited by its anchor. This document
 carries sections 2.30-2.32, 2.38, 2.38a, 2.39a and 2.39b: the argument-alignment contract a kernel declares on
 its `[metal_dispatch]` - the contract the batch driver's fixed-B mul_mv forms carry - the
 K-quant small-batch form and the row-buffer pad a multi-row verify dispatches under, the
 single-row driver's greedy chain, the batch driver's pre-encoded step, the decode layer encoder,
 and the rotated prefix a rope-store kernel takes. The speculative round these
 forms serve is `ARCHITECTURE_GPU_MTP.md`. The GPU backend role table these sections build on
-stays in `ARCHITECTURE_GPU.md` sec.1.5.
+stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
-### 2.30 The kernel argument-alignment contract {#metal-dispatch-requires}
+### The kernel argument-alignment contract {#metal-dispatch-requires}
 
 **A kernel's argument-alignment contract is declared on its `[metal_dispatch]` and enforced at
 every dispatch.** `requires = "lhs % N, ..."` (lhs a `params=` name or a kargs field) makes the
@@ -31,7 +31,7 @@ tensor twins and the MoE split stamps declare their `rows % 64` beside their own
 A contract on a value that reaches the builder only as a bound uniform BUFFER (the mul_mm's K)
 stays with the caller: the dispatch never pays a readback.
 
-### 2.31 The K-quant small-batch form is a per-box crown {#kq-rows-crown}
+### The K-quant small-batch form is a per-box crown {#kq-rows-crown}
 
 **A verify row on a K-quant plane costs what the box says, not what the kernel comment says.**
 At two to eight rows `enc_kq_site_b` dispatches either the small-batch twin (one weight pass per
@@ -65,12 +65,12 @@ against the tile (the tile is "tensor").
 Past eight rows the form is the panel's. The kq mul_mm twins dispatch `mp / 32` threadgroups
 along M, so `enc_kq_site_b` takes them only over a panel padded to that tile (`mp` a multiple of
 32) - the batch driver's at nine rows and up. The verify's panel is padded to the GEMV forms'
-4-row tile (sec.2.32), so its nine rows (`MTP_MAX_ROWS`, depth 8) ride the small-batch forms: the
+4-row tile (`ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad`), so its nine rows (`MTP_MAX_ROWS`, depth 8) ride the small-batch forms: the
 first eight as the eight-row dispatch, each row past eight as a single pass at its own x and y row
 offsets. An unpadded nine-row panel handed to the mul_mm dispatches no threadgroup at all; the
 twins' `mp % 32` contract names that site instead of leaving the output unwritten.
 
-### 2.32 The verify's row buffers are padded to the GEMV form's row tile {#verify-row-pad}
+### The verify's row buffers are padded to the GEMV form's row tile {#verify-row-pad}
 
 **A multi-row verify sizes every row buffer to a whole 4-row tile, and the pad rows are owned
 scratch.** `acquire_step` takes `mp = ceil(nrows / 4) * 4` (a single-row step stays at 1) and sizes
@@ -96,7 +96,7 @@ surfaces rounds later, on whatever the heap put there. Each group's layer bases 
 slice follow that group's own cap (`group_routes`): a deeper stream's slice is taller than group
 0's, and a base computed from another group's cap addresses the wrong layer.
 
-### 2.38 The single-row driver's greedy chain {#greedy-chain}
+### The single-row driver's greedy chain {#greedy-chain}
 
 **The single-row driver pre-encodes the next step on the GPU's own argmax, and only a greedy
 caller can afford it.** `pre_encode_next` encodes step `pos + 1` while step `pos` runs. Armed,
@@ -135,7 +135,7 @@ The GPU argmax reproduces the CPU sampler's tie-break exactly: a lane keeps the 
 values (strict `>`), and the cross-lane fold takes the lower index on a tie, so the lowest index
 wins - what lets the chain predict a bare-argmax sampler's pick bit for bit.
 
-### 2.38a The batch driver's pre-encoded step {#batch-pre-encode}
+### The batch driver's pre-encoded step {#batch-pre-encode}
 
 **The batch driver encodes the next step under the current one's GPU run and commits it when the
 caller arrives with the tokens.** A batched step's landing state is a `BatchLanding` (the pooled
@@ -172,11 +172,11 @@ to avoid.
 The rail is neutral on the board rows because the step's command buffers already commit
 progressively (`DASLLAMA_METAL_BATCH_NCB`), so the GPU runs under the encode either way; what the
 rows pay is the GPU's idle between the landing and the next commit (`followup_metal.md` row 23).
-The rail is the scaffold for the rows twin of the greedy chain (sec.2.38): a pre-encoded step
+The rail is the scaffold for the rows twin of the greedy chain (`ARCHITECTURE_GPU_MTP_DECODE.md#greedy-chain`): a pre-encoded step
 that opens with the GPU's argmax over the running step's logits and the rows' gathers commits at
 once, and the poke disappears.
 
-### 2.39a The decode driver's layer encoder {#metal-layer-enc}
+### The decode driver's layer encoder {#metal-layer-enc}
 
 **A layer is one chain at every row shape, written once.** `LayerEncT`
 (`dasllama/dasllama_metal_decode.das`) carries the phase order - QKV, the norms, rope plus the KV
@@ -212,7 +212,7 @@ both parts, so `GEMV_SG_MAX_N` is a constant, not a crown. The pick reads n alon
 crossover moves on n and d, which is why the M5 classifier takes the slower form
 (`followup_metal.md` sec.12).
 
-### 2.39b A rope-store kernel rotates a partial carrier's prefix alone {#metal-rope-store-rot}
+### A rope-store kernel rotates a partial carrier's prefix alone {#metal-rope-store-rot}
 
 **A rope-store kernel takes the rotated prefix `rot`, and `rot` alone rotates.** `rot` is 0 or the
 head size for a full head; a partial carrier (qwen3.5: 64 rotated dims of a 256-wide head) rotates

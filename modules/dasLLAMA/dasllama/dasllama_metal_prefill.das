@@ -5015,7 +5015,7 @@ def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wbo
     return true
 }
 
-//! the split-scale formats whose dev-W dequant rides the mul_mm tensor scaffold (sec.2.2aa)
+//! the split-scale formats whose dev-W dequant rides the mul_mm tensor scaffold (ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold)
 def private pf_kq_split_fmt(fmt : KqFmt) : bool {
     return (fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl
         || fmt == KqFmt.q40 || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs)
@@ -7200,7 +7200,7 @@ var private g_pf_env_half_x = true
 var private g_pf_env_dev_w = true
 var private g_pf_env_devw_res_bytes = 0ul   //!< DASLLAMA_METAL_DEVW_RESIDENT budget (MB env, bytes here); 0 = off
 var private g_pf_env_tall = true
-var private g_pf_tall_crowned : bool     //!< the box's "hmm_tall" crown (ARCHITECTURE_GPU_PREFILL.md sec.2.2c)
+var private g_pf_tall_crowned : bool     //!< the box's "hmm_tall" crown (ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder)
 
 def private pf_tall_on : bool => g_pf_env_tall && g_pf_tall_crowned
 var private g_pf_env_qkr = true
@@ -7218,7 +7218,7 @@ let DEVW_BIG_ROWS = 2048l
 let DEVW_LONG_K = 4096l
 let DEVW_LONG_K_ROWS = 1024l
 let DEVW_MAX_TILES = 32l
-var private TALLKQ_MIN_PANEL = 96ul * 1024ul * 1024ul //! DRAM-residency knee, raced on panel BYTES (ARCHITECTURE_GPU_PREFILL.md sec.2.2c/2.2d)
+var private TALLKQ_MIN_PANEL = 96ul * 1024ul * 1024ul //! DRAM-residency knee, raced on panel BYTES (ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder/2.2d)
 var private g_pf_env_span = true
 var private g_pf_env_logits = true
 var private g_pf_env_attn = true

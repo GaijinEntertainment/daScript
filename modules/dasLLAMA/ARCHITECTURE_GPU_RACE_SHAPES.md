@@ -1,11 +1,11 @@
 # dasLLAMA Architecture - the refuted kernel shapes
 
-Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
+Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
 carries section 2.2b: the tensor-GEMM and fused-attention shapes that measured out, the retained
 reference arms beside them, and the sanctioned float-A stamps. The GPU backend role table this
-section builds on stays in `ARCHITECTURE_GPU.md` sec.1.5.
+section builds on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
-### 2.2b Tensor-GEMM shapes that measured out (M5, interleaved-race evidence)
+### Tensor-GEMM shapes that measured out (M5, interleaved-race evidence) {#tensor-gemm-shapes-that-measured-out-m5}
 
 The forms below were built, raced against the crowned tg-staged q8u GEMM at real model
 shapes, and LOST; the probe that holds the GEMM numbers is

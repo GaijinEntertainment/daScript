@@ -1115,7 +1115,7 @@ def test_conv1d_dims_of(t : T?) {
     }
 }
 
-// ARCHITECTURE_TTS.md sec.2.28: a rows kernel's result never depends on how its rows split
+// ARCHITECTURE_TTS.md#tts-two-layouts: a rows kernel's result never depends on how its rows split
 // across the parallel workers. Two axes move that split, and every kernel runs both. The batch
 // lane cap: 1 collapses every rows GEMM to one inline chunk, 0 gives the box's lanes times the
 // oversplit. The jobque worker limit: 1 leaves one live worker plus the caller lane, the box's

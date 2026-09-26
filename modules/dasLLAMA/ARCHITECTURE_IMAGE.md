@@ -1,8 +1,8 @@
 # dasLLAMA Architecture - the prepared-image rail
 
-Companion to `ARCHITECTURE.md`; section numbers are that document's.
+Companion to `ARCHITECTURE.md`; a section is cited by its anchor.
 
-### 2.1 There is ONE way to load a model
+### There is ONE way to load a model {#there-is-one-way-to-load-a}
 
 A weight carrier becomes a live struct through exactly two functions here, and nothing else may
 read weights into one:
@@ -15,7 +15,7 @@ read weights into one:
 Cold and warm therefore yield the SAME struct. A cold load reaches it by building the image and
 handing off *through the file* - write, drop the model, map - so the model and its image are never
 both resident. That handoff costs a close and a re-map of a multi-GB file and is the *slower* cold
-start on purpose, under the tiebreak in `ARCHITECTURE_INVARIANTS.md` sec.3. `cache_via_image` is
+start on purpose, under the tiebreak in `ARCHITECTURE_INVARIANTS.md#inherited-invariants`. `cache_via_image` is
 that handoff for every weight carrier; the streaming forms transcode planes from the gguf
 mapping straight into the image so they never materialize at all.
 
@@ -34,7 +34,7 @@ clears them behind the exe gate at batch start and after each model's last cell,
 re-baked from its gguf on demand. Judging stays forbidden; owning the directory for the batch is
 what licenses deletion without judgment.
 
-### 2.1n A planar image never stands in for the blob flavor {#image-flavor-rebake}
+### A planar image never stands in for the blob flavor {#image-flavor-rebake}
 
 A metal-mode load resolves its flavor in order: the blob image under the metal tag maps first; a
 planar image under the plain identity maps next, and serves only when the model cannot take the
@@ -47,14 +47,14 @@ transform would write borrowed planes, and the rebake never transforms the mappi
 the portable backend, so the packing flags are false there and the form question reduces to shape
 and layout.
 
-### 2.1a Page alignment is the no-copy contract {#image-page-alignment}
+### Page alignment is the no-copy contract {#image-page-alignment}
 
 Every plane section starts on a 16 KiB boundary (`IMAGE_PAGE`, the Apple-Silicon page) and the
 image's total length is a page multiple. The alignment is what lets a mapped plane be wrapped for
 the GPU with no copy - Metal's `bytesNoCopy` requires it - and what lets a load borrow a plane in
 place instead of reading it.
 
-### 2.1b The meta blob leads with two strings {#dlim-meta-head}
+### The meta blob leads with two strings {#dlim-meta-head}
 
 The meta blob sits at the image tail and leads with two strings - the identity the image was baked
 for and its config JSON - then the section table and the walk's scalar stream. The strings lead so
@@ -69,14 +69,14 @@ differs from `IMAGE_VERSION` declines in its own message, naming both numbers an
 command - the one decline a reader can act on without reading the load log. Every other
 mismatch declines on the identity strings this build would accept.
 
-### 2.1c Array payloads reach the archive in bulk {#image-bulk-serialize}
+### Array payloads reach the archive in bulk {#image-bulk-serialize}
 
 Array payloads reach the archive in bulk - one stream call per array (`serialize_pod_array`),
 string arrays as a length vector plus one byte blob (`serialize_strings`). `daslib/archive`'s
 per-element generic dispatch costs on the order of 340 us per element, which puts a 128k-entry
 vocabulary near 238 seconds; the bulk forms make the same work milliseconds.
 
-### 2.1d An interpreted gguf load pays; an image load does not {#image-interp-load}
+### An interpreted gguf load pays; an image load does not {#image-interp-load}
 
 A gguf load's O(model) transform loops run about ten times slower interpreted - a tinyllama load
 takes 53 s against 5.5 s jitted, and a 69 GB hybrid extrapolates to an hour (the repack itself is
@@ -86,14 +86,14 @@ the gguf path and never on the image path. The guard passes on every compiled ti
 standalone exe, and a host that linked the engine's AOT stubs (`aot_kernels_linked`, the probe
 `guard_interp_inference` shares) - because the transform loops are native on each.
 
-### 2.1e Publishing an image {#image-publish}
+### Publishing an image {#image-publish}
 
 An image is published by writing a temp file beside its destination and renaming over it. POSIX
 makes that replace atomic. Windows has no rename-over, so the publish removes the destination
 first and a concurrent reader can see a brief absence - which costs that reader a regenerate,
 never a corrupt map.
 
-### 2.1f The image's size is known before the first byte {#image-sizing-exactness}
+### The image's size is known before the first byte {#image-sizing-exactness}
 
 The image's final size is known before a byte goes out: the meta blob is serialized first, so its
 length is in hand, and every plane contributes its own bytes (`image_total_bytes`). The sink
@@ -104,7 +104,7 @@ pass and the walk - a bug, not a disk condition - and the chunk rail panics rath
 The one decline it survives is failing to get the chunk at all: that happens before the walk
 starts, so the carrier is still whole and its caller keeps serving it.
 
-### 2.1g Identity names the backend, so the backend is selected first {#image-identity-backend-order}
+### Identity names the backend, so the backend is selected first {#image-identity-backend-order}
 
 An image's identity names the active matmul backend, so the backend is selected before any
 identity is computed or compared. `image_identity` is a pure formatter over `DlimConfiguration`;
@@ -123,7 +123,7 @@ on one box with different tune manifests would otherwise bake different identiti
 lane and reap each other's image on every switch.
 
 
-### 2.1h The baked dev-W f16 panel plane {#image-devw-plane}
+### The baked dev-W f16 panel plane {#image-devw-plane}
 
 A metal-flavor image carries `devwf16`: every dev-W-eligible q8, k4/k5/k6 and split-scale
 (iq4xs, iq4nl, q40, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs) weight - a plane job whose f16 panel
@@ -160,7 +160,7 @@ compiler factors the distributed form anyway, and it pins the SIGN of a zero res
 with a negative scale the distributed form yields +0 and the factored one -0. One spelling
 everywhere makes the equality hold by source rather than by toolchain mood.
 
-### 2.1i The baked tower twin-W plane {#image-tower-twin-plane}
+### The baked tower twin-W plane {#image-tower-twin-plane}
 
 A vision- or audio-tower image carries `wblob`: the tower's block and merger GEMM weights
 re-emitted as halfwords in the same element order as the f32 blob, so a site reads its twin at
@@ -188,7 +188,7 @@ The crown set is read when the prefill PSOs compile, not when a GEMM dispatches,
 caller that arms a crown after bring-up runs `metal_prefill_shutdown` to force the recompile;
 without it the f16 arm silently stays unavailable and every encode takes the f32 route.
 
-### 2.1j A split head is part of the image's identity {#image-identity-head-fold}
+### A split head is part of the image's identity {#image-identity-head-fold}
 
 **An image path folds in the split NextN head that rides the load.** `image_path_for` resolves
 `mtp_head_sidecar` for the gguf - the resolver excludes an assistant drafter (`gguf_is_assistant`),
@@ -200,7 +200,7 @@ other forever. Because the fold changes the path, the head's arrival needed no `
 bump: no image at an unchanged path changed content. The fold lives in the path and not yet in
 the baked identity string (`followup_general.md` #99).
 
-### 2.1k The assistant drafter is a ledgered non-image lane {#drafter-non-image-lane}
+### The assistant drafter is a ledgered non-image lane {#drafter-non-image-lane}
 
 **The gemma-4 assistant drafter (`dasllama_mtp_gemma.das`) reads its Q8_0 sidecar straight into
 its own blob and never mints a `.dlim`.** The sidecar is 440 MiB, its Q8_0 blocks are already the
@@ -208,7 +208,7 @@ its own blob and never mints a `.dlim`.** The sidecar is 440 MiB, its Q8_0 block
 image would shorten nothing. The lane is optional (no sidecar, no drafter) and invisible to
 `dasllama-convert`'s list and GC by design.
 
-### 2.1l The layout stamp is one hash over the code that places bytes {#image-layout-stamp}
+### The layout stamp is one hash over the code that places bytes {#image-layout-stamp}
 
 `REVIEW.das`'s `check_image_layout_stamp` hashes the LAYOUT CLOSURE - the top-level definitions
 under `dasllama/` that decide what an image holds and where each byte lands - and compares the
@@ -242,7 +242,7 @@ changes what an image at an UNCHANGED path contains: `IMAGE_VERSION` (`dasllama_
 up, `IMAGE_LAYOUT_STAMP_VERSION` follows it, and the hash is re-stamped alongside. Without the
 bump a stale image stays structurally valid and silently serves a different model.
 
-### 2.1m A hand-listed meta serializer pins its own field count {#image-meta-tripwire}
+### A hand-listed meta serializer pins its own field count {#image-meta-tripwire}
 
 An `Archive` serializer over a struct writes that struct's fields by hand, one call per field, so
 a field added to the struct and forgotten in the list reads back zero on every load - no error,
@@ -260,11 +260,11 @@ The set the check licenses is the bulk payload forms themselves, recognized by t
 than their names: a serializer whose header declares an `array` parameter carries a payload, not
 a struct field list, so it has no count to pin. Everything else taking an `Archive` is checked.
 
-### 2.1o The interleave identity lists every lattice format {#dlim-kq-mr-identity}
+### The interleave identity lists every lattice format {#dlim-kq-mr-identity}
 
 `DlimCpuConfig`'s interleave tag prints one slot per lattice format in `KqFmt` order (`4/4/4/...`), never only the formats a given model uses, so two configurations with different interleaves can never key to the same identity - and a format added without its interleave shows as its own slot rather than shifting the others.
 
-### 2.1p The per-format plane table holds the 256-lattice formats only {#image-kq-table-sb-only}
+### The per-format plane table holds the 256-lattice formats only {#image-kq-table-sb-only}
 
 The `Model`'s per-format plane table (`kq`, one `KqPlanes` slot per `KqFmt`) carries planes for the
 256-element lattice formats alone - the formats `kq_sb` is true for. A 32-block format keeps its

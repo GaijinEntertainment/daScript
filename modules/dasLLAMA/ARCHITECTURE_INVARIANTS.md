@@ -1,8 +1,8 @@
 # dasLLAMA Architecture - inherited invariants
 
-Companion to `ARCHITECTURE.md`; section numbers are that document's.
+Companion to `ARCHITECTURE.md`; a section is cited by its anchor.
 
-## 3. Inherited invariants
+## Inherited invariants {#inherited-invariants}
 
 Durable "why it is built this way" facts harvested from the arcs' design records. Violating one
 of these is a bug, not a style choice.

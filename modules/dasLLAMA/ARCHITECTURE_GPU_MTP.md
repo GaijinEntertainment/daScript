@@ -1,6 +1,6 @@
 # dasLLAMA Architecture - the Metal speculative round
 
-Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
+Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
 carries sections 2.28-2.29, 2.33-2.37a and 2.39: the speculative round on Metal, the box knob
 that sets the depth a round drafts, the draft chains and the verify that commits them, and the
 assistant drafter. `ARCHITECTURE_GPU_MTP_DECODE.md` beside it carries sections 2.30-2.32, 2.38,
@@ -9,9 +9,9 @@ multi-row verify dispatches under, the single-row driver's greedy chain, the arg
 contract a kernel declares on its `[metal_dispatch]`, and the rotated prefix a rope-store kernel
 takes. The GPU backend role table these
 sections build on, the assistant-drafter driver's role row included, stays in
-`ARCHITECTURE_GPU.md` sec.1.5.
+`ARCHITECTURE_GPU.md#gpu-backends`.
 
-### 2.28 The speculative round on Metal {#mtp-round-one-join}
+### The speculative round on Metal {#mtp-round-one-join}
 
 **The speculative round on Metal is one queue, one join.** A round drafts k tokens and verifies them
 as k+1 same-slab rows of the batch driver. The gemma assistant drafter encodes its k steps into ONE
@@ -57,7 +57,7 @@ or a sampler that is a bare argmax (temperature zero, no penalty), keeps the arg
 bit; a penalized greedy sampler goes through the walk too, because its pick is the penalized
 argmax and the raw-argmax match would accept drafts the penalty rejects.
 
-### 2.29 The depth a round drafts {#mtp-depth-knob}
+### The depth a round drafts {#mtp-depth-knob}
 
 **The depth a round drafts is a box knob per round kind, not a controller.** `get_mtp_depth()`
 serves an explicit setting (`set_mtp_depth`, the `--mtp-depth` flag) when one was made, else the
@@ -77,7 +77,7 @@ best there on the M4 Pro, and the M5 Max's depth-3 point (1.31x against 1.23x at
 Qwen3.8-27B, the ruler's `_depths` record) is a direction-grade reading the tuner does not yet
 mint into the knob.
 
-### 2.33 The NextN draft chain reads only what its own chain wrote {#mtp-nextn-chain}
+### The NextN draft chain reads only what its own chain wrote {#mtp-nextn-chain}
 
 **A chained draft carries the head's own hidden and may read slab rows only above the round's
 base.** The chain fills the verify batch: `vbatch[0]` is the committed token, `vbatch[i]` is draft
@@ -89,7 +89,7 @@ watermark only has to cover the base, since a draft at `pos + i` reads exactly t
 chain wrote above it, while the slab capacity must still cover the row being written. Gating on the
 drafted position refuses every round past the first draft.
 
-### 2.34 The verify step re-warms the draft slab from committed history {#mtp-verify-draft-warm}
+### The verify step re-warms the draft slab from committed history {#mtp-verify-draft-warm}
 
 **The NextN verify encodes the draft head as one more layer and re-warms its K/V slab in the same
 command buffer.** `encode_verify_step` builds `nrows` same-slab route entries for every trunk layer
@@ -101,7 +101,7 @@ and the hiddens with `mtp_hnorm`, interleaves `[enorm(embed_i) ; hnorm(h_i)]` pe
 image, runs `mtp_ehproj`, and encodes the verify layer once more at `l == n_layers`. The head
 therefore enters the next round on rows the trunk actually committed, not on the chain's own drafts.
 
-### 2.35 A recurrent verify writes a shadow region and replays into it {#mtp-dn-shadow-replay}
+### A recurrent verify writes a shadow region and replays into it {#mtp-dn-shadow-replay}
 
 **Recurrent layers under a verify never touch their live state, so a partial accept costs one
 replay instead of a re-forward.** When `r.dn_split` is set, every deltanet store of the verify - the
@@ -115,7 +115,7 @@ the same kernels over the same inputs, so the boundary state is bit for bit what
 for that prefix - and `dn_mirror_flip` then makes the shadow live at `pos + a + 1`. A verify whose
 dispatch failed mid-scan leaves the mirror neither live nor re-derivable, so the round drops it.
 
-### 2.36 One assistant-drafter step {#assistant-drafter-step}
+### One assistant-drafter step {#assistant-drafter-step}
 
 **The drafter is a Q-only head on the target's cache at ONE frozen anchor.** A step takes
 `(tok, h)`: it concatenates `embed(tok) * sqrt(tdim)` with the target hidden `h` into a `2 x tdim`
@@ -133,7 +133,7 @@ position. Each attention class ropes on its own terms: the full class over `hs` 
 `rope_freq_base` with the p-RoPE frequency table, the sliding class over its own head size at
 `rope_freq_base_swa` with none.
 
-### 2.37 The batch driver's same-slab mode {#batch-same-slab}
+### The batch driver's same-slab mode {#batch-same-slab}
 
 **In same-slab mode every batch row is the SAME session at consecutive positions, so the mirror is
 prepared once and the whole step lands on one session.** `verify_batch_step` fills the workspace
@@ -146,7 +146,7 @@ session, and `land_sameslab_rows` copies every row's logits into `s.mtp_logits_b
 `s.mtp_logits`, which only a NextN-headed session has sized), the post-final-norm hidden rows into
 `s.mtp_hrows`, and the GPU per-row argmax into `g_sameslab_arg`.
 
-### 2.37a Every stream's round verifies in one pass {#mtp-joint-verify}
+### Every stream's round verifies in one pass {#mtp-joint-verify}
 
 **A scheduler tick verifies every speculative stream's rows together.** `metal_mtp_spec_rounds`
 takes the tick's streams: each drafts its k tokens on its own chain (a cold stream, or one whose
@@ -154,7 +154,7 @@ draft declines, plain-steps and leaves), then the warm streams' k+1 rows go thro
 `g_v_groups` names each stream's rows (`row0`, its slab's `koff`/`voff`/`cap`, its recurrent
 mirror's live and shadow bases, its tape slots), the route table carries every row's own slab and
 position, `recurrent_verify` scans each group's rows against that stream's mirror through the
-kargs row index with the shadow-and-tape discipline of sec.2.35 per group, and the draft head's
+kargs row index with the shadow-and-tape discipline of `ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay` per group, and the draft head's
 inputs assemble per group (a group's saved pre-draft hidden parks at cat row `nr + its index`).
 The landing scatters each group's K/V rows and logits into its own stream; the accept walk, the
 replay (one command buffer per replaying group), the flip and the commit run per stream exactly as
@@ -180,7 +180,7 @@ another order and a solo stream's drafts must round as they do beside others - t
 invariance cell's claim. A stream whose mirror cannot take the row (its watermark or capacity
 short) declines the whole rows step and every warm stream plain-steps.
 
-### 2.39 The verify encodes on the serial encoder {#verify-serial-encoder}
+### The verify encodes on the serial encoder {#verify-serial-encoder}
 
 **The NextN round's verify builds its whole step on one serial compute encoder - the one decode
 path that does not take the concurrent rail.** `encode_verify_step` opens a single encoder on the

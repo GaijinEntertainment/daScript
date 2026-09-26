@@ -1406,7 +1406,7 @@ def gpu_combine_on : bool {
     return g_gpu_combine
 }
 
-//! the split's cost model - the reference box's measurements (ARCHITECTURE_GPU_VULKAN_DECODE.md sec.2.2s: the measured values, tuned)
+//! the split's cost model - the reference box's measurements (ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split: the measured values, tuned)
 let private SPLIT_BUS_BPS = 13.5e9
 let private SPLIT_GPU_ROW_S = 1.2e-6
 let private SPLIT_CPU_ROW_S = 10.0e-6

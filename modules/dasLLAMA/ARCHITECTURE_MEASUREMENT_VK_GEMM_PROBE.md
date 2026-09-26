@@ -1,11 +1,11 @@
 # dasLLAMA Architecture - the Vulkan GEMM probe
 
-Companion to `ARCHITECTURE_MEASUREMENT.md`; section numbers are `ARCHITECTURE.md`'s. This
+Companion to `ARCHITECTURE_MEASUREMENT.md`; a section is cited by its anchor. This
 document carries section 2.5a: the arms `harness/vk_gemm_probe.das` times, the shapes they run
 at and the alternates they are read against. The benchmark rig that produces recorded numbers,
 the tune gate and the instrumentation rails stay in `ARCHITECTURE_MEASUREMENT.md`.
 
-### 2.5a The Vulkan GEMM probe attributes prefill GEMM cost on three axes {#vk-gemm-probe}
+### The Vulkan GEMM probe attributes prefill GEMM cost on three axes {#vk-gemm-probe}
 
 `harness/vk_gemm_probe.das` times one shape at a time: the serving GEMM against its alternates
 on the dense role shapes (gate/up, down, q/wo, k/v - the mm_a kernel against the cm2 l and m
@@ -44,7 +44,7 @@ column's unclamped partial load reads; it skips the sdot4 mm tile, which stalls 
 the fc1 shape, and it needs a coopmat2 device in cm2 mode, exiting non-zero otherwise. Its
 third-party row is ggml's per-op `MUL_MAT` on the same shapes, read off whisper-cli's logger -
 `GGML_VK_PERF_LOGGER=1 whisper-cli -m ggml-large-v3-turbo-q8_0.bin -f jfk.wav -t 16 -bs 1 -bo 1
--nf`, the whisper.cpp build sec.2.20 of `ARCHITECTURE_MEASUREMENT.md` pins. The `mmqx` arm is the first axis for
+-nf`, the whisper.cpp build `ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs` pins. The `mmqx` arm is the first axis for
 the integer tile: the sdot4 k4 tile against register-block prototypes over the same planes. Both
 sweeps time the served graph's shape first: sixteen dispatches per submit over two alternating
 outputs with a fresh hazard each, the arms interleaved round by round, an arm's figure its best

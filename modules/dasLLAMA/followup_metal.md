@@ -104,13 +104,13 @@ zoo. Facts that decide the order:
   a document rules: the float/quant attention pairs (two binding layouts,
   `REVIEW_GPU_KERNEL_CLASSES.md`); the f4-slab GEMV crowns `MetalKqGemvIq3sF4` / `Iq3xxsF4` /
   `Iq2xxsF4` and `MetalKqGemvK5C` beside `K5T` (per-box crowns with their numbers,
-  `ARCHITECTURE_GPU_QUANT_PLANES.md` sec.2.2z); the `*Db` double-buffered shells beside the
-  single-tile shells (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2c carries the measurement); the
-  compact-kargs and unread-bind asymmetries (`ARCHITECTURE_GPU.md` sec.1.5); the four dense
+  `ARCHITECTURE_GPU_QUANT_PLANES.md#metal-iquant-gemv-grid`); the `*Db` double-buffered shells beside the
+  single-tile shells (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder` carries the measurement); the
+  compact-kargs and unread-bind asymmetries (`ARCHITECTURE_GPU.md#gpu-backends`); the four dense
   mul_mm shells (`MetalF32MulMm` xf/y at 1/2, `MetalQ8MulMm` and `MetalBf16MulMm` at 2/3,
   `MetalKqMulMmK45T` at 3/4, the MoE base's kargs at 5); the codebook grid
-  tables twinned in the Vulkan home (sec.1.5 role table); and the scalar attention trio beside
-  the tensor QK/AV pair (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2f).
+  tables twinned in the Vulkan home (`ARCHITECTURE_GPU.md#gpu-backends` role table); and the scalar attention trio beside
+  the tensor QK/AV pair (`ARCHITECTURE_GPU_PREFILL.md#prefill-attn-slab`).
 - Two thirds of the debt is one family: the per-format GEMV, MvB2/B4 and MvB8 copies - 36
   classes over 12 formats (`MetalKqGemv*` 7985-9319, `MetalKqMv*T` 8368-10970, `MetalKqMvB8*`
   8477-11102) where iq4xs and iq4nl differ in ONE line and iq2s and iq2xs in eight; the shells
@@ -155,7 +155,7 @@ zoo. Facts that decide the order:
 
 The nine iquant/split-scale tensor mul_mm twins stamp `T` and `TH` only. k4/k5/k6 additionally
 carry the tall (`TH128`) and double-buffered (`THDb`, `THDb128`) stamps, and that is where the
-tall in-kernel-dequant win lives (`ARCHITECTURE_GPU_PREFILL.md` sec.2.2c form 1). Race a tall
+tall in-kernel-dequant win lives (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder` form 1). Race a tall
 stamp for the iquant scaffold before assuming the k6 result transfers; the arc-end matrix's
 soft spot is the deep-K w2 column (k6 0.91x / iq3s 0.88x / iq3xxs 0.92x vs llama.cpp on m5),
 which is exactly the column a tall stamp serves.
@@ -257,7 +257,7 @@ The three iquant rows are re-times: the sweep first read them 0.91, 0.93 and 0.8
 IQ3_XXS stop), every split-scale site on the staged mul_mm stamp that re-dequantizes W per
 32-row tile, while the K-quant twin rode the image's baked dev-W panels. The nine split-scale
 formats now carry a dev-W dequant pass on their tensor class and bake into the image's
-`devwf16` plane (IMAGE_VERSION 37, `ARCHITECTURE_GPU_PREFILL.md` sec.2.2aa): 1.05 on the
+`devwf16` plane (IMAGE_VERSION 37, `ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`): 1.05 on the
 scratch route, the rows above resident. The IQ2_XS file skips "19" on llama.cpp too; its
 fixture is frozen off that file. The 40-token tg128 reads on a 1B move +-10% between cool
 slots (the IQ2_XXS 1.09 / 1.26 / 1.30 across three re-times); the pp512 reads hold to 1%.
@@ -680,7 +680,7 @@ against 6.25; elementwise 1.11, attention 0.89), so the E4B's deficit is the E-s
 per-step cost meeting less flat headroom (its flat lead is 1.11, the E2B's 1.17). The host encode
 is NOT on the critical path: the step's command buffers commit progressively (`DASLLAMA_METAL_BATCH_NCB`),
 so the GPU runs under the encode already, and the pre-encoded step (`DASLLAMA_METAL_BATCH_PRE`,
-sec.2.38a of `ARCHITECTURE_GPU_MTP_DECODE.md`) moves the four-row step 13.26 -> 13.18 ms in the
+`ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode`) moves the four-row step 13.26 -> 13.18 ms in the
 same probe (`--bs 4`, no knockouts: setup 0.05 encode 0.68 wait 12.04 gpu 11.87 readback 0.07 ms a
 step, 33 of 34 steps pre-encoded; debug-jit) and leaves the bench row at 259.0 (`lcpp_bench -jit
 --for-debug-purposes`, debug-jit, against the board cell's 259.6). What the row pays is the
@@ -690,7 +690,7 @@ sampler's argmax over four 262144-wide rows 0.19, the driver's setup + sched + h
 wake 0.4. The pipelined submission (`DASLLAMA_METAL_BATCH_PIPE=1`, a bench-only rail: it serves the
 PREVIOUS step's logits) hides all of it - 12.01 against 13.34 ms in the probe - which bounds the
 lever: the next step committed BEFORE the current one lands, on the GPU's own argmax (the rows twin
-of the single-row greedy chain, sec.2.38: argmax rows -> per-row embed gather -> the PLE gather +
+of the single-row greedy chain, `ARCHITECTURE_GPU_MTP_DECODE.md#greedy-chain`: argmax rows -> per-row embed gather -> the PLE gather +
 model_proj chain of row 13 on device -> the layer stack), verified against the caller's tokens at
 the landing, a miss re-running the step; only rows whose sampler is a bare argmax may chain. The
 elementwise chain's dispatch count (~40 us a layer at four rows) is the second, smaller lever. The
@@ -727,7 +727,7 @@ CPU stack.
 
 ## 27. The StyleTTS2 chain's remaining cost and precision
 
-The chain (`ARCHITECTURE_GPU_TOWER.md` sec.2.2au) serves the whole synthesis; the measured record
+The chain (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`) serves the whole synthesis; the measured record
 is `PERF_LEDGER.md`'s landed entry, and the walls this section names are `debug-jit` readings of a
 scratch probe over the seats on one kokoro sentence of 200 synthetic tokens on the M5 Max (no
 board row covers a synthesis). The items, each an A/B on `harness/tts_synth.das --prof` with the
@@ -746,7 +746,7 @@ loader are the A/Bs. The served-lane synthesis cell (`tests/_tts_parity.das`,
 `tts_gpu_synthesis`) gates counters and sample counts and logs its sample-wise waveform figure
 without a bar; a phase-insensitive instrument - a per-window spectral compare tolerant of one
 frame of shift - would gate the served lane end to end. Pocket TTS rides the tower in two seats
-(`ARCHITECTURE_GPU_TOWER.md` sec.2.2av and sec.2.2aw); what its frame loop still costs is the
+(`ARCHITECTURE_GPU_TOWER.md#tower-pocket-codec` and `ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`); what its frame loop still costs is the
 GPU's own time, `debug-jit` on the M5 Max 0.6 ms a frame on the q8 file against the CPU's 1.3
 (`PERF_LEDGER.md`, `harness/pocket_stage_probe.das`), 0.44 of it the backbone's 57 dispatches
 and 0.19 the head's 22, the encode under 0.03: the levers are

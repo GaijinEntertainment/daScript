@@ -1,9 +1,8 @@
 # dasLLAMA Architecture - engine file charters
 
-Companion to `ARCHITECTURE.md`; section numbers are that document's.
+Companion to `ARCHITECTURE.md`; a section is cited by its anchor.
 
-`ARCHITECTURE_ENGINE_FORMATS.md` holds sec.1.2-1.4: the format, load-rail and CPU-kernel-tier
-charters.
+`ARCHITECTURE_ENGINE_FORMATS.md` holds the format, load-rail and CPU-kernel-tier charters.
 
 `REVIEW.das`'s `check_exe_fn_global_restore` walks every `dasllama/` file and licenses no
 names: each `var g_x = @@fn` declaration carries an `if (g_x == null)` boot-restore guard in
@@ -23,7 +22,7 @@ PARAMETER (the parameterized race helpers) - those the check cannot resolve text
 stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
 `race_envelope_ok` fails closed - the twin silently loses its crown.
 
-### 1.1 Engine core
+### Engine core
 
 - **`dasllama.das`** - the public API facade and nothing else: `load_model` -> `create_session` ->
   generate, re-exported names, the doc surface. No engine logic; a function that does work belongs
@@ -41,8 +40,8 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   caller's sampler), and the MTP per-position accept telemetry (`mtp_pos_*`) the round-override
   registry's rounds feed. The standard attention's Config-keyed arms live beside it - the gated
   projection (`q_gated`: a 2x-wide q whose second half sigmoid-gates the output) among them - one
-  kernel every arch shares, its arms chosen by the model's flags. **Not** the load walk (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.3) and **not** GPU residency
-  (`ARCHITECTURE_GPU.md` sec.1.5) - both left, and the seam each left behind is a registered hook,
+  kernel every arch shares, its arms chosen by the model's flags. **Not** the load walk (`ARCHITECTURE_ENGINE_FORMATS.md#the-load-and-image-rail`) and **not** GPU residency
+  (`ARCHITECTURE_GPU.md#gpu-backends`) - both left, and the seam each left behind is a registered hook,
   so neither comes back.
   It remains the module's debt sink; what sits here that is family-specific or platform-specific is
   debt, **not precedent**. Ledgered exceptions the sidecar-apply seam forces
@@ -108,11 +107,11 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
   functions, model-free testable; the chat layer assembles the output into ChatParts and the
   server parses through the parsers.
 - **`dasllama_chat.das`** - conversation turns and chat-template application. Per-arch template
-  *content* is registered by the arch file (sec.1.6), not written here.
+  *content* is registered by the arch file (`ARCHITECTURE_ENGINE.md#architecture-registrations`), not written here.
 - **`dasllama_par.das`** - `maybe_parallel_for` plus the dispatch counters its arms call at RUN
-  time, so the module AOTs, and the single-thread gate those arms read (`set_single_thread_`, `ARCHITECTURE_RUNTIME.md` sec.2.44a). Threading policy (job counts, thresholds) belongs to the caller.
+  time, so the module AOTs, and the single-thread gate those arms read (`set_single_thread_`, `ARCHITECTURE_RUNTIME.md#single-thread`). Threading policy (job counts, thresholds) belongs to the caller.
 
-### 1.6 Architecture registrations
+### Architecture registrations {#architecture-registrations}
 
 Thirteen files registering eighteen names:
 `dasllama_arch_llama.das` * `dasllama_arch_phi3.das` * `dasllama_arch_qwen2.das` * `dasllama_arch_qwen2moe.das` * `dasllama_arch_qwen3.das` * `dasllama_arch_qwen3moe.das` * `dasllama_arch_qwen35.das` * `dasllama_arch_gemma2.das` * `dasllama_arch_gemma3.das` * `dasllama_arch_gemma4.das` * `dasllama_arch_glm4moe.das` * `dasllama_arch_gptoss.das` * `dasllama_arch_mistral3.das`. They are DECLARATIVE: an arch
@@ -121,14 +120,14 @@ file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr set - `a
 names * `ChatTemplate` * `LlmCaps`) and calls `register_arch` at `[init]`. Adding an arch touches no
 forward loop.
 
-### 1.8 Instrumentation and support
+### Instrumentation and support {#instrumentation-and-support}
 
 - **`dasllama_parity.das`** - CPU-reference caches for the parity instruments. Test-facing, but
   library-side because the caches outlive a single suite.
 - **`dasllama_prefix.das`** - the prefix/page cache for evaluated token history.
 - **`dasllama_fat_start.das`** - a fat exe's first start: the runtime-section snapshot the tuner's
   kernel half also writes, the Metal twin crown race (synthetic, no model), and the first-start
-  hook it registers with the box-profile apply (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a).
+  hook it registers with the box-profile apply (`ARCHITECTURE_MEASUREMENT.md#fat-first-start`).
 - **`dasllama_bench.das`** - the benchmark rows as one-rep steps over a `Model` and a `Session`:
   the pp warmup and timed prefill, the tg warmup and timed single-token forwards (whole-rep, or
   one token at a time for a driver that keeps its tick loop live), the warmup logit sanity check,
@@ -140,7 +139,7 @@ forward loop.
   file requires `dasllama_scheduler`, `dasllama_batch` and `dasllama_gpu_tier`. A sanctioned
   public entry point, like the exchange: the fourth door in `dasllama_lint`'s allowed table.
   `benchmarks/lcpp_bench.das` drives it from its loop; dasllama-server's in-process `/bench` runs
-  one step per tick (`ARCHITECTURE_MEASUREMENT.md` sec.2.5).
+  one step per tick (`ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`).
 - **`dasllama_lint.das`** - the facade boundary as a compile-time lint (DASLLAMA001): every engine
   module carries it, so a consumer requiring anything under `modules/dasLLAMA/` but the entry
   modules (facade, scheduler, exchange pair, bench) fails to compile. Escape:
@@ -191,7 +190,7 @@ forward loop.
   asr_bench process per cell; macOS only) - the interim footprint instrument until a footprint
   leg lands in `gen_bench_records`; its numbers live in `PERF_LEDGER.md`, never the stores.
 
-### 1.9 Serving {#scheduler-step}
+### Serving {#scheduler-step}
 
 - **`dasllama_scheduler.das`** - the continuous-batching scheduler, the serving layer over the
   facade (its one engine require is `dasllama/dasllama`). One synchronous thread: each

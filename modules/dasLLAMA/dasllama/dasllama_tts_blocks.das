@@ -604,7 +604,7 @@ def transpose_tc_strided(x : array<float>; t, c, row_stride : int64; @scratch va
 
 // ===== convolution =====
 
-// ===== kernel-private scratch: module globals, one per buffer (ARCHITECTURE_TTS_MEMORY.md sec.2.31) =====
+// ===== kernel-private scratch: module globals, one per buffer (ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier) =====
 var @scratch g_conv_col : array<float>
 var @scratch g_conv_ytm : array<float>
 var @scratch g_convt_xtm : array<float>

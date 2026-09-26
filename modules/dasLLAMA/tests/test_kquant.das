@@ -2655,7 +2655,7 @@ def test_iq4nl_planes(t : T?) {
 }
 
 // the Metal-blob carrier splits a format's scale plane into [16B strips of every superblock]
-// [the d tails] (ARCHITECTURE_GPU_QUANT_PLANES.md sec.2.2y); this rebuilds that form from the
+// [the d tails] (ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane); this rebuilds that form from the
 // CPU row form the way metal_blob_scale_plane does for the 20B rows: [f16 d][2 pad][16B strips]
 def private split_scale_plane(ks : array<uint8>; ssb : int64) : array<uint8> {
     let nsb = long_length(ks) / ssb

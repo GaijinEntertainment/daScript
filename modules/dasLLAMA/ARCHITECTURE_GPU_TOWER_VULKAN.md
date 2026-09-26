@@ -1,12 +1,12 @@
 # dasLLAMA Architecture - the Vulkan tower and ASR-decoder drivers
 
-Companion to `ARCHITECTURE_GPU_TOWER.md`; section numbers are `ARCHITECTURE.md`'s. This document
+Companion to `ARCHITECTURE_GPU_TOWER.md`; a section is cited by its anchor. This document
 carries sections 2.2aq-2.2ar, the Vulkan tower driver's row classes and attention routes, and its
 encode chains, and section 2.2at, the Vulkan ASR-decoder driver. The Metal sections they cite by
 number - 2.2w, the tower attention routes, and 2.2x, the encode chain's shape - stay in
 `ARCHITECTURE_GPU_TOWER.md`.
 
-### 2.2aq The Vulkan tower's row classes and attention routes {#vk-tower-routes}
+### The Vulkan tower's row classes and attention routes {#vk-tower-routes}
 
 Every vision block is a handful of row operations around two tiles the LLM rails already own -
 the Q8_0 batch tile (or the f16 GEMM class) and the flash tile. The row operations are
@@ -48,7 +48,7 @@ and 72 is off every fragment lattice. Per family, both drivers:
 | qwen25v full layers | 80 | the slab trio | the padded route, h128 tile | the baked halfword twin |
 | qwen25v window layers | 80 | the per-window route | the window route, f32 | the baked halfword twin |
 
-### 2.2ar The Vulkan tower driver's encode chains {#vk-tower-encode-chains}
+### The Vulkan tower driver's encode chains {#vk-tower-encode-chains}
 
 `dasllama_vulkan_tower.das` fills the gemma4v, gemma3v, qwen3v and qwen25v hook slots, the three
 audio blocks seats - the whisper-class block loop (`register_tower_blocks_gpu`), gemma4a's
@@ -232,7 +232,7 @@ Engage is
 blocks, the front dispatches (`convs`) and qwen3a's device mels (`mels`) - and the bench's image
 and ASR cells print them around their timed turns.
 
-### 2.2at The Vulkan ASR-decoder driver {#vk-asr-decoder}
+### The Vulkan ASR-decoder driver {#vk-asr-decoder}
 
 `dasllama_vulkan_asr_dec.das` fills the whisper decoder's two hook slots
 (`register_whisper_cross_kv_gpu`, `register_whisper_decode_gpu`) on a build without das_metal, the

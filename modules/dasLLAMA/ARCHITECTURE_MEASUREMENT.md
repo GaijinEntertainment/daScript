@@ -1,12 +1,11 @@
 # dasLLAMA Architecture - the benchmark rig and instrumentation rails
 
-Companion to `ARCHITECTURE.md`; section numbers are that document's. The instruments that time
-a kernel away from the served graph - the kernel race's fidelity conditions, the gemv's own
-tune seat and the CPU kernel bench's fixture - are `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`
-sections 2.21, 2.26 and 2.27. The Vulkan GEMM probe's arms, shapes and alternates are
-`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` section 2.5a.
+Companion to `ARCHITECTURE.md`; a section is cited by its anchor. The instruments that time a
+kernel away from the served graph - kernel-race fidelity, the gemv's own tune seat, the CPU kernel
+bench's fixture - are `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`; the Vulkan GEMM probe's arms,
+shapes and alternates are `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`.
 
-### 2.5 There is ONE benchmark rig, and the records are the baseline {#one-benchmark-rig}
+### There is ONE benchmark rig, and the records are the baseline {#one-benchmark-rig}
 
 `benchmarks/lcpp_bench.das` is the only thing that produces a recorded measurement. It is a
 *mirror* of the upstream `llama-bench` - the same test shapes, rep counts and timing
@@ -86,7 +85,7 @@ compares two tune states, not two engines.
 **A measured number proves its kernel provenance through `tune_gate()`
 (`performance/profile_common.das`), one arm per world it can run in.** Four worlds, because
 `tune_status()` populates in two of them: a standalone exe checks the sidecar the release
-shipped beside it; a fat exe (sec.2.42a) checks that every kernel's most capable active class
+shipped beside it; a fat exe (`ARCHITECTURE_MEASUREMENT.md#fat-first-start`) checks that every kernel's most capable active class
 row is a profile stamp; a `DAS_TUNE_MANIFEST` run checks that file; a plain script checks
 that every `[tune]` row stamps a manifest winner. An invocation no arm covers refuses - or
 worse, measures on fallback kernels - which is why every measuring entry point calls the gate
@@ -152,7 +151,7 @@ by, since the ruler's static fixture has read a retired pass three times off its
 the device clock and on the transfer queue by the host clock in the same run: each queue's row
 is the other's alternate, and the pod's 4.3 GB/s against 19-27 is the whole verdict.
 
-### 2.10 Sanctioned instrumentation rails
+### Sanctioned instrumentation rails {#sanctioned-instrumentation-rails}
 
 Engine timing goes through the rails that aggregate and tag it: the `jobque_profile` markers
 (`profile_tag` / `profile_marker` and the `trace_*` wrappers in `dasllama_math.das`), the
@@ -175,7 +174,7 @@ same math differ in float terms - while one that changes only WHEN work happens 
 a CLI flag is never an override (it is the run's own command line, visible where the run is
 launched).
 
-### 2.20 The ASR board's GPU row pairs {#asr-gpu-pairs}
+### The ASR board's GPU row pairs {#asr-gpu-pairs}
 
 The das Metal ASR leg is OPT-IN per catalog row: `AsrModelSpec.metal_served`
 (`performance/profile_common.das`) declares that the Metal driver serves that family end to
@@ -215,7 +214,7 @@ applies after the reference pin moves. On Apple boxes `performance/setup_asr_rig
 second, Metal-ON copy of the same patched checkout, because `-ngl` on a Metal-OFF build is
 inert; `mtmd_bin_metal()` returns "" when it is absent and the GPU reference leg skips loudly.
 
-### 2.20a The TTS reference instrument
+### The TTS reference instrument {#the-tts-reference-instrument}
 
 `harness/tts_ref_bench.py` is the reference number-maker every das TTS wall in `PERF_LEDGER.md`
 is held against: it feeds the g2p corpus's `ps_espeak` phoneme strings to the kokoro and KittenTTS
@@ -232,7 +231,7 @@ real-time factor. No board cell covers a synthesis (`followup_general.md` 166 pl
 `--tts` path), so the das side of the compare is `harness/tts_synth.das` under
 `REVIEW_MEASUREMENT.md`'s harness rule.
 
-### 2.40 A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
+### A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
 
 `dasllama_tune.das` picks one perm per `[tuned]` kernel, first match wins: the `reference` tune
 policy (the kill switch - the template's own loops, no hints stamped), a `perm=` pin on the
@@ -247,7 +246,7 @@ profile - so the ladder is the `perm=` pin, then the `fallback` chain's first UN
 entry (a `suffix:requires` seat cannot be judged with no feature probe), then `DEFAULT_PERM`,
 and the compile reports nothing.
 
-### 2.41 The mint's own wall rides in the sidecar's provenance {#mint-wall-provenance}
+### The mint's own wall rides in the sidecar's provenance {#mint-wall-provenance}
 
 A successful mint stamps three provenance keys into the sidecar before the archive copy is
 written: `mint_gen_ms` (the generator half), `mint_kernels_ms` (the loop-hint half) and
@@ -256,7 +255,7 @@ box's tune-history directory carry them too, so the box's longitudinal record an
 shipping a profile cost without re-running the mint - a console line that scrolled past is not
 that record.
 
-### 2.42a A fat exe races its runtime section at first start {#fat-first-start}
+### A fat exe races its runtime section at first start {#fat-first-start}
 
 A fat exe (`DAS_TUNE_MODE=fat`, `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md` sec.11) ships
 its kernels baked per CPU class and carries no tuner and no policy rail, so nothing would ever
@@ -283,7 +282,7 @@ confirms - each spawn a daslang child on a harness script and a vehicle model, a
 harness's alone; under `harness/dasllama_tuner.das` on the M5 Max the confirms take 147 s of the
 metal_crowns family's 161 s, the twin race itself 14 s.
 
-### 2.45 The speculative round's cell is a ruler record {#ruler-records}
+### The speculative round's cell is a ruler record {#ruler-records}
 
 **`performance/records/mtp/mtp_<box>_<model>[_variant].json` is a ruler record: one file per
 box and model, written only by `harness/mtp_ruler.das`.** The board (`records/<box>.json`) has

@@ -183,7 +183,7 @@ class template WgReduceBase : Q8BlockStoreT {
     }
 }
 
-//! the residual step's shell (ARCHITECTURE_GPU_VULKAN_NROW.md sec.2.2ap): a stamp supplies the accessors below and a `pa` carrying the step's fields under these names
+//! the residual step's shell (ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma): a stamp supplies the accessors below and a `pa` carrying the step's fields under these names
 [ |> template_struct_instance]
 class template ResidualT : WgReduceBase {
     @template_constant NORM_SWITCH : bool = false   //!< the runtime `no_norm` arm of `pa`: the requant stamps and the GEMV epilogue read it, the store and combine stamps carry no such call and no branch for it

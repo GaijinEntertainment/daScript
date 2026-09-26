@@ -1,8 +1,8 @@
 # dasLLAMA Architecture - runtime mechanisms
 
-Companion to `ARCHITECTURE.md`; section numbers are that document's.
+Companion to `ARCHITECTURE.md`; a section is cited by its anchor.
 
-### 2.2 Kernel SHAPE is compile-time; only DATA is runtime
+### Kernel SHAPE is compile-time; only DATA is runtime
 
 The test is one question: *for a given compiled kernel, can this value change between dispatches?*
 
@@ -39,7 +39,7 @@ family's args change, silently: the slots still exist, the types still compile, 
 reads a struct out of a 4-byte buffer. The dispatch census only catches a builder that binds kargs
 on some paths and not others; a duplicate that binds NO kargs is invisible to it.
 
-### 2.3 GPU-resident cache identity
+### GPU-resident cache identity
 
 An address-keyed entry carries its SPAN, and a hit covers the request: a shorter first upload never
 serves a wider later one. Different upload FORMS (plain span vs concat) live in separate tables so
@@ -47,14 +47,14 @@ they can never alias; the Metal `RegionEntry` rail is the model. Buffers grown o
 retire to a list released only at a quiesce boundary - a point where no submitted command buffer is
 still in flight - because unretained command buffers may still bind them.
 
-### 2.3a Making weights live bumps the weights epoch {#weights-epoch-on-load}
+### Making weights live bumps the weights epoch {#weights-epoch-on-load}
 
 Every path that makes weights live bumps the weights epoch, the image rail included. A fresh
 mapping or chunk can land on a deleted model's recycled addresses, and an address-keyed region
 cache would otherwise serve the previous model's bytes out of an entry that still looks like a
 hit.
 
-### 2.4 Complexity and length lint
+### Complexity and length lint
 
 STYLE037 (cyclomatic) and STYLE038 (line count) are prompts to look, not orders to refactor. This
 module has shapes that are irreducible by design and they take `// nolint:STYLE03x` with a one-line
@@ -68,7 +68,7 @@ self-contained arm - and only when the extracted helper stands on its own. One c
 the merge** - unpacking N fields adds N lines, so the growth is taken and the real seam goes to
 the module's follow-up ledger.
 
-### 2.6 Capability questions and readiness questions are different questions
+### Capability questions and readiness questions are different questions
 
 A predicate that mixes them cannot be reused. `prefill_decline_caps` answers "can metal serve this
 model" (capability); `prefill_decline` adds "is this window staged" (readiness - are the rope
@@ -77,13 +77,13 @@ half: `metal_ple_pre_gpu_gate` calls `prefill_decline_caps` directly, because as
 get it "not yet" forever and its feature would silently never run. An optimistic capability answer
 is safe here, because the late path has a fallback.
 
-### 2.7 A quantized activation carries its scale lattice (Vulkan) {#activation-scale-lattice}
+### A quantized activation carries its scale lattice (Vulkan) {#activation-scale-lattice}
 
 Two activation quant forms ride the Vulkan rail, and they differ in the SCALE LATTICE, not the
 int8 payload: the Q8_0 form scales per 32 values, the superblock form per 256 (with per-32
 sub-scales inside). A compiled kernel indexes ONE lattice - the q8 GEMV/GEMM rail reads per-32
 scales; the k-quant (k4/k5/k6/q40) kernels index the per-256 lattice. `kq_sb(fmt)` is the
-predicate (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2), and it answers for the WEIGHT plane the dispatch
+predicate (`ARCHITECTURE_ENGINE_FORMATS.md#formats-and-data-movement`), and it answers for the WEIGHT plane the dispatch
 consumes.
 
 Three consequences the code is shaped around:
@@ -110,7 +110,7 @@ Three consequences the code is shaped around:
   delta-rule scan writes. So the two feeds are decided apart, and a Q8_0 out plane decides the out
   feed alone: it leaves the qkv and z planes on the tiles.
 
-### 2.8 Every program root declares its stack budget and its prefill intent
+### Every program root declares its stack budget and its prefill intent
 
 `options stack` is main-module-only: it does not unify up from required modules, so no library in
 the forward chain can declare the depth it needs. Every program that drives the engine - each test,
@@ -132,7 +132,7 @@ ended on. The guard panics, and a panic takes every live stream down: an undecla
 normally until its first long prompt. Both halves of root discipline are enforced by
 `tests/test_program_roots.das`.
 
-### 2.9 Environment knobs {#env-knobs}
+### Environment knobs {#env-knobs}
 
 A knob is an `[EnvConfig]` field in `dasllama_env.das`, read as `g_env_*.<field>`; the field is
 also what generates its `ENVIRONMENT.md` row, so a knob declared anywhere else is invisible to
@@ -157,7 +157,7 @@ change the outcome - the `[init]` wire, the gate they bypass, a tool banner - an
 when set but inert. Thread counts, rail selection and format knobs report their state in the
 tools' existing config and status lines instead.
 
-### 2.11 The [hot_path] coverage model
+### The [hot_path] coverage model {#the-hot-path-coverage-model}
 
 `[hot_path]` sits at the REGION ENTRY - the `*_encode` / `*_decode` / step drivers - and its
 `[no_alloc]` / `[no_env]` / `[no_io]` contracts arm transitively down the call graph, so
@@ -169,7 +169,7 @@ The tokenizer encode/decode path is sanctioned UNCOVERED by the region contracts
 gate is the `--tok` scaling rows, whose instrument (the size-ladder ratio) catches what the
 contracts cannot.
 
-### 2.12 The post-CPU-burn GPU ramp and the residency heartbeat
+### The post-CPU-burn GPU ramp and the residency heartbeat {#the-post-cpu-burn-gpu-ramp-and}
 
 After a CPU-only phase, the first Metal submission runs degraded. The cost is paid once per idle
 phase, and all of it sits in the kernel-side driver span (kernelStart->kernelEnd); the queue
@@ -191,7 +191,7 @@ call reaches it. Arming Metal at all makes a CPU q8 tower encode ~1.7x slower; t
 unknown, and a GPU-served tower removes the cost. `PERF_LEDGER.md`'s heartbeat entry carries the
 measurements behind this section and each refuted attempt.
 
-### 2.18 The CPU worker pool on a hybrid box {#hybrid-pool-policy}
+### The CPU worker pool on a hybrid box {#hybrid-pool-policy}
 
 SMT siblings share the FMA and load ports, so the default pool is (physical cores - 1) workers -
 a cap the engine's `[init]` sets on every platform but a browser, where the reported count can be
@@ -211,7 +211,7 @@ more wakes every worker - a prefill through `dispatch_phase_batch`, a CPU tower/
 through `dispatch_phase_encode(rows)` at its entry - while smaller work keeps the parked pool,
 since it cannot fill the slow tier past the dispatch grain.
 
-Precedence, strongest first: single-thread mode (sec.2.44a), under which both phase entries do
+Precedence, strongest first: single-thread mode (`ARCHITECTURE_RUNTIME.md#single-thread`), under which both phase entries do
 nothing at all, then `DAS_JOBQUE_THREADS` and an app's own cap, then the box profile's
 `jobque_pool` / `phase_decode_workers` / `dispatch_worker_limit` entries, then this tier-kind
 policy. A profile declares the shape of the NEXT queue and is inert for one that already exists when
@@ -220,7 +220,7 @@ measured race - records the fast-tier-only "uncapped" default rather than a meas
 hybrid box ignores it and keeps the fast-tier cap; a non-zero value is a measured choice and
 applies.
 
-### 2.18a A browser's workers spin, like every other target's {#browser-workers-spin}
+### A browser's workers spin, like every other target's {#browser-workers-spin}
 
 The spin-before-park window (`g_jobque_spin_us`, 30 ms) keeps a worker hot through the serial gaps
 of a token, and a browser takes it on the same terms as a desktop: `setup_dasllama_jobque` pushes
@@ -249,7 +249,7 @@ one for the computing main thread - seven workers on a real box, the pool
 an eight-core desktop runs, and three under fingerprint protection, where a browser reports two
 cores whatever the box has; the floor is what keeps such a visitor off a one-worker pool.
 
-### 2.19 The CPU MoE region list caps a region at 32 rows {#moe-region-split}
+### The CPU MoE region list caps a region at 32 rows {#moe-region-split}
 
 The grouped MoE prefill hands its expert regions to the batch dispatcher as (weight offset, first
 row, count) triples. That dispatcher chunks units by COUNT, not by work, so one heavy expert in a
@@ -259,7 +259,7 @@ of at most 32 rows: sub-regions of one expert share its weight offset, and the p
 lists repeat once per sub-region. The GPU arms keep whole regions - their kernels chunk by work
 already.
 
-### 2.44 The engine dispatches only on a configured job queue {#jobque-policy}
+### The engine dispatches only on a configured job queue {#jobque-policy}
 
 A queue from a bare `create_job_que` clones and destroys a fork context per job, wakes one worker
 per push, and parks a worker the moment its job ends. The engine's fork/join dispatch issues ~160
@@ -278,7 +278,7 @@ not checked. The engine's own scoped queues - the ones `load_gguf` and `load_ggu
 for a caller that has none - configure themselves, so the check reaches only queues a caller
 opened.
 
-### 2.44a Single-thread mode runs every arm inline {#single-thread}
+### Single-thread mode runs every arm inline {#single-thread}
 
 `set_single_thread(true)` - `DASLLAMA_SINGLE_THREAD=1` from the environment, applied by an
 `[init]` - makes every kernel run on the calling thread while a queue, configured or not, stays up

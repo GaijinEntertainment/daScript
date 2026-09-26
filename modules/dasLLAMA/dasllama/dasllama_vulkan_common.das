@@ -2516,7 +2516,7 @@ struct RDec {
     tok_wide_recorded : array<bool>
     nb : int64 = 1l               //! the rows the per-row planes hold: the N-row token command's most, one per region to RD_NB_MAX
     cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
-    cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS; the rows take no wide form (sec.2.2al)
+    cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS; the rows take no wide form (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
     tok_n_recorded : array<bool>
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
     // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
@@ -2647,9 +2647,9 @@ def rd_invalidate_token {
     }
 }
 
-let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md` sec.2.2al)
+let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`)
 let RD_WIDE_POS = 3072l   //! ... and the one-row command its wide twin from this one; between them the split form
-let RD_SPLIT_PIECES = 4l   //! the split form's key pieces a head; the attended span picks the form (sec.2.2al)
+let RD_SPLIT_PIECES = 4l   //! the split form's key pieces a head; the attended span picks the form (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
 let RD_SPLIT_WIDE_PIECES = 8l   //! ... and the wide form's
 
 //! the token command's attention forms: the unsplit twin under RD_UNSPLIT_POS, the wide twin from RD_WIDE_POS, the split form between

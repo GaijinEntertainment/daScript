@@ -27,20 +27,25 @@ and the exception ledger. Nothing else.**
 - **The exception ledger** - the cases a `REVIEW.md` rule fires on that are ruled acceptable,
   each with its reason.
 
-**Sections are numbered, and rules cite them by section.** A section number is never reused
-for different content: append new sections, never renumber.
+**A section is named, not numbered: its heading carries a `{#anchor}` naming its topic, and
+every citation of it - from a rule document, a ledger, a comment or code - spells
+`<doc>.md#<anchor>`.** An anchor is stable across rewording, so a citation survives an edit of
+the heading's words; an anchor is never reused for different content, and a section that
+splits or moves takes its anchor and every citation with it. A section number carries no
+meaning and collides across companions, so a document carries none.
 
-**A section that code implements carries a `{#anchor}` on its heading, and every anchor is
-cited by an `[arch(at="<doc>#<anchor>")]` on a function in the document's own folder tree, or
-by a `// <doc>#<anchor>` pointer in a C or C++ source.** One anchor per heading; the anchor
-name is stable across rewording, like the section number. A C++ pointer's path is root-relative
+**Every anchor is cited: by an `[arch(at="<doc>#<anchor>")]` on a function in the document's
+own folder tree, by a `// <doc>#<anchor>` pointer in a C or C++ source, or by a `<doc>.md#<anchor>`
+in a rule document or ledger.** One anchor per heading. A C++ pointer's path is root-relative
 (`src/ast/ARCHITECTURE.md#...`), found by walking up from the citing file, and the folder-tree
 rule does not bind it - a header under `include/` answers for a mechanism `src/` documents.
-An anchor no code cites, a citation naming no anchor, and a `.das` citation reaching a document
+An anchor nothing cites, a citation naming no anchor, and a `.das` citation reaching a document
 outside the citer's folder tree are all lint findings (LINT026), in every folder. A mechanism
 another folder's document states is restated here in prose - a paragraph, not a resolved link -
-and the code cites this document. A section no function implements is narrative and carries no
-anchor.
+and the code cites this document. A `[arch]` citation is what makes a section a contract with
+the code; a section only prose cites is narrative the rule documents lean on; a grouping
+heading (the charters list, the mechanisms list) and a section nothing cites carry no anchor,
+and gain one the moment a citation names them.
 
 **A fact that a rule or a code comment cites is load-bearing: it must stay true.** The
 same-change duty that keeps it true belongs in the folder's `REVIEW.md`, not here.
