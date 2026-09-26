@@ -617,6 +617,7 @@ def private stage_checks(t : T?; tag : string; tr : StyleTts2Trace?; dump : tabl
 }
 
 //! Run one family's rig, or skip loudly when its model or dumps are not stocked.
+[cold_path]
 def tts_parity(t : T?; rig : TtsParityRig) {
     return if (!model_available(t, rig.gguf))
     var inscope mf <- load_tts_oracle_manifest(rig.oracle_dir)

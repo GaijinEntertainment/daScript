@@ -676,7 +676,7 @@ def private same_rng(a, b : TtsRng) : bool {
 typedef FrameRows = tuple<lat : array<float>; conds : array<float>; eos : array<float>>
 
 //! The frames seat teacher-forced on `k` against the CPU leg, `all_rows` adding conds and EOS; the CPU leg's frame count (-1 unserved) and rows; the knob stays on.
-[unused_argument(t, m, k, tag, bar, all_rows, sc)]   // off-Apple the gated body is empty
+[cold_path, unused_argument(t, m, k, tag, bar, all_rows, sc)]   // off-Apple the gated body is empty
 def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : string; bar : float; all_rows : bool;
                             var sc : PocketScratch) : tuple<fc : int64; cpu : FrameRows> {
     var r : tuple<fc : int64; cpu : FrameRows>
@@ -1139,6 +1139,7 @@ def test_pocket_kq_file(t : T?) {
 // the three lanes of the small file on one oracle case: kq against q8 at the q8 bar (with the
 // poisoned control), kq against the exact lane (the head's Q8_0 route), the f16 reference logged;
 // then the stored roster against the reference encoder (the f16 file on its f32 lane)
+[cold_path]
 def private kq_lanes_case(t : T?; c : PocketCase; man : PocketManifest; var mk, mq, m32, mf : PocketModel; var sc : PocketScratch) {
     var inscope a <- forced_latents(mk, c, man, sc)
     var inscope b <- forced_latents(mq, c, man, sc)
@@ -1211,6 +1212,7 @@ let private LANGS <- [PocketLang(code = "de", config = "german", voice = "juerge
 
 // one language's cells: the tokenizer on its own sentences and the probes, the teacher-forced
 // frames of every stage case on the published file, one sentence through the facade
+[cold_path]
 def private language_cells(t : T?; L : PocketLang) {
     let path = path_join(models_dir(), "pocket-tts-{L.code}-q8.gguf")
     let odir = path_join(models_dir(), "tts_oracle/pocket_{L.config}")

@@ -756,8 +756,9 @@ prologue as the f32 route already folds it, and the text prompt's rows on the to
 `prompt` stage clock of `test_pocket_synthesis_metal`, six milliseconds a chunk on the CPU). The frames' K/V never return to the host, so a chunk
 whose command buffer fails reruns whole on the CPU. The codec transformer's layer
 (`pk_transformer`) and the frame loop's (`pk_fr_layer`) are two bodies of one layer: one body
-waits on a rows form of the ADD LayerNorm stamp (`MetalPkAddLn` over `nrows`) and a rows form of
-the rope-and-store (`MetalRopeStoreBKvT` with a row table is the candidate).
+waits on a rows form of the rope-and-store (`MetalRopeStoreBKvT` with a row table is the
+candidate) and one K/V home for both loops (the codec's per-chunk rows buffers against the frames'
+per-voice slot).
 
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 

@@ -2700,11 +2700,11 @@ def private st2_slab_free(var base : auto(TT)) {
     base.key = 0ul
 }
 
+//! The slab for `key` stands: its buffer is up under that key.
+def private st2_slab_current(base : St2SlabBase; key : uint64) : bool => base.buf != null && base.key == key
+
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
-def private st2_slab_attach(var base : St2SlabBase; key : uint64; write : block<(var w : St2SlabWriter; measuring : bool) : void>; drop : function<void>) : bool {
-    if (base.buf != null && base.key == key) {
-        return true
-    }
+def private st2_slab_rebuild(var base : St2SlabBase; key : uint64; write : block<(var w : St2SlabWriter; measuring : bool) : void>; drop : function<void>) : bool {
     invoke(drop)
     var inscope w = St2SlabWriter(measure = true)
     invoke(write, w, true)
@@ -2811,9 +2811,14 @@ def private st2_text_ok(te : St2TextEncoder) : bool {
     return st2_lstm_ok(te.lstm, te.lstm.fwd.nin)
 }
 
-[cold_path]
 def private st2_dec_attach(d : St2Decoder) : bool {
-    return st2_slab_attach(g_tw_st2_dec, st2_dec_key(d), $(var w; measuring) {
+    let key = st2_dec_key(d)
+    return st2_slab_current(g_tw_st2_dec, key) || st2_dec_rebuild(d, key)
+}
+
+[cold_path]
+def private st2_dec_rebuild(d : St2Decoder; key : uint64) : bool {
+    return st2_slab_rebuild(g_tw_st2_dec, key, $(var w; measuring) {
         if (measuring) {
             var probe : St2DecSlab
             st2_dec_write(w, d, probe)
@@ -2849,9 +2854,14 @@ def private st2_pred_drop {
     st2_slab_free(g_tw_st2_pred)
 }
 
-[cold_path]
 def private st2_pred_attach(p : St2Predictor) : bool {
-    return st2_slab_attach(g_tw_st2_pred, st2_pred_key(p), $(var w; measuring) {
+    let key = st2_pred_key(p)
+    return st2_slab_current(g_tw_st2_pred, key) || st2_pred_rebuild(p, key)
+}
+
+[cold_path]
+def private st2_pred_rebuild(p : St2Predictor; key : uint64) : bool {
+    return st2_slab_rebuild(g_tw_st2_pred, key, $(var w; measuring) {
         if (measuring) {
             var probe : St2PredSlab
             st2_pred_write(w, p, probe)
@@ -2882,9 +2892,14 @@ def private st2_albert_drop {
     st2_slab_free(g_tw_st2_albert)
 }
 
-[cold_path]
 def private st2_albert_attach(a : St2Albert) : bool {
-    return st2_slab_attach(g_tw_st2_albert, st2_albert_key(a), $(var w; measuring) {
+    let key = st2_albert_key(a)
+    return st2_slab_current(g_tw_st2_albert, key) || st2_albert_rebuild(a, key)
+}
+
+[cold_path]
+def private st2_albert_rebuild(a : St2Albert; key : uint64) : bool {
+    return st2_slab_rebuild(g_tw_st2_albert, key, $(var w; measuring) {
         if (measuring) {
             var probe : St2AlbertSlab
             st2_albert_write(w, a, probe)
@@ -2912,9 +2927,14 @@ def private st2_text_drop {
     st2_slab_free(g_tw_st2_text)
 }
 
-[cold_path]
 def private st2_text_attach(te : St2TextEncoder) : bool {
-    return st2_slab_attach(g_tw_st2_text, st2_text_key(te), $(var w; measuring) {
+    let key = st2_text_key(te)
+    return st2_slab_current(g_tw_st2_text, key) || st2_text_rebuild(te, key)
+}
+
+[cold_path]
+def private st2_text_rebuild(te : St2TextEncoder; key : uint64) : bool {
+    return st2_slab_rebuild(g_tw_st2_text, key, $(var w; measuring) {
         if (measuring) {
             var probe : St2TextSlab
             st2_text_write(w, te, probe)
@@ -4165,10 +4185,16 @@ def private pk_codec_ok(mm : PocketMimi) : bool {
     return pk_conv_ok(mm.dec_out) && mm.dec_out.cout >= 1l
 }
 
-[cold_path]
 def private pk_codec_attach(mm : PocketMimi) : bool {
+    let key = pk_codec_key(mm)
+    return st2_slab_current(g_tw_pk_codec, key) || pk_codec_rebuild(mm, key)
+}
+
+//! The codec slab and its rope tables over the one-shot chain's row budget.
+[cold_path]
+def private pk_codec_rebuild(mm : PocketMimi; key : uint64) : bool {
     var bytes = 0l
-    let ok = st2_slab_attach(g_tw_pk_codec, pk_codec_key(mm), $(var w; measuring) {
+    let ok = st2_slab_rebuild(g_tw_pk_codec, key, $(var w; measuring) {
         if (measuring) {
             var probe : PkCodecSlab
             pk_codec_write(w, mm, probe)
@@ -4178,15 +4204,14 @@ def private pk_codec_attach(mm : PocketMimi) : bool {
             bytes = long_length(w.host) * 4l
         }
     }, @@pk_codec_drop)
-    if (ok && bytes > 0l) {
-        pk_stage_rows(mm, PK_CODEC_MAX_FRAMES, g_tw_pk_sc.rows)
-        if (!pk_rope_tables(mm.dec_tf, g_tw_pk_sc.rows[1], g_tw_pk_codec.bcos, g_tw_pk_codec.bsin)) {
-            pk_codec_drop()
-            return false
-        }
-        to_log(LOG_INFO, "dasLLAMA metal tower: pocket codec slab {bytes} bytes\n")
+    return false if (!ok)
+    pk_stage_rows(mm, PK_CODEC_MAX_FRAMES, g_tw_pk_sc.rows)
+    if (!pk_rope_tables(mm.dec_tf, g_tw_pk_sc.rows[1], g_tw_pk_codec.bcos, g_tw_pk_codec.bsin)) {
+        pk_codec_drop()
+        return false
     }
-    return ok
+    to_log(LOG_INFO, "dasLLAMA metal tower: pocket codec slab {bytes} bytes\n")
+    return true
 }
 
 //! One codec conv over `t` input rows of stride `xs` in the CPU's first-window form; the output row count.
@@ -4646,12 +4671,17 @@ def private pk_frames_ok(m : PocketModel) : bool {
 }
 
 //! The frames slab and its q8 blob: the blob writer rides the slab writer's two passes, its bytes uploaded after the slab.
-[cold_path]
 def private pk_frames_attach(m : PocketModel) : bool {
+    let key = pk_frames_key(m)
+    return st2_slab_current(g_tw_pk_frames, key) || pk_frames_rebuild(m, key)
+}
+
+[cold_path]
+def private pk_frames_rebuild(m : PocketModel; key : uint64) : bool {
     var inscope qb = PkBlobWriter(measure = true)
     var qbytes = 0l
     var bytes = 0l
-    let ok = st2_slab_attach(g_tw_pk_frames, pk_frames_key(m), $(var w; measuring) {
+    let ok = st2_slab_rebuild(g_tw_pk_frames, key, $(var w; measuring) {
         if (measuring) {
             var probe : PkFramesSlab
             pk_frames_write(w, qb, m, probe)

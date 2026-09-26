@@ -64,8 +64,9 @@ and keys on a fold of the part's weight addresses - the address of the form each
 q8 quants or the f32 operand - and of the q8 lane's active repack layout, so a reload serving
 another lane or another layout keys differently; the addresses stand for the model because a
 reload never reuses them before the weights epoch drops every slab, which shutdown does too. Every
-family attaches its slab through one path (`st2_slab_attach`): a slab whose key matches stays
-resident; otherwise the family's drop runs, the family's writer runs twice - the measuring pass
+family attaches its slab through one guard and one rebuild (`st2_slab_current`, `st2_slab_rebuild`):
+a slab whose key matches stays resident and the call returns on the guard; otherwise the cold
+rebuild runs the family's drop, then the family's writer twice - the measuring pass
 writes into a probe slab to size the host copy, the second fills the resident - and the copy
 uploads, the drop running again when the upload fails. A slab releases through one walk over its
 fields by type (`st2_release_any`): a conv slot's and a Pocket linear's pooled uniforms, a buffer
@@ -168,8 +169,9 @@ key samples the rows because an address alone outlives the voice that held it: a
 caches can land at the freed address with the same fill and capacity. The
 backbone's q8 linears (a K-quant linear requantized to q8 from its dequantized rows, so the small
 form serves) ride the decode GEMV over a 34B-block blob with their bias rows in the slab, the bias
-a row add after the GEMV (the row GEMV's fused-bias q8 form, one lane a block, runs a frame 20%
-slower than the decode GEMV's split-K walk - `PERF_LEDGER.md`'s Pocket frame loop entry); every
+a row add after the GEMV (the row GEMV's fused-bias q8 form as it stood before the lane-map fold,
+one lane a block, ran a frame 20% slower than the decode GEMV's split-K walk - `PERF_LEDGER.md`'s
+Pocket frame loop entry; the folded row stamp keeps the epilogue kinds only); every
 f32 linear rides the row GEMV over the slab's rows - a simdgroup a row, x staged in threadgroup
 memory - so the parity lane runs exact. Per layer: the first norm (the layer before's residual
 joined in the same dispatch - the tower LayerNorm's ADD stamp), the fused q/k/v projection, the

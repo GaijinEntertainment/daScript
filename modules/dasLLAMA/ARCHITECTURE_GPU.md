@@ -1,12 +1,16 @@
 # dasLLAMA Architecture - GPU backends
 
 Companion to `ARCHITECTURE.md`; section numbers are that document's. This document carries
-section 1.5: the GPU backend role table with its closed asymmetry lists. Beside it,
-`ARCHITECTURE_GPU_RACE_SHAPES.md` carries section 2.2b - the tensor-GEMM and fused-attention
-shapes that measured out; `ARCHITECTURE_GPU_TOWER.md` carries 2.2w-2.2x (the Metal tower's
-attention routes and encode chains); `ARCHITECTURE_GPU_TOWER_VULKAN.md` carries 2.2aq-2.2ar (the
-Vulkan tower's) and 2.2at (the Vulkan ASR-decoder driver), `ARCHITECTURE_GPU_TOWER.md` 2.2au-2.2aw (the StyleTTS2 chain and the Pocket TTS seats); `ARCHITECTURE_GPU_QUANT_PLANES.md` carries 2.2y-2.2z, the Metal quant plane
-reads.
+section 1.5: the GPU backend role table with its closed asymmetry lists. The companions beside
+it carry the sections built on it, and each one's opening routes to its own companions:
+`ARCHITECTURE_GPU_RACE_SHAPES.md` 2.2b (the tensor-GEMM and fused-attention shapes that measured
+out); `ARCHITECTURE_GPU_TOWER.md` 2.2w-2.2x (the Metal tower's attention routes and encode
+chains) and 2.2au-2.2aw (the StyleTTS2 chain and the Pocket TTS seats);
+`ARCHITECTURE_GPU_QUANT_PLANES.md` 2.2y-2.2z and 2.2an (the Metal quant plane reads and the GEMV
+site abstraction); `ARCHITECTURE_GPU_MTP.md` 2.28-2.29, 2.33-2.37a and 2.39 (the Metal
+speculative round, the depth a round drafts, and the verify, drafter and batch-driver
+mechanics); `ARCHITECTURE_GPU_VULKAN.md` 2.2j, 2.2p, 2.2ab-2.2ad and 2.2ai-2.2aj (the Vulkan
+resident driver).
 
 ### 1.5 GPU backends {#gpu-backends}
 
@@ -29,7 +33,7 @@ that a question answered for one backend has an obvious address in the other. Th
   identity source, cross-arm routers, the `[init]` installs. It re-exports the family `public`,
   and its NAME is the transformer umbrella's `?vulkan` require contract (deliberately LAST in the
   umbrella: the vulkan drivers are the hot-edit modules, and require order is the jit obj-cache
-  layout): **never rename it.**
+  layout).
 - **Vulkan additionally has `dasllama_vulkan_seams.das`** - the thin whole-op call seams the tier
   and suites dispatch through (`vk_add_rms`, `vk_rope_kv_store`, `vk_decode_attn`). It exists
   because of a require direction: common cannot require the classes module (classes requires
@@ -185,13 +189,12 @@ that a question answered for one backend has an obvious address in the other. Th
   `grid=` spec (`"n/c"` is a CEIL-divide); a `grid = "wgs"` class carries no number there - its grid is the kernel body's workgroup-index
   decode with the host helper that computes `wgs`. Threadgroup constant: Metal's `tg=` spec or Vulkan's `[spirv_kernel(local_size_x=)]`. Uniform: the single writer that fills its buffer.
 
-**PSO lifecycle - the family shares ONE device and queue** (`metal_common_init`; the second-device
-question was surveyed and closed against; the tune-time race arms' transient queue is
-`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` sec.2.21's). The decode PSO set lives as `g_pso_*` in
-`dasllama_metal_common`, is compiled by `metal_decode_init` in `dasllama_metal_kernels` and
-released by `metal_kernels_release` there - the kernels module owns its set's lifecycle even
-though the vars live with the device state. Prefill's `g_pf_pso_*` set is prefill-private end to
-end: `metal_prefill_init` compiles, `metal_prefill_shutdown` releases.
+**PSO lifecycle - the family shares ONE device and queue** (`metal_common_init`; the tune-time
+race arms' transient queue is `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` sec.2.21's). The decode
+PSO set lives as `g_pso_*` in `dasllama_metal_common`, is compiled by `metal_decode_init` in
+`dasllama_metal_kernels` and released by `metal_kernels_release` there - the kernels module owns
+its set's lifecycle even though the vars live with the device state. Prefill's `g_pf_pso_*` set
+is prefill-private end to end: `metal_prefill_init` compiles, `metal_prefill_shutdown` releases.
 
 **Race and tune code for a kernel family lives beside the family.** The shared scaffolding
 (`race_buf`, `race_envelope_ok`, `race_pair_ms`, `MetalTensorRaceResult`) is `<gpu>_common`'s;
@@ -201,16 +204,14 @@ in prefill) and the tuner calls those public entries.
 **Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`, `MetalPrefillDecline`);
 decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both paths.
 
-Sections 2.28-2.29, 2.33-2.37a and 2.39 - the Metal speculative round, the depth a round drafts, and
-the verify, drafter and batch-driver mechanics - are `ARCHITECTURE_GPU_MTP.md`; sections 2.30-2.32,
-2.38-2.38a and 2.39a - the decode driver's kernel forms, pre-encoded steps and layer encoder - are `ARCHITECTURE_GPU_MTP_DECODE.md`.
-
 **The allowed asymmetries between the backends - this list is closed; a new one lands with its entry here:**
 
-- **The Pocket frame batch knob is Metal-only** (`set_metal_pocket_frame_batch` / `metal_pocket_frame_batch`; the Vulkan tower has no Pocket seat). **The `dasllama_gpu_tier` cooperation SPI is Vulkan-only**: every hook seat the tier
-  exposes (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the
-  Vulkan family alone, and the role row above enumerates the seats; a new seat lands in that
-  row, not as a new entry here. The one seat outside that rule is the entry below.
+- **The Pocket frame batch knob is Metal-only** (`set_metal_pocket_frame_batch` /
+  `metal_pocket_frame_batch`; the Vulkan tower has no Pocket seat).
+- **The `dasllama_gpu_tier` cooperation SPI is Vulkan-only**: every hook seat the tier exposes
+  (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the Vulkan
+  family alone, and the role row above enumerates the seats. The one seat outside that rule is
+  the entry below.
 - **The deltanet mirror room seat is Metal-only.** `set_moe_gpu_dn_room_hook` (the engine half
   `gpu_dn_room_`, the facade's `gpu_dn_room`) carries a scheduler's stream count to whatever
   keeps sessions' recurrent state device-resident; `_common`'s `dn_mirror_room` is its one
@@ -294,10 +295,4 @@ the verify, drafter and batch-driver mechanics - are `ARCHITECTURE_GPU_MTP.md`; 
 - **The device argmax pick is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2an): a
   bare-argmax stream's token id lands in place of its logits row; Metal lands every row's logits.
 
-Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched. The
-Vulkan resident driver's sections live in its companions: 2.2j, 2.2p, 2.2ab, 2.2ac, 2.2ad, 2.2ai
-and 2.2aj in `ARCHITECTURE_GPU_VULKAN.md`; 2.2al and 2.2am in `ARCHITECTURE_GPU_VULKAN_ATTN.md`;
-2.2k-2.2m, 2.2q, 2.2ae and 2.2ah in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; 2.2n-2.2o, 2.2an and 2.2as
-in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; 2.2ao-2.2ap in `ARCHITECTURE_GPU_VULKAN_NROW.md`;
-2.2r-2.2v in `ARCHITECTURE_GPU_VULKAN_DECODE.md`; 2.2af, 2.2ag and 2.2ak in
-`ARCHITECTURE_GPU_VULKAN_MOE.md`.
+Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
