@@ -33,10 +33,12 @@ def logits_maxabs(a : array<float>) : float {
 //! Element-for-element equality of two id lists - the token oracles' compare, named for the sites that read it.
 def ids_equal(a, b : array<int64>) : bool => sequence_equal(a, b)
 
+let APPROX_REL = 2e-3   //! the kernel cells' relative bar, `approx`'s
+
 //! The kernel cells' relative bar: within 2e-3 of the larger magnitude, floored at 1 - the device's reassociation and its
 //! transcendentals against the CPU oracle. An f16 store rounds at 2^-11 = 4.9e-4 relative, f32 sums of up to 4096 terms
 //! drift n x 6e-8 <= 2.5e-4, the device transcendentals ~1e-6; 2e-3 covers each with margin.
-def approx(x, y : float) : bool => abs(x - y) <= 2e-3 * max(1.0, max(abs(x), abs(y)))
+def approx(x, y : float) : bool => abs(x - y) <= APPROX_REL * max(1.0, max(abs(x), abs(y)))
 
 //! The elements of `got` off `want` by more than `bar` relative (floored at 1), the first six logged for the eyeball -
 //! enough to tell tolerance drift from garbage.
@@ -56,7 +58,25 @@ def mismatch_rel(got, want : array<float>; bar : float) : int {
 }
 
 //! `mismatch_rel` at the kernel cells' bar.
-def mismatch_approx(got, want : array<float>) : int => mismatch_rel(got, want, 2e-3)
+def mismatch_approx(got, want : array<float>) : int => mismatch_rel(got, want, APPROX_REL)
+
+//! The Q8_0 planes' differences, scale for scale then byte for byte: a scale off by more than `scale_bar` relative (floored at
+//! 1; 0 = bit-exact), a quant byte off by more than `qtol` steps - a fused requant against its separate pass at (0, 0), a
+//! device requant against the CPU at (`APPROX_REL`, 1), where the device rounds a half-step value apart.
+def q8_off(qd : array<int8>; sd : array<float>; qr : array<int8>; sr : array<float>; scale_bar : float; qtol : int) : int {
+    var bad = 0
+    for (a, b in sd, sr) {
+        if (scale_bar == 0.0 ? a != b : !(abs(a - b) <= scale_bar * max(1.0, max(abs(a), abs(b))))) {
+            bad++
+        }
+    }
+    for (a, b in qd, qr) {
+        if (abs(int(a) - int(b)) > qtol) {
+            bad++
+        }
+    }
+    return bad
+}
 
 //! The elements of `got` not bit-equal to `want` - the compare behind a kernel cell's exact bar (a copy, a clamp, a pad).
 def mismatch_exact(got, want : array<float>) : int {

@@ -22,7 +22,7 @@ require _compares
 require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan arms alone
 require dasllama/dasllama_math
 require daslib/jobque_boost
-require daslib/linq   // count - the sentinel bytes left in a quant plane
+require daslib/linq   // count - the sentinel words a dispatch left, the pads' zero tails
 
 //! The vision and audio towers' Vulkan kernel classes against their CPU oracles (a Vulkan device,
 //! else the cells skip): the bidirectional flash tiles, the tower row classes, the Conformer and
@@ -79,10 +79,6 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {   // nolint:STYLE038 �
         let yd = make_device_buf(q_bytes)
         let ycd = make_device_buf(q_bytes)
         var host = make_host_buf(q_bytes * 2l, true, [cached = true])
-        var y : array<float>
-        var yc : array<float>
-        y |> resize(rows * qd)
-        yc |> resize(rows * qd)
         unsafe {
             upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
             upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
@@ -106,14 +102,10 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {   // nolint:STYLE038 �
             enc_f16cvt_cls(raw, h, scv, pcv, cvtwgs)
             fa_stamp_enc(khr, int64(hs), false, false, false, false, raw, h, sfa, pcf, wgs, true)
             fa_stamp_enc(khr, int64(hs), false, false, false, false, raw, h, sfc, pcf, wgs)
-            vhz_dep(raw, h, B_Y | B_YC, 0u, true)
-            cmd_copy_range(raw, yd, 0l, host.buf, 0l, q_bytes)
-            cmd_copy_range(raw, ycd, 0l, host.buf, q_bytes, q_bytes)
+            cmd_copy_planes(raw, h, fixed_array(yd, ycd), host, fixed_array(q_bytes, q_bytes), B_Y | B_YC)
         }
-        unsafe {
-            memcpy(addr<void?>(y[0]), host.mapped, q_bytes)
-            memcpy(addr<void?>(yc[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), q_bytes)
-        }
+        var y <- staged(host.mapped, 0l, rows * qd, type<float>)
+        var yc <- staged(host.mapped, q_bytes, rows * qd, type<float>)
         var y_ref : array<float>
         y_ref |> resize(rows * qd)
         for (hh in range(nheads)) {
@@ -190,22 +182,6 @@ def test_vkt_fa_bidir(t0 : T?) {
             t |> skip("dasVulkan not present")
         }
     }
-}
-
-//! the Q8_0 planes' differences, byte for byte and scale for scale (the fused pass must land the separate pass's bytes exactly)
-def private q8_exact_off(qd : array<int8>; sd : array<float>; qr : array<int8>; sr : array<float>) : int {
-    var bad = 0
-    for (a, b in sd, sr) {
-        if (a != b) {
-            bad++
-        }
-    }
-    for (a, b in qd, qr) {
-        if (a != b) {
-            bad++
-        }
-    }
-    return bad
 }
 
 //! the decode step's fused row passes: each lands the Q8_0 bytes of its row pass followed by `TowerClampRq`, byte for byte,
@@ -305,8 +281,10 @@ def test_vkt_wdec_fused_rq(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             let wg4 = int64((nd / 4 + 255) / 256)
             let wg4h = int64((nff / 4 + 255) / 256)
             let wg_comb = int64(heads * rows)
-            let hostb = 2l * bx + 6l * (bq + bs) + 2l * (bqh + bsh)
-            var host = make_host_buf(hostb, true, [cached = true])
+            let planes = fixed_array(qd[0], sd[0], qd[1], sd[1], qd[2], sd[2], qd[3], sd[3], qd[4], sd[4], qd[5], sd[5], qd[6], sd[6], qd[7], sd[7], x2d, x3d)
+            let sizes = fixed_array(bq, bs, bq, bs, bq, bs, bq, bs, bqh, bsh, bqh, bsh, bq, bs, bq, bs, bx, bx)
+            let at <- staged_offsets(sizes)
+            var host = make_host_buf(at[length(sizes)], true, [cached = true])
             let run_all <- @(poison : bool) {
                 cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_ln_cls(raw, h, s_ln, pa_ln, int64(rows))
@@ -321,40 +299,26 @@ def test_vkt_wdec_fused_rq(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                     enc_tower_wdec_attn_comb_cls(raw, h, s_comb, pa_c, wg_comb)
                     enc_tower_clamp_rq_cls(raw, h, s_rq4, pa_rq, wg4)
                     enc_tower_wdec_attn_comb_rq_cls(raw, h, s_combrq, pa_c, wg_comb)
-                    vhz_dep(raw, h, B_X | B_Q, 0u, true)
-                    var at = 0l
-                    for (i in range(8)) {
-                        let wide = i == 4 || i == 5
-                        cmd_copy_range(raw, qd[i], 0l, host.buf, at, wide ? bqh : bq)
-                        at += wide ? bqh : bq
-                        cmd_copy_range(raw, sd[i], 0l, host.buf, at, wide ? bsh : bs)
-                        at += wide ? bsh : bs
-                    }
-                    cmd_copy_range(raw, x2d, 0l, host.buf, at, bx)
-                    cmd_copy_range(raw, x3d, 0l, host.buf, at + bx, bx)
+                    cmd_copy_planes(raw, h, planes, host, sizes, B_X | B_Q)
                 }
                 if (poison) {
                     return
                 }
             }
             invoke(run_all, false)
-            var at = 0l
             var qs : array<array<int8>>
             var ss : array<array<float>>
             qs |> reserve(8)
             ss |> reserve(8)
             for (i in range(8)) {
-                let wide = i == 4 || i == 5
-                qs |> emplace(staged_i8(host.mapped, at, int(wide ? bqh : bq)))
-                at += wide ? bqh : bq
-                ss |> emplace(staged_f32(host.mapped, at, int((wide ? bsh : bs) / 4l)))
-                at += wide ? bsh : bs
+                qs |> emplace(staged(host.mapped, at[2 * i], int(sizes[2 * i]), type<int8>))
+                ss |> emplace(staged(host.mapped, at[2 * i + 1], int(sizes[2 * i + 1] / 4l), type<float>))
             }
-            var x2 <- staged_f32(host.mapped, at, nd)
-            var x3 <- staged_f32(host.mapped, at + bx, nd)
+            var x2 <- staged(host.mapped, at[16], nd, type<float>)
+            var x3 <- staged(host.mapped, at[17], nd, type<float>)
             let names <- ["layernorm", "post-add + next norm", "bias + tanh GELU", "attention combine"]
             for (i in range(4)) {
-                let off = q8_exact_off(qs[2 * i + 1], ss[2 * i + 1], qs[2 * i], ss[2 * i])
+                let off = q8_off(qs[2 * i + 1], ss[2 * i + 1], qs[2 * i], ss[2 * i], 0.0, 0)
                 t |> equal(off, 0, "{names[i]} fused with the requant lands the separate pass's Q8_0 bytes and scales ({off} differ)")
                 t |> equal(count(qs[2 * i + 1], $(v) => int(v) == -128), 0, "{names[i]}: every block written (no sentinel bytes left)")
             }
@@ -377,18 +341,15 @@ def test_vkt_wdec_fused_rq(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 upload_region_at(pyd, 0l, addr<uint8 const?>(py[0]), bpy)
             }
             invoke(run_all, true)
-            at = 0l
             for (i in range(8)) {
-                let wide = i == 4 || i == 5
                 if (i % 2 == 1) {
-                    var qp <- staged_i8(host.mapped, at, int(wide ? bqh : bq))
-                    var sp <- staged_f32(host.mapped, at + (wide ? bqh : bq), int((wide ? bsh : bs) / 4l))
-                    let moved = q8_exact_off(qp, sp, qs[i], ss[i])
+                    var qp <- staged(host.mapped, at[2 * i], int(sizes[2 * i]), type<int8>)
+                    var sp <- staged(host.mapped, at[2 * i + 1], int(sizes[2 * i + 1] / 4l), type<float>)
+                    let moved = q8_off(qp, sp, qs[i], ss[i], 0.0, 0)
                     t |> success(moved > 0, "{names[i / 2]}: the poisoned input moves the fused bytes ({moved} differ)")
                     delete qp
                     delete sp
                 }
-                at += (wide ? bqh : bq) + (wide ? bsh : bs)
             }
             for (i in range(8)) {
                 destroy_device_buf(qd[i])
@@ -446,34 +407,7 @@ def private row_fill(n : int; mul, add : int; scale, off : float) : array<float>
     return <- a
 }
 
-//! scales on the kernel cells' bar, quant bytes within one step: the device rounds a half-step value apart from the CPU
-def private q8_rows_off(qd : array<int8>; sd : array<float>; qr : array<int8>; sr : array<float>) : int {
-    var bad = 0
-    for (a, b in sd, sr) {
-        if (!approx(a, b)) {
-            bad++
-        }
-    }
-    for (a, b in qd, qr) {
-        if (abs(int(a) - int(b)) > 1) {
-            bad++
-        }
-    }
-    return bad
-}
-
 def private gelu_quick_ref(x : float) : float => x * (1.0 / (1.0 + exp(-1.702 * x)))
-
-//! the words of a read-back output that still carry the sentinel `word` - a whole buffer of them proves the dispatch wrote nothing there
-def private sentinel_words(got : array<uint>; word : uint = NAN_SENTINEL_BITS) : int {
-    var n = 0
-    for (w in got) {
-        if (w == word) {
-            n++
-        }
-    }
-    return n
-}
 
 [test]
 def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over the eight row classes: the fixture, one command buffer, eight oracles and their controls
@@ -549,8 +483,9 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             let xb_plain0_d = make_device_buf(bx)   // ... and its pre-norm output, which must stay untouched
             let x_half_d = make_device_buf(bx)      // the post-norm stamp at ascale = 0.5, ln_on = 0
             let xb_half_d = make_device_buf(bx)
-            let hostb = 11l * bx + bff + bh + bq + bs
-            var host = make_host_buf(hostb, true, [cached = true])
+            let sizes = fixed_array(bx, bx, bx, bx, bff, bh, bq, bs, bx, bx, bx, bx, bx, bx, bx)
+            let at <- staged_offsets(sizes)
+            var host = make_host_buf(at[length(sizes)], true, [cached = true])
             unsafe {
                 upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
                 upload_region_at(x0d, 0l, addr<uint8 const?>(x[0]), bx)
@@ -585,11 +520,11 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             var s_post_half = set_tower_post_add_cls(fixed_array(x_half_d, yd, xb_half_d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_XHALF, B_Y, B_XBHALF, 0u))
             var s_geglu = set_tower_geglu_cls(fixed_array(gd, ud), fixed_array(bff, bff), fixed_array(B_G, B_U))
             var pa_rms = TowerRowArgs(d = uint(d), rows = uint(rows), woff = 0u, eps = ROWS_EPS)
-            var pa_post = TowerRowArgs(d = uint(d), rows = uint(rows), woff = uint(d), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, ascale = 1.0)
-            var pa_post0 = TowerRowArgs(d = uint(d), rows = uint(rows), woff = uint(d), eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, ascale = 1.0)
-            var pa_post_plain = TowerRowArgs(d = uint(d), rows = uint(rows), woff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, ascale = 0.5)
-            var pa_post_plain0 = TowerRowArgs(d = uint(d), rows = uint(rows), woff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, ascale = 0.5)
-            var pa_post_half = TowerRowArgs(d = uint(d), rows = uint(rows), woff = uint(d), eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, ascale = 0.5)
+            var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
+            var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
+            var pa_post_plain = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 0.5)
+            var pa_post_plain0 = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 0.5)
+            var pa_post_half = TowerLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 0.5)
             var pa_clamp = TowerClampArgs(nelem = uint(nd), lo = lo, hi = hi)
             var pa_cvt = TowerClampArgs(nelem = uint(nd), lo = lo2, hi = hi2)
             var pa_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = lo2, hi = hi2)
@@ -608,74 +543,29 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 enc_tower_post_add_plain_cls(raw, h, s_post_plain0, pa_post_plain0, int64(rows))
                 enc_tower_post_add_cls(raw, h, s_post_half, pa_post_half, int64(rows))
                 enc_tower_post_add_cls(raw, h, s_post, pa_post, int64(rows))   // last: it rewrites x, which the rms and the feeds read whole
-                vhz_dep(raw, h, B_X | B_Y | B_XB | B_XB2 | B_Q | B_G | B_XH | B_XQ | B_XS | B_X0 | B_XB0 | B_XP | B_XBP | B_XP0 | B_XBP0 | B_XHALF, 0u, true)
-                cmd_copy_range(raw, xbd, 0l, host.buf, 0l, bx)
-                cmd_copy_range(raw, yd, 0l, host.buf, bx, bx)
-                cmd_copy_range(raw, xd, 0l, host.buf, 2l * bx, bx)
-                cmd_copy_range(raw, xb2d, 0l, host.buf, 3l * bx, bx)
-                cmd_copy_range(raw, gd, 0l, host.buf, 4l * bx, bff)
-                cmd_copy_range(raw, xhd, 0l, host.buf, 4l * bx + bff, bh)
-                cmd_copy_range(raw, xqd, 0l, host.buf, 4l * bx + bff + bh, bq)
-                cmd_copy_range(raw, xsd, 0l, host.buf, 4l * bx + bff + bh + bq, bs)
-                cmd_copy_range(raw, x0d, 0l, host.buf, 4l * bx + bff + bh + bq + bs, bx)
-                cmd_copy_range(raw, xb0d, 0l, host.buf, 5l * bx + bff + bh + bq + bs, bx)
-                cmd_copy_range(raw, x_plain_d, 0l, host.buf, 6l * bx + bff + bh + bq + bs, bx)
-                cmd_copy_range(raw, xb_plain_d, 0l, host.buf, 7l * bx + bff + bh + bq + bs, bx)
-                cmd_copy_range(raw, x_plain0_d, 0l, host.buf, 8l * bx + bff + bh + bq + bs, bx)
-                cmd_copy_range(raw, xb_plain0_d, 0l, host.buf, 9l * bx + bff + bh + bq + bs, bx)
-                cmd_copy_range(raw, x_half_d, 0l, host.buf, 10l * bx + bff + bh + bq + bs, bx)
+                cmd_copy_planes(raw, h, fixed_array(xbd, yd, xd, xb2d, gd, xhd, xqd, xsd, x0d, xb0d, x_plain_d, xb_plain_d, x_plain0_d, xb_plain0_d, x_half_d), host, sizes,
+                    B_X | B_Y | B_XB | B_XB2 | B_Q | B_G | B_XH | B_XQ | B_XS | B_X0 | B_XB0 | B_XP | B_XBP | B_XP0 | B_XBP0 | B_XHALF)
             }
-            var xp_dev : array<float>
-            var xbp_dev : array<float>
-            xp_dev |> resize(nd)
-            xbp_dev |> resize(nd)
-            var xb_dev : array<float>
-            var y_dev : array<float>
-            var x_dev : array<float>
-            var xb2_dev : array<float>
-            var g_dev : array<float>
-            var xh_dev : array<uint16>
-            var xq_dev : array<int8>
-            var xs_dev : array<float>
-            var x0_dev : array<float>
-            var xb0_dev : array<uint>
-            xb_dev |> resize(nd)
-            y_dev |> resize(nd)
-            x_dev |> resize(nd)
-            xb2_dev |> resize(nd)
-            g_dev |> resize(nff)
-            xh_dev |> resize(nd)
-            xq_dev |> resize(nd)
-            xs_dev |> resize(nd / q8e)
-            x0_dev |> resize(nd)
-            xb0_dev |> resize(nd)
-            unsafe {
-                let hp = intptr(host.mapped)
-                memcpy(addr<void?>(xb_dev[0]), reinterpret<void?>(hp), bx)
-                memcpy(addr<void?>(y_dev[0]), reinterpret<void?>(hp + uint64(bx)), bx)
-                memcpy(addr<void?>(x_dev[0]), reinterpret<void?>(hp + uint64(2l * bx)), bx)
-                memcpy(addr<void?>(xb2_dev[0]), reinterpret<void?>(hp + uint64(3l * bx)), bx)
-                memcpy(addr<void?>(g_dev[0]), reinterpret<void?>(hp + uint64(4l * bx)), bff)
-                memcpy(addr<void?>(xh_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bff)), bh)
-                memcpy(addr<void?>(xq_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bff + bh)), bq)
-                memcpy(addr<void?>(xs_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bff + bh + bq)), bs)
-                memcpy(addr<void?>(x0_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bff + bh + bq + bs)), bx)
-                memcpy(addr<void?>(xb0_dev[0]), reinterpret<void?>(hp + uint64(5l * bx + bff + bh + bq + bs)), bx)
-                memcpy(addr<void?>(xp_dev[0]), reinterpret<void?>(hp + uint64(6l * bx + bff + bh + bq + bs)), bx)
-                memcpy(addr<void?>(xbp_dev[0]), reinterpret<void?>(hp + uint64(7l * bx + bff + bh + bq + bs)), bx)
-            }
-            let xp0_dev <- staged_f32(host.mapped, 8l * bx + bff + bh + bq + bs, nd)
-            let xbp0_dev <- staged_u32(host.mapped, 9l * bx + bff + bh + bq + bs, nd)
-            let xhalf_dev <- staged_f32(host.mapped, 10l * bx + bff + bh + bq + bs, nd)
-            var q_dev : array<float>
-            q_dev |> resize(nd)
+            let xb_dev <- staged(host.mapped, at[0], nd, type<float>)
+            let y_dev <- staged(host.mapped, at[1], nd, type<float>)
+            let x_dev <- staged(host.mapped, at[2], nd, type<float>)
+            let xb2_dev <- staged(host.mapped, at[3], nd, type<float>)
+            let g_dev <- staged(host.mapped, at[4], nff, type<float>)
+            let xh_dev <- staged(host.mapped, at[5], nd, type<uint16>)
+            let xq_dev <- staged(host.mapped, at[6], nd, type<int8>)
+            let xs_dev <- staged(host.mapped, at[7], nd / q8e, type<float>)
+            let x0_dev <- staged(host.mapped, at[8], nd, type<float>)
+            let xb0_dev <- staged(host.mapped, at[9], nd, type<uint>)
+            let xp_dev <- staged(host.mapped, at[10], nd, type<float>)
+            let xbp_dev <- staged(host.mapped, at[11], nd, type<float>)
+            let xp0_dev <- staged(host.mapped, at[12], nd, type<float>)
+            let xbp0_dev <- staged(host.mapped, at[13], nd, type<uint>)
+            let xhalf_dev <- staged(host.mapped, at[14], nd, type<float>)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 vhz_dep(raw, h, B_Q, 0u, true)
                 cmd_copy_range(raw, qd, 0l, host.buf, 0l, bx)
             }
-            unsafe {
-                memcpy(addr<void?>(q_dev[0]), host.mapped, bx)
-            }
+            let q_dev <- staged(host.mapped, 0l, nd, type<float>)
             let wplane = PlaneF(p = unsafe(addr<float const?>(wn[0])), n = int64(2 * d))
             var xb_ref : array<float>
             xb_ref |> resize(nd)
@@ -703,11 +593,11 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             var xq_ref : array<int8>
             var xs_ref : array<float>
             requant_rows_q8_sized(clamped_x, int64(d), int64(rows), xq_ref, xs_ref)
-            let bad_rq = q8_rows_off(xq_dev, xs_dev, xq_ref, xs_ref)
+            let bad_rq = q8_off(xq_dev, xs_dev, xq_ref, xs_ref, APPROX_REL, 1)
             t |> success(bad_rq == 0, "tower_clamp_rq: the Q8_0 feed is the clamped rows requantized as the CPU does ({bad_rq} off)")
             var xs_poison := xs_ref
             xs_poison[0] += 0.5
-            t |> success(q8_rows_off(xq_dev, xs_dev, xq_ref, xs_poison) > 0, "tower_clamp_rq: the bar reds a poisoned scale")
+            t |> success(q8_off(xq_dev, xs_dev, xq_ref, xs_poison, APPROX_REL, 1) > 0, "tower_clamp_rq: the bar reds a poisoned scale")
             var q_ref := q
             var cos_x : array<float>
             var sin_x : array<float>
@@ -745,7 +635,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             t |> success(!approx(xb2_dev[nd - 1], xb2_ref[nd - 1] + 0.5), "tower_post_add: the bar reds a poisoned element")
             let bad_add0 = mismatch_approx(x0_dev, x_ref)
             t |> success(bad_add0 == 0, "tower_post_add ln_on = 0: the seam alone lands the same x ({bad_add0} of {nd} off)")
-            t |> equal(sentinel_words(xb0_dev), nd, "tower_post_add ln_on = 0: the pre-norm output stays untouched (every word the sentinel)")
+            t |> equal(count(xb0_dev, $(w) => w == NAN_SENTINEL_BITS), nd, "tower_post_add ln_on = 0: the pre-norm output stays untouched (every word the sentinel)")
             var xhalf_ref := x
             for (i in range(nd)) {
                 xhalf_ref[i] += 0.5 * ypost[i]
@@ -764,7 +654,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             let bad_plain0 = mismatch_approx(xp0_dev, xp_ref)
             t |> success(bad_plain0 == 0, "tower_post_add_plain ln_on = 0: the seam alone lands the same x ({bad_plain0} of {nd} off)")
             t |> success(!approx(xp0_dev[nd - 1], xp_ref[nd - 1] + 0.5), "tower_post_add_plain ln_on = 0: the bar reds a poisoned element")
-            t |> equal(sentinel_words(xbp0_dev), nd, "tower_post_add_plain ln_on = 0: the pre-norm output stays untouched (every word the sentinel)")
+            t |> equal(count(xbp0_dev, $(w) => w == NAN_SENTINEL_BITS), nd, "tower_post_add_plain ln_on = 0: the pre-norm output stays untouched (every word the sentinel)")
             var xbp_ref : array<float>
             xbp_ref |> resize(nd)
             rms_rows(xbp_ref, xp_ref, wplane, 0l, int64(d), int64(rows), ROWS_EPS)
@@ -903,27 +793,12 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 enc_tower_glu_sig_cls(raw, h, s_glu, pa_convmod, int64((nd + 255) / 256))
                 enc_tower_dw_conv5_cls(raw, h, s_dw, pa_convmod, int64((nd + 255) / 256))
                 enc_tower_g4a_attn64_cls(raw, h, s_attn, pa_attn, int64((rows * ROWS_HEADS + 63) / 64))
-                vhz_dep(raw, h, B_S | B_G | B_C | B_AO, 0u, true)
-                cmd_copy_range(raw, sd, 0l, host.buf, 0l, bx)
-                cmd_copy_range(raw, gd, 0l, host.buf, bx, bx)
-                cmd_copy_range(raw, cd, 0l, host.buf, 2l * bx, bx)
-                cmd_copy_range(raw, aod, 0l, host.buf, 3l * bx, bx)
+                cmd_copy_planes(raw, h, fixed_array(sd, gd, cd, aod), host, fixed_array(bx, bx, bx, bx), B_S | B_G | B_C | B_AO)
             }
-            var s_dev : array<float>
-            var g_dev : array<float>
-            var c_dev : array<float>
-            var ao_dev : array<float>
-            s_dev |> resize(nd)
-            g_dev |> resize(nd)
-            c_dev |> resize(nd)
-            ao_dev |> resize(nd)
-            unsafe {
-                let hp = intptr(host.mapped)
-                memcpy(addr<void?>(s_dev[0]), host.mapped, bx)
-                memcpy(addr<void?>(g_dev[0]), reinterpret<void?>(hp + uint64(bx)), bx)
-                memcpy(addr<void?>(c_dev[0]), reinterpret<void?>(hp + uint64(2l * bx)), bx)
-                memcpy(addr<void?>(ao_dev[0]), reinterpret<void?>(hp + uint64(3l * bx)), bx)
-            }
+            let s_dev <- staged(host.mapped, 0l, nd, type<float>)
+            let g_dev <- staged(host.mapped, bx, nd, type<float>)
+            let c_dev <- staged(host.mapped, 2l * bx, nd, type<float>)
+            let ao_dev <- staged(host.mapped, 3l * bx, nd, type<float>)
             var s_ref := s
             silu(s_ref, int64(nd))
             let bad_silu = mismatch_approx(s_dev, s_ref)
@@ -983,7 +858,7 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 vhz_dep(raw, h, B_AO, 0u, true)
                 cmd_copy_range(raw, aod, 0l, host.buf, 0l, bx)
             }
-            let ao_knee_dev <- staged_f32(host.mapped, 0l, nd)
+            let ao_knee_dev <- staged(host.mapped, 0l, nd, type<float>)
             let ao_capped_ref <- g4a_attn_ref(q_at_cap_knee, k, v, rpe, wn, rows, d, heads2, hs2, qscale2, kscale, G4A_CAP)
             let bad_capped = mismatch_approx(ao_knee_dev, ao_capped_ref)
             t |> success(bad_capped == 0, "tower_g4a_attn (128-wide stamp): the windowed RPE attention over scaled queries matches the CPU loop ({bad_capped} of {nd} off)")
@@ -1081,7 +956,7 @@ def test_vkt_tower_fastconformer(t0 : T?) {
                 vhz_dep(raw, h, B_C, 0u, true)
                 cmd_copy_range(raw, cd, 0l, host.buf, 0l, bx)
             }
-            let c_dev <- staged_f32(host.mapped, 0l, nd)
+            let c_dev <- staged(host.mapped, 0l, nd, type<float>)
             var c_ref : array<float>
             c_ref |> resize(nd)
             for (r in range(rows)) {
@@ -1163,11 +1038,9 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             let xd = make_device_buf(bx)
             let xbd = make_device_buf(bx)
             let yd = make_device_buf(bx)
-            let gd = make_device_buf(bx)
-            let g0d = make_device_buf(bx)    // the BIAS_ACT_NONE arm's rows: the bias alone
-            let gerf_d = make_device_buf(bx)
-            let gsilu_d = make_device_buf(bx)
-            let grelu_d = make_device_buf(bx)
+            let act_arms = fixed_array((act = BIAS_ACT_GELU_TANH, bit = B_G), (act = BIAS_ACT_NONE, bit = B_G0), (act = BIAS_ACT_GELU_ERF, bit = B_GERF),
+                (act = BIAS_ACT_SILU, bit = B_GSILU), (act = BIAS_ACT_RELU, bit = B_GRELU))   // one in-place row buffer an activation, the same rows in each
+            let act_d <- [for (_a in act_arms); make_device_buf(bx)]
             let xb2d = make_device_buf(bx)
             let x0d = make_device_buf(bx)    // the ln_on = 0 arm's x: the seam with no next layernorm
             let xb0d = make_device_buf(bx)   // ... and its layernorm output, which must stay untouched
@@ -1183,18 +1056,17 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             let qkvd = make_device_buf(bqkv)
             let cosd = make_device_buf(btab)
             let sind = make_device_buf(btab)
-            let hostb = 11l * bx + bp + bph + bq + bqkv
-            var host = make_host_buf(hostb, true, [cached = true])
+            let sizes = fixed_array(bx, bx, bx, bx, bp, bph, bq, bqkv, bx, bx, bx, bx, bx, bx, bx)
+            let at <- staged_offsets(sizes)
+            var host = make_host_buf(at[length(sizes)], true, [cached = true])
             unsafe {
                 upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
                 upload_region_at(x0d, 0l, addr<uint8 const?>(x[0]), bx)
                 upload_region_at(x_half_d, 0l, addr<uint8 const?>(x[0]), bx)
                 upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
-                upload_region_at(gd, 0l, addr<uint8 const?>(g[0]), bx)
-                upload_region_at(g0d, 0l, addr<uint8 const?>(g[0]), bx)
-                upload_region_at(gerf_d, 0l, addr<uint8 const?>(g[0]), bx)
-                upload_region_at(gsilu_d, 0l, addr<uint8 const?>(g[0]), bx)
-                upload_region_at(grelu_d, 0l, addr<uint8 const?>(g[0]), bx)
+                for (b in act_d) {
+                    upload_region_at(b, 0l, addr<uint8 const?>(g[0]), bx)
+                }
                 upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
                 upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bq)
                 upload_region_at(qkvd, 0l, addr<uint8 const?>(qkv[0]), bqkv)
@@ -1211,11 +1083,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             var s_rope = set_tower_rope_tab_cls(fixed_array(qkvd, cosd, sind), fixed_array(bqkv, btab, btab), fixed_array(B_QKV, 0u, 0u))
             var pa_rope = TowerRopeTabArgs(sstride = uint(3 * d_compact), soff = uint(d_compact), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), rows = uint(rows))
             var s_ln = set_tower_ln_cls(fixed_array(xd, xbd, wd), fixed_array(bx, bx, bw), fixed_array(B_X, B_XB, 0u))
-            var s_bias = set_tower_bias_act_cls(fixed_array(gd, wd), fixed_array(bx, bw), fixed_array(B_G, 0u))
-            var s_bias0 = set_tower_bias_act_cls(fixed_array(g0d, wd), fixed_array(bx, bw), fixed_array(B_G0, 0u))
-            var s_bias_erf = set_tower_bias_act_cls(fixed_array(gerf_d, wd), fixed_array(bx, bw), fixed_array(B_GERF, 0u))
-            var s_bias_silu = set_tower_bias_act_cls(fixed_array(gsilu_d, wd), fixed_array(bx, bw), fixed_array(B_GSILU, 0u))
-            var s_bias_relu = set_tower_bias_act_cls(fixed_array(grelu_d, wd), fixed_array(bx, bw), fixed_array(B_GRELU, 0u))
+            var s_acts <- [for (i in range(length(act_arms))); set_tower_bias_act_cls(fixed_array(act_d[i], wd), fixed_array(bx, bw), fixed_array(act_arms[i].bit, 0u))]
             var s_post = set_tower_post_add_ln_cls(fixed_array(xd, yd, xb2d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB2, 0u))
             var s_post0 = set_tower_post_add_ln_cls(fixed_array(x0d, yd, xb0d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X0, B_Y, B_XB0, 0u))
             var s_post_half = set_tower_post_add_ln_cls(fixed_array(x_half_d, yd, xb_half_d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_XHALF, B_Y, B_XBHALF, 0u))
@@ -1223,11 +1091,6 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             var s_pad16 = set_tower_hpad16_cls(fixed_array(qd, qphd), fixed_array(bq, bph), fixed_array(B_Q, B_QPH))
             var s_unpad = set_tower_hunpad_cls(fixed_array(qpd, qcd), fixed_array(bp, bq), fixed_array(B_QP, B_QC))
             var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(d), eps = ROWS_EPS)
-            var pa_bias = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_GELU_TANH)
-            var pa_bias0 = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_NONE)
-            var pa_bias_erf = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_GELU_ERF)
-            var pa_bias_silu = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_SILU)
-            var pa_bias_relu = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_RELU)
             var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
             var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
             var pa_post_half = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 0.5)
@@ -1236,11 +1099,10 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             let wg_rs = int64((rows_pad * d_padded + 255) / 256)   // the pads cover the 64-aligned cap: the rows past `rows` come out zero
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tower_ln_cls(raw, h, s_ln, pa_ln, int64(rows))
-                enc_tower_bias_act_cls(raw, h, s_bias, pa_bias, wg4)
-                enc_tower_bias_act_cls(raw, h, s_bias0, pa_bias0, wg4)
-                enc_tower_bias_act_cls(raw, h, s_bias_erf, pa_bias_erf, wg4)
-                enc_tower_bias_act_cls(raw, h, s_bias_silu, pa_bias_silu, wg4)
-                enc_tower_bias_act_cls(raw, h, s_bias_relu, pa_bias_relu, wg4)
+                for (arm, s_act in act_arms, s_acts) {
+                    var pa_act = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = arm.act)
+                    enc_tower_bias_act_cls(raw, h, s_act, pa_act, wg4)
+                }
                 enc_tower_hpad_cls(raw, h, s_pad, pa_rs, wg_rs)
                 enc_tower_hpad16_cls(raw, h, s_pad16, pa_rs, wg_rs)
                 enc_tower_hunpad_cls(raw, h, s_unpad, pa_rs, wg_rs)
@@ -1248,67 +1110,24 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 enc_tower_post_add_ln_cls(raw, h, s_post0, pa_post0, int64(rows))
                 enc_tower_post_add_ln_cls(raw, h, s_post_half, pa_post_half, int64(rows))
                 enc_tower_post_add_ln_cls(raw, h, s_post, pa_post, int64(rows))   // last: it rewrites x, which the layernorm reads whole
-                vhz_dep(raw, h, B_X | B_XB | B_G | B_XB2 | B_QP | B_QPH | B_QC | B_QKV | B_G0 | B_X0 | B_XB0 | B_GERF | B_GSILU | B_GRELU | B_XHALF, 0u, true)
-                cmd_copy_range(raw, xbd, 0l, host.buf, 0l, bx)
-                cmd_copy_range(raw, gd, 0l, host.buf, bx, bx)
-                cmd_copy_range(raw, xd, 0l, host.buf, 2l * bx, bx)
-                cmd_copy_range(raw, xb2d, 0l, host.buf, 3l * bx, bx)
-                cmd_copy_range(raw, qpd, 0l, host.buf, 4l * bx, bp)
-                cmd_copy_range(raw, qphd, 0l, host.buf, 4l * bx + bp, bph)
-                cmd_copy_range(raw, qcd, 0l, host.buf, 4l * bx + bp + bph, bq)
-                cmd_copy_range(raw, qkvd, 0l, host.buf, 4l * bx + bp + bph + bq, bqkv)
-                cmd_copy_range(raw, g0d, 0l, host.buf, 4l * bx + bp + bph + bq + bqkv, bx)
-                cmd_copy_range(raw, x0d, 0l, host.buf, 5l * bx + bp + bph + bq + bqkv, bx)
-                cmd_copy_range(raw, xb0d, 0l, host.buf, 6l * bx + bp + bph + bq + bqkv, bx)
-                cmd_copy_range(raw, gerf_d, 0l, host.buf, 7l * bx + bp + bph + bq + bqkv, bx)
-                cmd_copy_range(raw, gsilu_d, 0l, host.buf, 8l * bx + bp + bph + bq + bqkv, bx)
-                cmd_copy_range(raw, grelu_d, 0l, host.buf, 9l * bx + bp + bph + bq + bqkv, bx)
-                cmd_copy_range(raw, x_half_d, 0l, host.buf, 10l * bx + bp + bph + bq + bqkv, bx)
+                cmd_copy_planes(raw, h, fixed_array(xbd, act_d[0], xd, xb2d, qpd, qphd, qcd, qkvd, act_d[1], x0d, xb0d, act_d[2], act_d[3], act_d[4], x_half_d), host, sizes,
+                    B_X | B_XB | B_G | B_XB2 | B_QP | B_QPH | B_QC | B_QKV | B_G0 | B_X0 | B_XB0 | B_GERF | B_GSILU | B_GRELU | B_XHALF)
             }
-            var qkv_dev : array<float>
-            qkv_dev |> resize(rows * 3 * d_compact)
-            var xb_dev : array<float>
-            var g_dev : array<float>
-            var x_dev : array<float>
-            var xb2_dev : array<float>
-            var qp_dev : array<float>
-            var qph_dev : array<uint16>
-            var qc_dev : array<float>
-            var g0_dev : array<float>
-            var x0_dev : array<float>
-            var xb0_dev : array<uint>
-            var gerf_dev : array<float>
-            var gsilu_dev : array<float>
-            gerf_dev |> resize(nd)
-            gsilu_dev |> resize(nd)
-            xb_dev |> resize(nd)
-            g_dev |> resize(nd)
-            x_dev |> resize(nd)
-            xb2_dev |> resize(nd)
-            qp_dev |> resize(rows_pad * d_padded)
-            qph_dev |> resize(rows_pad * d_padded)
-            qc_dev |> resize(rows * d_compact)
-            g0_dev |> resize(nd)
-            x0_dev |> resize(nd)
-            xb0_dev |> resize(nd)
-            unsafe {
-                let hp = intptr(host.mapped)
-                memcpy(addr<void?>(xb_dev[0]), host.mapped, bx)
-                memcpy(addr<void?>(g_dev[0]), reinterpret<void?>(hp + uint64(bx)), bx)
-                memcpy(addr<void?>(x_dev[0]), reinterpret<void?>(hp + uint64(2l * bx)), bx)
-                memcpy(addr<void?>(xb2_dev[0]), reinterpret<void?>(hp + uint64(3l * bx)), bx)
-                memcpy(addr<void?>(qp_dev[0]), reinterpret<void?>(hp + uint64(4l * bx)), bp)
-                memcpy(addr<void?>(qph_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bp)), bph)
-                memcpy(addr<void?>(qc_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bp + bph)), bq)
-                memcpy(addr<void?>(qkv_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bp + bph + bq)), bqkv)
-                memcpy(addr<void?>(g0_dev[0]), reinterpret<void?>(hp + uint64(4l * bx + bp + bph + bq + bqkv)), bx)
-                memcpy(addr<void?>(x0_dev[0]), reinterpret<void?>(hp + uint64(5l * bx + bp + bph + bq + bqkv)), bx)
-                memcpy(addr<void?>(xb0_dev[0]), reinterpret<void?>(hp + uint64(6l * bx + bp + bph + bq + bqkv)), bx)
-                memcpy(addr<void?>(gerf_dev[0]), reinterpret<void?>(hp + uint64(7l * bx + bp + bph + bq + bqkv)), bx)
-                memcpy(addr<void?>(gsilu_dev[0]), reinterpret<void?>(hp + uint64(8l * bx + bp + bph + bq + bqkv)), bx)
-            }
-            let grelu_dev <- staged_f32(host.mapped, 9l * bx + bp + bph + bq + bqkv, nd)
-            let xhalf_dev <- staged_f32(host.mapped, 10l * bx + bp + bph + bq + bqkv, nd)
+            let xb_dev <- staged(host.mapped, at[0], nd, type<float>)
+            let g_dev <- staged(host.mapped, at[1], nd, type<float>)
+            let x_dev <- staged(host.mapped, at[2], nd, type<float>)
+            let xb2_dev <- staged(host.mapped, at[3], nd, type<float>)
+            let qp_dev <- staged(host.mapped, at[4], rows_pad * d_padded, type<float>)
+            let qph_dev <- staged(host.mapped, at[5], rows_pad * d_padded, type<uint16>)
+            let qc_dev <- staged(host.mapped, at[6], rows * d_compact, type<float>)
+            let qkv_dev <- staged(host.mapped, at[7], rows * 3 * d_compact, type<float>)
+            let g0_dev <- staged(host.mapped, at[8], nd, type<float>)
+            let x0_dev <- staged(host.mapped, at[9], nd, type<float>)
+            let xb0_dev <- staged(host.mapped, at[10], nd, type<uint>)
+            let gerf_dev <- staged(host.mapped, at[11], nd, type<float>)
+            let gsilu_dev <- staged(host.mapped, at[12], nd, type<float>)
+            let grelu_dev <- staged(host.mapped, at[13], nd, type<float>)
+            let xhalf_dev <- staged(host.mapped, at[14], nd, type<float>)
             var xb_ref : array<float>
             xb_ref |> resize(nd)
             layernorm_batch(xb_ref, x, wn, 0l, int64(d), int64(d), int64(rows), ROWS_EPS)
@@ -1362,7 +1181,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             t |> success(!approx(xb2_dev[nd - 1], xb2_ref[nd - 1] + 0.5), "tower_post_add_ln: the bar reds a poisoned element")
             let bad_add0 = mismatch_approx(x0_dev, x_ref)
             t |> success(bad_add0 == 0, "tower_post_add_ln ln_on = 0: the seam alone lands the same x ({bad_add0} of {nd} off)")
-            t |> equal(sentinel_words(xb0_dev), nd, "tower_post_add_ln ln_on = 0: the layernorm output stays untouched (every word the sentinel)")
+            t |> equal(count(xb0_dev, $(w) => w == NAN_SENTINEL_BITS), nd, "tower_post_add_ln ln_on = 0: the layernorm output stays untouched (every word the sentinel)")
             var xhalf_ref := x
             for (i in range(nd)) {
                 xhalf_ref[i] += 0.5 * yb[i]
@@ -1393,15 +1212,15 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             // the rows in [rows, rows_pad): the pads write them zero, so the flash tile's last 16-row group reads no stale shadow
             let tail_lo = rows * d_padded
             let tail_hi = rows_pad * d_padded
-            let bad_tail = nonzero_in(qp_dev, tail_lo, tail_hi)
-            let bad_tail16 = nonzero_halves_in(qph_dev, tail_lo, tail_hi)
+            let bad_tail = count(each(range(tail_lo, tail_hi)), $(i) => qp_dev[i] != 0.0)
+            let bad_tail16 = count(each(range(tail_lo, tail_hi)), $(i) => uint(qph_dev[i]) != 0u)
             t |> success(rows_pad > rows && bad_tail == 0, "tower_hpad: the {rows_pad - rows} rows past the live count are zero ({bad_tail} off)")
             t |> success(bad_tail16 == 0, "tower_hpad16: the rows past the live count are zero in f16 ({bad_tail16} off)")
             var qp_poison := qp_dev
             var qph_poison := qph_dev
             qp_poison[tail_hi - 1] += 0.5
             qph_poison[tail_hi - 1] = uint16(f32_to_f16(0.5))
-            t |> success(nonzero_in(qp_poison, tail_lo, tail_hi) > 0 && nonzero_halves_in(qph_poison, tail_lo, tail_hi) > 0, "tower_hpad / hpad16: the tail check reds a poisoned element")
+            t |> success(count(each(range(tail_lo, tail_hi)), $(i) => qp_poison[i] != 0.0) > 0 && count(each(range(tail_lo, tail_hi)), $(i) => uint(qph_poison[i]) != 0u) > 0, "tower_hpad / hpad16: the tail check reds a poisoned element")
             let bad_unpad = mismatch_exact(qc_dev, q)
             t |> success(bad_unpad == 0, "tower_hunpad: the compact rows come back off the padded panel exactly ({bad_unpad} off)")
             t |> success(qc_dev[0] != q[0] + 0.5, "tower_hunpad: the bar reds a poisoned element")
@@ -1424,7 +1243,10 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             t |> success(bad_rope == 0, "tower_rope_tab: the k slot of the fused rows matches rope_neox_tab_rows ({bad_rope} of {rows * d_compact} off)")
             t |> success(bad_slots == 0, "tower_rope_tab: the q and v slots stay untouched ({bad_slots} moved)")
             t |> success(!approx(k_dev[0], k_ref[0] + 0.5), "tower_rope_tab: the bar reds a poisoned element")
-            for (b in fixed_array(xd, xbd, yd, gd, g0d, gerf_d, gsilu_d, grelu_d, xb2d, x0d, xb0d, x_half_d, xb_half_d, wd, qd, qpd, qphd, qcd, qkvd, cosd, sind)) {
+            for (b in fixed_array(xd, xbd, yd, xb2d, x0d, xb0d, x_half_d, xb_half_d, wd, qd, qpd, qphd, qcd, qkvd, cosd, sind)) {
+                destroy_device_buf(b)
+            }
+            for (b in act_d) {
                 destroy_device_buf(b)
             }
             destroy_host_buf(host)
@@ -1485,15 +1307,13 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let x_post16_d = make_device_buf(bx)    // the f16 post-add's own x: both post-adds update x in place from the same start
             let x_post16z_d = make_device_buf(bx)   // the f16 post-add at ln_on = 0: the seam alone
             let xb2h0d = make_device_buf(bxh)       // ... and its half pre-norm output, which must stay untouched
-            let gerf_d = make_device_buf(bx)        // the erf arm: the f32 stamp in place, the f16 stamp reading it first
-            let gherf_d = make_device_buf(bxh)
-            let grelu_d = make_device_buf(bx)       // the relu arm, the same pair
-            let ghrelu_d = make_device_buf(bxh)
+            let act_arms = fixed_array((act = BIAS_ACT_GELU_TANH, bit = B_G, hbit = B_GH), (act = BIAS_ACT_GELU_ERF, bit = B_GE, hbit = B_GHE),
+                (act = BIAS_ACT_RELU, bit = B_GR, hbit = B_GHR))   // an activation's pair: the f32 stamp in place, the f16 stamp reading its rows first
+            let act_d <- [for (_a in act_arms); make_device_buf(bx)]
+            let act_hd <- [for (_a in act_arms); make_device_buf(bxh)]
             let xbd = make_device_buf(bx)
             let xbhd = make_device_buf(bxh)
             let yd = make_device_buf(bx)
-            let gd = make_device_buf(bx)
-            let ghd = make_device_buf(bxh)
             let xb2d = make_device_buf(bx)
             let xb2hd = make_device_buf(bxh)
             let wd = make_device_buf(bw)
@@ -1501,21 +1321,17 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let qpd = make_device_buf(bp)
             let qphd = make_device_buf(bph)
             let qchd = make_device_buf(bqh)
-            let o_gerf = 2l * bx + 3l * bxh + bp + bph + bqh
-            let o_gherf = o_gerf + bx
-            let o_grelu = o_gherf + bxh
-            let o_ghrelu = o_grelu + bx
-            let o_x16z = o_ghrelu + bxh
-            let o_xb2h0 = o_x16z + bx
-            var host = make_host_buf(o_xb2h0 + bxh, true, [cached = true])
+            let sizes = fixed_array(bx, bxh, bx, bxh, bxh, bp, bph, bqh, bx, bxh, bx, bxh, bx, bxh)
+            let at <- staged_offsets(sizes)
+            var host = make_host_buf(at[length(sizes)], true, [cached = true])
             unsafe {
                 upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
                 upload_region_at(x_post16_d, 0l, addr<uint8 const?>(x[0]), bx)
                 upload_region_at(x_post16z_d, 0l, addr<uint8 const?>(x[0]), bx)
                 upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
-                upload_region_at(gd, 0l, addr<uint8 const?>(g[0]), bx)
-                upload_region_at(gerf_d, 0l, addr<uint8 const?>(g[0]), bx)
-                upload_region_at(grelu_d, 0l, addr<uint8 const?>(g[0]), bx)
+                for (b in act_d) {
+                    upload_region_at(b, 0l, addr<uint8 const?>(g[0]), bx)
+                }
                 upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
                 upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bq)
             }
@@ -1525,19 +1341,16 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             fill_upload(xbhd, 0l, bxh, F16_SENTINEL_BITS)
             fill_upload(xb2hd, 0l, bxh, F16_SENTINEL_BITS)
             fill_upload(xb2h0d, 0l, bxh, F16_SENTINEL_BITS)
-            fill_upload(ghd, 0l, bxh, F16_SENTINEL_BITS)
-            fill_upload(gherf_d, 0l, bxh, F16_SENTINEL_BITS)
-            fill_upload(ghrelu_d, 0l, bxh, F16_SENTINEL_BITS)
+            for (b in act_hd) {
+                fill_upload(b, 0l, bxh, F16_SENTINEL_BITS)
+            }
             fill_upload(qphd, 0l, bph, F16_SENTINEL_BITS)
             fill_upload(qchd, 0l, bqh, F16_SENTINEL_BITS)
             var s_ln = set_tower_ln_cls(fixed_array(xd, xbd, wd), fixed_array(bx, bx, bw), fixed_array(B_X, B_XB, 0u))
             var s_ln16 = set_tower_ln16_cls(fixed_array(xd, wd, xbhd), fixed_array(bx, bw, bxh), fixed_array(B_X, 0u, B_XBH))
-            var s_bias = set_tower_bias_act_cls(fixed_array(gd, wd), fixed_array(bx, bw), fixed_array(B_G, 0u))
-            var s_bias16 = set_tower_bias_act_cvt16_cls(fixed_array(gd, wd, ghd), fixed_array(bx, bw, bxh), fixed_array(B_G, 0u, B_GH))
-            var s_bias_erf = set_tower_bias_act_cls(fixed_array(gerf_d, wd), fixed_array(bx, bw), fixed_array(B_GE, 0u))
-            var s_bias16_erf = set_tower_bias_act_cvt16_cls(fixed_array(gerf_d, wd, gherf_d), fixed_array(bx, bw, bxh), fixed_array(B_GE, 0u, B_GHE))
-            var s_bias_relu = set_tower_bias_act_cls(fixed_array(grelu_d, wd), fixed_array(bx, bw), fixed_array(B_GR, 0u))
-            var s_bias16_relu = set_tower_bias_act_cvt16_cls(fixed_array(grelu_d, wd, ghrelu_d), fixed_array(bx, bw, bxh), fixed_array(B_GR, 0u, B_GHR))
+            var s_acts <- [for (i in range(length(act_arms))); set_tower_bias_act_cls(fixed_array(act_d[i], wd), fixed_array(bx, bw), fixed_array(act_arms[i].bit, 0u))]
+            var s_acts16 <- [for (i in range(length(act_arms)));
+                set_tower_bias_act_cvt16_cls(fixed_array(act_d[i], wd, act_hd[i]), fixed_array(bx, bw, bxh), fixed_array(act_arms[i].bit, 0u, act_arms[i].hbit))]
             var s_post = set_tower_post_add_ln_cls(fixed_array(xd, yd, xb2d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB2, 0u))
             var s_post16 = set_tower_post_add_ln16_cls(fixed_array(x_post16_d, yd, wd, xb2hd), fixed_array(bx, bx, bw, bxh), fixed_array(B_X2, B_Y, 0u, B_XB2H))
             var s_post16z = set_tower_post_add_ln16_cls(fixed_array(x_post16z_d, yd, wd, xb2h0d), fixed_array(bx, bx, bw, bxh), fixed_array(B_X16Z, B_Y, 0u, B_XB2H0))
@@ -1545,9 +1358,6 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             var s_pad16b = set_tower_hpad16_b_cls(fixed_array(qd, qphd, wd), fixed_array(bq, bph, bw), fixed_array(B_Q, B_QPH, 0u))
             var s_unpad16 = set_tower_hunpad16_cls(fixed_array(qpd, qchd), fixed_array(bp, bqh), fixed_array(B_QP, B_QCH))
             var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(d), eps = ROWS_EPS)
-            var pa_bias = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_GELU_TANH)
-            var pa_bias_erf = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_GELU_ERF)
-            var pa_bias_relu = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_RELU)
             var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
             var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
             var pa_rs = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows_pad), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP),
@@ -1557,67 +1367,34 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tower_ln_cls(raw, h, s_ln, pa_ln, int64(rows))
                 enc_tower_ln16_cls(raw, h, s_ln16, pa_ln, int64(rows))
-                enc_tower_bias_act_cvt16_cls(raw, h, s_bias16, pa_bias, wg4)   // reads g before the in-place stamp rewrites it
-                enc_tower_bias_act_cls(raw, h, s_bias, pa_bias, wg4)
-                enc_tower_bias_act_cvt16_cls(raw, h, s_bias16_erf, pa_bias_erf, wg4)
-                enc_tower_bias_act_cls(raw, h, s_bias_erf, pa_bias_erf, wg4)
-                enc_tower_bias_act_cvt16_cls(raw, h, s_bias16_relu, pa_bias_relu, wg4)
-                enc_tower_bias_act_cls(raw, h, s_bias_relu, pa_bias_relu, wg4)
+                for (arm, s_act, s_act16 in act_arms, s_acts, s_acts16) {
+                    var pa_act = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = arm.act)
+                    enc_tower_bias_act_cvt16_cls(raw, h, s_act16, pa_act, wg4)   // reads the rows before the in-place stamp rewrites them
+                    enc_tower_bias_act_cls(raw, h, s_act, pa_act, wg4)
+                }
                 enc_tower_hpad_b_cls(raw, h, s_padb, pa_rs, wg_rs)
                 enc_tower_hpad16_b_cls(raw, h, s_pad16b, pa_rs, wg_rs)
                 enc_tower_hunpad16_cls(raw, h, s_unpad16, pa_rs, wg_rs)
                 enc_tower_post_add_ln_cls(raw, h, s_post, pa_post, int64(rows))   // last on x: the layernorms read x whole
                 enc_tower_post_add_ln16_cls(raw, h, s_post16, pa_post, int64(rows))
                 enc_tower_post_add_ln16_cls(raw, h, s_post16z, pa_post0, int64(rows))
-                vhz_dep(raw, h, B_X | B_X2 | B_XB | B_XBH | B_G | B_GH | B_QP | B_QPH | B_QCH | B_XB2 | B_XB2H | B_GE | B_GHE | B_GR | B_GHR | B_X16Z | B_XB2H0, 0u, true)
-                cmd_copy_range(raw, xbd, 0l, host.buf, 0l, bx)
-                cmd_copy_range(raw, xbhd, 0l, host.buf, bx, bxh)
-                cmd_copy_range(raw, gd, 0l, host.buf, bx + bxh, bx)
-                cmd_copy_range(raw, ghd, 0l, host.buf, 2l * bx + bxh, bxh)
-                cmd_copy_range(raw, xb2hd, 0l, host.buf, 2l * bx + 2l * bxh, bxh)
-                cmd_copy_range(raw, qpd, 0l, host.buf, 2l * bx + 3l * bxh, bp)
-                cmd_copy_range(raw, qphd, 0l, host.buf, 2l * bx + 3l * bxh + bp, bph)
-                cmd_copy_range(raw, qchd, 0l, host.buf, 2l * bx + 3l * bxh + bp + bph, bqh)
-                cmd_copy_range(raw, gerf_d, 0l, host.buf, o_gerf, bx)
-                cmd_copy_range(raw, gherf_d, 0l, host.buf, o_gherf, bxh)
-                cmd_copy_range(raw, grelu_d, 0l, host.buf, o_grelu, bx)
-                cmd_copy_range(raw, ghrelu_d, 0l, host.buf, o_ghrelu, bxh)
-                cmd_copy_range(raw, x_post16z_d, 0l, host.buf, o_x16z, bx)
-                cmd_copy_range(raw, xb2h0d, 0l, host.buf, o_xb2h0, bxh)
+                cmd_copy_planes(raw, h, fixed_array(xbd, xbhd, act_d[0], act_hd[0], xb2hd, qpd, qphd, qchd, act_d[1], act_hd[1], act_d[2], act_hd[2], x_post16z_d, xb2h0d), host, sizes,
+                    B_X | B_X2 | B_XB | B_XBH | B_G | B_GH | B_QP | B_QPH | B_QCH | B_XB2 | B_XB2H | B_GE | B_GHE | B_GR | B_GHR | B_X16Z | B_XB2H0)
             }
-            var xb_dev : array<float>
-            var xbh_dev : array<uint16>
-            var g_dev : array<float>
-            var gh_dev : array<uint16>
-            var xb2h_dev : array<uint16>
-            var qp_dev : array<float>
-            var qph_dev : array<uint16>
-            var qch_dev : array<uint16>
-            xb_dev |> resize(nd)
-            xbh_dev |> resize(nd)
-            g_dev |> resize(nd)
-            gh_dev |> resize(nd)
-            xb2h_dev |> resize(nd)
-            qp_dev |> resize(rows_pad * d_padded)
-            qph_dev |> resize(rows_pad * d_padded)
-            qch_dev |> resize(rows * d_compact)
-            unsafe {
-                let hp = intptr(host.mapped)
-                memcpy(addr<void?>(xb_dev[0]), host.mapped, bx)
-                memcpy(addr<void?>(xbh_dev[0]), reinterpret<void?>(hp + uint64(bx)), bxh)
-                memcpy(addr<void?>(g_dev[0]), reinterpret<void?>(hp + uint64(bx + bxh)), bx)
-                memcpy(addr<void?>(gh_dev[0]), reinterpret<void?>(hp + uint64(2l * bx + bxh)), bxh)
-                memcpy(addr<void?>(xb2h_dev[0]), reinterpret<void?>(hp + uint64(2l * bx + 2l * bxh)), bxh)
-                memcpy(addr<void?>(qp_dev[0]), reinterpret<void?>(hp + uint64(2l * bx + 3l * bxh)), bp)
-                memcpy(addr<void?>(qph_dev[0]), reinterpret<void?>(hp + uint64(2l * bx + 3l * bxh + bp)), bph)
-                memcpy(addr<void?>(qch_dev[0]), reinterpret<void?>(hp + uint64(2l * bx + 3l * bxh + bp + bph)), bqh)
-            }
-            let gerf_dev <- staged_f32(host.mapped, o_gerf, nd)
-            let gherf_dev <- staged_u16(host.mapped, o_gherf, nd)
-            let grelu_dev <- staged_f32(host.mapped, o_grelu, nd)
-            let ghrelu_dev <- staged_u16(host.mapped, o_ghrelu, nd)
-            let x16z_dev <- staged_f32(host.mapped, o_x16z, nd)
-            let xb2h0_dev <- staged_u32(host.mapped, o_xb2h0, nd / 2)
+            let xb_dev <- staged(host.mapped, at[0], nd, type<float>)
+            let xbh_dev <- staged(host.mapped, at[1], nd, type<uint16>)
+            let g_dev <- staged(host.mapped, at[2], nd, type<float>)
+            let gh_dev <- staged(host.mapped, at[3], nd, type<uint16>)
+            let xb2h_dev <- staged(host.mapped, at[4], nd, type<uint16>)
+            let qp_dev <- staged(host.mapped, at[5], rows_pad * d_padded, type<float>)
+            let qph_dev <- staged(host.mapped, at[6], rows_pad * d_padded, type<uint16>)
+            let qch_dev <- staged(host.mapped, at[7], rows * d_compact, type<uint16>)
+            let gerf_dev <- staged(host.mapped, at[8], nd, type<float>)
+            let gherf_dev <- staged(host.mapped, at[9], nd, type<uint16>)
+            let grelu_dev <- staged(host.mapped, at[10], nd, type<float>)
+            let ghrelu_dev <- staged(host.mapped, at[11], nd, type<uint16>)
+            let x16z_dev <- staged(host.mapped, at[12], nd, type<float>)
+            let xb2h0_dev <- staged(host.mapped, at[13], nd / 2, type<uint>)
             var bad_ln16 = 0
             var bad_bias16 = 0
             var bad_post16 = 0
@@ -1657,7 +1434,7 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let bad_add16z = mismatch_approx(x16z_dev, x_ref)
             t |> success(bad_add16z == 0, "tower_post_add_ln16 ln_on = 0: the seam alone lands x += y + b ({bad_add16z} of {nd} off)")
             t |> success(!approx(x16z_dev[nd - 1], x_ref[nd - 1] + 0.5), "tower_post_add_ln16 ln_on = 0: the bar reds a poisoned element")
-            t |> equal(sentinel_words(xb2h0_dev, F16_SENTINEL_BITS), nd / 2, "tower_post_add_ln16 ln_on = 0: the half pre-norm output stays untouched (every word the sentinel)")
+            t |> equal(count(xb2h0_dev, $(w) => w == F16_SENTINEL_BITS), nd / 2, "tower_post_add_ln16 ln_on = 0: the half pre-norm output stays untouched (every word the sentinel)")
             var xb2_ref : array<float>
             xb2_ref |> resize(nd)
             layernorm_batch(xb2_ref, x_ref, wn, int64(3 * d), int64(d), int64(d), int64(rows), ROWS_EPS)
@@ -1700,15 +1477,19 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             t |> success(uint(qch_dev[0]) != f32_to_f16(qp_dev[0] + 0.5), "tower_hunpad16: the bar reds a poisoned element")
             let tail_lo = rows * d_padded
             let tail_hi = rows_pad * d_padded
-            let bad_tail16 = nonzero_in(qp_dev, tail_lo, tail_hi) + nonzero_halves_in(qph_dev, tail_lo, tail_hi)
+            let bad_tail16 = count(each(range(tail_lo, tail_hi)), $(i) => qp_dev[i] != 0.0) + count(each(range(tail_lo, tail_hi)), $(i) => uint(qph_dev[i]) != 0u)
             t |> success(rows_pad > rows && bad_tail16 == 0, "tower_hpad_b / hpad16_b: the {rows_pad - rows} rows past the live count are zero ({bad_tail16} off)")
             var qp_poison := qp_dev
             var qph_poison := qph_dev
             qp_poison[tail_hi - 1] += 0.5
             qph_poison[tail_hi - 1] = uint16(f32_to_f16(0.5))
-            t |> success(nonzero_in(qp_poison, tail_lo, tail_hi) > 0 && nonzero_halves_in(qph_poison, tail_lo, tail_hi) > 0, "tower_hpad_b / hpad16_b: the tail check reds a poisoned element")
-            for (b in fixed_array(xd, x_post16_d, x_post16z_d, xb2h0d, gerf_d, gherf_d, grelu_d, ghrelu_d, xbd, xbhd, yd, gd, ghd, xb2d, xb2hd, wd, qd, qpd, qphd, qchd)) {
+            t |> success(count(each(range(tail_lo, tail_hi)), $(i) => qp_poison[i] != 0.0) > 0 && count(each(range(tail_lo, tail_hi)), $(i) => uint(qph_poison[i]) != 0u) > 0, "tower_hpad_b / hpad16_b: the tail check reds a poisoned element")
+            for (b in fixed_array(xd, x_post16_d, x_post16z_d, xb2h0d, xbd, xbhd, yd, xb2d, xb2hd, wd, qd, qpd, qphd, qchd)) {
                 destroy_device_buf(b)
+            }
+            for (b, bh in act_d, act_hd) {
+                destroy_device_buf(b)
+                destroy_device_buf(bh)
             }
             destroy_host_buf(host)
         } else {
@@ -1822,8 +1603,9 @@ def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over
             nan_sentinel_upload(pyd, bpy)
             let yd = make_device_buf(by)
             let ycd = make_device_buf(by)
-            let hostb = 2l * bkv + 2l * bkvf + 2l * by
-            var host = make_host_buf(hostb, true, [cached = true])
+            let sizes = fixed_array(bkv, bkv, bkvf, bkvf, by, by)
+            let at <- staged_offsets(sizes)
+            var host = make_host_buf(at[length(sizes)], true, [cached = true])
             unsafe {
                 upload_region_at(srcd, 0l, addr<uint8 const?>(src[0]), bsrc)
                 upload_region_at(histd, 0l, addr<uint8 const?>(hist[0]), bhist)
@@ -1880,35 +1662,14 @@ def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over
                 enc_tower_wdec_attn_comb_cls(raw, h, s_comb, pa_c, wg_comb)
                 enc_tower_wdec_attn_part_cls(raw, h, s_attn, pa_ac, wg_attn)
                 enc_tower_wdec_attn_comb_cls(raw, h, s_combc, pa_c, wg_comb)
-                vhz_dep(raw, h, B_K | B_V | B_KX | B_VX | B_Y | B_YC, 0u, true)
-                cmd_copy_range(raw, kd, 0l, host.buf, 0l, bkv)
-                cmd_copy_range(raw, vd, 0l, host.buf, bkv, bkv)
-                cmd_copy_range(raw, kxd, 0l, host.buf, 2l * bkv, bkvf)
-                cmd_copy_range(raw, vxd, 0l, host.buf, 2l * bkv + bkvf, bkvf)
-                cmd_copy_range(raw, yd, 0l, host.buf, 2l * bkv + 2l * bkvf, by)
-                cmd_copy_range(raw, ycd, 0l, host.buf, 2l * bkv + 2l * bkvf + by, by)
+                cmd_copy_planes(raw, h, fixed_array(kd, vd, kxd, vxd, yd, ycd), host, sizes, B_K | B_V | B_KX | B_VX | B_Y | B_YC)
             }
-            var k_dev : array<uint16>
-            var v_dev : array<uint16>
-            var kx_dev : array<float>
-            var vx_dev : array<float>
-            var y_dev : array<float>
-            var yc_dev : array<float>
-            k_dev |> resize(heads * tstride * hs)
-            v_dev |> resize(heads * tstride * hs)
-            kx_dev |> resize(heads * tstride * hs)
-            vx_dev |> resize(heads * tstride * hs)
-            y_dev |> resize(rows * d)
-            yc_dev |> resize(rows * d)
-            unsafe {
-                let hp = intptr(host.mapped)
-                memcpy(addr<void?>(k_dev[0]), host.mapped, bkv)
-                memcpy(addr<void?>(v_dev[0]), reinterpret<void?>(hp + uint64(bkv)), bkv)
-                memcpy(addr<void?>(kx_dev[0]), reinterpret<void?>(hp + uint64(2l * bkv)), bkvf)
-                memcpy(addr<void?>(vx_dev[0]), reinterpret<void?>(hp + uint64(2l * bkv + bkvf)), bkvf)
-                memcpy(addr<void?>(y_dev[0]), reinterpret<void?>(hp + uint64(2l * bkv + 2l * bkvf)), by)
-                memcpy(addr<void?>(yc_dev[0]), reinterpret<void?>(hp + uint64(2l * bkv + 2l * bkvf + by)), by)
-            }
+            let k_dev <- staged(host.mapped, at[0], heads * tstride * hs, type<uint16>)
+            let v_dev <- staged(host.mapped, at[1], heads * tstride * hs, type<uint16>)
+            let kx_dev <- staged(host.mapped, at[2], heads * tstride * hs, type<float>)
+            let vx_dev <- staged(host.mapped, at[3], heads * tstride * hs, type<float>)
+            let y_dev <- staged(host.mapped, at[4], rows * d, type<float>)
+            let yc_dev <- staged(host.mapped, at[5], rows * d, type<float>)
             let len_self = p0 + rows
             var bad_k = 0
             var bad_v = 0
@@ -2049,11 +1810,7 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
                 vhz_dep(raw, h, B_ATT, 0u, true)
                 cmd_copy_range(raw, attd, 0l, host.buf, 0l, bc)
             }
-            var att_dev : array<float>
-            att_dev |> resize(rows * dc)
-            unsafe {
-                memcpy(addr<void?>(att_dev[0]), host.mapped, bc)
-            }
+            let att_dev <- staged(host.mapped, 0l, rows * dc, type<float>)
             var att_ref : array<float>
             var hp : array<float>
             var attsc : array<float>
@@ -2089,7 +1846,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 t |> skip("no Vulkan device")
                 return
             }
-            if (!ensure_tower_win_attn_cls() || !ensure_tower_post_add_rms_cls() || !ensure_tower_glu_act_cls()) {
+            if (!ensure_tower_win_attn_cls() || !ensure_tower_post_add_rms_cls() || !ensure_actf16_b_cls()) {
                 t |> skip("the window route's classes declined on this device")
                 return
             }
@@ -2104,6 +1861,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             let B_U = 4096u
             let B_X0 = 8192u
             let B_XB0 = 16384u
+            let B_GH = 32768u
             let rows = WIN_ROWS
             let dc = WIN_HEADS * WIN_HS
             let scale = 1.0 / sqrt(float(WIN_HS))
@@ -2147,7 +1905,13 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             let gd = make_device_buf(bx)
             let ud = make_device_buf(bx)
             let wd = make_device_buf(bw)
-            var host = make_host_buf(bc + 5l * bx, true, [cached = true])
+            let bxh = int64(nd) * 2l
+            let brex = int64(nrows) * 4l
+            let ghd = make_device_buf(bxh)    // the gated hidden's f16 rows
+            let rexd = make_device_buf(brex)  // the row map: every row the one expert, so the bias rows are the layer's
+            let sizes = fixed_array(bc, bx, bx, bxh, bx, bx)
+            let at <- staged_offsets(sizes)
+            var host = make_host_buf(at[length(sizes)], true, [cached = true])
             unsafe {
                 upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bc)
                 upload_region_at(kd, 0l, addr<uint8 const?>(k[0]), bc)
@@ -2163,49 +1927,31 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             nan_sentinel_upload(attd, bc)
             nan_sentinel_upload(xbd, bx)
             nan_sentinel_upload(xb0d, bx)
+            fill_upload(ghd, 0l, bxh, F16_SENTINEL_BITS)
+            upload_zeros(rexd, 0l, brex)
             var s_win = set_tower_win_attn_cls(fixed_array(qd, kd, vd, attd, wld), fixed_array(bc, bc, bc, bc, bwl), fixed_array(B_Q, B_K, B_V, B_ATT, 0u))
             var s_post = set_tower_post_add_rms_cls(fixed_array(xd, yd, xbd, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB, 0u))
             var s_post0 = set_tower_post_add_rms_cls(fixed_array(x0d, yd, xb0d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X0, B_Y, B_XB0, 0u))
-            var s_glu = set_tower_glu_act_cls(fixed_array(gd, ud, wd), fixed_array(bx, bx, bw), fixed_array(B_G, B_U, 0u))
+            var s_glu = set_actf16_b_cls(fixed_array(gd, ud, ghd, wd, wd, rexd), fixed_array(bx, bx, bxh, bw, bw, brex), fixed_array(B_G, B_U, B_GH, 0u, 0u, 0u))
             var pa_win = TowerWinArgs(nheads = uint(WIN_HEADS), scale = scale)
             var pa_post = TowerLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = uint(d), lnboff = 0u, ascale = 1.0)
             var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = uint(d), lnboff = 0u, ascale = 1.0)
-            var pa_glu = TowerGluArgs(d = uint(d), nelem = uint(nd), bgoff = uint(2 * d), buoff = uint(3 * d))
+            var pa_glu = ActArgs(nelem = uint(nd), act = ACT_SILU, gboff = uint(2 * d), uboff = uint(3 * d), brow = uint(d))
             let wg4 = int64((nd / 4 + 255) / 256)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tower_win_attn_cls(raw, h, s_win, pa_win, int64(nslot * WIN_HEADS))
-                enc_tower_glu_act_cls(raw, h, s_glu, pa_glu, wg4)
+                enc_actf16_b_cls(raw, h, s_glu, pa_glu, wg4)
                 enc_tower_post_add_rms_cls(raw, h, s_post0, pa_post0, int64(nrows))
                 enc_tower_post_add_rms_cls(raw, h, s_post, pa_post, int64(nrows))
-                vhz_dep(raw, h, B_ATT | B_X | B_XB | B_G | B_X0 | B_XB0, 0u, true)
-                cmd_copy_range(raw, attd, 0l, host.buf, 0l, bc)
-                cmd_copy_range(raw, xd, 0l, host.buf, bc, bx)
-                cmd_copy_range(raw, xbd, 0l, host.buf, bc + bx, bx)
-                cmd_copy_range(raw, gd, 0l, host.buf, bc + 2l * bx, bx)
-                cmd_copy_range(raw, x0d, 0l, host.buf, bc + 3l * bx, bx)
-                cmd_copy_range(raw, xb0d, 0l, host.buf, bc + 4l * bx, bx)
+                cmd_copy_planes(raw, h, fixed_array(attd, xd, xbd, ghd, x0d, xb0d), host, sizes, B_ATT | B_X | B_XB | B_GH | B_X0 | B_XB0)
             }
-            var att_dev : array<float>
-            var x_dev : array<float>
-            var xb_dev : array<float>
-            var g_dev : array<float>
-            var x0_dev : array<float>
-            var xb0_dev : array<uint>
-            att_dev |> resize(rows * dc)
-            x_dev |> resize(nd)
-            xb_dev |> resize(nd)
-            g_dev |> resize(nd)
-            x0_dev |> resize(nd)
-            xb0_dev |> resize(nd)
-            unsafe {
-                let hp = intptr(host.mapped)
-                memcpy(addr<void?>(att_dev[0]), host.mapped, bc)
-                memcpy(addr<void?>(x_dev[0]), reinterpret<void?>(hp + uint64(bc)), bx)
-                memcpy(addr<void?>(xb_dev[0]), reinterpret<void?>(hp + uint64(bc + bx)), bx)
-                memcpy(addr<void?>(g_dev[0]), reinterpret<void?>(hp + uint64(bc + 2l * bx)), bx)
-                memcpy(addr<void?>(x0_dev[0]), reinterpret<void?>(hp + uint64(bc + 3l * bx)), bx)
-                memcpy(addr<void?>(xb0_dev[0]), reinterpret<void?>(hp + uint64(bc + 4l * bx)), bx)
-            }
+            let att_dev <- staged(host.mapped, at[0], rows * dc, type<float>)
+            let x_dev <- staged(host.mapped, at[1], nd, type<float>)
+            let xb_dev <- staged(host.mapped, at[2], nd, type<float>)
+            let gh_dev <- staged(host.mapped, at[3], nd, type<uint16>)
+            let g_dev <- [for (hv in gh_dev); f16_to_f32(uint(hv))]
+            let x0_dev <- staged(host.mapped, at[4], nd, type<float>)
+            let xb0_dev <- staged(host.mapped, at[5], nd, type<uint>)
             var att_ref : array<float>
             var hpp : array<float>
             var attsc : array<float>
@@ -2245,16 +1991,16 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             t |> success(!approx(xb_dev[nd - 1], xb_ref[nd - 1] + 0.5), "tower_post_add_rms: the bar reds a poisoned element")
             let bad_add0 = mismatch_approx(x0_dev, x_ref)
             t |> success(bad_add0 == 0, "tower_post_add_rms ln_on = 0: the seam alone lands the same x ({bad_add0} of {nd} off)")
-            t |> equal(sentinel_words(xb0_dev), nd, "tower_post_add_rms ln_on = 0: the rms output stays untouched (every word the sentinel)")
+            t |> equal(count(xb0_dev, $(w) => w == NAN_SENTINEL_BITS), nd, "tower_post_add_rms ln_on = 0: the rms output stays untouched (every word the sentinel)")
             var g_ref := g
             var u_ref := u
             add_bias_rows(g_ref, wn, int64(2 * d), int64(d), int64(nrows))
             add_bias_rows(u_ref, wn, int64(3 * d), int64(d), int64(nrows))
             swiglu(g_ref, u_ref, int64(nd))
-            let bad_glu = mismatch_approx(g_dev, g_ref)
-            t |> success(bad_glu == 0, "tower_glu_act: silu(g + bg) . (u + bu) matches the CPU form ({bad_glu} of {nd} off)")
-            t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "tower_glu_act: the bar reds a poisoned element")
-            for (b in fixed_array(qd, kd, vd, attd, wld, xd, yd, xbd, x0d, xb0d, gd, ud, wd)) {
+            let bad_glu = mismatch_approx(g_dev, g_ref)   // the half store rounds at 2^-11 relative, inside `approx`'s bar
+            t |> success(bad_glu == 0, "actf16_b (the gated hidden): silu(g + bg) . (u + bu) as halves matches the CPU form ({bad_glu} of {nd} off)")
+            t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "actf16_b (the gated hidden): the bar reds a poisoned element")
+            for (b in fixed_array(qd, kd, vd, attd, wld, xd, yd, xbd, x0d, xb0d, gd, ud, wd, ghd, rexd)) {
                 destroy_device_buf(b)
             }
             destroy_host_buf(host)
@@ -2262,46 +2008,6 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             t |> skip("dasVulkan not present")
         }
     }
-}
-
-//! `n` floats read back from a mapped staging, `byte_off` bytes past its start
-def private staged_f32(mapped : void?; byte_off : int64; n : int) : array<float> {
-    var a : array<float>
-    a |> resize(n)
-    unsafe {
-        memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n) * 4l)
-    }
-    return <- a
-}
-
-//! `n` raw words read back from a mapped staging, `byte_off` bytes past its start - a sentinel check's bits
-def private staged_u32(mapped : void?; byte_off : int64; n : int) : array<uint> {
-    var a : array<uint>
-    a |> resize(n)
-    unsafe {
-        memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n) * 4l)
-    }
-    return <- a
-}
-
-//! `n` halves read back from a mapped staging, `byte_off` bytes past its start
-def private staged_u16(mapped : void?; byte_off : int64; n : int) : array<uint16> {
-    var a : array<uint16>
-    a |> resize(n)
-    unsafe {
-        memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n) * 2l)
-    }
-    return <- a
-}
-
-//! `n` Q8_0 quant bytes read back from a mapped staging, `byte_off` bytes past its start
-def private staged_i8(mapped : void?; byte_off : int64; n : int) : array<int8> {
-    var a : array<int8>
-    a |> resize(n)
-    unsafe {
-        memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n))
-    }
-    return <- a
 }
 
 def private halves_off(got : array<uint16>; want : array<float>) : int {
@@ -2324,28 +2030,6 @@ def private first_live(want : array<float>) : int {
     return 0
 }
 
-//! the elements of `a` in [lo, hi) that are not zero - the pads' zero-tail check
-def private nonzero_in(a : array<float>; lo, hi : int) : int {
-    var n = 0
-    for (i in range(lo, hi)) {
-        if (a[i] != 0.0) {
-            n++
-        }
-    }
-    return n
-}
-
-//! the halves of `a` in [lo, hi) that are not the zero bit pattern - the f16 pads' zero-tail check
-def private nonzero_halves_in(a : array<uint16>; lo, hi : int) : int {
-    var n = 0
-    for (i in range(lo, hi)) {
-        if (uint(a[i]) != 0u) {
-            n++
-        }
-    }
-    return n
-}
-
 let private FM_IW = 7          //! the k3 s2 p1 conv over the 7 x 5 image gives the 4 x 3 output
 let private FM_IH = 5
 let private FM_CIN = 3
@@ -2355,12 +2039,12 @@ let private FM_OH = (FM_IH - 1) / 2 + 1
 let private FM_KDP = 64        //! the column row's padded width: cin x 9 = 27 live columns, the rest zero
 
 [test]
-def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gate over the ten data movers: the fixture, one command buffer, the exact oracles and their controls
-    t0 |> run("the audio fronts' data movers (im2col, im2col1d, the shuffles, the head gather, clamp + halfword, zero rows, add plane, q3a finish, ln + relu) == their forms") <| @(t : T?) {
+def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gate over the data movers: the fixture, one command buffer, the exact oracles and their controls
+    t0 |> run("the audio fronts' data movers (im2col, im2col1d, the shuffles, the one-head restride, clamp + halfword, add plane, the q3a finish's bias passes, ln + relu) == their forms") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tower_im2col_cls() || !ensure_tower_im2col1d_cls() || !ensure_tower_q3a_shuffle_cls() || !ensure_tower_feat_shuffle_cls()
-                    || !ensure_tower_head_gather_cls() || !ensure_tower_clamp_cvt_cls() || !ensure_tower_zero_rows_cls() || !ensure_tower_bias_act_cls()
-                    || !ensure_tower_q3a_finish_cls() || !ensure_tower_ln_relu_cls()) {
+                    || !ensure_tower_hpad16_cls() || !ensure_tower_hpad16_b_cls() || !ensure_tower_clamp_cvt_cls() || !ensure_tower_bias_act_cls()
+                    || !ensure_tower_ln_relu_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -2372,7 +2056,6 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             let B_GQ = 32u
             let B_GP = 64u
             let B_CVT = 128u
-            let B_Z = 256u
             let B_ADD = 512u
             let B_FIN = 1024u
             let B_LN = 2048u
@@ -2397,8 +2080,6 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             let fs_t = 3
             let fs_w = 4
             let fs_c = 5
-            let z_from = 100
-            let z_to = 1000
             let add_n = 4 * d
             var src <- row_fill(n_src, 31, 5, 0.07, 3.3)
             var mel1 <- row_fill(nch1 * len1, 23, 7, 0.09, 2.0)
@@ -2406,7 +2087,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             var y3 <- row_fill(FM_CHUNKS * 16 * q3_tok * q3_nch, 11, 2, 0.06, 2.9)
             var fs_src <- row_fill(fs_t * fs_w * fs_c, 13, 9, 0.05, 1.5)
             var x <- row_fill(nd, 41, 7, 0.05, 2.1)
-            var wn <- row_fill((3 + q3_tok) * d, 7, 1, 0.01, -0.6)   // the gather's bias at 0, the add plane at d, the finish's bias at 2d and its tok position rows at 3d, the ln weight at 0
+            var wn <- row_fill((3 + q3_tok) * d, 7, 1, 0.01, -0.6)   // the panel's bias row at 0, the add plane at d, the finish's bias at 2d and its tok position rows at 3d, the ln weight at 0
             let bsrc = int64(n_src) * 4l
             let bcol = int64(n_col) * 2l
             let bmel1 = int64(nch1 * len1) * 4l
@@ -2435,23 +2116,12 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             let gqd = make_device_buf(bg)
             let gpd = make_device_buf(bg)
             let cvtd = make_device_buf(bxh)
-            let zd = make_device_buf(bx)
             let addd = make_device_buf(bx)
             let find = make_device_buf(bx)
             let lnd = make_device_buf(bx)
-            let o_col = 0l
-            let o_col1 = o_col + bcol
-            let o_col2 = o_col1 + bcol1
-            let o_feat = o_col2 + bcol2
-            let o_fs = o_feat + bfeat
-            let o_gq = o_fs + bfs
-            let o_gp = o_gq + bg
-            let o_cvt = o_gp + bg
-            let o_z = o_cvt + bxh
-            let o_add = o_z + bx
-            let o_fin = o_add + bx
-            let o_ln = o_fin + bx
-            var host = make_host_buf(o_ln + bx, true, [cached = true])
+            let sizes = fixed_array(bcol, bcol1, bcol2, bfeat, bfs, bg, bg, bxh, bx, bx, bx)
+            let at <- staged_offsets(sizes)
+            var host = make_host_buf(at[length(sizes)], true, [cached = true])
             unsafe {
                 upload_region_at(srcd, 0l, addr<uint8 const?>(src[0]), bsrc)
                 upload_region_at(mel1d, 0l, addr<uint8 const?>(mel1[0]), bmel1)
@@ -2460,7 +2130,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                 upload_region_at(fsd, 0l, addr<uint8 const?>(fs_src[0]), bfs)
                 upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
                 upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-                for (b in fixed_array(zd, addd, find, lnd)) {
+                for (b in fixed_array(addd, find, lnd)) {
                     upload_region_at(b, 0l, addr<uint8 const?>(x[0]), bx)
                 }
             }
@@ -2473,24 +2143,25 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             var s_im2 = set_tower_im2col1d_cls(fixed_array(cv2d, col2d), fixed_array(bcv2, bcol2), fixed_array(0u, B_COL2))
             var s_sh = set_tower_q3a_shuffle_cls(fixed_array(y3d, featd), fixed_array(by3, bfeat), fixed_array(0u, B_FEAT))
             var s_fs = set_tower_feat_shuffle_cls(fixed_array(fsd, fsod), fixed_array(bfs, bfs), fixed_array(0u, B_FS))
-            var s_gq = set_tower_head_gather_cls(fixed_array(xd, wd, gqd), fixed_array(bx, bw, bg), fixed_array(0u, 0u, B_GQ))
-            var s_gp = set_tower_head_gather_cls(fixed_array(xd, wd, gpd), fixed_array(bx, bw, bg), fixed_array(0u, 0u, B_GP))
+            var s_gq = set_tower_hpad16_b_cls(fixed_array(xd, gqd, wd), fixed_array(bx, bg, bw), fixed_array(0u, B_GQ, 0u))
+            var s_gp = set_tower_hpad16_cls(fixed_array(xd, gpd), fixed_array(bx, bg), fixed_array(0u, B_GP))
             var s_cvt = set_tower_clamp_cvt_cls(fixed_array(xd, cvtd), fixed_array(bx, bxh), fixed_array(0u, B_CVT))
-            var s_z = set_tower_zero_rows_cls(fixed_array(zd), fixed_array(bx), fixed_array(B_Z))
             var s_add = set_tower_bias_act_cls(fixed_array(addd, wd), fixed_array(bx, bw), fixed_array(B_ADD, 0u))
-            var s_fin = set_tower_q3a_finish_cls(fixed_array(find, wd), fixed_array(bx, bw), fixed_array(B_FIN, 0u))
+            var s_fin = set_tower_bias_act_cls(fixed_array(find, wd), fixed_array(bx, bw), fixed_array(B_FIN, 0u))
             var s_ln = set_tower_ln_relu_cls(fixed_array(lnd, wd), fixed_array(bx, bw), fixed_array(B_LN, 0u))
             var pa_im = TowerIm2colArgs(iw = uint(FM_IW), ih = uint(FM_IH), cin = uint(FM_CIN), kdp = uint(FM_KDP), rows = uint(FM_CHUNKS * FM_OH * FM_OW))
             var pa_im1 = TowerIm2col1dArgs(nch = uint(nch1), srclen = uint(len1), stride = 1u, chmajor = 1u, kdp = uint(kdp1), rows = uint(len1))
             var pa_im2 = TowerIm2col1dArgs(nch = uint(nch2), srclen = uint(len1), stride = 2u, chmajor = 0u, kdp = uint(kdp2), rows = uint(rows2))
             var pa_sh = TowerQ3aShuffleArgs(nch = uint(q3_nch), npos = uint(q3_pos))
             var pa_fs = TowerFeatShuffleArgs(w = uint(fs_w), ch = uint(fs_c), t = uint(fs_t))
-            var pa_gq = TowerHeadGatherArgs(d = uint(d), hs = uint(hs), hoff = uint(second_head_base), rows = uint(rows), boff = 0u, bias_on = 1u)
-            var pa_gp = TowerHeadGatherArgs(d = uint(d), hs = uint(hs), hoff = uint(second_head_base), rows = uint(rows), boff = 0u, bias_on = 0u)
+            var pa_gq = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d),
+                soff = uint(second_head_base), boff = uint(second_head_base))   // canary's panel: one head's rows restrided at one head, the pad and the tail none
+            var pa_gp = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d),
+                soff = uint(second_head_base))
             var pa_cvt = TowerClampArgs(nelem = uint(nd), lo = -1.5, hi = 1.5)
-            var pa_z = TowerZeroRowsArgs(from_elem = uint(z_from), to_elem = uint(z_to))
             var pa_add = TowerBiasArgs(d = uint(add_n), nelem = uint(add_n), boff = uint(d), act = BIAS_ACT_NONE)   // the stem's position plane: one bias row the width of the rows
-            var pa_fin = TowerQ3aFinishArgs(d = uint(d), npos = uint(rows), boff = uint(2 * d), poff = uint(3 * d))
+            var pa_fin_b = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_NONE)   // the q3a finish: the conv_out bias row ...
+            var pa_fin_p = TowerBiasArgs(d = uint(q3_tok * d), nelem = uint(nd), boff = uint(3 * d), act = BIAS_ACT_NONE)   // ... then the chunk's position rows as one bias row a chunk wide
             var pa_ln = TowerLnReluArgs(cout = uint(d), rows = uint(rows), woff = 0u, eps = ROWS_EPS)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tower_im2col_cls(raw, h, s_im, pa_im, int64((n_col + 255) / 256))
@@ -2498,39 +2169,27 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                 enc_tower_im2col1d_cls(raw, h, s_im2, pa_im2, int64((rows2 * kdp2 + 255) / 256))
                 enc_tower_q3a_shuffle_cls(raw, h, s_sh, pa_sh, int64((q3_pos * q3_feat + 255) / 256))
                 enc_tower_feat_shuffle_cls(raw, h, s_fs, pa_fs, int64((fs_t * fs_w * fs_c + 255) / 256))
-                enc_tower_head_gather_cls(raw, h, s_gq, pa_gq, int64((rows * hs + 255) / 256))
-                enc_tower_head_gather_cls(raw, h, s_gp, pa_gp, int64((rows * hs + 255) / 256))
+                enc_tower_hpad16_b_cls(raw, h, s_gq, pa_gq, int64((rows * hs + 255) / 256))
+                enc_tower_hpad16_cls(raw, h, s_gp, pa_gp, int64((rows * hs + 255) / 256))
                 enc_tower_clamp_cvt_cls(raw, h, s_cvt, pa_cvt, int64((nd / 4 + 255) / 256))
-                enc_tower_zero_rows_cls(raw, h, s_z, pa_z, int64((z_to - z_from + 255) / 256))
                 enc_tower_bias_act_cls(raw, h, s_add, pa_add, int64((add_n / 4 + 255) / 256))
-                enc_tower_q3a_finish_cls(raw, h, s_fin, pa_fin, int64((nd + 255) / 256))
+                enc_tower_bias_act_cls(raw, h, s_fin, pa_fin_b, int64((nd / 4 + 255) / 256))
+                enc_tower_bias_act_cls(raw, h, s_fin, pa_fin_p, int64((nd / 4 + 255) / 256))
                 enc_tower_ln_relu_cls(raw, h, s_ln, pa_ln, int64((rows + 255) / 256))
-                vhz_dep(raw, h, B_COL | B_COL1 | B_COL2 | B_FEAT | B_FS | B_GQ | B_GP | B_CVT | B_Z | B_ADD | B_FIN | B_LN, 0u, true)
-                cmd_copy_range(raw, cold, 0l, host.buf, o_col, bcol)
-                cmd_copy_range(raw, col1d, 0l, host.buf, o_col1, bcol1)
-                cmd_copy_range(raw, col2d, 0l, host.buf, o_col2, bcol2)
-                cmd_copy_range(raw, featd, 0l, host.buf, o_feat, bfeat)
-                cmd_copy_range(raw, fsod, 0l, host.buf, o_fs, bfs)
-                cmd_copy_range(raw, gqd, 0l, host.buf, o_gq, bg)
-                cmd_copy_range(raw, gpd, 0l, host.buf, o_gp, bg)
-                cmd_copy_range(raw, cvtd, 0l, host.buf, o_cvt, bxh)
-                cmd_copy_range(raw, zd, 0l, host.buf, o_z, bx)
-                cmd_copy_range(raw, addd, 0l, host.buf, o_add, bx)
-                cmd_copy_range(raw, find, 0l, host.buf, o_fin, bx)
-                cmd_copy_range(raw, lnd, 0l, host.buf, o_ln, bx)
+                cmd_copy_planes(raw, h, fixed_array(cold, col1d, col2d, featd, fsod, gqd, gpd, cvtd, addd, find, lnd), host, sizes,
+                    B_COL | B_COL1 | B_COL2 | B_FEAT | B_FS | B_GQ | B_GP | B_CVT | B_ADD | B_FIN | B_LN)
             }
-            let col_dev <- staged_u16(host.mapped, o_col, n_col)
-            let col1_dev <- staged_u16(host.mapped, o_col1, len1 * kdp1)
-            let col2_dev <- staged_u16(host.mapped, o_col2, rows2 * kdp2)
-            let feat_dev <- staged_u16(host.mapped, o_feat, q3_pos * q3_feat)
-            let fs_dev <- staged_f32(host.mapped, o_fs, fs_t * fs_w * fs_c)
-            let gq_dev <- staged_u16(host.mapped, o_gq, rows * hs)
-            let gp_dev <- staged_u16(host.mapped, o_gp, rows * hs)
-            let cvt_dev <- staged_u16(host.mapped, o_cvt, nd)
-            let z_dev <- staged_f32(host.mapped, o_z, nd)
-            let add_dev <- staged_f32(host.mapped, o_add, nd)
-            let fin_dev <- staged_f32(host.mapped, o_fin, nd)
-            let ln_dev <- staged_f32(host.mapped, o_ln, nd)
+            let col_dev <- staged(host.mapped, at[0], n_col, type<uint16>)
+            let col1_dev <- staged(host.mapped, at[1], len1 * kdp1, type<uint16>)
+            let col2_dev <- staged(host.mapped, at[2], rows2 * kdp2, type<uint16>)
+            let feat_dev <- staged(host.mapped, at[3], q3_pos * q3_feat, type<uint16>)
+            let fs_dev <- staged(host.mapped, at[4], fs_t * fs_w * fs_c, type<float>)
+            let gq_dev <- staged(host.mapped, at[5], rows * hs, type<uint16>)
+            let gp_dev <- staged(host.mapped, at[6], rows * hs, type<uint16>)
+            let cvt_dev <- staged(host.mapped, at[7], nd, type<uint16>)
+            let add_dev <- staged(host.mapped, at[8], nd, type<float>)
+            let fin_dev <- staged(host.mapped, at[9], nd, type<float>)
+            let ln_dev <- staged(host.mapped, at[10], nd, type<float>)
             var col_want : array<float>
             col_want |> resize(n_col)
             for (gid in range(n_col)) {
@@ -2614,9 +2273,9 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             }
             let bad_gq = halves_off(gq_dev, gq_want)
             let bad_gp = halves_off(gp_dev, gp_want)
-            t |> success(bad_gq == 0, "tower_head_gather (biased): the head's rows plus the bias row as halves, bit for bit ({bad_gq} of {rows * hs} off)")
-            t |> success(bad_gp == 0, "tower_head_gather (plain): the head's rows as halves, bit for bit ({bad_gp} of {rows * hs} off)")
-            t |> success(uint(gq_dev[0]) != f32_to_f16(gq_want[0] + 0.5) && halves_off(gp_dev, gq_want) > rows * hs / 2, "tower_head_gather: the bar reds a poisoned element, and the plain arm misses the biased rows")
+            t |> success(bad_gq == 0, "tower_hpad16_b restride at one head (the canary panel): the head's rows plus the bias row as halves, bit for bit ({bad_gq} of {rows * hs} off)")
+            t |> success(bad_gp == 0, "tower_hpad16 restride at one head (the canary panel): the head's rows as halves, bit for bit ({bad_gp} of {rows * hs} off)")
+            t |> success(uint(gq_dev[0]) != f32_to_f16(gq_want[0] + 0.5) && halves_off(gp_dev, gq_want) > rows * hs / 2, "the one-head restride: the bar reds a poisoned element, and the plain arm misses the biased rows")
             var cvt_want : array<float>
             cvt_want |> resize(nd)
             var clamped = 0
@@ -2629,15 +2288,6 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             let bad_cvt = halves_off(cvt_dev, cvt_want)
             t |> success(bad_cvt == 0 && clamped > nd / 8, "tower_clamp_cvt: the clamped rows as halves, bit for bit ({bad_cvt} of {nd} off, {clamped} elements clamped)")
             t |> success(uint(cvt_dev[0]) != f32_to_f16(cvt_want[0] + 0.5), "tower_clamp_cvt: the bar reds a poisoned element")
-            var z_want := x
-            for (i in range(z_from, z_to)) {
-                z_want[i] = 0.0
-            }
-            let bad_z = mismatch_exact(z_dev, z_want)
-            t |> success(bad_z == 0 && z_dev[z_from] == 0.0 && x[z_from] != 0.0, "tower_zero_rows: the span zeroed and nothing beside it touched ({bad_z} of {nd} off; element {z_from} moved off {x[z_from]})")
-            var z_poison := z_want
-            z_poison[z_from] += 0.5
-            t |> success(mismatch_exact(z_dev, z_poison) > 0, "tower_zero_rows: the bar reds a poisoned element")
             var add_want := x
             for (i in range(add_n)) {
                 add_want[i] = x[i] + wn[d + i]
@@ -2654,8 +2304,8 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                 fin_want[gid] = x[gid] + wn[2 * d + e] + wn[3 * d + ((gid / d) % q3_tok) * d + e]
             }
             let bad_fin = mismatch_approx(fin_dev, fin_want)
-            t |> success(bad_fin == 0 && !approx(fin_dev[d], x[d]), "tower_q3a_finish: the conv_out bias and the per-chunk position rows added ({bad_fin} of {nd} off)")
-            t |> success(!approx(fin_dev[0], fin_want[0] + 0.5), "tower_q3a_finish: the bar reds a poisoned element")
+            t |> success(bad_fin == 0 && !approx(fin_dev[d], x[d]), "tower_bias_act twice as the q3a finish: the conv_out bias and the per-chunk position rows added ({bad_fin} of {nd} off)")
+            t |> success(!approx(fin_dev[0], fin_want[0] + 0.5), "tower_bias_act as the q3a finish: the bar reds a poisoned element")
             var ln_want : array<float>
             ln_want |> resize(nd)
             for (r in range(rows)) {
@@ -2678,7 +2328,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             let live_ln = first_live(ln_want)
             t |> success(bad_ln == 0 && ln_dev[live_ln] != x[live_ln], "tower_ln_relu: the channel LayerNorm then ReLU match the CPU loop ({bad_ln} of {nd} off)")
             t |> success(!approx(ln_dev[live_ln], ln_want[live_ln] + 0.5), "tower_ln_relu: the bar reds a poisoned element")
-            for (b in fixed_array(srcd, cold, mel1d, col1d, cv2d, col2d, y3d, featd, fsd, fsod, xd, wd, gqd, gpd, cvtd, zd, addd, find, lnd)) {
+            for (b in fixed_array(srcd, cold, mel1d, col1d, cv2d, col2d, y3d, featd, fsd, fsod, xd, wd, gqd, gpd, cvtd, addd, find, lnd)) {
                 destroy_device_buf(b)
             }
             destroy_host_buf(host)
@@ -2768,15 +2418,9 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let dwyd = make_device_buf(bdwy_lanes)
             let dwwd = make_device_buf(bdww)
             let reld = make_device_buf(brel)
-            let o_mag = 0l
-            let o_pow = o_mag + bpw
-            let o_g4a = o_pow + bpw
-            let o_cn = o_g4a + bmel
-            let o_wh = o_cn + bmel
-            let o_norm = o_wh + bmel
-            let o_dw = o_norm + bnorm
-            let o_rel = o_dw + bdwy_lanes
-            var host = make_host_buf(o_rel + brel, true, [cached = true])
+            let sizes = fixed_array(bpw, bpw, bmel, bmel, bmel, bnorm, bdwy_lanes, brel)
+            let at <- staged_offsets(sizes)
+            var host = make_host_buf(at[length(sizes)], true, [cached = true])
             unsafe {
                 upload_region_at(xwd, 0l, addr<uint8 const?>(xw[0]), bxw)
                 upload_region_at(twd, 0l, addr<uint8 const?>(tw[0]), btw)
@@ -2822,25 +2466,18 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 enc_tower_mel_norm_cls(raw, h, s_norm, pa_norm, int64((MEL_NMEL + 63) / 64))
                 enc_tower_dw_conv_cls(raw, h, s_dw, pa_dw, int64((dw_out + 255) / 256))
                 enc_tower_rel_sincos_cls(raw, h, s_rel, pa_rel, int64((n_rel + 255) / 256))
-                vhz_dep(raw, h, B_MAG | B_POW | B_G4A | B_CN | B_WH | B_NORM | B_DW | B_REL, 0u, true)
-                cmd_copy_range(raw, magd, 0l, host.buf, o_mag, bpw)
-                cmd_copy_range(raw, powd, 0l, host.buf, o_pow, bpw)
-                cmd_copy_range(raw, g4ad, 0l, host.buf, o_g4a, bmel)
-                cmd_copy_range(raw, cnd, 0l, host.buf, o_cn, bmel)
-                cmd_copy_range(raw, whd, 0l, host.buf, o_wh, bmel)
-                cmd_copy_range(raw, normd, 0l, host.buf, o_norm, bnorm)
-                cmd_copy_range(raw, dwyd, 0l, host.buf, o_dw, bdwy_lanes)
-                cmd_copy_range(raw, reld, 0l, host.buf, o_rel, brel)
+                cmd_copy_planes(raw, h, fixed_array(magd, powd, g4ad, cnd, whd, normd, dwyd, reld), host, sizes,
+                    B_MAG | B_POW | B_G4A | B_CN | B_WH | B_NORM | B_DW | B_REL)
             }
-            let mag_dev <- staged_f32(host.mapped, o_mag, n_pw)
-            let pow_dev <- staged_f32(host.mapped, o_pow, n_pw)
-            let g4a_dev <- staged_f32(host.mapped, o_g4a, n_mel)
-            let cn_dev <- staged_f32(host.mapped, o_cn, n_mel)
-            let wh_dev <- staged_f32(host.mapped, o_wh, n_mel)
-            let norm_dev <- staged_f32(host.mapped, o_norm, n_norm)
-            let dw_dev <- staged_f32(host.mapped, o_dw, dw_out)
-            let dw_idle <- staged_u32(host.mapped, o_dw + bdwy, dw_lanes - dw_out)
-            let rel_dev <- staged_f32(host.mapped, o_rel, n_rel)
+            let mag_dev <- staged(host.mapped, at[0], n_pw, type<float>)
+            let pow_dev <- staged(host.mapped, at[1], n_pw, type<float>)
+            let g4a_dev <- staged(host.mapped, at[2], n_mel, type<float>)
+            let cn_dev <- staged(host.mapped, at[3], n_mel, type<float>)
+            let wh_dev <- staged(host.mapped, at[4], n_mel, type<float>)
+            let norm_dev <- staged(host.mapped, at[5], n_norm, type<float>)
+            let dw_dev <- staged(host.mapped, at[6], dw_out, type<float>)
+            let dw_idle <- staged(host.mapped, at[6] + bdwy, dw_lanes - dw_out, type<uint>)
+            let rel_dev <- staged(host.mapped, at[7], n_rel, type<float>)
             var mag_want : array<float>
             var pow_want : array<float>
             mag_want |> resize(n_pw)
@@ -2936,7 +2573,7 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let bad_dw = mismatch_approx(dw_dev, dw_want)
             t |> success(bad_dw == 0, "tower_dw_conv: the k3 s2 p1 depthwise taps with the bias match the CPU form ({bad_dw} of {dw_out} off)")
             t |> success(!approx(dw_dev[0], dw_want[0] + 0.5), "tower_dw_conv: the bar reds a poisoned element")
-            t |> equal(sentinel_words(dw_idle), dw_lanes - dw_out, "tower_dw_conv: the idle lanes past the output write nothing (every word past it the sentinel)")
+            t |> equal(count(dw_idle, $(w) => w == NAN_SENTINEL_BITS), dw_lanes - dw_out, "tower_dw_conv: the idle lanes past the output write nothing (every word past it the sentinel)")
             var rel_want : array<float>
             rel_want |> resize(n_rel)
             for (w in range(ww)) {
@@ -3050,16 +2687,14 @@ def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {   // nolint:STYLE038 — one fla
                     var pa = TowerCnAttnRArgs(d = uint(d), npos = uint(rows), buoff = 0u, hoff = uint(hh * hs2))
                     enc_tower_cn_attn_r_cls(raw, h, sets[ROWS_HEADS + hh], pa, wg)
                 }
-                vhz_dep(raw, h, B_AO | B_AO2, 0u, true)
-                cmd_copy_range(raw, aod, 0l, host.buf, 0l, bao)
-                cmd_copy_range(raw, ao2d, 0l, host.buf, bao, bao)
+                cmd_copy_planes(raw, h, fixed_array(aod, ao2d), host, fixed_array(bao, bao), B_AO | B_AO2)
             }
-            let ao_dev <- staged_f32(host.mapped, 0l, nd)
-            let ao2_dev <- staged_f32(host.mapped, bao, nd)
-            let ao_idle <- staged_u32(host.mapped, bx, int(bidle / 4l))
-            let ao2_idle <- staged_u32(host.mapped, bao + bx, int(bidle / 4l))
+            let ao_dev <- staged(host.mapped, 0l, nd, type<float>)
+            let ao2_dev <- staged(host.mapped, bao, nd, type<float>)
+            let ao_idle <- staged(host.mapped, bx, int(bidle / 4l), type<uint>)
+            let ao2_idle <- staged(host.mapped, bao + bx, int(bidle / 4l), type<uint>)
             t |> success(ao_rows > rows, "the dispatch carries idle lanes past the live rows ({ao_rows - rows} of {ao_rows})")
-            t |> equal(sentinel_words(ao_idle) + sentinel_words(ao2_idle), 2 * (ao_rows - rows) * d, "tower_cn_attn_r: the idle lanes write nothing past the live rows on both stamps (every word the sentinel)")
+            t |> equal(count(ao_idle, $(w) => w == NAN_SENTINEL_BITS) + count(ao2_idle, $(w) => w == NAN_SENTINEL_BITS), 2 * (ao_rows - rows) * d, "tower_cn_attn_r: the idle lanes write nothing past the live rows on both stamps (every word the sentinel)")
             let ao_ref <- cn_attn_ref(q, k, v, posl, wn, rows, d, ROWS_HEADS, hs, 0, d)
             let ao2_ref <- cn_attn_ref(q, k, v, posl, wn, rows, d, heads2, hs2, 0, d)
             let bad64 = mismatch_approx(ao_dev, ao_ref)

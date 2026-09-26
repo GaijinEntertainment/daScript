@@ -156,15 +156,12 @@ def test_ultravox_tower(t : T?) {
             var enc <- make_encoder_state(tw)
             let tower_was_on = vulkan_tower_knob()
             defer() {
-                restore_vulkan_tower(tower_was_on)
+                restore_every_gpu_tower(tower_was_on)
             }
             set_every_gpu_tower(false)
             with_job_que() {
                 setup_dasllama_jobque_()
                 audio_encode(tw, enc, mel)
-            }
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                set_metal_tower(true)
             }
             // llama-mtmd-debug -p encode --audio one -n 3000 (CPU, f32 mmproj): token 0 opens
             // -0.831656 1.679679 0.112337 -0.558047; stats mean=0.002889 max=4.306354.
@@ -206,15 +203,12 @@ def test_voxtral_tower(t : T?) {
             var enc <- make_encoder_state(tw)
             let tower_was_on = vulkan_tower_knob()
             defer() {
-                restore_vulkan_tower(tower_was_on)
+                restore_every_gpu_tower(tower_was_on)
             }
             set_every_gpu_tower(false)
             with_job_que() {
                 setup_dasllama_jobque_()
                 audio_encode(tw, enc, mel)
-            }
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                set_metal_tower(true)
             }
             // llama-mtmd-debug -p encode --audio one -n 3000 (CPU, f32 mmproj): token 0 opens
             // 0.967699 -0.765652 0.050477 -0.571310; stats mean=-0.001517 max=1.459851.
@@ -232,33 +226,6 @@ def test_voxtral_tower(t : T?) {
             t |> success(abs(mx - 1.459851) < 5e-2, "max")
         }
         delete tw   // image-backed planes are locked views — only the finalizer may release them
-    }
-}
-
-let private TWIN_SLACK_AUDIO = double(TWIN_SLACK_VK)
-
-def private audio_twin_bar(t : T?; tag : string; exact, cpu, dev : array<float>; n_layer : int64) : double
-    => tower_twin_bar(t, tag, exact, cpu, dev, n_layer, TWIN_SLACK_AUDIO, TWIN_REL_L2_FLOOR)
-
-//! the exact (f32) tower encoded with the knob on: the driver dispatches nothing - no block, no front - records the
-//! `quant_mode` decline, and the CPU chain serves the encode (`encode` returns the output's length)
-[cold_path, unused_argument(t, tag, expected_len, encode)]
-def private exact_lane_declines_audio(t : T?; tag : string; expected_len : int64; encode : block<() : int64>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        set_vulkan_tower(true)
-        let x0 = vulkan_tower_stats()
-        let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
-        var n = 0l
-        with_job_que() {
-            setup_dasllama_jobque_()
-            n = invoke(encode)
-        }
-        let x1 = vulkan_tower_stats()
-        let dq = (vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0
-        t |> equal(x1.encodes - x0.encodes, 0l, "{tag}: the exact (f32) tower never dispatched a block with the knob on")
-        t |> equal(x1.convs - x0.convs, 0l, "{tag}: the exact (f32) tower never dispatched a front with the knob on")
-        t |> success(dq >= 1l, "{tag}: the exact tower reached the driver and it declined quant_mode ({dq} declines)")
-        t |> equal(n, expected_len, "{tag}: the CPU chain served the exact-lane encode")
     }
 }
 
@@ -282,6 +249,13 @@ def private mint_aud(path : string; q8 : bool; zero_block : int64) : AudioTower 
     var tw = AudioTower()
     mint_audio_tower(stg, tw, q8)
     return <- tw
+}
+
+//! `audio_encode` over `mel` as a twin leg: the output copied into `out`, its length returned
+def private aud_twin_encode(tw : AudioTower; var enc : EncoderState; mel : MelChunk; var out : array<float>) : int64 {
+    audio_encode(tw, enc, mel)
+    out := enc.out
+    return long_length(out)
 }
 
 [cold_path]
@@ -309,44 +283,25 @@ def private vulkan_blocks_twin(t : T?; family, file : string; layers_claimed : i
         }
         var encx <- make_encoder_state(twx)
         var enc <- make_encoder_state(tw)
-        set_vulkan_tower(false)
-        var cpu_out : array<float>
-        let s0 = vulkan_tower_stats()
-        with_job_que() {
-            setup_dasllama_jobque_()
-            audio_encode(twx, encx, mel)
-            audio_encode(tw, enc, mel)
-            cpu_out := enc.out
-            set_vulkan_tower(true)
-            audio_encode(tw, enc, mel)
+        let spec = TwinSpec(family = family, lbl = tag, n_layer = tw.n_layer, metric = TwinMetric.rel_l2)
+        let r <- twin_three_way(t, spec, tw, enc, twx, encx, $(e; var s; var out) => aud_twin_encode(e, s, mel, out)) $(legs) {
+            t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: exactly the device leg dispatched")
+            t |> equal(legs.dev.blocks - legs.pre.blocks, tw.n_layer, "{tag}: blocks delta = n_layer")
+            t |> equal(legs.dev.rows - legs.pre.rows, tw.n_ctx, "{tag}: rows delta = n_ctx")
         }
-        let s1 = vulkan_tower_stats()
-        if (s1.encodes == s0.encodes) {
-            to_log(LOG_INFO, "{tag} vulkan blocks: the driver declined - {vulkan_tower_declines()}\n")
-        }
-        t |> equal(s1.encodes - s0.encodes, 1l, "{tag}: exactly the device leg dispatched")
-        t |> equal(s1.blocks - s0.blocks, tw.n_layer, "{tag}: blocks delta = n_layer")
-        t |> equal(s1.rows - s0.rows, tw.n_ctx, "{tag}: rows delta = n_ctx")
-        let bar = audio_twin_bar(t, tag, encx.out, cpu_out, enc.out, tw.n_layer)
-        if (bar > 0.0lf) {
+        if (r.bar > 0.0lf) {
             var twp <- mint_aud(path, true, tw.n_layer / 2l)
             var encp <- make_encoder_state(twp)
-            with_job_que() {
-                setup_dasllama_jobque_()
-                audio_encode(twp, encp, mel)
-            }
-            t |> equal(vulkan_tower_stats().encodes - s1.encodes, 1l, "{tag} poison: the device served the poisoned encode")
-            tower_twin_poison(t, tag, encx.out, encp.out, bar)
+            twin_poison(t, r, tw.n_layer / 2l, twp, encp) $(e; var s; var out) => aud_twin_encode(e, s, mel, out)
             delete encp
             delete twp
         }
         var encx2 <- make_encoder_state(twx)
-        exact_lane_declines_audio(t, tag, long_length(encx.out)) $() : int64 {
+        exact_lane_declines(t, tag, long_length(r.reference), false) $() : int64 {
             audio_encode(twx, encx2, mel)
             return long_length(encx2.out)
         }
         delete encx2
-        delete cpu_out
         delete enc
         delete encx
         delete tw
@@ -389,36 +344,50 @@ def private clip_head(samples : array<float>) : array<float> {
     return <- [for (i in range64(n)); samples[i]]
 }
 
-//! a short encode then the full clip on one residency: the rel projection sets must follow the rebuilt scratch
-[cold_path]
-def private g4a_twin_legs(t : T?; mm : string; enc : Gemma4aEncoder; samples, exact : array<float>; bar : double; encodes0 : int64) {
+//! a short encode then the full clip on one residency (the scratch - and gemma4a's rel projection sets, canary's rel quartet -
+//! regrown under it), then the clip on a fresh residency after a shutdown, each held to the bar `r` set, then the input poison
+//! over the q8 tower `mint_poisoned` returns; `exactly_three`: the three encodes are three dispatches, else at least three (a
+//! chunked encode dispatches per chunk)
+[cold_path, unused_argument(t, tag, enc, st, samples, r, exactly_three, mint_poisoned, encode)]
+def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto(ST); samples : array<float>; r : TwinResult;
+                             exactly_three : bool; mint_poisoned : block<() : TW>;
+                             encode : block<(e : TW; var s : ST; clip : array<float>; var out : array<float>) : int64>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let head <- clip_head(samples)
-        var st2 = Gemma4aState()
         var dev_head : array<float>
         var dev_again : array<float>
         var dev_fresh : array<float>
+        set_vulkan_tower(true)
+        let e0 = vulkan_tower_stats().encodes
         with_job_que() {
             setup_dasllama_jobque_()
-            gemma4a_encode_all(enc, st2, head, dev_head)
-            gemma4a_encode_all(enc, st2, samples, dev_again)
+            invoke(encode, enc, st, head, dev_head)
+            invoke(encode, enc, st, samples, dev_again)
             vulkan_tower_shutdown()
-            gemma4a_encode_all(enc, st2, samples, dev_fresh)
+            invoke(encode, enc, st, samples, dev_fresh)
         }
-        t |> success(vulkan_tower_stats().encodes - encodes0 >= 3l, "gemma4a jfk: the short, the regrown and the fresh encodes ran on the device")
-        tower_twin_held(t, "gemma4a jfk regrown scratch", exact, dev_again, bar)
-        tower_twin_held(t, "gemma4a jfk after shutdown", exact, dev_fresh, bar)
-        var encp <- mint_g4a(mm, true, enc.n_layer / 2l)
-        var stp = Gemma4aState()
+        let n_enc = vulkan_tower_stats().encodes - e0
+        if (exactly_three) {
+            t |> equal(n_enc, 3l, "{tag}: the short, the regrown and the fresh encodes ran on the device")
+        } else {
+            t |> success(n_enc >= 3l, "{tag}: the short, the regrown and the fresh encodes ran on the device")
+        }
+        tower_twin_held(t, "{tag} regrown scratch", r.reference, dev_again, r.bar)
+        tower_twin_held(t, "{tag} after shutdown", r.reference, dev_fresh, r.bar)
+        var encp <- invoke(mint_poisoned)
+        var stp = ST()
         var poisoned : array<float>
         with_job_que() {
             setup_dasllama_jobque_()
-            gemma4a_encode_all(encp, stp, samples, poisoned)
+            invoke(encode, encp, stp, samples, poisoned)
         }
-        tower_twin_poison(t, "gemma4a jfk", exact, poisoned, bar)
+        tower_twin_poison(t, tag, r.reference, poisoned, r.bar)
+        delete poisoned
         delete stp
         delete encp
-        delete st2
+        delete dev_head
+        delete dev_again
+        delete dev_fresh
     }
 }
 
@@ -427,64 +396,41 @@ def test_gemma4a_vulkan_twin(tst : T?) {
     tst |> run("gemma4a E2B: the Vulkan Conformer blocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-            if (!model_available(t, mm) || !vulkan_twin_seat(t)) {
-                return
+            jfk_twin_cell(t, mm, false) $(samples) {
+                var encx <- mint_g4a(mm, false, -1l)
+                var enc <- mint_g4a(mm, true, -1l)
+                t |> success(!encx.q8 && enc.q8, "the exact and the q8 encoders minted")
+                var stx = Gemma4aState()
+                var st = Gemma4aState()
+                var n_exact = 0l
+                let spec = TwinSpec(family = "gemma4a", lbl = "gemma4a jfk", n_layer = enc.n_layer, metric = TwinMetric.rel_l2)
+                let r <- twin_three_way(t, spec, enc, st, encx, stx, $(e; var s; var out) => gemma4a_encode_all(e, s, samples, out)) $(legs) {
+                    n_exact = legs.nexact
+                    let n_chunks = legs.dev.encodes - legs.pre.encodes
+                    t |> equal(legs.ncpu, legs.nexact, "gemma4a jfk: the q8 chain's token count")
+                    t |> equal(legs.ndev, legs.nexact, "gemma4a jfk: the device chain's token count")
+                    t |> success(n_chunks >= 1l, "gemma4a jfk: the device served the chunk encodes ({n_chunks})")
+                    t |> equal(legs.dev.blocks - legs.pre.blocks, n_chunks * enc.n_layer, "gemma4a jfk: every block of every served encode ran on the driver")
+                    front_served(t, "gemma4a jfk", legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.pre.declines)
+                }
+                if (r.bar > 0.0lf) {
+                    var st2 = Gemma4aState()
+                    twin_regrow_legs(t, "gemma4a jfk", enc, st2, samples, r, false, $ { return <- mint_g4a(mm, true, enc.n_layer / 2l) }) $(e; var s; clip; var out) => gemma4a_encode_all(e, s, clip, out)
+                    delete st2
+                }
+                var stx2 = Gemma4aState()
+                var exact2 : array<float>
+                exact_lane_declines(t, "gemma4a jfk", n_exact, false) $() : int64 {
+                    return gemma4a_encode_all(encx, stx2, samples, exact2)
+                }
+                delete exact2
+                delete stx2
+                delete stx
+                delete st
+                delete enc
+                delete encx
+                vulkan_tower_shutdown()
             }
-            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
-            if (empty(samples)) {
-                t |> skip("jfk.wav not present")
-                return
-            }
-            let tower_was_on = vulkan_tower_on()
-            defer() {
-                set_vulkan_tower(tower_was_on)
-            }
-            var encx <- mint_g4a(mm, false, -1l)
-            var enc <- mint_g4a(mm, true, -1l)
-            t |> success(!encx.q8 && enc.q8, "the exact and the q8 encoders minted")
-            var stx = Gemma4aState()
-            var st = Gemma4aState()
-            var exact : array<float>
-            var cpu : array<float>
-            var dev : array<float>
-            var n_exact = 0l
-            var n_cpu = 0l
-            var n_dev = 0l
-            set_vulkan_tower(false)
-            let s0 = vulkan_tower_stats()
-            with_job_que() {
-                setup_dasllama_jobque_()
-                n_exact = gemma4a_encode_all(encx, stx, samples, exact)
-                n_cpu = gemma4a_encode_all(enc, st, samples, cpu)
-                set_vulkan_tower(true)
-                n_dev = gemma4a_encode_all(enc, st, samples, dev)
-            }
-            let s1 = vulkan_tower_stats()
-            if (s1.encodes == s0.encodes) {
-                to_log(LOG_INFO, "gemma4a jfk vulkan twin: the driver declined - {vulkan_tower_declines()}\n")
-            }
-            let n_chunks = s1.encodes - s0.encodes
-            t |> equal(n_cpu, n_exact, "gemma4a jfk: the q8 chain's token count")
-            t |> equal(n_dev, n_exact, "gemma4a jfk: the device chain's token count")
-            t |> success(n_chunks >= 1l, "gemma4a jfk: the device served the chunk encodes ({n_chunks})")
-            t |> equal(s1.blocks - s0.blocks, n_chunks * enc.n_layer, "gemma4a jfk: every block of every served encode ran on the driver")
-            front_served(t, "gemma4a jfk", s1.convs - s0.convs, n_chunks, s1.declines - s0.declines)
-            let bar = audio_twin_bar(t, "gemma4a jfk", exact, cpu, dev, enc.n_layer)
-            if (bar > 0.0lf) {
-                g4a_twin_legs(t, mm, enc, samples, exact, bar, s1.encodes)
-            }
-            var stx2 = Gemma4aState()
-            var exact2 : array<float>
-            exact_lane_declines_audio(t, "gemma4a jfk", n_exact) $() : int64 {
-                return gemma4a_encode_all(encx, stx2, samples, exact2)
-            }
-            delete exact2
-            delete stx2
-            delete stx
-            delete st
-            delete enc
-            delete encx
-            vulkan_tower_shutdown()
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -513,42 +459,12 @@ def private mint_cn(path : string; q8 : bool; zero_block : int64) : CanaryEncode
     return <- enc
 }
 
-//! a short encode then the full clip on one residency: the scratch and the rel quartet must regrow under it
-[cold_path]
-def private cn_twin_legs(t : T?; path : string; enc : CanaryEncoder; samples, exact : array<float>; bar : double; encodes0 : int64) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let head <- clip_head(samples)
-        var st2 = CanaryState()
-        var dev_again : array<float>
-        var dev_fresh : array<float>
-        with_job_que() {
-            setup_dasllama_jobque_()
-            canary_log_mel(enc, head, st2)
-            canary_encode(enc, st2)
-            canary_log_mel(enc, samples, st2)
-            canary_encode(enc, st2)
-            dev_again := st2.out
-            vulkan_tower_shutdown()
-            canary_encode(enc, st2)
-            dev_fresh := st2.out
-        }
-        t |> equal(vulkan_tower_stats().encodes - encodes0, 3l, "canary jfk: the short, the regrown and the fresh encodes ran on the device")
-        tower_twin_held(t, "canary jfk regrown scratch", exact, dev_again, bar)
-        tower_twin_held(t, "canary jfk after shutdown", exact, dev_fresh, bar)
-        var encp <- mint_cn(path, true, enc.n_layer / 2l)
-        var stp = CanaryState()
-        with_job_que() {
-            setup_dasllama_jobque_()
-            canary_log_mel(encp, samples, stp)
-            canary_encode(encp, stp)
-        }
-        tower_twin_poison(t, "canary jfk", exact, stp.out, bar)
-        delete stp
-        delete encp
-        delete dev_again
-        delete dev_fresh
-        delete st2
-    }
+//! canary's log-mel and encode of `clip` as a twin leg: the output copied into `out`, the frame count returned
+def private cn_twin_encode(enc : CanaryEncoder; var st : CanaryState; clip : array<float>; var out : array<float>) : int64 {
+    canary_log_mel(enc, clip, st)
+    let n = canary_encode(enc, st)
+    out := st.out
+    return n
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
@@ -556,64 +472,39 @@ def test_canary_vulkan_twin(tst : T?) {
     tst |> run("canary-qwen 2.5B: the Vulkan FastConformer blocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
-            if (!model_available(t, path) || !vulkan_twin_seat(t)) {
-                return
+            jfk_twin_cell(t, path, false) $(samples) {
+                var encx <- mint_cn(path, false, -1l)
+                var enc <- mint_cn(path, true, -1l)
+                t |> success(!encx.q8 && enc.q8, "the exact and the q8 encoders minted")
+                var stx = CanaryState()
+                var st = CanaryState()
+                var n_exact = 0l
+                let spec = TwinSpec(family = "canary", lbl = "canary jfk", n_layer = enc.n_layer, metric = TwinMetric.rel_l2)
+                let r <- twin_three_way(t, spec, enc, st, encx, stx, $(e; var s; var out) => cn_twin_encode(e, s, samples, out)) $(legs) {
+                    n_exact = legs.nexact
+                    t |> equal(legs.ncpu, legs.nexact, "canary jfk: the q8 chain's frame count")
+                    t |> equal(legs.ndev, legs.nexact, "canary jfk: the device chain's frame count")
+                    t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "canary jfk: the device served the encode")
+                    t |> equal(legs.dev.blocks - legs.pre.blocks, enc.n_layer, "canary jfk: every block ran on the driver")
+                    front_served(t, "canary jfk", legs.dev.convs - legs.pre.convs, 1l, legs.dev.declines - legs.pre.declines)
+                }
+                if (r.bar > 0.0lf) {
+                    var st2 = CanaryState()
+                    twin_regrow_legs(t, "canary jfk", enc, st2, samples, r, true, $ { return <- mint_cn(path, true, enc.n_layer / 2l) }) $(e; var s; clip; var out) => cn_twin_encode(e, s, clip, out)
+                    delete st2
+                }
+                var stx2 = CanaryState()
+                exact_lane_declines(t, "canary jfk", n_exact, false) $() : int64 {
+                    canary_log_mel(encx, samples, stx2)
+                    return canary_encode(encx, stx2)
+                }
+                delete stx2
+                delete stx
+                delete st
+                delete enc
+                delete encx
+                vulkan_tower_shutdown()
             }
-            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
-            if (empty(samples)) {
-                t |> skip("jfk.wav not present")
-                return
-            }
-            let tower_was_on = vulkan_tower_on()
-            defer() {
-                set_vulkan_tower(tower_was_on)
-            }
-            var encx <- mint_cn(path, false, -1l)
-            var enc <- mint_cn(path, true, -1l)
-            t |> success(!encx.q8 && enc.q8, "the exact and the q8 encoders minted")
-            var stx = CanaryState()
-            var st = CanaryState()
-            var cpu : array<float>
-            var n_exact = 0l
-            var n_cpu = 0l
-            var n_dev = 0l
-            set_vulkan_tower(false)
-            let s0 = vulkan_tower_stats()
-            with_job_que() {
-                setup_dasllama_jobque_()
-                canary_log_mel(encx, samples, stx)
-                n_exact = canary_encode(encx, stx)
-                canary_log_mel(enc, samples, st)
-                n_cpu = canary_encode(enc, st)
-                cpu := st.out
-                set_vulkan_tower(true)
-                n_dev = canary_encode(enc, st)
-            }
-            let s1 = vulkan_tower_stats()
-            if (s1.encodes == s0.encodes) {
-                to_log(LOG_INFO, "canary jfk vulkan twin: the driver declined - {vulkan_tower_declines()}\n")
-            }
-            t |> equal(n_cpu, n_exact, "canary jfk: the q8 chain's frame count")
-            t |> equal(n_dev, n_exact, "canary jfk: the device chain's frame count")
-            t |> equal(s1.encodes - s0.encodes, 1l, "canary jfk: the device served the encode")
-            t |> equal(s1.blocks - s0.blocks, enc.n_layer, "canary jfk: every block ran on the driver")
-            front_served(t, "canary jfk", s1.convs - s0.convs, 1l, s1.declines - s0.declines)
-            let bar = audio_twin_bar(t, "canary jfk", stx.out, cpu, st.out, enc.n_layer)
-            if (bar > 0.0lf) {
-                cn_twin_legs(t, path, enc, samples, stx.out, bar, s1.encodes)
-            }
-            var stx2 = CanaryState()
-            exact_lane_declines_audio(t, "canary jfk", n_exact) $() : int64 {
-                canary_log_mel(encx, samples, stx2)
-                return canary_encode(encx, stx2)
-            }
-            delete stx2
-            delete cpu
-            delete stx
-            delete st
-            delete enc
-            delete encx
-            vulkan_tower_shutdown()
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -652,101 +543,81 @@ def private mint_q3a(path : string; q8 : bool; zero_block : int64) : Qwen3aTower
     return <- tw
 }
 
-//! the input poison: a q8 tower with `poison_blocks` blocks zeroed from `zero_block` on, through the device chain over
-//! `win`, must EXCEED the bar the clean chains set
-[cold_path, unused_argument(t, tag, path, zero_block, win, exact, bar)]
-def private q3a_poison_leg(t : T?; tag, path : string; zero_block : int64; win : MelChunk; exact : array<float>; bar : double) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        var twp <- mint_q3a(path, true, zero_block)
-        var encp <- make_encoder_state(twp.core)
-        var csp = Qwen3aConvState()
-        let p0 = vulkan_tower_stats()
-        with_job_que() {
-            setup_dasllama_jobque_()
-            qwen3a_encode(twp, encp, csp, win)
-        }
-        t |> equal(vulkan_tower_stats().encodes - p0.encodes, 1l, "{tag} poison: the device served the poisoned encode")
-        tower_twin_poison(t, tag, exact, encp.out, bar)
-        delete csp
-        delete encp
-        delete twp
+//! a qwen3a twin leg's two states over one tower
+struct Q3aLegState {
+    enc : EncoderState
+    cs : Qwen3aConvState
+}
+
+def private q3a_leg_state(tw : Qwen3aTower) : Q3aLegState {
+    var s = Q3aLegState()
+    s.enc <- make_encoder_state(tw.core)
+    return <- s
+}
+
+//! `qwen3a_encode` as a twin leg: the device leg (the knob on) reads the device mel's window `dev_win`, the CPU legs the CPU
+//! mel's `win`; the output copied into `out`, its length returned
+def private q3a_twin_encode(tw : Qwen3aTower; var s : Q3aLegState; win, dev_win : MelChunk; var out : array<float>) : int64 {
+    if (vulkan_tower_knob()) {
+        qwen3a_encode(tw, s.enc, s.cs, dev_win)
+    } else {
+        qwen3a_encode(tw, s.enc, s.cs, win)
     }
+    out := s.enc.out
+    return long_length(out)
 }
 
 [test]
 def test_qwen3a_vulkan_front(tst : T?) {
     tst |> run("qwen3a: the Vulkan mel + conv front + blocks vs the CPU q8 chain on jfk windows 0 and the tail") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
-            if (!model_available(t, path) || !vulkan_twin_seat(t)) {
-                return
-            }
-            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
-            if (empty(samples)) {
-                t |> skip("jfk.wav not present")
-                return
-            }
-            let tower_was_on = vulkan_tower_on()
-            defer() {
-                set_vulkan_tower(tower_was_on)
-            }
-            var twx <- mint_q3a(path, false, -1l)
-            var tw <- mint_q3a(path, true, -1l)
-            t |> success(!twx.core.q8 && tw.core.q8 && tw.cq8, "qwen3a jfk: the exact and the q8 towers minted, the cblob trio on the q8 lane")
-            set_vulkan_tower(false)
-            let m0 = vulkan_tower_stats()
-            let mel <- log_mel_qwen3a(samples, tw.core.n_mel)
-            let m1 = vulkan_tower_stats()
-            t |> equal(m1.mels - m0.mels, 0l, "qwen3a jfk mel: the knob-off mel ran on the CPU (mels delta)")
-            set_vulkan_tower(true)
-            let dev_mel <- log_mel_qwen3a(samples, tw.core.n_mel)
-            let m2 = vulkan_tower_stats()
-            t |> equal(m2.mels - m1.mels, 1l, "qwen3a jfk mel: the device mel served (mels delta)")
-            t |> equal(m2.declines, m1.declines, "qwen3a jfk mel: the device mel served with no decline")
-            t |> equal(dev_mel.n_len, mel.n_len, "qwen3a jfk mel: the device mel has the CPU mel's frames")
-            let mel_maxd = logits_maxdiff(dev_mel.data, mel.data)
-            t |> success(mel_maxd < 1e-3, "qwen3a jfk mel: the device log-mel matches the CPU's within 1e-3 (max |diff| {mel_maxd})")
-            var encx <- make_encoder_state(twx.core)
-            var enc <- make_encoder_state(tw.core)
-            var csx = Qwen3aConvState()
-            var cs = Qwen3aConvState()
-            var cpu_out : array<float>
-            for (off in [0l, QWEN3A_WINDOW]) {
-                let tag = "qwen3a jfk mel+front+blocks at {off}"
-                let win <- qwen3a_mel_window(mel, off)
-                let dev_win <- qwen3a_mel_window(dev_mel, off)
-                let n_chunks = dev_win.n_len / QWEN3A_CHUNK
+            jfk_twin_cell(t, path, true) $(samples) {
+                var twx <- mint_q3a(path, false, -1l)
+                var tw <- mint_q3a(path, true, -1l)
+                t |> success(!twx.core.q8 && tw.core.q8 && tw.cq8, "qwen3a jfk: the exact and the q8 towers minted, the cblob trio on the q8 lane")
                 set_vulkan_tower(false)
-                let s0 = vulkan_tower_stats()
-                with_job_que() {
-                    setup_dasllama_jobque_()
-                    qwen3a_encode(twx, encx, csx, win)
-                    qwen3a_encode(tw, enc, cs, win)
-                    cpu_out := enc.out
-                    set_vulkan_tower(true)
-                    qwen3a_encode(tw, enc, cs, dev_win)
+                let m0 = vulkan_tower_stats()
+                let mel <- log_mel_qwen3a(samples, tw.core.n_mel)
+                let m1 = vulkan_tower_stats()
+                t |> equal(m1.mels - m0.mels, 0l, "qwen3a jfk mel: the knob-off mel ran on the CPU (mels delta)")
+                set_vulkan_tower(true)
+                let dev_mel <- log_mel_qwen3a(samples, tw.core.n_mel)
+                let m2 = vulkan_tower_stats()
+                t |> equal(m2.mels - m1.mels, 1l, "qwen3a jfk mel: the device mel served (mels delta)")
+                t |> equal(m2.declines, m1.declines, "qwen3a jfk mel: the device mel served with no decline")
+                t |> equal(dev_mel.n_len, mel.n_len, "qwen3a jfk mel: the device mel has the CPU mel's frames")
+                let mel_maxd = logits_maxdiff(dev_mel.data, mel.data)
+                t |> success(mel_maxd < 1e-3, "qwen3a jfk mel: the device log-mel matches the CPU's within 1e-3 (max |diff| {mel_maxd})")
+                var sx <- q3a_leg_state(twx)
+                var sq <- q3a_leg_state(tw)
+                for (off in [0l, QWEN3A_WINDOW]) {
+                    let tag = "qwen3a jfk mel+front+blocks at {off}"
+                    let win <- qwen3a_mel_window(mel, off)
+                    let dev_win <- qwen3a_mel_window(dev_mel, off)
+                    let n_chunks = dev_win.n_len / QWEN3A_CHUNK
+                    let spec = TwinSpec(family = "qwen3a", lbl = tag, n_layer = tw.core.n_layer, metric = TwinMetric.rel_l2)
+                    let r <- twin_three_way(t, spec, tw, sq, twx, sx, $(e; var s; var out) => q3a_twin_encode(e, s, win, dev_win, out)) $(legs) {
+                        if (legs.dev.convs == legs.pre.convs) {
+                            to_log(LOG_INFO, "{tag}: the driver declined - {vulkan_tower_declines()}\n")
+                        }
+                        front_served(t, tag, legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.pre.declines)
+                        t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: the block loop served the window")
+                    }
+                    if (off == 0l && r.bar > 0.0lf) {
+                        var twp <- mint_q3a(path, true, tw.core.n_layer / 2l)
+                        var sp <- q3a_leg_state(twp)
+                        twin_poison(t, r, tw.core.n_layer / 2l, twp, sp) $(e; var s; var out) => q3a_twin_encode(e, s, win, dev_win, out)
+                        delete sp
+                        delete twp
+                    }
                 }
-                let s1 = vulkan_tower_stats()
-                if (s1.convs == s0.convs) {
-                    to_log(LOG_INFO, "{tag}: the driver declined - {vulkan_tower_declines()}\n")
-                }
-                front_served(t, tag, s1.convs - s0.convs, n_chunks, s1.declines - s0.declines)
-                t |> equal(s1.encodes - s0.encodes, 1l, "{tag}: the block loop served the window")
-                let bar = audio_twin_bar(t, tag, encx.out, cpu_out, enc.out, tw.core.n_layer)
-                if (off == 0l && bar > 0.0lf) {
-                    q3a_poison_leg(t, tag, path, tw.core.n_layer / 2l, dev_win, encx.out, bar)
-                }
+                delete sq
+                delete sx
+                delete tw
+                delete twx
+                vulkan_tower_shutdown()
             }
-            delete cpu_out
-            delete enc
-            delete encx
-            delete tw
-            delete twx
-            vulkan_tower_shutdown()
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -878,10 +749,7 @@ def test_encoder_oracle(t : T?) {
             setup_dasllama_jobque_()
             audio_encode(tw, enc, mel)
         }
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            set_metal_tower(true)
-        }
-        restore_vulkan_tower(tower_was_on)
+        restore_every_gpu_tower(tower_was_on)
         // llama-mtmd-debug -p encode --audio one -n 3000 (CPU): token 0 opens
         // 0.251974 0.311756 0.556828 0.005232 -0.838854; stats mean=0.009261 max=7.527778.
         // fp32 CPU re-orders put us ~1e-3 off their flash-attn encoder; gate at 5e-3.

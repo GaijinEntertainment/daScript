@@ -241,15 +241,8 @@ let private POISON_BLOCK = 13l   //! the whole-tower input poison's block: mid-s
 //! a tower minted in memory from the staged planes under the lane pin (pinned, staged, the pin restored): `nl` blocks (0 = the
 //! file's count); `zero_block` >= 0 zeroes that block's q8 GEMM planes - the input poison of the device-side bars (q8 lane).
 //! Never `load_gemma3v_tower`, which bakes a `.dlim` under the pin.
-def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l) : Gemma3vTower {
-    set_gemma3v_q8(q8)
-    var inscope stg <- stage_gemma3v_tower(mm)
-    reset_gemma3v_q8()
-    truncate_and_poison(stg, nl, zero_block)
-    var tw = Gemma3vTower()
-    mint_gemma3v_tower(stg, tw)
-    return <- tw
-}
+def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l) : Gemma3vTower
+    => mint_twin_tower(mm, q8, nl, zero_block, @@set_gemma3v_q8, @@reset_gemma3v_q8, @@stage_gemma3v_tower, @@mint_gemma3v_tower)
 
 //! the input poison of a device-side dump bar: the q8 tower with `POISON_BLOCK` zeroed, served by the driver, must EXCEED the
 //! bar its dump holds - a bar the poison clears measures nothing
@@ -264,17 +257,8 @@ def private poison_device_leg(tt : T?; mm : string; kind : string; logname : str
         var stp = Gemma3vState()
         let px = int(twp.image_px)
         let planes <- make_planes(kind, px, px)
-        var out : array<float>
-        set_vulkan_tower(true)
-        let e0 = vulkan_tower_stats().encodes
-        with_job_que() {
-            setup_dasllama_jobque_()
-            gemma3v_encode(twp, stp, planes, twp.image_px, twp.image_px, out)
-        }
-        tt |> equal(vulkan_tower_stats().encodes - e0, 1l, "{kind} poison: device-served (encodes delta)")
-        let excess = encode_excess(out, int(twp.proj_dim), o, TIER1_ABS, rel)
-        to_log(LOG_INFO, "gemma3v vulkan poison leg {kind}: block {POISON_BLOCK} zeroed -> excess {excess} over the {rel} x rms bar\n")
-        tt |> success(excess > 0.0, "{kind}: a zeroed block through the device chain reds the bar (excess {excess})")
+        poison_dump_leg(tt, "gemma3v", kind, POISON_BLOCK, rel, twp, stp,
+            $(t; var s; var out) => gemma3v_encode(t, s, planes, t.image_px, t.image_px, out)) $(out) => encode_excess(out, int(twp.proj_dim), o, TIER1_ABS, rel)
         delete stp
         delete twp
     }
@@ -283,18 +267,10 @@ def private poison_device_leg(tt : T?; mm : string; kind : string; logname : str
 //! the fixed canvas three ways on the shared instrument; `zero_block` >= 0 adds the input poison over a fresh q8 tower
 def private twin_encode(tt : T?; tw : Gemma3vTower; var st : Gemma3vState; tw_exact : Gemma3vTower; var st_exact : Gemma3vState;
                         kind : string; mm : string; zero_block : int64 = -1l) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let px = int(tw.image_px)
-        let planes <- make_planes(kind, px, px)
-        let r <- twin_three_way(tt, "gemma3v", kind, px, px, tw.patch, "", tw, st, tw_exact, st_exact) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
-        if (zero_block >= 0l) {
-            var twp <- mint_tower(mm, true, tw.n_layer, zero_block)
-            var stp = Gemma3vState()
-            twin_poison(tt, "gemma3v", kind, px, px, zero_block, twp, stp, r) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
-            delete stp
-            delete twp
-        }
-    }
+    let px = int(tw.image_px)
+    let planes <- make_planes(kind, px, px)
+    twin_canvas(tt, "gemma3v", kind, px, px, tw.patch, "", tw, st, tw_exact, st_exact, zero_block,
+        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb) }) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
@@ -328,7 +304,7 @@ def test_gemma3v_vulkan_twin(t : T?) {
             delete tw
             let planes <- make_planes("cb", int(tw_exact.image_px), int(tw_exact.image_px))
             let n_side = tw_exact.image_px / tw_exact.patch / tw_exact.merge
-            exact_lane_declines(tt, tw_exact, st_exact, n_side * n_side * tw_exact.proj_dim) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw_exact.image_px, tw_exact.image_px, out)
+            exact_lane_declines(tt, "gemma3v cb", tw_exact, st_exact, n_side * n_side * tw_exact.proj_dim) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw_exact.image_px, tw_exact.image_px, out)
             delete st_exact
             delete tw_exact
             vulkan_tower_shutdown()

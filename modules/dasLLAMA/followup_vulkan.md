@@ -1860,9 +1860,8 @@ module) is independent and can land any time - it is pure structure.
     by 108 bytes for fifteen lines); the three hand-rolled listener registries
     (`register_vk_drop_hook`, `register_weights_epoch_listener`, `register_reload_prep`) against
     daslib's `delegate` module; `TowerClampRqT` against `RqPlainT` with the bounds in the requant
-    args; the Vulkan dump rungs and `shallow_routing_cell_vk` against their Metal twins, the five
-    `x * sigmoid(1.702 x)` spellings, and `approx` in `test_metal_decode_kernels.das` against
-    `_compares`.
+    args; the Vulkan dump rungs against their Metal twins, the five `x * sigmoid(1.702 x)`
+    spellings, and `approx` in `test_metal_decode_kernels.das` against `_compares`.
 92. **The low-format N-row arc's review leftovers.** The kq kernel
     bodies write the per-format scale-row strides as literals (`wsb * 5u`, `* 8u`, `* 6u`, `* 10u`,
     `* 12u`, `* 40u + 32u`), which `REVIEW_KQ_FORMATS.md` wants read off `dasllama_kqformat.das`'s

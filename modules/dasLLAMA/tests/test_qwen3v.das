@@ -395,30 +395,15 @@ def test_qwen3v_tier1_q8(t : T?) {
 //! a tower minted in memory from the staged planes under the lane pin (pinned, staged, the pin restored): `nl` blocks (0 = the
 //! file's count); `zero_block` >= 0 zeroes that block's q8 GEMM planes - the input poison of the device-side bar (q8 lane).
 //! Never `load_qwen3v_tower`, which bakes a `.dlim` under the pin.
-def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l) : Qwen3vTower {
-    set_qwen3v_q8(q8)
-    var inscope stg <- stage_qwen3v_tower(mm)
-    reset_qwen3v_q8()
-    truncate_and_poison(stg, nl, zero_block)
-    var tw = Qwen3vTower()
-    mint_qwen3v_tower(stg, tw)
-    return <- tw
-}
+def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l) : Qwen3vTower
+    => mint_twin_tower(mm, q8, nl, zero_block, @@set_qwen3v_q8, @@reset_qwen3v_q8, @@stage_qwen3v_tower, @@mint_qwen3v_tower)
 
 //! one canvas three ways on the shared instrument; `zero_block` >= 0 adds the input poison over a fresh q8 tower
 def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; tw_exact : Qwen3vTower; var st_exact : Qwen3vState;
                         kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let planes <- make_planes(kind, w, h)
-        let r <- twin_three_way(tt, "qwen3v", kind, w, h, 16l, ", {tw.n_deepstack} taps", tw, st, tw_exact, st_exact) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
-        if (zero_block >= 0l) {
-            var twp <- mint_tower(mm, true, tw.n_layer, zero_block)
-            var stp = Qwen3vState()
-            twin_poison(tt, "qwen3v", kind, w, h, zero_block, twp, stp, r) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
-            delete stp
-            delete twp
-        }
-    }
+    let planes <- make_planes(kind, w, h)
+    twin_canvas(tt, "qwen3v", kind, w, h, 16l, ", {tw.n_deepstack} taps", tw, st, tw_exact, st_exact, zero_block,
+        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb) }) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
@@ -454,7 +439,7 @@ def test_qwen3v_vulkan_twin(t : T?) {
             delete st
             delete tw
             let planes <- make_planes("cb", 96, 96)
-            exact_lane_declines(tt, tw_exact, st_exact, 9l * qwen3v_row_width(tw_exact)) $(t; var s; var out) => qwen3v_encode(t, s, planes, 96l, 96l, out)
+            exact_lane_declines(tt, "qwen3v cb 96x96", tw_exact, st_exact, 9l * qwen3v_row_width(tw_exact)) $(t; var s; var out) => qwen3v_encode(t, s, planes, 96l, 96l, out)
             delete st_exact
             delete tw_exact
             vulkan_tower_shutdown()

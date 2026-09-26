@@ -418,8 +418,8 @@ the CPU mel within 1e-3, its counter (`mels`) asserted and no decline counted, t
 the clip's shorter tail window three ways through `qwen3a_encode` on one residency - the second
 window has fewer chunks than the scratch holds - the rows leg fed the device mel, the soft-token
 rows at the twin bar, the conv counter proving the front served every chunk and the encode counter
-the block loop, the input poison (a q8 tower with zeroed blocks through the device chain must
-exceed the bar) and the exact lane's `quant_mode` decline. Every tower but the whisper twins' is
+the block loop and the input poison (a q8 tower with zeroed blocks through the device chain must
+exceed the bar). Every tower but the whisper twins' is
 staged and minted in memory (the qwen3a pair through `stage_qwen3a_tower`); the whisper twins load
 the served model through the ASR facade, and their rows compare and the f32-decoder leg stage and
 mint in memory. The three-way twins skip without their carriers, without a Vulkan device under

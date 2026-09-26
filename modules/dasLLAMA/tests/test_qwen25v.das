@@ -108,10 +108,7 @@ def private mint_tower(mm : string; nl : int64 = 0l; wa : int64 = -1l; zero_bloc
     if (wa >= 0l) {
         stg.t.n_wa_pattern = wa
     }
-    truncate_and_poison(stg, nl, zero_block)
-    var tw = Qwen25vTower()
-    mint_qwen25v_tower(stg, tw)
-    return <- tw
+    return <- mint_staged_tower(stg, nl, zero_block, @@mint_qwen25v_tower)
 }
 
 //! one canvas two ways - the exact CPU chain and the device chain - with the counters and the bar; `zero_block` >= 0 adds the
@@ -139,7 +136,7 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
         if (d2.encodes == d1.encodes) {
             to_log(LOG_INFO, "qwen25v vulkan twin {kind} {w}x{h}: the driver declined - {vulkan_tower_declines()}\n")
         }
-        twin_counters(tt, "{kind} {w}x{h}", d0, d1, d2, ncpu, ngpu, tw.n_layer, int64(w / 14) * int64(h / 14))
+        twin_counters(tt, "{kind} {w}x{h}", TwinLegs(exact = d0, cpu = d1, dev = d2, ncpu = ncpu, ndev = ngpu), tw.n_layer, int64(w / 14) * int64(h / 14))
         let rms = rms_of(cpu)
         let dev_ex = logits_maxdiff(gpu, cpu)
         let rel = tw.n_layer <= 8l ? TWIN_REL_VK_SHALLOW : TWIN_REL_VK_DEEP
@@ -172,69 +169,69 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
         if (zero_block >= 0l) {
             var twp <- mint_tower(mm, tw.n_layer, -1l, zero_block)
             var stp = Qwen25vState()
-            var r = TwinResult(rms = rms, bar = bar)
+            var r = TwinResult(spec = TwinSpec(family = "qwen25v", lbl = "{kind} {w}x{h}", n_layer = tw.n_layer, metric = TwinMetric.maxdiff), rms = rms, bar = double(bar))
             r.reference <- cpu
-            twin_poison(tt, "qwen25v", kind, w, h, zero_block, twp, stp, r) $(t; var s; var out) => qwen25v_encode(t, s, planes, int64(w), int64(h), out)
+            twin_poison(tt, r, zero_block, twp, stp) $(t; var s; var out) => qwen25v_encode(t, s, planes, int64(w), int64(h), out)
             delete stp
             delete twp
         }
     }
 }
 
-let private SHALLOW_ABS_BAR = 0.1   //! shallow_routing_cell's 0.1 abs and its derivation, held on the driver
+let private SHALLOW_ABS_BAR = 0.1   //! one layer of GPU noise measures ~2.6e-2 abs peak on quad (f16-operand GEMMs + the K=5120 merger on |~70| values), a routing defect mixes quadrants at >= 1.0
 
-//! the one-block routing cell on the driver: the device chain against the CPU chain on quad content, then the input poison -
-//! the device over a tower whose one block is zeroed, against the same clean CPU chain, must EXCEED the bar
-def private shallow_routing_cell_vk(t : T?; mm, name : string; wa : int64) {   // nolint:LINT012,LINT019 — the whole body is the vulkan static_if arm; the no-vulkan lane sees every argument unused
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        var tw <- mint_tower(mm, 1l, wa)
-        let planes <- make_planes("quad", 448, 448)
-        var sg = Qwen25vState()
-        var og : array<float>
-        set_vulkan_tower(true)
-        let e0 = vulkan_tower_stats().encodes
-        var ng = 0l
-        with_job_que() {
-            setup_dasllama_jobque_()
-            ng = qwen25v_encode(tw, sg, planes, 448l, 448l, og)
-        }
-        t |> equal(vulkan_tower_stats().encodes - e0, 1l, "shallow {name}: device-served")
-        var sc = Qwen25vState()
-        var oc : array<float>
-        set_vulkan_tower(false)
-        var nc = 0l
-        with_job_que() {
-            setup_dasllama_jobque_()
-            nc = qwen25v_encode(tw, sc, planes, 448l, 448l, oc)
-        }
-        set_vulkan_tower(true)
-        t |> equal(int(ng), int(nc), "shallow {name}: token counts agree")
-        let md = logits_maxdiff(og, oc)
-        to_log(LOG_INFO, "qwen25v shallow {name} on the driver: device vs CPU on quad maxdiff {md} (bar {SHALLOW_ABS_BAR} abs)\n")
-        t |> success(md < SHALLOW_ABS_BAR, "shallow {name}: device == CPU on quad within {SHALLOW_ABS_BAR} abs (measured {md})")
+//! the one-block routing cell on a GPU lane (`set_on` its knob, `encodes` its served-encode counter): the `lane` chain against the
+//! CPU chain on quad content within `SHALLOW_ABS_BAR`, then - `poison` - the lane over a tower whose one block is zeroed, against the
+//! same clean CPU chain, must EXCEED the bar
+def private shallow_routing_cell(t : T?; mm, name, lane : string; wa : int64; poison : bool; set_on : block<(on : bool) : void>;
+                                 encodes : block<() : int64>) {
+    var tw <- mint_tower(mm, 1l, wa)
+    let planes <- make_planes("quad", 448, 448)
+    var sg = Qwen25vState()
+    var og : array<float>
+    invoke(set_on, true)
+    let e0 = invoke(encodes)
+    var ng = 0l
+    with_job_que() {
+        setup_dasllama_jobque_()
+        ng = qwen25v_encode(tw, sg, planes, 448l, 448l, og)
+    }
+    t |> equal(invoke(encodes) - e0, 1l, "shallow {name}: {lane}-served")
+    var sc = Qwen25vState()
+    var oc : array<float>
+    invoke(set_on, false)
+    var nc = 0l
+    with_job_que() {
+        setup_dasllama_jobque_()
+        nc = qwen25v_encode(tw, sc, planes, 448l, 448l, oc)
+    }
+    invoke(set_on, true)
+    t |> equal(int(ng), int(nc), "shallow {name}: token counts agree")
+    let md = logits_maxdiff(og, oc)
+    to_log(LOG_INFO, "qwen25v shallow {name} on the driver: {lane} vs CPU on quad maxdiff {md} (bar {SHALLOW_ABS_BAR} abs)\n")
+    t |> success(md < SHALLOW_ABS_BAR, "shallow {name}: {lane} == CPU on quad within {SHALLOW_ABS_BAR} abs (measured {md})")
+    if (poison) {
         var twp <- mint_tower(mm, 1l, wa, 0l)
         var sp = Qwen25vState()
         var op : array<float>
-        let p0 = vulkan_tower_stats().encodes
+        let p0 = invoke(encodes)
         with_job_que() {
             setup_dasllama_jobque_()
             qwen25v_encode(twp, sp, planes, 448l, 448l, op)
         }
-        t |> equal(vulkan_tower_stats().encodes - p0, 1l, "shallow {name} poison: device-served")
+        t |> equal(invoke(encodes) - p0, 1l, "shallow {name} poison: {lane}-served")
         let mdp = logits_maxdiff(op, oc)
-        to_log(LOG_INFO, "qwen25v shallow {name} poison: the zeroed block on the device vs the clean CPU chain maxdiff {mdp}\n")
-        t |> success(mdp >= SHALLOW_ABS_BAR, "shallow {name}: a zeroed block through the device chain EXCEEDS the {SHALLOW_ABS_BAR} abs bar (measured {mdp})")
-        delete og
-        delete oc
+        to_log(LOG_INFO, "qwen25v shallow {name} poison: the zeroed block on the {lane} vs the clean CPU chain maxdiff {mdp}\n")
+        t |> success(mdp >= SHALLOW_ABS_BAR, "shallow {name}: a zeroed block through the {lane} chain EXCEEDS the {SHALLOW_ABS_BAR} abs bar (measured {mdp})")
         delete op
-        delete sg
-        delete sc
         delete sp
-        delete tw
         delete twp
-    } else {
-        t |> skip("no dasVulkan on this build")
     }
+    delete og
+    delete oc
+    delete sg
+    delete sc
+    delete tw
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
@@ -261,8 +258,12 @@ def test_qwen25v_vulkan_twin(t : T?) {
             twin_encode(tt, tw, st, "cb", 616, 336, mm)
             delete st
             delete tw
-            shallow_routing_cell_vk(tt, mm, "window", 99l)
-            shallow_routing_cell_vk(tt, mm, "full", 1l)
+            shallow_routing_cell(tt, mm, "window", "device", 99l, true, $(on) { set_vulkan_tower(on) }) $ {
+                return vulkan_tower_stats().encodes
+            }
+            shallow_routing_cell(tt, mm, "full", "device", 1l, true, $(on) { set_vulkan_tower(on) }) $ {
+                return vulkan_tower_stats().encodes
+            }
             vulkan_tower_shutdown()
         } else {
             tt |> skip("dasVulkan not present")
@@ -337,56 +338,14 @@ def test_qwen25v_tier1_gpu(t : T?) {
             }
             delete stq
             delete twp
-            shallow_routing_cell(tt, mm, "window", 99l)   // (0+1) % 99 != 0 -> the window arm
-            shallow_routing_cell(tt, mm, "full", 1l)      // (0+1) % 1 == 0 -> the slab arm
+            shallow_routing_cell(tt, mm, "window", "GPU", 99l, false, $(on) { set_metal_tower(on) }) $ {   // (0+1) % 99 != 0 -> the window arm
+                return metal_tower_stats().encodes
+            }
+            shallow_routing_cell(tt, mm, "full", "GPU", 1l, false, $(on) { set_metal_tower(on) }) $ {   // (0+1) % 1 == 0 -> the slab arm
+                return metal_tower_stats().encodes
+            }
         } else {
             tt |> skip("no das_metal on this build - the GPU rung has no device to serve")
         }
-    }
-}
-
-//! one layer of GPU noise measures ~2.6e-2 abs peak here (f16-operand GEMMs + the K=5120 merger
-//! on |~70| values) and a routing defect mixes quadrants at >= 1.0, so the bar is 0.1 abs
-def private shallow_routing_cell(t : T?; mm, name : string; wa : int64) {   // nolint:LINT012,LINT019 — the whole body is the das_metal static_if arm; the no-metal lane sees every argument unused
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        var inscope st <- stage_qwen25v_tower(mm)
-        st.t.n_layer = 1l
-        st.t.n_wa_pattern = wa
-        var tw = Qwen25vTower()
-        mint_qwen25v_tower(st, tw)
-        let planes <- make_planes("quad", 448, 448)
-        var sg = Qwen25vState()
-        var og : array<float>
-        set_metal_tower(true)
-        let e0 = metal_tower_stats().encodes
-        var ng = 0l
-        with_job_que() {
-            setup_dasllama_jobque_()
-            ng = qwen25v_encode(tw, sg, planes, 448l, 448l, og)
-        }
-        t |> equal(metal_tower_stats().encodes - e0, 1l, "shallow {name}: GPU-served")
-        var sc = Qwen25vState()
-        var oc : array<float>
-        set_metal_tower(false)
-        var nc = 0l
-        with_job_que() {
-            setup_dasllama_jobque_()
-            nc = qwen25v_encode(tw, sc, planes, 448l, 448l, oc)
-        }
-        set_metal_tower(true)
-        t |> equal(int(ng), int(nc), "shallow {name}: token counts agree")
-        var md = 0.0
-        for (a, b in og, oc) {
-            let av = abs(a - b)
-            if (av > md) {
-                md = av
-            }
-        }
-        t |> success(md < 0.1, "shallow {name}: GPU == CPU on quad within 0.1 abs (measured {md})")
-        delete og
-        delete oc
-        delete sg
-        delete sc
-        delete tw
     }
 }
