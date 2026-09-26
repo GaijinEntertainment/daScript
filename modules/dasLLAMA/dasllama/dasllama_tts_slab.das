@@ -803,7 +803,7 @@ def tts_pk_layer_dims_ok(l : PocketLayer; d, ffn : int64) : bool {
         && long_length(l.norm1.w) == d && long_length(l.norm2.w) == d)
 }
 
-def private tts_pk_layer_ok(l : PocketLayer; d, ffn : int64) : bool {
+def tts_pk_layer_ok(l : PocketLayer; d, ffn : int64) : bool {
     return tts_pk_layer_dims_ok(l, d, ffn) && tts_gemm_lin_ok(l.in_proj) && tts_gemm_lin_ok(l.out_proj) && tts_gemm_lin_ok(l.ffn1) && tts_gemm_lin_ok(l.ffn2)
 }
 

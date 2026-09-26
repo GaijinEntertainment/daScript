@@ -66,9 +66,12 @@ another lane or another layout keys differently; the addresses stand for the mod
 reload never reuses them before the weights epoch drops every slab, which shutdown does too. Every
 family attaches its slab through one guard and one rebuild (`st2_slab_current`, `st2_slab_rebuild`):
 a slab whose key matches stays resident and the call returns on the guard; otherwise the cold
-rebuild runs the family's drop, then the family's writer twice - the measuring pass
-writes into a probe slab to size the host copy, the second fills the resident - and the copy
-uploads, the drop running again when the upload fails. A slab releases through one walk over its
+rebuild runs the family's drop, then the family's writer twice through the shared host writer
+(`dasllama_tts_slab.das`, the one the Vulkan seats build from; its keys, shape checks and row
+layouts are the same here, the slots adapted to byte offsets with the GEMM's uniforms hung on
+each, and an LSTM recurrence written unturned, as the Metal recurrence kernel reads it) - the
+measuring pass writes into a probe slab to size the host copy, the second fills the resident -
+and the copy uploads, the drop running again when the upload fails. A slab releases through one walk over its
 fields by type (`st2_release_any`): a conv slot's and a Pocket linear's pooled uniforms, a buffer
 the slab owns, the elements of an array of them and the fields of a struct of them go back to their
 homes, so a slot field a slab gains frees itself. The walk releases and never deletes;
