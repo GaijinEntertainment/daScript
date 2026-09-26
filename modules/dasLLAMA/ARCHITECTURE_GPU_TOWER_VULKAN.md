@@ -255,11 +255,12 @@ the post-add with the next layer's first norm and its feed (the final norm on th
 whose feed is the logits GEMV's), then the tied-embedding logits GEMV over the last row alone and
 the logits readback - the CPU filter and sampler stay the parity anchor. The fused passes land
 the same Q8_0 bytes as the row pass and the separate requant (`TowerClampRq`) - the block store is
-one text, eight consecutive lanes a block - and cost a token 66 dispatches where the separate
+`RqT`'s text, eight consecutive lanes a block - and cost a token 66 dispatches where the separate
 passes cost 91, the dispatch floor of a decode step being its own launch and barrier. A partial's workgroup
 (`TowerWdecAttnPart`) is one chunk of 256 keys, one head and one row - the chunk's scores off the
 f16 keys, its own max and exp-sum, its unnormalized weighted values - so a 1500-key cross window
-spreads over six workgroups a row. The combine's workgroup (`TowerWdecAttnComb`) is one head and
+spreads over six workgroups a row. The combine's workgroup (`TowerWdecAttnCombRq`; the f32-storing
+`TowerWdecAttnComb` is the kernel cells' reference form) is one head and
 one row: it merges the chunks' partials by log-sum-exp into the row's head slice of the [rows x
 dim] output. A batch wider than the step's row
 cap (`WD_ROW_CAP`) at the window's first batch hands the window to the CPU chain (`rows`);
