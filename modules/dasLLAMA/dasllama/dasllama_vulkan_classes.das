@@ -9651,66 +9651,6 @@ class TowerRope2d {
     }
 }
 
-//! the residual seam of a tower block: x[r] += ascale . rmsnorm(y[r]) . wpost (the branch's post-norm, `woff`; the plain
-//! stamp adds ascale . y[r] as it is), then under `ln_on` xb[r] = rmsnorm(x[r]) . wln (the next branch's pre-norm, `lnoff`)
-//! - the CPU loop's post-norm, add and pre-norm in one workgroup a row
-[ |> template_struct_instance]
-class template TowerPostAddT : RmsWgBase {
-    @template_constant POST : bool = true   //! the branch's post-norm at `woff`; the plain stamp adds the branch rows as they are
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 y : array<float>
-    @ssbo @binding = 2 xb : array<float>
-    @ssbo @binding = 3 @role = "weight" wn : array<float>
-    @push_constant pa : TowerRowArgs
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let base = gl_WorkGroupID.x * pa.d
-        let tid = gl_LocalInvocationID.x
-        var ss2 = 0.0
-        var i = tid
-        static_if (POST) {
-            var ss = 0.0
-            while (i < pa.d) {
-                let v = y[base + i]
-                ss += v * v
-                i += 256u
-            }
-            let inv = wg_rms_inv(ss, pa.d, pa.eps, 0u)
-            i = tid
-            while (i < pa.d) {
-                let xv = x[base + i] + pa.ascale * ((y[base + i] * inv) * wn[pa.woff + i])
-                x[base + i] = xv
-                ss2 += xv * xv
-                i += 256u
-            }
-        } else {
-            while (i < pa.d) {
-                let xv = x[base + i] + pa.ascale * y[base + i]
-                x[base + i] = xv
-                ss2 += xv * xv
-                i += 256u
-            }
-        }
-        if (pa.ln_on != 0u) {
-            let inv2 = wg_rms_inv(ss2, pa.d, pa.eps, 1u)
-            i = tid
-            while (i < pa.d) {
-                xb[base + i] = (x[base + i] * inv2) * wn[pa.lnoff + i]
-                i += 256u
-            }
-        }
-    }
-}
-
-[vk_dispatch(name = "tower_post_add_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerPostAdd : TowerPostAddT {}
-
-[vk_dispatch(name = "tower_post_add_plain_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerPostAddPlain : TowerPostAddT {
-    override POST = false
-}
-
 struct TowerG4aAttnArgs {
     d : uint        //! the row width (compact [npos x d] rows)
     npos : uint
@@ -10118,12 +10058,16 @@ class TowerLnRq : TowerLnT {
     override OUT32 = false
 }
 
-//! the residual seam of a biased block: x[r] += y[r] + b (the branch's output bias at `boff`), then under `ln_on`
-//! xb[r] = layernorm(x[r]) . wln + bln (the next branch's pre-norm at `lnoff` / `lnboff`; the RMS stamp: rms(x[r]) . wln)
-//! - one workgroup a row; the OUT_Q8 stamp (the layernorm arm) quantizes the next norm into Q8_0 blocks in place of storing it
+//! the residual seam of a block, one workgroup a row: x[r] += ascale . branch, where the branch is y[r] + b (BIAS: the branch's
+//! output bias at `boff`), rmsnorm(y[r]) . wpost (POST: the branch's post-norm at `woff`, the gemma towers) or y[r] as it is (the
+//! conv module's plain add); then under `ln_on` the next branch's pre-norm - xb[r] = layernorm(x[r]) . wln + bln at `lnoff` /
+//! `lnboff`, or rms(x[r]) . wln on an RMS stamp (POST implies RMS: the two reduces take slots 0 and 1); the OUT_Q8 stamp (the
+//! layernorm arm) quantizes the next norm into Q8_0 blocks in place of storing it
 [ |> template_struct_instance]
 class template TowerPostAddLnT : RmsWgBase {
-    @template_constant RMS : bool = false   //! the next pre-norm is the weighted rms (qwen25v), not the layernorm
+    @template_constant RMS : bool = false   //! the next pre-norm is the weighted rms (qwen25v, the gemma towers), not the layernorm
+    @template_constant POST : bool = false  //! the branch rows carry their post-norm before the add
+    @template_constant BIAS : bool = true   //! the branch rows carry their output bias before the add
     @template_constant OUT16 : bool = false   //! the normed rows as f16 (the cm2 tile's feed), else f32
     @template_constant OUT32 : bool = true
     @ssbo @binding = 0 x : array<float>
@@ -10145,14 +10089,44 @@ class template TowerPostAddLnT : RmsWgBase {
         }
     }
 
+    //! the branch's element `i` of the row at `base` as the add takes it
+    def branch(base, i : uint; inv_post : float) : float {
+        static_if (POST) {
+            return (y[base + i] * inv_post) * wn[pa.woff + i]
+        } else {
+            static_if (BIAS) {
+                return y[base + i] + wn[pa.boff + i]
+            } else {
+                return y[base + i]
+            }
+        }
+    }
+
+    //! the branch's post-norm inverse over the row at `base` (slot 0), 1 on a stamp without the post-norm
+    def post_inv(base : uint) : float {
+        static_if (POST) {
+            var ss = 0.0
+            var i = gl_LocalInvocationID.x
+            while (i < pa.d) {
+                let v = y[base + i]
+                ss += v * v
+                i += 256u
+            }
+            return wg_rms_inv(ss, pa.d, pa.eps, 0u)
+        } else {
+            return 1.0
+        }
+    }
+
     [spirv_kernel(local_size_x = 256)]
     def run {
         let base = gl_WorkGroupID.x * pa.d
         let tid = gl_LocalInvocationID.x
+        let inv_post = post_inv(base)
         var s1 = 0.0
         var i = tid
         while (i < pa.d) {
-            let xv = x[base + i] + pa.ascale * (y[base + i] + wn[pa.boff + i])
+            let xv = x[base + i] + pa.ascale * branch(base, i, inv_post)
             x[base + i] = xv
             static_if (RMS) {
                 s1 += xv * xv
@@ -10163,7 +10137,7 @@ class template TowerPostAddLnT : RmsWgBase {
         }
         if (pa.ln_on != 0u) {
             static_if (RMS) {
-                let inv = wg_rms_inv(s1, pa.d, pa.eps, 0u)
+                let inv = wg_rms_inv(s1, pa.d, pa.eps, POST ? 1u : 0u)
                 i = tid
                 while (i < pa.d) {
                     store(base + i, (x[base + i] * inv) * wn[pa.lnoff + i])
@@ -10210,6 +10184,19 @@ class TowerPostAddLn16 : TowerPostAddLnT {
 class TowerPostAddLnRq : TowerPostAddLnT {
     override OUT_Q8 = true
     override OUT32 = false
+}
+
+[vk_dispatch(name = "tower_post_add_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPostAdd : TowerPostAddLnT {
+    override RMS = true
+    override POST = true
+    override BIAS = false
+}
+
+[vk_dispatch(name = "tower_post_add_plain_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPostAddPlain : TowerPostAddLnT {
+    override RMS = true
+    override BIAS = false
 }
 
 [vk_dispatch(name = "tower_post_add_rms_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -10447,41 +10434,6 @@ class TowerHeadUnpad16 : TowerRestrideT {
     override PAD = false
     override OUT16 = true
     override OUT32 = false
-}
-
-struct TowerGluArgs {
-    d : uint        //! the row width, a 4-multiple
-    nelem : uint
-    bgoff : uint    //! the gate and up bias rows' bases in wn
-    buoff : uint
-}
-
-//! the gated FFN's hidden in place: g = silu(g + bg) . (u + bu) - the two bias rows, the SiLU and the product of the CPU
-//! loop in one pass over the rows
-[vk_dispatch(name = "tower_glu_act_cls", grid = "wgs", params = "wgs : int64")]
-class TowerGluAct {
-    @ssbo @binding = 0 g : array<float>
-    @ssbo @binding = 1 u : array<float>
-    @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @push_constant pa : TowerGluArgs
-
-    def glu(e : uint) : float {
-        let c = e % max(1u, pa.d)
-        let gv = g[e] + wn[pa.bgoff + c]
-        let uv = u[e] + wn[pa.buoff + c]
-        return act_mul_sel(gv, uv, ACT_SILU)
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "tower_glu_act_cls_spv")]
-    def run {
-        let e = gl_GlobalInvocationID.x * 4u
-        if (e < pa.nelem) {
-            g[e] = glu(e)
-            g[e + 1u] = glu(e + 1u)
-            g[e + 2u] = glu(e + 2u)
-            g[e + 3u] = glu(e + 3u)
-        }
-    }
 }
 
 struct TowerRopeTabArgs {

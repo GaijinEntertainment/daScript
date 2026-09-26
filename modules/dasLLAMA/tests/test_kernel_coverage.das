@@ -897,10 +897,10 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // in test_qwen3v.das); their kernel coverage is test_vkt_tower_ln_rows
     "tower_ln_cls_spv", "tower_post_add_ln_cls_spv", "tower_bias_act_cls_spv", "tower_hpad_cls_spv", "tower_hpad16_cls_spv",
     "tower_hunpad_cls_spv", "tower_rope_tab_cls_spv",
-    // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows, the gated FFN's
-    // hidden and the rms seam (the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf, dispatched by test_qwen25v_vulkan_twin in
-    // test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
-    "tower_win_attn_cls_spv", "tower_glu_act_cls_spv", "tower_post_add_rms_cls_spv",
+    // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows and the rms seam (the
+    // gated hidden is the LLM's biased f16 act stamp at a zero row map; the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf,
+    // dispatched by test_qwen25v_vulkan_twin in test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
+    "tower_win_attn_cls_spv", "tower_post_add_rms_cls_spv",
     // the audio towers' classes - no zoo row runs an audio tower: the Conformer's silu rows (the bias class's unbiased stamp),
     // GLU, causal depthwise taps, windowed RPE attention (the 128-wide stamp serves the stocked mmproj-gemma-4-E2B-it-bf16.gguf's
     // audio encoder through test_gemma4a_vulkan_twin in test_audio.das) and the plain residual seam; the FastConformer's
