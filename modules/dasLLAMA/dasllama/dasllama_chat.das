@@ -896,9 +896,14 @@ def effective_stop_ids_(c : ChatSession) : array<int64> {
     return <- out
 }
 
+//! The template's own stop ids for the NEXT generation: a token among them ends the turn outright.
+def turn_stop_ids_(c : ChatSession) : array<int64> {
+    return <- clone_to_move(c.stop_ids)
+}
+
 //! The template's thinking-off extras (gemma-4's channel markers) while the next turn is NOT a
 //! thinking turn; empty on a thinking turn.
-def nothink_stop_ids_(c : ChatSession) : array<int64> {
+def private nothink_stop_ids_(c : ChatSession) : array<int64> {
     var out : array<int64>
     if (!think_turn_active_(c)) {
         out := c.stop_ids_nothink

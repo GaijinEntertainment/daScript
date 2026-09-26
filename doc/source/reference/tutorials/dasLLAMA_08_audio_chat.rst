@@ -122,11 +122,12 @@ carrier-served family hears in a conversation at all, and the path for a
 scheduler that owns its own encoder; the rows are ``dim``-wide on every family
 and the call length-checks them:
 
+.. das-doc: given var rows : array<float>; let n = 0l
 .. code-block:: das
 
    var chat <- create_chat(m, "", 96l)
    add_user_audio_rows(m, chat, rows, n)   // moves the rows in
-   add_user(chat, prompt)
+   add_user(chat, "What did you hear?")
    respond(m, chat, SamplingParams()) $(piece) {
        print("{piece}")
        return true

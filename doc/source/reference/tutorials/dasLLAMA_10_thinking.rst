@@ -109,6 +109,26 @@ stop list:
    add_user(chat, "And 12 * 12 vs 11 * 13? One sentence.")
    // respond(...) now answers directly — no <think> span on the wire
 
+A loop that samples the tokens itself splits that list in two.
+``turn_stop_ids`` are the template's own stops and end the turn outright;
+``make_nothink_guard`` carries the thinking-off extras, and
+``nothink_stop_here`` decides each token: a channel marker before the reply's
+first content piece is a leading thought the reply matcher splits (gemma-4's
+E-series opens a media turn with one even in instruct mode), a marker after
+content ends the turn:
+
+.. code-block:: das
+
+   let turn_stops <- turn_stop_ids(chat)
+   var guard <- make_nothink_guard(chat)
+   let prompt <- render_turn(m, chat)
+   generate(m, chat.session, prompt, SamplingParams(), 96l) $(id, piece) {
+       return false if (find_index(turn_stops, id) >= 0)
+       return false if (nothink_stop_here(guard, id, piece))
+       print("{piece}")
+       return true
+   }
+
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/10_thinking.das <../../../../tutorials/dasLLAMA/10_thinking.das>`

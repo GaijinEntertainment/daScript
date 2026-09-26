@@ -435,7 +435,7 @@ def turn_stop_ids(chat : ChatSession) : array<int64> {
     //! The template's own stop ids for the NEXT generation (``<turn|>``, ``<eos>`` and their
     //! kin): a token among them ends the turn outright. The thinking-off extras are the
     //! ``make_nothink_guard`` guard's.
-    return <- clone_to_move(chat.stop_ids)
+    return <- turn_stop_ids_(chat)
 }
 
 def make_nothink_guard(chat : ChatSession) : NothinkStopGuard {

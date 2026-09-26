@@ -91,14 +91,19 @@ def section_raw(m : Model) {
 
 // Render one request with NO session: a queued request holds tokens only, so a
 // deep queue costs no KV memory. The renderer chat supplies the same template,
-// stop ids, and turn close that a live chat would.
+// stop ids, and turn close that a live chat would. The stops come as two
+// lists: the template's own (turn_stop_ids) end the stream outright, and the
+// thinking-off extras of a non-thinking turn ride the guard (make_nothink_guard)
+// - a channel marker before the reply's first content piece is a leading
+// thought the reply matcher splits, one after content ends the stream.
 def render_request(m : Model; id : int64; question : string) : PendingReq {
     var chat = create_chat_renderer(m, SYSTEM, MAX_NEW)
     add_user(chat, question)
     var r <- PendingReq(id = id, max_new = MAX_NEW)
     r.prompt <- render_turn(m, chat)
     r.close_toks <- render_close(m, chat)
-    r.stop_ids <- effective_stop_ids(chat)
+    r.stop_ids <- turn_stop_ids(chat)
+    r.nothink <- make_nothink_guard(chat)
     return <- r
 }
 

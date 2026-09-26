@@ -338,7 +338,7 @@ def document_module_dasllama(_root : string) {
         group_by_regex("Vision and audio encoders", mod, %regex~(encode_image|encode_audio)$%%),
         group_by_regex("Chat", mod, %regex~(create_chat|create_chat_renderer|add_user|add_user_audio|add_user_image|add_user_image_rows|add_user_audio_rows|add_assistant|render_turn|render_turn_image|render_turn_audio|render_assistant|render_close|respond|set_thinking)$%%),
         group_by_regex("Tool calling", mod, %regex~(set_tools|add_tool_results|render_assistant_calls|parse_calls)$%%),
-        group_by_regex("Reasoning (thinking models)", mod, %regex~(split_reasoning|make_think_stream|think_feed|think_finish|think_drain|effective_stop_ids)$%%),
+        group_by_regex("Reasoning (thinking models)", mod, %regex~(split_reasoning|make_think_stream|think_feed|think_finish|think_drain|effective_stop_ids|turn_stop_ids|make_nothink_guard|nothink_stop_here)$%%),
         group_by_regex("Operations: prepared images and dispatch", mod, %regex~(dlim_inventory|dlim_clean|set_dispatch_worker_limit|get_dispatch_worker_limit|set_jobque_spin_us|get_jobque_spin_us|set_jobque_spin_gpu_us|get_jobque_spin_gpu_us|get_jobque_spin_in_force|set_single_thread|get_single_thread|select_matmul_backend_for_load|kernel_backend_available)$%%),
         group_by_regex("Operations: GPU tier and model slots", mod, %regex~(gpu_tier_status|set_gpu_tier_want|moe_gpu_tier_arm|moe_gpu_weight_budget|gpu_model_marks_init|gpu_slot_capture|gpu_slot_rearm|moe_gpu_model_marks_save|moe_gpu_model_marks_restore|moe_gpu_hydrate_session|moe_gpu_drop_model|set_resident_prefill_allowed)$%%),
         group_by_regex("Operations: serving from the device", mod, %regex~(create_device_session|gpu_device_sessions|gpu_dn_room|gpu_device_prefill_continues|gpu_device_prefill_window|gpu_device_kv_park|gpu_device_kv_adopt|gpu_device_session_ctx|gpu_device_session_dtype|set_gpu_resident_regions|set_gpu_ctx_max|gpu_resident_decline|gpu_cpu_passes)$%%)
@@ -374,6 +374,8 @@ def document_module_dasllama(_root : string) {
             "The incremental reasoning/content splitter for a streamed reply (``make_think_stream``): feed decoded pieces through ``think_feed``, flush with ``think_finish``. Holds partial reasoning markers back across chunk boundaries; a non-thinking family yields a pass-through stream.")
         dasllama_type_stanza(f, "struct-dasllama_chat-ThinkSplit", "ThinkSplit",
             "One reply split at its reasoning boundary, as returned by ``split_reasoning``: ``reasoning`` holds the thinking span (empty when the model answered directly), ``content`` the answer.")
+        dasllama_type_stanza(f, "struct-dasllama_chat-NothinkStopGuard", "NothinkStopGuard",
+            "The instruct-mode stop guard over a family's channel markers (``make_nothink_guard``): a loop that samples tokens itself checks ``turn_stop_ids`` first, then asks ``nothink_stop_here`` - a marker before the reply's first content piece is a leading thought the reply matcher splits, one after content ends the turn. Unarmed (every token passes) on a thinking turn and on families with no such markers.")
         dasllama_type_stanza(f, "struct-dasllama_tools-ToolReply", "ToolReply",
             "A fully classified tool-capable reply, as returned by ``parse_calls``: the ``reasoning`` span, the ``content``, and the ``calls`` the model made (empty when it answered directly).")
         dasllama_type_stanza(f, "struct-dasllama_tools-ToolCall", "ToolCall",

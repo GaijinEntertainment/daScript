@@ -55,7 +55,12 @@ The scheduler
 
 ``dasllama_scheduler`` is that step made production-shaped. Requests are
 rendered to tokens with **no session** — ``create_chat_renderer`` supplies
-the template, stop ids, and turn close, so a deep queue holds no KV memory:
+the template, stop ids, and turn close, so a deep queue holds no KV memory.
+The stops come as two lists: ``turn_stop_ids`` are the template's own and end
+the stream outright; ``make_nothink_guard`` carries the thinking-off extras of
+a non-thinking turn, which the scheduler runs through ``nothink_stop_here`` — a
+channel marker before the reply's first content piece is a leading thought the
+reply matcher splits, one after content ends the stream:
 
 .. code-block:: das
 
@@ -64,7 +69,8 @@ the template, stop ids, and turn close, so a deep queue holds no KV memory:
    var req <- PendingReq(id = 1l, max_new = 32l)
    req.prompt <- render_turn(m, chat)
    req.close_toks <- render_close(m, chat)
-   req.stop_ids <- effective_stop_ids(chat)
+   req.stop_ids <- turn_stop_ids(chat)
+   req.nothink <- make_nothink_guard(chat)
 
 ``create_scheduler`` sizes the machine; ``submit`` queues requests;
 ``scheduler_step`` admits, runs one batched decode step over every live
