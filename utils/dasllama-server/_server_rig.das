@@ -6,6 +6,7 @@ module _server_rig shared
 require dastest/testing_boost public
 require daslib/fio
 require daslib/clargs   // get_host_binary: the daslang a child runs under
+require daslib/base64   // image_data_uri
 require math
 require dasllama/dasllama_env
 
@@ -24,6 +25,19 @@ def model_missing(t : T?; path : string) : bool {
         return true
     }
     return false
+}
+
+//! A jpeg as the data: URI a browser's FileReader would produce (a byte read, not fread(path):
+//! a jpeg carries interior NULs, which a string read would truncate at); "" when unreadable.
+def image_data_uri(path : string) : string {
+    var inscope bytes : array<uint8>
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            bytes |> resize(int64(fstat(f).size))
+            fread(f, bytes)
+        }
+    }
+    return empty(bytes) ? "" : "data:image/jpeg;base64,{base64_encode(bytes)}"
 }
 
 //! The last `n` bytes of a child's output, for a failure message.

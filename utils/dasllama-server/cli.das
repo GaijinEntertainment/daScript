@@ -392,8 +392,7 @@ def private run_complete(plan : CliPlan; cfg : CliConfig) : int {
         setup_dasllama_jobque()
         if (!empty(plan.complete.image)) {
             var v <- load_vision(image_mmproj)
-            // the family's own thinking default: instruct mode cuts a gemma-4 image turn at its first channel marker
-            let no_turns : array<ReplTurn>
+            let no_turns : array<ReplTurn>   // the family's own thinking default: `complete` carries no thinking flag
             var chat <- open_chat(m, ChatRig(seed = plan.sampler.seed, max_new = rig.max_new, kv = rig.kv), no_turns)
             if (!queue_image(m, chat, v, plan.complete.image, why)) {
                 rc = fail(why)

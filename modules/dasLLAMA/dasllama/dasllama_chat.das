@@ -887,15 +887,65 @@ def set_thinking_(var c : ChatSession; on : bool) {
     c.enable_thinking = on
 }
 
-//! The stop ids in force for the NEXT generation: the template's stops, plus its thinking-off
-//! extras while the next turn is NOT a thinking turn (gemma-4 cuts at a stray channel marker in
-//! instruct mode — including "thinking on" that never armed: missing vocab, un-rendered gate).
+//! Every stop id for the NEXT generation as one list: the template's stops plus the thinking-off
+//! extras of a non-thinking turn (`nothink_stop_ids_`). The generation loops split the two:
+//! the template's stops end the turn outright, the extras go through `nothink_stop_here_`.
 def effective_stop_ids_(c : ChatSession) : array<int64> {
     var out := c.stop_ids
+    out |> push_from(nothink_stop_ids_(c))
+    return <- out
+}
+
+//! The template's thinking-off extras (gemma-4's channel markers) while the next turn is NOT a
+//! thinking turn; empty on a thinking turn.
+def nothink_stop_ids_(c : ChatSession) : array<int64> {
+    var out : array<int64>
     if (!think_turn_active_(c)) {
-        out |> push_from(c.stop_ids_nothink)
+        out := c.stop_ids_nothink
     }
     return <- out
+}
+
+//! The instruct-mode stop guard over a turn's channel markers: a marker before the first content
+//! piece opens a leading thought the reply matcher splits, a marker after content ends the turn.
+struct NothinkStopGuard {
+    ids : array<int64>       // the thinking-off extras; empty = every token passes
+    ts : ThinkStream = ThinkStream()   // the family's reply matcher, armed, tracking whether content began
+    content_seen : bool = false
+}
+
+//! The guard for `c`'s NEXT turn: armed on an instruct-shaped turn of a family with `stop_nothink`.
+def make_nothink_guard_(c : ChatSession) : NothinkStopGuard {
+    return <- make_nothink_guard_(c.tmpl, nothink_stop_ids_(c))
+}
+
+//! The low-level form: the template's reply matcher over `ids` (tests hand the ids in directly).
+def make_nothink_guard_(tmpl : ChatTemplate; ids : array<int64>) : NothinkStopGuard {
+    var g = NothinkStopGuard()
+    g.ids := ids
+    if (!empty(g.ids)) {
+        g.ts = make_think_stream_(tmpl, true)
+    }
+    return <- g
+}
+
+//! true = `id` ends the turn: a guarded marker sampled after content. Every other token passes
+//! through the matcher, which is how a leading `<|channel>thought…<channel|>` block stays reasoning
+//! rather than a stop - an E-series model opens a media turn with one even in instruct mode.
+def nothink_stop_here_(var g : NothinkStopGuard; id : int64; piece : string) : bool {
+    if (empty(g.ids)) {
+        return false
+    }
+    if (g.content_seen && find_index(g.ids, id) >= 0) {
+        return true
+    }
+    var rsn = ""
+    var cnt = ""
+    think_feed_(g.ts, piece, rsn, cnt)
+    if (!empty(strip(cnt))) {
+        g.content_seen = true
+    }
+    return false
 }
 
 //! Queue a user message for the next respond().
@@ -1093,10 +1143,11 @@ def make_think_stream_(tmpl : ChatTemplate; thinking : bool) : ThinkStream {
                        state = TS_START)
 }
 
-//! The reply matcher for `c`'s NEXT turn: armed only when the turn is a thinking turn
-//! (`think_turn_active_` — toggle on, markers in the vocab, gate rendered or rendering).
+//! The reply matcher for `c`'s NEXT turn: armed on a thinking turn (`think_turn_active_`) and on
+//! an instruct turn of a family whose channel markers are guarded stops (`stop_nothink`) - the
+//! tolerated leading thought splits like any other.
 def make_think_stream_(c : ChatSession) : ThinkStream {
-    return make_think_stream_(c.tmpl, think_turn_active_(c))
+    return make_think_stream_(c.tmpl, think_turn_active_(c) || !empty(c.stop_ids_nothink))
 }
 
 // Longest k < length(mark) where the view's tail from `from` ends with mark's first k characters —
@@ -1468,8 +1519,9 @@ def private assemble_media_embd(m : Model; c : ChatSession; head, tail : array<i
 
 def private respond_media_or_text_(m : Model; var c : ChatSession; params : SamplingParams;
                                    blk : block<(piece : string) : bool>) : string {
-    // local clone so the streaming callback captures no part of `c` (c.session is passed to generate)
-    var inscope stops <- effective_stop_ids_(c)
+    // local clones so the streaming callback captures no part of `c` (c.session is passed to generate)
+    var inscope stops := c.stop_ids
+    var inscope guard <- make_nothink_guard_(c)
     var inscope reply_parts : array<string>
     if (c.n_audio_rows > 0l || c.n_image_rows > 0l) {
         // media turn: spans around the splice; ONE kind per turn (the add_user_* pair enforces it)
@@ -1494,6 +1546,7 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
             for (sid in stops) {
                 return false if (id == sid)
             }
+            return false if (nothink_stop_here_(guard, id, piece))
             reply_parts |> push(piece)
             return invoke(blk, piece)
         }
@@ -1509,6 +1562,7 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
             for (sid in stops) {
                 return false if (id == sid)
             }
+            return false if (nothink_stop_here_(guard, id, piece))
             reply_parts |> push(piece)
             return invoke(blk, piece)
         }

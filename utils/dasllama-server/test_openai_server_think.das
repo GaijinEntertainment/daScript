@@ -35,13 +35,17 @@ let GPTOSS_PATH = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
 // Start the server on a dedicated thread (model loaded in-thread — slots are per-context), wait
 // until it answers /v1/models, run the block, POST /shutdown, join. `ready_s` scales the wait to
 // the model's load time (the 11 GB gpt-oss needs minutes where the 0.6B needs seconds).
-def private with_think_server(t : T?; model_path : string; port : int; ready_s : int; blk : block<(base_url : string) : void>) {
+def private with_think_server(t : T?; model_path : string; port : int; ready_s : int; blk : block<(base_url : string) : void>;
+                              mm : string = "") {   // a vision mmproj arms the image route beside the model
     with_job_status(1) $(finished) {
         new_thread() @() {
             allow_cpu_prefill()   // deliberate CPU serving: deterministic across boxes, no blob twin needed
             var m <- load_model(model_path, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, TEST_CTX)
             set_model(m, "test-llm-think")
+            if (!empty(mm)) {
+                set_model_vision("test-llm-think", mm)
+            }
             run_server(port)   // blocks (with_job_que + tick loop) until POST /shutdown
             finished |> notify_and_release
         }
@@ -302,6 +306,39 @@ def test_think_gemma4(t : T?) {
                 t |> success(find(msg.content, "<channel|>") < 0 && find(msg.content, "<|channel>") < 0,
                              "content clean of channel markers")
                 t |> success(find(msg.reasoning_content, "<|channel>") < 0, "reasoning clean of the opener")
+            }
+        }
+    }
+}
+
+// ===== gemma-4-E2B: an instruct-mode IMAGE turn opens with a thought block anyway =====
+
+let GEMMA4_MM_PATH = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+let CATS_PATH = path_join(models_dir(), "coco-val2017-000000039769.jpg")
+
+// The instruct-mode media turn through the server: the request's channel markers ride the
+// scheduler's guard (`Stream.nothink`), so a stream whose model opens with a thought block
+// still captions. The E-series does that in the chat layer at seed 1234 (test_vision_chat's
+// no-think cell); through the scheduler's prefill the same seeds answer directly, so this cell
+// pins the served shape - the caption in content, no marker in either half.
+[test]
+def test_think_gemma4_media_instruct(t : T?) {
+    if (model_missing(t, GEMMA4_PATH) || model_missing(t, GEMMA4_MM_PATH) || model_missing(t, CATS_PATH)) {
+        return
+    }
+    let uri = image_data_uri(CATS_PATH)
+    with_think_server(t, GEMMA4_PATH, TEST_PORT + 2, 180, mm = GEMMA4_MM_PATH) $(base_url) {
+        t |> run("enable_thinking=false + an image under the chat sampler preset: the caption is content") @(t : T?) {
+            var body = "\{\"messages\":[\{\"role\":\"user\",\"content\":["
+            body += "\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"{uri}\"}},"
+            body += "\{\"type\":\"text\",\"text\":\"describe this image\"}"
+            body += "]}],\"max_tokens\":640,\"temperature\":0.7,\"top_k\":20,\"top_p\":0.95,\"seed\":1234,\"enable_thinking\":false}"
+            chat_resp(t, base_url, body) $(r) {
+                let msg & = unsafe(r.choices[0].message)
+                t |> success(find(to_lower(msg.content), "cat") >= 0, "the content half describes the cats: '{msg.content}'")
+                t |> success(find(msg.reasoning_content, "<|channel>") < 0, "reasoning, when the model opens with a thought, is clean of the opener")
+                t |> success(find(msg.content, "<channel|>") < 0 && find(msg.content, "<|channel>") < 0,
+                             "no channel markers in content")
             }
         }
     }
