@@ -4468,7 +4468,7 @@ def metal_pocket_frame_batch() : int64 => g_tw_pk_batch
 def private pk_blob_q8(var qb : PkBlobWriter; l : TtsLinear) : uint64 {
     qb.n = (qb.n + 15l) & ~15l
     let at = qb.n
-    qb.n += (((l.nout + 1l) & ~1l) * l.nin / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB)   //! the decode GEMV reads two rows a threadgroup: an odd row count's phantom row stays inside the region
+    qb.n += (l.nout * l.nin / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB)   //! the decode GEMV reads two rows a threadgroup: the loader admits a q8 linear only 32-wide on both dims, so the second row is always a real one
     return uint64(at) if (qb.measure)
     unsafe {
         if (l.q8) {

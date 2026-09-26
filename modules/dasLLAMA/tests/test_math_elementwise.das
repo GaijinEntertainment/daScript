@@ -450,3 +450,17 @@ def test_f32_to_f16_forms(t : T?) {
         t |> equal(f16_form_mismatches(big), 4, "the cast overflows where the convert clamps")
     }
 }
+
+[test]
+def test_active_q8_repack_layout(t : T?) {
+    t |> run("active_q8_repack_layout: the disk-order record off the repack, the backend's layout on it") @(t : T?) {
+        let plain = active_q8_repack_layout(false)
+        t |> equal(plain.mr, 1l, "disk order: one row a tile")
+        t |> equal(plain.kgroup, 4l, "disk order: the k group of four")
+        t |> equal(plain.wbias, 0l, "disk order: no weight bias")
+        let packed = active_q8_repack_layout(true)
+        t |> equal(packed.mr, active_q8_layout_mr(), "repacked: the backend's row tile")
+        t |> equal(packed.kgroup, active_q8_kgroup(), "repacked: the backend's k group")
+        t |> equal(packed.wbias, active_q8_wbias(), "repacked: the backend's weight bias")
+    }
+}
