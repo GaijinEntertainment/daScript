@@ -13,11 +13,13 @@ graph into the same f32 picture:
   dropped, anonymous `onnx::MatMul_N` / `onnx::LSTM_N` initializers named after the node that
   consumes them.
 """
+import os
 import numpy as np
 import onnx
 from onnx import helper, numpy_helper
 
-HUB = "/Users/borisbatkin/Work/tts-ab/g2p/.hf/hub/"
+# the Hugging Face cache holding the pinned snapshots: HF_HOME when the box sets it, else the g2p experiment's
+HUB = os.path.join(os.environ.get("HF_HOME", os.path.expanduser("~/Work/tts-ab/g2p/.hf")), "hub") + "/"
 SNAPSHOTS = {
     "nano": HUB + "models--KittenML--kitten-tts-nano-0.8/snapshots/7a1db645b1f3ab9420761d87428e042b9cec3f26/",
     "mini": HUB + "models--KittenML--kitten-tts-mini-0.8/snapshots/c02725660cea441db4c383af69f1f26f5cd00947/",
