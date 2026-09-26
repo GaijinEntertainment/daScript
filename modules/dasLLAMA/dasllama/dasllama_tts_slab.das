@@ -14,6 +14,8 @@ require dasllama/dasllama_math
 require dasllama/dasllama_convert
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_styletts2
+require dasllama/dasllama_pocket
+require dasllama/dasllama_rope
 
 //! The host side of a TTS tower's weight slab, backend-neutral: the StyleTTS2 parts' weights laid out
 //! as the f32 rows a tile GEMM and the row kernels read - every conv dense as [cout padded to 64 x
@@ -567,4 +569,267 @@ def tts_text_ok(te : St2TextEncoder; max_hidden : int64) : bool {
         return false if (!tts_conv_ok(c))
     }
     return tts_lstm_ok(te.lstm, te.lstm.fwd.nin, max_hidden)
+}
+
+// ----- the Pocket parts: the codec decoder's slab and the frame loop's, every linear as f32 rows (a q8 or K-quant one dequantized) -----
+
+//! a transformer layer's slots: the two norms, the four linears, the layer scale rows where the layer carries them
+struct TtsPkLayerSlots {
+    n1 : TtsNormSlot
+    in_proj : TtsConvSlot
+    out_proj : TtsConvSlot
+    scale1_off : int64
+    has_s1 : bool
+    n2 : TtsNormSlot
+    ffn1 : TtsConvSlot
+    ffn2 : TtsConvSlot
+    scale2_off : int64
+    has_s2 : bool
+}
+
+struct TtsPkCodecSlab {
+    quant : TtsConvSlot
+    up_w : int64          //! the depthwise upsample's taps [c][k] and bias
+    up_b : int64
+    layers : array<TtsPkLayerSlots>
+    dec_in : TtsConvSlot
+    ups : array<TtsConvSlot>
+    res1 : array<TtsConvSlot>
+    res2 : array<TtsConvSlot>
+    dec_out : TtsConvSlot
+    zero : int64          //! a zero row as wide as the transformer, the residual seam's bias
+    rope_cos : int64      //! the transformer's rope tables [rope_rows][dh / 2]
+    rope_sin : int64
+    rope_rows : int64
+}
+
+var private g_tts_no_freqs : array<float>   //! the rope builder's absent frequency table
+
+//! the engine's rope tables for positions 0..rows-1 at the transformer's period, cos then sin, each [rows][dh / 2]; the cos row's element offset
+def tts_pk_rope_rows(var w : TtsSlabWriter; tf : PocketTransformer; rows : int64; var sin_off : int64&) : int64 {
+    let dh = tf.d / tf.heads
+    let half = dh / 2l
+    var inscope @exact_size tcos : array<float>
+    var inscope @exact_size tsin : array<float>
+    build_rope_tabs(tcos, tsin, tf.period, 1.0, 1.0, g_tts_no_freqs, false, 0l, rows, dh)
+    let at = tts_slab_raw(w, tcos, rows * half)
+    sin_off = tts_slab_raw(w, tsin, rows * half)
+    return at
+}
+
+//! a row of `n` zeros; the element offset
+def tts_slab_zero(var w : TtsSlabWriter; n : int64) : int64 {
+    let at = tsw_alloc(w, n)
+    for (i in range64(n)) {
+        tsw_put(w, at + i, 0.0)
+    }
+    return at
+}
+
+//! the head's residual block: its norm rows and three linears
+struct TtsPkHeadSlots {
+    ln : TtsNormSlot
+    adaln : TtsConvSlot
+    mlp1 : TtsConvSlot
+    mlp2 : TtsConvSlot
+}
+
+struct TtsPkFramesSlab {
+    input_linear : TtsConvSlot
+    layers : array<TtsPkLayerSlots>
+    out_norm : TtsNormSlot
+    out_eos : TtsConvSlot
+    cond_embed : TtsConvSlot
+    time_const : int64
+    input_proj : TtsConvSlot
+    blocks : array<TtsPkHeadSlots>
+    final_ln : TtsNormSlot
+    final_adaln : TtsConvSlot
+    final_linear : TtsConvSlot
+    std_mean : int64      //! emb_std then emb_mean, one row of 2 x latent_dim
+    bos : int64
+    zero : int64          //! a zero row as wide as the backbone, the residual seams' bias
+}
+
+def private tts_pk_layer_write(var w : TtsSlabWriter; l : PocketLayer; d : int64) : TtsPkLayerSlots {
+    var s = TtsPkLayerSlots(n1 = tts_slab_norm_rows(w, l.norm1, d), in_proj = tts_slab_linear(w, l.in_proj), out_proj = tts_slab_linear(w, l.out_proj),
+        n2 = tts_slab_norm_rows(w, l.norm2, d), ffn1 = tts_slab_linear(w, l.ffn1), ffn2 = tts_slab_linear(w, l.ffn2))
+    s.has_s1 = !empty(l.scale1.a)
+    s.has_s2 = !empty(l.scale2.a)
+    if (s.has_s1) {
+        s.scale1_off = tts_slab_raw(w, l.scale1.a, d)
+    }
+    if (s.has_s2) {
+        s.scale2_off = tts_slab_raw(w, l.scale2.a, d)
+    }
+    return s
+}
+
+//! the codec decoder's slab, the rope tables sized for `rope_rows` positions (the one-shot chain's row budget)
+def tts_pk_codec_write(var w : TtsSlabWriter; mm : PocketMimi; rope_rows : int64; var s : TtsPkCodecSlab) {
+    s.zero = tts_slab_zero(w, max(mm.dec_tf.d, 32l))
+    s.rope_rows = rope_rows
+    s.rope_cos = tts_pk_rope_rows(w, mm.dec_tf, rope_rows, s.rope_sin)
+    s.quant = tts_slab_conv(w, mm.quant_proj)
+    s.up_w = tts_slab_raw(w, mm.upsample.w, mm.upsample.cin * mm.upsample.k)
+    s.up_b = tts_slab_raw(w, mm.upsample.b, mm.upsample.cin)
+    s.layers |> reserve(length(mm.dec_tf.layers))
+    for (l in mm.dec_tf.layers) {
+        s.layers |> push(tts_pk_layer_write(w, l, mm.dec_tf.d))
+    }
+    s.dec_in = tts_slab_conv(w, mm.dec_in)
+    s.ups |> reserve(length(mm.dec_up))
+    s.res1 |> reserve(length(mm.dec_res))
+    s.res2 |> reserve(length(mm.dec_res))
+    for (c in mm.dec_up) {
+        s.ups |> push(tts_slab_conv(w, c))
+    }
+    for (b in mm.dec_res) {
+        s.res1 |> push(tts_slab_conv(w, b.conv1))
+        s.res2 |> push(tts_slab_conv(w, b.conv2))
+    }
+    s.dec_out = tts_slab_conv(w, mm.dec_out)
+}
+
+def tts_pk_frames_write(var w : TtsSlabWriter; m : PocketModel; var s : TtsPkFramesSlab) {
+    let d = m.backbone.d
+    let ld = m.latent_dim
+    s.zero = tts_slab_zero(w, max(d, 32l))
+    s.input_linear = tts_slab_linear(w, m.input_linear)
+    s.layers |> reserve(length(m.backbone.layers))
+    for (l in m.backbone.layers) {
+        s.layers |> push(tts_pk_layer_write(w, l, d))
+    }
+    s.out_norm = tts_slab_norm_rows(w, m.out_norm, d)
+    s.out_eos = tts_slab_linear(w, m.out_eos)
+    let h & = unsafe(m.head)
+    s.cond_embed = tts_slab_linear(w, h.cond_embed)
+    s.time_const = tts_slab_raw(w, h.time_const.a, h.dim)
+    s.input_proj = tts_slab_linear(w, h.input_proj)
+    s.blocks |> reserve(length(h.blocks))
+    for (b in h.blocks) {
+        s.blocks |> push(TtsPkHeadSlots(ln = tts_slab_norm_rows(w, b.ln, h.dim), adaln = tts_slab_linear(w, b.adaln), mlp1 = tts_slab_linear(w, b.mlp1),
+            mlp2 = tts_slab_linear(w, b.mlp2)))
+    }
+    s.final_ln = tts_slab_norm_rows(w, h.final_ln, h.dim)
+    s.final_adaln = tts_slab_linear(w, h.final_adaln)
+    s.final_linear = tts_slab_linear(w, h.final_linear)
+    let sm = tsw_alloc(w, 2l * ld)
+    for (j in range64(ld)) {
+        tsw_put(w, sm + j, m.emb_std.a[j])
+        tsw_put(w, sm + ld + j, m.emb_mean.a[j])
+    }
+    s.std_mean = sm
+    s.bos = tts_slab_raw(w, m.bos_emb.a, ld)
+}
+
+def private tts_pk_layer_key(var key : uint64&; l : PocketLayer) {
+    key = hash_combine64(key, tts_lin_key(l.in_proj))
+    key = hash_combine64(key, tts_lin_key(l.out_proj))
+    key = hash_combine64(key, tts_lin_key(l.ffn1))
+    key = hash_combine64(key, tts_lin_key(l.ffn2))
+    key = hash_combine64(key, tts_arr_key(l.norm1.w))
+    key = hash_combine64(key, tts_arr_key(l.scale1.a))
+}
+
+def tts_pk_codec_key(mm : PocketMimi) : uint64 {
+    var key = hash_combine64(hash_combine64(19ul, tts_lane_key()), tts_conv_key(mm.quant_proj))
+    key = hash_combine64(key, tts_arr_key(mm.upsample.w))
+    for (l in mm.dec_tf.layers) {
+        tts_pk_layer_key(key, l)
+    }
+    tts_key_fold(key, mm.dec_in)
+    for (c in mm.dec_up) {
+        tts_key_fold(key, c)
+    }
+    for (b in mm.dec_res) {
+        tts_key_fold(key, b.conv1)
+        tts_key_fold(key, b.conv2)
+    }
+    tts_key_fold(key, mm.dec_out)
+    return key
+}
+
+def tts_pk_frames_key(m : PocketModel) : uint64 {
+    var key = hash_combine64(hash_combine64(23ul, tts_lane_key()), tts_lin_key(m.input_linear))
+    key = hash_combine64(hash_combine64(hash_combine64(key, uint64(m.backbone.d)), uint64(m.backbone.heads)), uint64(m.latent_dim))
+    key = hash_combine64(hash_combine64(key, uint64(m.backbone.period)), uint64(long_length(m.backbone.layers)))
+    for (l in m.backbone.layers) {
+        tts_pk_layer_key(key, l)
+    }
+    key = hash_combine64(key, tts_arr_key(m.out_norm.w))
+    key = hash_combine64(key, tts_lin_key(m.out_eos))
+    let h & = unsafe(m.head)
+    key = hash_combine64(key, tts_lin_key(h.cond_embed))
+    key = hash_combine64(key, tts_arr_key(h.time_const.a))
+    key = hash_combine64(key, tts_lin_key(h.input_proj))
+    for (b in h.blocks) {
+        key = hash_combine64(key, tts_arr_key(b.ln.w))
+        key = hash_combine64(key, tts_lin_key(b.adaln))
+        key = hash_combine64(key, tts_lin_key(b.mlp1))
+        key = hash_combine64(key, tts_lin_key(b.mlp2))
+    }
+    key = hash_combine64(key, tts_lin_key(h.final_adaln))
+    key = hash_combine64(key, tts_lin_key(h.final_linear))
+    key = hash_combine64(key, tts_arr_key(m.emb_std.a))
+    return hash_combine64(key, tts_arr_key(m.bos_emb.a))
+}
+
+//! a codec conv the im2col route serves: dense, not itself quantized, a transposed conv's taps past its stride (the padding the one-shot row count assumes)
+def tts_pk_conv_ok(c : TtsConv1d) : bool => tts_conv_ok(c) && !c.q8 && (!c.transposed || c.k > c.stride)
+
+def tts_pk_layer_dims_ok(l : PocketLayer; d, ffn : int64) : bool {
+    return (l.in_proj.nin == d && l.in_proj.nout == 3l * d && l.out_proj.nin == d && l.out_proj.nout == d
+        && l.ffn1.nin == d && l.ffn1.nout == ffn && l.ffn2.nin == ffn && l.ffn2.nout == d
+        && long_length(l.norm1.w) == d && long_length(l.norm2.w) == d)
+}
+
+def private tts_pk_layer_ok(l : PocketLayer; d, ffn : int64) : bool {
+    return tts_pk_layer_dims_ok(l, d, ffn) && tts_gemm_lin_ok(l.in_proj) && tts_gemm_lin_ok(l.out_proj) && tts_gemm_lin_ok(l.ffn1) && tts_gemm_lin_ok(l.ffn2)
+}
+
+//! a transformer the row kernels serve: the width on the 32 lattice, heads of `hs`, the ffn on the 32 lattice
+def tts_pk_tf_ok(tf : PocketTransformer; hs : int64) : bool {
+    let d = tf.d
+    return d >= 32l && d % 32l == 0l && tf.heads >= 1l && d % tf.heads == 0l && d / tf.heads == hs && tf.ffn % 32l == 0l
+}
+
+def tts_pk_codec_ok(mm : PocketMimi; hs, max_keys : int64) : bool {
+    let tf & = unsafe(mm.dec_tf)
+    let d = tf.d
+    return false if (!tts_pk_tf_ok(tf, hs) || tf.context < 1l || tf.context > max_keys)
+    for (l in tf.layers) {
+        return false if (!tts_pk_layer_ok(l, d, tf.ffn))
+    }
+    let up & = unsafe(mm.upsample)
+    return false if (!up.transposed || up.groups != up.cin || up.cin != up.cout || up.cin != d || mm.frame_steps != up.stride || empty(up.w)
+        || !tts_pk_conv_ok(mm.quant_proj) || mm.quant_proj.cout != d || !tts_pk_conv_ok(mm.dec_in) || mm.dec_in.cin != d
+        || length(mm.dec_up) != length(mm.ratios) || length(mm.dec_res) != length(mm.ratios))
+    for (i, c in iter_range(mm.dec_up), mm.dec_up) {
+        return false if (!tts_pk_conv_ok(c) || !c.transposed || c.stride != mm.ratios[i] || !tts_pk_conv_ok(mm.dec_res[i].conv1) || !tts_pk_conv_ok(mm.dec_res[i].conv2)
+            || mm.dec_res[i].conv1.cin != c.cout || mm.dec_res[i].conv2.cout != c.cout)
+    }
+    return tts_pk_conv_ok(mm.dec_out) && mm.dec_out.cout >= 1l
+}
+
+//! the frame loop's linears the row GEMV serves, and the head's and the backbone's shapes
+def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64) : bool {
+    let tf & = unsafe(m.backbone)
+    let d = tf.d
+    let ld = m.latent_dim
+    let h & = unsafe(m.head)
+    let n = h.dim
+    return false if (!tts_pk_tf_ok(tf, hs) || d > max_nin || n > max_nin || tf.ffn > max_nin || ld > max_nin
+        || ld < 4l || ld % 4l != 0l || n < 1l || empty(h.blocks) || long_length(h.time_const.a) != n || long_length(m.emb_std.a) != ld
+        || long_length(m.emb_mean.a) != ld || long_length(m.bos_emb.a) != ld || long_length(m.out_norm.w) != d
+        || !tts_gemm_lin_ok(m.input_linear) || m.input_linear.nin != ld || m.input_linear.nout != d || !tts_gemm_lin_ok(m.out_eos) || m.out_eos.nin != d || m.out_eos.nout != 1l)
+    for (l in tf.layers) {
+        return false if (!tts_pk_layer_ok(l, d, tf.ffn))
+    }
+    return false if (!tts_gemm_lin_ok(h.cond_embed) || h.cond_embed.nin != d || h.cond_embed.nout != n || !tts_gemm_lin_ok(h.input_proj) || h.input_proj.nin != ld || h.input_proj.nout != n)
+    for (b in h.blocks) {
+        return false if (!tts_gemm_lin_ok(b.adaln) || b.adaln.nin != n || b.adaln.nout != 3l * n || !tts_gemm_lin_ok(b.mlp1) || b.mlp1.nin != n || b.mlp1.nout != n
+            || !tts_gemm_lin_ok(b.mlp2) || b.mlp2.nin != n || b.mlp2.nout != n)
+    }
+    return tts_gemm_lin_ok(h.final_adaln) && h.final_adaln.nin == n && h.final_adaln.nout == 2l * n && tts_gemm_lin_ok(h.final_linear) && h.final_linear.nin == n && h.final_linear.nout == ld
 }

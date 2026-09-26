@@ -168,6 +168,8 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vulkan_tower_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_tts_conv_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_tts_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tts_pocket_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tts_source_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das" ]
@@ -287,7 +289,7 @@ def area_tests(area : string) : array<string> {
         return <- [ "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
                     "test_tts_g2p.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
                     "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_voice_prompts.das", "test_vulkan_tts_conv_kernels.das",
-                    "test_vulkan_tts_kernels.das" ]
+                    "test_vulkan_tts_kernels.das", "test_vulkan_tts_pocket_kernels.das", "test_vulkan_tts_source_kernels.das" ]
     } elif (area == "infra") {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das", "test_bench_rows.das",
                     "test_box_ident.das", "test_box_profile.das", "test_dasllama_lint_contracts.das",

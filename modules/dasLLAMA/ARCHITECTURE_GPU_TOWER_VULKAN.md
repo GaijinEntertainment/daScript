@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE_GPU_TOWER.md`; a section is cited by its anchor. This document
 carries the Vulkan tower driver's row classes and attention routes, its encode chains, and the
-Vulkan ASR-decoder driver; the StyleTTS2 seats are `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`. The
+Vulkan ASR-decoder driver; the StyleTTS2 and Pocket seats are `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`. The
 Metal sections cited - the attention routes (`ARCHITECTURE_GPU_TOWER.md#tower-attn-routes`) and
 the encode chain's shape (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`) - stay in that file.
 

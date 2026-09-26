@@ -68,6 +68,56 @@ convs on the im2col and the biased tile, the learned shortcut the same, the join
 add (`TtsAddScale` at 1 / sqrt 2) - and the branch's one-channel projection; F0 and energy
 read back a float a frame.
 
+The decoder's two seats share one slab (`tts_dec_write`) and one scratch. The decode seat: the
+F0, energy and text front convs on the im2col and the biased tile, the encode block over the
+concat rows (`TtsConcat` laying the text rows, the residual rows and the two curves as columns),
+each decode block re-concatenated where its width asks, the stream pinging between two row sets
+and landing in the first; then the source - the noise rows drawn on the device (`TtsSrcNoise`,
+a counter-keyed normal, not the CPU's PCG32 stream) unless the call carries a captured stream,
+the phase increments and the phase per frame on the resample law's stamps (`TtsSrcLowTorch` /
+`TtsSrcLowOnnx`, `TtsSrcCumsumTorch` / `TtsSrcCumsumOnnx` - the torch law's double
+accumulator as a compensated two-float sum), the harmonics' sines at the interpolated phases
+through the source linear and its tanh (`TtsSrcSinesTorch` / `TtsSrcSinesOnnx`, the sine of a
+phase past a hundred thousand radians reduced by 2 pi in exact pieces), and its spectrum rows
+on the pad law's stamp (`TtsStftReflect` / `TtsStftEdge`: the magnitude and the phase); then
+the generator - per stage the leaky ReLU, the source rows through the stage's noise conv and
+Snake residual block (`TtsAdainSnake` on the norm slot's alpha row), the transposed upsample
+conv on the im2col's transposed read, the last stage's reflected row (`TtsReflect1`), the
+kernels' blocks averaged into the stage's out (`TtsAxpy`), then the final leaky and conv_post -
+and the inverse STFT (`TtsIstft`, the log magnitudes and phases through the transposed conv
+weights, the window envelope divided out where the model asks). The waveform reads back. The
+generator seat runs the stages and conv_post alone and reads conv_post's rows back for the
+host inverse STFT, as the Metal twin does.
+
+The Pocket family's two seats ride the same driver and knob, registered through
+`register_pocket_gpu`. Every Pocket linear is f32 rows in the slab - a q8 or K-quant file
+dequantized through the active repack at slab time; the driver carries no q8 blob route, so the
+served lanes read the weights at f32 where the CPU chain reads quants. The codec seat is one
+submit over the whole run (at most 512 frames; a longer chunk declines by shape and the CPU's
+windows serve): the latent projection and every codec conv on the im2col in the CPU's
+first-window form (a forward conv with the causal pad k - stride, a transposed one over t x
+stride rows with no pad) and the biased tile, the depthwise transposed upsample (`TtsPoolDw`),
+the transformer as the CPU's layer loop - the layernorm into a copy, the qkv projection, the
+NORM rope on the q and k spans against the slab's tables (`TtsPkRope`), the k and v columns
+copied to one row set the layers reuse (`TtsPkRows`), the causal attention over the context
+window (`TtsPkAttn`, a workgroup a head and query row, the head size the body's literal 64),
+the output projection, the layer scale (`TtsPkRowScale`), the residual seam on the post-add
+layernorm stamp against the slab's zero row, the ffn with the tanh GELU - then dec_in, per
+ratio the ELU (`TtsPkRowsElu`), the transposed upsample and the ELU-conv-ELU-conv residual
+block, the last ELU, dec_out and the sample column copied out. The frames seat: the voice's
+K/V rows live on the device per backbone layer as [cap][d] rows under a key over the host
+caches, with the rope tables for every position they can hold; the chunk's text rows come up
+before the loop; each frame is the CPU's `frame_step` and `head_step` at t = 1 - the input
+linear, per layer the seam, the qkv row, the rope at the frame's position, the k and v rows
+stored at that position, the attention over the cache, the projections and scales, then the
+output norm's row copied to the frame's conditioning row, the EOS logit, and the flow head as
+the row GEMV family (`TtsPkGemv`: four rows a workgroup, x staged, the dot in lane order; the
+bare dot, the layernorm-modulate-SiLU prologue, the gated residual, the add-SiLU over the slab
+vector, and the tail that adds the noise row and denormalizes the latent). The frames run in
+batches of eight a submit (`set_vulkan_pocket_frame_batch`), the EOS rule walked on the host
+between batches from the logits read back, the generator rewound past the frames made, as the
+Metal twin does.
+
 The declines: `knob`, `shape` (a width off the 64 lattice, a head width other than 64 or 128,
 more than 512 tokens for the attention stage, an LSTM direction over 256 hidden), `device` (the
 tier has no device, or a class failed to build), `memory` (a slab or scratch allocation failed),
