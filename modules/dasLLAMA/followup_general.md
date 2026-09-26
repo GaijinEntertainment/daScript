@@ -1316,8 +1316,8 @@
 116. **Audit-agent item, not a lint rule: a cap whose message says "characters" but whose test is
    `length(<string>)`.** `length()` on a string is bytes; the server counted bytes against
    `TTS_MAX_INPUT_CHARS` while the page counted UTF-16 units, so one paste was accepted by one
-   side and refused by the other. The facade already had `cpt_length` for exactly this and the
-   server did not reach it. A rule would have to guess semantics from a name, so this is an item
+   side and refused by the other. The engine already had `cpt_count` (`dasllama_unicode.das`) for
+   exactly this and the server did not reach it. A rule would have to guess semantics from a name, so this is an item
    for the review-round auditors' checklist.
 117. **Gate candidates the review round's dragons surfaced, one line each.** (a) dasLLAMA:
    `check_test_placement` - a `[test]` file requiring `dasllama/*` outside `tests/`, licensed

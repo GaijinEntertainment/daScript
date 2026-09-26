@@ -903,7 +903,7 @@ def vt_gather_slice(rows, mr : int64) : int64
 
 //! the q8 planes' regions gathered into the device layout (`wq` the quants, `ws` the halfword scales)
 [cold_path]
-def vt_gather_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>; lay : VtRepackLayout; var wq, ws : array<uint8>) {
+def vt_gather_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>; lay : Q8RepackLayout; var wq, ws : array<uint8>) {
     let q8e = kq_elems(KqFmt.q8)
     for (reg in regions) {
         q8_gather_rows(plane_at(qblob, reg.woff), null, plane_at(qscales, reg.woff / q8e), reg.n, reg.rows, vt_gather_slice(reg.rows, lay.mr), lay.mr, lay.kgroup, lay.wbias,
@@ -913,7 +913,7 @@ def vt_gather_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegio
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>;
-                      blob : PlaneF; rows_off, rows_n, ones_n : int64; lay : VtRepackLayout) : bool {
+                      blob : PlaneF; rows_off, rows_n, ones_n : int64; lay : Q8RepackLayout) : bool {
     vt_upload_begin(r, key)
     r.wq_bytes = qblob.n
     r.ws_bytes = qscales.n * 2l
@@ -952,14 +952,6 @@ def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales
     return true
 }
 
-typedef VtRepackLayout = tuple<mr : int64; kgroup : int64; wbias : int64>
-
-//! the active backend's q8 repack layout, folded into the residency key and handed to the gather: the key and the upload read
-//! one answer, and a backend switch re-gathers
-def vt_repack_layout : VtRepackLayout {
-    let repacked = g_active_needs_repack
-    return (mr = repacked ? active_q8_layout_mr() : 1l, kgroup = repacked ? active_q8_kgroup() : 4l, wbias = repacked ? active_q8_wbias() : 0l)
-}
 
 def private vt_scratch_fits(r : VtResident; rows, d, ff, dp, meta_bytes : int64; khr, fused : bool; taps : int64) : bool
     => (r.cap_rows >= vt_cap_rows(rows) && r.d == d && r.ff == ff && r.pad_dp == dp && r.meta_bytes >= meta_bytes && r.fused == fused
@@ -1046,13 +1038,13 @@ let private VT_G4A_FF_UP_1 = 9l
 let private VT_G4A_FF_DOWN_1 = 10l
 let private VT_G4A_TAIL_GEMMS = 2l   //! the projector tail's records after the blocks': the out-proj, the mm-proj
 
-def private vt_g4a_key(t : Gemma4aEncoder; lay : VtRepackLayout) : uint64 {
+def private vt_g4a_key(t : Gemma4aEncoder; lay : Q8RepackLayout) : uint64 {
     let key = vt_key(t.qblob, t.qscales, t.blob, 0l, t.blob.n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     return vt_fold_words(key, unsafe(reinterpret<uint8 const?>(plane_at(t.pos_emb, 0l))), (gemma4a_attn_past() + 1l) * t.d_model * 4l)
 }
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_upload_g4a(var r : VtResident; key : uint64; t : Gemma4aEncoder; lay : VtRepackLayout) : bool {
+def private vt_upload_g4a(var r : VtResident; key : uint64; t : Gemma4aEncoder; lay : Q8RepackLayout) : bool {
     let d = t.d_model
     let ff = t.n_ff
     var regions : array<VtRegion>
@@ -1263,7 +1255,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
             || (cm2 && !ensure_tower_clamp_cvt_cls()) || !ensure_tower_bias_act_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = vt_g4a_key(t, lay)
     if (r.key != key && !vt_upload_g4a(r, key, t, lay)) {
         return vt_decline(r, VulkanTowerDecline.memory)
@@ -1440,7 +1432,7 @@ let private VT_CN_FF2A = 9l
 let private VT_CN_FF2B = 10l
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_upload_cn(var r : VtResident; key : uint64; t : CanaryEncoder; lay : VtRepackLayout) : bool {
+def private vt_upload_cn(var r : VtResident; key : uint64; t : CanaryEncoder; lay : Q8RepackLayout) : bool {
     let d = t.d_model
     let ff = t.n_ff
     var regions : array<VtRegion>
@@ -1584,7 +1576,7 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     if (!vt_tile_ensure(v) || !vt_tile_ensure(vff) || !vt_tile_ensure(v2d) || !vt_tile_ensure(v_rel) || (cm2 && !ensure_tower_clamp_cvt_cls())) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = vt_key(t.qblob, t.qscales, t.blob, 0l, t.blob.n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     if (r.key != key && !vt_upload_cn(r, key, t, lay)) {
         return vt_decline(r, VulkanTowerDecline.memory)
@@ -2036,7 +2028,7 @@ let private VT_LN_FC2 = 5l
 
 [cold_path]
 def private vt_upload_ln(var r : VtResident; key : uint64; qblob : PlaneI8; qscales : PlaneF; d, ff : int64;
-                         blob : PlaneF; rows_off, rows_n : int64; lay : VtRepackLayout; offs : array<LayerOffs>; conv2_w : int64 = -1l) : bool {
+                         blob : PlaneF; rows_off, rows_n : int64; lay : Q8RepackLayout; offs : array<LayerOffs>; conv2_w : int64 = -1l) : bool {
     var regions : array<VtRegion>
     regions |> reserve(long_length(offs) * VT_LN_GEMMS + 1l)
     if (conv2_w >= 0l) {
@@ -2374,7 +2366,7 @@ def private vt_aud_attach(var r : VtResident; t : AudioTower) : bool {
     for (l in range64(t.n_layer)) {
         g_vt_ln_offs[l] = enc_layer_offsets(t, l)
     }
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     let rows_n = t.n_layer * t.layer_stride
     let key = vt_key(t.qblob, t.qscales, t.fblob, t.layers_off, rows_n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     if (r.key == key) {
@@ -2622,7 +2614,7 @@ def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos :
     for (l in range64(t.n_layer)) {
         g_vt_ln_offs[l] = g3v_ln_offs(t, l)
     }
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     let rows_n = t.n_layer * t.layer_f_stride
     let key = vt_key(t.qblob, t.qscales, t.blob, t.layer_f, rows_n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     if (r.key != key && !vt_upload_ln(r, key, t.qblob, t.qscales, d, ff, t.blob, t.layer_f, rows_n, lay, g_vt_ln_offs)) {
@@ -2632,7 +2624,7 @@ def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos :
 }
 
 [cold_path]
-def private vt_upload_q3v(var r : VtResident; key : uint64; t : Qwen3vTower; lay : VtRepackLayout) : bool {
+def private vt_upload_q3v(var r : VtResident; key : uint64; t : Qwen3vTower; lay : Q8RepackLayout) : bool {
     let d = t.n_embd
     let ff = t.ff_pad
     var regions : array<VtRegion>
@@ -2687,7 +2679,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     if (!q8_batch_cls_ensure(v) || !q8_batch_cls_ensure(vff) || !q8_batch_cls_ensure(vqkv)) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = vt_key(t.qblob, t.qscales, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     if (r.key != key && !vt_upload_q3v(r, key, t, lay)) {
         return vt_decline(r, VulkanTowerDecline.memory)
@@ -2961,7 +2953,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
 }
 
 [cold_path]
-def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; hs : int64; lay : VtRepackLayout) : bool {
+def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; hs : int64; lay : Q8RepackLayout) : bool {
     let d = t.n_embd
     let ff = t.n_ff
     var regions : array<VtRegion>
@@ -3013,7 +3005,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
     if (!q8_batch_cls_ensure(v) || !q8_batch_cls_ensure(vff)) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = vt_key(t.qblob, t.qscales, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, hs, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     if (r.key != key && !vt_upload_g4v(r, key, t, hs, lay)) {
         return vt_decline(r, VulkanTowerDecline.memory)
@@ -3214,7 +3206,7 @@ def private vt_q3a_geometry(t : Qwen3aTower) {
 }
 
 [cold_path]
-def private vt_q3a_slab(var r : VtResident; t : Qwen3aTower; key : uint64; lay : VtRepackLayout) : bool {
+def private vt_q3a_slab(var r : VtResident; t : Qwen3aTower; key : uint64; lay : Q8RepackLayout) : bool {
     let nch = t.n_ch
     let woffs = fixed_array(t.c1_w_off, t.c2_w_off, t.c3_w_off)
     var total = 0l
@@ -3335,7 +3327,7 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
     if (!cm2_cls_ensure(int(KqFmt.q8), tc)) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = vt_key(t.qcblob, t.qcscales, t.cblob, t.cout_w_off, featw, 0l, 1l, lay.mr, lay.kgroup, lay.wbias)
     if (r.key != key) {
         r.d = nch
@@ -3553,7 +3545,7 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
         vt_decline(r, VulkanTowerDecline.device)
         return -1l
     }
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = vt_g4a_key(t, lay)
     if (r.key != key && !vt_upload_g4a(r, key, t, lay)) {
         vt_decline(r, VulkanTowerDecline.memory)
@@ -3816,7 +3808,7 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
         vt_decline(r, VulkanTowerDecline.device)
         return -1l
     }
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = vt_key(t.qblob, t.qscales, t.blob, 0l, t.blob.n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     if (r.key != key && !vt_upload_cn(r, key, t, lay)) {
         vt_decline(r, VulkanTowerDecline.memory)

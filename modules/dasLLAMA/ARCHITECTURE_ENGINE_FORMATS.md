@@ -64,6 +64,9 @@ Companion to `ARCHITECTURE.md` beside `ARCHITECTURE_ENGINE.md`; section numbers 
   `check_unicode_tables_stamp` hashes `dasllama_unicode.das`'s RANGES and WS literals against
   `UNICODE_TABLES_HASH` and licenses no names: the tables change only through a retranscode of the
   reference checkout's unicode data, and the re-stamp is the regeneration's receipt.
+- **`dasllama_unicode.das`** - the codepoint tables (RANGES, WS) and the UTF-8 codepoint helpers over
+  a `string` the tokenizers and the TTS front end share: classification, `cpt_count`, the
+  decode/encode of one codepoint.
 - **`dasllama_spm.das`** - the SentencePiece backend: score-greedy merges over vocab pieces (Llama-2, Phi-3, Gemma),
   the unigram Viterbi arm over the same pieces (`unigram_encode`, GGUF `"t5"`, sec.1.7d's tokenizer), `<0xXX>` byte fallback.
 - **`dasllama_bpe.das`** - the byte-level BPE backend (Llama-3 / tiktoken family): vocab load, the

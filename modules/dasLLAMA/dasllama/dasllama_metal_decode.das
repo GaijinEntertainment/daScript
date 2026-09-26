@@ -699,7 +699,7 @@ def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComp
                 npairs = k_npall_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot)
             enc_rope_store(enc, f16v, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                 lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
-                bcos_l, bsin_l, bbias, rka,
+                bcos_l, bsin_l, 0ul, bbias, rka,
                 kvsh ? qd / 2l : (qd + kv_dim) / 2l)
         }
     }

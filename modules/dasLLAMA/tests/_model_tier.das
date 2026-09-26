@@ -215,6 +215,20 @@ def read_wav_pcm16_mono(path : string) : array<float> {
     return <- out
 }
 
+//! The TTS cells' data gate: the model, then the g2p pack (and the tagger pack when `postag`); a missing one skips loudly and answers true.
+def tts_data_missing(t : T?; gguf : string; postag : bool = true) : bool {
+    if (!model_available(t, gguf)) {
+        return true
+    }
+    for (pack in (postag ? ["tts_g2p.bin", "tts_postag.bin"] : ["tts_g2p.bin"])) {
+        if (!stat(path_join(models_dir(), pack)).is_valid) {
+            t |> skip("{pack} not present")
+            return true
+        }
+    }
+    return false
+}
+
 // Presence + tier gate for a model-loading test. Returns true if the caller should proceed to
 // load `path`; otherwise registers a LOUD skip on `t` (model absent, or large-tier without
 // DASLLAMA_PARITY_FULL) and returns false — the arm lands in the suite's skipped count instead

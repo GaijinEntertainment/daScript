@@ -281,17 +281,21 @@ accumulator where the two laws part by whole cycles, and the driver's own noise 
 fill kernel (finite, repeatable per seed, moving with it); the STFT on either pad law's stamp and
 the inverse STFT with and without the window envelope. Each carries a poisoned input. The census row is one synthesis each
 on kitten-nano (the ONNX law's stamps) and kokoro-82m (the torch law's) on the file's planes (`cov_tower_styletts2`). The Pocket chain's cells (the same
-file): the row copies with and without the ELU, the layer scale, the table rope, the attention
+file): the row copies with and without the ELU, the layer scale, the rows rope over a row stride
+from a column with the tables bound at a position's row, the attention
 row against `attention_causal_rows` over a `TtsKvCache` (every key and an 8-key window, an
-unseen key's poison staying silent), the rope-and-store row against `rope_rows` with the caches'
-sentinel rows, the add-and-norm at a width under the threadgroup and one past it, and the row
-GEMV's ten stamps (f32 rows and a q8 blob, each under the bare dot, the normed and modulated x
-with the SiLU out, the gated residual, the SiLU over the slab vector and the frame tail) against
+unseen key's poison staying silent), the rope-and-store kernel's f32 stamp at the frame loop's
+binds (no bias, the whole head, the tables and the caches at the position's row) against
+`rope_rows` with the caches' sentinel rows, the add-and-norm at a width under the threadgroup and one past it, and the row
+GEMV's nine stamps (f32 rows under the bare dot, f32 rows and a q8 blob under the normed and
+modulated x with the SiLU out, the gated residual, the SiLU over the slab vector and the frame tail;
+the bare q8 dot rides the decode GEMV) against
 an fp64 oracle with x, y and the latent row bound at offsets. The census row is one Pocket
 codec pass over synthetic latents and one spoken line on the f16 file, then one spoken line on
-the kq file so the q8 GEMV stamps count (`cov_tower_pocket`). Shared fixtures
-(buf helpers, the mismatch compares that dump both sides, kq plane + q8 blob builders) live
-in `_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
+the kq file so the q8 GEMV stamps count (`cov_tower_pocket`). Shared fixtures - the buffer
+helpers of `metal/das_metal_boost`, re-exported, the mismatch compares that dump both sides, the
+kq plane and q8 blob builders, the 64-lane dispatch and the fp64 scalars - live in
+`_metal_kernel_common.das`. `test_metal_prefill_kernels.das` keeps its tag-less mismatch
 compares local - a same-arity twin would collide with the shared tagged one. `_mtl_toy.das`
 is the `[metal_dispatch]` multi-kernel (kernel=) fixture; its gate in the misc file
 dispatches through the GENERATED builders (kn_ rail), not hand binds.
@@ -1270,9 +1274,10 @@ run the parity rail of `_tts_parity.das` per size and a facade smoke cell that s
 sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings;
 `test_kitten_synthesis_metal` (nano) is the synthesis across the tower knob through
 `tts_gpu_synthesis` (`_tts_parity.das`; kokoro's twin is `test_kokoro_synthesis_metal`): on the
-served lane every chunk's decode seat served, one tower encode per seat per chunk, the knob-off
-chunks declined by name at every seat (the generator seat's included), the generator seat never
-reached while the decode seat serves, the tower leg audible, the sample counts within a twentieth
+served lane every chunk served at every seat but the generator's, one tower encode per seat per
+chunk, the knob-off chunks reaching every seat (the generator seat's included), serving nothing and
+declining by name at each, the generator seat never reached while the decode seat serves, the
+tower leg audible, the sample counts within a twentieth
 (the q8 CPU chain quantizes its activations, so its durations can round a frame apart); on the
 reference lane, one captured noise stream on both legs, the sample counts equal - the durations
 token for token. The sample-wise figures are logged, not gated: an uncaptured synthesis draws its

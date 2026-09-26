@@ -3261,6 +3261,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 - `TtsVoicePrompt` - Portable Pocket codec latents.
 - `TtsCaps` - What a loaded TTS model can do: its voices (canonical names; aliases resolve in the family file), the PCM rate it emits, the languages it speaks, whether it clones a voice from audio, and whether a speed means anything to it.
 - `TtsTimings` - Where a synthesis spent its time, in microseconds of wall clock, model loading excluded: the text front end, then each model stage.
+- `TtsGpuSeats`
 - `TtsAudio` - Synthesized speech: mono f32 PCM at `sample_rate`, with the time it took.
 - `TtsNoise` - The source noise a synthesis consumed - captured from the oracle for a parity run, or drawn from the session's own generator into a carrier every synthesis reuses.
 - `KittenFamily`
@@ -3301,6 +3302,15 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 - `reset_tts_q8` - Drop the `set_tts_q8` pin: the next load follows the policy default again.
 - `set_tts_q8` - Pin the GEMM weights' format for subsequent TTS loads of every family: Q8_0 quants (their own prepared image beside the GGUF) or the file's f32 planes; `reset_tts_q8` returns to the policy default.
 - `tts_serves_q8` - Would the next TTS load serve its rows GEMMs as q8 - the pin when set, the policy otherwise.
+
+### GPU seats
+
+- `tts_seat_call`
+- `tts_seat_index`
+- `tts_seat_names`
+- `tts_seat_served`
+- `tts_seat_stats`
+- `tts_seats`
 
 ### Timings
 

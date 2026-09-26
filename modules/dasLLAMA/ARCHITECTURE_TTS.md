@@ -59,7 +59,8 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   parity rails for all three stages.
 - **`dasllama_tts_types.das`** - the TTS floor: `TtsCaps`, `TtsAudio` (f32 PCM + rate), `TtsNoise`
   (the source noise a synthesis consumed - captured from the oracle, or drawn into a reused
-  carrier), and the two family data records the shared carrier serializes - `KittenFamily` (speed
+  carrier), `TtsGpuSeats` (a family's GPU hook seats - the names in dispatch order, the calls and
+  the serves per seat - behind `tts_seat_*`; the family keeps its own record), and the two family data records the shared carrier serializes - `KittenFamily` (speed
   priors, voice aliases) and `KokoroFamily` (the symbol vocabulary) - plain data, no family logic.
   Family files require this, never each other.
 - **`dasllama_tts_blocks.das`** - the TTS block home, the TTS twin of `dasllama_tower.das`, in

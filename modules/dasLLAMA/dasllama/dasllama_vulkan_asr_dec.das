@@ -341,7 +341,7 @@ def private wd_upload_weights(w : WhisperModel) {
     r.ws_bytes = w.dqscales.n * 2l
     r.wq_dev = wd_dev_buf(r.wq_bytes)
     r.ws_dev = wd_dev_buf(r.ws_bytes)
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     var regions : array<VtRegion>
     regions |> reserve(nl * 10l + 1l)
     regions |> push(VtRegion(woff = w.d_te_q_off, n = d, rows = r.nvocab))
@@ -403,7 +403,7 @@ def private wd_upload_norms(w : WhisperModel) {
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
 def private wd_attach(w : WhisperModel) : bool {
     var r & = g_wd
-    let lay = vt_repack_layout()
+    let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = vt_key(w.dqblob, w.dqscales, w.dblob, w.dlayers_off, w.n_text_layer * w.dlayer_stride, 0l, w.n_text_layer, lay.mr, lay.kgroup, lay.wbias)
     if (r.key != 0ul && key == r.key) {
         return true

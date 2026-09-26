@@ -353,12 +353,14 @@ let MODULE_AREAS <- {
     "dasllama_arch_qwen3moe" => "llm", "dasllama_attn_prefill" => "llm", "dasllama_batch" => "llm",
     "dasllama_bpe" => "llm", "dasllama_gpu_resident" => "llm", "dasllama_gpu_tier" => "llm",
     "dasllama_kv_dtype" => "llm", "dasllama_kv_codec" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
-    "dasllama_metal_prefill" => "llm", "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
+    "dasllama_metal_prefill" => "llm,tts",   // its rope serves the Pocket codec transformer
+    "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
     "dasllama_rope" => "llm", "dasllama_sampling" => "llm", "dasllama_scheduler" => "llm",
     "dasllama_spm" => "llm,tts",   // the unigram arm is the Pocket tokenizer (test_tts_pocket)
     "dasllama_bench" => "llm,infra",   // the rows serve lcpp_bench (llm) and the server's /bench (infra's tooling)
-    "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm", "dasllama_unicode" => "llm",
+    "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm",
+    "dasllama_unicode" => "llm,tts",   // cpt_count serves the TTS front end and its chunker
     "dasllama_vulkan_decode" => "llm", "dasllama_vulkan_prefill" => "llm", "dasllama_vulkan_seams" => "llm"
 }
 

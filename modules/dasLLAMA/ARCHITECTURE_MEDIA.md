@@ -180,7 +180,8 @@ blocks seats it serves and the front seats it fills (qwen3a's mel and conv front
 whole chunk, canary's front). The direction is forced: the driver requires the family file for its
 types, so the family cannot require the driver back. A box with no driver leaves the slot empty
 and the CPU form runs. A seat taken over a filled slot (a test's stub through
-`register_styletts2_gpu` or `register_pocket_gpu`, a record of seats) gives the displaced registration back on
+`register_styletts2_gpu` or `register_pocket_gpu`, a record of seats whose names and per-seat call
+and serve counters are a `TtsGpuSeats` of `dasllama_tts_types.das`) gives the displaced registration back on
 `unregister` - one level: the record keeps the registration it displaced, not a stack of them - so
 the driver's seats survive the test.
 
@@ -209,8 +210,9 @@ column buffer (`s.x0`, `st.xw`) and never the residual stream the CPU half would
 A tower serves its GEMMs on one of two lanes: q8 planes (the CPU serving format) or the file's
 exact f32 planes. Un-pinned, the lane follows the fastest GEMM path on the box - a serving Metal
 driver reads the f32 blob and declines q8, so `*_gpu_serves` answering true flips the default to
-exact, and every other box takes q8. Each family exposes the same trio: `set_*_q8` pins a lane,
-`reset_*_q8` returns to the policy, `*_serves_q8` reports the lane the next load would take. The
+exact, and every other box takes q8. Each family exposes the same trio over one `GemmLane` pin
+(`lane_serves_q8`, `dasllama_common.das`): `set_*_q8` pins a lane, `reset_*_q8` returns to the
+policy, `*_serves_q8` reports the lane the next load would take. The
 lane picks the image tag, so the two lanes are separate images that coexist.
 
 Pins exist for the arms that must not follow the box: the parity legs, the CPU board rows, and the

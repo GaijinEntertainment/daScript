@@ -16,7 +16,11 @@ require ?das_metal _metal_kernel_common   // shared buf helpers + fixtures; only
 require ?das_metal _metal4_probe
 require daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
 require dasllama/dasllama_tts_blocks
+require dasllama/dasllama_tower
+require dasllama/dasllama_moe
+require dasllama/dasllama_common
 require dasllama/dasllama_rope   // build_rope_tabs - the Pk rope gates' tables
+require _attn_oracle
 require daslib/jobque_boost
 require math
 
@@ -42,10 +46,6 @@ let NROWS = 6
 let DIM = 128
 let HIDDEN = 64
 let EPS = 1.0e-5
-
-def private approx(x, y : float) : bool {
-    return abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
-}
 
 //! GENERIC (untyped dev/queue) so it instantiates only inside the Apple static_if.
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-twin-dual-store")]
@@ -93,14 +93,7 @@ def private qk_rope_gate(t : T?; dev, queue; hx, donorm, neox, partial : bool) {
             if (donorm) {
                 for (h in range(nh)) {
                     let rb = p * rstride + h * hs
-                    var ss = 0.0
-                    for (j in range(hs)) {
-                        ss += want[rb + j] * want[rb + j]
-                    }
-                    let inv = 1.0 / sqrt(ss / float(hs) + EPS)
-                    for (j in range(hs)) {
-                        want[rb + j] = wv[j] * (want[rb + j] * inv)
-                    }
+                    rmsnorm(addr(want[rb]), addr<float const?>(want[rb]), addr<float const?>(wv[0]), int64(hs), EPS)
                 }
             }
             if (partial) {
@@ -117,7 +110,7 @@ def private qk_rope_gate(t : T?; dev, queue; hx, donorm, neox, partial : bool) {
     }
     var moved = 0
     for (k in range(nreal * rstride)) {
-        moved += approx(want[k], xv[k]) ? 0 : 1
+        moved += fapprox(want[k], xv[k]) ? 0 : 1
     }
     t |> success(moved > 0, "{tag}: oracle is not the identity ({moved} moved)")
     var bx = buf_upload(dev, xv)
@@ -144,18 +137,7 @@ def private qk_rope_gate(t : T?; dev, queue; hx, donorm, neox, partial : bool) {
     if (ran) {
         t |> equal(buf_mismatch_approx(bx, want, tag), 0)
         if (hx) {
-            var badh = 0
-            unsafe {
-                let pf = reinterpret<float const?>(metal_buffer_contents(bx))
-                let ph = reinterpret<uint16 const?>(metal_buffer_contents(bxh))
-                for (k in range(nrows * rstride)) {
-                    let wantbits = uint(reinterpret<uint16>(float16(pf[k])))
-                    if (uint(ph[k]) != wantbits) {
-                        badh++
-                    }
-                }
-            }
-            t |> equal(badh, 0, "{tag}: f16 twin bit-equals float16(panel)")
+            t |> equal(hx_narrow_mismatch(bxh, bx, nrows * rstride, nrows * rstride, "{tag} f16 twin"), 0, "{tag}: f16 twin bit-equals float16(panel)")
         }
     }
     metal_release(bx)
@@ -173,172 +155,39 @@ def private qk_rope_gate(t : T?; dev, queue; hx, donorm, neox, partial : bool) {
     delete want
 }
 
-// The tiled sgmat attention trio (QK^T -> rowstat -> P.V) vs a direct causal-GQA oracle at one
-// (head_size, heads, kv_heads, npos) shape. Buffers carry np32 rows like the driver's (whole-tile
-// sgmat stores + staging reads walk the padded rows); rows >= npos are pad. GENERIC (untyped
-// dev/queue) so it instantiates only inside the Apple static_if.
-def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, npos : int; mm : bool;
-                           softcap : float = 0.0; hass : int = 0) {
-    let kv_mul = n_heads / n_kv_heads
-    let qd = n_heads * head_size
-    let kv_dim = n_kv_heads * head_size
-    let np32 = (npos + 31) / 32 * 32
-    var err : string
-    var pso_sc = (mm
-        ? pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, err))
-    t |> success(pso_sc != null, "qk pipeline (mm={mm}): {err}")
-    var pso_sm = pipeline_from_source(dev, metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, err)
-    t |> success(pso_sm != null, "rowstat pipeline: {err}")
-    var pso_av = (mm
-        ? pipeline_from_source(dev, MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, err))
-    t |> success(pso_av != null, "av pipeline (mm={mm}): {err}")
-    let scale = 1.0 / sqrt(float(head_size))
-    var aq : array<float>
-    var ak : array<float>
-    var av : array<float>
-    var axb_want : array<float>
-    aq |> resize(np32 * qd)
-    ak |> resize(np32 * kv_dim)
-    av |> resize(np32 * kv_dim)
-    axb_want |> resize(npos * qd)
-    for (k in range(npos * qd)) {
-        aq[k] = 0.13 * float(k % 31) - 1.9
-    }
-    for (k in range(npos * kv_dim)) {
-        ak[k] = 0.17 * float(k % 23) - 1.8
-        av[k] = 0.09 * float(k % 37) - 1.6
-    }
-    var sinks : array<float>
-    sinks |> resize(n_heads)
-    for (h in range(n_heads)) {
-        sinks[h] = 0.4 * float(h) - 0.2   // near the score range so the sink genuinely moves sums
-    }
-    var prow : array<float>
-    prow |> resize(npos)
-    for (h in range(n_heads)) {
-        let kvhoff = (h / kv_mul) * head_size
-        for (qi in range(npos)) {
-            let cnt = qi + 1
-            var m = -1.0e30
-            for (j in range(cnt)) {
-                var dot = 0.0
-                for (d in range(head_size)) {
-                    dot += aq[qi * qd + h * head_size + d] * ak[j * kv_dim + kvhoff + d]
-                }
-                prow[j] = dot * scale
-                if (softcap > 0.0) {
-                    prow[j] = softcap * tanh(prow[j] / softcap)   // must match rowstat AND pf_p_weight
-                }
-                m = max(m, prow[j])
-            }
-            if (hass != 0) {
-                m = max(m, sinks[h])
-            }
-            var sum = 0.0
-            for (j in range(cnt)) {
-                prow[j] = exp(prow[j] - m)
-                sum += prow[j]
-            }
-            if (hass != 0) {
-                sum += exp(max(sinks[h] - m, -80.0))   // the sink joins the denominator only
-            }
-            for (d in range(head_size)) {
-                var acc = 0.0
-                for (j in range(cnt)) {
-                    acc += (prow[j] / sum) * av[j * kv_dim + kvhoff + d]
-                }
-                axb_want[qi * qd + h * head_size + d] = acc
-            }
-        }
-    }
-    var baq = buf_upload(dev, aq)
-    var bak = buf_upload(dev, ak)
-    var bav = buf_upload(dev, av)
-    // +1000 poison: production leaves QK-skipped slab positions as pool garbage — a mask hole
-    // in rowstat/pf_p_weight EXPLODES through exp() and reds the compare (0 or -1000 would hide)
-    var batt = buf_fill(dev, n_heads * np32 * np32, float16(1000.0))
-    var bstat = buf_fill(dev, n_heads * np32 * 2, 0.0)
-    var bxb = buf_fill(dev, np32 * qd, 0.0)
-    // ONE AttnArgs serves all three stages (each ignores the fields it does not read):
-    // qoff = 0 / qrows = np32 (fresh start), window/softcap/hass at their llama-shape identities
-    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kv_dim), head_size = uint(head_size),
-        kv_mul = uint(kv_mul), npos = uint(npos), np32 = uint(np32), scale = scale,
-        qoff = 0u, qrows = uint(np32), window = 0u, softcap = softcap, hass = uint(hass))
-    var bcap0 = hass != 0 ? buf_upload(dev, sinks) : buf_f32(dev, 0.0)   // the sink plane (hass = 0: never read)
-    let aran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso_sc)
-        metal_set_threadgroup_memory_length(enc, mm ? metal_attn_qk_mm_msl_tgmem : metal_attn_qk_msl_tgmem, 0)
-        metal_set_buffer(enc, baq, 0ul, 0)
-        metal_set_buffer(enc, bak, 0ul, 1)
-        metal_set_buffer(enc, batt, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
-        metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(np32 / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
-        metal_set_pipeline(enc, pso_sm)
-        metal_set_threadgroup_memory_length(enc, metal_attn_rowstat_msl_tgmem, 0)
-        metal_set_buffer(enc, batt, 0ul, 0)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 1)
-        metal_set_buffer(enc, bstat, 0ul, 2)
-        metal_set_buffer(enc, bcap0, 0ul, 20)   // sink identity (hass = 0)
-        metal_dispatch_threadgroups(enc, uint3(uint(npos), uint(n_heads), 1u), uint3(128u, 1u, 1u))
-        metal_set_pipeline(enc, pso_av)
-        metal_set_threadgroup_memory_length(enc, mm ? MetalAttnAVMm_metal_attn_av_mm_msl_tgmem : metal_attn_av_msl_tgmem, 0)
-        metal_set_buffer(enc, batt, 0ul, 0)
-        metal_set_buffer(enc, bav, 0ul, 1)
-        metal_set_buffer(enc, bxb, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
-        metal_set_buffer(enc, bstat, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(np32 / 32), uint(head_size / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
-    }
-    t |> success(aran, "attention dispatches (hs={head_size}, mm={mm}): {err}")
-    // the f16 score slab + half staging — the envelope is the half-precision score shift
-    // through softmax, ~1% of the convex-combination output (both variants)
-    t |> equal(buf_mismatch_tol(bxb, axb_want, 2e-2), 0)
-    metal_release(baq)
-    metal_release(bak)
-    metal_release(bav)
-    metal_release(batt)
-    metal_release(bstat)
-    metal_release(bxb)
-    metal_release(bcap0)
-    metal_release(pso_sc)
-    metal_release(pso_sm)
-    metal_release(pso_av)
-    delete aq
-    delete ak
-    delete av
-    delete axb_want
-    delete prow
+//! the key range each trio query row attends and its score transforms: `uend` 0 = causal; `uend` > 0 = the queries at
+//! [ulo, uend) attend up to uend (a uniform span of media rows, the fused eval_embd_span_ contract) while the rest stay
+//! causal - the legacy whole-eval span is ulo 0, uend qoff + npos; `window` > 0 = a sliding layer's floor, query-based
+//! even for span rows; `qoff` = the continuation's existing context rows
+struct private AttnKeys {
+    qoff : int
+    window : int
+    ulo : int
+    uend : int
+    softcap : float
+    hass : int
 }
 
-// The trio under a uniform span (media rows): queries at [ulo, uend) attend [window floor,
-// uend), the rest stay causal — the fused eval_embd_span_ contract. The legacy whole-eval
-// shape is ulo = 0, uend = qoff + npos (every chunk row in the span); span_lo/span_hi >= 0
-// pin the fused MIXED shape (causal head + span rows + causal tail in one chunk). The
-// continuation shape (qoff > 0) and a sliding layer (window > 0) exercise the two bounds
-// independently: the window floor stays query-based even for span rows.
-def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, npos, qoff, window : int; mm : bool;
-                                span_lo : int = -1; span_hi : int = -1) {
+//! The sgmat attention trio (QK^T -> rowstat -> P.V) vs `attn_row_oracle` over the driver's padded rows: queries to 32, keys (context + chunk) to 64.
+def private attn_trio_gate(t : T?; dev, queue; head_size, n_heads, n_kv_heads, npos : int; mm : bool; keys : AttnKeys = AttnKeys()) {
     let kv_mul = n_heads / n_kv_heads
     let qd = n_heads * head_size
     let kv_dim = n_kv_heads * head_size
-    let nk = qoff + npos                    // key rows: existing context + the span chunk
-    let ulo = span_lo >= 0 ? qoff + span_lo : 0
-    let ue = span_lo >= 0 ? qoff + span_hi : nk
+    let nk = keys.qoff + npos
     let nkp = (nk + 63) / 64 * 64           // 64-padded key extent (the driver's nk64)
     let qp = (npos + 31) / 32 * 32          // padded query rows (continuation: != nkp)
+    let tag = "attention trio (hs={head_size}, mm={mm}, qoff={keys.qoff}, w={keys.window}, span=[{keys.ulo},{keys.uend}), cap={keys.softcap}, sink={keys.hass})"
     var err : string
     var pso_sc = (mm
         ? pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)
         : pipeline_from_source(dev, metal_attn_qk_msl, metal_attn_qk_msl_entry, metal_attn_qk_msl_fastmath, err))
-    t |> success(pso_sc != null, "span qk pipeline (mm={mm}): {err}")
+    t |> success(pso_sc != null, "{tag} qk pipeline: {err}")
     var pso_sm = pipeline_from_source(dev, metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, err)
-    t |> success(pso_sm != null, "span rowstat pipeline: {err}")
+    t |> success(pso_sm != null, "{tag} rowstat pipeline: {err}")
     var pso_av = (mm
         ? pipeline_from_source(dev, MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, err)
         : pipeline_from_source(dev, metal_attn_av_msl, metal_attn_av_msl_entry, metal_attn_av_msl_fastmath, err))
-    t |> success(pso_av != null, "span av pipeline (mm={mm}): {err}")
+    t |> success(pso_av != null, "{tag} av pipeline: {err}")
     let scale = 1.0 / sqrt(float(head_size))
     var aq : array<float>
     var ak : array<float>
@@ -349,54 +198,39 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
     av |> resize(nkp * kv_dim)
     axb_want |> resize(npos * qd)
     for (k in range(npos * qd)) {
-        aq[k] = 0.11 * float(k % 29) - 1.7
+        aq[k] = 0.13 * float(k % 31) - 1.9
     }
     for (k in range(nk * kv_dim)) {
-        ak[k] = 0.15 * float(k % 27) - 1.9
-        av[k] = 0.07 * float(k % 41) - 1.4
+        ak[k] = 0.17 * float(k % 23) - 1.8
+        av[k] = 0.09 * float(k % 37) - 1.6
     }
-    var prow : array<float>
-    prow |> resize(nk)
+    var sinks : array<float>
+    sinks |> resize(n_heads)
     for (h in range(n_heads)) {
-        let kvhoff = (h / kv_mul) * head_size
+        sinks[h] = 0.4 * float(h) - 0.2   // near the score range so the sink genuinely moves sums
+    }
+    for (h in range(n_heads)) {
         for (qi in range(npos)) {
-            let ap = qoff + qi
-            let jlo = window > 0 && ap + 1 > window ? ap + 1 - window : 0
-            let jhi = ap >= ulo && ap < ue ? ue : ap + 1   // span row: uniform bound; else causal
-            var m = -1.0e30
-            for (j in range(jlo, jhi)) {
-                var dot = 0.0
-                for (d in range(head_size)) {
-                    dot += aq[qi * qd + h * head_size + d] * ak[j * kv_dim + kvhoff + d]
-                }
-                prow[j] = dot * scale
-                m = max(m, prow[j])
-            }
-            var sum = 0.0
-            for (j in range(jlo, jhi)) {
-                prow[j] = exp(prow[j] - m)
-                sum += prow[j]
-            }
-            for (d in range(head_size)) {
-                var acc = 0.0
-                for (j in range(jlo, jhi)) {
-                    acc += (prow[j] / sum) * av[j * kv_dim + kvhoff + d]
-                }
-                axb_want[qi * qd + h * head_size + d] = acc
-            }
+            let ap = keys.qoff + qi
+            let jlo = keys.window > 0 && ap + 1 > keys.window ? ap + 1 - keys.window : 0
+            let jhi = keys.uend > 0 && ap >= keys.ulo && ap < keys.uend ? keys.uend : ap + 1
+            attn_row_oracle(aq, qi * qd + h * head_size, ak, 0, av, 0, kv_dim, h, head_size, kv_mul, jhi, scale,
+                axb_want, qi * qd + h * head_size, jlo, keys.softcap, keys.hass != 0, sinks[h])
         }
     }
     var baq = buf_upload(dev, aq)
     var bak = buf_upload(dev, ak)
     var bav = buf_upload(dev, av)
-    var batt = buf_fill(dev, n_heads * qp * nkp, float16(1000.0))   // the same mask-hole poison as the trio gate
+    // +1000 poison: production leaves QK-skipped slab positions as pool garbage — a mask hole
+    // in rowstat/pf_p_weight EXPLODES through exp() and reds the compare (0 or -1000 would hide)
+    var batt = buf_fill(dev, n_heads * qp * nkp, float16(1000.0))
     var bstat = buf_fill(dev, n_heads * qp * 2, 0.0)
     var bxb = buf_fill(dev, qp * qd, 0.0)
     var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kv_dim), head_size = uint(head_size),
         kv_mul = uint(kv_mul), npos = uint(nk), np32 = uint(nkp), scale = scale,
-        qoff = uint(qoff), qrows = uint(qp), window = uint(window), softcap = 0.0, hass = 0u,
-        uend = uint(ue), ulo = uint(ulo))
-    var bcap0 = buf_f32(dev, 0.0)   // stands in for the sink buffer slot (hass = 0: never read)
+        qoff = uint(keys.qoff), qrows = uint(qp), window = uint(keys.window), softcap = keys.softcap, hass = uint(keys.hass),
+        uend = uint(keys.uend), ulo = uint(keys.ulo))
+    var bcap0 = keys.hass != 0 ? buf_upload(dev, sinks) : buf_f32(dev, 0.0)   // the sink plane (hass = 0: never read)
     let aran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso_sc)
         metal_set_threadgroup_memory_length(enc, mm ? metal_attn_qk_mm_msl_tgmem : metal_attn_qk_msl_tgmem, 0)
@@ -421,7 +255,9 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
         metal_set_buffer(enc, bstat, 0ul, 4)
         metal_dispatch_threadgroups(enc, uint3(uint(qp / 32), uint(head_size / (mm ? 64 : 32)), uint(n_heads)), uint3(128u, 1u, 1u))
     }
-    t |> success(aran, "span attention dispatches (hs={head_size}, qoff={qoff}, w={window}, mm={mm}, span=[{ulo},{ue})): {err}")
+    t |> success(aran, "{tag} dispatches: {err}")
+    // the f16 score slab + half staging — the envelope is the half-precision score shift
+    // through softmax, ~1% of the convex-combination output (both variants)
     t |> equal(buf_mismatch_tol(bxb, axb_want, 2e-2), 0)
     metal_release(baq)
     metal_release(bak)
@@ -437,7 +273,23 @@ def private attn_trio_span_gate(t : T?; dev, queue; head_size, n_heads, n_kv_hea
     delete ak
     delete av
     delete axb_want
-    delete prow
+    delete sinks
+}
+
+//! the f16-exact q / k / v rows of `n` elements the tower and conformer attention cells share
+def private f16_qkv_rows(n : int) : tuple<q : array<float>; k : array<float>; v : array<float>> {
+    var q : array<float>
+    var k : array<float>
+    var v : array<float>
+    q |> resize(n)
+    k |> resize(n)
+    v |> resize(n)
+    for (i in range(n)) {
+        q[i] = float(float16(0.11 * float(i % 37) - 1.9))
+        k[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
+        v[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
+    }
+    return <- (q = q, k = k, v = v)
 }
 
 // ===== the tower flash (the dk72 lifted flash + its per-head-contiguous f16 K/V restride) =====
@@ -455,17 +307,7 @@ def private tower_flash_kvhc_gate(t : T?; dev, queue) {
     let heads = 2
     let hs = 72
     let qd = heads * hs
-    var qv : array<float>
-    var kv : array<float>
-    var vv : array<float>
-    qv |> resize(np * qd)
-    kv |> resize(np * qd)
-    vv |> resize(np * qd)
-    for (i in range(np * qd)) {
-        qv[i] = float(float16(0.11 * float(i % 37) - 1.9))
-        kv[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
-        vv[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
-    }
+    var (qv, kv, vv) <- f16_qkv_rows(np * qd)
     // the SECOND 64-key block carries every row's running max (x4, a power of two, so the keys
     // stay f16-exact): with a uniform K the max settles in block 0 and the flash's cross-block
     // rescale multiplies by 1, which no compare can witness
@@ -485,73 +327,54 @@ def private tower_flash_kvhc_gate(t : T?; dev, queue) {
     var want : array<float>
     want |> resize(np * qd)
     let scale = 1.0 / sqrt(float(hs))
-    for (h in range(heads)) {
-        for (qi in range(np)) {
-            var mx = -3.0e38
-            for (j in range(np)) {
-                var sd = 0.0lf
-                for (dd in range(hs)) {
-                    sd += double(float(float16(qv[qi * qd + h * hs + dd]))) * double(kv[j * qd + h * hs + dd])
-                }
-                mx = max(mx, float(sd) * scale)
-            }
-            var tot = 0.0lf
-            var oa : float[72]
-            for (dd in range(hs)) {
-                oa[dd] = 0.0
-            }
-            for (j in range(np)) {
-                var sd = 0.0lf
-                for (dd in range(hs)) {
-                    sd += double(float(float16(qv[qi * qd + h * hs + dd]))) * double(kv[j * qd + h * hs + dd])
-                }
-                let e = exp(float(sd) * scale - mx)
-                tot += double(e)
-                for (dd in range(hs)) {
-                    oa[dd] += e * vv[j * qd + h * hs + dd]
-                }
-            }
-            for (dd in range(hs)) {
-                want[qi * qd + h * hs + dd] = oa[dd] / float(tot)
-            }
-        }
+    var hp : array<float>
+    var att : array<float>
+    with_job_que() {
+        setup_dasllama_jobque_()
+        attention_bidir(want, qv, kv, vv, hp, att, int64(np), int64(qd), int64(heads), scale)
     }
+    delete hp
+    delete att
     var bq = buf_upload(dev, qv)
     var bkc = buf_upload(dev, kv)
     var bvc = buf_upload(dev, vv)
     var bkh = buf_fill(dev, np * qd, float16(-77.0))
     var bvh = buf_fill(dev, np * qd + 256, float16(-77.0))
     var bo = buf_fill(dev, np * qd, -1.0e30)
-    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(qd), head_size = uint(hs), kv_mul = 1u,
+    let ka = AttnArgs(qd = uint(qd), kv_dim = uint(qd), head_size = uint(hs), kv_mul = 1u,
         npos = uint(np), np32 = uint(np), scale = scale,
         qoff = 0u, qrows = uint(np), window = 0u, softcap = 0.0, hass = 0u, uend = uint(np))
-    var u_hs = uint(hs)
-    var u_d = uint(qd)
-    var u_np = uint(np)
-    var u_tot = uint(np * qd)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso_hc)
-        metal_set_buffer(enc, bkc, 0ul, 0)
-        metal_set_buffer(enc, bkh, 0ul, 1)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_hs)), 4ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_np)), 4ul, 4)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint((np * qd + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
-        metal_set_buffer(enc, bvc, 0ul, 0)
-        metal_set_buffer(enc, bvh, 0ul, 1)
-        metal_dispatch_threadgroups(enc, uint3(uint((np * qd + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_tower_flash_msl_tgmem, 0)
-        metal_set_buffer(enc, bq, 0ul, 0)
-        metal_set_buffer(enc, bkh, 0ul, 1)
-        metal_set_buffer(enc, bvh, 0ul, 2)
-        metal_set_buffer(enc, bo, 0ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(np / 8), uint(heads), 1u), uint3(128u, 1u, 1u))
+    let run <- @(bvx : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            var u_hs = uint(hs)
+            var u_d = uint(qd)
+            var u_np = uint(np)
+            var u_tot = uint(np * qd)
+            metal_set_pipeline(enc, pso_hc)
+            metal_set_buffer(enc, bkc, 0ul, 0)
+            metal_set_buffer(enc, bkh, 0ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_hs)), 4ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_np)), 4ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 5)
+            metal_dispatch_threadgroups(enc, uint3(uint((np * qd + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+            metal_set_buffer(enc, bvx, 0ul, 0)
+            metal_set_buffer(enc, bvh, 0ul, 1)
+            metal_dispatch_threadgroups(enc, uint3(uint((np * qd + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+            metal_set_pipeline(enc, pso)
+            metal_set_threadgroup_memory_length(enc, metal_tower_flash_msl_tgmem, 0)
+            metal_set_buffer(enc, bq, 0ul, 0)
+            metal_set_buffer(enc, bkh, 0ul, 1)
+            metal_set_buffer(enc, bvh, 0ul, 2)
+            metal_set_buffer(enc, bo, 0ul, 3)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
+            metal_dispatch_threadgroups(enc, uint3(uint(np / 8), uint(heads), 1u), uint3(128u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
     }
-    t |> success(ran, "{tag} dispatch: {err}")
-    return if (!ran)
+    return if (!invoke(run, bvc))
     t |> equal(buf_mismatch_exact(bkh, khc, "{tag} kv_hc K panel"), 0)
     var vslice : array<float16>
     vslice |> resize(np * qd)
@@ -562,26 +385,7 @@ def private tower_flash_kvhc_gate(t : T?; dev, queue) {
     t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
     vv[(np / 2) * qd + hs / 2] += 3.0
     var bvc2 = buf_upload(dev, vv)
-    let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso_hc)
-        metal_set_buffer(enc, bvc2, 0ul, 0)
-        metal_set_buffer(enc, bvh, 0ul, 1)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_hs)), 4ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_np)), 4ul, 4)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint((np * qd + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_tower_flash_msl_tgmem, 0)
-        metal_set_buffer(enc, bq, 0ul, 0)
-        metal_set_buffer(enc, bkh, 0ul, 1)
-        metal_set_buffer(enc, bvh, 0ul, 2)
-        metal_set_buffer(enc, bo, 0ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(np / 8), uint(heads), 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran2, "{tag} poison dispatch: {err}")
-    if (ran2) {
+    if (invoke(run, bvc2)) {
         t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} poison (MUST mismatch)") > 0,
             "{tag}: a poisoned V element reds the bars through kv_hc + flash")
     }
@@ -617,90 +421,47 @@ def private tower_win_gate(t : T?; dev, queue) {
     let qd = heads * hs
     let wlo <- [ 0u, 64u, 128u, 160u ]   //! two full windows + a ragged 32-row tail
     let nwin = 3
-    var qv : array<float>
-    var kv : array<float>
-    var vv : array<float>
-    qv |> resize(np * qd)
-    kv |> resize(np * qd)
-    vv |> resize(np * qd)
-    for (i in range(np * qd)) {
-        qv[i] = float(float16(0.11 * float(i % 37) - 1.9))
-        kv[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
-        vv[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
-    }
+    var (qv, kv, vv) <- f16_qkv_rows(np * qd)
     var want : array<float>
     want |> resize(np * qd)
     let scale = 1.0 / sqrt(float(hs))
-    for (w in range(nwin)) {
-        let r0 = int(wlo[w])
-        let r1 = int(wlo[w + 1])
-        for (h in range(heads)) {
-            for (qi in range(r0, r1)) {
-                var mx = -3.0e38
-                for (j in range(r0, r1)) {
-                    var sd = 0.0lf
-                    for (dd in range(hs)) {
-                        sd += double(float(float16(qv[qi * qd + h * hs + dd]))) * double(float(float16(kv[j * qd + h * hs + dd])))
-                    }
-                    mx = max(mx, float(sd) * scale)
-                }
-                var tot = 0.0lf
-                var oa : float[80]
-                for (dd in range(hs)) {
-                    oa[dd] = 0.0
-                }
-                for (j in range(r0, r1)) {
-                    var sd = 0.0lf
-                    for (dd in range(hs)) {
-                        sd += double(float(float16(qv[qi * qd + h * hs + dd]))) * double(float(float16(kv[j * qd + h * hs + dd])))
-                    }
-                    let e = exp(float(sd) * scale - mx)
-                    tot += double(e)
-                    for (dd in range(hs)) {
-                        oa[dd] += e * float(float16(vv[j * qd + h * hs + dd]))
-                    }
-                }
-                for (dd in range(hs)) {
-                    want[qi * qd + h * hs + dd] = oa[dd] / float(tot)
-                }
-            }
-        }
+    let win_lo <- [for (w in wlo); int64(w)]
+    var hp : array<float>
+    var att : array<float>
+    with_job_que() {
+        setup_dasllama_jobque_()
+        attention_bidir_windows(want, qv, kv, vv, hp, att, win_lo, int64(qd), int64(heads), scale)
     }
+    delete hp
+    delete att
     var bq = buf_upload(dev, qv)
     var bk = buf_upload(dev, kv)
-    var bv = buf_upload(dev, vv)
     var bw = buf_upload(dev, wlo)
     var bo = buf_fill(dev, np * qd, -1.0e30)
-    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(qd), head_size = uint(hs), kv_mul = 1u,
+    let ka = AttnArgs(qd = uint(qd), kv_dim = uint(qd), head_size = uint(hs), kv_mul = 1u,
         npos = uint(np), np32 = uint(np), scale = scale,
         qoff = 0u, qrows = uint(np), window = 0u, softcap = 0.0, hass = 0u, uend = uint(np))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bq, 0ul, 0)
-        metal_set_buffer(enc, bk, 0ul, 1)
-        metal_set_buffer(enc, bv, 0ul, 2)
-        metal_set_buffer(enc, bo, 0ul, 3)
-        metal_set_buffer(enc, bw, 0ul, 4)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(nwin), uint(heads), 1u), uint3(64u, 1u, 1u))
+    let run <- @(bvx : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso)
+            metal_set_buffer(enc, bq, 0ul, 0)
+            metal_set_buffer(enc, bk, 0ul, 1)
+            metal_set_buffer(enc, bvx, 0ul, 2)
+            metal_set_buffer(enc, bo, 0ul, 3)
+            metal_set_buffer(enc, bw, 0ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+            metal_dispatch_threadgroups(enc, uint3(uint(nwin), uint(heads), 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
     }
-    t |> success(ran, "{tag} dispatch: {err}")
-    return if (!ran)
+    var bv = buf_upload(dev, vv)
+    return if (!invoke(run, bv))
     t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
     vv[80 * qd + hs / 2] += 3.0
     var bv2 = buf_upload(dev, vv)
-    let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bq, 0ul, 0)
-        metal_set_buffer(enc, bk, 0ul, 1)
-        metal_set_buffer(enc, bv2, 0ul, 2)
-        metal_set_buffer(enc, bo, 0ul, 3)
-        metal_set_buffer(enc, bw, 0ul, 4)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(nwin), uint(heads), 1u), uint3(64u, 1u, 1u))
-    }
-    t |> success(ran2, "{tag} poison dispatch: {err}")
-    if (ran2) {
+    if (invoke(run, bv2)) {
         t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} poison (MUST mismatch)") > 0,
             "{tag}: a poisoned V element reds the bars")
     }
@@ -749,17 +510,7 @@ def private fc_pack_gate(t : T?; dev, queue) {
     return if (pso == null)
     let f = fc_fixture(dev)
     let h = 1
-    var qv : array<float>
-    var kv : array<float>
-    var vv : array<float>
-    qv |> resize(f.np * f.d)
-    kv |> resize(f.np * f.d)
-    vv |> resize(f.np * f.d)
-    for (i in range(f.np * f.d)) {
-        qv[i] = float(float16(0.11 * float(i % 37) - 1.9))
-        kv[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
-        vv[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
-    }
+    var (qv, kv, vv) <- f16_qkv_rows(f.np * f.d)
     var pl : array<float>
     pl |> resize(f.ww * f.d)
     for (i in range(f.ww * f.d)) {
@@ -812,9 +563,7 @@ def private fc_pack_gate(t : T?; dev, queue) {
     let ka = fc_args(dev, f)
     let total = f.wwpad * f.hs
     let run_once <- @(bqx, bkx, bvx, bplx, bbux, bbvx : MetalBuffer?) : bool {
-        var err2 : string
-        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-            metal_set_pipeline(enc, pso)
+        return dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
             metal_set_buffer(enc, bqx, 0ul, 0)
             metal_set_buffer(enc, bkx, 0ul, 1)
             metal_set_buffer(enc, bvx, 0ul, 2)
@@ -829,10 +578,7 @@ def private fc_pack_gate(t : T?; dev, queue) {
             metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 11)
             var u_h = uint(h)
             metal_set_bytes(enc, unsafe(addr<void?>(u_h)), 4ul, 12)
-            metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
         }
-        t |> success(ran, "{tag} dispatch: {err2}")
-        return ran
     }
     return if (!invoke(run_once, bq, bk, bv, bpl, bbu, bbv))
     t |> equal(buf_mismatch_bars(bqu, wqu, 0.0, 0.0, "{tag} Q+u"), 0)
@@ -985,16 +731,11 @@ def private fc_unpack_gate(t : T?; dev, queue) {
     var bao = buf_fill(dev, f.mp * f.d, -1.0e30)
     let total = f.mp * f.d
     let run_once <- @(bohx : MetalBuffer?) : bool {
-        var err2 : string
-        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-            metal_set_pipeline(enc, pso)
+        return dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
             metal_set_buffer(enc, bohx, 0ul, 0)
             metal_set_buffer(enc, bao, 0ul, 1)
             metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
-            metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
         }
-        t |> success(ran, "{tag} dispatch: {err2}")
-        return ran
     }
     var boh = buf_upload(dev, oh)
     return if (!invoke(run_once, boh))
@@ -1069,9 +810,7 @@ def private fc_dw_gate(t : T?; dev, queue; tap_major : bool) {
     var by = buf_fill(dev, np * d, -1.0e30)
     let total = np * d
     let run_once <- @(bwx : MetalBuffer?) : bool {
-        var err2 : string
-        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-            metal_set_pipeline(enc, pso)
+        return dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
             metal_set_buffer(enc, bx, 0ul, 0)
             metal_set_buffer(enc, by, 0ul, 1)
             metal_set_buffer(enc, bwx, 0ul, 2)
@@ -1085,10 +824,7 @@ def private fc_dw_gate(t : T?; dev, queue; tap_major : bool) {
             metal_set_bytes(enc, unsafe(addr<void?>(u_nk)), 4ul, 6)
             metal_set_bytes(enc, unsafe(addr<void?>(u_np)), 4ul, 7)
             metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 8)
-            metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
         }
-        t |> success(ran, "{tag} dispatch: {err2}")
-        return ran
     }
     return if (!invoke(run_once, bw))
     t |> equal(buf_mismatch_bars(by, want, 1e-5, 1e-6, tag), 0)
@@ -1122,17 +858,7 @@ def private g4a_attn_gate(t : T?; dev, queue) {
     let qscale = (1.0 / sqrt(float(hs))) / log(2.0)
     let kscale = log(1.0 + exp(1.0)) / log(2.0)
     let cap = 50.0
-    var qv : array<float>
-    var kv : array<float>
-    var vv : array<float>
-    qv |> resize(np * d)
-    kv |> resize(np * d)
-    vv |> resize(np * d)
-    for (i in range(np * d)) {
-        qv[i] = float(float16(0.11 * float(i % 37) - 1.9))
-        kv[i] = float(float16(0.07 * float((i * 13) % 41) - 1.3))
-        vv[i] = float(float16(0.05 * float((i * 7) % 53) - 1.1))
-    }
+    var (qv, kv, vv) <- f16_qkv_rows(np * d)
     var rpe : array<float>
     rpe |> resize((past + 1) * d)
     for (i in range((past + 1) * d)) {
@@ -1187,38 +913,30 @@ def private g4a_attn_gate(t : T?; dev, queue) {
     var brp = buf_upload(dev, rpe)
     var bpd = buf_upload(dev, pds)
     var bo = buf_fill(dev, np * d, -1.0e30)
-    var ka = G4aAttnArgs(d = uint(d), hs = uint(hs), npos = uint(np), past = uint(past),
+    let ka = G4aAttnArgs(d = uint(d), hs = uint(hs), npos = uint(np), past = uint(past),
         qscale = qscale, kscale = kscale, cap = cap)
     let np64 = (np + 63) / 64
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bq, 0ul, 0)
-        metal_set_buffer(enc, bk, 0ul, 1)
-        metal_set_buffer(enc, bv, 0ul, 2)
-        metal_set_buffer(enc, bo, 0ul, 3)
-        metal_set_buffer(enc, brp, 0ul, 4)
-        metal_set_buffer(enc, bpd, 0ul, 5)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 6)
-        metal_dispatch_threadgroups(enc, uint3(uint(np64), uint(heads), 1u), uint3(64u, 1u, 1u))
+    let run <- @(bvx : MetalBuffer?) : bool {
+        var err2 : string
+        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
+            metal_set_pipeline(enc, pso)
+            metal_set_buffer(enc, bq, 0ul, 0)
+            metal_set_buffer(enc, bk, 0ul, 1)
+            metal_set_buffer(enc, bvx, 0ul, 2)
+            metal_set_buffer(enc, bo, 0ul, 3)
+            metal_set_buffer(enc, brp, 0ul, 4)
+            metal_set_buffer(enc, bpd, 0ul, 5)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 6)
+            metal_dispatch_threadgroups(enc, uint3(uint(np64), uint(heads), 1u), uint3(64u, 1u, 1u))
+        }
+        t |> success(ran, "{tag} dispatch: {err2}")
+        return ran
     }
-    t |> success(ran, "{tag} dispatch: {err}")
-    return if (!ran)
+    return if (!invoke(run, bv))
     t |> equal(buf_mismatch_bars(bo, want, 1e-3, 1e-4, tag), 0)
     vv[18 * d + hs / 2] += 3.0
     var bv2 = buf_upload(dev, vv)
-    let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bq, 0ul, 0)
-        metal_set_buffer(enc, bk, 0ul, 1)
-        metal_set_buffer(enc, bv2, 0ul, 2)
-        metal_set_buffer(enc, bo, 0ul, 3)
-        metal_set_buffer(enc, brp, 0ul, 4)
-        metal_set_buffer(enc, bpd, 0ul, 5)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 6)
-        metal_dispatch_threadgroups(enc, uint3(uint(np64), uint(heads), 1u), uint3(64u, 1u, 1u))
-    }
-    t |> success(ran2, "{tag} poison dispatch: {err}")
-    if (ran2) {
+    if (invoke(run, bv2)) {
         t |> success(buf_mismatch_bars(bo, want, 1e-3, 1e-4, "{tag} poison (MUST mismatch)") > 0,
             "{tag}: a poisoned V element reds the bars")
     }
@@ -1398,16 +1116,11 @@ def private st2_im2col_gate(t : T?; dev, queue; r0, rows : int; transposed : boo
     }
     var bcols = buf_fill(dev, 32 * kdim, -1.0e30)
     let run_once <- @(bxx : MetalBuffer?) : bool {
-        var err2 : string
-        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-            metal_set_pipeline(enc, pso)
+        return dispatch_64_lanes(t, queue, tag, pso, 32 * kdim) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
             metal_set_buffer(enc, bcols, 0ul, 1)
             metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
-            metal_dispatch_threadgroups(enc, uint3(uint((32 * kdim + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
         }
-        t |> success(ran, "{tag} dispatch: {err2}")
-        return ran
     }
     var bx = buf_upload(dev, x)
     return if (!invoke(run_once, bx))
@@ -1558,7 +1271,7 @@ def private st2_rows_gate(t : T?; dev, queue) {
     t |> success(pso_lk != null, "{tag} leaky pipeline: {err}")
     var pso_ax = pipeline_from_source(dev, metal_st2_axpy_msl, metal_st2_axpy_msl_entry, metal_st2_axpy_msl_fastmath, err)
     t |> success(pso_ax != null, "{tag} axpy pipeline: {err}")
-    var pso_add = pipeline_from_source(dev, metal_st2_add_msl, metal_st2_add_msl_entry, metal_st2_add_msl_fastmath, err)
+    var pso_add = pipeline_from_source(dev, MetalSt2Add_metal_ew2_msl, MetalSt2Add_metal_ew2_msl_entry, MetalSt2Add_metal_ew2_msl_fastmath, err)
     t |> success(pso_add != null, "{tag} add pipeline: {err}")
     var pso_rf = pipeline_from_source(dev, metal_st2_reflect1_msl, metal_st2_reflect1_msl_entry, metal_st2_reflect1_msl_fastmath, err)
     t |> success(pso_rf != null, "{tag} reflect1 pipeline: {err}")
@@ -1606,59 +1319,39 @@ def private st2_rows_gate(t : T?; dev, queue) {
     let u_c = uint(c)
     let u_nrf = uint(n + c)
     let run_leaky <- @(bxx : MetalBuffer?) : bool {
-        var err2 : string
-        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-            metal_set_pipeline(enc, pso_lk)
+        return dispatch_64_lanes(t, queue, "{tag} leaky", pso_lk, n) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
-            metal_set_bytes(enc, unsafe(addr<void?>(u_slope)), 4ul, 1)
-            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 2)
-            metal_dispatch_threadgroups(enc, uint3(uint((n + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 1)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_slope)), 4ul, 2)
         }
-        t |> success(ran, "{tag} leaky dispatch: {err2}")
-        return ran
     }
     let run_axpy <- @(bax, bbx : MetalBuffer?; zero : uint) : bool {
-        var err2 : string
         var u_zero = zero
-        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-            metal_set_pipeline(enc, pso_ax)
+        return dispatch_64_lanes(t, queue, "{tag} axpy", pso_ax, n) $(enc) {
             metal_set_buffer(enc, bax, 0ul, 0)
             metal_set_buffer(enc, bbx, 0ul, 1)
             metal_set_bytes(enc, unsafe(addr<void?>(u_scale)), 4ul, 2)
             metal_set_bytes(enc, unsafe(addr<void?>(u_zero)), 4ul, 3)
             metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 4)
-            metal_dispatch_threadgroups(enc, uint3(uint((n + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
         }
-        t |> success(ran, "{tag} axpy dispatch: {err2}")
-        return ran
     }
     let run_add <- @(bax, bbx : MetalBuffer?; scale : float) : bool {
-        var err2 : string
         var u_sc = scale
-        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-            metal_set_pipeline(enc, pso_add)
+        return dispatch_64_lanes(t, queue, "{tag} add", pso_add, n) $(enc) {
             metal_set_buffer(enc, bax, 0ul, 0)
             metal_set_buffer(enc, bbx, 0ul, 1)
-            metal_set_buffer(enc, bo, 0ul, 2)
+            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 2)
             metal_set_bytes(enc, unsafe(addr<void?>(u_sc)), 4ul, 3)
-            metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 4)
-            metal_dispatch_threadgroups(enc, uint3(uint((n + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
+            metal_set_buffer(enc, bo, 0ul, 7)
         }
-        t |> success(ran, "{tag} add dispatch: {err2}")
-        return ran
     }
     let run_reflect <- @(bax : MetalBuffer?) : bool {
-        var err2 : string
-        let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-            metal_set_pipeline(enc, pso_rf)
+        return dispatch_64_lanes(t, queue, "{tag} reflect1", pso_rf, n + c) $(enc) {
             metal_set_buffer(enc, bax, 0ul, 0)
             metal_set_buffer(enc, bo, 0ul, 1)
             metal_set_bytes(enc, unsafe(addr<void?>(u_c)), 4ul, 2)
             metal_set_bytes(enc, unsafe(addr<void?>(u_nrf)), 4ul, 3)
-            metal_dispatch_threadgroups(enc, uint3(uint((n + c + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
         }
-        t |> success(ran, "{tag} reflect1 dispatch: {err2}")
-        return ran
     }
     var bx = buf_upload(dev, a)
     if (invoke(run_leaky, bx)) {
@@ -1736,18 +1429,7 @@ def private st2_rows_gate(t : T?; dev, queue) {
     metal_release(pso_rf)
 }
 
-//! a 64-lane dispatch of one pipeline over `total` elements
-def private st2_dispatch_64_lanes(t : T?; queue; tag : string; pso; total : int; blk : block<(enc : MetalComputeEncoder?)>) : bool {
-    var err2 : string
-    let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        invoke(blk, enc)
-        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
-    }
-    t |> success(ran, "{tag} dispatch: {err2}")
-    return ran
-}
-
+//! `n` f16-exact patterned values: seed (i * seed_mul) % 47 through `st2_f16`
 def private st2_fill(n : int; seed_mul : int; scale, bias : float) : array<float> {
     var a : array<float>
     a |> resize(n)
@@ -1761,7 +1443,7 @@ def private st2_fill(n : int; seed_mul : int; scale, bias : float) : array<float
 def private st2_gather_gate(t : T?; dev, queue) {
     let tag = "st2_gather"
     var err : string
-    var pso = pipeline_from_source(dev, metal_st2_gather_msl, metal_st2_gather_msl_entry, metal_st2_gather_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, metal_row_gather_msl, metal_row_gather_msl_entry, metal_row_gather_msl_fastmath, err)
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
     let c = 24
@@ -1780,8 +1462,8 @@ def private st2_gather_gate(t : T?; dev, queue) {
     var bidx = buf_upload(dev, idx)
     var bo = buf_fill(dev, nrows * c, -1.0e30)
     let run <- @(bax : MetalBuffer?; add_b, add_c : uint) : bool {
-        var ka = St2GatherArgs(c = uint(c), add_b = add_b, add_c = add_c, total = uint(nrows * c))
-        return st2_dispatch_64_lanes(t, queue, "{tag} add_b {add_b} add_c {add_c}", pso, nrows * c) $(enc) {
+        var ka = RowGatherArgs(c = uint(c), add_b = add_b, add_c = add_c, total = uint(nrows * c))
+        return dispatch_64_lanes(t, queue, "{tag} add_b {add_b} add_c {add_c}", pso, nrows * c) $(enc) {
             metal_set_buffer(enc, bax, 0ul, 0)
             metal_set_buffer(enc, bidx, 0ul, 1)
             metal_set_buffer(enc, bb, 0ul, 2)
@@ -1859,7 +1541,7 @@ def private st2_concat_gate(t : T?; dev, queue; with_res : bool) {
     let run <- @(bres : MetalBuffer?) : bool {
         var ka = St2ConcatArgs(c = uint(c), rc = uint(rc), rs = uint(rs), f0s = uint(f0s), ns = uint(f0s), with_res = with_res ? 1u : 0u,
             width = uint(width), total = uint(nrows * width))
-        return st2_dispatch_64_lanes(t, queue, tag, pso, nrows * width) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, nrows * width) $(enc) {
             metal_set_buffer(enc, bx, 0ul, 0)
             metal_set_buffer(enc, bres, 0ul, 1)
             metal_set_buffer(enc, bf0, 0ul, 2)
@@ -1924,7 +1606,7 @@ def private st2_pool_gate(t : T?; dev, queue) {
     var by = buf_fill(dev, t_out * c, -1.0e30)
     let run <- @(bxx : MetalBuffer?) : bool {
         var ka = St2PoolArgs(c = uint(c), k = uint(k), stride = uint(stride), pad_l = uint(pad_l), dil = 1u, t_in = uint(t_in), total = uint(t_out * c))
-        return st2_dispatch_64_lanes(t, queue, tag, pso, t_out * c) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, t_out * c) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
             metal_set_buffer(enc, by, 0ul, 1)
             metal_set_buffer(enc, bw, 0ul, 2)
@@ -2108,7 +1790,7 @@ def private pk_rows_gate(t : T?; dev, queue; elu : bool) {
         }
     }
     let run <- @(bxx : MetalBuffer?; byy : MetalBuffer?) : bool {
-        return st2_dispatch_64_lanes(t, queue, tag, pso, rows * width) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, rows * width) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
             metal_set_buffer(enc, byy, 0ul, 1)
             metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
@@ -2153,7 +1835,7 @@ def private pk_row_scale_gate(t : T?; dev, queue) {
     let run <- @(bxx : MetalBuffer?) : bool {
         var u_c = uint(c)
         var u_n = uint(tt * c)
-        return st2_dispatch_64_lanes(t, queue, tag, pso, tt * c) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, tt * c) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
             metal_set_buffer(enc, bs, 64ul, 1)
             metal_set_bytes(enc, unsafe(addr<void?>(u_c)), 4ul, 2)
@@ -2176,10 +1858,11 @@ def private pk_row_scale_gate(t : T?; dev, queue) {
 }
 
 //! rows [7][96] rotated over 64 columns from column 16 (two heads of 32) at positions 5..: the CPU's `rope_rows` on the same columns
-def private pk_rope_gate(t : T?; dev, queue) {
-    let tag = "pk_rope"
+//! The codec's rope: MetalRope over rows at a stride from a column, the tables' first row position 0
+def private rope_stride_gate(t : T?; dev, queue) {
+    let tag = "rope stride"
     var err : string
-    var pso = pipeline_from_source(dev, metal_pk_rope_msl, metal_pk_rope_msl_entry, metal_pk_rope_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath, err)
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
     let tt = 7
@@ -2208,15 +1891,25 @@ def private pk_rope_gate(t : T?; dev, queue) {
     var tcos : array<float>
     var tsin : array<float>
     build_rope_tabs(tcos, tsin, period, 1.0, 1.0, none, false, 0l, int64(pos0 + tt), int64(dh))
-    let ka = PkRopeArgs(t = uint(tt), stride = uint(stride), col = uint(col), d = uint(d), dh = uint(dh), pos0 = uint(pos0))
     var bcos = buf_upload(dev, tcos)
     var bsin = buf_upload(dev, tsin)
+    var u_n = buf_u32(dev, uint(d))
+    var u_hs = buf_u32(dev, uint(dh))
+    var u_np = buf_u32(dev, uint(tt * d / 2))
+    var u_neox = buf_u32(dev, 0u)
+    var u_stride = buf_u32(dev, uint(stride))
+    let toff = uint64(pos0 * (dh / 2) * 4)
     let run <- @(bxx : MetalBuffer?) : bool {
-        return st2_dispatch_64_lanes(t, queue, tag, pso, tt * d / 2) $(enc) {
-            metal_set_buffer(enc, bxx, 0ul, 0)
-            metal_set_buffer(enc, bcos, 0ul, 1)
-            metal_set_buffer(enc, bsin, 0ul, 2)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+        return dispatch_64_lanes(t, queue, tag, pso, tt * d / 2) $(enc) {
+            metal_set_buffer(enc, bxx, uint64(col * 4), 0)
+            metal_set_buffer(enc, bcos, toff, 1)
+            metal_set_buffer(enc, bsin, toff, 2)
+            metal_set_buffer(enc, u_n, 0ul, 3)
+            metal_set_buffer(enc, u_hs, 0ul, 4)
+            metal_set_buffer(enc, u_np, 0ul, 5)
+            metal_set_buffer(enc, u_neox, 0ul, 6)
+            metal_set_buffer(enc, u_hs, 0ul, 7)
+            metal_set_buffer(enc, u_stride, 0ul, 8)
         }
     }
     var bx = buf_upload(dev, x)
@@ -2232,6 +1925,11 @@ def private pk_rope_gate(t : T?; dev, queue) {
     }
     metal_release(bcos)
     metal_release(bsin)
+    metal_release(u_n)
+    metal_release(u_hs)
+    metal_release(u_np)
+    metal_release(u_neox)
+    metal_release(u_stride)
     metal_release(bx)
     metal_release(bx2)
     metal_release(pso)
@@ -2321,10 +2019,11 @@ def private pk_attn_gate(t : T?; dev, queue; ctx, n_old : int) {
 
 //! one row of q, k, v at position 5 over a 64-wide model of two heads: q and k rotated as
 //! `rope_rows` rotates them, the rotated k and the v landing on the caches' row 5
-def private pk_rope_store_gate(t : T?; dev, queue) {
-    let tag = "pk_rope_store"
+//! MetalRopeStoreKvT's f32 stamp at the frame loop's binds: neox 0, no bias, the whole head, the tables and the caches at the position's row
+def private rope_store_pocket_gate(t : T?; dev, queue) {
+    let tag = "rope_store f32 pocket"
     var err : string
-    var pso = pipeline_from_source(dev, metal_pk_rope_store_msl, metal_pk_rope_store_msl_entry, metal_pk_rope_store_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, MetalRopeStoreF32_metal_rope_store_msl, MetalRopeStoreF32_metal_rope_store_msl_entry, MetalRopeStoreF32_metal_rope_store_msl_fastmath, err)
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
     let d = 64
@@ -2361,17 +2060,22 @@ def private pk_rope_store_gate(t : T?; dev, queue) {
     var tcos : array<float>
     var tsin : array<float>
     build_rope_tabs(tcos, tsin, period, 1.0, 1.0, none, false, 0l, int64(cap), int64(dh))
-    let ka = PkRopeStoreArgs(d = uint(d), dh = uint(dh), pos = uint(pos))
+    let ka = RopeStoreArgs(qd = uint(d), head_size = uint(dh), npairs_q = uint(d / 2), npairs = uint(d), neox = 0u, has_bias = 0u, rot = uint(dh))
     var bcos = buf_upload(dev, tcos)
     var bsin = buf_upload(dev, tsin)
+    var bbias = buf_fill(dev, 3 * d, 0.0)
+    let toff = uint64(pos * (dh / 2) * 4)
+    let roff = uint64(pos * d * 4)
     let run <- @(bxx : MetalBuffer?; bkk : MetalBuffer?; bvv : MetalBuffer?) : bool {
-        return st2_dispatch_64_lanes(t, queue, tag, pso, d / 2) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, d) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
-            metal_set_buffer(enc, bcos, 0ul, 1)
-            metal_set_buffer(enc, bsin, 0ul, 2)
-            metal_set_buffer(enc, bkk, 0ul, 3)
-            metal_set_buffer(enc, bvv, 0ul, 4)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+            metal_set_buffer(enc, bxx, uint64(2 * d * 4), 1)
+            metal_set_buffer(enc, bkk, roff, 2)
+            metal_set_buffer(enc, bvv, roff, 3)
+            metal_set_buffer(enc, bcos, toff, 4)
+            metal_set_buffer(enc, bsin, toff, 5)
+            metal_set_buffer(enc, bbias, 0ul, 6)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 7)
         }
     }
     var bx = buf_upload(dev, qkv)
@@ -2406,6 +2110,7 @@ def private pk_rope_store_gate(t : T?; dev, queue) {
     metal_release(bv3)
     metal_release(bcos)
     metal_release(bsin)
+    metal_release(bbias)
     metal_release(bx)
     metal_release(bk)
     metal_release(bv)
@@ -2413,27 +2118,6 @@ def private pk_rope_store_gate(t : T?; dev, queue) {
     metal_release(bk2)
     metal_release(bv2)
     metal_release(pso)
-}
-
-def private ln_row_ref(x, w, b : array<float>; dim : int; eps : float) : array<float> {
-    var mean = 0.0lf
-    for (i in range(dim)) {
-        mean += double(x[i])
-    }
-    mean /= double(dim)
-    var variance = 0.0lf
-    for (i in range(dim)) {
-        let dv = double(x[i]) - mean
-        variance += dv * dv
-    }
-    variance /= double(dim)
-    let inv = 1.0lf / sqrt(variance + double(eps))
-    var y : array<float>
-    y |> resize(dim)
-    for (i in range(dim)) {
-        y[i] = float((double(x[i]) - mean) * inv) * w[i] + b[i]
-    }
-    return <- y
 }
 
 //! x += a in place and the LayerNorm of the sum at a 16-float offset of y, at a width under the
@@ -2455,25 +2139,31 @@ def private pk_add_ln_gate(t : T?; dev, queue; dim : int) {
     for (i in range(dim)) {
         want_x[i] = x[i] + a[i]
     }
-    let yn <- ln_row_ref(want_x, w, bb, dim, eps)
+    var yn : array<float>
+    yn |> resize(dim)
+    unsafe {
+        layernorm(addr(yn[0]), addr<float const?>(want_x[0]), addr<float const?>(w[0]), addr<float const?>(bb[0]), int64(dim), eps)
+    }
     var want_y : array<float>
     want_y |> resize(yoff + dim)
     for (i in range(yoff + dim)) {
         want_y[i] = i < yoff ? -7.0 : yn[i - yoff]
     }
-    let ka = PkAddLnArgs(dim = uint(dim), eps = eps)
     var bw = buf_upload(dev, w)
     var bbb = buf_upload(dev, bb)
+    var bdim = buf_u32(dev, uint(dim))
+    var beps = buf_f32(dev, eps)
     let run <- @(bxx : MetalBuffer?; baa : MetalBuffer?; byy : MetalBuffer?) : bool {
         var err2 : string
         let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
             metal_set_pipeline(enc, pso)
             metal_set_buffer(enc, bxx, 0ul, 0)
-            metal_set_buffer(enc, baa, 0ul, 1)
-            metal_set_buffer(enc, bw, 0ul, 2)
-            metal_set_buffer(enc, bbb, 0ul, 3)
-            metal_set_buffer(enc, byy, uint64(yoff * 4), 4)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+            metal_set_buffer(enc, bw, 0ul, 1)
+            metal_set_buffer(enc, bbb, 0ul, 2)
+            metal_set_buffer(enc, byy, uint64(yoff * 4), 3)
+            metal_set_buffer(enc, bdim, 0ul, 4)
+            metal_set_buffer(enc, beps, 0ul, 5)
+            metal_set_buffer(enc, baa, 0ul, 6)
             metal_set_threadgroup_memory_length(enc, metal_pk_add_ln_msl_tgmem, 0)
             metal_dispatch_threadgroups(enc, uint3(1u, 1u, 1u), uint3(256u, 1u, 1u))
         }
@@ -2485,7 +2175,7 @@ def private pk_add_ln_gate(t : T?; dev, queue; dim : int) {
     var by = buf_fill(dev, yoff + dim, -7.0)
     if (invoke(run, bx, ba, by)) {
         t |> equal(buf_mismatch_bars(bx, want_x, 1e-6, 1e-6, "{tag} x"), 0)
-        t |> equal(buf_mismatch_bars(by, want_y, 1e-5, 1e-6, "{tag} y"), 0)   //! f32 mean and variance over values under 1 against the fp64 row: an error of a few f32 ulps (6e-8 each), the bar a hundred of them
+        t |> equal(buf_mismatch_bars(by, want_y, 1e-5, 1e-6, "{tag} y"), 0)   //! f32 mean and variance over values under 1 against the CPU's double mean and variance: an error of a few f32 ulps (6e-8 each), the bar a hundred of them
     }
     a[dim / 2] += 0.5
     var bx2 = buf_upload(dev, x)
@@ -2497,6 +2187,8 @@ def private pk_add_ln_gate(t : T?; dev, queue; dim : int) {
     }
     metal_release(bw)
     metal_release(bbb)
+    metal_release(bdim)
+    metal_release(beps)
     metal_release(bx)
     metal_release(ba)
     metal_release(by)
@@ -2508,9 +2200,7 @@ def private pk_add_ln_gate(t : T?; dev, queue; dim : int) {
 
 def private pk_gemv_pso(dev; q8 : bool; kind : int; var err : string&) {
     if (q8) {
-        if (kind == 0) {
-            return pipeline_from_source(dev, metal_pk_gemv_q8_msl, metal_pk_gemv_q8_msl_entry, metal_pk_gemv_q8_msl_fastmath, err)
-        } elif (kind == 1) {
+        if (kind == 1) {
             return pipeline_from_source(dev, metal_pk_gemv_q8_ln_silu_msl, metal_pk_gemv_q8_ln_silu_msl_entry, metal_pk_gemv_q8_ln_silu_msl_fastmath, err)
         } elif (kind == 2) {
             return pipeline_from_source(dev, metal_pk_gemv_q8_gate_msl, metal_pk_gemv_q8_gate_msl_entry, metal_pk_gemv_q8_gate_msl_fastmath, err)
@@ -2533,15 +2223,12 @@ def private pk_gemv_pso(dev; q8 : bool; kind : int; var err : string&) {
 
 def private pk_gemv_tgmem(dev; q8 : bool; kind : int) : uint64 {   //! `dev` untyped: the module behind `?das_metal` may be absent
     if (q8) {
-        return kind == 0 ? metal_pk_gemv_q8_msl_tgmem : (kind == 1 ? metal_pk_gemv_q8_ln_silu_msl_tgmem : (kind == 2 ? metal_pk_gemv_q8_gate_msl_tgmem
+        return (kind == 1 ? metal_pk_gemv_q8_ln_silu_msl_tgmem : (kind == 2 ? metal_pk_gemv_q8_gate_msl_tgmem
             : (kind == 3 ? metal_pk_gemv_q8_add_silu_msl_tgmem : metal_pk_gemv_q8_tail_msl_tgmem)))
     }
     return kind == 0 ? metal_pk_gemv_f32_msl_tgmem : (kind == 1 ? metal_pk_gemv_f32_ln_silu_msl_tgmem : (kind == 2 ? metal_pk_gemv_f32_gate_msl_tgmem
         : (kind == 3 ? metal_pk_gemv_f32_add_silu_msl_tgmem : metal_pk_gemv_f32_tail_msl_tgmem)))
 }
-
-def private silu_d(v : double) : double => v / (1.0lf + exp(-v))
-
 //! the row GEMV over 9 rows of 96 (three q8 blocks; the f32 rows at stride 128) under one stamp:
 //! the bare dot, the normed and modulated x with the SiLU out, the gated residual, the SiLU over
 //! the slab vector, and the frame tail - x, y and the latent row bound at offsets, an fp64 oracle
@@ -2587,7 +2274,11 @@ def private pk_gemv_gate(t : T?; dev, queue; q8 : bool; kind, nin : int) {
         xs[j] = x[xoff + j]
     }
     if (kind == 1 || kind == 4) {
-        let ln <- ln_row_ref(xs, lw, lb, nin, eps)
+        var ln : array<float>
+        ln |> resize(nin)
+        unsafe {
+            layernorm(addr(ln[0]), addr<float const?>(xs[0]), addr<float const?>(lw[0]), addr<float const?>(lb[0]), int64(nin), eps)
+        }
         for (j in range(nin)) {
             xs[j] = ln[j] * (1.0 + md[nin + j]) + md[j]
         }
@@ -2703,7 +2394,7 @@ def private st2_sigsum_gate(t : T?; dev, queue) {
     for (r in range(nrows)) {
         var acc = 0.0lf
         for (j in range(nb)) {
-            acc += double(st2_sigmoid(lg[r * ls + j]))
+            acc += sigmoid_d(double(lg[r * ls + j]))
         }
         want[r] = float(acc) * (1.0 / 1.3)
     }
@@ -2713,7 +2404,7 @@ def private st2_sigsum_gate(t : T?; dev, queue) {
         var u_ls = uint(ls)
         var u_speed = 1.3
         var u_t = uint(nrows)
-        return st2_dispatch_64_lanes(t, queue, tag, pso, nrows) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, nrows) $(enc) {
             metal_set_buffer(enc, blg, 0ul, 0)
             metal_set_buffer(enc, braw, 0ul, 1)
             metal_set_bytes(enc, unsafe(addr<void?>(u_nb)), 4ul, 2)
@@ -2748,15 +2439,11 @@ def private st2_gelu_gate(t : T?; dev, queue) {
     var x <- st2_fill(n, 7, 0.25, -3.0)
     x[17] = 40.0
     x[18] = -40.0
-    var want : array<float>
-    want |> resize(n)
-    for (i in range(n)) {
-        let v = x[i]
-        want[i] = 0.5 * v * (1.0 + st2_tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))
-    }
+    var want := x
+    gelu(want, int64(n))
     let run <- @(bxx : MetalBuffer?) : bool {
         var u_n = uint(n)
-        return st2_dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
             metal_set_buffer(enc, bxx, 0ul, 0)
             metal_set_bytes(enc, unsafe(addr<void?>(u_n)), 4ul, 1)
         }
@@ -2774,27 +2461,6 @@ def private st2_gelu_gate(t : T?; dev, queue) {
     metal_release(bx)
     metal_release(bx2)
     metal_release(pso)
-}
-
-//! The CPU twin of the source's counter-keyed normal (`st2_hash_normal` in the kernels module):
-//! the seed hashed first, two hashed uniforms through Box-Muller.
-def private hash_u32_ref(x : uint) : uint {
-    var v = x * 0x9E3779B1u
-    v ^= v >> 15u
-    v *= 0x85EBCA77u
-    v ^= v >> 13u
-    v *= 0xC2B2AE3Du
-    v ^= v >> 16u
-    return v
-}
-
-def private hash_normal_ref(seed, idx : uint) : float {
-    let sh = hash_u32_ref(seed)
-    let a = hash_u32_ref(sh ^ (idx * 2u + 1u))
-    let b = hash_u32_ref(sh ^ (idx * 2u + 2u) ^ 0x6A09E667u)
-    let u1 = (float(a >> 8u) + 1.0) * (1.0 / 16777217.0)
-    let u2 = float(b >> 8u) * (1.0 / 16777216.0)
-    return sqrt(-2.0 * log(u1)) * cos(6.28318530717959 * u2)
 }
 
 def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
@@ -2949,7 +2615,7 @@ def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
         var want_noise : array<float>
         want_noise |> resize(n * nh)
         for (i in range(n * nh)) {
-            want_noise[i] = hash_normal_ref(ka_own.seed, uint(i))
+            want_noise[i] = st2_hash_normal(ka_own.seed, uint(i))
         }
         t |> equal(buf_mismatch_bars(bnz1, want_noise, 1e-5, 1e-6, "{tag} own draw vs the CPU hash"), 0)   //! the kernel's log and cos under the default fast math against the CPU's: within 1e-5 of a value under 5
         var own1 <- buf_download(bh1, n, type<float>)
@@ -3039,7 +2705,7 @@ def private st2_stft_gate(t : T?; dev, queue; reflect : bool) {
     var bspec = buf_fill(dev, frames * 2 * bins, -1.0e30)
     let run <- @(bh : MetalBuffer?) : bool {
         var ka = St2StftArgs(n = uint(n), frames = uint(frames), bins = uint(bins), k = uint(k), hop = uint(hop), pad = uint(pad), eps = 1e-9)
-        return st2_dispatch_64_lanes(t, queue, tag, pso, frames * bins) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, frames * bins) $(enc) {
             metal_set_buffer(enc, bh, 0ul, 0)
             metal_set_buffer(enc, bre, 0ul, 1)
             metal_set_buffer(enc, bim, 0ul, 2)
@@ -3108,7 +2774,7 @@ def private st2_istft_gate(t : T?; dev, queue; envelope : bool) {
     let run <- @(byy : MetalBuffer?) : bool {
         var ka = St2IstftArgs(tt = uint(tt), stride = uint(stride), bins = uint(bins), k = uint(k), hop = uint(hop), pad = uint(pad),
             envelope = envelope ? 1u : 0u, n = uint(n))
-        return st2_dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
+        return dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
             metal_set_buffer(enc, byy, 0ul, 0)
             metal_set_buffer(enc, bre, 0ul, 1)
             metal_set_buffer(enc, bim, 0ul, 2)
@@ -3136,10 +2802,11 @@ def private st2_istft_gate(t : T?; dev, queue; envelope : bool) {
 }
 
 // ===== the tower row gather (the qwen25v stem's window-sort reorder) =====
+//! The stem's window-sort reorder: MetalRowGather with both adds off over a full permutation
 def private tower_gather_gate(t : T?; dev, queue) {
     let tag = "tower_gather"
     var err : string
-    var pso = pipeline_from_source(dev, metal_tower_row_gather_msl, metal_tower_row_gather_msl_entry, metal_tower_row_gather_msl_fastmath, err)
+    var pso = pipeline_from_source(dev, metal_row_gather_msl, metal_row_gather_msl_entry, metal_row_gather_msl_fastmath, err)
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
     let nr = 37
@@ -3164,33 +2831,23 @@ def private tower_gather_gate(t : T?; dev, queue) {
     var bx = buf_upload(dev, xv)
     var bs = buf_upload(dev, src)
     var by = buf_fill(dev, nr * d, -1.0e30)
-    var u_d = uint(d)
-    var u_tot = uint(nr * d)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_buffer(enc, bs, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint((nr * d + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+    let ka = RowGatherArgs(c = uint(d), add_b = 0u, add_c = 0u, total = uint(nr * d))
+    let run <- @(bidx : MetalBuffer?) : bool {
+        return dispatch_64_lanes(t, queue, tag, pso, nr * d) $(enc) {
+            metal_set_buffer(enc, bx, 0ul, 0)
+            metal_set_buffer(enc, bidx, 0ul, 1)
+            metal_set_buffer(enc, bx, 0ul, 2)
+            metal_set_buffer(enc, bx, 0ul, 3)
+            metal_set_buffer(enc, by, 0ul, 4)
+            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+        }
     }
-    t |> success(ran, "{tag} dispatch: {err}")
-    return if (!ran)
-    t |> equal(buf_mismatch_exact(by, want, tag), 0)
+    if (invoke(run, bs)) {
+        t |> equal(buf_mismatch_exact(by, want, tag), 0)
+    }
     src[nr / 2] = src[nr / 2] == 0u ? 1u : 0u
     var bs2 = buf_upload(dev, src)
-    let ran2 = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_buffer(enc, bs2, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_d)), 4ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(u_tot)), 4ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint((nr * d + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
-    }
-    t |> success(ran2, "{tag} poison dispatch: {err}")
-    if (ran2) {
+    if (invoke(run, bs2)) {
         t |> success(buf_mismatch_exact(by, want, "{tag} poison (MUST mismatch)") > 0,
             "{tag}: a swapped gather index reds the exact compare")
     }
@@ -3202,6 +2859,105 @@ def private tower_gather_gate(t : T?; dev, queue) {
     delete xv
     delete src
     delete want
+}
+
+//! one arm of the table-driven rope at the q width: the input pattern, the table rows' step and period, the pairing
+//! and the rotated width (rot < HEAD_SIZE = partial NEOX)
+struct private RopeArm {
+    tag : string
+    neox : bool
+    rot : int
+    xscale : float
+    xmod : int
+    xbias : float
+    tstep : float
+    tmod : int
+}
+
+//! MetalRope over NPOS rows of QD against `rope_scaled_tab` / `_neox_tab` / `_neox_tab_part` - the arm's pairing and width
+def private rope_arm_gate(t : T?; dev, queue; pso; arm : RopeArm) {
+    let half = arm.rot / 2
+    var rv : array<float>
+    var rcos : array<float>
+    var rsin : array<float>
+    rv |> resize(NPOS * QD)
+    rcos |> resize(NPOS * half)
+    rsin |> resize(NPOS * half)
+    for (k in range(NPOS * QD)) {
+        rv[k] = arm.xscale * float(k % arm.xmod) + arm.xbias
+    }
+    for (k in range(NPOS * half)) {
+        rcos[k] = cos(arm.tstep * float(k % arm.tmod))
+        rsin[k] = sin(arm.tstep * float(k % arm.tmod))
+    }
+    var rvwant := rv
+    unsafe {
+        for (p in range(NPOS)) {
+            if (arm.rot < HEAD_SIZE) {
+                rope_scaled_neox_tab_part(addr(rvwant[p * QD]), int64(HEAD_SIZE), int64(arm.rot),
+                    int64(QD), addr<float const?>(rcos[p * half]), addr<float const?>(rsin[p * half]))
+            } elif (arm.neox) {
+                rope_scaled_neox_tab(addr(rvwant[p * QD]), int64(HEAD_SIZE), int64(QD),
+                    addr<float const?>(rcos[p * half]), addr<float const?>(rsin[p * half]))
+            } else {
+                rope_scaled_tab(addr(rvwant[p * QD]), int64(HEAD_SIZE), int64(QD),
+                    addr<float const?>(rcos[p * half]), addr<float const?>(rsin[p * half]))
+            }
+        }
+    }
+    var brv = buf_upload(dev, rv)
+    var brc = buf_upload(dev, rcos)
+    var brs = buf_upload(dev, rsin)
+    var brn = buf_u32(dev, uint(QD))
+    var brhs = buf_u32(dev, uint(HEAD_SIZE))
+    var brnp = buf_u32(dev, uint(NPOS * QD / 2))
+    var brnx = buf_u32(dev, arm.neox ? 1u : 0u)
+    var brot = buf_u32(dev, uint(arm.rot))
+    var bufs <- [brv, brc, brs, brn, brhs, brnp, brnx, brot, brn]   // brn again: the row stride (contiguous rows)
+    var err : string
+    let ran = run_compute_1d(queue, pso, bufs, uint(NPOS * QD / 2), 64u, err)
+    t |> success(ran, "{arm.tag} dispatch: {err}")
+    t |> equal(buf_mismatch_approx(brv, rvwant), 0)
+    bufs |> clear()
+    unsafe {
+        delete bufs
+    }
+    metal_release(brv)
+    metal_release(brc)
+    metal_release(brs)
+    metal_release(brn)
+    metal_release(brhs)
+    metal_release(brnp)
+    metal_release(brnx)
+    metal_release(brot)
+    delete rv
+    delete rcos
+    delete rsin
+    delete rvwant
+}
+
+//! One `_metal_ew2_msl` stamp, y's op into x in place, against its CPU op: `approx` bars, or bit-exact where the op is one rounding on both sides.
+def private ew2_gate(t : T?; dev, queue; tag : string; pso; x, y, want : array<float>; exact : bool) : array<float> {
+    let total = length(x)
+    var bx = buf_upload(dev, x)
+    var by = buf_upload(dev, y)
+    var btot = buf_u32(dev, uint(total))
+    var bone = buf_f32(dev, 1.0)   // the ascale slot at its identity (exact: *1.0); a stamp without the slot erases it
+    var bufs <- [bx, by, btot, bone]
+    var err : string
+    let ran = run_compute_1d(queue, pso, bufs, uint(total), 64u, err)
+    t |> success(ran, "{tag} dispatch: {err}")
+    t |> equal(exact ? buf_mismatch_exact(bx, want) : buf_mismatch_approx(bx, want), 0, tag)
+    var got <- buf_download(bx, total, type<float>)
+    bufs |> clear()
+    unsafe {
+        delete bufs
+    }
+    metal_release(bx)
+    metal_release(by)
+    metal_release(btot)
+    metal_release(bone)
+    return <- got
 }
 
 [test]
@@ -3261,121 +3017,16 @@ def test_metal_prefill_kernels(t : T?) {
                 metal_release(breps)
                 metal_release(pso_rms)
 
-                // ===== rope (NORM pairs, table-driven) — the q-width dispatch =====
                 var pso_rope = pipeline_from_source(dev, metal_rope_msl, metal_rope_msl_entry, metal_rope_msl_fastmath, err)
                 t |> success(pso_rope != null, "rope pipeline: {err}")
-                let half = HEAD_SIZE / 2
-                var rv : array<float>
-                var rcos : array<float>
-                var rsin : array<float>
-                var rvwant : array<float>
-                rv |> resize(NPOS * QD)
-                rvwant |> resize(NPOS * QD)
-                rcos |> resize(NPOS * half)
-                rsin |> resize(NPOS * half)
-                for (k in range(NPOS * QD)) {
-                    rv[k] = 0.11 * float(k % 41) - 2.2
-                    rvwant[k] = rv[k]
+                let rope_arms <- [
+                    RopeArm(tag = "rope", neox = false, rot = HEAD_SIZE, xscale = 0.11, xmod = 41, xbias = -2.2, tstep = 0.01, tmod = 97),
+                    RopeArm(tag = "rope NEOX", neox = true, rot = HEAD_SIZE, xscale = 0.13, xmod = 37, xbias = -1.9, tstep = 0.01, tmod = 97),
+                    RopeArm(tag = "rope partial-NEOX", neox = true, rot = HEAD_SIZE / 2, xscale = 0.17, xmod = 33, xbias = -2.4, tstep = 0.02, tmod = 89)
+                ]
+                for (arm in rope_arms) {
+                    rope_arm_gate(t, dev, queue, pso_rope, arm)
                 }
-                for (k in range(NPOS * half)) {
-                    rcos[k] = cos(0.01 * float(k % 97))
-                    rsin[k] = sin(0.01 * float(k % 97))
-                }
-                unsafe {
-                    for (p in range(NPOS)) {
-                        rope_scaled_tab(addr(rvwant[p * QD]), int64(HEAD_SIZE), int64(QD),
-                            addr<float const?>(rcos[p * half]), addr<float const?>(rsin[p * half]))
-                    }
-                }
-                var brv = buf_upload(dev, rv)
-                var brc = buf_upload(dev, rcos)
-                var brs = buf_upload(dev, rsin)
-                var brn = buf_u32(dev, uint(QD))
-                var brhs = buf_u32(dev, uint(HEAD_SIZE))
-                var brnp = buf_u32(dev, uint(NPOS * QD / 2))
-                var brnx = buf_u32(dev, 0u)
-                var ropebufs <- [brv, brc, brs, brn, brhs, brnp, brnx, brhs]   // trailing brhs = rot (full rope)
-                let roperan = run_compute_1d(queue, pso_rope, ropebufs, uint(NPOS * QD / 2), 64u, err)
-                t |> success(roperan, "rope dispatch: {err}")
-                t |> equal(buf_mismatch_approx(brv, rvwant), 0)
-                ropebufs |> clear()
-                unsafe {
-                    delete ropebufs
-                }
-                metal_release(brv)
-                metal_release(brnx)
-
-                // ===== the same kernel, NEOX pairing (j, j+half) — vs rope_scaled_neox_tab =====
-                for (k in range(NPOS * QD)) {
-                    rv[k] = 0.13 * float(k % 37) - 1.9
-                    rvwant[k] = rv[k]
-                }
-                unsafe {
-                    for (p in range(NPOS)) {
-                        rope_scaled_neox_tab(addr(rvwant[p * QD]), int64(HEAD_SIZE), int64(QD),
-                            addr<float const?>(rcos[p * half]), addr<float const?>(rsin[p * half]))
-                    }
-                }
-                var brv2 = buf_upload(dev, rv)
-                var brnx1 = buf_u32(dev, 1u)
-                var ropebufs2 <- [brv2, brc, brs, brn, brhs, brnp, brnx1, brhs]
-                let roperan2 = run_compute_1d(queue, pso_rope, ropebufs2, uint(NPOS * QD / 2), 64u, err)
-                t |> success(roperan2, "rope NEOX dispatch: {err}")
-                t |> equal(buf_mismatch_approx(brv2, rvwant), 0)
-                ropebufs2 |> clear()
-                unsafe {
-                    delete ropebufs2
-                }
-                metal_release(brv2)
-                metal_release(brnx1)
-
-                // ===== partial NEOX (rot < head_size, Wave D) — vs rope_scaled_neox_tab_part;
-                // the table rows are rot/2 wide, dims >= rot pass through untouched
-                let prot = HEAD_SIZE / 2
-                let phalf = prot / 2
-                var rcosp : array<float>
-                var rsinp : array<float>
-                rcosp |> resize(NPOS * phalf)
-                rsinp |> resize(NPOS * phalf)
-                for (k in range(NPOS * phalf)) {
-                    rcosp[k] = cos(0.02 * float(k % 89))
-                    rsinp[k] = sin(0.02 * float(k % 89))
-                }
-                for (k in range(NPOS * QD)) {
-                    rv[k] = 0.17 * float(k % 33) - 2.4
-                    rvwant[k] = rv[k]
-                }
-                unsafe {
-                    for (p in range(NPOS)) {
-                        rope_scaled_neox_tab_part(addr(rvwant[p * QD]), int64(HEAD_SIZE), int64(prot),
-                            int64(QD), addr<float const?>(rcosp[p * phalf]), addr<float const?>(rsinp[p * phalf]))
-                    }
-                }
-                var brv3 = buf_upload(dev, rv)
-                var brcp = buf_upload(dev, rcosp)
-                var brsp = buf_upload(dev, rsinp)
-                var brnx2 = buf_u32(dev, 1u)
-                var brot = buf_u32(dev, uint(prot))
-                var ropebufs3 <- [brv3, brcp, brsp, brn, brhs, brnp, brnx2, brot]
-                let roperan3 = run_compute_1d(queue, pso_rope, ropebufs3, uint(NPOS * QD / 2), 64u, err)
-                t |> success(roperan3, "rope partial-NEOX dispatch: {err}")
-                t |> equal(buf_mismatch_approx(brv3, rvwant), 0)
-                ropebufs3 |> clear()
-                unsafe {
-                    delete ropebufs3
-                }
-                delete rcosp
-                delete rsinp
-                metal_release(brv3)
-                metal_release(brcp)
-                metal_release(brsp)
-                metal_release(brnx2)
-                metal_release(brot)
-                metal_release(brc)
-                metal_release(brs)
-                metal_release(brn)
-                metal_release(brhs)
-                metal_release(brnp)
                 metal_release(pso_rope)
 
                 // ===== the fused qk_norm+rope kernel: every (hx, donorm, pairing) production arm =====
@@ -3425,17 +3076,17 @@ def test_metal_prefill_kernels(t : T?) {
                 pk_rows_gate(t, dev, queue, false)
                 pk_rows_gate(t, dev, queue, true)
                 pk_row_scale_gate(t, dev, queue)
-                pk_rope_gate(t, dev, queue)
+                rope_stride_gate(t, dev, queue)
                 pk_attn_gate(t, dev, queue, 0, 10)
                 pk_attn_gate(t, dev, queue, 8, 10)
                 pk_attn_gate(t, dev, queue, 0, 300)   //! past one 256-key stride of the staged scores
                 pk_attn_gate(t, dev, queue, 8, 300)
-                pk_rope_store_gate(t, dev, queue)
+                rope_store_pocket_gate(t, dev, queue)
                 pk_add_ln_gate(t, dev, queue, 100)
                 pk_add_ln_gate(t, dev, queue, 300)
                 pk_add_ln_gate(t, dev, queue, 512)   //! two whole 256-lane strides
                 for (q8 in [false, true]) {
-                    for (kind in range(5)) {
+                    for (kind in range(q8 ? 1 : 0, 5)) {   //! the bare q8 dot rides the decode GEMV, gated in test_metal_gemv_kernels
                         pk_gemv_gate(t, dev, queue, q8, kind, 96)
                         pk_gemv_gate(t, dev, queue, q8, kind, 256)   //! a whole stage stride
                         pk_gemv_gate(t, dev, queue, q8, kind, 1024)   //! several stage strides, several row strides
@@ -3454,23 +3105,23 @@ def test_metal_prefill_kernels(t : T?) {
                 attn_trio_gate(t, dev, queue, 128, 6, 2, 40, true)
                 // softcap + sink arms: rowstat and pf_p_weight carry MIRRORED window/softcap
                 // math — these are the only cells where a drift between the two can red
-                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, false, softcap = 30.0)
-                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true, softcap = 30.0)
-                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, false, hass = 1)
-                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true, hass = 1)
+                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, false, AttnKeys(softcap = 30.0))
+                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true, AttnKeys(softcap = 30.0))
+                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, false, AttnKeys(hass = 1))
+                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true, AttnKeys(hass = 1))
 
                 // ===== the uniform span (media rows): fresh, continuation, continuation+window =====
-                attn_trio_span_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, 0, 0, false)
-                attn_trio_span_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, 32, 0, false)
-                attn_trio_span_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, 32, 40, false)
-                attn_trio_span_gate(t, dev, queue, 64, 4, 2, NPOS, 0, 0, true)
-                attn_trio_span_gate(t, dev, queue, 64, 4, 2, NPOS, 32, 0, true)
-                attn_trio_span_gate(t, dev, queue, 64, 4, 2, NPOS, 32, 40, true)
-                // the fused MIXED shape (AttnArgs.ulo): causal head + span rows + causal tail
-                attn_trio_span_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, 0, 0, false, span_lo = 5, span_hi = NPOS - 11)
-                attn_trio_span_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, 32, 40, false, span_lo = 5, span_hi = NPOS - 11)
-                attn_trio_span_gate(t, dev, queue, 64, 4, 2, NPOS, 0, 0, true, span_lo = 5, span_hi = NPOS - 11)
-                attn_trio_span_gate(t, dev, queue, 64, 4, 2, NPOS, 32, 0, true, span_lo = 5, span_hi = NPOS - 11)
+                attn_trio_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, false, AttnKeys(uend = NPOS))
+                attn_trio_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, false, AttnKeys(qoff = 32, uend = 32 + NPOS))
+                attn_trio_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, false, AttnKeys(qoff = 32, window = 40, uend = 32 + NPOS))
+                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true, AttnKeys(uend = NPOS))
+                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true, AttnKeys(qoff = 32, uend = 32 + NPOS))
+                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true, AttnKeys(qoff = 32, window = 40, uend = 32 + NPOS))
+                // the fused MIXED shape (AttnArgs.ulo): causal head + span rows [5, NPOS - 11) + causal tail
+                attn_trio_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, false, AttnKeys(ulo = 5, uend = NPOS - 11))
+                attn_trio_gate(t, dev, queue, HEAD_SIZE, N_HEADS, N_KV_HEADS, NPOS, false, AttnKeys(qoff = 32, window = 40, ulo = 32 + 5, uend = 32 + NPOS - 11))
+                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true, AttnKeys(ulo = 5, uend = NPOS - 11))
+                attn_trio_gate(t, dev, queue, 64, 4, 2, NPOS, true, AttnKeys(qoff = 32, ulo = 32 + 5, uend = 32 + NPOS - 11))
 
                 // ===== swiglu + residual add =====
                 var pso_sw = pipeline_from_source(dev, MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, MetalSwiglu_metal_ew2_msl_fastmath, err)
@@ -3480,65 +3131,25 @@ def test_metal_prefill_kernels(t : T?) {
                 let total = NROWS * HIDDEN
                 var sg : array<float>
                 var su : array<float>
-                var sg_want : array<float>
                 sg |> resize(total)
                 su |> resize(total)
-                sg_want |> resize(total)
                 for (k in range(total)) {
                     sg[k] = 0.21 * float(k % 43) - 4.3
                     su[k] = 0.31 * float(k % 17) - 2.5
                 }
-                for (k in range(total)) {
-                    let vv = sg[k]
-                    sg_want[k] = (vv / (1.0 + exp(-vv))) * su[k]     // the swiglu ptr-core formula
-                }
-                var bsg = buf_upload(dev, sg)
-                var bsu = buf_upload(dev, su)
-                var btot = buf_u32(dev, uint(total))
-                var swbufs <- [bsg, bsu, btot]
-                let swran = run_compute_1d(queue, pso_sw, swbufs, uint(total), 64u, err)
-                t |> success(swran, "swiglu dispatch: {err}")
-                t |> equal(buf_mismatch_approx(bsg, sg_want), 0)
-                swbufs |> clear()
-                unsafe {
-                    delete swbufs
-                }
+                var sg_want := sg
+                swiglu(sg_want, su, int64(total))
+                let sg_gpu <- ew2_gate(t, dev, queue, "swiglu", pso_sw, sg, su, sg_want, false)
                 // add: x += y, bit-exact (one fadd on both sides) — seeded from the GPU gate
                 // output, not the CPU one: the exp-envelope difference upstream would otherwise
                 // masquerade as an add mismatch
-                let sg_gpu <- buf_download(bsg, total, type<float>)
                 var add_want : array<float>
                 add_want |> resize(total)
                 for (k in range(total)) {
                     add_want[k] = sg_gpu[k] + su[k]
                 }
-                var bone_add = buf_f32(dev, 1.0)   // the wave-B ascale slot at its identity (exact: *1.0)
-                var addbufs <- [bsg, bsu, btot, bone_add]
-                let addran = run_compute_1d(queue, pso_add, addbufs, uint(total), 64u, err)
-                t |> success(addran, "add dispatch: {err}")
-                t |> equal(buf_mismatch_exact(bsg, add_want), 0)
-                addbufs |> clear()
-                unsafe {
-                    delete addbufs
-                }
-                // flat copy (the gemma4 V-from-K panel copy rides MetalCopyRow): dst = src, bit-exact
-                var pso_cp = pipeline_from_source(dev, metal_copy_row_msl, metal_copy_row_msl_entry, metal_copy_row_msl_fastmath, err)
-                t |> success(pso_cp != null, "copy_row pipeline: {err}")
-                var bcp = buf_upload(dev, su)   // pre-filled — fully overwritten by the copy
-                var cpbufs <- [bsg, bcp, btot]
-                let cpran = run_compute_1d(queue, pso_cp, cpbufs, uint(total), 256u, err)
-                t |> success(cpran, "copy_row dispatch: {err}")
-                t |> equal(buf_mismatch_exact(bcp, add_want), 0)
-                cpbufs |> clear()
-                unsafe {
-                    delete cpbufs
-                }
-                metal_release(bcp)
-                metal_release(pso_cp)
-                metal_release(bsg)
-                metal_release(bsu)
-                metal_release(btot)
-                metal_release(bone_add)
+                var added <- ew2_gate(t, dev, queue, "add", pso_add, sg_gpu, su, add_want, true)
+                delete added
                 metal_release(pso_sw)
                 metal_release(pso_add)
 
@@ -3555,7 +3166,7 @@ def test_metal_prefill_kernels(t : T?) {
                 gemv_gate(t, dev, queue, 1120, 8)           // 35 blocks: exercises the 4-chunk main loop, not only the tail
 
                 // ===== MoE routing kernels (Wave C) =====
-                // select: exact-tie + odd-ne shapes vs the moe_select_core mirror; router /
+                // select: exact-tie + odd-ne shapes vs moe_select_core; router /
                 // expert-indexed q8 GEMV / combine: exact-arithmetic data, BIT-exact. The kq
                 // expert twins share the q8 twin's slot/index math verbatim (dequant bodies are
                 // the proven site GEMVs') — their numeric coverage rides the fam-qwen3moe row.
@@ -3566,27 +3177,27 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_select_gate(t, dev, queue, 300, 8, 2, true)    // past 256 with pad lanes and exact ties, two stream rows
                 moe_select_gate(t, dev, queue, 128, 8, 3, false)   // batch: one stream row per tg
                 moe_select_gate(t, dev, queue, 32, 4, 1, false, 1)  // gpt-oss softmax_weight mode
-                moe_router_gate(t, dev, queue, 64, 128)
-                moe_gemv_gate(t, dev, queue, 96, 24, 5, 3, 1, false)   // shared x (the gate/up sites)
-                moe_gemv_gate(t, dev, queue, 64, 32, 7, 4, 1, true)    // per-slot x rows (the down site)
-                moe_gemv_gate(t, dev, queue, 64, 24, 5, 3, 3, false)   // batch streams, shared-x form
-                moe_gemv_gate(t, dev, queue, 64, 24, 5, 3, 3, true)    // batch streams, down form
+                moe_router_gate(t, dev, queue, 64, 128, 1, false)
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.q8, 96, 24, 5, 3, 1, false)   // shared x (the gate/up sites)
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.q8, 64, 32, 7, 4, 1, true)    // per-slot x rows (the down site)
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.q8, 64, 24, 5, 3, 3, false)   // batch streams, shared-x form
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.q8, 64, 24, 5, 3, 3, true)    // batch streams, down form
                 moe_combine_gate(t, dev, queue, 200, 4)
 
                 // ===== q51 expert kernels (the 26B-A4B Q4_K_M down stacks) =====
                 // exact-arithmetic q51 planes (pow2 d, quarter m, int x) — BIT-exact both kernels;
                 // n = 96 covers 3 blocks/row, the mulmm shapes cover padded CSR tails (ce % 32)
-                moe_gemv_q51_gate(t, dev, queue, 96, 24, 5, 3, 1, false)   // gate/up site (shared x)
-                moe_gemv_q51_gate(t, dev, queue, 64, 32, 7, 4, 1, true)    // down site (per-slot x)
-                moe_gemv_q51_gate(t, dev, queue, 64, 24, 5, 3, 3, true)    // batch streams, down form
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.q51, 96, 24, 5, 3, 1, false)   // gate/up site (shared x)
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.q51, 64, 32, 7, 4, 1, true)    // down site (per-slot x)
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.q51, 64, 24, 5, 3, 3, true)    // batch streams, down form
                 moe_mulmm_q51_gate(t, dev, queue, 64, 64, [32, 40, 64])    // padded tail on expert 1
                 moe_mulmm_q51_gate(t, dev, queue, 96, 128, [8, 96])        // 2 col tiles, tiny run + multi-tile
                 moe_mulmm_q51_gate(t, dev, queue, 64, 64, [136, 32])       // counts crossing 128 — both tall-pair stamps live
 
                 // ===== mx4 expert GEMV (reworked to the q51 shape — gpt-oss's decode kernel) =====
-                moe_gemv_mx4_gate(t, dev, queue, 96, 24, 5, 3, 1, false, false)   // gate/up (shared x)
-                moe_gemv_mx4_gate(t, dev, queue, 64, 32, 7, 4, 1, true, true)     // down site + bias rows
-                moe_gemv_mx4_gate(t, dev, queue, 64, 24, 5, 3, 3, true, true)     // batch streams, biased down
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.mx4, 96, 24, 5, 3, 1, false)          // gate/up (shared x)
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.mx4, 64, 32, 7, 4, 1, true, true)     // down site + bias rows
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.mx4, 64, 24, 5, 3, 3, true, true)     // batch streams, biased down
 
                 // ===== deltanet kernels (Wave D) =====
                 // the chain gates compare each stage at its seam vs a sequential CPU mirror;
@@ -3605,20 +3216,20 @@ def test_metal_prefill_kernels(t : T?) {
                 swiglu_oai_pf_gate(t, dev, queue, 16, [32, 40, 8], 32)   // 32 ghost rows stay untouched
                 g4_router_norm_gate(t, dev, queue, 5, 96)
                 moe_wscale_gate(t, dev, queue, 13, 2, 7)
-                moe_router_b_gate(t, dev, queue, 64, 7, 13, false)       // ne=7: row guard; np=13: stream clamp
-                moe_router_b_gate(t, dev, queue, 64, 7, 13, true)
+                moe_router_gate(t, dev, queue, 64, 7, 13, false)         // ne=7: row guard; np=13: stream clamp
+                moe_router_gate(t, dev, queue, 64, 7, 13, true)
                 moe_csr_gate(t, dev, queue, 13, 5, 2)
                 moe_csr_gate(t, dev, queue, 40, 3, 4)                    // an expert crosses one 32-pad tile
                 moe_gather_x_gate(t, dev, queue, 7, 3, 2, 64)            // stale tail words: in-range copies, >= total zeroes
                 moe_reduce_gate(t, dev, queue, 96, 9, 2)
 
                 // ===== prefill misc (PLE pre-step, bias epilogue, MTP cat, deltanet ba) =====
-                ple_gather_q8_gate(t, dev, queue, 11, 3, 32, 5)
+                ple_gather_gate(t, dev, queue, 0, 11, 3, 32, 5, 0)
                 // the kq table twins: 300 superblocks of table past a non-zero base, one row per
                 // token = 3 superblocks, so every arm walks the row-stride and sub-block math
-                ple_gather_kq_gate(t, dev, queue, 4, 100, 3, 256, 5, 7)
-                ple_gather_kq_gate(t, dev, queue, 5, 100, 3, 256, 5, 7)
-                ple_gather_kq_gate(t, dev, queue, 40, 100, 3, 256, 5, 7)
+                ple_gather_gate(t, dev, queue, 4, 100, 3, 256, 5, 7)
+                ple_gather_gate(t, dev, queue, 5, 100, 3, 256, 5, 7)
+                ple_gather_gate(t, dev, queue, 40, 100, 3, 256, 5, 7)
                 ple_finish_gate(t, dev, queue, 3, 64, 5)
                 add_bias_rows_gate(t, dev, queue, 7, 96)
                 pf_cat2_gate(t, dev, queue, 5, 48)
@@ -3635,12 +3246,6 @@ def test_metal_prefill_kernels(t : T?) {
 
 // ===== MoE plumbing gates (Wave C: swiglu-oai, g4 router norm, wscale, router, CSR, reduce) =====
 
-def private swiglu_oai_ref(g, u : double) : double {
-    let x = min(g, 7.0lf)
-    let y = clamp(u, -7.0lf, 7.0lf)
-    return (x / (1.0lf + exp(-1.702lf * x))) * (y + 1.0lf)
-}
-
 // the decode form (MetalSwigluOai): in-place clamped swiglu over a flat span, the enc_ew2 shape
 def private swiglu_oai_gate(t : T?; dev, queue; total : int) {
     let tag = "swiglu_oai total={total}"
@@ -3656,22 +3261,16 @@ def private swiglu_oai_gate(t : T?; dev, queue; total : int) {
         g[i] = float((i * 7) % 23 - 11)   // past the +-7 clamps on both sides
         u[i] = float((i * 5 + 3) % 23 - 11)
     }
-    var want : array<float>
-    want |> resize(total)
-    for (i in range(total)) {
-        want[i] = float(swiglu_oai_ref(double(g[i]), double(u[i])))
-    }
+    var want := g
+    swiglu_oai(want, u, int64(total))
     var bg = buf_upload(dev, g)
     var bu = buf_upload(dev, u)
     var btot = buf_u32(dev, uint(total))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
+    dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
         metal_set_buffer(enc, bg, 0ul, 0)
         metal_set_buffer(enc, bu, 0ul, 1)
         metal_set_buffer(enc, btot, 0ul, 2)
-        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
     }
-    t |> success(ran, "{tag}: encode: {err}")
     t |> equal(buf_mismatch_approx(bg, want), 0)
     metal_release(bg)
     metal_release(bu)
@@ -3691,16 +3290,7 @@ def private swiglu_oai_pf_gate(t : T?; dev, queue; nfe : int; counts : array<int
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let ne = length(counts)
-    var cnt : array<uint>
-    var basep : array<uint>
-    cnt |> reserve(ne)
-    basep |> reserve(ne)
-    var pad = 0
-    for (c in counts) {
-        cnt |> push(uint(c))
-        basep |> push(uint(pad))
-        pad += (c + 31) / 32 * 32
-    }
+    var (cnt, basep, pad) <- padded_bases(counts)
     let live = pad * nfe
     let total = (pad + extra_rows) * nfe
     var g : array<float>
@@ -3711,11 +3301,8 @@ def private swiglu_oai_pf_gate(t : T?; dev, queue; nfe : int; counts : array<int
         g[i] = float((i * 7) % 23 - 11)
         u[i] = float((i * 5 + 3) % 23 - 11)
     }
-    var want : array<float>
-    want |> resize(total)
-    for (i in range(total)) {
-        want[i] = i < live ? float(swiglu_oai_ref(double(g[i]), double(u[i]))) : g[i]
-    }
+    var want := g
+    swiglu_oai(want, u, int64(live))
     var bg = buf_upload(dev, g)
     var bu = buf_upload(dev, u)
     var btot = buf_u32(dev, uint(total))
@@ -3723,8 +3310,7 @@ def private swiglu_oai_pf_gate(t : T?; dev, queue; nfe : int; counts : array<int
     var bbase = buf_upload(dev, basep)
     var bne = buf_u32(dev, uint(ne))
     var bnfe = buf_u32(dev, uint(nfe))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
+    dispatch_64_lanes(t, queue, tag, pso, total / 4) $(enc) {   //! four elements a thread
         metal_set_buffer(enc, bg, 0ul, 0)
         metal_set_buffer(enc, bu, 0ul, 1)
         metal_set_buffer(enc, btot, 0ul, 2)
@@ -3732,9 +3318,7 @@ def private swiglu_oai_pf_gate(t : T?; dev, queue; nfe : int; counts : array<int
         metal_set_buffer(enc, bbase, 0ul, 4)
         metal_set_buffer(enc, bne, 0ul, 5)
         metal_set_buffer(enc, bnfe, 0ul, 6)
-        metal_dispatch_threadgroups(enc, uint3(uint((total / 4 + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
     }
-    t |> success(ran, "{tag}: encode: {err}")
     t |> equal(buf_mismatch_approx(bg, want), 0)
     metal_release(bg)
     metal_release(bu)
@@ -3773,13 +3357,11 @@ def private g4_router_norm_gate(t : T?; dev, queue; rows, dim : int) {
     var want : array<float>
     want |> resize(rows * dim)
     for (r in range(rows)) {
-        var ss = 0.0lf
-        for (c in range(dim)) {
-            ss += double(x[r * dim + c]) * double(x[r * dim + c])
+        unsafe {
+            rmsnorm(addr(want[r * dim]), addr<float const?>(x[r * dim]), addr<float const?>(rs[0]), int64(dim), eps)
         }
-        let inv = (1.0lf / sqrt(ss / double(dim) + double(eps))) * double(invd)
         for (c in range(dim)) {
-            want[r * dim + c] = float(double(x[r * dim + c]) * inv * double(rs[c]))
+            want[r * dim + c] *= invd
         }
     }
     var bx = buf_upload(dev, x)
@@ -3862,12 +3444,13 @@ def private moe_wscale_gate(t : T?; dev, queue; rows, nk, ne : int) {
     delete want
 }
 
-// the batched prefill router GEMV (MetalMoeRouterB): logits[st][e] = w[e]·x[st] (+ rb[e]),
-// 8 streams per tg column, pad streams clamp and their stores gate — BIT-exact fixture
-def private moe_router_b_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bool) {
-    let tag = "moe_router_b dim={dim} ne={ne} np={npos}{hasb ? " bias" : ""}"
+//! The router GEMV BIT-exact on dyadic data: npos 1 = MetalMoeRouter (BATCHED gates slot 8 out); past one MetalMoeRouterB, 8 streams a column, pad stores gated.
+def private moe_router_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bool) {
+    let tag = "moe_router{npos > 1 ? "_b" : ""} dim={dim} ne={ne} np={npos}{hasb ? " bias" : ""}"
     var err : string
-    var pso = pipeline_from_source(dev, MetalMoeRouterB_metal_moe_router_msl, MetalMoeRouterB_metal_moe_router_msl_entry, MetalMoeRouterB_metal_moe_router_msl_fastmath, err)
+    var pso = (npos > 1
+        ? pipeline_from_source(dev, MetalMoeRouterB_metal_moe_router_msl, MetalMoeRouterB_metal_moe_router_msl_entry, MetalMoeRouterB_metal_moe_router_msl_fastmath, err)
+        : pipeline_from_source(dev, MetalMoeRouter_metal_moe_router_msl, MetalMoeRouter_metal_moe_router_msl_entry, MetalMoeRouter_metal_moe_router_msl_fastmath, err))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     var w : array<float>
@@ -3917,11 +3500,24 @@ def private moe_router_b_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bo
         metal_set_buffer(enc, bdim, 0ul, 5)   // per-stream x stride = dim
         metal_set_buffer(enc, brb, 0ul, 6)
         metal_set_buffer(enc, bhasb, 0ul, 7)
-        metal_set_buffer(enc, bnp, 0ul, 8)
+        if (npos > 1) {
+            metal_set_buffer(enc, bnp, 0ul, 8)
+        }
         metal_dispatch_threadgroups(enc, uint3(uint((ne + 3) / 4), uint((npos + 7) / 8), 1u), uint3(128u, 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
     t |> equal(buf_mismatch_exact(by, want), 0)
+    let got <- buf_download(by, npos * ne, type<float>)
+    var mx = 0.0
+    var at = 0
+    for (i in range(npos * ne)) {
+        let d = abs(got[i] - want[i])
+        if (d > mx) {
+            mx = d
+            at = i
+        }
+    }
+    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {mx} at stream {at / ne} expert {at % ne}\n")
     metal_release(bw)
     metal_release(bx)
     metal_release(by)
@@ -3935,6 +3531,52 @@ def private moe_router_b_gate(t : T?; dev, queue; dim, ne, npos : int; hasb : bo
     delete x
     delete rb
     delete want
+}
+
+//! The padded-CSR prefix: each expert's rows from a 32-aligned base (the route prefix contract); `pad` = the padded total.
+def private padded_bases(counts : array<int>) : tuple<cnt : array<uint>; base : array<uint>; pad : int> {
+    var cnt : array<uint>
+    var base : array<uint>
+    cnt |> reserve(length(counts))
+    base |> reserve(length(counts))
+    var pad = 0
+    for (c in counts) {
+        cnt |> push(uint(c))
+        base |> push(uint(pad))
+        pad += (c + 31) / 32 * 32
+    }
+    return <- (cnt = cnt, base = base, pad = pad)
+}
+
+//! The CPU twin of the count -> bucket CSR pair: counts, padded bases (the total past the last expert), bucket rows (pad tails at 0xFFFFFFFF), each slot's row.
+def private csr_ref(sel : array<uint>; npos, ne, nk : int) : tuple<cnt : array<uint>; base : array<uint>; bkt : array<uint>; inv : array<uint>; pad : int> {
+    let total = npos * nk
+    var counts : array<int>
+    counts |> resize(ne)
+    for (tt in range(total)) {
+        counts[int(sel[(tt / nk) * 2 * nk + tt % nk])]++
+    }
+    var (cnt, base, pad) <- padded_bases(counts)
+    base |> push(uint(pad))
+    var bkt : array<uint>
+    var inv : array<uint>
+    bkt |> resize(pad)
+    inv |> resize(total)
+    for (i in range(pad)) {
+        bkt[i] = 0xFFFFFFFF
+    }
+    for (e in range(ne)) {
+        var b = int(base[e])
+        for (tt in range(total)) {
+            if (int(sel[(tt / nk) * 2 * nk + tt % nk]) == e) {
+                bkt[b] = uint(tt)
+                inv[tt] = uint(b)
+                b++
+            }
+        }
+    }
+    delete counts
+    return <- (cnt = cnt, base = base, bkt = bkt, inv = inv, pad = pad)
 }
 
 // the atomics-free CSR pair (MetalMoeCount -> MetalMoeBucket) chained as production dispatches
@@ -3962,42 +3604,7 @@ def private moe_csr_gate(t : T?; dev, queue; npos, ne, nk : int) {
             sel[r * 2 * nk + nk + j] = float_bits_to_uint(1.0)   // weight half — unread here
         }
     }
-    var cntw : array<uint>
-    var basew : array<uint>
-    cntw |> resize(ne)
-    basew |> resize(ne + 1)   // [ne] = the padded total the extra threadgroup publishes
-    for (e in range(ne)) {
-        var n = 0u
-        for (tt in range(total)) {
-            if (int(sel[(tt / nk) * 2 * nk + tt % nk]) == e) {
-                n++
-            }
-        }
-        cntw[e] = n
-    }
-    var pad = 0
-    for (e in range(ne)) {
-        basew[e] = uint(pad)
-        pad += (int(cntw[e]) + 31) / 32 * 32
-    }
-    basew[ne] = uint(pad)
-    var bktw : array<uint>
-    var invw : array<uint>
-    bktw |> resize(pad)
-    invw |> resize(total)
-    for (i in range(pad)) {
-        bktw[i] = 0xFFFFFFFF
-    }
-    for (e in range(ne)) {
-        var b = int(basew[e])
-        for (tt in range(total)) {
-            if (int(sel[(tt / nk) * 2 * nk + tt % nk]) == e) {
-                bktw[b] = uint(tt)
-                invw[tt] = uint(b)
-                b++
-            }
-        }
-    }
+    var (cntw, basew, bktw, invw, pad) <- csr_ref(sel, npos, ne, nk)   // basew[ne] = the padded total the extra threadgroup publishes
     var bsel = buf_upload(dev, sel)
     var bcnt = buf_fill(dev, ne, 0xFFFFFFFF)
     var bbase = buf_fill(dev, ne + 1, 0xFFFFFFFF)
@@ -4067,39 +3674,9 @@ def private moe_gather_x_gate(t : T?; dev, queue; npos, ne, nk, dim : int) {
             sel[r * 2 * nk + j] = uint((r * 3 + j * 5 + 1) % ne)
         }
     }
-    var cntw : array<int>
-    var basew : array<int>
-    cntw |> resize(ne)
-    basew |> resize(ne)
-    for (e in range(ne)) {
-        var n = 0
-        for (tt in range(total)) {
-            if (int(sel[(tt / nk) * 2 * nk + tt % nk]) == e) {
-                n++
-            }
-        }
-        cntw[e] = n
-    }
-    var pad = 0
-    for (e in range(ne)) {
-        basew[e] = pad
-        pad += (cntw[e] + 31) / 32 * 32
-    }
+    var (cntw, basew, bktw, invw, pad) <- csr_ref(sel, npos, ne, nk)
     let mpad = pad + 32   // a trailing gap past the last expert's stamped tail
-    var bktw : array<uint>
     bktw |> resize(mpad)
-    for (i in range(pad)) {
-        bktw[i] = 0xFFFFFFFF   // the bucket kernel's pad-tail stamp
-    }
-    for (e in range(ne)) {
-        var b = basew[e]
-        for (tt in range(total)) {
-            if (int(sel[(tt / nk) * 2 * nk + tt % nk]) == e) {
-                bktw[b] = uint(tt)
-                b++
-            }
-        }
-    }
     // the gap: recycled-pool flavors — total (>= total boundary: MUST zero; the old equality
     // test read the one-past-the-end activation row here), a live selection (harmless copy),
     // and arbitrary garbage (>= total: zero)
@@ -4155,6 +3732,7 @@ def private moe_gather_x_gate(t : T?; dev, queue; npos, ne, nk, dim : int) {
     delete cntw
     delete basew
     delete bktw
+    delete invw
     delete xfw
     delete want
 }
@@ -4228,82 +3806,30 @@ def private moe_reduce_gate(t : T?; dev, queue; dim, npos, nk : int) {
 
 // ===== prefill misc gates (PLE pre-step, bias epilogue, MTP cat, deltanet ba GEMV) =====
 
-// q8 blob region shared by the ple/dn gates: pow2 scales + small-int quants (the common
-// PLE stage 1 (MetalPleGatherQ8): token-row q8 dequant into the layer-major side panel,
-// sqrt(ple) folded into the scale
-def private ple_gather_q8_gate(t : T?; dev, queue; vocab, nlayers, ple, npos : int) {
-    let tag = "ple_gather_q8 v={vocab} nl={nlayers} ple={ple} np={npos}"
+//! PLE stage 1: fmt 0 the q8 table bound twice vs its exact dequant; a kq id its native planes bound at sb0, as production binds them, vs kq_row_ref; exact in fp32.
+def private ple_gather_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npos, sb0 : int) {
+    let tag = "ple_gather f={fmt} v={vocab} nl={nlayers} ple={ple} np={npos} sb0={sb0}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_ple_gather_q8_msl, metal_ple_gather_q8_msl_entry, metal_ple_gather_q8_msl_fastmath, err)
+    var pso = (fmt == 0
+        ? pipeline_from_source(dev, metal_ple_gather_q8_msl, metal_ple_gather_q8_msl_entry, metal_ple_gather_q8_msl_fastmath, err)
+        : (fmt == 4
+            ? pipeline_from_source(dev, MetalPleGatherK4_metal_ple_gather_kq_msl, MetalPleGatherK4_metal_ple_gather_kq_msl_entry, MetalPleGatherK4_metal_ple_gather_kq_msl_fastmath, err)
+            : (fmt == 5
+                ? pipeline_from_source(dev, MetalPleGatherK5_metal_ple_gather_kq_msl, MetalPleGatherK5_metal_ple_gather_kq_msl_entry, MetalPleGatherK5_metal_ple_gather_kq_msl_fastmath, err)
+                : pipeline_from_source(dev, MetalPleGatherQ40_metal_ple_gather_kq_msl, MetalPleGatherQ40_metal_ple_gather_kq_msl_entry, MetalPleGatherQ40_metal_ple_gather_kq_msl_fastmath, err))))
     t |> success(pso != null, "{tag}: pipeline: {err}")
     return if (pso == null)
     let rowlen = nlayers * ple
-    var blob : array<uint8>
-    var wdeq : array<float>
-    q8_blob_fill(1, vocab * rowlen / 32, blob, wdeq)
-    var tok : array<uint>
-    tok |> resize(npos)
-    for (p in range(npos)) {
-        tok[p] = uint((p * 7 + 2) % vocab)
-    }
-    let sc0 = sqrt(float(ple))
-    var want : array<float>
-    want |> resize(nlayers * npos * ple)
-    for (l in range(nlayers)) {
-        for (p in range(npos)) {
-            for (i in range(ple)) {
-                want[(l * npos + p) * ple + i] = wdeq[int(tok[p]) * rowlen + l * ple + i] * sc0
-            }
-        }
-    }
-    var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sc0,
-        inv_sd = 1.0, eps = 1.0e-6, inv_s2 = 1.0)
-    var bw = buf_upload(dev, blob)
-    var btok = buf_upload(dev, tok)
-    var by = buf_fill(dev, nlayers * npos * ple, -1000.0)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bw, 0ul, 0)   // half-scale view
-        metal_set_buffer(enc, bw, 0ul, 1)   // byte view
-        metal_set_buffer(enc, btok, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(nlayers), uint(npos), 1u), uint3(uint(ple), 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    t |> equal(buf_mismatch_approx(by, want), 0)
-    metal_release(bw)
-    metal_release(btok)
-    metal_release(by)
-    metal_release(pso)
-    delete blob
-    delete wdeq
-    delete tok
-    delete want
-}
-
-// PLE stage 1, the kq twins (MetalPleGatherK4/K5/Q40): the same token-row gather and the same
-// layer-major output, decoding the table off its format's native planes bound at the table's
-// own superblock base (sb0) — the production shape, where kq_quants_of/kq_scales_of offset the
-// binds by the table's element offset. Truth is kq_row_ref, the same per-superblock dequant
-// ple_gather_row runs, scaled by sqrt(ple). The fixture's scales are pow2/quarter and its
-// quants are 4-/5-bit ints, so every product and difference is exact in fp32 on both sides.
-def private ple_gather_kq_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npos, sb0 : int) {
-    let tag = "ple_gather_kq f={fmt} v={vocab} nl={nlayers} ple={ple} np={npos} sb0={sb0}"
-    var err : string
-    var pso = (fmt == 4
-        ? pipeline_from_source(dev, MetalPleGatherK4_metal_ple_gather_kq_msl, MetalPleGatherK4_metal_ple_gather_kq_msl_entry, MetalPleGatherK4_metal_ple_gather_kq_msl_fastmath, err)
-        : (fmt == 5
-            ? pipeline_from_source(dev, MetalPleGatherK5_metal_ple_gather_kq_msl, MetalPleGatherK5_metal_ple_gather_kq_msl_entry, MetalPleGatherK5_metal_ple_gather_kq_msl_fastmath, err)
-            : pipeline_from_source(dev, MetalPleGatherQ40_metal_ple_gather_kq_msl, MetalPleGatherQ40_metal_ple_gather_kq_msl_entry, MetalPleGatherQ40_metal_ple_gather_kq_msl_fastmath, err)))
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let rowlen = nlayers * ple
-    let rowsb = rowlen / 256          // superblocks per token row - the gate's `all % 256` clause
+    let rowsb = rowlen / 256          // superblocks per token row - the quants gate's `all % 256` clause
     let nsb = sb0 + vocab * rowsb
-    var kq : array<uint8>
+    var quants : array<uint8>             // fmt 0: the q8 blob
     var ks : array<uint8>
-    kq_fill_planes(fmt, nsb, kq, ks)
+    var wdeq : array<float>
+    if (fmt == 0) {
+        q8_blob_fill(1, vocab * rowlen / 32, quants, wdeq)
+    } else {
+        kq_fill_planes(fmt, nsb, quants, ks)
+    }
     var tok : array<uint>
     tok |> resize(npos)
     for (p in range(npos)) {
@@ -4315,7 +3841,13 @@ def private ple_gather_kq_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npo
     wrow |> resize(rowlen)
     want |> resize(nlayers * npos * ple)
     for (p in range(npos)) {
-        kq_row_ref(fmt, sb0 + int(tok[p]) * rowsb, rowsb, nsb, kq, ks, wrow)
+        if (fmt == 0) {
+            for (i in range(rowlen)) {
+                wrow[i] = wdeq[int(tok[p]) * rowlen + i]
+            }
+        } else {
+            kq_row_ref(fmt, sb0 + int(tok[p]) * rowsb, rowsb, nsb, quants, ks, wrow)
+        }
         for (l in range(nlayers)) {
             for (i in range(ple)) {
                 want[(l * npos + p) * ple + i] = wrow[l * ple + i] * sc0
@@ -4324,27 +3856,29 @@ def private ple_gather_kq_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npo
     }
     var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sc0,
         inv_sd = 1.0, eps = 1.0e-6, inv_s2 = 1.0)
-    var bkq = buf_upload(dev, kq)
-    var bks = buf_upload(dev, ks)
+    var bkq = buf_upload(dev, quants)
+    var bks = fmt == 0 ? bkq : buf_upload(dev, ks)
     var btok = buf_upload(dev, tok)
     var by = buf_fill(dev, nlayers * npos * ple, -1000.0)
-    let soff = uint64(sb0 * 16)
-    let qoff = uint64(int64(sb0) * kq_qsb(fmt))
+    let soff = fmt == 0 ? 0ul : uint64(sb0 * 16)
+    let qoff = fmt == 0 ? 0ul : uint64(int64(sb0) * kq_qsb(fmt))
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
         metal_set_buffer(enc, bks, soff, 0)
         if (fmt != 40) {
-            metal_set_buffer(enc, bks, soff, 1)   // the uint4 view of the same 16B block - `@template_gate = "!Q40"` drops it on q40
+            metal_set_buffer(enc, bks, soff, 1)   // the byte (q8) / uint4 (quants) view of the same blocks - `@template_gate = "!Q40"` drops it on q40
         }
         metal_set_buffer(enc, btok, 0ul, 2)
         metal_set_buffer(enc, by, 0ul, 3)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
-        metal_set_buffer(enc, bkq, qoff, 6)
+        if (fmt != 0) {
+            metal_set_buffer(enc, bkq, qoff, 6)
+        }
         metal_dispatch_threadgroups(enc, uint3(uint(nlayers), uint(npos), 1u), uint3(uint(ple), 1u, 1u))
     }
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
-        t |> equal(buf_mismatch_approx(by, want), 0, "{tag}: gather vs kq_row_ref")
+        t |> equal(buf_mismatch_approx(by, want), 0, "{tag}: gather vs the table's row dequant")
         // the control: the same compare must RED on a poisoned expectation - an added
         // abs(want[0])*0.1 + 1.0, past buf_mismatch_approx's 1e-4*max(1, |v|) band at any magnitude
         var wantp := want
@@ -4353,12 +3887,15 @@ def private ple_gather_kq_gate(t : T?; dev, queue; fmt, vocab, nlayers, ple, npo
         delete wantp
     }
     metal_release(bkq)
-    metal_release(bks)
+    if (fmt != 0) {
+        metal_release(bks)
+    }
     metal_release(btok)
     metal_release(by)
     metal_release(pso)
-    delete kq
+    delete quants
     delete ks
+    delete wdeq
     delete tok
     delete wrow
     delete want
@@ -4392,22 +3929,22 @@ def private ple_finish_gate(t : T?; dev, queue; nlayers, ple, npos : int) {
         side[i] = 0.07 * float(i % 19) - 0.6
     }
     var want : array<float>
+    var v : array<float>
     want |> resize(nlayers * npos * ple)
+    v |> resize(ple)
     for (l in range(nlayers)) {
         for (p in range(npos)) {
-            var ss = 0.0lf
             for (i in range(ple)) {
-                let v = double(proj[p * rowlen + l * ple + i]) * double(inv_sd)
-                ss += v * v
+                v[i] = proj[p * rowlen + l * ple + i] * inv_sd
             }
-            let inv = 1.0lf / sqrt(ss / double(ple) + double(eps))
+            rmsnorm(v, v, pnorm, int64(ple), eps)
             for (i in range(ple)) {
-                let v = double(proj[p * rowlen + l * ple + i]) * double(inv_sd)
                 let yi = (l * npos + p) * ple + i
-                want[yi] = float((double(side[yi]) + double(pnorm[i]) * (v * inv)) * double(inv_s2))
+                want[yi] = (side[yi] + v[i]) * inv_s2
             }
         }
     }
+    delete v
     var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = 1.0,
         inv_sd = inv_sd, eps = eps, inv_s2 = inv_s2)
     var bproj = buf_upload(dev, proj)
@@ -4461,15 +3998,12 @@ def private add_bias_rows_gate(t : T?; dev, queue; nrows, n : int) {
     var bb = buf_upload(dev, b)
     var bn = buf_u32(dev, uint(n))
     var btot = buf_u32(dev, uint(total))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
+    dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
         metal_set_buffer(enc, bx, 0ul, 0)
         metal_set_buffer(enc, bb, 0ul, 1)
         metal_set_buffer(enc, bn, 0ul, 2)
         metal_set_buffer(enc, btot, 0ul, 3)
-        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
     }
-    t |> success(ran, "{tag}: encode: {err}")
     t |> equal(buf_mismatch_exact(bx, want), 0)
     metal_release(bx)
     metal_release(bb)
@@ -4510,16 +4044,13 @@ def private pf_cat2_gate(t : T?; dev, queue; npos, d : int) {
     var by = buf_fill(dev, npos * 2 * d, -1000.0)
     var bd = buf_u32(dev, uint(d))
     var btot = buf_u32(dev, uint(total))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
+    dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
         metal_set_buffer(enc, by, 0ul, 0)
         metal_set_buffer(enc, ba, 0ul, 1)
         metal_set_buffer(enc, bb, 0ul, 2)
         metal_set_buffer(enc, bd, 0ul, 3)
         metal_set_buffer(enc, btot, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint((total + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
     }
-    t |> success(ran, "{tag}: encode: {err}")
     t |> equal(buf_mismatch_exact(by, want), 0)
     metal_release(ba)
     metal_release(bb)
@@ -4598,45 +4129,24 @@ def private gemv_gate(t : T?; dev, queue; n, d : int) {
     if (pso == null) {
         return
     }
-    let nblk = n / 32
-    var wq : array<int8>
-    var ws : array<float>
+    var blob : array<uint8>
+    var wdeq : array<float>
+    q8_blob_fill(d, n / 32, blob, wdeq)
     var xv : array<float>
     var want : array<float>
-    wq |> resize(d * n)
-    ws |> resize(d * nblk)
     xv |> resize(n)
     want |> resize(d)
-    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
-    for (i in range(d * n)) {
-        wq[i] = int8((i * 7 + i / 31) % 16 - 8)
-    }
-    for (i in range(d * nblk)) {
-        ws[i] = lut[(i / 5) % 4]
-    }
     for (i in range(n)) {
         xv[i] = float((i * 3) % 9 - 4)
     }
     for (r in range(d)) {
         var acc = 0.0
         for (k in range(n)) {
-            acc += float(wq[r * n + k]) * ws[r * nblk + k / 32] * xv[k]
+            acc += wdeq[r * n + k] * xv[k]
         }
         want[r] = acc
     }
-    // W blob: 34-byte blocks, built straight in the buffer (bound TWICE — half + byte views)
-    var bw = metal_new_buffer(dev, uint64(d * nblk * 34))
-    unsafe {
-        var base = reinterpret<int8?>(metal_buffer_contents(bw))
-        for (b in range(d * nblk)) {
-            let off = b * 34
-            var ph = reinterpret<float16?>(base + off)
-            ph[0] = float16(ws[b])
-            for (c in range(32)) {
-                base[off + 2 + c] = wq[b * 32 + c]
-            }
-        }
-    }
+    var bw = buf_upload(dev, blob)   // bound TWICE — half + byte views
     // one sentinel float past the output: the odd-d tail guard's only witness - an unguarded
     // pair row writes element d, which a d-wide compare never reads
     want |> push(-1000.0)
@@ -4663,8 +4173,8 @@ def private gemv_gate(t : T?; dev, queue; n, d : int) {
     metal_release(bn)
     metal_release(bd)
     metal_release(pso)
-    delete wq
-    delete ws
+    delete blob
+    delete wdeq
     delete xv
     delete want
 }
@@ -4678,37 +4188,13 @@ def private mulmm_gate(t : T?; dev, queue; k, d, m : int) {
     var err : string
     var pso = pipeline_from_source(dev, metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath, err)
     t |> success(pso != null, "mul_mm pipeline: {err}")
-    let nb = k / 32
-    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
-    var wq : array<int8>
-    var ws : array<float>
-    wq |> resize(d * k)
-    ws |> resize(d * nb)
-    for (i in range(d * k)) {
-        wq[i] = int8((i * 7 + i / 31) % 16 - 8)
-    }
-    for (i in range(d * nb)) {
-        ws[i] = lut[(i / 5) % 4]
-    }
-    // W blob: 34-byte blocks (half scale + 32 quants), built straight in the buffer
-    var bw = metal_new_buffer(dev, uint64(d * nb * 34))
-    var base = unsafe(reinterpret<int8?>(metal_buffer_contents(bw)))
-    for (b in range(d * nb)) {
-        let off = b * 34
-        unsafe {
-            var ph = reinterpret<float16?>(base + off)
-            ph[0] = float16(ws[b])
-            for (c in range(32)) {
-                base[off + 2 + c] = wq[b * 32 + c]
-            }
-        }
-    }
+    var blob : array<uint8>
+    var wdeq : array<float>
+    q8_blob_fill(d, k / 32, blob, wdeq)
+    var bw = buf_upload(dev, blob)
     // X: raw f32 rows, integer-times-pow2 values (exact in half)
     var xf : array<float>
-    xf |> resize(m * k)
-    for (i in range(m * k)) {
-        xf[i] = float((i * 5 + i / 17) % 16 - 8) * lut[(i / 3) % 4]
-    }
+    q8_x_fill(m * k, xf)
     var bx = buf_upload(dev, xf)
     var by = buf_fill(dev, m * d, 0.0)
     var bk = buf_u32(dev, uint(k))
@@ -4719,7 +4205,7 @@ def private mulmm_gate(t : T?; dev, queue; k, d, m : int) {
         for (j in range(d)) {
             var acc = 0.0lf
             for (c in range(k)) {
-                acc += double(float(wq[j * k + c]) * ws[j * nb + c / 32]) * double(xf[r * k + c])
+                acc += double(wdeq[j * k + c]) * double(xf[r * k + c])
             }
             want[r * d + j] = float(acc)
         }
@@ -4745,8 +4231,8 @@ def private mulmm_gate(t : T?; dev, queue; k, d, m : int) {
     if (pso != null) {
         metal_release(pso)
     }
-    delete wq
-    delete ws
+    delete blob
+    delete wdeq
     delete xf
     delete want
 }
@@ -4764,14 +4250,14 @@ def private moe_select_bad(bsel; widx : array<uint>; ww : array<float>; nst, k :
         for (s in range(nst)) {
             for (j in range(k)) {
                 bidx += pi[s * 2 * k + j] != widx[s * k + j] ? 1 : 0
-                bw += approx(pw[s * 2 * k + k + j], ww[s * k + j]) ? 0 : 1
+                bw += fapprox(pw[s * 2 * k + k + j], ww[s * k + j]) ? 0 : 1
             }
         }
     }
     return (idx = bidx, w = bw)
 }
 
-// The select kernel vs an in-test moe_select_core mirror (softmax + top-k + norm_topk renorm),
+// The select kernel vs the host select `moe_select_core` (softmax + top-k + norm_topk renorm),
 // one stream row per threadgroup ([k idx u32][k w f32] per row). idx must match EXACTLY — ties
 // are exact-equal logits, so both sides agree by the lowest-index rule; w compares within the
 // shared fp tolerance (hardware exp vs the CPU's exp).
@@ -4797,65 +4283,21 @@ def private moe_select_gate(t : T?; dev, queue; ne, k, nst : int; ties : bool; g
         lg[19] = 9.5
         lg[33] = 9.5
     }
-    var widx : array<uint>
+    // gmode 0: softmax over all ne, top-k, the norm_topk renorm; gmode 1 (gpt-oss softmax_weight): top-k on the raw logits, softmax over the k, no renorm
+    var lgc := lg
+    var sidx : array<int64>
     var ww : array<float>
-    widx |> reserve(nst * k)
-    ww |> reserve(nst * k)
+    sidx |> resize(nst * k)
+    ww |> resize(nst * k)
     for (s in range(nst)) {
-        var p : array<float>
-        p |> resize(ne)
-        for (i in range(ne)) {
-            p[i] = lg[s * ne + i]
+        unsafe {
+            moe_select_core(gmode == 0 ? MoeGate.softmax : MoeGate.softmax_weight, int64(ne), int64(k), gmode == 0, 1.0,
+                addr(lgc[s * ne]), addr(sidx[0]), addr(ww[0]), int64(s * k))
         }
-        if (gmode == 0) {   // softmax over all ne first; mode 1 selects on the raw logits
-            var mx = p[0]
-            for (i in range(ne)) {
-                mx = max(mx, p[i])
-            }
-            var sum = 0.0
-            for (i in range(ne)) {
-                p[i] = exp(max(p[i] - mx, -80.0))
-                sum += p[i]
-            }
-            for (i in range(ne)) {
-                p[i] /= sum
-            }
-        }
-        var ws = 0.0
-        let base = length(ww)
-        for (_j in range(k)) {
-            var best = 0
-            for (i in range(ne)) {
-                if (p[i] > p[best]) {
-                    best = i
-                }
-            }
-            widx |> push(uint(best))   // reference built winner-by-winner (knockout between)
-            ww |> push(p[best])
-            ws += p[best]
-            p[best] = -FLT_MAX
-        }
-        if (gmode == 1) {   // gpt-oss softmax_weight: softmax over just the selected k
-            var mxw = ww[base]
-            for (j in range(k)) {
-                mxw = max(mxw, ww[base + j])
-            }
-            var sw = 0.0
-            for (j in range(k)) {
-                ww[base + j] = exp(max(ww[base + j] - mxw, -80.0))
-                sw += ww[base + j]
-            }
-            for (j in range(k)) {
-                ww[base + j] /= sw
-            }
-        } else {
-            ws = max(ws, 6.103515625e-5)
-            for (j in range(k)) {
-                ww[base + j] /= ws
-            }
-        }
-        delete p
     }
+    var widx <- [for (i in sidx); uint(i)]
+    delete lgc
+    delete sidx
     var blg = buf_upload(dev, lg)
     var bsel = metal_new_buffer(dev, uint64(nst * 2 * k * 4))
     var bne = buf_u32(dev, uint(ne))
@@ -4897,90 +4339,62 @@ def private moe_select_gate(t : T?; dev, queue; ne, k, nst : int; ties : bool; g
     delete ww
 }
 
-// The router GEMV on exact f32 data (integer w and x — every fma partial is exact), BIT-exact.
-def private moe_router_gate(t : T?; dev, queue; n, ne : int) {
-    var err : string
-    var pso = pipeline_from_source(dev, MetalMoeRouter_metal_moe_router_msl, MetalMoeRouter_metal_moe_router_msl_entry, MetalMoeRouter_metal_moe_router_msl_fastmath, err)
-    t |> success(pso != null, "moe router pipeline: {err}")
-    if (pso == null) {
-        return
-    }
-    var w : array<float>
-    var xv : array<float>
-    var want : array<float>
-    w |> resize(ne * n)
-    xv |> resize(n)
-    want |> resize(ne)
-    for (i in range(ne * n)) {
-        w[i] = float((i * 7 + 3) % 15 - 7)
-    }
-    for (i in range(n)) {
-        xv[i] = float((i * 5) % 11 - 5)
-    }
-    for (r in range(ne)) {
-        var acc = 0.0
-        for (c in range(n)) {
-            acc += w[r * n + c] * xv[c]
-        }
-        want[r] = acc
-    }
-    var bw = buf_upload(dev, w)
-    var bx = buf_upload(dev, xv)
-    var by = buf_fill(dev, ne, -1000.0)
-    var bn = buf_u32(dev, uint(n))
-    var bd = buf_u32(dev, uint(ne))
-    var bxs = buf_u32(dev, uint(n))   // per-stream x stride (one stream here)
-    var bhb0 = buf_u32(dev, 0u)       // router bias off (identity)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bw, 0ul, 0)
-        metal_set_buffer(enc, bx, 0ul, 1)
-        metal_set_buffer(enc, by, 0ul, 2)
-        metal_set_buffer(enc, bn, 0ul, 3)
-        metal_set_buffer(enc, bd, 0ul, 4)
-        metal_set_buffer(enc, bxs, 0ul, 5)
-        metal_set_buffer(enc, bhb0, 0ul, 6)
-        metal_set_buffer(enc, bhb0, 0ul, 7)
-        // slot 8 (ns) is a HOLE here — @template_gate = BATCHED erases it from the single stamp
-        metal_dispatch_threadgroups(enc, uint3(uint((ne + 3) / 4), 1u, 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "moe router dispatch n={n} ne={ne}: {err}")
-    t |> equal(buf_mismatch_exact(by, want), 0)
-    metal_release(bw)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bn)
-    metal_release(bd)
-    metal_release(bxs)
-    metal_release(bhb0)
-    metal_release(pso)
-    delete w
-    delete xv
-    delete want
+enum private MoeGemvFmt {
+    q8
+    q51
+    mx4
 }
 
-// The expert-indexed q8 GEMV: a net-expert stack of [d x n] q8 rows (gemv_gate's exact-arithmetic
-// data), sel rows pick k expert planes per stream, grid (rows, k slots, nst streams). perslot
-// exercises the down site's per-slot x stride; nst > 1 the batch strides (ss/bxs/bys).
-def private moe_gemv_gate(t : T?; dev, queue; n, d, net, k, nst : int; perslot : bool) {
+//! the mx4 nibble values: the signed doubled-e2m1 table
+let private MX4_VT = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,
+                                 0.0, -1.0, -2.0, -3.0, -4.0, -6.0, -8.0, -12.0)
+
+//! An expert stack's planes in `fmt` (q8: plane 1 empty, one blob serves both views) and their exact dequant, BIT-exact under any GPU reduction order.
+def private moe_gemv_planes(fmt : MoeGemvFmt; rows, n) : tuple<p0 : array<uint8>; p1 : array<uint8>; wref : array<float>> {   //! `rows`, `n` untyped: q8_blob_fill sits behind the optional das_metal require
+    var p0 : array<uint8>
+    var p1 : array<uint8>
+    var wref : array<float>
+    if (fmt == MoeGemvFmt.q8) {
+        q8_blob_fill(rows, n / 32, p0, wref)
+    } elif (fmt == MoeGemvFmt.q51) {
+        q51_test_planes(rows, n, p0, p1, wref)
+    } else {
+        let nb = n / 32
+        p0 |> resize(rows * nb * 16)
+        p1 |> resize(rows * nb)
+        wref |> resize(rows * n)
+        for (b in range(rows * nb)) {
+            let sc = 120 + (b * 3) % 12   // pow2 E8M0 scales 2^-8 .. 2^3 — every product dyadic
+            let scale = unsafe(reinterpret<float>(uint(sc - 1) << 23u))
+            p1[b] = uint8(sc)
+            for (i in range(16)) {
+                let nl = (b * 7 + i * 5 + 1) % 16
+                let nh = (b * 11 + i * 3 + 2) % 16
+                p0[b * 16 + i] = uint8(nl | (nh << 4))
+                wref[b * 32 + i] = MX4_VT[nl] * scale
+                wref[b * 32 + 16 + i] = MX4_VT[nh] * scale
+            }
+        }
+    }
+    return <- (p0 = p0, p1 = p1, wref = wref)
+}
+
+//! The expert-indexed GEMV BIT-exact over a net-expert stack in `fmt`, sel picking k planes a stream; `perslot` the down site's x stride, nst > 1 the batch strides.
+def private moe_gemv_gate(t : T?; dev, queue; fmt : MoeGemvFmt; n, d, net, k, nst : int; perslot : bool; bias : bool = false) {
+    let tag = "moe gemv {fmt} n={n} d={d} net={net} k={k} nst={nst}{bias ? " bias" : ""}"
     var err : string
-    var pso = pipeline_from_source(dev, metal_moe_gemv_q8_msl, metal_moe_gemv_q8_msl_entry, metal_moe_gemv_q8_msl_fastmath, err)
-    t |> success(pso != null, "moe gemv pipeline: {err}")
-    if (pso == null) {
-        return
+    var pso : MetalComputePipeline?
+    if (fmt == MoeGemvFmt.q8) {
+        pso = pipeline_from_source(dev, metal_moe_gemv_q8_msl, metal_moe_gemv_q8_msl_entry, metal_moe_gemv_q8_msl_fastmath, err)
+    } elif (fmt == MoeGemvFmt.q51) {
+        pso = pipeline_from_source(dev, metal_moe_gemv_q51_msl, metal_moe_gemv_q51_msl_entry, metal_moe_gemv_q51_msl_fastmath, err)
+    } else {
+        pso = pipeline_from_source(dev, metal_moe_gemv_mx4_msl, metal_moe_gemv_mx4_msl_entry, metal_moe_gemv_mx4_msl_fastmath, err)
     }
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
     let nb = n / 32
-    let lut = fixed_array(0.25, 0.5, 1.0, 2.0)
-    var wq : array<int8>
-    var ws : array<float>
-    wq |> resize(net * d * n)
-    ws |> resize(net * d * nb)
-    for (i in range(net * d * n)) {
-        wq[i] = int8((i * 7 + i / 31) % 16 - 8)
-    }
-    for (i in range(net * d * nb)) {
-        ws[i] = lut[(i / 5) % 4]
-    }
+    var (p0, p1, wref) <- moe_gemv_planes(fmt, net * d, n)
     // selection rows: [k idx u32][k w f32] per stream — only the idx section is read here
     var sel : array<uint>
     sel |> resize(nst * 2 * k)
@@ -4995,6 +4409,11 @@ def private moe_gemv_gate(t : T?; dev, queue; n, d, net, k, nst : int; perslot :
     for (i in range(xrows * n)) {
         xv[i] = float((i * 3) % 9 - 4)
     }
+    var wb : array<float>
+    wb |> resize(net * d)
+    for (i in range(net * d)) {
+        wb[i] = bias ? float(i % 7 - 3) * 0.25 : 0.0
+    }
     var want : array<float>
     want |> resize(nst * k * d)
     for (s in range(nst)) {
@@ -5004,53 +4423,61 @@ def private moe_gemv_gate(t : T?; dev, queue; n, d, net, k, nst : int; perslot :
             for (r in range(d)) {
                 var acc = 0.0
                 for (c in range(n)) {
-                    acc += float(wq[(e * d + r) * n + c]) * ws[(e * d + r) * nb + c / 32] * xv[x0 + c]
+                    acc += wref[(e * d + r) * n + c] * xv[x0 + c]
                 }
-                want[(s * k + j) * d + r] = acc
+                want[(s * k + j) * d + r] = acc + wb[e * d + r]
             }
         }
     }
-    // the expert STACK blob: net*d*nb 34-byte blocks, expert-major (mulmm_gate's block layout)
-    var bw = metal_new_buffer(dev, uint64(net * d * nb * 34))
-    unsafe {
-        var base = reinterpret<int8?>(metal_buffer_contents(bw))
-        for (b in range(net * d * nb)) {
-            let off = b * 34
-            var ph = reinterpret<float16?>(base + off)
-            ph[0] = float16(ws[b])
-            for (c in range(32)) {
-                base[off + 2 + c] = wq[b * 32 + c]
-            }
-        }
-    }
+    var bw = buf_upload(dev, p0)
+    var bs = fmt == MoeGemvFmt.q8 ? bw : buf_upload(dev, p1)
     var bx = buf_upload(dev, xv)
     var by = buf_fill(dev, nst * k * d, -1000.0)
     var bsel = buf_upload(dev, sel)
+    var bwb = buf_upload(dev, wb)
+    var vtf <- [for (v in MX4_VT); v]
+    var bvt = buf_upload(dev, vtf)
     var ka = MoeGemvArgs(ndim = uint(n), ddim = uint(d), eplane = uint(d * nb),
         xs = perslot ? uint(n) : 0u, ss = uint(2 * k),
-        bxs = uint((perslot ? k : 1) * n), bys = uint(k * d), hasb = 0u)
+        bxs = uint((perslot ? k : 1) * n), bys = uint(k * d), hasb = bias ? 1u : 0u)
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bw, 0ul, 0)   // half-scale view
-        metal_set_buffer(enc, bw, 0ul, 1)   // byte view
+        if (fmt == MoeGemvFmt.mx4) {
+            metal_set_threadgroup_memory_length(enc, metal_moe_gemv_mx4_msl_tgmem, 0)
+        }
+        metal_set_buffer(enc, bw, 0ul, 0)
+        metal_set_buffer(enc, bs, 0ul, 1)
         metal_set_buffer(enc, bx, 0ul, 2)
         metal_set_buffer(enc, by, 0ul, 3)
         metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
         metal_set_buffer(enc, bsel, 0ul, 6)
-        metal_dispatch_threadgroups(enc, uint3(uint((d + 3) / 4), uint(k), uint(nst)), uint3(128u, 1u, 1u))
+        if (fmt == MoeGemvFmt.mx4) {
+            metal_set_buffer(enc, bwb, 0ul, 12)
+            metal_set_buffer(enc, bvt, 0ul, 15)
+        }
+        let tg = fmt == MoeGemvFmt.q8 ? 128u : 64u
+        metal_dispatch_threadgroups(enc, uint3(uint((d + 3) / 4), uint(k), uint(nst)), uint3(tg, 1u, 1u))
     }
-    t |> success(ran, "moe gemv dispatch n={n} d={d} net={net} k={k} nst={nst}: {err}")
-    t |> equal(buf_mismatch_exact(by, want), 0)
+    t |> success(ran, "{tag} dispatch: {err}")
+    t |> equal(buf_mismatch_exact(by, want), 0, tag)
     metal_release(bw)
+    if (fmt != MoeGemvFmt.q8) {
+        metal_release(bs)
+    }
     metal_release(bx)
     metal_release(by)
     metal_release(bsel)
+    metal_release(bwb)
+    metal_release(bvt)
     metal_release(pso)
-    delete wq
-    delete ws
+    delete p0
+    delete p1
+    delete wref
     delete sel
     delete xv
+    delete wb
     delete want
+    delete vtf
 }
 
 // Build q51 plane pairs for `rows` rows of n elements: patterned 5-bit quants (position-
@@ -5089,197 +4516,6 @@ def private q51_test_planes(rows, n : int; var qp : array<uint8>; var sp : array
             qp[b * 20 + 16 + i] = uint8(qh >> uint(i * 8))
         }
     }
-}
-
-// The expert-indexed q51 GEMV on exact-arithmetic q51 planes — moe_gemv_gate's shapes, BIT-exact.
-def private moe_gemv_q51_gate(t : T?; dev, queue; n, d, net, k, nst : int; perslot : bool) {
-    var err : string
-    var pso = pipeline_from_source(dev, metal_moe_gemv_q51_msl, metal_moe_gemv_q51_msl_entry, metal_moe_gemv_q51_msl_fastmath, err)
-    t |> success(pso != null, "moe q51 gemv pipeline: {err}")
-    if (pso == null) {
-        return
-    }
-    let nb = n / 32
-    var qp : array<uint8>
-    var sp : array<uint8>
-    var wref : array<float>
-    q51_test_planes(net * d, n, qp, sp, wref)
-    var sel : array<uint>
-    sel |> resize(nst * 2 * k)
-    for (s in range(nst)) {
-        for (j in range(k)) {
-            sel[s * 2 * k + j] = uint((s + j * 3 + net - 1) % net)
-        }
-    }
-    let xrows = perslot ? nst * k : nst
-    var xv : array<float>
-    xv |> resize(xrows * n)
-    for (i in range(xrows * n)) {
-        xv[i] = float((i * 3) % 9 - 4)
-    }
-    var want : array<float>
-    want |> resize(nst * k * d)
-    for (s in range(nst)) {
-        for (j in range(k)) {
-            let e = int(sel[s * 2 * k + j])
-            let x0 = (perslot ? s * k + j : s) * n
-            for (r in range(d)) {
-                var acc = 0.0
-                for (c in range(n)) {
-                    acc += wref[((e * d + r) * nb) * 32 + c] * xv[x0 + c]
-                }
-                want[(s * k + j) * d + r] = acc
-            }
-        }
-    }
-    var bw = buf_upload(dev, qp)
-    var bs = buf_upload(dev, sp)
-    var bx = buf_upload(dev, xv)
-    var by = buf_fill(dev, nst * k * d, -1000.0)
-    var bsel = buf_upload(dev, sel)
-    var ka = MoeGemvArgs(ndim = uint(n), ddim = uint(d), eplane = uint(d * nb),
-        xs = perslot ? uint(n) : 0u, ss = uint(2 * k),
-        bxs = uint((perslot ? k : 1) * n), bys = uint(k * d), hasb = 0u)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bw, 0ul, 0)
-        metal_set_buffer(enc, bs, 0ul, 1)
-        metal_set_buffer(enc, bx, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
-        metal_set_buffer(enc, bsel, 0ul, 6)
-        metal_dispatch_threadgroups(enc, uint3(uint((d + 3) / 4), uint(k), uint(nst)), uint3(64u, 1u, 1u))
-    }
-    t |> success(ran, "moe q51 gemv dispatch n={n} d={d} net={net} k={k} nst={nst}: {err}")
-    t |> equal(buf_mismatch_exact(by, want), 0)
-    metal_release(bw)
-    metal_release(bs)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bsel)
-    metal_release(pso)
-    delete qp
-    delete sp
-    delete wref
-    delete sel
-    delete xv
-    delete want
-}
-
-// The expert-indexed mx4 GEMV on exact-arithmetic planes: nibble values from the signed
-// doubled-e2m1 table, pow2 E8M0 scales, int x — BIT-exact (covers the bias arm too).
-def private moe_gemv_mx4_gate(t : T?; dev, queue; n, d, net, k, nst : int; perslot, bias : bool) {
-    var err : string
-    var pso = pipeline_from_source(dev, metal_moe_gemv_mx4_msl, metal_moe_gemv_mx4_msl_entry, metal_moe_gemv_mx4_msl_fastmath, err)
-    t |> success(pso != null, "moe mx4 gemv pipeline: {err}")
-    if (pso == null) {
-        return
-    }
-    let nb = n / 32
-    let vt = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,
-                         0.0, -1.0, -2.0, -3.0, -4.0, -6.0, -8.0, -12.0)
-    var etab : array<float>
-    etab |> resize(256)
-    for (ei in range(256)) {
-        etab[ei] = unsafe(reinterpret<float>(ei < 2 ? (0x00200000u << uint(ei)) : (uint(ei - 1) << 23u)))
-    }
-    var qp : array<uint8>
-    var sp : array<uint8>
-    var wref : array<float>
-    qp |> resize(net * d * nb * 16)
-    sp |> resize(net * d * nb)
-    wref |> resize(net * d * n)
-    for (b in range(net * d * nb)) {
-        let sc = 120 + (b * 3) % 12   // pow2 scales 2^-8 .. 2^3 — every product dyadic
-        sp[b] = uint8(sc)
-        for (i in range(16)) {
-            let nl = (b * 7 + i * 5 + 1) % 16
-            let nh = (b * 11 + i * 3 + 2) % 16
-            qp[b * 16 + i] = uint8(nl | (nh << 4))
-            wref[b * 32 + i] = vt[nl] * etab[sc]
-            wref[b * 32 + 16 + i] = vt[nh] * etab[sc]
-        }
-    }
-    var sel : array<uint>
-    sel |> resize(nst * 2 * k)
-    for (s in range(nst)) {
-        for (j in range(k)) {
-            sel[s * 2 * k + j] = uint((s + j * 3 + net - 1) % net)
-        }
-    }
-    let xrows = perslot ? nst * k : nst
-    var xv : array<float>
-    xv |> resize(xrows * n)
-    for (i in range(xrows * n)) {
-        xv[i] = float((i * 3) % 9 - 4)
-    }
-    var wb : array<float>
-    wb |> resize(net * d)
-    for (i in range(net * d)) {
-        wb[i] = bias ? float(i % 7 - 3) * 0.25 : 0.0
-    }
-    var want : array<float>
-    want |> resize(nst * k * d)
-    for (s in range(nst)) {
-        for (j in range(k)) {
-            let e = int(sel[s * 2 * k + j])
-            let x0 = (perslot ? s * k + j : s) * n
-            for (r in range(d)) {
-                var acc = 0.0
-                for (c in range(n)) {
-                    acc += wref[(e * d + r) * n + c] * xv[x0 + c]
-                }
-                want[(s * k + j) * d + r] = acc + (bias ? wb[e * d + r] : 0.0)
-            }
-        }
-    }
-    var bw = buf_upload(dev, qp)
-    var bs = buf_upload(dev, sp)
-    var bx = buf_upload(dev, xv)
-    var by = buf_fill(dev, nst * k * d, -1000.0)
-    var bsel = buf_upload(dev, sel)
-    var bwb = buf_upload(dev, wb)
-    var ka = MoeGemvArgs(ndim = uint(n), ddim = uint(d), eplane = uint(d * nb),
-        xs = perslot ? uint(n) : 0u, ss = uint(2 * k),
-        bxs = uint((perslot ? k : 1) * n), bys = uint(k * d), hasb = bias ? 1u : 0u)
-    var vtf : array<float>
-    vtf |> resize(16)
-    for (i in range(16)) {
-        vtf[i] = vt[i]
-    }
-    var bvt = buf_upload(dev, vtf)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_moe_gemv_mx4_msl_tgmem, 0)
-        metal_set_buffer(enc, bw, 0ul, 0)
-        metal_set_buffer(enc, bs, 0ul, 1)
-        metal_set_buffer(enc, bx, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
-        metal_set_buffer(enc, bsel, 0ul, 6)
-        metal_set_buffer(enc, bwb, 0ul, 12)
-        metal_set_buffer(enc, bvt, 0ul, 15)
-        metal_dispatch_threadgroups(enc, uint3(uint((d + 3) / 4), uint(k), uint(nst)), uint3(64u, 1u, 1u))
-    }
-    t |> success(ran, "moe mx4 gemv dispatch n={n} d={d} net={net} k={k} nst={nst} bias={bias}: {err}")
-    t |> equal(buf_mismatch_exact(by, want), 0)
-    metal_release(bw)
-    metal_release(bs)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bsel)
-    metal_release(bwb)
-    metal_release(bvt)
-    metal_release(pso)
-    delete etab
-    delete qp
-    delete sp
-    delete wref
-    delete sel
-    delete xv
-    delete wb
-    delete want
-    delete vtf
 }
 
 // The gathered q51 mul_mm: ne experts with padded-CSR row runs (gather = 0 bucket-rows mode);
@@ -5338,17 +4574,7 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
     var sp : array<uint8>
     var wref : array<float>
     q51_test_planes(ne * ndim, kdim, qp, sp, wref)
-    // padded CSR: each expert's rows start at a 32-aligned base (the route prefix contract)
-    var cnt : array<uint>
-    var basep : array<uint>
-    cnt |> reserve(ne)
-    basep |> reserve(ne)
-    var pad = 0
-    for (c in range(ne)) {
-        cnt |> push(uint(counts[c]))
-        basep |> push(uint(pad))
-        pad += (counts[c] + 31) / 32 * 32
-    }
+    var (cnt, basep, pad) <- padded_bases(counts)
     var xv : array<float>
     xv |> resize(pad * kdim)
     for (i in range(pad * kdim)) {
@@ -5739,18 +4965,13 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
     if (npos >= 2) {
         t |> equal(buf_mismatch_approx(bhm, hmid_want), 0)
     }
-    // stage 2 mirror: per-head L2 over q/k + q pre-scale (double square-sum like the CPU)
+    // stage 2 mirror: per-head L2 over the q/k heads (contiguous at each position's row start), then the q pre-scale
     for (p in range(npos)) {
-        for (blk in range(2 * nkh)) {
-            var sum = 0.0lf
-            for (j in range(ds)) {
-                let v = cv[p * cd + blk * ds + j]
-                sum += double(v * v)
-            }
-            let sc = (1.0 / max(sqrt(float(sum)), EPS)) * (blk < nkh ? qscale : 1.0)
-            for (j in range(ds)) {
-                cv[p * cd + blk * ds + j] *= sc
-            }
+        unsafe {
+            l2_norm_rows(addr(cv[p * cd]), int64(2 * nkh), int64(ds), EPS)
+        }
+        for (j in range(kd)) {
+            cv[p * cd + j] *= qscale
         }
     }
     let lran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
@@ -5844,16 +5065,13 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
     gwant |> resize(npos * di)
     for (p in range(npos)) {
         for (h in range(nvh)) {
-            var ms = 0.0lf
-            for (j in range(ds)) {
-                let v = owant[p * di + h * ds + j]
-                ms += double(v * v)
+            let hb = p * di + h * ds
+            unsafe {
+                rmsnorm(addr(gwant[hb]), addr<float const?>(owant[hb]), addr<float const?>(wn[0]), int64(ds), EPS)
             }
-            let inv = 1.0 / sqrt(float(ms) / float(ds) + EPS)
             for (j in range(ds)) {
-                let v = owant[p * di + h * ds + j]
-                let zv = zz[p * di + h * ds + j]
-                gwant[p * di + h * ds + j] = (wn[j] * (v * inv)) * (zv / (1.0 + exp(-zv)))
+                let zv = zz[hb + j]
+                gwant[hb + j] *= zv / (1.0 + exp(-zv))
             }
         }
     }
@@ -5975,22 +5193,11 @@ def private dn_deint_sigmul_gate(t : T?; dev, queue; nh, hs, npos : int) {
         xv[k] = 0.06 * float(k % 39) - 1.1
         swant[k] = xv[k] / (1.0 + exp(-gwant[k]))
     }
-    var bxv = buf_upload(dev, xv)
-    var btot = buf_u32(dev, uint(npos * qd))
-    let sran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso_sg)
-        metal_set_buffer(enc, bxv, 0ul, 0)
-        metal_set_buffer(enc, bgt, 0ul, 1)
-        metal_set_buffer(enc, btot, 0ul, 2)
-        metal_dispatch_threadgroups(enc, uint3(uint((npos * qd + 63) / 64), 1u, 1u), uint3(64u, 1u, 1u))
-    }
-    t |> success(sran, "sigmul dispatch: {err}")
-    t |> equal(buf_mismatch_approx(bxv, swant), 0)
+    var sgot <- ew2_gate(t, dev, queue, "sigmul", pso_sg, xv, gwant, swant, false)   // the gate rows the deint compare held exact
+    delete sgot
     metal_release(bqg)
     metal_release(bq)
     metal_release(bgt)
-    metal_release(bxv)
-    metal_release(btot)
     metal_release(pso_de)
     metal_release(pso_sg)
     delete qg
@@ -6032,17 +5239,14 @@ def private axpy_sig_gate(t : T?; dev, queue; npos, dim : int) {
     var bg = buf_upload(dev, gv)
     var btot = buf_u32(dev, uint(total))
     var bdim = buf_u32(dev, uint(dim))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, by, 0ul, 0)
-        metal_set_buffer(enc, bx, 0ul, 1)
-        metal_set_buffer(enc, bg, 0ul, 2)
-        metal_set_buffer(enc, btot, 0ul, 3)
-        metal_set_buffer(enc, bdim, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint((total + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
-    }
+    var bufs <- [by, bx, bg, btot, bdim]
+    let ran = run_compute_1d(queue, pso, bufs, uint(total), 256u, err)
     t |> success(ran, "axpy_sig dispatch: {err}")
     t |> equal(buf_mismatch_approx(by, want), 0)
+    bufs |> clear()
+    unsafe {
+        delete bufs
+    }
     metal_release(by)
     metal_release(bx)
     metal_release(bg)
@@ -6084,7 +5288,7 @@ def private buf_mismatch_approx(buf; want : array<float>) : int {
     let p = unsafe(reinterpret<float const?>(metal_buffer_contents(buf)))
     var bad = 0
     for (k in range(length(want))) {
-        if (!approx(unsafe(p[k]), want[k])) {
+        if (!fapprox(unsafe(p[k]), want[k])) {
             bad++
         }
     }

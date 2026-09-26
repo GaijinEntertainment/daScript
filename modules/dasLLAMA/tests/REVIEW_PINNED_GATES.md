@@ -26,8 +26,8 @@ and this list is the only test of whether a cell is one:**
 filter); `test_program_roots.das` (the `ROOT_DIRS` sweep, `options stack = 524288`, prefill
 intent); `test_env_registry.das` (the `../ENVIRONMENT.md` knob contract); `test_model_specs.das`
 (`../performance/model_specs.das`'s model-set table); `test_metal_prefill_kernels.das`'s
-`test_metal_prefill_kernels` cell (its `attn_trio_gate` calls passing `softcap =` or `hass =`,
-and its `attn_trio_span_gate` calls); `test_site_records.das` (the byte-compare of
+`test_metal_prefill_kernels` cell (its `attn_trio_gate` calls whose `AttnKeys` sets `softcap`,
+`hass`, `uend` or `ulo` - the softcap, sink, uniform-span and mixed-span arms); `test_site_records.das` (the byte-compare of
 `site/files/dasllama/bench_records.json` (repo root) against a fresh `merge_site_records`
 run); `test_exchange_schema.das` (the exchange validator's corpus sweeps, and the `[tune_scope]`
 wire-key pin read out of `../dasllama/dasllama_tune_scope.das`) and

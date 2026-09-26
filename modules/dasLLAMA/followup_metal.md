@@ -123,9 +123,7 @@ zoo. Facts that decide the order:
   byte-identical per stamp before and after.
 - Then: the decode-side `MetalKqMulMmK45T` 12-bool `static_if` ladder (its prefill twins now
   derive the split tensor base's decode; the coupled-bool trap where `MetalKqMulMmIq4nl` must
-  set `IQ4XS` and `IQ4NL` lives on in the kernels file); the bias pair that folds,
-  `MetalAddBiasRows` with `MetalBiasGeluLut` - field for field at 0-3, the map and `x`'s offset
-  apart - while `MetalBiasAddRes`'s residual plane at 1 keeps it out. Two classes fold only when
+  set `IQ4XS` and `IQ4NL` lives on in the kernels file). Two classes fold only when
   their (binding number -> field type, `@off`) maps agree: the
   SqAttn single/batched pairs (the layer slab through `@off`, the kargs at 4 vs 5 under `rt`),
   the rope-store single/batched pairs (the single form's raw-V buffer at 1 shifts every later
@@ -616,14 +614,6 @@ only from the lens's `compile_stamp` / `race_pso_pair_stamp` expansions: the two
 left are the race shells whose sources arrive as parameters, and a hand-spelled triple can pair
 one kernel's source with another's entry and compile clean.
 
-## 17. `ksign7m` and Vulkan's `ksign7` are one function under two homes
-
-`ksign7m` (`dasllama/dasllama_metal_kernels.das`) and `ksign7` (`dasllama/dasllama_vulkan_classes.das`)
-are five identical lines of pure ALU - no table, no backend lowering. `ARCHITECTURE_GPU.md`
-sec.1.5's role table keeps the codebook TABLES per kernel home; it does not reach a helper with
-no table in it. The shared-grammar precedent is `dasllama_kernel_access.das`, one owner after two
-private copies drifted. One home for the sign helper, both backends calling it.
-
 ## 18. A kargs-bearing builder cannot be taken by address, so `enc_kq_mvb` stays a ladder
 
 `enc_kq_mvb` (`dasllama/dasllama_metal_kernels.das`) walks thirteen formats by three arms each to
@@ -764,25 +754,11 @@ the head as one threadgroup over q8 weights (nine million parameters, one dispat
 22 - where the CPU's head is q8 already, the kq files), the first norm folded into the q8 GEMV's
 prologue as the f32 route already folds it, and the text prompt's rows on the tower (the
 `prompt` stage clock of `test_pocket_synthesis_metal`, six milliseconds a chunk on the CPU). The frames' K/V never return to the host, so a chunk
-whose command buffer fails reruns whole on the CPU. The StyleTTS2 stage cells
-(`gpu_stage_checks` in `tests/_tts_parity.das`) still carry an output-moved element as their only
-control; `REVIEW_GPU_PARITY.md` now asks an input-side one (a scaled input re-run through the
-compare), so each stage cell owes a scaled-input leg. The arc's dedup pass named the folds the two
-seats and the StyleTTS2 slabs still owe, each a discussion before a diff: the fused rope-and-store
-row on `MetalRopeStoreKvT` (a position offset on its tables; the decode rails dispatch that kernel,
-so its own PR); `MetalPkAddLn` as an `ADD` stamp of `MetalLayerNorm` and the q8 arm of
-`MetalPkGemvT` derived from `MetalQ8GemvT`'s hooks; the backbone's q8 linear-plus-bias on one
-route (the decode GEMV plus a bias add, or the row stamp's epilogue - no row compares the two);
-`MetalPkAttn` and the whisper decoder's chunked attention as one template over the K/V element
-type, layout and window; the codec and frames seats' transformer layer written once over a row
-count and a linear route (the slot struct generic over the linear type, the writer, predicate and
-release taking the route as a block); the slab attach protocol, six copies from `st2_dec_attach`
-to `pk_frames_attach`, as one attach over a key and write/drop blocks with a writer generic over
-the element type; the GPU seat record - `pk_seat_index`, `pocket_gpu_stats`, `pocket_gpu_seats`
-and their StyleTTS2 twins - as one record type in the TTS types module; `embed_row`'s K-quant branch
-(`dasllama_common.das`) onto `kq_plane_row_f32`, the plane-row helper beside `dequant_kq_plane_sb`
-the tower's slabs already take; the tests' fp64 LayerNorm and SiLU oracles into `_metal_kernel_common.das`;
-`tg_sum` and `tg_max` on `MetalTgReduceBase` for the three hand-written threadgroup reductions.
+whose command buffer fails reruns whole on the CPU. The codec transformer's layer
+(`pk_transformer`) and the frame loop's (`pk_fr_layer`) are two bodies of one layer: one body
+waits on a rows form of the rope-and-store (`MetalRopeStoreBKvT` with a row table is the
+candidate) and one K/V home for both loops (the codec's per-chunk rows buffers against the frames'
+per-voice slot).
 
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 

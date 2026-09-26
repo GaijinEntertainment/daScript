@@ -6,6 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode kernel set (Apple builds)
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
+require ?das_metal _metal_kernel_common
 require math
 
 // The single-query attention kernels vs a direct CPU oracle on synthetic data — the model-less
@@ -25,9 +26,6 @@ let KV_DIM = (N_HEADS / KV_MUL) * HS
 let QD = N_HEADS * HS
 let CHUNK = 64                          // the split-K chunk height the part kernels hardcode
 
-def private approx(x, y : float) : bool {
-    return abs(x - y) <= 2e-3 * max(1.0, max(abs(x), abs(y)))
-}
 
 // K/V hold f16-exact small values so the oracle sees the same numbers the kernel loads
 def private kv_at(j, d : int) : float => float((j * 7 + d * 3) % 9 - 4) * 0.25
@@ -123,7 +121,7 @@ def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap 
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
         var want <- oracle_all(cnt, scale, softcap, hass ? sink_v : -3.0e38, 0)
-        t |> equal(buf_mismatch_approx(by, want), 0)
+        t |> equal(buf_mismatch_bars(by, want, 2e-3, 0.0, "decode"), 0)
         delete want
     }
     release_all([bk, bv, bq, by, bsink])
@@ -179,7 +177,7 @@ def private sq_part_gate(t : T?; dev, queue; tag : string; cnt, window : int) {
     t |> success(ran, "{tag}: encode: {err}")
     if (ran) {
         var want <- oracle_all(cnt, scale, 0.0, -3.0e38, window)
-        t |> equal(buf_mismatch_approx(by, want), 0)
+        t |> equal(buf_mismatch_bars(by, want, 2e-3, 0.0, "decode"), 0)
         delete want
     }
     release_all([bk, bv, bq, bpart, by, bsink])
@@ -239,31 +237,3 @@ def private q_f32 : array<float> {
     return <- q
 }
 
-def private buf_upload(dev; arr : array<auto(TT)>) : auto {
-    var buf = metal_new_buffer(dev, uint64(long_length(arr)) * uint64(typeinfo sizeof(arr[0])))
-    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
-    for (k in range(length(arr))) {
-        unsafe(p[k]) = arr[k]
-    }
-    return buf
-}
-
-def private buf_fill(dev; nn : int; value : auto(TT)) : auto {
-    var buf = metal_new_buffer(dev, uint64(nn) * uint64(typeinfo sizeof(value)))
-    var p = unsafe(reinterpret<TT -const?>(metal_buffer_contents(buf)))
-    for (k in range(nn)) {
-        unsafe(p[k]) = value
-    }
-    return buf
-}
-
-def private buf_mismatch_approx(buf; want : array<float>) : int {
-    let p = unsafe(reinterpret<float const?>(metal_buffer_contents(buf)))
-    var bad = 0
-    for (k in range(length(want))) {
-        if (!approx(unsafe(p[k]), want[k])) {
-            bad++
-        }
-    }
-    return bad
-}

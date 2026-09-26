@@ -959,37 +959,27 @@ def register_canary_gpu(fn : CanaryGpuBlocksFn; serves : CanaryServesFn) {
 //! the lane policy's question - would a GPU driver serve the exact block loop: false with no driver, with the knob off, or under the Vulkan driver, which serves q8
 def canary_gpu_serves() : bool => g_cn_serves_set && invoke(g_cn_serves)
 
-enum private CnLane {
-    unset
-    exact
-    q8
-}
-var private g_cn_pin = CnLane.unset
+var private g_cn_pin = GemmLane.unset
 
 //! Pin the canary encoder's weight format for subsequent loads: q8 (the CPU serving lane) vs
 //! the fp32 lane the parity legs and the GPU driver read. ``reset_canary_enc_q8`` returns to
 //! the policy default (exact when the Metal driver serves).
 def set_canary_enc_q8(on : bool) {
-    g_cn_pin = on ? CnLane.q8 : CnLane.exact
+    g_cn_pin = lane_pin(on)
 }
 
 def reset_canary_enc_q8() {
-    g_cn_pin = CnLane.unset
+    g_cn_pin = GemmLane.unset
 }
 
 //! The lane subsequent loads would take — the facade's default and the tests read it.
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def canary_enc_serves_q8() : bool {
-    if (g_cn_pin != CnLane.unset) {
-        return g_cn_pin == CnLane.q8
-    }
-    return !canary_gpu_serves()
-}
+def canary_enc_serves_q8() : bool => lane_serves_q8(g_cn_pin, !canary_gpu_serves())
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def private cn_announce_lane(q8 : bool) {
     var why = "the default lane (no GPU driver serving the exact encoder)"
-    if (g_cn_pin != CnLane.unset) {
+    if (g_cn_pin != GemmLane.unset) {
         why = "pinned via set_canary_enc_q8"
     } elif (canary_gpu_serves()) {
         why = "the Metal FastConformer driver serves f32 planes"

@@ -1934,6 +1934,18 @@ def scale_rows(var y : array<float>; s : float; n : int64) {
     }
 }
 
+//! A conv's (cin, cout) from its weight dims: [k][cin][cout] forward, [k][cout][cin] transposed, the grouped dimension times groups.
+def conv1d_dims_of(dims : array<int64>; transposed : bool; groups : int64) : tuple<cin : int64; cout : int64> {
+    return transposed ? (cin = dims[2], cout = dims[1] * groups) : (cin = dims[1] * groups, cout = dims[2])
+}
+
+//! dst [rows x width] = the table's rows ids[r] - an embedding lookup.
+def gather_rows(var dst : array<float>; emb : array<float>; ids : array<auto(TT)>; width : int64) {
+    for (r in range64(long_length(ids))) {
+        copy_floats(emb, int64(ids[r]) * width, dst, r * width, width)
+    }
+}
+
 //! dst = src over n floats (n % 4 == 0); `dst` sized here.
 def copy_rows(@scratch @exact_size var dst : array<float>; src : array<float>; n : int64) {
     rows_width_check(n, "copy_rows")

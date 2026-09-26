@@ -202,29 +202,19 @@ def register_gemma3v_gpu(fn : Gemma3vGpuBlocksFn; serves : Gemma3vGpuServesFn) {
 // The lane policy follows the fastest GEMM path on the box: a serving GPU blocks driver or the
 // armed accelerate float-batch tier both want f32 planes (the driver declines q8) and flip the
 // default to the exact lane; else q8. A pin overrides.
-enum private G3vLane {
-    unset    // the policy decides
-    exact    // f32 planes
-    q8
-}
-var private g_g3v_q8_pin = G3vLane.unset
+var private g_g3v_q8_pin = GemmLane.unset
 
-def private g3v_serve_q8() : bool {
-    if (g_g3v_q8_pin != G3vLane.unset) {
-        return g_g3v_q8_pin == G3vLane.q8
-    }
-    return !((g_g3v_gpu_set && invoke(g_g3v_gpu_serves)) || float_batch_override_active())
-}
+def private g3v_serve_q8() : bool => lane_serves_q8(g_g3v_q8_pin, !((g_g3v_gpu_set && invoke(g_g3v_gpu_serves)) || float_batch_override_active()))
 
 //! Pin the gemma3v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
 //! vs f32 planes (the parity rail). Each lane is its own prepared image. ``reset_gemma3v_q8``
 //! returns to the policy default.
 def set_gemma3v_q8(on : bool) {
-    g_g3v_q8_pin = on ? G3vLane.q8 : G3vLane.exact
+    g_g3v_q8_pin = lane_pin(on)
 }
 
 def reset_gemma3v_q8() {
-    g_g3v_q8_pin = G3vLane.unset
+    g_g3v_q8_pin = GemmLane.unset
 }
 
 //! Would the next load serve the block GEMMs as q8 — the pin when set, the policy otherwise.
@@ -235,7 +225,7 @@ def private g3v_tag() : string => g3v_serve_q8() ? GEMMA3V_TAG_Q8 : GEMMA3V_TAG
 // the lane changes what a load mints and serves, so the load says which and why, by knob spelling
 def private g3v_announce_lane() {
     var why = "the CPU default (DASLLAMA_METAL_TOWER off / no accelerate tier)"
-    if (g_g3v_q8_pin != G3vLane.unset) {
+    if (g_g3v_q8_pin != GemmLane.unset) {
         why = "pinned"
     } elif (g_g3v_gpu_set && invoke(g_g3v_gpu_serves)) {
         why = "DASLLAMA_METAL_TOWER on: the Metal tower serves f32 planes"

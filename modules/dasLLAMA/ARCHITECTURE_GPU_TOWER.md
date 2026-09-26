@@ -63,7 +63,18 @@ seat is one command buffer of 2.2x's shape over a per-part weight slab the drive
 and keys on a fold of the part's weight addresses - the address of the form each conv serves, the
 q8 quants or the f32 operand - and of the q8 lane's active repack layout, so a reload serving
 another lane or another layout keys differently; the addresses stand for the model because a
-reload never reuses them before the weights epoch drops every slab, which shutdown does too. The decode seat takes the aligned features, F0 and N up and runs the front convs, the
+reload never reuses them before the weights epoch drops every slab, which shutdown does too. Every
+family attaches its slab through one guard and one rebuild (`st2_slab_current`, `st2_slab_rebuild`):
+a slab whose key matches stays resident and the call returns on the guard; otherwise the cold
+rebuild runs the family's drop, then the family's writer twice - the measuring pass
+writes into a probe slab to size the host copy, the second fills the resident - and the copy
+uploads, the drop running again when the upload fails. A slab releases through one walk over its
+fields by type (`st2_release_any`): a conv slot's and a Pocket linear's pooled uniforms, a buffer
+the slab owns, the elements of an array of them and the fields of a struct of them go back to their
+homes, so a slot field a slab gains frees itself. The walk releases and never deletes;
+`st2_slab_free` then deletes the slab whole, which frees every array once, nested ones included,
+and zeroes the fields the walk reached by value (a buffer field is released through a copy of its
+pointer). The decode seat takes the aligned features, F0 and N up and runs the front convs, the
 AdaIN residual blocks, the harmonic source, the generator and the inverse STFT as ONE command
 buffer, the samples back; the generator seat behind it - reached only by the CPU chain a
 declined decode falls into - runs the generator through conv_post as one command buffer and reads
@@ -129,9 +140,10 @@ crosses a dispatch: the 1x1 latent projection and every dense conv on the conv-g
 (a forward conv behind `k - stride` zero rows, a transposed conv's first `t * stride` output rows;
 the input row stride `xs` of `St2ConvArgs` lets a conv read the padded width its producer wrote),
 the depthwise upsample on the residual pool kernel, the two codec transformer layers on the dense
-GEMM stamp with the layer scale, a table rope (the CPU's own cos and sin per position, no device
-trigonometry) and a windowed causal attention kernel over device K/V rows, ELU and the row copies on
-one row kernel, the sample column picked out of the last conv's padded rows. Every GEMM is the
+GEMM stamp with the layer scale, the prefill rows rope over the layer's row stride with the CPU's own
+cos and sin tables (no device trigonometry) and a windowed causal attention kernel over device K/V
+rows, ELU and the row copies on one row kernel, the sample column picked out of the last conv's
+padded rows. Every GEMM is the
 f32-exact stamp: the codec reads within 1e-6 of the CPU chain on the f32 lane that way on the M5
 Max (1e-2 on the served q8 and K-quant lanes, whose CPU chains quantize their activations), and the f16-staged twins
 bought no time on this chain (the row kernels and the attention, not the GEMMs, carry its cost)
@@ -156,13 +168,17 @@ comes back to the host, since the CPU chain forgets a chunk's rows by resetting 
 key samples the rows because an address alone outlives the voice that held it: a later voice's
 caches can land at the freed address with the same fill and capacity. The
 backbone's q8 linears (a K-quant linear requantized to q8 from its dequantized rows, so the small
-form serves) ride the decode GEMV over a 34B-block blob with their bias rows in the slab; every
+form serves) ride the decode GEMV over a 34B-block blob with their bias rows in the slab, the bias
+a row add after the GEMV (the row GEMV's fused-bias q8 form as it stood before the lane-map fold,
+one lane a block, ran a frame 20% slower than the decode GEMV's split-K walk - `PERF_LEDGER.md`'s
+Pocket frame loop entry; the folded row stamp keeps the epilogue kinds only); every
 f32 linear rides the row GEMV over the slab's rows - a simdgroup a row, x staged in threadgroup
 memory - so the parity lane runs exact. Per layer: the first norm (the layer before's residual
-joined in the same dispatch), the fused q/k/v projection, one kernel rotating q and k and storing
-k and v into the voice slot's row, the attention row (a threadgroup per head, the scores staged,
-one softmax, the value sum in parts), the out projection, the residual join with the second norm,
-the two ffn projections around the tanh GELU. The out norm writes the conditioning row straight
+joined in the same dispatch - the tower LayerNorm's ADD stamp), the fused q/k/v projection, the
+decode rail's rope-and-store kernel rotating q and k and storing k and v into the voice slot's row
+(its f32 stamp, the rope tables and the caches bound at the position's row), the attention row (a
+threadgroup per head, the scores staged, one softmax, the value sum in parts), the out projection,
+the residual join with the second norm, the two ffn projections around the tanh GELU. The out norm writes the conditioning row straight
 into the readback rows, and the head's GEMVs carry their norm, modulation and activations as
 prologue and epilogue stamps (the LayerNorm and adaLN modulation in, the SiLU, the gated
 residual, the SiLU over the time constant, the tail that adds the noise and denormalizes the

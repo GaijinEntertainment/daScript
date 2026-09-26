@@ -42,7 +42,8 @@ hook `dasllama_vulkan_tower_register` registers) runs `test_gemma4v_vulkan_twin`
 each named `test_*` cell sees the counter of every hook it covers rise.**
 
 **A change to `dasllama/dasllama_vulkan_asr_dec.das`, to a kernel class it dispatches, or to a
-tower helper it rides (`vt_tile*`, `vt_sched_map`, `vt_feed_enc`, the repack layout) runs
+tower helper it rides (`vt_tile*`, `vt_sched_map`, `vt_feed_enc`, `active_q8_repack_layout` in
+`dasllama/dasllama_math.das`) runs
 `test_whisper_vulkan_wdec` (`tests/test_whisper.das`).** Its CPU-vs-GPU transcript cells are the
 Vulkan ASR-decoder driver's parity instrument, and the shared helpers reach the driver with no
 line of its own file touched.
@@ -85,8 +86,8 @@ before `sin`.** `st2_source_gate` in `tests/test_metal_prefill_kernels.das` chec
 **A diff to the source's noise-fill kernel (`MetalSt2SrcNoise`) keeps it drawing the normal
 sample `st2_hash_normal` hashes from the seed and the element index.** The draw feeds the sines
 kernel's rows in place of a noise stream recorded from the reference run; `st2_source_gate`
-holds it to the CPU twin of the hash, bit-equal when repeated under one seed and different
-under another.
+holds it to `st2_hash_normal` evaluated on the host, bit-equal when repeated under one seed and
+different under another.
 
 **A diff to `dasllama/dasllama_vulkan_tower.das` after which the whisper-class blocks hook
 (`vulkan_audio_tower_blocks`) and the conv stem (`vulkan_audio_conv_front`) no longer both -
