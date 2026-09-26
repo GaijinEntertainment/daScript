@@ -1361,6 +1361,18 @@ def mb_delta(now, base : int64) : string {
 }
 
 //! Array form of the tuned pointer copy in dasllama_math: n floats from src[soff..] into dst[doff..].
+//! A family's serving-lane pin for subsequent loads: q8 quants or the file's own exact planes, the family's
+//! policy deciding while unset. `set_<family>_q8` pins, `reset_<family>_q8` unpins.
+enum GemmLane {
+    unset
+    exact
+    q8
+}
+
+def lane_serves_q8(pin : GemmLane; policy : bool) : bool => pin != GemmLane.unset ? pin == GemmLane.q8 : policy
+
+def lane_pin(on : bool) : GemmLane => on ? GemmLane.q8 : GemmLane.exact
+
 def copy_floats(src : array<float> | #; soff : int64; var dst : array<float>; doff, n : int64) {
     if (n <= 0l) {
         return
@@ -3969,37 +3981,16 @@ def embed_row(t : Model; token : int64; var dst : float?) {
             dequant_q8_row(t, t.emb_q8_off + token * dim, dim, dst)
         }
     } elif (cls_kq(t)) {
+        // the row off the plane pair: trimmed, embq/embs hold the region's pair verbatim, rebased to 0; else the
+        // pair sits at wcls_off inside the model's plane, in the GPU's split scale form when metal_blob
         let fmt = t.emb_fmt
-        let i = kq_slot("embed_row", fmt)
-        let mr = kq_active_mr(t, fmt)   // 1 when not repacked — unread past the guard then
-        if (t.kq_repacked && token < (t.config.vocab_size / mr) * mr) {
-            // repacked plane: gather via the grp<mr> layout (tail rows below stay disk-order, verbatim)
-            unsafe {
-                let nsb = dim / 256l
-                let g = token / mr
-                // trimmed: embq/embs hold the region's plane pair verbatim, rebased to 0
-                let sb0t = t.planes_trimmed ? 0l : t.wcls_off / 256l
-                let sbg = (sb0t + g * mr * nsb)
-                let qo = sbg * kq_qsb(fmt)
-                let so = sbg * kq_ssb(fmt)
-                if (t.planes_trimmed) {
-                    dequant_kq_row_grp(int64(kq_schema_id(fmt)), addr(t.embq[qo]), addr(t.embs[so]), token % mr, mr, dim, dst)
-                } else {
-                    dequant_kq_row_grp(int64(kq_schema_id(fmt)), addr(t.kq[i].q[qo]), addr(t.kq[i].s[so]), token % mr, mr, dim, dst)
-                }
-            }
-        } else {
-            unsafe {
-                var row = temp_array(dst, dim, type<float>)
-                // trimmed: embq/embs hold the region's plane pair verbatim (the row form), rebased to 0
-                let sb0 = t.planes_trimmed ? (token * dim) / 256l : (t.wcls_off + token * dim) / 256l
-                for (s in range64(dim / 256l)) {
-                    if (t.planes_trimmed) {
-                        dequant_kq_plane_sb(fmt, t.embq, t.embs, sb0 + s, false, row, s * 256l)
-                    } else {
-                        dequant_kq_plane_sb(fmt, t.kq[i].q, t.kq[i].s, sb0 + s, t.metal_blob, row, s * 256l)
-                    }
-                }
+        unsafe {
+            var row = temp_array(dst, dim, type<float>)
+            if (t.planes_trimmed) {
+                kq_plane_row_f32(fmt, t.embq, t.embs, dim, t.config.vocab_size, t.kq_repacked, token, row, 0l)
+            } else {
+                let i = kq_slot("embed_row", fmt)
+                kq_plane_row_f32(fmt, t.kq[i].q, t.kq[i].s, dim, t.config.vocab_size, t.kq_repacked, token, row, 0l, t.wcls_off / 256l, t.metal_blob)
             }
         }
     } else {

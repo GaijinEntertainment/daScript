@@ -165,11 +165,9 @@ def private wdec_attach(w : WhisperModel) : bool {
     staging |> reserve_resize((blen / 32l) * 34l + (g_wd_nvpad - w.n_vocab) * (d / 32l) * 34l + 16l * (nl * WD_MATS + 1l))
     // PURE read (the resident rail's form): re-running selection here desyncs from the load-time repack
     let rep = kernel_backend_needs_repack(active_kernel_backend())
-    let mr = rep ? active_q8_layout_mr() : 1l
-    let kgroup = rep ? active_q8_kgroup() : 4l
-    let wbias = rep ? active_q8_wbias() : 0l
+    let lay = active_q8_repack_layout(rep)
     var cur = 0ul
-    g_wd_te_boff = wd_region(w, w.d_te_q_off, d, w.n_vocab, rep, mr, kgroup, wbias, staging, cur)
+    g_wd_te_boff = wd_region(w, w.d_te_q_off, d, w.n_vocab, rep, lay.mr, lay.kgroup, lay.wbias, staging, cur)
     let te_pad = (g_wd_nvpad - w.n_vocab) * (d / 32l) * 34l
     for (i in range64(te_pad)) {   // zero rows: the prompt-batch GEMM's floor-tiling needs them, their logits go unread
         staging[int64(cur) + i] = 0u8
@@ -180,11 +178,11 @@ def private wdec_attach(w : WhisperModel) : bool {
         let lo = dec_layer_offsets(w, l)
         var mi = 0l
         for (woff in [lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.cq_w, lo.ck_w, lo.cv_w, lo.co_w]) {
-            g_wd_boffs[l * WD_MATS + mi] = wd_region(w, woff, d, d, rep, mr, kgroup, wbias, staging, cur)
+            g_wd_boffs[l * WD_MATS + mi] = wd_region(w, woff, d, d, rep, lay.mr, lay.kgroup, lay.wbias, staging, cur)
             mi++
         }
-        g_wd_boffs[l * WD_MATS + 8l] = wd_region(w, lo.fc1_w, d, 4l * d, rep, mr, kgroup, wbias, staging, cur)
-        g_wd_boffs[l * WD_MATS + 9l] = wd_region(w, lo.fc2_w, 4l * d, d, rep, mr, kgroup, wbias, staging, cur)
+        g_wd_boffs[l * WD_MATS + 8l] = wd_region(w, lo.fc1_w, d, 4l * d, rep, lay.mr, lay.kgroup, lay.wbias, staging, cur)
+        g_wd_boffs[l * WD_MATS + 9l] = wd_region(w, lo.fc2_w, 4l * d, d, rep, lay.mr, lay.kgroup, lay.wbias, staging, cur)
         // the fused-QKV GEMV reads q..v as ONE 3d-row region — d%64 keeps the cursor gap-free
         assert(g_wd_boffs[l * WD_MATS + 2l] == g_wd_boffs[l * WD_MATS] + 2ul * uint64((d * d / 32l) * 34l),
             "wdec attach: q/k/v regions are not contiguous")
@@ -322,21 +320,11 @@ def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_
 // encoder drains at each of the step's ~90 tiny dispatches).
 def private wd_run_cb(var err : string&; var gpu_ms : double&; var encode_ms : double&;
                       blk : block<(enc : MetalComputeEncoder?) : void>) : bool {
-    let cb = metal_new_command_buffer(g_queue)
-    let enc = metal_new_compute_encoder_concurrent(cb)
-    hz_arm(true)
-    let ts = ref_time_ticks()
-    invoke(blk, enc)
-    hz_arm(false)
-    metal_end_encoding(enc)
-    encode_ms = double(get_time_usec(ts)) / 1000.0lf
-    metal_commit(cb)
-    metal_wait_until_completed(cb)
-    err = metal_command_buffer_error(cb)
-    gpu_ms = (metal_command_buffer_gpu_end_time(cb) - metal_command_buffer_gpu_start_time(cb)) * 1000.0lf
-    metal_release(enc)
-    metal_release(cb)
-    return empty(err)
+    return with_compute_encoder_timed(g_queue, err, gpu_ms, encode_ms, true) $(enc) {
+        hz_arm(true)
+        invoke(blk, enc)
+        hz_arm(false)
+    }
 }
 
 // one projection site: the row-parallel GEMV at n=1 (occupancy = rows), the GEMM tile for the prompt
@@ -449,11 +437,7 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
         }
         // final LN, then logits: a single-row GEMV per token; the prompt batch GEMMs every row
         enc_ln(enc, g_wd_sx, bblobf, uint64(w.d_ln_w_off * 4l), bblobf, uint64(w.d_ln_b_off * 4l), g_wd_sxb, u_d, u_eps, n)
-        if (n == 1l) {
-            enc_gemv(enc, g_wd_mblob, g_wd_te_boff, g_wd_sxb, g_wd_slog, u_d, u_nv, g_wd_nvpad)
-        } else {
-            enc_gemm_b(enc, g_wd_mblob, g_wd_te_boff, g_wd_sxb, g_wd_slog, gemm_ka(d, g_wd_nvpad, g_wd_nvpad), WD_ROW_CAP, g_wd_nvpad)
-        }
+        wd_mm(enc, g_wd_te_boff, g_wd_sxb, g_wd_slog, u_d, u_nv, d, g_wd_nvpad, n)
     }
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_3d, 4ul)

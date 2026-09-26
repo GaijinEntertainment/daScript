@@ -281,10 +281,12 @@ accumulator where the two laws part by whole cycles, and the driver's own noise 
 fill kernel (finite, repeatable per seed, moving with it); the STFT on either pad law's stamp and
 the inverse STFT with and without the window envelope. Each carries a poisoned input. The census row is one synthesis each
 on kitten-nano (the ONNX law's stamps) and kokoro-82m (the torch law's) on the file's planes (`cov_tower_styletts2`). The Pocket chain's cells (the same
-file): the row copies with and without the ELU, the layer scale, the table rope, the attention
+file): the row copies with and without the ELU, the layer scale, the rows rope over a row stride
+from a column with the tables bound at a position's row, the attention
 row against `attention_causal_rows` over a `TtsKvCache` (every key and an 8-key window, an
-unseen key's poison staying silent), the rope-and-store row against `rope_rows` with the caches'
-sentinel rows, the add-and-norm at a width under the threadgroup and one past it, and the row
+unseen key's poison staying silent), the rope-and-store kernel's f32 stamp at the frame loop's
+binds (no bias, the whole head, the tables and the caches at the position's row) against
+`rope_rows` with the caches' sentinel rows, the add-and-norm at a width under the threadgroup and one past it, and the row
 GEMV's ten stamps (f32 rows and a q8 blob, each under the bare dot, the normed and modulated x
 with the SiLU out, the gated residual, the SiLU over the slab vector and the frame tail) against
 an fp64 oracle with x, y and the latent row bound at offsets. The census row is one Pocket

@@ -239,12 +239,7 @@ def private register_qwen3v_image_tags {
 
 // the lane policy follows the fastest GEMM path on the box: the Metal tower or the armed
 // accelerate float-batch tier wants f32 planes; else q8. A pin overrides.
-enum private Q3vLane {
-    unset    // the policy decides
-    exact    // f32 planes
-    q8
-}
-var private g_q3v_q8_pin = Q3vLane.unset
+var private g_q3v_q8_pin = GemmLane.unset
 
 typedef Qwen3vGpuBlocksFn = function<(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool>
 typedef Qwen3vGpuServesFn = function<() : bool>
@@ -275,22 +270,17 @@ def register_qwen3v_gpu_blocks(fn : Qwen3vGpuBlocksFn) {
 //! The deepstack tap index of block `l`, -1 off the taps.
 def qwen3v_tap_of(t : Qwen3vTower; l : int64) : int64 => l == t.ds_l0 ? 0l : (l == t.ds_l1 ? 1l : (l == t.ds_l2 ? 2l : -1l))
 
-def private q3v_serve_q8() : bool {
-    if (g_q3v_q8_pin != Q3vLane.unset) {
-        return g_q3v_q8_pin == Q3vLane.q8
-    }
-    return !((g_q3v_gpu_set && invoke(g_q3v_gpu_serves)) || float_batch_override_active())
-}
+def private q3v_serve_q8() : bool => lane_serves_q8(g_q3v_q8_pin, !((g_q3v_gpu_set && invoke(g_q3v_gpu_serves)) || float_batch_override_active()))
 
 //! Pin the qwen3v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
 //! vs the file's own planes (the parity rail). Each lane is its own prepared image.
 //! ``reset_qwen3v_q8`` returns to the policy default.
 def set_qwen3v_q8(on : bool) {
-    g_q3v_q8_pin = on ? Q3vLane.q8 : Q3vLane.exact
+    g_q3v_q8_pin = lane_pin(on)
 }
 
 def reset_qwen3v_q8() {
-    g_q3v_q8_pin = Q3vLane.unset
+    g_q3v_q8_pin = GemmLane.unset
 }
 
 //! Would the next load serve the block GEMMs as q8 — the pin when set, the policy otherwise.
@@ -304,7 +294,7 @@ def private q3v_tag() : string => q3v_serve_q8() ? QWEN3V_TAG_Q8 : QWEN3V_TAG
 // the lane changes what a load mints and serves, so the load says which and why
 def private q3v_announce_lane() {
     var why = "the CPU default (DASLLAMA_METAL_TOWER off / no accelerate tier)"
-    if (g_q3v_q8_pin != Q3vLane.unset) {
+    if (g_q3v_q8_pin != GemmLane.unset) {
         why = "pinned via set_qwen3v_q8"
     } elif (g_q3v_gpu_set && invoke(g_q3v_gpu_serves)) {
         why = "DASLLAMA_METAL_TOWER on: the Metal tower serves f32 planes"

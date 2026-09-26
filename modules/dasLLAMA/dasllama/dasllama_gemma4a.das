@@ -649,30 +649,20 @@ def gemma4a_res_w() : float => G4A_RES_W
 //! The log-mel floor — the GPU chunk driver's log stage mirrors the CPU form.
 def gemma4a_mel_floor() : float => float(G4A_MEL_FLOOR)
 
-enum private G4aLane {
-    unset
-    exact
-    q8
-}
-var private g_g4a_pin = G4aLane.unset
+var private g_g4a_pin = GemmLane.unset
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def private g4a_serve_q8() : bool {
-    if (g_g4a_pin != G4aLane.unset) {
-        return g_g4a_pin == G4aLane.q8
-    }
-    return !gemma4a_gpu_serves()
-}
+def private g4a_serve_q8() : bool => lane_serves_q8(g_g4a_pin, !gemma4a_gpu_serves())
 
 //! Pin the gemma4a tower's weight format for subsequent loads: q8 (the CPU serving lane) vs
 //! the fp32 lane the parity legs and the GPU driver read. ``reset_gemma4a_q8`` returns to the
 //! policy default (exact when the Metal tower serves).
 def set_gemma4a_q8(on : bool) {
-    g_g4a_pin = on ? G4aLane.q8 : G4aLane.exact
+    g_g4a_pin = lane_pin(on)
 }
 
 def reset_gemma4a_q8() {
-    g_g4a_pin = G4aLane.unset
+    g_g4a_pin = GemmLane.unset
 }
 
 //! The lane subsequent loads would take — the facade's exec_fmt and the tests read it.
@@ -681,7 +671,7 @@ def gemma4a_serves_q8() : bool => g4a_serve_q8()
 // the lane changes what a load mints and serves, so the load says which and why
 def private g4a_announce_lane() {
     var why = "the default lane (no GPU driver serving the exact encoder)"
-    if (g_g4a_pin != G4aLane.unset) {
+    if (g_g4a_pin != GemmLane.unset) {
         why = "pinned via set_gemma4a_q8"
     } elif (gemma4a_gpu_serves()) {
         why = "the Metal Conformer driver serves f32 planes"

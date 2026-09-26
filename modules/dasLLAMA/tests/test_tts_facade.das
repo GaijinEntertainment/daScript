@@ -22,11 +22,6 @@ require math
 require _model_tier
 require _tts_corpus   // the 200-sentence front-end fixture: the phonemes arm E was scored against
 
-def private cpt_count(s : string) : int {
-    var inscope c <- utf8_to_cpts(s)
-    return length(c)
-}
-
 def private panic_text_of(blk : block<() : void>) : string {
     var why = ""
     try {

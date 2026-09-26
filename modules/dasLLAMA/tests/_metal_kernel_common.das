@@ -260,45 +260,10 @@ def q8_x_fill(nn : int; var xf : array<float>) {
     }
 }
 
-// reference dequant of one row (nb superblocks starting at superblock sb_base) off the planes
+// reference dequant of one row (nb superblocks starting at superblock sb_base) off the planes in the GPU's split
+// scale form - the engine's own plane-row dequant, the scale tail found from the plane's length (nsb_total's planes)
 def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wrow : array<float>) {
-    for (ib in range(nb)) {
-        let sb = sb_base + ib
-        if (fmt == 4) {
-            dequant_k4_plane_superblock(kq, int64(sb * 128), ks, int64(sb * 16), wrow, int64(ib * 256))
-        } elif (fmt == 5) {
-            dequant_k5_plane_superblock(kq, int64(sb * 160), ks, int64(sb * 16), wrow, int64(ib * 256))
-        } elif (fmt == 44) {
-            dequant_iq4xs_plane_superblock_at(kq, int64(sb * 128), ks, int64(sb * 16),
-                int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
-        } elif (fmt == 3) {
-            dequant_k3_plane_superblock_at(kq, int64(sb * 96), ks, int64(sb * 16),
-                int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
-        } elif (fmt == 33) {
-            dequant_iq3s_plane_superblock_at(kq, int64(sb * 104), ks, int64(sb * 16),
-                int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
-        } elif (fmt == 34) {
-            dequant_iq3xxs_plane_superblock_at(kq, int64(sb * 96), ks, int64(sb * 16),
-                int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
-        } elif (fmt == 45) {
-            dequant_iq4nl_plane_superblock(kq, int64(sb * 128), ks, int64(sb * 16), wrow, int64(ib * 256))
-        } elif (fmt == 40) {
-            dequant_q40_plane_superblock(kq, int64(sb * 128), ks, int64(sb * 16), wrow, int64(ib * 256))
-        } elif (fmt == 2) {
-            dequant_k2_plane_superblock_at(kq, int64(sb * 64), ks, int64(sb * 16),
-                int64(nsb_total * 16 + sb * 4), wrow, int64(ib * 256))
-        } elif (fmt == 23) {
-            dequant_iq2s_plane_superblock_at(kq, int64(sb * 72), ks, int64(sb * 16),
-                int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
-        } elif (fmt == 24) {
-            dequant_iq2xs_plane_superblock_at(kq, int64(sb * 64), ks, int64(sb * 16),
-                int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
-        } elif (fmt == 25) {
-            dequant_iq2xxs_plane_superblock_at(kq, int64(sb * 64), ks, int64(sb * 16),
-                int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
-        } else {
-            dequant_k6_plane_superblock_at(kq, int64(sb * 192), ks, int64(sb * 16),
-                int64(nsb_total * 16 + sb * 2), wrow, int64(ib * 256))
-        }
-    }
+    let tail = fmt == 2 ? 4l : 2l   //! the engine finds the d tail from the plane's length: the fixture's plane holds nsb_total superblocks exactly
+    assert(fmt == 4 || fmt == 5 || fmt == 40 || fmt == 45 || long_length(ks) == int64(nsb_total) * (16l + tail), "kq_row_ref: the scale plane holds nsb_total superblocks")
+    kq_plane_row_f32(kq_fmt_of_id(fmt, "kq_row_ref"), kq, ks, int64(nb) * 256l, 1l, false, 0l, wrow, 0l, int64(sb_base), true)
 }

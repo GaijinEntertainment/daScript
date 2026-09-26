@@ -226,8 +226,14 @@ def public submit_trace_log(cb : MetalCommandBuffer?; gpu_ms, encode_ms : double
 //! buffer, measured from block entry through end_encoding (captured just before commit) — for the
 //! encode-CPU vs GPU-window split. The metal_commit hand-off itself falls in neither number.
 def public with_compute_encoder_timed(queue : MetalCommandQueue?; var error : string&; var gpu_ms : double&; var encode_ms : double&; blk : block<(enc : MetalComputeEncoder?) : void>) : bool {
+    return with_compute_encoder_timed(queue, error, gpu_ms, encode_ms, false, blk)
+}
+
+//! The concurrent-dispatch twin: `concurrent` opens the encoder with concurrent dispatch, where the caller
+//! sequences its own hazards.
+def public with_compute_encoder_timed(queue : MetalCommandQueue?; var error : string&; var gpu_ms : double&; var encode_ms : double&; concurrent : bool; blk : block<(enc : MetalComputeEncoder?) : void>) : bool {
     let cb = metal_new_command_buffer(queue)
-    let enc = metal_new_compute_encoder(cb)
+    let enc = concurrent ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
     let ts_enc = ref_time_ticks()
     invoke(blk, enc)
     metal_end_encoding(enc)

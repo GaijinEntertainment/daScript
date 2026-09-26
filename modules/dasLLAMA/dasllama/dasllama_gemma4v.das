@@ -231,29 +231,19 @@ def register_gemma4v_gpu(fn : Gemma4vGpuBlocksFn; serves : Gemma4vGpuServesFn) {
 // The lane policy follows the fastest GEMM path on the box: a serving GPU blocks driver or the
 // armed accelerate float-batch tier both want the file's planes (the driver declines q8, the tier
 // serves float planes only) and flip the default to the exact lane; else q8. A pin overrides.
-enum private G4vLane {
-    unset    // the policy decides
-    exact    // the file's planes
-    q8
-}
-var private g_g4v_q8_pin = G4vLane.unset
+var private g_g4v_q8_pin = GemmLane.unset
 
-def private g4v_serve_q8() : bool {
-    if (g_g4v_q8_pin != G4vLane.unset) {
-        return g_g4v_q8_pin == G4vLane.q8
-    }
-    return !((g_g4v_gpu_set && invoke(g_g4v_gpu_serves)) || float_batch_override_active())
-}
+def private g4v_serve_q8() : bool => lane_serves_q8(g_g4v_q8_pin, !((g_g4v_gpu_set && invoke(g_g4v_gpu_serves)) || float_batch_override_active()))
 
 //! Pin the gemma4v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
 //! vs the file's own planes (the parity rail, and what the Metal tower serves). Each lane is its
 //! own prepared image. ``reset_gemma4v_q8`` returns to the policy default.
 def set_gemma4v_q8(on : bool) {
-    g_g4v_q8_pin = on ? G4vLane.q8 : G4vLane.exact
+    g_g4v_q8_pin = lane_pin(on)
 }
 
 def reset_gemma4v_q8() {
-    g_g4v_q8_pin = G4vLane.unset
+    g_g4v_q8_pin = GemmLane.unset
 }
 
 //! Would the next load serve the block GEMMs as q8 — the pin when set, the policy otherwise.
@@ -264,7 +254,7 @@ def private g4v_tag() : string => g4v_serve_q8() ? GEMMA4V_TAG_Q8 : GEMMA4V_TAG
 // the lane changes what a load mints and serves, so the load says which and why, by knob spelling
 def private g4v_announce_lane() {
     var why = "the CPU default (DASLLAMA_METAL_TOWER off / no accelerate tier)"
-    if (g_g4v_q8_pin != G4vLane.unset) {
+    if (g_g4v_q8_pin != GemmLane.unset) {
         why = "pinned"
     } elif (g_g4v_gpu_set && invoke(g_g4v_gpu_serves)) {
         why = "DASLLAMA_METAL_TOWER on: the Metal tower serves the file's planes"

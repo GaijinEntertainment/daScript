@@ -84,6 +84,14 @@ per-row bucket entry, the one the bucket-building kernel writes, with the live e
 hold stale pool bytes, not the sentinel, and an equality test sends their token index out of
 bounds.
 
+**A Metal kernel body that folds simdgroup partials across the threadgroup by hand - a
+`simd_shuffle_xor` butterfly over a lane's value, a lane-0 loop over a partials array, a broadcast
+slot the lanes read back - is a defect: the fold is `tg_sum_all` / `tg_max_all` over the class's
+partials array (`MetalTgReduceBase`'s `tg_sum` / `tg_max` / `tg_rms_inv` over its own), every lane
+holding the result after one barrier, and two folds in a row take a barrier between them.** One
+fold spelled in one place is what the decode attention's, the norms' and the tower's parity cells
+hold; a private butterfly rounds its own way.
+
 **Never put an op every lane of the group must reach together - a `barrier()`, a simdgroup matrix
 op, or a subgroup shuffle, vote, ballot or reduction - behind an early `return`, a loop or a
 branch that a per-lane value decides, unless that value is equal across every lane the op

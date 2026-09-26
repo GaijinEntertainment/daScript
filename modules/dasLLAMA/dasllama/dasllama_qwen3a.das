@@ -133,30 +133,20 @@ def private register_qwen3a_image_tags {
     register_image_family_tag("qwen3a-q8")
 }
 
-enum private Q3aLane {
-    unset
-    exact
-    q8
-}
-var private g_q3a_pin = Q3aLane.unset
+var private g_q3a_pin = GemmLane.unset
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def private q3a_serve_q8() : bool {
-    if (g_q3a_pin != Q3aLane.unset) {
-        return g_q3a_pin == Q3aLane.q8
-    }
-    return !audio_tower_gpu_serves()
-}
+def private q3a_serve_q8() : bool => lane_serves_q8(g_q3a_pin, !audio_tower_gpu_serves())
 
 //! Pin the qwen3a tower's weight format for subsequent loads: q8 (the CPU serving format) vs
 //! f32 planes (the Metal tower's lane; also the fp32 reference-route parity legs).
 //! ``reset_qwen3a_q8`` returns to the policy default.
 def set_qwen3a_q8(on : bool) {
-    g_q3a_pin = on ? Q3aLane.q8 : Q3aLane.exact
+    g_q3a_pin = lane_pin(on)
 }
 
 def reset_qwen3a_q8() {
-    g_q3a_pin = Q3aLane.unset
+    g_q3a_pin = GemmLane.unset
 }
 
 //! Would the next load serve the tower q8 — the pin when set, the policy otherwise.
@@ -165,7 +155,7 @@ def qwen3a_serves_q8() : bool => q3a_serve_q8()
 // the lane changes what a load mints and serves, so the load says which and why
 def private q3a_announce_lane() {
     var why = "the CPU default (no Metal tower serving)"
-    if (g_q3a_pin != Q3aLane.unset) {
+    if (g_q3a_pin != GemmLane.unset) {
         why = "pinned via set_qwen3a_q8"
     } elif (audio_tower_gpu_serves()) {
         why = "the Metal tower serves f32 planes"

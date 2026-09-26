@@ -1935,6 +1935,19 @@ def scale_rows(var y : array<float>; s : float; n : int64) {
 }
 
 //! dst = src over n floats (n % 4 == 0); `dst` sized here.
+//! A conv's channel counts from its weight tensor's dims: [k][cin][cout] for a forward conv, [k][cout][cin] for a
+//! transposed one, the grouped dimension multiplied out.
+def conv1d_dims_of(dims : array<int64>; transposed : bool; groups : int64) : tuple<cin : int64; cout : int64> {
+    return transposed ? (cin = dims[2], cout = dims[1] * groups) : (cin = dims[1] * groups, cout = dims[2])
+}
+
+//! dst [rows x width] = the table's rows ids[r] - an embedding lookup.
+def gather_rows(var dst : array<float>; emb : array<float>; ids : array<auto(TT)>; width : int64) {
+    for (r in range64(long_length(ids))) {
+        copy_floats(emb, int64(ids[r]) * width, dst, r * width, width)
+    }
+}
+
 def copy_rows(@scratch @exact_size var dst : array<float>; src : array<float>; n : int64) {
     rows_width_check(n, "copy_rows")
     dst |> reserve_resize(n)

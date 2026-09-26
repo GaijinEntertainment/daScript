@@ -129,9 +129,10 @@ crosses a dispatch: the 1x1 latent projection and every dense conv on the conv-g
 (a forward conv behind `k - stride` zero rows, a transposed conv's first `t * stride` output rows;
 the input row stride `xs` of `St2ConvArgs` lets a conv read the padded width its producer wrote),
 the depthwise upsample on the residual pool kernel, the two codec transformer layers on the dense
-GEMM stamp with the layer scale, a table rope (the CPU's own cos and sin per position, no device
-trigonometry) and a windowed causal attention kernel over device K/V rows, ELU and the row copies on
-one row kernel, the sample column picked out of the last conv's padded rows. Every GEMM is the
+GEMM stamp with the layer scale, the prefill rows rope over the layer's row stride with the CPU's own
+cos and sin tables (no device trigonometry) and a windowed causal attention kernel over device K/V
+rows, ELU and the row copies on one row kernel, the sample column picked out of the last conv's
+padded rows. Every GEMM is the
 f32-exact stamp: the codec reads within 1e-6 of the CPU chain on the f32 lane that way on the M5
 Max (1e-2 on the served q8 and K-quant lanes, whose CPU chains quantize their activations), and the f16-staged twins
 bought no time on this chain (the row kernels and the attention, not the GEMMs, carry its cost)
@@ -159,10 +160,11 @@ backbone's q8 linears (a K-quant linear requantized to q8 from its dequantized r
 form serves) ride the decode GEMV over a 34B-block blob with their bias rows in the slab; every
 f32 linear rides the row GEMV over the slab's rows - a simdgroup a row, x staged in threadgroup
 memory - so the parity lane runs exact. Per layer: the first norm (the layer before's residual
-joined in the same dispatch), the fused q/k/v projection, one kernel rotating q and k and storing
-k and v into the voice slot's row, the attention row (a threadgroup per head, the scores staged,
-one softmax, the value sum in parts), the out projection, the residual join with the second norm,
-the two ffn projections around the tanh GELU. The out norm writes the conditioning row straight
+joined in the same dispatch - the tower LayerNorm's ADD stamp), the fused q/k/v projection, the
+decode rail's rope-and-store kernel rotating q and k and storing k and v into the voice slot's row
+(its f32 stamp, the rope tables and the caches bound at the position's row), the attention row (a
+threadgroup per head, the scores staged, one softmax, the value sum in parts), the out projection,
+the residual join with the second norm, the two ffn projections around the tanh GELU. The out norm writes the conditioning row straight
 into the readback rows, and the head's GEMVs carry their norm, modulation and activations as
 prologue and epilogue stamps (the LayerNorm and adaLN modulation in, the SiLU, the gated
 residual, the SiLU over the time constant, the tail that adds the noise and denormalizes the

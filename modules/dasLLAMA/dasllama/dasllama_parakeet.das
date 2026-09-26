@@ -1194,36 +1194,26 @@ def register_parakeet_gpu(fn : ParakeetGpuBlocksFn; serves : ParakeetServesFn) {
 //! the f32 blob, so the un-pinned lane defaults to exact); false on CPU builds or knob-off.
 def parakeet_gpu_serves() : bool => g_pk_serves_set && invoke(g_pk_serves)
 
-enum private PkLane {
-    unset
-    exact
-    q8
-}
-var private g_pk_pin = PkLane.unset
+var private g_pk_pin = GemmLane.unset
 
 //! Pin the parakeet weight format for subsequent loads: q8 (the CPU serving lane) vs the fp32
 //! lane the parity legs and the GPU driver read. ``reset_parakeet_q8`` returns to the policy
 //! default (exact when the Metal driver serves).
 def set_parakeet_q8(on : bool) {
-    g_pk_pin = on ? PkLane.q8 : PkLane.exact
+    g_pk_pin = lane_pin(on)
 }
 
 def reset_parakeet_q8() {
-    g_pk_pin = PkLane.unset
+    g_pk_pin = GemmLane.unset
 }
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def parakeet_serves_q8() : bool {
-    if (g_pk_pin != PkLane.unset) {
-        return g_pk_pin == PkLane.q8
-    }
-    return !parakeet_gpu_serves()
-}
+def parakeet_serves_q8() : bool => lane_serves_q8(g_pk_pin, !parakeet_gpu_serves())
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def private pk_announce_lane(q8 : bool) {
     var why = "the CPU default (DASLLAMA_METAL_TOWER off, or no Metal FastConformer driver)"
-    if (g_pk_pin != PkLane.unset) {
+    if (g_pk_pin != GemmLane.unset) {
         why = "pinned via set_parakeet_q8"
     } elif (parakeet_gpu_serves()) {
         why = "the Metal FastConformer driver serves f32 planes"
