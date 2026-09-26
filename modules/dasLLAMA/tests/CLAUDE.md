@@ -370,6 +370,50 @@ off zero, plus the leaky stamp in place (bit for bit the out-of-place rows, the 
 the prefixes before the bases kept, and `test_vkt_add_scale` the residual join (`TtsAddScale`)
 bit-exact against (a + b) / sqrt(2) in f32 over 1030 elements at offsets, out of place and in place,
 the elements outside the run kept.
+`test_vulkan_tts_source_kernels.das` - model-free (a Vulkan device, else skips): the TTS tower's
+Vulkan decoder tail against the CPU chain - `test_vkt_axpy` holds the stage sum's axpy (`TtsAxpy`)
+bit-exact against o + 0.25 y in f32 over 1030 elements at offsets, accumulating onto a filled o and
+overwriting a NaN-filled one (control: the same dispatch at zero = 0 adds o's old contents), the
+elements outside the run kept; `test_vkt_reflect1` the last stage's reflect pad (`TtsReflect1`,
+37 x 24 rows) bit-exact, the sentinel past (t + 1) x c kept; `test_vkt_source` the harmonic source
+(`TtsSrcLow*`, `TtsSrcCumsum*`, `TtsSrcNoise`, `TtsSrcSines*`) on either resample law's stamps in the
+Metal gate's shape (up 300, three harmonics, 700 frames) and at up 2 x 37 frames (the first taps
+read sample 0, the initial phases in) against the CPU `sine_source` chain through `linear_rows` and
+`tanh_inplace` - the phase frames within one ulp of its carry, the mixed signal within 2e-6, the
+source linear at offsets in a slab plane between poisoned slots, a poisoned f0 frame that must red
+both compares - then on the big shape a 40000-frame cumsum against a double accumulator where the
+two laws part by whole cycles, and the own noise draw against the CPU hash (finite, repeatable per
+seed, moved by seeds 78 and 81, apart from the captured rows' signal); `test_vkt_stft` the STFT on
+either pad law's stamp (`TtsStftReflect`, `TtsStftEdge`; the Metal gate's 10 frames with a fourth
+bin whose imaginary row is zero, reaching the zero-imaginary phase rule on both signs) and
+`test_vkt_istft` the inverse STFT (`TtsIstft`) with and without the window envelope (two zeroed
+window taps leaving a quarter of the samples undivided) against their double-precision forms, each
+with a poisoned input that must red the compare, the weights at offsets in one slab plane; every
+output under a NaN fill, every compare with its poisoned element.
+`test_vulkan_tts_pocket_kernels.das` - model-free (a Vulkan device, else skips): the Pocket TTS
+family's Vulkan classes against the CPU chain - `test_vkt_pk_rows` holds the codec stream's row
+copies (`TtsPkRows`, `TtsPkRowsElu`) over a 7 x 13 window at source and destination strides with
+column and row offsets off zero, the plain copy bit-exact and the ELU stamp against the CPU
+`elu_rows` at the approx bar (controls: the negative elements move off the plain copy, the
+non-negative ones pass bit for bit), every element outside the window left at its sentinel;
+`test_vkt_pk_row_scale` the layer scale (`TtsPkRowScale`) in place at t 37 x 72 bit-exact against
+`layer_scale_rows`, x and the scale row at offsets (control: the input row is overwritten);
+`test_vkt_pk_attn` the causal cached attention row (`TtsPkAttn`) against `attention_causal_rows`
+over a `TtsKvCache` of two 64-wide heads, the device's key and value rows written from the cache's
+own layouts with three poisoned rows past the appended 45 - a 45-query prompt over every key, a
+decode step at position 44 over an 8-key window (the query at a row offset of the q plane) and the
+prompt over a 16-key window - at the approx bar (controls: a poisoned key just before the decode
+step's window leaves its output bit for bit, the 16-key window moves the prompt's rows);
+`test_vkt_pk_gemv` the row GEMV's five stamps (`TtsPkGemvDot`, `TtsPkGemvLnSilu`, `TtsPkGemvGate`,
+`TtsPkGemvAddSilu`, `TtsPkGemvTail`) at nin 200 (off the lane multiple) and nout 45 (off the
+four-row multiple) against `linear_vec` under the CPU chain's norm, modulation, SiLU, gated
+residual and frame tail, the weight rows (their stride pad poisoned), bias, norm rows and slab
+vector at offsets in one slab plane between poisoned slots, x, the modulation rows, the noise row,
+y and the latent row at offsets (controls: the gated residual moves its row off its input, the
+masked rows past nout keep their sentinel); `test_vkt_pk_rope` the rows rope (`TtsPkRope`) on the
+k span of 23 rows x 384 at column 128, two 64-wide heads at position 37, the tables from
+`build_rope_tabs`, against `rope_rows` at the approx bar (the q and v spans bit for bit untouched);
+every written-only output under a NaN fill, every compare with its poisoned element.
 
 `test_vulkan_tower_kernels.das` - model-free (a Vulkan device, else skips): the vision and audio towers'
 kernel classes against their CPU oracles - the bidirectional flash tiles (h64 and the padded h128

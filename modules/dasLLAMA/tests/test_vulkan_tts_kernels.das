@@ -717,7 +717,8 @@ def private colstats_arm(t : T?; rows, c : int) {
         let half = mi < c ? "mean" : "ssq"
         to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at {half} channel {mi % c}\n")
         t |> success(bad == 0, "{tag}: the means and squared deviations == the double-precision sums ({bad} of {2 * c} off)")
-        t |> success(!approx(got[2 * c - 1], want[2 * c - 1] + 0.5), "{tag}: the bar reds a poisoned element")
+        t |> success(!approx(got[c - 1], want[c - 1] + 0.5), "{tag}: the bar reds a poisoned mean")   // a sum of 300 squared deviations sits past the relative bar's reach of 0.5
+        t |> success(!approx(got[2 * c - 1], want[2 * c - 1] * 1.01), "{tag}: the bar reds a squared-deviation sum a percent off")
         destroy_device_buf(xd)
         destroy_device_buf(std)
         destroy_host_buf(host)

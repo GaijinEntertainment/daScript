@@ -31,9 +31,9 @@ require _model_tier
 // written by the oracle script's --tokens-fixture), the decode round trip, then the parity rail.
 // Prepared-prompt transfer needs pocket-tts-en-kq.gguf and pocket-tts-en-stuart-kq.gguf;
 // it uses the checked-in jfk_ask_not.wav reference and skips if either model is absent. The
-// quiet-floor cell needs pocket-tts-en-kq.gguf alone. The Metal cells skip on a build without the
-// das_metal module and need a Metal device that serves the tower (they red where a present device
-// declines); the served-lane cells skip unless pocket-tts-en-q8.gguf or pocket-tts-en-kq.gguf is
+// quiet-floor cell needs pocket-tts-en-kq.gguf alone. The GPU cells skip on a build without a GPU
+// module (das_metal or vulkan) and need a device that serves the tower (they red where a present
+// device declines); the served-lane cells skip unless pocket-tts-en-q8.gguf or pocket-tts-en-kq.gguf is
 // stocked, the served frames cell also unless the oracle carries two voices' stage cases; the
 // cells that hold the CPU chain pin the tower off for their run.
 
@@ -45,9 +45,9 @@ let GPU_FRAME_FREE_BAR = 1e-3   //! the frames seat free-running on the f32 lane
 
 //! The tower knob off for a cell that holds the CPU chain; the knob it found, for the restore.
 def private tower_pin_off() : bool {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let found = metal_tower_knob()
-        set_metal_tower(false)
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        let found = gpu_knob()
+        set_gpu(false)
         return found
     } else {
         return false
@@ -56,8 +56,8 @@ def private tower_pin_off() : bool {
 
 [unused_argument(found)]   //! off-Apple there is no knob
 def private tower_restore(found : bool) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(found)
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        set_gpu(found)
     }
 }
 
@@ -520,16 +520,16 @@ def test_pocket_codec_metal(t : T?) {
         t |> skip("no oracle dumps under {oracle_dir()}")
         return
     }
-    static_if (typeinfo builtin_module_exists(das_metal)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         with_job_que() {
             setup_dasllama_jobque_()
             defer() {
                 reset_pocket_q8()
             }
             set_pocket_q8(false)
-            let knob_found = metal_tower_knob()
+            let knob_found = gpu_knob()
             defer() {
-                set_metal_tower(knob_found)
+                set_gpu(knob_found)
             }
             var inscope m <- load_pocket(path)
             var inscope sc = PocketScratch()
@@ -552,7 +552,7 @@ def test_pocket_codec_metal(t : T?) {
             t |> success(done > 0, "at least one stage case ran")
         }
     } else {
-        t |> skip("no Metal module in this build")
+        t |> skip("no GPU module in this build")
     }
 }
 
@@ -566,12 +566,12 @@ def test_pocket_codec_metal_served(t : T?) {
         t |> skip("no oracle dumps under {oracle_dir()}")
         return
     }
-    static_if (typeinfo builtin_module_exists(das_metal)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         with_job_que() {
             setup_dasllama_jobque_()
-            let knob_found = metal_tower_knob()
+            let knob_found = gpu_knob()
             defer() {
-                set_metal_tower(knob_found)
+                set_gpu(knob_found)
             }
             reset_pocket_q8()
             var files = 0
@@ -594,7 +594,7 @@ def test_pocket_codec_metal_served(t : T?) {
             }
         }
     } else {
-        t |> skip("no Metal module in this build")
+        t |> skip("no GPU module in this build")
     }
 }
 
@@ -602,20 +602,20 @@ def test_pocket_codec_metal_served(t : T?) {
 [unused_argument(t, m, tag, stage, latents, frames, bar, sc, cpu)]   // off-Apple the gated body is empty
 def private codec_served_leg(t : T?; m : PocketModel; tag, stage : string; latents : array<float>; frames : int64; bar : float; var sc : PocketScratch;
                              var cpu : array<float>) : bool {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(false)
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        set_gpu(false)
         pocket_decode_latents(m, latents, frames, sc, cpu)
-        set_metal_tower(true)
+        set_gpu(true)
         let h0 = pocket_gpu_stats("codec")
-        let e0 = metal_tower_stats().encodes
+        let e0 = gpu_encodes()
         var inscope b : array<float>
         pocket_decode_latents(m, latents, frames, sc, b)
         let h1 = pocket_gpu_stats("codec")
-        let e1 = metal_tower_stats().encodes
+        let e1 = gpu_encodes()
         var inscope lat_x <- scaled(latents, 3.0)
         var inscope bp : array<float>
         pocket_decode_latents(m, lat_x, frames, sc, bp)
-        return gpu_stage_verdict(t, tag, stage, b, cpu, bp, bar, h1.calls - h0.calls, h1.served - h0.served, e1 - e0, "{metal_tower_declines()}")
+        return gpu_stage_verdict(t, tag, stage, b, cpu, bp, bar, h1.calls - h0.calls, h1.served - h0.served, e1 - e0, "{gpu_declines()}")
     } else {
         return false
     }
@@ -681,22 +681,22 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
                             var sc : PocketScratch) : tuple<fc : int64; cpu : FrameRows> {
     var r : tuple<fc : int64; cpu : FrameRows>
     r.fc = -1l
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(false)
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        set_gpu(false)
         let fc = forced_frames(m, k, k.x0, k.x1, sc)
         r.cpu <- frame_rows(m, sc, fc)
         let rng_cpu = sc.rng
-        set_metal_tower(true)
+        set_gpu(true)
         let h0 = pocket_gpu_stats("frames")
-        let e0 = metal_tower_stats().encodes
+        let e0 = gpu_encodes()
         let fg = forced_frames(m, k, k.x0, k.x1, sc)
         let h1 = pocket_gpu_stats("frames")
-        let e1 = metal_tower_stats().encodes
-        return <- r if (h1.served - h0.served != 1 && !tower_served(t, tag, "{metal_tower_declines()}"))
+        let e1 = gpu_encodes()
+        return <- r if (h1.served - h0.served != 1 && !tower_served(t, tag, "{gpu_declines()}"))
         t |> equal(h1.calls - h0.calls, 1, "{tag}: one hook call")
         t |> equal(fg, fc, "{tag}: the frame count")
         t |> success(same_rng(sc.rng, rng_cpu), "{tag}: the generator ends where the CPU loop's does")
-        let batch = metal_pocket_frame_batch()
+        let batch = gpu_pocket_frame_batch()
         t |> equal(e1 - e0, (fc + batch) / batch + 1l, "{tag}: one tower encode a batch of {batch}, and the codec's")
         var inscope gpu <- frame_rows(m, sc, fg)
         let dl = rel_rms(gpu.lat, r.cpu.lat)
@@ -763,16 +763,16 @@ def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs,
         t |> skip("no oracle dumps under {oracle_dir()}")
         return
     }
-    static_if (typeinfo builtin_module_exists(das_metal)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         with_job_que() {
             setup_dasllama_jobque_()
             defer() {
                 reset_pocket_q8()
             }
             set_pocket_q8(false)
-            let knob_found = metal_tower_knob()
+            let knob_found = gpu_knob()
             defer() {
-                set_metal_tower(knob_found)
+                set_gpu(knob_found)
             }
             var inscope m <- load_pocket(path)
             var inscope sc = PocketScratch()
@@ -793,7 +793,7 @@ def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs,
                 let free_cpu = forced_frames(m, k, none, none, sc)
                 var inscope cpu_free <- frame_rows(m, sc, free_cpu)
                 let rng_free = sc.rng
-                set_metal_tower(true)
+                set_gpu(true)
                 let hf0 = pocket_gpu_stats("frames")
                 let free = forced_frames(m, k, none, none, sc)
                 let hf1 = pocket_gpu_stats("frames")
@@ -810,18 +810,18 @@ def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs,
                 let free_other = forced_frames(m, k, none, none, sc, 1ul)
                 var inscope gpu_other <- frame_rows(m, sc, min(free_other, free_cpu))
                 t |> success(rel_rms(gpu_other.lat, cpu_free.lat) > GPU_FRAME_FREE_BAR, "{tag}: the next seed's free run reds the bar (the compare's control)")
-                let batch_found = metal_pocket_frame_batch()
-                set_metal_pocket_frame_batch(3l)
-                let eb0 = metal_tower_stats().encodes
+                let batch_found = gpu_pocket_frame_batch()
+                set_gpu_pocket_frame_batch(3l)
+                let eb0 = gpu_encodes()
                 let f3 = forced_frames(m, k, k.x0, k.x1, sc)
-                let eb1 = metal_tower_stats().encodes
+                let eb1 = gpu_encodes()
                 var inscope b3 <- frame_rows(m, sc, f3)
                 t |> equal(f3, fc, "{tag}: batches of three make the frame count")
                 t |> equal(eb1 - eb0, (fc + 3l) / 3l + 1l, "{tag}: one tower encode a batch of three, and the codec's")
                 t |> success(rel_rms(b3.lat, leg.cpu.lat) <= GPU_FRAME_BAR, "{tag}: batches of three land within {GPU_FRAME_BAR}")
-                set_metal_pocket_frame_batch(0l)
-                t |> equal(metal_pocket_frame_batch(), 1l, "{tag}: a batch below one clamps to one")
-                set_metal_pocket_frame_batch(batch_found)
+                set_gpu_pocket_frame_batch(0l)
+                t |> equal(gpu_pocket_frame_batch(), 1l, "{tag}: a batch below one clamps to one")
+                set_gpu_pocket_frame_batch(batch_found)
                 register_pocket_gpu(PocketGpuDriver())   //! the seats taken by an empty record: the tower's registration is displaced
                 let ht0 = pocket_gpu_stats("frames")
                 let ft = forced_frames(m, k, k.x0, k.x1, sc)
@@ -840,7 +840,7 @@ def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs,
             t |> success(done > 0, "at least one stage case ran")
         }
     } else {
-        t |> skip("no Metal module in this build")
+        t |> skip("no GPU module in this build")
     }
 }
 
@@ -855,12 +855,12 @@ def test_pocket_frames_metal_served(t : T?) {
         t |> skip("no oracle dumps under {oracle_dir()}")
         return
     }
-    static_if (typeinfo builtin_module_exists(das_metal)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         with_job_que() {
             setup_dasllama_jobque_()
-            let knob_found = metal_tower_knob()
+            let knob_found = gpu_knob()
             defer() {
-                set_metal_tower(knob_found)
+                set_gpu(knob_found)
             }
             reset_pocket_q8()
             var files = 0
@@ -886,7 +886,7 @@ def test_pocket_frames_metal_served(t : T?) {
             }
         }
     } else {
-        t |> skip("no Metal module in this build")
+        t |> skip("no GPU module in this build")
     }
 }
 
@@ -899,7 +899,7 @@ def test_pocket_synthesis_metal(t : T?) {
     if (!model_available(t, path)) {
         return
     }
-    static_if (typeinfo builtin_module_exists(das_metal)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         with_job_que() {
             setup_dasllama_jobque_()
             reset_pocket_q8()   //! the served lane is the unpinned default, whatever an earlier cell left
@@ -913,7 +913,7 @@ def test_pocket_synthesis_metal(t : T?) {
             }
         }
     } else {
-        t |> skip("no Metal module in this build")
+        t |> skip("no GPU module in this build")
     }
 }
 
@@ -1500,16 +1500,16 @@ def test_pocket_long_chunk(t : T?) {
         t |> equal(length(chunks), 1, "an unsplittable text is one chunk")
         var inscope ids <- pocket_text_ids(m.pocket, chunks[0])
         t |> success(length(ids) > POCKET_MAX_TOKENS, "{length(ids)} tokens: past the budget the caches were sized for")
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let knob_found = metal_tower_knob()
+        static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+            let knob_found = gpu_knob()
             defer() {
-                set_metal_tower(knob_found)
+                set_gpu(knob_found)
             }
-            set_metal_tower(true)
-            let d0 = metal_tower_declines()
+            set_gpu(true)
+            let d0 <- gpu_declines()
             var inscope a <- synthesize(m, text, "alba")
             t |> success(speech_stats(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")
-            let d1 = metal_tower_declines()
+            let d1 <- gpu_declines()
             t |> success((d1?["shape"] ?? 0l) - (d0?["shape"] ?? 0l) >= 1l, "the chunk past the codec seat's frame cap declines by shape, and the CPU codec speaks it")
         } else {
             var inscope a <- synthesize(m, text, "alba")

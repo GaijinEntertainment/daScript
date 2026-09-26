@@ -953,6 +953,20 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the depthwise transposed pool: the decoder's upsampling residual block, the Vulkan StyleTTS2 driver's alone. Its
     // coverage is test_vkt_tts_pool_dw in test_vulkan_tts_conv_kernels.das
     "tts_pool_dw_cls_spv",
+    // the decoder tail (the stage sum's axpy, the last stage's reflect pad, the harmonic source's increments, cumsum,
+    // noise draw and sines on both resample laws, the STFT on both pad laws, the inverse STFT): the Vulkan StyleTTS2
+    // driver's alone, which no zoo carrier reaches. Their coverage is test_vkt_axpy, test_vkt_reflect1, test_vkt_source,
+    // test_vkt_stft and test_vkt_istft in test_vulkan_tts_source_kernels.das
+    "tts_axpy_cls_spv", "tts_reflect1_cls_spv", "tts_src_low_torch_cls_spv", "tts_src_low_onnx_cls_spv",
+    "tts_src_cumsum_torch_cls_spv", "tts_src_cumsum_onnx_cls_spv", "tts_src_noise_cls_spv", "tts_src_sines_torch_cls_spv",
+    "tts_src_sines_onnx_cls_spv", "tts_stft_reflect_cls_spv", "tts_stft_edge_cls_spv", "tts_istft_cls_spv",
+    // the Pocket TTS classes (the codec stream's row copies with and without the ELU, the layer scale, the causal cached
+    // attention row, the row GEMV's five stamps, the rows rope): the Vulkan Pocket driver's alone, which no zoo carrier
+    // reaches. Their coverage is test_vkt_pk_rows, test_vkt_pk_row_scale, test_vkt_pk_attn, test_vkt_pk_gemv and
+    // test_vkt_pk_rope in test_vulkan_tts_pocket_kernels.das
+    "tts_pk_rows_cls_spv", "tts_pk_rows_elu_cls_spv", "tts_pk_row_scale_cls_spv", "tts_pk_attn_cls_spv",
+    "tts_pk_gemv_dot_cls_spv", "tts_pk_gemv_ln_silu_cls_spv", "tts_pk_gemv_gate_cls_spv", "tts_pk_gemv_add_silu_cls_spv",
+    "tts_pk_gemv_tail_cls_spv", "tts_pk_rope_cls_spv",
     // the scalar beta/alpha GEMM: the same route split for a hybrid's f32 beta/alpha rows on the f16
     // feed; off the f16 feed (DASLLAMA_COOPMAT=sdot4) it runs. Its coverage is the dn_ba run of
     // test_vkd_dn_family in test_vulkan_kernels.das
