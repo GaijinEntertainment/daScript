@@ -13852,7 +13852,7 @@ class template TtsSrcCumsumT : TtsSrcLawT {
     @ssbo @binding = 1 lowc : array<float>
     @push_constant pa : TtsSourceArgs
 
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256, precise = true)]   //! the device compiler folds the two-float sum's correction terms otherwise
     def run {
         let h = gl_LocalInvocationID.x
         if (h < pa.nh) {
