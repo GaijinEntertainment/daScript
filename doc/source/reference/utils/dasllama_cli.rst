@@ -80,24 +80,260 @@ files; ``utils/dasllama-server/test_cli.das`` runs each one:
    dasllama-cli chat -m gemma-4-E2B-it-Q4_K_M.gguf --image-mmproj mmproj-gemma-4-E2B-it-bf16.gguf --audio-mmproj mmproj-gemma-4-E2B-it-bf16.gguf
    dasllama-cli bench -m SmolLM2-135M-Instruct-Q8_0.gguf --npl 2 -o md
 
-Shared flags and the config file
-================================
+Flags
+=====
 
-Every command takes the server's knobs under the server's names: ``--gpu auto |
-off | metal | metal-required | vulkan`` (the same automatic pick - Metal on a
-Mac, Vulkan on a card, the CPU otherwise; ``vulkan`` serves a model that fits
-the card whole from the device, the conversation's cache with it), ``--quant``,
-``--kv-dtype``, ``--ctx``, ``--threads``, ``--models-dir``, and the sampler
-where a command samples (``--temp``, ``--top-k``, ``--top-p``, ``--min-p``, the
-penalties, ``--seed``, ``-n`` / ``--max-tokens``); ``<command> --help`` lists them
+``<command> --help`` prints the command's own flags, then the groups it takes
 (from the source tree ``-?`` or ``--show-help``, since the daslang host takes
-``--help`` for itself). A sampler knob left unset
-takes the command's default: greedy for ``complete``, and for ``chat`` and
-``talk`` temperature 0.7, top-k 20, top-p 0.95 - under greedy decoding a
-thinking model loops on its own draft and never reaches its answer. ``<command> --help`` lists
-them beside the command's own flags. A bare model name resolves under
-``--models-dir`` (``~/.dasllama/models``, where the server's catalog downloads
-land; ``DASLLAMA_MODELS_DIR`` overrides).
+``--help`` for itself). The shared flags are the server's knobs under the
+server's names; the config file fills whatever they leave empty (below).
+
+.. list-table:: Shared flags (every command)
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--config`` / ``-c``
+     - TOML config file (default: ``dasllama-server.toml`` in the cwd, else beside the program); keys mirror the long flag names, explicit flags win
+   * - ``--model`` / ``-m``
+     - The LLM GGUF: a path, or a file name under ``--models-dir``
+   * - ``--quant`` / ``-q``
+     - Weight serving mode: ``fp32`` | ``q8`` (default; the file-format spellings serve natively under ``q8``) | ``q4`` = the legacy requant tier
+   * - ``--kv-dtype``
+     - KV cache codec: ``f32`` | ``f16`` (default) | ``q8_0`` | ``tq4``
+   * - ``--gpu``
+     - GPU backend: ``auto`` (default: metal or vulkan when detected, else CPU) | ``off`` | ``metal`` | ``metal-required`` | ``vulkan``; ``vulkan`` serves a model that fits the card whole from the device, the conversation's cache with it
+   * - ``--metal``
+     - Metal serving mode when ``--gpu`` is unset: ``off`` | ``auto`` | ``required``
+   * - ``--gpu-layers``
+     - vulkan: resident MoE expert-stack layers, offloaded from the end (default auto under ``--gpu vulkan``)
+   * - ``--gpu-stream``
+     - vulkan: streamed prefill MoE layers below the resident set (default auto under ``--gpu vulkan``)
+   * - ``--gpu-dn``
+     - vulkan: deltanet (recurrent) layers through the device chain (default on under ``--gpu vulkan``)
+   * - ``--gpu-attn``
+     - vulkan: full-attention layers through the device chain (default on under ``--gpu vulkan``)
+   * - ``--gpu-dense``
+     - vulkan: dense attention-side planes resident (default off)
+   * - ``--gpu-vram-mb``
+     - vulkan: resident-weight VRAM cap override in MB (default: query the device)
+   * - ``--ctx``
+     - Context-length cap in tokens (default: the model's trained ``context_length``)
+   * - ``--threads`` / ``-t``
+     - Worker-lane cap for the matmul dispatch (default 16; ``-1`` = all cores)
+   * - ``--models-dir``
+     - Where a bare model name resolves (default ``~/.dasllama/models``, where the server's catalog downloads land; ``DASLLAMA_MODELS_DIR`` overrides)
+   * - ``--tune``
+     - Re-tune this box's dasLLAMA kernels, then relaunch (a fat build carries no tuner and ignores it)
+   * - ``--verbose``
+     - Echo the engine's log records (``logs/dasllama-cli.log``: a missing Metal profile, a GPU decline, a model load) to stderr as they land; stdout stays the answer
+   * - ``--help`` / ``-?``
+     - The command's help (``--show-help`` from the source tree)
+
+.. list-table:: Sampling (``complete``, ``chat``, ``talk``)
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--temp``
+     - Sampling temperature; ``0`` = greedy. Unset, ``complete`` is greedy and ``chat`` / ``talk`` sample at 0.7 - under greedy decoding a thinking model loops on its own draft and never reaches its answer
+   * - ``--top-k``
+     - Top-k cutoff (unset: 20 on the sampled default, off under greedy)
+   * - ``--top-p``
+     - Nucleus cutoff (unset: 0.95 on the sampled default)
+   * - ``--min-p``
+     - Drop tokens below this fraction of the top probability (default off)
+   * - ``--repeat-penalty``
+     - Multiplicative repetition penalty over the recent window (default 1 = none)
+   * - ``--presence-penalty``
+     - Subtracted from every token already in the window (default 0)
+   * - ``--frequency-penalty``
+     - Subtracted per occurrence in the window (default 0)
+   * - ``--seed`` / ``-s``
+     - The sampler's seed for a reproducible run (default: the session's fixed seed)
+   * - ``--max-tokens`` / ``-n``
+     - Reply token budget (default 256 for ``complete``, 16384 for ``chat`` and ``talk``)
+
+.. list-table:: Speaker (``chat``, ``speak``, ``talk``)
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--play``
+     - Also play each spoken reply through the speaker once its WAV has landed; the run blocks until the clip ends. A box with no audio device says so once and keeps writing the files
+   * - ``--null-audio``
+     - With ``--play``: drive the null audio backend instead of a device (a test box, a CI runner)
+
+.. list-table:: ``complete``
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--prompt`` / ``-p``
+     - The prompt (or ``--file``, or the first bare argument)
+   * - ``--file`` / ``-f``
+     - Read the prompt from this file
+   * - ``--image``
+     - A picture to ask about (needs ``--image-mmproj``); the family's own thinking default applies
+   * - ``--image-mmproj``
+     - The vision mmproj GGUF for ``--image``
+   * - ``--quiet``
+     - Print the completion only - no token counts or rates after it
+
+.. list-table:: ``chat``
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--system``
+     - The system prompt
+   * - ``--script``
+     - Read the turns from this file instead of the terminal, one message per line (slash commands work); the reply follows each
+   * - ``--image-mmproj``
+     - The vision mmproj GGUF: arms ``/image``
+   * - ``--audio-mmproj``
+     - The audio mmproj GGUF: arms ``/audio`` (the E-series mmproj serves both towers, pass the same file twice)
+   * - ``--tts``
+     - A TTS model GGUF: ``/speak on`` writes every reply to a WAV file
+   * - ``--voice`` / ``-v``
+     - Voice name for ``--tts`` (default: the model's first voice)
+   * - ``--speed``
+     - Speech speed multiplier for ``--tts`` (default 1.0)
+   * - ``--out-dir``
+     - Where the spoken replies land, ``reply_<n>.wav`` each (default: the cwd)
+   * - ``--hide-thinking``
+     - Hide a thinking model's reasoning (default: it streams before the answer, a blank line between)
+   * - ``--no-think``
+     - Answer directly on a hybrid thinking model (default: the model's own default)
+   * - ``--quiet``
+     - Print the reply only - no token counts or rates after it
+
+.. list-table:: ``transcribe``
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--asr`` / ``-a``
+     - The ASR model (GGUF or ``.bin``): a path, or a file name under ``--models-dir``
+   * - ``--mmproj``
+     - mmproj for a GGUF ASR model (paired with ``--asr``)
+   * - ``--file`` / ``-f``
+     - The audio file to transcribe (wav / mp3 / flac / ogg; or the first bare argument)
+   * - ``--out`` / ``-o``
+     - Write the transcript here instead of stdout
+   * - ``--lang`` / ``-l``
+     - Language hint (default: auto for a model that detects it, else ``en``); a model that detects the language refuses a hint, a code the model does not speak is refused with the codes it does
+
+.. list-table:: ``speak``
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--tts``
+     - The TTS model GGUF: a path, or a file name under ``--models-dir``
+   * - ``--text``
+     - The text to speak (or ``--file``, or the first bare argument)
+   * - ``--file`` / ``-f``
+     - Read the text from this file
+   * - ``--out`` / ``-o``
+     - The WAV file to write (16-bit PCM, the model's rate; default ``out.wav``)
+   * - ``--voice`` / ``-v``
+     - Voice name or alias (default: the model's first voice); a voice the model does not carry is refused with the voices it does
+   * - ``--speed``
+     - Speech speed multiplier (default 1.0); a speed on a model that takes none is refused
+   * - ``--tts-lane``
+     - TTS weight lane: ``q8`` (default; the prepared quant image beside the GGUF) | ``f32`` (the file's own planes)
+   * - ``--prof``
+     - Print the generator's per-op profile
+
+.. list-table:: ``talk``
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--asr`` / ``-a``
+     - The ASR model (GGUF or ``.bin``) that hears ``--in``
+   * - ``--mmproj``
+     - mmproj for a GGUF ASR model (paired with ``--asr``)
+   * - ``--in`` / ``-i``
+     - The audio file to answer (wav / mp3 / flac / ogg; or the first bare argument)
+   * - ``--prompt`` / ``-p``
+     - A text prompt to answer instead of ``--in``
+   * - ``--system``
+     - The system prompt
+   * - ``--lang`` / ``-l``
+     - Language hint for the ASR model (default: auto for a model that detects it, else ``en``)
+   * - ``--tts``
+     - The TTS model GGUF that speaks the reply
+   * - ``--voice`` / ``-v``
+     - Voice name for ``--tts`` (default: the model's first voice)
+   * - ``--speed``
+     - Speech speed multiplier for ``--tts`` (default 1.0)
+   * - ``--out`` / ``-o``
+     - The WAV file the reply lands in (default ``reply.wav``)
+   * - ``--no-think``
+     - Answer directly on a hybrid thinking model (default: the model's own default)
+   * - ``--quiet``
+     - Print the transcript and the reply only - no stage times or token counts
+
+.. list-table:: ``embed``
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--text``
+     - The text to embed (or ``--file``, or the first bare argument)
+   * - ``--file`` / ``-f``
+     - Read the text from this file
+   * - ``--json``
+     - Print the vector as a JSON array (default: one float per line)
+
+.. list-table:: ``tokenize``
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--text``
+     - The text to tokenize (or ``--file``, or the first bare argument)
+   * - ``--file`` / ``-f``
+     - Read the text from this file
+   * - ``--ids``
+     - Print the ids only, space-separated (default: one ``id<TAB>piece`` per line)
+   * - ``--no-special``
+     - Do not add the model's BOS / leading specials
+
+.. list-table:: ``bench``
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Flag
+     - Meaning
+   * - ``--plen`` / ``-p``
+     - Prompt tokens per pp rep (default 512, llama-bench ``-p``; 0 skips the row)
+   * - ``--ngen`` / ``-n``
+     - Generated tokens per tg rep (default 128, llama-bench ``-n``; 0 skips the row)
+   * - ``--reps`` / ``-r``
+     - Timed repetitions per row after an untimed warmup (default 5, llama-bench ``-r``)
+   * - ``--npl``
+     - Streams of the batched tg row, ``tg<n>@<npl>``: that many streams through the scheduler, the summed rate (default 0 = no batched row)
+   * - ``--output`` / ``-o``
+     - ``txt`` (default) | ``md`` (a llama-bench-style table)
+
+The config file
+===============
+
+A bare model name resolves under ``--models-dir`` (``~/.dasllama/models``,
+where the server's catalog downloads land; ``DASLLAMA_MODELS_DIR`` overrides).
 
 The ``dasllama-server.toml`` in the current directory, else beside the
 program - the server's own lookup - fills whatever the flags leave empty: the model (a ``[[models]]``
@@ -112,8 +348,9 @@ the vector, the ids - on stdout alone, so it pipes; the CLI's progress lines and
 the token counters (prompt and generated tokens, time to first token, prefill and
 decode rates) on stderr, ``--quiet`` dropping the counters; and the engine's own
 notices - a missing Metal profile, a GPU decline - in ``logs/dasllama-cli.log``
-under the das root, where the server's land too (from the source tree the tune
-policy guard still prints its one status line first). A refusal - no
+under the das root, where the server's land too, echoed to stderr as they land
+under ``--verbose`` (from the source tree the tune policy guard still prints its
+one status line first). A refusal - no
 model, a file that does not exist, a flag value that does not parse - names
 what is missing and exits non-zero.
 

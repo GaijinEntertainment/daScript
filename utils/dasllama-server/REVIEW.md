@@ -7,18 +7,18 @@ doc: `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo roo
 `dasllama/*` module, or to `README.md` text stating dasLLAMA engine behavior or a measured
 number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
-**A diff that adds a `main.das` flag, changes what one does or defaults to, or edits any copy of
-its text leaves the flag's `@clarg_doc`, its `README.md` table row with its `Default` cell, the
-`README.md` section on its config-file key where one exists, and its row in
+**A diff that changes what a `main.das` flag does or defaults to, or edits any copy of its text,
+leaves the flag's `@clarg_doc`, its `README.md` table row with its `Default` cell, the `README.md`
+section on its config-file key where one exists, and its row in
 `doc/source/reference/utils/dasllama_server.rst` (repo root) stating the same behavior and the
-same default, adding any copy that is missing.** A copy left behind sends the user to a flag that
-no longer does what it says.
+same default.** A copy left behind sends the user to a flag that no longer does what it says;
+that every flag has its README and rst mention at all is `REVIEW.das`'s.
 
-**A diff that adds a `cli_args.das` flag, changes what one does or defaults to, or edits any copy
-of its text leaves the flag's `@clarg_doc`, its entry in the `README.md` dasllama-cli section (the
-command's table row, or the shared-flags sentence for a shared flag), and its row in
-`doc/source/reference/utils/dasllama_cli.rst` (repo root) stating the same behavior and the same
-default, adding any copy that is missing.**
+**A diff that changes what a `cli_args.das` flag does or defaults to, or edits any copy of its
+text, leaves the flag's `@clarg_doc`, its entry in the `README.md` dasllama-cli section (the
+command's row, or the shared-flags paragraph for a shared, sampler or speaker flag), and its row
+in `doc/source/reference/utils/dasllama_cli.rst` (repo root) stating the same behavior and the
+same default.**
 
 **A diff that changes how `serving_knobs.das` derives a knob updates, for every `main.das` and
 `cli_args.das` flag that reads that knob, the flag's `@clarg_doc`, its `README.md` entry and its

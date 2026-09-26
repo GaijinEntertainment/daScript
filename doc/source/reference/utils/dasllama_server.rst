@@ -147,6 +147,34 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - ``auto``
      - GPU backend: ``auto`` (metal or vulkan when detected, else CPU) | ``off`` | ``metal`` | ``metal-required`` | ``vulkan``. ``vulkan`` serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got. Details under *The gpu key*
+   * - ``--metal``
+     -
+     - ``off``
+     - Metal serving mode when ``--gpu`` is unset: ``off`` | ``auto`` (the GPU when a path's gates pass, the CPU otherwise) | ``required`` (a call the GPU cannot serve is a hard failure). A set flag keeps the legacy env-driven path
+   * - ``--gpu-layers``
+     -
+     - *auto*
+     - vulkan: resident MoE expert-stack layers, offloaded from the end (config key ``gpu_layers``; *The gpu key*)
+   * - ``--gpu-stream``
+     -
+     - *auto*
+     - vulkan: streamed prefill MoE layers below the resident set (config key ``gpu_stream``)
+   * - ``--gpu-dn``
+     -
+     - on
+     - vulkan: deltanet (recurrent) layers through the device chain
+   * - ``--gpu-attn``
+     -
+     - on
+     - vulkan: full-attention layers through the device chain
+   * - ``--gpu-dense``
+     -
+     - off
+     - vulkan: dense attention-side planes resident
+   * - ``--gpu-vram-mb``
+     -
+     - *device*
+     - vulkan: resident-weight VRAM cap override in MB (default: query the device)
    * - ``--asr``
      - ``-a``
      - ---
@@ -195,6 +223,10 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - ``hybrid``
      - ``hybrid``: the LLM uses the worker team while the ASR and TTS workers run inline; ``team``: every caller uses serialized team publishes; ``inline``: every caller runs independently
+   * - ``--affinity``
+     -
+     - ``-1``
+     - Worker CPU affinity: ``-1`` = the platform default (QoS on darwin, off elsewhere), ``0`` = off, ``1`` = an ideal-CPU hint, ``2`` = a hard mask (``DAS_JOBQUE_AFFINITY`` overrides)
    * - ``--chunk``
      -
      - ``64``
@@ -215,6 +247,10 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - *auto*
      - MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (``streams = 1``) host-cached and leaves it off otherwise: at one stream the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x), at several streams the plain batched step is faster, and a device-resident slot (``--gpu vulkan``) keeps plain decode, since an armed round keeps every stream's cache on the host. ``true`` / ``false`` set it outright. It needs a model with an in-file NextN head (the ``-MTP-`` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. ``/v1/stats`` reports ``mtp_drafted`` / ``mtp_accepted``
+   * - ``--lcpp-bin``
+     -
+     - ---
+     - Path to a llama.cpp ``llama-bench`` binary: the control page's benchmark button then runs the A/B child (our bench, then llama-bench on the same GGUF) instead of the in-process rows; source-tree daslang only (config key ``lcpp_bin``)
    * - ``--models-dir``
      -
      - ``~/.dasllama/models``
