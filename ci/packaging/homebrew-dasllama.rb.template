@@ -1,0 +1,54 @@
+# Homebrew formula template for dasllama in the daslang tap.
+# Lives in the tap repo as Formula/dasllama.rb; this copy is the template of record.
+# render_manifests.py fills @TAG@, @VERSION@ and each @SHA:<asset>@ from the release; this header is dropped.
+class Dasllama < Formula
+  desc "OpenAI-compatible local LLM server, CLI and benchmark over dasLLAMA"
+  homepage "https://dasllama.io"
+  version "@VERSION@"
+  license "BSD-3-Clause"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/dasllama-darwin-arm64.zip"
+      sha256 "@SHA:dasllama-darwin-arm64.zip@"
+    end
+  end
+  on_linux do
+    on_intel do
+      url "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/dasllama-linux-x86_64.tar.gz"
+      sha256 "@SHA:dasllama-linux-x86_64.tar.gz@"
+    end
+    on_arm do
+      url "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/dasllama-linux-arm64.tar.gz"
+      sha256 "@SHA:dasllama-linux-arm64.tar.gz@"
+    end
+  end
+
+  # the tray app is the cask; both put the same commands on PATH
+  conflicts_with cask: "dasllama"
+
+  def install
+    # the programs find their runtime beside themselves, so the tree stays together; brew
+    # strips a sole top dir on unpack (dasllama-server/ on linux, the .app on a mac)
+    libexec.install Dir["*"]
+    if OS.mac?
+      app = File.directory?(libexec/"Contents") ? libexec : libexec/"dasllama-server.app"
+      exes = { @BREW_EXES_MAC@ }
+      exes.each { |cmd, exe| bin.install_symlink app/"Contents/MacOS"/exe => cmd }
+    else
+      exes = { @BREW_EXES_LINUX@ }
+      exes.each { |cmd, exe| bin.install_symlink libexec/exe => cmd }
+    end
+  end
+
+  service do
+    run [opt_bin/"dasllama-watchdog"]
+    keep_alive false
+    log_path var/"log/dasllama.log"
+    error_log_path var/"log/dasllama.log"
+  end
+
+  test do
+    assert_match "dasllama-cli", shell_output("#{bin}/dasllama-cli --help")
+  end
+end

@@ -99,5 +99,44 @@ class RpmSpecTest(unittest.TestCase):
         self.assertNotIn("/usr/bin/daslang", self.spec("v0.6.5"))
 
 
+class DasllamaRpmSpecTest(unittest.TestCase):
+    """The dasllama profile: a flat bundle, its own prefix, declared requirements."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.bundle = os.path.join(self.tmp, "dasllama-server")
+        os.makedirs(self.bundle)
+        for name in ("dasllama-server.exe", "dasllama-cli.exe", "dasllama-bench.exe", "watchdog"):
+            p = os.path.join(self.bundle, name)
+            with open(p, "wb") as f:
+                f.write(b"\x7fELF")
+            os.chmod(p, 0o755)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def spec(self):
+        return subprocess.run(["bash", SCRIPT, "--spec-only", "--package", "dasllama", self.bundle, "v0.6.5"],
+                              check=True, capture_output=True, text=True).stdout
+
+    def test_name_prefix_and_requirements(self):
+        spec = self.spec()
+        self.assertIn("Name: dasllama\n", spec)
+        self.assertIn("\n/opt/dasllama\n", spec)
+        self.assertIn("Requires: openssl-libs\n", spec)
+        self.assertIn("Requires: curl\n", spec)
+
+    def test_commands_drop_the_exe_suffix_and_rename_the_watchdog(self):
+        spec = self.spec()
+        self.assertIn("ln -s /opt/dasllama/dasllama-server.exe %{buildroot}/usr/bin/dasllama-server\n", spec)
+        self.assertIn("ln -s /opt/dasllama/watchdog %{buildroot}/usr/bin/dasllama-watchdog\n", spec)
+        self.assertNotIn("/usr/bin/watchdog", spec)
+
+    def test_unknown_package_fails(self):
+        r = subprocess.run(["bash", SCRIPT, "--spec-only", "--package", "nope", self.bundle, "v0.6.5"],
+                           capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

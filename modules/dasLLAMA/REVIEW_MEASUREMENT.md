@@ -115,7 +115,7 @@ manual cell whenever it can run the documented command.
 `benchmarks/lcpp_bench.das` requires directly copies into the PR body the `sanity:` lines and the
 `tune gate:` line of an `lcpp_bench` run of the fat exe built from the diff's tree, or says that
 run printed none.** A fat exe is what `daspkg
-release --fat <class>` builds (`DAS_TUNE_MODE=fat`, `ARCHITECTURE_MEASUREMENT.md` sec.2.42a).
+release --fat <class>` builds (`DAS_TUNE_MODE=fat`, `ARCHITECTURE_MEASUREMENT_FAT_START.md` sec.2.42a).
 
 **A diff that claims to make an already-served path faster, where a rig leg drives that path,
 re-mints a board row (`performance/records/<box>.json`) that exercises it, in the same change,
@@ -158,7 +158,7 @@ a model or a child there is a hang or a silent skip.
 
 **A shipped exe's startup race races only a GPU pipeline-state twin - two pipeline-state objects
 built from the same shader, raced to set a runtime knob - never a `[tune]` kernel family**
-(`ARCHITECTURE_MEASUREMENT.md` sec.2.42a). A `[tune]` winner needs a recompiled clone the shipped
+(`ARCHITECTURE_MEASUREMENT_FAT_START.md` sec.2.42a). A `[tune]` winner needs a recompiled clone the shipped
 exe does not carry.
 
 **A diff never adds a confirm outside `harness/` - it goes there instead.** A confirm is an

@@ -98,10 +98,12 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
   MoE region split, the job queue the engine dispatches on, and the mode that dispatches to none.
 - `ARCHITECTURE_MEDIA.md` - sec.2.13-2.16: the padded tower GEMM widths, the family GPU hooks,
   the tower weight lane, and the plain-Model ASR decoders.
-- `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10, 2.20, 2.40-2.41, 2.42a, 2.45: the benchmark
-  rig, the tune gate, the sanctioned instrumentation rails, the ASR board's GPU row pairs, the
-  `[tuned]` perm precedence, the mint wall in the sidecar's provenance, the fat exe's
-  first-start race, and the speculative round's ruler record.
+- `ARCHITECTURE_MEASUREMENT.md` - sec.2.5, 2.10, 2.20, 2.40-2.41, 2.45: the benchmark rig, the
+  tune gate, the sanctioned instrumentation rails, the ASR board's GPU row pairs, the `[tuned]`
+  perm precedence, the mint wall in the sidecar's provenance, and the speculative round's ruler
+  record.
+- `ARCHITECTURE_MEASUREMENT_FAT_START.md` - sec.2.42a: a fat exe's first-start race and its
+  per-user sidecar.
 - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` - sec.2.5a: the Vulkan GEMM probe's arms, the
   shapes they run at, and the alternates they are read against.
 - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` - sec.2.21, 2.26-2.27: the instruments that time a

@@ -29,6 +29,7 @@ require cli_args                // the plan: subcommand, flags, config file
 require cli_repl                // the chat loop's logic
 require serving_knobs           // the spellings shared with the server + the --gpu pick
 require model_catalog           // catalog_models_dir
+require user_state              // open_logs - the log lives under ~/.dasllama in a shipped exe
 require dasllama/dasllama_bench // the llama-bench rows - the same rows dasllama-bench and the server's in-process bench run
 require audio/audio_boost       // --play: the spoken reply through the speaker (dasAudio ships with the facade's audio decoding)
 
@@ -939,11 +940,11 @@ def main : int {
         return fail("run under the JIT - bin/daslang -jit utils/dasllama-server/cli.das -- <command> ...")
     }
     // stdout carries the answer alone: the engine's notices (a missing Metal profile, a decline)
-    // go to logs/dasllama-cli.log under the das root, the CLI's own lines to stderr. Not an
+    // go to dasllama-cli.log (user_state's logs_dir), the CLI's own lines to stderr. Not an
     // [init]: a host that loads this file as a module (the MCP tools) carries its own hook
     // agent, and two collide. The tune policy guard speaks before main, so from the source
     // tree its one status line still lands on stdout; the shipped exe has no guard.
-    logger_init(TOOL)
+    open_logs(TOOL, false)
     let argv <- get_user_args()
     var plan <- parse_cli(argv)
     if (!empty(plan.error)) {
@@ -959,7 +960,7 @@ def main : int {
         arm_verbose()
     }
     log_tune_status(TOOL)
-    let cfg = load_cli_config(plan.common.config, get_this_module_dir())
+    let cfg = load_cli_config(plan.common.config, discover_config(get_this_module_dir()))
     if (!empty(cfg.error)) {
         return fail(cfg.error)
     }

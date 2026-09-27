@@ -131,9 +131,16 @@ forward loop.
 - **`dasllama_parity.das`** - CPU-reference caches for the parity instruments. Test-facing, but
   library-side because the caches outlive a single suite.
 - **`dasllama_prefix.das`** - the prefix/page cache for evaluated token history.
+- **`dasllama_env.das`** - the `[EnvConfig]` knob declarations, loaded once into the `g_env_*`
+  globals, and the paths derived from them: the per-user `~/.dasllama` directory and the config
+  lookup the server, its CLI and the exchange share.
 - **`dasllama_fat_start.das`** - a fat exe's first start: the runtime-section snapshot the tuner's
-  kernel half also writes, the Metal twin crown race (synthetic, no model), and the first-start
-  hook it registers with the box-profile apply (`ARCHITECTURE_MEASUREMENT.md` sec.2.42a).
+  kernel half also writes, the Metal twin crown race (synthetic, no model), the first-start hook
+  it registers with the box-profile apply, and the per-user sidecar placement - the path, the
+  one-time adoption of a sidecar beside the exe, and the placement hook the apply runs first
+  (`ARCHITECTURE_MEASUREMENT_FAT_START.md` sec.2.42a). The placement hook is optional, unlike a
+  hook that does the work itself: unset, the apply reads the sidecar where the tune framework put
+  it, which is what every build but a fat exe wants.
 - **`dasllama_bench.das`** - the benchmark rows as one-rep steps over a `Model` and a `Session`:
   the pp warmup and timed prefill, the tg warmup and timed single-token forwards (whole-rep, or
   one token at a time for a driver that keeps its tick loop live), the warmup logit sanity check,
@@ -154,6 +161,7 @@ forward loop.
   rail), `utils/dasllama-server/model_catalog.das` (the env rail + the model-set serving view; it
   re-exports `model_specs` so the server's catalog tests can gate the serve rows),
   `utils/dasllama-server/test_openai_server*.das` (env-registry test knobs),
+  `utils/dasllama-server/user_state.das` (the env rail: the per-user directory and config lookup),
   `modules/dasLLVM/daslib/llvm_user_modules.das` + `modules/dasLLVM/tests/test_{grid,tune,tuned}.das`
   (the tune-generator contract).
 - **`performance/model_specs.das`** - the ONE model-set table: per carrier, the profiled-catalog

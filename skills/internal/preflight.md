@@ -70,7 +70,7 @@ working-tree copy.
 | `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed | the doc gates |
 | `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
 | `dasweb-verify-browser.yml` | `pull_request` touching `utils/internal/dasweb-verify/browser/**`, `web/examples/ui/samples/data.json`, or the workflow file itself; `workflow_dispatch` | `node_test`: `node --test` in `utils/internal/dasweb-verify/browser` - section below |
-| `dasllama_server_release.yml` | `release: prereleased`, `workflow_dispatch` (`publish` input), and a branch push that edits the file itself or what the bundle carries (`utils/dasllama-server/**`, `utils/watchdog/**`, `utils/daspkg/**`, `daslib/daspkg.das`, `modules/dasHV/**`, `modules/dasLLAMA/benchmarks/lcpp_bench.das`, `modules/dasLLAMA/dasllama/dasllama_bench.das`; `.md` edits excepted) | four cells (linux x86_64 and arm64 on ubuntu-22.04, darwin arm64, windows x64): daslang with the release modules, `daspkg release --fat x86-avx2 \| arm-neon` of `utils/dasllama-server` (the server, the watchdog, the `dasllama-bench` companion), smoke, package; a release or a `publish` dispatch uploads to the rolling `dasllama-server` release (and the daslang release being cut). Local mirror: `bin/daslang utils/daspkg/main.das -- release --fat <class> --root utils/dasllama-server --out <dir>` on the box, then the smoke by hand - the server on a spare port answering `/v1/stats` in setup mode, `dasllama-bench -m none.gguf --help` exiting 0 |
+| `dasllama_server_release.yml` | `release: prereleased`, `workflow_dispatch` (`publish` input), and a branch push editing a non-`.md` file the workflow's `paths:` filter names (the workflow itself, what the bundle carries, `ci/packaging/**`) | four cells (linux x86_64 on ubuntu-22.04, linux arm64 on ubuntu-22.04-arm, darwin arm64, windows x64): daslang with the release modules, `daspkg release --fat x86-avx2 \| arm-neon` of `utils/dasllama-server`, the smoke run from a copy with a fresh HOME (write-protected off Windows), the `dasllama` archive, `.deb` + `.rpm` (linux) and pip wheel with their smokes; a release or a `publish` dispatch uploads the archives to the rolling `dasllama-server` release, and a release also uploads every asset to the daslang release being cut; then, on a release event only, `pypi_route` + `publish_pypi` by tag shape, and `publish_manifests` - section below |
 | `release.yml` | `release: prereleased` and `workflow_dispatch` (build + smoke; publishes nothing) | four cells (linux x86_64, linux arm64, darwin26 arm64, windows x86_64): build, the test suite under `-jit`, bundle + smoke, `.deb` / `.rpm` / pip wheel, sha256 per asset, the `.rpm` and wheel smokes, upload; then `pypi_route` + `publish_pypi` by tag shape - section below |
 | `nightly_issue.yml` | `workflow_call`, from `nightly.yml` once a `schedule` run has a failed job | keeps ONE open `nightly-failure` issue for the whole nightly, titled `The nightly is red`: the first red night files it with a link to each failed job, and every red night after that comments on it with its own while it is open. Close the issue when the nightly is green. No local mirror |
 
@@ -305,21 +305,50 @@ from apt, no Fedora runner) -> "Set up Python for the wheel" -> "Build pip wheel
 "Checksum every release asset" ->
 "Smoke-test pip wheel" -> "Upload wheel for the PyPI publish job" (every run) -> "Upload
 release assets" (release events only). `pypi_route` reads the tag shape, `publish_pypi`
-uploads the wheel set. The packaging scripts are `ci/packaging/`
+uploads the wheel set, `publish_manifests` (release events only) pushes the Homebrew formula and
+the scoop manifest to `borisbat/homebrew-daslang` and `borisbat/scoop-daslang` with the
+`PACKAGING_TOKEN` secret, a token that can push to both. The packaging scripts are `ci/packaging/`
 (`README.md` there is the per-release ritual).
 
 | CI step | Local mirror |
 |---|---|
 | Install binaries + Smoke-test installed bundle | `cmake --build build --config Release --target check_bundle_smoke` (the `build.yml` `bundle_smoke` gate) |
-| Build .deb | linux only: `bash ci/packaging/deb_build.sh build/daslang_bundle <tag> <out>` |
-| Build .rpm + Smoke-test .rpm | linux with `rpm`: `bash ci/packaging/rpm_build.sh build/daslang_bundle <tag> <out>`, then the smoke by hand - `rpm -qpl` naming `/usr/bin/daslang` and `/usr/bin/daslang-live`, `rpm2cpio <rpm> \| cpio -idm` in a scratch dir, `./opt/daslang/bin/daslang --version`, `readlink usr/bin/daslang` = `/opt/daslang/bin/daslang`; the spec alone, any OS: `cmake --build build --config Release --target check_rpm_spec` |
+| Build .deb | linux only: `bash ci/packaging/deb_build.sh build/daslang_bundle <tag> <out>`; the control file alone, any unix: `cmake --build build --config Release --target check_deb_control` |
+| Build .rpm + Smoke-test .rpm | linux with `rpm`: `bash ci/packaging/rpm_build.sh build/daslang_bundle <tag> <out>`, then the smoke by hand - `rpm -qpl` naming `/usr/bin/daslang` and `/usr/bin/daslang-live`, `rpm2cpio <rpm> \| cpio -idm` in a scratch dir, `./opt/daslang/bin/daslang --version`, `readlink usr/bin/daslang` = `/opt/daslang/bin/daslang`; the spec alone, any unix: `cmake --build build --config Release --target check_rpm_spec` |
 | Build pip wheel + Smoke-test pip wheel | `python ci/packaging/wheel_build.py build/daslang_bundle <tag> <out>` + `pip install <out>/*.whl` in a venv; the repack rules alone: `cmake --build build --config Release --target check_wheel_repack` |
-| Checksum every release asset, the uploads, `pypi_route`, `publish_pypi` | none - runner-side plumbing over the assets above |
+| Checksum every release asset | `bash ci/packaging/checksum_assets.sh <out>` |
+| the uploads, `pypi_route`, `publish_pypi` | none - runner-side plumbing over the assets above |
+| `publish_manifests` | `bash ci/packaging/publish_manifests.sh daslang <tag>` - renders from the release's `.sha256` assets and prints the diff against the tap and bucket without pushing; the render alone: `cmake --build build --config Release --target check_manifest_render` |
 
 The workflow's wiring - step order, conditions, the runner-side smokes - has no per-PR lane;
-the packaging scripts do (`check_rpm_spec`, `check_wheel_repack`, `check_bundle_smoke` above).
+the packaging scripts do - the `check_*` targets above.
 Prove a wiring change with a `workflow_dispatch` of `release.yml` on the branch - it builds and
 smokes every cell and publishes nothing - or with the next RC cut.
+
+## dasllama_server_release.yml
+
+Each cell: release-modules build -> "Release the server as a fat <class> bundle" -> "Smoke-test
+the bundle" (from a copy with a fresh HOME: the bundle unchanged after, the logs under
+`<home>/.dasllama`, nothing in the working directory) -> "Package" -> "Build .deb and .rpm" +
+"Smoke-test the .deb and .rpm" (linux: apt installs the `.deb`, the commands run from PATH, the
+server boots through its `/usr/bin` link) -> "Set up Python for the wheel" -> "Build pip wheel"
+-> "Smoke-test pip wheel" -> "Checksum every asset" -> "Upload wheel for the PyPI publish job"
+-> "Upload workflow artifact" -> the uploads. `pypi_route` + `publish_pypi` publish the
+`dasllama` wheels, `publish_manifests` pushes the dasllama formula, cask and scoop manifest -
+all three on release events only, the last with `PACKAGING_TOKEN`.
+
+| CI step | Local mirror |
+|---|---|
+| Release the server as a fat bundle + Smoke-test the bundle | `bin/daslang utils/daspkg/main.das -- release --fat <class> --root utils/dasllama-server --out <dir>`, then from a write-protected copy with `HOME` pointed at a scratch dir: `watchdog --help`, `dasllama-cli --help`, `dasllama-bench -m none.gguf --help`, the server and then the watchdog each answering `/v1/stats` in setup mode; the copy's `find` listing identical before and after, `$HOME/.dasllama/logs/libhv.*.log` present, no `libhv.*.log` or `logs/` in the working directory |
+| Build .deb and .rpm + Smoke-test the .deb and .rpm | `bash ci/packaging/deb_build.sh --package dasllama <dir>/dasllama-server <tag> <out>` (Debian-family linux) and `rpm_build.sh` the same (`rpm` installed); the renders, any unix: `cmake --build build --config Release --target check_deb_control check_rpm_spec`; the install smoke needs a Debian-family linux box |
+| Build pip wheel + Smoke-test pip wheel | `python ci/packaging/wheel_build.py --package dasllama <dir>/dasllama-server <tag> <out>` (`<dir>` itself on a Mac) + `pip install` in a venv; the repack rules: `check_wheel_repack` |
+| Checksum every asset | `bash ci/packaging/checksum_assets.sh <out>` |
+| the uploads, `pypi_route`, `publish_pypi` | none - runner-side plumbing |
+| `publish_manifests` | `bash ci/packaging/publish_manifests.sh dasllama <tag>` (dry run: the diff, no push); the render: `check_manifest_render` |
+
+A branch push that touches the carried paths runs every cell but the upload to the daslang
+release being cut, the rolling `dasllama-server` publish and the three publish jobs; a `publish`
+dispatch adds the rolling publish, and nothing else.
 
 ## nightly_imgui.yml
 

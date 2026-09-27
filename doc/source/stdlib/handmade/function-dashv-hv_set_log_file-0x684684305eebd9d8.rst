@@ -1,0 +1,1 @@
+Sends libhv's own log to a daily file <path>.YYYYMMDD.log (the directory must exist) instead of libhv.YYYYMMDD.log in the working directory. An empty path changes nothing; DASLIVE_HV_LOG still routes the log to a console or silences it.

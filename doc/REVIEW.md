@@ -15,9 +15,10 @@ reader sends that host and whether the host sets cookies.**
 
 **A diff that adds to an authored `.rst` under `source`, or to a stub under
 `source/stdlib/handmade`, anything a reader is told to fetch, run, or type - an address, a
-file, a command, a flag, an API, a `.das_package` name - states, in the PR body, that each
-exists and works at merge, and where that was checked** - the build proves the page renders,
-never that what it points a reader at is there.
+file, a command, a flag, an API, a `.das_package` name - states, in the PR body, for each: where
+it was checked to exist and work at merge, or which job of a `.github/workflows/` (repo root)
+workflow that a release tag triggers creates and smoke-tests it** - the build proves the page renders, never that what it points a reader at is
+there.
 
 **A diff that touches the `require` list of `reflections/das2rst.das` keeps
 `require daslib/rst_comment` ahead of every other require** - the `//!` comment reader

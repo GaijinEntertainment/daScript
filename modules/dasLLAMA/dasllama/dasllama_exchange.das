@@ -251,7 +251,7 @@ def exchange_fetch_and_apply(base_url : string; sha : string; manifest_path : st
 // ===== policy + config discovery =====
 
 //! Locate the app's config file the same way the app does: `--config X` / `--config=X` / `-c X`
-//! on the command line, else `<cwd>/<name>`, else `<name>` beside the app script. "" = none.
+//! on the command line, else `dasllama_find_config` beside the app script. "" = none.
 def exchange_discover_config(app_config_name : string) : string {
     var args <- get_user_args()
     var found = ""
@@ -270,11 +270,7 @@ def exchange_discover_config(app_config_name : string) : string {
     if (!empty(found)) {
         return found
     }
-    if (stat(app_config_name).is_valid) {
-        return app_config_name
-    }
-    let beside = path_join(dir_name(tune_app_script()), app_config_name)
-    return stat(beside).is_valid ? beside : ""
+    return dasllama_find_config(app_config_name, dasllama_home_dir(), dir_name(tune_app_script()))
 }
 
 //! Resolve the exchange policy: baked defaults < the TOML at `config_path` < env overrides.

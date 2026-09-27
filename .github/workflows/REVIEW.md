@@ -32,11 +32,15 @@ the diff changes, and a trigger change corrects every section that names the tri
 the table does not list, or lists wrong, is one nobody mirrors before a push.
 
 **A step the diff adds, renames, or deletes, other than a provisioning step, adds, corrects, or
-deletes its name, in the same change, in the section of `skills/internal/preflight.md` (repo
-root) for the workflow that runs it - adding that section when the workflow has none, and using
-the section for the job that runs it when the workflow carries one per job; when the step has a
-local mirror, the same change also adds, corrects, or deletes its row in that section's mirror
-table, adding the table when the section has none.**
+deletes its entry, in the same change, in the section of `skills/internal/preflight.md` (repo
+root) for the workflow that runs it - the job's section when the workflow carries one per job, a
+new section when it has none. A job the diff adds is entered once, by its job id, and that entry
+covers its steps; a step added, renamed, or deleted in an existing job is entered by its
+`name:`.**
+
+**A step with a local mirror that the diff adds, renames, or deletes adds, corrects, or deletes
+its row in that section's mirror table, in the same change, adding the table when the section
+has none.**
 
 **A per-PR check leaves the per-PR path only to the nightly cron (`github.event_name ==
 'schedule' || github.event_name == 'workflow_dispatch'`), and the diff either names the

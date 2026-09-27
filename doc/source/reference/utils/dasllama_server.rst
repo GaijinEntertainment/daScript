@@ -32,37 +32,89 @@ facade is complete.
 Get it
 ======
 
-The server ships as a standalone download from the rolling
-``dasllama-server`` release,
-https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-server,
-refreshed with every daslang release: ``dasllama-server-darwin-arm64.zip``
-(macOS, Apple silicon), ``dasllama-server-windows-x64.zip``,
-``dasllama-server-linux-x86_64.tar.gz`` and ``dasllama-server-linux-arm64.tar.gz``.
-The Linux bundles need glibc 2.35 or newer (Debian 12, Ubuntu 22.04 and later),
-the system OpenSSL 3 (``libssl3`` on Debian and Ubuntu, ``openssl-libs`` on
-Fedora) and ``curl`` for the catalog downloads; the macOS and Windows bundles
-carry their own OpenSSL.
+The server ships as the ``dasllama`` package, refreshed with every daslang
+release:
 
-Unpack it and start the supervisor beside the server - ``watchdog``
-(``watchdog.exe``), or on macOS the ``dasllama-server.app`` itself, whose
-launcher is the watchdog. The server binary beside it is ``dasllama-server.exe``
-on Linux and Windows alike; the macOS app carries it as
-``Contents/MacOS/dasllama-server``. The watchdog keeps the server up, puts the
-dasllama mark in the notification area, and a click on it opens the control
-page at ``http://127.0.0.1:8080/``. With no model configured the server starts
-in setup mode: pick a model from the catalog, it downloads into
-``~/.dasllama/models``, and *serve this model* restarts into it. The config it
-writes, ``dasllama-server.toml`` beside the exe, and the tune sidecar beside it
-survive an upgrade unpacked over the old directory on Linux and Windows; on
-macOS a new ``.app`` replaces the old one whole, so copy the two files out of
-``Contents/MacOS`` first and back in after.
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Platform
+     - Install
+   * - macOS, Apple silicon
+     - ``brew install --cask borisbat/daslang/dasllama`` (the tray app), or
+       ``brew install borisbat/daslang/dasllama`` (the commands)
+   * - Windows x64
+     - ``scoop bucket add daslang https://github.com/borisbat/scoop-daslang``,
+       then ``scoop install dasllama``
+   * - Debian, Ubuntu
+     - ``sudo apt install ./dasllama_<version>_<arch>.deb``, from the release page
+   * - Fedora
+     - ``sudo dnf install ./dasllama-<version>-1.<arch>.rpm``, from the release page
+   * - Linux (Homebrew)
+     - ``brew install borisbat/daslang/dasllama``
+   * - any, with Python
+     - ``pip install dasllama``
+
+Or unpack an archive from the rolling ``dasllama-server`` release,
+https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-server:
+``dasllama-darwin-arm64.zip`` (macOS, Apple silicon),
+``dasllama-windows-x64.zip``, ``dasllama-linux-x86_64.tar.gz`` and
+``dasllama-linux-arm64.tar.gz``.
+
+Every form carries the same four programs. A package manager puts them on PATH
+as ``dasllama-server``, ``dasllama-cli``, ``dasllama-bench`` and
+``dasllama-watchdog``. Inside an archive they are ``dasllama-server.exe``,
+``dasllama-cli.exe``, ``dasllama-bench.exe`` and ``watchdog`` (``watchdog.exe``
+on Windows) on Linux and Windows alike; the macOS ``.app`` carries them without
+the suffix in ``Contents/MacOS``.
+
+The Linux builds need glibc 2.35 or newer (Debian 12, Ubuntu 22.04 and later),
+the system OpenSSL 3 (``libssl3`` on Debian and Ubuntu, ``openssl-libs`` on
+Fedora) and ``curl`` for the catalog downloads - the ``.deb`` and ``.rpm`` pull
+them in. The macOS and Windows builds carry their own OpenSSL.
+
+Start the supervisor - ``dasllama-watchdog`` (``watchdog`` in an archive), or
+on macOS the ``dasllama-server.app`` itself, whose launcher is the watchdog.
+``brew services start dasllama`` starts it at login. The watchdog keeps the
+server up, puts the dasllama mark in the notification area, and a click on it
+opens the control page at ``http://127.0.0.1:8080/``. With no model configured
+the server starts in setup mode: pick a model from the catalog, it downloads
+into ``~/.dasllama/models``, and *serve this model* restarts into it.
+
+Everything the programs write lives under ``~/.dasllama``
+(``%USERPROFILE%\.dasllama`` on Windows), never beside them. So an installed
+copy stays read-only, and an upgrade keeps it all:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Path
+     - What
+   * - ``models/``
+     - the catalog downloads, and the ``.dlim`` images baked beside them
+   * - ``dasllama-server.toml``
+     - the config the control page saves
+   * - ``tune/<program>.tune.json``
+     - the box's runtime section: the Metal kernel choices raced at the first
+       start, the knobs
+   * - ``logs/``
+     - ``dasllama-server.log``, ``dasllama-cli.log``, the watchdog's log and
+       crash bundles, libhv's daily log
+
+``--config`` names a config outright. Without it, the programs look for
+``dasllama-server.toml`` in the working directory, then in ``~/.dasllama``,
+then beside the program. A config or sidecar an earlier download kept beside
+the exe still reads - the sidecar is copied to ``tune/`` at the first start. A
+JIT run from the SDK keeps its logs in the SDK's ``logs/``.
 
 The exe is a fat build (``daspkg release --fat``): plain code for the
 platform's baseline CPU class - ``x86-avx2`` on x86, ``arm-neon`` on arm64 -
 with one clone of every ``[tune]`` kernel per class the engine ships a profile
 for (``x86-vnni512``, ``x86-amx``, ``arm-i8mm``), picked from cpuid at start.
 On a Mac the Metal kernel choices are raced once at the first start and kept
-beside the exe. That is the good default, and it is as far as a solid
+in ``~/.dasllama/tune/``. That is the good default, and it is as far as a solid
 executable goes: a fat build cannot tune - its kernels are baked, it carries no
 tuner, and ``--tune``, the sidecar exchange and a re-tune have nothing to act
 on (the control page's exchange levers refuse). To tune every kernel for this
@@ -71,11 +123,12 @@ JIT - the command under *Run from the source tree* - or ``daspkg release`` the
 package on that box: either mints the box's own sidecar, every kernel raced on
 your own hardware instead of picked from a class profile.
 
-The bundles are not code-signed. macOS quarantines a downloaded app, and an app
-started from the download folder runs from a read-only copy where nothing it
-writes beside itself survives - so first drag ``dasllama-server.app`` out of
-Downloads with the Finder, then either allow it under System Settings >
-Privacy & Security after the first refused start, or clear the flag once with
+The builds are not code-signed. macOS asks once under System Settings >
+Privacy & Security before the cask's first start. An app unpacked from a
+downloaded archive is quarantined, and started from the download folder it runs
+from a read-only copy - so first drag ``dasllama-server.app`` out of Downloads
+with the Finder, then either allow it under System Settings > Privacy &
+Security after the first refused start, or clear the flag once with
 ``xattr -dr com.apple.quarantine dasllama-server.app``. Windows SmartScreen
 shows an unknown publisher: *More info*, *Run anyway*.
 
@@ -91,11 +144,12 @@ per second beside the hardware line. Every route that could contend holds for
 the run (the text, audio and speech routes answer 503, the model-switching,
 bake and download routes 409). A run is seconds on a small model. The same
 rows from a shell, and the llama.cpp comparison the page cannot run itself,
-come from ``dasllama-bench`` beside the server (``dasllama-bench.exe`` on Linux
-and Windows, ``dasllama-server.app/Contents/MacOS/dasllama-bench`` on a Mac)::
+come from ``dasllama-bench`` (on PATH from a package; in an archive
+``dasllama-bench.exe`` beside the server on Linux and Windows,
+``dasllama-server.app/Contents/MacOS/dasllama-bench`` on a Mac)::
 
-   ./dasllama-bench.exe -m ~/.dasllama/models/<model>.gguf           # pp512/tg128, five reps
-   ./dasllama-bench.exe -m <model.gguf> --ref /path/to/llama-bench   # and llama.cpp on the same GGUF
+   dasllama-bench -m ~/.dasllama/models/<model>.gguf           # pp512/tg128, five reps
+   dasllama-bench -m <model.gguf> --ref /path/to/llama-bench   # and llama.cpp on the same GGUF
 
 The two run the same rows, not the same numbers: the page measures the served
 slot as it is - its device, its KV codec - while ``dasllama-bench`` runs f16
@@ -126,7 +180,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--config``
      - ``-c``
      - *auto*
-     - TOML config file; keys mirror the long flag names, explicit CLI flags override. Without the flag, a ``dasllama-server.toml`` in the cwd or next to the program loads automatically
+     - TOML config file; keys mirror the long flag names, explicit CLI flags override. Without the flag, a ``dasllama-server.toml`` in the cwd, in ``~/.dasllama`` or next to the program loads automatically, the first found
    * - ``--model``
      - ``-m``
      - *(required)*
@@ -265,8 +319,8 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      - Show help and exit
 
 A config file replaces long command lines; keys are the long flag names with
-underscores. A ``dasllama-server.toml`` in the cwd, or next to the program (the
-exe directory in a release bundle), loads automatically; ``--config other.toml``
+underscores. A ``dasllama-server.toml`` in the cwd, in ``~/.dasllama``, or next
+to the program loads automatically, the first one found; ``--config other.toml``
 picks a different one:
 
 .. code-block:: toml
@@ -308,6 +362,11 @@ per-entry ``ctx``, ``quant``, ``kv_dtype``, ``streams``, ``chunk``,
    name = "smol"
    path = "D:/models/SmolLM2-135M-Instruct-Q8_0.gguf"
    backend = "cpu"    # never touches the device - alternating with the GPU slot costs nothing
+
+An explicit ``--model`` wins over the roster: the entry with that path becomes
+the default, and a path the roster does not list joins it as the default. A
+missing file, or a route name another entry already takes, is logged, and the
+roster boots unchanged.
 
 Chat and completion requests batch continuously (``dasllama/dasllama_scheduler.das``):
 up to ``--streams`` generations run concurrently through one ``eval_batch``
@@ -360,20 +419,25 @@ Per-box tuning
 This section is the JIT run's - the SDK path. The standalone download is a fat
 build: one baked clone of every kernel per CPU class, picked at start, no
 tuner, no sidecar of its own (only the runtime section its first start writes
-beside the exe); nothing below applies to it, and ``--tune`` is ignored there.
+into ``~/.dasllama/tune/``); nothing below applies to it, and ``--tune`` is
+ignored there.
 
-The server declares ``[tune_policy(missing = "auto")]``, so the first start on
-an untuned box runs the dasLLAMA kernel tuner, writes the per-box manifest, and
-relaunches itself with the winners; thereafter it serves directly and logs the
-tune status at startup. ``--tune`` forces a re-tune. ``DAS_TUNE_POLICY=error``
-skips per-start tuning while developing (it prints the tuner command instead of
-running it).
+The server declares ``[tune_policy(missing = "restart")]``. The first start on
+an untuned box adopts the shipped profile for its CPU class, and what the
+profile does not answer runs the dasLLAMA kernel tuner. A tune writes the
+sidecar and exits with code 3, before the port opens; the watchdog relaunches
+the server with the winners (without a watchdog, start it again). Thereafter it
+serves directly and logs the tune status at startup. A start with no model
+configured skips the tune, so the setup page opens at once. ``--tune`` forces a
+re-tune. ``DAS_TUNE_POLICY=error`` skips per-start tuning while developing (it
+prints the tuner command instead of running it).
 
-The winners live at ``<das_root>/dasllama.tune.json`` and are shared by every
-dasLLAMA application on the box. :ref:`dasllama-cli <utils_dasllama_cli>` ships
-beside the server with the same ``[tune_policy(missing = "auto")]`` and reads
-the same manifest: whichever of the two you run first tunes the box, the other
-is then instant. See :ref:`Kernel tuning <tune>` for the framework.
+The winners live in a sidecar beside the script the JIT runs:
+``utils/dasllama-server/main.tune.json`` for the server
+(``DAS_TUNE_MANIFEST`` names another path). :ref:`dasllama-cli <utils_dasllama_cli>`
+declares ``[tune_policy(missing = "auto")]`` - it tunes, then relaunches
+itself - and keeps its own sidecar beside ``cli.das``. See
+:ref:`Kernel tuning <tune>` for the framework.
 
 The sidecar exchange - dasllama.io's tune-sidecar service - is closed by
 default: the three config-only keys ``exchange_accept`` (``verified`` | ``any``
@@ -429,7 +493,7 @@ Endpoints
      - The control page (``control.html`` beside the server): live stats and charts, the models panel (per-slot cards with state and GPU badges, prefix hit rate, activate buttons), the stream swimlane, a chat panel (every sampling knob, thinking inline, mic input, a speaker button under ``--tts``), a speech studio, the config editor with the ``[[models]]`` roster and save/restart, GC and drain buttons. Polls ``/v1/stats`` and ``/v1/streams`` at 1 Hz
    * - ``GET``
      - ``/v1/models``
-     - Lists every served slot (and ``--asr`` if loaded); requests route on these ids through their ``"model"`` field
+     - Lists every served slot, plus the ``--asr`` and ``--tts`` models when loaded; requests route on these ids through their ``"model"`` field
    * - ``POST``
      - ``/v1/models/activate``
      - ``{"model": name}`` --- make ``name`` the default + stepped slot and move the GPU tier to it now (loopback-only; 409 while work is live)
@@ -486,7 +550,7 @@ Endpoints
      - Read the bake state and log / bake the slot's prepared ``.dlim`` image through ``dasllama-convert`` (``POST`` is loopback-only)
    * - ``GET`` / ``POST``
      - ``/config``
-     - The effective config with per-key source (``default`` / ``cli`` / ``toml``), the ``[[models]]`` roster and the GPU tier status / validate and save an authoritative TOML, applied on the next restart (``POST`` is loopback-only)
+     - The effective config with per-key source (``default`` / ``cli`` / ``toml``), the ``[[models]]`` roster and the GPU tier status / validate and save an authoritative TOML to the loaded config, or to ``~/.dasllama/dasllama-server.toml`` on a config-less start, applied on the next restart (``POST`` is loopback-only)
    * - ``GET``
      - ``/exchange``
      - The tune-sidecar exchange surface: policy, the consent state, the current sidecar's identity and share state
@@ -602,8 +666,8 @@ Tool / function calling
 -----------------------
 
 ``/v1/chat/completions`` speaks the OpenAI function-calling protocol: pass
-``tools`` (and ``tool_choice``; ``"none"`` disables, the forced-function object
-form is not honored), get back ``finish_reason: "tool_calls"`` with
+``tools`` (and ``tool_choice``: ``"none"`` disables, ``"required"`` acts as
+``"auto"``, the forced-function object form is not honored), get back ``finish_reason: "tool_calls"`` with
 ``message.tool_calls``, send the results as ``role: "tool"`` messages, repeat.
 Assistant ``tool_calls`` turns and ``role: "tool"`` results replay through the
 chat template on each stateless resend, so agent loops (opencode, pi, ...) work
@@ -681,11 +745,13 @@ Supervised deployment
 
 The server runs under the shared watchdog in ``utils/watchdog/``, in the
 release bundle and in a JIT deployment alike. The watchdog needs no arguments:
-in the bundle it finds the baked exe beside it, in a JIT deployment ``main.das``
-beside ``bin/Release/daslang.exe``, and ``watchdog.json`` pins the name so logs
-land in ``logs/dasllama-watchdog.log``, turns the tray on and names ``tray.ico``
-as its mark. From the source tree the watchdog does not sit beside the script,
-so pass ``--cwd``::
+in the bundle it finds the baked exe beside it (``watchdog.json`` names
+``dasllama-server`` among the bundle's programs), in a JIT deployment
+``main.das`` beside ``bin/Release/daslang.exe``. ``watchdog.json`` also pins the
+name, turns the tray on, names ``tray.ico`` as its mark, and points the state
+directory at ``~/.dasllama``, so the watchdog's log lands in
+``~/.dasllama/logs/dasllama-watchdog.log``. From the source tree the watchdog
+does not sit beside the script, so pass ``--cwd``::
 
    bin/Release/watchdog.exe --cwd utils/dasllama-server --jit-stack
 
@@ -693,16 +759,17 @@ The first JIT start on an untuned box writes the tune sidecar and exits with
 code 3; the watchdog recognizes that bootstrap exit and relaunches. It writes
 rotating JSON-line logs, polls ``/v1/models``, and after a crash copies the
 minidump with the matching JIT artifacts, tune manifest and log into
-``logs/crashes/``, then restarts with bounded exponential backoff.
+``~/.dasllama/logs/crashes/``, then restarts with bounded exponential backoff.
 
 ``daspkg release --root utils/dasllama-server --out <dir>`` bakes the server
 into a standalone bundle: the exe, the shared modules and runtime libraries it
-needs, ``watchdog`` beside it, ``dasllama-bench``, ``watchdog.json``,
-``control.html`` and ``tray.ico``. Plain ``release`` tunes the kernels on the
-build box and ships that box's sidecar; ``release --fat x86-avx2`` (``arm-neon``
-on arm64) is what the public download is built from. Keep the deployed
-``dasllama-server.toml`` and ``dasllama-server.tune.json`` across upgrades, and
-stop a running server first - Windows locks the DLLs.
+needs, ``watchdog`` beside it, ``dasllama-cli``, ``dasllama-bench``,
+``watchdog.json``, ``control.html`` and ``tray.ico``. Plain ``release`` tunes
+the kernels on the build box and ships that box's sidecar; ``release --fat
+x86-avx2`` (``arm-neon`` on arm64) is what the public download is built from.
+The config and the tune sidecar live under ``~/.dasllama``, so an upgrade
+unpacked over the old bundle keeps them; stop a running server first - Windows
+locks the DLLs.
 
 
 Testing
@@ -735,6 +802,10 @@ in :ref:`the dasLLAMA knob reference <dasllama_env>`)::
 - ``test_exchange_client.das``, ``test_model_catalog.das``,
   ``test_setup_mode.das`` --- model-free: the sidecar exchange client against a
   fake exchange, the catalog-table invariants, a slotless setup-mode boot.
+- ``test_slot_served.das``, ``test_model_override.das``,
+  ``test_worker_dispatch.das`` --- model-free: every ``served`` /
+  ``served_note`` arm, the ``--model``-over-roster override, the media worker's
+  dispatch under the job queue.
 - ``tests/`` --- the control page itself under Playwright (Node + chromium),
   against JSON/SSE fixtures captured from a real server; ``npm ci && npx
   playwright test`` in that directory.

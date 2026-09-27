@@ -107,7 +107,7 @@ def test_models_dir_resolution(t : T?) {
         t |> equal(catalog_models_dir_from("D:/somewhere/models/", "", "H:/u"), "D:/somewhere/models")
         t |> equal(catalog_models_dir_from("D:\\somewhere\\models\\", "", "H:/u"), "D:\\somewhere\\models")
         t |> equal(catalog_models_dir_from("D:/cfg-models", "E:/env-models/", "H:/u"), "E:/env-models")
-        t |> equal(catalog_models_dir_from("", "", "H:/u"), path_join(path_join("H:/u", ".dasllama"), "models"))
+        t |> equal(catalog_models_dir_from("", "", "H:/u/.dasllama"), path_join("H:/u/.dasllama", "models"))
         // bare roots must keep their separator - stripping "/" or "C:\\" retargets the cwd/drive
         t |> equal(catalog_models_dir_from("", "/", "H:/u"), "/")
         t |> equal(catalog_models_dir_from("", "C:\\", "H:/u"), "C:\\")

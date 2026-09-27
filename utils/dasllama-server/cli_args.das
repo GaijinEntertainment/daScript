@@ -4,8 +4,8 @@ module cli_args shared
 
 //! dasllama-cli's command line as a plan: the subcommand, the flags every subcommand shares, the
 //! sampler, and each subcommand's own flags - parsed from the argv slice after the subcommand
-//! and checked before anything loads. The config file (`dasllama-server.toml` beside the exe
-//! or in the cwd, or `--config`) fills what the flags left empty, so a box the server's setup
+//! and checked before anything loads. The config file (`--config`, else `dasllama-server.toml` in
+//! the cwd, in `~/.dasllama` or beside the exe) fills what the flags left empty, so a box the server's setup
 //! page configured answers `dasllama-cli chat` with no flags at all.
 
 require daslib/clargs
@@ -43,7 +43,7 @@ let CLI_USAGE_LINES : array<string> <- [
     "  bench        the llama-bench rows (pp512 / tg128, tg128@N) on a model",
     "",
     "dasllama-cli <command> --help lists that command's flags.",
-    "A dasllama-server.toml beside the program or in the current directory supplies the model,",
+    "A dasllama-server.toml in the current directory, in ~/.dasllama or beside the program supplies the model,",
     "the towers, the speech models and the backend when the flags do not."
 ]
 
@@ -55,7 +55,7 @@ def command_of(name : string) : CliCommand => to_enum(type<CliCommand>, name, Cl
 [CommandLineArgs]
 struct CommonArgs {
     @clarg_short = "c"
-    @clarg_doc = "TOML config file (default: dasllama-server.toml in the cwd, else beside the program); keys mirror the long flag names, explicit flags win"
+    @clarg_doc = "TOML config file (default: dasllama-server.toml in the cwd, else in ~/.dasllama, else beside the program); keys mirror the long flag names, explicit flags win"
     config : string
 
     @clarg_short = "m"
@@ -103,7 +103,7 @@ struct CommonArgs {
     @clarg_doc = "Where a bare model name resolves (default ~/.dasllama/models; DASLLAMA_MODELS_DIR overrides)"
     models_dir : string
 
-    @clarg_doc = "Echo the engine's log records (logs/dasllama-cli.log: a missing Metal profile, a GPU decline, model load) to stderr as they land; stdout stays the answer"
+    @clarg_doc = "Echo the engine's log records (dasllama-cli.log - ~/.dasllama/logs from an installed build, the das root's logs/ from the source tree: a missing Metal profile, a GPU decline, model load) to stderr as they land; stdout stays the answer"
     verbose : bool
 
     @clarg_doc = "Re-tune this box's dasLLAMA kernels, then relaunch (a fat build carries no tuner and ignores it)"
@@ -596,17 +596,6 @@ struct CliConfig {
     error : string           // the read or parse failure of an explicit --config
 }
 
-//! The config a program reads with no `--config`: `dasllama-server.toml` in the cwd, else beside
-//! the program (`program_dir`); "" when neither exists. The one lookup both programs share.
-def discover_config(program_dir : string) : string {
-    let here = "dasllama-server.toml"
-    if (stat(here).is_valid) {
-        return here
-    }
-    let beside = path_join(program_dir, "dasllama-server.toml")
-    return stat(beside).is_valid ? beside : ""
-}
-
 //! The roster's default entry (`default = true`, else the first): its path and per-model
 //! overrides land on the config where the flat keys left them empty.
 def private apply_roster(root : JsonValue?; var cfg : CliConfig) {
@@ -684,11 +673,11 @@ def parse_cli_config(body : string; var cfg : CliConfig) : bool {
     return true
 }
 
-//! Read the config the plan names, or the discovered one; a missing explicit `--config` is the
-//! error, a missing discovered file is no config at all.
-def load_cli_config(named : string; program_dir : string) : CliConfig {
+//! Read the config the plan names, or the `discovered` one (`user_state`'s `discover_config`, ""
+//! for none); a missing explicit `--config` is the error, a missing discovered file is no config.
+def load_cli_config(named, discovered : string) : CliConfig {
     var cfg : CliConfig
-    cfg.path = !empty(named) ? named : discover_config(program_dir)
+    cfg.path = !empty(named) ? named : discovered
     if (empty(cfg.path)) {
         return cfg
     }

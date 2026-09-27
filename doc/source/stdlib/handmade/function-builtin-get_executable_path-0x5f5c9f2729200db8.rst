@@ -1,0 +1,1 @@
+Returns the absolute path of the running executable with symlinks resolved (on Windows the module file name), or an empty string where the platform exposes none. A standalone program finds what it ships beside itself from it, whatever symlink or ``PATH`` lookup started it; ``argv[0]`` is the name as typed.
