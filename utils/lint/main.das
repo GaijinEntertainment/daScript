@@ -137,7 +137,7 @@ def is_skip_file(name : string) : bool {
 }
 
 def is_skip_dir(name : string) : bool {
-    return name |> starts_with(".")
+    return name |> starts_with(".") || name == "node_modules"
 }
 
 // A CMake build tree is not source, whatever it is named: FetchContent checkouts under it

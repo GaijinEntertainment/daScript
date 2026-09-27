@@ -1552,7 +1552,7 @@ def public phase2_emitter_opcodes : table<uint> {
         SpvOp.TypeBool, SpvOp.TypeFloat,
         // arithmetic breadth
         SpvOp.IAdd, SpvOp.ISub, SpvOp.UDiv, SpvOp.UMod, SpvOp.SDiv, SpvOp.SRem, SpvOp.SNegate, SpvOp.Not,
-        SpvOp.FAdd, SpvOp.FSub, SpvOp.FMul, SpvOp.FDiv, SpvOp.FRem, SpvOp.FNegate,
+        SpvOp.FAdd, SpvOp.FSub, SpvOp.FMul, SpvOp.FDiv, SpvOp.FRem, SpvOp.FMod, SpvOp.FNegate,   // FMod: the precise fixture's mod()
         // comparisons (only the flavors the fixtures actually exercise)
         SpvOp.IEqual, SpvOp.INotEqual, SpvOp.UGreaterThan, SpvOp.ULessThan,
         SpvOp.SGreaterThan, SpvOp.SLessThan, SpvOp.SGreaterThanEqual, SpvOp.SLessThanEqual,

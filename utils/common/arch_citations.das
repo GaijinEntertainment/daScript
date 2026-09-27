@@ -61,7 +61,7 @@ struct public ArchDocs {
 // `builtin.das`, which sits outside the citation system in LINT026's walk
 // (utils/lint/main.das), the census walk (arch_common), and extraction alike.
 def public arch_walk_skips(name : string) : bool {
-    return name |> starts_with("_") || name |> starts_with(".") || name == "builtin.das"
+    return name |> starts_with("_") || name |> starts_with(".") || name == "builtin.das" || name == "node_modules"
 }
 
 
