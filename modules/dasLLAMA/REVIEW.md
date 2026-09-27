@@ -270,9 +270,10 @@ input into embeddings - onto a GPU hook leaves the CPU form in place and changes
 arithmetic.** The CPU form serves every box with no driver.
 
 **A call to a `set_*_q8` lane setter - one that picks whether a model family's weights run the
-q8 or the float path - outside the body of another `set_*_q8` setter is followed at once by a
-`defer()` calling its `reset_*_q8` twin.** A pin
-still set after its caller returns silently changes the lane of the next model the process loads.
+q8 or the float path - in engine or harness code, outside the body of another `set_*_q8` setter,
+is followed at once by a `defer()` calling its `reset_*_q8` twin.** A pin still set after its
+caller returns silently changes the lane of the next model the process loads; a test cell's pins
+answer to `tests/REVIEW_LANE_PINS.md`'s end-state rule instead.
 
 **A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
 `TUNE_KNOWN_FEATURES` (`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it

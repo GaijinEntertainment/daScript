@@ -1833,3 +1833,12 @@
    describes is owed. A trailing defaulted parameter (after `kernel_self`) would have kept every
    caller compiling. Done = the sweep run over the external module repos, or the parameter moved
    to the defaulted tail before the next release.
+
+170. **The jfk twin cells read a clip nobody can fetch.** `tests/_tower_twin.das` reads `jfk.wav`
+   from the models dir, a copy each box stocks by hand, and `test_whisper.das` reads
+   `gemma4a_test2.wav` from the ASR corpus folder, the one corpus clip with no traceable
+   provenance (`performance/profile_common.das`). `tests/REVIEW_MEDIA_CELLS.md` admits only a clip
+   the test builds, the repository tracks, or `performance/setup_asr_rig.das` fetches, so both
+   cells stand against it until the rig fetches jfk (it is whisper.cpp's sample) and the gemma4a
+   clip is replaced by a traceable one or built by the test. Done = both clips come from the rig
+   or the repository and the cells' expectations are re-pinned on them.

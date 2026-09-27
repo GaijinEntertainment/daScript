@@ -86,8 +86,9 @@ the reader that fills it from the gguf or the image (`ARCHITECTURE_TTS.md#tts-im
 field reads back zero from a mapped image.
 
 **A diff that moves what a served synthesis computes - a run with no flags and no environment
-overrides, the text front end included (a moved phoneme of the rig corpus, which
-`test_corpus_phonemes` in `tests/test_tts_g2p.das` decides) - ships the WER and UTMOS of
+overrides, on the CPU chain or on any GPU TTS seat that serves it, the text front end included
+(a moved phoneme of the rig corpus, which `test_corpus_phonemes` in `tests/test_tts_g2p.das`
+decides) - ships the WER and UTMOS of
 `harness/tts_rig.py`, before and after, on every model the change reaches, on every weight lane
 that model can take - the unpinned default and each pin - at the rig's voice, in the PR body.** A
 lane's per-frame figures against the f32 oracle say nothing about the speech; only the rig does.
@@ -100,17 +101,12 @@ expose lands as a failing-first case in `tests/test_tts_textnorm.das` or
 `caps().cloning` is false, or a speed other than 1.0 when `caps().speed` is false - panic at
 the call site instead.**
 
-**A diff that makes a windowed stage `dasllama/dasllama_styletts2.das` or a TTS family file
-assembles from kernels - one that runs its input a window at a time over a carry, the state one
-window hands to the next - produce a result
-on the f32 lane that differs from the same stage run over the whole input in one pass by more
-than float rounding (a few ulp per element) is a defect** (`ARCHITECTURE_TTS_MEMORY.md#tts-source-stream`,
-`ARCHITECTURE_POCKET.md#pocket-codec-stream`).
-
 **A diff that adds a windowed stage `dasllama/dasllama_styletts2.das` or a TTS family file
-assembles from kernels ships, in the same change, the cell that runs that stage windowed and over
-the whole input in one pass and holds the two together within float rounding, in the `tests/`
-file that holds that stage's cells.**
+assembles from kernels - one that runs its input a window at a time over a carry, the state one
+window hands to the next - ships, in the same change, the cell that runs that stage windowed and
+over the whole input in one pass on the f32 lane and holds the two together within float rounding
+(a few ulp per element), in the `tests/` file that holds that stage's cells**
+(`ARCHITECTURE_TTS_MEMORY.md#tts-source-stream`, `ARCHITECTURE_POCKET.md#pocket-codec-stream`).
 
 **A Pocket codec conv (`dasllama/dasllama_pocket.das`) carries its causal context as the
 stream's carry - the rows its taps reach before a window, zero or edge-replicated ahead of the

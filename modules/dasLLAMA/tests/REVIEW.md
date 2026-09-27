@@ -34,6 +34,9 @@ samples.
 operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without the
 `[metal_kernel(float_a_ok=true)]` annotation - is a defect.**
 
+**Weakening `st2_source_gate` in `test_metal_prefill_kernels.das` - the check that the StyleTTS2
+harmonic-source kernels match the CPU chain under both resample laws - is a defect.**
+
 **Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the models
 stocked (the stocked files of the areas the change reaches; a core module with no `MODULE_AREAS` row
 reaches every area), plus every test here the change reaches - never the whole directory, never the

@@ -79,7 +79,8 @@ changes what the chain computes changes that CPU code in the same diff.** That C
 hook's call site runs when the hook declines: the CPU block loop, front, tail or mel beside the
 call, plus every CPU step the call site skips when the hook serves.
 
-**Weakening `st2_source_gate` (`tests/test_metal_prefill_kernels.das`) is a defect.**
+**A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
+too** - its served-synthesis rule owes the rig's rows on every seat the diff reaches.
 
 **In `dasllama/dasllama_vulkan_tower.das`, the block hooks that take an `AudioTower` (both through
 `vt_aud_blocks`) and the conv stem (`vulkan_audio_conv_front`) each get their device weights

@@ -14401,7 +14401,9 @@ struct TtsPkGemvArgs {
 //! y += d * the slab vector (the layer scale), 7 the residual y += d, 8 the tanh GELU; 32 lanes a row, each a float4 of the
 //! row a step when the row base, the stride and nin sit on the four lattice (the slab writer's 16-byte runs) and a float
 //! otherwise, the lanes folded by shuffle; four rows a workgroup, wgs = `tts_pk_gemv_wgs`. The rope-store stamp turns the
-//! pairs (2j, 2j + 1) a workgroup's even and odd rows hold, so it takes a span on the four lattice
+//! pairs (2j, 2j + 1) a workgroup's even and odd rows hold, so it takes a span on the four lattice. The workgroup memory is
+//! measured to size (the staged x, the four dots), so the norm's sums fold through one subgroupAdd into `red`, one slot a
+//! subgroup, not through `WgReduceBase`
 [ |> template_struct_instance]
 class template TtsPkGemvT {
     @template_constant NORM_IN : bool = false       //!< the input through the LayerNorm (lw, lb) alone

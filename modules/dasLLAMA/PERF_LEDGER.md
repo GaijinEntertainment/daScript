@@ -29,7 +29,10 @@ what it costs today and what the fix would change.
   52 ms a sentence (`external`: `harness/tts_ref_bench.py --device cuda --models
   kokoro-82m:af_heart --limit 20` on the pod under
   `ARCHITECTURE_MEASUREMENT.md#the-tts-reference-instrument`'s recipe; the package versions that
-  run printed are not in this branch's record). kitten-nano: 54 ms. The LSTM recurrence's share,
+  run printed are not in this branch's record). kitten-nano (`kitten-nano.gguf`): 54 ms against
+  its onnxruntime CUDA EP reference row of 132 (`external`: the same script with `--device cuda
+  --models kitten-nano`, onnxruntime-gpu with the cu12 pip libraries, providers CUDA then CPU);
+  kitten-mini 302 against 4166 (the mini graph runs mostly off the provider). The LSTM recurrence's share,
   from the same run's per-role GPU ledger under `DASLLAMA_GPU_PROF=1`: a `TtsLstmDir` step 14 us
   at kokoro's H = 256, 22 ms of a kokoro sentence (`followup_vulkan.md` 106). The device
   bring-up - the process's first seat call, reported under the info log - 254..257 ms at the 64

@@ -87,6 +87,14 @@ distance each step, a lane-0 loop over a `@workgroup` float array with one slot 
 `MetalTgReduceBase` calls its fold methods over its own `partial[]`; any other class calls
 `tg_sum_all` / `tg_max_all` over its own `@workgroup` array.**
 
+**A diff that adds or changes a Vulkan kernel body that folds a value across the workgroup by hand
+- a subgroup shuffle loop, a lane-0 loop over a `@workgroup` array, one `@workgroup` value that one
+lane writes and every lane reads - is a defect: a class deriving `WgReduceBase` folds through its
+`wg_sum` / `wg_max`; a class whose workgroup memory is measured to size (a GEMV or attention row
+that stages its inputs) folds through one subgroup reduction into a slot array one entry a
+subgroup, and its class doc says so.** The base's slots move every stamp on it, so a measured
+kernel keeps its own smaller array.
+
 **A diff that adds or changes a Metal kernel body that can run one fold call on a `@workgroup`
 array after another on the same array - two calls to `tg_sum_all` / `tg_max_all` or a
 `MetalTgReduceBase` fold method in sequence, or one such call inside a loop - puts a `barrier()`

@@ -67,7 +67,8 @@ that a question answered for one backend has an obvious address in the other. Th
   and the slab additionally drops with the weights epoch through the tower's reload prep.
 - **The Vulkan tower driver serves the vision ViT chains, the audio block loops and the audio
   fronts, the Vulkan ASR-decoder driver the whisper decoder, and the Vulkan TTS driver the StyleTTS2
-  and Pocket seats** (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`); the towers serve their q8
+  and Pocket seats** (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`,
+  `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-pocket-chain`); the towers serve their q8
   lanes on the CPU chain and on the driver alike, so its `serves` answer to the lane policy is no. Likewise the
   non-causal media span: Metal serves it through `AttnArgs.uend` - including the FUSED image turn
   (head + media rows + tail as ONE eval, the per-query mask through `AttnArgs.ulo`); the Vulkan

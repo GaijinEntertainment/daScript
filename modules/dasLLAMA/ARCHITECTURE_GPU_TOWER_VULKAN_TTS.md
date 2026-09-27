@@ -121,6 +121,8 @@ weights, the window envelope divided out where the model asks). The waveform rea
 generator seat runs the stages and conv_post alone and reads conv_post's rows back for the
 host inverse STFT, as the Metal twin does.
 
+### The Pocket seats on Vulkan {#vk-pocket-chain}
+
 The Pocket family's two seats ride the same driver and knob, registered through
 `register_pocket_gpu`. Every Pocket linear is f32 rows in the slab - a q8 or K-quant file
 dequantized through the active repack at slab time; the driver carries no q8 blob route, so the

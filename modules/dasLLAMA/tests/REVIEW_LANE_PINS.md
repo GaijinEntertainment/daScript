@@ -26,7 +26,9 @@ the other lane, instead of pinning, measures whichever lane the box's policy pic
 through a loader parameter that takes the lane - returns with every pin it set unset through its
 paired unset call, and every setter it set back where it found it; where the driver exposes no
 getter, back at the value the file's `[init]` sets, else at its default.** A pin left set makes
-the next cell measure this cell's lane, not its own.
+the next cell measure this cell's lane, not its own; this rule binds a cell's end state, and the
+`defer()` spelling `../REVIEW.md` asks of a `set_*_q8` call binds engine and harness code, where
+an early return skips a reset written by hand.
 
 **A cell asserting the unpinned default lane compares against the predicates the family's
 `*_serves_q8` accessor reads for its unpinned default (whatever its body calls), never against a

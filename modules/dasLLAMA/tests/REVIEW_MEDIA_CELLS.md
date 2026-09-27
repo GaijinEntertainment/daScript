@@ -18,12 +18,8 @@ file, or a value the test computes itself.**
 instrumentation before a human can see what the model consumed.
 
 **An audio clip a test feeds an encoder that is not built by the test, tracked in the
-repository, fetched by `../performance/setup_asr_rig.das`, or one of the clips stocked beside the
-models (`jfk.wav`, `gemma4a_test2.wav`), is a defect** - a clip nobody else can play makes a red
-unreadable.
-
-**A diff that stocks a new clip beside the models adds it to the stocked-beside-the-models list
-in the audio-clip rule in the same change.**
+repository, or fetched by `../performance/setup_asr_rig.das` is a defect** - a clip nobody else
+can fetch makes a red unreadable.
 
 **A media fixture an encoder-parity cell regenerates in-test and compares against an oracle
 dump, with no exact-value generator - one whose values are exactly representable floats, so
