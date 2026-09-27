@@ -23,12 +23,6 @@ require daslib/jobque_boost
 //! channel and hidden widths off every lattice, with the poisoned-element control on every compare.
 
 
-//! logs the widest |got - want| with the row and the column it sits at, rows `width` wide
-def private log_maxdiff(tag : string; got, want : array<float>; width : int) {
-    let mi = maxdiff_at(got, want)
-    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / width} column {mi % width}\n")
-}
-
 struct private ConvGeom {
     cin : int
     cout : int
@@ -94,10 +88,8 @@ let private F16_LATTICE = 1.0 / 64.0   //! the half route's operand step: sixty-
 //! one conv through the im2col and its GEMM against the CPU conv1d under NaN-filled outputs. `half`: TtsIm2col16, the f16 tile
 //! and the bias pass on f16-lattice operands (every product exact, the bar covers the accumulation); else TtsIm2col and
 //! F32GemmB, both sides f32 over K <= 128 products, the CPU's matmul_batch reassociating - inside `approx`'s 2e-3 either way
-def private im2col_arm(t : T?; tag : string; g : ConvGeom; half : bool) {   // nolint:STYLE038 — one conv on either route: the fixture, the route's dispatches, the oracle and its control
+def private im2col_arm(t : T?; tag : string; g : ConvGeom; half : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let B_COL = 1u
-        let B_Y = 2u
         let khr = g_gpu.coopmat_mode != COOPMAT_CM2   //! the pick the driver makes where an f16 tile serves at all (the half cell skipped otherwise)
         var c <- make_conv(g, half ? F16_LATTICE : 0.004, half ? 0.75 : 0.19)
         let tout = int(conv1d_out_len(c, int64(g.tin)))
@@ -116,68 +108,48 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom; half : bool) {   // n
         if (g.rows_x) {
             transpose_ct(x, int64(g.cin), int64(g.tin), x_rows)
         }
-        var xdev <- at_base(g.rows_x ? x_rows : x, g.xoff)
         var y_ref <- conv_ref(c, x, g.tin)
         let ny = tout * g.cout
-        let bx = long_length(xdev) * 4l
-        let bcol = half ? int64((tout + COL16_SLACK_ROWS) * kdim) * 2l : int64(g.coloff + tout * kdim) * 4l
-        let bw = half ? long_length(w16) * 2l : long_length(w) * 4l
-        let bb = int64(g.cout) * 4l
-        let by = int64(ny) * 4l
-        let xd = dev_upload(xdev)
-        let cold = make_device_buf(bcol)
-        let wd = half ? dev_upload(w16) : dev_upload(w)
-        let bd = dev_upload(c.b)
-        let yd = make_device_buf(by)
-        var host = make_host_buf(by, true, [cached = true])
-        nan_sentinel_upload(cold, bcol)
-        nan_sentinel_upload(yd, by)
-        var pc = TtsIm2colArgs(cin = uint(g.cin), tin = uint(g.tin), tout = uint(tout), k = uint(g.k), stride = uint(g.stride),
-            pad_l = uint(g.pad), dilation = 1u, transposed = g.transposed ? 1u : 0u, kdim = uint(kdim), xoff = uint(g.xoff),
-            coloff = uint(g.coloff), rows = g.rows_x ? 1u : 0u)
-        if (half) {
-            var s_col = set_tts_im2col16_cls(fixed_array(xd, cold), fixed_array(bx, bcol), fixed_array(0u, B_COL))
-            var s_mm = f16_gemm_set(khr, fixed_array(wd, cold, yd), fixed_array(bw, bcol, by), fixed_array(0u, B_COL, B_Y))
-            var s_b = set_tower_bias_act_cls(fixed_array(yd, bd), fixed_array(by, bb), fixed_array(B_Y, 0u))
-            var pm = F16GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, ybase = 0u, ystride = uint(g.cout), ksplit = 0u)
-            var pb = TowerBiasArgs(d = uint(g.cout), nelem = uint(ny), boff = 0u, act = BIAS_ACT_NONE)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_im2col16_cls(raw, h, s_col, pc, int64(tout * kdim))
-                f16_gemm_enc(khr, raw, h, s_mm, pm, int64(tout), int64(g.cout))
-                enc_tower_bias_act_cls(raw, h, s_b, pb, (int64(ny) / 4l + 255l) / 256l)
-                cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let xp = cp |> in_(g.rows_x ? x_rows : x, g.xoff)
+            let colp = half ? cp |> out_((tout + COL16_SLACK_ROWS) * kdim / 2) : cp |> out_(tout * kdim, g.coloff)   //! the half plane: two halfwords a float slot
+            let wp = half ? cp |> in_plain(w16) : cp |> in_(w)
+            let bp = cp |> in_(c.b)
+            let yp = cp |> out_(ny)
+            var pc = TtsIm2colArgs(cin = uint(g.cin), tin = uint(g.tin), tout = uint(tout), k = uint(g.k), stride = uint(g.stride),
+                pad_l = uint(g.pad), dilation = 1u, transposed = g.transposed ? 1u : 0u, kdim = uint(kdim), xoff = uint(g.xoff),
+                coloff = uint(g.coloff), rows = g.rows_x ? 1u : 0u)
+            if (half) {
+                var s_col = cp |> cls_set(fixed_array(xp, colp), @@set_tts_im2col16_cls)
+                let mm = fixed_array(wp, colp, yp)
+                var s_mm = f16_gemm_set(khr, cp |> plane_bufs(mm), cp |> plane_sizes(mm), cp |> plane_bits(mm))
+                var s_b = cp |> cls_set(fixed_array(yp, bp), @@set_tower_bias_act_cls)
+                var pm = F16GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, ybase = 0u, ystride = uint(g.cout), ksplit = 0u)
+                var pb = TowerBiasArgs(d = uint(g.cout), nelem = uint(ny), boff = 0u, act = BIAS_ACT_NONE)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_im2col16_cls(raw, h, s_col, pc, int64(tout * kdim))
+                    f16_gemm_enc(khr, raw, h, s_mm, pm, int64(tout), int64(g.cout))
+                    enc_tower_bias_act_cls(raw, h, s_b, pb, (int64(ny) / 4l + 255l) / 256l)
+                }
+            } else {
+                var s_col = cp |> cls_set(fixed_array(xp, colp), @@set_tts_im2col_cls)
+                var s_mm = cp |> cls_set(fixed_array(wp, colp, yp, bp), @@set_f32_gemm_b_cls)
+                var pm = F32GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, wstride = uint(kdim), boff = 0u,
+                    xoff = uint(g.coloff), xstride = uint(kdim), yoff = 0u, ystride = uint(g.cout))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_im2col_cls(raw, h, s_col, pc, int64(tout * kdim))
+                    enc_f32_gemm_b_cls(raw, h, s_mm, pm, f32_gemm_wgs(int64(tout), int64(g.cout)))
+                }
             }
-        } else {
-            var s_col = set_tts_im2col_cls(fixed_array(xd, cold), fixed_array(bx, bcol), fixed_array(0u, B_COL))
-            var s_mm = set_f32_gemm_b_cls(fixed_array(wd, cold, yd, bd), fixed_array(bw, bcol, by, bb), fixed_array(0u, B_COL, B_Y, 0u))
-            var pm = F32GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, wstride = uint(kdim), boff = 0u,
-                xoff = uint(g.coloff), xstride = uint(kdim), yoff = 0u, ystride = uint(g.cout))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_im2col_cls(raw, h, s_col, pc, int64(tout * kdim))
-                enc_f32_gemm_b_cls(raw, h, s_mm, pm, f32_gemm_wgs(int64(tout), int64(g.cout)))
-                cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
-            }
+            let route = half ? "im2col16 + the {khr ? "KHR" : "cm2"} f16 tile + the bias" : "im2col + F32GemmB"
+            check_rows(t, "{tag} {route} over {tout} x {g.cout} vs the CPU conv1d", cp |> plane_run(yp), y_ref, BAR_APPROX, g.cout)
         }
-        var y_dev <- staged(host.mapped, 0l, ny, type<float>)
-        let route = half ? "im2col16 + the {khr ? "KHR" : "cm2"} f16 tile + the bias" : "im2col + F32GemmB"
-        let bad = mismatch_approx(y_dev, y_ref)
-        log_maxdiff(tag, y_dev, y_ref, g.cout)
-        t |> success(bad == 0, "{tag}: {route} == the CPU conv1d over {tout} x {g.cout} ({bad} of {ny} off)")
-        t |> success(!approx(y_dev[ny - 1], y_ref[ny - 1] + 0.5), "{tag}: the bar reds a poisoned element")
-        destroy_device_buf(xd)
-        destroy_device_buf(cold)
-        destroy_device_buf(wd)
-        destroy_device_buf(bd)
-        destroy_device_buf(yd)
-        destroy_host_buf(host)
         delete c
         delete w
         delete w16
         delete x
         delete x_rows
-        delete xdev
         delete y_ref
-        delete y_dev
     }
 }
 
@@ -346,68 +318,35 @@ def private lstm_fixture(hd : int) : LstmFixture {
 def private lstm_arm(t : T?; hd : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = "lstm h{hd}"
-        let B_Y = 1u
-        let B_YC = 2u
         var f <- lstm_fixture(hd)
-        let ny = LSTM_T * 2 * hd
-        let nyc = LSTM_T * hd
-        let bg = long_length(f.gates) * 4l
-        let bw = long_length(f.whh) * 4l
-        let by = int64(ny) * 4l
-        let byc = int64(nyc) * 4l
-        let gd = dev_upload(f.gates)
-        let wd = dev_upload(f.whh)
-        let yd = make_device_buf(by)
-        let ycd = make_device_buf(byc)
-        let sizes = fixed_array(by, byc)
-        let at <- staged_offsets(sizes)
-        var host = make_host_buf(at[length(sizes)], true, [cached = true])
-        nan_sentinel_upload(yd, by)
-        nan_sentinel_upload(ycd, byc)
-        var s_y = set_tts_lstm_dir_cls(fixed_array(gd, wd, yd), fixed_array(bg, bw, by), fixed_array(0u, 0u, B_Y))
-        var s_yc = set_tts_lstm_dir_cls(fixed_array(gd, wd, ycd), fixed_array(bg, bw, byc), fixed_array(0u, 0u, B_YC))
-        var pf = TtsLstmArgs(t = uint(LSTM_T), hidden = uint(hd), goff = 0u, gstride = uint(f.gstride), hhoff = 0u, hoff = 0u,
-            hstride = uint(2 * hd), backward = 0u)
-        var pb = TtsLstmArgs(t = uint(LSTM_T), hidden = uint(hd), goff = uint(LSTM_T * f.gstride), gstride = uint(f.gstride),
-            hhoff = uint(f.bwd_hh), hoff = uint(hd), hstride = uint(2 * hd), backward = 1u)
-        var pc = TtsLstmArgs(t = uint(LSTM_T), hidden = uint(hd), goff = 0u, gstride = uint(f.gstride), hhoff = 0u, hoff = 0u,
-            hstride = uint(hd), backward = 1u)
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_lstm_dir_cls(raw, h, s_y, pf, 1l)
-            enc_tts_lstm_dir_cls(raw, h, s_y, pb, 1l)
-            enc_tts_lstm_dir_cls(raw, h, s_yc, pc, 1l)
-            cmd_copy_planes(raw, h, fixed_array(yd, ycd), host, sizes, B_Y | B_YC)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let gp = cp |> in_(f.gates)
+            let wp = cp |> in_(f.whh)
+            let yp = cp |> out_(LSTM_T * 2 * hd)
+            let ycp = cp |> out_(LSTM_T * hd)
+            var s_y = cp |> cls_set(fixed_array(gp, wp, yp), @@set_tts_lstm_dir_cls)
+            var s_yc = cp |> cls_set(fixed_array(gp, wp, ycp), @@set_tts_lstm_dir_cls)
+            var pf = TtsLstmArgs(t = uint(LSTM_T), hidden = uint(hd), goff = 0u, gstride = uint(f.gstride), hhoff = 0u, hoff = 0u,
+                hstride = uint(2 * hd), backward = 0u)
+            var pb = TtsLstmArgs(t = uint(LSTM_T), hidden = uint(hd), goff = uint(LSTM_T * f.gstride), gstride = uint(f.gstride),
+                hhoff = uint(f.bwd_hh), hoff = uint(hd), hstride = uint(2 * hd), backward = 1u)
+            var pc = TtsLstmArgs(t = uint(LSTM_T), hidden = uint(hd), goff = 0u, gstride = uint(f.gstride), hhoff = 0u, hoff = 0u,
+                hstride = uint(hd), backward = 1u)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tts_lstm_dir_cls(raw, h, s_y, pf, 1l)
+                enc_tts_lstm_dir_cls(raw, h, s_y, pb, 1l)
+                enc_tts_lstm_dir_cls(raw, h, s_yc, pc, 1l)
+            }
+            let y_dev <- cp |> plane_run(yp)
+            let yc_dev <- cp |> plane_run(ycp)
+            //! `approx`'s 2e-3: both sides f32, the CPU matmul reassociating the h dot and adding the bias after it, over 23 steps
+            check_rows(t, "{tag} both directions over {LSTM_T} steps vs the CPU bilstm", y_dev, f.y_ref, BAR_APPROX, 2 * hd, hd)
+            check_rows(t, "{tag} the forward weights walked backward vs the CPU's backward walk", yc_dev, f.yc_ref, BAR_APPROX, hd)
+            let moved = logits_maxdiff(half_rows(y_dev, hd, 0), yc_dev)
+            t |> success(moved > 0.01, "{tag} control: flipping `backward` on the same gates moves the output (maxdiff {moved})")
         }
-        var y_dev <- staged(host.mapped, at[0], ny, type<float>)
-        var yc_dev <- staged(host.mapped, at[1], nyc, type<float>)
-        lstm_asserts(t, tag, hd, f, y_dev, yc_dev)
-        destroy_device_buf(gd)
-        destroy_device_buf(wd)
-        destroy_device_buf(yd)
-        destroy_device_buf(ycd)
-        destroy_host_buf(host)
         delete f
-        delete y_dev
-        delete yc_dev
     }
-}
-
-def private lstm_asserts(t : T?; tag : string; hd : int; f : LstmFixture; y_dev, yc_dev : array<float>) {
-    let ny = LSTM_T * 2 * hd
-    let nyc = LSTM_T * hd
-    //! `approx`'s 2e-3: both sides f32, the CPU matmul reassociating the h dot and adding the bias after it, over 23 steps
-    let bad = mismatch_approx(y_dev, f.y_ref)
-    log_maxdiff(tag, y_dev, f.y_ref, 2 * hd)
-    t |> success(bad == 0, "{tag}: both directions over {LSTM_T} steps == the CPU bilstm ({bad} of {ny} off)")
-    t |> success(!approx(y_dev[ny - 1], f.y_ref[ny - 1] + 0.5), "{tag}: the bar reds a poisoned element")
-    let badc = mismatch_approx(yc_dev, f.yc_ref)
-    log_maxdiff("{tag} reversed", yc_dev, f.yc_ref, hd)
-    t |> success(badc == 0, "{tag}: the forward weights walked backward == the CPU's backward walk ({badc} of {nyc} off)")
-    t |> success(!approx(yc_dev[0], f.yc_ref[0] + 0.5), "{tag} reversed: the bar reds a poisoned element")
-    var fwd <- half_rows(y_dev, hd, 0)
-    let moved = logits_maxdiff(fwd, yc_dev)
-    t |> success(moved > 0.01, "{tag} control: flipping `backward` on the same gates moves the output (maxdiff {moved})")
-    delete fwd
 }
 
 [test]

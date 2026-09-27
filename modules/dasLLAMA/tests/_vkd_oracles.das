@@ -135,18 +135,36 @@ def io_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0) 
     return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, true, base, length(a))
 }
 
-//! a class's descriptor set over the planes `idx` (a fixed array of plane ids in binding order): `set_fn` is its generated
-//! `set_*_cls`, fed each plane's buffer, bytes and hazard bit
-def cls_set(cp : CellPlanes; idx; set_fn) {
-    var bufs : uint64[typeinfo dim(idx)]
-    var sizes : int64[typeinfo dim(idx)]
-    var bits : uint[typeinfo dim(idx)]
+//! the buffers of the planes `idx` (a fixed array of plane ids in binding order), a descriptor set's first argument
+def plane_bufs(cp : CellPlanes; idx) {
+    var r : uint64[typeinfo dim(idx)]
     for (i in range(typeinfo dim(idx))) {
-        bufs[i] = cp.dev[idx[i]]
-        sizes[i] = cp.bytes[idx[i]]
-        bits[i] = cp.bit[idx[i]]
+        r[i] = cp.dev[idx[i]]
     }
-    return invoke(set_fn, bufs, sizes, bits)
+    return r
+}
+
+//! the bytes of the planes `idx`, a descriptor set's second argument
+def plane_sizes(cp : CellPlanes; idx) {
+    var r : int64[typeinfo dim(idx)]
+    for (i in range(typeinfo dim(idx))) {
+        r[i] = cp.bytes[idx[i]]
+    }
+    return r
+}
+
+//! the hazard bits of the planes `idx`, a descriptor set's third argument
+def plane_bits(cp : CellPlanes; idx) {
+    var r : uint[typeinfo dim(idx)]
+    for (i in range(typeinfo dim(idx))) {
+        r[i] = cp.bit[idx[i]]
+    }
+    return r
+}
+
+//! a class's descriptor set over the planes `idx`: `set_fn` is its generated `set_*_cls`
+def cls_set(cp : CellPlanes; idx; set_fn) {
+    return invoke(set_fn, cp |> plane_bufs(idx), cp |> plane_sizes(idx), cp |> plane_bits(idx))
 }
 
 //! one command buffer: `rec` records the cell's dispatches, then every written plane is copied back whole behind their

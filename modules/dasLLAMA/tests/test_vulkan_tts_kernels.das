@@ -416,29 +416,29 @@ def private colstats_ref(x : array<float>; rows, c : int) : array<float> {
     return <- st
 }
 
-//! the four column-statistics passes over x [rows][c] into `std`'s stats rows, the partials past them (the command buffer and
-//! hazard set untyped: the file compiles with no vulkan module, where nothing instantiates this)
-def private colstats_enc(raw; var h; xd : uint64; bx : int64; std : uint64; bst : int64; rows, c : int; bit : uint) {
+//! the four column-statistics passes over plane `xp` [rows][c] into plane `stp`'s stats rows, the partials past them (the
+//! command buffer, hazard set and planes untyped: the file compiles with no vulkan module, where nothing instantiates this)
+def private colstats_enc(raw; var h; cp; xp, stp, rows, c : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nblk = tts_stats_blocks(int64(rows))
         var pa = TtsStatsArgs(t = uint(rows), c = uint(c), nblk = uint(nblk), poff = uint(2 * c))
-        var s1 = set_tts_colpart_sum_cls(fixed_array(xd, std), fixed_array(bx, bst), fixed_array(0u, bit))
+        var s1 = cp |> cls_set(fixed_array(xp, stp), @@set_tts_colpart_sum_cls)
         enc_tts_colpart_sum_cls(raw, h, s1, pa, nblk)
-        var s2 = set_tts_colreduce_mean_cls(fixed_array(std, std), fixed_array(bst, bst), fixed_array(bit, bit))
+        var s2 = cp |> cls_set(fixed_array(stp, stp), @@set_tts_colreduce_mean_cls)
         enc_tts_colreduce_mean_cls(raw, h, s2, pa, int64(c))
-        var s3 = set_tts_colpart_sq_cls(fixed_array(xd, std, std), fixed_array(bx, bst, bst), fixed_array(0u, bit, bit))
+        var s3 = cp |> cls_set(fixed_array(xp, stp, stp), @@set_tts_colpart_sq_cls)
         enc_tts_colpart_sq_cls(raw, h, s3, pa, nblk)
-        var s4 = set_tts_colreduce_sq_cls(fixed_array(std, std), fixed_array(bst, bst), fixed_array(bit, bit))
+        var s4 = cp |> cls_set(fixed_array(stp, stp), @@set_tts_colreduce_sq_cls)
         enc_tts_colreduce_sq_cls(raw, h, s4, pa, int64(c))
     }
 }
 
-//! the stats plane's bytes for `rows` x `c`: the two stats rows and the block partials
-def private colstats_bytes(rows, c : int) : int64 {
+//! the stats plane's floats for `rows` x `c`: the two stats rows and the block partials
+def private colstats_floats(rows, c : int) : int {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        return tts_stats_floats(int64(rows), int64(c)) * 4l
+        return int(tts_stats_floats(int64(rows), int64(c)))
     } else {
-        return 0l
+        return 0
     }
 }
 
@@ -454,31 +454,19 @@ def private ensure_colstats : bool {
 def private colstats_arm(t : T?; rows, c : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = "tts_colstats t{rows} c{c}"
-        let B_ST = 1u
-        var x <- row_fill(rows * c, 53, 11, 0.05, 1.3)
-        let xd = dev_upload(x)
-        let bst = colstats_bytes(rows, c)
-        let std = make_device_buf(bst)
-        let sizes = fixed_array(int64(2 * c) * 4l)
-        let at <- staged_offsets(sizes)
-        let host = make_host_buf(at[length(sizes)], true, [cached = true])
-        nan_sentinel_upload(std, bst)
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            colstats_enc(raw, h, xd, long_length(x) * 4l, std, bst, rows, c, B_ST)
-            cmd_copy_planes(raw, h, fixed_array(std), host, sizes, B_ST)
+        let x <- row_fill(rows * c, 53, 11, 0.05, 1.3)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let xp = cp |> in_(x)
+            let stp = cp |> out_(colstats_floats(rows, c))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                colstats_enc(raw, h, cp, xp, stp, rows, c)
+            }
+            let got <- subarray(cp |> plane_run(stp), range(2 * c))
+            let want <- colstats_ref(x, rows, c)
+            //! row 0 the means, row 1 the squared deviations; a sum of 300 of them sits past the relative bar's reach of 0.5, so the poison is a percent
+            check_rows(t, "{tag} means and squared deviations vs the double-precision sums", got, want, Bar(rel = APPROX_REL, poison = 0.01, scaled = true), c)
+            t |> success(!approx(got[c - 1], want[c - 1] + 0.5), "{tag}: the bar reds a poisoned mean")
         }
-        let got <- staged(host.mapped, at[0], 2 * c, type<float>)
-        let want <- colstats_ref(x, rows, c)
-        let bad = mismatch_approx(got, want)
-        let mi = maxdiff_at(got, want)
-        let half = mi < c ? "mean" : "ssq"
-        to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at {half} channel {mi % c}\n")
-        t |> success(bad == 0, "{tag}: the means and squared deviations == the double-precision sums ({bad} of {2 * c} off)")
-        t |> success(!approx(got[c - 1], want[c - 1] + 0.5), "{tag}: the bar reds a poisoned mean")   //! a sum of 300 squared deviations sits past the relative bar's reach of 0.5
-        t |> success(!approx(got[2 * c - 1], want[2 * c - 1] * 1.01), "{tag}: the bar reds a squared-deviation sum a percent off")
-        destroy_device_buf(xd)
-        destroy_device_buf(std)
-        destroy_host_buf(host)
     }
 }
 
@@ -556,16 +544,6 @@ def private adain_fixture() : AdainFixture {
     return <- f
 }
 
-//! a stamp's rows against the CPU form: the bar, its poisoned element, the widest miss logged with its row and channel
-def private adain_asserts(t : T?; tag : string; got, want : array<float>) {
-    let n = length(want)
-    let bad = mismatch_approx(got, want)
-    let mi = maxdiff_at(got, want)
-    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / AD_C} channel {mi % AD_C}\n")
-    t |> success(bad == 0, "{tag}: the device == the CPU adain_rows_into and activation ({bad} of {n} off)")
-    t |> success(!approx(got[n - 1], want[n - 1] + 0.5), "{tag}: the bar reds a poisoned element")
-}
-
 [test]
 def test_vkt_adain(t0 : T?) {
     t0 |> run("the column stats + fused AdaIN, leaky and Snake stamps, == the CPU adain_rows_into, out of place and in place") <| @(t : T?) {
@@ -574,71 +552,43 @@ def test_vkt_adain(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_ST = 1u
-            let B_YL = 2u
-            let B_YS = 4u
-            let B_XI = 8u
             let c = AD_C
             let n = AD_T * c
             var f <- adain_fixture()
-            var xp <- at_base(f.x, AD_XOFF)
-            var hp <- at_base(f.style_fc, AD_HOFF)
-            let x0d = dev_upload(f.x)
-            let xpd = dev_upload(xp)
-            let xid = dev_upload(xp)
-            let hd = dev_upload(hp)
-            let wnd = dev_upload(f.slab)
-            let bst = colstats_bytes(AD_T, c)
-            let by = int64(AD_YOFF + n) * 4l
-            let bxp = long_length(xp) * 4l
-            let bh = long_length(hp) * 4l
-            let bwn = long_length(f.slab) * 4l
-            let std = make_device_buf(bst)
-            let yld = make_device_buf(by)
-            let ysd = make_device_buf(by)
-            let sizes = fixed_array(by, by, bxp)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            nan_sentinel_upload(std, bst)
-            nan_sentinel_upload(yld, by)
-            nan_sentinel_upload(ysd, by)
-            var s_l = set_tts_adain_leaky_cls(fixed_array(xpd, yld, std, hd, wnd), fixed_array(bxp, by, bst, bh, bwn), fixed_array(0u, B_YL, B_ST, 0u, 0u))
-            var s_s = set_tts_adain_snake_cls(fixed_array(xpd, ysd, std, hd, wnd), fixed_array(bxp, by, bst, bh, bwn), fixed_array(0u, B_YS, B_ST, 0u, 0u))
-            var s_i = set_tts_adain_leaky_cls(fixed_array(xid, xid, std, hd, wnd), fixed_array(bxp, bxp, bst, bh, bwn), fixed_array(B_XI, B_XI, B_ST, 0u, 0u))
-            static_assert(AD_EPS == TTS_ADAIN_EPS, "the CPU oracle's eps is the stamps' literal")
-            var pa = TtsAdainArgs(c = uint(c), t = uint(AD_T), xoff = uint(AD_XOFF), yoff = uint(AD_YOFF), hoff = uint(AD_HOFF),
-                gwoff = uint(AD_GWOFF), gboff = uint(f.gboff), aoff = uint(f.aoff))
-            var pi = pa
-            pi.yoff = uint(AD_XOFF)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                colstats_enc(raw, h, x0d, long_length(f.x) * 4l, std, bst, AD_T, c, B_ST)
-                enc_tts_adain_leaky_cls(raw, h, s_l, pa, int64(n))
-                enc_tts_adain_snake_cls(raw, h, s_s, pa, int64(n))
-                enc_tts_adain_leaky_cls(raw, h, s_i, pi, int64(n))
-                cmd_copy_planes(raw, h, fixed_array(yld, ysd, xid), host, sizes, B_YL | B_YS | B_XI)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let x0p = cp |> in_(f.x)
+                let xp = cp |> in_(f.x, AD_XOFF)
+                let xip = cp |> io_(f.x, AD_XOFF)
+                let hp = cp |> in_(f.style_fc, AD_HOFF)
+                let wp = cp |> in_(f.slab)
+                let stp = cp |> out_(colstats_floats(AD_T, c))
+                let ylp = cp |> out_(n, AD_YOFF)
+                let ysp = cp |> out_(n, AD_YOFF)
+                var s_l = cp |> cls_set(fixed_array(xp, ylp, stp, hp, wp), @@set_tts_adain_leaky_cls)
+                var s_s = cp |> cls_set(fixed_array(xp, ysp, stp, hp, wp), @@set_tts_adain_snake_cls)
+                var s_i = cp |> cls_set(fixed_array(xip, xip, stp, hp, wp), @@set_tts_adain_leaky_cls)
+                static_assert(AD_EPS == TTS_ADAIN_EPS, "the CPU oracle's eps is the stamps' literal")
+                var pa = TtsAdainArgs(c = uint(c), t = uint(AD_T), xoff = uint(AD_XOFF), yoff = uint(AD_YOFF), hoff = uint(AD_HOFF),
+                    gwoff = uint(AD_GWOFF), gboff = uint(f.gboff), aoff = uint(f.aoff))
+                var pi = pa
+                pi.yoff = uint(AD_XOFF)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    colstats_enc(raw, h, cp, x0p, stp, AD_T, c)
+                    enc_tts_adain_leaky_cls(raw, h, s_l, pa, int64(n))
+                    enc_tts_adain_snake_cls(raw, h, s_s, pa, int64(n))
+                    enc_tts_adain_leaky_cls(raw, h, s_i, pi, int64(n))
+                }
+                let got_l <- cp |> plane_run(ylp)
+                let got_i <- cp |> plane_run(xip)
+                check_rows(t, "tts_adain_leaky vs the CPU adain_rows_into and leaky_relu", got_l, f.want_leaky, BAR_APPROX, AD_C)
+                check_rows(t, "tts_adain_snake vs the CPU adain_rows_into and snake_rows", cp |> plane_run(ysp), f.want_snake, BAR_APPROX, AD_C)
+                check_rows(t, "tts_adain_leaky in place vs the CPU adain_rows_into and leaky_relu", got_i, f.want_leaky, BAR_APPROX, AD_C)
+                t |> success(got_i[0] != f.x[0], "tts_adain_leaky in place control: the input row is overwritten")
+                t |> equal(mismatch_exact(got_i, got_l), 0, "tts_adain_leaky: in place == out of place, bit for bit")
+                t |> success(outside_run(cp |> plane_whole(ylp), AD_YOFF, n, NAN_SENTINEL) && outside_run(cp |> plane_whole(ysp), AD_YOFF, n, NAN_SENTINEL),
+                    "tts_adain: the prefix before yoff keeps its sentinel")
+                t |> success(outside_run(cp |> plane_whole(xip), AD_XOFF, n, POISON), "tts_adain in place: the prefix before xoff is untouched")
             }
-            let got_l <- staged(host.mapped, at[0] + int64(AD_YOFF) * 4l, n, type<float>)
-            let got_s <- staged(host.mapped, at[1] + int64(AD_YOFF) * 4l, n, type<float>)
-            let got_i <- staged(host.mapped, at[2] + int64(AD_XOFF) * 4l, n, type<float>)
-            let pre_l <- staged(host.mapped, at[0], AD_YOFF, type<float>)
-            let pre_s <- staged(host.mapped, at[1], AD_YOFF, type<float>)
-            let pre_i <- staged(host.mapped, at[2], AD_XOFF, type<float>)
-            adain_asserts(t, "tts_adain_leaky", got_l, f.want_leaky)
-            adain_asserts(t, "tts_adain_snake", got_s, f.want_snake)
-            adain_asserts(t, "tts_adain_leaky in place", got_i, f.want_leaky)
-            t |> success(got_i[0] != f.x[0], "tts_adain_leaky in place control: the input row is overwritten")
-            t |> equal(mismatch_exact(got_i, got_l), 0, "tts_adain_leaky: in place == out of place, bit for bit")
-            t |> equal(nan_count(pre_l) + nan_count(pre_s), 2 * AD_YOFF, "tts_adain: the prefix before yoff keeps its sentinel")
-            t |> success(elem_all(pre_i, POISON), "tts_adain in place: the prefix before xoff is untouched")
-            destroy_device_buf(x0d)
-            destroy_device_buf(xpd)
-            destroy_device_buf(xid)
-            destroy_device_buf(hd)
-            destroy_device_buf(wnd)
-            destroy_device_buf(std)
-            destroy_device_buf(yld)
-            destroy_device_buf(ysd)
-            destroy_host_buf(host)
             delete f
         } else {
             t |> skip("dasVulkan not present")

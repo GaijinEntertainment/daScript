@@ -23,17 +23,7 @@ require dasllama/dasllama_tts_blocks
 
 let private SLACK = 5      //! the elements past a run, left at their fill
 
-//! `w` moved by a hundredth of its magnitude (floored at 1): outside every bar in this file
-def private poison_of(w : float) : float => w + max(1.0, abs(w)) * 0.01
-
-let private BAR_EXACT_1PC = Bar(exact = true, poison = 0.01, scaled = true)   //! bit-exact, its poison `poison_of`'s hundredth
-
-//! the elements of `got` outside the bars, the first six and the widest miss logged (its row and column in rows `width` wide)
-def private bars_bad(tag : string; got, want : array<float>; rel, absf : float; width : int) : int {
-    let mi = maxdiff_at(got, want)
-    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / width} column {mi % width}\n")
-    return mismatch_rel(got, want, rel, absf, tag)
-}
+let private BAR_EXACT_1PC = Bar(exact = true, poison = 0.01, scaled = true)   //! bit-exact, its poison a hundredth of the magnitude (floored at 1): outside every bar in this file
 
 let private AX_N = 1030        //! four whole workgroups and six more
 let private AX_OOFF = 3
@@ -122,10 +112,14 @@ let private HAR_ABS = 2e-7
 let private NOISE_REL = 1e-4    //! the own draw: the device log, sqrt and cos - the driver's approximations, 2.8e-5 at most on the RTX PRO 4500 - against the CPU's on the same hashed uniforms, under 5 in magnitude
 let private NOISE_ABS = 1e-5
 
+let private LOWC_BAR = bar_rel(LOWC_REL, 0.01, 0.0, true)
+let private HAR_BAR = bar_rel(HAR_REL, 0.01, HAR_ABS, true)
+let private NOISE_BAR = bar_rel(NOISE_REL, 0.01, NOISE_ABS, true)
+
 struct private SrcOut {
     lowc : array<float>
     har : array<float>
-    har_tail : array<float>     //! the `SLACK` elements past n
+    har_whole : array<float>    //! the mixed signal's plane with the `SLACK` elements past n
     noise : array<float>
 }
 
@@ -136,94 +130,57 @@ def private src_boff : int => SRC_WOFF + TTS_SRC_NH + SRC_GAP
 def private src_run(f : TtsSrcFixture; torch : bool; f0 : array<float>; own : bool; seed : uint) : SrcOut {
     var o : SrcOut
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let B_LOW = 1u
-        let B_LOWC = 2u
-        let B_HAR = 4u
-        let B_NZ = 8u
         var wn : array<float>
         put(wn, f.lw, SRC_WOFF)
         put(wn, f.lb, SRC_GAP)
         wn |> push_from(poison_plane(4))
-        let f0d = dev_upload(f0)
-        let nud = dev_upload(f.nu)
-        let wnd = dev_upload(wn)
-        let bnz = int64(f.n * TTS_SRC_NH) * 4l
-        let nzd = own ? make_device_buf(bnz) : dev_upload(f.noise)
-        if (own) {
-            nan_sentinel_upload(nzd, bnz)
-        }
-        let blow = int64(TTS_SRC_NH * f.nlow) * 4l
-        let bhar = int64(f.n + SLACK) * 4l
-        let lowd = make_device_buf(blow)
-        let lowcd = make_device_buf(blow)
-        let hard = make_device_buf(bhar)
-        nan_sentinel_upload(lowd, blow)
-        nan_sentinel_upload(lowcd, blow)
-        nan_sentinel_upload(hard, bhar)
-        let bf0 = long_length(f0) * 4l
-        let bnu = long_length(f.nu) * 4l
-        let bwn = long_length(wn) * 4l
-        let sizes = fixed_array(blow, bhar, bnz)
-        let at <- staged_offsets(sizes)
-        var host = make_host_buf(at[length(sizes)], true, [cached = true])
-        var pa = TtsSourceArgs(n = uint(f.n), nlow = uint(f.nlow), nh = uint(TTS_SRC_NH), up = uint(f.up), sr = TTS_SRC_SR, sine_amp = 0.1,
-            noise_std = 0.003, voiced_thr = 10.0, seed = seed, woff = uint(SRC_WOFF), boff = uint(src_boff()))
-        var s_nz = set_tts_src_noise_cls(fixed_array(nzd), fixed_array(bnz), fixed_array(B_NZ))
-        let low_devs = fixed_array(f0d, nud, lowd)
-        let low_sizes = fixed_array(bf0, bnu, blow)
-        let low_bits = fixed_array(0u, 0u, B_LOW)
-        var s_low = torch ? set_tts_src_low_torch_cls(low_devs, low_sizes, low_bits) : set_tts_src_low_onnx_cls(low_devs, low_sizes, low_bits)
-        let cum_devs = fixed_array(lowd, lowcd)
-        let cum_sizes = fixed_array(blow, blow)
-        let cum_bits = fixed_array(B_LOW, B_LOWC)
-        var s_cum = torch ? set_tts_src_cumsum_torch_cls(cum_devs, cum_sizes, cum_bits) : set_tts_src_cumsum_onnx_cls(cum_devs, cum_sizes, cum_bits)
-        let sin_devs = fixed_array(f0d, lowcd, nzd, wnd, hard)
-        let sin_sizes = fixed_array(bf0, blow, bnz, bwn, bhar)
-        let sin_bits = fixed_array(0u, B_LOWC, B_NZ, 0u, B_HAR)
-        var s_sin = torch ? set_tts_src_sines_torch_cls(sin_devs, sin_sizes, sin_bits) : set_tts_src_sines_onnx_cls(sin_devs, sin_sizes, sin_bits)
-        let low_total = int64(TTS_SRC_NH * f.nlow)
-        let sin_n = int64(f.n)
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            if (own) {
-                enc_tts_src_noise_cls(raw, h, s_nz, pa, int64(f.n * TTS_SRC_NH))
+        let nz = f.n * TTS_SRC_NH
+        let nlow = TTS_SRC_NH * f.nlow
+        with_cell_planes() $(var cp : CellPlanes) {
+            let f0p = cp |> in_(f0)
+            let nup = cp |> in_(f.nu)
+            let wp = cp |> in_(wn)
+            let nzp = own ? cp |> out_(nz) : cp |> io_(f.noise)
+            let lowp = cp |> out_(nlow)
+            let lowcp = cp |> out_(nlow)
+            let harp = cp |> out_(f.n, 0, SLACK)
+            var pa = TtsSourceArgs(n = uint(f.n), nlow = uint(f.nlow), nh = uint(TTS_SRC_NH), up = uint(f.up), sr = TTS_SRC_SR, sine_amp = 0.1,
+                noise_std = 0.003, voiced_thr = 10.0, seed = seed, woff = uint(SRC_WOFF), boff = uint(src_boff()))
+            var s_nz = cp |> cls_set(fixed_array(nzp), @@set_tts_src_noise_cls)
+            let low_ix = fixed_array(f0p, nup, lowp)
+            var s_low = torch ? cp |> cls_set(low_ix, @@set_tts_src_low_torch_cls) : cp |> cls_set(low_ix, @@set_tts_src_low_onnx_cls)
+            let cum_ix = fixed_array(lowp, lowcp)
+            var s_cum = torch ? cp |> cls_set(cum_ix, @@set_tts_src_cumsum_torch_cls) : cp |> cls_set(cum_ix, @@set_tts_src_cumsum_onnx_cls)
+            let sin_ix = fixed_array(f0p, lowcp, nzp, wp, harp)
+            var s_sin = torch ? cp |> cls_set(sin_ix, @@set_tts_src_sines_torch_cls) : cp |> cls_set(sin_ix, @@set_tts_src_sines_onnx_cls)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                if (own) {
+                    enc_tts_src_noise_cls(raw, h, s_nz, pa, int64(nz))
+                }
+                if (torch) {
+                    enc_tts_src_low_torch_cls(raw, h, s_low, pa, int64(nlow))
+                    enc_tts_src_cumsum_torch_cls(raw, h, s_cum, pa, 1l)
+                    enc_tts_src_sines_torch_cls(raw, h, s_sin, pa, int64(f.n))
+                } else {
+                    enc_tts_src_low_onnx_cls(raw, h, s_low, pa, int64(nlow))
+                    enc_tts_src_cumsum_onnx_cls(raw, h, s_cum, pa, 1l)
+                    enc_tts_src_sines_onnx_cls(raw, h, s_sin, pa, int64(f.n))
+                }
             }
-            if (torch) {
-                enc_tts_src_low_torch_cls(raw, h, s_low, pa, low_total)
-                enc_tts_src_cumsum_torch_cls(raw, h, s_cum, pa, 1l)
-                enc_tts_src_sines_torch_cls(raw, h, s_sin, pa, sin_n)
-            } else {
-                enc_tts_src_low_onnx_cls(raw, h, s_low, pa, low_total)
-                enc_tts_src_cumsum_onnx_cls(raw, h, s_cum, pa, 1l)
-                enc_tts_src_sines_onnx_cls(raw, h, s_sin, pa, sin_n)
-            }
-            cmd_copy_planes(raw, h, fixed_array(lowcd, hard, nzd), host, sizes, B_LOWC | B_HAR | B_NZ)
+            o.lowc <- cp |> plane_run(lowcp)
+            o.har <- cp |> plane_run(harp)
+            o.har_whole <- cp |> plane_whole(harp)
+            o.noise <- cp |> plane_run(nzp)
         }
-        o.lowc <- staged(host.mapped, at[0], TTS_SRC_NH * f.nlow, type<float>)
-        o.har <- staged(host.mapped, at[1], f.n, type<float>)
-        o.har_tail <- staged(host.mapped, at[1] + int64(f.n) * 4l, SLACK, type<float>)
-        o.noise <- staged(host.mapped, at[2], f.n * TTS_SRC_NH, type<float>)
-        destroy_device_buf(f0d)
-        destroy_device_buf(nud)
-        destroy_device_buf(wnd)
-        destroy_device_buf(nzd)
-        destroy_device_buf(lowd)
-        destroy_device_buf(lowcd)
-        destroy_device_buf(hard)
-        destroy_host_buf(host)
     }
     return <- o
 }
 
 //! the phase frames and the mixed signal against the CPU chain at their bars, the poisoned element on each
 def private src_asserts(t : T?; tag : string; f : TtsSrcFixture; o : SrcOut) {
-    let nl = TTS_SRC_NH * f.nlow
-    let bad_l = bars_bad("{tag} lowc", o.lowc, f.want_lowc, LOWC_REL, 0.0, f.nlow)
-    t |> success(bad_l == 0, "{tag}: the phase frames within one ulp of the CPU carry ({bad_l} of {nl} off)")
-    t |> success(!bar_ok(o.lowc[nl - 1], poison_of(f.want_lowc[nl - 1]), LOWC_REL, 0.0), "{tag}: the lowc bar reds a poisoned element")
-    let bad_h = bars_bad("{tag} har", o.har, f.want_har, HAR_REL, HAR_ABS, f.up)
-    t |> success(bad_h == 0, "{tag}: the mixed signal within 2e-6 of the CPU sines through the linear and tanh ({bad_h} of {f.n} off)")
-    t |> success(!bar_ok(o.har[f.n - 1], poison_of(f.want_har[f.n - 1]), HAR_REL, HAR_ABS), "{tag}: the har bar reds a poisoned element")
-    t |> equal(nan_count(o.har_tail), SLACK, "{tag}: the elements past n keep their sentinel")
+    check_rows(t, "{tag} phase frames within one ulp of the CPU carry", o.lowc, f.want_lowc, LOWC_BAR, f.nlow)
+    check_rows(t, "{tag} mixed signal within 2e-6 of the CPU sines through the linear and tanh", o.har, f.want_har, HAR_BAR, f.up)
+    t |> success(outside_run(o.har_whole, 0, f.n, NAN_SENTINEL), "{tag}: the elements past n keep their sentinel")
 }
 
 //! the long cumsum: 40000 low-rate frames of one harmonic, where a plain f32 sum and a double one part by cycles
@@ -255,10 +212,7 @@ def private own_draw_arm(t : T?; tag : string; torch : bool; f : TtsSrcFixture; 
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nz = f.n * TTS_SRC_NH
         var own1 <- src_run(f, torch, f.f0, true, 77u)
-        let want_noise <- [for (i in range(nz)); tts_hash_normal(77u, uint(i))]
-        let bad = bars_bad("{tag} own draw", own1.noise, want_noise, NOISE_REL, NOISE_ABS, TTS_SRC_NH)
-        t |> success(bad == 0, "{tag}: the own draw == the CPU hash at seed 77 ({bad} of {nz} off)")
-        t |> success(!bar_ok(own1.noise[nz - 1], poison_of(want_noise[nz - 1]), NOISE_REL, NOISE_ABS), "{tag}: the own-draw bar reds a poisoned element")
+        check_rows(t, "{tag} own draw vs the CPU hash at seed 77", own1.noise, [for (i in range(nz)); tts_hash_normal(77u, uint(i))], NOISE_BAR, TTS_SRC_NH)
         var in_range = true
         for (v in own1.har) {
             in_range = in_range && abs(v) <= 1.0
@@ -301,8 +255,8 @@ def private source_arm(t : T?; torch : bool; up, frames : int; full : bool) {
         f0p[4] += 40.0   //! a voiced frame: every later phase moves
         var moved <- src_run(f, torch, f0p, false, 0u)
         let nl = TTS_SRC_NH * f.nlow
-        t |> success(bars_bad("{tag} lowc poison (MUST mismatch)", moved.lowc, f.want_lowc, LOWC_REL, 0.0, f.nlow) > 0, "{tag}: a poisoned f0 frame reds the lowc compare over {nl} frames")
-        t |> success(bars_bad("{tag} har poison (MUST mismatch)", moved.har, f.want_har, HAR_REL, HAR_ABS, f.up) > 0, "{tag}: a poisoned f0 frame reds the har compare")
+        t |> success(mismatch_rel(moved.lowc, f.want_lowc, LOWC_REL, 0.0, "{tag} lowc poison (MUST mismatch)") > 0, "{tag}: a poisoned f0 frame reds the lowc compare over {nl} frames")
+        t |> success(mismatch_rel(moved.har, f.want_har, HAR_REL, HAR_ABS, "{tag} har poison (MUST mismatch)") > 0, "{tag}: a poisoned f0 frame reds the har compare")
         if (full) {
             long_cumsum_arm(t, tag, torch, up)
             own_draw_arm(t, tag, torch, f, cap)
