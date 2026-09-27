@@ -1469,8 +1469,8 @@ def kv_cache_append(var kc : TtsKvCache; k, v : array<float>; t, hidden : int64)
         for (r in range64(t)) {
             for (h in range64(hh)) {
                 for (j in range64(dh)) {
-                    kp[(h * dh + j) * cap + p0 + r] = ks[r * hidden + h * dh + j]
-                    vp[(h * cap + p0 + r) * dh + j] = vs[r * hidden + h * dh + j]
+                    kp[kv_key_at(dh, cap, h, j, p0 + r)] = ks[r * hidden + h * dh + j]
+                    vp[kv_value_at(dh, cap, h, j, p0 + r)] = vs[r * hidden + h * dh + j]
                 }
             }
         }
@@ -1478,27 +1478,44 @@ def kv_cache_append(var kc : TtsKvCache; k, v : array<float>; t, hidden : int64)
     kc.n += t
 }
 
-//! Grow a cache to `cap2` positions, the `n` filled ones kept; a cache already that wide is left.
-def kv_cache_grow(var kc : TtsKvCache; cap2 : int64) {
-    return if (cap2 <= kc.cap)
-    let hh = kc.heads
+//! Where a cache of head size `dh` and `cap` positions holds head `h`'s key element `e` at `pos`: keys transposed per head, [heads][dh][cap].
+def kv_key_at(dh, cap, h, e, pos : int64) : int64 => (h * dh + e) * cap + pos
+
+//! Where the same cache holds head `h`'s value element `e` at `pos`: values per head, [heads][cap][dh].
+def kv_value_at(dh, cap, h, e, pos : int64) : int64 => (h * cap + pos) * dh + e
+
+//! The cache's positions [r0, r1) as token-major key and value rows [pos][heads * dh] at kp / vp,
+//! position r0 landing at row `at` - `kv_cache_append`'s inverse.
+def kv_cache_read_rows(kc : TtsKvCache; r0, r1, at : int64; var kp, vp : float?) {
     let dh = kc.dh
     let cap = kc.cap
-    var inscope k2 : array<float>
-    var inscope v2 : array<float>
-    k2 |> reserve_resize(hh * dh * cap2)
-    v2 |> reserve_resize(hh * cap2 * dh)
-    for (h in range64(hh)) {
-        for (p in range64(kc.n)) {
-            for (j in range64(dh)) {
-                k2[(h * dh + j) * cap2 + p] = kc.k[(h * dh + j) * cap + p]
-                v2[(h * cap2 + p) * dh + j] = kc.v[(h * cap + p) * dh + j]
+    let d = kc.heads * dh
+    unsafe {
+        for (pos in range64(r0, r1)) {
+            for (h in range64(kc.heads)) {
+                for (e in range64(dh)) {
+                    kp[(at + pos - r0) * d + h * dh + e] = kc.k[kv_key_at(dh, cap, h, e, pos)]
+                    vp[(at + pos - r0) * d + h * dh + e] = kc.v[kv_value_at(dh, cap, h, e, pos)]
+                }
             }
         }
     }
-    kc.k <- k2
-    kc.v <- v2
-    kc.cap = cap2
+}
+
+//! Grow a cache to `cap2` positions, the `n` filled ones kept; a cache already that wide is left.
+def kv_cache_grow(var kc : TtsKvCache; cap2 : int64) {
+    return if (cap2 <= kc.cap)
+    let n = kc.n
+    let d = kc.heads * kc.dh
+    var inscope k : array<float>
+    var inscope v : array<float>
+    k |> reserve_resize(max(n, 1l) * d)
+    v |> reserve_resize(max(n, 1l) * d)
+    unsafe {
+        kv_cache_read_rows(kc, 0l, n, 0l, addr(k[0]), addr(v[0]))
+    }
+    kv_cache_init(kc, kc.heads, kc.dh, cap2)
+    kv_cache_append(kc, k, v, n, d)
 }
 
 var @scratch g_catt_heads : array<float>
@@ -1550,7 +1567,7 @@ def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; 
                         }
                     }
                     for (e in range64(dh)) {
-                        let krow = kp + (hd * dh + e) * cap + lo
+                        let krow = kp + kv_key_at(dh, cap, hd, e, lo)
                         for (j in range64(w)) {
                             ks[e * w + j] = krow[j]
                         }
@@ -1572,7 +1589,7 @@ def attention_causal_rows(q : array<float>; t, hidden : int64; context : int64; 
                     for (i in range64(rows * dh)) {
                         oh[i] = 0.0
                     }
-                    gemm_f32_jo(oh, s, vp + (hd * cap + lo) * dh, rows, w, dh)
+                    gemm_f32_jo(oh, s, vp + kv_value_at(dh, cap, hd, 0l, lo), rows, w, dh)
                     for (i in range64(rows)) {
                         for (e in range64(dh)) {
                             cp[(i0 + i) * hidden + off + e] = oh[i * dh + e]
@@ -1604,7 +1621,7 @@ def attention_causal_ref(q : array<float>; t, hidden : int64; context : int64; k
             for (j in range64(first, last + 1l)) {
                 var acc = 0.0lf
                 for (e in range64(dh)) {
-                    acc += double(q[i * hidden + hd * dh + e]) * double(kc.k[(hd * dh + e) * cap + j])
+                    acc += double(q[i * hidden + hd * dh + e]) * double(kc.k[kv_key_at(dh, cap, hd, e, j)])
                 }
                 s[j] = acc * scale
                 mx = max(mx, s[j])
@@ -1617,7 +1634,7 @@ def attention_causal_ref(q : array<float>; t, hidden : int64; context : int64; k
             for (e in range64(dh)) {
                 var acc = 0.0lf
                 for (j in range64(first, last + 1l)) {
-                    acc += s[j] * double(kc.v[(hd * cap + j) * dh + e])
+                    acc += s[j] * double(kc.v[kv_value_at(dh, cap, hd, e, j)])
                 }
                 ctx[i * hidden + hd * dh + e] = float(acc / sum)
             }

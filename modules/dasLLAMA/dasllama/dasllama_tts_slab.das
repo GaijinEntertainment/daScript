@@ -640,30 +640,20 @@ def tts_pk_voice_key(vs : PocketVoiceState) : uint64 {
         let d = kc.heads * kc.dh
         let rows = max(vs.len, 1l)
         for (i in range64(64l)) {
-            let kv = kc.k[((i * 131l) % d) * kc.cap + (i * 17l) % rows]
+            let c = (i * 131l) % d
+            let pos = (i * 17l) % rows
+            let kv = kc.k[kv_key_at(kc.dh, kc.cap, c / kc.dh, c % kc.dh, pos)]
             key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(kv))))
-            let vv = kc.v[(((i * 131l) % d) / kc.dh * kc.cap + (i * 17l) % rows) * kc.dh + (i * 131l) % kc.dh]
+            let vv = kc.v[kv_value_at(kc.dh, kc.cap, c / kc.dh, c % kc.dh, pos)]
             key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(vv))))
         }
     }
     return key
 }
 
-//! host rows [r0, r1) of one cache - keys [d][cap], values [heads][cap][dh] - as [pos][d] rows at kp / vp, row r0 landing at row `at`
+//! the GPU drivers' spelling of `kv_cache_read_rows`
 def tts_pk_kv_rows(kc : TtsKvCache; r0, r1, at : int64; var kp, vp : float?) {
-    let dh = kc.dh
-    let d = kc.heads * dh
-    let cap = kc.cap
-    unsafe {
-        for (pos in range64(r0, r1)) {
-            for (h in range64(kc.heads)) {
-                for (e in range64(dh)) {
-                    kp[(at + pos - r0) * d + h * dh + e] = kc.k[(h * dh + e) * cap + pos]
-                    vp[(at + pos - r0) * d + h * dh + e] = kc.v[(h * cap + pos) * dh + e]
-                }
-            }
-        }
-    }
+    kv_cache_read_rows(kc, r0, r1, at, kp, vp)
 }
 
 //! the harmonic source's geometry for `f2` frames: the samples, the low-rate rows and the STFT frames; `ok` false where the decoder's source parts do not fit the stamps
