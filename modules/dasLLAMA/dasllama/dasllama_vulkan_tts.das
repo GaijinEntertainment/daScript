@@ -341,26 +341,27 @@ def private ts_aux_reset {
     g_ts_aux_n = 0l
 }
 
-//! `n` floats of `src` at the next 16-byte boundary of the staged rows; the element offset
-def private ts_aux_push(src : array<float>; n : int64) : int64 {
+//! `n` staged floats reserved at the next 16-byte boundary of the rows; the element offset
+def private ts_aux_alloc(n : int64) : int64 {
     let at = round_up(g_ts_aux_n, 4l)
     g_ts_aux_host |> ensure_length(at + n)
-    for (i in range64(n)) {
-        g_ts_aux_host[at + i] = src[i]
-    }
     g_ts_aux_n = at + n
     return at
 }
 
-//! fc(style) as the norm's rows: gamma [c] then beta [c], gamma + 1 where the norm applies it as a layernorm weight; the element offset
-def private ts_style_rows(fc : TtsLinear; s : array<float>; c : int64; ln_form : bool) : int64 {
-    linear_vec(fc, s, g_ts_h_tmp)
-    let at = ts_aux_push(g_ts_h_tmp, 2l * c)
-    if (ln_form) {
-        for (i in range64(c)) {
-            g_ts_aux_host[at + i]++
-        }
+//! `n` floats of `src` staged; the element offset
+def private ts_aux_push(src : array<float>; n : int64) : int64 {
+    let at = ts_aux_alloc(n)
+    for (i in range64(n)) {
+        g_ts_aux_host[at + i] = src[i]
     }
+    return at
+}
+
+//! a norm's fc(style) rows staged (`tts_style_rows`); the element offset
+def private ts_style_rows(fc : TtsLinear; s : array<float>; c : int64; ln_form : bool) : int64 {
+    let at = ts_aux_alloc(2l * c)
+    tts_style_rows(fc, s, c, ln_form, g_ts_h_tmp, unsafe(addr(g_ts_aux_host[at])))
     return at
 }
 

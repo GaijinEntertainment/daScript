@@ -699,6 +699,20 @@ def tts_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64) : TtsSourc
     return sh
 }
 
+//! fc(style) as a norm's rows at `dst`: gamma [c] then beta [c], gamma + 1 where the norm applies it as a layernorm weight (an AdaLN
+//! site); `tmp` the fc's output scratch
+def tts_style_rows(fc : TtsLinear; s : array<float>; c : int64; ln_form : bool; @scratch @exact_size var tmp : array<float>; var dst : float?) {
+    linear_vec(fc, s, tmp)
+    unsafe {
+        memcpy(dst, addr(tmp[0]), 2l * c * 4l)
+        if (ln_form) {
+            for (i in range64(c)) {
+                dst[i] = dst[i] + 1.0
+            }
+        }
+    }
+}
+
 //! a row of `n` zeros - an allocation alone, since the fill pass's host starts zeroed (`tts_slab_build`); the element offset
 def tts_slab_zero(var w : TtsSlabWriter; n : int64) : int64 => tsw_alloc(w, n)
 

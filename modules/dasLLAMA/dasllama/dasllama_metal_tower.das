@@ -2720,18 +2720,9 @@ def private st2_readback(b : MetalBuffer?; var dst : array<float>; n : int64) {
 
 //! The style fc at the h cursor - (1 + gamma, beta) for an AdaLN site - and its byte offset.
 def private st2_style_rows(var c : St2GpuCtx; fc : TtsLinear; s : array<float>; cc : int64; ln_form : bool) : uint64 {
-    linear_vec(fc, s, g_tw_st2_style_fc)
     let hoff = c.hcur
     assert(hoff + 2l * cc <= c.hcap)
-    unsafe {
-        var p = reinterpret<float?>(metal_buffer_contents(c.bh)) + hoff
-        memcpy(p, addr(g_tw_st2_style_fc[0]), 2l * cc * 4l)
-        if (ln_form) {
-            for (i in range64(cc)) {
-                p[i] = p[i] + 1.0
-            }
-        }
-    }
+    tts_style_rows(fc, s, cc, ln_form, g_tw_st2_style_fc, unsafe(reinterpret<float?>(metal_buffer_contents(c.bh)) + hoff))
     c.hcur += 2l * cc
     return uint64(hoff * 4l)
 }
