@@ -1834,4 +1834,10 @@
     model file leaves the mapping when the load ends. Done = the table stays a borrowed view over
     a mapping the Model owns (the `.dlim` plane borrow is the precedent: `image_map` plus the
     finalizer's release), so a cold start pays no copy and the pages the OS evicts come back
-    from the file.
+    from the file. The image-mapped table is where the gather's cost shows: on the M5 Max the
+    CPU gather of a 512-row window reads 51 ms with the pages warm (the `ple_gather` bucket, 11%
+    of a 447 ms Metal pp512 window, the only host bucket) and seconds with them cold - the two
+    pp512 runs after the image mint read 518 ± 121 and 666 ± 290 tok/s against 1293 ± 31 warm,
+    the 16 random 90-byte rows a token touches each faulting a 16 KB page from disk. The lever
+    beyond the view is the gather on the device (the table as a Metal plane, the rows read where
+    the key/value GEMMs consume them) or the table pinned resident where the box has the room.
