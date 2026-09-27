@@ -137,6 +137,9 @@ only in cm2 mode on a coopmat2 device with every expert format the f16 feed admi
 e stamps (`Q51Cm2T`, the per-32 plane verbatim, `BLKW` 32) and the token command's `Q51Gemv` over
 Q8_0 activations (`vk_fmt_b32`, one lane a block), so a 704-wide down stack rides its own format
 where the K-quant rails' 256-multiple rule would demote it to q8; a dense q51 plane stays declined.
+The per-32 IQ4_NL plane (`iq4nl32`) rides the same admission on its own stamps (`Iq4nl32Cm2T`, the
+codebook staged as the kq iq4 tiles stage it; `Iq4nl32Gemv` through `iq4_word`), the 640-wide down
+stacks of Qwen3.8-Flash-Next.
 
 ### 2.2ag The whole-model driver's MoE token command {#resident-moe-token}
 

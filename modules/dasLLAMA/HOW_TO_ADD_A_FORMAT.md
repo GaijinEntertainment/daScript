@@ -47,7 +47,12 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
 `kq_ggml_type`, the int-id twins in `dasllama_gemm_schema.das`) reads the row.
 
 - Append the member to `KqFmt` - **append, never reorder**: the int value is the device stack
-  tag (`vk_kq_schema_id`) and the image plane id.
+  tag (`vk_kq_schema_id`) and the image plane id. The member alone breaks every Vulkan build
+  until its `<fmt>_batch_cm2e_cls` / `<fmt>_batch_khr_cls` stamps exist (`kq_tile_stamp` walks
+  the whole enum in the `khr_cls_*` / `cm2e_cls_*` ladders), and a Mac whose dasVulkan module is
+  not built never sees it - build the module first (`cmake --build modules/dasVulkan/build`;
+  MoltenVK then also runs the sdot4 GEMV cells, the coopmat tile cells skip) and keep the
+  identity and the sec.6 stamps in ONE compile-checked step.
 - The `GGML_TYPE_<FMT>` constant, the stride constants `<FMT>_QSB` / `<FMT>_SSB` (bytes per
   superblock row of the quant and scale planes), and the `kq_desc` row: strides, weights per
   stride unit, disk bytes per stride unit (the ggml block bytes), the ggml type, the kernel/IR id
@@ -332,13 +337,14 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    `enc` ladder lacks the new arm dispatches the else format's pipeline over the new planes and
    reads byte-stable across fix rounds.
 
-A per-32 format (q51's and mx4's shape: 32-weight blocks, Q8_0-form activations, off the kq
-lattice) takes none of the kq id bridge: it joins `kq_block32` (`dasllama_kqformat.das`, the one
-predicate the drivers and the resident plan read) and `arena_block_bytes` (the CPU plane's own block
+A per-32 format (q51's, mx4's and iq4nl32's shape: 32-weight blocks, Q8_0-form activations, off
+the kq lattice) takes none of the kq id bridge: it joins `kq_block32` (`dasllama_kqformat.das`, the one
+predicate the drivers, the resident plan and `pf_f16_feed` read) and `arena_block_bytes` (the CPU plane's own block
 strides; mx4's scale slab rounds to whole words, since the tiles read its byte scales four blocks a
-word), the `pf_f16_feed` admission, and writes its own classes beside q8's rather than a `KqGemvBase`
+word; iq4nl32's 2 B d is half a word, so its decodes and its GEMV pick the half by the block's parity), and writes its own classes beside q8's rather than a `KqGemvBase`
 child - a `KqCm2BatchT` format template at `BLKW` 32 (`Q51Cm2T` with a word scale plane, `Mx4Cm2T`
-decoding the doubled e2m1 magnitudes under the halved E8M0 scale; the s and e stamps the expert
+decoding the doubled e2m1 magnitudes under the halved E8M0 scale, `Iq4nl32Cm2T` on the `IQLUT`
+axis; the s and e stamps the expert
 schedule dispatches and the `khr_stage16` method behind the `<Fmt>KhrBatch` stamp the mm-mode
 schedule takes; `cm2_cls_ensure` refuses it a dense column, the plan declines a dense plane of it)
 and a decode GEMV in `Q8Gemv`'s shape (`Q51Gemv`, `Mx4Gemv`: one lane a block, `gemv_lanes_per_row`

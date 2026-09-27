@@ -2091,6 +2091,9 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     if (fmt == int(KqFmt.mx4)) {
         return (wq = MX4_QB, ws = MX4_SB)   // 16 nibble bytes, one E8M0 byte: the CPU's mxq / mxs planes verbatim
     }
+    if (fmt == int(KqFmt.iq4nl32)) {
+        return (wq = IQ4NL32_QB, ws = IQ4NL32_SB)   // 16 nibble bytes, one f16 d: the CPU's iq4nl32q / iq4nl32s planes verbatim
+    }
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = kq_dev_ssb_i(fmt))
 }
 

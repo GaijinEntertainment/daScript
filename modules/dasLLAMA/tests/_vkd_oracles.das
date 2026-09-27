@@ -694,6 +694,21 @@ def q51f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
     }
 }
 
+//! IQ4_NL per-32 x f16 GEMM oracle (the iq4nl32 s and e stamps' shape): per weight d * LUT[q] off the per-32 plane - q the
+//! nibble (byte j: element j low, j + 16 high), d the block's f16 half of its scale word (two blocks a word) - rounded f16
+//! as the decode rounds, f16 activations, block order - approx bars
+def iq4nl32f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                           recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let lut = iq4nl_lut()
+    f16_gemm_walk(xf, recs, nrec, n, d, 32, y) $(wb, e : int) : float {
+        let dp = unpackHalf2x16(wsw[wb / 2])
+        let dv = wb % 2 == 0 ? dp.x : dp.y
+        let by = byte_u8(wq, wb * 16 + e % 16)
+        let q = (by >> ((e / 16) * 4)) & 0xF
+        return float(float16(dv * float(int(lut[q]))))
+    }
+}
+
 //! one MXFP4 weight off its e2m1 code and E8M0 scale byte, as the CPU dot and the cm2 decode compute it (denormal bit patterns below e = 2)
 def mx4_dequant(nib, ex : int) : float {
     let e = uint(ex)
@@ -811,6 +826,15 @@ def requant_oracle(src : array<float>; base, nelem : int; q8k : bool;
 def q51_gemv_row_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
     unsafe {
         return dot_q51q8_scalar(addr<uint8 const?>(wq[wb0 * 5]), addr<uint8 const?>(ws[wb0]), addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
+    }
+}
+
+//! the iq4nl32 GEMV cell's oracle: the engine's scalar dot over the plane words from block `wb0` (its 16-byte blocks, its f16 d
+//! half-word, the Q8_0 activation bytes and scales from 0) - the CPU rail's float order, the kernel held to it
+def iq4nl32_gemv_row_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+    unsafe {
+        return dot_iq4nl32q8_scalar(addr<uint8 const?>(wq[wb0 * 4]), addr<uint8 const?>(ws[wb0 / 2]) + int64(wb0 % 2) * 2l,
+            addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
     }
 }
 

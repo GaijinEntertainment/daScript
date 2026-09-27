@@ -980,13 +980,13 @@ def private cm2_template_chain_lines(name : string) : array<string> {
 //! one class ladder trio every format template on the cm2 base joins
 struct private LadderTrio {
     suffix : string     //! the stamp's class suffix: `<Fmt>` + suffix
-    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail; a per-32 format (q8, q51) spells `<fmt>_batch_` + tail
+    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail; a per-32 format (q8, q51, mx4, iq4nl32) spells `<fmt>_batch_` + tail
     ladder : string     //! the ladder functions' prefix: ladder + `ensure` / `set` / `enc`
     why : string        //! what a missing arm does at run time
 }
 
 def private cm2_dispatch_name(fmt, tail : string) : string {
-    return fmt == "q8" || fmt == "q51" || fmt == "mx4" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
+    return fmt == "q8" || fmt == "q51" || fmt == "mx4" || fmt == "iq4nl32" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 }
 
 //! the words of `let KQ_CM2E_ALIASES_M = "..."` in the kqformat module: the formats whose e column the m stamp serves
