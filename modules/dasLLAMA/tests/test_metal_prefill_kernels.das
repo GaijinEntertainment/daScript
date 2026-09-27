@@ -21,6 +21,7 @@ require dasllama/dasllama_moe
 require dasllama/dasllama_common
 require dasllama/dasllama_rope   // build_rope_tabs - the Pk rope gates' tables
 require _attn_oracle
+require _tts_kernel_oracles   // the StyleTTS2 cells' fixtures and double forms the Vulkan TTS cells share
 require daslib/jobque_boost
 require math
 
@@ -957,9 +958,8 @@ def private g4a_attn_gate(t : T?; dev, queue) {
 }
 
 // ===== the StyleTTS2 chain's kernels (the tower driver's TTS seats) =====
-//! f16-exact fixture values: every product is exact, so the bars below cover only the f32
-//! accumulation order (conv_mm) or the reduction order and sin() rounding (adain_snake)
-def private st2_f16(seed : int; scale, bias : float) : float => float(float16(scale * float(seed) + bias))
+// f16-exact fixture values (`f16_at`, `f16_fill`): every product is exact, so the bars below cover only the f32
+// accumulation order (conv_mm) or the reduction order and sin() rounding (adain_snake)
 
 def private st2_conv_fixture(dev; transposed : bool) : St2ConvArgs {
     //! forward: 40 channels (an 8-run never straddles a tap; the k-run tail lands past the taps -
@@ -1018,13 +1018,13 @@ def private st2_conv_gate(t : T?; dev, queue; transposed : bool; exact : bool) {
     var x : array<float>
     x |> resize(t_in * cin)
     for (i in range(t_in * cin)) {
-        x[i] = st2_f16((i * 7) % 41, 0.05, -1.0) * off16
+        x[i] = f16_at((i * 7) % 41, 0.05, -1.0) * off16
     }
     var w : array<float>
     w |> resize(cout * kdim)   //! the pad columns past k * cin stay zero, as the slab's do
     for (co in range(cout)) {
         for (j in range(k * cin)) {
-            w[co * kdim + j] = st2_f16(((co + 1) * (j + 3)) % 37, 0.03, -0.5) * off16
+            w[co * kdim + j] = f16_at(((co + 1) * (j + 3)) % 37, 0.03, -0.5) * off16
         }
     }
     let rel = exact ? 2e-6 : 1e-3
@@ -1101,7 +1101,7 @@ def private st2_im2col_gate(t : T?; dev, queue; r0, rows : int; transposed : boo
     var x : array<float>
     x |> resize(30 * cin)
     for (i in range(30 * cin)) {
-        x[i] = st2_f16((i * 5) % 43, 0.07, -1.5)
+        x[i] = f16_at((i * 5) % 43, 0.07, -1.5)
     }
     var want : array<float>
     want |> resize(32 * kdim)   //! zeros past the taps, the pad columns and the pad rows
@@ -1162,7 +1162,7 @@ def private st2_adain_gate(t : T?; dev, queue; nrows : int; snake : bool) {
     var x : array<float>
     x |> resize(n)
     for (i in range(n)) {
-        x[i] = st2_f16((i * 11) % 53, 0.04, -1.1)
+        x[i] = f16_at((i * 11) % 53, 0.04, -1.1)
     }
     var h : array<float>
     var gw : array<float>
@@ -1173,11 +1173,11 @@ def private st2_adain_gate(t : T?; dev, queue; nrows : int; snake : bool) {
     gb |> resize(c)
     alpha |> resize(c)
     for (i in range(c)) {
-        h[i] = st2_f16((i * 3) % 17, 0.02, -0.1)
-        h[c + i] = st2_f16((i * 5) % 19, 0.03, -0.2)
-        gw[i] = st2_f16((i * 7) % 13, 0.05, 0.7)
-        gb[i] = st2_f16((i * 2) % 11, 0.01, -0.05)
-        alpha[i] = st2_f16((i * 3) % 7, 0.1, 0.3)
+        h[i] = f16_at((i * 3) % 17, 0.02, -0.1)
+        h[c + i] = f16_at((i * 5) % 19, 0.03, -0.2)
+        gw[i] = f16_at((i * 7) % 13, 0.05, 0.7)
+        gb[i] = f16_at((i * 2) % 11, 0.01, -0.05)
+        alpha[i] = f16_at((i * 3) % 7, 0.1, 0.3)
     }
     let ka = St2AdainArgs(c = uint(c), t = uint(nrows), eps = 1e-5)
     var want_st : array<float>
@@ -1284,8 +1284,8 @@ def private st2_rows_gate(t : T?; dev, queue) {
     a |> resize(n)
     b |> resize(n)
     for (i in range(n)) {
-        a[i] = st2_f16((i * 7) % 31, 0.1, -1.5)
-        b[i] = st2_f16((i * 5) % 29, 0.1, -1.4)
+        a[i] = f16_at((i * 7) % 31, 0.1, -1.5)
+        b[i] = f16_at((i * 5) % 29, 0.1, -1.4)
     }
     var want_lk : array<float>
     var want_ax0 : array<float>
@@ -1429,16 +1429,6 @@ def private st2_rows_gate(t : T?; dev, queue) {
     metal_release(pso_rf)
 }
 
-//! `n` f16-exact patterned values: seed (i * seed_mul) % 47 through `st2_f16`
-def private st2_fill(n : int; seed_mul : int; scale, bias : float) : array<float> {
-    var a : array<float>
-    a |> resize(n)
-    for (i in range(n)) {
-        a[i] = st2_f16((i * seed_mul) % 47, scale, bias)
-    }
-    return <- a
-}
-
 //! the row gather with its add flags off and on, exact, a poisoned source row as the control
 def private st2_gather_gate(t : T?; dev, queue) {
     let tag = "st2_gather"
@@ -1448,9 +1438,9 @@ def private st2_gather_gate(t : T?; dev, queue) {
     return if (pso == null)
     let c = 24
     let nrows = 9
-    var a <- st2_fill(16 * c, 7, 0.05, -1.0)
-    let b <- st2_fill(nrows * c, 5, 0.03, 0.2)
-    let cv <- st2_fill(c, 3, 0.02, -0.1)
+    var a <- f16_fill(16 * c, 7, 0.05, -1.0)
+    let b <- f16_fill(nrows * c, 5, 0.03, 0.2)
+    let cv <- f16_fill(c, 3, 0.02, -0.1)
     var idx : array<uint>
     idx |> resize(nrows)
     for (r in range(nrows)) {
@@ -1517,23 +1507,11 @@ def private st2_concat_gate(t : T?; dev, queue; with_res : bool) {
     let nrows = 7
     let f0s = 4
     let width = with_res ? 48 : 32
-    let x <- st2_fill(nrows * c, 7, 0.05, -1.0)
-    var res <- st2_fill(nrows * rs, 5, 0.03, 0.2)
-    let f0 <- st2_fill(nrows * f0s, 3, 1.5, 80.0)
-    let nd <- st2_fill(nrows * f0s, 11, 0.1, -3.0)
-    var want : array<float>
-    want |> resize(nrows * width)
-    let rcw = with_res ? rc : 0
-    for (r in range(nrows)) {
-        for (j in range(c)) {
-            want[r * width + j] = x[r * c + j]
-        }
-        for (j in range(rcw)) {
-            want[r * width + c + j] = res[r * rs + j]
-        }
-        want[r * width + c + rcw] = f0[r * f0s]
-        want[r * width + c + rcw + 1] = nd[r * f0s]
-    }
+    let x <- f16_fill(nrows * c, 7, 0.05, -1.0)
+    var res <- f16_fill(nrows * rs, 5, 0.03, 0.2)
+    let f0 <- f16_fill(nrows * f0s, 3, 1.5, 80.0)
+    let nd <- f16_fill(nrows * f0s, 11, 0.1, -3.0)
+    var want <- concat_ref(x, res, f0, nd, nrows, c, rc, rs, f0s, f0s, width, with_res)
     var bx = buf_upload(dev, x)
     var bf0 = buf_upload(dev, f0)
     var bnd = buf_upload(dev, nd)
@@ -1585,9 +1563,9 @@ def private st2_pool_gate(t : T?; dev, queue) {
     let pad_l = 1
     let t_in = 9
     let t_out = (t_in - 1) * stride - 2 * pad_l + (k - 1) + 1
-    var x <- st2_fill(t_in * c, 7, 0.05, -1.0)
-    let w <- st2_fill(c * k, 5, 0.1, -0.15)
-    let b <- st2_fill(c, 3, 0.02, 0.05)
+    var x <- f16_fill(t_in * c, 7, 0.05, -1.0)
+    let w <- f16_fill(c * k, 5, 0.1, -0.15)
+    let b <- f16_fill(c, 3, 0.02, 0.05)
     var want : array<float>
     want |> resize(t_out * c)
     for (p in range(t_out)) {
@@ -1644,8 +1622,8 @@ def private st2_lstm_gate(t : T?; dev, queue) {
     let hd = 8
     let steps = 13
     let xgs = 64
-    var xg <- st2_fill(steps * xgs, 7, 0.05, -1.15)   //! centred, so no gate saturates and the poison stays visible
-    let whh <- st2_fill(4 * hd * hd, 5, 0.012, -0.28)
+    var xg <- f16_fill(steps * xgs, 7, 0.05, -1.15)   //! centred, so no gate saturates and the poison stays visible
+    let whh <- f16_fill(4 * hd * hd, 5, 0.012, -0.28)
     var want : array<float>
     want |> resize(steps * 2 * hd)
     for (dir in range(2)) {
@@ -1721,9 +1699,9 @@ def private st2_attn_gate(t : T?; dev, queue; nrows : int) {
     let heads = 2
     let hs = 64
     let d = heads * hs
-    var q <- st2_fill(nrows * d, 7, 0.02, -0.4)
-    var k <- st2_fill(nrows * d, 5, 0.03, -0.6)
-    var vv <- st2_fill(nrows * d, 3, 0.05, -1.1)
+    var q <- f16_fill(nrows * d, 7, 0.02, -0.4)
+    var k <- f16_fill(nrows * d, 5, 0.03, -0.6)
+    var vv <- f16_fill(nrows * d, 3, 0.05, -1.1)
     var want : array<float>
     with_job_que() {
         setup_dasllama_jobque_()
@@ -1777,7 +1755,7 @@ def private pk_rows_gate(t : T?; dev, queue; elu : bool) {
     let rows = 10
     let width = 40
     let ka = PkRowsArgs(rows = uint(rows), width = uint(width), ss = 48u, sc = 8u, sr0 = 2u, ds = 64u, dc = 5u, dr0 = 3u)
-    var x <- st2_fill((2 + rows) * 48, 3, 0.5, -1.0)
+    var x <- f16_fill((2 + rows) * 48, 3, 0.5, -1.0)
     var want : array<float>
     want |> resize((3 + rows) * 64)
     for (w in want) {
@@ -1824,8 +1802,8 @@ def private pk_row_scale_gate(t : T?; dev, queue) {
     return if (pso == null)
     let tt = 9
     let c = 48
-    var x <- st2_fill(tt * c, 5, 0.3, -0.7)
-    let s <- st2_fill(16 + c, 11, 0.1, 0.5)
+    var x <- f16_fill(tt * c, 5, 0.3, -0.7)
+    let s <- f16_fill(16 + c, 11, 0.1, 0.5)
     var want : array<float>
     want |> resize(tt * c)
     for (i in range(tt * c)) {
@@ -1872,7 +1850,7 @@ def private rope_stride_gate(t : T?; dev, queue) {
     let dh = 32
     let pos0 = 5
     let period = 10000.0
-    var x <- st2_fill(tt * stride, 13, 0.4, -0.9)
+    var x <- f16_fill(tt * stride, 13, 0.4, -0.9)
     var y : array<float>
     y |> resize(tt * d)
     for (r in range(tt)) {
@@ -1950,9 +1928,9 @@ def private pk_attn_gate(t : T?; dev, queue; ctx, n_old : int) {
     let n = n_old + tt
     let qs = 160
     let qcol = 16
-    let q <- st2_fill(tt * qs, 7, 0.05, -0.6)
-    var k <- st2_fill(n * d, 5, 0.06, -0.7)
-    var vv <- st2_fill(n * d, 3, 0.08, -1.1)
+    let q <- f16_fill(tt * qs, 7, 0.05, -0.6)
+    var k <- f16_fill(n * d, 5, 0.06, -0.7)
+    var vv <- f16_fill(n * d, 3, 0.08, -1.1)
     var qn : array<float>
     qn |> resize(tt * d)
     for (r in range(tt)) {
@@ -2031,7 +2009,7 @@ def private rope_store_pocket_gate(t : T?; dev, queue) {
     let pos = 5
     let cap = 8
     let period = 10000.0
-    var qkv <- st2_fill(3 * d, 13, 0.4, -0.9)
+    var qkv <- f16_fill(3 * d, 13, 0.4, -0.9)
     var q : array<float>
     var k : array<float>
     q |> resize(d)
@@ -2130,10 +2108,10 @@ def private pk_add_ln_gate(t : T?; dev, queue; dim : int) {
     return if (pso == null)
     let eps = 1e-5
     let yoff = 16
-    let x <- st2_fill(dim, 7, 0.5, -0.3)
-    var a <- st2_fill(dim, 11, 0.4, 0.2)
-    let w <- st2_fill(dim, 5, 0.3, 0.9)
-    let bb <- st2_fill(dim, 3, 0.2, -0.1)
+    let x <- f16_fill(dim, 7, 0.5, -0.3)
+    var a <- f16_fill(dim, 11, 0.4, 0.2)
+    let w <- f16_fill(dim, 5, 0.3, 0.9)
+    let bb <- f16_fill(dim, 3, 0.2, -0.1)
     var want_x : array<float>
     want_x |> resize(dim)
     for (i in range(dim)) {
@@ -2250,7 +2228,7 @@ def private pk_gemv_gate(t : T?; dev, queue; q8 : bool; kind, nin : int) {
     q8_blob_fill(nout, max(nin / 32, 1), blob, wdeq)
     if (!q8) {
         delete wdeq
-        wdeq <- st2_fill(nout * nin, 29, 0.5, -0.2)   //! the f32 rows take any width; the q8 blob needs whole blocks
+        wdeq <- f16_fill(nout * nin, 29, 0.5, -0.2)   //! the f32 rows take any width; the q8 blob needs whole blocks
     }
     var wf : array<float>
     wf |> resize(nout * stride)
@@ -2259,15 +2237,15 @@ def private pk_gemv_gate(t : T?; dev, queue; q8 : bool; kind, nin : int) {
             wf[r * stride + j] = wdeq[r * nin + j]
         }
     }
-    let b <- st2_fill(nout, 5, 0.2, -0.1)
+    let b <- f16_fill(nout, 5, 0.2, -0.1)
     let sc = sqrt(96.0 / float(nin))   //! the dot's spread held at the 96-wide case's, so the SiLU epilogues stay off their flat tail and the poison shows
-    var x <- st2_fill(xoff + nin, 7, 0.5 * sc, -0.3 * sc)
-    let lw <- st2_fill(nin, 3, 0.3 * sc, 0.9 * sc)
-    let lb <- st2_fill(nin, 11, 0.2, -0.1)
-    let md <- st2_fill(3 * nin, 13, 0.4, 0.1)
-    let aux <- st2_fill(2 * nout, 17, 0.3, 0.2)
-    let x0 <- st2_fill(nout, 19, 0.5, -0.4)
-    let y0 <- st2_fill(yoff + nout, 23, 0.6, 0.3)
+    var x <- f16_fill(xoff + nin, 7, 0.5 * sc, -0.3 * sc)
+    let lw <- f16_fill(nin, 3, 0.3 * sc, 0.9 * sc)
+    let lb <- f16_fill(nin, 11, 0.2, -0.1)
+    let md <- f16_fill(3 * nin, 13, 0.4, 0.1)
+    let aux <- f16_fill(2 * nout, 17, 0.3, 0.2)
+    let x0 <- f16_fill(nout, 19, 0.5, -0.4)
+    let y0 <- f16_fill(yoff + nout, 23, 0.6, 0.3)
     var xs : array<float>
     xs |> resize(nin)
     for (j in range(nin)) {
@@ -2388,7 +2366,7 @@ def private st2_sigsum_gate(t : T?; dev, queue) {
     let nrows = 37
     let nb = 50
     let ls = 64
-    var lg <- st2_fill(nrows * ls, 7, 0.3, -5.0)
+    var lg <- f16_fill(nrows * ls, 7, 0.3, -5.0)
     var want : array<float>
     want |> resize(nrows)
     for (r in range(nrows)) {
@@ -2436,7 +2414,7 @@ def private st2_gelu_gate(t : T?; dev, queue) {
     t |> success(pso != null, "{tag} pipeline: {err}")
     return if (pso == null)
     let n = 216
-    var x <- st2_fill(n, 7, 0.25, -3.0)
+    var x <- f16_fill(n, 7, 0.25, -3.0)
     x[17] = 40.0
     x[18] = -40.0
     var want := x
@@ -2478,43 +2456,21 @@ def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
     var pso_noise = pipeline_from_source(dev, metal_st2_src_noise_msl, metal_st2_src_noise_msl_entry, metal_st2_src_noise_msl_fastmath, err)
     t |> success(pso_noise != null, "{tag} noise pipeline: {err}")
     return if (pso_low == null || pso_cum == null || pso_sin == null || pso_noise == null)
-    let up = 300
-    let nh = 3
-    let frames = 700   //! 210000 samples: the phases past a hundred thousand radians, where a fast sin loses them
-    let n = frames * up
-    let nlow = int(resize_len(int64(n), 1.0 / float(up)))
-    let sr = 24000.0
-    var f0 : array<float>
-    f0 |> resize(frames)
-    for (i in range(frames)) {
-        f0[i] = i % 3 == 2 ? 0.0 : float(float16(180.0 + 0.3 * float(i % 97)))
-    }
-    let nu <- st2_fill(nh, 3, 0.1, 0.2)
-    let noise <- st2_fill(n * nh, 7, 0.4, -0.9)
-    var lw <- st2_fill(nh, 5, 0.3, 0.2)
-    var lb : array<float>
-    lb |> push(0.05)
-    let ka = St2SourceArgs(n = uint(n), nlow = uint(nlow), nh = uint(nh), up = uint(up), sr = sr, sine_amp = 0.1, noise_std = 0.003,
+    var src <- tts_src_fixture(torch_math, 300, 700)   //! 210000 samples: the phases past a hundred thousand radians, where a fast sin loses them
+    let up = src.up
+    let nh = TTS_SRC_NH
+    let n = src.n
+    let nlow = src.nlow
+    var f0 <- src.f0
+    let nu <- src.nu
+    let noise <- src.noise
+    let lw <- src.lw
+    let lb <- src.lb
+    let want_lowc <- src.want_lowc
+    let want_har <- src.want_har
+    let ka = St2SourceArgs(n = uint(n), nlow = uint(nlow), nh = uint(nh), up = uint(up), sr = TTS_SRC_SR, sine_amp = 0.1, noise_std = 0.003,
         voiced_thr = 10.0, seed = 77u)
-    let cfg = SineSourceCfg(upsample = int64(up), sample_rate = sr, n_harm = int64(nh), sine_amp = 0.1, noise_std = 0.003, voiced_thr = 10.0, torch_math = torch_math)
-    var cr = SineSourceCarry()
-    sine_carry_reset(cr, int64(nh), int64(nlow))
-    var sines : array<float>
-    let rows = sine_source(cfg, f0, int64(frames), nu, 0l, int64(nlow), cr, noise, 0l, sines)
-    t |> equal(rows, int64(n), "{tag}: the CPU source mixes every sample")
-    var want_lowc : array<float>
-    want_lowc |> resize(nh * nlow)
-    for (h in range(nh)) {
-        for (k in range(nlow)) {
-            want_lowc[h * nlow + k] = cr.lowc[int64(h) * cr.stride + int64(k)]
-        }
-    }
-    var lin = TtsLinear(nin = int64(nh), nout = 1l)
-    lin.w := lw
-    lin.b := lb
-    var want_har : array<float>
-    linear_rows(lin, sines, int64(n), want_har)
-    tanh_inplace(want_har, int64(n))
+    t |> equal(src.rows, int64(n), "{tag}: the CPU source mixes every sample")
     var bnu = buf_upload(dev, nu)
     var bnoise = buf_upload(dev, noise)
     var blw = buf_upload(dev, lw)
@@ -2564,22 +2520,9 @@ def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
     let har_captured <- buf_download(bhar, n, type<float>)
     {   // the long cumsum: 40000 low-rate frames of one harmonic, where a plain f32 sum and a double one part by cycles
         let nlong = 40000
-        var lowl : array<float>
-        var wantl : array<float>
-        lowl |> resize(nlong)
-        wantl |> resize(nlong)
-        var acc64 = 0.0lf
-        var accf = 0.0
-        var accp = 0.0
-        for (k in range(nlong)) {
-            lowl[k] = float(float16(0.0071 + 0.0003 * float(k % 13)))
-            acc64 += double(lowl[k])
-            accf = torch_math ? float(acc64) : accf + lowl[k]
-            accp += lowl[k]
-            wantl[k] = ((accf * 2.0) * PI) * float(up)
-        }
-        t |> success(abs(float(acc64) - accp) > 0.01, "{tag} long cumsum: the two laws part by {abs(float(acc64) - accp)} cycles over {nlong} frames (the leg's control)")
-        var blowl = buf_upload(dev, lowl)
+        let lc <- tts_long_cumsum(torch_math, up, nlong)
+        t |> success(lc.parted > 0.01, "{tag} long cumsum: the two laws part by {lc.parted} cycles over {nlong} frames (the leg's control)")
+        var blowl = buf_upload(dev, lc.low)
         var blowcl = buf_fill(dev, nlong, -1.0e30)
         var kl = ka
         kl.nlow = uint(nlong)
@@ -2594,8 +2537,8 @@ def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
         }
         t |> success(ranl, "{tag} long cumsum dispatch: {err3}")
         if (ranl) {
-            t |> equal(buf_mismatch_bars(blowcl, wantl, 2e-7, 1e-3, "{tag} long cumsum"), 0)
-            var wantp := wantl
+            t |> equal(buf_mismatch_bars(blowcl, lc.want, 2e-7, 1e-3, "{tag} long cumsum"), 0)
+            var wantp := lc.want
             wantp[nlong - 1] += 2.0   //! two radians on the last frame: the bars are a few ulps of a phase in the thousands
             t |> success(buf_mismatch_bars(blowcl, wantp, 2e-7, 1e-3, "{tag} long cumsum poison (MUST mismatch)") > 0, "{tag} long cumsum: a moved last frame reds the compare (the compare's control)")
         }
@@ -2674,32 +2617,11 @@ def private st2_stft_gate(t : T?; dev, queue; reflect : bool) {
     let pad = 2
     let bins = 3
     let frames = (n + 2 * pad - k) / hop + 1
-    var har <- st2_fill(n, 7, 0.05, -0.9)
-    let wre <- st2_fill(bins * k, 5, 0.2, -0.7)
-    var wim <- st2_fill(bins * k, 3, 0.15, -0.5)
+    var har <- f16_fill(n, 7, 0.05, -0.9)
+    let wre <- f16_fill(bins * k, 5, 0.2, -0.7)
+    var wim <- f16_fill(bins * k, 3, 0.15, -0.5)
     wim[2 * k + 5] = 0.0
-    var want : array<float>
-    want |> resize(frames * 2 * bins)
-    for (f in range(frames)) {
-        for (b in range(bins)) {
-            var re = 0.0lf
-            var im = 0.0lf
-            for (tap in range(k)) {
-                var src = f * hop + tap - pad
-                if (src < 0) {
-                    src = reflect ? -src : 0
-                } elif (src >= n) {
-                    src = reflect ? 2 * (n - 1) - src : n - 1
-                }
-                re += double(wre[b * k + tap]) * double(har[src])
-                im += double(wim[b * k + tap]) * double(har[src])
-            }
-            want[f * 2 * bins + b] = float(sqrt(re * re + im * im + 1e-9lf))
-            let imf = float(im)
-            let ref = float(re)
-            want[f * 2 * bins + bins + b] = imf == 0.0 ? (ref < 0.0 ? PI : 0.0) : atan2(imf, ref)
-        }
-    }
+    let want <- stft_ref(har, wre, wim, n, k, hop, pad, bins, reflect)
     var bre = buf_upload(dev, wre)
     var bim = buf_upload(dev, wim)
     var bspec = buf_fill(dev, frames * 2 * bins, -1.0e30)
@@ -2744,29 +2666,12 @@ def private st2_istft_gate(t : T?; dev, queue; envelope : bool) {
     let hop = 4
     let pad = 2
     let n = (tt - 1) * hop + k - 2 * pad
-    var y <- st2_fill(tt * stride, 7, 0.15, -1.2)
-    let wre <- st2_fill(k * bins, 5, 0.2, -0.7)   //! [k][bins], the transposed conv's operand layout
-    let wim <- st2_fill(k * bins, 3, 0.15, -0.5)
-    let window <- st2_fill(k, 11, 0.1, 0.3)
-    var want : array<float>
-    want |> resize(n)
-    for (i in range(n)) {
-        let m = i + pad
-        var acc = 0.0lf
-        var env = 0.0lf
-        for (tap in range(k)) {
-            continue if (m < tap || (m - tap) % hop != 0)
-            let q = (m - tap) / hop
-            continue if (q >= tt)
-            for (b in range(bins)) {
-                let mag = exp(y[q * stride + b])
-                let ph = sin(y[q * stride + bins + b])
-                acc += double(mag * cos(ph) * wre[tap * bins + b]) - double(mag * sin(ph) * wim[tap * bins + b])
-            }
-            env += double(window[tap] * window[tap])
-        }
-        want[i] = float((envelope && env > 1e-11lf) ? acc / env : acc)
-    }
+    var y <- f16_fill(tt * stride, 7, 0.15, -1.2)
+    let wre <- f16_fill(k * bins, 5, 0.2, -0.7)   //! [k][bins], the transposed conv's operand layout
+    let wim <- f16_fill(k * bins, 3, 0.15, -0.5)
+    let window <- f16_fill(k, 11, 0.1, 0.3)
+    var ref <- istft_ref(y, wre, wim, window, tt, stride, bins, k, hop, pad, envelope)
+    let want <- ref.want
     var bre = buf_upload(dev, wre)
     var bim = buf_upload(dev, wim)
     var bwn = buf_upload(dev, window)

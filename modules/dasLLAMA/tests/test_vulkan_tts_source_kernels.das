@@ -12,9 +12,8 @@ require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan dasllama/dasllama_gpu_math   // tts_hash_normal: the own noise draw's CPU form
 require ?vulkan _vkd_oracles
 require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
+require _tts_kernel_oracles   // nolint:STYLE030,LINT019 — the fixtures and double forms the Metal gate shares, inside the vulkan arms alone
 require dasllama/dasllama_tts_blocks
-require dasllama/dasllama_math
-require daslib/jobque_boost
 
 //! The TTS tower's decoder tail on Vulkan against the CPU chain (a Vulkan device, else the cells skip): the stage sum's
 //! axpy and the last stage's reflect pad, exact; the harmonic source on both resample laws - the phase frames, the mixed
@@ -23,16 +22,6 @@ require daslib/jobque_boost
 //! every compare with its poisoned element.
 
 let private SLACK = 5      //! the elements past a run, left at their fill
-
-//! `n` f16-exact patterned values: (i * seed_mul) % 47 scaled and biased, rounded through f16 - the Metal gates' fixtures
-def private f16_fill(n, seed_mul : int; scale, bias : float) : array<float> {
-    var a : array<float>
-    a |> resize(n)
-    for (i in range(n)) {
-        a[i] = float(float16(scale * float((i * seed_mul) % 47) + bias))
-    }
-    return <- a
-}
 
 //! `w` moved by a hundredth of its magnitude (floored at 1): outside every bar in this file
 def private poison_of(w : float) : float => w + max(1.0, abs(w)) * 0.01
@@ -154,29 +143,13 @@ def test_vkt_reflect1(t0 : T?) {
     }
 }
 
-let private SRC_NH = 3
-let private SRC_SR = 24000.0
-let private SRC_WOFF = 5        //! the source linear's weight row in the slab plane, poisoned slots before it
+let private SRC_WOFF = 5       //! the source linear's weight row in the slab plane, poisoned slots before it
 let private SRC_GAP = 3         //! poisoned slots between the weight row and the bias
 let private LOWC_REL = 1.2e-7   //! one ulp of a phase frame: the device's increments and sums in the CPU carry's operation order
 let private HAR_REL = 2e-6      //! the mixed signal: the device sin, tanh and the linear's reassociation against the CPU's
 let private HAR_ABS = 2e-7
 let private NOISE_REL = 1e-4    //! the own draw: the device log, sqrt and cos - the driver's approximations, 2.8e-5 at most on the RTX PRO 4500 - against the CPU's on the same hashed uniforms, under 5 in magnitude
 let private NOISE_ABS = 1e-5
-
-struct private SrcFixture {
-    up : int
-    frames : int
-    n : int
-    nlow : int
-    rows : int64                //! the samples the CPU source mixed
-    f0 : array<float>
-    nu : array<float>
-    noise : array<float>        //! the captured noise rows [n][nh]
-    wn : array<float>           //! the slab plane: lw [nh] at SRC_WOFF, lb after SRC_GAP poisoned slots, four poisoned past it
-    want_lowc : array<float>    //! the CPU carry's phase frames [nh][nlow]
-    want_har : array<float>     //! the CPU sines through the source linear and tanh
-}
 
 struct private SrcOut {
     lowc : array<float>
@@ -185,64 +158,30 @@ struct private SrcOut {
     noise : array<float>
 }
 
-def private src_boff : int => SRC_WOFF + SRC_NH + SRC_GAP
+def private src_boff : int => SRC_WOFF + TTS_SRC_NH + SRC_GAP
 
-//! the Metal `st2_source_gate`'s fixture at `up` x `frames`, with the CPU chain's phase frames and mixed signal
-def private src_fixture(torch : bool; up, frames : int) : SrcFixture {
-    var f = SrcFixture(up = up, frames = frames, n = frames * up)
-    f.nlow = int(resize_len(int64(f.n), 1.0 / float(up)))
-    f.f0 |> resize(frames)
-    for (i in range(frames)) {
-        f.f0[i] = i % 3 == 2 ? 0.0 : float(float16(180.0 + 0.3 * float(i % 97)))
-    }
-    f.nu <- f16_fill(SRC_NH, 3, 0.1, 0.2)
-    f.noise <- f16_fill(f.n * SRC_NH, 7, 0.4, -0.9)
-    var lin = TtsLinear(nin = int64(SRC_NH), nout = 1l)
-    lin.w <- f16_fill(SRC_NH, 5, 0.3, 0.2)
-    lin.b |> push(0.05)
-    put(f.wn, lin.w, SRC_WOFF)
-    put(f.wn, lin.b, SRC_GAP)
-    f.wn |> push_from(poison_plane(4))
-    let cfg = SineSourceCfg(upsample = int64(up), sample_rate = SRC_SR, n_harm = int64(SRC_NH), sine_amp = 0.1, noise_std = 0.003,
-        voiced_thr = 10.0, torch_math = torch)
-    var cr = SineSourceCarry()
-    var sines : array<float>
-    with_job_que() {
-        setup_dasllama_jobque_()
-        sine_carry_reset(cr, int64(SRC_NH), int64(f.nlow))
-        f.rows = sine_source(cfg, f.f0, int64(frames), f.nu, 0l, int64(f.nlow), cr, f.noise, 0l, sines)
-        linear_rows(lin, sines, int64(f.n), f.want_har)
-        tanh_inplace(f.want_har, int64(f.n))
-    }
-    f.want_lowc |> resize(SRC_NH * f.nlow)
-    for (h in range(SRC_NH)) {
-        for (k in range(f.nlow)) {
-            f.want_lowc[h * f.nlow + k] = cr.lowc[int64(h) * cr.stride + int64(k)]
-        }
-    }
-    delete cr
-    delete sines
-    delete lin
-    return <- f
-}
-
-//! the source chain on the device (the own draw at `seed` when `own`, else the captured rows), every written buffer under a NaN fill
-def private src_run(f : SrcFixture; torch : bool; f0 : array<float>; own : bool; seed : uint) : SrcOut {
+//! the source chain on the device (the own draw at `seed` when `own`, else the captured rows), every written buffer under a
+//! NaN fill; the source linear's weight row at SRC_WOFF and its bias at `src_boff` in one slab plane between poisoned slots
+def private src_run(f : TtsSrcFixture; torch : bool; f0 : array<float>; own : bool; seed : uint) : SrcOut {
     var o : SrcOut
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let B_LOW = 1u
         let B_LOWC = 2u
         let B_HAR = 4u
         let B_NZ = 8u
+        var wn : array<float>
+        put(wn, f.lw, SRC_WOFF)
+        put(wn, f.lb, SRC_GAP)
+        wn |> push_from(poison_plane(4))
         let f0d = dev_upload(f0)
         let nud = dev_upload(f.nu)
-        let wnd = dev_upload(f.wn)
-        let bnz = int64(f.n * SRC_NH) * 4l
+        let wnd = dev_upload(wn)
+        let bnz = int64(f.n * TTS_SRC_NH) * 4l
         let nzd = own ? make_device_buf(bnz) : dev_upload(f.noise)
         if (own) {
             nan_sentinel_upload(nzd, bnz)
         }
-        let blow = int64(SRC_NH * f.nlow) * 4l
+        let blow = int64(TTS_SRC_NH * f.nlow) * 4l
         let bhar = int64(f.n + SLACK) * 4l
         let lowd = make_device_buf(blow)
         let lowcd = make_device_buf(blow)
@@ -252,11 +191,11 @@ def private src_run(f : SrcFixture; torch : bool; f0 : array<float>; own : bool;
         nan_sentinel_upload(hard, bhar)
         let bf0 = long_length(f0) * 4l
         let bnu = long_length(f.nu) * 4l
-        let bwn = long_length(f.wn) * 4l
+        let bwn = long_length(wn) * 4l
         let sizes = fixed_array(blow, bhar, bnz)
         let at <- staged_offsets(sizes)
         var host = make_host_buf(at[length(sizes)], true, [cached = true])
-        var pa = TtsSourceArgs(n = uint(f.n), nlow = uint(f.nlow), nh = uint(SRC_NH), up = uint(f.up), sr = SRC_SR, sine_amp = 0.1,
+        var pa = TtsSourceArgs(n = uint(f.n), nlow = uint(f.nlow), nh = uint(TTS_SRC_NH), up = uint(f.up), sr = TTS_SRC_SR, sine_amp = 0.1,
             noise_std = 0.003, voiced_thr = 10.0, seed = seed, woff = uint(SRC_WOFF), boff = uint(src_boff()))
         var s_nz = set_tts_src_noise_cls(fixed_array(nzd), fixed_array(bnz), fixed_array(B_NZ))
         let low_devs = fixed_array(f0d, nud, lowd)
@@ -271,11 +210,11 @@ def private src_run(f : SrcFixture; torch : bool; f0 : array<float>; own : bool;
         let sin_sizes = fixed_array(bf0, blow, bnz, bwn, bhar)
         let sin_bits = fixed_array(0u, B_LOWC, B_NZ, 0u, B_HAR)
         var s_sin = torch ? set_tts_src_sines_torch_cls(sin_devs, sin_sizes, sin_bits) : set_tts_src_sines_onnx_cls(sin_devs, sin_sizes, sin_bits)
-        let low_total = int64(SRC_NH * f.nlow)
+        let low_total = int64(TTS_SRC_NH * f.nlow)
         let sin_n = int64(f.n)
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
             if (own) {
-                enc_tts_src_noise_cls(raw, h, s_nz, pa, int64(f.n * SRC_NH))
+                enc_tts_src_noise_cls(raw, h, s_nz, pa, int64(f.n * TTS_SRC_NH))
             }
             if (torch) {
                 enc_tts_src_low_torch_cls(raw, h, s_low, pa, low_total)
@@ -288,10 +227,10 @@ def private src_run(f : SrcFixture; torch : bool; f0 : array<float>; own : bool;
             }
             cmd_copy_planes(raw, h, fixed_array(lowcd, hard, nzd), host, sizes, B_LOWC | B_HAR | B_NZ)
         }
-        o.lowc <- staged(host.mapped, at[0], SRC_NH * f.nlow, type<float>)
+        o.lowc <- staged(host.mapped, at[0], TTS_SRC_NH * f.nlow, type<float>)
         o.har <- staged(host.mapped, at[1], f.n, type<float>)
         o.har_tail <- staged(host.mapped, at[1] + int64(f.n) * 4l, SLACK, type<float>)
-        o.noise <- staged(host.mapped, at[2], f.n * SRC_NH, type<float>)
+        o.noise <- staged(host.mapped, at[2], f.n * TTS_SRC_NH, type<float>)
         destroy_device_buf(f0d)
         destroy_device_buf(nud)
         destroy_device_buf(wnd)
@@ -305,8 +244,8 @@ def private src_run(f : SrcFixture; torch : bool; f0 : array<float>; own : bool;
 }
 
 //! the phase frames and the mixed signal against the CPU chain at their bars, the poisoned element on each
-def private src_asserts(t : T?; tag : string; f : SrcFixture; o : SrcOut) {
-    let nl = SRC_NH * f.nlow
+def private src_asserts(t : T?; tag : string; f : TtsSrcFixture; o : SrcOut) {
+    let nl = TTS_SRC_NH * f.nlow
     let bad_l = bars_bad("{tag} lowc", o.lowc, f.want_lowc, LOWC_REL, 0.0, f.nlow)
     t |> success(bad_l == 0, "{tag}: the phase frames within one ulp of the CPU carry ({bad_l} of {nl} off)")
     t |> success(!bar_ok(o.lowc[nl - 1], poison_of(f.want_lowc[nl - 1]), LOWC_REL, 0.0), "{tag}: the lowc bar reds a poisoned element")
@@ -321,23 +260,10 @@ def private long_cumsum_arm(t : T?; tag : string; torch : bool; up : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let B_LC = 1u
         let nlong = 40000
-        var lowl : array<float>
-        var wantl : array<float>
-        lowl |> resize(nlong)
-        wantl |> resize(nlong)
-        var acc64 = 0.0lf
-        var accf = 0.0
-        var accp = 0.0
-        for (k in range(nlong)) {
-            lowl[k] = float(float16(0.0071 + 0.0003 * float(k % 13)))
-            acc64 += double(lowl[k])
-            accf = torch ? float(acc64) : accf + lowl[k]
-            accp += lowl[k]
-            wantl[k] = ((accf * 2.0) * PI) * float(up)
-        }
-        t |> success(abs(float(acc64) - accp) > 0.01, "{tag} long cumsum: the two laws part by {abs(float(acc64) - accp)} cycles over {nlong} frames (the leg's control)")
-        let ld = dev_upload(lowl)
-        let bl = long_length(lowl) * 4l
+        let lc <- tts_long_cumsum(torch, up, nlong)
+        t |> success(lc.parted > 0.01, "{tag} long cumsum: the two laws part by {lc.parted} cycles over {nlong} frames (the leg's control)")
+        let ld = dev_upload(lc.low)
+        let bl = long_length(lc.low) * 4l
         let lcd = make_device_buf(bl)
         nan_sentinel_upload(lcd, bl)
         var host = make_host_buf(bl, true, [cached = true])
@@ -355,9 +281,9 @@ def private long_cumsum_arm(t : T?; tag : string; torch : bool; up : int) {
             cmd_copy_planes(raw, h, fixed_array(lcd), host, fixed_array(bl), B_LC)
         }
         let got <- staged(host.mapped, 0l, nlong, type<float>)
-        let bad = bars_bad("{tag} long cumsum", got, wantl, 2e-7, 1e-3, nlong)
+        let bad = bars_bad("{tag} long cumsum", got, lc.want, 2e-7, 1e-3, nlong)
         t |> success(bad == 0, "{tag} long cumsum: every frame within the bars of the law's sum ({bad} of {nlong} off)")
-        t |> success(!bar_ok(got[nlong - 1], wantl[nlong - 1] + 2.0, 2e-7, 1e-3), "{tag} long cumsum: a moved last frame reds the compare")
+        t |> success(!bar_ok(got[nlong - 1], lc.want[nlong - 1] + 2.0, 2e-7, 1e-3), "{tag} long cumsum: a moved last frame reds the compare")
         destroy_device_buf(ld)
         destroy_device_buf(lcd)
         destroy_host_buf(host)
@@ -365,12 +291,12 @@ def private long_cumsum_arm(t : T?; tag : string; torch : bool; up : int) {
 }
 
 //! the own draw at seed 77 against the CPU hash: finite, in tanh's range, repeatable, apart from the captured signal, moved by seeds 78 and 81 (77 xor 4)
-def private own_draw_arm(t : T?; tag : string; torch : bool; f : SrcFixture; cap : SrcOut) {
+def private own_draw_arm(t : T?; tag : string; torch : bool; f : TtsSrcFixture; cap : SrcOut) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let nz = f.n * SRC_NH
+        let nz = f.n * TTS_SRC_NH
         var own1 <- src_run(f, torch, f.f0, true, 77u)
         let want_noise <- [for (i in range(nz)); tts_hash_normal(77u, uint(i))]
-        let bad = bars_bad("{tag} own draw", own1.noise, want_noise, NOISE_REL, NOISE_ABS, SRC_NH)
+        let bad = bars_bad("{tag} own draw", own1.noise, want_noise, NOISE_REL, NOISE_ABS, TTS_SRC_NH)
         t |> success(bad == 0, "{tag}: the own draw == the CPU hash at seed 77 ({bad} of {nz} off)")
         t |> success(!bar_ok(own1.noise[nz - 1], poison_of(want_noise[nz - 1]), NOISE_REL, NOISE_ABS), "{tag}: the own-draw bar reds a poisoned element")
         var in_range = true
@@ -407,14 +333,14 @@ def private own_draw_arm(t : T?; tag : string; torch : bool; f : SrcFixture; cap
 def private source_arm(t : T?; torch : bool; up, frames : int; full : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = "tts_source {torch ? "torch" : "onnx"} law up{up} x{frames}"
-        var f <- src_fixture(torch, up, frames)
+        var f <- tts_src_fixture(torch, up, frames)
         t |> equal(f.rows, int64(f.n), "{tag}: the CPU source mixes every sample")
         var cap <- src_run(f, torch, f.f0, false, 0u)
         src_asserts(t, tag, f, cap)
         var f0p := f.f0
         f0p[4] += 40.0   //! a voiced frame: every later phase moves
         var moved <- src_run(f, torch, f0p, false, 0u)
-        let nl = SRC_NH * f.nlow
+        let nl = TTS_SRC_NH * f.nlow
         t |> success(bars_bad("{tag} lowc poison (MUST mismatch)", moved.lowc, f.want_lowc, LOWC_REL, 0.0, f.nlow) > 0, "{tag}: a poisoned f0 frame reds the lowc compare over {nl} frames")
         t |> success(bars_bad("{tag} har poison (MUST mismatch)", moved.har, f.want_har, HAR_REL, HAR_ABS, f.up) > 0, "{tag}: a poisoned f0 frame reds the har compare")
         if (full) {
@@ -479,34 +405,6 @@ let private SPEC_ABS = 1e-5
 
 def private st_frames : int => (ST_N + 2 * ST_PAD - ST_K) / ST_HOP + 1
 
-//! the STFT in double - the taps summed over the padded signal, the magnitude and phase rounded to f32 as the Metal gate holds it
-def private stft_ref(har, wre, wim : array<float>; reflect : bool) : array<float> {
-    let frames = st_frames()
-    var want : array<float>
-    want |> resize(frames * 2 * ST_BINS)
-    for (f in range(frames)) {
-        for (b in range(ST_BINS)) {
-            var re = 0.0lf
-            var im = 0.0lf
-            for (tap in range(ST_K)) {
-                var src = f * ST_HOP + tap - ST_PAD
-                if (src < 0) {
-                    src = reflect ? -src : 0
-                } elif (src >= ST_N) {
-                    src = reflect ? 2 * (ST_N - 1) - src : ST_N - 1
-                }
-                re += double(wre[b * ST_K + tap]) * double(har[src])
-                im += double(wim[b * ST_K + tap]) * double(har[src])
-            }
-            want[f * 2 * ST_BINS + b] = float(sqrt(re * re + im * im + 1e-9lf))
-            let imf = float(im)
-            let ref = float(re)
-            want[f * 2 * ST_BINS + ST_BINS + b] = imf == 0.0 ? (ref < 0.0 ? PI : 0.0) : atan2(imf, ref)
-        }
-    }
-    return <- want
-}
-
 //! one pad law: the spectrum against the double form, then the first frame's reflected sample moved, which must red the compare
 def private stft_arm(t : T?; reflect : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -526,7 +424,7 @@ def private stft_arm(t : T?; reflect : bool) {
         put(wn, wre, ST_REOFF)
         let imoff = put(wn, wim, ST_GAP)
         wn |> push_from(poison_plane(4))
-        let want <- stft_ref(har, wre, wim, reflect)
+        let want <- stft_ref(har, wre, wim, ST_N, ST_K, ST_HOP, ST_PAD, ST_BINS, reflect)
         var neg = 0
         var pos = 0
         for (f in range(frames)) {
@@ -615,37 +513,6 @@ let private WAVE_ABS = 5e-5
 
 def private is_n : int => (IS_TT - 1) * IS_HOP + IS_K - 2 * IS_PAD
 
-struct private IstftRef {
-    want : array<float>
-    bare : int          //! the samples whose envelope is negligible, left undivided
-}
-
-//! the overlap-added inverse in double as the Metal gate holds it, the envelope divided out under `envelope`
-def private istft_ref(y, wre, wim, window : array<float>; envelope : bool) : IstftRef {
-    let n = is_n()
-    var r : IstftRef
-    r.want |> resize(n)
-    for (i in range(n)) {
-        let m = i + IS_PAD
-        var acc = 0.0lf
-        var env = 0.0lf
-        for (tap in range(IS_K)) {
-            continue if (m < tap || (m - tap) % IS_HOP != 0)
-            let q = (m - tap) / IS_HOP
-            continue if (q >= IS_TT)
-            for (b in range(IS_BINS)) {
-                let mag = exp(y[q * IS_STRIDE + b])
-                let ph = sin(y[q * IS_STRIDE + IS_BINS + b])
-                acc += double(mag * cos(ph) * wre[tap * IS_BINS + b]) - double(mag * sin(ph) * wim[tap * IS_BINS + b])
-            }
-            env += double(window[tap] * window[tap])
-        }
-        r.bare += env > 1e-11lf ? 0 : 1
-        r.want[i] = float((envelope && env > 1e-11lf) ? acc / env : acc)
-    }
-    return <- r
-}
-
 //! one envelope mode: the wave against the double form, then a moved log magnitude, which must red the compare
 def private istft_arm(t : T?; envelope : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -664,7 +531,7 @@ def private istft_arm(t : T?; envelope : bool) {
         let imoff = put(wn, wim, IS_GAP)
         let wnoff = put(wn, window, IS_GAP)
         wn |> push_from(poison_plane(4))
-        var ref <- istft_ref(y, wre, wim, window, envelope)
+        var ref <- istft_ref(y, wre, wim, window, IS_TT, IS_STRIDE, IS_BINS, IS_K, IS_HOP, IS_PAD, envelope)
         t |> success(ref.bare > 0 && ref.bare < n, "{tag}: {ref.bare} of {n} samples carry a negligible envelope")
         var yp := y
         yp[4 * IS_STRIDE + 1] += 2.0   //! a log magnitude: every sample its frame overlaps moves

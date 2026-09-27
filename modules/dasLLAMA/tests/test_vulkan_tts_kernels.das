@@ -10,6 +10,7 @@ require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
 require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
+require _tts_kernel_oracles   // nolint:STYLE030,LINT019 — the in-test CPU forms the cells share, inside the vulkan arms alone
 require dasllama/dasllama_math
 require dasllama/dasllama_tts_blocks   // nolint:STYLE030,LINT019 — attention_rows, leaky_relu: the CPU oracles, inside the vulkan arms alone
 require daslib/jobque_boost
@@ -116,18 +117,6 @@ let private GA_ROWS = 23
 let private GA_VOCAB = 40
 let private GA_WORD = 5     //! the word rows' element base in the slab
 let private GA_OUT = 9      //! the output rows' element base: the prefix before it is never written
-
-//! the CPU `styletts2_albert`'s embedding sum: word + position + type, added in that order
-def private gather_ref(slab : array<float>; ids : array<int>; c, word_off, pos_off, type_off : int) : array<float> {
-    var out : array<float>
-    out |> resize(length(ids) * c)
-    for (r in range(length(ids))) {
-        for (j in range(c)) {
-            out[r * c + j] = slab[word_off + ids[r] * c + j] + slab[pos_off + r * c + j] + slab[type_off + j]
-        }
-    }
-    return <- out
-}
 
 [test]
 def test_vkt_row_gather(t0 : T?) {
@@ -420,29 +409,6 @@ let private CC_F0S = 3      //! the F0 column's row stride
 let private CC_NS = 2       //! the noise column's row stride
 let private CC_WIDTH = 48   //! the padded arm's width: six zero columns past x, f0 and n
 
-//! the CPU `concat_rows`: x, the residual columns under `with_res` (row stride rs, 0 = one row broadcast), f0, n, zeros
-def private concat_ref(x, res, f0, nd : array<float>; rows, c, rc, rs, f0s, ns, width : int; with_res : bool) : array<float> {
-    let rcw = with_res ? rc : 0
-    var out : array<float>
-    out |> resize(rows * width)
-    for (r in range(rows)) {
-        for (j in range(width)) {
-            var v = 0.0
-            if (j < c) {
-                v = x[r * c + j]
-            } elif (j < c + rcw) {
-                v = res[r * rs + j - c]
-            } elif (j == c + rcw) {
-                v = f0[r * f0s]
-            } elif (j == c + rcw + 1) {
-                v = nd[r * ns]
-            }
-            out[r * width + j] = v
-        }
-    }
-    return <- out
-}
-
 [test]
 def test_vkt_concat(t0 : T?) {
     t0 |> run("the concat rows == the CPU concat, exact: one style row broadcast, then f0 and n at strides and a zero pad") <| @(t : T?) {
@@ -517,20 +483,6 @@ let private SG_T = 37
 let private SG_NB = 50      //! the duration bins summed
 let private SG_LS = 64      //! the logit rows' stride: the columns past SG_NB carry POISON
 let private SG_SPEED = 1.3
-
-//! the CPU `styletts2_durations`' raw sum in f32: the sigmoids of a row's first `nb` logits in column order, over `speed`
-def private sigsum_ref(logits : array<float>; rows, nb, ls : int; speed : float) : array<float> {
-    var raw : array<float>
-    raw |> resize(rows)
-    for (r in range(rows)) {
-        var acc = 0.0
-        for (j in range(nb)) {
-            acc += 1.0 / (1.0 + exp(-logits[r * ls + j]))
-        }
-        raw[r] = acc / speed
-    }
-    return <- raw
-}
 
 [test]
 def test_vkt_sigsum(t0 : T?) {
