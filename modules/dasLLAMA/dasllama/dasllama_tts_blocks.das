@@ -1771,48 +1771,24 @@ def private adain_affine(a : TtsAdaIn; x : array<float>; t, c : int64; style : a
 
 //! AdaIN1d in place on token-major x [T][C].
 def adain_rows(a : TtsAdaIn; var x : array<float>; t, c : int64; style : array<float>; eps : float) {
-    var scale & = g_adain_scale
-    var shift & = g_adain_shift
-    adain_affine(a, x, t, c, style, eps, scale, shift)
-    var xp = unsafe(addr(x[0]))
-    let sp = unsafe(addr<float const?>(scale[0]))
-    let bp = unsafe(addr<float const?>(shift[0]))
-    let s4 = unsafe(addr<float4 const?>(scale[0]))
-    let b4 = unsafe(addr<float4 const?>(shift[0]))
-    let chunks = lanes_for_work(t * c, 0)
-    maybe_parallel_for(0, int(t), chunks) $(rb, re) {
-        unsafe {
-            let c4 = c / 4l
-            for (r in range64(int64(rb), int64(re))) {
-                if (c4 * 4l != c) {   // a width off the lane
-                    var row = xp + r * c
-                    for (j in range64(c)) {
-                        row[j] = mad(row[j], sp[j], bp[j])
-                    }
-                    continue
-                }
-                var row4 = reinterpret<float4?>(xp + r * c)
-                for (j in range64(c4)) {
-                    row4[j] = mad(row4[j], s4[j], b4[j])
-                }
-            }
-        }
-    }
+    adain_affine(a, x, t, c, style, eps, g_adain_scale, g_adain_shift)
+    adain_rows_at(unsafe(addr<float const?>(x[0])), unsafe(addr(x[0])), t, c)
 }
 
 //! AdaIN1d of token-major src [T][C] written into dst - the copy a residual branch would make
 //! of its input, folded into the normalize pass.
 def adain_rows_into(a : TtsAdaIn; src : array<float>; @scratch @exact_size var dst : array<float>; t, c : int64; style : array<float>; eps : float) {
-    var scale & = g_adain_scale
-    var shift & = g_adain_shift
-    adain_affine(a, src, t, c, style, eps, scale, shift)
+    adain_affine(a, src, t, c, style, eps, g_adain_scale, g_adain_shift)
     dst |> reserve_resize(t * c)
-    let xp = unsafe(addr<float const?>(src[0]))
-    var dp = unsafe(addr(dst[0]))
-    let sp = unsafe(addr<float const?>(scale[0]))
-    let bp = unsafe(addr<float const?>(shift[0]))
-    let s4 = unsafe(addr<float4 const?>(scale[0]))
-    let b4 = unsafe(addr<float4 const?>(shift[0]))
+    adain_rows_at(unsafe(addr<float const?>(src[0])), unsafe(addr(dst[0])), t, c)
+}
+
+//! the affine `adain_affine` left in g_adain_scale / g_adain_shift, over t rows from xp into dp - dp may be xp
+def private adain_rows_at(xp : float const?; var dp : float?; t, c : int64) {
+    let sp = unsafe(addr<float const?>(g_adain_scale[0]))
+    let bp = unsafe(addr<float const?>(g_adain_shift[0]))
+    let s4 = unsafe(addr<float4 const?>(g_adain_scale[0]))
+    let b4 = unsafe(addr<float4 const?>(g_adain_shift[0]))
     let chunks = lanes_for_work(t * c, 0)
     maybe_parallel_for(0, int(t), chunks) $(rb, re) {
         unsafe {
