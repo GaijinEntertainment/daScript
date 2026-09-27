@@ -875,7 +875,7 @@ def private act_mul_sel(v, u : float; act : uint) : float {
         return (x / (1.0 + exp(-1.702 * x))) * (y + 1.0)
     }
     return (act == ACT_GELU ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
-        : (v / (1.0 + exp(-v))) * u)
+        : tts_silu(v) * u)
 }
 
 //! the act + requant of a gate / up pair on `RqT`: the element load is the activation
@@ -2259,7 +2259,7 @@ class DnConv {
             let p = p0 + uint(i)
             let x3 = p < pa.npos ? xrow(int(p), cch, taps) : 0.0
             let acc = w[0] * x0 + w[1] * x1 + w[2] * x2 + w[3] * x3
-            y[i] = (live && p < pa.npos) ? acc / (1.0 + exp(-acc)) : 0.0
+            y[i] = (live && p < pa.npos) ? tts_silu(acc) : 0.0
             x0 = x1
             x1 = x2
             x2 = x3
@@ -2409,7 +2409,7 @@ class DnStepFused : WgReduceBase {
                 }
                 smalls[wrb + ch * taps + taps - 1u] = fresh
             }
-            let sv = acc / (1.0 + exp(-acc))
+            let sv = tts_silu(acc)
             if (sl == 0u) {
                 dq[j] = sv
             } elif (sl == 1u) {
@@ -2523,7 +2523,7 @@ class DnStepFused : WgReduceBase {
         while (e < ds) {
             let zv = proj[prow + pa.cd + h * ds + e]
             let xn = dout[e] * oinv * smalls[pa.wnorm_off + e]
-            dout[e] = xn * (zv / (1.0 + exp(-zv)))
+            dout[e] = xn * tts_silu(zv)
             e += 256u
         }
         barrier()
@@ -2872,7 +2872,7 @@ class DnScanP3 {
         while (e < pa.di) {
             let zv = zrows[p * pa.di + e]
             let xn = orows[ob + e] * hinv[e / ds] * smalls[pa.wnorm_off + e % ds]
-            orows[ob + e] = xn * (zv / (1.0 + exp(-zv)))
+            orows[ob + e] = xn * tts_silu(zv)
             e += 256u
         }
     }
@@ -9068,7 +9068,7 @@ class template TtsElemT {
 //! durations); the clamp keeps a device tanh off its exp overflow and changes no f32 result
 [vk_dispatch(name = "tts_gelu_tanh_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
 class TtsGeluTanh : TtsElemT {
-    def override act(v : float) : float => 0.5 * v * (1.0 + tanh(clamp(0.7978845608028654 * (v + 0.044715 * v * v * v), -15.0, 15.0)))
+    def override act(v : float) : float => tts_gelu_tanh(v)
 }
 
 //! the CPU `leaky_relu`: v > 0 ? v : v * slope
@@ -10270,7 +10270,7 @@ class TowerCnDw {
                 kk++
             }
             let bv = acc * wn[pa.bnwoff + c] + wn[pa.bnboff + c]
-            y[e] = bv / (1.0 + exp(-bv))
+            y[e] = tts_silu(bv)
         }
     }
 }
@@ -10586,7 +10586,7 @@ def tower_act(v : float; act : uint) : float {
         return tower_gelu_erf(v)
     }
     if (act == BIAS_ACT_SILU) {
-        return v / (1.0 + exp(-v))
+        return tts_silu(v)
     }
     if (act == BIAS_ACT_RELU) {
         return max(v, 0.0)
@@ -13260,15 +13260,9 @@ class template TtsIm2colT {
     //! the input position tap `tap` reads for output row r, or -1 where it falls off x
     def src_pos(r, tap : uint) : int {
         if (pa.transposed != 0u) {
-            let stride = max(pa.stride, 1u)
-            let q = int(r + pa.pad_l) - int(tap * pa.dilation)
-            if (q >= 0 && uint(q) % stride == 0u && uint(q) / stride < pa.tin) {
-                return int(uint(q) / stride)
-            }
-            return -1
+            return st2_conv_src_tr_row(r, tap, 0u, pa.pad_l, pa.dilation, max(pa.stride, 1u), pa.tin)
         }
-        let p = int(r * pa.stride + tap * pa.dilation) - int(pa.pad_l)
-        return p >= 0 && uint(p) < pa.tin ? p : -1
+        return st2_conv_src_fwd_row(r, tap, 0u, pa.pad_l, pa.dilation, pa.stride, pa.tin)
     }
 
     //! column j of output row r
@@ -13507,7 +13501,7 @@ class TtsSigSum {
             var acc = 0.0
             var j = 0u
             while (j < pa.nb) {
-                acc += 1.0 / (1.0 + exp(-logits[r * pa.ls + j]))
+                acc += tts_sigmoid(logits[r * pa.ls + j])
                 j++
             }
             raw[r] = acc / pa.speed
@@ -13701,9 +13695,9 @@ class TtsPoolDw {
             var acc = wn[pa.boff + j]
             var kk = 0u
             while (kk < pa.k) {
-                let num = int(p + pa.pad_l) - int(kk * pa.dil)
-                if (num >= 0 && uint(num) % stride == 0u && uint(num) / stride < pa.t_in) {
-                    acc = mad(wn[pa.woff + j * pa.k + kk], x[(uint(num) / stride) * pa.c + j], acc)
+                let src = st2_conv_src_tr_row(p, kk, 0u, pa.pad_l, pa.dil, stride, pa.t_in)
+                if (src >= 0) {
+                    acc = mad(wn[pa.woff + j * pa.k + kk], x[uint(src) * pa.c + j], acc)
                 }
                 kk++
             }
@@ -14487,14 +14481,13 @@ class template TtsPkGemvT {
                 y[pa.yoff + row] = d
             }
             static_if (EPI == 1) {
-                y[pa.yoff + row] = d / (1.0 + exp(-d))
+                y[pa.yoff + row] = tts_silu(d)
             }
             static_if (EPI == 2) {
                 y[pa.yoff + row] = y[pa.yoff + row] + mod[pa.moff + 2u * pa.nin + row] * d
             }
             static_if (EPI == 3) {
-                let av = d + aux_at(row)
-                y[pa.yoff + row] = av / (1.0 + exp(-av))
+                y[pa.yoff + row] = tts_silu(d + aux_at(row))
             }
             static_if (EPI == 4) {
                 let tv = d + x0[pa.x0off + row]
@@ -14511,7 +14504,7 @@ class template TtsPkGemvT {
                 y[pa.yoff + row] = y[pa.yoff + row] + d
             }
             static_if (EPI == 8) {
-                y[pa.yoff + row] = 0.5 * d * (1.0 + tanh(clamp(0.7978845608028654 * (d + 0.044715 * d * d * d), -15.0, 15.0)))
+                y[pa.yoff + row] = tts_gelu_tanh(d)
             }
         }
         static_if (EPI == 5) {

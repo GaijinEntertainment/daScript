@@ -29,6 +29,24 @@ def tts_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
 //! the CPU `sigmoid_f`
 def tts_sigmoid(v : float) : float => 1.0 / (1.0 + exp(-v))
 
+//! SiLU as the one quotient v / (1 + exp(-v)), the CPU `silu`'s form
+def tts_silu(v : float) : float => v / (1.0 + exp(-v))
+
+//! the CPU `gelu`'s tanh form in f32 (not the f16 LUT form the vision towers read), its tanh clamped by `tts_tanh`
+def tts_gelu_tanh(v : float) : float => 0.5 * v * (1.0 + tts_tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))
+
+//! A forward conv's source row for output row r at tap - (r0 + r) * stride + tap * dil - pad_l - or -1 off the input.
+def st2_conv_src_fwd_row(r, tap, r0, pad_l, dil, stride, t_in : uint) : int {
+    let st = int((r0 + r) * stride + tap * dil) - int(pad_l)
+    return (st >= 0 && uint(st) < t_in) ? st : -1
+}
+
+//! The transposed conv's: the source row whose stride lands the tap on output row r, or -1; stride at least one.
+def st2_conv_src_tr_row(r, tap, r0, pad_l, dil, stride, t_in : uint) : int {
+    let q = int(r0 + r + pad_l) - int(tap * dil)
+    return (q >= 0 && uint(q) % stride == 0u && uint(q) / stride < t_in) ? int(uint(q) / stride) : -1
+}
+
 def tts_resize_mix_torch(x0, x1, l0, l1 : float) : float => mad(l0, x0, l1 * x1)
 
 //! onnxruntime's trilinear mix in its operation order: the last channel through all seven fma terms, the rest their two nonzero ones

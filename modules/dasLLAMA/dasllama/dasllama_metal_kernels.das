@@ -5423,18 +5423,6 @@ struct St2ConvArgs {
     xs : uint
 }
 
-//! A forward conv's source row for output row r at tap - (r0 + r) * stride + tap * dil - pad_l - or -1 off the input.
-def st2_conv_src_fwd_row(r, tap, r0, pad_l, dil, stride, t_in : uint) : int {
-    let st = int((r0 + r) * stride + tap * dil) - int(pad_l)
-    return (st >= 0 && uint(st) < t_in) ? st : -1
-}
-
-//! The transposed conv's: the source row whose stride lands the tap on output row r, or -1.
-def st2_conv_src_tr_row(r, tap, r0, pad_l, dil, stride, t_in : uint) : int {
-    let q = int(r0 + r + pad_l) - int(tap * dil)
-    return (q >= 0 && uint(q) % stride == 0u && uint(q) / stride < t_in) ? int(uint(q) / stride) : -1
-}
-
 //! The float4 index of a forward conv's output row rr 8-run at column kk, or 0xFFFFFFFF where the run reads zeros.
 def st2_conv_b_src_fwd(rr, kk, rows, k, cin, r0, pad_l, dil, stride, t_in, xs : uint) : uint {
     if (rr >= rows || kk >= k * cin) {
@@ -9843,7 +9831,7 @@ class MetalDnConv {
             acc += xv * w[ch * dconv + k]
             k++
         }
-        y[(ka.row + p) * cd + ch] = acc / (1.0 + exp(-acc))
+        y[(ka.row + p) * cd + ch] = tts_silu(acc)
     }
 }
 
@@ -9978,7 +9966,7 @@ class MetalDnScan {
         while (p < npos) {
             let gr = graw[(ka.row + p) * nvh + h] + dt_h
             let dec = exp(a_h * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
-            let beta = 1.0 / (1.0 + exp(-braw[(ka.row + p) * nvh + h]))
+            let beta = tts_sigmoid(braw[(ka.row + p) * nvh + h])
             let cb = (ka.row + p) * cd
             var kv4 : float[4]
             var sk = 0.0
@@ -10046,7 +10034,7 @@ class MetalDnGate {
         let inv = rsqrt(ss / float(ds) + eps)
         for [unroll_full] (c in range(4)) {
             let zz = z[base + uint(c)]
-            o[base + uint(c)] = (wn[lane * 4u + uint(c)] * (v[c] * inv)) * (zz / (1.0 + exp(-zz)))
+            o[base + uint(c)] = (wn[lane * 4u + uint(c)] * (v[c] * inv)) * tts_silu(zz)
         }
     }
 }
@@ -10502,9 +10490,9 @@ class MetalSt2Lstm {
                 let gf = xg[ti * ka.xgs + hd + j] + gsh[hd + j]
                 let gg = xg[ti * ka.xgs + 2u * hd + j] + gsh[2u * hd + j]
                 let go = xg[ti * ka.xgs + 3u * hd + j] + gsh[3u * hd + j]
-                let si = 1.0 / (1.0 + exp(-gi))
-                let sf = 1.0 / (1.0 + exp(-gf))
-                let so = 1.0 / (1.0 + exp(-go))
+                let si = tts_sigmoid(gi)
+                let sf = tts_sigmoid(gf)
+                let so = tts_sigmoid(go)
                 cst = sf * cst + si * tts_tanh(gg)
                 let hn = so * tts_tanh(cst)
                 hsh[j] = hn
@@ -10589,7 +10577,7 @@ class MetalSt2Attn {
 //! The CPU gelu's tanh form at full precision: the LUT form's two f16 roundings would move the front end's durations.
 [metal_dispatch(name = "enc_st2_gelu_tanh", pso = "g_pso_st2_gelu_tanh", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSt2GeluTanh : MetalEw1BaseT {
-    def override map(a : float) : float => 0.5 * a * (1.0 + tts_tanh(0.7978845608028654 * (a + 0.044715 * a * a * a)))
+    def override map(a : float) : float => tts_gelu_tanh(a)
 
     [metal_kernel(name="metal_st2_gelu_tanh_msl")]
     def metal_st2_gelu_tanh {
@@ -10615,7 +10603,7 @@ class MetalSt2SigSum {
         var acc = 0.0
         var j = 0u
         while (j < nb) {
-            acc += 1.0 / (1.0 + exp(-logits[gid * ls + j]))
+            acc += tts_sigmoid(logits[gid * ls + j])
             j++
         }
         raw[gid] = acc / speed   //! the CPU divides; a reciprocal multiply rounds a raw duration apart from it
@@ -11263,14 +11251,13 @@ class template MetalPkGemvT {
                 y[row] = d
             }
             static_if (EPI == 1) {
-                y[row] = d / (1.0 + exp(-d))
+                y[row] = tts_silu(d)
             }
             static_if (EPI == 2) {
                 y[row] += mod[2u * ka.nin + row] * d
             }
             static_if (EPI == 3) {
-                let v = d + aux[row]
-                y[row] = v / (1.0 + exp(-v))
+                y[row] = tts_silu(d + aux[row])
             }
             static_if (EPI == 4) {
                 let v = d + x0[row]
