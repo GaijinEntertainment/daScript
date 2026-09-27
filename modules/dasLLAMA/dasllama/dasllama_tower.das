@@ -202,11 +202,12 @@ def add_bias_rows(var y : array<float>; blob : PlaneF; b_off, d, npos : int64) {
     add_bias_rows_at(y, plane_at(blob, b_off), d, npos)
 }
 
-def private add_bias_rows_at(var y : array<float>; bp : float const?; d, npos : int64) {
+//! The pointer core: the bias row at `bp` onto `npos` rows of y from row `r0` on.
+def add_bias_rows_at(var y : array<float>; bp : float const?; d, npos : int64; r0 : int64 = 0l) {
     if (npos <= 0l || d <= 0l) return
     let d4 = d - d % 4l
     unsafe {
-        var yp = addr(y[0])
+        var yp = addr(y[r0 * d])
         maybe_parallel_for(0, int(npos), lanes_for_work(npos * d, get_gemv_lane_cap())) $(rb, re) {
             unsafe {
                 for (p in range64(int64(rb), int64(re))) {

@@ -1023,18 +1023,7 @@ def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; 
         }
         invoke(g_mm_q8q8_batch, unsafe(yp + r0 * cout), wqp, wsp, xstp, xssp, kc, cout, rows)
         if (nbias > 0l) {
-            maybe_parallel_for(0, int(rows), lanes_for_work(rows * cout, 0)) $(rb, re) {
-                unsafe {
-                    let c4 = cout / 4l
-                    let b4 = reinterpret<float4 const?>(bp)
-                    for (r in range64(int64(rb), int64(re))) {
-                        var y4 = reinterpret<float4?>(yp + (r0 + r) * cout)
-                        for (j in range64(c4)) {
-                            y4[j] += b4[j]
-                        }
-                    }
-                }
-            }
+            add_bias_rows_at(y, bp, cout, rows, r0)
         }
         r0 += rows
     }
@@ -1158,25 +1147,7 @@ def private linear_rows_q8(l : TtsLinear; x : array<float>; t : int64; var y : a
 
 def private linear_rows_add_bias(l : TtsLinear; t : int64; var y : array<float>) {
     return if (empty(l.b))
-    let nout = l.nout
-    var yp = unsafe(addr(y[0]))
-    let b4 = unsafe(addr<float4 const?>(l.b[0]))
-    let bp = unsafe(addr<float const?>(l.b[0]))
-    maybe_parallel_for(0, int(t), lanes_for_work(t * nout, 0)) $(rb, re) {
-        unsafe {
-            let n4 = nout / 4l
-            for (r in range64(int64(rb), int64(re))) {
-                var yrow = yp + r * nout
-                var y4 = reinterpret<float4?>(yrow)
-                for (j in range64(n4)) {
-                    y4[j] += b4[j]
-                }
-                for (o in range64(n4 * 4l, nout)) {   // the tail past the last float4: a width off 4
-                    yrow[o] += bp[o]
-                }
-            }
-        }
-    }
+    add_bias_rows(y, l.b, 0l, l.nout, t)
 }
 
 // ===== the K-quant lane: a layer whose weights are the file's own K-quant planes =====
@@ -1321,13 +1292,7 @@ def linear_rows(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_size
     }
     if (empty(l.wt)) {
         matmul_batch(y, l.w, x, l.nin, l.nout, t)
-        return if (empty(l.b))
-        for (r in range64(t)) {
-            let row = r * l.nout
-            for (o in range64(l.nout)) {
-                y[row + o] += l.b[o]
-            }
-        }
+        linear_rows_add_bias(l, t, y)
         return
     }
     let nin = l.nin
