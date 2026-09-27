@@ -3746,18 +3746,14 @@ def private pk_codec_write(var w : TtsSlabWriter; mm : PocketMimi; var s : PkCod
 }
 
 
-//! A codec conv the gathering stamps serve: dense, a channel count on the 8-run lattice, a transposed conv's taps at least its stride (the padding the one-shot row count assumes).
-def private pk_conv_ok(c : TtsConv1d) : bool {
-    return tts_conv_ok(c) && c.cin % 8l == 0l && !c.q8 && c.stride >= 1l && (!c.transposed || c.k > c.stride)
-}
-
-//! the shared codec admission, then the gathering stamps' own rule over every codec conv
+//! the shared codec admission (every conv dense, a transposed one's taps past its stride), then the gathering stamps' 8-run channel lattice
+//! over every codec conv
 def private pk_codec_ok(mm : PocketMimi) : bool {
-    return false if (!tts_pk_codec_ok(mm, int64(PK_ATTN_HS), PK_ATTN_MAX_KEYS) || !pk_conv_ok(mm.quant_proj) || !pk_conv_ok(mm.dec_in))
+    return false if (!tts_pk_codec_ok(mm, int64(PK_ATTN_HS), PK_ATTN_MAX_KEYS) || mm.quant_proj.cin % 8l != 0l || mm.dec_in.cin % 8l != 0l || mm.dec_out.cin % 8l != 0l)
     for (i, c in iter_range(mm.dec_up), mm.dec_up) {
-        return false if (!pk_conv_ok(c) || !pk_conv_ok(mm.dec_res[i].conv1) || !pk_conv_ok(mm.dec_res[i].conv2))
+        return false if (c.cin % 8l != 0l || mm.dec_res[i].conv1.cin % 8l != 0l || mm.dec_res[i].conv2.cin % 8l != 0l)
     }
-    return pk_conv_ok(mm.dec_out)
+    return true
 }
 
 def private pk_codec_attach(mm : PocketMimi) : bool {
@@ -4040,10 +4036,7 @@ struct private PkBlobWriter {
 
 //! One voice's device K/V rows [cap][d] per backbone layer, and the rope table for every position they can hold.
 struct private PkVoiceSlot {
-    key : uint64
-    cap : int64
-    len : int64
-    d : int64
+    meta : TtsPkVoiceMeta
     bk : array<MetalBuffer?>
     bv : array<MetalBuffer?>
     bcos : MetalBuffer?
@@ -4161,9 +4154,11 @@ def private pk_frames_write(var w : TtsSlabWriter; var qb : PkBlobWriter; m : Po
 }
 
 def private pk_voice_drop {
-    st2_slab_free(g_tw_pk_voice)
-    g_tw_pk_voice.cap = 0l
-    g_tw_pk_voice.len = 0l
+    st2_release_any(g_tw_pk_voice)
+    unsafe {
+        delete g_tw_pk_voice
+    }
+    g_tw_pk_voice.meta = TtsPkVoiceMeta()
 }
 
 //! A GEMV-served linear: q8 quants 32-wide, a K-quant plane 256-wide, f32 rows as they are.
@@ -4171,26 +4166,14 @@ def private pk_lin_gemv_ok(l : TtsLinear) : bool {
     return l.nin >= 1l && l.nout >= 1l && (l.q8 ? (!empty(l.wq) && l.nin % Q8_BLOCK_ELEMS == 0l) : (l.kq_fmt != 0 ? (!empty(l.kq) && l.nin % KQ_SB_ELEMS == 0l) : (!empty(l.w) || !empty(l.wt))))
 }
 
+//! the shared frames admission over the decode GEMV's lanes, every q8 route's bias within the zero row
 def private pk_frames_ok(m : PocketModel) : bool {
-    let tf & = unsafe(m.backbone)
-    let d = tf.d
-    let ld = m.latent_dim
-    let h & = unsafe(m.head)
-    let n = h.dim
-    return false if (!tts_pk_tf_ok(tf, int64(PK_ATTN_HS))
-        || 3l * d > PK_ZERO_ROW || tf.ffn > PK_ZERO_ROW || 3l * n > PK_ZERO_ROW || d > PK_GEMV_MAX_NIN || n > PK_GEMV_MAX_NIN || tf.ffn > PK_GEMV_MAX_NIN || ld > PK_GEMV_MAX_NIN
-        || ld < 4l || ld % 4l != 0l || n < 1l || empty(h.blocks) || long_length(h.time_const.a) != n || long_length(m.emb_std.a) != ld
-        || long_length(m.emb_mean.a) != ld || long_length(m.bos_emb.a) != ld || long_length(m.out_norm.w) != d
-        || !pk_lin_gemv_ok(m.input_linear) || m.input_linear.nin != ld || m.input_linear.nout != d || !pk_lin_gemv_ok(m.out_eos) || m.out_eos.nin != d || m.out_eos.nout != 1l)
-    for (l in tf.layers) {
-        return false if (!tts_pk_layer_dims_ok(l, d, tf.ffn) || !pk_lin_gemv_ok(l.in_proj) || !pk_lin_gemv_ok(l.out_proj) || !pk_lin_gemv_ok(l.ffn1) || !pk_lin_gemv_ok(l.ffn2))
+    let d = m.backbone.d
+    let n = m.head.dim
+    return false if (3l * d > PK_ZERO_ROW || m.backbone.ffn > PK_ZERO_ROW || 3l * n > PK_ZERO_ROW)
+    return tts_pk_frames_ok(m, int64(PK_ATTN_HS), PK_GEMV_MAX_NIN) $(l : TtsLinear) : bool {
+        return pk_lin_gemv_ok(l)
     }
-    return false if (!pk_lin_gemv_ok(h.cond_embed) || h.cond_embed.nin != d || h.cond_embed.nout != n || !pk_lin_gemv_ok(h.input_proj) || h.input_proj.nin != ld || h.input_proj.nout != n)
-    for (b in h.blocks) {
-        return false if (!pk_lin_gemv_ok(b.adaln) || b.adaln.nin != n || b.adaln.nout != 3l * n || !pk_lin_gemv_ok(b.mlp1) || b.mlp1.nin != n || b.mlp1.nout != n
-            || !pk_lin_gemv_ok(b.mlp2) || b.mlp2.nin != n || b.mlp2.nout != n)
-    }
-    return pk_lin_gemv_ok(h.final_adaln) && h.final_adaln.nin == n && h.final_adaln.nout == 2l * n && pk_lin_gemv_ok(h.final_linear) && h.final_linear.nin == n && h.final_linear.nout == ld
 }
 
 //! The frames slab and its q8 blob: the blob writer rides the slab writer's two passes, its bytes uploaded after the slab.
@@ -4239,20 +4222,14 @@ def private pk_kv_rows(kc : TtsKvCache; bk, bv : MetalBuffer?; r0, r1 : int64) {
     }
 }
 
-def private pk_voice_attach(vs : PocketVoiceState; tf : PocketTransformer) : bool {
-    let key = tts_pk_voice_key(vs)
-    let cap = vs.caches[0].cap
-    var v & = g_tw_pk_voice
-    if (v.key == key && v.cap == cap && v.len == vs.len && length(v.bk) == length(vs.caches)) {
-        return true
-    }
-    return pk_voice_rebuild(vs, tf, key, cap)
-}
+def private pk_voice_attach(vs : PocketVoiceState; tf : PocketTransformer) : bool
+    => tts_pk_voice_current(g_tw_pk_voice.meta, vs, length(g_tw_pk_voice.bk)) || pk_voice_rebuild(vs, tf)
 
 [cold_path]
-def private pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer; key : uint64; cap : int64) : bool {
+def private pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer) : bool {
     var v & = g_tw_pk_voice
     pk_voice_drop()
+    let cap = vs.caches[0].cap
     let d = tf.d
     v.bk |> reserve(length(vs.caches))
     v.bv |> reserve(length(vs.caches))
@@ -4272,10 +4249,7 @@ def private pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer; key 
         return false
     }
     to_log(LOG_INFO, "dasLLAMA metal tower: pocket voice slot {long_length(vs.caches) * 2l * cap * d * 4l} bytes of K/V over {cap} rows, rope tables {cap * (d / tf.heads) * 4l} bytes\n")
-    v.key = key
-    v.cap = cap
-    v.len = vs.len
-    v.d = d
+    v.meta = tts_pk_voice_meta(vs, d)
     return true
 }
 
@@ -4528,8 +4502,7 @@ def private metal_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_tx
     let d = tf.d
     let ld = m.latent_dim
     let base = vs.len + n_txt
-    if (max_frames < 1l || n_txt < 0l || length(vs.caches) != length(tf.layers) || empty(vs.caches) || base + max_frames > vs.caches[0].cap
-        || vs.caches[0].cap > PK_ATTN_MAX_KEYS || !pk_frames_ok(m)) {
+    if (!tts_pk_frames_admit(m, vs, n_txt, max_frames, PK_ATTN_MAX_KEYS) || !pk_frames_ok(m)) {
         tw_decline(MetalTowerDecline.shape)
         return none
     }
@@ -4561,7 +4534,7 @@ def private metal_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_tx
     asr_prof_add("tts.pocket.gpu.frames", tc)
     if (r.frames >= 0l) {
         st2_readback(b.latents, sc.latents, r.frames * ld)
-        st2_readback(b.conds, sc.conds, min(r.frames + 1l, f0) * d)   //! the breaking frame's row too, as the CPU loop leaves it
+        st2_readback(b.conds, sc.conds, tts_pk_cond_rows(r.frames, f0) * d)
         g_tower_rows += r.frames
     }
     st2_ctx_release(c)

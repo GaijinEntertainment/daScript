@@ -903,8 +903,9 @@ def tts_pk_codec_ok(mm : PocketMimi; hs, max_keys : int64) : bool {
     return tts_pk_conv_ok(mm.dec_out) && mm.dec_out.cout >= 1l
 }
 
-//! the frame loop's linears the row GEMV serves, and the head's and the backbone's shapes
-def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64) : bool {
+//! the frame loop's shapes - the backbone's and the head's, every width within the GEMV's `max_nin` stage - with each linear one the
+//! driver's GEMV serves (`lin_ok`)
+def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64; lin_ok : block<(l : TtsLinear) : bool>) : bool {
     let tf & = unsafe(m.backbone)
     let d = tf.d
     let ld = m.latent_dim
@@ -913,14 +914,40 @@ def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64) : bool {
     return false if (!tts_pk_tf_ok(tf, hs) || d > max_nin || n > max_nin || tf.ffn > max_nin || ld > max_nin
         || ld < 4l || ld % 4l != 0l || n < 1l || empty(h.blocks) || long_length(h.time_const.a) != n || long_length(m.emb_std.a) != ld
         || long_length(m.emb_mean.a) != ld || long_length(m.bos_emb.a) != ld || long_length(m.out_norm.w) != d
-        || !tts_gemm_lin_ok(m.input_linear) || m.input_linear.nin != ld || m.input_linear.nout != d || !tts_gemm_lin_ok(m.out_eos) || m.out_eos.nin != d || m.out_eos.nout != 1l)
+        || !invoke(lin_ok, m.input_linear) || m.input_linear.nin != ld || m.input_linear.nout != d || !invoke(lin_ok, m.out_eos) || m.out_eos.nin != d || m.out_eos.nout != 1l)
     for (l in tf.layers) {
-        return false if (!tts_pk_layer_ok(l, d, tf.ffn))
+        return false if (!tts_pk_layer_dims_ok(l, d, tf.ffn) || !invoke(lin_ok, l.in_proj) || !invoke(lin_ok, l.out_proj) || !invoke(lin_ok, l.ffn1) || !invoke(lin_ok, l.ffn2))
     }
-    return false if (!tts_gemm_lin_ok(h.cond_embed) || h.cond_embed.nin != d || h.cond_embed.nout != n || !tts_gemm_lin_ok(h.input_proj) || h.input_proj.nin != ld || h.input_proj.nout != n)
+    return false if (!invoke(lin_ok, h.cond_embed) || h.cond_embed.nin != d || h.cond_embed.nout != n || !invoke(lin_ok, h.input_proj) || h.input_proj.nin != ld || h.input_proj.nout != n)
     for (b in h.blocks) {
-        return false if (!tts_gemm_lin_ok(b.adaln) || b.adaln.nin != n || b.adaln.nout != 3l * n || !tts_gemm_lin_ok(b.mlp1) || b.mlp1.nin != n || b.mlp1.nout != n
-            || !tts_gemm_lin_ok(b.mlp2) || b.mlp2.nin != n || b.mlp2.nout != n)
+        return false if (!invoke(lin_ok, b.adaln) || b.adaln.nin != n || b.adaln.nout != 3l * n || !invoke(lin_ok, b.mlp1) || b.mlp1.nin != n || b.mlp1.nout != n
+            || !invoke(lin_ok, b.mlp2) || b.mlp2.nin != n || b.mlp2.nout != n)
     }
-    return tts_gemm_lin_ok(h.final_adaln) && h.final_adaln.nin == n && h.final_adaln.nout == 2l * n && tts_gemm_lin_ok(h.final_linear) && h.final_linear.nin == n && h.final_linear.nout == ld
+    return invoke(lin_ok, h.final_adaln) && h.final_adaln.nin == n && h.final_adaln.nout == 2l * n && invoke(lin_ok, h.final_linear) && h.final_linear.nin == n && h.final_linear.nout == ld
 }
+
+//! a frames call the voice's caches hold: frames asked, a cache a backbone layer, the voice, the chunk's text rows and the frames within the
+//! caches' capacity, the capacity within the attention row's `max_keys`
+def tts_pk_frames_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_frames, max_keys : int64) : bool {
+    return (max_frames >= 1l && n_txt >= 0l && !empty(vs.caches) && length(vs.caches) == length(m.backbone.layers)
+        && vs.len + n_txt + max_frames <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
+}
+
+//! the conditioning rows a frames call reads back after `run` frames ran: every frame made and the breaking frame's row, as the CPU loop leaves them
+def tts_pk_cond_rows(frames, run : int64) : int64 => min(frames + 1l, run)
+
+//! a voice slot's residency: the key over the caches, their capacity and fill, the backbone width
+struct TtsPkVoiceMeta {
+    key : uint64
+    cap : int64
+    len : int64
+    d : int64
+}
+
+//! the slot's meta for this voice at the backbone width `d`
+def tts_pk_voice_meta(vs : PocketVoiceState; d : int64) : TtsPkVoiceMeta
+    => TtsPkVoiceMeta(key = tts_pk_voice_key(vs), cap = vs.caches[0].cap, len = vs.len, d = d)
+
+//! a slot holding `layers` layers of K/V rows stands for this voice: the same key, capacity and fill, a layer a cache
+def tts_pk_voice_current(meta : TtsPkVoiceMeta; vs : PocketVoiceState; layers : int) : bool
+    => meta.key == tts_pk_voice_key(vs) && meta.cap == vs.caches[0].cap && meta.len == vs.len && layers == length(vs.caches)

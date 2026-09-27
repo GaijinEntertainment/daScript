@@ -1795,10 +1795,7 @@ def private ts_pk_frames_rebuild(m : PocketModel; key : uint64) : bool {
 
 //! one voice's device K/V rows [cap][d] per backbone layer, and the rope tables (cos then sin) for every position they can hold
 struct private TsPkVoice {
-    key : uint64
-    cap : int64
-    len : int64
-    d : int64
+    meta : TtsPkVoiceMeta
     k : array<TsRows>
     v : array<TsRows>
     rope : TsRows
@@ -1818,9 +1815,7 @@ def private ts_pk_voice_drop {
     v.k |> clear()
     v.v |> clear()
     ts_rows_release(v.rope)
-    v.key = 0ul
-    v.cap = 0l
-    v.len = 0l
+    v.meta = TtsPkVoiceMeta()
 }
 
 //! host rows [r0, r1) of one cache as the device's [pos][d] rows, staged then uploaded at row r0
@@ -1837,19 +1832,15 @@ def private ts_pk_kv_upload(kc : TtsKvCache; bk, bv : TsRows; r0, r1 : int64) {
     upload_region_at(bv.dev, r0 * d * 4l, unsafe(addr<uint8 const?>(g_ts_pk_kv_host[rows * d])), rows * d * 4l)
 }
 
-def private ts_pk_voice_attach(vs : PocketVoiceState; tf : PocketTransformer) : bool {
-    let key = tts_pk_voice_key(vs)
-    let cap = vs.caches[0].cap
-    let v & = g_ts_pk_voice
-    return true if (v.key == key && v.cap == cap && v.len == vs.len && length(v.k) == length(vs.caches))
-    return ts_pk_voice_rebuild(vs, tf, key, cap)
-}
+def private ts_pk_voice_attach(vs : PocketVoiceState; tf : PocketTransformer) : bool
+    => tts_pk_voice_current(g_ts_pk_voice.meta, vs, length(g_ts_pk_voice.k)) || ts_pk_voice_rebuild(vs, tf)
 
 [cold_path]
-def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer; key : uint64; cap : int64) : bool {
+def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer) : bool {
     var v & = g_ts_pk_voice
     ts_pk_voice_drop()
     let t0 = ref_time_ticks()
+    let cap = vs.caches[0].cap
     let d = tf.d
     let half = d / tf.heads / 2l
     v.k |> reserve(length(vs.caches))
@@ -1876,10 +1867,7 @@ def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer; k
     ts_upload(v.rope, tcos, cap * half)
     upload_region_at(v.rope.dev, cap * half * 4l, unsafe(addr<uint8 const?>(tsin[0])), cap * half * 4l)
     v.sin_off = cap * half
-    v.key = key
-    v.cap = cap
-    v.len = vs.len
-    v.d = d
+    v.meta = tts_pk_voice_meta(vs, d)
     to_log(LOG_INFO, "vk tts pocket voice slot: {vs.len} of {cap} rows over {length(vs.caches)} layers, up in {get_time_usec(t0) / 1000} ms\n")
     return true
 }
@@ -2415,8 +2403,10 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
     let d = tf.d
     let ld = m.latent_dim
     let base = vs.len + n_txt
-    if (max_frames < 1l || n_txt < 0l || length(vs.caches) != length(tf.layers) || empty(vs.caches) || base + max_frames > vs.caches[0].cap
-        || vs.caches[0].cap > TS_PK_ATTN_MAX_KEYS || d % 4l != 0l || !tts_pk_frames_ok(m, TS_PK_ATTN_HS, TS_PK_GEMV_MAX_NIN)) {
+    let shape_ok = tts_pk_frames_ok(m, TS_PK_ATTN_HS, TS_PK_GEMV_MAX_NIN) $(l : TtsLinear) : bool {
+        return tts_gemm_lin_ok(l)
+    }
+    if (!tts_pk_frames_admit(m, vs, n_txt, max_frames, TS_PK_ATTN_MAX_KEYS) || d % 4l != 0l || !shape_ok) {
         ts_decline("frames", VulkanTtsDecline.shape)
         return none
     }
@@ -2444,8 +2434,7 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
     let r = ts_pk_frames_loop(m, sl, slab, sc_, base, batch, max_frames, forced_rows, std, frames_after_eos, captured, sc, f0)
     if (r.frames >= 0l) {
         ts_readback(ts_rows(sc_, TS_F_LATENTS), sc_, sc.latents, r.frames * ld)
-        let crows = min(r.frames + 1l, f0)   //! the breaking frame's row too, as the CPU loop leaves it
-        ts_readback(ts_rows(sc_, TS_F_CONDS), sc_, sc.conds, crows * d)
+        ts_readback(ts_rows(sc_, TS_F_CONDS), sc_, sc.conds, tts_pk_cond_rows(r.frames, f0) * d)
     }
     return r
 }
