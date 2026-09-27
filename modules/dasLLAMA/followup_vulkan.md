@@ -1945,3 +1945,18 @@ module) is independent and can land any time - it is pure structure.
     the ncol cell dispatches the one-column class before the N class, so a grid N leaf that skipped
     `stage_grid` would read the grid the previous dispatch left in workgroup memory (a poisoning
     dispatch between them, or the N class first, pins the call).
+115. **Twenty TTS kernels are one algorithm under two class shells.** `TtsSrcCumsumT`, `TtsStftT`,
+    `TtsIstft`, `TtsSrcSinesT`, `TtsSrcLowT`, `TtsAdainT`, `TtsConcat`, `TtsPkAttn`, `TtsPkGemvT`,
+    `TtsPoolDw`, `TtsIm2colT`, `TtsElemT`, `TtsAddScale`, `TtsPkRowScale`, `TtsRowGather`,
+    `TtsPkRowsT`, `TtsSigSum`, `TtsAxpy`, `TtsReflect1`'s successor and `TtsSrcNoise` each have a
+    `MetalSt2*` / `MetalPk*` twin whose body is the same arithmetic; the dedup pass moved that
+    arithmetic into `dasllama_gpu_math.das`, and what stays twice is the shell - the binding
+    declarations (`@push_constant pa` against `@uniform ka`), the entry, the workgroup count. No
+    `class template` is stamped by both the SPIR-V and the Metal emitter today
+    (`modules/dasMetal/ARCHITECTURE.md` section 5: uniform against push-constant bindings, method
+    splicing against calls), so the shells wait on an emitter feature: one template with a
+    per-emitter binding form, about 500 lines across the two homes. The seat chains the two
+    drivers write per backend are the other half of the same picture and a separate arc after
+    the 0.6.5 release (Boris's ruling): the host flow of every TTS seat - the stage ping-pong,
+    the concat when the width differs, the head-block loop - is identical and could run once over
+    an encoder interface, about 450 lines.
