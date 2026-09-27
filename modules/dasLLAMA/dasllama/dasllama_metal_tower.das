@@ -2294,43 +2294,29 @@ def private st2_slot_of(w : TtsSlabWriter; t : TtsConvSlot) : St2ConvSlot {
 def private st2_norm_of(t : TtsNormSlot) : St2NormSlot
     => St2NormSlot(gwoff = uint64(t.gwoff * 4l), gboff = uint64(t.gboff * 4l), aux_off = uint64(t.aux_off * 4l))
 
-def private st2_slab_conv(var w : TtsSlabWriter; c : TtsConv1d) : St2ConvSlot => st2_slot_of(w, tts_slab_conv(w, c))
+//! the shared writer's element offset as the byte offset a Metal binding takes
+def private st2_off(off : int64) : uint64 => uint64(off * 4l)
 
 def private st2_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : St2ConvSlot => st2_slot_of(w, tts_slab_linear(w, l))
 
 //! n floats of src into the slab, zeros past its length; the byte offset
-def private st2_slab_raw(var w : TtsSlabWriter; src : array<float>; n : int64) : uint64 => uint64(tts_slab_raw(w, src, n) * 4l)
-
-[arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
-def private st2_slab_lstm_dir(var w : TtsSlabWriter; l : TtsLstm; var xs : St2ConvSlot; var hh : uint64&) {
-    var lin = TtsLinear(nin = l.nin, nout = 4l * l.hidden)
-    lin.w := l.w_ih
-    lin.b := l.b
-    xs = st2_slab_linear(w, lin)
-    hh = st2_slab_raw(w, l.w_hh, 4l * l.hidden * l.hidden)
-}
-
-def private st2_slab_lstm(var w : TtsSlabWriter; l : TtsBiLstm) : St2LstmSlot {
-    var s : St2LstmSlot
-    st2_slab_lstm_dir(w, l.fwd, s.fx, s.fhh)
-    st2_slab_lstm_dir(w, l.bwd, s.bx, s.bhh)
-    return s
-}
+def private st2_slab_raw(var w : TtsSlabWriter; src : array<float>; n : int64) : uint64 => st2_off(tts_slab_raw(w, src, n))
 
 def private st2_slab_norm_rows(var w : TtsSlabWriter; n : TtsNorm; c : int64) : St2NormSlot => st2_norm_of(tts_slab_norm_rows(w, n, c))
 
-def private st2_slab_norm(var w : TtsSlabWriter; a : TtsAdaIn; alpha : TtsWeight; c : int64) : St2NormSlot => st2_norm_of(tts_slab_norm(w, a, alpha, c))
+//! The shared writer's slot records as the Metal slots - the part writers below run `tts_*_write` and map its record through these.
+def private st2_lstm_of(w : TtsSlabWriter; t : TtsLstmSlot) : St2LstmSlot
+    => St2LstmSlot(fx = st2_slot_of(w, t.fx), bx = st2_slot_of(w, t.bx), fhh = st2_off(t.fhh), bhh = st2_off(t.bhh))
 
-def private st2_slab_block(var w : TtsSlabWriter; b : St2GenResBlock) : St2BlockSlots {
-    var inscope t <- tts_slab_block(w, b)
+def private st2_block_of(w : TtsSlabWriter; t : TtsBlockSlots) : St2BlockSlots {
     return <- St2BlockSlots(c1 <- [for (c in t.c1); st2_slot_of(w, c)], c2 <- [for (c in t.c2); st2_slot_of(w, c)],
         n1 <- [for (n in t.n1); st2_norm_of(n)], n2 <- [for (n in t.n2); st2_norm_of(n)])
 }
 
-def private st2_slab_res(var w : TtsSlabWriter; b : St2AdainResBlk) : St2ResSlots {
-    let t = tts_slab_res(w, b)
+//! a residual block's slots; its 1x1 shortcut's uniforms only where the block carries one
+def private st2_res_of(w : TtsSlabWriter; b : St2AdainResBlk; t : TtsResSlots) : St2ResSlots {
     var s = St2ResSlots(n1 = st2_norm_of(t.n1), n2 = st2_norm_of(t.n2), c1 = st2_slot_of(w, t.c1), c2 = st2_slot_of(w, t.c2),
-        pool_w = uint64(t.pool_w * 4l), pool_b = uint64(t.pool_b * 4l))
+        pool_w = st2_off(t.pool_w), pool_b = st2_off(t.pool_b))
     if (b.learned_sc) {
         s.c1x1 = st2_slot_of(w, t.c1x1)
     }
@@ -2468,7 +2454,7 @@ def private st2_slab_current(base : St2SlabBase; key : uint64) : bool => base.bu
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
 def private st2_slab_rebuild(var base : auto(SS); key : uint64; write : block<(var w : TtsSlabWriter; var s : SS) : void>) : bool {
     st2_slab_free(base)
-    var inscope host <- tts_slab_build(base, write)
+    var inscope host <- tts_slab_build(base, write, false)
     if (!st2_slab_upload(base, host, key)) {
         st2_slab_free(base)
         return false
@@ -2477,37 +2463,27 @@ def private st2_slab_rebuild(var base : auto(SS); key : uint64; write : block<(v
 }
 
 def private st2_dec_write(var w : TtsSlabWriter; d : St2Decoder; var s : St2DecSlab) {
-    s.ups |> reserve(length(d.ups))
-    s.noise |> reserve(length(d.noise_convs))
-    s.blocks |> reserve(length(d.noise_res) + length(d.resblocks))
-    s.decode |> reserve(length(d.decode))
-    for (c in d.ups) {
-        s.ups |> push(st2_slab_conv(w, c))
+    var inscope t : TtsDecSlab
+    tts_dec_write(w, d, t)
+    s.ups <- [for (c in t.ups); st2_slot_of(w, c)]
+    s.noise <- [for (c in t.noise); st2_slot_of(w, c)]
+    s.blocks |> reserve(length(t.blocks))
+    for (b in t.blocks) {
+        s.blocks |> emplace(st2_block_of(w, b))
     }
-    for (c in d.noise_convs) {
-        s.noise |> push(st2_slab_conv(w, c))
-    }
-    for (b in d.noise_res) {
-        s.blocks |> emplace(st2_slab_block(w, b))
-    }
-    for (b in d.resblocks) {
-        s.blocks |> emplace(st2_slab_block(w, b))
-    }
-    s.post = st2_slab_conv(w, d.conv_post)
-    s.f0c = st2_slab_conv(w, d.f0_conv)
-    s.nc = st2_slab_conv(w, d.n_conv)
-    s.asr_res = st2_slab_conv(w, d.asr_res)
-    s.encode = st2_slab_res(w, d.encode)
-    for (b in d.decode) {
-        s.decode |> push(st2_slab_res(w, b))
-    }
-    s.src_w = st2_slab_raw(w, d.source_linear.w, d.source_linear.nin)
-    s.src_b = st2_slab_raw(w, d.source_linear.b, 1l)
-    s.stft_re = st2_slab_raw(w, d.stft_fwd_re.w, d.stft_fwd_re.cout * d.stft_fwd_re.k)
-    s.stft_im = st2_slab_raw(w, d.stft_fwd_im.w, d.stft_fwd_im.cout * d.stft_fwd_im.k)
-    s.istft_re = st2_slab_raw(w, d.stft_bwd_re.wt, d.stft_bwd_re.cin * d.stft_bwd_re.k)
-    s.istft_im = st2_slab_raw(w, d.stft_bwd_im.wt, d.stft_bwd_im.cin * d.stft_bwd_im.k)
-    s.window = st2_slab_raw(w, d.window.a, d.stft_bwd_re.k)
+    s.post = st2_slot_of(w, t.post)
+    s.f0c = st2_slot_of(w, t.f0c)
+    s.nc = st2_slot_of(w, t.nc)
+    s.asr_res = st2_slot_of(w, t.asr_res)
+    s.encode = st2_res_of(w, d.encode, t.encode)
+    s.decode <- [for (b, r in d.decode, t.decode); st2_res_of(w, b, r)]
+    s.src_w = st2_off(t.src_w)
+    s.src_b = st2_off(t.src_b)
+    s.stft_re = st2_off(t.stft_re)
+    s.stft_im = st2_off(t.stft_im)
+    s.istft_re = st2_off(t.istft_re)
+    s.istft_im = st2_off(t.istft_im)
+    s.window = st2_off(t.window)
 }
 
 
@@ -2524,24 +2500,17 @@ def private st2_dec_rebuild(d : St2Decoder; key : uint64) : bool {
 }
 
 def private st2_pred_write(var w : TtsSlabWriter; p : St2Predictor; var s : St2PredSlab) {
-    s.bert_enc = st2_slab_linear(w, p.bert_encoder)
-    s.de_lstm |> reserve(length(p.lstms))
-    for (l in p.lstms) {
-        s.de_lstm |> push(st2_slab_lstm(w, l))
-    }
-    s.dur_lstm = st2_slab_lstm(w, p.lstm)
-    s.dur_proj = st2_slab_linear(w, p.duration_proj)
-    s.sh_lstm = st2_slab_lstm(w, p.shared_lstm)
-    s.f0b |> reserve(length(p.f0))
-    s.nb |> reserve(length(p.n))
-    for (b in p.f0) {
-        s.f0b |> push(st2_slab_res(w, b))
-    }
-    for (b in p.n) {
-        s.nb |> push(st2_slab_res(w, b))
-    }
-    s.f0_proj = st2_slab_conv(w, p.f0_proj)
-    s.n_proj = st2_slab_conv(w, p.n_proj)
+    var inscope t : TtsPredSlab
+    tts_pred_write(w, p, t)
+    s.bert_enc = st2_slot_of(w, t.bert_enc)
+    s.de_lstm <- [for (l in t.de_lstm); st2_lstm_of(w, l)]
+    s.dur_lstm = st2_lstm_of(w, t.dur_lstm)
+    s.dur_proj = st2_slot_of(w, t.dur_proj)
+    s.sh_lstm = st2_lstm_of(w, t.sh_lstm)
+    s.f0b <- [for (b, r in p.f0, t.f0b); st2_res_of(w, b, r)]
+    s.nb <- [for (b, r in p.n, t.nb); st2_res_of(w, b, r)]
+    s.f0_proj = st2_slot_of(w, t.f0_proj)
+    s.n_proj = st2_slot_of(w, t.n_proj)
 }
 
 
@@ -2558,19 +2527,21 @@ def private st2_pred_rebuild(p : St2Predictor; key : uint64) : bool {
 }
 
 def private st2_albert_write(var w : TtsSlabWriter; a : St2Albert; var s : St2AlbertSlab) {
-    s.word_emb = st2_slab_raw(w, a.word_emb.a, long_length(a.word_emb.a))
-    s.pos_emb = st2_slab_raw(w, a.pos_emb.a, long_length(a.pos_emb.a))
-    s.type_emb = st2_slab_raw(w, a.type_emb.a, a.emb_dim)
-    s.emb_ln = st2_slab_norm_rows(w, a.emb_ln, a.emb_dim)
-    s.map_in = st2_slab_linear(w, a.map_in)
-    s.q = st2_slab_linear(w, a.q)
-    s.k = st2_slab_linear(w, a.k)
-    s.v = st2_slab_linear(w, a.v)
-    s.dense = st2_slab_linear(w, a.dense)
-    s.attn_ln = st2_slab_norm_rows(w, a.attn_ln, a.hidden)
-    s.ffn = st2_slab_linear(w, a.ffn)
-    s.ffn_out = st2_slab_linear(w, a.ffn_out)
-    s.full_ln = st2_slab_norm_rows(w, a.full_ln, a.hidden)
+    var t : TtsAlbertSlab
+    tts_albert_write(w, a, t)
+    s.word_emb = st2_off(t.word_emb)
+    s.pos_emb = st2_off(t.pos_emb)
+    s.type_emb = st2_off(t.type_emb)
+    s.emb_ln = st2_norm_of(t.emb_ln)
+    s.map_in = st2_slot_of(w, t.map_in)
+    s.q = st2_slot_of(w, t.q)
+    s.k = st2_slot_of(w, t.k)
+    s.v = st2_slot_of(w, t.v)
+    s.dense = st2_slot_of(w, t.dense)
+    s.attn_ln = st2_norm_of(t.attn_ln)
+    s.ffn = st2_slot_of(w, t.ffn)
+    s.ffn_out = st2_slot_of(w, t.ffn_out)
+    s.full_ln = st2_norm_of(t.full_ln)
 }
 
 
@@ -2587,16 +2558,12 @@ def private st2_albert_rebuild(a : St2Albert; key : uint64) : bool {
 }
 
 def private st2_text_write(var w : TtsSlabWriter; te : St2TextEncoder; var s : St2TextSlab) {
-    s.emb = st2_slab_raw(w, te.emb.a, long_length(te.emb.a))
-    s.cnn |> reserve(length(te.cnn))
-    s.ln |> reserve(length(te.cnn_ln))
-    for (c in te.cnn) {
-        s.cnn |> push(st2_slab_conv(w, c))
-    }
-    for (n in te.cnn_ln) {
-        s.ln |> push(st2_slab_norm_rows(w, n, te.c))
-    }
-    s.lstm = st2_slab_lstm(w, te.lstm)
+    var inscope t : TtsTextSlab
+    tts_text_write(w, te, t)
+    s.emb = st2_off(t.emb)
+    s.cnn <- [for (c in t.cnn); st2_slot_of(w, c)]
+    s.ln <- [for (n in t.ln); st2_norm_of(n)]
+    s.lstm = st2_lstm_of(w, t.lstm)
 }
 
 
@@ -3644,33 +3611,25 @@ var private g_tw_pk_codec : PkCodecSlab
 let private PK_CODEC_MAX_FRAMES = 512l   //!< the one-shot chain's row budget: past this the CPU's windows serve
 
 //! the shared writer's layer slots as the Metal chain binds them: byte offsets, the linears' uniforms hung
-def private pk_layer_write(var w : TtsSlabWriter; l : PocketLayer; d : int64) : PkLayerSlots {
-    let t = tts_pk_layer_write(w, l, d)
+def private pk_layer_of(w : TtsSlabWriter; t : TtsPkLayerSlots) : PkLayerSlots {
     return PkLayerSlots(n1 = st2_norm_of(t.n1), in_proj = st2_slot_of(w, t.in_proj), out_proj = st2_slot_of(w, t.out_proj),
-        scale1_off = uint64(t.scale1_off * 4l), has_s1 = t.has_s1, n2 = st2_norm_of(t.n2), ffn1 = st2_slot_of(w, t.ffn1), ffn2 = st2_slot_of(w, t.ffn2),
-        scale2_off = uint64(t.scale2_off * 4l), has_s2 = t.has_s2)
+        scale1_off = st2_off(t.scale1_off), has_s1 = t.has_s1, n2 = st2_norm_of(t.n2), ffn1 = st2_slot_of(w, t.ffn1), ffn2 = st2_slot_of(w, t.ffn2),
+        scale2_off = st2_off(t.scale2_off), has_s2 = t.has_s2)
 }
 
+//! the shared codec layout with no rope rows in the slab: this driver's rope tables ride their own buffers (`pk_rope_tables`)
 def private pk_codec_write(var w : TtsSlabWriter; mm : PocketMimi; var s : PkCodecSlab) {
-    s.quant = st2_slab_conv(w, mm.quant_proj)
-    s.up_w = st2_slab_raw(w, mm.upsample.w, mm.upsample.cin * mm.upsample.k)
-    s.up_b = st2_slab_raw(w, mm.upsample.b, mm.upsample.cin)
-    s.layers |> reserve(length(mm.dec_tf.layers))
-    for (l in mm.dec_tf.layers) {
-        s.layers |> push(pk_layer_write(w, l, mm.dec_tf.d))
-    }
-    s.dec_in = st2_slab_conv(w, mm.dec_in)
-    s.ups |> reserve(length(mm.dec_up))
-    s.res1 |> reserve(length(mm.dec_res))
-    s.res2 |> reserve(length(mm.dec_res))
-    for (c in mm.dec_up) {
-        s.ups |> push(st2_slab_conv(w, c))
-    }
-    for (b in mm.dec_res) {
-        s.res1 |> push(st2_slab_conv(w, b.conv1))
-        s.res2 |> push(st2_slab_conv(w, b.conv2))
-    }
-    s.dec_out = st2_slab_conv(w, mm.dec_out)
+    var inscope t : TtsPkCodecSlab
+    tts_pk_codec_write(w, mm, 0l, t)
+    s.quant = st2_slot_of(w, t.quant)
+    s.up_w = st2_off(t.up_w)
+    s.up_b = st2_off(t.up_b)
+    s.layers <- [for (l in t.layers); pk_layer_of(w, l)]
+    s.dec_in = st2_slot_of(w, t.dec_in)
+    s.ups <- [for (c in t.ups); st2_slot_of(w, c)]
+    s.res1 <- [for (c in t.res1); st2_slot_of(w, c)]
+    s.res2 <- [for (c in t.res2); st2_slot_of(w, c)]
+    s.dec_out = st2_slot_of(w, t.dec_out)
 }
 
 

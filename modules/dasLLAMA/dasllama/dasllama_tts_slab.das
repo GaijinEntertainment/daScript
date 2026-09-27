@@ -30,6 +30,7 @@ struct TtsSlabWriter {
     @exact_size host : array<float>   //! sized once from the measure pass; the write pass only bumps `n`
     n : int64
     measure : bool
+    lstm_turned : bool = true   //! an LSTM recurrence written turned to [H][4H] (the Vulkan kernel's read), else as the model stores it (Metal's)
 }
 
 //! `count` floats at the next 16-byte boundary (every item is a float4 read for some kernel); the element offset
@@ -242,6 +243,10 @@ def private tts_slab_lstm_dir(var w : TtsSlabWriter; l : TtsLstm; var xs : TtsCo
     lin.b := l.b
     xs = tts_slab_linear(w, lin)
     let hd = l.hidden
+    if (!w.lstm_turned) {
+        hh = tts_slab_raw(w, l.w_hh, 4l * hd * hd)
+        return
+    }
     hh = tsw_alloc(w, 4l * hd * hd)
     return if (w.measure)
     for (o in range64(4l * hd)) {
@@ -388,8 +393,8 @@ def tts_dec_write(var w : TtsSlabWriter; d : St2Decoder; var s : TtsDecSlab) {
 }
 
 //! the part's writer run twice (a measuring pass, then the fill); the host floats come back to upload, empty when the part carries nothing
-def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; var s : SS) : void>) : array<float> {
-    var inscope w = TtsSlabWriter(measure = true)
+def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; var s : SS) : void>; lstm_turned : bool = true) : array<float> {
+    var inscope w = TtsSlabWriter(measure = true, lstm_turned = lstm_turned)
     var probe : SS
     invoke(write, w, probe)
     unsafe {
