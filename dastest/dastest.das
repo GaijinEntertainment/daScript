@@ -577,6 +577,12 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         }
         files |> erase_if() $(f) => !(keep |> key_exists(f |> replace("\\", "/")))
     }
+    if (!empty(test_args.test_only)) {
+        files |> erase_if() $(f) {
+            let one = f |> replace("\\", "/")
+            return (find_index_if(test_args.test_only) $(p) => p |> replace("\\", "/") == one) < 0
+        }
+    }
     if (!empty(test_args.exclude_files)) {
         files |> erase_if() $(f) {
             let base = base_name(f)

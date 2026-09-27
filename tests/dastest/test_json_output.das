@@ -142,6 +142,13 @@ def test_benchmark_json_output(tt : T?) {
 }
 
 [test]
+def test_test_only_filter(tt : T?) {
+    let fixture = "{get_das_root()}/tests/dastest/_fixture_pass.das"
+    tt |> equal(run_dastest("pass", "--test-only {fixture}").total, 2)
+    tt |> equal(run_dastest("pass", "--test-only {fixture}.other").total, 0)
+}
+
+[test]
 def test_test_name_filter(tt : T?) {
     let report = run_dastest("pass", "--test-names test_passing")
     tt |> equal(report.total, 1)
