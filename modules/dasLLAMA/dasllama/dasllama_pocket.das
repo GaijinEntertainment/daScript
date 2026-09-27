@@ -1272,7 +1272,8 @@ def private frame_step(m : PocketModel; var vs : PocketVoiceState; pos : int64; 
     return sc.eos[0]
 }
 
-def private modulate(var x : array<float>; mod : array<float>; n : int64) {
+//! The flow head's adaLN modulation of one row in place: x * (1 + scale) + shift, `mod` holding the shift half then the scale half.
+def modulate(var x : array<float>; mod : array<float>; n : int64) {
     for (j in range64(n)) {
         x[j] = x[j] * (1.0 + mod[n + j]) + mod[j]
     }
