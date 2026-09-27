@@ -734,6 +734,18 @@ def private rows_width_check(c : int64; what : string) {
     }
 }
 
+//! Rows [r0, r1) of y at row stride `width` start as the bias - its first `nbias` columns, zero past them - for a GEMM to accumulate onto.
+def private rows_bias_init(var yp : float?; r0, r1, width, nbias : int64; bp : float const?) {
+    for (r in range64(r0, r1)) {
+        var yrow = unsafe(yp + r * width)
+        for (co in range64(width)) {
+            unsafe {
+                yrow[co] = co < nbias ? bp[co] : 0.0
+            }
+        }
+    }
+}
+
 [arch(at = "../ARCHITECTURE_TTS.md#tts-two-layouts")]
 def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
@@ -752,12 +764,7 @@ def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var
         unsafe {
             let rb4 = tile_edge(int64(rb), t_out)
             let re4 = tile_edge(int64(re), t_out)
-            for (r in range64(rb4, re4)) {
-                var yrow = yp + r * cout
-                for (co in range64(cout)) {
-                    yrow[co] = co < nbias ? bp[co] : 0.0
-                }
-            }
+            rows_bias_init(yp, rb4, re4, cout, nbias, bp)
             for (kk in range64(k)) {
                 let shift = kk * dil - pad_l
                 let r0 = max(rb4, -shift)
@@ -899,12 +906,7 @@ def private conv1d_rows_dense_strided(c : TtsConv1d; x : array<float>; t_in : in
             unsafe {
                 let rb4 = tile_edge(int64(rb), rows)
                 let re4 = tile_edge(int64(re), rows)
-                for (r in range64(rb4, re4)) {
-                    var yrow = yp + (r0 + r) * cout
-                    for (co in range64(cout)) {
-                        yrow[co] = co < nbias ? bp[co] : 0.0
-                    }
-                }
+                rows_bias_init(yp, r0 + rb4, r0 + re4, cout, nbias, bp)
                 if (re4 > rb4) {
                     gemm_f32_jo(yp + (r0 + rb4) * cout, xstp + rb4 * kc, wp, re4 - rb4, kc, cout)
                 }
@@ -1025,11 +1027,9 @@ def conv1d_rows_transposed_depthwise(c : TtsConv1d; x : array<float>; t_in : int
     let bp = nbias > 0l ? unsafe(addr<float const?>(c.b[0])) : null
     maybe_parallel_for(0, int(t_out), lanes_for_work(t_out * ch * k, 0)) $(rb, re) {
         unsafe {
+            rows_bias_init(yp, int64(rb), int64(re), ch, nbias, bp)
             for (p in range64(int64(rb), int64(re))) {
                 var yrow = yp + p * ch
-                for (j in range64(ch)) {
-                    yrow[j] = j < nbias ? bp[j] : 0.0
-                }
                 for (kk in range64(k)) {
                     let num = p + pad_l - kk * dil
                     continue if (num < 0l || num % stride != 0l)
@@ -1255,12 +1255,7 @@ def linear_rows(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_size
         unsafe {
             let rb4 = tile_edge(int64(rb), t)
             let re4 = tile_edge(int64(re), t)
-            for (r in range64(rb4, re4)) {
-                var yrow = yp + r * nout
-                for (o in range64(nout)) {
-                    yrow[o] = o < nbias ? bp[o] : 0.0
-                }
-            }
+            rows_bias_init(yp, rb4, re4, nout, nbias, bp)
             if (re4 > rb4) {
                 gemm_f32_jo(yp + rb4 * nout, xp + rb4 * nin, wp, re4 - rb4, nin, nout)
             }
