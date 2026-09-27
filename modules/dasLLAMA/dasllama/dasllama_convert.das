@@ -1193,6 +1193,36 @@ def kq_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout, mr : int64; r 
     }
 }
 
+//! Row r of a Q8_0 plane pair [nout][nin] as f32 at dst, each quant times its block's f32 scale: `q` / `s` the quants and
+//! scales as `lay` repacked them - the grp<mr> interleave for the whole groups (`kgroup`-byte columns, biased by `wbias`),
+//! row-major for the tail; the pointer core, so a row range runs on each job lane.
+def q8_plane_row_f32(q : int8 const?; s : float const?; nin, nout : int64; lay : Q8RepackLayout; r : int64; var dst : float?) {
+    let nb = nin / 32l
+    let mr = lay.mr
+    let kg = lay.kgroup
+    unsafe {
+        if (r < (nout / mr) * mr) {
+            let rg = r % mr
+            let gq = q + (r / mr) * mr * nin + rg * kg
+            for (bi in range64(nb)) {
+                let d = s[((r / mr) * nb + bi) * mr + rg]
+                for (c in range64(bi * 32l / kg, (bi + 1l) * 32l / kg)) {
+                    for (j in range64(kg)) {
+                        dst[c * kg + j] = float(int8(uint8(int(gq[c * kg * mr + j]) ^ int(lay.wbias)))) * d
+                    }
+                }
+            }
+        } else {
+            for (bi in range64(nb)) {
+                let d = s[r * nb + bi]
+                for (j in range64(bi * 32l, bi * 32l + 32l)) {
+                    dst[j] = float(q[r * nin + j]) * d
+                }
+            }
+        }
+    }
+}
+
 //! Quantize a flat fp32 tensor to Q8_0 directly into pre-allocated slices: quants land at
 //! qdst[qoff..], scales at sdst[soff..]. No allocation — the memory-honest loader uses this to
 //! quantize one tensor at a time into the model's shared qblob/qscales. n must be a multiple of 32.

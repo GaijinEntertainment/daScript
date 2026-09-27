@@ -22,9 +22,10 @@ the Metal twin's f16-staged GEMM does. The part's weights live in a slab the sha
 with column j = tap*cin + ci and its bias row beside it, every norm as a scale and a shift row,
 an LSTM direction as its input linear and its recurrence transposed to [H][4H], so the
 recurrence kernel's lanes read a step's column as consecutive floats; the q8 lane's quants and a
-K-quant linear are dequantized into the slab through the active repack - the q8 rows gathered over
-the cold gather's slice and dequantized over the job pool, a row range a lane, each quant times its
-block's f32 scale - so the served lane's weights are the CPU q8 lane's exactly; what still parts
+K-quant linear are dequantized into the slab through the active repack - a q8 row read out of the
+repack's interleave by `q8_plane_row_f32` (`dasllama_convert.das`, beside the K-quant twin
+`kq_plane_row_f32`), a row range a job lane, each quant times its block's f32 scale - so the served
+lane's weights are the CPU q8 lane's exactly; what still parts
 the two is that lane's per-32 quantization of the activations, which the f32 seat does not do. The slab uploads once to one device buffer and stays resident under a
 key that folds the part's weight addresses and the q8 lane's repack layout; the model-drop sweep
 releases it, and a reload or another lane keys differently and rebuilds. The seats' activation

@@ -8,7 +8,6 @@ module dasllama_tts_slab shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_kqformat
-require dasllama/dasllama_layout
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert
@@ -143,30 +142,15 @@ struct TtsDecSlab {
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private tsw_put_q8(var w : TtsSlabWriter; q : array<int8>; qs : array<float>; rows, cols, w0, stride : int64) {
     return if (w.measure)
-    var @exact_size wq : array<uint8>
-    var @exact_size ws : array<uint8>
-    wq |> reserve_resize(rows * cols)
-    ws |> reserve_resize(rows * cols / 32l * 2l)
     let lay = active_q8_repack_layout(g_active_needs_repack)
-    let mr = lay.mr
-    let nb = cols / 32l
-    let packed_rows = (rows / mr) * mr
     unsafe {
-        q8_gather_rows(addr<int8 const?>(q[0]), null, addr<float const?>(qs[0]), cols, rows, q8_gather_slice(rows, mr), mr, lay.kgroup, lay.wbias, wq, ws)
+        let qp = addr<int8 const?>(q[0])
         let sp = addr<float const?>(qs[0])
-        let qp = addr<uint8 const?>(wq[0])
         var hp = addr(w.host[w0])
         maybe_parallel_for(0, int(rows), lanes_for_work(rows * cols, 0)) $(rb, re) {
             unsafe {
                 for (r in range64(int64(rb), int64(re))) {
-                    var dst = hp + r * stride
-                    let src = qp + r * cols
-                    for (bi in range64(nb)) {
-                        let d = sp[r < packed_rows ? ((r / mr) * nb + bi) * mr + r % mr : r * nb + bi]
-                        for (j in range64(bi * 32l, bi * 32l + 32l)) {
-                            dst[j] = float(int8(src[j])) * d
-                        }
-                    }
+                    q8_plane_row_f32(qp, sp, cols, rows, lay, r, hp + r * stride)
                 }
             }
         }

@@ -85,10 +85,10 @@ AdaIN residual blocks, the harmonic source, the generator and the inverse STFT a
 buffer, the samples back; the generator seat behind it - reached only by the CPU chain a
 declined decode falls into - runs the generator through conv_post as one command buffer and reads
 conv_post's rows back for the CPU's inverse STFT (`styletts2_istft`). The CPU chain is the specification, dispatch for dispatch, and every
-seat serves both weight lanes: the q8 lane's stacked quants are read row-major through the
-active repack's gather and dequantized into the slab with their f32 scales - the CPU q8 lane's
-weights exactly, the distance left being that lane's per-32 activation quantization, which the f32
-seat does not do - and a K-quant linear (the Pocket small
+seat serves both weight lanes: the q8 lane's stacked quants are read row by row out of the
+active repack's interleave (`q8_plane_row_f32`) and dequantized into the slab with their f32
+scales - the CPU q8 lane's weights exactly, the distance left being that lane's per-32 activation
+quantization, which the f32 seat does not do - and a K-quant linear (the Pocket small
 form's codec transformer) row by row through the active K-quant layout's group gather, its tail
 rows superblock by superblock, so the lane policy does not flip for the tower.
 
