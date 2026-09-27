@@ -15,6 +15,7 @@ require _kq_dot   // dot_kq on the run-time format
 require _q4k_disk
 require daslib/f16_cvt
 require math
+require _compares   // mismatch_exact: the plane bytes' compare
 
 var g_taint = 0.0
 
@@ -386,16 +387,6 @@ def private grp_rows_after_repack(fmt : int; kq : array<uint8>; ks : array<uint8
     }
 }
 
-def private byte_diff(a : array<uint8>; b : array<uint8>) : int {
-    var n = 0
-    for (x, y in a, b) {
-        if (x != y) {
-            n++
-        }
-    }
-    return n
-}
-
 def private repack_seam(t : T?; fmt : int; kq : array<uint8>; ks : array<uint8>;
                         kqg : array<uint8>; ksg : array<uint8>; want : array<float>;
                         nsb, n, d : int64; xq : array<int8>; xs : array<float>; xbs : array<int>) {
@@ -408,14 +399,14 @@ def private repack_seam(t : T?; fmt : int; kq : array<uint8>; ks : array<uint8>;
     let has_kq = kernel_backend_has_kq()
     repack_kq_weight(fmt, kqs, kss, 0l, n, d)
     if (has_kq) {
-        let moved = byte_diff(kqs, kqg) + byte_diff(kss, ksg)
+        let moved = mismatch_exact(kqs, kqg) + mismatch_exact(kss, ksg)
         t |> success(moved == 0, "repack_kq_weight lands on the grp<{int(kq_layout_of(fmt))}> layout the readers expect ({moved} bytes differ)")
         var got : array<float>
         grp_rows_after_repack(fmt, kqs, kss, nsb, d, kq_layout_of(fmt), xq, xs, xbs, n, got)
         cmp_exact(t, got, want, d, "{fmt_tag(fmt)} row dots through repack_kq_weight's own planes")
         delete got
     } else {
-        let moved = byte_diff(kqs, kq) + byte_diff(kss, ks)
+        let moved = mismatch_exact(kqs, kq) + mismatch_exact(kss, ks)
         t |> success(moved == 0, "with no kq slot on the tier repack_kq_weight is the registered identity ({moved} bytes moved)")
         var got : array<float>
         got |> resize(d)

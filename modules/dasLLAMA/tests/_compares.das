@@ -9,9 +9,12 @@ module _compares shared public
 
 require dasllama/dasllama_lint public
 require math
-require daslib/linq   // sequence_equal
+require daslib/linq   // sequence_equal, count, all
+require daslib/algorithm   // fill
+require daslib/math_bits   // uint_bits_to_float: the NaN sentinel as a float
 
 let POISON = 7.5   //! the slots a kernel must never read or write: a large finite value, so a stray read lands in the sum
+let SLAB_GAP = 3   //! the poisoned slots `put` leaves before a run of a slab plane
 
 //! `n` patterned floats: (i * mul + add) % 97 scaled and biased - the kernel cells' input fill
 def row_fill(n : int; mul, add : int; scale, off : float) : array<float> {
@@ -27,10 +30,56 @@ def row_fill(n : int; mul, add : int; scale, off : float) : array<float> {
 def poison_plane(n : int) : array<float> {
     var a : array<float>
     a |> resize(n)
-    for (v in a) {
-        v = POISON
-    }
+    a |> fill(POISON)
     return <- a
+}
+
+//! `a` behind `base` slots of `POISON` and followed by `slack` more: a device plane whose run starts at an element base
+def at_base(a : array<float>; base : int; slack : int = 0) : array<float> {
+    var out <- poison_plane(base + length(a) + slack)
+    for (i in range(length(a))) {
+        out[base + i] = a[i]
+    }
+    return <- out
+}
+
+//! `a` appended to `plane` behind `gap` poisoned slots; its element base in the plane
+def put(var plane : array<float>; a : array<float>; gap : int = SLAB_GAP) : int {
+    plane |> push_from(poison_plane(gap))
+    let off = length(plane)
+    plane |> push_from(a)
+    return off
+}
+
+//! `put` at the next run base on the four lattice: a float4 row's element base
+def put4(var plane : array<float>; a : array<float>) : int {
+    while ((length(plane) + SLAB_GAP) % 4 != 0) {
+        plane |> push(POISON)
+    }
+    return put(plane, a)
+}
+
+//! true when every element of `whole` outside [lo, lo + n) is `kept` (any NaN for a NaN) - the slots a run leaves as they were
+def outside_run(whole : array<float>; lo, n : int; kept : float) : bool {
+    for (i in range(length(whole))) {
+        continue if (i >= lo && i < lo + n)
+        return false if (is_nan(kept) ? !is_nan(whole[i]) : whole[i] != kept)
+    }
+    return true
+}
+
+//! true when every element of `whole` outside [lo, lo + n) equals the same element of `kept` - the input a run leaves
+def outside_run(whole : array<float>; lo, n : int; kept : array<float>) : bool {
+    for (i in range(length(whole))) {
+        continue if (i >= lo && i < lo + n)
+        return false if (whole[i] != kept[i])
+    }
+    return true
+}
+
+//! a copy of `a` with every element times `k`
+def scaled_copy(a : array<float>; k : float) : array<float> {
+    return <- [for (v in a); v * k]
 }
 
 //! the index of the largest |got - want| (0 when every element agrees)
@@ -48,25 +97,10 @@ def maxdiff_at(got, want : array<float>) : int {
 }
 
 //! the NaN elements of `a`: the sentinel words a dispatch left
-def nan_count(a : array<float>) : int {
-    var n = 0
-    for (v in a) {
-        if (is_nan(v)) {
-            n++
-        }
-    }
-    return n
-}
+def nan_count(a : array<float>) : int => count(a, $(v) => is_nan(v))
 
 //! true when every element of `a` is bit-equal to `v`
-def elem_all(a : array<float>; v : float) : bool {
-    for (e in a) {
-        if (e != v) {
-            return false
-        }
-    }
-    return true
-}
+def elem_all(a : array<float>; v : float) : bool => all(a, $(e) => e == v)
 
 //! Max |a[i] - b[i]| over two float arrays of one length (the shorter's, where they differ) - the compare behind every
 //! logits or kernel-output bar in the suites.
@@ -95,19 +129,20 @@ def ids_equal(a, b : array<int64>) : bool => sequence_equal(a, b)
 //! 2e-3 covers each with margin.
 let APPROX_REL = 2e-3
 
-//! within `APPROX_REL` of the larger magnitude, floored at 1
-def approx(x, y : float) : bool => abs(x - y) <= APPROX_REL * max(1.0, max(abs(x), abs(y)))
+//! within `absf` absolute, or within `rel` of the larger magnitude floored at 1 - the kernel cells' bar on one element
+def bar_ok(g, w, rel : float; absf : float = 0.0) : bool => abs(g - w) <= absf || abs(g - w) <= rel * max(1.0, max(abs(g), abs(w)))
 
-//! The elements of `got` off `want` by more than `bar` relative (floored at 1), the first six logged for the eyeball -
-//! enough to tell tolerance drift from garbage.
-def mismatch_rel(got, want : array<float>; bar : float) : int {
+//! within `APPROX_REL` of the larger magnitude, floored at 1
+def approx(x, y : float) : bool => bar_ok(x, y, APPROX_REL)
+
+//! The elements of `got` outside `bar_ok`'s bars, the first six logged under `tag` for the eyeball - enough to tell
+//! tolerance drift from garbage.
+def mismatch_rel(got, want : array<float>; rel : float; absf : float = 0.0; tag : string = "") : int {
     var bad = 0
     for (i in range(length(got))) {
-        let g = got[i]
-        let w = want[i]
-        if (!(abs(g - w) <= bar * max(1.0, max(abs(g), abs(w))))) {
+        if (!bar_ok(got[i], want[i], rel, absf)) {
             if (bad < 6) {
-                to_log(LOG_ERROR, "  mismatch [{i}] gpu {g} cpu {w}\n")
+                to_log(LOG_ERROR, "  {tag} mismatch [{i}] gpu {got[i]} cpu {want[i]}\n")
             }
             bad++
         }
@@ -118,8 +153,9 @@ def mismatch_rel(got, want : array<float>; bar : float) : int {
 //! `mismatch_rel` at the kernel cells' bar.
 def mismatch_approx(got, want : array<float>) : int => mismatch_rel(got, want, APPROX_REL)
 
-//! The elements of `got` not bit-equal to `want` - the compare behind a kernel cell's exact bar (a copy, a clamp, a pad).
-def mismatch_exact(got, want : array<float>) : int {
+//! The elements of `got` not equal to `want` - the compare behind a kernel cell's exact bar (a copy, a clamp, a pad), over
+//! floats, bytes or words alike.
+def mismatch_exact(got, want : array<auto(TT)>) : int {
     var bad = 0
     for (g, w in got, want) {
         if (g != w) {
@@ -144,3 +180,4 @@ def mismatch_q8(qd : array<int8>; sd : array<float>; qr : array<int8>; sr : arra
 //! The word a kernel cell fills an output with before its dispatch: a NaN, so a stale or unwritten element cannot sit
 //! inside any bar.
 let NAN_SENTINEL_BITS = 0x7fc00000u
+let NAN_SENTINEL = uint_bits_to_float(NAN_SENTINEL_BITS)   //! the sentinel as a float, the `kept` value of an output's untouched slots

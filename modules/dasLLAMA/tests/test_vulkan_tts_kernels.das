@@ -65,7 +65,7 @@ def test_vkt_f32_gemm(t0 : T?) {
             var b <- row_fill(d, 29, 11, 0.06, 2.8)
             for (o in range(d)) {   //! the pad past n carries garbage: a read past n lands it in the sum
                 for (k in range(n, G_WSTRIDE)) {
-                    w[o * G_WSTRIDE + k] = 7.5
+                    w[o * G_WSTRIDE + k] = POISON
                 }
             }
             let bx = int64(nx) * 4l
@@ -110,23 +110,6 @@ def test_vkt_f32_gemm(t0 : T?) {
 }
 
 let private TTS_REL = 1e-5      //! the f32 row classes' bar: the device's reassociation and transcendentals sit well inside it, the f16 LUT GELU does not
-let private GARBAGE = 7.5       //! the prefix before a plane's element base: a read that ignores the base lands it in the result
-
-//! within `bar` relative of the larger magnitude, floored at 1 - `mismatch_rel`'s test on one element
-def private rel_ok(x, y, bar : float) : bool => abs(x - y) <= bar * max(1.0, max(abs(x), abs(y)))
-
-//! `a` behind `base` elements of `GARBAGE`: a device plane whose rows start at an element base
-def private with_base(a : array<float>; base : int) : array<float> {
-    var out : array<float>
-    out |> resize(base + length(a))
-    for (i in range(base)) {
-        out[i] = GARBAGE
-    }
-    for (i in range(length(a))) {
-        out[base + i] = a[i]
-    }
-    return <- out
-}
 
 let private GA_C = 72       //! the row width: a row straddles the 256-element workgroups
 let private GA_ROWS = 23
@@ -237,16 +220,6 @@ def private elem_fixture() : array<float> {
     return <- x
 }
 
-//! true when every element outside [EL_OFF, EL_OFF + EL_N) of `got` is bit-equal to `x`
-def private elem_outside_kept(got, x : array<float>) : bool {
-    for (i in range(length(x))) {
-        if ((i < EL_OFF || i >= EL_OFF + EL_N) && got[i] != x[i]) {
-            return false
-        }
-    }
-    return true
-}
-
 [test]
 def test_vkt_gelu_tanh(t0 : T?) {
     t0 |> run("the tanh GELU == the CPU gelu at the f32 bar, the run's tail and the tanh clamp included") <| @(t : T?) {
@@ -276,11 +249,11 @@ def test_vkt_gelu_tanh(t0 : T?) {
             let mi = maxdiff_at(got, want)
             to_log(LOG_INFO, "tts_gelu_tanh: max |gpu - cpu| {abs(got[mi] - want[mi])} at element {mi} (input {x[mi]})\n")
             t |> success(bad == 0, "tts_gelu_tanh: the device == the CPU gelu ({bad} of {n} off)")
-            t |> success(!rel_ok(got[n - EL_SLACK - 1] + 1e-4, want[n - EL_SLACK - 1], TTS_REL), "tts_gelu_tanh: the bar reds a poisoned element")
-            t |> success(elem_outside_kept(got, x), "tts_gelu_tanh: the elements outside the run are untouched")
+            t |> success(!bar_ok(got[n - EL_SLACK - 1] + 1e-4, want[n - EL_SLACK - 1], TTS_REL), "tts_gelu_tanh: the bar reds a poisoned element")
+            t |> success(outside_run(got, EL_OFF, EL_N, x), "tts_gelu_tanh: the elements outside the run are untouched")
             var lut_off = 0
             for (i in range(EL_OFF, EL_OFF + EL_N)) {
-                if (!rel_ok(tower_gelu_tanh(x[i]), want[i], TTS_REL)) {
+                if (!bar_ok(tower_gelu_tanh(x[i]), want[i], TTS_REL)) {
                     lut_off++
                 }
             }
@@ -327,7 +300,7 @@ def test_vkt_leaky(t0 : T?) {
             to_log(LOG_INFO, "tts_leaky: max |gpu - cpu| {abs(got[mi] - want[mi])} at element {mi} (input {x[mi]})\n")
             t |> success(bad == 0, "tts_leaky: the device == the CPU leaky_relu ({bad} of {n} off)")
             t |> success(got[n - EL_SLACK - 1] + 0.5 != want[n - EL_SLACK - 1], "tts_leaky: the bar reds a poisoned element")
-            t |> success(elem_outside_kept(got, x), "tts_leaky: the elements outside the run are untouched")
+            t |> success(outside_run(got, EL_OFF, EL_N, x), "tts_leaky: the elements outside the run are untouched")
             let neg = EL_OFF + 1
             t |> success(got[neg] == x[neg] * EL_SLOPE && got[neg] != x[neg], "tts_leaky control: a negative element is scaled by the slope")
             t |> success(got[EL_OFF] == x[EL_OFF], "tts_leaky control: a positive element passes unchanged")
@@ -358,10 +331,10 @@ def private attn_arm(t : T?; rows, heads, hs : int) {
         for (e in range(d)) {
             kz[(rows - 1) * d + e] = 0.0
         }
-        var qp <- with_base(q, qoff)
-        var kp <- with_base(k, koff)
-        var kzp <- with_base(kz, koff)
-        var vp <- with_base(v, voff)
+        var qp <- at_base(q, qoff)
+        var kp <- at_base(k, koff)
+        var kzp <- at_base(kz, koff)
+        var vp <- at_base(v, voff)
         let qd = dev_upload(qp)
         let kd = dev_upload(kp)
         let kzd = dev_upload(kzp)
@@ -398,13 +371,13 @@ def private attn_arm(t : T?; rows, heads, hs : int) {
         let mi = maxdiff_at(got, want)
         to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / d} head {(mi % d) / hs} col {mi % hs}\n")
         t |> success(bad == 0, "{tag}: the device == the CPU attention_rows ({bad} of {n} off)")
-        t |> success(!rel_ok(got[n - 1] + 1e-4, want[n - 1], TTS_REL), "{tag}: the bar reds a poisoned element")
+        t |> success(!bar_ok(got[n - 1] + 1e-4, want[n - 1], TTS_REL), "{tag}: the bar reds a poisoned element")
         let badz = mismatch_rel(gotz, wantz, TTS_REL)
         t |> success(badz == 0, "{tag}: the last key zeroed, the device == the CPU attention_rows ({badz} of {n} off)")
-        t |> success(!rel_ok(gotz[0] + 1e-4, wantz[0], TTS_REL), "{tag}: the zeroed-key bar reds a poisoned element")
+        t |> success(!bar_ok(gotz[0] + 1e-4, wantz[0], TTS_REL), "{tag}: the zeroed-key bar reds a poisoned element")
         var moved = 0
         for (e in range(d)) {
-            if (!rel_ok(got[e], gotz[e], TTS_REL)) {
+            if (!bar_ok(got[e], gotz[e], TTS_REL)) {
                 moved++
             }
         }
@@ -542,7 +515,7 @@ def test_vkt_concat(t0 : T?) {
 
 let private SG_T = 37
 let private SG_NB = 50      //! the duration bins summed
-let private SG_LS = 64      //! the logit rows' stride: the columns past SG_NB carry GARBAGE
+let private SG_LS = 64      //! the logit rows' stride: the columns past SG_NB carry POISON
 let private SG_SPEED = 1.3
 
 //! the CPU `styletts2_durations`' raw sum in f32: the sigmoids of a row's first `nb` logits in column order, over `speed`
@@ -571,7 +544,7 @@ def test_vkt_sigsum(t0 : T?) {
             var logits <- row_fill(SG_T * SG_LS, 41, 7, 0.1, 4.8)
             for (r in range(SG_T)) {
                 for (j in range(SG_NB, SG_LS)) {
-                    logits[r * SG_LS + j] = GARBAGE
+                    logits[r * SG_LS + j] = POISON
                 }
             }
             let ld = dev_upload(logits)
@@ -716,7 +689,7 @@ let private AD_EPS = 1e-5
 let private AD_XOFF = 5     //! each plane's element base: the prefix before it is never written
 let private AD_YOFF = 9
 let private AD_HOFF = 7
-let private AD_GWOFF = 3    //! the slab's norm scale row, then its shift row and Snake's alpha row, GARBAGE between
+let private AD_GWOFF = 3    //! the slab's norm scale row, then its shift row and Snake's alpha row, POISON between
 
 //! an AdaIN over AD_C channels from an AD_SD-wide style: fc w [2c][sd] and b, the norm's scale and shift rows
 def private make_adain() : TtsAdaIn {
@@ -742,21 +715,15 @@ struct private AdainFixture {
 
 def private adain_fixture() : AdainFixture {
     let c = AD_C
-    var f = AdainFixture(gboff = AD_GWOFF + c + 3)
-    f.aoff = f.gboff + c + 4
+    var f = AdainFixture()
     var a <- make_adain()
     var style <- row_fill(AD_SD, 23, 9, 0.06, 2.8)
     var alpha <- row_fill(c, 23, 9, 0.02, -0.3)
     f.x <- row_fill(AD_T * c, 41, 7, 0.05, 2.1)
-    f.slab |> resize(f.aoff + c + 5)
-    for (v in f.slab) {
-        v = GARBAGE
-    }
-    for (ci in range(c)) {
-        f.slab[AD_GWOFF + ci] = a.norm.w[ci]
-        f.slab[f.gboff + ci] = a.norm.b[ci]
-        f.slab[f.aoff + ci] = alpha[ci]
-    }
+    put(f.slab, a.norm.w, AD_GWOFF)
+    f.gboff = put(f.slab, a.norm.b)
+    f.aoff = put(f.slab, alpha, 4)
+    f.slab |> push_from(poison_plane(5))
     let n = AD_T * c
     with_job_que() {
         setup_dasllama_jobque_()
@@ -797,8 +764,8 @@ def test_vkt_adain(t0 : T?) {
             let c = AD_C
             let n = AD_T * c
             var f <- adain_fixture()
-            var xp <- with_base(f.x, AD_XOFF)
-            var hp <- with_base(f.style_fc, AD_HOFF)
+            var xp <- at_base(f.x, AD_XOFF)
+            var hp <- at_base(f.style_fc, AD_HOFF)
             let x0d = dev_upload(f.x)
             let xpd = dev_upload(xp)
             let xid = dev_upload(xp)
@@ -845,7 +812,7 @@ def test_vkt_adain(t0 : T?) {
             t |> success(got_i[0] != f.x[0], "tts_adain_leaky in place control: the input row is overwritten")
             t |> equal(mismatch_exact(got_i, got_l), 0, "tts_adain_leaky: in place == out of place, bit for bit")
             t |> equal(nan_count(pre_l) + nan_count(pre_s), 2 * AD_YOFF, "tts_adain: the prefix before yoff keeps its sentinel")
-            t |> success(elem_all(pre_i, GARBAGE), "tts_adain in place: the prefix before xoff is untouched")
+            t |> success(elem_all(pre_i, POISON), "tts_adain in place: the prefix before xoff is untouched")
             destroy_device_buf(x0d)
             destroy_device_buf(xpd)
             destroy_device_buf(xid)
@@ -882,8 +849,8 @@ def test_vkt_add_scale(t0 : T?) {
             let scale = 1.0 / sqrt(2.0)
             let a <- row_fill(n, 41, 7, 0.05, 2.1)
             let b <- row_fill(n, 17, 3, 0.04, 1.9)
-            var ap <- with_base(a, AS_AOFF)
-            var bp <- with_base(b, AS_BOFF)
+            var ap <- at_base(a, AS_AOFF)
+            var bp <- at_base(b, AS_BOFF)
             let ad = dev_upload(ap)
             let aid = dev_upload(ap)
             let bd = dev_upload(bp)
@@ -905,11 +872,10 @@ def test_vkt_add_scale(t0 : T?) {
                 enc_tts_add_scale_cls(raw, h, s_i, pi, int64(n))
                 cmd_copy_planes(raw, h, fixed_array(od, aid), host, sizes, B_O | B_AI)
             }
-            let got_o <- staged(host.mapped, at[0] + int64(AS_OOFF) * 4l, n, type<float>)
-            let pre_o <- staged(host.mapped, at[0], AS_OOFF, type<float>)
-            let tail_o <- staged(host.mapped, at[0] + int64(AS_OOFF + n) * 4l, AS_SLACK, type<float>)
-            let got_i <- staged(host.mapped, at[1] + int64(AS_AOFF) * 4l, n, type<float>)
-            let pre_i <- staged(host.mapped, at[1], AS_AOFF, type<float>)
+            let whole_o <- staged(host.mapped, at[0], AS_OOFF + n + AS_SLACK, type<float>)
+            let got_o <- subarray(whole_o, range(AS_OOFF, AS_OOFF + n))
+            let whole_i <- staged(host.mapped, at[1], AS_AOFF + n, type<float>)
+            let got_i <- subarray(whole_i, range(AS_AOFF, AS_AOFF + n))
             let want <- [for (i in range(n)); (a[i] + b[i]) * scale]
             let bad = mismatch_exact(got_o, want)
             t |> success(bad == 0, "tts_add_scale: every element == (a + b) * scale ({bad} of {n} off)")
@@ -918,8 +884,8 @@ def test_vkt_add_scale(t0 : T?) {
             t |> success(bad_i == 0, "tts_add_scale in place: every element == (a + b) * scale ({bad_i} of {n} off)")
             t |> success(got_i[0] + 0.5 != want[0], "tts_add_scale in place: the bar reds a poisoned element")
             t |> success(got_i[0] != a[0], "tts_add_scale in place control: the input row is overwritten")
-            t |> equal(nan_count(pre_o) + nan_count(tail_o), AS_OOFF + AS_SLACK, "tts_add_scale: the elements outside the run keep their sentinel")
-            t |> success(elem_all(pre_i, GARBAGE), "tts_add_scale in place: the prefix before aoff is untouched")
+            t |> success(outside_run(whole_o, AS_OOFF, n, NAN_SENTINEL), "tts_add_scale: the elements outside the run keep their sentinel")
+            t |> success(outside_run(whole_i, AS_AOFF, n, POISON), "tts_add_scale in place: the prefix before aoff is untouched")
             destroy_device_buf(ad)
             destroy_device_buf(aid)
             destroy_device_buf(bd)

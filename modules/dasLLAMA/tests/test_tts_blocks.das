@@ -216,9 +216,9 @@ def private pad_and_polar_case() : BlockCase {
     var inscope x_rows : array<float>
     transpose_ct(x_ct, c, t, x_rows)
     var inscope want : array<float>
-    var inscope y_rows : array<float>
+    var inscope y_rows := x_rows
     pad_reflect_left(x_ct, c, t, 1l, want)
-    pad_reflect_left_rows(x_rows, t, c, 1l, y_rows)
+    pad_reflect_left_rows_inplace(y_rows, t, c, 1l)
     var inscope got : array<float>
     transpose_tc(y_rows, t + 1l, c, got)
     var inscope env : array<float>

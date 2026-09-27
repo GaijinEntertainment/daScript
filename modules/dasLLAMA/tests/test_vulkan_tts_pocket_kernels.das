@@ -12,6 +12,7 @@ require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
 require _compares
 require dasllama/dasllama_tts_blocks
+require dasllama/dasllama_pocket   // modulate: the flow head's adaLN, the GEMV cell's CPU chain
 require dasllama/dasllama_rope
 require dasllama/dasllama_math
 require daslib/jobque_boost
@@ -22,29 +23,6 @@ require daslib/jobque_boost
 //! NaN fill, every compare with its poisoned element.
 
 let private SLACK = 5      //! the elements past a run, left at their fill
-let private GAP = 3        //! the poisoned slots between two runs of one slab plane
-
-//! `a` behind `base` slots of `POISON` and followed by `SLACK` more: a device plane whose run starts at an element base
-def private with_base(a : array<float>; base : int) : array<float> {
-    var out <- poison_plane(base + length(a) + SLACK)
-    for (i in range(length(a))) {
-        out[base + i] = a[i]
-    }
-    return <- out
-}
-
-//! `a` appended to `plane` behind `GAP` poisoned slots; its element base in the plane
-def private put(var plane : array<float>; a : array<float>) : int {
-    let off = length(plane) + GAP
-    plane |> resize(off + length(a))
-    for (i in range(GAP)) {
-        plane[off - GAP + i] = POISON
-    }
-    for (i in range(length(a))) {
-        plane[off + i] = a[i]
-    }
-    return off
-}
 
 let private PR_SROWS = 30
 let private PR_SS = 40
@@ -154,8 +132,8 @@ def test_vkt_pk_row_scale(t0 : T?) {
             let n = RS_T * RS_C
             let x <- row_fill(n, 41, 7, 0.05, 2.1)
             let scale <- row_fill(RS_C, 29, 3, 0.03, 1.2)
-            let xp <- with_base(x, 0)
-            let wn <- with_base(scale, RS_SOFF)
+            let xp <- at_base(x, 0, SLACK)
+            let wn <- at_base(scale, RS_SOFF, SLACK)
             let xd = dev_upload(xp)
             let wnd = dev_upload(wn)
             let bx = long_length(xp) * 4l
@@ -169,7 +147,7 @@ def test_vkt_pk_row_scale(t0 : T?) {
                 cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
             }
             let whole <- staged(host.mapped, at[0], length(xp), type<float>)
-            let got <- [for (i in range(n)); whole[i]]
+            let got <- span_of(whole, 0, n)
             var want := x
             with_job_que() {
                 setup_dasllama_jobque_()
@@ -179,8 +157,7 @@ def test_vkt_pk_row_scale(t0 : T?) {
             t |> success(bad == 0, "tts_pk_row_scale: every element == the CPU layer_scale_rows ({bad} of {n} off)")
             t |> success(got[n - 1] + 0.5 != want[n - 1], "tts_pk_row_scale: the compare reds a poisoned element")
             t |> success(got[0] != x[0], "tts_pk_row_scale in place control: the input row is overwritten")
-            let outside <- [for (i in range(length(whole))); whole[i]; where i >= n]
-            t |> success(elem_all(outside, POISON), "tts_pk_row_scale: the slack past the rows is untouched")
+            t |> success(outside_run(whole, 0, n, POISON), "tts_pk_row_scale: the slack past the rows is untouched")
             destroy_device_buf(xd)
             destroy_device_buf(wnd)
             destroy_host_buf(host)
@@ -267,11 +244,11 @@ def private pk_attn_device(kc : TtsKvCache; qfull : array<float>) : PkAttnOut {
         let d = PA_D
         var inscope rows <- pk_cache_rows(kc, -1l)
         var inscope rows_x <- pk_cache_rows(kc, int64(PA_DEC_POS - PA_DEC_CTX))
-        let qd = dev_upload(with_base(qfull, PA_QOFF))
-        let kd = dev_upload(with_base(rows.k, PA_KOFF))
-        let vd = dev_upload(with_base(rows.v, PA_VOFF))
-        let kxd = dev_upload(with_base(rows_x.k, PA_KOFF))
-        let vxd = dev_upload(with_base(rows_x.v, PA_VOFF))
+        let qd = dev_upload(at_base(qfull, PA_QOFF, SLACK))
+        let kd = dev_upload(at_base(rows.k, PA_KOFF, SLACK))
+        let vd = dev_upload(at_base(rows.v, PA_VOFF, SLACK))
+        let kxd = dev_upload(at_base(rows_x.k, PA_KOFF, SLACK))
+        let vxd = dev_upload(at_base(rows_x.v, PA_VOFF, SLACK))
         let bq = int64(PA_QOFF + length(qfull) + SLACK) * 4l
         let bk = int64(PA_KOFF + length(rows.k) + SLACK) * 4l
         let bv = int64(PA_VOFF + length(rows.v) + SLACK) * 4l
@@ -401,14 +378,6 @@ struct PkGemvRows {
     lat : array<float>
 }
 
-//! `put` at the next run base on the four lattice: the quad dot's weight rows
-def private put4(var plane : array<float>; a : array<float>) : int {
-    while ((length(plane) + GAP) % 4 != 0) {
-        plane |> push(POISON)
-    }
-    return put(plane, a)
-}
-
 //! the fixture with its weight rows on the four lattice (`quad`: the float4 dot) or off it (the float dot)
 def private pk_gemv_fixture(quad : bool) : PkGemvFix {
     let nin = PG_NIN
@@ -430,15 +399,8 @@ def private pk_gemv_fixture(quad : bool) : PkGemvFix {
     f.lwoff = put(f.slab, f.norm.w)
     f.lboff = put(f.slab, f.norm.b)
     f.aoff = put(f.slab, f.aux)
-    f.slab |> push_from(poison_plane(GAP))
+    f.slab |> push_from(poison_plane(SLAB_GAP))
     return <- f
-}
-
-//! the CPU `modulate`: x * (1 + scale) + shift, the shift row first in mod
-def private pk_modulate(var x : array<float>; mods : array<float>; n : int) {
-    for (j in range(n)) {
-        x[j] = x[j] * (1.0 + mods[n + j]) + mods[j]
-    }
 }
 
 //! the CPU chain of each stamp: the linear over x or over the normed and modulated x, then the stamp's epilogue
@@ -452,7 +414,7 @@ def private pk_gemv_wants(f : PkGemvFix) : PkGemvRows {
         linear_vec(f.lin, f.x, d_plain)
         var xn := f.x
         layernorm_rows(xn, 1l, int64(nin), f.norm, PG_EPS)
-        pk_modulate(xn, f.mods, nin)
+        modulate(xn, f.mods, int64(nin))
         linear_vec(f.lin, xn, d_norm)
     }
     var out : PkGemvRows
@@ -481,10 +443,10 @@ def private pk_gemv_device(f : PkGemvFix) : PkGemvRows {
         let ny = PG_YOFF + nout + SLACK
         let nlat = PG_LOFF + nout + SLACK
         let wnd = dev_upload(f.slab)
-        let xd = dev_upload(with_base(f.x, PG_XOFF))
-        let md = dev_upload(with_base(f.mods, PG_MOFF))
-        let x0d = dev_upload(with_base(f.x0, PG_X0OFF))
-        let ygd = dev_upload(with_base(f.y0, PG_YOFF))
+        let xd = dev_upload(at_base(f.x, PG_XOFF, SLACK))
+        let md = dev_upload(at_base(f.mods, PG_MOFF, SLACK))
+        let x0d = dev_upload(at_base(f.x0, PG_X0OFF, SLACK))
+        let ygd = dev_upload(at_base(f.y0, PG_YOFF, SLACK))
         let bwn = long_length(f.slab) * 4l
         let bx = int64(PG_XOFF + length(f.x) + SLACK) * 4l
         let bm = int64(PG_MOFF + length(f.mods) + SLACK) * 4l
@@ -535,14 +497,9 @@ def private pk_gemv_device(f : PkGemvFix) : PkGemvRows {
     return <- out
 }
 
-//! the output row out of a staged plane
-def private pk_row(whole : array<float>; off : int) : array<float> {
-    return <- [for (i in range(PG_NOUT)); whole[off + i]]
-}
-
 //! one GEMV stamp's row out of its staged plane against its CPU chain, the maxdiff logged, with its poisoned element
 def private pk_gemv_check(t : T?; tag : string; whole : array<float>; off : int; want : array<float>) {
-    let got <- pk_row(whole, off)
+    let got <- span_of(whole, off, PG_NOUT)
     let bad = mismatch_approx(got, want)
     let mi = maxdiff_at(got, want)
     to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi}\n")
@@ -567,8 +524,7 @@ def private pk_gemv_arm(t : T?; arm : string; quad : bool) {
     t |> equal(nan_count(got.dot) + nan_count(got.ln) + nan_count(got.add) + nan_count(got.tail), 4 * (ny - PG_NOUT),
         "{arm} tts_pk_gemv: the slots before yoff and the masked rows past nout keep their sentinel")
     t |> equal(nan_count(got.lat), PG_LOFF + SLACK, "{arm} tts_pk_gemv_tail: the latent plane outside its row keeps its sentinel")
-    let gate_out <- [for (i in range(ny)); got.gate[i]; where i < PG_YOFF || i >= PG_YOFF + PG_NOUT]
-    t |> success(elem_all(gate_out, POISON), "{arm} tts_pk_gemv_gate: the residual plane outside its row is untouched")
+    t |> success(outside_run(got.gate, PG_YOFF, PG_NOUT, POISON), "{arm} tts_pk_gemv_gate: the residual plane outside its row is untouched")
 }
 
 [test]
@@ -621,7 +577,7 @@ def test_vkt_pk_rope(t0 : T?) {
             let kspan <- [for (e in range(nk)); x[(e / PO_D) * PO_QS + PO_D + e % PO_D]]
             var want := kspan
             rope_rows(want, int64(PO_T), int64(PO_D), int64(PO_DH), int64(PO_POS0), PO_THETA)
-            let xp <- with_base(x, PO_XOFF)
+            let xp <- at_base(x, PO_XOFF, SLACK)
             let xd = dev_upload(xp)
             let wnd = dev_upload(slab)
             let bx = long_length(xp) * 4l
@@ -653,8 +609,7 @@ def test_vkt_pk_rope(t0 : T?) {
                 }
             }
             t |> equal(kept, PO_T * 2 * PO_D, "tts_pk_rope: the q and v spans are untouched")
-            let outside <- [for (i in range(length(whole))); whole[i]; where i < PO_XOFF || i >= PO_XOFF + n]
-            t |> success(elem_all(outside, POISON), "tts_pk_rope: the prefix before xoff and the slack past the rows are untouched")
+            t |> success(outside_run(whole, PO_XOFF, n, POISON), "tts_pk_rope: the prefix before xoff and the slack past the rows are untouched")
             destroy_device_buf(xd)
             destroy_device_buf(wnd)
             destroy_host_buf(host)
@@ -718,7 +673,7 @@ def private pk_fused_fixture() : PkFusedFix {
     f.lwoff = put(f.slab, f.norm.w)
     f.lboff = put(f.slab, f.norm.b)
     f.aoff = put(f.slab, f.scale)
-    f.slab |> push_from(poison_plane(GAP))
+    f.slab |> push_from(poison_plane(SLAB_GAP))
     var cos_tab : array<float>
     var sin_tab : array<float>
     let no_freqs : array<float>
@@ -729,9 +684,7 @@ def private pk_fused_fixture() : PkFusedFix {
 }
 
 //! a span of a row
-def private span_of(row : array<float>; from, n : int) : array<float> {
-    return <- [for (i in range(n)); row[from + i]]
-}
+def private span_of(row : array<float>; from, n : int) : array<float> => subarray(row, range(from, from + n))
 
 //! one fused stamp's row against its CPU chain, the maxdiff logged, with its poisoned element
 def private pk_fused_check(t : T?; tag : string; got, want : array<float>) {
@@ -783,12 +736,12 @@ def test_vkt_pk_gemv_fused(t0 : T?) {   // nolint:STYLE038 — one fixture's fou
             let ng = PF_YOFF + d + SLACK
             let nc = PF_CAP * d
             let wnd = dev_upload(f.slab)
-            let xd = dev_upload(with_base(f.x, PF_XOFF))
+            let xd = dev_upload(at_base(f.x, PF_XOFF, SLACK))
             let tabsd = dev_upload(f.tabs)
             let kcd = dev_upload(poison_plane(nc))
             let vcd = dev_upload(poison_plane(nc))
-            let yasd = dev_upload(with_base(f.y0, PF_YOFF))
-            let yad = dev_upload(with_base(f.y0, PF_YOFF))
+            let yasd = dev_upload(at_base(f.y0, PF_YOFF, SLACK))
+            let yad = dev_upload(at_base(f.y0, PF_YOFF, SLACK))
             let yd = make_device_buf(int64(ny) * 4l)
             let ygd = make_device_buf(int64(ng) * 4l)
             let bwn = long_length(f.slab) * 4l

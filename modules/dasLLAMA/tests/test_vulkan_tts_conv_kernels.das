@@ -25,16 +25,8 @@ require daslib/jobque_boost
 
 //! logs the widest |got - want| with the row and the column it sits at, rows `width` wide
 def private log_maxdiff(tag : string; got, want : array<float>; width : int) {
-    var worst = 0.0
-    var at = 0
-    for (i in range(length(got))) {
-        let d = abs(got[i] - want[i])
-        if (d > worst) {
-            worst = d
-            at = i
-        }
-    }
-    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {worst} at row {at / width} column {at % width}\n")
+    let mi = maxdiff_at(got, want)
+    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / width} column {mi % width}\n")
 }
 
 struct private ConvGeom {
@@ -95,19 +87,6 @@ def private conv_ref(var c : TtsConv1d; x : array<float>; tin : int) : array<flo
     return <- y
 }
 
-//! x [cin][tin] at `xoff` in the device plane, the slots under it poisoned
-def private at_offset(x : array<float>; xoff : int) : array<float> {
-    var a : array<float>
-    a |> resize(xoff + length(x))
-    for (i in range(xoff)) {
-        a[i] = POISON
-    }
-    for (i in range(length(x))) {
-        a[xoff + i] = x[i]
-    }
-    return <- a
-}
-
 //! one conv through TtsIm2col + F32GemmB against the CPU conv1d: the columns and the output under a NaN fill first
 def private im2col_arm(t : T?; tag : string; g : ConvGeom) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -123,7 +102,7 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom) {
         if (g.rows_x) {
             transpose_ct(x, int64(g.cin), int64(g.tin), x_rows)
         }
-        var xdev <- at_offset(g.rows_x ? x_rows : x, g.xoff)
+        var xdev <- at_base(g.rows_x ? x_rows : x, g.xoff)
         var y_ref <- conv_ref(c, x, g.tin)
         let ny = tout * g.cout
         let bx = long_length(xdev) * 4l
@@ -205,7 +184,7 @@ def private im2col16_arm(t : T?; tag : string; g : ConvGeom) {
         if (g.rows_x) {
             transpose_ct(x, int64(g.cin), int64(g.tin), x_rows)
         }
-        var xdev <- at_offset(g.rows_x ? x_rows : x, g.xoff)
+        var xdev <- at_base(g.rows_x ? x_rows : x, g.xoff)
         var y_ref <- conv_ref(c, x, g.tin)
         let ny = tout * g.cout
         let bx = long_length(xdev) * 4l
@@ -396,28 +375,22 @@ struct private LstmFixture {
 }
 
 def private lstm_fixture(hd : int) : LstmFixture {
-    var f = LstmFixture(gstride = (4 * hd + 63) / 64 * 64, bwd_hh = 4 * hd * hd + LSTM_HH_GAP)
+    var f = LstmFixture(gstride = (4 * hd + 63) / 64 * 64)
     var lf <- make_lstm(hd, 0)
     var lb <- make_lstm(hd, 19)
     f.x <- row_fill(LSTM_T * LSTM_NIN, 41, 7, 0.03, 1.44)
     f.gates <- gates_ref(lf, f.x, f.gstride)
     var gb <- gates_ref(lb, f.x, f.gstride)
     f.gates |> push_from(gb)
-    let nhh = 4 * hd * hd
-    f.whh |> resize(f.bwd_hh + nhh)
-    for (o in range(4 * hd)) {   //! each direction's w_hh transposed [H][4H], as the slab lays it
-        for (i in range(hd)) {
-            f.whh[i * 4 * hd + o] = lf.w_hh[o * hd + i]
-            f.whh[f.bwd_hh + i * 4 * hd + o] = lb.w_hh[o * hd + i]
-        }
-    }
-    for (i in range(nhh, f.bwd_hh)) {
-        f.whh[i] = POISON
-    }
+    var bwd_whh : array<float>
+    transpose_ct(lf.w_hh, int64(4 * hd), int64(hd), f.whh)   //! each direction's w_hh transposed [H][4H], as the slab lays it
+    transpose_ct(lb.w_hh, int64(4 * hd), int64(hd), bwd_whh)
+    f.bwd_hh = put(f.whh, bwd_whh, LSTM_HH_GAP)
     f.y_ref <- bilstm_ref(lf, lb, f.x)
     var yff <- bilstm_ref(lf, lf, f.x)
     f.yc_ref <- half_rows(yff, hd, 1)
     delete gb
+    delete bwd_whh
     delete yff
     delete lf
     delete lb
@@ -518,19 +491,10 @@ let private PD_GAP = 3       //! poisoned slots between the weight rows and the 
 
 //! the pool's slab plane: w [c][k] at PD_WOFF, the bias row after PD_GAP poisoned slots, four poisoned slots past it
 def private pool_slab(c : TtsConv1d) : array<float> {
-    let nw = PD_C * PD_K
-    let boff = PD_WOFF + nw + PD_GAP
     var wn : array<float>
-    wn |> resize(boff + PD_C + 4)
-    for (v in wn) {
-        v = POISON
-    }
-    for (i in range(nw)) {
-        wn[PD_WOFF + i] = c.w[i]
-    }
-    for (j in range(PD_C)) {
-        wn[boff + j] = c.b[j]
-    }
+    put(wn, c.w, PD_WOFF)
+    put(wn, c.b, PD_GAP)
+    wn |> push_from(poison_plane(4))
     return <- wn
 }
 

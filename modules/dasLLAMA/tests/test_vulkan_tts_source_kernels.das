@@ -34,39 +34,14 @@ def private f16_fill(n, seed_mul : int; scale, bias : float) : array<float> {
     return <- a
 }
 
-//! `a` written into `plane` from element `off`
-def private put_at(var plane : array<float>; off : int; a : array<float>) {
-    for (i in range(length(a))) {
-        plane[off + i] = a[i]
-    }
-}
-
-//! within `absf` absolute or `rel` relative of the larger magnitude (floored at 1) - the Metal gates' two-bar test
-def private bar_ok(g, w, rel, absf : float) : bool => abs(g - w) <= absf || abs(g - w) <= rel * max(1.0, max(abs(g), abs(w)))
-
 //! `w` moved by a hundredth of its magnitude (floored at 1): outside every bar in this file
 def private poison_of(w : float) : float => w + max(1.0, abs(w)) * 0.01
 
 //! the elements of `got` outside the bars, the first six and the widest miss logged (its row and column in rows `width` wide)
 def private bars_bad(tag : string; got, want : array<float>; rel, absf : float; width : int) : int {
-    var bad = 0
-    var worst = 0.0
-    var at = 0
-    for (i in range(length(want))) {
-        let d = abs(got[i] - want[i])
-        if (d > worst) {
-            worst = d
-            at = i
-        }
-        if (!bar_ok(got[i], want[i], rel, absf)) {
-            if (bad < 6) {
-                to_log(LOG_ERROR, "  {tag} mismatch [{i}] gpu {got[i]} cpu {want[i]}\n")
-            }
-            bad++
-        }
-    }
-    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {worst} at row {at / width} column {at % width}\n")
-    return bad
+    let mi = maxdiff_at(got, want)
+    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / width} column {mi % width}\n")
+    return mismatch_rel(got, want, rel, absf, tag)
 }
 
 let private AX_N = 1030        //! four whole workgroups and six more
@@ -87,10 +62,8 @@ def test_vkt_axpy(t0 : T?) {
             let n = AX_N
             let ob <- f16_fill(n, 7, 0.05, -1.1)
             let yv <- f16_fill(n, 5, 0.04, -0.9)
-            var op <- poison_plane(AX_OOFF + n + SLACK)
-            put_at(op, AX_OOFF, ob)
-            var yp <- poison_plane(AX_YOFF + n)
-            put_at(yp, AX_YOFF, yv)
+            let op <- at_base(ob, AX_OOFF, SLACK)
+            let yp <- at_base(yv, AX_YOFF)
             let oad = dev_upload(op)
             let yd = dev_upload(yp)
             let bo = long_length(op) * 4l
@@ -110,12 +83,10 @@ def test_vkt_axpy(t0 : T?) {
                 enc_tts_axpy_cls(raw, h, s_z, pz, int64(n))
                 cmd_copy_planes(raw, h, fixed_array(oad, ozd), host, sizes, B_OA | B_OZ)
             }
-            let got_a <- staged(host.mapped, at[0] + int64(AX_OOFF) * 4l, n, type<float>)
-            let pre_a <- staged(host.mapped, at[0], AX_OOFF, type<float>)
-            let tail_a <- staged(host.mapped, at[0] + int64(AX_OOFF + n) * 4l, SLACK, type<float>)
-            let got_z <- staged(host.mapped, at[1] + int64(AX_OOFF) * 4l, n, type<float>)
-            let pre_z <- staged(host.mapped, at[1], AX_OOFF, type<float>)
-            let tail_z <- staged(host.mapped, at[1] + int64(AX_OOFF + n) * 4l, SLACK, type<float>)
+            let whole_a <- staged(host.mapped, at[0], length(op), type<float>)
+            let got_a <- subarray(whole_a, range(AX_OOFF, AX_OOFF + n))
+            let whole_z <- staged(host.mapped, at[1], length(op), type<float>)
+            let got_z <- subarray(whole_z, range(AX_OOFF, AX_OOFF + n))
             let want_a <- [for (i in range(n)); ob[i] + AX_SCALE * yv[i]]
             let want_z <- [for (i in range(n)); AX_SCALE * yv[i]]
             let bad_a = mismatch_exact(got_a, want_a)
@@ -125,8 +96,8 @@ def test_vkt_axpy(t0 : T?) {
             t |> success(bad_z == 0, "tts_axpy zero = 1: every element == 0.25 y over a NaN-filled o ({bad_z} of {n} off)")
             t |> success(got_z[0] != poison_of(want_z[0]), "tts_axpy zero = 1: the bar reds a poisoned element")
             t |> success(ob[0] != 0.0 && got_a[0] != got_z[0], "tts_axpy control: the same dispatch at zero = 0 adds o's old contents")
-            t |> success(elem_all(pre_a, POISON) && elem_all(tail_a, POISON), "tts_axpy zero = 0: the elements outside the run are untouched")
-            t |> equal(nan_count(pre_z) + nan_count(tail_z), AX_OOFF + SLACK, "tts_axpy zero = 1: the elements outside the run keep their sentinel")
+            t |> success(outside_run(whole_a, AX_OOFF, n, POISON), "tts_axpy zero = 0: the elements outside the run are untouched")
+            t |> success(outside_run(whole_z, AX_OOFF, n, NAN_SENTINEL), "tts_axpy zero = 1: the elements outside the run keep their sentinel")
             destroy_device_buf(oad)
             destroy_device_buf(ozd)
             destroy_device_buf(yd)
@@ -167,7 +138,8 @@ def test_vkt_reflect1(t0 : T?) {
             }
             let got <- staged(host.mapped, 0l, total, type<float>)
             let tail <- staged(host.mapped, int64(total) * 4l, SLACK, type<float>)
-            let want <- [for (i in range(total)); x[(i / RF_C == 0 ? 1 : i / RF_C - 1) * RF_C + i % RF_C]]
+            var want := x
+            pad_reflect_left_rows_inplace(want, int64(RF_T), int64(RF_C), 1l)
             let bad = mismatch_exact(got, want)
             t |> success(bad == 0, "reflect pad: row 0 == x's row 1, row r == x's row r - 1 over {RF_T + 1} x {RF_C} ({bad} of {total} off)")
             t |> success(got[RF_C + 1] != poison_of(want[RF_C + 1]), "reflect pad: the bar reds a poisoned element")
@@ -228,9 +200,9 @@ def private src_fixture(torch : bool; up, frames : int) : SrcFixture {
     var lin = TtsLinear(nin = int64(SRC_NH), nout = 1l)
     lin.w <- f16_fill(SRC_NH, 5, 0.3, 0.2)
     lin.b |> push(0.05)
-    f.wn <- poison_plane(src_boff() + 1 + 4)
-    put_at(f.wn, SRC_WOFF, lin.w)
-    f.wn[src_boff()] = lin.b[0]
+    put(f.wn, lin.w, SRC_WOFF)
+    put(f.wn, lin.b, SRC_GAP)
+    f.wn |> push_from(poison_plane(4))
     let cfg = SineSourceCfg(upsample = int64(up), sample_rate = SRC_SR, n_harm = int64(SRC_NH), sine_amp = 0.1, noise_std = 0.003,
         voiced_thr = 10.0, torch_math = torch)
     var cr = SineSourceCarry()
@@ -550,10 +522,10 @@ def private stft_arm(t : T?; reflect : bool) {
         for (tap in range(ST_K)) {
             wim[(ST_BINS - 1) * ST_K + tap] = 0.0
         }
-        let imoff = ST_REOFF + nb + ST_GAP
-        var wn <- poison_plane(imoff + nb + 4)
-        put_at(wn, ST_REOFF, wre)
-        put_at(wn, imoff, wim)
+        var wn : array<float>
+        put(wn, wre, ST_REOFF)
+        let imoff = put(wn, wim, ST_GAP)
+        wn |> push_from(poison_plane(4))
         let want <- stft_ref(har, wre, wim, reflect)
         var neg = 0
         var pos = 0
@@ -687,12 +659,11 @@ def private istft_arm(t : T?; envelope : bool) {
         var window <- f16_fill(IS_K, 11, 0.1, 0.3)
         window[1] = 0.0   //! taps 1 and 5 carry every sample m = 1 mod 4: their envelope is zero
         window[5] = 0.0
-        let imoff = IS_REOFF + nb + IS_GAP
-        let wnoff = imoff + nb + IS_GAP
-        var wn <- poison_plane(wnoff + IS_K + 4)
-        put_at(wn, IS_REOFF, wre)
-        put_at(wn, imoff, wim)
-        put_at(wn, wnoff, window)
+        var wn : array<float>
+        put(wn, wre, IS_REOFF)
+        let imoff = put(wn, wim, IS_GAP)
+        let wnoff = put(wn, window, IS_GAP)
+        wn |> push_from(poison_plane(4))
         var ref <- istft_ref(y, wre, wim, window, envelope)
         t |> success(ref.bare > 0 && ref.bare < n, "{tag}: {ref.bare} of {n} samples carry a negligible envelope")
         var yp := y

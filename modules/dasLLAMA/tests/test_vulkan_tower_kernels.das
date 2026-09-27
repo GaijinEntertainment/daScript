@@ -598,12 +598,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             var clamped_x : array<float>
             clamped_x |> resize(nd)
             clamp_rows(clamped_x, x, int64(nd), lo2, hi2)
-            var bad_cvt = 0
-            for (i in range(nd)) {
-                if (uint(xh_dev[i]) != f32_to_f16(clamped_x[i])) {
-                    bad_cvt++
-                }
-            }
+            let bad_cvt = halves_off(xh_dev, clamped_x)
             t |> success(bad_cvt == 0, "tower_clamp_cvt: the f16 feed is the clamped rows rounded to f16, bit for bit ({bad_cvt} of {nd} off)")
             t |> success(uint(xh_dev[nd - 1]) != f32_to_f16(clamped_x[nd - 1] + 0.5), "tower_clamp_cvt: the bar reds a poisoned element")
             var xq_ref : array<int8>
@@ -844,10 +839,7 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let bad_attn = mismatch_approx(ao_dev, ao_ref)
             t |> success(bad_attn == 0, "tower_g4a_attn (64-wide stamp): the windowed RPE attention matches the CPU loop ({bad_attn} of {nd} off)")
             t |> success(!approx(ao_dev[nd - 1], ao_ref[nd - 1] + 0.5), "tower_g4a_attn: the bar reds a poisoned element")
-            var k_scaled := k
-            for (i in range(nd)) {
-                k_scaled[i] *= 1.5
-            }
+            let k_scaled <- scaled_copy(k, 1.5)
             let ao_ctl <- g4a_attn_ref(q, k_scaled, v, rpe, wn, rows, d, ROWS_HEADS, hs, qscale, kscale, G4A_CAP)
             let moved = mismatch_approx(ao_dev, ao_ctl)
             t |> success(moved > nd / 4, "tower_g4a_attn control: scaled keys land the oracle elsewhere ({moved} of {nd} moved)")
@@ -855,7 +847,7 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             // the scores reach the softcap's knee: the oracle at the cap, and at four times the cap as the control
             let heads2 = ROWS_HEADS / 2
             let hs2 = d / heads2
-            var q_at_cap_knee <- [for (qv in q); qv * 30.0]
+            var q_at_cap_knee <- scaled_copy(q, 30.0)
             upload_region_at(qd, 0l, unsafe(addr<uint8 const?>(q_at_cap_knee[0])), bx)
             nan_sentinel_upload(aod, bx)
             var s_attn128 = set_tower_g4a_attn_cls(fixed_array(qd, kd, vd, aod, rd, wd), fixed_array(bx, bx, bx, bx, brpe, bw), fixed_array(0u, 0u, 0u, B_AO, 0u, 0u))
@@ -1377,17 +1369,9 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let ghrelu_dev <- staged(host.mapped, at[11], nd, type<uint16>)
             let x16z_dev <- staged(host.mapped, at[12], nd, type<float>)
             let xb2h0_dev <- staged(host.mapped, at[13], nd / 2, type<uint>)
-            var bad_ln16 = 0
-            var bad_bias16 = 0
+            let bad_ln16 = halves_off(xbh_dev, xb_dev)
+            let bad_bias16 = halves_off(gh_dev, g_dev)
             var bad_post16 = 0
-            for (i in range(nd)) {
-                if (uint(xbh_dev[i]) != f32_to_f16(xb_dev[i])) {
-                    bad_ln16++
-                }
-                if (uint(gh_dev[i]) != f32_to_f16(g_dev[i])) {
-                    bad_bias16++
-                }
-            }
             t |> success(bad_ln16 == 0, "tower_ln16: the f16 rows are the f32 stamp's rows rounded to half, bit for bit ({bad_ln16} of {nd} off)")
             t |> success(uint(xbh_dev[0]) != f32_to_f16(xb_dev[0] + 0.5), "tower_ln16: the bar reds a poisoned element")
             var xb_ref : array<float>
@@ -1980,16 +1964,6 @@ def private halves_off(got : array<uint16>; want : array<float>) : int {
     return bad
 }
 
-//! the first element of `want` that is not zero - the poisoned-element control's seat, off the pad columns
-def private first_live(want : array<float>) : int {
-    for (i in range(length(want))) {
-        if (want[i] != 0.0) {
-            return i
-        }
-    }
-    return 0
-}
-
 let private FM_IW = 7          //! the k3 s2 p1 conv over the 7 x 5 image gives the 4 x 3 output
 let private FM_IH = 5
 let private FM_CIN = 3
@@ -2159,7 +2133,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             }
             let bad_im = halves_off(col_dev, col_want)
             t |> success(bad_im == 0, "tower_im2col: the k3 s2 p1 columns over two chunks, the pad and the zero tail, bit for bit ({bad_im} of {n_col} off)")
-            let live_im = first_live(col_want)
+            let live_im = find_index_if(col_want, $(v) => v != 0.0)
             t |> success(uint(col_dev[live_im]) != f32_to_f16(col_want[live_im] + 0.5), "tower_im2col: the bar reds a poisoned element")
             var col1_want : array<float>
             col1_want |> resize(len1 * kdp1)
@@ -2187,9 +2161,9 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             let bad_im2 = halves_off(col2_dev, col2_want)
             t |> success(bad_im1 == 0, "the stem's im2col (tts_im2col16, channel-major, stride 1): the mel's k3 columns with the zero pad and tail, bit for bit ({bad_im1} of {len1 * kdp1} off)")
             t |> success(bad_im2 == 0, "the stem's im2col (tts_im2col16, row-major, stride 2): the conv output's k3 columns at every second position and the zero pad columns, bit for bit ({bad_im2} of {rows2 * kdp2} off)")
-            let live_im1 = first_live(col1_want)
+            let live_im1 = find_index_if(col1_want, $(v) => v != 0.0)
             t |> success(uint(col1_dev[live_im1]) != f32_to_f16(col1_want[live_im1] + 0.5), "the stem's im2col (channel-major): the bar reds a poisoned element")
-            let live_im2 = first_live(col2_want)
+            let live_im2 = find_index_if(col2_want, $(v) => v != 0.0)
             t |> success(uint(col2_dev[live_im2]) != f32_to_f16(col2_want[live_im2] + 0.5), "the stem's im2col (row-major, stride 2): the bar reds a poisoned element")
             var feat_want : array<float>
             feat_want |> resize(q3_pos * q3_feat)
@@ -2200,7 +2174,8 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             }
             let bad_sh = halves_off(feat_dev, feat_want)
             t |> success(bad_sh == 0, "tower_q3a_shuffle: the feature rows off the third conv stage, bit for bit ({bad_sh} of {q3_pos * q3_feat} off)")
-            t |> success(uint(feat_dev[first_live(feat_want)]) != f32_to_f16(feat_want[first_live(feat_want)] + 0.5), "tower_q3a_shuffle: the bar reds a poisoned element")
+            let live_sh = find_index_if(feat_want, $(v) => v != 0.0)
+            t |> success(uint(feat_dev[live_sh]) != f32_to_f16(feat_want[live_sh] + 0.5), "tower_q3a_shuffle: the bar reds a poisoned element")
             var fs_want : array<float>
             fs_want |> resize(fs_t * fs_w * fs_c)
             for (gid in range(fs_t * fs_w * fs_c)) {
@@ -2275,7 +2250,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                 }
             }
             let bad_ln = mismatch_approx(ln_dev, ln_want)
-            let live_ln = first_live(ln_want)
+            let live_ln = find_index_if(ln_want, $(v) => v != 0.0)
             t |> success(bad_ln == 0 && ln_dev[live_ln] != x[live_ln], "tower_ln_relu: the channel LayerNorm then ReLU match the CPU loop ({bad_ln} of {nd} off)")
             t |> success(!approx(ln_dev[live_ln], ln_want[live_ln] + 0.5), "tower_ln_relu: the bar reds a poisoned element")
             for (b in fixed_array(srcd, cold, mel1d, col1d, cv2d, col2d, y3d, featd, fsd, fsod, xd, wd, gqd, gpd, cvtd, addd, find, lnd)) {
@@ -2583,7 +2558,7 @@ def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {   // nolint:STYLE038 — one fla
             var q <- row_fill(nd, 41, 3, 0.03, 1.1)
             var k <- row_fill(nd, 17, 11, 0.04, 1.3)
             var v <- row_fill(nd, 29, 13, 0.05, 1.7)
-            var posl <- row_fill(ww * d, 13, 2, 0.02, 0.9)
+            let posl <- row_fill(ww * d, 13, 2, 0.02, 0.9)
             var wn <- row_fill(2 * d, 7, 1, 0.01, 0.3)   // bias_u at 0, bias_v at d
             let wg = int64((rows + 63) / 64)
             let ao_rows = int(wg) * 64   // a row a lane: the idle lanes' rows past `rows` keep the sentinel
@@ -2631,14 +2606,8 @@ def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {   // nolint:STYLE038 — one fla
             t |> success(bad64 == 0, "tower_cn_attn_r64: the rel-plane attention over four 64-wide heads matches the CPU loop ({bad64} of {nd} off)")
             t |> success(bad128 == 0, "tower_cn_attn_r: the same over two 128-wide heads ({bad128} of {nd} off)")
             t |> success(!approx(ao_dev[0], ao_ref[0] + 0.5) && !approx(ao2_dev[nd - 1], ao2_ref[nd - 1] + 0.5), "tower_cn_attn_r: the bar reds a poisoned element on both stamps")
-            var k_scaled := k
-            var posl_scaled := posl
-            for (i in range(nd)) {
-                k_scaled[i] *= 1.5
-            }
-            for (i in range(ww * d)) {
-                posl_scaled[i] *= 1.5
-            }
+            let k_scaled <- scaled_copy(k, 1.5)
+            let posl_scaled <- scaled_copy(posl, 1.5)
             let ctl_k <- cn_attn_ref(q, k_scaled, v, posl, wn, rows, d, ROWS_HEADS, hs, 0, d)
             let ctl_p <- cn_attn_ref(q, k, v, posl_scaled, wn, rows, d, heads2, hs2, 0, d)
             let moved_k = mismatch_approx(ao_dev, ctl_k)
