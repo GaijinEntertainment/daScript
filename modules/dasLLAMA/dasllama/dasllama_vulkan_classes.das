@@ -9006,7 +9006,7 @@ struct TtsGatherArgs {
 
 //! out[t][j] = word[ids[t]][j] + pos[t][j] + type[j], added in that order - the PL-BERT embedding sum of the CPU
 //! `styletts2_albert` - or the word row alone under `adds = 0` (the CPU `gather_rows`), one element an invocation
-[vk_dispatch(name = "tts_row_gather_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_row_gather_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsRowGather {
     @ssbo @binding = 0 slab : array<float>
     @ssbo @binding = 1 ids : array<int>
@@ -9025,9 +9025,6 @@ class TtsRowGather {
         }
     }
 }
-
-//! the row gather's workgroup count over `total` elements
-def tts_row_gather_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 struct TtsElemArgs {
     nelem : uint   //! the elements mapped
@@ -9069,19 +9066,16 @@ class template TtsElemT {
 
 //! the CPU `gelu`'s tanh form in f32 (not the f16 LUT form `tower_act` spells - its roundings would move the front end's
 //! durations); the clamp keeps a device tanh off its exp overflow and changes no f32 result
-[vk_dispatch(name = "tts_gelu_tanh_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_gelu_tanh_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
 class TtsGeluTanh : TtsElemT {
     def override act(v : float) : float => 0.5 * v * (1.0 + tanh(clamp(0.7978845608028654 * (v + 0.044715 * v * v * v), -15.0, 15.0)))
 }
 
 //! the CPU `leaky_relu`: v > 0 ? v : v * slope
-[vk_dispatch(name = "tts_leaky_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_leaky_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
 class TtsLeaky : TtsElemT {
     def override act(v : float) : float => v > 0.0 ? v : v * pa.slope
 }
-
-//! the elementwise maps' workgroup count over `nelem` elements (four an invocation)
-def tts_elem_wgs(nelem : int64) : int64 => (nelem + 1023l) / 1024l
 
 struct TtsAttnArgs {
     t : uint       //! the rows, queries and keys alike
@@ -13252,7 +13246,7 @@ struct TtsIm2colArgs {
 //! order, so one weight row [cout][kdim] multiplies it - zero where the tap falls off x and in the columns past k * cin;
 //! a forward tap reads x at t * stride + tap * dilation - pad_l, a transposed one the input position whose stride lands
 //! the tap on t, (t + pad_l - tap * dilation) / stride where that divides exactly (the CPU `conv1d_transposed_dense`'s
-//! scatter read as a gather); one element an invocation, wgs = `tts_im2col_wgs`. The HALF stamp stores the columns as
+//! scatter read as a gather); one element an invocation, four under HALF. The HALF stamp stores the columns as
 //! f16 into `col16`, the f16 tile's feed (the decoder's and generator's convs); the plain stamp as f32, the f32 tile's feed
 [ |> template_struct_instance]
 class template TtsIm2colT {
@@ -13352,20 +13346,14 @@ class template TtsIm2colT {
     }
 }
 
-[vk_dispatch(name = "tts_im2col_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_im2col_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsIm2col : TtsIm2colT {}
 
-[vk_dispatch(name = "tts_im2col16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_im2col16_cls", kernel = "run", grid = "total/1024", params = "total : int64")]
 class TtsIm2col16 : TtsIm2colT {
     override HALF = true
     override FULL = false
 }
-
-//! the im2col's workgroup count over `total` = tout * kdim column elements
-def tts_im2col_wgs(total : int64) : int64 => (total + 255l) / 256l
-
-//! ... and the half stamp's, four columns an invocation
-def tts_im2col16_wgs(total : int64) : int64 => (total / 4l + 255l) / 256l
 
 struct TtsLstmArgs {
     t : uint          //! the steps
@@ -13466,7 +13454,7 @@ struct TtsConcatArgs {
 
 //! o [rows][width] = cat(x [rows][c], res at stride rs under `with_res`, f0 at stride f0s, nd at stride ns), zero-padded to
 //! width - the CPU `concat_rows`; one element an invocation
-[vk_dispatch(name = "tts_concat_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_concat_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsConcat {
     @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 res : array<float>
@@ -13497,9 +13485,6 @@ class TtsConcat {
     }
 }
 
-//! the concat's workgroup count over `total` = rows * width elements
-def tts_concat_wgs(total : int64) : int64 => (total + 255l) / 256l
-
 struct TtsSigSumArgs {
     t : uint       //! the rows
     nb : uint      //! the logits summed a row
@@ -13509,7 +13494,7 @@ struct TtsSigSumArgs {
 
 //! raw[r] = (the sum of sigmoid(logits[r][j]) over j < nb, in j order) / speed - the CPU `styletts2_durations`' raw
 //! durations; one row an invocation
-[vk_dispatch(name = "tts_sigsum_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_sigsum_cls", kernel = "run", grid = "t/256", params = "t : int64")]
 class TtsSigSum {
     @ssbo @binding = 0 logits : array<float>
     @ssbo @binding = 1 raw : array<float>
@@ -13529,9 +13514,6 @@ class TtsSigSum {
         }
     }
 }
-
-//! the sigmoid sums' workgroup count over `t` rows
-def tts_sigsum_wgs(t : int64) : int64 => (t + 255l) / 256l
 
 struct TtsStatsArgs {
     t : uint      //! the rows
@@ -13591,8 +13573,7 @@ class TtsColPartSq : TtsColPartT {
     override SQ = true
 }
 
-//! the partials folded a channel a lane: stats[ch] = the mean, or under SQ stats[c + ch] = the sum of squared deviations;
-//! wgs = `tts_colreduce_wgs`
+//! the partials folded a channel a lane: stats[ch] = the mean, or under SQ stats[c + ch] = the sum of squared deviations
 [ |> template_struct_instance]
 class template TtsColReduceT {
     @template_constant SQ : bool = false
@@ -13619,19 +13600,16 @@ class template TtsColReduceT {
     }
 }
 
-[vk_dispatch(name = "tts_colreduce_mean_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_colreduce_mean_cls", kernel = "run", grid = "c/256", params = "c : int64")]
 class TtsColReduceMean : TtsColReduceT {}
 
-[vk_dispatch(name = "tts_colreduce_sq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_colreduce_sq_cls", kernel = "run", grid = "c/256", params = "c : int64")]
 class TtsColReduceSq : TtsColReduceT {
     override SQ = true
 }
 
 //! the column statistics' blocks over `t` rows
 def tts_stats_blocks(t : int64) : int64 => (t + int64(TTS_STATS_ROWS) - 1l) / int64(TTS_STATS_ROWS)
-
-//! the reduce stamps' workgroup count over `c` channels
-def tts_colreduce_wgs(c : int64) : int64 => (c + 255l) / 256l
 
 //! the stats rows a seat holds for `c_max` channels over `t_max` rows: the mean and squared-deviation rows, then the partials
 def tts_stats_floats(t_max, c_max : int64) : int64 => 2l * c_max + tts_stats_blocks(t_max) * c_max
@@ -13683,16 +13661,13 @@ class template TtsAdainT {
     }
 }
 
-[vk_dispatch(name = "tts_adain_leaky_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_adain_leaky_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsAdainLeaky : TtsAdainT {}
 
-[vk_dispatch(name = "tts_adain_snake_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_adain_snake_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsAdainSnake : TtsAdainT {
     override SNAKE = true
 }
-
-//! the AdaIN stamps' workgroup count over `total` = t * c elements
-def tts_adain_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 struct TtsPoolArgs {
     c : uint       //! the channels, one tap row each
@@ -13708,7 +13683,7 @@ struct TtsPoolArgs {
 
 //! the depthwise transposed pool on rows: y [t_out][c] gathers the rows of x [t_in][c] its taps reach, w [c][k] - the CPU
 //! `conv1d_rows_transposed_depthwise`; one element an invocation
-[vk_dispatch(name = "tts_pool_dw_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pool_dw_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsPoolDw {
     @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 y : array<float>
@@ -13737,9 +13712,6 @@ class TtsPoolDw {
     }
 }
 
-//! the pool's workgroup count over `total` = t_out * c elements
-def tts_pool_dw_wgs(total : int64) : int64 => (total + 255l) / 256l
-
 struct TtsAddScaleArgs {
     nelem : uint
     scale : float
@@ -13750,7 +13722,7 @@ struct TtsAddScaleArgs {
 
 //! o = (a + b) * scale over nelem elements - the residual join's 1 / sqrt(2) and the averaged stage sums; o may be a;
 //! one element an invocation
-[vk_dispatch(name = "tts_add_scale_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_add_scale_cls", kernel = "run", grid = "nelem/256", params = "nelem : int64")]
 class TtsAddScale {
     @ssbo @binding = 0 a : array<float>
     @ssbo @binding = 1 b : array<float>
@@ -13766,9 +13738,6 @@ class TtsAddScale {
     }
 }
 
-//! the add-and-scale's workgroup count over `nelem` elements
-def tts_add_scale_wgs(nelem : int64) : int64 => (nelem + 255l) / 256l
-
 struct TtsAxpyArgs {
     nelem : uint
     scale : float
@@ -13779,7 +13748,7 @@ struct TtsAxpyArgs {
 
 //! o = (zero ? 0 : o) + scale * y over nelem elements - the generator stage's averaged residual-block sum; one element
 //! an invocation
-[vk_dispatch(name = "tts_axpy_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_axpy_cls", kernel = "run", grid = "nelem/256", params = "nelem : int64")]
 class TtsAxpy {
     @ssbo @binding = 0 o : array<float>
     @ssbo @binding = 1 y : array<float>
@@ -13795,9 +13764,6 @@ class TtsAxpy {
     }
 }
 
-//! the axpy's workgroup count over `nelem` elements
-def tts_axpy_wgs(nelem : int64) : int64 => (nelem + 255l) / 256l
-
 struct TtsReflectArgs {
     c : uint       //! the row width
     total : uint   //! (t + 1) * c
@@ -13805,7 +13771,7 @@ struct TtsReflectArgs {
 
 //! y [t + 1][c] = x [t][c] behind one reflected row (row 0 = x's row 1, row r > 0 = x's row r - 1) - the last stage's
 //! left reflect pad; one element an invocation
-[vk_dispatch(name = "tts_reflect1_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_reflect1_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsReflect1 {
     @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 y : array<float>
@@ -13821,9 +13787,6 @@ class TtsReflect1 {
         }
     }
 }
-
-//! the reflect pad's workgroup count over `total` = (t + 1) * c elements
-def tts_reflect1_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 struct TtsSourceArgs {
     n : uint            //! the samples, frames * up
@@ -13925,16 +13888,13 @@ class template TtsSrcLowT : TtsSrcLawT {
     }
 }
 
-[vk_dispatch(name = "tts_src_low_torch_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_src_low_torch_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsSrcLowTorch : TtsSrcLowT {
     override TORCH = true
 }
 
-[vk_dispatch(name = "tts_src_low_onnx_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_src_low_onnx_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsSrcLowOnnx : TtsSrcLowT {}
-
-//! the phase increments' workgroup count over `total` = nh * nlow elements
-def tts_src_low_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 //! the phase per frame lowc [nh][nlow] as the running sum of the increments - TORCH: the double accumulator as a two-float
 //! sum carrying its rounding error, else the plain float sum; one workgroup, invocation h < nh walks its harmonic, wgs = 1
@@ -13980,7 +13940,7 @@ class TtsSrcCumsumOnnx : TtsSrcCumsumT {}
 
 //! the source's own noise draw noise_n [n][nh], `tts_hash_normal` at the seed - the captured stream's seat when no stream
 //! was captured; one element an invocation
-[vk_dispatch(name = "tts_src_noise_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_src_noise_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsSrcNoise {
     @ssbo @binding = 0 noise_n : array<float>
     @push_constant pa : TtsSourceArgs
@@ -13993,9 +13953,6 @@ class TtsSrcNoise {
         }
     }
 }
-
-//! the noise draw's workgroup count over `total` = n * nh elements
-def tts_src_noise_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 //! the mixed source signal har [n] on the stamp's resample law: the harmonics' sines at the interpolated phases, the noise
 //! rows scaled by voicing, the source linear (lw [nh] at woff, lb [1] at boff) and its tanh; one sample an invocation
@@ -14028,16 +13985,13 @@ class template TtsSrcSinesT : TtsSrcLawT {
     }
 }
 
-[vk_dispatch(name = "tts_src_sines_torch_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_src_sines_torch_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsSrcSinesTorch : TtsSrcSinesT {
     override TORCH = true
 }
 
-[vk_dispatch(name = "tts_src_sines_onnx_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_src_sines_onnx_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsSrcSinesOnnx : TtsSrcSinesT {}
-
-//! the mixed signal's workgroup count over `n` samples
-def tts_src_sines_wgs(n : int64) : int64 => (n + 255l) / 256l
 
 struct TtsStftArgs {
     n : uint        //! the signal's samples
@@ -14094,16 +14048,13 @@ class template TtsStftT {
     }
 }
 
-[vk_dispatch(name = "tts_stft_reflect_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_stft_reflect_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsStftReflect : TtsStftT {
     override REFLECT = true
 }
 
-[vk_dispatch(name = "tts_stft_edge_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_stft_edge_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsStftEdge : TtsStftT {}
-
-//! the STFT's workgroup count over `total` = frames * bins elements
-def tts_stft_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 struct TtsIstftArgs {
     tt : uint         //! the frames
@@ -14121,7 +14072,7 @@ struct TtsIstftArgs {
 
 //! the inverse STFT from conv_post's rows y [tt][stride] - a bin's log magnitude, then its phase - as the overlap-added
 //! transposed conv, a non-negligible envelope divided out under `envelope`; one sample an invocation
-[vk_dispatch(name = "tts_istft_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_istft_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsIstft {
     @ssbo @binding = 0 y : array<float>
     @ssbo @binding = 1 @role = "weight" wn : array<float>
@@ -14160,9 +14111,6 @@ class TtsIstft {
     }
 }
 
-//! the inverse STFT's workgroup count over `n` samples
-def tts_istft_wgs(n : int64) : int64 => (n + 255l) / 256l
-
 struct TtsPkRowsArgs {
     rows : uint
     width : uint   //! the floats a row copies
@@ -14199,16 +14147,13 @@ class template TtsPkRowsT {
     }
 }
 
-[vk_dispatch(name = "tts_pk_rows_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_rows_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsPkRows : TtsPkRowsT {}
 
-[vk_dispatch(name = "tts_pk_rows_elu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_rows_elu_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsPkRowsElu : TtsPkRowsT {
     override ELU = true
 }
-
-//! the row copies' workgroup count over `total` = rows * width elements
-def tts_pk_rows_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 struct TtsPkScaleArgs {
     rows : uint
@@ -14219,7 +14164,7 @@ struct TtsPkScaleArgs {
 
 //! x [rows][c] *= the scale row [c] in place - a transformer layer's per-channel layer scale (the CPU `layer_scale_rows`);
 //! one element an invocation
-[vk_dispatch(name = "tts_pk_row_scale_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_row_scale_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsPkRowScale {
     @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 @role = "weight" wn : array<float>
@@ -14233,9 +14178,6 @@ class TtsPkRowScale {
         }
     }
 }
-
-//! the layer scale's workgroup count over `total` = rows * c elements
-def tts_pk_row_scale_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 let TTS_PK_ATTN_HS = 64u            //! the head size the attention row is stamped for, the body's literal: another head size declines at the driver
 let TTS_PK_ATTN_MAX_KEYS = 2048u    //! the scores a row stages, the body's literal: a longer key range declines at the driver
@@ -14256,7 +14198,7 @@ struct TtsPkAttnArgs {
 //! the causal cached attention of one query row over the caches' rows (the CPU `attention_causal_rows`): query i at
 //! position pos0 + i sees the keys up to itself, the last `ctx` of them when ctx is nonzero; the scaled query staged,
 //! the scores into the stage, the softmax, then the value sum four parts a column (`value_sum`); one workgroup a
-//! (head, query row), wgs = heads * t
+//! (head, query row), wgs = `tts_attn_wgs`
 [vk_dispatch(name = "tts_pk_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TtsPkAttn : WgReduceBase {
     @ssbo @binding = 0 q : array<float>
@@ -14366,9 +14308,6 @@ class TtsPkAttn : WgReduceBase {
     }
 }
 
-//! the attention row's workgroup count: a workgroup a (head, query row)
-def tts_pk_attn_wgs(heads, t : int64) : int64 => heads * t
-
 let TTS_PK_GEMV_MAX_NIN = 4096u   //! the x the row GEMV stages, the body's literal: a wider input declines at the driver
 
 struct TtsPkGemvArgs {
@@ -14400,7 +14339,7 @@ struct TtsPkGemvArgs {
 //! into the k cache's row p, the v span into the v cache's (the CPU's rope_rows and kv_cache_append), 6 the residual
 //! y += d * the slab vector (the layer scale), 7 the residual y += d, 8 the tanh GELU; 32 lanes a row, each a float4 of the
 //! row a step when the row base, the stride and nin sit on the four lattice (the slab writer's 16-byte runs) and a float
-//! otherwise, the lanes folded by shuffle; four rows a workgroup, wgs = `tts_pk_gemv_wgs`. The rope-store stamp turns the
+//! otherwise, the lanes folded by shuffle; four rows a workgroup. The rope-store stamp turns the
 //! pairs (2j, 2j + 1) a workgroup's even and odd rows hold, so it takes a span on the four lattice. The workgroup memory is
 //! measured to size (the staged x, the four dots), so the norm's sums fold through one subgroupAdd into `red`, one slot a
 //! subgroup, not through `WgReduceBase`
@@ -14613,29 +14552,29 @@ class template TtsPkGemvT {
     }
 }
 
-[vk_dispatch(name = "tts_pk_gemv_dot_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_dot_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvDot : TtsPkGemvT {}
 
-[vk_dispatch(name = "tts_pk_gemv_ln_silu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_ln_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvLnSilu : TtsPkGemvT {
     override NORM_MOD_IN = true
     override MOD_IN = true
     override EPI = 1
 }
 
-[vk_dispatch(name = "tts_pk_gemv_gate_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_gate_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvGate : TtsPkGemvT {
     override MOD_IN = true
     override EPI = 2
 }
 
-[vk_dispatch(name = "tts_pk_gemv_add_silu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_add_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvAddSilu : TtsPkGemvT {
     override AUX_IN = true
     override EPI = 3
 }
 
-[vk_dispatch(name = "tts_pk_gemv_tail_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_tail_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvTail : TtsPkGemvT {
     override NORM_MOD_IN = true
     override MOD_IN = true
@@ -14644,32 +14583,29 @@ class TtsPkGemvTail : TtsPkGemvT {
     override EPI = 4
 }
 
-[vk_dispatch(name = "tts_pk_gemv_ln_qkv_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_ln_qkv_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvLnQkv : TtsPkGemvT {
     override NORM_IN = true
     override ROPE_STORE = true
     override EPI = 5
 }
 
-[vk_dispatch(name = "tts_pk_gemv_add_scale_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_add_scale_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvAddScale : TtsPkGemvT {
     override AUX_IN = true
     override EPI = 6
 }
 
-[vk_dispatch(name = "tts_pk_gemv_add_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_add_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvAdd : TtsPkGemvT {
     override EPI = 7
 }
 
-[vk_dispatch(name = "tts_pk_gemv_ln_gelu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_ln_gelu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvLnGelu : TtsPkGemvT {
     override NORM_IN = true
     override EPI = 8
 }
-
-//! the row GEMV's workgroup count over `nout` rows, four a workgroup
-def tts_pk_gemv_wgs(nout : int64) : int64 => (nout + 3l) / 4l
 
 struct TtsPkRopeArgs {
     rows : uint
@@ -14685,7 +14621,7 @@ struct TtsPkRopeArgs {
 
 //! the rotary embedding over a span of rows in place (the CPU `rope_rows`): row r at position pos0 + r turns each adjacent
 //! pair (2j, 2j + 1) of each head by the tables' angle j at that position; one pair an invocation over rows * d / 2
-[vk_dispatch(name = "tts_pk_rope_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_rope_cls", kernel = "run", grid = "pairs/256", params = "pairs : int64")]
 class TtsPkRope {
     @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 @role = "weight" wn : array<float>
@@ -14711,6 +14647,3 @@ class TtsPkRope {
         }
     }
 }
-
-//! the rope's workgroup count over `pairs` = rows * d / 2 pairs
-def tts_pk_rope_wgs(pairs : int64) : int64 => (pairs + 255l) / 256l

@@ -152,7 +152,7 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom) {
         var pm = F32GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, wstride = uint(kdim), boff = 0u,
             xoff = uint(g.coloff), xstride = uint(kdim), yoff = 0u, ystride = uint(g.cout))
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_im2col_cls(raw, h, s_col, pc, tts_im2col_wgs(int64(tout * kdim)))
+            enc_tts_im2col_cls(raw, h, s_col, pc, int64(tout * kdim))
             enc_f32_gemm_b_cls(raw, h, s_mm, pm, f32_gemm_wgs(int64(tout), int64(g.cout)))
             cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
         }
@@ -240,7 +240,7 @@ def private im2col16_arm(t : T?; tag : string; g : ConvGeom) {
         var pm = F16GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, ybase = 0u, ystride = uint(g.cout), ksplit = 0u)
         var pb = TowerBiasArgs(d = uint(g.cout), nelem = uint(ny), boff = 0u, act = BIAS_ACT_NONE)
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_im2col16_cls(raw, h, s_col, pc, tts_im2col16_wgs(int64(tout * kdim)))
+            enc_tts_im2col16_cls(raw, h, s_col, pc, int64(tout * kdim))
             f16_gemm_enc(khr, raw, h, s_mm, pm, int64(tout), int64(g.cout))
             enc_tower_bias_act_cls(raw, h, s_b, pb, (int64(ny) / 4l + 255l) / 256l)
             cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
@@ -583,7 +583,7 @@ def private pool_dw_arm(t : T?) {
         var pa = TtsPoolArgs(c = uint(PD_C), k = uint(PD_K), stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(PD_TIN), t_out = uint(tout),
             woff = uint(PD_WOFF), boff = uint(PD_WOFF + PD_C * PD_K + PD_GAP))
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_pool_dw_cls(raw, h, s, pa, tts_pool_dw_wgs(int64(ny)))
+            enc_tts_pool_dw_cls(raw, h, s, pa, int64(ny))
             cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
         }
         var y_dev <- staged(host.mapped, 0l, ny, type<float>)

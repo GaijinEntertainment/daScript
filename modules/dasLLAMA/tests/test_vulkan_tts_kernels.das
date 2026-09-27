@@ -180,7 +180,7 @@ def test_vkt_row_gather(t0 : T?) {
             var pa = TtsGatherArgs(c = uint(c), rows = uint(rows), word_off = uint(GA_WORD), pos_off = uint(pos_off), type_off = uint(type_off),
                 out_off = uint(GA_OUT), adds = 1u)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_row_gather_cls(raw, h, s, pa, tts_row_gather_wgs(int64(total)))
+                enc_tts_row_gather_cls(raw, h, s, pa, int64(total))
                 cmd_copy_planes(raw, h, fixed_array(outd), host, sizes, B_OUT)
             }
             let prefix <- staged(host.mapped, at[0], GA_OUT, type<float>)
@@ -206,7 +206,7 @@ def test_vkt_row_gather(t0 : T?) {
             nan_sentinel_upload(outd, bout)
             pa.adds = 0u
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_row_gather_cls(raw, h, s, pa, tts_row_gather_wgs(int64(total)))
+                enc_tts_row_gather_cls(raw, h, s, pa, int64(total))
                 cmd_copy_planes(raw, h, fixed_array(outd), host, sizes, B_OUT)
             }
             let got_plain <- staged(host.mapped, at[0] + int64(GA_OUT) * 4l, total, type<float>)
@@ -271,7 +271,7 @@ def test_vkt_gelu_tanh(t0 : T?) {
             var s = set_tts_gelu_tanh_cls(fixed_array(xd), fixed_array(bx), fixed_array(B_X))
             var pa = TtsElemArgs(nelem = uint(EL_N), off = uint(EL_OFF), slope = 0.0)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_gelu_tanh_cls(raw, h, s, pa, tts_elem_wgs(int64(EL_N)))
+                enc_tts_gelu_tanh_cls(raw, h, s, pa, int64(EL_N))
                 cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
             }
             let got <- staged(host.mapped, at[0], n, type<float>)
@@ -317,7 +317,7 @@ def test_vkt_leaky(t0 : T?) {
             var s = set_tts_leaky_cls(fixed_array(xd), fixed_array(bx), fixed_array(B_X))
             var pa = TtsElemArgs(nelem = uint(EL_N), off = uint(EL_OFF), slope = EL_SLOPE)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_leaky_cls(raw, h, s, pa, tts_elem_wgs(int64(EL_N)))
+                enc_tts_leaky_cls(raw, h, s, pa, int64(EL_N))
                 cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
             }
             let got <- staged(host.mapped, at[0], n, type<float>)
@@ -514,8 +514,8 @@ def test_vkt_concat(t0 : T?) {
             var pp = TtsConcatArgs(c = uint(c), rc = uint(CC_RC), rs = uint(CC_RC), f0s = uint(CC_F0S), ns = uint(CC_NS), with_res = 0u,
                 width = uint(CC_WIDTH), rows = uint(rows))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_concat_cls(raw, h, s_res, pr, tts_concat_wgs(int64(rows * wr)))
-                enc_tts_concat_cls(raw, h, s_pad, pp, tts_concat_wgs(int64(rows * CC_WIDTH)))
+                enc_tts_concat_cls(raw, h, s_res, pr, int64(rows * wr))
+                enc_tts_concat_cls(raw, h, s_pad, pp, int64(rows * CC_WIDTH))
                 cmd_copy_planes(raw, h, fixed_array(ord, opd), host, sizes, B_OR | B_OP)
             }
             let nr = rows * wr
@@ -589,7 +589,7 @@ def test_vkt_sigsum(t0 : T?) {
             var s = set_tts_sigsum_cls(fixed_array(ld, rawd), fixed_array(long_length(logits) * 4l, braw), fixed_array(0u, B_RAW))
             var pa = TtsSigSumArgs(t = uint(SG_T), nb = uint(SG_NB), ls = uint(SG_LS), speed = SG_SPEED)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_sigsum_cls(raw, h, s, pa, tts_sigsum_wgs(int64(SG_T)))
+                enc_tts_sigsum_cls(raw, h, s, pa, int64(SG_T))
                 cmd_copy_planes(raw, h, fixed_array(rawd), host, sizes, B_RAW)
             }
             let got <- staged(host.mapped, at[0], SG_T, type<float>)
@@ -640,11 +640,11 @@ def private colstats_enc(raw; var h; xd : uint64; bx : int64; std : uint64; bst 
         var s1 = set_tts_colpart_sum_cls(fixed_array(xd, std), fixed_array(bx, bst), fixed_array(0u, bit))
         enc_tts_colpart_sum_cls(raw, h, s1, pa, nblk)
         var s2 = set_tts_colreduce_mean_cls(fixed_array(std, std), fixed_array(bst, bst), fixed_array(bit, bit))
-        enc_tts_colreduce_mean_cls(raw, h, s2, pa, tts_colreduce_wgs(int64(c)))
+        enc_tts_colreduce_mean_cls(raw, h, s2, pa, int64(c))
         var s3 = set_tts_colpart_sq_cls(fixed_array(xd, std, std), fixed_array(bx, bst, bst), fixed_array(0u, bit, bit))
         enc_tts_colpart_sq_cls(raw, h, s3, pa, nblk)
         var s4 = set_tts_colreduce_sq_cls(fixed_array(std, std), fixed_array(bst, bst), fixed_array(bit, bit))
-        enc_tts_colreduce_sq_cls(raw, h, s4, pa, tts_colreduce_wgs(int64(c)))
+        enc_tts_colreduce_sq_cls(raw, h, s4, pa, int64(c))
     }
 }
 
@@ -831,12 +831,11 @@ def test_vkt_adain(t0 : T?) {
                 gwoff = uint(AD_GWOFF), gboff = uint(f.gboff), aoff = uint(f.aoff))
             var pi = pa
             pi.yoff = uint(AD_XOFF)
-            let wgs = tts_adain_wgs(int64(n))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 colstats_enc(raw, h, x0d, long_length(f.x) * 4l, std, bst, AD_T, c, B_ST)
-                enc_tts_adain_leaky_cls(raw, h, s_l, pa, wgs)
-                enc_tts_adain_snake_cls(raw, h, s_s, pa, wgs)
-                enc_tts_adain_leaky_cls(raw, h, s_i, pi, wgs)
+                enc_tts_adain_leaky_cls(raw, h, s_l, pa, int64(n))
+                enc_tts_adain_snake_cls(raw, h, s_s, pa, int64(n))
+                enc_tts_adain_leaky_cls(raw, h, s_i, pi, int64(n))
                 cmd_copy_planes(raw, h, fixed_array(yld, ysd, xid), host, sizes, B_YL | B_YS | B_XI)
             }
             let got_l <- staged(host.mapped, at[0] + int64(AD_YOFF) * 4l, n, type<float>)
@@ -907,8 +906,8 @@ def test_vkt_add_scale(t0 : T?) {
             var pi = po
             pi.ooff = uint(AS_AOFF)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_add_scale_cls(raw, h, s_o, po, tts_add_scale_wgs(int64(n)))
-                enc_tts_add_scale_cls(raw, h, s_i, pi, tts_add_scale_wgs(int64(n)))
+                enc_tts_add_scale_cls(raw, h, s_o, po, int64(n))
+                enc_tts_add_scale_cls(raw, h, s_i, pi, int64(n))
                 cmd_copy_planes(raw, h, fixed_array(od, aid), host, sizes, B_O | B_AI)
             }
             let got_o <- staged(host.mapped, at[0] + int64(AS_OOFF) * 4l, n, type<float>)

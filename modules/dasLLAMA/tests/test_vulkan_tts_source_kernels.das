@@ -106,8 +106,8 @@ def test_vkt_axpy(t0 : T?) {
             var pz = pa
             pz.zero = 1u
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_axpy_cls(raw, h, s_a, pa, tts_axpy_wgs(int64(n)))
-                enc_tts_axpy_cls(raw, h, s_z, pz, tts_axpy_wgs(int64(n)))
+                enc_tts_axpy_cls(raw, h, s_a, pa, int64(n))
+                enc_tts_axpy_cls(raw, h, s_z, pz, int64(n))
                 cmd_copy_planes(raw, h, fixed_array(oad, ozd), host, sizes, B_OA | B_OZ)
             }
             let got_a <- staged(host.mapped, at[0] + int64(AX_OOFF) * 4l, n, type<float>)
@@ -160,7 +160,7 @@ def test_vkt_reflect1(t0 : T?) {
             var s = set_tts_reflect1_cls(fixed_array(xd, yd), fixed_array(bx, by), fixed_array(0u, B_Y))
             var pa = TtsReflectArgs(c = uint(RF_C), total = uint(total))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_reflect1_cls(raw, h, s, pa, tts_reflect1_wgs(int64(total)))
+                enc_tts_reflect1_cls(raw, h, s, pa, int64(total))
                 cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
             }
             let got <- staged(host.mapped, 0l, total, type<float>)
@@ -297,20 +297,20 @@ def private src_run(f : SrcFixture; torch : bool; f0 : array<float>; own : bool;
         let sin_sizes = fixed_array(bf0, blow, bnz, bwn, bhar)
         let sin_bits = fixed_array(0u, B_LOWC, B_NZ, 0u, B_HAR)
         var s_sin = torch ? set_tts_src_sines_torch_cls(sin_devs, sin_sizes, sin_bits) : set_tts_src_sines_onnx_cls(sin_devs, sin_sizes, sin_bits)
-        let low_wgs = tts_src_low_wgs(int64(SRC_NH * f.nlow))
-        let sin_wgs = tts_src_sines_wgs(int64(f.n))
+        let low_total = int64(SRC_NH * f.nlow)
+        let sin_n = int64(f.n)
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
             if (own) {
-                enc_tts_src_noise_cls(raw, h, s_nz, pa, tts_src_noise_wgs(int64(f.n * SRC_NH)))
+                enc_tts_src_noise_cls(raw, h, s_nz, pa, int64(f.n * SRC_NH))
             }
             if (torch) {
-                enc_tts_src_low_torch_cls(raw, h, s_low, pa, low_wgs)
+                enc_tts_src_low_torch_cls(raw, h, s_low, pa, low_total)
                 enc_tts_src_cumsum_torch_cls(raw, h, s_cum, pa, 1l)
-                enc_tts_src_sines_torch_cls(raw, h, s_sin, pa, sin_wgs)
+                enc_tts_src_sines_torch_cls(raw, h, s_sin, pa, sin_n)
             } else {
-                enc_tts_src_low_onnx_cls(raw, h, s_low, pa, low_wgs)
+                enc_tts_src_low_onnx_cls(raw, h, s_low, pa, low_total)
                 enc_tts_src_cumsum_onnx_cls(raw, h, s_cum, pa, 1l)
-                enc_tts_src_sines_onnx_cls(raw, h, s_sin, pa, sin_wgs)
+                enc_tts_src_sines_onnx_cls(raw, h, s_sin, pa, sin_n)
             }
             cmd_copy_planes(raw, h, fixed_array(lowcd, hard, nzd), host, sizes, B_LOWC | B_HAR | B_NZ)
         }
@@ -582,14 +582,14 @@ def private stft_arm(t : T?; reflect : bool) {
         var sp = reflect ? set_tts_stft_reflect_cls(fixed_array(hpd, wd, spd), szs, bits) : set_tts_stft_edge_cls(fixed_array(hpd, wd, spd), szs, bits)
         var pa = TtsStftArgs(n = uint(ST_N), frames = uint(frames), bins = uint(ST_BINS), k = uint(ST_K), hop = uint(ST_HOP), pad = uint(ST_PAD),
             eps = 1e-9, reoff = uint(ST_REOFF), imoff = uint(imoff))
-        let wgs = tts_stft_wgs(int64(frames * ST_BINS))
+        let total = int64(frames * ST_BINS)
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
             if (reflect) {
-                enc_tts_stft_reflect_cls(raw, h, s, pa, wgs)
-                enc_tts_stft_reflect_cls(raw, h, sp, pa, wgs)
+                enc_tts_stft_reflect_cls(raw, h, s, pa, total)
+                enc_tts_stft_reflect_cls(raw, h, sp, pa, total)
             } else {
-                enc_tts_stft_edge_cls(raw, h, s, pa, wgs)
-                enc_tts_stft_edge_cls(raw, h, sp, pa, wgs)
+                enc_tts_stft_edge_cls(raw, h, s, pa, total)
+                enc_tts_stft_edge_cls(raw, h, sp, pa, total)
             }
             cmd_copy_planes(raw, h, fixed_array(sd, spd), host, sizes, B_S)
         }
@@ -713,8 +713,8 @@ def private istft_arm(t : T?; envelope : bool) {
         var pa = TtsIstftArgs(tt = uint(IS_TT), stride = uint(IS_STRIDE), bins = uint(IS_BINS), k = uint(IS_K), hop = uint(IS_HOP),
             pad = uint(IS_PAD), envelope = envelope ? 1u : 0u, n = uint(n), reoff = uint(IS_REOFF), imoff = uint(imoff), wnoff = uint(wnoff))
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_istft_cls(raw, h, s, pa, tts_istft_wgs(int64(n)))
-            enc_tts_istft_cls(raw, h, sp, pa, tts_istft_wgs(int64(n)))
+            enc_tts_istft_cls(raw, h, s, pa, int64(n))
+            enc_tts_istft_cls(raw, h, sp, pa, int64(n))
             cmd_copy_planes(raw, h, fixed_array(od, opd), host, sizes, B_W)
         }
         let got <- staged(host.mapped, at[0], n, type<float>)

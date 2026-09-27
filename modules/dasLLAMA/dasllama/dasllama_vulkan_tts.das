@@ -427,7 +427,7 @@ def private ts_add_ln(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; bslot
 def private ts_leaky(raw : VkCommandBuffer; var h : VkHaz; x : TsRows; nelem : int64; slope : float) {
     var s = set_tts_leaky_cls(fixed_array(x.dev), fixed_array(x.bytes), fixed_array(x.bit))
     var pa = TtsElemArgs(nelem = uint(nelem), off = 0u, slope = slope)
-    enc_tts_leaky_cls(raw, h, s, pa, tts_elem_wgs(nelem))
+    enc_tts_leaky_cls(raw, h, s, pa, nelem)
     vt_pt(raw, VtProfRole.tts_act)
 }
 
@@ -441,7 +441,7 @@ def private ts_conv_padded(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
     var sc = set_tts_im2col_cls(fixed_array(x.dev, col.dev), fixed_array(x.bytes, col.bytes), fixed_array(x.bit, col.bit))
     var pc = TtsIm2colArgs(cin = uint(cv.cin), tin = uint(tin), tout = uint(tout), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(pad_l),
         dilation = uint(cv.dilation), transposed = cv.transposed ? 1u : 0u, kdim = uint(slot.kdim_p), xoff = 0u, coloff = 0u, rows = 1u)
-    enc_tts_im2col_cls(raw, h, sc, pc, tts_im2col_wgs(tout * slot.kdim_p))
+    enc_tts_im2col_cls(raw, h, sc, pc, tout * slot.kdim_p)
     vt_pt(raw, VtProfRole.tts_im2col)
     var sm = set_f32_gemm_b_cls(fixed_array(slab.dev, col.dev, y.dev, slab.dev), fixed_array(slab.bytes, col.bytes, y.bytes, slab.bytes), fixed_array(0u, col.bit, y.bit, 0u))
     var pm = F32GemmArgs(n = uint(cv.k * cv.cin), d = uint(cv.cout), rows = uint(tout), woff = uint(slot.woff), wstride = uint(slot.kdim_p), boff = uint(slot.boff),
@@ -463,7 +463,7 @@ def private ts_conv16(raw : VkCommandBuffer; var h : VkHaz; slab, slab16 : TsRow
     var sc = set_tts_im2col16_cls(fixed_array(x.dev, col16.dev), fixed_array(x.bytes, col16.bytes), fixed_array(x.bit, col16.bit))
     var pc = TtsIm2colArgs(cin = uint(cv.cin), tin = uint(tin), tout = uint(tout), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(cv.pad_l),
         dilation = uint(cv.dilation), transposed = cv.transposed ? 1u : 0u, kdim = uint(slot.kdim_p), xoff = 0u, coloff = 0u, rows = 1u)
-    enc_tts_im2col16_cls(raw, h, sc, pc, tts_im2col16_wgs(tout * slot.kdim_p))
+    enc_tts_im2col16_cls(raw, h, sc, pc, tout * slot.kdim_p)
     vt_pt(raw, VtProfRole.tts_im2col)
     let khr = ts_f16_tile_khr()
     var sm = f16_gemm_set(khr, fixed_array(slab16.dev, col16.dev, y.dev), fixed_array(slab16.bytes, col16.bytes, y.bytes), fixed_array(0u, col16.bit, y.bit))
@@ -584,7 +584,7 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     let eps = ST2_ALBERT_EPS
     //! x the residual stream, then the full-normed rows; xb2 the attention context, then the attention-normed rows the ffn reads
     vt_chain_one_shot("albert", a.n_layers, t) $(raw : VkCommandBuffer; var h : VkHaz) {
-        enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, tts_row_gather_wgs(t * a.emb_dim))
+        enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, t * a.emb_dim)
         vt_pt(raw, VtProfRole.tts_rows)
         ts_ln(raw, h, slab, sl.emb_ln, r_e, t, a.emb_dim, eps)
         ts_lin(raw, h, slab, sl.map_in, a.emb_dim, d, r_e, r_x, t)
@@ -597,7 +597,7 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
             ts_lin_branch(raw, h, slab, sl.dense, d, d, r_xb2, r_xb, t)
             ts_add_ln(raw, h, slab, sl.dense, sl.attn_ln, r_x, r_xb, r_xb2, t, d, eps)
             ts_lin(raw, h, slab, sl.ffn, d, ff, r_xb2, r_ffn, t)
-            enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, tts_elem_wgs(t * ff))
+            enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, t * ff)
             vt_pt(raw, VtProfRole.tts_act)
             ts_lin_branch(raw, h, slab, sl.ffn_out, ff, d, r_ffn, r_f2, t)
             ts_add_ln(raw, h, slab, sl.ffn_out, sl.full_ln, r_xb2, r_f2, r_x, t, d, eps)
@@ -685,7 +685,7 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     var pa_gather = TtsGatherArgs(c = uint(cc), rows = uint(t), word_off = uint(sl.emb), pos_off = 0u, type_off = 0u, out_off = 0u, adds = 0u)
     let ncnn = length(te.cnn)
     vt_chain_one_shot("text", int64(ncnn), t) $(raw : VkCommandBuffer; var h : VkHaz) {
-        enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, tts_row_gather_wgs(t * cc))
+        enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, t * cc)
         vt_pt(raw, VtProfRole.tts_rows)
         for (i in range(ncnn)) {
             let src = i % 2 == 0 ? r_a : r_b
@@ -721,7 +721,7 @@ def private ts_concat(raw : VkCommandBuffer; var h : VkHaz; x, res, f0, nd, o : 
     var s = set_tts_concat_cls(fixed_array(x.dev, res.dev, f0.dev, nd.dev, o.dev), fixed_array(x.bytes, res.bytes, f0.bytes, nd.bytes, o.bytes),
         fixed_array(x.bit, res.bit, f0.bit, nd.bit, o.bit))
     var pc = pa
-    enc_tts_concat_cls(raw, h, s, pc, tts_concat_wgs(int64(pa.rows) * int64(pa.width)))
+    enc_tts_concat_cls(raw, h, s, pc, int64(pa.rows) * int64(pa.width))
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
@@ -729,7 +729,7 @@ def private ts_concat(raw : VkCommandBuffer; var h : VkHaz; x, res, f0, nd, o : 
 def private ts_sigsum(raw : VkCommandBuffer; var h : VkHaz; logits, out : TsRows; t, nb : int64; speed : float) {
     var s = set_tts_sigsum_cls(fixed_array(logits.dev, out.dev), fixed_array(logits.bytes, out.bytes), fixed_array(logits.bit, out.bit))
     var pa = TtsSigSumArgs(t = uint(t), nb = uint(nb), ls = uint(nb), speed = speed)
-    enc_tts_sigsum_cls(raw, h, s, pa, tts_sigsum_wgs(t))
+    enc_tts_sigsum_cls(raw, h, s, pa, t)
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
@@ -740,11 +740,11 @@ def private ts_colstats(raw : VkCommandBuffer; var h : VkHaz; sc_ : TsScratch; x
     var s1 = set_tts_colpart_sum_cls(fixed_array(x.dev, st.dev), fixed_array(x.bytes, st.bytes), fixed_array(x.bit, st.bit))
     enc_tts_colpart_sum_cls(raw, h, s1, pa, tts_stats_blocks(t))
     var s2 = set_tts_colreduce_mean_cls(fixed_array(st.dev, st.dev), fixed_array(st.bytes, st.bytes), fixed_array(st.bit, st.bit))
-    enc_tts_colreduce_mean_cls(raw, h, s2, pa, tts_colreduce_wgs(c))
+    enc_tts_colreduce_mean_cls(raw, h, s2, pa, c)
     var s3 = set_tts_colpart_sq_cls(fixed_array(x.dev, st.dev, st.dev), fixed_array(x.bytes, st.bytes, st.bytes), fixed_array(x.bit, st.bit, st.bit))
     enc_tts_colpart_sq_cls(raw, h, s3, pa, tts_stats_blocks(t))
     var s4 = set_tts_colreduce_sq_cls(fixed_array(st.dev, st.dev), fixed_array(st.bytes, st.bytes), fixed_array(st.bit, st.bit))
-    enc_tts_colreduce_sq_cls(raw, h, s4, pa, tts_colreduce_wgs(c))
+    enc_tts_colreduce_sq_cls(raw, h, s4, pa, c)
     vt_pt(raw, VtProfRole.tts_adain)
 }
 
@@ -759,10 +759,10 @@ def private ts_adain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : 
         aoff = uint(ns.aux_off))
     if (snake) {
         var s2 = set_tts_adain_snake_cls(bufs, sizes, bits)
-        enc_tts_adain_snake_cls(raw, h, s2, p2, tts_adain_wgs(t * c))
+        enc_tts_adain_snake_cls(raw, h, s2, p2, t * c)
     } else {
         var s2 = set_tts_adain_leaky_cls(bufs, sizes, bits)
-        enc_tts_adain_leaky_cls(raw, h, s2, p2, tts_adain_wgs(t * c))
+        enc_tts_adain_leaky_cls(raw, h, s2, p2, t * c)
     }
     vt_pt(raw, VtProfRole.tts_adain)
 }
@@ -772,7 +772,7 @@ def private ts_pool_dw(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; cv :
     var s = set_tts_pool_dw_cls(fixed_array(x.dev, y.dev, slab.dev), fixed_array(x.bytes, y.bytes, slab.bytes), fixed_array(x.bit, y.bit, 0u))
     var pa = TtsPoolArgs(c = uint(cv.cin), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(cv.pad_l), dil = uint(cv.dilation), t_in = uint(t_in),
         t_out = uint(t_out), woff = uint(woff), boff = uint(boff))
-    enc_tts_pool_dw_cls(raw, h, s, pa, tts_pool_dw_wgs(t_out * cv.cin))
+    enc_tts_pool_dw_cls(raw, h, s, pa, t_out * cv.cin)
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
@@ -780,7 +780,7 @@ def private ts_pool_dw(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; cv :
 def private ts_gather_rows(raw : VkCommandBuffer; var h : VkHaz; src, idx, out : TsRows; rows, c : int64) {
     var s = set_tts_row_gather_cls(fixed_array(src.dev, idx.dev, out.dev), fixed_array(src.bytes, idx.bytes, out.bytes), fixed_array(src.bit, idx.bit, out.bit))
     var pa = TtsGatherArgs(c = uint(c), rows = uint(rows), word_off = 0u, pos_off = 0u, type_off = 0u, out_off = 0u, adds = 0u)
-    enc_tts_row_gather_cls(raw, h, s, pa, tts_row_gather_wgs(rows * c))
+    enc_tts_row_gather_cls(raw, h, s, pa, rows * c)
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
@@ -788,7 +788,7 @@ def private ts_gather_rows(raw : VkCommandBuffer; var h : VkHaz; src, idx, out :
 def private ts_add_scale(raw : VkCommandBuffer; var h : VkHaz; a, b, o : TsRows; n : int64; scale : float) {
     var s = set_tts_add_scale_cls(fixed_array(a.dev, b.dev, o.dev), fixed_array(a.bytes, b.bytes, o.bytes), fixed_array(a.bit, b.bit, o.bit))
     var pa = TtsAddScaleArgs(nelem = uint(n), scale = scale, aoff = 0u, boff = 0u, ooff = 0u)
-    enc_tts_add_scale_cls(raw, h, s, pa, tts_add_scale_wgs(n))
+    enc_tts_add_scale_cls(raw, h, s, pa, n)
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
@@ -1439,7 +1439,7 @@ def private ts_block_style_rows(b : St2GenResBlock; s : array<float>; var at : i
 def private ts_axpy(raw : VkCommandBuffer; var h : VkHaz; o, y : TsRows; n : int64; scale : float; zero : bool) {
     var s = set_tts_axpy_cls(fixed_array(o.dev, y.dev), fixed_array(o.bytes, y.bytes), fixed_array(o.bit, y.bit))
     var pa = TtsAxpyArgs(nelem = uint(n), scale = scale, zero = zero ? 1u : 0u, ooff = 0u, yoff = 0u)
-    enc_tts_axpy_cls(raw, h, s, pa, tts_axpy_wgs(n))
+    enc_tts_axpy_cls(raw, h, s, pa, n)
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
@@ -1487,7 +1487,7 @@ def private ts_stage(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : 
     if (last) {
         var s = set_tts_reflect1_cls(fixed_array(r_bxt.dev, r_by.dev), fixed_array(r_bxt.bytes, r_by.bytes), fixed_array(r_bxt.bit, r_by.bit))
         var pa = TtsReflectArgs(c = uint(c2), total = uint(n))
-        enc_tts_reflect1_cls(raw, h, s, pa, tts_reflect1_wgs(n))
+        enc_tts_reflect1_cls(raw, h, s, pa, n)
         vt_pt(raw, VtProfRole.tts_rows)
     }
     ts_add_scale(raw, h, r_by, r_bsres, r_by, n, 1.0)
@@ -1538,7 +1538,7 @@ def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
         noise_std = cfg.noise_std, voiced_thr = cfg.voiced_thr, seed = uint(seed ^ (seed >> 32ul)), woff = uint(sl.src_w), boff = uint(sl.src_b))
     if (!captured) {
         var s0 = set_tts_src_noise_cls(fixed_array(r_noise.dev), fixed_array(r_noise.bytes), fixed_array(r_noise.bit))
-        enc_tts_src_noise_cls(raw, h, s0, ka, tts_src_noise_wgs(sh.samples * nh))
+        enc_tts_src_noise_cls(raw, h, s0, ka, sh.samples * nh)
     }
     let low_bufs = fixed_array(r_f0.dev, r_nu.dev, r_low.dev)
     let low_sizes = fixed_array(r_f0.bytes, r_nu.bytes, r_low.bytes)
@@ -1551,19 +1551,19 @@ def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
     let sin_bits = fixed_array(r_f0.bit, r_lowc.bit, r_noise.bit, 0u, r_har.bit)
     if (cfg.torch_math) {
         var s1 = set_tts_src_low_torch_cls(low_bufs, low_sizes, low_bits)
-        enc_tts_src_low_torch_cls(raw, h, s1, ka, tts_src_low_wgs(nh * sh.nlow))
+        enc_tts_src_low_torch_cls(raw, h, s1, ka, nh * sh.nlow)
         var s2 = set_tts_src_cumsum_torch_cls(cum_bufs, cum_sizes, cum_bits)
         enc_tts_src_cumsum_torch_cls(raw, h, s2, ka, 1l)
         var s3 = set_tts_src_sines_torch_cls(sin_bufs, sin_sizes, sin_bits)
-        enc_tts_src_sines_torch_cls(raw, h, s3, ka, tts_src_sines_wgs(sh.samples))
+        enc_tts_src_sines_torch_cls(raw, h, s3, ka, sh.samples)
         vt_pt(raw, VtProfRole.tts_source)
     } else {
         var s1 = set_tts_src_low_onnx_cls(low_bufs, low_sizes, low_bits)
-        enc_tts_src_low_onnx_cls(raw, h, s1, ka, tts_src_low_wgs(nh * sh.nlow))
+        enc_tts_src_low_onnx_cls(raw, h, s1, ka, nh * sh.nlow)
         var s2 = set_tts_src_cumsum_onnx_cls(cum_bufs, cum_sizes, cum_bits)
         enc_tts_src_cumsum_onnx_cls(raw, h, s2, ka, 1l)
         var s3 = set_tts_src_sines_onnx_cls(sin_bufs, sin_sizes, sin_bits)
-        enc_tts_src_sines_onnx_cls(raw, h, s3, ka, tts_src_sines_wgs(sh.samples))
+        enc_tts_src_sines_onnx_cls(raw, h, s3, ka, sh.samples)
         vt_pt(raw, VtProfRole.tts_source)
     }
     let re & = unsafe(d.stft_fwd_re)
@@ -1574,10 +1574,10 @@ def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
     let st_bits = fixed_array(r_har.bit, 0u, r_spec.bit)
     if (d.stft_pad_reflect) {
         var s4 = set_tts_stft_reflect_cls(st_bufs, st_sizes, st_bits)
-        enc_tts_stft_reflect_cls(raw, h, s4, ks, tts_stft_wgs(sh.spec_frames * d.bins))
+        enc_tts_stft_reflect_cls(raw, h, s4, ks, sh.spec_frames * d.bins)
     } else {
         var s4 = set_tts_stft_edge_cls(st_bufs, st_sizes, st_bits)
-        enc_tts_stft_edge_cls(raw, h, s4, ks, tts_stft_wgs(sh.spec_frames * d.bins))
+        enc_tts_stft_edge_cls(raw, h, s4, ks, sh.spec_frames * d.bins)
     }
     vt_pt(raw, VtProfRole.tts_stft)
 }
@@ -1690,7 +1690,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
             pad = uint(ST2_STFT_PAD), envelope = d.istft_envelope ? 1u : 0u, n = uint(sh.n_out), reoff = uint(sl.istft_re), imoff = uint(sl.istft_im),
             wnoff = uint(sl.window))
         var s = set_tts_istft_cls(fixed_array(r_post.dev, slab.dev, r_wave.dev), fixed_array(r_post.bytes, slab.bytes, r_wave.bytes), fixed_array(r_post.bit, 0u, r_wave.bit))
-        enc_tts_istft_cls(raw, h, s, ki, tts_istft_wgs(sh.n_out))
+        enc_tts_istft_cls(raw, h, s, ki, sh.n_out)
         vt_pt(raw, VtProfRole.tts_stft)
     }
     unsafe(scratch_resize(wave, sh.n_out))
@@ -1959,10 +1959,10 @@ def private ts_pk_rows(raw : VkCommandBuffer; var h : VkHaz; src, dst : TsRows; 
     let total = int64(pa.rows) * int64(pa.width)
     if (elu) {
         var s = set_tts_pk_rows_elu_cls(fixed_array(src.dev, dst.dev), fixed_array(src.bytes, dst.bytes), fixed_array(src.bit, dst.bit))
-        enc_tts_pk_rows_elu_cls(raw, h, s, pc, tts_pk_rows_wgs(total))
+        enc_tts_pk_rows_elu_cls(raw, h, s, pc, total)
     } else {
         var s = set_tts_pk_rows_cls(fixed_array(src.dev, dst.dev), fixed_array(src.bytes, dst.bytes), fixed_array(src.bit, dst.bit))
-        enc_tts_pk_rows_cls(raw, h, s, pc, tts_pk_rows_wgs(total))
+        enc_tts_pk_rows_cls(raw, h, s, pc, total)
     }
     vt_pt(raw, VtProfRole.tts_pk)
 }
@@ -1979,7 +1979,7 @@ def private ts_pk_elu(raw : VkCommandBuffer; var h : VkHaz; x : TsRows; rows, wi
 def private ts_pk_row_scale(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; x : TsRows; rows, c, soff : int64) {
     var s = set_tts_pk_row_scale_cls(fixed_array(x.dev, slab.dev), fixed_array(x.bytes, slab.bytes), fixed_array(x.bit, 0u))
     var pa = TtsPkScaleArgs(rows = uint(rows), c = uint(c), xoff = 0u, soff = uint(soff))
-    enc_tts_pk_row_scale_cls(raw, h, s, pa, tts_pk_row_scale_wgs(rows * c))
+    enc_tts_pk_row_scale_cls(raw, h, s, pa, rows * c)
     vt_pt(raw, VtProfRole.tts_pk)
 }
 
@@ -1987,7 +1987,7 @@ def private ts_pk_row_scale(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
 def private ts_pk_rope(raw : VkCommandBuffer; var h : VkHaz; tabs : TsRows; coff, soff : int64; x : TsRows; rows, qs, col, d, dh, pos0 : int64) {
     var s = set_tts_pk_rope_cls(fixed_array(x.dev, tabs.dev), fixed_array(x.bytes, tabs.bytes), fixed_array(x.bit, tabs.bit))
     var pa = TtsPkRopeArgs(rows = uint(rows), qs = uint(qs), col = uint(col), d = uint(d), dh = uint(dh), pos0 = uint(pos0), xoff = 0u, coff = uint(coff), soff = uint(soff))
-    enc_tts_pk_rope_cls(raw, h, s, pa, tts_pk_rope_wgs(rows * d / 2l))
+    enc_tts_pk_rope_cls(raw, h, s, pa, rows * d / 2l)
     vt_pt(raw, VtProfRole.tts_pk)
 }
 
@@ -1995,7 +1995,7 @@ def private ts_pk_rope(raw : VkCommandBuffer; var h : VkHaz; tabs : TsRows; coff
 def private ts_pk_attn(raw : VkCommandBuffer; var h : VkHaz; qkv, k, v, o : TsRows; t, qs, d, heads, pos0, ctx : int64) {
     var s = set_tts_pk_attn_cls(fixed_array(qkv.dev, k.dev, v.dev, o.dev), fixed_array(qkv.bytes, k.bytes, v.bytes, o.bytes), fixed_array(qkv.bit, k.bit, v.bit, o.bit))
     var pa = TtsPkAttnArgs(t = uint(t), qs = uint(qs), qcol = 0u, d = uint(d), pos0 = uint(pos0), ctx = uint(ctx), qoff = 0u, koff = 0u, voff = 0u, ooff = 0u)
-    enc_tts_pk_attn_cls(raw, h, s, pa, heads * t)
+    enc_tts_pk_attn_cls(raw, h, s, pa, tts_attn_wgs(t, heads))
     vt_pt(raw, VtProfRole.tts_pk_attn)
 }
 
@@ -2040,34 +2040,33 @@ def private ts_pk_gemv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : 
     var pa = TtsPkGemvArgs(nin = uint(nin), nout = uint(nout), stride = uint(p.kdim_p), eps = s.eps, woff = uint(p.woff), boff = uint(p.boff),
         xoff = uint(s.xoff), yoff = uint(s.yoff), moff = uint(s.moff), lwoff = uint(s.lwoff), lboff = uint(s.lboff), aoff = uint(s.aoff),
         x0off = uint(s.x0off), loff = uint(s.loff))
-    let wgs = tts_pk_gemv_wgs(nout)
     if (kind == TS_PK_GEMV_DOT) {
         var d0 = set_tts_pk_gemv_dot_cls(fixed_array(slab.dev, s.x.dev, s.y.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes), fixed_array(0u, s.x.bit, s.y.bit))
-        enc_tts_pk_gemv_dot_cls(raw, h, d0, pa, wgs)
+        enc_tts_pk_gemv_dot_cls(raw, h, d0, pa, nout)
     } elif (kind == TS_PK_GEMV_LN_SILU) {
         var d1 = set_tts_pk_gemv_ln_silu_cls(fixed_array(slab.dev, s.x.dev, s.y.dev, s.mod.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes, s.mod.bytes),
             fixed_array(0u, s.x.bit, s.y.bit, s.mod.bit))
-        enc_tts_pk_gemv_ln_silu_cls(raw, h, d1, pa, wgs)
+        enc_tts_pk_gemv_ln_silu_cls(raw, h, d1, pa, nout)
     } elif (kind == TS_PK_GEMV_GATE) {
         var d2 = set_tts_pk_gemv_gate_cls(fixed_array(slab.dev, s.x.dev, s.y.dev, s.mod.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes, s.mod.bytes),
             fixed_array(0u, s.x.bit, s.y.bit, s.mod.bit))
-        enc_tts_pk_gemv_gate_cls(raw, h, d2, pa, wgs)
+        enc_tts_pk_gemv_gate_cls(raw, h, d2, pa, nout)
     } elif (kind == TS_PK_GEMV_ADD_SILU) {
         var d3 = set_tts_pk_gemv_add_silu_cls(fixed_array(slab.dev, s.x.dev, s.y.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes), fixed_array(0u, s.x.bit, s.y.bit))
-        enc_tts_pk_gemv_add_silu_cls(raw, h, d3, pa, wgs)
+        enc_tts_pk_gemv_add_silu_cls(raw, h, d3, pa, nout)
     } elif (kind == TS_PK_GEMV_LN_GELU) {
         var d5 = set_tts_pk_gemv_ln_gelu_cls(fixed_array(slab.dev, s.x.dev, s.y.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes), fixed_array(0u, s.x.bit, s.y.bit))
-        enc_tts_pk_gemv_ln_gelu_cls(raw, h, d5, pa, wgs)
+        enc_tts_pk_gemv_ln_gelu_cls(raw, h, d5, pa, nout)
     } elif (kind == TS_PK_GEMV_ADD_SCALE) {
         var d6 = set_tts_pk_gemv_add_scale_cls(fixed_array(slab.dev, s.x.dev, s.y.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes), fixed_array(0u, s.x.bit, s.y.bit))
-        enc_tts_pk_gemv_add_scale_cls(raw, h, d6, pa, wgs)
+        enc_tts_pk_gemv_add_scale_cls(raw, h, d6, pa, nout)
     } elif (kind == TS_PK_GEMV_ADD) {
         var d7 = set_tts_pk_gemv_add_cls(fixed_array(slab.dev, s.x.dev, s.y.dev), fixed_array(slab.bytes, s.x.bytes, s.y.bytes), fixed_array(0u, s.x.bit, s.y.bit))
-        enc_tts_pk_gemv_add_cls(raw, h, d7, pa, wgs)
+        enc_tts_pk_gemv_add_cls(raw, h, d7, pa, nout)
     } else {
         var d4 = set_tts_pk_gemv_tail_cls(fixed_array(slab.dev, s.x.dev, s.y.dev, s.mod.dev, s.x0.dev, s.lat.dev),
             fixed_array(slab.bytes, s.x.bytes, s.y.bytes, s.mod.bytes, s.x0.bytes, s.lat.bytes), fixed_array(0u, s.x.bit, s.y.bit, s.mod.bit, s.x0.bit, s.lat.bit))
-        enc_tts_pk_gemv_tail_cls(raw, h, d4, pa, wgs)
+        enc_tts_pk_gemv_tail_cls(raw, h, d4, pa, nout)
     }
     vt_pt(raw, ts_pk_gemv_role(kind))
 }
@@ -2173,7 +2172,7 @@ def private ts_pk_transformer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRow
         }
         ts_pk_add_ln(raw, h, slab, sl.zero, s.n2, r_x, r_xb, r_xb, t, d, tf.eps)
         ts_lin(raw, h, slab, s.ffn1, d, tf.ffn, r_xb, r_h, t)
-        enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, tts_elem_wgs(t * tf.ffn))
+        enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, t * tf.ffn)
         vt_pt(raw, VtProfRole.tts_act)
         ts_lin(raw, h, slab, s.ffn2, tf.ffn, d, r_h, r_xb, t)
         if (s.has_s2) {
@@ -2207,7 +2206,7 @@ def private ts_pk_codec_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRow
     var sp = set_tts_pool_dw_cls(fixed_array(r_q.dev, r_x.dev, slab.dev), fixed_array(r_q.bytes, r_x.bytes, slab.bytes), fixed_array(r_q.bit, r_x.bit, 0u))
     var pp = TtsPoolArgs(c = uint(d), k = uint(mm.upsample.k), stride = uint(mm.upsample.stride), pad_l = 0u, dil = uint(mm.upsample.dilation), t_in = uint(frames),
         t_out = uint(t1), woff = uint(sl.up_w), boff = uint(sl.up_b))
-    enc_tts_pool_dw_cls(raw, h, sp, pp, tts_pool_dw_wgs(t1 * d))
+    enc_tts_pool_dw_cls(raw, h, sp, pp, t1 * d)
     vt_pt(raw, VtProfRole.tts_rows)
     ts_pk_transformer(raw, h, slab, sc_, mm.dec_tf, sl, t1)
     var cur = ts_rows(sc_, TS_C_A)
@@ -2345,7 +2344,7 @@ def private ts_pk_fr_layer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
     var pq = TtsPkGemvArgs(nin = uint(d), nout = uint(3l * d), stride = uint(L.in_proj.kdim_p), eps = tf.eps, woff = uint(L.in_proj.woff),
         boff = uint(L.in_proj.boff), xoff = 0u, yoff = 0u, moff = 0u, lwoff = uint(L.n1.gwoff), lboff = uint(L.n1.gboff), aoff = 0u, x0off = 0u, loff = 0u,
         span = uint(d), dh = dh, p = uint(p), coff = 0u, soff = uint(v.sin_off))
-    enc_tts_pk_gemv_ln_qkv_cls(raw, h, sq, pq, tts_pk_gemv_wgs(3l * d))
+    enc_tts_pk_gemv_ln_qkv_cls(raw, h, sq, pq, 3l * d)
     vt_pt(raw, VtProfRole.tts_pk_qkv)
     ts_pk_attn(raw, h, r_qkv, v.k[li], v.v[li], r_ctx, 1l, 3l * d, d, tf.heads, p, tf.context)
     ts_pk_gemv_add(raw, h, slab, L.out_proj, d, d, r_ctx, r_x, L.has_s1, L.scale1_off)

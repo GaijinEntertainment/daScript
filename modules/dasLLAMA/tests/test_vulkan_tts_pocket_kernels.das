@@ -89,10 +89,9 @@ def test_vkt_pk_rows(t0 : T?) {
             var s_e = set_tts_pk_rows_elu_cls(fixed_array(srcd, ded), fixed_array(bsrc, bdst), fixed_array(0u, B_E))
             var pa = TtsPkRowsArgs(rows = uint(PR_ROWS), width = uint(PR_WIDTH), ss = uint(PR_SS), sc = uint(PR_SC), sr0 = uint(PR_SR0),
                 ds = uint(PR_DS), dc = uint(PR_DC), dr0 = uint(PR_DR0))
-            let wgs = tts_pk_rows_wgs(int64(nwin))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_rows_cls(raw, h, s_p, pa, wgs)
-                enc_tts_pk_rows_elu_cls(raw, h, s_e, pa, wgs)
+                enc_tts_pk_rows_cls(raw, h, s_p, pa, int64(nwin))
+                enc_tts_pk_rows_elu_cls(raw, h, s_e, pa, int64(nwin))
                 cmd_copy_planes(raw, h, fixed_array(dpd, ded), host, sizes, B_P | B_E)
             }
             let dst_p <- staged(host.mapped, at[0], ndst, type<float>)
@@ -167,7 +166,7 @@ def test_vkt_pk_row_scale(t0 : T?) {
             var s = set_tts_pk_row_scale_cls(fixed_array(xd, wnd), fixed_array(bx, long_length(wn) * 4l), fixed_array(B_X, 0u))
             var pa = TtsPkScaleArgs(rows = uint(RS_T), c = uint(RS_C), xoff = uint(RS_XOFF), soff = uint(RS_SOFF))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_row_scale_cls(raw, h, s, pa, tts_pk_row_scale_wgs(int64(n)))
+                enc_tts_pk_row_scale_cls(raw, h, s, pa, int64(n))
                 cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
             }
             let whole <- staged(host.mapped, at[0], length(xp), type<float>)
@@ -301,10 +300,10 @@ def private pk_attn_device(kc : TtsKvCache; qfull : array<float>) : PkAttnOut {
         pc.ctx = uint(PA_WIN_CTX)
         let heads = int64(PA_HEADS)
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_pk_attn_cls(raw, h, s_a, pa, tts_pk_attn_wgs(heads, int64(PA_T)))
-            enc_tts_pk_attn_cls(raw, h, s_b, pb, tts_pk_attn_wgs(heads, 1l))
-            enc_tts_pk_attn_cls(raw, h, s_x, pb, tts_pk_attn_wgs(heads, 1l))
-            enc_tts_pk_attn_cls(raw, h, s_c, pc, tts_pk_attn_wgs(heads, int64(PA_T)))
+            enc_tts_pk_attn_cls(raw, h, s_a, pa, tts_attn_wgs(int64(PA_T), heads))
+            enc_tts_pk_attn_cls(raw, h, s_b, pb, tts_attn_wgs(1l, heads))
+            enc_tts_pk_attn_cls(raw, h, s_x, pb, tts_attn_wgs(1l, heads))
+            enc_tts_pk_attn_cls(raw, h, s_c, pc, tts_attn_wgs(int64(PA_T), heads))
             cmd_copy_planes(raw, h, outs, host, sizes, B_OA | B_OB | B_OX | B_OC)
         }
         out.a <- staged(host.mapped, at[0] + int64(PA_OOFF) * 4l, PA_T * d, type<float>)
@@ -511,13 +510,13 @@ def private pk_gemv_device(f : PkGemvFix) : PkGemvRows {
         var pa = TtsPkGemvArgs(nin = uint(PG_NIN), nout = uint(nout), stride = uint(PG_STRIDE), eps = PG_EPS, woff = uint(f.woff),
             boff = uint(f.boff), xoff = uint(PG_XOFF), yoff = uint(PG_YOFF), moff = uint(PG_MOFF), lwoff = uint(f.lwoff),
             lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = uint(PG_X0OFF), loff = uint(PG_LOFF))
-        let wgs = tts_pk_gemv_wgs(int64(nout))
+        let rows = int64(nout)
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_pk_gemv_dot_cls(raw, h, s_dot, pa, wgs)
-            enc_tts_pk_gemv_ln_silu_cls(raw, h, s_ln, pa, wgs)
-            enc_tts_pk_gemv_gate_cls(raw, h, s_gate, pa, wgs)
-            enc_tts_pk_gemv_add_silu_cls(raw, h, s_add, pa, wgs)
-            enc_tts_pk_gemv_tail_cls(raw, h, s_tail, pa, wgs)
+            enc_tts_pk_gemv_dot_cls(raw, h, s_dot, pa, rows)
+            enc_tts_pk_gemv_ln_silu_cls(raw, h, s_ln, pa, rows)
+            enc_tts_pk_gemv_gate_cls(raw, h, s_gate, pa, rows)
+            enc_tts_pk_gemv_add_silu_cls(raw, h, s_add, pa, rows)
+            enc_tts_pk_gemv_tail_cls(raw, h, s_tail, pa, rows)
             cmd_copy_planes(raw, h, outs, host, sizes, B_DOT | B_LN | B_GATE | B_ADD | B_TAIL | B_LAT)
         }
         out.dot <- staged(host.mapped, at[0], ny, type<float>)
@@ -634,7 +633,7 @@ def test_vkt_pk_rope(t0 : T?) {
             var pa = TtsPkRopeArgs(rows = uint(PO_T), qs = uint(PO_QS), col = uint(PO_D), d = uint(PO_D), dh = uint(PO_DH), pos0 = uint(PO_POS0),
                 xoff = uint(PO_XOFF), coff = uint(coff), soff = uint(soff))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_rope_cls(raw, h, s, pa, tts_pk_rope_wgs(int64(nk / 2)))
+                enc_tts_pk_rope_cls(raw, h, s, pa, int64(nk / 2))
                 cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
             }
             let whole <- staged(host.mapped, at[0], length(xp), type<float>)
@@ -817,10 +816,10 @@ def test_vkt_pk_gemv_fused(t0 : T?) {   // nolint:STYLE038 — one fixture's fou
             ps.woff = uint(f.woff_s)
             ps.boff = uint(f.boff_s)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_gemv_ln_qkv_cls(raw, h, s_qkv, pq, tts_pk_gemv_wgs(int64(3 * d)))
-                enc_tts_pk_gemv_add_scale_cls(raw, h, s_as, ps, tts_pk_gemv_wgs(int64(d)))
-                enc_tts_pk_gemv_add_cls(raw, h, s_a, ps, tts_pk_gemv_wgs(int64(d)))
-                enc_tts_pk_gemv_ln_gelu_cls(raw, h, s_g, ps, tts_pk_gemv_wgs(int64(d)))
+                enc_tts_pk_gemv_ln_qkv_cls(raw, h, s_qkv, pq, int64(3 * d))
+                enc_tts_pk_gemv_add_scale_cls(raw, h, s_as, ps, int64(d))
+                enc_tts_pk_gemv_add_cls(raw, h, s_a, ps, int64(d))
+                enc_tts_pk_gemv_ln_gelu_cls(raw, h, s_g, ps, int64(d))
                 cmd_copy_planes(raw, h, outs, host, sizes, B_Y | B_K | B_V | B_AS | B_A | B_G)
             }
             let y_whole <- staged(host.mapped, at[0], ny, type<float>)
