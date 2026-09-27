@@ -28,7 +28,7 @@ struct TtsSlabWriter {
     @exact_size host : array<float>   //! sized once from the measure pass; the write pass only bumps `n`
     n : int64
     measure : bool
-    lstm_turned : bool = true   //! an LSTM recurrence written turned to [H][4H] (the Vulkan kernel's read), else as the model stores it (Metal's)
+    lstm_transposed : bool = true   //! an LSTM recurrence written transposed to [H][4H] (the Vulkan kernel's read), else as the model stores it (Metal's)
 }
 
 //! `count` floats at the next 16-byte boundary (every item is a float4 read for some kernel); the element offset
@@ -64,7 +64,7 @@ struct TtsNormSlot {
 struct TtsLstmSlot {
     fx : TtsConvSlot    //! the forward direction's input linear [4H][nin] with its bias
     bx : TtsConvSlot
-    fhh : int64         //! ... and its recurrence transposed [H][4H]
+    fhh : int64         //! the forward direction's recurrence, [H][4H] under `lstm_transposed`, else as stored
     bhh : int64
 }
 
@@ -218,7 +218,7 @@ def private tts_slab_lstm_dir(var w : TtsSlabWriter; l : TtsLstm; var xs : TtsCo
     lin.b := l.b
     xs = tts_slab_linear(w, lin)
     let hd = l.hidden
-    if (!w.lstm_turned) {
+    if (!w.lstm_transposed) {
         hh = tts_slab_raw(w, l.w_hh, 4l * hd * hd)
         return
     }
@@ -368,8 +368,8 @@ def tts_dec_write(var w : TtsSlabWriter; d : St2Decoder; var s : TtsDecSlab) {
 }
 
 //! the part's writer run twice (a measuring pass, then the fill); the host floats come back to upload, empty when the part carries nothing
-def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; var s : SS) : void>; lstm_turned : bool = true) : array<float> {
-    var inscope w = TtsSlabWriter(measure = true, lstm_turned = lstm_turned)
+def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; var s : SS) : void>; lstm_transposed : bool = true) : array<float> {
+    var inscope w = TtsSlabWriter(measure = true, lstm_transposed = lstm_transposed)
     var probe : SS
     invoke(write, w, probe)
     unsafe {
@@ -985,8 +985,8 @@ def tts_pk_frames_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_frame
         && vs.len + n_txt + max_frames <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
 }
 
-//! the conditioning rows a frames call reads back after `run` frames ran: every frame made and the breaking frame's row, as the CPU loop leaves them
-def tts_pk_cond_rows(frames, run : int64) : int64 => min(frames + 1l, run)
+//! the conditioning rows a frames call reads back after the loop stepped `stepped` frames: every frame made and the breaking frame's row, as the CPU loop leaves them
+def tts_pk_cond_rows(frames, stepped : int64) : int64 => min(frames + 1l, stepped)
 
 //! a voice slot's residency: the key over the caches, their capacity and fill, the backbone width
 struct TtsPkVoiceMeta {
@@ -1000,6 +1000,7 @@ struct TtsPkVoiceMeta {
 def tts_pk_voice_meta(vs : PocketVoiceState; d : int64) : TtsPkVoiceMeta
     => TtsPkVoiceMeta(key = tts_pk_voice_key(vs), cap = vs.caches[0].cap, len = vs.len, d = d)
 
-//! a slot holding `layers` layers of K/V rows stands for this voice: the same key, capacity and fill, a layer a cache
-def tts_pk_voice_current(meta : TtsPkVoiceMeta; vs : PocketVoiceState; layers : int) : bool
-    => meta.key == tts_pk_voice_key(vs) && meta.cap == vs.caches[0].cap && meta.len == vs.len && layers == length(vs.caches)
+//! a slot holding `layers` layers of K/V rows stands for this voice at the backbone width `d`: the same key, capacity, fill and width, a layer a cache
+def tts_pk_voice_current(meta : TtsPkVoiceMeta; vs : PocketVoiceState; layers : int; d : int64) : bool
+    => (meta.key == tts_pk_voice_key(vs) && meta.cap == vs.caches[0].cap && meta.len == vs.len && meta.d == d
+        && layers == length(vs.caches))

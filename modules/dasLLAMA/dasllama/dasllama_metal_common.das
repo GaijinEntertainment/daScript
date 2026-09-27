@@ -599,6 +599,19 @@ def upload_rows_padded(var buf : MetalBuffer?; src : void?; rows, mp, width : in
     zero_rows(buf, rows, mp, width)
 }
 
+//! `rows` rows of `width` floats from `src` laid in `buf` at the row stride `stride`, each row's tail past `width` zeroed.
+def upload_rows_strided(var buf : MetalBuffer?; src : float const?; rows, width, stride : int64) {
+    unsafe {
+        var dp = reinterpret<float?>(metal_buffer_contents(buf))
+        for (r in range64(rows)) {
+            memcpy(dp + r * stride, src + r * width, width * 4l)
+            for (k in range64(width, stride)) {
+                dp[r * stride + k] = 0.0
+            }
+        }
+    }
+}
+
 //! One mirror row of layer `l` - K and V - copied from the arena back into the session's CPU KV.
 def mirror_row_writeback(var s : Session; seq_len, l, pos, prow, rowb, lb : int64; ab : uint8?; koff, voff : uint64) {
     unsafe {

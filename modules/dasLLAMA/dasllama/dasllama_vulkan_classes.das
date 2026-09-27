@@ -12,6 +12,7 @@ require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gpu_math
+require dasllama/dasllama_math
 require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
 require daslib/math_bits   // uint_bits_to_float: the KHR tile's f32 store bounce read back through its uint staging array
 require daslib/enum_trait   // kq_gemv_fmts walks the enum
@@ -875,7 +876,7 @@ def private act_mul_sel(v, u : float; act : uint) : float {
         return (x / (1.0 + exp(-1.702 * x))) * (y + 1.0)
     }
     return (act == ACT_GELU ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
-        : tts_silu(v) * u)
+        : silu_f32(v) * u)
 }
 
 //! the act + requant of a gate / up pair on `RqT`: the element load is the activation
@@ -2259,7 +2260,7 @@ class DnConv {
             let p = p0 + uint(i)
             let x3 = p < pa.npos ? xrow(int(p), cch, taps) : 0.0
             let acc = w[0] * x0 + w[1] * x1 + w[2] * x2 + w[3] * x3
-            y[i] = (live && p < pa.npos) ? tts_silu(acc) : 0.0
+            y[i] = (live && p < pa.npos) ? silu_f32(acc) : 0.0
             x0 = x1
             x1 = x2
             x2 = x3
@@ -2409,7 +2410,7 @@ class DnStepFused : WgReduceBase {
                 }
                 smalls[wrb + ch * taps + taps - 1u] = fresh
             }
-            let sv = tts_silu(acc)
+            let sv = silu_f32(acc)
             if (sl == 0u) {
                 dq[j] = sv
             } elif (sl == 1u) {
@@ -2523,7 +2524,7 @@ class DnStepFused : WgReduceBase {
         while (e < ds) {
             let zv = proj[prow + pa.cd + h * ds + e]
             let xn = dout[e] * oinv * smalls[pa.wnorm_off + e]
-            dout[e] = xn * tts_silu(zv)
+            dout[e] = xn * silu_f32(zv)
             e += 256u
         }
         barrier()
@@ -2872,7 +2873,7 @@ class DnScanP3 {
         while (e < pa.di) {
             let zv = zrows[p * pa.di + e]
             let xn = orows[ob + e] * hinv[e / ds] * smalls[pa.wnorm_off + e % ds]
-            orows[ob + e] = xn * tts_silu(zv)
+            orows[ob + e] = xn * silu_f32(zv)
             e += 256u
         }
     }
@@ -8816,6 +8817,12 @@ def f16_gemm_wgs(khr : bool; rows, d : int64) : int64 {
     return ((rows + tile - 1l) / tile) * ((d + tile - 1l) / tile)
 }
 
+//! an f16 GEMM off a cm2-mode device takes the KHR tile (`f16_gemm_set`'s `khr`)
+def f16_gemm_khr : bool => g_gpu.coopmat_mode != COOPMAT_CM2
+
+//! the f16 GEMM tile serves on a cm2-mode device or where the KHR tile does; elsewhere an f16 GEMM route declines to the f32 tile
+def f16_gemm_on : bool => g_gpu.coopmat_mode == COOPMAT_CM2 || khr_kq_tile_on()
+
 def f16_gemm_ensure(khr : bool) : bool => khr ? ensure_f16_gemm_khr_cls() : ensure_f16_gemm_cm2_cls()
 
 def f16_gemm_set(khr : bool; bufs : uint64 const[3]; sizes : int64 const[3]; gbits : uint const[3]) : VkDescriptorSet
@@ -10056,18 +10063,18 @@ class TowerGluSig {
     }
 }
 
-struct TtsPoolArgs {
+struct DwConvRowsArgs {
     c : uint       //! the channels, one tap row each
     k : uint       //! the taps, where the stamp does not fix them
     stride : uint  //! the transposed stamp's stride
-    pad_l : uint   //! ... its cropped left edge
-    dil : uint     //! ... its dilation
-    t_in : uint
-    t_out : uint
+    pad_l : uint   //! the transposed stamp's cropped left edge
+    dil : uint     //! the transposed stamp's dilation
+    t_in : uint    //! the input rows, and the output rows of the causal and the centered stamps
+    t_out : uint   //! the transposed stamp's output rows
     woff : uint    //! w [c][k]'s element base in wn
     boff : uint    //! the transposed stamp's bias row in wn
     bnwoff : uint  //! the centered stamp's folded BatchNorm scale row in wn
-    bnboff : uint  //! ... and shift row
+    bnboff : uint  //! the centered stamp's folded BatchNorm shift row in wn
 }
 
 //! a depthwise conv on rows, y [t_out][c] from x [t_in][c] and w [c][k], one element an invocation; FORM is the source
@@ -10081,7 +10088,15 @@ class template DwConvRowsT {
     @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 y : array<float>
     @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @push_constant pa : TtsPoolArgs
+    @push_constant pa : DwConvRowsArgs
+
+    def rows_out : uint {
+        static_if (FORM == 0) {
+            return pa.t_out
+        } else {
+            return pa.t_in
+        }
+    }
 
     def taps : uint {
         static_if (K != 0u) {
@@ -10093,12 +10108,12 @@ class template DwConvRowsT {
 
     def src_row(t, kk : uint) : int {
         static_if (FORM == 0) {
-            return st2_conv_src_tr_row(t, kk, 0u, pa.pad_l, pa.dil, max(pa.stride, 1u), pa.t_in)
+            return conv_src_tr_row(t, kk, 0u, pa.pad_l, pa.dil, max(pa.stride, 1u), pa.t_in)
         } else {
             static_if (FORM == 1) {
-                return st2_conv_src_fwd_row(t, kk, 0u, taps() - 1u, 1u, 1u, pa.t_in)
+                return conv_src_fwd_row(t, kk, 0u, taps() - 1u, 1u, 1u, pa.t_in)
             } else {
-                return st2_conv_src_fwd_row(t, kk, 0u, (taps() - 1u) / 2u, 1u, 1u, pa.t_in)
+                return conv_src_fwd_row(t, kk, 0u, (taps() - 1u) / 2u, 1u, 1u, pa.t_in)
             }
         }
     }
@@ -10106,7 +10121,7 @@ class template DwConvRowsT {
     [spirv_kernel(local_size_x = 256)]
     def run {
         let e = gl_GlobalInvocationID.x
-        if (e < pa.t_out * pa.c) {
+        if (e < rows_out() * pa.c) {
             let c = max(pa.c, 1u)
             let t = e / c
             let j = e % c
@@ -10128,7 +10143,7 @@ class template DwConvRowsT {
                 kk++
             }
             static_if (FORM == 2) {
-                y[e] = tts_silu(acc * wn[pa.bnwoff + j] + wn[pa.bnboff + j])
+                y[e] = silu_f32(acc * wn[pa.bnwoff + j] + wn[pa.bnboff + j])
             } else {
                 y[e] = acc
             }
@@ -10545,19 +10560,18 @@ def tower_gelu_tanh(v : float) : float {
         return v
     }
     let xr = float(float16(v))
-    let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))
+    let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * mad(0.044715 * xr, xr, 1.0)))
     return float(float16(g))
 }
 
 //! the erf GELU, the CPU `gelu_erf`'s rational erfc in f32
 def tower_gelu_erf(v : float) : float {
     let z = abs(v) * 0.7071067811865476
-    let t = 1.0 / (1.0 + 0.5 * z)
-    let erfc = t * exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 +
-        t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 +
-        t * (-0.82215223 + t * 0.17087277)))))))))
-    let half_v_erfc = 0.5 * v * erfc
-    return v >= 0.0 ? v - half_v_erfc : half_v_erfc
+    let t = 1.0 / mad(0.5, z, 1.0)
+    let inner = mad(t, mad(t, mad(t, mad(t, 0.17087277, -0.82215223), 1.48851587), -1.13520398), 0.27886807)
+    let poly = mad(t, mad(t, mad(t, mad(t, mad(t, inner, -0.18628806), 0.09678418), 0.37409196), 1.00002368), mad(-z, z, -1.26551223))
+    let erfc = t * exp(poly)
+    return v >= 0.0 ? mad(-0.5 * v, erfc, v) : 0.5 * v * erfc
 }
 
 //! the tower activations by `TowerBiasArgs.act` code
@@ -10569,7 +10583,7 @@ def tower_act(v : float; act : uint) : float {
         return tower_gelu_erf(v)
     }
     if (act == BIAS_ACT_SILU) {
-        return tts_silu(v)
+        return silu_f32(v)
     }
     if (act == BIAS_ACT_RELU) {
         return max(v, 0.0)
@@ -10839,28 +10853,29 @@ class template TowerWinAttnT {
 [vk_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
 class TowerWinAttn : TowerWinAttnT {}
 
-struct TtsPkRopeArgs {
-    rows : uint
+struct RopeTabArgs {
+    rows : uint   //! the rows roped, row r at position r
     qs : uint     //! x's row stride
     col : uint    //! the roped span's first column (a fused [q | k | v] row's q or k slot)
     d : uint      //! the span's width, its heads side by side
     dh : uint     //! the head size
-    pos0 : uint   //! the first row's position, the tables' row
-    xoff : uint   //! x's element base
-    coff : uint   //! the cos table [pos][dh / 2]'s element base in cos_t
-    soff : uint   //! the sin table's in sin_t, the same layout
+    coff : uint   //! the cos table [pos][dh / 2]'s element base in its binding
+    soff : uint   //! the sin table's element base in its binding, laid out as the cos table
 }
 
-//! the rotary embedding over a span of rows in place from per-position tables: row r at position pos0 + r turns each pair
+//! the rotary embedding over a span of rows in place from per-position tables: row r at position r turns each pair
 //! of each head by the tables' angle j at that position - NEOX the pairs (j, j + dh / 2), the CPU `rope_neox_tab_rows` (the
 //! vision mrope tables), else the adjacent pairs (2j, 2j + 1), the CPU `rope_rows`; one pair an invocation over rows * d / 2
 [ |> template_struct_instance]
 class template RopeTabT {
     @template_constant NEOX : bool = false
+    @template_constant SLAB_TABS : bool = false   //!< the tables sit in a weight slab, not in per-encode planes
     @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 cos_t : array<float>
-    @ssbo @binding = 2 sin_t : array<float>
-    @push_constant pa : TtsPkRopeArgs
+    @ssbo @binding = 1 @template_gate = "!SLAB_TABS" cos_t : array<float>
+    @ssbo @binding = 2 @template_gate = "!SLAB_TABS" sin_t : array<float>
+    @ssbo @binding = 1 @role = "weight" @template_gate = SLAB_TABS cos_w : array<float>
+    @ssbo @binding = 2 @role = "weight" @template_gate = SLAB_TABS sin_w : array<float>
+    @push_constant pa : RopeTabArgs
 
     def pair_first(hb, j : uint) : uint {
         static_if (NEOX) {
@@ -10887,11 +10902,18 @@ class template RopeTabT {
             let pi = gid % max(half, 1u)
             let hh = max(pa.dh / 2u, 1u)
             let j = pi % hh
-            let i0 = pair_first(pa.xoff + r * pa.qs + pa.col + (pi / hh) * pa.dh, j)
+            let i0 = pair_first(r * pa.qs + pa.col + (pi / hh) * pa.dh, j)
             let i1 = i0 + pair_partner_dist(hh)
-            let tb = (pa.pos0 + r) * hh + j
-            let cv = cos_t[pa.coff + tb]
-            let sv = sin_t[pa.soff + tb]
+            let tb = r * hh + j
+            var cv = 0.0
+            var sv = 0.0
+            static_if (SLAB_TABS) {
+                cv = cos_w[pa.coff + tb]
+                sv = sin_w[pa.soff + tb]
+            } else {
+                cv = cos_t[pa.coff + tb]
+                sv = sin_t[pa.soff + tb]
+            }
             let v0 = x[i0]
             let v1 = x[i1]
             x[i0] = v0 * cv - v1 * sv
@@ -13221,7 +13243,7 @@ def vt_tile_groups(t : VtTile; width, rows : int64) : int64 => t.tc > 0l ? cm2_t
 
 //! the rows a GEMM record carries: on the l column the encode's rounded up to the column, else the raw count
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def vt_tile_rows(t : VtTile; rows : int64) : int64 => t.tc == 256l ? (rows + 255l) / 256l * 256l : rows
+def vt_tile_rows(t : VtTile; rows : int64) : int64 => t.tc == 256l ? round_up(rows, 256l) : rows
 
 def vt_tile_enc(raw : VkCommandBuffer; var h : VkHaz; t : VtTile; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     if (t.tc > 0l) {
@@ -13274,9 +13296,9 @@ class template TtsIm2colT {
     //! the input position tap `tap` reads for output row r, or -1 where it falls off x
     def src_pos(r, tap : uint) : int {
         if (pa.transposed != 0u) {
-            return st2_conv_src_tr_row(r, tap, 0u, pa.pad_l, pa.dilation, max(pa.stride, 1u), pa.tin)
+            return conv_src_tr_row(r, tap, 0u, pa.pad_l, pa.dilation, max(pa.stride, 1u), pa.tin)
         }
-        return st2_conv_src_fwd_row(r, tap, 0u, pa.pad_l, pa.dilation, pa.stride, pa.tin)
+        return conv_src_fwd_row(r, tap, 0u, pa.pad_l, pa.dilation, pa.stride, pa.tin)
     }
 
     //! column j of output row r
@@ -13435,10 +13457,10 @@ class TtsLstmDir {
             if (lead) {
                 let ti = pa.backward != 0u ? t_first - step : t_first + step
                 let gb = pa.goff + ti * pa.gstride + j
-                let gi = tts_sigmoid(gates[gb] + gs[lane])
-                let gf = tts_sigmoid(gates[gb + hd] + gs[lane + 1u])
+                let gi = sigmoid_f32(gates[gb] + gs[lane])
+                let gf = sigmoid_f32(gates[gb + hd] + gs[lane + 1u])
                 let gg = tts_tanh(gates[gb + 2u * hd] + gs[lane + 2u])
-                let go = tts_sigmoid(gates[gb + 3u * hd] + gs[lane + 3u])
+                let go = sigmoid_f32(gates[gb + 3u * hd] + gs[lane + 3u])
                 cst = gf * cst + gi * gg
                 let hn = go * tts_tanh(cst)
                 hs[j] = hn
@@ -13475,8 +13497,9 @@ class TtsConcat {
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.rows * pa.width) {
-            let r = gid / pa.width
-            let j = gid % pa.width
+            let w = max(pa.width, 1u)
+            let r = gid / w
+            let j = gid % w
             let rc = pa.with_res != 0u ? pa.rc : 0u
             var v = 0.0
             if (j < pa.c) {
@@ -13515,7 +13538,7 @@ class TtsSigSum {
             var acc = 0.0
             var j = 0u
             while (j < pa.nb) {
-                acc += tts_sigmoid(logits[r * pa.ls + j])
+                acc += sigmoid_f32(logits[r * pa.ls + j])
                 j++
             }
             raw[r] = acc / pa.speed
@@ -13745,6 +13768,14 @@ struct TtsSourceArgs {
     seed : uint         //! the own noise draw's key
     woff : uint         //! the source linear's weight row [nh] in wn
     boff : uint         //! its bias [1] in wn
+}
+
+//! a / b rounded as the CPU's IEEE divide: a SPIR-V divide sits up to 2.5 ulp off, which the phase sums carry (Metal's `/` is IEEE)
+def private tts_div(a, b : float) : float {
+    var r = 1.0 / b
+    r = mad(mad(-b, r, 1.0), r, r)
+    let q = a * r
+    return mad(mad(-q, b, a), r, q)
 }
 
 //! the source's resample law - TORCH: torch's taps and mix, else onnxruntime's - the base of the source stamps; the taps'
@@ -14039,8 +14070,9 @@ class template TtsPkRowsT {
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.rows * pa.width) {
-            let r = gid / pa.width
-            let j = gid % pa.width
+            let w = max(pa.width, 1u)
+            let r = gid / w
+            let j = gid % w
             var v = src[(pa.sr0 + r) * pa.ss + pa.sc + j]
             static_if (ELU) {
                 v = max(v, 0.0) + min(exp(v) - 1.0, 0.0)
@@ -14353,13 +14385,13 @@ class template TtsPkGemvT : WgReduceBase {
                 y[pa.yoff + row] = d
             }
             static_if (EPI == 1) {
-                y[pa.yoff + row] = tts_silu(d)
+                y[pa.yoff + row] = silu_f32(d)
             }
             static_if (EPI == 2) {
                 y[pa.yoff + row] = y[pa.yoff + row] + mod[pa.moff + 2u * pa.nin + row] * d
             }
             static_if (EPI == 3) {
-                y[pa.yoff + row] = tts_silu(d + aux_at(row))
+                y[pa.yoff + row] = silu_f32(d + aux_at(row))
             }
             static_if (EPI == 4) {
                 let tv = d + x0[pa.x0off + row]
@@ -14472,6 +14504,8 @@ class TtsPkGemvLnGelu : TtsPkGemvT {
     override EPI = 8
 }
 
-//! the Pocket codec's NORM rope over the q and k spans, the tables in the slab (cos_t and sin_t bind one buffer)
+//! the Pocket codec's adjacent-pair rope over the q and k spans, the tables in the slab (cos_w and sin_w bind one buffer)
 [vk_dispatch(name = "tts_pk_rope_cls", kernel = "run", grid = "pairs/256", params = "pairs : int64")]
-class TtsPkRope : RopeTabT {}
+class TtsPkRope : RopeTabT {
+    override SLAB_TABS = true
+}

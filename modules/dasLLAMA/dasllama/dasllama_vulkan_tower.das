@@ -50,6 +50,10 @@ enum private VulkanTowerDecline {
     memory       //! a device or pinned allocation failed: the tower stays on the CPU chain
 }
 
+let VK_DECLINE_WORDS_TOWER_KNOB = "the tower knob is off (DASLLAMA_VK_TOWER=0 or set_vulkan_tower(false))"
+let VK_DECLINE_WORDS_DEVICE = "the tier has no device (DASLLAMA_GPU=1 arms it), or a class failed to build"
+let VK_DECLINE_WORDS_MEMORY = "a device allocation failed"
+
 //! Engage / decline counters; `blocks` = transformer blocks the driver ran. Model-level gates assert DELTAS on these.
 def vulkan_tower_stats : tuple<encodes : int64; rows : int64; blocks : int64; declines : int64; convs : int64; mels : int64> {
     return (encodes = g_vt_encodes, rows = g_vt_rows, blocks = g_vt_blocks, declines = g_vt_declines.total, convs = g_vt_convs, mels = g_vt_mels)
@@ -1232,7 +1236,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     var pc_rq_rel = TowerClampRqArgs(inbase = 0u, nblk = uint(rel_cap_rows * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rel = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd))
-    var pc_dw = TtsPoolArgs(c = uint(d), t_in = uint(npos), t_out = uint(npos))
+    var pc_dw = DwConvRowsArgs(c = uint(d), t_in = uint(npos))
     var pc_silu_ff = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = BIAS_ACT_SILU)
     var pc_silu_d = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_SILU)
     var pc_attn = TowerG4aAttnArgs(d = uint(d), npos = uint(npos), pdsoff = 0u)
@@ -1562,7 +1566,7 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     var pc_rq_xb = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rel = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd))
-    var pc_dw = TtsPoolArgs(c = uint(d), k = uint(t.conv_kernel), t_in = uint(npos), t_out = uint(npos))
+    var pc_dw = DwConvRowsArgs(c = uint(d), k = uint(t.conv_kernel), t_in = uint(npos))
     var pc_attn_r = TowerCnAttnRArgs(d = uint(d), npos = uint(npos), buoff = 0u, hoff = 0u)
     var pc_ln = TowerLnArgs(d = uint(d), rows = uint(npos), woff = 0u, boff = 0u, eps = t.eps, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
     var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), woff = 0u, boff = 0u, eps = t.eps, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
@@ -1893,10 +1897,10 @@ def private vt_arm(r : VtResident; gemm_off_cm2 : bool = false) : tuple<ok : boo
     return (ok = true, khr = khr, gemm_khr = gemm_khr)
 }
 
-//! `bytes` of a host readback buffer the chain's own command filled, landed in `x`
-def private vt_land(var x : array<float>; hb : HostBuf; bytes : int64) {
+//! `bytes` of a host readback buffer the chain's own command filled, from byte `src_off`, landed in `x`
+def private vt_readback_copy(var x : array<float>; hb : HostBuf; bytes : int64; src_off : int64 = 0l) {
     unsafe {
-        memcpy(addr<void?>(x[0]), hb.mapped, bytes)
+        memcpy(addr<void?>(x[0]), reinterpret<void?>(intptr(hb.mapped) + uint64(src_off)), bytes)
     }
 }
 
@@ -1905,7 +1909,7 @@ def private vt_served(var r : VtResident; var x : array<float>; bx, npos, n_laye
     => vt_served_from(r, r.host, x, bx, npos, n_layer)
 
 def private vt_served_from(var r : VtResident; hb : HostBuf; var x : array<float>; bx, npos, n_layer : int64) : bool {
-    vt_land(x, hb, bx)
+    vt_readback_copy(x, hb, bx)
     g_vt_encodes++
     g_vt_rows += npos
     g_vt_blocks += n_layer
@@ -2653,8 +2657,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = 1.0 / sqrt(float(hs)), window = 0u, sinkoff = 0u)
     var pc_pad_qkv = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(3l * d), soff = 0u)
     var pc_unpad = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)   //! the attention rows are d-wide
-    var pc_rope = TtsPkRopeArgs(rows = uint(npos), qs = uint(3l * d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), pos0 = 0u, xoff = 0u, coff = 0u,
-        soff = 0u)
+    var pc_rope = RopeTabArgs(rows = uint(npos), qs = uint(3l * d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), coff = 0u, soff = 0u)
     var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rqh = TowerClampRqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_gqkv = BatchArgs(n = uint(d), d = uint(3l * d), map_off = 0u)
@@ -2724,9 +2727,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         }
     }
     if (nds > 0l) {
-        unsafe {
-            memcpy(addr<void?>(s.ds_xtaps[0]), reinterpret<void?>(intptr(r.host.mapped) + uint64(bx)), nds * bx)
-        }
+        vt_readback_copy(s.ds_xtaps, r.host, nds * bx, bx)
     }
     return vt_served(r, s.x, bx, npos, t.n_layer)
 }
@@ -2801,7 +2802,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     let scale = 1.0 / sqrt(float(hs))
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
     var pc_rs = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)
-    var pc_rope = TtsPkRopeArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), pos0 = 0u, xoff = 0u, coff = 0u, soff = 0u)
+    var pc_rope = RopeTabArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), coff = 0u, soff = 0u)
     var pc_gd = F16GemmArgs(n = uint(d), d = uint(d), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
     var pc_gff = F16GemmArgs(n = uint(d), d = uint(ff), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(ff), ksplit = 0u)
     var pc_dn = F16GemmArgs(n = uint(ff), d = uint(d), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
@@ -3269,7 +3270,7 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
         cmd_copy_range(raw, r.fx_dev, 0l, r.host.buf, 0l, bx)
         vt_pt(raw, VtProfRole.copy_out)
     }
-    vt_land(s.x, r.host, bx)
+    vt_readback_copy(s.x, r.host, bx)
     g_vt_convs += n_chunks
     vt_announce(r)
     return true
@@ -3476,7 +3477,7 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
         vt_pt(raw, VtProfRole.copy_out)
     }
     ensure_length(s.x, npos * d)
-    vt_land(s.x, r.fhost, bx)
+    vt_readback_copy(s.x, r.fhost, bx)
     g_vt_convs++
     if (!vulkan_gemma4a_blocks(t, s, npos)) {
         return -1l
@@ -3724,7 +3725,7 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
         vt_pt(raw, VtProfRole.copy_out)
     }
     ensure_length(s.x, tt * d)
-    vt_land(s.x, r.fhost, bx)
+    vt_readback_copy(s.x, r.fhost, bx)
     g_vt_convs++
     return tt
 }
@@ -3795,7 +3796,7 @@ def private vulkan_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int6
         cmd_copy_range(raw, r.yo_dev, 0l, r.host.buf, 0l, bout)
         vt_pt(raw, VtProfRole.copy_out)
     }
-    vt_land(m.data, r.host, bout)
+    vt_readback_copy(m.data, r.host, bout)
     vt_announce(r)
     g_vt_mels++
     return true

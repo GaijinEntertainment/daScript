@@ -1849,8 +1849,8 @@ def public matmul_moe_gpu_cls(var y : array<float>; woff : int64; xq : array<int
     }
 }
 
-//! log census `cov` (name -> dispatches, `census` naming it): the dispatched with counts, a LOUD WARNING per never-dispatched one
-def public kernel_coverage_report(backend, census : string; cov : table<string; int64>) {
+//! log census `cov` (name -> dispatches): the dispatched with counts, a LOUD WARNING per never-dispatched one
+def public kernel_coverage_report(backend, population : string; cov : table<string; int64>) {
     var names <- [for (name in keys(cov)); name]
     names |> sort()
     var served = 0
@@ -1868,7 +1868,7 @@ def public kernel_coverage_report(backend, census : string; cov : table<string; 
             to_log(LOG_WARNING, "{backend} kernel coverage: {name} NEVER DISPATCHED this run - coverage gap or dead kernel (human call)\n")
         }
     }
-    to_log(LOG_INFO, "{backend} kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} {census}\n")
+    to_log(LOG_INFO, "{backend} kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} {population}\n")
     delete names
 }
 

@@ -1195,7 +1195,7 @@ def kq_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout, mr : int64; r 
 
 //! row r of the Q8_0 plane pair `q` / `s` as `lay` repacked them, dequantized to f32 at dst; a pointer core, a row range a job lane
 def q8_plane_row_f32(q : int8 const?; s : float const?; nin, nout : int64; lay : Q8RepackLayout; r : int64; var dst : float?) {
-    let nb = nin / 32l
+    let nb = nin / QK8
     let mr = lay.mr
     let kg = lay.kgroup
     unsafe {
@@ -1204,7 +1204,7 @@ def q8_plane_row_f32(q : int8 const?; s : float const?; nin, nout : int64; lay :
             let gq = q + (r / mr) * mr * nin + rg * kg
             for (bi in range64(nb)) {
                 let d = s[((r / mr) * nb + bi) * mr + rg]
-                for (c in range64(bi * 32l / kg, (bi + 1l) * 32l / kg)) {
+                for (c in range64(bi * QK8 / kg, (bi + 1l) * QK8 / kg)) {
                     for (j in range64(kg)) {
                         dst[c * kg + j] = float(int8(uint8(int(gq[c * kg * mr + j]) ^ int(lay.wbias)))) * d
                     }
@@ -1213,7 +1213,7 @@ def q8_plane_row_f32(q : int8 const?; s : float const?; nin, nout : int64; lay :
         } else {
             for (bi in range64(nb)) {
                 let d = s[r * nb + bi]
-                for (j in range64(bi * 32l, bi * 32l + 32l)) {
+                for (j in range64(bi * QK8, bi * QK8 + QK8)) {
                     dst[j] = float(q[r * nin + j]) * d
                 }
             }
@@ -1576,7 +1576,7 @@ def cvt_f32_to_f16_sat(var d : uint16?; s : float const?; n : int64) {
 
 //! the saturating f16 image of a staged f32 slab, one halfword an element - the halfword twin a device upload takes
 def cvt_f32_to_f16_sat_array(src : array<float>) : array<uint16> {
-    var out : array<uint16>
+    var @exact_size out : array<uint16>
     out |> reserve_resize(long_length(src))
     if (!empty(src)) {
         unsafe {

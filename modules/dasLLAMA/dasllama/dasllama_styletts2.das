@@ -18,7 +18,7 @@ require dasllama/dasllama_par
 require dasllama/dasllama_plane
 require dasllama/dasllama_image
 require dasllama/dasllama_tower   // asr_prof_add: the encode-stage profiling rail; add_inplace_rows: the residual add
-require dasllama/dasllama_gpu_math   // tts_sigmoid
+require dasllama/dasllama_gpu_math   // sigmoid_f32
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 
@@ -523,7 +523,7 @@ def private read_adain_res_blk(m : GGUFMeta; bytes : array<uint8> | #; prefix : 
     b.learned_sc = gguf_find_tensor(m, "{prefix}.conv1x1.weight") >= 0
     b.upsample = gguf_find_tensor(m, "{prefix}.pool.weight") >= 0
     let pad = pad_in && b.learned_sc && b.dim_in % 32l != 0l
-    b.dim_in_s = pad ? (b.dim_in + 31l) / 32l * 32l : b.dim_in
+    b.dim_in_s = pad ? round_up(b.dim_in, 32l) : b.dim_in
     let cin_s = pad ? b.dim_in_s : 0l
     b.norm1 <- read_adain(m, bytes, "{prefix}.norm1")
     if (pad) {
@@ -1081,7 +1081,7 @@ def styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : f
         for (i in range64(t)) {
             var acc = 0.0
             for (j in range64(nb)) {
-                acc += tts_sigmoid(logits[i * nb + j])
+                acc += sigmoid_f32(logits[i * nb + j])
             }
             raw[i] = acc / speed
         }

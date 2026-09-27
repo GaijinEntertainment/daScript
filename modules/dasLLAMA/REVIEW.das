@@ -101,8 +101,7 @@ def private read_rst(folder : string; prefix : string; var out : array<string>) 
     }
 }
 
-// the names check_floor_of licenses without a tutorial - ARCHITECTURE_TTS.md#text-to-speech says why each
-var private FLOOR_HOOKS <- {"finalize", "tts_finish_styletts2"}
+var private FACADE_DEFS_WITHOUT_TUTORIAL <- {"finalize", "tts_finish_styletts2"}   //! defs the runtime or a loader chain calls, never a user - `ARCHITECTURE_TTS.md#text-to-speech` lists them
 
 [arch(at = "ARCHITECTURE_TTS.md#text-to-speech")]
 def private check_floor_of(path : string; var seen : table<string>; tut_texts, rst_texts : array<string>) {
@@ -111,15 +110,15 @@ def private check_floor_of(path : string; var seen : table<string>; tut_texts, r
         line_no++
         continue if (!starts_with(line, "def ") || starts_with(line, "def private ") || starts_with(line, "def operator"))
         let name = ident_prefix(slice(line, 4))
-        continue if (empty(name) || key_exists(FLOOR_HOOKS, name) || key_exists(seen, name))
+        continue if (empty(name) || key_exists(FACADE_DEFS_WITHOUT_TUTORIAL, name) || key_exists(seen, name))
         seen |> insert(name)
         if (!word_in_any(tut_texts, name)) {
             gate_finding(path, line_no,
-                "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial (ARCHITECTURE_TTS.md#text-to-speech lists the licensed defs)")
+                "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial, or is a def the runtime or a loader chain calls, never a user, that ARCHITECTURE_TTS.md#text-to-speech lists")
         }
         if (!word_in_any(rst_texts, name)) {
             gate_finding(path, line_no,
-                "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes) (ARCHITECTURE_TTS.md#text-to-speech lists the licensed defs)")
+                "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes), or it is a def the runtime or a loader chain calls, never a user, that ARCHITECTURE_TTS.md#text-to-speech lists")
         }
     }
 }
@@ -646,15 +645,17 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 39
-let private IMAGE_LAYOUT_STAMP_HASH = 0x9ae267aac06fa765ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0xa9934049a903053cul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
-// writer's append / zero-fill / header patch, the header's scalar stores, and the lattice
-// plane's section name. Changing one moves every plane offset (or renames every lattice
-// section) while every serializer body reads the same.
+// writer's append / zero-fill / header patch, the header's scalar stores, the lattice
+// plane's section name, and the TTS blob's aligned append, its per-weight walk slot and the
+// conv's stacked-row gather the q8 mint quantizes. Changing one moves every plane offset (or
+// renames every lattice section) while every serializer body reads the same.
 var private LAYOUT_HELPERS <- {
     "pad_to_page", "plane_end", "image_total_bytes",
-    "w_append", "w_zeros", "w_header", "store_u32", "store_u64", "kq_plane_name"
+    "w_append", "w_zeros", "w_header", "store_u32", "store_u64", "kq_plane_name",
+    "blob_push", "weight_slot", "conv1d_weight_row"
 }
 
 // The constants those helpers place bytes by, and the bands the two streaming writers stage
@@ -663,7 +664,7 @@ var private LAYOUT_HELPERS <- {
 // change that provably moves nothing re-stamps the hash alone.
 var private LAYOUT_CONSTANTS <- {
     "IMAGE_PAGE", "IMAGE_HEADER_BYTES", "SECTION_TABLE_SLACK",
-    "DWRITE_STAGING_BAND", "METAL_BAND_BLOCKS"
+    "DWRITE_STAGING_BAND", "METAL_BAND_BLOCKS", "BLOB_ALIGN_FLOATS"
 }
 
 def private is_archive_serializer(header : string) : bool {
@@ -833,7 +834,7 @@ def private check_image_layout_stamp {
     return if (h == IMAGE_LAYOUT_STAMP_HASH && version == IMAGE_LAYOUT_STAMP_VERSION)
     if (version == IMAGE_LAYOUT_STAMP_VERSION) {
         gate_finding(IMAGE_FILE,
-            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint of dasllama_tts_blocks.das, the layout helpers pad_to_page/plane_end/image_total_bytes/w_append/w_zeros/w_header/store_u32/store_u64/kq_plane_name, and the layout constants IMAGE_PAGE/IMAGE_HEADER_BYTES/SECTION_TABLE_SLACK/DWRITE_STAGING_BAND/METAL_BAND_BLOCKS): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
+            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint of dasllama_tts_blocks.das, the layout helpers pad_to_page/plane_end/image_total_bytes/w_append/w_zeros/w_header/store_u32/store_u64/kq_plane_name/blob_push/weight_slot/conv1d_weight_row, and the layout constants IMAGE_PAGE/IMAGE_HEADER_BYTES/SECTION_TABLE_SLACK/DWRITE_STAGING_BAND/METAL_BAND_BLOCKS/BLOB_ALIGN_FLOATS): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
     } else {
         gate_finding("modules/dasLLAMA/REVIEW.das",
             "the layout stamp is behind IMAGE_VERSION {version} - re-stamp: IMAGE_LAYOUT_STAMP_HASH = {h}ul, IMAGE_LAYOUT_STAMP_VERSION = {version}")

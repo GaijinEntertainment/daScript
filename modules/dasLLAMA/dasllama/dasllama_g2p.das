@@ -14,7 +14,7 @@ require daslib/f16_cvt  // the pack stores the GRU as f16; the reader widens it 
 require dasllama/dasllama_unicode
 require dasllama/dasllama_postag
 require dasllama/dasllama_textnorm
-require dasllama/dasllama_gpu_math   // tts_sigmoid
+require dasllama/dasllama_gpu_math   // sigmoid_f32
 
 //! Grapheme-to-phoneme conversion for the TTS front end, emitting the English inventory the
 //! StyleTTS2-lineage models were trained on - American by default, British under the
@@ -1168,8 +1168,8 @@ def private gru_cell(x : array<float>; var h : array<float>; w_ih, w_hh, b_ih, b
         scratch[g3 + r] = acc_h
     }
     for (j in range(hidden)) {
-        let rgate = tts_sigmoid(scratch[j] + scratch[g3 + j])
-        let zgate = tts_sigmoid(scratch[hidden + j] + scratch[g3 + hidden + j])
+        let rgate = sigmoid_f32(scratch[j] + scratch[g3 + j])
+        let zgate = sigmoid_f32(scratch[hidden + j] + scratch[g3 + hidden + j])
         let n = tanh(scratch[2 * hidden + j] + rgate * scratch[g3 + 2 * hidden + j])
         h[j] = (1.0 - zgate) * n + zgate * h[j]
     }

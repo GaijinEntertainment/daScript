@@ -121,12 +121,6 @@ def cm2_splitk_env : int64 => g_cm2_splitk >= 0l ? g_cm2_splitk : g_env_vulkan.c
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 
-//! an f16 GEMM off a cm2-mode device takes the KHR tile (`f16_gemm_set`'s `khr`)
-def f16_gemm_khr : bool => g_gpu.coopmat_mode != COOPMAT_CM2
-
-//! the f16 GEMM tile serves on a cm2-mode device or where the KHR tile does; elsewhere an f16 GEMM route declines to the f32 tile
-def f16_gemm_on : bool => g_gpu.coopmat_mode == COOPMAT_CM2 || khr_kq_tile_on()
-
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
 
@@ -1527,7 +1521,7 @@ def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64
 // ensure_gemv_scratch). Resident stacks pass their exact plane sizes; streaming pseudo-stacks
 // pass slot capacities and a base of -1 (re-based per layer).
 def make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false) : int {
-    let wswords = round_up(wscap, 4l)   //! whole words: a byte-scale plane (mx4) is read four blocks a word
+    let wswords = round_up(wscap, 4l)   // whole words: a byte-scale plane (mx4) is read four blocks a word
     var st = VkStack(base = base, elems = elems, fmt = fmt, wqbytes = wqcap,
                      wqbuf = g_gpu.dry ? 0ul : make_device_buf(wqcap, xfer_shared),
                      wsbuf = g_gpu.dry ? 0ul : make_device_buf(ws_floored(wswords), xfer_shared), wsbytes = wswords)
@@ -1825,10 +1819,6 @@ struct VkDeclineCounter {
     total : int64
     said : table<string>
 }
-
-let VK_DECLINE_WORDS_TOWER_KNOB = "the tower knob is off (DASLLAMA_VK_TOWER=0 or set_vulkan_tower(false))"
-let VK_DECLINE_WORDS_DEVICE = "the tier has no device (DASLLAMA_GPU=1 arms it), or a class failed to build"
-let VK_DECLINE_WORDS_MEMORY = "a device allocation failed"
 
 //! Count `reason` for `who`, say it once in `words` (the reason name when empty); answers false so a decline site returns it.
 [cold_path]
@@ -3601,7 +3591,7 @@ def private submit_core(var raw : VkCommandBuffer; fence : VkFence; signal : boo
     var wstage : VkPipelineStageFlags
     wstage.transfer = true
     wstage.compute_shader = true
-    let sval = signal ? g_gpu.cmp_value + 1ul : 0ul   //! the compute timeline: the transfer queue's copy of this command's output waits for it
+    let sval = signal ? g_gpu.cmp_value + 1ul : 0ul   // the compute timeline: the transfer queue's copy of this command's output waits for it
     timeline_submit(g_gpu.queue, raw, fence, g_gpu.xfer_sem, wval, wstage, g_gpu.cmp_sem, sval)
     if (signal) {
         g_gpu.cmp_value = sval

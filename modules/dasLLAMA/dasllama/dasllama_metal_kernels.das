@@ -5428,7 +5428,7 @@ def st2_conv_b_src_fwd(rr, kk, rows, k, cin, r0, pad_l, dil, stride, t_in, xs : 
     if (rr >= rows || kk >= k * cin) {
         return 0xFFFFFFFF
     }
-    let st = st2_conv_src_fwd_row(rr, kk / cin, r0, pad_l, dil, stride, t_in)
+    let st = conv_src_fwd_row(rr, kk / cin, r0, pad_l, dil, stride, t_in)
     return st >= 0 ? (uint(st) * xs + kk % cin) / 4u : 0xFFFFFFFF
 }
 
@@ -5437,7 +5437,7 @@ def st2_conv_b_src_tr(rr, kk, rows, k, cin, r0, pad_l, dil, stride, t_in, xs : u
     if (rr >= rows || kk >= k * cin) {
         return 0xFFFFFFFF
     }
-    let st = st2_conv_src_tr_row(rr, kk / cin, r0, pad_l, dil, stride, t_in)
+    let st = conv_src_tr_row(rr, kk / cin, r0, pad_l, dil, stride, t_in)
     return st >= 0 ? (uint(st) * xs + kk % cin) / 4u : 0xFFFFFFFF
 }
 
@@ -9831,7 +9831,7 @@ class MetalDnConv {
             acc += xv * w[ch * dconv + k]
             k++
         }
-        y[(ka.row + p) * cd + ch] = tts_silu(acc)
+        y[(ka.row + p) * cd + ch] = silu_f32(acc)
     }
 }
 
@@ -9966,7 +9966,7 @@ class MetalDnScan {
         while (p < npos) {
             let gr = graw[(ka.row + p) * nvh + h] + dt_h
             let dec = exp(a_h * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
-            let beta = tts_sigmoid(braw[(ka.row + p) * nvh + h])
+            let beta = sigmoid_f32(braw[(ka.row + p) * nvh + h])
             let cb = (ka.row + p) * cd
             var kv4 : float[4]
             var sk = 0.0
@@ -10034,7 +10034,7 @@ class MetalDnGate {
         let inv = rsqrt(ss / float(ds) + eps)
         for [unroll_full] (c in range(4)) {
             let zz = z[base + uint(c)]
-            o[base + uint(c)] = (wn[lane * 4u + uint(c)] * (v[c] * inv)) * tts_silu(zz)
+            o[base + uint(c)] = (wn[lane * 4u + uint(c)] * (v[c] * inv)) * silu_f32(zz)
         }
     }
 }
@@ -10118,9 +10118,9 @@ class template MetalSt2Im2colT {
             let ci = j % ka.cin
             var st = -1
             static_if (TRANSPOSED) {
-                st = st2_conv_src_tr_row(r, tap, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in)
+                st = conv_src_tr_row(r, tap, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in)
             } else {
-                st = st2_conv_src_fwd_row(r, tap, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in)
+                st = conv_src_fwd_row(r, tap, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in)
             }
             if (st >= 0) {
                 v = src_at(uint(st), ci)
@@ -10427,7 +10427,7 @@ class MetalSt2PoolDw {
         var acc = b[j]
         var kk = 0u
         while (kk < ka.k) {
-            let src = st2_conv_src_tr_row(p, kk, 0u, ka.pad_l, ka.dil, ka.stride, ka.t_in)
+            let src = conv_src_tr_row(p, kk, 0u, ka.pad_l, ka.dil, ka.stride, ka.t_in)
             if (src >= 0) {
                 acc += w[j * ka.k + kk] * x[uint(src) * ka.c + j]
             }
@@ -10488,9 +10488,9 @@ class MetalSt2Lstm {
                 let gf = xg[ti * ka.xgs + hd + j] + gsh[hd + j]
                 let gg = xg[ti * ka.xgs + 2u * hd + j] + gsh[2u * hd + j]
                 let go = xg[ti * ka.xgs + 3u * hd + j] + gsh[3u * hd + j]
-                let si = tts_sigmoid(gi)
-                let sf = tts_sigmoid(gf)
-                let so = tts_sigmoid(go)
+                let si = sigmoid_f32(gi)
+                let sf = sigmoid_f32(gf)
+                let so = sigmoid_f32(go)
                 cst = sf * cst + si * tts_tanh(gg)
                 let hn = so * tts_tanh(cst)
                 hsh[j] = hn
@@ -10601,7 +10601,7 @@ class MetalSt2SigSum {
         var acc = 0.0
         var j = 0u
         while (j < nb) {
-            acc += tts_sigmoid(logits[gid * ls + j])
+            acc += sigmoid_f32(logits[gid * ls + j])
             j++
         }
         raw[gid] = acc / speed   //! the CPU divides; a reciprocal multiply rounds a raw duration apart from it
@@ -11200,13 +11200,13 @@ class template MetalPkGemvT {
                 y[row] = d
             }
             static_if (EPI == 1) {
-                y[row] = tts_silu(d)
+                y[row] = silu_f32(d)
             }
             static_if (EPI == 2) {
                 y[row] += mod[2u * ka.nin + row] * d
             }
             static_if (EPI == 3) {
-                y[row] = tts_silu(d + aux[row])
+                y[row] = silu_f32(d + aux[row])
             }
             static_if (EPI == 4) {
                 let v = d + x0[row]

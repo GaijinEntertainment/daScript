@@ -162,13 +162,13 @@ def layernorm(var o : float?; x, w, b : float const?; size : int64; eps : float)
     }
 }
 
-//! Threaded per-position layernorm over token-major rows (rms_batch's shape, LN math),
-//! weight/bias read from ``blob`` at the given offsets.
-def private layernorm_batch_at(var out : array<float>; src : array<float>; wp, bp : float const?; dim, npos : int64; eps : float) {
+//! Threaded per-position layernorm over token-major rows (rms_batch's shape, LN math), the
+//! weight and bias at `wp` / `bp`; `out` may be `src`, and a single row runs inline.
+def layernorm_batch_at(var out : array<float>; src : array<float>; wp, bp : float const?; dim, npos : int64; eps : float) {
     unsafe {
         var op = addr(out[0])
         let ip = addr<float const?>(src[0])
-        maybe_parallel_for(0, int(npos), get_dispatch_lanes()) $(rb, re) {
+        maybe_parallel_for(0, int(npos), min(int(npos), get_dispatch_lanes())) $(rb, re) {
             unsafe {
                 for (p in range(rb, re)) {
                     let off = int64(p) * dim
@@ -179,6 +179,7 @@ def private layernorm_batch_at(var out : array<float>; src : array<float>; wp, b
     }
 }
 
+//! `layernorm_batch_at` with the weight and bias read from `blob` at the given offsets.
 def layernorm_batch(var out : array<float>; src : array<float>; blob : array<float>; w_off, b_off, dim, npos : int64; eps : float) {
     unsafe {
         layernorm_batch_at(out, src, addr<float const?>(blob[w_off]), addr<float const?>(blob[b_off]), dim, npos, eps)

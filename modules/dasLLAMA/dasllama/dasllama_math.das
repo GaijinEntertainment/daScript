@@ -17,6 +17,7 @@ require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_
 require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb — the fmt-id kq plane strides
 require dasllama/dasllama_gpu_tier public  // the device-cooperation seam (split out 2026-07-29) — re-exported for the 112 requirers
 require daslib/f16_cvt  // f16<->f32 converts: JIT half intrinsics on aarch64 / x64+F16C, exact bit-twiddle elsewhere
+require dasllama/dasllama_gpu_math  // silu_f32: the one SiLU form the CPU and the kernel homes share
 
 // dasLLAMA numeric primitives — naive fp32 baseline (curriculum step 1).
 // Correctness first; optimization (blocking, float4, threading) comes later.
@@ -2693,8 +2694,7 @@ def public parallel_argmax(x : array<float> | #; n : int64) : int64 {
 def silu(var x : float?; size : int64) {
     unsafe {
         for (i in range64(size)) {
-            let v = x[i]
-            x[i] = v / (1.0 + exp(-v))
+            x[i] = silu_f32(x[i])
         }
     }
 }

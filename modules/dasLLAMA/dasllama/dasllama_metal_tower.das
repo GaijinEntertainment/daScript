@@ -459,7 +459,7 @@ def private g4a_ctx_make(t : Gemma4aEncoder; npos : int64) : G4aGpuCtx {
     c.bxc = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_ff)
     c.bprpe = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
     c.bbounds = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_rec)
-    upload_rows_padded(c.bpos, unsafe(reinterpret<void?>(plane_at(t.pos_emb, 0l))), past + 1l, 32l, d)   //! the RPE table, zero-padded to the GEMM's 32-row floor
+    upload_rows_padded(c.bpos, unsafe(reinterpret<void?>(plane_at(t.pos_emb, 0l))), past + 1l, 32l, d)   // the RPE table, zero-padded to the GEMM's 32-row floor
     unsafe {
         //! the calibration records, one [imin imax omin omax] row per clamped GEMM site
         var bp = reinterpret<float?>(metal_buffer_contents(c.bbounds))
@@ -622,7 +622,7 @@ def private fc_ctx_make(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk : int6
     tw_ctx_make(c, unsafe(reinterpret<void?>(plane_at(blob, 0l))), uint64(length(blob) * 4l), mapped,
         npos, d, n_ff, eps, 0.5, uint64(c.wwp * d * 4l))
     c.bposl = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
-    upload_rows_padded(c.bpos, unsafe(addr<void?>(pos_emb[0])), ww, c.wwp, d)   //! the sinusoidal rel table, zero-padded to the GEMM's row floor
+    upload_rows_padded(c.bpos, unsafe(addr<void?>(pos_emb[0])), ww, c.wwp, d)   // the sinusoidal rel table, zero-padded to the GEMM's row floor
     c.u_nk = uniform_u32(uint(nk))
     c.u_np = uniform_u32(uint(npos))
     c.ka = fc_attn_args(d, dh, npos)
@@ -843,21 +843,8 @@ def private metal_parakeet_blocks(t : ParakeetModel; var st : ParakeetState; npo
     }
 }
 
-//! `rows` rows of `width` floats from `src` laid in `buf` at the row stride `stride`, each row's tail past `width` zeroed.
-def private tw_rows_strided(var buf : MetalBuffer?; src : float const?; rows, width, stride : int64) {
-    unsafe {
-        var dp = reinterpret<float?>(metal_buffer_contents(buf))
-        for (r in range64(rows)) {
-            memcpy(dp + r * stride, src + r * width, width * 4l)
-            for (k in range64(width, stride)) {
-                dp[r * stride + k] = 0.0
-            }
-        }
-    }
-}
-
 //! the DFT's transposed twiddle panel [rows_pad x kstride]: row n (a bin, real rows then imaginary) the twiddles' column n, pads zero
-def private tw_twiddle_panel(var buf : MetalBuffer?; tw : float const?; n_bins, n_fft, kstride, rows_pad : int64) {
+def private tw_twiddle_panel(var buf : MetalBuffer?; twiddles : float const?; n_bins, n_fft, kstride, rows_pad : int64) {
     unsafe {
         var tp = reinterpret<float?>(metal_buffer_contents(buf))
         for (i in range64(rows_pad * kstride)) {
@@ -865,7 +852,7 @@ def private tw_twiddle_panel(var buf : MetalBuffer?; tw : float const?; n_bins, 
         }
         for (n in range64(2l * n_bins)) {
             for (k in range64(n_fft)) {
-                tp[n * kstride + k] = tw[k * 2l * n_bins + n]
+                tp[n * kstride + k] = twiddles[k * 2l * n_bins + n]
             }
         }
     }
@@ -929,10 +916,10 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     var bcol1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_c1)
     var bw1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_w1)
     var by1p = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y1p)
-    upload_rows_padded(bxw, unsafe(addr(s.xw[0])), n_len, mpd, n_fft)   //! pad rows zeroed: the DFT GEMM walks mpd rows
+    upload_rows_padded(bxw, unsafe(addr(s.xw[0])), n_len, mpd, n_fft)   // the DFT GEMM walks mpd rows
     tw_twiddle_panel(btw, plane_at(t.twiddles, 0l), n_bins, n_fft, n_fft, dft_out_pad)
-    tw_rows_strided(bfil, plane_at(t.filters, 0l), n_mel, n_bins, mag_k_pad)   //! the mel filterbank [n_mel x mag_k_pad], k-padded
-    tw_rows_strided(bw0, plane_at(t.blob, t.c0_w), t.sub_ch0, 9l, conv0_k_pad)
+    upload_rows_strided(bfil, plane_at(t.filters, 0l), n_mel, n_bins, mag_k_pad)   // the mel filterbank [n_mel x mag_k_pad], k-padded
+    upload_rows_strided(bw0, plane_at(t.blob, t.c0_w), t.sub_ch0, 9l, conv0_k_pad)
     upload_rows_padded(bw1, unsafe(reinterpret<void?>(plane_at(t.blob, t.c1_w))), t.sub_ch1, conv1_cout_pad, kd1)
     var u_kfft = uniform_u32(uint(n_fft))
     var u_dft_out_pad = uniform_u32(uint(dft_out_pad))
@@ -2124,10 +2111,10 @@ def private metal_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64
     var bfil = pool_acquire_pinned(g_tw_pool, g_dev, bytes_fil)
     var braw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_raw)
     var bout = pool_acquire_pinned(g_tw_pool, g_dev, bytes_out)
-    tw_rows_strided(bxw, unsafe(addr<float const?>(xw[0])), n_len, n_fft, kfp)   //! xw rows at the padded k stride, zero tails; pad rows zeroed
+    upload_rows_strided(bxw, unsafe(addr<float const?>(xw[0])), n_len, n_fft, kfp)   // xw rows at the padded k stride, zero tails; pad rows zeroed
     zero_rows(bxw, n_len, mp, kfp)
     tw_twiddle_panel(btw, unsafe(addr<float const?>(twiddles[0])), n_bins, n_fft, kfp, dft_out_pad)
-    tw_rows_strided(bfil, unsafe(addr<float const?>(filters[0])), n_mel, n_bins, ldpow)   //! the mel filterbank [n_mel x ldpow], k-padded
+    upload_rows_strided(bfil, unsafe(addr<float const?>(filters[0])), n_mel, n_bins, ldpow)   // the mel filterbank [n_mel x ldpow], k-padded
     var u_kfp = uniform_u32(uint(kfp))
     var u_dft_out_pad = uniform_u32(uint(dft_out_pad))
     var u_nbins = uniform_u32(uint(n_bins))
@@ -2269,7 +2256,7 @@ def private st2_slot_release(var s : St2ConvSlot) {
     st2_uniform_pair_release(s.u_kdim, s.u_cout)
 }
 
-//! A pair of pooled uniforms hung together back to the pool, both nulled; a pair never hung stays as it is.
+//! A pair of pooled uniforms acquired together back to the pool, both nulled; a pair never acquired stays as it is.
 def private st2_uniform_pair_release(var a, b : MetalBuffer?&) {
     if (a != null) {
         pool_release(g_upool, a, 4ul)
@@ -2401,7 +2388,7 @@ def private st2_slab_current(base : St2SlabBase; key : uint64) : bool => base.bu
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
 def private st2_slab_rebuild(var base : auto(SS); key : uint64; write : block<(var w : TtsSlabWriter; var s : SS) : void>) : bool {
     st2_slab_free(base)
-    var inscope host <- tts_slab_build(base, write, false)
+    var inscope host <- tts_slab_build(base, write, lstm_transposed = false)
     if (!st2_slab_upload(base, host, key)) {
         st2_slab_free(base)
         return false
@@ -2888,21 +2875,24 @@ def private st2_note_conv(var sh : St2Shape; c : TtsConv1d) : bool {
     return true
 }
 
-//! The shape walks' hooks (`tts_res_shape` and its kin): a conv's gathered columns, the rows' buffer at the 32 lattice, the style fc rows.
+//! a conv's gathered columns
 [unused_argument(rows, upsample)]
-def private tts_note_conv(var sh : St2Shape; c : TtsConv1d; rows : int64; upsample : bool) : bool => st2_note_conv(sh, c)
+def private tts_note_conv(var sh : St2Shape; cv : TtsConv1d; rows : int64; upsample : bool) : bool => st2_note_conv(sh, cv)
 
+//! the rows' buffer at the 32 lattice
 def private tts_note_rows(var sh : St2Shape; t, c : int64) {
     sh.c_max = max(sh.c_max, c)
     sh.row_buf_floats = max(sh.row_buf_floats, round_up(t, 32l) * c)
 }
 
+//! a Snake block's style fc rows
 [unused_argument(t)]
 def private tts_note_block(var sh : St2Shape; b : St2GenResBlock; t, c : int64) : bool {
     sh.style_fc_floats += long_length(b.convs1) * 2l * 2l * c
     return true
 }
 
+//! an AdaIN block's style fc rows and its rows
 def private tts_note_res(var sh : St2Shape; b : St2AdainResBlk; t1 : int64) : bool {
     sh.style_fc_floats += 2l * (b.dim_in_s + b.dim_out)
     tts_note_rows(sh, t1, max(b.dim_in_s, b.dim_out))
@@ -3543,7 +3533,7 @@ var private g_tw_pk_codec : PkCodecSlab
 
 let private PK_CODEC_MAX_FRAMES = 512l   //!< the one-shot chain's row budget: past this the CPU's windows serve
 
-//! the shared writer's layer slots as the Metal chain binds them: byte offsets, the linears' uniforms hung
+//! the shared writer's layer slots as the Metal chain binds them: byte offsets, the linears' uniforms acquired
 def private pk_layer_of(w : TtsSlabWriter; t : TtsPkLayerSlots) : PkLayerSlots {
     return PkLayerSlots(n1 = st2_norm_of(t.n1), in_proj = st2_slot_of(w, t.in_proj), out_proj = st2_slot_of(w, t.out_proj),
         scale1_off = st2_byte_off(t.scale1_off), has_s1 = t.has_s1, n2 = st2_norm_of(t.n2), ffn1 = st2_slot_of(w, t.ffn1), ffn2 = st2_slot_of(w, t.ffn2),
@@ -4027,7 +4017,7 @@ def private pk_kv_rows(kc : TtsKvCache; bk, bv : MetalBuffer?; r0, r1 : int64) {
 }
 
 def private pk_voice_attach(vs : PocketVoiceState; tf : PocketTransformer) : bool
-    => tts_pk_voice_current(g_tw_pk_voice.meta, vs, length(g_tw_pk_voice.bk)) || pk_voice_rebuild(vs, tf)
+    => tts_pk_voice_current(g_tw_pk_voice.meta, vs, length(g_tw_pk_voice.bk), tf.d) || pk_voice_rebuild(vs, tf)
 
 [cold_path]
 def private pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer) : bool {
@@ -4246,18 +4236,18 @@ def private pk_frames_loop(m : PocketModel; var sl : PkFramesSlab; var c : St2Gp
     var err = ""
     return pocket_frames_batched(m, batch, max_frames, std, frames_after_eos, captured, sc, f0, $(_k : int64) : float? {
         return unsafe(reinterpret<float?>(metal_buffer_contents(b.noise)))
-    }, $(fb, k : int64) : bool {
+    }, $(first, k : int64) : bool {
         let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026,LINT019 — the error-text fetch runs only on the failure leg
             for (i in range64(k)) {
-                pk_frame(enc, c, m, sl, b, base + fb + i, fb + i, i, forced_rows)
+                pk_frame(enc, c, m, sl, b, base + first + i, first + i, i, forced_rows)
             }
         }
         if (ran) {
             g_tower_encodes++
         }
         return ran
-    }, $(fb, i : int64) : float {
-        return unsafe(reinterpret<float const?>(metal_buffer_contents(b.eos))[fb + i])
+    }, $(first, i : int64) : float {
+        return unsafe(reinterpret<float const?>(metal_buffer_contents(b.eos))[first + i])
     })
 }
 
