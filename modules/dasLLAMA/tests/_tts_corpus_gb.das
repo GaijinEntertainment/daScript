@@ -6,6 +6,7 @@ module _tts_corpus_gb shared public
 require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require daslib/fio
+require _tts_corpus   // load_json_file
 
 //! One sentence of the British half of the TTS front-end fixture
 //! (`_tts_fixtures/g2p_corpus_gb.json`, minted by `harness/mint_tts_g2p_gb_fixture.py`): the
@@ -40,15 +41,9 @@ def tts_corpus_gb_path() : string => "{get_das_root()}/modules/dasLLAMA/tests/_t
 //! in, so its absence is a defect, never a skip.
 def load_tts_corpus_gb() : TtsGbCorpus {
     let path = tts_corpus_gb_path()
-    let f = fopen(path, "rb")
-    if (f == null) {
-        panic("tts British corpus fixture missing: {path}")
-    }
-    let text = fread(f)
-    fclose(f)
     var corpus = TtsGbCorpus()
-    if (!sscan_json(text, corpus)) {
-        panic("tts British corpus fixture does not parse: {path}")
+    if (!load_json_file(path, corpus)) {
+        panic("tts British corpus fixture missing: {path}")
     }
     if (length(corpus.rows) != 200) {
         panic("tts British corpus fixture has {length(corpus.rows)} rows, expected 200")

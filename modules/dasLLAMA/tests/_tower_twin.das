@@ -147,21 +147,12 @@ def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); t
         with_gpu_knobs() {
             set_vulkan_tower(false)
             legs.pre = vulkan_tower_stats()
-            with_job_que() {
-                setup_dasllama_jobque_()
-                legs.n_exact = invoke(encode, tw_exact, st_exact, r.reference)
-            }
+            legs.n_exact = queued_encode(tw_exact, st_exact, r.reference, encode)
             legs.exact = vulkan_tower_stats()
-            with_job_que() {
-                setup_dasllama_jobque_()
-                legs.n_cpu = invoke(encode, tw, st, cpu)
-            }
+            legs.n_cpu = queued_encode(tw, st, cpu, encode)
             legs.cpu = vulkan_tower_stats()
             set_vulkan_tower(true)
-            with_job_que() {
-                setup_dasllama_jobque_()
-                legs.n_dev = invoke(encode, tw, st, dev)
-            }
+            legs.n_dev = queued_encode(tw, st, dev, encode)
             legs.dev = vulkan_tower_stats()
         }
         if (legs.dev.encodes == legs.cpu.encodes) {
@@ -191,25 +182,37 @@ def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); t
 def twin_poison(tt : T?; r : TwinResult; zero_block : int64; twp : auto(TW); var stp : auto(ST);
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        var poisoned : array<float>
-        let p0 = vulkan_tower_stats()
-        with_gpu_knobs() {
-            set_vulkan_tower(true)
-            with_job_que() {
-                setup_dasllama_jobque_()
-                invoke(encode, twp, stp, poisoned)
-            }
-        }
-        tt |> equal(vulkan_tower_stats().encodes - p0.encodes, 1l, "{r.spec.tag} poison: device-served (encodes delta)")
+        var inscope poisoned <- device_poison_leg(tt, r.spec.tag, twp, stp, encode)
         if (r.spec.metric == TwinMetric.maxdiff) {
             let poison_ex = logits_maxdiff(poisoned, r.reference)
             to_log(LOG_INFO, "{r.spec.family} vulkan twin {r.spec.tag} ({r.spec.n_layer} blocks) poison: block {zero_block} zeroed on the device lands {poison_ex} from the exact chain ({poison_ex / r.rms} x rms), bar {r.bar}\n")
             tt |> success(double(poison_ex) > r.bar, "{r.spec.tag}: a zeroed block through the device chain EXCEEDS the bar ({poison_ex} vs {r.bar})")
         } elif (r.bar > 0.0lf) {
-            tower_twin_poison(tt, r.spec.tag, r.reference, poisoned, r.bar)
+            tower_twin_check(tt, r.spec.tag, r.reference, poisoned, r.bar, true)
         }
-        delete poisoned
     }
+}
+
+//! `encode` over a tower and its state on a set-up job queue; the encode's token count
+def private queued_encode(tw : auto(TW); var st : auto(ST); var out : array<float>; encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) : int64 {
+    var n = 0l
+    with_job_que() {
+        setup_dasllama_jobque_()
+        n = invoke(encode, tw, st, out)
+    }
+    return n
+}
+
+//! a poison's device leg: `encode` over the zeroed tower `twp` with the Vulkan tower knob on, one device encode asserted; the rows it wrote
+def private device_poison_leg(tt : T?; tag : string; twp : auto(TW); var stp : auto(ST); encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) : array<float> {
+    var inscope out : array<float>
+    let e0 = vulkan_tower_stats().encodes
+    with_gpu_knobs() {
+        set_vulkan_tower(true)
+        queued_encode(twp, stp, out, encode)
+    }
+    tt |> equal(vulkan_tower_stats().encodes - e0, 1l, "{tag} poison: device-served (encodes delta)")
+    return <- out
 }
 
 //! a vision canvas three ways on the patch grid's counters, then - `zero_block` >= 0 - the input poison over the q8 tower
@@ -238,20 +241,10 @@ def twin_canvas(tt : T?; family, kind : string; w, h : int; patch : int64; log_s
 def dump_poison(tt : T?; family, tag : string; zero_block : int64; bar_rms : float; twp : auto(TW); var stp : auto(ST);
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>; excess : block<(out : array<float>) : float>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        var out : array<float>
-        let e0 = vulkan_tower_stats().encodes
-        with_gpu_knobs() {
-            set_vulkan_tower(true)
-            with_job_que() {
-                setup_dasllama_jobque_()
-                invoke(encode, twp, stp, out)
-            }
-        }
-        tt |> equal(vulkan_tower_stats().encodes - e0, 1l, "{tag} poison: device-served (encodes delta)")
+        var inscope out <- device_poison_leg(tt, tag, twp, stp, encode)
         let ex = invoke(excess, out)
         to_log(LOG_INFO, "{family} vulkan poison leg {tag}: block {zero_block} zeroed -> excess {ex} over the {bar_rms} x rms bar\n")
         tt |> success(ex > 0.0, "{tag}: a zeroed block through the device chain reds the bar (excess {ex})")
-        delete out
     }
 }
 
@@ -330,19 +323,15 @@ def tower_twin_bar(t : T?; tag : string; exact, cpu, dev : array<float>; n_layer
     return bar
 }
 
-//! a device encode over the same input held to the bar a clean three-way set (a later encode on the residency, a fresh one after a shutdown)
-def tower_twin_held(t : T?; tag : string; exact, dev : array<float>; bar : double) {
+//! a device encode's rel_l2 from the exact chain against the bar a clean three-way set: held within it (a later encode on the
+//! residency, a fresh one after a shutdown), or - `must_exceed`, the input poison over zeroed GEMM planes - past it
+def tower_twin_check(t : T?; tag : string; exact, dev : array<float>; bar : double; must_exceed : bool) {
     var st = TowerParityStats()
-    if (tower_parity_stats(t, "{tag} vulkan vs exact", exact, dev, st)) {
-        t |> success(st.rel_l2 <= bar, "{tag}: the device chain sits within the bar the first encode set ({st.rel_l2} vs {bar})")
-    }
-}
-
-//! the input poison: a device encode over a tower with zeroed GEMM planes must EXCEED the bar the clean chains set
-def tower_twin_poison(t : T?; tag : string; exact, poisoned : array<float>; bar : double) {
-    var st = TowerParityStats()
-    if (tower_parity_stats(t, "{tag} poisoned vulkan vs exact", exact, poisoned, st)) {
+    return if (!tower_parity_stats(t, must_exceed ? "{tag} poisoned vulkan vs exact" : "{tag} vulkan vs exact", exact, dev, st))
+    if (must_exceed) {
         t |> success(st.rel_l2 > bar, "{tag}: a zeroed block through the device chain EXCEEDS the bar ({st.rel_l2} vs {bar})")
+    } else {
+        t |> success(st.rel_l2 <= bar, "{tag}: the device chain sits within the bar the first encode set ({st.rel_l2} vs {bar})")
     }
 }
 

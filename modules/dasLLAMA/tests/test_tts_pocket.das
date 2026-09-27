@@ -17,6 +17,7 @@ require daslib/jobque_boost
 require daslib/defer   // defer() { reset_pocket_q8() } - a lane pin never outlives its cell
 require daslib/fio
 require daslib/json_boost
+require daslib/strings_boost   // join: the ids in a log line
 require strings
 require math
 require _tts_oracle
@@ -78,24 +79,14 @@ struct private TokFixture {
 }
 
 def private load_tokens_fixture(path : string = tokens_fixture_path()) : TokFixture {
-    let text = fread(path)
-    if (empty(text)) {
-        panic("pocket tokens fixture missing: {path}")
-    }
     var fx = TokFixture()
-    if (!sscan_json(text, fx)) {
-        panic("pocket tokens fixture does not parse: {path}")
+    if (!load_json_file(path, fx)) {
+        panic("pocket tokens fixture missing: {path}")
     }
     return <- fx
 }
 
-def private ids_text(a : array<int64>) : string {
-    return build_string() $(var wr) {
-        for (i, v in count(), a) {
-            write(wr, i == 0 ? "{v}" : " {v}")
-        }
-    }
-}
+def private ids_text(a : array<int64>) : string => join(a, " ")
 
 [test]
 def test_pocket_tokenizer(t : T?) {
@@ -256,6 +247,26 @@ def private load_manifest(dir_path : string = oracle_dir()) : PocketManifest {
     return <- m
 }
 
+//! The English oracle's manifest; where its dumps are not stocked, a loud skip and no cases.
+def private stocked_manifest(t : T?) : PocketManifest {
+    var inscope man <- load_manifest()
+    if (empty(man.cases)) {
+        t |> skip("no oracle dumps under {oracle_dir()}")
+    }
+    return <- man
+}
+
+//! `body` on a set-up job queue with the GPU knobs put back after and the Pocket lane pinned to `q8`, the pin reset after.
+def private pocket_lane_cell(q8 : bool; body : block<() : void>) {
+    with_gpu_cell() {
+        defer() {
+            reset_pocket_q8()
+        }
+        set_pocket_q8(q8)
+        invoke(body)
+    }
+}
+
 let CODEC_BAR = 2.0e-3    // the codec chain: eleven convs and a transformer of f32 GEMMs in a different order
 let ENCODER_BAR = 2.0e-3
 let FRAME_BAR = 5.0e-3    // one frame teacher-forced: six transformer layers and the head
@@ -266,16 +277,9 @@ def test_pocket_parity(t : T?) {
     if (!model_available(t, path)) {
         return
     }
-    var inscope man <- load_manifest()
-    if (empty(man.cases)) {
-        t |> skip("no oracle dumps under {oracle_dir()}")
-        return
-    }
-    with_gpu_cell() {
-        defer() {
-            reset_pocket_q8()
-        }
-        set_pocket_q8(false)   // the parity rail holds the f32 lane
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
+    pocket_lane_cell(false) {   // the parity rail holds the f32 lane
         set_gpu(false)
         var inscope m <- load_pocket(path)
         var inscope sc = PocketScratch()
@@ -331,18 +335,10 @@ def private head_over_frames(m : PocketModel; var sc : PocketScratch; conds, x0 
     let ld = m.latent_dim
     var inscope out : array<float>
     out |> resize(frames * ld)
-    var inscope crow : array<float>
-    crow |> resize(d)
-    var inscope nrow : array<float>
-    nrow |> resize(ld)
     var inscope x1 : array<float>
     for (f in range64(frames)) {
-        for (j in range64(d)) {
-            crow[j] = conds[f * d + j]
-        }
-        for (j in range64(ld)) {
-            nrow[j] = x0[f * ld + j]
-        }
+        var inscope crow <- copy_span(conds, f * d, d)
+        var inscope nrow <- copy_span(x0, f * ld, ld)
         pocket_head(m, crow, nrow, sc, x1)
         for (j in range64(ld)) {
             out[f * ld + j] = x1[j]
@@ -379,12 +375,10 @@ def test_pocket_codec_stream(t : T?) {
         return
     }
     let c & = unsafe(man.cases[picked])
-    with_gpu_cell() {
+    pocket_lane_cell(false) {   // the f32 lane: the served GEMMs' result depends on how many rows they batch
         defer() {
-            reset_pocket_q8()
             set_pocket_codec_window(POCKET_CODEC_WINDOW_DEFAULT)
         }
-        set_pocket_q8(false)   // the f32 lane: the served GEMMs' result depends on how many rows they batch
         set_gpu(false)
         var inscope m <- load_pocket(path)
         var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
@@ -433,16 +427,9 @@ def test_pocket_frames(t : T?) {
     if (!model_available(t, path)) {
         return
     }
-    var inscope man <- load_manifest()
-    if (empty(man.cases)) {
-        t |> skip("no oracle dumps under {oracle_dir()}")
-        return
-    }
-    with_gpu_cell() {
-        defer() {
-            reset_pocket_q8()
-        }
-        set_pocket_q8(false)
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
+    pocket_lane_cell(false) {
         set_gpu(false)
         var inscope m <- load_pocket(path)
         var inscope sc = PocketScratch()
@@ -486,17 +473,10 @@ def test_pocket_codec_metal(t : T?) {
     if (!model_available(t, path)) {
         return
     }
-    var inscope man <- load_manifest()
-    if (empty(man.cases)) {
-        t |> skip("no oracle dumps under {oracle_dir()}")
-        return
-    }
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        with_gpu_cell() {
-            defer() {
-                reset_pocket_q8()
-            }
-            set_pocket_q8(false)
+        pocket_lane_cell(false) {
             var inscope m <- load_pocket(path)
             var inscope sc = PocketScratch()
             var done = 0
@@ -527,11 +507,8 @@ def test_pocket_codec_metal(t : T?) {
 //! hook call served and one encode a call.
 [test]
 def test_pocket_codec_metal_served(t : T?) {
-    var inscope man <- load_manifest()
-    if (empty(man.cases)) {
-        t |> skip("no oracle dumps under {oracle_dir()}")
-        return
-    }
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         pocket_served_files(t) $(path : string; m : PocketModel; var sc : PocketScratch) : bool {
             for (c in man.cases) {
@@ -612,18 +589,9 @@ def private forced_frames(m : PocketModel; var k : ForcedCase; captured, forced 
 //! The frames one teacher-forced loop left in the scratch: the latents, the conditioning rows and the EOS logits.
 def private frame_rows(m : PocketModel; sc : PocketScratch; frames : int64) : FrameRows {
     var r : FrameRows
-    r.lat |> resize(frames * m.latent_dim)
-    for (i in range64(frames * m.latent_dim)) {
-        r.lat[i] = sc.latents[i]
-    }
-    r.conds |> resize(frames * m.backbone.d)
-    for (i in range64(frames * m.backbone.d)) {
-        r.conds[i] = sc.conds[i]
-    }
-    r.eos |> resize(frames)
-    for (i in range64(frames)) {
-        r.eos[i] = sc.eos_logits[i]
-    }
+    r.lat <- copy_span(sc.latents, 0l, frames * m.latent_dim)
+    r.conds <- copy_span(sc.conds, 0l, frames * m.backbone.d)
+    r.eos <- copy_span(sc.eos_logits, 0l, frames)
     return <- r
 }
 
@@ -711,22 +679,15 @@ def test_pocket_seat_stats(t : T?) {
 //! batch, the knob-off leg bit-equal to the CPU chain with its decline recorded; then the free run
 //! served.
 [test]
-def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs, in the order the counters read
+def test_pocket_frames_metal(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
         return
     }
-    var inscope man <- load_manifest()
-    if (empty(man.cases)) {
-        t |> skip("no oracle dumps under {oracle_dir()}")
-        return
-    }
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        with_gpu_cell() {
-            defer() {
-                reset_pocket_q8()
-            }
-            set_pocket_q8(false)
+        pocket_lane_cell(false) {
             var inscope m <- load_pocket(path)
             var inscope sc = PocketScratch()
             var done = 0
@@ -805,11 +766,8 @@ def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs,
 //! the distance to the f32 oracle logged beside the CPU chain's.
 [test]
 def test_pocket_frames_metal_served(t : T?) {
-    var inscope man <- load_manifest()
-    if (empty(man.cases)) {
-        t |> skip("no oracle dumps under {oracle_dir()}")
-        return
-    }
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         pocket_served_files(t) $(path : string; m : PocketModel; var sc : PocketScratch) : bool {
             var voices_seen : table<string; bool>
@@ -834,11 +792,8 @@ def test_pocket_frames_metal_served(t : T?) {
 //! the same voice and reads the same frames, the slabs, the scratch and the voice slot rebuilt behind the drop.
 [test]
 def test_pocket_frames_after_model_drop(t : T?) {
-    var inscope man <- load_manifest()
-    if (empty(man.cases)) {
-        t |> skip("no oracle dumps under {oracle_dir()}")
-        return
-    }
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         with_gpu_cell() {
             reset_pocket_q8()
@@ -901,17 +856,9 @@ def test_pocket_q8_lane(t : T?) {
     if (!model_available(t, path)) {
         return
     }
-    var inscope man <- load_manifest()
-    if (empty(man.cases)) {
-        t |> skip("no oracle dumps under {oracle_dir()}")
-        return
-    }
-    with_job_que() {
-        setup_dasllama_jobque_()
-        defer() {
-            reset_pocket_q8()
-        }
-        set_pocket_q8(true)   // the lane this cell measures, pinned - the sibling cells pin the other
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
+    pocket_lane_cell(true) {   // the lane this cell measures, pinned - the sibling cells pin the other
         var inscope m <- load_pocket(path)
         t |> success(m.q8, "the pinned q8 lane serves")
         t |> success(pocket_serves_q8(), "the pin is what the policy answers")
@@ -961,18 +908,10 @@ def test_pocket_q8_file(t : T?) {
     if (!model_available(t, path) || !model_available(t, q8path)) {
         return
     }
-    var inscope man <- load_manifest()
-    if (empty(man.cases)) {
-        t |> skip("no oracle dumps under {oracle_dir()}")
-        return
-    }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
+    pocket_lane_cell(true) {
         var inscope sc = PocketScratch()
-        defer() {
-            reset_pocket_q8()
-        }
-        set_pocket_q8(true)
         var inscope mq <- load_pocket(q8path)
         var inscope mf <- load_pocket(path)
         t |> success(mq.q8 && mf.q8, "both loads serve the q8 lane")
@@ -1031,11 +970,8 @@ def test_pocket_kq_file(t : T?) {
     if (!model_available(t, path) || !model_available(t, kqpath)) {
         return
     }
-    var inscope man <- load_manifest()
-    if (empty(man.cases)) {
-        t |> skip("no oracle dumps under {oracle_dir()}")
-        return
-    }
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
     with_job_que() {
         setup_dasllama_jobque_()
         var inscope sc = PocketScratch()
@@ -1189,14 +1125,8 @@ def private language_cells(t : T?; L : PocketLang) {
         let theirs = long_length(dump["latent"].f) / m.latent_dim
         t |> success(abs(ours - theirs) <= 2l, "{L.config} {c.id}: {ours} frames against the oracle's {theirs}")
         let n = min(long_length(lat), long_length(dump["latent"].f))
-        var inscope a : array<float>
-        var inscope b : array<float>
-        a |> resize(n)
-        b |> resize(n)
-        for (i in range64(n)) {
-            a[i] = lat[i]
-            b[i] = dump["latent"].f[i]
-        }
+        var inscope a <- copy_span(lat, 0l, n)
+        var inscope b <- copy_span(dump["latent"].f, 0l, n)
         bar_diff(t, "pocket {L.config} {c.id} latents (teacher-forced)", a, b, Q8_RMS_BAR, BarMetric.rel_rms, rms(b))
         t |> success(speech_level(sc.wave).rms > 0.01, "{L.config} {c.id}: the decoded frames carry speech")
         cases++

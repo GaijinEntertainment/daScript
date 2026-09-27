@@ -209,38 +209,17 @@ def spectrum_diff(t : T?; tag : string; ours, ref : array<float>; bins, frames :
     t |> success(ph_d <= PHASE_BAR, "{tag}: phase maxdiff {ph_d} rad <= {PHASE_BAR} where the magnitude carries signal")
 }
 
-def dump_f(dump : table<string; TtsDumpTensor>; name : string) : array<float> {
-    var inscope out : array<float>
-    dump |> get(name) $(tensor) {
-        out := tensor.f
-    }
-    return <- out
-}
-
-def dump_i(dump : table<string; TtsDumpTensor>; name : string) : array<int> {
-    var inscope out : array<int>
-    dump |> get(name) $(tensor) {
-        out := tensor.i
-    }
-    return <- out
-}
-
 def case_noise(dump : table<string; TtsDumpTensor>) : TtsNoise {
-    return <- TtsNoise(uniform <- dump_f(dump, "noise_uniform"), normal <- dump_f(dump, "noise_normal"), captured = true)
+    return <- TtsNoise(uniform <- dump_tensor(dump, type<float>, "noise_uniform"), normal <- dump_tensor(dump, type<float>, "noise_normal"), captured = true)
 }
 
 // the generator fed the oracle's own F0 curve, source signal and decoder output: block
 // correctness at the seams, with the phase drift the predictor's rounding noise induces taken out
 def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>) {
-    var inscope f0 <- dump_f(dump, "f0")
-    var inscope gen_in <- dump_f(dump, "gen_in")
-    var inscope style <- dump_f(dump, "style")
-    let hs = m.style_dim / 2l
-    var inscope s_ref : array<float>
-    s_ref |> resize(hs)
-    for (i in range64(hs)) {
-        s_ref[i] = style[i]
-    }
+    var inscope f0 <- dump_tensor(dump, type<float>, "f0")
+    var inscope gen_in <- dump_tensor(dump, type<float>, "gen_in")
+    var inscope style <- dump_tensor(dump, type<float>, "style")
+    var inscope s_ref <- copy_span(style, 0l, m.style_dim / 2l)   // the decoder's half of the style vector
     let f2 = long_length(f0)
     let cw = long_length(gen_in) / f2
     var inscope noise <- case_noise(dump)
@@ -249,10 +228,10 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     var inscope har : array<float>
     let n = styletts2_source(m.decoder, m.source, f0, f2, noise, 0ul, har, sc)
     stage_diff(t, "{tag} SOURCE", "har", har, dump, BarMetric.absolute, SOURCE_BAR)
-    var inscope har_ref <- dump_f(dump, "har")
+    var inscope har_ref <- dump_tensor(dump, type<float>, "har")
     var inscope spec : array<float>
     let frames = styletts2_har_spectrum(m.decoder, har_ref, n, tr, spec, sc)
-    var inscope spec_ref <- dump_f(dump, "har_spec")
+    var inscope spec_ref <- dump_tensor(dump, type<float>, "har_spec")
     if (!empty(spec_ref)) {
         // the reference's FFT and a direct sum agree on the magnitude everywhere and on the phase
         // wherever the magnitude is meaningful; below that the phase is rounding noise the network
@@ -357,6 +336,16 @@ def gpu_stage_verdict(t : T?; tag, stage : string; g, cpu, gp : array<float>; ba
     return true
 }
 
+//! `n` elements of `a` from `at`, copied out
+def copy_span(a : array<float>; at, n : int64) : array<float> {
+    var inscope out : array<float>
+    out |> resize(n)
+    for (i in range64(n)) {
+        out[i] = a[at + i]
+    }
+    return <- out
+}
+
 def scaled(a : array<float>; k : float) : array<float> {
     var r := a
     for (v in r) {
@@ -402,17 +391,11 @@ def seat_leg(t : T?; kind : TtsKind; tag, stage : string; bar : float; var cpu :
 [unused_argument(t, m, m8, tag, dump, noise, sc)]   // off-Apple the gated body is empty
 def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>; var noise : TtsNoise; var sc : St2Scratch) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        var inscope ids <- dump_i(dump, "input_ids")
-        var inscope style <- dump_f(dump, "style")
+        var inscope ids <- dump_tensor(dump, type<int>, "input_ids")
+        var inscope style <- dump_tensor(dump, type<float>, "style")
         let hs = m.style_dim / 2l
-        var inscope s_ref : array<float>
-        var inscope s_pro : array<float>
-        s_ref |> resize(hs)
-        s_pro |> resize(hs)
-        for (i in range64(hs)) {
-            s_ref[i] = style[i]
-            s_pro[i] = style[hs + i]
-        }
+        var inscope s_ref <- copy_span(style, 0l, hs)   // the decoder's half of the style vector
+        var inscope s_pro <- copy_span(style, hs, hs)   // the predictor's half
         let n_tok = long_length(ids)
         var inscope bert_c : array<float>
         var inscope ten_c : array<float>
@@ -695,7 +678,7 @@ def tts_parity(t : T?; rig : TtsParityRig) {
         for (c in mf.cases) {
             let tag = "{rig.family} {c.id} {c.voice}"
             var inscope dump <- load_tts_dump(path_join(rig.oracle_dir, c.file))
-            var inscope ids <- dump_i(dump, "input_ids")
+            var inscope ids <- dump_tensor(dump, type<int>, "input_ids")
             var inscope ours <- invoke(rig.ids, c.ps_espeak)
             if (sequence_equal(ours, ids)) {
                 ids_ok++
@@ -706,7 +689,7 @@ def tts_parity(t : T?; rig : TtsParityRig) {
             var tr = new StyleTts2Trace()
             var tm = TtsTimings()
             var inscope sc = St2Scratch()
-            styletts2_synthesize(m, ids, dump_f(dump, "style"), c.speed, noise, 0ul, tr, tm, sc)
+            styletts2_synthesize(m, ids, dump_tensor(dump, type<float>, "style"), c.speed, noise, 0ul, tr, tm, sc)
             let wave & = sc.wave
             dump |> get("waveform") $(ref) {
                 if (length(wave) != length(ref.f)) {

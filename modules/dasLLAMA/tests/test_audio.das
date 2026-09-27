@@ -369,8 +369,8 @@ def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto
         } else {
             t |> success(n_enc >= 3l, "{tag}: the short, the regrown and the fresh encodes ran on the device")
         }
-        tower_twin_held(t, "{tag} regrown scratch", r.reference, dev_again, r.bar)
-        tower_twin_held(t, "{tag} after shutdown", r.reference, dev_fresh, r.bar)
+        tower_twin_check(t, "{tag} regrown scratch", r.reference, dev_again, r.bar, false)
+        tower_twin_check(t, "{tag} after shutdown", r.reference, dev_fresh, r.bar, false)
         var encp <- invoke(mint_poisoned)
         var stp = ST()
         var poisoned : array<float>
@@ -380,7 +380,7 @@ def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto
             invoke(encode, encp, stp, samples, poisoned)
         }
         t |> success(vulkan_tower_stats().encodes > p0, "{tag} poison: device-served (encodes delta)")
-        tower_twin_poison(t, tag, r.reference, poisoned, r.bar)
+        tower_twin_check(t, tag, r.reference, poisoned, r.bar, true)
         delete poisoned
         delete stp
         delete encp
