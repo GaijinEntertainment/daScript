@@ -34,6 +34,7 @@ struct public DlimCpuConfig {
     kq_q40_native : bool
     kq_q50_native : bool
     kq_q51_native : bool
+    iq3s_lut : bool   //! the IQ3_S weights serve as iq3s4 planes (DASLLAMA_IQ3S_SERVE resolved at the load)
 }
 
 //! The vulkan flavor's plan inputs, RESOLVED — `coopmat_mode` is the running mode (not the raw
@@ -151,7 +152,7 @@ def public dlim_identity(c : DlimConfiguration; image_version : int; tag : strin
         + "|q8 mr{c.cpu.q8_mr} b{c.cpu.q8_wbias} g{c.cpu.q8_kgroup}"
         + "|kq {kq_mr_identity(c.cpu)}"
         + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr}"
-        + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q50_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}"
+        + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q50_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}{c.cpu.iq3s_lut ? 1 : 0}"
         + (tag != "" ? "|{tag}" : ""))
 }
 

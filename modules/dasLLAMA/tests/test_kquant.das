@@ -149,7 +149,7 @@ def private build_iq4nl_block() : array<uint8> {
     return <- blkb
 }
 
-def private kq_tag(fmt : int) : string => fmt == 40 ? "q40" : (fmt == 44 ? "iq4xs" : (fmt == 33 ? "iq3s" : (fmt == 34 ? "iq3xxs" : (fmt == 45 ? "iq4nl" : (fmt == 23 ? "iq2s" : (fmt == 24 ? "iq2xs" : (fmt == 25 ? "iq2xxs" : "k{fmt}")))))))
+def private kq_tag(fmt : int) : string => fmt == 40 ? "q40" : (fmt == 44 ? "iq4xs" : (fmt == 33 ? "iq3s" : (fmt == 35 ? "iq3s4" : (fmt == 34 ? "iq3xxs" : (fmt == 45 ? "iq4nl" : (fmt == 23 ? "iq2s" : (fmt == 24 ? "iq2xs" : (fmt == 25 ? "iq2xxs" : "k{fmt}"))))))))
 
 // iq4xs synthetic superblock: 136B disk block — f16 d = SYNTH_D, the 8 six-bit sub-scales are
 // SYNTH_SC (packed low nibbles into scales_l, top two bits into scales_h), the shared nibble
@@ -591,6 +591,47 @@ def test_kq_transcode_planes(t : T?) {
             let sgn = ((iq3s_sg_pat(b * 4 + l) >> hj) & 1) != 0 ? -1.0 : 1.0
             let expected = (SYNTH_D * float(1 + 2 * (SYNTH_SC[b] & 15))) * float(g) * sgn
             t |> success(dst[k] == expected, "iq3s plane element must match the upstream dequant exactly")
+        }
+    }
+    t |> run("iq3s4 planes are the iq3s superblock's exact served twin: 16-value codebook, iq3s's scale row") @(t : T?) {
+        var blkb <- build_iq3s_block()
+        var kq3 : array<uint8>
+        var ks3 : array<uint8>
+        var kq4 : array<uint8>
+        var ks4 : array<uint8>
+        kq3 |> resize(104)
+        ks3 |> resize(20)
+        kq4 |> resize(128)
+        ks4 |> resize(20)
+        var w3 : array<float>
+        var w4 : array<float>
+        w3 |> resize(256)
+        w4 |> resize(256)
+        var st = 0x2545F491u
+        for (rep in range(8)) {   // rep 0 = the synthetic block; then LCG-perturbed grid/qh/sign/scale bytes (every IQ3_S byte is legal)
+            if (rep > 0) {
+                for (i in range(2, 110)) {
+                    st = st * 1664525u + 1013904223u
+                    blkb[i] = uint8(st >> 24u)
+                }
+            }
+            kq_transcode_superblock(KqFmt.iq3s, blkb, 0l, kq3, 0l, ks3, 0l)
+            kq_transcode_superblock(KqFmt.iq3s4, blkb, 0l, kq4, 0l, ks4, 0l)
+            for (i in range(20)) {
+                t |> equal(int(ks4[i]), int(ks3[i]), "rep {rep}: the iq3s4 scale row is iq3s's")
+            }
+            dequant_iq3s_plane_superblock(kq3, 0l, ks3, 0l, w3, 0l)
+            dequant_iq3s4_plane_superblock(kq4, 0l, ks4, 0l, w4, 0l)
+            var bad = 0
+            for (k in range(256)) {
+                if (w3[k] != w4[k]) {
+                    bad++
+                }
+            }
+            t |> equal(bad, 0, "rep {rep}: every weight dequants bit-identically through the grid and through the codebook")
+        }
+        for (v in [-15, -1, 1, 15]) {
+            t |> equal(int(IQ3S4_LUT[iq3s4_index(v)]), v, "the codebook round-trips its own index")
         }
     }
     t |> run("k2 planes reorder the header and compose the 2-bit quants exactly") @(t : T?) {
@@ -1260,7 +1301,7 @@ def test_iq4nl32_kernels(t : T?) {
 // elementwise dot over the plane dequant (the kernels' declared oracle).
 def private kq_dot_gate(t : T?; fmt : int; n : int64 = 512l) {
     let nsb = n / 256l
-    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
+    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 || fmt == 35 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     var kq : array<uint8>
@@ -1280,6 +1321,8 @@ def private kq_dot_gate(t : T?; fmt : int; n : int64 = 512l) {
             kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 33) {
             kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, s * qsb, ks, s * ssb)
+        } elif (fmt == 35) {
+            kq_transcode_superblock(KqFmt.iq3s4, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 34) {
             kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, s * qsb, ks, s * ssb)
         } elif (fmt == 45) {
@@ -1317,6 +1360,8 @@ def private kq_dot_gate(t : T?; fmt : int; n : int64 = 512l) {
             dequant_k3_plane_superblock(kq, s * qsb, ks, s * ssb, w, s * 256l)
         } elif (fmt == 33) {
             dequant_iq3s_plane_superblock(kq, s * qsb, ks, s * ssb, w, s * 256l)
+        } elif (fmt == 35) {
+            dequant_iq3s4_plane_superblock(kq, s * qsb, ks, s * ssb, w, s * 256l)
         } elif (fmt == 34) {
             dequant_iq3xxs_plane_superblock(kq, s * qsb, ks, s * ssb, w, s * 256l)
         } elif (fmt == 45) {
@@ -1385,7 +1430,7 @@ def test_kq_dots(t : T?) {
     }
     // 122B-class row widths: n=3072 (12 superblocks — qwen35moe-122B gate/up/cls) and n=1024
     // (its k5 down_exps). Every earlier kq model kept n at 512..2560.
-    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25]) {
+    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25, 35]) {
         for (nn in [1024l, 3072l]) {
             t |> run("dot_{kq_tag(fmt)}q8 matches the fp64 reference at n={int(nn)}") @(t : T?) {
                 kq_dot_gate(t, fmt, nn)
@@ -1404,7 +1449,7 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
-    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
+    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 || fmt == 35 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
     var kq : array<uint8>
     var ks : array<uint8>
     kq |> resize(d * nsb * qsb)
@@ -1423,6 +1468,8 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
                 kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
                 kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+            } elif (fmt == 35) {
+                kq_transcode_superblock(KqFmt.iq3s4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
                 kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
@@ -1506,7 +1553,7 @@ def test_kq_gemv_rows(t : T?) {
     t |> run("portable iq3s GEMV rows bit-match per-row disk dots") @(t : T?) {
         kq_gemv_rows_gate(t, 33)
     }
-    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25]) {
+    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25, 35]) {
         for (nn in [1024l, 3072l]) {
             t |> run("portable {kq_tag(fmt)} GEMV rows bit-match per-row disk dots at n={int(nn)}") @(t : T?) {
                 kq_gemv_rows_gate(t, fmt, nn)
@@ -1526,7 +1573,7 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
-    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
+    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 || fmt == 35 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
     var kq : array<uint8>
     var ks : array<uint8>
     kq |> resize(d * nsb * qsb)
@@ -1545,6 +1592,8 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
                 kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
                 kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+            } elif (fmt == 35) {
+                kq_transcode_superblock(KqFmt.iq3s4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
                 kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
@@ -1603,6 +1652,8 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
                     dequant_k3_plane_superblock(kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb, wrow, r * n + s * 256l)
                 } elif (fmt == 33) {
                     dequant_iq3s_plane_superblock(kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb, wrow, r * n + s * 256l)
+                } elif (fmt == 35) {
+                    dequant_iq3s4_plane_superblock(kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb, wrow, r * n + s * 256l)
                 } elif (fmt == 34) {
                     dequant_iq3xxs_plane_superblock(kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb, wrow, r * n + s * 256l)
                 } elif (fmt == 45) {
@@ -1632,6 +1683,8 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
             repack_kq_grp(KqFmt.k3, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 33) {
             repack_kq_grp(KqFmt.iq3s, addr(kq[0]), addr(ks[0]), n, d, mr)
+        } elif (fmt == 35) {
+            repack_kq_grp(KqFmt.iq3s4, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 34) {
             repack_kq_grp(KqFmt.iq3xxs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 45) {
@@ -1661,8 +1714,8 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
                     ? iq4xs_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
                     : (fmt == 3
                         ? k3_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)
-                        : (fmt == 33 || fmt == 34 || fmt == 45 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25
-                            ? (fmt == 33 ? iq3s_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 34 ? iq3xxs_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 45 ? iq4nl_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 2 ? k2_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 23 ? iq2s_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 24 ? iq2xs_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : iq2xxs_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)))))))
+                        : (fmt == 33 || fmt == 35 || fmt == 34 || fmt == 45 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25
+                            ? (fmt == 33 ? iq3s_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 35 ? iq3s4_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 34 ? iq3xxs_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 45 ? iq4nl_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 2 ? k2_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 23 ? iq2s_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : (fmt == 24 ? iq2xs_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n) : iq2xxs_grp_row_dot(kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n))))))))
                             : kq_grp_row_dot(int64(fmt), kqg, ksg, r % mr, mr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n)))))
             if (got != want[r]) {
                 dotbad++
@@ -1690,7 +1743,7 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
 
 [test]
 def test_kq_repack_grp(t : T?) {
-    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25]) {
+    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25, 35]) {
         for (mr in [4l, 8l, 16l]) {
             t |> run("repack_{kq_tag(fmt)}_grp mr={mr} preserves dots and row dequants") @(t : T?) {
                 kq_repack_gate(t, fmt, mr)
@@ -1715,7 +1768,7 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
     let mr = kq_layout_of(fmt)   // the format's OWN layout companion (per-format tune families)
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
-    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
+    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 || fmt == 35 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
     var kq : array<uint8>
     var ks : array<uint8>
     kq |> resize(d * nsb * qsb)
@@ -1734,6 +1787,8 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
                 kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
                 kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+            } elif (fmt == 35) {
+                kq_transcode_superblock(KqFmt.iq3s4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
                 kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
@@ -1769,6 +1824,8 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
             repack_kq_grp(KqFmt.k3, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 33) {
             repack_kq_grp(KqFmt.iq3s, addr(kq[0]), addr(ks[0]), n, d, mr)
+        } elif (fmt == 35) {
+            repack_kq_grp(KqFmt.iq3s4, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 34) {
             repack_kq_grp(KqFmt.iq3xxs, addr(kq[0]), addr(ks[0]), n, d, mr)
         } elif (fmt == 45) {
@@ -1836,6 +1893,8 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
                     k3q8_tile_gen(addr(ytile[0]), kqg, ksg, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, d, g, tk)
                 } elif (fmt == 33) {
                     iq3sq8_tile_gen(addr(ytile[0]), addr(panel[0]), ksg, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, d, g, tk)
+                } elif (fmt == 35) {
+                    iq3s4q8_tile_gen(addr(ytile[0]), kqg, ksg, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, d, g, tk)
                 } elif (fmt == 34) {
                     iq3xxsq8_tile_gen(addr(ytile[0]), addr(panel[0]), ksg, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, d, g, tk)
                 } elif (fmt == 45) {
@@ -1866,6 +1925,8 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
                     k3q8_gemv_gen(addr(ytile[tk * d]), addr(kq[0]), addr(ks[0]), addr(xq[tk * n]), addr(xs[tk * (n / 256l)]), addr(xbs[tk * (n / 16l)]), n, g * mr, (g + 1l) * mr)
                 } elif (fmt == 33) {
                     iq3sq8_gemv_gen(addr(ytile[tk * d]), addr(kq[0]), addr(ks[0]), addr(xq[tk * n]), addr(xs[tk * (n / 256l)]), addr(xbs[tk * (n / 16l)]), n, g * mr, (g + 1l) * mr)
+                } elif (fmt == 35) {
+                    iq3s4q8_gemv_gen(addr(ytile[tk * d]), addr(kq[0]), addr(ks[0]), addr(xq[tk * n]), addr(xs[tk * (n / 256l)]), addr(xbs[tk * (n / 16l)]), n, g * mr, (g + 1l) * mr)
                 } elif (fmt == 34) {
                     iq3xxsq8_gemv_gen(addr(ytile[tk * d]), addr(kq[0]), addr(ks[0]), addr(xq[tk * n]), addr(xs[tk * (n / 256l)]), addr(xbs[tk * (n / 16l)]), n, g * mr, (g + 1l) * mr)
                 } elif (fmt == 45) {
@@ -1897,6 +1958,8 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
                 k3q8_gemv_gen(addr(ygemv[p * d]), addr(kq[0]), addr(ks[0]), addr(xq[p * n]), addr(xs[p * (n / 256l)]), addr(xbs[p * (n / 16l)]), n, 0l, d)
             } elif (fmt == 33) {
                 iq3sq8_gemv_gen(addr(ygemv[p * d]), addr(kq[0]), addr(ks[0]), addr(xq[p * n]), addr(xs[p * (n / 256l)]), addr(xbs[p * (n / 16l)]), n, 0l, d)
+            } elif (fmt == 35) {
+                iq3s4q8_gemv_gen(addr(ygemv[p * d]), addr(kq[0]), addr(ks[0]), addr(xq[p * n]), addr(xs[p * (n / 256l)]), addr(xbs[p * (n / 16l)]), n, 0l, d)
             } elif (fmt == 34) {
                 iq3xxsq8_gemv_gen(addr(ygemv[p * d]), addr(kq[0]), addr(ks[0]), addr(xq[p * n]), addr(xs[p * (n / 256l)]), addr(xbs[p * (n / 16l)]), n, 0l, d)
             } elif (fmt == 45) {
@@ -1934,7 +1997,7 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYL
 
 [test]
 def test_kq_tile(t : T?) {
-    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25]) {
+    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25, 35]) {
         t |> run("{kq_tag(fmt)} 4-token tile bit-matches per-token GEMVs") @(t : T?) {
             kq_tile_gate(t, fmt)
         }
@@ -1955,7 +2018,7 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
-    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
+    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 || fmt == 35 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
     var kq : array<uint8>
     var ks : array<uint8>
     kq |> resize(nreg * d * nsb * qsb)
@@ -1974,6 +2037,8 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
                 kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
                 kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+            } elif (fmt == 35) {
+                kq_transcode_superblock(KqFmt.iq3s4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
                 kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
@@ -2081,6 +2146,8 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
                 repack_kq_grp(KqFmt.k3, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 33) {
                 repack_kq_grp(KqFmt.iq3s, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+            } elif (fmt == 35) {
+                repack_kq_grp(KqFmt.iq3s4, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 34) {
                 repack_kq_grp(KqFmt.iq3xxs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 45) {
@@ -2118,6 +2185,9 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
             } elif (fmt == 33) {
                 iq3sq8_gemv_gen(addr(want_sh[r * d]), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, 0l, d)
                 iq3sq8_gemv_gen(addr(want_pr[r * d]), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n, 0l, d)
+            } elif (fmt == 35) {
+                iq3s4q8_gemv_gen(addr(want_sh[r * d]), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, 0l, d)
+                iq3s4q8_gemv_gen(addr(want_pr[r * d]), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n, 0l, d)
             } elif (fmt == 34) {
                 iq3xxsq8_gemv_gen(addr(want_sh[r * d]), kqr, ksr, addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, 0l, d)
                 iq3xxsq8_gemv_gen(addr(want_pr[r * d]), kqr, ksr, addr(xq[r * n]), addr(xs[r * (n / 256l)]), addr(xbs[r * (n / 16l)]), n, 0l, d)
@@ -2171,7 +2241,7 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
 
 [test]
 def test_kq_groupn(t : T?) {
-    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25]) {
+    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25, 35]) {
         t |> run("{kq_tag(fmt)} region-list GEMV bit-matches per-row dots (disk + grp slices)") @(t : T?) {
             kq_groupn_gate(t, fmt)
         }
@@ -2215,7 +2285,7 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
     for (c in cnts) {
         nk += c
     }
-    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
+    let blk1 <- fmt == 4 ? build_q4k_block() : (fmt == 5 ? build_q5k_block() : (fmt == 40 ? build_q40_block() : (fmt == 44 ? build_iq4xs_block() : (fmt == 3 ? build_q3k_block() : (fmt == 33 || fmt == 35 ? build_iq3s_block() : (fmt == 34 ? build_iq3xxs_block() : (fmt == 45 ? build_iq4nl_block() : (fmt == 2 ? build_q2k_block() : (fmt == 23 ? build_iq2s_block() : (fmt == 24 ? build_iq2xs_block() : (fmt == 25 ? build_iq2xxs_block() : build_q6k_block())))))))))))
     var kq : array<uint8>
     var ks : array<uint8>
     kq |> resize(nreg * d * nsb * qsb)
@@ -2234,6 +2304,8 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
                 kq_transcode_superblock(KqFmt.k3, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 33) {
                 kq_transcode_superblock(KqFmt.iq3s, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
+            } elif (fmt == 35) {
+                kq_transcode_superblock(KqFmt.iq3s4, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 34) {
                 kq_transcode_superblock(KqFmt.iq3xxs, blk1, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
             } elif (fmt == 45) {
@@ -2270,6 +2342,8 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
                 repack_kq_grp(KqFmt.k3, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 33) {
                 repack_kq_grp(KqFmt.iq3s, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
+            } elif (fmt == 35) {
+                repack_kq_grp(KqFmt.iq3s4, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 34) {
                 repack_kq_grp(KqFmt.iq3xxs, addr(kq[r * d * nsb * qsb]), addr(ks[r * d * nsb * ssb]), n, d, mr)
             } elif (fmt == 45) {
@@ -2332,6 +2406,8 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
                     k3q8_gemv_gen(addr(want[tk * d]), kqr, ksr, addr(xq[tk * n]), addr(xs[tk * (n / 256l)]), addr(xbs[tk * (n / 16l)]), n, 0l, d)
                 } elif (fmt == 33) {
                     iq3sq8_gemv_gen(addr(want[tk * d]), kqr, ksr, addr(xq[tk * n]), addr(xs[tk * (n / 256l)]), addr(xbs[tk * (n / 16l)]), n, 0l, d)
+                } elif (fmt == 35) {
+                    iq3s4q8_gemv_gen(addr(want[tk * d]), kqr, ksr, addr(xq[tk * n]), addr(xs[tk * (n / 256l)]), addr(xbs[tk * (n / 16l)]), n, 0l, d)
                 } elif (fmt == 34) {
                     iq3xxsq8_gemv_gen(addr(want[tk * d]), kqr, ksr, addr(xq[tk * n]), addr(xs[tk * (n / 256l)]), addr(xbs[tk * (n / 16l)]), n, 0l, d)
                 } elif (fmt == 45) {
@@ -2375,7 +2451,7 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
 
 [test]
 def test_kq_batch_groupn(t : T?) {
-    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25]) {
+    for (fmt in [4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25, 35]) {
         t |> run("{kq_tag(fmt)} batch groupn bit-matches per-token rows-core calls") @(t : T?) {
             kq_batch_groupn_gate(t, fmt)
         }

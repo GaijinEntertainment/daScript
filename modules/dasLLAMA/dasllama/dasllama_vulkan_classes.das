@@ -1898,7 +1898,7 @@ let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedul
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_ensure(fmt : int) : bool {
     var r = false
-    kq_tile_stamp(fmt) <| $() {
+    kq_tile_stamp(fmt, "iq3s4") <| $() {
         r = tile_ensure_khr_cls()
     }
     return r
@@ -1907,7 +1907,7 @@ def khr_cls_ensure(fmt : int) : bool {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     var r : VkDescriptorSet
-    kq_tile_stamp(fmt) <| $() {
+    kq_tile_stamp(fmt, "iq3s4") <| $() {
         r = tile_set_khr_cls(bufs, sizes, gbits)
     }
     return r
@@ -1915,7 +1915,7 @@ def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    kq_tile_stamp(fmt) <| $() {
+    kq_tile_stamp(fmt, "iq3s4") <| $() {
         tile_enc_khr_cls(raw, h, s, pc, groups)
     }
 }
@@ -1923,7 +1923,7 @@ def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescr
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2e_cls_ensure(fmt : int) : bool {
     var r = false
-    kq_tile_stamp(fmt) <| $() {
+    kq_tile_stamp(fmt, "iq3s4") <| $() {
         r = tile_ensure_cm2e_cls()
     }
     return r
@@ -1932,7 +1932,7 @@ def cm2e_cls_ensure(fmt : int) : bool {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2e_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     var r : VkDescriptorSet
-    kq_tile_stamp(fmt) <| $() {
+    kq_tile_stamp(fmt, "iq3s4") <| $() {
         r = tile_set_cm2e_cls(bufs, sizes, gbits)
     }
     return r
@@ -1940,7 +1940,7 @@ def cm2e_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbit
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2e_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    kq_tile_stamp(fmt) <| $() {
+    kq_tile_stamp(fmt, "iq3s4") <| $() {
         tile_enc_cm2e_cls(raw, h, s, pc, groups)
     }
 }
@@ -1968,7 +1968,7 @@ def cm2_cls_ensure(fmt : int; tc : int64) : bool {
         return ensure_iq4nl32_batch_cm2s_cls()
     }
     var r = false
-    kq_tile_stamp(fmt, "q51 mx4 iq4nl32") <| $() {
+    kq_tile_stamp(fmt, "q51 mx4 iq4nl32 iq3s4") <| $() {
         r = tc == 256l ? tile_ensure_cm2l_cls() : (tc == 128l ? tile_ensure_cm2m_cls() : tile_ensure_cm2s_cls())
     }
     return r
@@ -1996,7 +1996,7 @@ def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 con
         return set_iq4nl32_batch_cm2s_cls(bufs, sizes, gbits)
     }
     var r : VkDescriptorSet
-    kq_tile_stamp(fmt, "q51 mx4 iq4nl32") <| $() {
+    kq_tile_stamp(fmt, "q51 mx4 iq4nl32 iq3s4") <| $() {
         if (tc == 256l) {
             r = tile_set_cm2l_cls(bufs, sizes, gbits)
         } elif (tc == 128l) {
@@ -2025,7 +2025,7 @@ def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var
         verify(tc == 32l, "vk classes: an iq4nl32 plane reached a dense tile column - the resident plan admits iq4nl32 as a routed expert plane only")
         enc_iq4nl32_batch_cm2s_cls(raw, h, s, pc, groups)
     } else {
-        kq_tile_stamp(fmt, "q51 mx4 iq4nl32") <| $() {
+        kq_tile_stamp(fmt, "q51 mx4 iq4nl32 iq3s4") <| $() {
             if (tc == 256l) {
                 tile_enc_cm2l_cls(raw, h, s, pc, groups)
             } elif (tc == 128l) {
@@ -12431,7 +12431,7 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 // ===== the N-column GEMV leaves: one weight pass over `pa.ncols` activation rows =====
 
 //! the formats with an N-column leaf: every kq leaf and the q8 stamps; the per-32 expert GEMVs (q51, mx4) have no N form, so a dense plane in one steps a row at a time
-def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || kq_sb(fmt)
+def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || (kq_sb(fmt) && fmt != int(KqFmt.iq3s4))   //! iq3s4 is the CPU rail's served form: no Vulkan leaf
 
 //! the decode GEMV family's roster - q8 and every kq leaf, in enum order: what the kernel cells and the probe's ruler walk
 def kq_gemv_fmts() : array<KqFmt> {

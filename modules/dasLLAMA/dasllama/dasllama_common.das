@@ -1791,6 +1791,23 @@ def public get_kq_q51_native() : bool {
     return g_kq_q51_native
 }
 
+//! Whether an IQ3_S weight loads as the iq3s4 served form (DASLLAMA_IQ3S_SERVE): `lut` / `grid` decide
+//! outright; `auto` = the LUT form on a CPU-only load, the grid form where a GPU tier targets the load
+//! (a device gathers the grid for nothing, and the GPU tiers carry no iq3s4 kernels)
+def public iq3s_serve_lut() : bool {
+    let mode = g_env_engine.iq3s_serve
+    if (mode == "lut") {
+        return true
+    }
+    if (mode == "grid") {
+        return false
+    }
+    if (mode != "auto") {
+        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_IQ3S_SERVE='{mode}' is not one of auto | grid | lut - reading auto\n")
+    }
+    return get_metal_mode() == MetalMode.off && !moe_gpu_tier_installed()
+}
+
 // ===== DlimConfiguration sources (dasllama_config) =====
 
 def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
@@ -1814,6 +1831,7 @@ def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
     c.kq_q40_native = g_kq_q40_native
     c.kq_q50_native = g_kq_q50_native
     c.kq_q51_native = g_kq_q51_native
+    c.iq3s_lut = iq3s_serve_lut()
 }
 
 def private dlim_metal_source_impl(var c : DlimMetalConfig) : bool {

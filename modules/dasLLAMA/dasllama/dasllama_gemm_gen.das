@@ -2315,7 +2315,7 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
 // token PAIR — single-token slices ride the sdot lattice instead. kq blocks are SUPERBLOCKS
 // (the kq gemv/tile drive emit_slice with nb = n/256).
 def private emit_one_block(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
-    if (te.kq == 44 || te.kq == 33 || te.kq == 34 || te.kq == 45 || te.kq == 23 || te.kq == 24 || te.kq == 25) {
+    if (te.kq == 44 || te.kq == 35 || te.kq == 33 || te.kq == 34 || te.kq == 45 || te.kq == 23 || te.kq == 24 || te.kq == 25) {
         emit_block_iq4xs(te, bi, f, tokBase, tokCount)
     } elif (te.kq != 0) {
         emit_block_kqv2(te, bi, f, tokBase, tokCount)
@@ -2603,15 +2603,16 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
         }
     }
     if (needMx4) {
-        // the nibble codebook as a constant vector (mx4: doubled e2m1; kq 44: kvalues_iq4nl) - no runtime table pointer; broadcast per 16-byte lane on x64
+        // the nibble codebook as a constant vector (mx4: doubled e2m1; kq 44 / 45 / iq4nl32: kvalues_iq4nl; kq 35: the iq3s4 odd values) - no runtime table pointer; broadcast per 16-byte lane on x64
         let e2m1 = fixed_array(0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12)
         let iq4nl = iq4nl_lut()
+        let iq3s4 = iq3s4_lut()
         let lanes = te.dotKind == DOT_SDOT ? 1 : te.width / 128
         var lutElems : array<LLVMOpaqueValue?>
         lutElems |> reserve(16 * lanes)
         for (_lane in range(lanes)) {
             for (i in range(16)) {
-                let v = te.kq == 44 || te.kq == 45 || te.iq4nl32 ? int(iq4nl[i]) : e2m1[i]
+                let v = te.kq == 44 || te.kq == 45 || te.iq4nl32 ? int(iq4nl[i]) : (te.kq == 35 ? int(iq3s4[i]) : e2m1[i])
                 lutElems |> push(LLVMConstInt(te.types.t_int8, uint64(v & 255), 0))
             }
         }
@@ -3436,7 +3437,7 @@ def private kq_gemv_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     let p = companion_perm(p0)
 
     var te = TileEmit(kq = fmt)
-    if (!setup_tile_emit(te, gc, p, fmt == 44 || fmt == 45)) return false
+    if (!setup_tile_emit(te, gc, p, fmt == 44 || fmt == 45 || fmt == 35)) return false
 
     let b = gc.jit.builder
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
@@ -3581,7 +3582,7 @@ def private kq_tile_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     let p = companion_perm(p0)
 
     var te = TileEmit(kq = fmt, kqBytes = fmt == 5 || fmt == 6)   // only the k5/k6 tiles get the byte-expanded panel
-    if (!setup_tile_emit(te, gc, p, fmt == 44 || fmt == 45)) return false
+    if (!setup_tile_emit(te, gc, p, fmt == 44 || fmt == 45 || fmt == 35)) return false
 
     let b = gc.jit.builder
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
@@ -3625,6 +3626,11 @@ def private kq_tile_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
 // sign-trick dots); the tbl1/pshufb rail is the mx4 companion's, already in perm_declines.
 def private iq4xs_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 44)
 def private iq4xs_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 44)
+
+// iq3s4 (the IQ3_S served form) rides the iq4xs LUT block body with the odd codebook baked in
+// place of kvalues_iq4nl - the same plane pair, the same fold, no grid gather.
+def private iq3s4_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 35)
+def private iq3s4_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 35)
 
 // k3 rides the kq walks through emit_block_kqv2's k6 arms (the k3 flag swaps the quant compose and the offset)
 def private k3_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc, 3)
@@ -3752,6 +3758,8 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::q40_tile", @@q40_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq4xs_gemv", @@iq4xs_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq4xs_tile", @@iq4xs_tile_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq3s4_gemv", @@iq3s4_gemv_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq3s4_tile", @@iq3s4_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::k3_gemv", @@k3_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::k3_tile", @@k3_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq3s_gemv", @@iq3s_gemv_gen)

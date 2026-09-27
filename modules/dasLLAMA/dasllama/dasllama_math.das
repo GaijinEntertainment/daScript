@@ -1150,6 +1150,7 @@ struct KernelBackend {
     kq_rows_iq2s : MatmulKqRowsFn = @@kq_unset_rows
     kq_rows_iq2xs : MatmulKqRowsFn = @@kq_unset_rows
     kq_rows_iq2xxs : MatmulKqRowsFn = @@kq_unset_rows
+    kq_rows_iq3s4 : MatmulKqRowsFn = @@kq_unset_rows
     kq_batch : MatmulKqBatchFn = @@kq_unset_batch
     kq_groupn : MatmulKqGroupNFn = @@kq_unset_groupn
     kq_batch_groupn : MatmulKqBatchGroupNFn = @@kq_unset_batch_groupn
@@ -1224,6 +1225,7 @@ var g_kq_rows_k2 = @@kq_unset_rows
 var g_kq_rows_iq2s = @@kq_unset_rows
 var g_kq_rows_iq2xs = @@kq_unset_rows
 var g_kq_rows_iq2xxs = @@kq_unset_rows
+var g_kq_rows_iq3s4 = @@kq_unset_rows
 var g_mm_kq_batch = @@kq_unset_batch
 var g_mm_kq_groupn = @@kq_unset_groupn
 var g_mm_kq_batch_groupn = @@kq_unset_batch_groupn
@@ -1914,6 +1916,7 @@ def private activate(be : KernelBackend) {
     g_kq_rows_iq2s = be.kq_rows_iq2s
     g_kq_rows_iq2xs = be.kq_rows_iq2xs
     g_kq_rows_iq2xxs = be.kq_rows_iq2xxs
+    g_kq_rows_iq3s4 = be.kq_rows_iq3s4
     g_mm_kq_batch = be.kq_batch
     g_mm_kq_groupn = be.kq_groupn
     g_mm_kq_batch_groupn = be.kq_batch_groupn
@@ -2119,6 +2122,7 @@ def kq_rows_fn(fmt : int) : MatmulKqRowsFn {
     if (fmt == 6) return g_kq_rows_k6
     if (fmt == 40) return g_kq_rows_q40
     if (fmt == 44) return g_kq_rows_iq4xs
+    if (fmt == 35) return g_kq_rows_iq3s4
     if (fmt == 3) return g_kq_rows_k3
     if (fmt == 33) return g_kq_rows_iq3s
     if (fmt == 34) return g_kq_rows_iq3xxs
@@ -3519,6 +3523,9 @@ def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam
     }
     if (g_kq_rows_iq2xs == null) {
         g_kq_rows_iq2xs = @@kq_unset_rows
+    }
+    if (g_kq_rows_iq3s4 == null) {
+        g_kq_rows_iq3s4 = @@kq_unset_rows
     }
     if (g_kq_rows_iq2xxs == null) {
         g_kq_rows_iq2xxs = @@kq_unset_rows

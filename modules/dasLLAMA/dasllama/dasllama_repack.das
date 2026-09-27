@@ -363,6 +363,11 @@ def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq
     }
 }
 
+//! iq3s4: iq4xs's plane pair exactly (the k4 nibble tiling under the 20B signed-sub-scale row).
+def repack_grp(var kq : uint8?; var ks : uint8?; n, d, mr : int64; _f : KqTag_iq3s4) {
+    repack_grp(kq, ks, n, d, mr, KqTag_iq4xs())
+}
+
 //! k3: qs and hmask re-packed per sub-block into four-byte columns (the 2-bit lanes and the
 //! high bits gathered per column); scales interleave as k6's row ([16 x mr int8][mr x f16 d]).
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes")]

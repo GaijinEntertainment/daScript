@@ -1346,6 +1346,9 @@ def private log_load_report(t : Model) {
 // GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path)
 def private kq_fmt_of(gt : int) : KqFmt {
     let native = gguf_kq_fmt_of_type(gt)
+    if (native == KqFmt.iq3s && iq3s_serve_lut()) {
+        return KqFmt.iq3s4
+    }
     if (native != KqFmt.q8) {
         return native
     }

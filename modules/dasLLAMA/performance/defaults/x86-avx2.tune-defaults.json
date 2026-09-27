@@ -1,6 +1,8 @@
 {
 	"kernels" : {
 		"iq4xsq8_gemv_gen" : "dot_maddubs_width256_mr8",
+		"iq3s4q8_gemv_gen" : "dot_maddubs_width256_mr8",
+		"iq3s4q8_tile_gen" : "dot_maddubs_width256_mr8",
 		"q40q8_gemv_gen" : "dot_maddubs_width256_mr8",
 		"add_inplace" : "vec8_u2",
 		"iq2xsq8_gemv_gen" : "dot_maddubs_width256_mr8",

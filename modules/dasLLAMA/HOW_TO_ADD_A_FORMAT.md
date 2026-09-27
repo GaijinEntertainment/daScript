@@ -40,6 +40,22 @@ Three questions decide which existing family the format rides; answer them from
 
 Write the answers down; they are the first lines of the PR body's format section.
 
+**A served form of an existing disk type** (`iq3s4` = IQ3_S as a codebook plane,
+`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2e) is a member like any other, with four differences:
+the descriptor row names the SOURCE type (`ggml_type`, `disk_bytes`) under its own schema and
+stream ids; `kq_transcode_p` reads the source disk block and folds its decode into the served
+plane (exactness against the source form is a `test_kquant.das` cell - both transcodes of one
+superblock, dequants bit-identical, over LCG-perturbed source bytes); `kq_fmt_of`
+(`dasllama_load.das`) maps the native tag to the served one behind an `[EnvConfig]` knob whose
+resolved value is a `DlimCpuConfig` field (it changes plane bytes, so it is image identity - the
+struct's header rule); and the GPU tiers stay on the native form, so the member joins every
+Vulkan ladder's `kq_tile_stamp` skip list (sec.6), `pf_f16_feed` refuses it, `gemv_cls_has_n`
+excludes it, and the Metal roster (`moe_fmt_metal_served`) leaves it out - a load a GPU tier
+targets serves the native form (`auto`). The kernels are the shape it borrows (iq3s4: the iq4xs
+LUT kernels over its own codebook, sec.4/5), and the tune family is its own (`<fmt>q8_tile_gen`
+with the borrowed emitter's `fallback`, its two class-profile rows copied from the shape it
+borrows).
+
 ## 1. Identity - `dasllama/dasllama_kqformat.das`
 
 The taxonomy every other file keys off. One member and one descriptor row here; every

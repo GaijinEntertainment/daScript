@@ -31,7 +31,7 @@ require daslib/strings_boost
 [CommandLineArgs]
 struct BenchArgs {
     @clarg_short = "f"
-    @clarg_doc = "KqFmt names, comma-separated (q8,k4,k5,k6,q40,q51,iq4xs,k3,iq3s,iq3xxs,iq4nl,k2,iq2s,iq2xs,iq2xxs,iq4nl32; mx4 = mxfp4; q8s16 = q8 over binary16 group scales, the GGUF q8_0 tensor's path), or all"
+    @clarg_doc = "KqFmt names, comma-separated (q8,k4,k5,k6,q40,q51,iq4xs,k3,iq3s,iq3xxs,iq4nl,k2,iq2s,iq2xs,iq2xxs,iq4nl32,iq3s4; mx4 = mxfp4; q8s16 = q8 over binary16 group scales, the GGUF q8_0 tensor's path), or all"
     fmt : string = "all"
     @clarg_doc = "Reduction length - the weight row length (k in test-backend-ops terms)"
     n : int = 14336
@@ -91,6 +91,7 @@ def gemv_variants(f : KqFmt) : array<tuple<string; GemvFn>> {
     if (f == KqFmt.iq4xs) return <- iq4xsq8_gemv_gen_variants()
     if (f == KqFmt.k3) return <- k3q8_gemv_gen_variants()
     if (f == KqFmt.iq3s) return <- iq3sq8_gemv_gen_variants()
+    if (f == KqFmt.iq3s4) return <- iq3s4q8_gemv_gen_variants()
     if (f == KqFmt.iq3xxs) return <- iq3xxsq8_gemv_gen_variants()
     if (f == KqFmt.iq4nl) return <- iq4nlq8_gemv_gen_variants()
     if (f == KqFmt.k2) return <- k2q8_gemv_gen_variants()
@@ -111,6 +112,7 @@ def tile_variants(f : KqFmt) : array<tuple<string; TileFn>> {
     if (f == KqFmt.iq4xs) return <- iq4xsq8_tile_gen_variants()
     if (f == KqFmt.k3) return <- k3q8_tile_gen_variants()
     if (f == KqFmt.iq3s) return <- iq3sq8_tile_gen_variants()
+    if (f == KqFmt.iq3s4) return <- iq3s4q8_tile_gen_variants()
     if (f == KqFmt.iq3xxs) return <- iq3xxsq8_tile_gen_variants()
     if (f == KqFmt.iq4nl) return <- iq4nlq8_tile_gen_variants()
     if (f == KqFmt.k2) return <- k2q8_tile_gen_variants()
@@ -131,6 +133,7 @@ def layout_variants(f : KqFmt) : array<tuple<string; LayoutFn>> {
     if (f == KqFmt.iq4xs) return <- iq4xsq8_layout_gen_variants()
     if (f == KqFmt.k3) return <- k3q8_layout_gen_variants()
     if (f == KqFmt.iq3s) return <- iq3sq8_layout_gen_variants()
+    if (f == KqFmt.iq3s4) return <- iq3s4q8_layout_gen_variants()
     if (f == KqFmt.iq3xxs) return <- iq3xxsq8_layout_gen_variants()
     if (f == KqFmt.iq4nl) return <- iq4nlq8_layout_gen_variants()
     if (f == KqFmt.k2) return <- k2q8_layout_gen_variants()

@@ -42,6 +42,7 @@ enum KqFmt : uint8 {
     iq2xxs
     mx4
     iq4nl32
+    iq3s4
 }
 
 //! One empty tag type per KqFmt member - the overload key of every per-format function family
@@ -64,6 +65,7 @@ struct KqTag_iq2xs {}
 struct KqTag_iq2xxs {}
 struct KqTag_mx4 {}
 struct KqTag_iq4nl32 {}
+struct KqTag_iq3s4 {}
 
 [call_macro(name = "kq_fmt_stamp")]
 class KqFmtStamp : AstCallMacro {
@@ -338,6 +340,9 @@ def kq_desc(f : KqFmt) : KqDesc {
     if (f == KqFmt.iq4nl32) {
         return KqDesc(fmt = f, qsb = IQ4NL32_QB, ssb = IQ4NL32_SB, elems = KQ_B32_ELEMS, disk_bytes = 18l, ggml_type = GGML_TYPE_IQ4_NL, schema_id = -1, stream_code = IQ4NL32_STREAM_TAG)
     }
+    if (f == KqFmt.iq3s4) {
+        return KqDesc(fmt = f, qsb = IQ4XS_QSB, ssb = IQ3S_SSB, elems = KQ_SB_ELEMS, disk_bytes = 110l, ggml_type = GGML_TYPE_IQ3_S, schema_id = 35, stream_code = 35)
+    }
     return KqDesc(fmt = KqFmt.q8, qsb = 0l, ssb = 0l, elems = KQ_B32_ELEMS, disk_bytes = 34l, ggml_type = GGML_TYPE_Q8_0, schema_id = -1, stream_code = 0)
 }
 
@@ -384,7 +389,7 @@ def kq_blocks_for(n, rows : int64; fmt : int) : int64 {
 }
 
 //! the KqFmt slot count of a per-format table (int(KqFmt) indexes it; members append, so the last is the bound)
-let KQ_FMT_COUNT = int(KqFmt.iq4nl32) + 1
+let KQ_FMT_COUNT = int(KqFmt.iq3s4) + 1
 
 //! the format an `int(KqFmt)` slot names - the per-format slot the GPU drivers and the image's plane tables index by; the caller holds the slot inside the enum's range
 def kq_fmt_of_slot(slot : int) : KqFmt => unsafe(reinterpret<KqFmt>(uint8(slot)))
@@ -472,6 +477,17 @@ def iq4nl_lut() : int8[16] => fixed_array<int8>(-127, -104, -83, -65, -49, -35, 
 //! The codebook's main-context copy (tests, oracles, the emitter's constant bake): a kernel that
 //! can run on a forked worker reads a module global as zeros - kernels take `iq4nl_lut()`.
 let IQ4NL_LUT = iq4nl_lut()
+
+//! The iq3s4 nibble codebook: the sixteen signed odd values an IQ3_S weight takes (grid magnitude
+//! 1..15 under its sign bit), lut[q] = 2q - 15 - so an IQ3_S superblock is served as an
+//! iq4xs-shaped plane (4-bit index, the iq3s scale row) and decoded by the LUT kernels, exactly.
+def iq3s4_lut() : int8[16] => fixed_array<int8>(-15, -13, -11, -9, -7, -5, -3, -1, 1, 3, 5, 7, 9, 11, 13, 15)
+
+//! iq3s4_lut's main-context copy (tests, oracles, the emitter's constant bake).
+let IQ3S4_LUT = iq3s4_lut()
+
+//! The iq3s4 index of one signed odd IQ3_S weight value.
+def iq3s4_index(v : int) : int => (v + 15) / 2
 
 //! The 6-bit sub-scale/min pair j of a 12-byte packed Q4_K/Q5_K scale block at sp - the one
 //! decode the dots, repacks, dequants and the Q5_K encoder share.
