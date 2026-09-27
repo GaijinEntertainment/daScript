@@ -353,7 +353,7 @@ var private @scratch @exact_size g_vt_ln_offs : array<LayerOffs>       //! the p
 [cold_path]
 def private vt_decline_words(why : VulkanTowerDecline) : string {
     if (why == VulkanTowerDecline.knob) {
-        return "the tower knob is off (DASLLAMA_VK_TOWER=0 or set_vulkan_tower(false))"
+        return VK_DECLINE_WORDS_TOWER_KNOB
     } elif (why == VulkanTowerDecline.blocks) {
         return "the whisper-class block hooks are pinned off (set_vulkan_audio_blocks(false)); the stem still serves"
     } elif (why == VulkanTowerDecline.quant_mode) {
@@ -361,9 +361,9 @@ def private vt_decline_words(why : VulkanTowerDecline) : string {
     } elif (why == VulkanTowerDecline.shape) {
         return "a width, head size, row count, window or buffer range the stamps do not serve"
     } elif (why == VulkanTowerDecline.memory) {
-        return "a device allocation failed"
+        return VK_DECLINE_WORDS_MEMORY
     }
-    return "the tier has no device (DASLLAMA_GPU=1 arms it), or a class failed to build"
+    return VK_DECLINE_WORDS_DEVICE
 }
 
 //! the decline counted under the enum's value name, and said once per reason per tower in words (the counter's `note`)

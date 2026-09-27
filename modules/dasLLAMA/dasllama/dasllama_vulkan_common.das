@@ -1848,6 +1848,11 @@ struct VkDeclineCounter {
     said : table<string>
 }
 
+//! The words the Vulkan drivers' decline enums share: each driver keeps its own enum (one a driver) and says these where a reason means the same
+let VK_DECLINE_WORDS_TOWER_KNOB = "the tower knob is off (DASLLAMA_VK_TOWER=0 or set_vulkan_tower(false))"
+let VK_DECLINE_WORDS_DEVICE = "the tier has no device (DASLLAMA_GPU=1 arms it), or a class failed to build"
+let VK_DECLINE_WORDS_MEMORY = "a device allocation failed"
+
 //! Count `reason` for `who`, say it once in `words` (the reason name when empty); answers false so a decline site returns it.
 [cold_path]
 def note(var c : VkDeclineCounter; who, reason : string; words : string = "") : bool {

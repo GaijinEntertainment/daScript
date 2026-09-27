@@ -46,15 +46,15 @@ def vulkan_tts_declines : table<string; int64> => clone_to_move(g_ts_declines.co
 
 def private ts_decline_words(why : VulkanTtsDecline) : string {
     if (why == VulkanTtsDecline.knob) {
-        return "the tower knob is off (DASLLAMA_VK_TOWER=0 or set_vulkan_tower(false))"
+        return VK_DECLINE_WORDS_TOWER_KNOB
     } elif (why == VulkanTtsDecline.shape) {
         return "a width, head size, row count or hidden size the stamps do not serve"
     } elif (why == VulkanTtsDecline.memory) {
-        return "a device allocation failed, or a buffer would bind past the device's storage range"
+        return "{VK_DECLINE_WORDS_MEMORY}, or a buffer would bind past the device's storage range"
     } elif (why == VulkanTtsDecline.gpu_error) {
         return "a submit failed"
     }
-    return "the tier has no device (DASLLAMA_GPU=1 arms it), or a class failed to build"
+    return VK_DECLINE_WORDS_DEVICE
 }
 
 [cold_path]
