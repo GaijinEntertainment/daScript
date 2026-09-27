@@ -1,0 +1,25 @@
+# Homebrew cask template for the dasllama tray app in the daslang tap.
+# Lives in the tap repo as Casks/dasllama.rb; this copy is the template of record.
+# render_manifests.py fills @TAG@, @VERSION@ and each @SHA:<asset>@ from the release; this header is dropped.
+cask "dasllama" do
+  version "@VERSION@"
+  sha256 "@SHA:dasllama-darwin-arm64.zip@"
+
+  url "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/dasllama-darwin-arm64.zip"
+  name "dasllama"
+  desc "OpenAI-compatible local LLM server with a menu bar supervisor"
+  homepage "https://dasllama.io"
+
+  depends_on arch: :arm64
+  # the formula puts the same commands on PATH
+  conflicts_with formula: "dasllama"
+
+  # the app's launcher is the watchdog: it starts the server and puts the mark in the menu bar
+  app "dasllama-server.app"
+@CASK_BINARIES@
+
+  caveats <<~EOS
+    The app is not code-signed: macOS asks once under
+    System Settings > Privacy & Security before the first start.
+  EOS
+end

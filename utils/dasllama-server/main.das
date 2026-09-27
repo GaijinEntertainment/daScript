@@ -20,12 +20,12 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // explicit exchange_accept key in the config consults it); a tune exits so the watchdog can restart
 // with the winners (missing = "restart"); `--tune` forces a local re-tune. Set DAS_TUNE_POLICY=error
 // while developing to skip per-start tuning (it prints the tuner command instead). The winners live
-// at <das_root>/dasllama.tune.json, shared by every dasLLAMA app on this box. A fat build (the
+// in main.tune.json beside this script (DAS_TUNE_MANIFEST moves them). A fat build (the
 // download) carries no tuner: its kernels are the class clones, and `--tune` is ignored.
 
 require openai_server           // the server + route handlers (this directory)
 require model_catalog           // catalog_models_dir — the models-dir resolution
-require cli_args                // discover_config — the one dasllama-server.toml lookup both programs share
+require user_state              // discover_config + config_save_path + open_logs — what the server writes lives under ~/.dasllama
 require dasllama/dasllama       // load_model / QuantMode / load_asr_model
 require daslib/tune             // [tune_policy] + log_tune_status (the injected guard resolves here)
 require [tune_framework]   // nolint:STYLE030,LINT019 — OPTIONAL: tune_suppress_mint, reached under module_exists(llvm_tune)
@@ -44,7 +44,7 @@ require strings                 // to_lower / starts_with (pick_quant's file-qua
 [CommandLineArgs]
 struct ServerArgs {
     @clarg_short = "c"
-    @clarg_doc = "TOML config file; keys mirror the long flag names (explicit CLI flags override)"
+    @clarg_doc = "TOML config file; keys mirror the long flag names (explicit CLI flags override). Without the flag, a dasllama-server.toml in the cwd, in ~/.dasllama or next to the program loads automatically, the first found"
     config : string
 
     @clarg_short = "m"
@@ -204,8 +204,7 @@ def suppress_tune_for_setup {
     }
     delete args
     static_if (typeinfo module_exists(llvm_tune)) {
-        if (!configured && !stat("dasllama-server.toml").is_valid
-                && !stat(path_join(get_this_module_dir(), "dasllama-server.toml")).is_valid) {
+        if (!configured && empty(discover_config(get_this_module_dir()))) {
             tune_suppress_mint("no model configured - setup mode boots on fallback kernels")
         }
     }
@@ -813,9 +812,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     let lanes_desc = threads > 0 ? "{threads}" : "all"
     let aff_desc = g_cfg.affinity >= 0 ? "{g_cfg.affinity}" : "platform default"
     print("dispatch: {lanes_desc} worker lanes, affinity {aff_desc}\n")
-    // tee every to_log/print to logs/dasllama-server.log (timestamped ndjson) AND the console
-    logger_init_tee("dasllama-server")
-    to_log(LOG_INFO, "dasllama-server: logging to {get_das_root()}/logs/dasllama-server.log\n")
+    // tee every to_log/print to dasllama-server.log (timestamped ndjson) AND the console
+    let log_path = open_logs("dasllama-server", true)
+    to_log(LOG_INFO, "dasllama-server: logging to {log_path}\n")
 
     log_tune_status("dasllama-server")
     // a fresh local tune that has not been shared: submit now (always) or surface the offer
@@ -984,9 +983,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         configure_tts(g_cfg.tts, g_cfg.tts_lane, g_cfg.tts_voices_dir)
     }
 
-    // the /config surface: a config-less start saves beside the program (the same spot the
-    // auto-discovery in parse_args looks)
-    let save_path = !empty(g_cfg.config) ? g_cfg.config : path_join(get_this_module_dir(), "dasllama-server.toml")
+    // the /config surface: a config-less start saves to the per-user directory, where the
+    // auto-discovery in parse_args looks next
+    let save_path = !empty(g_cfg.config) ? g_cfg.config : config_save_path()
     // the served-model anchor for the page's model_files picker: the flat key, else the roster default
     var picker_model = g_cfg.model
     if (empty(picker_model)) {

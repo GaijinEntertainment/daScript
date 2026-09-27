@@ -31,8 +31,11 @@ That works because the watchdog resolves what to supervise in this order, first 
    in a source tree finds `bin/daslang`; exactly one program in the directory means that
    program - a `*.exe` file (a flat daspkg bundle keeps the suffix on Linux too), or on a Unix
    layout an executable file with no extension, which is how the macOS `.app` names its exe;
-   the watchdog's own executable is never a candidate. A `main.das` with no daslang in reach is
-   refused, never traded for a program. Anything ambiguous is an error, never a guess.
+   the watchdog's own executable is never a candidate. Among several programs, `discover_program`
+   names the one to supervise - a bundle that ships companion executables beside its server (the
+   dasllama bundle's CLI and bench) says which is the server, in its `.exe` and extensionless
+   layouts alike. A `main.das` with no daslang in reach is refused, never traded for a program.
+   Anything ambiguous is an error, never a guess.
 
 Everything after `--` goes to the child verbatim. From the source tree the watchdog does not sit
 beside what it supervises, so pass `--cwd`:
@@ -116,7 +119,10 @@ In-tree readers: `smoke_test.cmake`, `tests/watchdog/test_watchdog.das` and
 
 Crash bundles collect the log, any WER minidump, the program's symbols, the tune sidecar and
 the JIT artifacts the child named into `logs/crashes/<name>-<stamp>-pid<pid>/`, pruned to the
-newest `--crash-bundles`. WER local dumps need a one-time elevated `--install-local-dumps`
+newest `--crash-bundles`. The log, the pid file, the dumps, the crash bundles and libhv's daily
+log (`logs/libhv.<date>.log`) resolve against `--state-dir` (the `state_dir` key; a leading `~`
+is the home directory), which defaults to `--cwd` - a supervisor installed read-only points it at
+a per-user directory, as dasllama's `watchdog.json` does with `~/.dasllama`. WER local dumps need a one-time elevated `--install-local-dumps`
 (Windows); `--require-dumps` refuses to start without a policy, for a deployment where losing
 the dump is not acceptable. See `examples/crash/README.md` for which failure families are
 visible to which tier.
@@ -163,8 +169,8 @@ release_include("tray.ico")              // when watchdog.json names it as the t
 
 A build without the executable fails the release rather than shipping a bundle quietly short
 a supervisor. In the bundle the watchdog discovers the baked exe beside it (the one program in
-the directory that is not the watchdog), so the same `watchdog.json` serves a `daspkg release`
-bundle and a `daslang -jit main.das` deployment.
+the directory that is not the watchdog, or the one `discover_program` names), so the same
+`watchdog.json` serves a `daspkg release` bundle and a `daslang -jit main.das` deployment.
 
 ## Serving a stdio client
 

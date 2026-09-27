@@ -7,6 +7,7 @@ module openai_server
 require dasllama/dasllama       // the public facade — the main dasLLAMA surface this tool touches
 require dasllama/dasllama_scheduler   // continuous-batching scheduler (layer 3 over the facade)
 require dasllama/dasllama_bench       // the llama-bench rows the in-process /bench runs on the served model
+require user_state                    // write_config - the /config save
 require dashv/dashv_boost public
 require daslib/json_boost
 require daslib/toml             // write_toml: POST /config persists the authoritative config
@@ -3967,7 +3968,7 @@ def private handle_config_save(var req : HttpRequest?; var resp : HttpResponse?)
     if (!empty(werr)) {
         return resp |> JSON(error_body("config not TOML-representable: {werr}", "invalid_request_error"), http_status.BAD_REQUEST)
     }
-    if (!fwrite(g_config_save_path, toml)) {
+    if (!write_config(g_config_save_path, toml)) {
         return resp |> JSON(error_body("could not write '{g_config_save_path}'", "server_error"), http_status.INTERNAL_SERVER_ERROR)
     }
     to_log(LOG_INFO, "dasllama-server: authoritative config saved to {g_config_save_path} ({length(toml)} bytes)\n")

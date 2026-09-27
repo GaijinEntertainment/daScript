@@ -107,8 +107,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   lane, and the plain-Model ASR decoders.
 - `ARCHITECTURE_MEASUREMENT.md` - the benchmark rig, the tune gate, the sanctioned
   instrumentation rails, the ASR board's GPU row pairs, the `[tuned]` perm precedence, the mint
-  wall in the sidecar's provenance, the fat exe's first-start race, and the speculative round's
-  ruler record.
+  wall in the sidecar's provenance, and the speculative round's ruler record.
+- `ARCHITECTURE_MEASUREMENT_FAT_START.md` - a fat exe's first-start race and its per-user
+  sidecar (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
 - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` - the Vulkan GEMM probe's arms, the shapes they run
   at, and the alternates they are read against.
 - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` - the instruments that time a kernel away from the

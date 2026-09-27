@@ -134,3 +134,79 @@ def test_the_fat_hook_is_inert_outside_a_fat_exe(t : T?) {
         t |> success(!fexist(path), "and writes nothing")
     }
 }
+
+// the fake placement the hook-wiring cell installs: it counts its firings and points the apply at
+// the sidecar the cell staged, so the apply reading that sidecar proves the hook ran first
+var private g_fake_place_fired = 0
+var private g_fake_place_target = ""
+
+def private fake_place() {
+    g_fake_place_fired++
+    set_tune_manifest_runtime_path(g_fake_place_target)
+}
+
+[test]
+def test_fat_sidecar_lives_per_user(t : T?) {
+    t |> run("the per-user path keeps the exe's sidecar name under tune/") @(t : T?) {
+        t |> equal(dasllama_fat_sidecar_path("H/.dasllama", "/opt/dasllama/dasllama-server.tune.json"),
+            path_join(path_join("H/.dasllama", "tune"), "dasllama-server.tune.json"))
+    }
+    t |> run("a sidecar beside the exe is copied once; one already home is never overwritten") @(t : T?) {
+        var terr = ""
+        let dir = path_join(temp_directory(terr), "dasllama_adopt_{get_time_usec(0l)}")
+        let beside = path_join(dir, "exe/app.tune.json")
+        let home_path = path_join(dir, "home/tune/app.tune.json")
+        mkdir_rec(dir_name(beside))
+        dasllama_adopt_sidecar(beside, home_path)
+        t |> success(stat(dir_name(home_path)).is_dir, "the tune directory is made")
+        t |> success(!stat(home_path).is_valid, "nothing to adopt: nothing copied")
+        fwrite(beside, "old")
+        dasllama_adopt_sidecar(beside, home_path)
+        t |> equal(fread(home_path), "old")
+        fwrite(beside, "older")
+        dasllama_adopt_sidecar(beside, home_path)
+        t |> equal(fread(home_path), "old", "the home copy wins")
+        rmdir_rec(dir)
+    }
+    t |> run("the engine registers the placement, and outside a fat exe it leaves the sidecar where it was") @(t : T?) {
+        let registered = set_sidecar_place_hook(@@fake_place)
+        set_sidecar_place_hook(registered)
+        t |> success(registered == @@dasllama_place_fat_sidecar, "dasllama_fat_start's [init] installs the placement hook")
+        let before = tune_manifest_path()
+        apply_box_profile_runtime()
+        t |> equal(tune_manifest_path(), before)
+    }
+    t |> run("the default apply runs the placement hook before it reads the path") @(t : T?) {
+        with_temp_sidecar(t) $(path) {
+            let savedBlock = get_q8_token_block()
+            let noKernels : table<string; string>
+            var runtime = JV((q8_token_block = 232))
+            t |> success(tune_sidecar_merge(noKernels, runtime), "staged a section of this box's own")
+            set_tune_manifest_runtime_path("")   // the apply's own default would miss the staged file
+            g_fake_place_fired = 0
+            g_fake_place_target = path
+            let old = set_sidecar_place_hook(@@fake_place)
+            apply_box_profile_runtime()
+            set_sidecar_place_hook(old)
+            t |> equal(g_fake_place_fired, 1)
+            t |> equal(get_q8_token_block(), 232l, "the apply read the sidecar the hook placed")
+            set_q8_token_block(savedBlock)
+        }
+    }
+    t |> run("with no placement hook the default apply reads where the framework points") @(t : T?) {
+        with_temp_sidecar(t) $(_path) {
+            let none : function<() : void>
+            let old = set_sidecar_place_hook(none)
+            apply_box_profile_runtime()
+            set_sidecar_place_hook(old)
+            t |> equal(box_profile_runtime_declined(), "absent", "an absent sidecar, and no hook to call")
+        }
+    }
+    t |> run("a chosen sidecar location is explicit; the default beside the app is not") @(t : T?) {
+        t |> success(!tune_manifest_explicit(), "nothing chosen in this process")
+        set_tune_manifest_runtime_path("chosen.tune.json")
+        t |> success(tune_manifest_explicit(), "the runtime override chooses it")
+        set_tune_manifest_runtime_path("")
+        t |> success(!tune_manifest_explicit(), "cleared")
+    }
+}

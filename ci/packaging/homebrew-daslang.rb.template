@@ -1,6 +1,6 @@
 # Homebrew formula template for the daslang tap.
 # Lives in the tap repo as Formula/daslang.rb; this copy is the template of record.
-# Update per release: url tags + sha256 values (from the .sha256 assets).
+# render_manifests.py fills @TAG@, @VERSION@ and each @SHA:<asset>@ from the release; this header is dropped.
 class Daslang < Formula
   desc "High-performance statically-typed scripting language for games and real-time applications"
   homepage "https://daslang.io"
@@ -10,17 +10,17 @@ class Daslang < Formula
   on_macos do
     on_arm do
       url "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/daslang-bundle-darwin26-arm64.zip"
-      sha256 "@SHA_DARWIN_ARM64@"
+      sha256 "@SHA:daslang-bundle-darwin26-arm64.zip@"
     end
   end
   on_linux do
     on_intel do
       url "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/daslang-bundle-linux-x86_64.zip"
-      sha256 "@SHA_LINUX_X86_64@"
+      sha256 "@SHA:daslang-bundle-linux-x86_64.zip@"
     end
     on_arm do
       url "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/daslang-bundle-linux-arm64.zip"
-      sha256 "@SHA_LINUX_ARM64@"
+      sha256 "@SHA:daslang-bundle-linux-arm64.zip@"
     end
   end
 

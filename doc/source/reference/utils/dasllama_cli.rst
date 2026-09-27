@@ -95,7 +95,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - Flag
      - Meaning
    * - ``--config`` / ``-c``
-     - TOML config file (default: ``dasllama-server.toml`` in the cwd, else beside the program); keys mirror the long flag names, explicit flags win
+     - TOML config file (default: ``dasllama-server.toml`` in the cwd, else in ``~/.dasllama``, else beside the program); keys mirror the long flag names, explicit flags win
    * - ``--model`` / ``-m``
      - The LLM GGUF: a path, or a file name under ``--models-dir``
    * - ``--quant`` / ``-q``
@@ -127,7 +127,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - ``--tune``
      - Re-tune this box's dasLLAMA kernels, then relaunch (a fat build carries no tuner and ignores it)
    * - ``--verbose``
-     - Echo the engine's log records (``logs/dasllama-cli.log``: a missing Metal profile, a GPU decline, a model load) to stderr as they land; stdout stays the answer
+     - Echo the engine's log records (``dasllama-cli.log`` - ``~/.dasllama/logs`` from an installed build, the das root's ``logs/`` from the source tree: a missing Metal profile, a GPU decline, a model load) to stderr as they land; stdout stays the answer
    * - ``--help`` / ``-?``
      - The command's help (``--show-help`` from the source tree)
 
@@ -335,7 +335,8 @@ The config file
 A bare model name resolves under ``--models-dir`` (``~/.dasllama/models``,
 where the server's catalog downloads land; ``DASLLAMA_MODELS_DIR`` overrides).
 
-The ``dasllama-server.toml`` in the current directory, else beside the
+The ``dasllama-server.toml`` in the current directory, else in
+``~/.dasllama`` (where the server's control page saves it), else beside the
 program - the server's own lookup - fills whatever the flags leave empty: the model (a ``[[models]]``
 roster's default entry included), its ``image_mmproj``, the ``asr`` and
 ``mmproj`` pair, the ``tts`` model and its lane, ``gpu`` and the Vulkan detail
@@ -347,8 +348,9 @@ Output goes three ways: the answer - the completion, the reply, the transcript,
 the vector, the ids - on stdout alone, so it pipes; the CLI's progress lines and
 the token counters (prompt and generated tokens, time to first token, prefill and
 decode rates) on stderr, ``--quiet`` dropping the counters; and the engine's own
-notices - a missing Metal profile, a GPU decline - in ``logs/dasllama-cli.log``
-under the das root, where the server's land too, echoed to stderr as they land
+notices - a missing Metal profile, a GPU decline - in ``dasllama-cli.log``
+(``~/.dasllama/logs`` from an installed build, the das root's ``logs/`` from the
+source tree), where the server's land too, echoed to stderr as they land
 under ``--verbose`` (from the source tree the tune policy guard still prints its
 one status line first). A refusal - no
 model, a file that does not exist, a flag value that does not parse - names
@@ -362,7 +364,7 @@ in its ``[tune_scope]``, and the policy is ``auto`` - the first run from the
 source tree on an untuned box tunes and relaunches, every later run is instant,
 ``--tune`` forces a re-tune. A fat bundle carries no tuner: its kernels are the
 class clones, and its first ``dasllama-cli`` run on a Mac races the Metal crowns
-once into ``dasllama-cli.tune.json`` beside the program, as the server's first
+once into ``~/.dasllama/tune/dasllama-cli.tune.json``, as the server's first
 run does into its own. See :ref:`Kernel tuning <tune>`.
 
 Testing

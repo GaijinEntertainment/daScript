@@ -1514,6 +1514,17 @@ def private runtime_race_writes() : bool {
     return g_runtime_race_armed && invoke(g_runtime_race_hook)
 }
 
+var private g_sidecar_place_hook : function<() : void>
+
+//! Install what chooses the app sidecar's location before the default apply reads it
+//! (`dasllama_fat_start` registers the fat exe's per-user placement); returns the previous hook.
+//! It runs at the apply, after every `[init]`, so it may ask what an exe's own `[init]` decided.
+def public set_sidecar_place_hook(hook : function<() : void>) : function<() : void> {
+    let old = g_sidecar_place_hook
+    g_sidecar_place_hook = hook
+    return old
+}
+
 //! Why the checked apply declined the box sidecar - the `TuneSidecarReason` name, "" when it
 //! did not decline (or was never asked).
 def public box_profile_runtime_declined() : string {
@@ -1523,6 +1534,9 @@ def public box_profile_runtime_declined() : string {
 //! The default (no path) route checks the sidecar's standing; an explicit path applies as given.
 def apply_box_profile_runtime(path : string = "") {
     if (path == "") {
+        if (g_sidecar_place_hook != null) {
+            invoke(g_sidecar_place_hook)
+        }
         apply_box_profile_runtime_checked(box_profile_path())
     } else {
         apply_box_profile_runtime_at(path)

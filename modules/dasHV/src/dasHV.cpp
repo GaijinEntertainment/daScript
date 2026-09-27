@@ -257,6 +257,10 @@ int das_wsc_close ( Handle<hv::WebSocketClient> h ) {
     return p->close();
 }
 
+void das_hv_set_log_file ( const char * path ) {
+    if ( path && *path ) hlog_set_file(path);
+}
+
 bool das_wsc_is_connected ( Handle<hv::WebSocketClient> h ) {
     auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
     if ( !p ) return false;
@@ -1395,6 +1399,9 @@ public:
         addEnumeration(new Enumeration_ws_session_type());
         addEnumeration(new Enumeration_http_method());
         addEnumeration(new Enumeration_http_status());
+        addExtern<DAS_BIND_FUN(das_hv_set_log_file)>(*this, lib, "hv_set_log_file",
+            SideEffects::modifyExternal, "das_hv_set_log_file")
+                ->args({"path"});
         // client — handle-backed
         addHandleAnnotation<hv::WebSocketClient>(this, lib, "WebSocketClient",
             "destroy_web_socket_client", "das::Handle<hv::WebSocketClient>");

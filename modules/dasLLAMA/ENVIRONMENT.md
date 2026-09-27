@@ -284,8 +284,8 @@ Owned by daslang, not by dasLLAMA - listed because dasLLAMA's behaviour depends 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
 | `HF_HOME` | path | ~/.cache/huggingface | Hugging Face hub root; fetch_models --convert resolves checkpoint blobs under <HF_HOME>/hub. Falls back to HOME's default cache location when unset. |
-| `HOME` | path | unset | Ambient platform variable; read only to derive the default Hugging Face cache when HF_HOME is unset. |
-| `USERPROFILE` | path | unset | Ambient platform variable (Windows twin of HOME); read only to derive dasllama-server's default models dir. |
+| `HOME` | path | unset | Ambient platform variable; read to derive the per-user ~/.dasllama directory (when USERPROFILE is unset) and the default Hugging Face cache when HF_HOME is unset. |
+| `USERPROFILE` | path | unset | Ambient platform variable (Windows twin of HOME); read only to derive the per-user ~/.dasllama directory. |
 | `DAS_JOBQUE_THREADS` | number | conservative default | Total compute lanes for job queues (N-1 workers plus the caller). Overrides set_jobque_threads_cap; see skills/internal/environment_variables.md. |
 | `DAS_JOBQUE_AFFINITY` | number | 2 on darwin (engine [init]), else 0 | Worker affinity: 0 off, 1 ideal-processor hint, 2 hard mask - on darwin mode 2 is QoS classification (no pin API) and dasLLAMA defaults it on. Matters on big SMT boxes. |
 | `DAS_JOBQUE_TEAM_RANK_GATE` | number | profile-driven | Team-dispatch rank gate. When set, it suppresses the box profile's own team_rank_gate knob. |

@@ -4,18 +4,10 @@
     "homepage": "https://daslang.io",
     "license": "BSD-3-Clause",
     "url": "https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/daslang-bundle-windows-x86_64.zip",
-    "hash": "@SHA_WINDOWS_X86_64@",
+    "hash": "@SHA:daslang-bundle-windows-x86_64.zip@",
     "extract_dir": "daslang_bundle",
     "bin": [
-        "bin\\daslang.exe",
-        "bin\\daslang-live.exe",
-        "bin\\lint.exe",
-        "bin\\daspkg.exe",
-        "bin\\dascov.exe",
-        "bin\\detect-dupe.exe",
-        "bin\\benchctl.exe",
-        "bin\\dastest.exe",
-        "bin\\das-fmt.exe"
+@SCOOP_BIN@
     ],
     "checkver": {
         "github": "https://github.com/GaijinEntertainment/daScript"

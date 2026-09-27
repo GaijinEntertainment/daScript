@@ -439,6 +439,7 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 - `feint` - No-op replacement for `print`.
 - `get_das_root` - Returns the file-system path to the daslang root directory, where `daslib` and other standard libraries are located.
 - `get_das_version` - Returns the daslang SDK version as a string in "major.minor.patch" format (e.g.
+- `get_executable_path` - Returns the absolute path of the running executable with symlinks resolved (on Windows the module file name), or an empty string where the platform exposes none.
 - `get_stackwalk` - Returns the current call stack as a string — the same report `stackwalk` prints, captured instead of logged.
 - `is_in_aot` - Returns `true` if the compiler is currently generating ahead-of-time (AOT) compiled code.
 - `is_intern_strings` - Returns `true` if string interning is enabled in the current context, meaning identical strings share the same memory.
@@ -1188,6 +1189,10 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 - `set_writer_keepalive_timeout` - Sets how long a retained streaming response writer may remain inactive before it expires.
 - `sse_event` - Writes one Server-Sent Events frame (the data payload plus an optional event name; an empty name emits an unnamed event) to the streaming response writer.
 - `write_chunked` - Writes one chunk of body data to the streaming response writer using chunked transfer encoding.
+
+### Logging
+
+- `hv_set_log_file` - Sends libhv's own log to a daily file <path>.YYYYMMDD.log (the directory must exist) instead of libhv.YYYYMMDD.log in the working directory.
 
 ## openai_common
 
