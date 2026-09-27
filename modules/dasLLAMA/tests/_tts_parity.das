@@ -13,8 +13,6 @@ require dasllama/dasllama_pocket
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_tts   // nolint:STYLE029,LINT019 — the facade synthesis, read only inside the Apple half
-require dasllama/dasllama_g2p   // nolint:STYLE029,LINT019 — the facade's packs, read only inside the Apple half
-require dasllama/dasllama_postag   // nolint:STYLE029,LINT019 — the facade's packs, read only inside the Apple half
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require ?das_metal dasllama/dasllama_metal_tower
 require ?vulkan dasllama/dasllama_vulkan_tower   // nolint:STYLE030,LINT019 — the Vulkan tower knob, read only inside the GPU half
@@ -165,10 +163,7 @@ def private mint_tts_model(path : string; q8 : bool) : TtsModel {
     var inscope m = TtsModel()
     var inscope stg <- stage_styletts2(path, q8)
     mint_styletts2(stg, m.model)
-    m.kind = m.model.family == "kokoro" ? TtsKind.kokoro : TtsKind.kitten
-    let dir = dir_name(path)
-    m.g2p <- load_g2p(g2p_pack_path(dir))
-    m.tagger <- load_pos_tagger(path_join(dir, "tts_postag.bin"))
+    tts_finish_styletts2(m, path)
     return <- m
 }
 
