@@ -1820,14 +1820,15 @@
     line. Done = `--temp/--top-k/--top-p` on the tg row, a `tg128@sampled` cell beside `tg128`,
     and the ledger entry re-minted from it.
 
-168. **A per-32 IQ4_NL plane form for expert rows no multiple of 256.** Qwen3.8-Flash-Next's
-    `ffn_down_exps` rows are 640 wide (the quantizer's 32-block fallback), so `kq_tag_expert`
-    demotes every layer's IQ4_NL down stack to the q8 rail: 43 GB served for 23 GB on disk, and
-    the same for any 32-block file of a model whose expert width is not a superblock multiple.
-    The q51 tier already serves a per-32 format natively off its own plane pair. Done = an
-    `iq4nl` per-32 twin of that pair (planes, the CPU GEMV family, Metal, Vulkan, the tests
-    `HOW_TO_ADD_A_FORMAT.md` names), the expert tag rule admitting it at any 32-multiple width,
-    and the Flash-Next load report showing no demotion.
+168. **The iq4nl32 rail's Vulkan tier and gen-tier family.** The per-32 IQ4_NL plane pair
+    (`iq4nl32q`/`iq4nl32s`) serves Qwen3.8-Flash-Next's 640-wide `ffn_down_exps` stacks on the
+    CPU portable kernels and on Metal; the Vulkan tier has no `Iq4nl32Cm2T` / `Iq4nl32Gemv`
+    beside q51's, so a Vulkan box demotes the stacks to q8 as before, and the CPU tier has no
+    `iq4nl32q8_*_gen` `[tune]` family, so the expanded-row kernels run their `[tuned]` fallback
+    stamps (`dot_iq4nl32e` reads untuned in every manifest). Done = the Vulkan classes and
+    ladders sec.6 of `HOW_TO_ADD_A_FORMAT.md` names for a per-32 format, the gen family with
+    its `harness/gen_tune_probe.das` rows and the class-profile entries, and the Flash-Next
+    decode rows re-measured on both tiers.
 
 169. **The n-gram hash table as a mapped view.** Qwen3.8-Flash-Next's `per_layer_token_embd` is
     28.8 GB of gather-only rows the load copies into `Model.ngram_tab`; every other read of a

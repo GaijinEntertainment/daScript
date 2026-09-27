@@ -1993,6 +1993,10 @@ def private kq_gemv_gen(var _yp : float?; _kqp : uint8 const?; _ksp : uint8 cons
     panic("q51 has no kq gemv stamp")
 }
 
+def private kq_gemv_gen(var _yp : float?; _kqp : uint8 const?; _ksp : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _rb, _re : int64; _f : KqTag_iq4nl32) {
+    panic("iq4nl32 has no kq gemv stamp")
+}
+
 def private kq_gemv_gen(var _yp : float?; _kqp : uint8 const?; _ksp : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _rb, _re : int64; _f : KqTag_mx4) {
     panic("mx4 has no kq gemv stamp")
 }
@@ -2055,6 +2059,10 @@ def private kq_tile_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 cons
 
 def private kq_tile_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64; _f : KqTag_q51) {
     panic("q51 has no kq tile stamp")
+}
+
+def private kq_tile_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64; _f : KqTag_iq4nl32) {
+    panic("iq4nl32 has no kq tile stamp")
 }
 
 def private kq_tile_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64; _f : KqTag_mx4) {

@@ -598,22 +598,26 @@ var private g_layout_repack_q8 : ModelRepackFn
 var private g_layout_repack_kq : ModelRepackFn
 var private g_layout_repack_mx4 : ModelRepackFn
 var private g_layout_repack_q51 : ModelRepackFn
+var private g_layout_repack_iq4nl32 : ModelRepackFn
 typedef GatherStackB32Fn = function<(t : Model; woff : int64; n, rows, slice_rows : int64;
                                      repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) : void>
 var private g_layout_gather : GatherStackFn
 var private g_layout_gather_kq : GatherStackKqFn
 var private g_layout_gather_q51 : GatherStackB32Fn
+var private g_layout_gather_iq4nl32 : GatherStackB32Fn
 var private g_layout_gather_mx4 : GatherStackB32Fn
 var private g_layout_hooks_set = false
 
-def register_model_layout(rq8, rkq, rmx4, rq51 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51, gsmx4 : GatherStackB32Fn) {
+def register_model_layout(rq8, rkq, rmx4, rq51, riq4nl32 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51, gsiq4nl32, gsmx4 : GatherStackB32Fn) {
     g_layout_repack_q8 = rq8
     g_layout_repack_kq = rkq
     g_layout_repack_mx4 = rmx4
     g_layout_repack_q51 = rq51
+    g_layout_repack_iq4nl32 = riq4nl32
     g_layout_gather = gs
     g_layout_gather_kq = gskq
     g_layout_gather_q51 = gsq51
+    g_layout_gather_iq4nl32 = gsiq4nl32
     g_layout_gather_mx4 = gsmx4
     g_layout_hooks_set = true
 }
@@ -644,6 +648,11 @@ def layout_repack_q51(var t : Model) {
     invoke(g_layout_repack_q51, t)
 }
 
+def layout_repack_iq4nl32(var t : Model) {
+    layout_hooks_check()
+    invoke(g_layout_repack_iq4nl32, t)
+}
+
 // The GPU walk's gather half of the same hook contract. The residency rail intercepts each gather
 // for the flavor bake before calling through, so these stay thin and the hook globals stay private.
 
@@ -669,6 +678,12 @@ def layout_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int64
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     layout_hooks_check()
     invoke(g_layout_gather_mx4, t, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+}
+
+def layout_gather_stack_iq4nl32(t : Model; woff : int64; n, rows, slice_rows : int64;
+                                repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    layout_hooks_check()
+    invoke(g_layout_gather_iq4nl32, t, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
 
 // ===== whole-model GPU residency hook (registered by dasllama_gpu_resident at [init]) =====
@@ -1016,6 +1031,9 @@ struct Model {
     // the q51 tier's plane pair, per 32-BLOCK: 20B nibbles+qh / 4B f16 d+m (never repacked)
     q51q : array<uint8>
     q51s : array<uint8>
+    // the iq4nl32 tier's plane pair, per 32-BLOCK: 16B nibbles / 2B f16 d
+    iq4nl32q : array<uint8>
+    iq4nl32s : array<uint8>
     kquant_native : bool = false
     // kq stage 4: the kq planes were repacked at load into the active backend's grp<mr> layout.
     // From then on every kq matmul MUST run the backend slots — disk-order portable kernels would
@@ -1306,6 +1324,7 @@ def model_weights_bytes(t : Model) : int64 {
         + long_length(t.bf16blob) * 2l
         + kqb.q + kqb.s
         + long_length(t.q51q) + long_length(t.q51s)
+        + long_length(t.iq4nl32q) + long_length(t.iq4nl32s)
         + long_length(t.mblob) + long_length(t.vkblob)
         + long_length(t.embq) + long_length(t.embs))
 }
@@ -1788,6 +1807,7 @@ def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
         }
     }
     c.q51_mr = active_q51_layout_mr()
+    c.iq4nl32_mr = active_iq4nl32_layout_mr()
     // OUTCOME, not request: a backend without s16 twins keeps f32 scale planes (wscale_convert_f16)
     c.wscale_f16 = g_wscale_f16 && kernel_backend_has_wscale16()
     c.kquant_native = g_kquant_native
@@ -1829,9 +1849,11 @@ def kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
 }
 
 // Expert-stack tag rule: q51 serves natively off per-32 planes (its whole reason to exist — the
-// 26B-A4B down stacks are 704-wide); the superblock formats keep the % 256 rule.
+// 26B-A4B down stacks are 704-wide), and an IQ4_NL stack off the superblock lattice takes the
+// per-32 iq4nl32 planes (Qwen3.8-Flash-Next's 640-wide down stacks); the superblock formats keep the % 256 rule.
 def kq_fmt_expert_ok(f : KqFmt; n : int64) : KqFmt {
     if (f == KqFmt.q51) return n % 32l == 0l ? f : KqFmt.q8
+    if (f == KqFmt.iq4nl && n % 256l != 0l) return n % 32l == 0l ? KqFmt.iq4nl32 : KqFmt.q8
     return kq_fmt_row_ok(f, n)
 }
 
@@ -1968,8 +1990,8 @@ def footprint(t : Model) : MemFootprint {
     let mx4 = long_length(t.mxq)                  // uint8 (two nibbles) -> 1 byte each
     let mx4s = long_length(t.mxs)                 // raw E8M0 -> 1 byte per 32-block
     let kqb = kq_plane_bytes(t)
-    let kq = kqb.q + long_length(t.q51q)
-    let kqs = kqb.s + long_length(t.q51s)
+    let kq = kqb.q + long_length(t.q51q) + long_length(t.iq4nl32q)
+    let kqs = kqb.s + long_length(t.q51s) + long_length(t.iq4nl32s)
     return MemFootprint(aux_fp32_bytes = aux, weight_fp32_bytes = wf, q8_bytes = q8, q8_scale_bytes = q8s,
                         q4_bytes = q4, q4_scale_bytes = q4s, mx4_bytes = mx4, mx4_scale_bytes = mx4s,
                         kq_bytes = kq, kq_scale_bytes = kqs,
@@ -3754,6 +3776,22 @@ def mm_b_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregio
     matmul_q51q8_batch_groupn(y, t.q51q, t.q51s, offs, nregions, xq, xs, n, d)
 }
 
+// ===== native iq4nl32 dispatch (Q8_0-form activations, q51's shapes over the per-32 IQ4_NL planes) =====
+
+def mm_at_iq4nl32_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+    matmul_iq4nl32q8_groupn(y, t.iq4nl32q, t.iq4nl32s, offs, nregions, xq, xs, n, d)
+}
+
+def mm_b_iq4nl32_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
+    let ts_gemm = prof_ticks()
+    matmul_iq4nl32q8_batch(y, t.iq4nl32q, t.iq4nl32s, woff, xqb, xsb, n, d, npos)
+    prof_add("mm_gemm", ts_gemm)
+}
+
+def mm_b_iq4nl32_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+    matmul_iq4nl32q8_batch_groupn(y, t.iq4nl32q, t.iq4nl32s, offs, nregions, xq, xs, n, d)
+}
+
 // ===== native K-quant dispatch (kquant_native; fmt != q8 tags) =====
 
 // KqFmt -> the kernel-layer format id (matmul_kq*/kq_rows_fn/kq_qsb take the int form). q8 maps
@@ -3911,6 +3949,8 @@ def mm_at_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : a
         mm_at_kq_groupn(y, t, fmt, offs, nregions, kxq, kxs, kxbs, n, d)
     } elif (fmt == KqFmt.q51) {
         mm_at_q51_groupn(y, t, offs, nregions, xq, xs, n, d)
+    } elif (fmt == KqFmt.iq4nl32) {
+        mm_at_iq4nl32_groupn(y, t, offs, nregions, xq, xs, n, d)
     } elif (t.experts_mx4) {
         if (biased) {
             mm_at_mx4_groupn(y, t, offs, boffs, nregions, xq, xs, n, d)
@@ -3933,6 +3973,8 @@ def mm_b_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : ar
         mm_b_kq_groupn(y, t, fmt, offs, nregions, xq, xs, xbs, n, d)
     } elif (fmt == KqFmt.q51) {
         mm_b_q51_groupn(y, t, offs, nregions, xq, xs, n, d)
+    } elif (fmt == KqFmt.iq4nl32) {
+        mm_b_iq4nl32_groupn(y, t, offs, nregions, xq, xs, n, d)
     } elif (t.experts_mx4) {
         if (biased) {
             matmul_mx4q8_batch_groupn(y, t.mxq, t.mxs, offs, nregions, xq, xs, t.fblob, boffs, n, d)
@@ -3952,6 +3994,8 @@ def mm_b_f_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : 
         mm_b_kq_pre(y, t, fmt, woff, xq, xs, xbs, n, d, npos)
     } elif (fmt == KqFmt.q51) {
         mm_b_q51_pre(y, t, woff, xq, xs, n, d, npos)
+    } elif (fmt == KqFmt.iq4nl32) {
+        mm_b_iq4nl32_pre(y, t, woff, xq, xs, n, d, npos)
     } elif (t.experts_mx4) {
         if (!g_active_mx4_native_batch) {
             panic("mm_b_f_pre: the active backend has no native mx4 batch kernel - expand the region to Q8 at the site")

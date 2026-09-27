@@ -3569,6 +3569,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_swiglu_oai = compile_stamp(MetalSwigluOai_metal_swiglu_oai_msl, ok)
     g_pso_moe_gemv_mx4 = compile_stamp(metal_moe_gemv_mx4_msl, ok)
     g_pso_moe_gemv_q51 = compile_stamp(metal_moe_gemv_q51_msl, ok)
+    g_pso_moe_gemv_iq4nl32 = compile_stamp(metal_moe_gemv_iq4nl32_msl, ok)
     g_pso_dn_conv = compile_stamp(metal_dn_conv_msl, ok)
     g_pso_dn_hist = compile_stamp(metal_dn_conv_hist_msl, ok)
     g_pso_dn_l2 = compile_stamp(metal_dn_l2norm_msl, ok)
@@ -4170,6 +4171,9 @@ def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, 
     } elif (fmt == KqFmt.q51) {
         let qp = q51_planes_of(g_dev, t, stack_off)
         enc_moe_gemv_q51_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, by, yoff, ka, bsel, rows, k, nst)
+    } elif (fmt == KqFmt.iq4nl32) {
+        let qp = iq4nl32_planes_of(g_dev, t, stack_off)
+        enc_moe_gemv_iq4nl32_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, by, yoff, ka, bsel, rows, k, nst)
     } else {
         let bq = kq_quants_of(g_dev, t, fmt, stack_off)
         let bs = kq_scales_of(g_dev, t, fmt, stack_off)
@@ -4507,7 +4511,7 @@ def metal_kernels_release {
     release_handles(g_pso_moe_router, g_pso_moe_select, g_pso_moe_select_512, g_pso_moe_gemv_q8, g_pso_moe_kq_k4, g_pso_moe_kq_k3)
     release_handles(g_pso_moe_kq_iq3s, g_pso_moe_kq_iq3xxs, g_pso_moe_kq_iq2s, g_pso_moe_kq_iq2xs, g_pso_moe_kq_iq2xxs, g_pso_moe_kq_iq4xs)
     release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm, g_pso_moe_wscale)
-    release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_dn_conv, g_pso_dn_hist, g_pso_dn_l2)
+    release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_moe_gemv_iq4nl32, g_pso_dn_conv, g_pso_dn_hist, g_pso_dn_l2)
     release_handles(g_pso_dn_scan, g_pso_dn_gate, g_pso_dn_deint, g_pso_sigmul, g_pso_axpy_sig, g_mx4_vtab)
     release_handles(g_pso_dn_gate_sig, g_pso_hc_norm, g_pso_hc_lo, g_pso_hc_init, g_pso_hc_mix, g_pso_hc_combine, g_pso_ple_gate, g_pso_ple_conv)
     release_handles(g_pso_st2_attn)
@@ -6584,6 +6588,68 @@ class MetalMoeGemvQ51 {
                 hx += (qh & 4u) != 0u ? xv.z : 0.0
                 hx += (qh & 8u) != 0u ? xv.w : 0.0
                 sumf[r] += float(wsh[blk * 2u]) * (qx + 16.0 * hx) + float(wsh[blk * 2u + 1u]) * sx
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let sr = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[y0 + first_row + uint(r)] = sr
+            }
+        }
+    }
+}
+
+// Expert-indexed IQ4_NL per-32 GEMV — the q51 shape over 16B/2B planes (a block = 4 uints of nibbles
+// in the k/k+16 split-half pairing; the scale = one f16 d). value = d*LUT[q], the codebook staged
+// in threadgroup floats as the kq iq4 GEMVs do (f32 activations).
+[metal_dispatch(name = "enc_moe_gemv_iq4nl32_c", pso = "g_pso_moe_gemv_iq4nl32", tgmem = "metal_moe_gemv_iq4nl32_msl_tgmem", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
+class MetalMoeGemvIq4nl32 {
+    @ssbo @binding = 0 @role = "weight" @off = "qoff" wqu : array<uint>    // nibble plane, uint view (block at 4*blk)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" wsh : array<float16> // d plane (block blk's d at blk)
+    @ssbo @binding = 2 @role = "read" xf : array<float4>   // activations, float4 view (xoff always % 4)
+    @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
+    @uniform @binding = 4 ka : MoeGemvArgs
+    @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    @workgroup lut : float[64]   // kvalues_iq4nl as floats, one slot per thread of the 64-wide group
+
+    [metal_kernel(name="metal_moe_gemv_iq4nl32_msl")]
+    def metal_moe_gemv_iq4nl32 {
+        let ndim = ka.ndim
+        let ddim = ka.ddim
+        let eblk = ka.eplane
+        let xs = ka.xs
+        let ss = ka.ss
+        let bxs = ka.bxs
+        let bys = ka.bys
+        let lid = gl_LocalInvocationID.x
+        lut[lid] = iq4_lut(lid & 15u)
+        barrier()
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u    // 4-way block stride
+        let it = lane % 8u    // 8 threads per block, one float4 (4 elems) each
+        let nb = ndim / 32u
+        let slot = gl_WorkGroupID.y
+        let st = gl_WorkGroupID.z
+        let eb = sel[st * ss + slot] * eblk
+        let xoff = st * bxs + slot * xs
+        let y0 = st * bys + slot * ddim
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        // this thread's 4 elems: half = it/4 selects the nibble half, ku = it%4 the quant uint
+        let nsh = (it / 4u) * 4u
+        let ku = it % 4u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let xv = xf[(xoff + ib * 32u) / 4u + it]
+            for [unroll_full] (r in range(2)) {
+                let blk = eb + (first_row + uint(r)) * nb + ib
+                let u = wqu[blk * 4u + ku]
+                var qx = lut[(u >> nsh) & 15u] * xv.x
+                qx += lut[(u >> (8u + nsh)) & 15u] * xv.y
+                qx += lut[(u >> (16u + nsh)) & 15u] * xv.z
+                qx += lut[(u >> (24u + nsh)) & 15u] * xv.w
+                sumf[r] += float(wsh[blk]) * qx
             }
             ib += 4u
         }

@@ -237,6 +237,8 @@ struct ImgTableProbe {
     @safe_when_uninitialized kq : KqPlanes[KQ_FMT_COUNT]
     q51q : array<uint8>
     q51s : array<uint8>
+    iq4nl32q : array<uint8>
+    iq4nl32s : array<uint8>
     image_map : void?
     image_bytes : uint64
 }
@@ -298,11 +300,17 @@ def test_image_table_slot_names(t : T?) {
         fill_bytes(p.q51q, 2048, 3)
         fill_bytes(p.q51s, 256, 4)
         fill_bytes(p.kq[int(KqFmt.q51)].q, 777, 5)
+        fill_bytes(p.iq4nl32q, 1024, 6)
+        fill_bytes(p.iq4nl32s, 128, 7)
+        fill_bytes(p.kq[int(KqFmt.iq4nl32)].q, 555, 8)
         t |> success(save_image(p, path, "img-table"), "save")
         var m = ImgTableProbe()
         t |> success(load_image(path, m, "img-table"), "the image maps back (no two sections share a name)")
         t |> equal(count_mismatch(m.q51q, p.q51q), 0l, "q51q element-exact from the top-level pair")
         t |> equal(count_mismatch(m.q51s, p.q51s), 0l, "q51s element-exact")
+        t |> equal(count_mismatch(m.iq4nl32q, p.iq4nl32q), 0l, "iq4nl32q element-exact from the top-level pair")
+        t |> equal(count_mismatch(m.iq4nl32s, p.iq4nl32s), 0l, "iq4nl32s element-exact")
+        t |> equal(long_length(m.kq[int(KqFmt.iq4nl32)].q), 0l, "the iq4nl32 slot rode no section")
         t |> equal(count_mismatch(m.kq[int(KqFmt.k4)].q, p.kq[int(KqFmt.k4)].q), 0l, "the k4 slot's q plane element-exact")
         t |> equal(count_mismatch(m.kq[int(KqFmt.k4)].s, p.kq[int(KqFmt.k4)].s), 0l, "the k4 slot's s plane element-exact")
         t |> equal(long_length(m.kq[int(KqFmt.q51)].q), 0l, "the q51 slot rode no section")

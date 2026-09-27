@@ -71,9 +71,14 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the q5_1 MoE tensor twins, ALL stamps: no stocked carrier holds a Q5_1 expert plane
     // (the zoo's MoE carriers are Q8_0 / Q5_K_M / Q4_K_M / mxfp4; Q5_1 appears only when
     // expert_ffn % 256 != 0 forces the converter off K-quants). Their coverage is the
-    // bit-exact twin + tall-pair gate in test_metal_prefill_kernels.das (moe_mulmm_q51_gate)
+    // bit-exact twin + tall-pair gate in test_metal_prefill_kernels.das (moe_mulmm_b32_gate)
     "MetalMoeMulMmQ51T", "MetalMoeMulMmQ51TH",
     "MetalMoeMulMmQ51TH128", "MetalMoeMulMmQ51THR",
+    // the iq4nl32 MoE tensor twins, ALL stamps: the per-32 IQ4_NL expert planes ride only a
+    // carrier whose expert rows are off the 256 lattice (Qwen3.8-Flash-Next's 640-wide down
+    // stacks, far above the zoo's tier). Their coverage is the same gate's iq4nl32 arm
+    "MetalMoeMulMmIq4nl32T", "MetalMoeMulMmIq4nl32TH",
+    "MetalMoeMulMmIq4nl32TH128", "MetalMoeMulMmIq4nl32THR",
     // the dense tall in-kernel-dequant kq stamps: they engage only when a site's f16 panel
     // would reach TALLKQ_MIN_PANEL (96 MiB) - the zoo's small carriers top out far below it,
     // and the iq3 pair additionally wants a plane in a format the zoo does not stock.

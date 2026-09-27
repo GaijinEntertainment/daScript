@@ -39,6 +39,7 @@ def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
     if (fmt == KqFmt.q8) return off % 256l == 0l
     if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) return off % 512l == 0l
     if (fmt == KqFmt.q51) return off % 128l == 0l   // (off/32)*20 and (off/32)*4 both 16B-aligned
+    if (fmt == KqFmt.iq4nl32) return off % 256l == 0l   // (off/32)*16 and (off/32)*2 both 16B-aligned
     return true
 }
 
@@ -288,6 +289,7 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
     let rkq = active_repack_kq()
     let rmx = active_repack_mx4()
     let rq51 = active_repack_q51()
+    let riq4 = active_repack_iq4nl32()
     unsafe {
         var qbp : int8? = null
         var qsp : float? = null
@@ -295,6 +297,8 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
         var mxsp : uint8? = null
         var q51qp : uint8? = null
         var q51sp : uint8? = null
+        var iq4qp : uint8? = null
+        var iq4sp : uint8? = null
         // the lattice plane pairs' bases, by int(KqFmt); the lanes index them by the region's format
         var kqp : array<uint8?>
         var ksp : array<uint8?>
@@ -310,6 +314,8 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
         if (!empty(t.mxs)) { mxsp = addr(t.mxs[0]) }
         if (!empty(t.q51q)) { q51qp = addr(t.q51q[0]) }
         if (!empty(t.q51s)) { q51sp = addr(t.q51s[0]) }
+        if (!empty(t.iq4nl32q)) { iq4qp = addr(t.iq4nl32q[0]) }
+        if (!empty(t.iq4nl32s)) { iq4sp = addr(t.iq4nl32s[0]) }
         let rp = addr<StreamReg const?>(regs[0])
         let nr = length(regs)
         let njobs = is_job_que_available() ? min(nr, 4 * (get_total_hw_jobs() + 1)) : 1
@@ -325,6 +331,8 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                         invoke(rmx, mxqp + rp[i].off / 2l, mxsp + rp[i].off / 32l, rp[i].n, rp[i].d)
                     } elif (f == 2) {
                         invoke(rq51, q51qp + (rp[i].off / 32l) * Q51_QPB, q51sp + (rp[i].off / 32l) * Q51_SPB, rp[i].n, rp[i].d)
+                    } elif (f == IQ4NL32_STREAM_TAG) {
+                        invoke(riq4, iq4qp + (rp[i].off / 32l) * IQ4NL32_QB, iq4sp + (rp[i].off / 32l) * IQ4NL32_SB, rp[i].n, rp[i].d)
                     } else {
                         let sb = rp[i].off / 256l
                         var rf = KqFmt.q8
@@ -564,32 +572,42 @@ def private repack_mx4_stacks(var t : Model) {
     delete regs
 }
 
-// q51-native expert stacks -> the active backend's grp<mr> q51 layout (per-stack: a model can
-// mix q51 downs with k4 gates, e.g. gemma-4-26B-A4B). No-op unless a stack is tagged q51.
-def private collect_q51_regions(t : Model; var regs : array<StreamReg>) {
+// A per-32 format's expert stacks -> the active backend's grp<mr> layout of that format (per-stack:
+// a model can mix q51 downs with k4 gates, e.g. gemma-4-26B-A4B, or iq4nl32 downs with iq3s
+// gates, Qwen3.8-Flash-Next). No-op unless a stack carries the tag.
+def private collect_b32_regions(t : Model; var regs : array<StreamReg>; fmt : KqFmt) {
     let c = t.config
     let dim = c.dim
     let ege = dim * c.n_ff_exp
+    let code = kq_stream_code(fmt)
     for (l in range64(c.n_layers)) {
-        let f1q = fmt_at(t.we1_fmt, l) == KqFmt.q51
-        let f2q = fmt_at(t.we2_fmt, l) == KqFmt.q51
-        let f3q = fmt_at(t.we3_fmt, l) == KqFmt.q51
+        let f1q = fmt_at(t.we1_fmt, l) == fmt
+        let f2q = fmt_at(t.we2_fmt, l) == fmt
+        let f3q = fmt_at(t.we3_fmt, l) == fmt
         if (!(f1q || f2q || f3q)) {
             continue
         }
         for (e in range64(c.n_expert)) {
             let base = e * ege
             if (f1q) {
-                push_repack(regs, 2, t.we1_offs[l] + base, dim, c.n_ff_exp)
+                push_repack(regs, code, t.we1_offs[l] + base, dim, c.n_ff_exp)
             }
             if (f2q) {
-                push_repack(regs, 2, t.we2_offs[l] + base, c.n_ff_exp, dim)
+                push_repack(regs, code, t.we2_offs[l] + base, c.n_ff_exp, dim)
             }
             if (f3q) {
-                push_repack(regs, 2, t.we3_offs[l] + base, dim, c.n_ff_exp)
+                push_repack(regs, code, t.we3_offs[l] + base, dim, c.n_ff_exp)
             }
         }
     }
+}
+
+def private collect_q51_regions(t : Model; var regs : array<StreamReg>) {
+    collect_b32_regions(t, regs, KqFmt.q51)
+}
+
+def private collect_iq4nl32_regions(t : Model; var regs : array<StreamReg>) {
+    collect_b32_regions(t, regs, KqFmt.iq4nl32)
 }
 
 def private repack_q51_stacks(var t : Model) {
@@ -598,6 +616,16 @@ def private repack_q51_stacks(var t : Model) {
     if (!empty(regs)) {
         repack_regions(t, regs)
         to_log(LOG_INFO, "dasLLAMA: q51 expert planes repacked to grp{active_q51_layout_mr()}\n")
+    }
+    delete regs
+}
+
+def private repack_iq4nl32_stacks(var t : Model) {
+    var regs : array<StreamReg>
+    collect_iq4nl32_regions(t, regs)
+    if (!empty(regs)) {
+        repack_regions(t, regs)
+        to_log(LOG_INFO, "dasLLAMA: iq4nl32 expert planes repacked to grp{active_iq4nl32_layout_mr()}\n")
     }
     delete regs
 }
@@ -611,6 +639,8 @@ def private stream_repack_one(fmt : int; qp, sp : void?; n, d : int64) {
             invoke(active_repack_q8q8(), reinterpret<int8?>(qp), reinterpret<float?>(sp), n, d)
         } elif (fmt == 2) {
             invoke(active_repack_q51(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
+        } elif (fmt == IQ4NL32_STREAM_TAG) {
+            invoke(active_repack_iq4nl32(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
         } elif (fmt == K2_STREAM_TAG) {
             invoke(active_repack_kq(), 2, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
         } else {
@@ -764,23 +794,24 @@ def private pack_iq_dev_row(fmt : KqFmt; var out : uint8?; d : uint8 const?; sc 
     }
 }
 
-//! Gather one PREPARED q51 expert stack into the GPU tier's device planes: the disk layout (20 quant bytes and a
-//! d | m word a 32-block, row-major), out of whatever grp<mr> interleave the repack left.
-def moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64;
-                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+//! Gather one PREPARED per-32 expert stack (q51, iq4nl32) into the GPU tier's device planes: the
+//! disk layout (`qb` quant bytes and `sb` scale bytes a 32-block, row-major), out of whatever
+//! grp<mr> interleave the repack left - the quant bytes as four-byte columns, the scale bytes verbatim per row.
+def private moe_gpu_gather_stack_b32(qplane, splane : array<uint8>; qb, sb : int64; woff : int64; n, rows, slice_rows : int64;
+                                     repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
     let nb = n / Q8_BLOCK_ELEMS
-    assert(n % Q8_BLOCK_ELEMS == 0l, "GPU MoE q51 gather: row length must be a 32-block multiple")
-    assert(rows * nb * Q51_QB <= 2147483647l, "GPU MoE q51 stack exceeds the int32 gather-buffer rail")
-    wq |> grow_resize(rows * nb * Q51_QB)
-    ws |> grow_resize(rows * nb * Q51_SB)
+    assert(n % Q8_BLOCK_ELEMS == 0l, "GPU MoE per-32 gather: row length must be a 32-block multiple")
+    assert(rows * nb * qb <= 2147483647l, "GPU MoE per-32 stack exceeds the int32 gather-buffer rail")
+    wq |> grow_resize(rows * nb * qb)
+    ws |> grow_resize(rows * nb * sb)
     let nslices = int(rows / slice_rows)
-    let qrow = nb * Q51_QB
-    let srow = nb * Q51_SB
+    let qrow = nb * qb
+    let srow = nb * sb
     let ng = repacked ? slice_rows / mr : 0l
     unsafe {
         let b0 = woff / Q8_BLOCK_ELEMS
-        let qp = addr<uint8 const?>(t.q51q[b0 * Q51_QB])
-        let sp = addr<uint8 const?>(t.q51s[b0 * Q51_SB])
+        let qp = addr<uint8 const?>(qplane[b0 * qb])
+        let sp = addr<uint8 const?>(splane[b0 * sb])
         var wqp = addr(wq[0])
         var wsp = addr(ws[0])
         let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1
@@ -795,25 +826,24 @@ def moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int6
                         let g = ri / mr
                         let r = ri % mr
                         for (bi in range64(nb)) {
-                            var dq = wqp + rr * qrow + bi * Q51_QB
-                            var dsc = wsp + (rr * nb + bi) * Q51_SB
+                            var dq = wqp + rr * qrow + bi * qb
+                            var dsc = wsp + (rr * nb + bi) * sb
                             if (grouped) {
-                                let gq = qp + sliceQ + g * mr * qrow + bi * Q51_QB * mr
-                                let gs = sp + sliceS + g * mr * srow + bi * Q51_SB * mr
-                                for (j in range64(16l)) {
+                                let gq = qp + sliceQ + g * mr * qrow + bi * qb * mr
+                                let gs = sp + sliceS + g * mr * srow + bi * sb * mr
+                                for (j in range64(qb)) {
                                     dq[j] = gq[(j / 4l) * 4l * mr + r * 4l + j % 4l]
                                 }
-                                for (h in range64(4l)) {
-                                    dq[16l + h] = gq[16l * mr + r * 4l + h]
-                                    dsc[h] = gs[r * 4l + h]
+                                for (h in range64(sb)) {
+                                    dsc[h] = gs[r * sb + h]
                                 }
                             } else {
-                                let rq = qp + sliceQ + ri * qrow + bi * Q51_QB
-                                let rs = sp + sliceS + ri * srow + bi * Q51_SB
-                                for (m in range64(Q51_QB)) {
+                                let rq = qp + sliceQ + ri * qrow + bi * qb
+                                let rs = sp + sliceS + ri * srow + bi * sb
+                                for (m in range64(qb)) {
                                     dq[m] = rq[m]
                                 }
-                                for (m in range64(Q51_SB)) {
+                                for (m in range64(sb)) {
                                     dsc[m] = rs[m]
                                 }
                             }
@@ -823,6 +853,16 @@ def moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int6
             }
         }
     }
+}
+
+def moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64;
+                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    moe_gpu_gather_stack_b32(t.q51q, t.q51s, Q51_QB, Q51_SB, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+}
+
+def moe_gpu_gather_stack_iq4nl32(t : Model; woff : int64; n, rows, slice_rows : int64;
+                                 repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    moe_gpu_gather_stack_b32(t.iq4nl32q, t.iq4nl32s, IQ4NL32_QB, IQ4NL32_SB, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
 
 //! Gather one native-MXFP4 expert stack into the GPU tier's device planes: the disk layout (16 nibble bytes and one E8M0
@@ -1081,8 +1121,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
 
 [init]
 def private register_layout_hooks {
-    register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks, @@repack_q51_stacks,
-        @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq, @@moe_gpu_gather_stack_q51, @@moe_gpu_gather_stack_mx4)
-    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@stream_repack_one,
+    register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks, @@repack_q51_stacks, @@repack_iq4nl32_stacks,
+        @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq, @@moe_gpu_gather_stack_q51, @@moe_gpu_gather_stack_iq4nl32, @@moe_gpu_gather_stack_mx4)
+    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@collect_iq4nl32_regions, @@stream_repack_one,
         @@metal_blob_eligible, @@metal_blob_scale_plane)
 }

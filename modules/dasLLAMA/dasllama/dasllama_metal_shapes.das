@@ -251,14 +251,20 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.q51) {   // per-32 planes: off % 128 keeps the 20B/4B binds 16B-aligned
         return off >= 0l && (off % 128l) == 0l && (ege % 32l) == 0l
     }
+    if (fmt == KqFmt.iq4nl32) {   // per-32 planes: off % 256 keeps the 16B/2B binds 16B-aligned
+        return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
+    }
     return false
 }
 
 //! the expert plane formats the Metal routed block has kernels for (mx4 rides its own gpt-oss arm)
 def moe_fmt_metal_served(f : KqFmt) : bool {
-    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
+    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
         || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs)
 }
+
+//! the per-32 expert plane formats with their own Metal kernels (the 32-block reduction, 64-deep tensor twins)
+def private moe_fmt_b32(f : KqFmt) : bool => f == KqFmt.q51 || f == KqFmt.iq4nl32
 
 // The MoE serve gate — covered graph shapes: plain routed FFN (qwen3moe, silu, no biases)
 // + optional sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared dual branch, and
@@ -334,7 +340,7 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
             return false
         }
         // per-site alignment + reduction dims: superblock kq kernels iterate whole 256-rows,
-        // q51 whole 32-blocks (+ the mul_mm's 64-col output tiles)
+        // the per-32 formats whole 32-blocks (+ the mul_mm's 64-col output tiles)
         let sb1 = kq_sb(f1)
         let sb3 = kq_sb(f3)
         let sb2 = kq_sb(f2)
@@ -343,8 +349,8 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
                 !moe_site_ok(f3, t.we3_offs[l], ege) ||
                 ((sb1 || sb3) && (c.dim % 256l) != 0l) ||
                 (sb2 && (nfe % 256l) != 0l) ||
-                ((f1 == KqFmt.q51 || f3 == KqFmt.q51) && ((c.dim % 32l) != 0l || (nfe % 64l) != 0l)) ||
-                (f2 == KqFmt.q51 && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l))) {
+                ((moe_fmt_b32(f1) || moe_fmt_b32(f3)) && ((c.dim % 32l) != 0l || (nfe % 64l) != 0l)) ||
+                (moe_fmt_b32(f2) && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l))) {
             return false
         }
     }

@@ -99,6 +99,19 @@ Every materialized cos/sin table is the same fill; the position source is what d
 
 `Model.kq : KqPlanes[KQ_FMT_COUNT]` is the one `dim` field a `Model` carries, so every `apply` walk over it - the finalizer, the image build, the image parse, the layout describe - spells its plane-table arm as the `typeinfo is_dim(field)` branch and reaches each element's arrays from there. The table's interleaves serialize in enum order, so an appended `KqFmt` member lands last and no earlier slot moves.
 
+### 1.2d The per-32 rail is one kernel body over a format tag
+
+The per-32 formats (`q51`, `iq4nl32`) sit off the superblock lattice: 32-weight blocks, Q8_0-form
+activations, dedicated `Model` plane pairs (`ARCHITECTURE_IMAGE.md` sec.2.1p), and in
+`dasllama_math.das` one body per kernel shape (`b32_batch_kernel`, `b32_groupn_kernel`,
+`b32_batch_groupn_kernel`) generic over the `KqTag_<fmt>` it takes last - the tag picks the
+strides, the row expand, the grp scale gather and the expanded-row dot. `iq4nl32` is the IQ4_NL
+disk block served per-32: `kq_fmt_expert_ok` chooses it for an expert stack whose rows are off
+the 256 lattice and on the 32 lattice (the superblock member `iq4nl` serves a `% 256` row), and a
+dense plane off the lattice still demotes to q8. The codebook levels are int8, so the q8 rail's
+requant of an IQ4_NL block is value-exact and the per-32 form's gain is bytes - 18 a block
+against 34 - not precision.
+
 ### 1.3 The load and image rail
 
 **`dasllama_load.das`** is the GGUF load walk: metadata to `Config`, the plane layout, disk-format

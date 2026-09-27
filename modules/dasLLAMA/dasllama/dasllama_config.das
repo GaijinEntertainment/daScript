@@ -28,6 +28,7 @@ struct public DlimCpuConfig {
     q8_kgroup : int64
     kq_mr : array<int64>   //!< the lattice planes' repack interleaves, by int(KqFmt) (0 off the lattice)
     q51_mr : int64
+    iq4nl32_mr : int64
     wscale_f16 : bool
     kquant_native : bool
     kq_q40_native : bool
@@ -149,7 +150,7 @@ def public dlim_identity(c : DlimConfiguration; image_version : int; tag : strin
     return ("v{image_version}{pk}|{c.quant}|{c.cpu.backend}|{c.cpu.wscale_f16 ? "s16" : "s32"}"
         + "|q8 mr{c.cpu.q8_mr} b{c.cpu.q8_wbias} g{c.cpu.q8_kgroup}"
         + "|kq {kq_mr_identity(c.cpu)}"
-        + "|q51 mr{c.cpu.q51_mr}"
+        + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr}"
         + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q50_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}"
         + (tag != "" ? "|{tag}" : ""))
 }

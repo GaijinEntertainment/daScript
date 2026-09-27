@@ -232,6 +232,7 @@ var g_pso_moe_wscale : MetalComputePipeline?   // gemma4 per-expert down-scale f
 var g_pso_swiglu_oai : MetalComputePipeline?   // gpt-oss clamped swiglu (stage 4)
 var g_pso_moe_gemv_mx4 : MetalComputePipeline?  // gpt-oss MXFP4 expert GEMV
 var g_pso_moe_gemv_q51 : MetalComputePipeline?  // Q5_1 expert GEMV (per-32 planes)
+var g_pso_moe_gemv_iq4nl32 : MetalComputePipeline?  // IQ4_NL per-32 expert GEMV
 var g_mx4_vtab : MetalBuffer?                   // [16] signed doubled-e2m1 values
 var g_pso_dn_conv : MetalComputePipeline?      // deltanet (Wave D): causal conv + SiLU
 var g_pso_dn_hist : MetalComputePipeline?      // conv-history advance
@@ -1052,6 +1053,19 @@ def q51_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : Met
                 qoff = uint64(b0 * 20l),
                 sbuf = plane_buffer(dev, addr < void? >(t.q51s[0]), uint64(long_length(t.q51s)), t.image_map != null),
                 soff = uint64(b0 * 4l))
+    }
+}
+
+//! One iq4nl32 tensor's plane pair bind: nibble plane (16B/block, uint-viewable) at (off/32)*16 and
+//! the f16 d plane at (off/32)*2 — verbatim disk splits, never rebaked. off % 256 keeps both binds 16B-aligned.
+def iq4nl32_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
+    assert(t.metal_blob)
+    let b0 = off / 32l
+    unsafe {
+        return (qbuf = plane_buffer(dev, addr < void? >(t.iq4nl32q[0]), uint64(long_length(t.iq4nl32q)), t.image_map != null),
+                qoff = uint64(b0 * IQ4NL32_QB),
+                sbuf = plane_buffer(dev, addr < void? >(t.iq4nl32s[0]), uint64(long_length(t.iq4nl32s)), t.image_map != null),
+                soff = uint64(b0 * IQ4NL32_SB))
     }
 }
 

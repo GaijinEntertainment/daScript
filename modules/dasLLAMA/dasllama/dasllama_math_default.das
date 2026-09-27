@@ -780,6 +780,11 @@ def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xs
     return 0.0
 }
 
+def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_iq4nl32) : float {
+    panic("iq4nl32 rides the per-32 planes, not the kq lattice dot")
+    return 0.0
+}
+
 //! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot: y[i] = the
 //! dot of row i, the row strides off the descriptor. Generic in the tag; the gen tier's row tails
 //! and the fused chains thread it.

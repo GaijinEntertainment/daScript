@@ -403,6 +403,30 @@ def private build_q51_block(blk : int) : array<uint8> {
     return <- b
 }
 
+// iq4nl32 synthetic 32-block index `blk`: f16-exact d varied per block, nibble byte j =
+// iq4nl_qs_pat(blk*16 + j) (shifted per block so an inter-block offset bug can't cancel); disk
+// layout [d][16 nibble bytes] - IQ4_NL's own 18 B block.
+def private iq4nl32_d(blk : int) : float => float(blk % 7 + 1) * 0.0625
+
+def private build_iq4nl32_block(blk : int) : array<uint8> {
+    var b : array<uint8>
+    b |> resize(18)
+    let dbits = f32_to_f16(iq4nl32_d(blk))
+    b[0] = uint8(dbits & 0xFF)
+    b[1] = uint8(dbits >> 8u)
+    for (j in range(16)) {
+        b[2 + j] = uint8(iq4nl_qs_pat(blk * 16 + j))
+    }
+    return <- b
+}
+
+// the codebook value of element k of synthetic block `blk` (k < 16 low nibble, else high)
+def private iq4nl32_w(blk, k : int) : float {
+    let q = iq4nl_qs_pat(blk * 16 + (k % 16))
+    let nib = k < 16 ? q & 15 : q >> 4
+    return iq4nl32_d(blk) * float(int(IQ4NL_LUT[nib]))
+}
+
 [test]
 def test_q4k_synthetic(t : T?) {
     t |> run("Q4_K superblock unpacks the 6-bit scale/min packing") @(t : T?) {
@@ -677,6 +701,22 @@ def test_kq_transcode_planes(t : T?) {
             for (k in range(32)) {
                 let expected = q51_d(blk) * float(q5_pat(k + blk)) + q51_m(blk)
                 t |> success(dst[k] == expected, "q51 plane element must match hand-packed value exactly")
+            }
+        }
+    }
+    t |> run("iq4nl32 planes unpack the hand-packed IQ4_NL blocks through the codebook exactly") @(t : T?) {
+        for (blk in range(4)) {
+            let blkb <- build_iq4nl32_block(blk)
+            var kq : array<uint8>
+            var ks : array<uint8>
+            kq |> resize(16)
+            ks |> resize(2)
+            kq_transcode_superblock(KqFmt.iq4nl32, blkb, 0l, kq, 0l, ks, 0l)
+            var dst : array<float>
+            dst |> resize(32)
+            dequant_iq4nl32_plane_block(kq, 0l, ks, 0l, dst, 0l)
+            for (k in range(32)) {
+                t |> success(dst[k] == iq4nl32_w(blk, k), "iq4nl32 plane element must match hand-packed value exactly")
             }
         }
     }
@@ -958,6 +998,256 @@ def test_q51_kernels(t : T?) {
     }
     t |> run("q51 batch + batch-groupn bit-match scalar row dots") @(t : T?) {
         q51_batch_gate(t)
+    }
+}
+
+// ===== iq4nl32 kernel gates (per-32 IQ4_NL planes, Q8_0-form activations - q51's twins) =====
+
+// Fill `rows` iq4nl32 plane rows of n elements; row r block b packs build_iq4nl32_block(r*31 + b)
+// so no two blocks anywhere share data.
+def private iq4nl32_fill_planes(var kq : array<uint8>; var ks : array<uint8>; rows, n : int64) {
+    let nb = n / 32l
+    kq |> resize(rows * nb * IQ4NL32_QB)
+    ks |> resize(rows * nb * IQ4NL32_SB)
+    for (r in range64(rows)) {
+        for (b in range64(nb)) {
+            let blkb <- build_iq4nl32_block(int(r * 31l + b))
+            kq_transcode_superblock(KqFmt.iq4nl32, blkb, 0l, kq, (r * nb + b) * IQ4NL32_QB, ks, (r * nb + b) * IQ4NL32_SB)
+        }
+    }
+}
+
+def private iq4nl32_dot_gate(t : T?) {
+    let n = 2560l   // the qwen4exp expert row: % 32, NOT % 256 - why the format exists
+    let nb = n / 32l
+    var kq : array<uint8>
+    var ks : array<uint8>
+    iq4nl32_fill_planes(kq, ks, 1l, n)
+    var w : array<float>
+    w |> resize(n)
+    for (b in range64(nb)) {
+        dequant_iq4nl32_plane_block(kq, b * IQ4NL32_QB, ks, b * IQ4NL32_SB, w, b * 32l)
+    }
+    var xq : array<int8>
+    var xs : array<float>
+    q51_fill_acts(xq, xs, 1l, n)
+    var ref = 0.0lf
+    for (i in range64(n)) {
+        ref += double(w[i]) * double(xq[i]) * double(xs[i / 32l])
+    }
+    let got = dot_iq4nl32q8_scalar(unsafe(addr(kq[0])), unsafe(addr(ks[0])), unsafe(addr(xq[0])), unsafe(addr(xs[0])), n)
+    let denom = max(abs(float(ref)), 1.0e-6)
+    t |> success(abs(got - float(ref)) / denom < 1.0e-4, "dot_iq4nl32q8_scalar must match the fp64 plane-dequant reference")
+    t |> success(abs(got - float(ref) + 0.5) / denom >= 1.0e-4, "the dot bar's control: an added 0.5 must land outside it")
+}
+
+def private iq4nl32_groupn_gate(t : T?) {
+    let n = 2560l
+    let nb = n / 32l
+    let d = 8l
+    let nreg = 3l
+    var kq : array<uint8>
+    var ks : array<uint8>
+    iq4nl32_fill_planes(kq, ks, nreg * d, n)
+    var xq : array<int8>
+    var xs : array<float>
+    q51_fill_acts(xq, xs, nreg, n)
+    var offs : array<int64>
+    offs |> reserve(nreg * 2l)
+    for (r in range64(nreg)) {   // (weight element off, activation element off) pairs
+        offs |> push(r * d * n)
+        offs |> push(r * n)
+    }
+    var y : array<float>
+    y |> resize(nreg * d)
+    matmul_iq4nl32q8_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
+    unsafe {
+        for (r in range64(nreg)) {
+            for (row in range64(d)) {
+                let want = dot_iq4nl32q8_scalar(addr(kq[(r * d + row) * nb * IQ4NL32_QB]), addr(ks[(r * d + row) * nb * IQ4NL32_SB]),
+                    addr(xq[r * n]), addr(xs[r * (n / 32l)]), n)
+                t |> success(y[r * d + row] == want, "iq4nl32 groupn row must bit-match the scalar row dot")
+            }
+        }
+    }
+}
+
+def private iq4nl32_batch_gate(t : T?) {
+    let n = 2560l
+    let nb = n / 32l
+    let d = 8l
+    let ntok = 5l
+    let nreg = 2l
+    var kq : array<uint8>
+    var ks : array<uint8>
+    iq4nl32_fill_planes(kq, ks, nreg * d, n)
+    var xq : array<int8>
+    var xs : array<float>
+    q51_fill_acts(xq, xs, ntok, n)
+    // batch off region 1's rows - the non-zero element woff pins the wrapper's /32*16 plane math
+    var y : array<float>
+    y |> resize(ntok * d)
+    matmul_iq4nl32q8_batch(y, kq, ks, d * n, xq, xs, n, d, ntok)
+    unsafe {
+        for (tk in range64(ntok)) {
+            for (row in range64(d)) {
+                let want = dot_iq4nl32q8_scalar(addr(kq[(d + row) * nb * IQ4NL32_QB]), addr(ks[(d + row) * nb * IQ4NL32_SB]),
+                    addr(xq[tk * n]), addr(xs[tk * (n / 32l)]), n)
+                t |> success(y[tk * d + row] == want, "iq4nl32 batch cell must bit-match the scalar row dot")
+            }
+        }
+    }
+    // batch groupn: (woff, row0, cnt) triples - tokens 0..2 hit region 0, 2..5 region 1
+    let offs <- [0l, 0l, 2l, d * n, 2l, 3l]
+    var yg : array<float>
+    yg |> resize(ntok * d)
+    matmul_iq4nl32q8_batch_groupn(yg, kq, ks, offs, nreg, xq, xs, n, d)
+    unsafe {
+        for (r in range64(nreg)) {
+            let row0 = offs[r * 3l + 1l]
+            let cnt = offs[r * 3l + 2l]
+            for (tk in range64(cnt)) {
+                for (row in range64(d)) {
+                    let want = dot_iq4nl32q8_scalar(addr(kq[(r * d + row) * nb * IQ4NL32_QB]), addr(ks[(r * d + row) * nb * IQ4NL32_SB]),
+                        addr(xq[(row0 + tk) * n]), addr(xs[(row0 + tk) * (n / 32l)]), n)
+                    t |> success(yg[(row0 + tk) * d + row] == want, "iq4nl32 batch-groupn cell must bit-match the scalar row dot")
+                }
+            }
+        }
+    }
+}
+
+// the grp<mr> iq4nl32 layout: repack round-trip through the grp expand twins and the untouched
+// disk-order tail rows - all bit-exact vs disk (no gen-tier grp walk yet: the expand pair IS the walk)
+def private iq4nl32_grp_gate(t : T?) {
+    let n = 2560l
+    let nb = n / 32l
+    let d = 26l   // 3 grp8 (6 grp4) groups + a 2-row disk-order tail
+    var kq : array<uint8>
+    var ks : array<uint8>
+    iq4nl32_fill_planes(kq, ks, d, n)
+    var xq : array<int8>
+    var xs : array<float>
+    q51_fill_acts(xq, xs, 1l, n)
+    var yref : array<float>
+    yref |> resize(d)
+    unsafe {
+        for (r in range64(d)) {
+            yref[r] = dot_iq4nl32q8_scalar(addr(kq[0]) + r * nb * IQ4NL32_QB, addr(ks[0]) + r * nb * IQ4NL32_SB, addr(xq[0]), addr(xs[0]), n)
+        }
+        var qe : array<int8>
+        qe |> resize(n)
+        var qe2 : array<int8>
+        qe2 |> resize(n)
+        var sc : array<uint8>
+        sc |> resize(nb * IQ4NL32_SB)
+        for (mr in fixed_array(4l, 8l)) {
+            var gq := kq
+            var gs := ks
+            repack_kq_grp(KqFmt.iq4nl32, addr(gq[0]), addr(gs[0]), n, d, mr)
+            let grpRows = (d / mr) * mr
+            var moved = 0
+            for (a, b in gq, kq) {
+                if (a != b) {
+                    moved++
+                }
+            }
+            t |> success(moved > 0, "grp{mr}: the repack must move the quant bytes (the round-trip is not vacuous)")
+            for (r in range64(d)) {
+                if (r < grpRows) {
+                    let gbase = (r / mr) * mr * nb
+                    expand_iq4nl32_grp_row(addr(gq[0]) + gbase * IQ4NL32_QB, r % mr, mr, addr(qe[0]), nb)
+                    gather_iq4nl32_grp_scales(addr(gs[0]) + gbase * IQ4NL32_SB, r % mr, mr, addr(sc[0]), nb)
+                    expand_iq4nl32_row(addr(kq[0]) + r * nb * IQ4NL32_QB, addr(qe2[0]), nb)
+                    let ge = dot_iq4nl32e(addr(qe[0]), addr(sc[0]), addr(xq[0]), addr(xs[0]), n)
+                    let de = dot_iq4nl32e(addr(qe2[0]), addr(ks[0]) + r * nb * IQ4NL32_SB, addr(xq[0]), addr(xs[0]), n)
+                    t |> success(ge == de, "iq4nl32 grp expand twins must bit-match the disk expand")
+                    t |> success(de == yref[r], "dot_iq4nl32e over the disk expand must bit-match the scalar dot")
+                } else {
+                    let got = dot_iq4nl32q8_scalar(addr(gq[0]) + r * nb * IQ4NL32_QB, addr(gs[0]) + r * nb * IQ4NL32_SB, addr(xq[0]), addr(xs[0]), n)
+                    t |> success(got == yref[r], "iq4nl32 grp tail rows must stay disk-order")
+                }
+            }
+            delete gq
+            delete gs
+        }
+        delete qe
+        delete qe2
+        delete sc
+    }
+}
+
+//! the GPU tier's iq4nl32 expert gather: the device planes (disk order, 16 + 2 bytes a block, row-major) gathered off
+//! the grp<mr> plane must equal the ones gathered off the disk-order plane, byte for byte, groups and tail alike
+def private iq4nl32_gather_gate(t : T?) {
+    let n = 2560l
+    let nb = n / 32l
+    let d = 26l   // 3 grp8 groups + a 2-row disk-order tail
+    var kq : array<uint8>
+    var ks : array<uint8>
+    iq4nl32_fill_planes(kq, ks, d, n)
+    var m = Model()
+    m.iq4nl32q := kq
+    m.iq4nl32s := ks
+    var wqDisk : array<uint8>
+    var wsDisk : array<uint8>
+    moe_gpu_gather_stack_iq4nl32(m, 0l, n, d, d, false, 1l, wqDisk, wsDisk)
+    var qdisk = 0
+    for (a, b in wqDisk, kq) {
+        if (a != b) {
+            qdisk++
+        }
+    }
+    t |> equal(qdisk, 0, "the disk-order gather is the plane itself")
+    t |> equal(long_length(wqDisk), d * nb * IQ4NL32_QB)
+    t |> equal(long_length(wsDisk), d * nb * IQ4NL32_SB)
+    for (mr in fixed_array(4l, 8l)) {
+        var g = Model()
+        g.iq4nl32q := kq
+        g.iq4nl32s := ks
+        unsafe {
+            repack_kq_grp(KqFmt.iq4nl32, addr(g.iq4nl32q[0]), addr(g.iq4nl32s[0]), n, d, mr)
+        }
+        var wqGrp : array<uint8>
+        var wsGrp : array<uint8>
+        moe_gpu_gather_stack_iq4nl32(g, 0l, n, d, d, true, mr, wqGrp, wsGrp)
+        var qdiff = 0
+        for (a, b in wqDisk, wqGrp) {
+            if (a != b) {
+                qdiff++
+            }
+        }
+        var sdiff = 0
+        for (a, b in wsDisk, wsGrp) {
+            if (a != b) {
+                sdiff++
+            }
+        }
+        t |> equal(qdiff, 0, "grp{mr}: the gathered quant bytes match the disk-order gather")
+        t |> equal(sdiff, 0, "grp{mr}: the gathered scale words match the disk-order gather")
+        delete g
+    }
+    delete m
+    delete kq
+    delete ks
+}
+
+[test]
+def test_iq4nl32_kernels(t : T?) {
+    t |> run("dot_iq4nl32q8_scalar matches the fp64 plane-dequant reference at n=2560") @(t : T?) {
+        iq4nl32_dot_gate(t)
+    }
+    t |> run("the GPU tier's iq4nl32 gather off grp4 and grp8 planes matches the disk-order gather byte for byte") @(t : T?) {
+        iq4nl32_gather_gate(t)
+    }
+    t |> run("iq4nl32 groupn bit-matches scalar row dots") @(t : T?) {
+        iq4nl32_groupn_gate(t)
+    }
+    t |> run("iq4nl32 grp<mr> planes bit-match disk (repack + expand twins + tails)") @(t : T?) {
+        iq4nl32_grp_gate(t)
+    }
+    t |> run("iq4nl32 batch + batch-groupn bit-match scalar row dots") @(t : T?) {
+        iq4nl32_batch_gate(t)
     }
 }
 

@@ -3190,9 +3190,18 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_gemv_gate(t, dev, queue, MoeGemvFmt.q51, 96, 24, 5, 3, 1, false)   // gate/up site (shared x)
                 moe_gemv_gate(t, dev, queue, MoeGemvFmt.q51, 64, 32, 7, 4, 1, true)    // down site (per-slot x)
                 moe_gemv_gate(t, dev, queue, MoeGemvFmt.q51, 64, 24, 5, 3, 3, true)    // batch streams, down form
-                moe_mulmm_q51_gate(t, dev, queue, 64, 64, [32, 40, 64])    // padded tail on expert 1
-                moe_mulmm_q51_gate(t, dev, queue, 96, 128, [8, 96])        // 2 col tiles, tiny run + multi-tile
-                moe_mulmm_q51_gate(t, dev, queue, 64, 64, [136, 32])       // counts crossing 128 — both tall-pair stamps live
+                moe_mulmm_b32_gate(t, dev, queue, MoeGemvFmt.q51, 64, 64, [32, 40, 64])    // padded tail on expert 1
+                moe_mulmm_b32_gate(t, dev, queue, MoeGemvFmt.q51, 96, 128, [8, 96])        // 2 col tiles, tiny run + multi-tile
+                moe_mulmm_b32_gate(t, dev, queue, MoeGemvFmt.q51, 64, 64, [136, 32])       // counts crossing 128 — both tall-pair stamps live
+
+                // ===== iq4nl32 expert kernels (the Qwen3.8-Flash-Next 640-wide down stacks) =====
+                // exact-arithmetic planes (pow2 d, the int8 codebook, int x) — BIT-exact both kernels, the same shapes as q51
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.iq4nl32, 96, 24, 5, 3, 1, false)   // gate/up site (shared x)
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.iq4nl32, 64, 32, 7, 4, 1, true)    // down site (per-slot x)
+                moe_gemv_gate(t, dev, queue, MoeGemvFmt.iq4nl32, 64, 24, 5, 3, 3, true)    // batch streams, down form
+                moe_mulmm_b32_gate(t, dev, queue, MoeGemvFmt.iq4nl32, 64, 64, [32, 40, 64])
+                moe_mulmm_b32_gate(t, dev, queue, MoeGemvFmt.iq4nl32, 96, 128, [8, 96])
+                moe_mulmm_b32_gate(t, dev, queue, MoeGemvFmt.iq4nl32, 64, 64, [136, 32])
 
                 // ===== mx4 expert GEMV (reworked to the q51 shape — gpt-oss's decode kernel) =====
                 moe_gemv_gate(t, dev, queue, MoeGemvFmt.mx4, 96, 24, 5, 3, 1, false)          // gate/up (shared x)
@@ -4342,6 +4351,7 @@ def private moe_select_gate(t : T?; dev, queue; ne, k, nst : int; ties : bool; g
 enum private MoeGemvFmt {
     q8
     q51
+    iq4nl32
     mx4
 }
 
@@ -4358,6 +4368,8 @@ def private moe_gemv_planes(fmt : MoeGemvFmt; rows, n) : tuple<p0 : array<uint8>
         q8_blob_fill(rows, n / 32, p0, wref)
     } elif (fmt == MoeGemvFmt.q51) {
         q51_test_planes(rows, n, p0, p1, wref)
+    } elif (fmt == MoeGemvFmt.iq4nl32) {
+        iq4nl32_test_planes(rows, n, p0, p1, wref)
     } else {
         let nb = n / 32
         p0 |> resize(rows * nb * 16)
@@ -4388,6 +4400,8 @@ def private moe_gemv_gate(t : T?; dev, queue; fmt : MoeGemvFmt; n, d, net, k, ns
         pso = pipeline_from_source(dev, metal_moe_gemv_q8_msl, metal_moe_gemv_q8_msl_entry, metal_moe_gemv_q8_msl_fastmath, err)
     } elif (fmt == MoeGemvFmt.q51) {
         pso = pipeline_from_source(dev, metal_moe_gemv_q51_msl, metal_moe_gemv_q51_msl_entry, metal_moe_gemv_q51_msl_fastmath, err)
+    } elif (fmt == MoeGemvFmt.iq4nl32) {
+        pso = pipeline_from_source(dev, metal_moe_gemv_iq4nl32_msl, metal_moe_gemv_iq4nl32_msl_entry, metal_moe_gemv_iq4nl32_msl_fastmath, err)
     } else {
         pso = pipeline_from_source(dev, metal_moe_gemv_mx4_msl, metal_moe_gemv_mx4_msl_entry, metal_moe_gemv_mx4_msl_fastmath, err)
     }
@@ -4444,6 +4458,8 @@ def private moe_gemv_gate(t : T?; dev, queue; fmt : MoeGemvFmt; n, d, net, k, ns
         metal_set_pipeline(enc, pso)
         if (fmt == MoeGemvFmt.mx4) {
             metal_set_threadgroup_memory_length(enc, metal_moe_gemv_mx4_msl_tgmem, 0)
+        } elif (fmt == MoeGemvFmt.iq4nl32) {
+            metal_set_threadgroup_memory_length(enc, metal_moe_gemv_iq4nl32_msl_tgmem, 0)
         }
         metal_set_buffer(enc, bw, 0ul, 0)
         metal_set_buffer(enc, bs, 0ul, 1)
@@ -4518,9 +4534,66 @@ def private q51_test_planes(rows, n : int; var qp : array<uint8>; var sp : array
     }
 }
 
-// The gathered q51 mul_mm: ne experts with padded-CSR row runs (gather = 0 bucket-rows mode);
-// exact-arithmetic planes (the A tile's f16(d*q + m) values are dyadic <= 63.25 — f16-exact),
-// int x rows — every simdgroup accumulate is exact, so the whole padded y compares BIT-exact.
+// Build iq4nl32 plane pairs for `rows` rows of n elements: patterned nibbles (position-dependent,
+// every codebook slot reached), pow2 f16 d - d*LUT[q] is an f16-exact value, so the CPU float
+// reference is BIT-exact under any GPU reduction order.
+def private iq4nl32_test_planes(rows, n : int; var qp : array<uint8>; var sp : array<uint8>; var wref : array<float>) {
+    let nb = n / 32
+    let dlut = fixed_array(0.25, 0.5, 1.0, 2.0)
+    let lut = iq4nl_lut()
+    qp |> resize(rows * nb * 16)
+    sp |> resize(rows * nb * 2)
+    wref |> resize(rows * n)
+    for (b in range(rows * nb)) {
+        let d = dlut[(b / 3) % 4]
+        let dbits = f32_to_f16(d)
+        sp[b * 2] = uint8(dbits & 0xFF)
+        sp[b * 2 + 1] = uint8(dbits >> 8u)
+        for (i in range(32)) {
+            let q = (b * 11 + i * 7 + i / 3) % 16
+            wref[b * 32 + i] = d * float(int(lut[q]))
+            if (i < 16) {
+                qp[b * 16 + i] = uint8(q)
+            } else {
+                qp[b * 16 + i - 16] = uint8(uint(qp[b * 16 + i - 16]) | (uint(q) << 4u))
+            }
+        }
+    }
+}
+
+//! the per-32 expert mul_mm forms: the simdgroup base and the four tensor twins
+enum private B32MmForm {
+    base
+    t
+    th
+    th128
+    thr
+}
+
+//! one per-32 format's mul_mm stamp sources by form - the same cell's (source, entry, fastmath, tgmem) tuple
+def private b32_mm_stamp(fmt : MoeGemvFmt; form : B32MmForm) : tuple<src : string; entry : string; fm : bool; tgm : uint64> {
+    if (fmt == MoeGemvFmt.q51) {
+        if (form == B32MmForm.base) return (src = metal_moe_mulmm_q51_msl, entry = metal_moe_mulmm_q51_msl_entry, fm = metal_moe_mulmm_q51_msl_fastmath, tgm = metal_moe_mulmm_q51_msl_tgmem)
+        if (form == B32MmForm.t) return (src = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_tgmem)
+        if (form == B32MmForm.th) return (src = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_tgmem)
+        if (form == B32MmForm.th128) return (src = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_tgmem)
+        return (src = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_tgmem)
+    }
+    if (fmt == MoeGemvFmt.iq4nl32) {
+        if (form == B32MmForm.base) return (src = metal_moe_mulmm_iq4nl32_msl, entry = metal_moe_mulmm_iq4nl32_msl_entry, fm = metal_moe_mulmm_iq4nl32_msl_fastmath, tgm = metal_moe_mulmm_iq4nl32_msl_tgmem)
+        if (form == B32MmForm.t) return (src = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
+        if (form == B32MmForm.th) return (src = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
+        if (form == B32MmForm.th128) return (src = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
+        return (src = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
+    }
+    panic("b32_mm_stamp: {fmt} is not a per-32 expert mul_mm format")
+    return (src = "", entry = "", fm = false, tgm = 0ul)
+}
+
+// The gathered per-32 mul_mm (q51, iq4nl32): ne experts with padded-CSR row runs (gather = 0
+// bucket-rows mode); exact-arithmetic planes (the A tile's f16 values are dyadic and f16-exact:
+// d*q + m <= 63.25 on q51, d*LUT[q] <= 254 on iq4nl32), int x rows — every simdgroup accumulate
+// is exact, so the whole padded y compares BIT-exact.
 //! device-free: the dev-W knee arithmetic (the pick the board's deep-dense cells ride).
 //! Expectations hold at the DEVW_SMALL_PANEL default (32 MiB) - no sidecar loads here
 [test, unused_argument(t)]   // off-Apple the body feints without touching t
@@ -4561,19 +4634,18 @@ def test_tallkq_pick(t : T?) {
     }
 }
 
-def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : array<int>) {
+def private moe_mulmm_b32_gate(t : T?; dev, queue; fmt : MoeGemvFmt; kdim, ndim : int; counts : array<int>) {
+    let tag = "moe {fmt} mulmm"
     var err : string
-    var pso = pipeline_from_source(dev, metal_moe_mulmm_q51_msl, metal_moe_mulmm_q51_msl_entry, metal_moe_mulmm_q51_msl_fastmath, err)
-    t |> success(pso != null, "moe q51 mulmm pipeline: {err}")
+    let bst = b32_mm_stamp(fmt, B32MmForm.base)
+    var pso = pipeline_from_source(dev, bst.src, bst.entry, bst.fm, err)
+    t |> success(pso != null, "{tag} pipeline: {err}")
     if (pso == null) {
         return
     }
     let ne = length(counts)
     let nb = kdim / 32
-    var qp : array<uint8>
-    var sp : array<uint8>
-    var wref : array<float>
-    q51_test_planes(ne * ndim, kdim, qp, sp, wref)
+    var (qp, sp, wref) <- moe_gemv_planes(fmt, ne * ndim, kdim)
     var (cnt, basep, pad) <- padded_bases(counts)
     var xv : array<float>
     xv |> resize(pad * kdim)
@@ -4608,7 +4680,7 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
     let tiles = (pad + 31) / 32
     let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
         metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_moe_mulmm_q51_msl_tgmem, 0)
+        metal_set_threadgroup_memory_length(enc, bst.tgm, 0)
         metal_set_buffer(enc, bs, 0ul, 0)
         metal_set_buffer(enc, bw, 0ul, 1)
         // the MetalMoeMulMmBase family's shared numbering — 2 is the k-quant third weight view
@@ -4620,7 +4692,7 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
         metal_set_buffer(enc, bbkt, 0ul, 9)
         metal_dispatch_threadgroups(enc, uint3(uint(tiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
     }
-    t |> success(ran, "moe q51 mulmm dispatch kdim={kdim} ndim={ndim} ne={ne} pad={pad}: {err}")
+    t |> success(ran, "{tag} dispatch kdim={kdim} ndim={ndim} ne={ne} pad={pad}: {err}")
     t |> equal(buf_mismatch_exact(by, want), 0)
     // the contiguous tensor twin (TH stamp over an f16 X): same exact-arithmetic oracle —
     // pow2 d / quarter m / int x all stage to f16 losslessly, so the twin is BIT-exact too.
@@ -4645,11 +4717,12 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
         return
     }
     var terr : string
-    var tw_pso = pipeline_from_source(dev, MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl, MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_entry, MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_fastmath, terr)
+    let tws = b32_mm_stamp(fmt, B32MmForm.th)
+    var tw_pso = pipeline_from_source(dev, tws.src, tws.entry, tws.fm, terr)
     if (tw_pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "moe q51 mulmm twin: no Metal-4 tensor toolchain - twin leg skipped\n")
+        to_log(LOG_INFO, "{tag} twin: no Metal-4 tensor toolchain - twin leg skipped\n")
     } else {
-        t |> success(tw_pso != null, "moe q51 mulmm twin: pipeline: {terr}")
+        t |> success(tw_pso != null, "{tag} twin: pipeline: {terr}")
     }
     if (tw_pso != null) {
         var xh <- [for (v in xv); float16(v)]
@@ -4657,7 +4730,7 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
         var by_t = buf_fill(dev, pad * ndim, -500.0)
         let rant = with_compute_encoder(queue, terr) $(enc : MetalComputeEncoder?) {
             metal_set_pipeline(enc, tw_pso)
-            metal_set_threadgroup_memory_length(enc, MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_tgmem, 0)
+            metal_set_threadgroup_memory_length(enc, tws.tgm, 0)
             metal_set_buffer(enc, bs, 0ul, 0)
             metal_set_buffer(enc, bw, 0ul, 1)
             metal_set_buffer(enc, bxh, 0ul, 3)
@@ -4667,19 +4740,20 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
             metal_set_buffer(enc, bbase, 0ul, 7)
             metal_dispatch_threadgroups(enc, uint3(uint(tiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
         }
-        t |> success(rant, "moe q51 mulmm twin: encode: {terr}")
+        t |> success(rant, "{tag} twin: encode: {terr}")
         if (rant) {
             t |> equal(buf_mismatch_exact(by_t, want), 0)
         }
         // the float-X T stamp (the bxh == null pick arm): stages raw f32 rows to the same
         // f16 tiles, so the int-valued fixtures stay bit-exact through it too
-        var tf_pso = pipeline_from_source(dev, MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl, MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_entry, MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_fastmath, terr)
-        t |> success(tf_pso != null, "moe q51 mulmm T stamp: pipeline: {terr}")
+        let tfs = b32_mm_stamp(fmt, B32MmForm.t)
+        var tf_pso = pipeline_from_source(dev, tfs.src, tfs.entry, tfs.fm, terr)
+        t |> success(tf_pso != null, "{tag} T stamp: pipeline: {terr}")
         if (tf_pso != null) {
             var by_f = buf_fill(dev, pad * ndim, -600.0)
             let ranf = with_compute_encoder(queue, terr) $(enc : MetalComputeEncoder?) {
                 metal_set_pipeline(enc, tf_pso)
-                metal_set_threadgroup_memory_length(enc, MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_tgmem, 0)
+                metal_set_threadgroup_memory_length(enc, tfs.tgm, 0)
                 metal_set_buffer(enc, bs, 0ul, 0)
                 metal_set_buffer(enc, bw, 0ul, 1)
                 metal_set_buffer(enc, bx, 0ul, 3)
@@ -4689,7 +4763,7 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
                 metal_set_buffer(enc, bbase, 0ul, 7)
                 metal_dispatch_threadgroups(enc, uint3(uint(tiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
             }
-            t |> success(ranf, "moe q51 mulmm T stamp: encode: {terr}")
+            t |> success(ranf, "{tag} T stamp: encode: {terr}")
             if (ranf) {
                 t |> equal(buf_mismatch_exact(by_f, want), 0)
             }
@@ -4698,9 +4772,11 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
         }
         // the tall pair: 128-floor stamp + remainder stamp over the same fixtures — the
         // toolchain is proven (tw_pso compiled), so a pair PSO that fails to compile is a RED
-        var tl_pso = pipeline_from_source(dev, MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl, MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_entry, MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_fastmath, terr)
-        var rm_pso = pipeline_from_source(dev, MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl, MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_entry, MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_fastmath, terr)
-        t |> success(tl_pso != null && rm_pso != null, "moe q51 mulmm tall pair: pipeline: {terr}")
+        let tls = b32_mm_stamp(fmt, B32MmForm.th128)
+        let rms = b32_mm_stamp(fmt, B32MmForm.thr)
+        var tl_pso = pipeline_from_source(dev, tls.src, tls.entry, tls.fm, terr)
+        var rm_pso = pipeline_from_source(dev, rms.src, rms.entry, rms.fm, terr)
+        t |> success(tl_pso != null && rm_pso != null, "{tag} tall pair: pipeline: {terr}")
         if (tl_pso != null && rm_pso != null) {
             var maxce = 0
             for (c in cnt) {
@@ -4709,7 +4785,7 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
             var by_p = buf_fill(dev, pad * ndim, -700.0)
             let ranp = with_compute_encoder(queue, terr) $(enc : MetalComputeEncoder?) {
                 metal_set_pipeline(enc, tl_pso)
-                metal_set_threadgroup_memory_length(enc, MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_tgmem, 0)
+                metal_set_threadgroup_memory_length(enc, tls.tgm, 0)
                 metal_set_buffer(enc, bs, 0ul, 0)
                 metal_set_buffer(enc, bw, 0ul, 1)
                 metal_set_buffer(enc, bxh, 0ul, 3)
@@ -4719,7 +4795,7 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
                 metal_set_buffer(enc, bbase, 0ul, 7)
                 metal_dispatch_threadgroups(enc, uint3(uint((maxce + 127) / 128), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
                 metal_set_pipeline(enc, rm_pso)
-                metal_set_threadgroup_memory_length(enc, MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_tgmem, 0)
+                metal_set_threadgroup_memory_length(enc, rms.tgm, 0)
                 metal_set_buffer(enc, bs, 0ul, 0)
                 metal_set_buffer(enc, bw, 0ul, 1)
                 metal_set_buffer(enc, bxh, 0ul, 3)
@@ -4729,7 +4805,7 @@ def private moe_mulmm_q51_gate(t : T?; dev, queue; kdim, ndim : int; counts : ar
                 metal_set_buffer(enc, bbase, 0ul, 7)
                 metal_dispatch_threadgroups(enc, uint3(4u, uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
             }
-            t |> success(ranp, "moe q51 mulmm tall pair: encode: {terr}")
+            t |> success(ranp, "{tag} tall pair: encode: {terr}")
             if (ranp) {
                 t |> equal(buf_mismatch_exact(by_p, want), 0)
             }

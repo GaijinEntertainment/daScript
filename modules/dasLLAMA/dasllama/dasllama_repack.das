@@ -206,6 +206,16 @@ def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_q5
     }
 }
 
+//! mr-generalized iq4nl32 plane repack: per block the 16 nibble bytes as four four-byte columns
+//! (mx4's order), the 2-byte f16 d per block. grp1 == disk order.
+def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_iq4nl32) {
+    let nb = n / 32l
+    repack_in_place(qp, sp, d * nb * IQ4NL32_QB, d * nb * IQ4NL32_SB) $(tqp, tsp) {
+        repack_columns(qp, tqp, nb, IQ4NL32_QB, 4l, d, mr)
+        repack_fields(sp, tsp, nb, IQ4NL32_SB, d, mr, verbatim_unit_field(IQ4NL32_SB, 1l))
+    }
+}
+
 //! the k4/k5 scale row: d and dmin verbatim, then the 12 packed 6-bit sc/mn bytes DECODED into the two 8-strip fields
 def private repack_k45_scales(var ks : uint8?; tsp : uint8 const?; nsb, d, mr : int64) {
     repack_fields(ks, tsp, nsb, K4_SSB, d, mr, [RepackField(src = 0l, width = 2l, count = 1l), RepackField(src = 2l, width = 2l, count = 1l)])

@@ -50,6 +50,7 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.iq2xs), 13)
         t |> equal(int(KqFmt.iq2xxs), 14)
         t |> equal(int(KqFmt.mx4), 15)
+        t |> equal(int(KqFmt.iq4nl32), 16)
     }
 }
 
@@ -85,6 +86,11 @@ def test_kqfmt_predicates(t : T?) {
         t |> equal(kq_qsb(KqFmt.mx4), 16l)   // 16 nibble bytes a block
         t |> equal(kq_ssb(KqFmt.mx4), 1l)    // one E8M0 byte a block
         t |> equal(kq_elems(KqFmt.mx4), 32l)
+        t |> success(!kq_sb(KqFmt.iq4nl32) && kq_block32(KqFmt.iq4nl32) && kq_block32(int(KqFmt.iq4nl32)), "iq4nl32 is a per-32 format on both predicates")
+        t |> equal(kq_qsb(KqFmt.iq4nl32), 16l)   // per 32-BLOCK: the 16 nibble bytes
+        t |> equal(kq_ssb(KqFmt.iq4nl32), 2l)    // per 32-BLOCK: f16 d
+        t |> equal(kq_elems(KqFmt.iq4nl32), 32l)
+        t |> equal(kq_ggml_type(KqFmt.iq4nl32), GGML_TYPE_IQ4_NL)   // iq4nl's disk blocks, q51's plane form
     }
 }
 
@@ -267,6 +273,7 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_stream_code(KqFmt.iq2xs), 24)
         t |> equal(kq_stream_code(KqFmt.iq2xxs), 25)
         t |> equal(kq_stream_code(KqFmt.mx4), 39)
+        t |> equal(kq_stream_code(KqFmt.iq4nl32), 46)
     }
 }
 
@@ -310,6 +317,13 @@ def test_kq_fmt_row_demotion(t : T?) {
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 768l), KqFmt.q40)
         // the 256-superblock disk formats never see a non-multiple row (the file cannot hold one)
         t |> equal(kq_fmt_row_ok(KqFmt.iq2xxs, 768l), KqFmt.iq2xxs)
+    }
+    t |> run("an IQ4_NL expert stack off the superblock lattice takes the per-32 planes; a dense one still demotes") <| @(t : T?) {
+        t |> equal(kq_fmt_expert_ok(KqFmt.iq4nl, 640l), KqFmt.iq4nl32)   // Qwen3.8-Flash-Next's down stacks: 20 blocks of 32
+        t |> equal(kq_fmt_expert_ok(KqFmt.iq4nl, 768l), KqFmt.iq4nl)     // a superblock multiple keeps the lattice form
+        t |> equal(kq_fmt_expert_ok(KqFmt.iq4nl, 650l), KqFmt.q8)        // off the 32 lattice too: the q8 rail
+        t |> equal(kq_fmt_expert_ok(KqFmt.q40, 640l), KqFmt.q8)          // the rule is iq4nl's alone
+        t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 640l), KqFmt.q8)           // the dense rails carry no iq4nl32 form
     }
 }
 

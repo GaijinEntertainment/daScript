@@ -237,6 +237,18 @@ def private moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_row
     layout_gather_stack_q51(t, woff, n, rows, slice_rows, qmr > 1l, qmr, wq, ws)
 }
 
+def private moe_gpu_gather_stack_iq4nl32(t : Model; woff : int64; n, rows, slice_rows : int64;
+                                         var wq : array<uint8>; var ws : array<uint8>) {
+    if (vk_bake_slice(t, int(KqFmt.iq4nl32), woff, n, rows, wq, ws)) {
+        return
+    }
+    if (t.planes_trimmed) {
+        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
+    }
+    let qmr = active_iq4nl32_layout_mr()   //! the iq4nl32 expert stacks sit in the active backend's grp<mr> layout, disk order at mr 1
+    layout_gather_stack_iq4nl32(t, woff, n, rows, slice_rows, qmr > 1l, qmr, wq, ws)
+}
+
 def private moe_gpu_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int64;
                                      var wq : array<uint8>; var ws : array<uint8>) {
     if (vk_bake_slice(t, int(KqFmt.mx4), woff, n, rows, wq, ws)) {
@@ -311,6 +323,8 @@ def trim_model_planes(var t : Model) : bool {
     }
     delete t.q51q
     delete t.q51s
+    delete t.iq4nl32q
+    delete t.iq4nl32s
     delete t.mxq
     delete t.mxs
     delete t.q4blob
@@ -344,6 +358,8 @@ def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, s
         moe_gpu_gather_stack(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
     } elif (f == KqFmt.q51) {
         moe_gpu_gather_stack_q51(t, woff, n, rows, slice_rows, wq, ws)
+    } elif (f == KqFmt.iq4nl32) {
+        moe_gpu_gather_stack_iq4nl32(t, woff, n, rows, slice_rows, wq, ws)
     } elif (f == KqFmt.mx4) {
         moe_gpu_gather_stack_mx4(t, woff, n, rows, slice_rows, wq, ws)
     } else {
@@ -778,6 +794,8 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
         moe_gpu_gather_stack(t, woff, n, rows, srows, mr, kgroup, wbias, wq, ws)
     } elif (f == KqFmt.q51) {
         moe_gpu_gather_stack_q51(t, woff, n, rows, srows, wq, ws)
+    } elif (f == KqFmt.iq4nl32) {
+        moe_gpu_gather_stack_iq4nl32(t, woff, n, rows, srows, wq, ws)
     } elif (f == KqFmt.mx4) {
         moe_gpu_gather_stack_mx4(t, woff, n, rows, srows, wq, ws)
     } else {

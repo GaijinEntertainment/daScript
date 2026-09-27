@@ -15,7 +15,7 @@ once for the step instead of once a row.** The driver sizes every per-token plan
 rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width - and
 `vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense,
 MoE, per-layer-embedding, shared-KV and recurrent layers and a gated q, and none where a layer or
-the tail has no N-row form - a dense plane in a per-32 expert format (q51, mx4: the two formats
+the tail has no N-row form - a dense plane in a per-32 expert format (q51, iq4nl32, mx4: the formats
 with no N-column leaf, every kq leaf having one), a routed block beside a per-layer-embedding
 branch, or more routed slots than the block's slot planes hold - and logs the reason once per
 armed model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`)

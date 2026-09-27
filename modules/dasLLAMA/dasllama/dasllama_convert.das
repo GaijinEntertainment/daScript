@@ -1077,6 +1077,27 @@ def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : Kq
     }
 }
 
+//! Transcode one IQ4_NL disk block (18 bytes at `src`: d f16, 16 nibble bytes) into the iq4nl32
+//! planes — verbatim splits, exact: the 2 scale bytes to ks, the 16 nibble bytes to kq.
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq4nl32) {
+    unsafe {
+        bcopy(ks, src, 2l)
+        bcopy(kq, src + 2l, 16l)
+    }
+}
+
+//! Reference dequant of one iq4nl32-plane 32-block: w = d * lut[q], elem k off the low nibble of
+//! byte k and elem k + 16 off its high nibble (`dequantize_row_iq4_nl`'s order).
+def dequant_iq4nl32_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, kso))
+    let lut = iq4nl_lut()
+    for (k in range64(16l)) {
+        let b = int(kq[kqo + k])
+        dst[doff + k] = d * float(lut[b & 15])
+        dst[doff + k + 16l] = d * float(lut[b >> 4])
+    }
+}
+
 //! Reference dequant of one q51-plane 32-block: w = d * q + m with q = nibble | qh_bit << 4
 //! (elem k reads qh bit k, elem k+16 bit k+16 — the on-disk Q5_1 bit map, kept verbatim).
 def dequant_q51_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
