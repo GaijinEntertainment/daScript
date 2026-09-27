@@ -677,10 +677,9 @@ struct TtsSourceShape {
 let TTS_SRC_MAX_SAMPLES = 1l << 23   //! past it `float(to) + 0.5` rounds, and the torch law's tap coordinate parts from the CPU's double form
 
 def tts_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64) : TtsSourceShape {
-    let samples = f2 * cfg.upsample
-    var sh = TtsSourceShape(samples = samples, nlow = resize_len(samples, 1.0 / float(cfg.upsample)))
-    return sh if (sh.samples < 1l || sh.samples >= TTS_SRC_MAX_SAMPLES || sh.nlow < 1l || cfg.n_harm < 1l || cfg.n_harm > 64l
-        || resize_len(sh.nlow, float(cfg.upsample)) != sh.samples)
+    let geo = sine_source_geometry(cfg, f2)
+    var sh = TtsSourceShape(samples = geo.samples, nlow = geo.nlow)
+    return sh if (!geo.round_trips || sh.samples < 1l || sh.samples >= TTS_SRC_MAX_SAMPLES || sh.nlow < 1l || cfg.n_harm < 1l || cfg.n_harm > 64l)
     let re & = unsafe(d.stft_fwd_re)
     let im & = unsafe(d.stft_fwd_im)
     return sh if (re.cin != 1l || re.cout != d.bins || re.transposed || im.k != re.k || im.cout != d.bins || im.cin != 1l || im.transposed

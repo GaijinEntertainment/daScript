@@ -1260,8 +1260,9 @@ def styletts2_source(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; f0_
                      noise : TtsNoise; seed : uint64; @scratch @exact_size var har : array<float>; var sc : St2Scratch) : int64 {
     let up = cfg.upsample
     let nh = cfg.n_harm
-    let n = f0_frames * up
-    let nlow = resize_len(n, 1.0 / float(up))
+    let geo = sine_source_geometry(cfg, f0_frames)
+    let n = geo.samples
+    let nlow = geo.nlow
     let win = stream_window_for(g_source_window, nlow)
     var rng = TtsRng()
     if (!noise.captured) {

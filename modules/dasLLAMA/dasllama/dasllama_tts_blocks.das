@@ -2525,6 +2525,20 @@ def private sine_phase_frames(cfg : SineSourceCfg; f0 : array<float>; n : int64;
     cr.next = want
 }
 
+//! The harmonic source's geometry for `frames` F0 frames: its samples, the phase frames the downsample
+//! writes (`resize_len` of the samples), and whether the upsample of those lands back on the samples.
+struct SineSourceGeometry {
+    samples : int64
+    nlow : int64
+    round_trips : bool
+}
+
+def sine_source_geometry(cfg : SineSourceCfg; frames : int64) : SineSourceGeometry {
+    let samples = frames * cfg.upsample
+    let nlow = resize_len(samples, 1.0 / float(cfg.upsample))
+    return SineSourceGeometry(samples = samples, nlow = nlow, round_trips = resize_len(nlow, float(cfg.upsample)) == samples)
+}
+
 //! The harmonic source for the phase frames [fa, fb) of a run of `frames` (the downsample's frames, `resize_len`
 //! of the samples): out [rows][n_harm] for their samples, `rows` back, the last window running to the sample
 //! count. Windows come in order from a reset carry; `noise_n` holds the window's rows from `noise_base` on.
@@ -2532,12 +2546,12 @@ def private sine_phase_frames(cfg : SineSourceCfg; f0 : array<float>; n : int64;
 def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u : array<float>; fa, fb : int64;
                 var cr : SineSourceCarry; noise_n : array<float>; noise_base : int64; @exact_size var out : array<float>) : int64 {
     let up = cfg.upsample
-    let n = frames * up
     let nh = cfg.n_harm
-    let nlow = resize_len(n, 1.0 / float(up))
-    let nup = resize_len(nlow, float(up))
-    if (nup != n) {
-        panic("dasLLAMA tts: sine source resample {nlow} -> {nup} samples, want {n}")
+    let geo = sine_source_geometry(cfg, frames)
+    let n = geo.samples
+    let nlow = geo.nlow
+    if (!geo.round_trips) {
+        panic("dasLLAMA tts: sine source resample {nlow} -> {resize_len(nlow, float(up))} samples, want {n}")
     }
     let sa = fa * up
     let sb = fb == nlow ? n : fb * up
