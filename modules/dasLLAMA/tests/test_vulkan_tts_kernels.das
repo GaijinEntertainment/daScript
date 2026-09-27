@@ -53,57 +53,37 @@ def test_vkt_f32_gemm(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_Y = 1u
-            let B_YB = 2u
             let rows = G_ROWS
             let d = G_D
             let n = G_N
-            let nx = rows * G_XSTRIDE
-            let nw = d * G_WSTRIDE
-            let ny = rows * d
-            var x <- row_fill(nx, 41, 7, 0.05, 2.1)
-            var w <- row_fill(nw, 17, 3, 0.04, 1.9)
-            var b <- row_fill(d, 29, 11, 0.06, 2.8)
+            let x <- row_fill(rows * G_XSTRIDE, 41, 7, 0.05, 2.1)
+            var w <- row_fill(d * G_WSTRIDE, 17, 3, 0.04, 1.9)
+            let b <- row_fill(d, 29, 11, 0.06, 2.8)
             for (o in range(d)) {   //! the pad past n carries garbage: a read past n lands it in the sum
                 for (k in range(n, G_WSTRIDE)) {
                     w[o * G_WSTRIDE + k] = POISON
                 }
             }
-            let bx = int64(nx) * 4l
-            let bw = int64(nw) * 4l
-            let bb = int64(d) * 4l
-            let by = int64(ny) * 4l
-            let xd = dev_upload(x)
-            let wd = dev_upload(w)
-            let bd = dev_upload(b)
-            let yd = make_device_buf(by)
-            let ybd = make_device_buf(by)
-            let sizes = fixed_array(by, by)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            nan_sentinel_upload(yd, by)
-            nan_sentinel_upload(ybd, by)
-            var s_plain = set_f32_gemm_cls(fixed_array(wd, xd, yd), fixed_array(bw, bx, by), fixed_array(0u, 0u, B_Y))
-            var s_bias = set_f32_gemm_b_cls(fixed_array(wd, xd, ybd, bd), fixed_array(bw, bx, by, bb), fixed_array(0u, 0u, B_YB, 0u))
-            var pa = F32GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, wstride = uint(G_WSTRIDE), boff = 0u,
-                xoff = 0u, xstride = uint(G_XSTRIDE), yoff = 0u, ystride = uint(d))
-            let wgs = f32_gemm_wgs(int64(rows), int64(d))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_f32_gemm_cls(raw, h, s_plain, pa, wgs)
-                enc_f32_gemm_b_cls(raw, h, s_bias, pa, wgs)
-                cmd_copy_planes(raw, h, fixed_array(yd, ybd), host, sizes, B_Y | B_YB)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> in_(x)
+                let wp = cp |> in_(w)
+                let bp = cp |> in_(b)
+                let yp = cp |> out_(rows * d)
+                let ybp = cp |> out_(rows * d)
+                var s_plain = cp |> cls_set(fixed_array(wp, xp, yp), @@set_f32_gemm_cls)
+                var s_bias = cp |> cls_set(fixed_array(wp, xp, ybp, bp), @@set_f32_gemm_b_cls)
+                var pa = F32GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, wstride = uint(G_WSTRIDE), boff = 0u,
+                    xoff = 0u, xstride = uint(G_XSTRIDE), yoff = 0u, ystride = uint(d))
+                let wgs = f32_gemm_wgs(int64(rows), int64(d))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_f32_gemm_cls(raw, h, s_plain, pa, wgs)
+                    enc_f32_gemm_b_cls(raw, h, s_bias, pa, wgs)
+                }
+                let y_dev <- cp |> plane_run(yp)
+                check_rows(t, "f32_gemm plain stamp vs the k-ordered sum", y_dev, f32_gemm_ref(x, w, b, rows, d, n, G_WSTRIDE, G_XSTRIDE, false), BAR_APPROX, d)
+                check_rows(t, "f32_gemm_b biased stamp vs the sum plus the bias row", cp |> plane_run(ybp), f32_gemm_ref(x, w, b, rows, d, n, G_WSTRIDE, G_XSTRIDE, true), BAR_APPROX, d)
+                t |> equal(nan_count(y_dev), 0, "every output element is stored (no sentinel survives)")
             }
-            let y_dev <- staged(host.mapped, at[0], ny, type<float>)
-            let yb_dev <- staged(host.mapped, at[1], ny, type<float>)
-            let y_ref <- f32_gemm_ref(x, w, b, rows, d, n, G_WSTRIDE, G_XSTRIDE, false)
-            let yb_ref <- f32_gemm_ref(x, w, b, rows, d, n, G_WSTRIDE, G_XSTRIDE, true)
-            let bad = mismatch_approx(y_dev, y_ref)
-            t |> success(bad == 0, "f32_gemm: the plain stamp matches the k-ordered fma sum ({bad} of {ny} off)")
-            t |> success(!approx(y_dev[ny - 1], y_ref[ny - 1] + 0.5), "f32_gemm: the bar reds a poisoned element")
-            let badb = mismatch_approx(yb_dev, yb_ref)
-            t |> success(badb == 0, "f32_gemm_b: the biased stamp matches the sum plus the bias row ({badb} of {ny} off)")
-            t |> success(!approx(yb_dev[0], yb_ref[0] + 0.5), "f32_gemm_b: the bar reds a poisoned element")
-            t |> equal(nan_count(y_dev), 0, "every output element is stored (no sentinel survives)")
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -126,7 +106,6 @@ def test_vkt_row_gather(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_OUT = 1u
             let c = GA_C
             let rows = GA_ROWS
             let total = rows * c
@@ -135,61 +114,37 @@ def test_vkt_row_gather(t0 : T?) {
             var slab <- row_fill(type_off + c, 37, 5, 0.03, 1.4)
             var ids <- [for (r in range(rows)); (r * 7 + 3) % GA_VOCAB]
             ids[1] = ids[0]   //! two positions on one word: only the position rows part them
-            let bout = int64(GA_OUT + total) * 4l
-            let slabd = dev_upload(slab)
-            let idsd = dev_upload(ids)
-            let outd = make_device_buf(bout)
-            let sizes = fixed_array(bout)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            nan_sentinel_upload(outd, bout)
-            var s = set_tts_row_gather_cls(fixed_array(slabd, idsd, outd), fixed_array(long_length(slab) * 4l, long_length(ids) * 4l, bout), fixed_array(0u, 0u, B_OUT))
-            var pa = TtsGatherArgs(c = uint(c), rows = uint(rows), word_off = uint(GA_WORD), pos_off = uint(pos_off), type_off = uint(type_off),
-                out_off = uint(GA_OUT), adds = 1u)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_row_gather_cls(raw, h, s, pa, int64(total))
-                cmd_copy_planes(raw, h, fixed_array(outd), host, sizes, B_OUT)
-            }
-            let prefix <- staged(host.mapped, at[0], GA_OUT, type<float>)
-            let got <- staged(host.mapped, at[0] + int64(GA_OUT) * 4l, total, type<float>)
-            let want <- gather_ref(slab, ids, c, GA_WORD, pos_off, type_off)
-            let bad = mismatch_exact(got, want)
-            let mi = maxdiff_at(got, want)
-            to_log(LOG_INFO, "tts_row_gather: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / c} (id {ids[mi / c]}) col {mi % c}\n")
-            t |> success(bad == 0, "tts_row_gather: every element == the CPU sum ({bad} of {total} off)")
-            t |> success(got[total - 1] + 0.5 != want[total - 1], "tts_row_gather: the bar reds a poisoned element")
-            var zero_ids : array<int>
-            zero_ids |> resize(rows)
-            let want0 <- gather_ref(slab, zero_ids, c, GA_WORD, pos_off, type_off)
-            t |> success(mismatch_exact(got, want0) > 0, "tts_row_gather control: the rows follow their ids (the id-0 sum misses the device)")
-            var parted = 0
-            for (j in range(c)) {
-                if (got[j] != got[c + j]) {
-                    parted++
+            with_cell_planes() $(var cp : CellPlanes) {
+                let sp = cp |> in_(slab)
+                let ip = cp |> in_plain(ids)
+                let op = cp |> out_(total, GA_OUT)
+                var s = cp |> cls_set(fixed_array(sp, ip, op), @@set_tts_row_gather_cls)
+                var pa = TtsGatherArgs(c = uint(c), rows = uint(rows), word_off = uint(GA_WORD), pos_off = uint(pos_off), type_off = uint(type_off),
+                    out_off = uint(GA_OUT), adds = 1u)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_row_gather_cls(raw, h, s, pa, int64(total))
                 }
-            }
-            t |> success(parted > 0, "tts_row_gather control: two positions on one word differ by their position rows")
-            t |> equal(nan_count(prefix), GA_OUT, "tts_row_gather: the prefix before out_off keeps its sentinel")
-            nan_sentinel_upload(outd, bout)
-            pa.adds = 0u
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_row_gather_cls(raw, h, s, pa, int64(total))
-                cmd_copy_planes(raw, h, fixed_array(outd), host, sizes, B_OUT)
-            }
-            let got_plain <- staged(host.mapped, at[0] + int64(GA_OUT) * 4l, total, type<float>)
-            var want_plain : array<float>
-            want_plain |> resize(total)
-            for (r in range(rows)) {
-                for (j in range(c)) {
-                    want_plain[r * c + j] = slab[GA_WORD + ids[r] * c + j]
+                let got <- cp |> plane_run(op)
+                let want <- gather_ref(slab, ids, c, GA_WORD, pos_off, type_off)
+                check_rows(t, "tts_row_gather vs the CPU word + position + type sum", got, want, BAR_EXACT, c)
+                to_log(LOG_INFO, "tts_row_gather: the widest miss's row reads id {ids[maxdiff_at(got, want) / c]}\n")
+                var zero_ids : array<int>
+                zero_ids |> resize(rows)
+                t |> success(mismatch_exact(got, gather_ref(slab, zero_ids, c, GA_WORD, pos_off, type_off)) > 0, "tts_row_gather control: the rows follow their ids (the id-0 sum misses the device)")
+                t |> success(mismatch_exact(subarray(got, range(c)), subarray(got, range(c, 2 * c))) > 0, "tts_row_gather control: two positions on one word differ by their position rows")
+                t |> success(outside_run(cp |> plane_whole(op), GA_OUT, total, NAN_SENTINEL), "tts_row_gather: the prefix before out_off keeps its sentinel")
+                cp |> plane_refill(op)
+                pa.adds = 0u
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_row_gather_cls(raw, h, s, pa, int64(total))
                 }
+                let got_plain <- cp |> plane_run(op)
+                var want_plain : array<float>
+                want_plain |> resize(total)
+                gather_rows(want_plain, subarray(slab, range(GA_WORD, pos_off)), ids, int64(c))
+                check_rows(t, "tts_row_gather adds = 0 vs the word row alone", got_plain, want_plain, BAR_EXACT, c)
+                t |> success(mismatch_exact(got_plain, want) > 0, "tts_row_gather adds = 0 control: the position rows are out of the sum")
             }
-            t |> equal(mismatch_exact(got_plain, want_plain), 0, "tts_row_gather adds = 0: every element == the word row alone")
-            t |> success(mismatch_exact(got_plain, want) > 0, "tts_row_gather adds = 0 control: the position rows are out of the sum")
-            destroy_device_buf(slabd)
-            destroy_device_buf(idsd)
-            destroy_device_buf(outd)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -217,38 +172,27 @@ def test_vkt_gelu_tanh(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_X = 1u
             var x <- elem_fixture()
-            let n = length(x)
-            let bx = int64(n) * 4l
-            let xd = dev_upload(x)
-            let sizes = fixed_array(bx)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            var s = set_tts_gelu_tanh_cls(fixed_array(xd), fixed_array(bx), fixed_array(B_X))
-            var pa = TtsElemArgs(nelem = uint(EL_N), off = uint(EL_OFF), slope = 0.0)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_gelu_tanh_cls(raw, h, s, pa, int64(EL_N))
-                cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
-            }
-            let got <- staged(host.mapped, at[0], n, type<float>)
-            var want := x
-            gelu(unsafe(addr(want[EL_OFF])), int64(EL_N))
-            let bad = mismatch_rel(got, want, TTS_REL)
-            let mi = maxdiff_at(got, want)
-            to_log(LOG_INFO, "tts_gelu_tanh: max |gpu - cpu| {abs(got[mi] - want[mi])} at element {mi} (input {x[mi]})\n")
-            t |> success(bad == 0, "tts_gelu_tanh: the device == the CPU gelu ({bad} of {n} off)")
-            t |> success(!bar_ok(got[n - EL_SLACK - 1] + 1e-4, want[n - EL_SLACK - 1], TTS_REL), "tts_gelu_tanh: the bar reds a poisoned element")
-            t |> success(outside_run(got, EL_OFF, EL_N, x), "tts_gelu_tanh: the elements outside the run are untouched")
-            var lut_off = 0
-            for (i in range(EL_OFF, EL_OFF + EL_N)) {
-                if (!bar_ok(tower_gelu_tanh(x[i]), want[i], TTS_REL)) {
-                    lut_off++
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> io_(x)
+                var s = cp |> cls_set(fixed_array(xp), @@set_tts_gelu_tanh_cls)
+                var pa = TtsElemArgs(nelem = uint(EL_N), off = uint(EL_OFF), slope = 0.0)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_gelu_tanh_cls(raw, h, s, pa, int64(EL_N))
                 }
+                let got <- cp |> plane_run(xp)
+                var want := x
+                gelu(unsafe(addr(want[EL_OFF])), int64(EL_N))
+                check_rows(t, "tts_gelu_tanh vs the CPU gelu", got, want, bar_rel(TTS_REL, 1e-4), 0)
+                t |> success(outside_run(got, EL_OFF, EL_N, x), "tts_gelu_tanh: the elements outside the run are untouched")
+                var lut_off = 0
+                for (i in range(EL_OFF, EL_OFF + EL_N)) {
+                    if (!bar_ok(tower_gelu_tanh(x[i]), want[i], TTS_REL)) {
+                        lut_off++
+                    }
+                }
+                t |> success(lut_off > 0, "tts_gelu_tanh control: the bar tells the f32 tanh form from the f16 LUT form ({lut_off} of {EL_N} apart)")
             }
-            t |> success(lut_off > 0, "tts_gelu_tanh control: the bar tells the f32 tanh form from the f16 LUT form ({lut_off} of {EL_N} apart)")
-            destroy_device_buf(xd)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -263,38 +207,27 @@ def test_vkt_leaky(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_X = 1u
             var x <- elem_fixture()
-            let n = length(x)
-            let bx = int64(n) * 4l
-            let xd = dev_upload(x)
-            let sizes = fixed_array(bx)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            var s = set_tts_leaky_cls(fixed_array(xd), fixed_array(bx), fixed_array(B_X))
-            var pa = TtsElemArgs(nelem = uint(EL_N), off = uint(EL_OFF), slope = EL_SLOPE)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_leaky_cls(raw, h, s, pa, int64(EL_N))
-                cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> io_(x)
+                var s = cp |> cls_set(fixed_array(xp), @@set_tts_leaky_cls)
+                var pa = TtsElemArgs(nelem = uint(EL_N), off = uint(EL_OFF), slope = EL_SLOPE)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_leaky_cls(raw, h, s, pa, int64(EL_N))
+                }
+                let got <- cp |> plane_run(xp)
+                var run <- [for (i in range(EL_N)); x[EL_OFF + i]]
+                leaky_relu(run, int64(EL_N), EL_SLOPE)
+                var want := x
+                for (i in range(EL_N)) {
+                    want[EL_OFF + i] = run[i]
+                }
+                check_rows(t, "tts_leaky vs the CPU leaky_relu", got, want, BAR_EXACT, 0)
+                t |> success(outside_run(got, EL_OFF, EL_N, x), "tts_leaky: the elements outside the run are untouched")
+                let neg = EL_OFF + 1
+                t |> success(got[neg] == x[neg] * EL_SLOPE && got[neg] != x[neg], "tts_leaky control: a negative element is scaled by the slope")
+                t |> success(got[EL_OFF] == x[EL_OFF], "tts_leaky control: a positive element passes unchanged")
             }
-            let got <- staged(host.mapped, at[0], n, type<float>)
-            var run <- [for (i in range(EL_N)); x[EL_OFF + i]]
-            leaky_relu(run, int64(EL_N), EL_SLOPE)
-            var want := x
-            for (i in range(EL_N)) {
-                want[EL_OFF + i] = run[i]
-            }
-            let bad = mismatch_exact(got, want)
-            let mi = maxdiff_at(got, want)
-            to_log(LOG_INFO, "tts_leaky: max |gpu - cpu| {abs(got[mi] - want[mi])} at element {mi} (input {x[mi]})\n")
-            t |> success(bad == 0, "tts_leaky: the device == the CPU leaky_relu ({bad} of {n} off)")
-            t |> success(got[n - EL_SLACK - 1] + 0.5 != want[n - EL_SLACK - 1], "tts_leaky: the bar reds a poisoned element")
-            t |> success(outside_run(got, EL_OFF, EL_N, x), "tts_leaky: the elements outside the run are untouched")
-            let neg = EL_OFF + 1
-            t |> success(got[neg] == x[neg] * EL_SLOPE && got[neg] != x[neg], "tts_leaky control: a negative element is scaled by the slope")
-            t |> success(got[EL_OFF] == x[EL_OFF], "tts_leaky control: a positive element passes unchanged")
-            destroy_device_buf(xd)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -305,8 +238,6 @@ def test_vkt_leaky(t0 : T?) {
 def private attn_arm(t : T?; rows, heads, hs : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = "tts_attn t{rows} {heads}x{hs}"
-        let B_O = 1u
-        let B_OZ = 2u
         let d = heads * hs
         let n = rows * d
         let qoff = 5
@@ -320,65 +251,39 @@ def private attn_arm(t : T?; rows, heads, hs : int) {
         for (e in range(d)) {
             kz[(rows - 1) * d + e] = 0.0
         }
-        var qp <- at_base(q, qoff)
-        var kp <- at_base(k, koff)
-        var kzp <- at_base(kz, koff)
-        var vp <- at_base(v, voff)
-        let qd = dev_upload(qp)
-        let kd = dev_upload(kp)
-        let kzd = dev_upload(kzp)
-        let vd = dev_upload(vp)
-        let bo = int64(ooff + n) * 4l
-        let od = make_device_buf(bo)
-        let ozd = make_device_buf(bo)
-        let sizes = fixed_array(bo, bo)
-        let at <- staged_offsets(sizes)
-        let host = make_host_buf(at[length(sizes)], true, [cached = true])
-        nan_sentinel_upload(od, bo)
-        nan_sentinel_upload(ozd, bo)
-        let bq = long_length(qp) * 4l
-        let bk = long_length(kp) * 4l
-        let bv = long_length(vp) * 4l
-        var s = set_tts_attn_cls(fixed_array(qd, kd, vd, od), fixed_array(bq, bk, bv, bo), fixed_array(0u, 0u, 0u, B_O))
-        var sz = set_tts_attn_cls(fixed_array(qd, kzd, vd, ozd), fixed_array(bq, bk, bv, bo), fixed_array(0u, 0u, 0u, B_OZ))
-        var pa = TtsAttnArgs(t = uint(rows), d = uint(d), hs = uint(hs), heads = uint(heads), scale = 1.0 / sqrt(float(hs)),
-            qoff = uint(qoff), koff = uint(koff), voff = uint(voff), ooff = uint(ooff))
-        let wgs = tts_attn_wgs(int64(rows), int64(heads))
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_attn_cls(raw, h, s, pa, wgs)
-            enc_tts_attn_cls(raw, h, sz, pa, wgs)
-            cmd_copy_planes(raw, h, fixed_array(od, ozd), host, sizes, B_O | B_OZ)
-        }
-        let got <- staged(host.mapped, at[0] + int64(ooff) * 4l, n, type<float>)
-        let gotz <- staged(host.mapped, at[1] + int64(ooff) * 4l, n, type<float>)
-        let prefix <- staged(host.mapped, at[0], ooff, type<float>)
-        var want : array<float>
-        var wantz : array<float>
-        attention_rows(q, k, v, int64(rows), int64(d), int64(heads), want)
-        attention_rows(q, kz, v, int64(rows), int64(d), int64(heads), wantz)
-        let bad = mismatch_rel(got, want, TTS_REL)
-        let mi = maxdiff_at(got, want)
-        to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / d} head {(mi % d) / hs} col {mi % hs}\n")
-        t |> success(bad == 0, "{tag}: the device == the CPU attention_rows ({bad} of {n} off)")
-        t |> success(!bar_ok(got[n - 1] + 1e-4, want[n - 1], TTS_REL), "{tag}: the bar reds a poisoned element")
-        let badz = mismatch_rel(gotz, wantz, TTS_REL)
-        t |> success(badz == 0, "{tag}: the last key zeroed, the device == the CPU attention_rows ({badz} of {n} off)")
-        t |> success(!bar_ok(gotz[0] + 1e-4, wantz[0], TTS_REL), "{tag}: the zeroed-key bar reds a poisoned element")
-        var moved = 0
-        for (e in range(d)) {
-            if (!bar_ok(got[e], gotz[e], TTS_REL)) {
-                moved++
+        with_cell_planes() $(var cp : CellPlanes) {
+            let qp = cp |> in_(q, qoff)
+            let kp = cp |> in_(k, koff)
+            let kzp = cp |> in_(kz, koff)
+            let vp = cp |> in_(v, voff)
+            let op = cp |> out_(n, ooff)
+            let ozp = cp |> out_(n, ooff)
+            var s = cp |> cls_set(fixed_array(qp, kp, vp, op), @@set_tts_attn_cls)
+            var sz = cp |> cls_set(fixed_array(qp, kzp, vp, ozp), @@set_tts_attn_cls)
+            var pa = TtsAttnArgs(t = uint(rows), d = uint(d), hs = uint(hs), heads = uint(heads), scale = 1.0 / sqrt(float(hs)),
+                qoff = uint(qoff), koff = uint(koff), voff = uint(voff), ooff = uint(ooff))
+            let wgs = tts_attn_wgs(int64(rows), int64(heads))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tts_attn_cls(raw, h, s, pa, wgs)
+                enc_tts_attn_cls(raw, h, sz, pa, wgs)
             }
+            let got <- cp |> plane_run(op)
+            let gotz <- cp |> plane_run(ozp)
+            var want : array<float>
+            var wantz : array<float>
+            attention_rows(q, k, v, int64(rows), int64(d), int64(heads), want)
+            attention_rows(q, kz, v, int64(rows), int64(d), int64(heads), wantz)
+            check_rows(t, "{tag} vs the CPU attention_rows", got, want, bar_rel(TTS_REL, 1e-4), d, hs)
+            check_rows(t, "{tag} the last key zeroed vs the CPU attention_rows", gotz, wantz, bar_rel(TTS_REL, 1e-4), d, hs)
+            var moved = 0
+            for (e in range(d)) {
+                if (!bar_ok(got[e], gotz[e], TTS_REL)) {
+                    moved++
+                }
+            }
+            t |> success(moved > 0, "{tag} control: zeroing the last key moves the first query row (every key is read, not a causal prefix)")
+            t |> success(outside_run(cp |> plane_whole(op), ooff, n, NAN_SENTINEL), "{tag}: the prefix before ooff keeps its sentinel")
         }
-        t |> success(moved > 0, "{tag} control: zeroing the last key moves the first query row (every key is read, not a causal prefix)")
-        t |> equal(nan_count(prefix), ooff, "{tag}: the prefix before ooff keeps its sentinel")
-        destroy_device_buf(qd)
-        destroy_device_buf(kd)
-        destroy_device_buf(kzd)
-        destroy_device_buf(vd)
-        destroy_device_buf(od)
-        destroy_device_buf(ozd)
-        destroy_host_buf(host)
     }
 }
 
@@ -417,62 +322,35 @@ def test_vkt_concat(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_OR = 1u
-            let B_OP = 2u
             let rows = CC_ROWS
             let c = CC_C
             let wr = c + CC_RC
-            var x <- row_fill(rows * c, 41, 7, 0.05, 2.1)
-            var style <- row_fill(CC_RC, 29, 11, 0.06, 2.8)
-            var f0 <- row_fill(rows * CC_F0S, 17, 3, 0.04, 1.9)
-            var nd <- row_fill(rows * CC_NS, 53, 1, 0.11, 5.3)
-            let xd = dev_upload(x)
-            let sd = dev_upload(style)
-            let f0d = dev_upload(f0)
-            let ndd = dev_upload(nd)
-            let bor = int64(rows * wr) * 4l
-            let bop = int64(rows * CC_WIDTH) * 4l
-            let ord = make_device_buf(bor)
-            let opd = make_device_buf(bop)
-            let sizes = fixed_array(bor, bop)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            nan_sentinel_upload(ord, bor)
-            nan_sentinel_upload(opd, bop)
-            let bx = long_length(x) * 4l
-            let bf = long_length(f0) * 4l
-            let bn = long_length(nd) * 4l
-            var s_res = set_tts_concat_cls(fixed_array(xd, sd, f0d, ndd, ord), fixed_array(bx, long_length(style) * 4l, bf, bn, bor), fixed_array(0u, 0u, 0u, 0u, B_OR))
-            var s_pad = set_tts_concat_cls(fixed_array(xd, xd, f0d, ndd, opd), fixed_array(bx, bx, bf, bn, bop), fixed_array(0u, 0u, 0u, 0u, B_OP))
-            var pr = TtsConcatArgs(c = uint(c), rc = uint(CC_RC), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(wr), rows = uint(rows))
-            var pp = TtsConcatArgs(c = uint(c), rc = uint(CC_RC), rs = uint(CC_RC), f0s = uint(CC_F0S), ns = uint(CC_NS), with_res = 0u,
-                width = uint(CC_WIDTH), rows = uint(rows))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_concat_cls(raw, h, s_res, pr, int64(rows * wr))
-                enc_tts_concat_cls(raw, h, s_pad, pp, int64(rows * CC_WIDTH))
-                cmd_copy_planes(raw, h, fixed_array(ord, opd), host, sizes, B_OR | B_OP)
+            let x <- row_fill(rows * c, 41, 7, 0.05, 2.1)
+            let style <- row_fill(CC_RC, 29, 11, 0.06, 2.8)
+            let f0 <- row_fill(rows * CC_F0S, 17, 3, 0.04, 1.9)
+            let nd <- row_fill(rows * CC_NS, 53, 1, 0.11, 5.3)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> in_(x)
+                let sp = cp |> in_(style)
+                let fp = cp |> in_(f0)
+                let np = cp |> in_(nd)
+                let orp = cp |> out_(rows * wr)
+                let opp = cp |> out_(rows * CC_WIDTH)
+                var s_res = cp |> cls_set(fixed_array(xp, sp, fp, np, orp), @@set_tts_concat_cls)
+                var s_pad = cp |> cls_set(fixed_array(xp, xp, fp, np, opp), @@set_tts_concat_cls)
+                var pr = TtsConcatArgs(c = uint(c), rc = uint(CC_RC), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(wr), rows = uint(rows))
+                var pp = TtsConcatArgs(c = uint(c), rc = uint(CC_RC), rs = uint(CC_RC), f0s = uint(CC_F0S), ns = uint(CC_NS), with_res = 0u,
+                    width = uint(CC_WIDTH), rows = uint(rows))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_concat_cls(raw, h, s_res, pr, int64(rows * wr))
+                    enc_tts_concat_cls(raw, h, s_pad, pp, int64(rows * CC_WIDTH))
+                }
+                let got_p <- cp |> plane_run(opp)
+                check_rows(t, "tts_concat with_res rs 0 vs the CPU concat", cp |> plane_run(orp), concat_ref(x, style, f0, nd, rows, c, CC_RC, 0, 0, 0, wr, true), BAR_EXACT, wr)
+                check_rows(t, "tts_concat f0/n at strides, zero pad vs the CPU concat", got_p, concat_ref(x, style, f0, nd, rows, c, CC_RC, CC_RC, CC_F0S, CC_NS, CC_WIDTH, false), BAR_EXACT, CC_WIDTH)
+                let want_s1 <- concat_ref(x, style, f0, nd, rows, c, CC_RC, CC_RC, 1, 1, CC_WIDTH, false)
+                t |> success(mismatch_exact(got_p, want_s1) > 0, "tts_concat control: the f0 and n columns follow their strides")
             }
-            let nr = rows * wr
-            let np = rows * CC_WIDTH
-            let got_r <- staged(host.mapped, at[0], nr, type<float>)
-            let got_p <- staged(host.mapped, at[1], np, type<float>)
-            let want_r <- concat_ref(x, style, f0, nd, rows, c, CC_RC, 0, 0, 0, wr, true)
-            let want_p <- concat_ref(x, style, f0, nd, rows, c, CC_RC, CC_RC, CC_F0S, CC_NS, CC_WIDTH, false)
-            let bad_r = mismatch_exact(got_r, want_r)
-            t |> success(bad_r == 0, "tts_concat with_res rs 0: every element == the CPU concat ({bad_r} of {nr} off)")
-            t |> success(got_r[nr - 1] + 0.5 != want_r[nr - 1], "tts_concat with_res: the bar reds a poisoned element")
-            let bad_p = mismatch_exact(got_p, want_p)
-            t |> success(bad_p == 0, "tts_concat f0/n at strides, zero pad: every element == the CPU concat ({bad_p} of {np} off)")
-            t |> success(got_p[0] + 0.5 != want_p[0], "tts_concat padded: the bar reds a poisoned element")
-            let want_s1 <- concat_ref(x, style, f0, nd, rows, c, CC_RC, CC_RC, 1, 1, CC_WIDTH, false)
-            t |> success(mismatch_exact(got_p, want_s1) > 0, "tts_concat control: the f0 and n columns follow their strides")
-            destroy_device_buf(xd)
-            destroy_device_buf(sd)
-            destroy_device_buf(f0d)
-            destroy_device_buf(ndd)
-            destroy_device_buf(ord)
-            destroy_device_buf(opd)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -492,38 +370,25 @@ def test_vkt_sigsum(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_RAW = 1u
             var logits <- row_fill(SG_T * SG_LS, 41, 7, 0.1, 4.8)
             for (r in range(SG_T)) {
                 for (j in range(SG_NB, SG_LS)) {
                     logits[r * SG_LS + j] = POISON
                 }
             }
-            let ld = dev_upload(logits)
-            let braw = int64(SG_T) * 4l
-            let rawd = make_device_buf(braw)
-            let sizes = fixed_array(braw)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            nan_sentinel_upload(rawd, braw)
-            var s = set_tts_sigsum_cls(fixed_array(ld, rawd), fixed_array(long_length(logits) * 4l, braw), fixed_array(0u, B_RAW))
-            var pa = TtsSigSumArgs(t = uint(SG_T), nb = uint(SG_NB), ls = uint(SG_LS), speed = SG_SPEED)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_sigsum_cls(raw, h, s, pa, int64(SG_T))
-                cmd_copy_planes(raw, h, fixed_array(rawd), host, sizes, B_RAW)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let lp = cp |> in_(logits)
+                let rp = cp |> out_(SG_T)
+                var s = cp |> cls_set(fixed_array(lp, rp), @@set_tts_sigsum_cls)
+                var pa = TtsSigSumArgs(t = uint(SG_T), nb = uint(SG_NB), ls = uint(SG_LS), speed = SG_SPEED)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_sigsum_cls(raw, h, s, pa, int64(SG_T))
+                }
+                let got <- cp |> plane_run(rp)
+                check_rows(t, "tts_sigsum vs the CPU sum", got, sigsum_ref(logits, SG_T, SG_NB, SG_LS, SG_SPEED), BAR_APPROX, 1)
+                let want_all <- sigsum_ref(logits, SG_T, SG_LS, SG_LS, SG_SPEED)
+                t |> success(mismatch_approx(got, want_all) > 0, "tts_sigsum control: the columns past nb stay out of the sum")
             }
-            let got <- staged(host.mapped, at[0], SG_T, type<float>)
-            let want <- sigsum_ref(logits, SG_T, SG_NB, SG_LS, SG_SPEED)
-            let bad = mismatch_approx(got, want)
-            let mi = maxdiff_at(got, want)
-            to_log(LOG_INFO, "tts_sigsum: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi}\n")
-            t |> success(bad == 0, "tts_sigsum: every row == the CPU sum ({bad} of {SG_T} off)")
-            t |> success(!approx(got[SG_T - 1], want[SG_T - 1] + 0.5), "tts_sigsum: the bar reds a poisoned element")
-            let want_all <- sigsum_ref(logits, SG_T, SG_LS, SG_LS, SG_SPEED)
-            t |> success(mismatch_approx(got, want_all) > 0, "tts_sigsum control: the columns past nb stay out of the sum")
-            destroy_device_buf(ld)
-            destroy_device_buf(rawd)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -795,54 +660,32 @@ def test_vkt_add_scale(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_O = 1u
-            let B_AI = 2u
             let n = AS_N
             let scale = 1.0 / sqrt(2.0)
             let a <- row_fill(n, 41, 7, 0.05, 2.1)
             let b <- row_fill(n, 17, 3, 0.04, 1.9)
-            var ap <- at_base(a, AS_AOFF)
-            var bp <- at_base(b, AS_BOFF)
-            let ad = dev_upload(ap)
-            let aid = dev_upload(ap)
-            let bd = dev_upload(bp)
-            let bo = int64(AS_OOFF + n + AS_SLACK) * 4l
-            let bap = long_length(ap) * 4l
-            let bbp = long_length(bp) * 4l
-            let od = make_device_buf(bo)
-            let sizes = fixed_array(bo, bap)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            nan_sentinel_upload(od, bo)
-            var s_o = set_tts_add_scale_cls(fixed_array(ad, bd, od), fixed_array(bap, bbp, bo), fixed_array(0u, 0u, B_O))
-            var s_i = set_tts_add_scale_cls(fixed_array(aid, bd, aid), fixed_array(bap, bbp, bap), fixed_array(B_AI, 0u, B_AI))
-            var po = TtsAddScaleArgs(nelem = uint(n), scale = scale, aoff = uint(AS_AOFF), boff = uint(AS_BOFF), ooff = uint(AS_OOFF))
-            var pi = po
-            pi.ooff = uint(AS_AOFF)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_add_scale_cls(raw, h, s_o, po, int64(n))
-                enc_tts_add_scale_cls(raw, h, s_i, pi, int64(n))
-                cmd_copy_planes(raw, h, fixed_array(od, aid), host, sizes, B_O | B_AI)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let ap = cp |> in_(a, AS_AOFF)
+                let aip = cp |> io_(a, AS_AOFF)
+                let bp = cp |> in_(b, AS_BOFF)
+                let op = cp |> out_(n, AS_OOFF, AS_SLACK)
+                var s_o = cp |> cls_set(fixed_array(ap, bp, op), @@set_tts_add_scale_cls)
+                var s_i = cp |> cls_set(fixed_array(aip, bp, aip), @@set_tts_add_scale_cls)
+                var po = TtsAddScaleArgs(nelem = uint(n), scale = scale, aoff = uint(AS_AOFF), boff = uint(AS_BOFF), ooff = uint(AS_OOFF))
+                var pi = po
+                pi.ooff = uint(AS_AOFF)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_add_scale_cls(raw, h, s_o, po, int64(n))
+                    enc_tts_add_scale_cls(raw, h, s_i, pi, int64(n))
+                }
+                let got_i <- cp |> plane_run(aip)
+                let want <- [for (i in range(n)); (a[i] + b[i]) * scale]
+                check_rows(t, "tts_add_scale vs (a + b) * scale", cp |> plane_run(op), want, BAR_EXACT, 0)
+                check_rows(t, "tts_add_scale in place vs (a + b) * scale", got_i, want, BAR_EXACT, 0)
+                t |> success(got_i[0] != a[0], "tts_add_scale in place control: the input row is overwritten")
+                t |> success(outside_run(cp |> plane_whole(op), AS_OOFF, n, NAN_SENTINEL), "tts_add_scale: the elements outside the run keep their sentinel")
+                t |> success(outside_run(cp |> plane_whole(aip), AS_AOFF, n, POISON), "tts_add_scale in place: the prefix before aoff is untouched")
             }
-            let whole_o <- staged(host.mapped, at[0], AS_OOFF + n + AS_SLACK, type<float>)
-            let got_o <- subarray(whole_o, range(AS_OOFF, AS_OOFF + n))
-            let whole_i <- staged(host.mapped, at[1], AS_AOFF + n, type<float>)
-            let got_i <- subarray(whole_i, range(AS_AOFF, AS_AOFF + n))
-            let want <- [for (i in range(n)); (a[i] + b[i]) * scale]
-            let bad = mismatch_exact(got_o, want)
-            t |> success(bad == 0, "tts_add_scale: every element == (a + b) * scale ({bad} of {n} off)")
-            t |> success(got_o[n - 1] + 0.5 != want[n - 1], "tts_add_scale: the bar reds a poisoned element")
-            let bad_i = mismatch_exact(got_i, want)
-            t |> success(bad_i == 0, "tts_add_scale in place: every element == (a + b) * scale ({bad_i} of {n} off)")
-            t |> success(got_i[0] + 0.5 != want[0], "tts_add_scale in place: the bar reds a poisoned element")
-            t |> success(got_i[0] != a[0], "tts_add_scale in place control: the input row is overwritten")
-            t |> success(outside_run(whole_o, AS_OOFF, n, NAN_SENTINEL), "tts_add_scale: the elements outside the run keep their sentinel")
-            t |> success(outside_run(whole_i, AS_AOFF, n, POISON), "tts_add_scale in place: the prefix before aoff is untouched")
-            destroy_device_buf(ad)
-            destroy_device_buf(aid)
-            destroy_device_buf(bd)
-            destroy_device_buf(od)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }

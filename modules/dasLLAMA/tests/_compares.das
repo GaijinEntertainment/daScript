@@ -12,6 +12,7 @@ require math
 require daslib/linq   // sequence_equal, count, all
 require daslib/algorithm   // fill
 require daslib/math_bits   // uint_bits_to_float: the NaN sentinel as a float
+require dastest/testing_boost   // T?: check_rows asserts through the cell's handle
 
 let POISON = 7.5   //! the slots a kernel must never read or write: a large finite value, so a stray read lands in the sum
 let SLAB_GAP = 3   //! the poisoned slots `put` leaves before a run of a slab plane
@@ -152,6 +153,44 @@ def mismatch_rel(got, want : array<float>; rel : float; absf : float = 0.0; tag 
 
 //! `mismatch_rel` at the kernel cells' bar.
 def mismatch_approx(got, want : array<float>) : int => mismatch_rel(got, want, APPROX_REL)
+
+//! A kernel cell's bar and its poisoned-element control: bit-exact, or `bar_ok` at `rel` and `absf`; the control's expected
+//! element moves by `poison` (times its magnitude floored at 1 under `scaled`) and must land outside the bar.
+struct Bar {
+    exact : bool
+    rel : float
+    absf : float
+    poison : float = 0.5
+    scaled : bool
+}
+
+let BAR_EXACT = Bar(exact = true)
+let BAR_APPROX = Bar(rel = APPROX_REL)
+
+//! the bar `rel` relative and `absf` absolute, its control's expectation `poison` off (times the magnitude under `scaled`)
+def bar_rel(rel : float; poison : float; absf : float = 0.0; scaled : bool = false) : Bar => Bar(rel = rel, absf = absf, poison = poison, scaled = scaled)
+
+//! true when `g` sits inside `bar` of `w`
+def bar_holds(bar : Bar; g, w : float) : bool => bar.exact ? g == w : bar_ok(g, w, bar.rel, bar.absf)
+
+//! The elements of `got` outside `bar` of `want`, the first six logged under `tag` on a tolerance bar.
+def bar_misses(tag : string; got, want : array<float>; bar : Bar) : int => bar.exact ? mismatch_exact(got, want) : mismatch_rel(got, want, bar.rel, bar.absf, tag)
+
+//! A kernel cell's verdict on one compare: every element of `got` inside `bar` of `want`, the measured max difference logged
+//! with the index it sits at (row by `width`, the column split into head and lane by `sub`; 0 = a flat index), and the
+//! poisoned-element control - the last element's expectation moved by the bar's poison must fall outside it.
+def check_rows(t : T?; tag : string; got, want : array<float>; bar : Bar; width : int; sub : int = 0) {
+    let n = length(want)
+    let bad = bar_misses(tag, got, want, bar)
+    let mi = maxdiff_at(got, want)
+    let col = width > 0 ? mi % width : mi
+    let at = width <= 0 ? "element {mi}" : (sub > 0 ? "row {mi / width} head {col / sub} col {col % sub}" : "row {mi / width} col {col}")
+    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at {at}\n")
+    t |> success(bad == 0, "{tag}: every element within the bar of the CPU form ({bad} of {n} off)")
+    let w = want[n - 1]
+    let poisoned = w + (bar.scaled ? bar.poison * max(1.0, abs(w)) : bar.poison)
+    t |> success(!bar_holds(bar, got[n - 1], poisoned), "{tag}: the bar reds a poisoned element")
+}
 
 //! The elements of `got` not equal to `want` - the compare behind a kernel cell's exact bar (a copy, a clamp, a pad), over
 //! floats, bytes or words alike.

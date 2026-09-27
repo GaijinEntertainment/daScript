@@ -447,7 +447,6 @@ def private pool_slab(c : TtsConv1d) : array<float> {
 def private pool_dw_arm(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = "tts_pool_dw k3 s2 c22"
-        let B_Y = 1u
         var c = TtsConv1d(cin = int64(PD_C), cout = int64(PD_C), k = int64(PD_K), stride = 2l, pad_l = 1l, pad_r = 1l, dilation = 1l,
             groups = int64(PD_C), output_padding = 1l, transposed = true)
         c.w <- row_fill(PD_C * PD_K, 37, 5, 0.02, 0.9)
@@ -462,36 +461,23 @@ def private pool_dw_arm(t : T?) {
         }
         var wn <- pool_slab(c)
         let ny = tout * PD_C
-        let bx = long_length(x) * 4l
-        let bw = long_length(wn) * 4l
-        let by = int64(ny) * 4l
-        let xd = dev_upload(x)
-        let wd = dev_upload(wn)
-        let yd = make_device_buf(by)
-        var host = make_host_buf(by, true, [cached = true])
-        nan_sentinel_upload(yd, by)
-        var s = set_tts_pool_dw_cls(fixed_array(xd, yd, wd), fixed_array(bx, by, bw), fixed_array(0u, B_Y, 0u))
-        var pa = TtsPoolArgs(c = uint(PD_C), k = uint(PD_K), stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(PD_TIN), t_out = uint(tout),
-            woff = uint(PD_WOFF), boff = uint(PD_WOFF + PD_C * PD_K + PD_GAP))
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_pool_dw_cls(raw, h, s, pa, int64(ny))
-            cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let xp = cp |> in_(x)
+            let yp = cp |> out_(ny)
+            let wp = cp |> in_(wn)
+            var s = cp |> cls_set(fixed_array(xp, yp, wp), @@set_tts_pool_dw_cls)
+            var pa = TtsPoolArgs(c = uint(PD_C), k = uint(PD_K), stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(PD_TIN), t_out = uint(tout),
+                woff = uint(PD_WOFF), boff = uint(PD_WOFF + PD_C * PD_K + PD_GAP))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tts_pool_dw_cls(raw, h, s, pa, int64(ny))
+            }
+            //! `approx`'s 2e-3: both sides f32 over at most two taps a channel
+            check_rows(t, "{tag} over {tout} x {PD_C} vs the CPU conv1d_rows_transposed_depthwise", cp |> plane_run(yp), want, BAR_APPROX, PD_C)
         }
-        var y_dev <- staged(host.mapped, 0l, ny, type<float>)
-        //! `approx`'s 2e-3: both sides f32 over at most two taps a channel
-        let bad = mismatch_approx(y_dev, want)
-        log_maxdiff(tag, y_dev, want, PD_C)
-        t |> success(bad == 0, "{tag}: the pool == the CPU conv1d_rows_transposed_depthwise over {tout} x {PD_C} ({bad} of {ny} off)")
-        t |> success(!approx(y_dev[ny - 1], want[ny - 1] + 0.5), "{tag}: the bar reds a poisoned element")
-        destroy_device_buf(xd)
-        destroy_device_buf(wd)
-        destroy_device_buf(yd)
-        destroy_host_buf(host)
         delete c
         delete x
         delete want
         delete wn
-        delete y_dev
     }
 }
 

@@ -48,34 +48,9 @@ def test_vkt_pk_rows(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_P = 1u
-            let B_E = 2u
             let nwin = PR_ROWS * PR_WIDTH
             let ndst = PR_DROWS * PR_DS
             let src <- row_fill(PR_SROWS * PR_SS, 41, 7, 0.05, 2.1)
-            let srcd = dev_upload(src)
-            let bsrc = long_length(src) * 4l
-            let bdst = int64(ndst) * 4l
-            let dpd = make_device_buf(bdst)
-            let ded = make_device_buf(bdst)
-            let sizes = fixed_array(bdst, bdst)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            nan_sentinel_upload(dpd, bdst)
-            nan_sentinel_upload(ded, bdst)
-            var s_p = set_tts_pk_rows_cls(fixed_array(srcd, dpd), fixed_array(bsrc, bdst), fixed_array(0u, B_P))
-            var s_e = set_tts_pk_rows_elu_cls(fixed_array(srcd, ded), fixed_array(bsrc, bdst), fixed_array(0u, B_E))
-            var pa = TtsPkRowsArgs(rows = uint(PR_ROWS), width = uint(PR_WIDTH), ss = uint(PR_SS), sc = uint(PR_SC), sr0 = uint(PR_SR0),
-                ds = uint(PR_DS), dc = uint(PR_DC), dr0 = uint(PR_DR0))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_rows_cls(raw, h, s_p, pa, int64(nwin))
-                enc_tts_pk_rows_elu_cls(raw, h, s_e, pa, int64(nwin))
-                cmd_copy_planes(raw, h, fixed_array(dpd, ded), host, sizes, B_P | B_E)
-            }
-            let dst_p <- staged(host.mapped, at[0], ndst, type<float>)
-            let dst_e <- staged(host.mapped, at[1], ndst, type<float>)
-            let got <- pk_window(dst_p)
-            let got_e <- pk_window(dst_e)
             let want <- [for (e in range(nwin)); src[(PR_SR0 + e / PR_WIDTH) * PR_SS + PR_SC + e % PR_WIDTH]]
             var want_e := want
             want_e |> push(0.0)
@@ -84,32 +59,39 @@ def test_vkt_pk_rows(t0 : T?) {
                 elu_rows(want_e, int64(nwin + 1))
             }
             want_e |> resize(nwin)
-            let bad = mismatch_exact(got, want)
-            t |> success(bad == 0, "tts_pk_rows: the window == the source rows, exact ({bad} of {nwin} off)")
-            t |> success(got[nwin - 1] + 0.5 != want[nwin - 1], "tts_pk_rows: the compare reds a poisoned element")
-            t |> equal(nan_count(dst_p), ndst - nwin, "tts_pk_rows: every element outside the window keeps its sentinel")
-            let bad_e = mismatch_approx(got_e, want_e)
-            let mi = maxdiff_at(got_e, want_e)
-            to_log(LOG_INFO, "tts_pk_rows_elu: max |gpu - cpu| {abs(got_e[mi] - want_e[mi])} at row {mi / PR_WIDTH} col {mi % PR_WIDTH}\n")
-            t |> success(bad_e == 0, "tts_pk_rows_elu: the window == the CPU elu_rows ({bad_e} of {nwin} off)")
-            t |> success(!approx(got_e[0] + 0.5, want_e[0]), "tts_pk_rows_elu: the bar reds a poisoned element")
-            t |> equal(nan_count(dst_e), ndst - nwin, "tts_pk_rows_elu: every element outside the window keeps its sentinel")
-            var neg = 0
-            var pos_kept = true
-            for (e in range(nwin)) {
-                if (want[e] < 0.0 && got_e[e] != got[e]) {
-                    neg++
+            with_cell_planes() $(var cp : CellPlanes) {
+                let sp = cp |> in_(src)
+                let dp = cp |> out_(ndst)
+                let ep = cp |> out_(ndst)
+                var s_p = cp |> cls_set(fixed_array(sp, dp), @@set_tts_pk_rows_cls)
+                var s_e = cp |> cls_set(fixed_array(sp, ep), @@set_tts_pk_rows_elu_cls)
+                var pa = TtsPkRowsArgs(rows = uint(PR_ROWS), width = uint(PR_WIDTH), ss = uint(PR_SS), sc = uint(PR_SC), sr0 = uint(PR_SR0),
+                    ds = uint(PR_DS), dc = uint(PR_DC), dr0 = uint(PR_DR0))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_pk_rows_cls(raw, h, s_p, pa, int64(nwin))
+                    enc_tts_pk_rows_elu_cls(raw, h, s_e, pa, int64(nwin))
                 }
-                if (want[e] >= 0.0 && got_e[e] != got[e]) {
-                    pos_kept = false
+                let dst_p <- cp |> plane_run(dp)
+                let dst_e <- cp |> plane_run(ep)
+                let got <- pk_window(dst_p)
+                let got_e <- pk_window(dst_e)
+                check_rows(t, "tts_pk_rows window vs the source rows", got, want, BAR_EXACT, PR_WIDTH)
+                t |> equal(nan_count(dst_p), ndst - nwin, "tts_pk_rows: every element outside the window keeps its sentinel")
+                check_rows(t, "tts_pk_rows_elu window vs the CPU elu_rows", got_e, want_e, BAR_APPROX, PR_WIDTH)
+                t |> equal(nan_count(dst_e), ndst - nwin, "tts_pk_rows_elu: every element outside the window keeps its sentinel")
+                var neg = 0
+                var pos_kept = true
+                for (e in range(nwin)) {
+                    if (want[e] < 0.0 && got_e[e] != got[e]) {
+                        neg++
+                    }
+                    if (want[e] >= 0.0 && got_e[e] != got[e]) {
+                        pos_kept = false
+                    }
                 }
+                t |> success(neg > 0, "tts_pk_rows_elu control: the negative elements are mapped ({neg} moved off the plain copy)")
+                t |> success(pos_kept, "tts_pk_rows_elu control: the non-negative elements pass unchanged")
             }
-            t |> success(neg > 0, "tts_pk_rows_elu control: the negative elements are mapped ({neg} moved off the plain copy)")
-            t |> success(pos_kept, "tts_pk_rows_elu control: the non-negative elements pass unchanged")
-            destroy_device_buf(srcd)
-            destroy_device_buf(dpd)
-            destroy_device_buf(ded)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -128,39 +110,27 @@ def test_vkt_pk_row_scale(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_X = 1u
             let n = RS_T * RS_C
             let x <- row_fill(n, 41, 7, 0.05, 2.1)
             let scale <- row_fill(RS_C, 29, 3, 0.03, 1.2)
-            let xp <- at_base(x, 0, SLACK)
-            let wn <- at_base(scale, RS_SOFF, SLACK)
-            let xd = dev_upload(xp)
-            let wnd = dev_upload(wn)
-            let bx = long_length(xp) * 4l
-            let sizes = fixed_array(bx)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            var s = set_tts_pk_row_scale_cls(fixed_array(xd, wnd), fixed_array(bx, long_length(wn) * 4l), fixed_array(B_X, 0u))
-            var pa = TowerBiasArgs(d = uint(RS_C), nelem = uint(n), boff = uint(RS_SOFF))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_row_scale_cls(raw, h, s, pa, int64(n))
-                cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
-            }
-            let whole <- staged(host.mapped, at[0], length(xp), type<float>)
-            let got <- span_of(whole, 0, n)
             var want := x
             with_job_que() {
                 setup_dasllama_jobque_()
                 layer_scale_rows(want, int64(RS_T), int64(RS_C), scale)
             }
-            let bad = mismatch_exact(got, want)
-            t |> success(bad == 0, "tts_pk_row_scale: every element == the CPU layer_scale_rows ({bad} of {n} off)")
-            t |> success(got[n - 1] + 0.5 != want[n - 1], "tts_pk_row_scale: the compare reds a poisoned element")
-            t |> success(got[0] != x[0], "tts_pk_row_scale in place control: the input row is overwritten")
-            t |> success(outside_run(whole, 0, n, POISON), "tts_pk_row_scale: the slack past the rows is untouched")
-            destroy_device_buf(xd)
-            destroy_device_buf(wnd)
-            destroy_host_buf(host)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> io_(x, 0, SLACK)
+                let wp = cp |> in_(scale, RS_SOFF, SLACK)
+                var s = cp |> cls_set(fixed_array(xp, wp), @@set_tts_pk_row_scale_cls)
+                var pa = TowerBiasArgs(d = uint(RS_C), nelem = uint(n), boff = uint(RS_SOFF))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_pk_row_scale_cls(raw, h, s, pa, int64(n))
+                }
+                let got <- cp |> plane_run(xp)
+                check_rows(t, "tts_pk_row_scale vs the CPU layer_scale_rows", got, want, BAR_EXACT, RS_C)
+                t |> success(got[0] != x[0], "tts_pk_row_scale in place control: the input row is overwritten")
+                t |> success(outside_run(cp |> plane_whole(xp), 0, n, POISON), "tts_pk_row_scale: the slack past the rows is untouched")
+            }
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -561,7 +531,6 @@ def test_vkt_pk_rope(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_X = 1u
             let n = PO_T * PO_QS
             let nk = PO_T * PO_D
             let half = PO_DH / 2
@@ -577,42 +546,30 @@ def test_vkt_pk_rope(t0 : T?) {
             let kspan <- [for (e in range(nk)); x[(e / PO_D) * PO_QS + PO_D + e % PO_D]]
             var want := kspan
             rope_rows(want, int64(PO_T), int64(PO_D), int64(PO_DH), int64(PO_POS0), PO_THETA)
-            let xp <- at_base(x, PO_XOFF, SLACK)
-            let xd = dev_upload(xp)
-            let wnd = dev_upload(slab)
-            let bx = long_length(xp) * 4l
-            let sizes = fixed_array(bx)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            let bwn = long_length(slab) * 4l
-            var s = set_tts_pk_rope_cls(fixed_array(xd, wnd, wnd), fixed_array(bx, bwn, bwn), fixed_array(B_X, 0u, 0u))
-            var pa = TtsPkRopeArgs(rows = uint(PO_T), qs = uint(PO_QS), col = uint(PO_D), d = uint(PO_D), dh = uint(PO_DH), pos0 = uint(PO_POS0),
-                xoff = uint(PO_XOFF), coff = uint(coff), soff = uint(soff))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_rope_cls(raw, h, s, pa, int64(nk / 2))
-                cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
-            }
-            let whole <- staged(host.mapped, at[0], length(xp), type<float>)
-            let got <- [for (e in range(nk)); whole[PO_XOFF + (e / PO_D) * PO_QS + PO_D + e % PO_D]]
-            let bad = mismatch_approx(got, want)
-            let mi = maxdiff_at(got, want)
-            to_log(LOG_INFO, "tts_pk_rope: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / PO_D} head {(mi % PO_D) / PO_DH} col {mi % PO_DH}\n")
-            t |> success(bad == 0, "tts_pk_rope: the k span == the CPU rope_rows ({bad} of {nk} off)")
-            t |> success(!approx(got[nk - 1] + 0.5, want[nk - 1]), "tts_pk_rope: the bar reds a poisoned element")
-            t |> success(got[2] != kspan[2], "tts_pk_rope in place control: a pair at a nonzero angle is turned off its input")
-            var kept = 0
-            for (r in range(PO_T)) {
-                for (j in range(PO_QS)) {
-                    if ((j < PO_D || j >= 2 * PO_D) && whole[PO_XOFF + r * PO_QS + j] == x[r * PO_QS + j]) {
-                        kept++
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> io_(x, PO_XOFF, SLACK)
+                let wp = cp |> in_(slab)
+                var s = cp |> cls_set(fixed_array(xp, wp, wp), @@set_tts_pk_rope_cls)
+                var pa = TtsPkRopeArgs(rows = uint(PO_T), qs = uint(PO_QS), col = uint(PO_D), d = uint(PO_D), dh = uint(PO_DH), pos0 = uint(PO_POS0),
+                    xoff = uint(PO_XOFF), coff = uint(coff), soff = uint(soff))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_pk_rope_cls(raw, h, s, pa, int64(nk / 2))
+                }
+                let rows <- cp |> plane_run(xp)
+                let got <- [for (e in range(nk)); rows[(e / PO_D) * PO_QS + PO_D + e % PO_D]]
+                check_rows(t, "tts_pk_rope k span vs the CPU rope_rows", got, want, BAR_APPROX, PO_D, PO_DH)
+                t |> success(got[2] != kspan[2], "tts_pk_rope in place control: a pair at a nonzero angle is turned off its input")
+                var kept = 0
+                for (r in range(PO_T)) {
+                    for (j in range(PO_QS)) {
+                        if ((j < PO_D || j >= 2 * PO_D) && rows[r * PO_QS + j] == x[r * PO_QS + j]) {
+                            kept++
+                        }
                     }
                 }
+                t |> equal(kept, PO_T * 2 * PO_D, "tts_pk_rope: the q and v spans are untouched")
+                t |> success(outside_run(cp |> plane_whole(xp), PO_XOFF, n, POISON), "tts_pk_rope: the prefix before xoff and the slack past the rows are untouched")
             }
-            t |> equal(kept, PO_T * 2 * PO_D, "tts_pk_rope: the q and v spans are untouched")
-            t |> success(outside_run(whole, PO_XOFF, n, POISON), "tts_pk_rope: the prefix before xoff and the slack past the rows are untouched")
-            destroy_device_buf(xd)
-            destroy_device_buf(wnd)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }

@@ -11,7 +11,8 @@ require dasllama/dasllama_lint public
 require math   // tanh, exp: the activation oracles' closed forms
 require daslib/shader_lingua_franca
 require daslib/math_bits   // uint_bits_to_float: the mx4 oracle builds the E8M0 scale from its bits as the decode does
-require daslib/linq   // count: the bucket bounds
+require vulkan   // VkCommandBuffer: the cell harness's record block
+require daslib/linq   // count: the bucket bounds, the harness's written planes
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_convert   // quantize_q8_0_into, quantize_q8_k_into: the requant oracle
 require dasllama/dasllama_math
@@ -86,6 +87,123 @@ def staged(mapped : void?; byte_off : int64; n : int; elem : auto(TT)) : array<T
         memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n) * int64(typeinfo sizeof(type<TT>)))
     }
     return <- a
+}
+
+//! One kernel cell's device planes: each plane's buffer, bytes and hazard bit (0 for a plane the kernels only read), the
+//! element base and live run it was declared with, and - after `cell_record` - its host offset in the readback staging.
+struct CellPlanes {
+    dev : array<uint64>
+    bytes : array<int64>
+    bit : array<uint>
+    base : array<int>
+    run : array<int>
+    at : array<int64>
+    host : HostBuf
+}
+
+def private add_plane(var cp : CellPlanes; dev : uint64; bytes : int64; written : bool; base, run : int) : int {
+    let nw = count(cp.bit, $(b) => b != 0u)
+    cp.dev |> push(dev)
+    cp.bytes |> push(bytes)
+    cp.bit |> push(written ? 1u << uint(nw) : 0u)
+    cp.base |> push(base)
+    cp.run |> push(run)
+    cp.at |> push(-1l)
+    return length(cp.dev) - 1
+}
+
+//! a plane the kernels only read: `a` behind `base` poisoned slots and followed by `slack` more
+def in_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0) : int {
+    return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, false, base, length(a))
+}
+
+//! a plane the kernels only read, `a` uploaded as it is - ids, words, halves
+def in_plain(var cp : CellPlanes; a : array<auto(TT)>) : int {
+    return cp |> add_plane(dev_upload(a), long_length(a) * int64(typeinfo sizeof(type<TT>)), false, 0, length(a))
+}
+
+//! a plane the kernels write: `n` floats behind `base` slots and `slack` more, the whole plane under the NaN sentinel
+def out_(var cp : CellPlanes; n : int; base : int = 0; slack : int = 0) : int {
+    let bytes = int64(base + n + slack) * 4l
+    let dev = make_device_buf(bytes)
+    nan_sentinel_upload(dev, bytes)
+    return cp |> add_plane(dev, bytes, true, base, n)
+}
+
+//! a plane the kernels read and write in place: `a` as `in_` lays it, read back as `out_`
+def io_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0) : int {
+    return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, true, base, length(a))
+}
+
+//! a class's descriptor set over the planes `idx` (a fixed array of plane ids in binding order): `set_fn` is its generated
+//! `set_*_cls`, fed each plane's buffer, bytes and hazard bit
+def cls_set(cp : CellPlanes; idx; set_fn) {
+    var bufs : uint64[typeinfo dim(idx)]
+    var sizes : int64[typeinfo dim(idx)]
+    var bits : uint[typeinfo dim(idx)]
+    for (i in range(typeinfo dim(idx))) {
+        bufs[i] = cp.dev[idx[i]]
+        sizes[i] = cp.bytes[idx[i]]
+        bits[i] = cp.bit[idx[i]]
+    }
+    return invoke(set_fn, bufs, sizes, bits)
+}
+
+//! one command buffer: `rec` records the cell's dispatches, then every written plane is copied back whole behind their
+//! hazard bits into the host staging, back to back
+def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+    var devs : array<uint64>
+    var sizes : array<int64>
+    var ats : array<int64>
+    var bits = 0u
+    var total = 0l
+    for (p in range(length(cp.dev))) {
+        continue if (cp.bit[p] == 0u)
+        cp.at[p] = total
+        devs |> push(cp.dev[p])
+        sizes |> push(cp.bytes[p])
+        ats |> push(total)
+        bits |= cp.bit[p]
+        total += cp.bytes[p]
+    }
+    if (cp.host.bytes < total) {
+        if (cp.host.buf != 0ul) {
+            destroy_host_buf(cp.host)
+        }
+        cp.host = make_host_buf(total, true, [cached = true])
+    }
+    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+        invoke(rec, raw, h)
+        cmd_copy_planes(raw, h, devs, cp.host, ats, sizes, bits)
+    }
+}
+
+//! plane `p`'s live run as `cell_record` staged it
+def plane_run(cp : CellPlanes; p : int) : array<float> {
+    return <- staged(cp.host.mapped, cp.at[p] + int64(cp.base[p]) * 4l, cp.run[p], type<float>)
+}
+
+//! plane `p` whole as `cell_record` staged it: the slots before its base, its run and its slack
+def plane_whole(cp : CellPlanes; p : int) : array<float> {
+    return <- staged(cp.host.mapped, cp.at[p], int(cp.bytes[p] / 4l), type<float>)
+}
+
+//! the NaN sentinel over written plane `p` again, before a dispatch that must write it anew
+def plane_refill(cp : CellPlanes; p : int) {
+    nan_sentinel_upload(cp.dev[p], cp.bytes[p])
+}
+
+//! a kernel cell's planes for the length of `blk`, every buffer and the staging released after it
+def with_cell_planes(blk : block<(var cp : CellPlanes) : void>) {
+    var cp : CellPlanes
+    invoke(blk, cp)
+    for (dev in cp.dev) {
+        destroy_device_buf(dev)
+    }
+    if (cp.host.buf != 0ul) {
+        destroy_host_buf(cp.host)
+    }
+    delete cp
 }
 
 def to_u4(w : array<uint>) : array<uint4> {

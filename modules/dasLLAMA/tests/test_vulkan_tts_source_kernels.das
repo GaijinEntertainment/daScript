@@ -26,6 +26,8 @@ let private SLACK = 5      //! the elements past a run, left at their fill
 //! `w` moved by a hundredth of its magnitude (floored at 1): outside every bar in this file
 def private poison_of(w : float) : float => w + max(1.0, abs(w)) * 0.01
 
+let private BAR_EXACT_1PC = Bar(exact = true, poison = 0.01, scaled = true)   //! bit-exact, its poison `poison_of`'s hundredth
+
 //! the elements of `got` outside the bars, the first six and the widest miss logged (its row and column in rows `width` wide)
 def private bars_bad(tag : string; got, want : array<float>; rel, absf : float; width : int) : int {
     let mi = maxdiff_at(got, want)
@@ -46,51 +48,30 @@ def test_vkt_axpy(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_OA = 1u
-            let B_OZ = 2u
             let n = AX_N
             let ob <- f16_fill(n, 7, 0.05, -1.1)
             let yv <- f16_fill(n, 5, 0.04, -0.9)
-            let op <- at_base(ob, AX_OOFF, SLACK)
-            let yp <- at_base(yv, AX_YOFF)
-            let oad = dev_upload(op)
-            let yd = dev_upload(yp)
-            let bo = long_length(op) * 4l
-            let by = long_length(yp) * 4l
-            let ozd = make_device_buf(bo)
-            nan_sentinel_upload(ozd, bo)
-            let sizes = fixed_array(bo, bo)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            var s_a = set_tts_axpy_cls(fixed_array(oad, yd), fixed_array(bo, by), fixed_array(B_OA, 0u))
-            var s_z = set_tts_axpy_cls(fixed_array(ozd, yd), fixed_array(bo, by), fixed_array(B_OZ, 0u))
-            var pa = TtsAxpyArgs(nelem = uint(n), scale = AX_SCALE, zero = 0u, ooff = uint(AX_OOFF), yoff = uint(AX_YOFF))
-            var pz = pa
-            pz.zero = 1u
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_axpy_cls(raw, h, s_a, pa, int64(n))
-                enc_tts_axpy_cls(raw, h, s_z, pz, int64(n))
-                cmd_copy_planes(raw, h, fixed_array(oad, ozd), host, sizes, B_OA | B_OZ)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let oap = cp |> io_(ob, AX_OOFF, SLACK)
+                let ozp = cp |> out_(n, AX_OOFF, SLACK)
+                let yp = cp |> in_(yv, AX_YOFF)
+                var s_a = cp |> cls_set(fixed_array(oap, yp), @@set_tts_axpy_cls)
+                var s_z = cp |> cls_set(fixed_array(ozp, yp), @@set_tts_axpy_cls)
+                var pa = TtsAxpyArgs(nelem = uint(n), scale = AX_SCALE, zero = 0u, ooff = uint(AX_OOFF), yoff = uint(AX_YOFF))
+                var pz = pa
+                pz.zero = 1u
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_axpy_cls(raw, h, s_a, pa, int64(n))
+                    enc_tts_axpy_cls(raw, h, s_z, pz, int64(n))
+                }
+                let got_a <- cp |> plane_run(oap)
+                let got_z <- cp |> plane_run(ozp)
+                check_rows(t, "tts_axpy zero = 0 vs o + 0.25 y", got_a, [for (i in range(n)); ob[i] + AX_SCALE * yv[i]], BAR_EXACT_1PC, 0)
+                check_rows(t, "tts_axpy zero = 1 vs 0.25 y over a NaN-filled o", got_z, [for (i in range(n)); AX_SCALE * yv[i]], BAR_EXACT_1PC, 0)
+                t |> success(ob[0] != 0.0 && got_a[0] != got_z[0], "tts_axpy control: the same dispatch at zero = 0 adds o's old contents")
+                t |> success(outside_run(cp |> plane_whole(oap), AX_OOFF, n, POISON), "tts_axpy zero = 0: the elements outside the run are untouched")
+                t |> success(outside_run(cp |> plane_whole(ozp), AX_OOFF, n, NAN_SENTINEL), "tts_axpy zero = 1: the elements outside the run keep their sentinel")
             }
-            let whole_a <- staged(host.mapped, at[0], length(op), type<float>)
-            let got_a <- subarray(whole_a, range(AX_OOFF, AX_OOFF + n))
-            let whole_z <- staged(host.mapped, at[1], length(op), type<float>)
-            let got_z <- subarray(whole_z, range(AX_OOFF, AX_OOFF + n))
-            let want_a <- [for (i in range(n)); ob[i] + AX_SCALE * yv[i]]
-            let want_z <- [for (i in range(n)); AX_SCALE * yv[i]]
-            let bad_a = mismatch_exact(got_a, want_a)
-            t |> success(bad_a == 0, "tts_axpy zero = 0: every element == o + 0.25 y ({bad_a} of {n} off)")
-            t |> success(got_a[n - 1] != poison_of(want_a[n - 1]), "tts_axpy zero = 0: the bar reds a poisoned element")
-            let bad_z = mismatch_exact(got_z, want_z)
-            t |> success(bad_z == 0, "tts_axpy zero = 1: every element == 0.25 y over a NaN-filled o ({bad_z} of {n} off)")
-            t |> success(got_z[0] != poison_of(want_z[0]), "tts_axpy zero = 1: the bar reds a poisoned element")
-            t |> success(ob[0] != 0.0 && got_a[0] != got_z[0], "tts_axpy control: the same dispatch at zero = 0 adds o's old contents")
-            t |> success(outside_run(whole_a, AX_OOFF, n, POISON), "tts_axpy zero = 0: the elements outside the run are untouched")
-            t |> success(outside_run(whole_z, AX_OOFF, n, NAN_SENTINEL), "tts_axpy zero = 1: the elements outside the run keep their sentinel")
-            destroy_device_buf(oad)
-            destroy_device_buf(ozd)
-            destroy_device_buf(yd)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -108,35 +89,25 @@ def test_vkt_reflect1(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_Y = 1u
             let total = (RF_T + 1) * RF_C
             let x <- f16_fill(RF_T * RF_C, 11, 0.03, -0.7)
-            let xd = dev_upload(x)
-            let bx = long_length(x) * 4l
-            let by = int64(total + SLACK) * 4l
-            let yd = make_device_buf(by)
-            nan_sentinel_upload(yd, by)
-            var host = make_host_buf(by, true, [cached = true])
-            var s = set_tts_pk_rows_cls(fixed_array(xd, yd), fixed_array(bx, by), fixed_array(0u, B_Y))
-            var shift = TtsPkRowsArgs(rows = uint(RF_T), width = uint(RF_C), ss = uint(RF_C), sc = 0u, sr0 = 0u, ds = uint(RF_C), dc = 0u, dr0 = 1u)
-            var head = TtsPkRowsArgs(rows = 1u, width = uint(RF_C), ss = uint(RF_C), sc = 0u, sr0 = 1u, ds = uint(RF_C), dc = 0u, dr0 = 0u)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_rows_cls(raw, h, s, shift, int64(RF_T * RF_C))
-                enc_tts_pk_rows_cls(raw, h, s, head, int64(RF_C))
-                cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
-            }
-            let got <- staged(host.mapped, 0l, total, type<float>)
-            let tail <- staged(host.mapped, int64(total) * 4l, SLACK, type<float>)
             var want := x
             pad_reflect_left_rows_inplace(want, int64(RF_T), int64(RF_C), 1l)
-            let bad = mismatch_exact(got, want)
-            t |> success(bad == 0, "reflect pad: row 0 == x's row 1, row r == x's row r - 1 over {RF_T + 1} x {RF_C} ({bad} of {total} off)")
-            t |> success(got[RF_C + 1] != poison_of(want[RF_C + 1]), "reflect pad: the bar reds a poisoned element")
-            t |> success(got[0] != x[0], "reflect pad control: row 0 is x's row 1, not x's row 0")
-            t |> equal(nan_count(tail), SLACK, "reflect pad: the elements past (t + 1) * c keep their sentinel")
-            destroy_device_buf(xd)
-            destroy_device_buf(yd)
-            destroy_host_buf(host)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> in_(x)
+                let yp = cp |> out_(total, 0, SLACK)
+                var s = cp |> cls_set(fixed_array(xp, yp), @@set_tts_pk_rows_cls)
+                var shift = TtsPkRowsArgs(rows = uint(RF_T), width = uint(RF_C), ss = uint(RF_C), sc = 0u, sr0 = 0u, ds = uint(RF_C), dc = 0u, dr0 = 1u)
+                var head = TtsPkRowsArgs(rows = 1u, width = uint(RF_C), ss = uint(RF_C), sc = 0u, sr0 = 1u, ds = uint(RF_C), dc = 0u, dr0 = 0u)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_pk_rows_cls(raw, h, s, shift, int64(RF_T * RF_C))
+                    enc_tts_pk_rows_cls(raw, h, s, head, int64(RF_C))
+                }
+                let got <- cp |> plane_run(yp)
+                check_rows(t, "reflect pad [{RF_T + 1}][{RF_C}] vs x behind its row 1", got, want, BAR_EXACT_1PC, RF_C)
+                t |> success(got[0] != x[0], "reflect pad control: row 0 is x's row 1, not x's row 0")
+                t |> success(outside_run(cp |> plane_whole(yp), 0, total, NAN_SENTINEL), "reflect pad: the elements past (t + 1) * c keep their sentinel")
+            }
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -258,35 +229,24 @@ def private src_asserts(t : T?; tag : string; f : TtsSrcFixture; o : SrcOut) {
 //! the long cumsum: 40000 low-rate frames of one harmonic, where a plain f32 sum and a double one part by cycles
 def private long_cumsum_arm(t : T?; tag : string; torch : bool; up : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let B_LC = 1u
         let nlong = 40000
         let lc <- tts_long_cumsum(torch, up, nlong)
         t |> success(lc.parted > 0.01, "{tag} long cumsum: the two laws part by {lc.parted} cycles over {nlong} frames (the leg's control)")
-        let ld = dev_upload(lc.low)
-        let bl = long_length(lc.low) * 4l
-        let lcd = make_device_buf(bl)
-        nan_sentinel_upload(lcd, bl)
-        var host = make_host_buf(bl, true, [cached = true])
-        let devs = fixed_array(ld, lcd)
-        let szs = fixed_array(bl, bl)
-        let bits = fixed_array(0u, B_LC)
-        var s = torch ? set_tts_src_cumsum_torch_cls(devs, szs, bits) : set_tts_src_cumsum_onnx_cls(devs, szs, bits)
-        var pa = TtsSourceArgs(n = uint(nlong * up), nlow = uint(nlong), nh = 1u, up = uint(up))
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            if (torch) {
-                enc_tts_src_cumsum_torch_cls(raw, h, s, pa, 1l)
-            } else {
-                enc_tts_src_cumsum_onnx_cls(raw, h, s, pa, 1l)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let lp = cp |> in_(lc.low)
+            let cp_out = cp |> out_(nlong)
+            let ix = fixed_array(lp, cp_out)
+            var s = torch ? cp |> cls_set(ix, @@set_tts_src_cumsum_torch_cls) : cp |> cls_set(ix, @@set_tts_src_cumsum_onnx_cls)
+            var pa = TtsSourceArgs(n = uint(nlong * up), nlow = uint(nlong), nh = 1u, up = uint(up))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                if (torch) {
+                    enc_tts_src_cumsum_torch_cls(raw, h, s, pa, 1l)
+                } else {
+                    enc_tts_src_cumsum_onnx_cls(raw, h, s, pa, 1l)
+                }
             }
-            cmd_copy_planes(raw, h, fixed_array(lcd), host, fixed_array(bl), B_LC)
+            check_rows(t, "{tag} long cumsum vs the law's sum", cp |> plane_run(cp_out), lc.want, bar_rel(2e-7, 2.0, 1e-3), 0)   //! two radians on the last frame: the bars are a few ulps of a phase in the thousands
         }
-        let got <- staged(host.mapped, 0l, nlong, type<float>)
-        let bad = bars_bad("{tag} long cumsum", got, lc.want, 2e-7, 1e-3, nlong)
-        t |> success(bad == 0, "{tag} long cumsum: every frame within the bars of the law's sum ({bad} of {nlong} off)")
-        t |> success(!bar_ok(got[nlong - 1], lc.want[nlong - 1] + 2.0, 2e-7, 1e-3), "{tag} long cumsum: a moved last frame reds the compare")
-        destroy_device_buf(ld)
-        destroy_device_buf(lcd)
-        destroy_host_buf(host)
     }
 }
 
@@ -402,6 +362,7 @@ let private ST_REOFF = 6       //! the real basis in the slab plane, poisoned sl
 let private ST_GAP = 3         //! poisoned slots between the two bases
 let private SPEC_REL = 1e-4    //! the device atan2, sqrt and f32 tap sums against the double sums rounded once
 let private SPEC_ABS = 1e-5
+let private SPEC_BAR = bar_rel(SPEC_REL, 0.01, SPEC_ABS, true)
 
 def private st_frames : int => (ST_N + 2 * ST_PAD - ST_K) / ST_HOP + 1
 
@@ -409,7 +370,6 @@ def private st_frames : int => (ST_N + 2 * ST_PAD - ST_K) / ST_HOP + 1
 def private stft_arm(t : T?; reflect : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = reflect ? "tts_stft reflect" : "tts_stft edge"
-        let B_S = 1u
         let frames = st_frames()
         let nb = ST_BINS * ST_K
         let nspec = frames * 2 * ST_BINS
@@ -435,50 +395,30 @@ def private stft_arm(t : T?; reflect : bool) {
         t |> success(neg > 0 && pos > 0, "{tag}: the zero-imaginary bin reads +pi on {neg} frames and 0 on {pos}")
         var harp := har
         harp[1] += 2.0   //! the first frame's reflected tap reads it
-        let hd = dev_upload(har)
-        let hpd = dev_upload(harp)
-        let wd = dev_upload(wn)
-        let bh = long_length(har) * 4l
-        let bw = long_length(wn) * 4l
-        let bs = int64(nspec + SLACK) * 4l
-        let sd = make_device_buf(bs)
-        let spd = make_device_buf(bs)
-        nan_sentinel_upload(sd, bs)
-        nan_sentinel_upload(spd, bs)
-        let sizes = fixed_array(bs, bs)
-        let at <- staged_offsets(sizes)
-        var host = make_host_buf(at[length(sizes)], true, [cached = true])
-        let bits = fixed_array(0u, 0u, B_S)
-        let szs = fixed_array(bh, bw, bs)
-        var s = reflect ? set_tts_stft_reflect_cls(fixed_array(hd, wd, sd), szs, bits) : set_tts_stft_edge_cls(fixed_array(hd, wd, sd), szs, bits)
-        var sp = reflect ? set_tts_stft_reflect_cls(fixed_array(hpd, wd, spd), szs, bits) : set_tts_stft_edge_cls(fixed_array(hpd, wd, spd), szs, bits)
-        var pa = TtsStftArgs(n = uint(ST_N), frames = uint(frames), bins = uint(ST_BINS), k = uint(ST_K), hop = uint(ST_HOP), pad = uint(ST_PAD),
-            eps = 1e-9, reoff = uint(ST_REOFF), imoff = uint(imoff))
-        let total = int64(frames * ST_BINS)
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            if (reflect) {
-                enc_tts_stft_reflect_cls(raw, h, s, pa, total)
-                enc_tts_stft_reflect_cls(raw, h, sp, pa, total)
-            } else {
-                enc_tts_stft_edge_cls(raw, h, s, pa, total)
-                enc_tts_stft_edge_cls(raw, h, sp, pa, total)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let hp = cp |> in_(har)
+            let hpp = cp |> in_(harp)
+            let wp = cp |> in_(wn)
+            let sp = cp |> out_(nspec, 0, SLACK)
+            let spp = cp |> out_(nspec, 0, SLACK)
+            var s = reflect ? cp |> cls_set(fixed_array(hp, wp, sp), @@set_tts_stft_reflect_cls) : cp |> cls_set(fixed_array(hp, wp, sp), @@set_tts_stft_edge_cls)
+            var sq = reflect ? cp |> cls_set(fixed_array(hpp, wp, spp), @@set_tts_stft_reflect_cls) : cp |> cls_set(fixed_array(hpp, wp, spp), @@set_tts_stft_edge_cls)
+            var pa = TtsStftArgs(n = uint(ST_N), frames = uint(frames), bins = uint(ST_BINS), k = uint(ST_K), hop = uint(ST_HOP), pad = uint(ST_PAD),
+                eps = 1e-9, reoff = uint(ST_REOFF), imoff = uint(imoff))
+            let total = int64(frames * ST_BINS)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                if (reflect) {
+                    enc_tts_stft_reflect_cls(raw, h, s, pa, total)
+                    enc_tts_stft_reflect_cls(raw, h, sq, pa, total)
+                } else {
+                    enc_tts_stft_edge_cls(raw, h, s, pa, total)
+                    enc_tts_stft_edge_cls(raw, h, sq, pa, total)
+                }
             }
-            cmd_copy_planes(raw, h, fixed_array(sd, spd), host, sizes, B_S)
+            check_rows(t, "{tag} {frames} frames x {ST_BINS} bins of magnitude and phase vs the double form", cp |> plane_run(sp), want, SPEC_BAR, 2 * ST_BINS)
+            t |> success(mismatch_rel(cp |> plane_run(spp), want, SPEC_REL, SPEC_ABS, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned sample reds the compare")
+            t |> success(outside_run(cp |> plane_whole(sp), 0, nspec, NAN_SENTINEL), "{tag}: the elements past the spectrum keep their sentinel")
         }
-        let got <- staged(host.mapped, at[0], nspec, type<float>)
-        let tail <- staged(host.mapped, at[0] + int64(nspec) * 4l, SLACK, type<float>)
-        let gotp <- staged(host.mapped, at[1], nspec, type<float>)
-        let bad = bars_bad(tag, got, want, SPEC_REL, SPEC_ABS, 2 * ST_BINS)
-        t |> success(bad == 0, "{tag}: {frames} frames x {ST_BINS} bins of magnitude and phase == the double form ({bad} of {nspec} off)")
-        t |> success(!bar_ok(got[nspec - 1], poison_of(want[nspec - 1]), SPEC_REL, SPEC_ABS), "{tag}: the bar reds a poisoned element")
-        t |> success(bars_bad("{tag} poison (MUST mismatch)", gotp, want, SPEC_REL, SPEC_ABS, 2 * ST_BINS) > 0, "{tag}: a poisoned sample reds the compare")
-        t |> equal(nan_count(tail), SLACK, "{tag}: the elements past the spectrum keep their sentinel")
-        destroy_device_buf(hd)
-        destroy_device_buf(hpd)
-        destroy_device_buf(wd)
-        destroy_device_buf(sd)
-        destroy_device_buf(spd)
-        destroy_host_buf(host)
     }
 }
 
@@ -510,6 +450,7 @@ let private IS_REOFF = 5      //! the real basis in the slab plane, poisoned slo
 let private IS_GAP = 3        //! poisoned slots between the planes
 let private WAVE_REL = 5e-4   //! the device exp, sin, cos (the driver's approximations: 1.2e-4 at most with the envelope, 3.7e-4 without, on the RTX PRO 4500) and f32 overlap-add against the double sum rounded once
 let private WAVE_ABS = 5e-5
+let private WAVE_BAR = bar_rel(WAVE_REL, 0.01, WAVE_ABS, true)
 
 def private is_n : int => (IS_TT - 1) * IS_HOP + IS_K - 2 * IS_PAD
 
@@ -517,7 +458,6 @@ def private is_n : int => (IS_TT - 1) * IS_HOP + IS_K - 2 * IS_PAD
 def private istft_arm(t : T?; envelope : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = envelope ? "tts_istft envelope" : "tts_istft plain"
-        let B_W = 1u
         let n = is_n()
         let nb = IS_K * IS_BINS
         var y <- f16_fill(IS_TT * IS_STRIDE, 7, 0.15, -1.2)
@@ -535,42 +475,24 @@ def private istft_arm(t : T?; envelope : bool) {
         t |> success(ref.bare > 0 && ref.bare < n, "{tag}: {ref.bare} of {n} samples carry a negligible envelope")
         var yp := y
         yp[4 * IS_STRIDE + 1] += 2.0   //! a log magnitude: every sample its frame overlaps moves
-        let yd = dev_upload(y)
-        let ypd = dev_upload(yp)
-        let wd = dev_upload(wn)
-        let byy = long_length(y) * 4l
-        let bw = long_length(wn) * 4l
-        let bo = int64(n + SLACK) * 4l
-        let od = make_device_buf(bo)
-        let opd = make_device_buf(bo)
-        nan_sentinel_upload(od, bo)
-        nan_sentinel_upload(opd, bo)
-        let sizes = fixed_array(bo, bo)
-        let at <- staged_offsets(sizes)
-        var host = make_host_buf(at[length(sizes)], true, [cached = true])
-        var s = set_tts_istft_cls(fixed_array(yd, wd, od), fixed_array(byy, bw, bo), fixed_array(0u, 0u, B_W))
-        var sp = set_tts_istft_cls(fixed_array(ypd, wd, opd), fixed_array(byy, bw, bo), fixed_array(0u, 0u, B_W))
-        var pa = TtsIstftArgs(tt = uint(IS_TT), stride = uint(IS_STRIDE), bins = uint(IS_BINS), k = uint(IS_K), hop = uint(IS_HOP),
-            pad = uint(IS_PAD), envelope = envelope ? 1u : 0u, n = uint(n), reoff = uint(IS_REOFF), imoff = uint(imoff), wnoff = uint(wnoff))
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_istft_cls(raw, h, s, pa, int64(n))
-            enc_tts_istft_cls(raw, h, sp, pa, int64(n))
-            cmd_copy_planes(raw, h, fixed_array(od, opd), host, sizes, B_W)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let yq = cp |> in_(y)
+            let ypq = cp |> in_(yp)
+            let wq = cp |> in_(wn)
+            let oq = cp |> out_(n, 0, SLACK)
+            let opq = cp |> out_(n, 0, SLACK)
+            var s = cp |> cls_set(fixed_array(yq, wq, oq), @@set_tts_istft_cls)
+            var sq = cp |> cls_set(fixed_array(ypq, wq, opq), @@set_tts_istft_cls)
+            var pa = TtsIstftArgs(tt = uint(IS_TT), stride = uint(IS_STRIDE), bins = uint(IS_BINS), k = uint(IS_K), hop = uint(IS_HOP),
+                pad = uint(IS_PAD), envelope = envelope ? 1u : 0u, n = uint(n), reoff = uint(IS_REOFF), imoff = uint(imoff), wnoff = uint(wnoff))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tts_istft_cls(raw, h, s, pa, int64(n))
+                enc_tts_istft_cls(raw, h, sq, pa, int64(n))
+            }
+            check_rows(t, "{tag} {n} samples vs the double overlap-add", cp |> plane_run(oq), ref.want, WAVE_BAR, IS_HOP)
+            t |> success(mismatch_rel(cp |> plane_run(opq), ref.want, WAVE_REL, WAVE_ABS, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned magnitude reds the compare")
+            t |> success(outside_run(cp |> plane_whole(oq), 0, n, NAN_SENTINEL), "{tag}: the elements past n keep their sentinel")
         }
-        let got <- staged(host.mapped, at[0], n, type<float>)
-        let tail <- staged(host.mapped, at[0] + int64(n) * 4l, SLACK, type<float>)
-        let gotp <- staged(host.mapped, at[1], n, type<float>)
-        let bad = bars_bad(tag, got, ref.want, WAVE_REL, WAVE_ABS, IS_HOP)
-        t |> success(bad == 0, "{tag}: {n} samples == the double overlap-add ({bad} of {n} off)")
-        t |> success(!bar_ok(got[n - 1], poison_of(ref.want[n - 1]), WAVE_REL, WAVE_ABS), "{tag}: the bar reds a poisoned element")
-        t |> success(bars_bad("{tag} poison (MUST mismatch)", gotp, ref.want, WAVE_REL, WAVE_ABS, IS_HOP) > 0, "{tag}: a poisoned magnitude reds the compare")
-        t |> equal(nan_count(tail), SLACK, "{tag}: the elements past n keep their sentinel")
-        destroy_device_buf(yd)
-        destroy_device_buf(ypd)
-        destroy_device_buf(wd)
-        destroy_device_buf(od)
-        destroy_device_buf(opd)
-        destroy_host_buf(host)
         delete ref
     }
 }
