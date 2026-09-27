@@ -26,7 +26,7 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   and `pocket_synthesize` (with the oracle's noise draws and teacher-forced frames) are what
   `tests/test_tts_pocket.das` holds against `harness/pocket_oracle.py`. Every operator is the
   block home's but the residual add, the towers' `add_inplace_rows`: the transformer layer runs on
-  `linear_rows`, `layernorm_rows`, `rope_rows`, `attention_causal_rows` over a `TtsKvCache`,
+  `linear_rows`, `layernorm_rows_into`, `rope_rows`, `attention_causal_rows` over a `TtsKvCache`,
   `gelu`, `layer_scale_rows`; the codec on `conv1d_rows`, `conv1d_rows_transposed_depthwise` and
   `elu_rows`. The codec decoder and the
   frame loop are the two seats of the family's hook record (`PocketGpuDriver`,

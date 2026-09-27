@@ -702,8 +702,7 @@ def private layer_attention(l : PocketLayer; tf : PocketTransformer; var x : arr
                             var kc : TtsKvCache; var sc : PocketScratch) {
     let d = tf.d
     let dh = d / tf.heads
-    copy_rows(sc.xb, x, t * d)
-    layernorm_rows(sc.xb, t, d, l.norm1, tf.eps)
+    layernorm_rows_into(x, sc.xb, t, d, l.norm1, tf.eps)
     proj(l.in_proj, sc.xb, t, sc.qkv)
     split_qkv(sc.qkv, t, d, sc.q, sc.k, sc.v)
     rope_rows(sc.q, t, d, dh, pos0, tf.period)
@@ -719,8 +718,7 @@ def private layer_attention(l : PocketLayer; tf : PocketTransformer; var x : arr
 
 def private layer_ffn(l : PocketLayer; tf : PocketTransformer; var x : array<float>; t : int64; var sc : PocketScratch) {
     let d = tf.d
-    copy_rows(sc.xb, x, t * d)
-    layernorm_rows(sc.xb, t, d, l.norm2, tf.eps)
+    layernorm_rows_into(x, sc.xb, t, d, l.norm2, tf.eps)
     proj(l.ffn1, sc.xb, t, sc.h)
     gelu(sc.h, t * tf.ffn)
     proj(l.ffn2, sc.h, t, sc.xb)
@@ -1269,8 +1267,7 @@ def private frame_step(m : PocketModel; var vs : PocketVoiceState; pos : int64; 
     let d = m.backbone.d
     linear_rows_decode(m.input_linear, sc.x_in, sc.rows)
     transformer_rows(m.backbone, sc.rows, 1l, pos, vs.caches, sc)
-    copy_rows(sc.cond, sc.rows, d)
-    layernorm_rows(sc.cond, 1l, d, m.out_norm, m.backbone.eps)
+    layernorm_rows_into(sc.rows, sc.cond, 1l, d, m.out_norm, m.backbone.eps)
     linear_vec(m.out_eos, sc.cond, sc.eos)
     return sc.eos[0]
 }
@@ -1292,8 +1289,7 @@ def private head_step(hd : PocketHead; var sc : PocketScratch) {
     linear_vec(hd.input_proj, sc.x0, sc.hx)
     for (b in hd.blocks) {
         linear_vec(b.adaln, sc.hy, sc.hmod)
-        copy_rows(sc.hn, sc.hx, n)
-        layernorm_rows(sc.hn, 1l, n, b.ln, POCKET_HEAD_LN_EPS)
+        layernorm_rows_into(sc.hx, sc.hn, 1l, n, b.ln, POCKET_HEAD_LN_EPS)
         modulate(sc.hn, sc.hmod, n)
         linear_vec(b.mlp1, sc.hn, sc.hm)
         silu(sc.hm, n)
@@ -1303,8 +1299,7 @@ def private head_step(hd : PocketHead; var sc : PocketScratch) {
         }
     }
     linear_vec(hd.final_adaln, sc.hy, sc.hmod)
-    copy_rows(sc.hn, sc.hx, n)
-    layernorm_rows(sc.hn, 1l, n, hd.final_ln, POCKET_HEAD_LN_EPS)
+    layernorm_rows_into(sc.hx, sc.hn, 1l, n, hd.final_ln, POCKET_HEAD_LN_EPS)
     modulate(sc.hn, sc.hmod, n)
     linear_vec(hd.final_linear, sc.hn, sc.x1)
     for (j in range64(long_length(sc.x1))) {
@@ -1315,7 +1310,8 @@ def private head_step(hd : PocketHead; var sc : PocketScratch) {
 //! The flow head alone, the parity rail's seam: the normalized frame `x1` the head samples from a
 //! conditioning row and a noise draw.
 def pocket_head(m : PocketModel; cond, x0 : array<float>; var sc : PocketScratch; @scratch @exact_size var x1 : array<float>) {
-    copy_rows(sc.cond, cond, m.backbone.d)
+    sc.cond |> reserve_resize(m.backbone.d)
+    copy_floats(cond, 0l, sc.cond, 0l, m.backbone.d)
     sc.x0 |> reserve_resize(m.latent_dim)
     for (j in range64(m.latent_dim)) {
         sc.x0[j] = x0[j]

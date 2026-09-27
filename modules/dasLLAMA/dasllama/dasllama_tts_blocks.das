@@ -1635,15 +1635,28 @@ def rope_rows(var x : array<float>; t, hidden, dh : int64; pos0 : int64; period 
 
 // ===== normalization =====
 
-//! LayerNorm over the last dim of token-major rows, in place.
-def layernorm_rows(var x : array<float>; t, c : int64; n : TtsNorm; eps : float) {
+def private layernorm_rows_at(var dp : float?; sp : float const?; t, c : int64; n : TtsNorm; eps : float) {
     unsafe {
         let wp = addr<float const?>(n.w[0])
         let bp = addr<float const?>(n.b[0])
         for (r in range64(t)) {
-            var p = addr(x[r * c])
-            layernorm(p, p, wp, bp, c, eps)
+            layernorm(dp + r * c, sp + r * c, wp, bp, c, eps)
         }
+    }
+}
+
+//! LayerNorm over the last dim of token-major rows, in place.
+def layernorm_rows(var x : array<float>; t, c : int64; n : TtsNorm; eps : float) {
+    unsafe {
+        layernorm_rows_at(addr(x[0]), addr<float const?>(x[0]), t, c, n, eps)
+    }
+}
+
+//! `layernorm_rows` of src [t][c] written into dst, sized here - the copy a pre-norm sublayer would make of its input, folded in.
+def layernorm_rows_into(src : array<float>; @scratch @exact_size var dst : array<float>; t, c : int64; n : TtsNorm; eps : float) {
+    dst |> reserve_resize(t * c)
+    unsafe {
+        layernorm_rows_at(addr(dst[0]), addr<float const?>(src[0]), t, c, n, eps)
     }
 }
 
