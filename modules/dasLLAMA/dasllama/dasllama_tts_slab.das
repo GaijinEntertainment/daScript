@@ -188,17 +188,7 @@ def tts_slab_conv(var w : TtsSlabWriter; c : TtsConv1d) : TtsConvSlot {
         tsw_put_q8(w, c.wq, c.wqs, c.cout, kc, s.woff, s.kdim_p)
     } elif (!w.measure) {
         for (co in range64(c.cout)) {
-            for (ci in range64(c.cin)) {
-                for (tap in range64(c.k)) {
-                    var v = 0.0
-                    if (c.transposed) {
-                        v = !empty(c.wtr) ? c.wtr[(ci * c.k + tap) * c.cout + co] : c.wt[(co * c.k + tap) * c.cin + ci]
-                    } else {
-                        v = !empty(c.wk) ? c.wk[(tap * c.cin + ci) * c.cout_s + co] : c.w[(co * c.cin + ci) * c.k + tap]
-                    }
-                    w.host[s.woff + co * s.kdim_p + tap * c.cin + ci] = v
-                }
-            }
+            conv1d_weight_row(c, co, w.host, s.woff + co * s.kdim_p)
         }
     }
     s.boff = tts_slab_raw(w, c.b, s.cout_p)
@@ -214,9 +204,7 @@ def tts_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot {
         tsw_put_kq(w, l, s.woff, s.kdim_p)
     } elif (!w.measure) {
         for (o in range64(l.nout)) {
-            for (i in range64(l.nin)) {
-                w.host[s.woff + o * s.kdim_p + i] = !empty(l.w) ? l.w[o * l.nin + i] : l.wt[i * l.nout + o]
-            }
+            linear_weight_row(l, o, w.host, s.woff + o * s.kdim_p)
         }
     }
     s.boff = tts_slab_raw(w, l.b, s.cout_p)

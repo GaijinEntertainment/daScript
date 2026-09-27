@@ -499,6 +499,24 @@ def adain_pad(var a : TtsAdaIn; c, cs : int64) {
     }
 }
 
+//! Row `co` of a dense conv's weight in the tap-major order its stacked forms read, dst[doff + tap * cin + ci], from
+//! the f32 layout it serves: `wtr`, else `wt`, transposed; `wk`, else the ONNX `w`, forward.
+def conv1d_weight_row(c : TtsConv1d; co : int64; var dst : array<float>; doff : int64) {
+    for (ci in range64(c.cin)) {
+        for (tap in range64(c.k)) {
+            dst[doff + tap * c.cin + ci] = (c.transposed ? (!empty(c.wtr) ? c.wtr[(ci * c.k + tap) * c.cout + co] : c.wt[(co * c.k + tap) * c.cin + ci])
+                : (!empty(c.wk) ? c.wk[(tap * c.cin + ci) * c.cout_s + co] : c.w[(co * c.cin + ci) * c.k + tap]))
+        }
+    }
+}
+
+//! Row `o` of a dense layer's weight, dst[doff + i] for the nin inputs, from the f32 layout it serves: `w`, else the transposed `wt`.
+def linear_weight_row(l : TtsLinear; o : int64; var dst : array<float>; doff : int64) {
+    for (i in range64(l.nin)) {
+        dst[doff + i] = !empty(l.w) ? l.w[o * l.nin + i] : l.wt[i * l.nout + o]
+    }
+}
+
 //! Can this conv serve the q8 rows form: a dense forward conv whose widths quantize per 32.
 def conv1d_q8_eligible(c : TtsConv1d) : bool {
     return c.groups == 1l && !c.transposed && c.stride == 1l && c.cin % 32l == 0l && c.cout % 32l == 0l
@@ -510,11 +528,7 @@ def private conv1d_prepare_q8(var c : TtsConv1d; repack : bool) {
     var inscope slab : array<float>
     slab |> reserve_resize(c.cout * kc)
     for (co in range64(c.cout)) {
-        for (kk in range64(c.k)) {
-            for (ci in range64(c.cin)) {
-                slab[co * kc + kk * c.cin + ci] = c.w[(co * c.cin + ci) * c.k + kk]
-            }
-        }
+        conv1d_weight_row(c, co, slab, co * kc)
     }
     c.wq |> reserve_resize(c.cout * kc)
     c.wqs |> reserve_resize(c.cout * kc / 32l)
