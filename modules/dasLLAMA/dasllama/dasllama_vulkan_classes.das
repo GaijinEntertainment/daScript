@@ -9648,45 +9648,6 @@ class TowerFeatShuffle {
     }
 }
 
-struct TowerIm2col1dArgs {
-    nch : uint       //! the source channels
-    srclen : uint    //! the source positions (the pad guard)
-    stride : uint    //! 1 or 2
-    chmajor : uint   //! 1 = the source is [c][t] (the mel), 0 = [t][c] (a conv output)
-    kdp : uint       //! the column row's padded width, a 64-multiple; the columns past 3 nch read zero
-    rows : uint      //! the output rows
-}
-
-//! the whisper-class conv stem's im2col (k 3, "same" pad) as the f16 GEMM's feed: output row i is the 3 x nch columns
-//! in (dk, c) order - the loader's weight permute - so the weights need no permute
-[vk_dispatch(name = "tower_im2col1d_cls", grid = "wgs", params = "wgs : int64")]
-class TowerIm2col1d {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 col : array<float16>
-    @push_constant pa : TowerIm2col1dArgs
-
-    [spirv_kernel(local_size_x = 256, name = "tower_im2col1d_cls_spv")]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        let kdp = max(1u, pa.kdp)
-        if (gid < pa.rows * kdp) {
-            let nch = max(1u, pa.nch)
-            let i = gid / kdp
-            let k = gid % kdp
-            var v = 0.0
-            if (k < 3u * nch) {
-                let dk = k / nch
-                let c = k % nch
-                let sp = int(i * pa.stride + dk) - 1
-                if (sp >= 0 && sp < int(pa.srclen)) {
-                    v = pa.chmajor != 0u ? src[c * pa.srclen + uint(sp)] : src[uint(sp) * nch + c]
-                }
-            }
-            col[gid] = float16(v)
-        }
-    }
-}
-
 let WDEC_KV_F16 = 0u   //! `TowerWdecKvArgs.mode`: the resident f16 store, [heads][tstride][hs] at `dst_off`
 let WDEC_KV_KX = 1u    //! ... the CPU chain's pre-scaled f32 keys, [heads][hs][tstride]
 let WDEC_KV_VX = 2u    //! ... the CPU chain's f32 values, [heads][tstride][hs]

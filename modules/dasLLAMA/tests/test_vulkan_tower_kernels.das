@@ -2088,9 +2088,9 @@ let private FM_KDP = 64        //! the column row's padded width: cin x 9 = 27 l
 
 [test]
 def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gate over the data movers: the fixture, one command buffer, the exact oracles and their controls
-    t0 |> run("the audio fronts' data movers (im2col, im2col1d, the shuffles, the one-head restride, clamp + halfword, add plane, the q3a finish's bias passes, ln + relu) == their forms") <| @(t : T?) {
+    t0 |> run("the audio fronts' data movers (im2col, the stem's half im2col, the shuffles, the one-head restride, clamp + halfword, add plane, the q3a finish's bias passes, ln + relu) == their forms") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_tower_im2col_cls() || !ensure_tower_im2col1d_cls() || !ensure_tower_q3a_shuffle_cls() || !ensure_tower_feat_shuffle_cls()
+            if (!vk_moe_init() || !ensure_tower_im2col_cls() || !ensure_tts_im2col16_cls() || !ensure_tower_q3a_shuffle_cls() || !ensure_tower_feat_shuffle_cls()
                     || !ensure_tower_hpad16_cls() || !ensure_tower_hpad16_b_cls() || !ensure_tower_clamp_cvt_cls() || !ensure_tower_bias_act_cls()
                     || !ensure_tower_ln_relu_cls()) {
                 t |> skip("no Vulkan device")
@@ -2119,7 +2119,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             let len1 = 9
             let kdp1 = 64
             let nch2 = 6
-            let kdp2 = 3 * nch2
+            let kdp2 = 3 * nch2 + 2   // the half im2col's four-column lattice: the two columns past 3 nch read zero
             let rows2 = (len1 + 1) / 2
             let q3_nch = 5
             let q3_tok = int(QWEN3A_TOK_PER_CHUNK)   // the kernels carry the family's positions a chunk
@@ -2187,8 +2187,8 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             }
             nan_sentinel_upload(fsod, bfs)
             var s_im = set_tower_im2col_cls(fixed_array(srcd, cold), fixed_array(bsrc, bcol), fixed_array(0u, B_COL))
-            var s_im1 = set_tower_im2col1d_cls(fixed_array(mel1d, col1d), fixed_array(bmel1, bcol1), fixed_array(0u, B_COL1))
-            var s_im2 = set_tower_im2col1d_cls(fixed_array(cv2d, col2d), fixed_array(bcv2, bcol2), fixed_array(0u, B_COL2))
+            var s_im1 = set_tts_im2col16_cls(fixed_array(mel1d, col1d), fixed_array(bmel1, bcol1), fixed_array(0u, B_COL1))
+            var s_im2 = set_tts_im2col16_cls(fixed_array(cv2d, col2d), fixed_array(bcv2, bcol2), fixed_array(0u, B_COL2))
             var s_sh = set_tower_q3a_shuffle_cls(fixed_array(y3d, featd), fixed_array(by3, bfeat), fixed_array(0u, B_FEAT))
             var s_fs = set_tower_feat_shuffle_cls(fixed_array(fsd, fsod), fixed_array(bfs, bfs), fixed_array(0u, B_FS))
             var s_gq = set_tower_hpad16_b_cls(fixed_array(xd, gqd, wd), fixed_array(bx, bg, bw), fixed_array(0u, B_GQ, 0u))
@@ -2198,8 +2198,10 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             var s_fin = set_tower_bias_act_cls(fixed_array(find, wd), fixed_array(bx, bw), fixed_array(B_FIN, 0u))
             var s_ln = set_tower_ln_relu_cls(fixed_array(lnd, wd), fixed_array(bx, bw), fixed_array(B_LN, 0u))
             var pa_im = TowerIm2colArgs(iw = uint(FM_IW), ih = uint(FM_IH), cin = uint(FM_CIN), kdp = uint(FM_KDP), rows = uint(FM_CHUNKS * FM_OH * FM_OW))
-            var pa_im1 = TowerIm2col1dArgs(nch = uint(nch1), srclen = uint(len1), stride = 1u, chmajor = 1u, kdp = uint(kdp1), rows = uint(len1))
-            var pa_im2 = TowerIm2col1dArgs(nch = uint(nch2), srclen = uint(len1), stride = 2u, chmajor = 0u, kdp = uint(kdp2), rows = uint(rows2))
+            var pa_im1 = TtsIm2colArgs(cin = uint(nch1), tin = uint(len1), tout = uint(len1), k = 3u, stride = 1u, pad_l = 1u, dilation = 1u, kdim = uint(kdp1),
+                rows = 0u)
+            var pa_im2 = TtsIm2colArgs(cin = uint(nch2), tin = uint(len1), tout = uint(rows2), k = 3u, stride = 2u, pad_l = 1u, dilation = 1u, kdim = uint(kdp2),
+                rows = 1u)
             var pa_sh = TowerQ3aShuffleArgs(nch = uint(q3_nch), npos = uint(q3_pos))
             var pa_fs = TowerFeatShuffleArgs(w = uint(fs_w), ch = uint(fs_c), t = uint(fs_t))
             var pa_gq = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d),
@@ -2213,8 +2215,8 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             var pa_ln = TowerLnReluArgs(cout = uint(d), rows = uint(rows), woff = 0u, eps = ROWS_EPS)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tower_im2col_cls(raw, h, s_im, pa_im, int64((n_col + 255) / 256))
-                enc_tower_im2col1d_cls(raw, h, s_im1, pa_im1, int64((len1 * kdp1 + 255) / 256))
-                enc_tower_im2col1d_cls(raw, h, s_im2, pa_im2, int64((rows2 * kdp2 + 255) / 256))
+                enc_tts_im2col16_cls(raw, h, s_im1, pa_im1, int64(len1 * kdp1))
+                enc_tts_im2col16_cls(raw, h, s_im2, pa_im2, int64(rows2 * kdp2))
                 enc_tower_q3a_shuffle_cls(raw, h, s_sh, pa_sh, int64((q3_pos * q3_feat + 255) / 256))
                 enc_tower_feat_shuffle_cls(raw, h, s_fs, pa_fs, int64((fs_t * fs_w * fs_c + 255) / 256))
                 enc_tower_hpad16_b_cls(raw, h, s_gq, pa_gq, int64((rows * hs + 255) / 256))
@@ -2279,16 +2281,16 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                 let i = gid / kdp2
                 let k = gid % kdp2
                 let sp = i * 2 + k / nch2 - 1
-                col2_want[gid] = sp >= 0 && sp < len1 ? cv2[sp * nch2 + k % nch2] : 0.0
+                col2_want[gid] = k < 3 * nch2 && sp >= 0 && sp < len1 ? cv2[sp * nch2 + k % nch2] : 0.0
             }
             let bad_im1 = halves_off(col1_dev, col1_want)
             let bad_im2 = halves_off(col2_dev, col2_want)
-            t |> success(bad_im1 == 0, "tower_im2col1d (channel-major, stride 1): the mel's k3 columns with the zero pad and tail, bit for bit ({bad_im1} of {len1 * kdp1} off)")
-            t |> success(bad_im2 == 0, "tower_im2col1d (row-major, stride 2): the conv output's k3 columns at every second position, bit for bit ({bad_im2} of {rows2 * kdp2} off)")
+            t |> success(bad_im1 == 0, "the stem's im2col (tts_im2col16, channel-major, stride 1): the mel's k3 columns with the zero pad and tail, bit for bit ({bad_im1} of {len1 * kdp1} off)")
+            t |> success(bad_im2 == 0, "the stem's im2col (tts_im2col16, row-major, stride 2): the conv output's k3 columns at every second position and the zero pad columns, bit for bit ({bad_im2} of {rows2 * kdp2} off)")
             let live_im1 = first_live(col1_want)
-            t |> success(uint(col1_dev[live_im1]) != f32_to_f16(col1_want[live_im1] + 0.5), "tower_im2col1d: the bar reds a poisoned element")
+            t |> success(uint(col1_dev[live_im1]) != f32_to_f16(col1_want[live_im1] + 0.5), "the stem's im2col (channel-major): the bar reds a poisoned element")
             let live_im2 = first_live(col2_want)
-            t |> success(uint(col2_dev[live_im2]) != f32_to_f16(col2_want[live_im2] + 0.5), "tower_im2col1d (row-major, stride 2): the bar reds a poisoned element")
+            t |> success(uint(col2_dev[live_im2]) != f32_to_f16(col2_want[live_im2] + 0.5), "the stem's im2col (row-major, stride 2): the bar reds a poisoned element")
             var feat_want : array<float>
             feat_want |> resize(q3_pos * q3_feat)
             for (gid in range(q3_pos * q3_feat)) {

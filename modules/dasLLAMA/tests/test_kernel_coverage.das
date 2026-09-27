@@ -881,10 +881,6 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // combine, each landing its Q8_0 feed): the same two stocked files via test_whisper_vulkan_wdec; their kernel coverage is
     // test_vkt_wdec_fused_rq in test_vulkan_tower_kernels.das
     "tower_ln_rq_cls_spv", "tower_post_add_ln_rq_cls_spv", "tower_bias_act_rq_cls_spv", "tower_wdec_attn_comb_rq_cls_spv",
-    // the whisper-class conv stem's classes (the tower driver's conv seat - no zoo row): the k3 im2col and the position rows'
-    // add, the same two stocked whisper files via test_whisper_vulkan_twin in test_whisper.das; their kernel coverage is
-    // test_vkt_tower_front_movers in test_vulkan_tower_kernels.das
-    "tower_im2col1d_cls_spv",
     // the pre-LN chain's f16-feed stamps (the cm2 arm: the norms and seams storing the feed, the biased restrides, the unpad and
     // the bias + GELU storing it): the whisper twin and the gemma3v twin (mmproj-gemma-3-4b-it-F16.gguf) dispatch them; their
     // kernel coverage is test_vkt_tower_f16_feeds in test_vulkan_tower_kernels.das

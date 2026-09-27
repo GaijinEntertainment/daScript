@@ -2399,10 +2399,10 @@ def private vt_aud_front_scratch(var r : VtResident; tin, nm, d : int64; gemm_kh
     }
     let bx = r.cap_rows * d * 4l
     let bxh = (r.cap_rows + TILE_READ_SLACK) * max(r.d, r.ff) * 2l
-    r.s_fim[0] = set_tower_im2col1d_cls(fixed_array(r.fxin_dev, r.fcol_dev), fixed_array(bxin, bcol), fixed_array(VT_STEM_MEL, VT_STEM_COL))
+    r.s_fim[0] = set_tts_im2col16_cls(fixed_array(r.fxin_dev, r.fcol_dev), fixed_array(bxin, bcol), fixed_array(VT_STEM_MEL, VT_STEM_COL))
     r.s_fg[0] = f16_gemm_set(gemm_khr, fixed_array(r.fw16_dev, r.fcol_dev, r.fy1_dev), fixed_array(r.fw16_bytes, bcol, by1), fixed_array(0u, VT_STEM_COL, VT_STEM_Y1))
     r.s_fb[0] = set_tower_bias_act_cls(fixed_array(r.fy1_dev, r.fnorm_dev), fixed_array(by1, r.fnorm_bytes), fixed_array(VT_STEM_Y1, 0u))
-    r.s_fim[1] = set_tower_im2col1d_cls(fixed_array(r.fy1_dev, r.xh_dev), fixed_array(by1, bxh), fixed_array(VT_STEM_Y1, VT_XQ))
+    r.s_fim[1] = set_tts_im2col16_cls(fixed_array(r.fy1_dev, r.xh_dev), fixed_array(by1, bxh), fixed_array(VT_STEM_Y1, VT_XQ))
     r.s_fb[1] = set_tower_bias_act_cls(fixed_array(r.x_dev, r.fnorm_dev), fixed_array(bx, r.fnorm_bytes), fixed_array(VT_X, 0u))
     r.s_stem_pos_add = set_tower_bias_act_cls(fixed_array(r.x_dev, r.fnorm_dev), fixed_array(bx, r.fnorm_bytes), fixed_array(VT_X, 0u))
     return true
@@ -2455,7 +2455,7 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
     let vff = q8_batch_cls_variant(q8_batch_tile_for(ff, tt), q8_batch_aligned(ff, tt))
     let tc_d = cm2_tile_cols(d, tt)
     let tc_ff = cm2_tile_cols(ff, tt)
-    if (!vt_ln_chain_ensure(khr, hsp, v, vff) || !f16_gemm_ensure(arm.gemm_khr) || !ensure_tower_im2col1d_cls() || !ensure_tower_bias_act_cls()
+    if (!vt_ln_chain_ensure(khr, hsp, v, vff) || !f16_gemm_ensure(arm.gemm_khr) || !ensure_tts_im2col16_cls() || !ensure_tower_bias_act_cls()
             || !cm2_cls_ensure(int(KqFmt.q8), tc_d) || !cm2_cls_ensure(int(KqFmt.q8), tc_ff)) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
@@ -2488,16 +2488,17 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
     let act = t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF
     let bx = tt * d * 4l
     vt_chain_one_shot("whisper-class stem", 2l, tt) $(raw : VkCommandBuffer; var h : VkHaz) {
-        var pc_im1 = TowerIm2col1dArgs(nch = uint(nm), srclen = uint(tin), stride = 1u, chmajor = 1u, kdp = uint(r.stem_kdp), rows = uint(tin))
-        enc_tower_im2col1d_cls(raw, h, r.s_fim[0], pc_im1, (tin * r.stem_kdp + 255l) / 256l)
+        var pc_im1 = TtsIm2colArgs(cin = uint(nm), tin = uint(tin), tout = uint(tin), k = 3u, stride = 1u, pad_l = 1u, dilation = 1u, kdim = uint(r.stem_kdp),
+            rows = 0u)
+        enc_tts_im2col16_cls(raw, h, r.s_fim[0], pc_im1, tin * r.stem_kdp)
         vt_pt(raw, VtProfRole.im2col)
         var pc_g1 = F16GemmArgs(n = uint(r.stem_kdp), d = uint(d), rows = uint(tin), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
         f16_gemm_enc(arm.gemm_khr, raw, h, r.s_fg[0], pc_g1, tin, d)
         vt_pt(raw, VtProfRole.gemm_pw)
         vt_bias_act(raw, h, r.s_fb[0], d, tin * d, 0l, act)
         vt_pt(raw, VtProfRole.bias)
-        var pc_im2 = TowerIm2col1dArgs(nch = uint(d), srclen = uint(tin), stride = 2u, chmajor = 0u, kdp = uint(3l * d), rows = uint(tt))
-        enc_tower_im2col1d_cls(raw, h, r.s_fim[1], pc_im2, (tt * 3l * d + 255l) / 256l)
+        var pc_im2 = TtsIm2colArgs(cin = uint(d), tin = uint(tin), tout = uint(tt), k = 3u, stride = 2u, pad_l = 1u, dilation = 1u, kdim = uint(3l * d), rows = 1u)
+        enc_tts_im2col16_cls(raw, h, r.s_fim[1], pc_im2, tt * 3l * d)
         vt_pt(raw, VtProfRole.im2col)
         var pc_c2 = BatchArgs(n = uint(3l * d), d = uint(d), map_off = map_off)
         cm2_cls_enc(int(KqFmt.q8), tc_d, raw, h, s_conv2, pc_c2, g_d)
