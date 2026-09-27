@@ -6,6 +6,7 @@ module dasllama_math shared public
 
 require dasllama/dasllama_lint public
 require math
+require daslib/math_boost public  // round_up: re-exported for the engine's requirers
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require dasllama/dasllama_plane  // PlaneF/PlaneI8 — the borrowed-plane weight forms below
 require dasllama/dasllama_config  // DlimVulkanConfig — the dry-bake seam's config argument
@@ -157,8 +158,6 @@ def template copy_floats_template(var d : float ?; s : float const ?; n : int64)
 }
 [hint(unsafe_range_check, noalias = d, noalias = s), tuned]
 def copy_floats(var d : float?; s : float const?; n : int64) {}
-
-def round_up(n, m : auto(TT)) : TT => (n + m - TT(1)) / m * m
 
 //! Exact capacity, then size: the buffer sized once and never regrown.
 def reserve_resize(var a : array<auto(numT)>; n : int | int64) {

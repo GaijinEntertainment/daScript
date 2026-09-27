@@ -6820,6 +6820,10 @@ The MATH_BOOST module adds geometric types (`AABB`, `AABR`, `Ray`), intersection
 - `UCOLOR_TO_RGB` - conversion from ucolor to RGB.
 - `UCOLOR_TO_RGBA` - conversion from ucolor to RGBA.
 
+### Integer rounding
+
+- `round_up` - `n` rounded up to a multiple of `m` (`m` > 0), in `m`'s integer type
+
 ## option
 
 Monadic `Option<T>` — represents a value that may or may not be present. Functional API for modelling "absence" in ordinary value code, where nullable pointers are inapplicable and sentinel values (`-1`, `""`) are fragile.

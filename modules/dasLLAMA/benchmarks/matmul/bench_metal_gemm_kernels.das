@@ -11,6 +11,7 @@ require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
 require ?das_metal dasllama/dasllama_metal_gemm  // the production kernel MSL (v0 baseline)
 require dasllama/dasllama_metal_kernels  // the production mul_mm companions (v25 = zero copy drift)
 require math  // used only inside the Apple static_if half
+require daslib/math_boost
 require strings
 
 // The Metal Q8 GEMM kernel lab: candidate kernel variants head-to-head against the PRODUCTION
@@ -3522,8 +3523,6 @@ struct private LabVariant {
     tgmem : uint64 = 0ul                    // dynamic [[threadgroup(0)]] bytes (0 = kernel uses static tg arrays)
 }
 
-def private align_up(v, a : int64) : int64 => ((v + a - 1l) / a) * a
-
 // exact-arithmetic Q8 fill: quants in [-8, 7], pow2 scales, zero pad rows past `rows`
 def private fill_exact_q8(var q : array<int8>; var s : array<float>; rows, padded_rows, k : int64; seed : int64) {
     let nb = k / 32l
@@ -4123,7 +4122,7 @@ def private run_lab(b : B?; variants) {
                    // the llama-3B set (dim 3072, hidden 8192, kv_dim 1024)
                    ("kv3b", 3072l, 1024l), ("q3b", 3072l, 3072l), ("w13_3b", 3072l, 8192l),
                    ("w2_3b", 8192l, 3072l)]
-    let mp_max = align_up(ntok, 64l)
+    let mp_max = round_up(ntok, 64l)
     for (sh in shapes) {
         if (!want(g_env_bench.lab_shapes, sh._0)) {
             continue
@@ -4205,7 +4204,7 @@ def private run_lab(b : B?; variants) {
             if (pso == null || (d % int64(v.bn)) != 0l || !want(g_env_bench.lab_variants, v.name)) {
                 continue
             }
-            let mp = align_up(ntok, int64(v.bm))
+            let mp = round_up(ntok, int64(v.bm))
             let groups = (v.grid2d
                 ? uint3(uint(mp / int64(v.bm)), uint(d / int64(v.bn)), 1u)
                 : uint3(uint((mp / int64(v.bm)) * (d / int64(v.bn))), 1u, 1u))
@@ -4250,7 +4249,7 @@ def private run_lab(b : B?; variants) {
                 if (!alive[idx]) {
                     continue
                 }
-                let mp = align_up(ntok, int64(v.bm))
+                let mp = round_up(ntok, int64(v.bm))
                 let groups = (v.grid2d
                     ? uint3(uint(mp / int64(v.bm)), uint(d / int64(v.bn)), 1u)
                     : uint3(uint((mp / int64(v.bm)) * (d / int64(v.bn))), 1u, 1u))

@@ -23,6 +23,7 @@ require daslib/ast_boost
 // public: dasVulkan's host binder reaches compute_block_layout / BlockField through spirv_emit (its
 // existing spelling), so re-export the shared std140 module to keep that consumer compiling unchanged.
 require daslib/shader_block_layout public
+require daslib/math_boost
 
 // The shader stage drives the entry-point execution model + execution mode and which builtins
 // are legal. Vertex needs no execution mode; Fragment needs OriginUpperLeft; Compute needs LocalSize.

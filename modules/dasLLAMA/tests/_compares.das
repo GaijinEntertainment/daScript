@@ -61,9 +61,7 @@ def put_run4(var plane : array<float>; a : array<float>) : int {
 }
 
 //! `n` elements of `a` from `at`
-def copy_span(a : array<float>; at, n : int64) : array<float> {
-    return <- [for (i in range64(n)); a[at + i]]
-}
+def copy_span(a : array<float>; at, n : int64) : array<float> => subarray(a, range64(at, at + n))
 
 def copy_span(a : array<float>; at, n : int) : array<float> => copy_span(a, int64(at), int64(n))
 

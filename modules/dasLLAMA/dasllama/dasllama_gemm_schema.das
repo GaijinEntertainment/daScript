@@ -43,15 +43,17 @@ def q8q8_repack_type(mr : int; wbias : int = 0; kgroup : int = 4) : Q8RepackType
 //! stamped from one manifest entry so both decline in lockstep (M4).
 def GEMM_REFERENCE_MR : int => 4
 
-//! GPU-tier device-plane shape of the Q8 rail: 32-weight blocks, 32B quants + one f16 scale
-//! halfword per block. Every q8 plane sizing (gathers, arena/stack math) derives from these.
-let Q8_BLOCK_ELEMS = 32l
+//! GPU-tier device-plane shape of the Q8 rail: 32-weight blocks (the alias of KQ_B32_ELEMS), 32B
+//! quants + one f16 scale halfword per block. Every q8 plane sizing (gathers, arena/stack math)
+//! derives from these.
+let Q8_BLOCK_ELEMS = KQ_B32_ELEMS
 let Q8_QPB = 32l   // quant bytes per block
 let Q8_SPB = 2l    // scale bytes per block (f16 halfword)
 
-//! kq superblock element count, and the DEVICE scale-row stride the gathers decode a kq format's
-//! scales to (kq_ssb below is the DISK/plane stride, per format); kq_dev_ssb is the per-format form.
-let KQ_SUPERBLOCK_ELEMS = 256l
+//! kq superblock element count (the alias of KQ_SB_ELEMS), and the DEVICE scale-row stride the
+//! gathers decode a kq format's scales to (kq_ssb below is the DISK/plane stride, per format);
+//! kq_dev_ssb is the per-format form.
+let KQ_SUPERBLOCK_ELEMS = KQ_SB_ELEMS
 let KQ_DEV_SSB = 20l
 
 //! The codebook formats whose device scale row is two words: word 0 = f16 d with the format's

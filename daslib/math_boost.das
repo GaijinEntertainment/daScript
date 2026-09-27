@@ -252,3 +252,8 @@ def planar_shadow(Light, Plane : float4) {
     Result[3] = float4(P.w * L.x,      P.w * L.y,      P.w * L.z,      P.w * L.w + d)
     return Result
 }
+
+def round_up(n, m : auto(TT)) : TT {
+    //! ``n`` rounded up to a multiple of ``m`` (``m`` > 0), in ``m``'s integer type
+    return (n + m - TT(1)) / m * m
+}
