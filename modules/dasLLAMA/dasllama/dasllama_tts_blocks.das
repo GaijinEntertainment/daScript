@@ -2594,17 +2594,13 @@ def pad_reflect_left_rows_inplace(@scratch @exact_size var x : array<float>; t, 
     }
 }
 
-//! y [left + t][c] = x [t][c] with its first row repeated `left` times in front (replicate padding).
+//! y [left + t][c] = x [t][c] with its first row repeated `left` times in front (replicate padding); at t = 0, that row alone.
 def pad_edge_left_rows(x : array<float>; t, c, left : int64; @scratch @exact_size var y : array<float>) {
     y |> reserve_resize((left + t) * c)
     for (r in range64(left)) {
-        for (j in range64(c)) {
-            y[r * c + j] = x[j]
-        }
+        copy_floats(x, 0l, y, r * c, c)
     }
-    for (i in range64(t * c)) {
-        y[left * c + i] = x[i]
-    }
+    copy_floats(x, 0l, y, left * c, t * c)
 }
 
 //! The rows twin of `pad_reflect_left`: y [t + left][c] from x [t][c] - a copy of x padded by `pad_reflect_left_rows_inplace`.

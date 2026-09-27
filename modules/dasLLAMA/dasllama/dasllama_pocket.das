@@ -762,10 +762,7 @@ def private carry_init(var cr : PocketConvCarry; c : TtsConv1d) {
 //! the first window's carry for a conv whose pad replicates the edge: `n` copies of the window's first row
 def private carry_replicate(var cr : PocketConvCarry; x : array<float>; n, w : int64) {
     cr.n = n
-    cr.rows |> reserve_resize(n * w)
-    for (r in range64(n)) {
-        copy_floats(x, 0l, cr.rows, r * w, w)
-    }
+    pad_edge_left_rows(x, 0l, w, n, cr.rows)
 }
 
 //! x [n][cin], one window of a stream, through a codec conv: the carried rows lead the window,
