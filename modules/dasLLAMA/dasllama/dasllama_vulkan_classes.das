@@ -10768,14 +10768,6 @@ class TowerHeadUnpad16 : TowerRestrideT {
     override OUT32 = false
 }
 
-struct TowerRopeTabArgs {
-    sstride : uint  //! the rows' stride and the column the heads start at (a fused [q | k | v] row)
-    soff : uint
-    nheads : uint
-    hs : uint       //! the head width: the rotary half is hs / 2 - pairs (j, j + half), one table row of `half` cos and `half` sin a token
-    rows : uint
-}
-
 struct TowerWinArgs {
     nheads : uint
     scale : float
@@ -10863,33 +10855,73 @@ class template TowerWinAttnT {
 [vk_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
 class TowerWinAttn : TowerWinAttnT {}
 
-//! the full-head NEOX rope over q or k rows in place, the CPU `rope_neox_tab_rows`'s form: one table pair a row shared by
-//! every head (the vision mrope tables), the pairs (j, j + half) rotated - one thread per (row, head, pair)
-[vk_dispatch(name = "tower_rope_tab_cls", grid = "wgs", params = "wgs : int64")]
-class TowerRopeTab {
-    @ssbo @binding = 0 v : array<float>
+struct TtsPkRopeArgs {
+    rows : uint
+    qs : uint     //! x's row stride
+    col : uint    //! the roped span's first column (a fused [q | k | v] row's q or k slot)
+    d : uint      //! the span's width, its heads side by side
+    dh : uint     //! the head size
+    pos0 : uint   //! the first row's position, the tables' row
+    xoff : uint   //! x's element base
+    coff : uint   //! the cos table [pos][dh / 2]'s element base in cos_t
+    soff : uint   //! the sin table's in sin_t, the same layout
+}
+
+//! the rotary embedding over a span of rows in place from per-position tables: row r at position pos0 + r turns each pair
+//! of each head by the tables' angle j at that position - NEOX the pairs (j, j + dh / 2), the CPU `rope_neox_tab_rows` (the
+//! vision mrope tables), else the adjacent pairs (2j, 2j + 1), the CPU `rope_rows`; one pair an invocation over rows * d / 2
+[ |> template_struct_instance]
+class template RopeTabT {
+    @template_constant NEOX : bool = false
+    @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 cos_t : array<float>
     @ssbo @binding = 2 sin_t : array<float>
-    @push_constant pa : TowerRopeTabArgs
+    @push_constant pa : TtsPkRopeArgs
 
-    [spirv_kernel(local_size_x = 256, name = "tower_rope_tab_cls_spv")]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        let half = pa.hs / 2u
-        let per_row = pa.nheads * half
-        if (gid < pa.rows * per_row) {
-            let row = gid / per_row
-            let hp = gid % per_row
-            let j = hp % half
-            let base = row * pa.sstride + pa.soff + (hp / half) * pa.hs
-            let x0 = v[base + j]
-            let x1 = v[base + j + half]
-            let c = cos_t[row * half + j]
-            let s = sin_t[row * half + j]
-            v[base + j] = x0 * c - x1 * s
-            v[base + j + half] = x0 * s + x1 * c
+    //! the pair's first element at head base `hb`
+    def pair_first(hb, j : uint) : uint {
+        static_if (NEOX) {
+            return hb + j
+        } else {
+            return hb + 2u * j
         }
     }
+
+    //! ... and the distance to its partner
+    def pair_step(hh : uint) : uint {
+        static_if (NEOX) {
+            return hh
+        } else {
+            return 1u
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let half = pa.d / 2u
+        if (gid < pa.rows * half) {
+            let r = gid / max(half, 1u)
+            let pi = gid % max(half, 1u)
+            let hh = max(pa.dh / 2u, 1u)
+            let j = pi % hh
+            let i0 = pair_first(pa.xoff + r * pa.qs + pa.col + (pi / hh) * pa.dh, j)
+            let i1 = i0 + pair_step(hh)
+            let tb = (pa.pos0 + r) * hh + j
+            let cv = cos_t[pa.coff + tb]
+            let sv = sin_t[pa.soff + tb]
+            let v0 = x[i0]
+            let v1 = x[i1]
+            x[i0] = v0 * cv - v1 * sv
+            x[i1] = v0 * sv + v1 * cv
+        }
+    }
+}
+
+//! the vision towers' full-head NEOX rope over q or k rows, one table row a position shared by every head
+[vk_dispatch(name = "tower_rope_tab_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerRopeTab : RopeTabT {
+    override NEOX = true
 }
 
 struct RopeKvArgs {
@@ -14557,43 +14589,6 @@ class TtsPkGemvLnGelu : TtsPkGemvT {
     override EPI = 8
 }
 
-struct TtsPkRopeArgs {
-    rows : uint
-    qs : uint     //! x's row stride
-    col : uint    //! the roped span's first column
-    d : uint      //! the span's width, its heads side by side
-    dh : uint     //! the head size
-    pos0 : uint   //! the first row's position, the tables' row
-    xoff : uint   //! x's element base
-    coff : uint   //! the cos table [pos][dh / 2] in wn
-    soff : uint   //! the sin table, the same layout
-}
-
-//! the rotary embedding over a span of rows in place (the CPU `rope_rows`): row r at position pos0 + r turns each adjacent
-//! pair (2j, 2j + 1) of each head by the tables' angle j at that position; one pair an invocation over rows * d / 2
+//! the Pocket codec's NORM rope over the q and k spans, the tables in the slab (cos_t and sin_t bind one buffer)
 [vk_dispatch(name = "tts_pk_rope_cls", kernel = "run", grid = "pairs/256", params = "pairs : int64")]
-class TtsPkRope {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @role = "weight" wn : array<float>
-    @push_constant pa : TtsPkRopeArgs
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        let half = pa.d / 2u
-        if (gid < pa.rows * half) {
-            let r = gid / max(half, 1u)
-            let pi = gid % max(half, 1u)
-            let hh = max(pa.dh / 2u, 1u)
-            let j = pi % hh
-            let i = pa.xoff + r * pa.qs + pa.col + (pi / hh) * pa.dh + 2u * j
-            let tb = (pa.pos0 + r) * hh + j
-            let cv = wn[pa.coff + tb]
-            let sv = wn[pa.soff + tb]
-            let v0 = x[i]
-            let v1 = x[i + 1u]
-            x[i] = v0 * cv - v1 * sv
-            x[i + 1u] = v0 * sv + v1 * cv
-        }
-    }
-}
+class TtsPkRope : RopeTabT {}

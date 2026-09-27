@@ -629,7 +629,8 @@ def test_vkt_pk_rope(t0 : T?) {
             let sizes = fixed_array(bx)
             let at <- staged_offsets(sizes)
             let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            var s = set_tts_pk_rope_cls(fixed_array(xd, wnd), fixed_array(bx, long_length(slab) * 4l), fixed_array(B_X, 0u))
+            let bwn = long_length(slab) * 4l
+            var s = set_tts_pk_rope_cls(fixed_array(xd, wnd, wnd), fixed_array(bx, bwn, bwn), fixed_array(B_X, 0u, 0u))
             var pa = TtsPkRopeArgs(rows = uint(PO_T), qs = uint(PO_QS), col = uint(PO_D), d = uint(PO_D), dh = uint(PO_DH), pos0 = uint(PO_POS0),
                 xoff = uint(PO_XOFF), coff = uint(coff), soff = uint(soff))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {

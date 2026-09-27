@@ -1985,7 +1985,7 @@ def private ts_pk_row_scale(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
 
 //! the NORM rope over the span `d` wide at column `col` of x's rows [rows][qs], positions pos0.., on the tables in `tabs` (cos at coff, sin at soff)
 def private ts_pk_rope(raw : VkCommandBuffer; var h : VkHaz; tabs : TsRows; coff, soff : int64; x : TsRows; rows, qs, col, d, dh, pos0 : int64) {
-    var s = set_tts_pk_rope_cls(fixed_array(x.dev, tabs.dev), fixed_array(x.bytes, tabs.bytes), fixed_array(x.bit, tabs.bit))
+    var s = set_tts_pk_rope_cls(fixed_array(x.dev, tabs.dev, tabs.dev), fixed_array(x.bytes, tabs.bytes, tabs.bytes), fixed_array(x.bit, tabs.bit, tabs.bit))
     var pa = TtsPkRopeArgs(rows = uint(rows), qs = uint(qs), col = uint(col), d = uint(d), dh = uint(dh), pos0 = uint(pos0), xoff = 0u, coff = uint(coff), soff = uint(soff))
     enc_tts_pk_rope_cls(raw, h, s, pa, rows * d / 2l)
     vt_pt(raw, VtProfRole.tts_pk)

@@ -1126,7 +1126,8 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             nan_sentinel_upload(qcd, bq)
             fill_upload(qphd, 0l, bph, F16_SENTINEL_BITS)
             var s_rope = set_tower_rope_tab_cls(fixed_array(qkvd, cosd, sind), fixed_array(bqkv, btab, btab), fixed_array(B_QKV, 0u, 0u))
-            var pa_rope = TowerRopeTabArgs(sstride = uint(3 * d_compact), soff = uint(d_compact), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), rows = uint(rows))
+            var pa_rope = TtsPkRopeArgs(rows = uint(rows), qs = uint(3 * d_compact), col = uint(d_compact), d = uint(ROWS_HEADS * LN_HS), dh = uint(LN_HS), pos0 = 0u,
+                xoff = 0u, coff = 0u, soff = 0u)
             var s_ln = set_tower_ln_cls(fixed_array(xd, xbd, wd), fixed_array(bx, bx, bw), fixed_array(B_X, B_XB, 0u))
             var s_acts <- [for (i in range(length(act_arms))); set_tower_bias_act_cls(fixed_array(act_d[i], wd), fixed_array(bx, bw), fixed_array(act_arms[i].bit, 0u))]
             var s_post = set_tower_post_add_ln_cls(fixed_array(xd, yd, xb2d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB2, 0u))
