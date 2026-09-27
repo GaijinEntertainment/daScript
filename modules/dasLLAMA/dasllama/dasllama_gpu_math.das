@@ -69,6 +69,47 @@ def tts_resize_mix_onnx(x0, x1, l0, l1 : float; last : bool) : float {
     return mad(w1, x1, acc)
 }
 
+//! a / b as the CPU's IEEE division rounds it: a SPIR-V device's own divide sits up to 2.5 ulp off, which the phase's
+//! cumulative sums carry; a Metal body under fastmath=false divides with `/`, already IEEE
+def tts_div(a, b : float) : float {
+    var r = 1.0 / b
+    r = mad(mad(-b, r, 1.0), r, r)
+    let q = a * r
+    return mad(mad(-q, b, a), r, q)
+}
+
+//! the CPU `sine_phase_frames`' rad from the cycles `cyc` at sample i of harmonic h - f0 * (h + 1) / sr, divided at the call
+//! site the home's way (`tts_div` or `/`): its fraction, `nu` folded into the overtones' sample 0
+def tts_src_rad(cyc, nu : float; i, h : uint) : float {
+    let r = cyc - floor(cyc)
+    return (i == 0u && h > 0u) ? r + nu : r
+}
+
+//! torch's linear resample taps at output index `to` over `n` inputs: the source position, its floor and the next, the two
+//! weights; `inv_scale` is 1 / scale, divided at the call site the home's way
+def tts_resize_taps_torch(n, to : uint; inv_scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
+    let src = max(0.0, mad(inv_scale, float(to) + 0.5, -0.5))
+    i0 = min(uint(src), n - 1u)
+    i1 = min(i0 + 1u, n - 1u)
+    l1 = src - float(i0)
+    l0 = 1.0 - l1
+}
+
+//! onnxruntime's taps at the source quotient `q` = (to + 0.5) / scale, divided at the call site the home's way: the clamped
+//! source position, equal weights where the two taps coincide
+def tts_resize_taps_onnx(n : uint; q : float; var i0, i1 : uint&; var l0, l1 : float&) {
+    let in_x = clamp(q - 0.5, 0.0, float(n - 1u))
+    i0 = min(uint(in_x), n - 1u)
+    i1 = min(i0 + 1u, n - 1u)
+    if (i0 == i1) {
+        l0 = 0.5
+        l1 = 0.5
+    } else {
+        l0 = abs(in_x - float(i1))
+        l1 = abs(in_x - float(i0))
+    }
+}
+
 //! sin of a phase past a million radians: 2 pi in pieces of five significant bits, so k times a piece is exact
 def tts_sin_big(phase : float) : float {
     let k = round(phase * 0.15915493667125702)
@@ -78,6 +119,66 @@ def tts_sin_big(phase : float) : float {
     r = mad(-k, -6.608047442568932e-13, r)
     return sin(r)
 }
+
+//! the source's noise amplitude: `noise_std` where voiced, a third of the sine amplitude where not
+def tts_noise_amp(uv, noise_std, sine_amp : float) : float => uv * noise_std + (1.0 - uv) * sine_amp / 3.0
+
+//! one harmonic's share of the source linear: its weight times the voiced sine `s` plus the scaled noise draw
+def tts_src_term(w, s, uv, noise_amp, nz : float) : float => w * (s * uv + noise_amp * nz)
+
+//! one step of the torch law's double accumulator as a two-float sum, x added to `acc` with its rounding error carried in
+//! `lo`; the kernel compiles without contraction (`precise`, `fastmath=false`), else the correction folds to zero
+def tts_two_sum_add(var acc, lo : float&; x : float) {
+    let s = acc + x
+    let bv = s - acc
+    lo += (acc - (s - bv)) + (x - bv)
+    let s2 = s + lo
+    lo = lo - (s2 - s)
+    acc = s2
+}
+
+//! the phase in radians of the cycles `acc` summed at the low rate, `up` samples a frame
+def tts_phase_rad(acc : float; up : uint) : float => ((acc * 2.0) * 3.14159265358979) * float(up)
+
+//! the reflect pad's source index of padded position p in a signal of n samples, mirrored past either end
+def tts_pad_reflect(p, n : int) : int {
+    if (p < 0) {
+        return -p
+    }
+    return p >= n ? 2 * (n - 1) - p : p
+}
+
+//! the CPU `magnitude_phase`'s magnitude
+def tts_stft_mag(re, im, eps : float) : float => sqrt(re * re + im * im + eps)
+
+//! ... and its phase, a zero imaginary part on the negative real axis reading +pi (torch.angle's sign, where atan2 reads -pi)
+def tts_stft_phase(re, im : float) : float => im == 0.0 ? (re < 0.0 ? 3.14159265358979 : 0.0) : atan2(im, re)
+
+//! the inverse STFT's term of one bin: the magnitude exp(logmag) at the phase sin(phrow) through the transposed conv's two
+//! basis weights
+def tts_istft_term(logmag, phrow, wre, wim : float) : float {
+    let mag = exp(logmag)
+    let ph = sin(phrow)
+    return mag * cos(ph) * wre - mag * sin(ph) * wim
+}
+
+//! the CPU `adain_affine`'s per-channel fold: the column stats (the mean, the squared-deviation sum over `tn` rows), the
+//! norm's scale `g` and shift `gb`, the style's gamma and beta, into one scale and shift
+def tts_adain_affine(mean, sqsum, tn, eps, g, gb, gamma, beta : float; var scale, shift : float&) {
+    let rs = 1.0 / sqrt(sqsum / tn + eps)
+    let g1 = 1.0 + gamma
+    scale = rs * g * g1
+    shift = (gb - mean * rs * g) * g1 + beta
+}
+
+//! a LayerNorm element: x at the row's mean and inverse deviation, through the norm's scale and shift
+def tts_ln_affine(x, mean, inv, w, b : float) : float => (x - mean) * inv * w + b
+
+//! the adaLN modulation of a normed element
+def tts_modulate(v, shift, scale : float) : float => v * (1.0 + scale) + shift
+
+//! the causal window's first key for the query at position p: the last `ctx` keys up to itself, every key at ctx 0
+def tts_window_start(p, ctx : uint) : uint => (ctx != 0u && p + 1u > ctx) ? p + 1u - ctx : 0u
 
 //! the source's own noise draw's counter hash
 def tts_hash_u32(x : uint) : uint {

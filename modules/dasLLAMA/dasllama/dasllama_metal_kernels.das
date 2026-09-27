@@ -10221,11 +10221,9 @@ class template MetalSt2AdainT {
             return
         }
         let ci = gid % ka.c
-        let rs = 1.0 / sqrt(stats[ka.c + ci] / float(ka.t) + ka.eps)
-        let g = gw[ci]
-        let g1 = 1.0 + h[ci]
-        let scale = rs * g * g1
-        let shift = (gb[ci] - stats[ci] * rs * g) * g1 + h[ka.c + ci]
+        var scale = 0.0
+        var shift = 0.0
+        tts_adain_affine(stats[ci], stats[ka.c + ci], float(ka.t), ka.eps, gw[ci], gb[ci], h[ci], h[ka.c + ci], scale, shift)
         let v = x[gid] * scale + shift
         static_if (SNAKE) {
             let a = alpha[ci]
@@ -10623,36 +10621,6 @@ struct St2SourceArgs {
     total : uint
 }
 
-//! The cycles at sample i of harmonic h, the initial phase folded into sample 0 of the overtones.
-def st2_src_rad(f0 : array<float>; noise_u : array<float>; i, h, up : uint; sr : float) : float {
-    let cyc = f0[i / up] * float(h + 1u) / sr
-    let r = cyc - floor(cyc)
-    return (i == 0u && h > 0u) ? r + noise_u[h] : r
-}
-
-//! torch's linear resample taps at output index `to`: the source position, its floor and the next, the two weights.
-def st2_resize_taps_torch(n, to : uint; scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
-    let src = max(0.0, mad(1.0 / scale, float(to) + 0.5, -0.5))
-    i0 = min(uint(src), n - 1u)
-    i1 = min(i0 + 1u, n - 1u)
-    l1 = src - float(i0)
-    l0 = 1.0 - l1
-}
-
-//! onnxruntime's taps: the clamped source position, equal weights where the two taps coincide.
-def st2_resize_taps_onnx(n, to : uint; scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
-    let in_x = clamp((float(to) + 0.5) / scale - 0.5, 0.0, float(n - 1u))
-    i0 = min(uint(in_x), n - 1u)
-    i1 = min(i0 + 1u, n - 1u)
-    if (i0 == i1) {
-        l0 = 0.5
-        l1 = 0.5
-    } else {
-        l0 = abs(in_x - float(i1))
-        l1 = abs(in_x - float(i0))
-    }
-}
-
 //! The low-rate phase increments per harmonic on either resample law (TORCH: the torch taps and
 //! mix; else onnxruntime's), the first sample's initial phases folded in.
 [ |> template_struct_instance]
@@ -10674,13 +10642,14 @@ class template MetalSt2SrcLowT {
         var i1 = 0u
         var l0 = 0.0
         var l1 = 0.0
+        let scale = 1.0 / float(ka.up)
         static_if (TORCH) {
-            st2_resize_taps_torch(ka.n, k, 1.0 / float(ka.up), i0, i1, l0, l1)
+            tts_resize_taps_torch(ka.n, k, 1.0 / scale, i0, i1, l0, l1)
         } else {
-            st2_resize_taps_onnx(ka.n, k, 1.0 / float(ka.up), i0, i1, l0, l1)
+            tts_resize_taps_onnx(ka.n, (float(k) + 0.5) / scale, i0, i1, l0, l1)
         }
-        let r0 = st2_src_rad(f0, noise_u, i0, h, ka.up, ka.sr)
-        let r1 = st2_src_rad(f0, noise_u, i1, h, ka.up, ka.sr)
+        let r0 = tts_src_rad(f0[i0 / ka.up] * float(h + 1u) / ka.sr, noise_u[h], i0, h)
+        let r1 = tts_src_rad(f0[i1 / ka.up] * float(h + 1u) / ka.sr, noise_u[h], i1, h)
         static_if (TORCH) {
             low[gid] = tts_resize_mix_torch(r0, r1, l0, l1)
         } else {
@@ -10727,16 +10696,11 @@ class template MetalSt2SrcCumsumT {
         while (k < ka.nlow) {
             let x = low[h * ka.nlow + k]
             static_if (TORCH) {
-                let s = acc + x
-                let bv = s - acc
-                lo += (acc - (s - bv)) + (x - bv)
-                let s2 = s + lo
-                lo = lo - (s2 - s)
-                acc = s2
+                tts_two_sum_add(acc, lo, x)
             } else {
                 acc += x
             }
-            lowc[h * ka.nlow + k] = ((acc * 2.0) * 3.14159265358979) * float(ka.up)
+            lowc[h * ka.nlow + k] = tts_phase_rad(acc, ka.up)
             k++
         }
     }
@@ -10800,12 +10764,12 @@ class template MetalSt2SrcSinesT {
         var l0 = 0.0
         var l1 = 0.0
         static_if (TORCH) {
-            st2_resize_taps_torch(ka.nlow, i, float(ka.up), i0, i1, l0, l1)
+            tts_resize_taps_torch(ka.nlow, i, 1.0 / float(ka.up), i0, i1, l0, l1)
         } else {
-            st2_resize_taps_onnx(ka.nlow, i, float(ka.up), i0, i1, l0, l1)
+            tts_resize_taps_onnx(ka.nlow, (float(i) + 0.5) / float(ka.up), i0, i1, l0, l1)
         }
         let uv = f0[i / ka.up] > ka.voiced_thr ? 1.0 : 0.0
-        let noise_amp = uv * ka.noise_std + (1.0 - uv) * ka.sine_amp / 3.0
+        let noise_amp = tts_noise_amp(uv, ka.noise_std, ka.sine_amp)
         var acc = lb[0]
         var h = 0u
         while (h < ka.nh) {
@@ -10815,8 +10779,7 @@ class template MetalSt2SrcSinesT {
             } else {
                 phase = tts_resize_mix_onnx(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1, h + 1u == ka.nh)
             }
-            let s = tts_sin_big(phase) * ka.sine_amp
-            acc += lw[h] * (s * uv + noise_amp * noise_n[i * ka.nh + h])
+            acc += tts_src_term(lw[h], tts_sin_big(phase) * ka.sine_amp, uv, noise_amp, noise_n[i * ka.nh + h])
             h++
         }
         har[i] = tts_tanh(acc)
@@ -10875,23 +10838,20 @@ class template MetalSt2StftT {
         var im = 0.0
         var tap = 0u
         while (tap < ka.k) {
-            var src = int(f * ka.hop + tap) - int(ka.pad)
+            let p = int(f * ka.hop + tap) - int(ka.pad)
+            var src = 0
             static_if (REFLECT) {
-                if (src < 0) {
-                    src = -src
-                } elif (src >= int(ka.n)) {
-                    src = 2 * (int(ka.n) - 1) - src
-                }
+                src = tts_pad_reflect(p, int(ka.n))
             } else {
-                src = clamp(src, 0, int(ka.n) - 1)
+                src = clamp(p, 0, int(ka.n) - 1)
             }
             let v = har[uint(src)]
             re += wre[b * ka.k + tap] * v
             im += wim[b * ka.k + tap] * v
             tap++
         }
-        spec[f * 2u * ka.bins + b] = sqrt(re * re + im * im + ka.eps)
-        spec[f * 2u * ka.bins + ka.bins + b] = im == 0.0 ? (re < 0.0 ? 3.14159265358979 : 0.0) : atan2(im, re)
+        spec[f * 2u * ka.bins + b] = tts_stft_mag(re, im, ka.eps)
+        spec[f * 2u * ka.bins + ka.bins + b] = tts_stft_phase(re, im)
     }
 }
 
@@ -10950,9 +10910,7 @@ class MetalSt2Istft {
                 if (q < ka.tt) {
                     var b = 0u
                     while (b < ka.bins) {
-                        let mag = exp(y[q * ka.stride + b])
-                        let ph = sin(y[q * ka.stride + ka.bins + b])
-                        acc += mag * cos(ph) * wre[tap * ka.bins + b] - mag * sin(ph) * wim[tap * ka.bins + b]
+                        acc += tts_istft_term(y[q * ka.stride + b], y[q * ka.stride + ka.bins + b], wre[tap * ka.bins + b], wim[tap * ka.bins + b])
                         b++
                     }
                     env += window[tap] * window[tap]
@@ -11054,7 +11012,7 @@ class MetalPkAttn {
     @workgroup qh : float[128]
     @workgroup sc : float[2048]   // == PK_ATTN_MAX_KEYS
     @workgroup po : float[512]
-    @workgroup red : float[8]
+    @workgroup red : float[16]
 
     //! the scaled scores of keys j0.. into the stage, then their normalized softmax weights
     def pk_attn_scores(h, j0, nk, lid : uint) {
@@ -11073,16 +11031,8 @@ class MetalPkAttn {
             j += 256u
         }
         let mall = tg_max_all(m, red)
-        var l = 0.0
-        j = lid
-        while (j < nk) {
-            let pw = exp(sc[j] - mall)
-            sc[j] = pw
-            l += pw
-            j += 256u
-        }
         barrier()
-        let inv = 1.0 / tg_sum_all(l, red)
+        let inv = 1.0 / sq_exp_sum(sc, red, mall, nk, lid, 256u)
         j = lid
         while (j < nk) {
             sc[j] *= inv
@@ -11098,7 +11048,7 @@ class MetalPkAttn {
         let i = wg % ka.t
         let lid = gl_LocalInvocationID.x
         let p = ka.pos0 + i
-        let j0 = (ka.ctx != 0u && p + 1u > ka.ctx) ? p + 1u - ka.ctx : 0u
+        let j0 = tts_window_start(p, ka.ctx)
         let nk = p + 1u - j0
         if (lid < 64u) {
             qh[lid] = q[i * ka.qs + ka.qcol + h * 64u + lid] / sqrt(float(64u))
@@ -11209,8 +11159,7 @@ class template MetalPkGemvT {
             let inv = rsqrt(vtot / float(ka.nin) + ka.eps)
             k = lid
             while (k < ka.nin) {
-                let v = (x[k] - mean) * inv * lw[k] + lb[k]
-                xs[k] = v * (1.0 + mod[ka.nin + k]) + mod[k]
+                xs[k] = tts_modulate(tts_ln_affine(x[k], mean, inv, lw[k], lb[k]), mod[k], mod[ka.nin + k])
                 k += 128u
             }
         } else {

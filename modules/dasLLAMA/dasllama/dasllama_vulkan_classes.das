@@ -13638,11 +13638,10 @@ class template TtsAdainT {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.t * pa.c) {
             let ci = gid % max(pa.c, 1u)
-            let rs = 1.0 / sqrt(stats[pa.c + ci] / float(pa.t) + TTS_ADAIN_EPS)
-            let g = wn[pa.gwoff + ci]
-            let g1 = 1.0 + h[pa.hoff + ci]
-            let scale = rs * g * g1
-            let shift = (wn[pa.gboff + ci] - stats[ci] * rs * g) * g1 + h[pa.hoff + pa.c + ci]
+            var scale = 0.0
+            var shift = 0.0
+            tts_adain_affine(stats[ci], stats[pa.c + ci], float(pa.t), TTS_ADAIN_EPS, wn[pa.gwoff + ci], wn[pa.gboff + ci], h[pa.hoff + ci],
+                h[pa.hoff + pa.c + ci], scale, shift)
             let v = mad(x[pa.xoff + gid], scale, shift)
             static_if (SNAKE) {
                 let a = wn[pa.aoff + ci]
@@ -13796,56 +13795,17 @@ struct TtsSourceArgs {
     boff : uint         //! its bias [1] in wn
 }
 
-//! a resample's two taps at one output index: the source positions and their weights
-struct TtsTaps {
-    i0 : uint
-    i1 : uint
-    l0 : float
-    l1 : float
-}
-
-//! a / b as the CPU's IEEE division rounds it: the device's own sits up to 2.5 ulp off, which the phase's cumulative sums carry
-def tts_div(a, b : float) : float {
-    var r = 1.0 / b
-    r = mad(mad(-b, r, 1.0), r, r)
-    let q = a * r
-    return mad(mad(-q, b, a), r, q)
-}
-
-//! the CPU `sine_phase_frames`' rad: the cycles at sample i of harmonic h off f0 `f0v`, `nu` folded into the overtones' sample 0
-def tts_src_rad(f0v, nu : float; i, h : uint; sr : float) : float {
-    let cyc = tts_div(f0v * float(h + 1u), sr)
-    let r = cyc - floor(cyc)
-    return (i == 0u && h > 0u) ? r + nu : r
-}
-
-//! torch's linear resample taps at output index `to` over `n` inputs: the source position, its floor and the next
-def tts_resize_taps_torch(n, to : uint; scale : float) : TtsTaps {
-    let src = max(0.0, mad(tts_div(1.0, scale), float(to) + 0.5, -0.5))
-    let i0 = min(uint(src), n - 1u)
-    let l1 = src - float(i0)
-    return TtsTaps(i0 = i0, i1 = min(i0 + 1u, n - 1u), l0 = 1.0 - l1, l1 = l1)
-}
-
-//! onnxruntime's taps: the clamped source position, equal weights where the two taps coincide
-def tts_resize_taps_onnx(n, to : uint; scale : float) : TtsTaps {
-    let in_x = clamp(tts_div(float(to) + 0.5, scale) - 0.5, 0.0, float(n - 1u))
-    let i0 = min(uint(in_x), n - 1u)
-    let i1 = min(i0 + 1u, n - 1u)
-    let same = i0 == i1
-    return TtsTaps(i0 = i0, i1 = i1, l0 = same ? 0.5 : abs(in_x - float(i1)), l1 = same ? 0.5 : abs(in_x - float(i0)))
-}
-
-//! the source's resample law - TORCH: torch's taps and mix, else onnxruntime's - the base of the source stamps
+//! the source's resample law - TORCH: torch's taps and mix, else onnxruntime's - the base of the source stamps; the taps'
+//! quotients divide through `tts_div`
 [ |> template_struct_instance]
 class template TtsSrcLawT {
     @template_constant TORCH : bool = false
 
-    def law_taps(n, to : uint; scale : float) : TtsTaps {
+    def law_taps(n, to : uint; scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
         static_if (TORCH) {
-            return tts_resize_taps_torch(n, to, scale)
+            tts_resize_taps_torch(n, to, tts_div(1.0, scale), i0, i1, l0, l1)
         } else {
-            return tts_resize_taps_onnx(n, to, scale)
+            tts_resize_taps_onnx(n, tts_div(float(to) + 0.5, scale), i0, i1, l0, l1)
         }
     }
 
@@ -13874,10 +13834,14 @@ class template TtsSrcLowT : TtsSrcLawT {
             let nlow = max(pa.nlow, 1u)
             let up = max(pa.up, 1u)
             let h = gid / nlow
-            let tp = law_taps(pa.n, gid % nlow, tts_div(1.0, float(pa.up)))
-            let r0 = tts_src_rad(f0[tp.i0 / up], noise_u[h], tp.i0, h, pa.sr)
-            let r1 = tts_src_rad(f0[tp.i1 / up], noise_u[h], tp.i1, h, pa.sr)
-            low[gid] = law_mix(r0, r1, tp.l0, tp.l1, h + 1u == pa.nh)
+            var i0 = 0u
+            var i1 = 0u
+            var l0 = 0.0
+            var l1 = 0.0
+            law_taps(pa.n, gid % nlow, tts_div(1.0, float(pa.up)), i0, i1, l0, l1)
+            let r0 = tts_src_rad(tts_div(f0[i0 / up] * float(h + 1u), pa.sr), noise_u[h], i0, h)
+            let r1 = tts_src_rad(tts_div(f0[i1 / up] * float(h + 1u), pa.sr), noise_u[h], i1, h)
+            low[gid] = law_mix(r0, r1, l0, l1, h + 1u == pa.nh)
         }
     }
 }
@@ -13908,16 +13872,11 @@ class template TtsSrcCumsumT : TtsSrcLawT {
             while (k < pa.nlow) {
                 let x = low[h * pa.nlow + k]
                 static_if (TORCH) {
-                    let s = acc + x
-                    let bv = s - acc
-                    lo += (acc - (s - bv)) + (x - bv)
-                    let s2 = s + lo
-                    lo = lo - (s2 - s)
-                    acc = s2
+                    tts_two_sum_add(acc, lo, x)
                 } else {
                     acc += x
                 }
-                lowc[h * pa.nlow + k] = ((acc * 2.0) * 3.14159265358979) * float(pa.up)
+                lowc[h * pa.nlow + k] = tts_phase_rad(acc, pa.up)
                 k++
             }
         }
@@ -13963,15 +13922,18 @@ class template TtsSrcSinesT : TtsSrcLawT {
     def run {
         let i = gl_GlobalInvocationID.x
         if (i < pa.n) {
-            let tp = law_taps(pa.nlow, i, float(pa.up))
+            var i0 = 0u
+            var i1 = 0u
+            var l0 = 0.0
+            var l1 = 0.0
+            law_taps(pa.nlow, i, float(pa.up), i0, i1, l0, l1)
             let uv = f0[i / max(pa.up, 1u)] > pa.voiced_thr ? 1.0 : 0.0
-            let noise_amp = uv * pa.noise_std + (1.0 - uv) * pa.sine_amp / 3.0
+            let noise_amp = tts_noise_amp(uv, pa.noise_std, pa.sine_amp)
             var acc = wn[pa.boff]
             var h = 0u
             while (h < pa.nh) {
-                let phase = law_mix(lowc[h * pa.nlow + tp.i0], lowc[h * pa.nlow + tp.i1], tp.l0, tp.l1, h + 1u == pa.nh)
-                let s = tts_sin_big(phase) * pa.sine_amp
-                acc += wn[pa.woff + h] * (s * uv + noise_amp * noise_n[i * pa.nh + h])
+                let phase = law_mix(lowc[h * pa.nlow + i0], lowc[h * pa.nlow + i1], l0, l1, h + 1u == pa.nh)
+                acc += tts_src_term(wn[pa.woff + h], tts_sin_big(phase) * pa.sine_amp, uv, noise_amp, noise_n[i * pa.nh + h])
                 h++
             }
             har[i] = tts_tanh(acc)
@@ -14020,15 +13982,12 @@ class template TtsStftT {
             var im = 0.0
             var tap = 0u
             while (tap < pa.k) {
-                var src = int(f * pa.hop + tap) - int(pa.pad)
+                let p = int(f * pa.hop + tap) - int(pa.pad)
+                var src = 0
                 static_if (REFLECT) {
-                    if (src < 0) {
-                        src = -src
-                    } elif (src >= int(pa.n)) {
-                        src = 2 * (int(pa.n) - 1) - src
-                    }
+                    src = tts_pad_reflect(p, int(pa.n))
                 } else {
-                    src = clamp(src, 0, int(pa.n) - 1)
+                    src = clamp(p, 0, int(pa.n) - 1)
                 }
                 let v = har[uint(src)]
                 re += wn[pa.reoff + b * pa.k + tap] * v
@@ -14036,8 +13995,8 @@ class template TtsStftT {
                 tap++
             }
             let row = f * 2u * pa.bins
-            spec[row + b] = sqrt(re * re + im * im + pa.eps)
-            spec[row + pa.bins + b] = im == 0.0 ? (re < 0.0 ? 3.14159265358979 : 0.0) : atan2(im, re)
+            spec[row + b] = tts_stft_mag(re, im, pa.eps)
+            spec[row + pa.bins + b] = tts_stft_phase(re, im)
         }
     }
 }
@@ -14088,10 +14047,8 @@ class TtsIstft {
                     if (q < pa.tt) {
                         var b = 0u
                         while (b < pa.bins) {
-                            let mag = exp(y[q * pa.stride + b])
-                            let ph = sin(y[q * pa.stride + pa.bins + b])
                             let wa = tap * pa.bins + b
-                            acc += mag * cos(ph) * wn[pa.reoff + wa] - mag * sin(ph) * wn[pa.imoff + wa]
+                            acc += tts_istft_term(y[q * pa.stride + b], y[q * pa.stride + pa.bins + b], wn[pa.reoff + wa], wn[pa.imoff + wa])
                             b++
                         }
                         let wv = wn[pa.wnoff + tap]
@@ -14243,7 +14200,7 @@ class TtsPkAttn : WgReduceBase {
         let i = wg % t
         let lid = gl_LocalInvocationID.x
         let p = pa.pos0 + i
-        let j0 = (pa.ctx != 0u && p + 1u > pa.ctx) ? p + 1u - pa.ctx : 0u
+        let j0 = tts_window_start(p, pa.ctx)
         let nk = p + 1u - j0
         if (lid < 64u) {
             qh[lid] = q[pa.qoff + i * pa.qs + pa.qcol + h * 64u + lid] / sqrt(float(64u))
@@ -14444,9 +14401,9 @@ class template TtsPkGemvT {
         let inv = 1.0 / sqrt(var_sum / float(pa.nin) + pa.eps)
         k = tid
         while (k < pa.nin) {
-            let nv = (x[pa.xoff + k] - mean) * inv * wn[pa.lwoff + k] + wn[pa.lboff + k]
+            let nv = tts_ln_affine(x[pa.xoff + k], mean, inv, wn[pa.lwoff + k], wn[pa.lboff + k])
             static_if (NORM_MOD_IN) {
-                xs[k] = nv * (1.0 + mod[pa.moff + pa.nin + k]) + mod[pa.moff + k]
+                xs[k] = tts_modulate(nv, mod[pa.moff + k], mod[pa.moff + pa.nin + k])
             } else {
                 xs[k] = nv
             }
