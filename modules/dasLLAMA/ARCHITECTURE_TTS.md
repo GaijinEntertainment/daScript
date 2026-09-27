@@ -64,7 +64,7 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
 - **`dasllama_tts_blocks.das`** - the TTS block home, the TTS twin of `dasllama_tower.das`, in
   the two layouts of `ARCHITECTURE_TTS.md#tts-two-layouts`: Conv1d (dense, depthwise, forward and transposed), the dense
   layer, LayerNorm over rows and over channels, InstanceNorm and AdaIN, AdaLayerNorm, the
-  bidirectional LSTM (gates i,f,g,o, both bias halves pre-summed), LeakyReLU / Snake / sigmoid /
+  bidirectional LSTM (gates i,f,g,o, both bias halves pre-summed), LeakyReLU / Snake /
   tanh / ELU, nearest and ONNX-half-pixel linear resampling, the duration-to-frame expansion,
   half-to-even rounding, PCG32 with a polar normal (a generator nobody seeded refuses), the
   harmonic-plus-noise sine source over a frame window with its carried phase (`SineSourceCarry`),

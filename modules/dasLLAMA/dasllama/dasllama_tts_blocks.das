@@ -1995,12 +1995,6 @@ def snake_rows(var x : array<float>; t, c : int64; alpha : array<float>) {
     }
 }
 
-def sigmoid_inplace(var x : array<float>; n : int64) {
-    for (i in range64(n)) {
-        x[i] = tts_sigmoid(x[i])
-    }
-}
-
 //! ELU (alpha 1) over n floats in place: x where positive, exp(x) - 1 below; four a lane.
 def elu_rows(var x : array<float>; n : int64) {
     rows_width_check(n, "elu_rows")
