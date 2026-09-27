@@ -460,22 +460,20 @@ def private g4a_ctx_make(t : Gemma4aEncoder; npos : int64) : G4aGpuCtx {
     c.bprpe = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
     c.bbounds = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_rec)
     upload_rows_padded(c.bpos, unsafe(reinterpret<void?>(plane_at(t.pos_emb, 0l))), past + 1l, 32l, d)   // the RPE table, zero-padded to the GEMM's 32-row floor
-    unsafe {
-        //! the calibration records, one [imin imax omin omax] row per clamped GEMM site
-        var bp = reinterpret<float?>(metal_buffer_contents(c.bbounds))
-        for (l in range64(t.n_layer)) {
-            let lo = t.layers[l]
-            g4a_rec(bp, l * 10l, lo.c_ff_up)
-            g4a_rec(bp, l * 10l + 1l, lo.c_ff_down)
-            g4a_rec(bp, l * 10l + 2l, lo.c_q)
-            g4a_rec(bp, l * 10l + 3l, lo.c_k)
-            g4a_rec(bp, l * 10l + 4l, lo.c_v)
-            g4a_rec(bp, l * 10l + 5l, lo.c_o)
-            g4a_rec(bp, l * 10l + 6l, lo.c_pw1)
-            g4a_rec(bp, l * 10l + 7l, lo.c_pw2)
-            g4a_rec(bp, l * 10l + 8l, lo.c_ff_up_1)
-            g4a_rec(bp, l * 10l + 9l, lo.c_ff_down_1)
-        }
+    //! the calibration records, one [imin imax omin omax] row per clamped GEMM site
+    var bp = unsafe(reinterpret<float?>(metal_buffer_contents(c.bbounds)))
+    for (l in range64(t.n_layer)) {
+        let lo = t.layers[l]
+        g4a_rec(bp, l * 10l, lo.c_ff_up)
+        g4a_rec(bp, l * 10l + 1l, lo.c_ff_down)
+        g4a_rec(bp, l * 10l + 2l, lo.c_q)
+        g4a_rec(bp, l * 10l + 3l, lo.c_k)
+        g4a_rec(bp, l * 10l + 4l, lo.c_v)
+        g4a_rec(bp, l * 10l + 5l, lo.c_o)
+        g4a_rec(bp, l * 10l + 6l, lo.c_pw1)
+        g4a_rec(bp, l * 10l + 7l, lo.c_pw2)
+        g4a_rec(bp, l * 10l + 8l, lo.c_ff_up_1)
+        g4a_rec(bp, l * 10l + 9l, lo.c_ff_down_1)
     }
     c.u_in = uniform_u32(0u)    //! the clamp record's input pair
     c.u_out = uniform_u32(1u)   //! its output pair

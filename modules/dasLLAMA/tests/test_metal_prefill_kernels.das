@@ -16,6 +16,7 @@ require ?das_metal _metal_kernel_common   // shared buf helpers + fixtures; only
 require ?das_metal _metal4_probe
 require daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
 require dasllama/dasllama_tts_blocks
+require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 — tts_tanh, tts_hash_normal: the StyleTTS2 gates' CPU forms, inside the Apple half alone
 require dasllama/dasllama_tower
 require dasllama/dasllama_moe
 require dasllama/dasllama_common
@@ -1643,8 +1644,8 @@ def private st2_lstm_gate(t : T?; dev, queue) {
                     }
                     g[gi] = float(acc)
                 }
-                cs[j] = st2_sigmoid(g[1]) * cs[j] + st2_sigmoid(g[0]) * st2_tanh(g[2])
-                hn[j] = st2_sigmoid(g[3]) * st2_tanh(cs[j])
+                cs[j] = st2_sigmoid(g[1]) * cs[j] + st2_sigmoid(g[0]) * tts_tanh(g[2])
+                hn[j] = st2_sigmoid(g[3]) * tts_tanh(cs[j])
                 want[ti * 2 * hd + dir * hd + j] = hn[j]
             }
             h := hn
@@ -2557,7 +2558,7 @@ def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
         var want_noise : array<float>
         want_noise |> resize(n * nh)
         for (i in range(n * nh)) {
-            want_noise[i] = st2_hash_normal(ka_own.seed, uint(i))
+            want_noise[i] = tts_hash_normal(ka_own.seed, uint(i))
         }
         t |> equal(buf_mismatch_bars(bnz1, want_noise, 1e-5, 1e-6, "{tag} own draw vs the CPU hash"), 0)   //! the kernel's log and cos under the default fast math against the CPU's: within 1e-5 of a value under 5
         var own1 <- buf_download(bh1, n, type<float>)

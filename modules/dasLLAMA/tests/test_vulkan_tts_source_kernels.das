@@ -5,7 +5,7 @@ options _dasllama_internal = true
 module test_vulkan_tts_source_kernels
 
 require dastest/testing_boost public
-require math
+require math   // nolint:STYLE030,LINT019 — the oracles' scalar math inside the vulkan arms alone; the no-Vulkan lane sees it unused
 require ?vulkan vulkan
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
@@ -13,7 +13,7 @@ require ?vulkan dasllama/dasllama_gpu_math   // tts_hash_normal: the own noise d
 require ?vulkan _vkd_oracles
 require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
 require _tts_kernel_oracles   // nolint:STYLE030,LINT019 — the fixtures and double forms the Metal gate shares, inside the vulkan arms alone
-require dasllama/dasllama_tts_blocks
+require dasllama/dasllama_tts_blocks   // nolint:STYLE030,LINT019 — the CPU source chain the cells hold against, inside the vulkan arms alone
 
 //! The TTS tower's decoder tail on Vulkan against the CPU chain (a Vulkan device, else the cells skip): the stage sum's
 //! axpy and the last stage's reflect pad, exact; the harmonic source on both resample laws - the phase frames, the mixed

@@ -14,7 +14,7 @@ require _tts_kernel_oracles   // nolint:STYLE030,LINT019 — the in-test CPU for
 require dasllama/dasllama_math
 require dasllama/dasllama_tts_blocks   // nolint:STYLE030,LINT019 — attention_rows, leaky_relu: the CPU oracles, inside the vulkan arms alone
 require daslib/jobque_boost
-require math
+require math   // nolint:STYLE030,LINT019 — sqrt, tanh: the oracles inside the vulkan arms alone; the no-Vulkan lane sees it unused
 
 //! The TTS tower's Vulkan kernel classes against their CPU oracles (a Vulkan device, else the
 //! cells skip): the f32-exact tile GEMM the front end feeds on, in both its stamps, at shapes off
