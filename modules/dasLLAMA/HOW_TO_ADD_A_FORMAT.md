@@ -226,9 +226,19 @@ grp<mr> pair `expand_<fmt>_grp_row` / `gather_<fmt>_grp_scales`. Around them: th
 `mm_b_<fmt>_pre` / `mm_b_<fmt>_groupn` routers in `dasllama_common.das`, and the gates in
 `tests/test_kquant.das` twinning q51's (plane unpack, dot vs fp64, groupn / batch /
 batch-groupn bit-match, the grp expand twins at mr 4/8, the GPU gather off grp planes) plus the
-identity / inverse-map cells in `tests/test_repack.das`. The gen-tier family
-(`<fmt>q8_*_gen`) is the same shape as q51's and lands after the portable rail proves parity
-(`followup_general.md` item 168 holds iq4nl32's).
+identity / inverse-map cells in `tests/test_repack.das`. The gen-tier family is q51's shape
+twice over: in `dasllama_math_gen.das` the layout companion, the grp scalar walk
+(`<fmt>_grp_row_dot`), the `[tune_perm]` tile with its GEMV and layout companions, and the
+groupn / batch / batch-groupn slots - the slots are ONE body over the tag (`b32g_*`: strides,
+layout, the tile and GEMV stamps, the scalar tail dot, and whether the fold reads the per-32
+activation sums), so a per-32 format writes its leaves and eight one-line overloads; in
+`dasllama_gemm_gen.das` a `TileEmit` flag, a block body (iq4nl32's is the mx4 nibble+LUT dots -
+`emit_lut_nibble_dots`, shared - under an f16 d fold, `emit_lut_block_fold`, shared), the
+`emit_one_block` arm, the `nibblePlane` set in `setup_tile_emit`, and the `b32_gemv_gen_impl` /
+`b32_tile_gen_impl` walks parameterized on the block strides; then the registration rows, the
+probe's per-32 family (`b32_tune_family` over `KqFmt.q51` and `KqFmt.iq4nl32` - the fixture
+width is the expert width the rail exists for), the `kq_kernel_bench` variant arms and the
+class-profile entries (`<fmt>q8_tile_gen`, `dot_<fmt>e`) in every `performance/defaults/*.json`.
 
 Gate: `test_kqformat` + `test_kquant` under `-jit` (the stubs decline, so their reference bodies
 run either way; every dasLLAMA test run is a `-jit` run). A new `[tune]` family re-tunes every

@@ -1820,15 +1820,13 @@
     line. Done = `--temp/--top-k/--top-p` on the tg row, a `tg128@sampled` cell beside `tg128`,
     and the ledger entry re-minted from it.
 
-168. **The iq4nl32 rail's gen-tier family and its Vulkan device run.** The per-32 IQ4_NL plane
-    pair (`iq4nl32q`/`iq4nl32s`) serves Qwen3.8-Flash-Next's 640-wide `ffn_down_exps` stacks on
-    the CPU portable kernels, on Metal and through the Vulkan classes (`Iq4nl32Cm2T`'s three
-    stamps, `Iq4nl32Gemv`), but the CPU tier has no `iq4nl32q8_*_gen` `[tune]` family, so the
-    expanded-row kernels run their `[tuned]` fallback stamps (`dot_iq4nl32e` reads untuned in
-    every manifest), and the Vulkan cells (`test_vkd_iq4nl32_cm2_batch`, `test_vkd_iq4nl32_gemv`)
-    have run on no coopmat device yet. Done = the gen family with its
-    `harness/gen_tune_probe.das` rows and the class-profile entries, the two Vulkan cells green
-    on the 5060 Ti, and the Flash-Next decode rows re-measured on both tiers.
+168. **The iq4nl32 rail's Vulkan device run.** The per-32 IQ4_NL plane pair
+    (`iq4nl32q`/`iq4nl32s`) serves Qwen3.8-Flash-Next's 640-wide `ffn_down_exps` stacks on the
+    CPU (the portable kernels and the `iq4nl32q8_*_gen` family), on Metal and through the Vulkan
+    classes (`Iq4nl32Cm2T`'s three stamps, `Iq4nl32Gemv`), but the Vulkan tile cells
+    (`test_vkd_iq4nl32_cm2_batch`) have run on no coopmat device - this Mac's MoltenVK serves the
+    GEMV cell alone. Done = the cm2 and KHR arms green on the 5060 Ti and the Flash-Next decode
+    rows re-measured on the Vulkan tier.
 
 169. **The n-gram hash table as a mapped view.** Qwen3.8-Flash-Next's `per_layer_token_embd` is
     28.8 GB of gather-only rows the load copies into `Model.ngram_tab`; every other read of a

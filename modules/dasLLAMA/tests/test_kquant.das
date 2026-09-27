@@ -1117,8 +1117,8 @@ def private iq4nl32_batch_gate(t : T?) {
     }
 }
 
-// the grp<mr> iq4nl32 layout: repack round-trip through the grp expand twins and the untouched
-// disk-order tail rows - all bit-exact vs disk (no gen-tier grp walk yet: the expand pair IS the walk)
+// the grp<mr> iq4nl32 layout (the emitter family's plane): repack round-trip, the grp scalar walk,
+// the grp expand twins, and the untouched disk-order tail rows - all bit-exact vs disk
 def private iq4nl32_grp_gate(t : T?) {
     let n = 2560l
     let nb = n / 32l
@@ -1156,6 +1156,9 @@ def private iq4nl32_grp_gate(t : T?) {
             for (r in range64(d)) {
                 if (r < grpRows) {
                     let gbase = (r / mr) * mr * nb
+                    let got = iq4nl32_grp_row_dot(addr(gq[0]) + gbase * IQ4NL32_QB, addr(gs[0]) + gbase * IQ4NL32_SB, r % mr, mr,
+                                                  addr(xq[0]), addr(xs[0]), n)
+                    t |> success(got == yref[r], "iq4nl32_grp_row_dot must bit-match the disk scalar dot")
                     expand_iq4nl32_grp_row(addr(gq[0]) + gbase * IQ4NL32_QB, r % mr, mr, addr(qe[0]), nb)
                     gather_iq4nl32_grp_scales(addr(gs[0]) + gbase * IQ4NL32_SB, r % mr, mr, addr(sc[0]), nb)
                     expand_iq4nl32_row(addr(kq[0]) + r * nb * IQ4NL32_QB, addr(qe2[0]), nb)
@@ -1243,7 +1246,7 @@ def test_iq4nl32_kernels(t : T?) {
     t |> run("iq4nl32 groupn bit-matches scalar row dots") @(t : T?) {
         iq4nl32_groupn_gate(t)
     }
-    t |> run("iq4nl32 grp<mr> planes bit-match disk (repack + expand twins + tails)") @(t : T?) {
+    t |> run("iq4nl32 grp<mr> planes bit-match disk (repack + grp walk + expand twins + tails)") @(t : T?) {
         iq4nl32_grp_gate(t)
     }
     t |> run("iq4nl32 batch + batch-groupn bit-match scalar row dots") @(t : T?) {

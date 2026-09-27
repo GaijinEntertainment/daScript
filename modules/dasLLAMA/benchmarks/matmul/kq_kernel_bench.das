@@ -31,7 +31,7 @@ require daslib/strings_boost
 [CommandLineArgs]
 struct BenchArgs {
     @clarg_short = "f"
-    @clarg_doc = "KqFmt names, comma-separated (q8,k4,k5,k6,q40,q51,iq4xs,k3,iq3s,iq3xxs,iq4nl,k2,iq2s,iq2xs,iq2xxs; mx4 = mxfp4; q8s16 = q8 over binary16 group scales, the GGUF q8_0 tensor's path), or all"
+    @clarg_doc = "KqFmt names, comma-separated (q8,k4,k5,k6,q40,q51,iq4xs,k3,iq3s,iq3xxs,iq4nl,k2,iq2s,iq2xs,iq2xxs,iq4nl32; mx4 = mxfp4; q8s16 = q8 over binary16 group scales, the GGUF q8_0 tensor's path), or all"
     fmt : string = "all"
     @clarg_doc = "Reduction length - the weight row length (k in test-backend-ops terms)"
     n : int = 14336
@@ -98,6 +98,7 @@ def gemv_variants(f : KqFmt) : array<tuple<string; GemvFn>> {
     if (f == KqFmt.iq2xs) return <- iq2xsq8_gemv_gen_variants()
     if (f == KqFmt.iq2xxs) return <- iq2xxsq8_gemv_gen_variants()
     if (f == KqFmt.q51) return <- q51q8_gemv_gen_variants()
+    if (f == KqFmt.iq4nl32) return <- iq4nl32q8_gemv_gen_variants()
     var none : array<tuple<string; GemvFn>>
     return <- none
 }
@@ -117,6 +118,7 @@ def tile_variants(f : KqFmt) : array<tuple<string; TileFn>> {
     if (f == KqFmt.iq2xs) return <- iq2xsq8_tile_gen_variants()
     if (f == KqFmt.iq2xxs) return <- iq2xxsq8_tile_gen_variants()
     if (f == KqFmt.q51) return <- q51q8_tile_gen_variants()
+    if (f == KqFmt.iq4nl32) return <- iq4nl32q8_tile_gen_variants()
     var none : array<tuple<string; TileFn>>
     return <- none
 }
@@ -136,6 +138,7 @@ def layout_variants(f : KqFmt) : array<tuple<string; LayoutFn>> {
     if (f == KqFmt.iq2xs) return <- iq2xsq8_layout_gen_variants()
     if (f == KqFmt.iq2xxs) return <- iq2xxsq8_layout_gen_variants()
     if (f == KqFmt.q51) return <- q51q8_layout_gen_variants()
+    if (f == KqFmt.iq4nl32) return <- iq4nl32q8_layout_gen_variants()
     return <- q8q8_layout_gen_variants()   // q8 and its mx4 companion share the q8q8 layout
 }
 
@@ -150,7 +153,7 @@ def companion_ints(var lvs : array<tuple<string; LayoutFn>>) : table<string; int
 //! a TILE reads either the packed quant plane or a caller-unpacked byte panel (256 bytes per row per superblock: k5, k6 and the five grid formats) - kq_reads_packed_planes is the truth
 def tile_kq_bytes_per_sb(f : KqFmt) : int64 => kq_reads_packed_planes(int64(kq_schema_id(f))) ? kq_qsb(f) : 256l
 
-//! plane bytes per row: kq formats per 256-superblock, q51 per 32-block (20 + 4), q8 n int8 + n/32 f32, mx4 n/2 nibbles + n/32 e8m0
+//! plane bytes per row: kq formats per 256-superblock, q51 per 32-block (20 + 4), iq4nl32 per 32-block (16 + 2), q8 n int8 + n/32 f32, mx4 n/2 nibbles + n/32 e8m0
 struct PlaneShape {
     gemvW_row : int64   // the gemv's weight plane bytes per row
     tileW_row : int64   // the tile's weight plane bytes per row
@@ -166,6 +169,9 @@ def plane_shape(f : KqFmt; mx4 : bool; n : int64) : PlaneShape {
     }
     if (f == KqFmt.q51) {
         return PlaneShape(gemvW_row = (n / 32l) * 20l, tileW_row = (n / 32l) * 20l, ws_row = (n / 32l) * 4l)
+    }
+    if (f == KqFmt.iq4nl32) {
+        return PlaneShape(gemvW_row = (n / 32l) * IQ4NL32_QB, tileW_row = (n / 32l) * IQ4NL32_QB, ws_row = (n / 32l) * IQ4NL32_SB)
     }
     let nsb = n / 256l
     return PlaneShape(gemvW_row = nsb * kq_qsb(f), tileW_row = nsb * tile_kq_bytes_per_sb(f), ws_row = nsb * kq_ssb(f))
