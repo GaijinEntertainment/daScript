@@ -201,7 +201,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|move|move_new|get_ptr$)%%),
         group_by_regex("Macro infrastructure", mod, %regex~(is_folding|is_compiling|is_in_completion|is_in_lint_check|is_building_documentation|is_reporting_compilation_errors)%%),
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%),
-        group_by_regex("System infrastructure", mod, %regex~(panic|print|feint|sprint|sprint_json|sscan_json|to_log|to_compiler_log|diagnostics_to_stderr|diagnostics_to_file|error|terminate|breakpoint|stackwalk|get_stackwalk|get_das_root|get_das_version|is_in_aot|aot_enabled|is_intern_strings|is_safe_hash|eval_main_loop|shared_module_extension)$%%),
+        group_by_regex("System infrastructure", mod, %regex~(panic|print|feint|sprint|sprint_json|sscan_json|to_log|to_compiler_log|diagnostics_to_stderr|diagnostics_to_file|error|terminate|breakpoint|stackwalk|get_stackwalk|get_das_root|get_executable_path|get_das_version|is_in_aot|aot_enabled|is_intern_strings|is_safe_hash|eval_main_loop|shared_module_extension)$%%),
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|hash_combine64|memcpy|memmove|lock_data|map_to_array|map_to_ro_array)$%%),
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%),
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments|with_argv)$%%),
@@ -284,7 +284,8 @@ def document_module_dashv(_root : string) {
         group_by_regex("Request configuration", mod, %regex~(set_basic_auth|set_bearer_token_auth|set_timeout|set_connect_timeout|allow_redirect|set_param|get_param|each_param)$%%),
         group_by_regex("Cookies", mod, %regex~(add_cookie|get_cookie|each_cookie)$%%),
         group_by_regex("Form data", mod, %regex~(set_form_data|set_form_file|get_form_data|each_form_field|save_form_file|set_url_encoded|get_url_encoded)$%%),
-        group_by_regex("SSE response writer", mod, %regex~(respond|sse_event|end_headers|write_chunked|set_writer_keepalive_timeout|close_writer|release_writer|is_writer_connected)$%%)
+        group_by_regex("SSE response writer", mod, %regex~(respond|sse_event|end_headers|write_chunked|set_writer_keepalive_timeout|close_writer|release_writer|is_writer_connected)$%%),
+        group_by_regex("Logging", mod, %regex~(hv_set_log_file)$%%)
     )
     document("HTTP and WebSocket library (libhv)", mod, "dashv.rst", groups)
 }

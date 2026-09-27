@@ -543,6 +543,38 @@ def test_config_layering(t : T?) {
 }
 
 [test]
+def test_state_dir(t : T?) {
+    t |> run("~ is the home directory, alone or leading a path; anything else is untouched") @(t : T?) {
+        t |> equal(expand_home("~", "/h"), "/h")
+        t |> equal(expand_home("~/.dasllama", "/h"), path_join("/h", ".dasllama"))
+        t |> equal(expand_home("~\\.dasllama", "C:/u"), path_join("C:/u", ".dasllama"))
+        t |> equal(expand_home("~user/x", "/h"), "~user/x")
+        t |> equal(expand_home("logs/~", "/h"), "logs/~")
+    }
+    t |> run("the log, pid file, dumps and crash bundles resolve under state_dir; the child still runs in cwd") @(t : T?) {
+        let root = make_temp(t, "wd state ")
+        if (empty(root)) return
+        let state = path_join(root, "state")
+        fwrite(path_join(root, "watchdog.json"), "\{\"name\": \"st\", \"no_health\": true\}")
+        let resolved <- resolve_config(["--program", das_exe(), "--state-dir", state], root)
+        t |> equal(resolved.error, "")
+        t |> equal(resolved.cfg.log, get_full_file_name(path_join(state, "logs/st-watchdog.log")))
+        t |> equal(resolved.cfg.pid_file, get_full_file_name(path_join(state, "logs/st-watchdog.pid")))
+        t |> equal(resolved.cfg.crash_dir, get_full_file_name(path_join(state, "logs/crashes")))
+        t |> equal(resolved.cfg.dump_dir, get_full_file_name(path_join(state, "logs/dumps")))
+        t |> equal(resolved.cfg.cwd, get_full_file_name(root), "the child's directory is unchanged")
+        let profile = get_env_variable("USERPROFILE")
+        let home = !empty(profile) ? profile : get_env_variable("HOME")
+        let homed <- resolve_config(["--program", das_exe(), "--state-dir", "~/wd_state_probe"], root)
+        t |> equal(homed.cfg.state_dir, get_full_file_name(path_join(home, "wd_state_probe")), "~ is the user's home directory")
+        let defaulted <- resolve_config(["--program", das_exe()], root)
+        t |> equal(defaulted.cfg.state_dir, defaulted.cfg.cwd, "no state_dir: everything stays under cwd")
+        let cleanup = rmdir_rec_result(root)
+        t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+}
+
+[test]
 def test_discovery(t : T?) {   // nolint:STYLE038 — one layout fixture per arm, each a straight list of assertions
     t |> run("main.das beside bin/Release/daslang means script mode; two exes are ambiguous; nothing is an error") @(t : T?) {
         let root = make_temp(t, "wd discover ")
@@ -587,6 +619,12 @@ def test_discovery(t : T?) {   // nolint:STYLE038 — one layout fixture per arm
         fwrite(path_join(root, "two.exe"), "")
         let ambiguous <- resolve_config([], root)
         t |> success(find(ambiguous.error, "2 executables") >= 0, "two exes are refused: {ambiguous.error}")
+        let hinted <- resolve_config(["--discover-program", "two"], root)
+        t |> equal(hinted.error, "")
+        t |> equal(hinted.cfg.program, get_full_file_name(path_join(root, "two.exe")), "discover_program picks among several")
+        t |> equal(hinted.cfg.name, "two")
+        let wrong_hint <- resolve_config(["--discover-program", "three"], root)
+        t |> success(find(wrong_hint.error, "2 executables") >= 0, "a hint that names none of them stays ambiguous: {wrong_hint.error}")
         remove(path_join(root, "two.exe"))
         fwrite(path_join(root, "watchdog.exe"), "")
         mkdir(path_join(root, "dir.exe"))
@@ -954,9 +992,15 @@ def test_supervise_config_restart(t : T?) {
         let state_dir = path_join(root, "state")
         mkdir(state_dir)
         var code = 0
-        var sup = watchdog_start(program_mode_args(root, state_dir, "config-restart"), root, 0, code)
+        let wd_state = path_join(root, "wdstate")
+        var args <- program_mode_args(root, state_dir, "config-restart")
+        args |> push("--state-dir", 0)
+        args |> push(wd_state, 1)
+        var sup = watchdog_start(args, root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
         if (sup == null) return
+        t |> success(stat(path_join(wd_state, "logs")).is_dir, "the supervisor made its state directory's logs/")
+        t |> success(ends_with(replace(sup.cfg.log, "\\", "/"), "wdstate/logs/wdtest-watchdog.log"), "its log lives there: {sup.cfg.log}")
         t |> equal(run_bounded(t, sup, guard(60.0)), 0)
         let events <- read_events(sup.cfg.log)
         t |> equal(count_event(events, "config_restart_relaunch"), 1, "{event_names(events)}")

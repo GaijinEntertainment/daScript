@@ -24,6 +24,7 @@ namespace das {
     int das_wsc_send ( Handle<hv::WebSocketClient> h, const char* msg );
     int das_wsc_send_buf ( Handle<hv::WebSocketClient> h, const char* msg, int32_t len, ws_opcode opcode );
     int das_wsc_close ( Handle<hv::WebSocketClient> h );
+    void das_hv_set_log_file ( const char * path );
     bool das_wsc_is_connected ( Handle<hv::WebSocketClient> h );
     void das_wsc_tick ( Handle<hv::WebSocketClient> h );
 

@@ -30,10 +30,13 @@ def macho_with(minos_major, minos_minor, legacy=False):
     return hdr + struct.pack("<IIIIII", wb.LC_BUILD_VERSION, 24, 1, mo, mo, 0)
 
 
-class WheelBuildTest(unittest.TestCase):
+class BundleFixture(unittest.TestCase):
+    """A tempdir with the bundle under BUNDLE_DIR and an out dir; stage() writes files into it."""
+    BUNDLE_DIR = "daslang_bundle"
+
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        self.bundle = os.path.join(self.tmp, "daslang_bundle")
+        self.bundle = os.path.join(self.tmp, self.BUNDLE_DIR)
         self.out = os.path.join(self.tmp, "out")
 
     def tearDown(self):
@@ -45,6 +48,9 @@ class WheelBuildTest(unittest.TestCase):
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "wb") as f:
                 f.write(data)
+
+
+class WheelBuildTest(BundleFixture):
 
     def stage_minimal(self, extra=None):
         files = {"LICENSE": b"BSD", "README.md": b"# daslang", "daslib/strings.das": b"// das"}
@@ -191,7 +197,7 @@ class WheelBuildTest(unittest.TestCase):
         os.remove(os.path.join(self.bundle, "README.md"))
         whl = wb.build(self.bundle, "v0.6.4", self.out, platform_tag="win_amd64")
         with zipfile.ZipFile(whl) as z:
-            self.assertIn(wb.SUMMARY, z.read("daslang-0.6.4.dist-info/METADATA").decode())
+            self.assertIn(wb.profile("daslang")["summary"], z.read("daslang-0.6.4.dist-info/METADATA").decode())
 
     def test_over_the_size_cap_is_fatal(self):
         self.stage_minimal()
@@ -208,6 +214,48 @@ class WheelBuildTest(unittest.TestCase):
         os.remove(os.path.join(self.bundle, "bin", "dastest.exe"))
         with self.assertRaises(SystemExit):
             wb.build(self.bundle, "v0.6.4", self.out, platform_tag="win_amd64")
+
+
+class DasllamaWheelTest(BundleFixture):
+    """The dasllama profile: a flat bundle (or the mac .app), the repo LICENSE, no trimming."""
+    BUNDLE_DIR = "dist"
+
+    def build(self, **kw):
+        return wb.build(self.bundle, "v0.6.5-RC1", self.out, package="dasllama", **kw)
+
+    def test_flat_bundle_shims_every_command(self):
+        self.stage({"dasllama-server.exe": elf_with("2.35"), "dasllama-cli.exe": elf_with("2.35"),
+                    "dasllama-bench.exe": elf_with("2.34"), "watchdog": elf_with("2.35"),
+                    "control.html": b"<html>", "include/x.h": b"kept"})
+        whl = self.build(system="Linux", machine="x86_64")
+        self.assertTrue(whl.endswith("dasllama-0.6.5rc1-py3-none-manylinux_2_35_x86_64.whl"))
+        with zipfile.ZipFile(whl) as z:
+            names = set(z.namelist())
+            eps = z.read("dasllama-0.6.5rc1.dist-info/entry_points.txt").decode()
+            mode = z.getinfo("dasllama/_sdk/watchdog").external_attr >> 16
+            init = z.read("dasllama/__init__.py").decode()
+            main = z.read("dasllama/__main__.py").decode()
+            meta = z.read("dasllama-0.6.5rc1.dist-info/METADATA").decode()
+        self.assertIn("dasllama/_sdk/include/x.h", names)
+        self.assertIn("dasllama-0.6.5rc1.dist-info/LICENSE", names)
+        self.assertIn("dasllama-watchdog = dasllama._cli:dasllama_watchdog", eps)
+        self.assertIn("dasllama-server = dasllama._cli:dasllama_server", eps)
+        self.assertTrue(mode & 0o111, "an extensionless executable keeps its exec bit")
+        self.assertIn("'dasllama-watchdog': ['watchdog'", init)
+        self.assertIn('run("dasllama-cli")', main, "python -m dasllama runs the profile's main command")
+        self.assertIn(wb.profile("dasllama")["description"], meta, "no README: the summary and the description")
+
+    def test_mac_app_resolves_inside_the_bundle(self):
+        macos = "dasllama-server.app/Contents/MacOS/"
+        self.stage({macos + n: macho_with(14, 0) for n in
+                    ("dasllama-server", "dasllama-cli", "dasllama-bench", "watchdog")})
+        whl = self.build(system="Darwin", machine="arm64")
+        self.assertTrue(whl.endswith("py3-none-macosx_14_0_arm64.whl"))
+
+    def test_missing_command_is_fatal(self):
+        self.stage({"dasllama-server.exe": b"MZ", "dasllama-cli.exe": b"MZ", "watchdog.exe": b"MZ"})
+        with self.assertRaises(SystemExit):
+            self.build(platform_tag="win_amd64")
 
 
 if __name__ == "__main__":

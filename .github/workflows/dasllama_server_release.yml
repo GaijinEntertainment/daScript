@@ -1,13 +1,16 @@
 name: dasllama-server release
 
-# Builds the standalone dasllama-server bundle per platform - a fat exe (one clone of every
-# [tune] kernel per shipped CPU-class profile, picked from cpuid at start) with the watchdog
-# beside it - and publishes it to the rolling `dasllama-server` release, the one the download
-# links on dasllama.io point at, plus the daslang release that triggered the run.
+# Builds the standalone dasllama bundle per platform - a fat exe (one clone of every [tune]
+# kernel per shipped CPU-class profile, picked from cpuid at start) with the watchdog beside it -
+# and packages it as the `dasllama` package: the archive, a .deb and an .rpm per linux arch, a
+# pip wheel per platform (ci/packaging/README.md). The archives go to the rolling
+# `dasllama-server` release and to the daslang release that triggered the run; the packages to
+# the daslang release, PyPI, and the Homebrew tap and scoop bucket.
 #
 # Triggers:
-#   * release: prereleased - full matrix, uploads dasllama-server-<os>-<arch>.<ext> to the
-#     rolling release (--clobber) and to the daslang release being cut.
+#   * release: prereleased - full matrix, uploads dasllama-<os>-<arch>.<ext> and the packages to
+#     the daslang release being cut, the archives to the rolling release (--clobber), the wheels
+#     to PyPI (TestPyPI for an RC), the manifests to the tap and bucket.
 #   * workflow_dispatch - full matrix build + smoke; uploads to the rolling release only when
 #     the `publish` input is set. A dispatch without it is a build check, nothing moves.
 #   * push on a branch of this file or of what the bundle carries (the server, the watchdog,
@@ -34,6 +37,7 @@ on:
       - 'modules/dasHV/**'
       - 'modules/dasLLAMA/benchmarks/lcpp_bench.das'
       - 'modules/dasLLAMA/dasllama/dasllama_bench.das'
+      - 'ci/packaging/**'
       - '!**/*.md'
   workflow_dispatch:
     inputs:
@@ -162,15 +166,22 @@ jobs:
         # the server has no --help (its flag is --show-help, and an unknown flag is ignored), so the
         # smoke is the real thing: the exe boots into setup mode on a spare port, answers /v1/stats,
         # and leaves cleanly on POST /shutdown. daspkg keeps the .exe suffix on every flat bundle;
-        # only the macOS .app drops it
+        # only the macOS .app drops it. It runs from a copy of the bundle with a fresh home: every
+        # file the programs write lands under <home>/.dasllama, and the copy is unchanged after
         timeout-minutes: 15
         run: |
           set -eux
+          SMOKE="$RUNNER_TEMP/smoke"
+          mkdir -p "$SMOKE/home"
+          cp -R dist "$SMOKE/dist"
+          export HOME="$SMOKE/home" USERPROFILE="$SMOKE/home"
           case "${{ runner.os }}" in
-            macOS)   APP=dist/dasllama-server.app/Contents/MacOS; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench"; CLI="$APP/dasllama-cli" ;;
-            Windows) APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog.exe"; BENCH="$APP/dasllama-bench.exe"; CLI="$APP/dasllama-cli.exe" ;;
-            *)       APP=dist/dasllama-server; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench.exe"; CLI="$APP/dasllama-cli.exe" ;;
+            macOS)   APP="$SMOKE/dist/dasllama-server.app/Contents/MacOS"; SERVER="$APP/dasllama-server"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench"; CLI="$APP/dasllama-cli" ;;
+            Windows) APP="$SMOKE/dist/dasllama-server"; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog.exe"; BENCH="$APP/dasllama-bench.exe"; CLI="$APP/dasllama-cli.exe" ;;
+            *)       APP="$SMOKE/dist/dasllama-server"; SERVER="$APP/dasllama-server.exe"; WATCHDOG="$APP/watchdog"; BENCH="$APP/dasllama-bench.exe"; CLI="$APP/dasllama-cli.exe" ;;
           esac
+          (cd "$SMOKE/dist" && find . | sort) > "$SMOKE/before.txt"
+          if [[ "${{ runner.os }}" != "Windows" ]]; then chmod -R a-w "$SMOKE/dist"; fi
           test -f "$APP/control.html"
           test -f "$APP/tray.ico"
           test -f "$APP/watchdog.json"
@@ -182,13 +193,13 @@ jobs:
           # a refusal that names the flag, not a crash
           "$CLI" --help
           "$CLI" talk --help
-          if "$CLI" complete "hi" > smoke_cli.log 2>&1; then echo "the CLI completed with no model"; cat smoke_cli.log; exit 1; fi
+          if (cd "$SMOKE" && "$CLI" complete "hi") > smoke_cli.log 2>&1; then echo "the CLI completed with no model"; cat smoke_cli.log; exit 1; fi
           grep -q -- "--model" smoke_cli.log
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             grep -A1 CFBundleExecutable dist/dasllama-server.app/Contents/Info.plist | grep -q '<string>watchdog</string>'
             grep -A1 LSUIElement dist/dasllama-server.app/Contents/Info.plist | grep -q '<true'
           fi
-          "$SERVER" --port 18099 > smoke_server.log 2>&1 &
+          (cd "$SMOKE" && exec "$SERVER" --port 18099) > smoke_server.log 2>&1 &
           SERVER_PID=$!
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:18099/v1/stats > smoke_stats.json; then break; fi
@@ -200,21 +211,125 @@ jobs:
           curl -sf -X POST http://127.0.0.1:18099/shutdown
           wait "$SERVER_PID"
           tail -5 smoke_server.log
+          # the supervisor finds the server among its companions and keeps it up; a signal stops both
+          if [[ "${{ runner.os }}" != "Windows" ]]; then
+            (cd "$SMOKE" && exec "$WATCHDOG" --no-tray) > smoke_watchdog.log 2>&1 &
+            WATCHDOG_PID=$!
+            for i in $(seq 1 60); do
+              if curl -sf http://127.0.0.1:8080/v1/stats > smoke_wd_stats.json; then break; fi
+              if ! kill -0 "$WATCHDOG_PID" 2>/dev/null; then echo "the watchdog exited"; cat smoke_watchdog.log; exit 1; fi
+              sleep 2
+            done
+            grep -q '"setup":true' smoke_wd_stats.json
+            kill "$WATCHDOG_PID"
+            wait "$WATCHDOG_PID"
+            test -f "$HOME/.dasllama/logs/dasllama-watchdog.log"
+          fi
+          # the state went home, nothing into the bundle or the working directory
+          ls "$HOME"/.dasllama/logs/libhv.*.log
+          (cd "$SMOKE/dist" && find . | sort) > "$SMOKE/after.txt"
+          diff "$SMOKE/before.txt" "$SMOKE/after.txt"
+          for p in "$SMOKE"/libhv.*.log "$SMOKE/logs"; do
+            if [ -e "$p" ]; then echo "a program wrote into its working directory: $p"; exit 1; fi
+          done
+          if [[ "${{ runner.os }}" != "Windows" ]]; then chmod -R u+w "$SMOKE/dist"; fi
 
       - name: Package
         run: |
           set -eux
           mkdir -p artifacts
-          ASSET="dasllama-server-${{ matrix.name }}.${{ matrix.ext }}"
+          ASSET="dasllama-${{ matrix.name }}.${{ matrix.ext }}"
           case "${{ runner.os }}" in
             macOS)   ditto -c -k --sequesterRsrc --keepParent dist/dasllama-server.app "artifacts/$ASSET" ;;
             Windows) (cd dist && 7z a "../artifacts/$ASSET" dasllama-server) ;;
             *)       tar -czf "artifacts/$ASSET" -C dist dasllama-server ;;
           esac
-          cd artifacts
-          (sha256sum "$ASSET" 2>/dev/null || shasum -a 256 "$ASSET") > "$ASSET.sha256"
-          cat "$ASSET.sha256"
-          ls -la
+
+      - name: Build .deb and .rpm
+        # the apt- and dnf-installable forms of the linux bundle (ci/packaging/README.md); rpmbuild
+        # is an apt package, so both linux cells produce their arch without a Fedora runner
+        if: runner.os == 'Linux'
+        run: |
+          set -eux
+          sudo bash ci/apt_install.sh --no-install-recommends rpm cpio
+          TAG="${{ github.event.release.tag_name || '0.0.0-dev' }}"
+          bash ci/packaging/deb_build.sh --package dasllama dist/dasllama-server "$TAG" artifacts
+          bash ci/packaging/rpm_build.sh --package dasllama dist/dasllama-server "$TAG" artifacts
+
+      - name: Smoke-test the .deb and .rpm
+        # apt resolves the declared dependencies and puts the commands on PATH; the server then boots
+        # from /usr/bin through its link, with the install tree root-owned, and writes only under HOME
+        if: runner.os == 'Linux'
+        timeout-minutes: 15
+        run: |
+          set -eux
+          sudo apt-get install -y ./artifacts/dasllama_*.deb
+          [ "$(readlink /usr/bin/dasllama-server)" = /opt/dasllama/dasllama-server.exe ]
+          [ "$(readlink /usr/bin/dasllama-watchdog)" = /opt/dasllama/watchdog ]
+          dasllama-cli --help
+          dasllama-watchdog --help
+          dasllama-bench -m none.gguf --help
+          export HOME="$RUNNER_TEMP/deb_home"
+          mkdir -p "$HOME"
+          dasllama-server --port 18098 > deb_server.log 2>&1 &
+          SERVER_PID=$!
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:18098/v1/stats > deb_stats.json; then break; fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then echo "the server exited before serving"; cat deb_server.log; exit 1; fi
+            sleep 2
+          done
+          grep -q '"setup":true' deb_stats.json
+          curl -sf -X POST http://127.0.0.1:18098/shutdown
+          wait "$SERVER_PID"
+          ls "$HOME"/.dasllama/logs/libhv.*.log
+          sudo apt-get remove -y dasllama
+          rpm=$(ls artifacts/*.rpm)
+          rpm -qpi "$rpm"
+          rpm -qpR "$rpm" | grep -qx openssl-libs
+          for cmd in dasllama-server dasllama-cli dasllama-bench dasllama-watchdog; do
+            rpm -qpl "$rpm" | grep -qx "/usr/bin/$cmd"
+          done
+          [ "$(rpm -qp --queryformat '%{ARCH}' "$rpm")" = "$(rpm --eval '%{_arch}')" ]
+          mkdir rpm_payload
+          (cd rpm_payload && rpm2cpio "../$rpm" | cpio -idm --quiet)
+          [ "$(readlink rpm_payload/usr/bin/dasllama-cli)" = /opt/dasllama/dasllama-cli.exe ]
+          rpm_payload/opt/dasllama/dasllama-cli.exe --help
+
+      - name: Set up Python for the wheel
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Build pip wheel
+        # the pip-installable form of the bundle - ci/packaging/README.md; also a release asset
+        run: |
+          set -eux
+          if [[ "${{ runner.os }}" == "macOS" ]]; then BUNDLE=dist; else BUNDLE=dist/dasllama-server; fi
+          python ci/packaging/wheel_build.py --package dasllama "$BUNDLE" "${{ github.event.release.tag_name || '0.0.0-dev' }}" artifacts
+
+      - name: Smoke-test pip wheel
+        # the console scripts reach the bundle inside site-packages, whatever the platform names them
+        run: |
+          set -eux
+          python -m venv wheel_venv
+          if [ -d wheel_venv/Scripts ]; then VB=wheel_venv/Scripts; else VB=wheel_venv/bin; fi
+          "$VB/python" -m pip install --disable-pip-version-check artifacts/*.whl
+          "$VB/dasllama-cli" --help
+          "$VB/dasllama-cli" talk --help
+          "$VB/dasllama-watchdog" --help
+          "$VB/dasllama-bench" -m none.gguf --help
+          "$VB/python" -c "import dasllama; print(dasllama.__version__, dasllama.tool_path('dasllama-server'))"
+
+      - name: Checksum every asset
+        # every package-manager manifest reads its sha256 from the sibling asset
+        run: bash ci/packaging/checksum_assets.sh artifacts
+
+      - name: Upload wheel for the PyPI publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.name }}
+          path: artifacts/*.whl
+          if-no-files-found: error
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -234,12 +349,92 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # four cells publish in parallel: the first to find no release creates it, a loser of that
-        # race sees "already exists" and re-checks instead of failing
+        # race sees "already exists" and re-checks instead of failing. The rolling release carries
+        # the archives only, also under their dasllama-server-* names, which links made before the
+        # package was named dasllama still point at
         run: |
           set -eux
+          mkdir rolling
+          ASSET="dasllama-${{ matrix.name }}.${{ matrix.ext }}"
+          cp "artifacts/$ASSET" "artifacts/$ASSET.sha256" rolling/
+          cp "artifacts/$ASSET" "rolling/dasllama-server-${{ matrix.name }}.${{ matrix.ext }}"
+          bash ci/packaging/checksum_assets.sh rolling "dasllama-server-${{ matrix.name }}.${{ matrix.ext }}"
           gh release view dasllama-server --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
             || gh release create dasllama-server --repo "$GITHUB_REPOSITORY" --latest=false \
               --title "dasllama-server - standalone downloads (rolling)" \
               --notes "The OpenAI-compatible dasLLAMA server as a standalone download per platform. Rolling: every asset is replaced in place when a daslang release is cut. Unpack, start watchdog (the .app on macOS), open http://127.0.0.1:8080/ - utils/dasllama-server/README.md." \
             || gh release view dasllama-server --repo "$GITHUB_REPOSITORY" > /dev/null
-          gh release upload dasllama-server --repo "$GITHUB_REPOSITORY" artifacts/* --clobber
+          gh release upload dasllama-server --repo "$GITHUB_REPOSITORY" rolling/* --clobber
+
+  pypi_route:
+    # Where a wheel set may go is decided by the tag's SHAPE, as release.yml does: exactly
+    # v<major>.<minor>.<patch> is a release and goes to PyPI; every other tag is a prerelease and
+    # goes to TestPyPI. Both PyPI environments key on this job's outputs.
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      environment: ${{ steps.route.outputs.environment }}
+      repository_url: ${{ steps.route.outputs.repository_url }}
+      project_url: ${{ steps.route.outputs.project_url }}
+    steps:
+      - id: route
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -eu
+          if [[ "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "environment=pypi" >> "$GITHUB_OUTPUT"
+            echo "repository_url=https://upload.pypi.org/legacy/" >> "$GITHUB_OUTPUT"
+            echo "project_url=https://pypi.org/p/dasllama" >> "$GITHUB_OUTPUT"
+          else
+            echo "environment=testpypi" >> "$GITHUB_OUTPUT"
+            echo "repository_url=https://test.pypi.org/legacy/" >> "$GITHUB_OUTPUT"
+            echo "project_url=https://test.pypi.org/p/dasllama" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag $TAG -> $(grep environment= "$GITHUB_OUTPUT" | tail -1)"
+
+  publish_pypi:
+    # Trusted publishing (OIDC), no token secret: the dasllama PyPI project and its TestPyPI twin
+    # register this repo + workflow + environment as their publisher.
+    needs: [build, pypi_route]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ needs.pypi_route.outputs.environment }}
+      url: ${{ needs.pypi_route.outputs.project_url }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Collect the wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - name: List the collected wheels
+        run: ls -la dist
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ needs.pypi_route.outputs.repository_url }}
+          skip-existing: true
+
+  publish_manifests:
+    # the Homebrew formula and cask and the scoop manifest, rendered from the .sha256 assets the
+    # build cells uploaded (ci/packaging/render_manifests.py) and pushed to the tap and bucket
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: SCM Checkout
+        uses: actions/checkout@v4
+      - name: Render and push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGING_TOKEN: ${{ secrets.PACKAGING_TOKEN }}
+        run: bash ci/packaging/publish_manifests.sh dasllama "${{ github.event.release.tag_name }}" --push

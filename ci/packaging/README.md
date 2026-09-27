@@ -1,50 +1,73 @@
 # Packaging - release artifacts and package-manager manifests
 
-The canonical distribution source is the GitHub release: four stable-named bundles
-(`daslang-bundle-{linux-x86_64,linux-arm64,darwin26-arm64,windows-x86_64}.zip`, unix
-modes preserved), each with a sibling `.zip.sha256`, plus a `.deb` for Debian/Ubuntu, an
-`.rpm` for Fedora per linux arch, and a pip wheel per bundle - all produced by `release.yml`
-at prerelease-cut time. Every
-package manager below is a pointer at those assets, except pip, which the workflow
-publishes itself.
+Two packages ship from one release cut, each described once in `packages.py` (commands, install
+prefix, dependencies, the tap and bucket files it publishes) and read by every builder here:
+
+- **daslang** - `release.yml`: four stable-named bundles
+  (`daslang-bundle-{linux-x86_64,linux-arm64,darwin26-arm64,windows-x86_64}.zip`, unix modes
+  preserved), a `.deb` (x86_64), an `.rpm` per linux arch, a pip wheel per bundle.
+- **dasllama** - `dasllama_server_release.yml`: the fat server bundle as
+  `dasllama-{linux-x86_64,linux-arm64}.tar.gz`, `dasllama-darwin-arm64.zip` (the `.app`) and
+  `dasllama-windows-x64.zip`, a `.deb` and an `.rpm` per linux arch, a pip wheel per platform.
+  The archives also go to the rolling `dasllama-server` release, the one dasllama.io links.
+
+Every asset has a sibling `.sha256`, written by `checksum_assets.sh`. Every package manager below is a pointer at those assets,
+except pip, which the workflows publish themselves.
 
 ## The per-release ritual
 
-1. Cut the prerelease tag; `release.yml` uploads bundles + `.sha256` files + the `.deb` +
-   the `.rpm`s.
-2. **Homebrew tap** (repo `homebrew-daslang`, formula `Formula/daslang.rb` from
-   `homebrew-daslang.rb.template`): fill `@TAG@`/`@VERSION@` and the three `@SHA_*@`
-   values from the `.sha256` assets, push to the tap.
-   Users: `brew install <org>/daslang/daslang`.
-3. **Scoop bucket** (repo `scoop-daslang`, `bucket/daslang.json` from
-   `scoop-daslang.json.template`): fill version/tag/hash, push.
-   Users: `scoop bucket add daslang <repo-url>; scoop install daslang`.
-4. **winget** (real releases ONLY, never an RC): render the manifest trio from
+1. Cut the prerelease tag. `release.yml` and `dasllama_server_release.yml` upload the assets,
+   publish the wheels, and each ends with `publish_manifests`, which renders its package's
+   Homebrew and scoop manifests from the release's `.sha256` assets and pushes them to the tap
+   (`homebrew-daslang`) and the bucket (`scoop-daslang`) with the `PACKAGING_TOKEN` secret.
+   Check that the commits `daslang manifests @ <tag>` and `dasllama manifests @ <tag>` arrived.
+   `publish_manifests.sh <package> <tag>` without `--push` prints the same diff locally.
+2. **winget** (real releases ONLY, never an RC): render the manifest trio from
    `winget-daslang.yaml.template` and PR it to microsoft/winget-pkgs.
-5. **apt**: the `.deb` on the release page installs with
-   `sudo apt install ./daslang_<version>_amd64.deb` (binaries land in `/opt/daslang`,
-   `daslang`/`daslang-live` symlinked into `/usr/bin`). A hosted apt
-   repo is a later tier.
-6. **dnf**: the `.rpm` on the release page installs with
-   `sudo dnf install ./daslang-<version>-1.x86_64.rpm` (or `.aarch64.rpm`) - same layout as
-   the `.deb`, `rpm_build.sh` renders the spec, no dependencies declared. The linux bundle's
-   glibc floor is the runner's (`manylinux_2_38` on the wheels), which every supported Fedora
-   meets; RHEL 9 and its rebuilds do not. A hosted dnf repo is a later tier.
-7. **pip** (automatic): `wheel_build.py` repacks each bundle into a platform wheel
-   (`daslang-<ver>-py3-none-{win_amd64,manylinux_2_NN_x86_64,manylinux_2_NN_aarch64,macosx_NN_0_arm64}.whl`)
-   and the `publish_pypi` job uploads the set through trusted publishing - a plain
-   `vX.Y.Z` tag to PyPI, any other tag (RC, beta, ...) to TestPyPI. The wheel is the toolchain minus the C++ embedding
-   payload and the media trees, to stay under PyPI's 100 MB per-file cap - exact set:
-   `EXCLUDE_*` in `wheel_build.py`; the platform tag is read off the binaries (highest
-   GLIBC symbol / Mach-O minos), never assumed. Users: `pip install daslang` (RC:
-   `pip install -i https://test.pypi.org/simple/ daslang==<ver>rcN`), then `daslang`,
-   `dastest`, `lint`, `daspkg`, ... are on PATH and `python -m daslang file.das` works.
-   Fixture tests: `python3 ci/test_wheel_build.py`.
+3. **site**: the install commands in `site/index.html`, `site/downloads.html` and
+   `site-dasllama/index.html` name the advertised release's assets by file name, so a package
+   form reaches the site with the release that first ships it.
 
-8. **site**: the install commands in `site/index.html` (the install tabs) and
-   `site/downloads.html` (the package-manager rows) name the advertised release's assets by
-   file name, so a package form reaches the site with the release that first ships it.
+RC cuts update the tap and bucket too, as they point at the newest cut; the templates here are
+the copies of record - never edit the tap or bucket by hand.
 
-RC dry-runs point the tap and bucket at the RC tag to validate install paths end to
-end; retargeting to the real tag is a hash+tag bump. Templates here are the copies of
-record - edit them first, then propagate to the tap/bucket repos.
+## The package managers
+
+| Manager | daslang | dasllama |
+|---|---|---|
+| Homebrew | `brew install borisbat/daslang/daslang` | `brew install borisbat/daslang/dasllama` (the commands; `brew services start dasllama` runs the watchdog at login), `brew install --cask borisbat/daslang/dasllama` (the tray app, macOS) - the two conflict |
+| scoop | `scoop bucket add daslang https://github.com/borisbat/scoop-daslang; scoop install daslang` | same bucket, `scoop install dasllama` (a Start-menu shortcut to the watchdog) |
+| apt | `sudo apt install ./daslang_<version>_amd64.deb` | `sudo apt install ./dasllama_<version>_<arch>.deb` (pulls `libssl3`, `curl`) |
+| dnf | `sudo dnf install ./daslang-<version>-1.<arch>.rpm` | `sudo dnf install ./dasllama-<version>-1.<arch>.rpm` (pulls `openssl-libs`, `curl`) |
+| pip | `pip install daslang` | `pip install dasllama` |
+
+The linux packages install the bundle under `/opt/<package>` and link the commands into
+`/usr/bin`; the dasllama links drop the bundle's `.exe` suffix and name the supervisor
+`dasllama-watchdog` (the Debian `watchdog` package owns that name). A hosted apt or dnf repo is
+a later tier. glibc floors: the daslang bundle is built on ubuntu-24.04 (`manylinux_2_38` on the
+wheels), which every supported Fedora meets and RHEL 9 does not; the dasllama bundle on
+ubuntu-22.04 (2.35), which admits Debian 12.
+
+The installed dasllama programs never write beside themselves: config, tune sidecar and logs
+live under `~/.dasllama` (`utils/dasllama-server/README.md`), so every install directory can
+stay read-only.
+
+## pip
+
+`wheel_build.py` repacks a bundle into a platform wheel
+(`<package>-<ver>-py3-none-{win_amd64,manylinux_2_NN_x86_64,manylinux_2_NN_aarch64,macosx_NN_0_arm64}.whl`)
+and the `publish_pypi` jobs upload each set through trusted publishing - a plain `vX.Y.Z` tag to
+PyPI, any other tag (RC, beta, ...) to TestPyPI. The daslang wheel is the toolchain minus the
+C++ embedding payload and the media trees, to stay under PyPI's 100 MB per-file cap - exact set:
+`EXCLUDE_*` in `wheel_build.py`; the dasllama wheel carries its bundle whole. The platform tag
+is read off the binaries (highest GLIBC symbol / Mach-O minos), never assumed. Users:
+`pip install daslang` (RC: `pip install -i https://test.pypi.org/simple/ daslang==<ver>rcN`),
+then `daslang`, `dastest`, `lint`, `daspkg`, ... are on PATH and `python -m daslang file.das`
+works; `pip install dasllama` puts `dasllama-server`, `dasllama-cli`, `dasllama-bench` and
+`dasllama-watchdog` on PATH.
+
+## Fixture tests
+
+`python3 ci/test_wheel_build.py`, `ci/test_rpm_build.py`, `ci/test_deb_build.py`,
+`ci/test_render_manifests.py` - the extended core runs them as `check_wheel_repack`,
+`check_rpm_spec`, `check_deb_control` and `check_manifest_render`.

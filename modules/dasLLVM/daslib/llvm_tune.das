@@ -125,9 +125,11 @@ def sidecar_for(app : string) : string {
     return "{stem}.tune.json"
 }
 
-    // argv[0] verbatim, NOT get_das_exe(): that derives the interpreter-to-SPAWN, which does
-    // not exist inside a released bundle and mis-anchored the exe sidecar + staleness checks.
+    // the resolved executable, NOT get_das_exe(): that derives the interpreter-to-SPAWN, which does
+    // not exist inside a released bundle; argv[0] as typed is a bare name when PATH found the exe.
 def private running_binary() : string {
+    let exe = get_executable_path()
+    if (!empty(exe)) return replace(exe, "\\", "/")
     // aliases a process-global Array header (locked) — do not delete
     let argv <- get_command_line_arguments()
     return empty(argv) ? "" : replace("{argv[0]}", "\\", "/")
@@ -140,6 +142,12 @@ var private g_runtime_manifest = ""
 //! explicit sidecar; harnesses that manage their own location call it before get/set.
 def set_tune_manifest_runtime_path(p : string) {
     g_runtime_manifest = p
+}
+
+//! Whether the sidecar location was chosen (`set_tune_manifest_runtime_path` or `DAS_TUNE_MANIFEST`)
+//! rather than defaulted beside the app.
+def tune_manifest_explicit() : bool {
+    return !empty(g_runtime_manifest) || !empty(g_env_tune.tune_manifest)
 }
 
     //! The tune sidecar location: the in-process override (`set_tune_manifest_runtime_path` names

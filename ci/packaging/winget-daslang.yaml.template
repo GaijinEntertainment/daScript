@@ -16,7 +16,7 @@ ManifestVersion: 1.6.0
 #   - Architecture: x64
 #     InstallerType: zip
 #     InstallerUrl: https://github.com/GaijinEntertainment/daScript/releases/download/@TAG@/daslang-bundle-windows-x86_64.zip
-#     InstallerSha256: "@SHA_WINDOWS_X86_64@"
+#     InstallerSha256: "@SHA:daslang-bundle-windows-x86_64.zip@"
 #     NestedInstallerType: portable
 #     NestedInstallerFiles:
 #       - RelativeFilePath: daslang_bundle\bin\daslang.exe

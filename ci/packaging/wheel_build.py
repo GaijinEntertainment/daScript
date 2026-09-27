@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build a pip wheel from an installed daslang bundle directory.
+"""Build a pip wheel from a release bundle directory.
 
-Usage: wheel_build.py <bundle_dir> <tag_or_version> <out_dir> [--platform-tag TAG]
+Usage: wheel_build.py [--package NAME] <bundle_dir> <tag_or_version> <out_dir> [--platform-tag TAG]
 
-- a repack, not a compile: the bundle tree lands under daslang/_sdk/, console_scripts
+- NAME is a profile in packages.py (default daslang): the commands, the license source
+- a repack, not a compile: the bundle tree lands under <package>/_sdk/, console_scripts
   shims exec the binaries there
 - payload: the toolchain minus what EXCLUDE_* below names - keeps every wheel under
   PyPI's 100 MB per-file cap; the release zip carries the rest
@@ -22,13 +23,14 @@ import struct
 import sys
 import zipfile
 
-PACKAGE = "daslang"
-SUMMARY = "High-performance statically-typed scripting language for games and real-time applications"
+from packages import pep440, profile  # noqa: F401 - pep440 is part of this module's surface
 
-# console_scripts shim per shipped executable; the scoop bucket exposes the same set
-TOOLS = ["daslang", "daslang-live", "lint", "daspkg", "dascov",
-         "detect-dupe", "benchctl", "dastest", "das-fmt"]
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# console_scripts shim per shipped executable of the daslang wheel; the scoop bucket exposes the same set
+TOOLS = list(profile("daslang")["commands"])
+
+# the daslang SDK trims to fit; the dasllama bundle ships whole
 EXCLUDE_TOP = ("include", "examples", "doc", "logs")
 # the tutorial sources ship (0.6 MB, and the skills link into them); the 30 MB of
 # media under tutorials/_assets and the media-heavy examples tree stay in the zip
@@ -43,20 +45,9 @@ ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)  # reproducible: no mtimes in the archive
 MAX_WHEEL_MB = 100  # PyPI's per-file limit
 
 
-def pep440(raw):
-    """v0.6.4-RC1 -> 0.6.4rc1, v0.6.4 -> 0.6.4, 0.0.0-dev -> 0.0.0.dev0 (the release
-    pattern is plain + RC + dev; anything else is a wheel_build error, not a guess)."""
-    v = raw[1:] if raw.startswith(("v", "V")) else raw
-    m = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-rc(\d+)|(-dev)\d*)?", v, re.I)
-    if not m:
-        sys.exit(f"wheel_build: cannot map tag {raw!r} to a PEP 440 version")
-    base, rc, dev = m.groups()
-    if rc:
-        return base + "rc" + rc
-    return base + ".dev0" if dev else base
-
-
-def is_shipped(rel):
+def is_shipped(rel, package="daslang"):
+    if package != "daslang":
+        return True
     parts = rel.replace(os.sep, "/").split("/")
     if parts[0] in EXCLUDE_TOP:
         return False
@@ -70,7 +61,7 @@ def is_shipped(rel):
     return True
 
 
-def bundle_files(bundle):
+def bundle_files(bundle, package="daslang"):
     # symlinks are stored as their target's bytes (a wheel has no symlinks; the mac bundle
     # carries glfw's .dylib aliases) - but only when the target stays inside the bundle
     root = os.path.realpath(bundle)
@@ -78,7 +69,7 @@ def bundle_files(bundle):
         for f in fs:
             full = os.path.join(d, f)
             rel = os.path.relpath(full, bundle)
-            if not is_shipped(rel):
+            if not is_shipped(rel, package):
                 continue
             if os.path.islink(full):
                 target = os.path.realpath(full)
@@ -134,7 +125,7 @@ def arch_word(machine, table):
     return table[machine]
 
 
-def detect_platform_tag(files, system=None, machine=None):
+def detect_platform_tag(files, system=None, machine=None, probe_prefixes=("bin/", "lib/")):
     system = system or platform.system()
     machine = (machine or platform.machine()).lower()
     if system == "Windows":
@@ -142,13 +133,13 @@ def detect_platform_tag(files, system=None, machine=None):
     probe = macho_minos if system == "Darwin" else elf_glibc_max
     best = None
     for full, rel in files:
-        if not (rel.startswith("bin/") or rel.startswith("lib/")):
+        if not rel.startswith(probe_prefixes):
             continue
         v = probe(full)
         if v and (best is None or v > best):
             best = v
     if best is None:
-        sys.exit("wheel_build: no binaries found under bin/ or lib/ to derive a platform tag from")
+        sys.exit(f"wheel_build: no binaries found under {'/'.join(probe_prefixes) or 'the bundle'} to derive a platform tag from")
     if system == "Darwin":
         major, minor = best
         minor = 0 if major >= 11 else minor  # macOS 11+ wheel tags pin the minor to 0
@@ -160,14 +151,17 @@ def detect_platform_tag(files, system=None, machine=None):
 
 # --- package sources ----------------------------------------------------------
 
-INIT_PY = '''"""daslang SDK — the toolchain is under `sdk_root()`; console scripts exec it."""
+INIT_PY = '''"""@SUMMARY@ - the bundle is under `sdk_root()`; console scripts exec it."""
 import os
 
 __version__ = "@VERSION@"
 
+# command -> the candidate paths of its executable under sdk_root(), first present wins
+COMMANDS = @COMMANDS@
+
 
 def sdk_root():
-    """Root of the bundled SDK (bin/, daslib/, modules/, dastest/, utils/, skills/)."""
+    """Root of the bundle the wheel carries."""
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "_sdk")
 
 
@@ -176,13 +170,13 @@ def bin_dir():
 
 
 def tool_path(name):
-    """Absolute path of a shipped executable (`daslang`, `dastest`, ...); the
-    `.exe` suffix is resolved here so callers never spell it."""
-    for candidate in (name, name + ".exe"):
-        p = os.path.join(bin_dir(), candidate)
+    """Absolute path of a shipped executable (`@MAIN@`, ...); the platform's file
+    name is resolved here so callers never spell it."""
+    for candidate in COMMANDS.get(name, [name, name + ".exe"]):
+        p = os.path.join(sdk_root(), candidate)
         if os.path.isfile(p):
             return p
-    raise FileNotFoundError(f"daslang SDK has no tool {name!r} in {bin_dir()}")
+    raise FileNotFoundError(f"@PACKAGE@ has no tool {name!r} under {sdk_root()}")
 '''
 
 CLI_PY = '''"""console_scripts entry points: one shim per shipped executable."""
@@ -206,10 +200,10 @@ def run(name):
 
 @SHIMS@'''
 
-MAIN_PY = '''"""`python -m daslang file.das` == `daslang file.das`."""
+MAIN_PY = '''"""`python -m @PACKAGE@ ...` == `@MAIN@ ...`."""
 from ._cli import run
 
-run("daslang")
+run("@MAIN@")
 '''
 
 
@@ -217,17 +211,18 @@ def shim_name(tool):
     return tool.replace("-", "_")
 
 
-def render_cli():
-    shims = "\n\n".join(f"def {shim_name(t)}():\n    run({t!r})\n" for t in TOOLS)
+def render_cli(tools):
+    shims = "\n\n".join(f"def {shim_name(t)}():\n    run({t!r})\n" for t in tools)
     return CLI_PY.replace("@SHIMS@", shims)
 
 
-def render_metadata(version, readme):
+def render_metadata(package, version, readme):
+    p = profile(package)
     lines = [
         "Metadata-Version: 2.1",
-        f"Name: {PACKAGE}",
+        f"Name: {package}",
         f"Version: {version}",
-        f"Summary: {SUMMARY}",
+        f"Summary: {p['summary']}",
         "Home-page: https://daslang.io",
         "Author: Gaijin Entertainment",
         "License: BSD-3-Clause",
@@ -238,8 +233,7 @@ def render_metadata(version, readme):
         "Requires-Python: >=3.8",
         "Classifier: Programming Language :: Other",
         "Classifier: License :: OSI Approved :: BSD License",
-        "Classifier: Topic :: Software Development :: Compilers",
-        "Classifier: Topic :: Software Development :: Interpreters",
+        *(f"Classifier: {c}" for c in p["classifiers"]),
         "Classifier: Operating System :: Microsoft :: Windows",
         "Classifier: Operating System :: POSIX :: Linux",
         "Classifier: Operating System :: MacOS",
@@ -250,8 +244,8 @@ def render_metadata(version, readme):
     return "\n".join(lines)
 
 
-def render_entry_points():
-    body = "\n".join(f"{t} = {PACKAGE}._cli:{shim_name(t)}" for t in TOOLS)
+def render_entry_points(package, tools):
+    body = "\n".join(f"{t} = {package}._cli:{shim_name(t)}" for t in tools)
     return f"[console_scripts]\n{body}\n"
 
 
@@ -292,42 +286,52 @@ class WheelWriter:
         self.zf.close()
 
 
-def build(bundle, tag, out_dir, platform_tag=None, system=None, machine=None):
+def build(bundle, tag, out_dir, platform_tag=None, system=None, machine=None, package="daslang"):
+    p = profile(package)
+    tools = list(p["commands"])
     bundle = os.path.abspath(bundle)
     version = pep440(tag)
-    files = sorted(bundle_files(bundle), key=lambda x: x[1])
+    files = sorted(bundle_files(bundle, package), key=lambda x: x[1])
     present = {rel for _, rel in files}
-    missing = [t for t in TOOLS if not ({f"bin/{t}", f"bin/{t}.exe"} & present)]
+    missing = [t for t in tools if not (set(p["commands"][t]) & present)]
     if missing:
         sys.exit(f"wheel_build: bundle has no binary for console_scripts {missing} - every entry point must resolve")
-    plat = platform_tag or detect_platform_tag(files, system, machine)
-    dist_info = f"{PACKAGE}-{version}.dist-info"
-    wheel_name = f"{PACKAGE}-{version}-py3-none-{plat}.whl"
+    executables = {rel for t in tools for rel in p["commands"][t]} & present
+    plat = platform_tag or detect_platform_tag(files, system, machine, p["probe_prefixes"])
+    dist_info = f"{package}-{version}.dist-info"
+    wheel_name = f"{package}-{version}-py3-none-{plat}.whl"
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, wheel_name)
 
     readme_path = os.path.join(bundle, "README.md")
-    readme = read_bytes(readme_path).decode("utf-8") if os.path.isfile(readme_path) else SUMMARY
-    license_path = os.path.join(bundle, "LICENSE")
+    readme = read_bytes(readme_path).decode("utf-8") if os.path.isfile(readme_path) else p["summary"] + "\n\n" + p["description"]
+    license_path = os.path.join(bundle if p["license"] == "bundle" else REPO_ROOT, "LICENSE")
     if not os.path.isfile(license_path):
-        sys.exit(f"wheel_build: {license_path} missing — the bundle must carry its LICENSE")
+        sys.exit(f"wheel_build: {license_path} missing — the wheel must carry its LICENSE")
+
+    subst = {"@VERSION@": version, "@PACKAGE@": package, "@MAIN@": p["main_command"],
+             "@SUMMARY@": p["summary"], "@COMMANDS@": repr(p["commands"])}
+    def render(template):
+        for k, v in subst.items():
+            template = template.replace(k, v)
+        return template.encode()
 
     w = WheelWriter(out)
-    w.add_bytes(f"{PACKAGE}/__init__.py", INIT_PY.replace("@VERSION@", version).encode())
-    w.add_bytes(f"{PACKAGE}/_cli.py", render_cli().encode())
-    w.add_bytes(f"{PACKAGE}/__main__.py", MAIN_PY.encode())
+    w.add_bytes(f"{package}/__init__.py", render(INIT_PY))
+    w.add_bytes(f"{package}/_cli.py", render_cli(tools).encode())
+    w.add_bytes(f"{package}/__main__.py", render(MAIN_PY))
     for full, rel in files:
         # pip restores mode bits from the archive - a bundle staged on a modeless filesystem must not lose them
-        w.add_file(f"{PACKAGE}/_sdk/{rel}", full, executable=rel.startswith("bin/"))
+        w.add_file(f"{package}/_sdk/{rel}", full, executable=rel.startswith("bin/") or rel in executables)
     w.add_file(f"{dist_info}/LICENSE", license_path)
-    w.add_bytes(f"{dist_info}/METADATA", render_metadata(version, readme).encode())
+    w.add_bytes(f"{dist_info}/METADATA", render_metadata(package, version, readme).encode())
     w.add_bytes(f"{dist_info}/WHEEL",
                 f"Wheel-Version: 1.0\nGenerator: daslang-wheel-build\nRoot-Is-Purelib: false\nTag: py3-none-{plat}\n".encode())
-    w.add_bytes(f"{dist_info}/entry_points.txt", render_entry_points().encode())
-    w.add_bytes(f"{dist_info}/top_level.txt", f"{PACKAGE}\n".encode())
+    w.add_bytes(f"{dist_info}/entry_points.txt", render_entry_points(package, tools).encode())
+    w.add_bytes(f"{dist_info}/top_level.txt", f"{package}\n".encode())
     w.finish(dist_info)
     size_mb = os.path.getsize(out) / 2**20
-    print(f"built: {out} ({len(files)} SDK files, {size_mb:.1f} MB, tag py3-none-{plat})")
+    print(f"built: {out} ({len(files)} bundle files, {size_mb:.1f} MB, tag py3-none-{plat})")
     if size_mb > MAX_WHEEL_MB:
         sys.exit(f"wheel_build: {out} is {size_mb:.1f} MB, over PyPI's {MAX_WHEEL_MB} MB per-file limit - trim EXCLUDE_* or request a size raise")
     return out
@@ -335,6 +339,7 @@ def build(bundle, tag, out_dir, platform_tag=None, system=None, machine=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--package", default="daslang", help="profile in packages.py")
     ap.add_argument("bundle_dir")
     ap.add_argument("tag", help="release tag (v0.6.4-RC1) or version; 0.0.0-dev for dispatch runs")
     ap.add_argument("out_dir")
@@ -343,7 +348,7 @@ def main():
                     help="derive the tag as if on this OS (cross-checking a foreign bundle)")
     ap.add_argument("--machine", help="machine word for --system (x86_64, aarch64, arm64)")
     a = ap.parse_args()
-    build(a.bundle_dir, a.tag, a.out_dir, a.platform_tag, a.system, a.machine)
+    build(a.bundle_dir, a.tag, a.out_dir, a.platform_tag, a.system, a.machine, a.package)
 
 
 if __name__ == "__main__":

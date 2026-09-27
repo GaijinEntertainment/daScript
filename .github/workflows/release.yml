@@ -352,14 +352,7 @@ jobs:
         # every package-manager manifest reads its sha256 from the sibling asset
         if: matrix.cmake_preset == 'Release'
         shell: bash
-        run: |
-          set -eux
-          cd artifacts
-          for f in *; do
-            case "$f" in *.sha256) continue ;; esac
-            (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f") > "$f.sha256"
-          done
-          cat *.sha256
+        run: bash ci/packaging/checksum_assets.sh artifacts
       - name: "Smoke-test pip wheel"
         # pip on the runner that derived the tag is the first judge of that tag
         if: matrix.cmake_preset == 'Release'
@@ -450,3 +443,21 @@ jobs:
         with:
           repository-url: ${{ needs.pypi_route.outputs.repository_url }}
           skip-existing: true
+
+  ###########################################################
+  publish_manifests:
+    ###########################################################
+    # the Homebrew formula and the scoop manifest, rendered from the .sha256 assets the build
+    # cells uploaded (ci/packaging/render_manifests.py) and pushed to the tap and bucket
+    needs: build
+    if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: "SCM Checkout"
+        uses: actions/checkout@v4
+      - name: "Render and push"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGING_TOKEN: ${{ secrets.PACKAGING_TOKEN }}
+        run: bash ci/packaging/publish_manifests.sh daslang "${{ github.event.release.tag_name }}" --push

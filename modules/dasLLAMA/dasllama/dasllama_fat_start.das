@@ -6,6 +6,8 @@ module dasllama_fat_start shared private
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_common
+require dasllama/dasllama_env   // dasllama_home_dir - where a fat exe keeps its sidecar
+require daslib/fio
 require dasllama/dasllama_math   // the runtime knob getters the snapshot records
 require dasllama/dasllama_par    // get_total_hw_jobs - the advisory "threads" entry
 require daslib/json_boost
@@ -78,7 +80,7 @@ def public dasllama_metal_crown_race() : tuple<wins : array<string>; ran : bool>
 //! Race the runtime section on this box and write it into the app sidecar
 //! (`tune_manifest_path()`), the kernels section untouched: the Metal twins under the tune
 //! progress display, then the knob snapshot. True when the sidecar was written.
-[arch(at = "../ARCHITECTURE_MEASUREMENT.md#fat-first-start")]
+[arch(at = "../ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start")]
 def public dasllama_race_runtime_section() : bool {
     static_if (typeinfo module_exists(llvm_tune)) {
         let path = tune_manifest_path()
@@ -121,7 +123,39 @@ def public dasllama_fat_first_start() : bool {
     }
 }
 
+//! Where a fat exe keeps its sidecar: `<dasllama home>/tune/<exe name>.tune.json`, so an installed
+//! exe never writes beside itself. `beside` is the default path next to the exe.
+def public dasllama_fat_sidecar_path(dasllama_home, beside : string) : string {
+    return path_join(path_join(dasllama_home, "tune"), base_name(beside))
+}
+
+//! Make `home_path`'s directory, and copy the sidecar at `beside` there when `home_path` has none.
+def public dasllama_adopt_sidecar(beside, home_path : string) {
+    mkdir_rec(dir_name(home_path))
+    if (!stat(home_path).is_valid && stat(beside).is_valid) {
+        var err = ""
+        if (copy_file(beside, home_path, false, err)) {
+            to_log(LOG_INFO, "dasLLAMA: the tune sidecar {beside} is copied to {home_path}, which every start reads from now on\n")
+        }
+    }
+}
+
+//! Point a fat exe's sidecar at the per-user directory, unless its location was chosen already
+//! (`DAS_TUNE_MANIFEST`, or an earlier call); a sidecar an earlier version wrote beside the exe is
+//! copied there once.
+[arch(at = "../ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start")]
+def public dasllama_place_fat_sidecar {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return if (!tune_fat_built() || tune_manifest_explicit())
+        let beside = tune_manifest_path()
+        let home_path = dasllama_fat_sidecar_path(dasllama_home_dir(), beside)
+        dasllama_adopt_sidecar(beside, home_path)
+        set_tune_manifest_runtime_path(home_path)
+    }
+}
+
 [init]
 def private register_fat_start {
     set_runtime_race_hook(@@dasllama_fat_first_start)
+    set_sidecar_place_hook(@@dasllama_place_fat_sidecar)
 }

@@ -1797,6 +1797,11 @@ namespace das
         return context->allocateString(getDasRoot(), at);
     }
 
+    char * builtin_executable_path ( Context * context, LineInfoArg * at ) {
+        string exe = getExecutablePathUtf8();
+        return exe.empty() ? nullptr : context->allocateString(exe, at);
+    }
+
     char * builtin_shared_module_extension ( Context * context, LineInfoArg * at ) {
 #ifdef NDEBUG
         return context->allocateString(".shared_module", at);
@@ -2370,6 +2375,9 @@ namespace das
         // command line arguments
         addExternInline<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
             SideEffects::accessExternal,"builtin_das_root")
+                ->args({"context","at"})->setTempStringResult();
+        addExternInline<DAS_BIND_FUN(builtin_executable_path)>(*this, lib, "get_executable_path",
+            SideEffects::accessExternal,"builtin_executable_path")
                 ->args({"context","at"})->setTempStringResult();
         addExternInline<DAS_BIND_FUN(builtin_shared_module_extension)>(*this, lib, "shared_module_extension",
             SideEffects::none,"builtin_shared_module_extension")

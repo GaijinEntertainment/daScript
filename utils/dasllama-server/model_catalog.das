@@ -59,25 +59,24 @@ def public model_catalog() : array<CatalogEntry> {
     return <- [for (s in model_specs()); catalog_entry_of(s); where !empty(s.serve_name)]
 }
 
-//! The pure resolution core: env override > config key > `<home>/.dasllama/models`;
+//! The pure resolution core: env override > config key > `<dasllama home>/models`;
 //! no trailing separator. Split from the wrapper so every arm is testable without
 //! touching the process environment.
-def public catalog_models_dir_from(cfg_models_dir, env_override, home : string) : string {
+def public catalog_models_dir_from(cfg_models_dir, env_override, dasllama_home : string) : string {
     if (!empty(env_override)) {
         return strip_trailing_sep(env_override)
     }
     if (!empty(cfg_models_dir)) {
         return strip_trailing_sep(cfg_models_dir)
     }
-    return path_join(path_join(home, ".dasllama"), "models")
+    return path_join(dasllama_home, "models")
 }
 
 //! The SERVER's models-dir resolution: DASLLAMA_MODELS_DIR > the `models_dir` config key >
 //! `~/.dasllama/models` (USERPROFILE on Windows). Distinct from the rig/test resolution
 //! `models_dir_resolved()` (dasllama_env), whose fallback is the rig dir.
 def public catalog_models_dir(cfg_models_dir : string) : string {
-    let home = !empty(g_env_core.user_profile) ? g_env_core.user_profile : g_env_core.home
-    return catalog_models_dir_from(cfg_models_dir, catalog_env_override(), home)
+    return catalog_models_dir_from(cfg_models_dir, catalog_env_override(), dasllama_home_dir())
 }
 
 //! The env-rail override the resolution honours ("" = unset) — exposed so facade-only

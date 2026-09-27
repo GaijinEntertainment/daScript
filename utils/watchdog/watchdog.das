@@ -45,11 +45,15 @@ struct public WatchdogConfig {
     daslang : string
     @clarg_doc = "Script for daslang -jit; discovered as main.das beside the program when unset"
     script : string
+    @clarg_doc = "When layout discovery finds several programs, supervise the one with this name (no extension); the others are its companions"
+    discover_program : string
     @clarg_doc = "Directory the child runs in; defaults to the watchdog's own directory"
     cwd : string
-    @clarg_doc = "JSON-lines log; defaults to logs/<name>-watchdog.log under --cwd"
+    @clarg_doc = "Directory the log, pid file, dumps and crash bundles resolve against, and libhv's log goes under; a leading ~ is the home directory; defaults to --cwd"
+    state_dir : string
+    @clarg_doc = "JSON-lines log; defaults to logs/<name>-watchdog.log under --state-dir"
     log : string
-    @clarg_doc = "Single-instance pid file; defaults to logs/<name>-watchdog.pid under --cwd"
+    @clarg_doc = "Single-instance pid file; defaults to logs/<name>-watchdog.pid under --state-dir"
     pid_file : string
     @clarg_doc = "GET here every --health-interval seconds; 2xx is healthy"
     health_url : string = "http://127.0.0.1:8080/v1/models"
@@ -99,6 +103,18 @@ struct public WatchdogConfig {
     stdio : bool
     @clarg_skip
     server_args : array<string>
+}
+
+//! `~` or a leading `~/` is the home directory (USERPROFILE on Windows, else HOME).
+def public expand_home(path, home : string) : string {
+    return home if (path == "~")
+    return path_join(home, slice(path, 2)) if (starts_with(path, "~/") || starts_with(path, "~\\"))
+    return path
+}
+
+def private home_dir() : string {
+    let profile = get_env_variable("USERPROFILE")
+    return !empty(profile) ? profile : get_env_variable("HOME")
 }
 
 def private resolve_from(path, base : string) : string {
@@ -191,7 +207,8 @@ def private load_config(folder : string) : LoadedConfig {
 //! What to supervise, from the layout: `main.das` means script mode when a daslang sits beside it
 //! (`daslang(.exe)`, `bin/Release/daslang(.exe)`, `bin/daslang(.exe)`, `build/daslang`) or beside the watchdog itself;
 //! exactly one program - a `*.exe` file, or on a Unix layout an executable file with no extension,
-//! the watchdog's own executable aside - means that program. A `main.das` with no daslang in reach
+//! the watchdog's own executable aside - means that program, and among several the one
+//! `discover_program` names. A `main.das` with no daslang in reach
 //! is refused, never traded for a program. Ambiguity is an error, never a guess.
 def private discover_target(var cfg : WatchdogConfig; folder, program_dir : string) : string {
     let script = path_join(folder, "main.das")
@@ -221,8 +238,15 @@ def private discover_target(var cfg : WatchdogConfig; folder, program_dir : stri
         }
         return ""
     }
+    if (length(exes) > 1 && !empty(cfg.discover_program)) {
+        let named <- [for (e in exes); e; where stem(e) == cfg.discover_program]
+        if (length(named) == 1) {
+            cfg.program = named[0]
+            return ""
+        }
+    }
     if (length(exes) > 1) {
-        return "watchdog: {folder} holds {length(exes)} executables; pick one with --program or {CONFIG_NAME}"
+        return "watchdog: {folder} holds {length(exes)} executables; pick one with --program, or --discover-program or {CONFIG_NAME}"
     }
     return "watchdog: nothing to supervise in {folder} - expected a single program (*.exe, or a file with no extension), or main.das with a daslang beside it or beside the watchdog. Use --program/--script or ship {CONFIG_NAME}."
 }
@@ -267,8 +291,8 @@ struct public ResolvedConfig {
     error : string
 }
 
-//! Flags over `watchdog.json` beside the program over layout discovery; every path then resolves
-//! against `cwd`. Everything after the first `--` goes to the child verbatim (the config's
+//! Flags over `watchdog.json` beside the program over layout discovery; the log, pid file, dumps
+//! and crash bundles then resolve against `state_dir`, every other path against `cwd`. Everything after the first `--` goes to the child verbatim (the config's
 //! `server_args` when there is no `--`). `error` carries the text of a fatal configuration.
 def public resolve_config(args : array<string>; program_dir : string) : ResolvedConfig {
     let loaded = load_config(program_dir)
@@ -318,10 +342,11 @@ def public resolve_config(args : array<string>; program_dir : string) : Resolved
     if (empty(cfg.pid_file)) {
         cfg.pid_file = "logs/{cfg.name}-watchdog.pid"
     }
-    cfg.log = resolve_from(cfg.log, cfg.cwd)
-    cfg.pid_file = resolve_from(cfg.pid_file, cfg.cwd)
-    cfg.dump_dir = resolve_from(cfg.dump_dir, cfg.cwd)
-    cfg.crash_dir = resolve_from(cfg.crash_dir, cfg.cwd)
+    cfg.state_dir = empty(cfg.state_dir) ? cfg.cwd : resolve_from(expand_home(cfg.state_dir, home_dir()), cfg.cwd)
+    cfg.log = resolve_from(cfg.log, cfg.state_dir)
+    cfg.pid_file = resolve_from(cfg.pid_file, cfg.state_dir)
+    cfg.dump_dir = resolve_from(cfg.dump_dir, cfg.state_dir)
+    cfg.crash_dir = resolve_from(cfg.crash_dir, cfg.state_dir)
     cfg.jit_dir = resolve_from(cfg.jit_dir, cfg.cwd)
     resolve_optional(cfg.script, cfg.cwd)
     resolve_optional(cfg.program, cfg.cwd)
@@ -1760,6 +1785,8 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
         return null
     }
     var cfg <- resolved.cfg
+    mkdir_p(path_join(cfg.state_dir, "logs"))
+    hv_set_log_file(path_join(cfg.state_dir, "logs/libhv"))
     var log = new Emitter(cfg.log)
     let command <- child_command(cfg)
     let child_exe_name = base_name(command[0])

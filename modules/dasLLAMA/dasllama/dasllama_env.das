@@ -24,6 +24,7 @@ require daslib/clargs
 require daslib/env_registry public
 require daslib/option public
 require daslib/rtti
+require daslib/fio
 require strings
 
 // ===== Engine =====
@@ -779,12 +780,12 @@ struct public CoreEnv {
 
     @clarg_env = "HOME"
     @clarg_path
-    @clarg_doc = "Ambient platform variable; read only to derive the default Hugging Face cache when HF_HOME is unset."
+    @clarg_doc = "Ambient platform variable; read to derive the per-user ~/.dasllama directory (when USERPROFILE is unset) and the default Hugging Face cache when HF_HOME is unset."
     home : string = ""
 
     @clarg_env = "USERPROFILE"
     @clarg_path
-    @clarg_doc = "Ambient platform variable (Windows twin of HOME); read only to derive dasllama-server's default models dir."
+    @clarg_doc = "Ambient platform variable (Windows twin of HOME); read only to derive the per-user ~/.dasllama directory."
     user_profile : string = ""
 
     @clarg_default_doc = "conservative default"
@@ -834,6 +835,28 @@ let public g_env_prof = env_config(type<ProfilingEnv>)
 let public g_env_test = env_config(type<TestEnv>)
 let public g_env_exchange = env_config(type<ExchangeEnv>)
 let public g_env_core = env_config(type<CoreEnv>)
+
+//! The per-user dasLLAMA directory under `home`: the standalone programs' models, config, tune
+//! state and logs, so an install directory can stay read-only.
+def public dasllama_home_dir_from(home : string) : string {
+    return path_join(home, ".dasllama")
+}
+
+//! `<home>/.dasllama`, home being USERPROFILE (Windows), else HOME.
+def public dasllama_home_dir() : string {
+    return dasllama_home_dir_from(!empty(g_env_core.user_profile) ? g_env_core.user_profile : g_env_core.home)
+}
+
+//! A dasLLAMA app's config `name`, looked for in the working directory, then in `dasllama_home`,
+//! then in `anchor_dir` (beside the program or its script); "" when none exists. The one lookup
+//! the server, its CLI and the tune exchange share.
+def public dasllama_find_config(name, dasllama_home, anchor_dir : string) : string {
+    for (dir in [".", dasllama_home, anchor_dir]) {
+        let path = dir == "." ? name : path_join(dir, name)
+        return path if (stat(path).is_valid)
+    }
+    return ""
+}
 
 //! The rig/probe/test models-dir resolution (DASLLAMA_MODELS_DIR, else the primary rig's dir),
 //! trailing separator guaranteed — callers concat "{models_dir_resolved()}{file}". The server's

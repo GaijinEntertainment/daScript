@@ -55,13 +55,14 @@ def private collect_if_due() {
     g_last_collect = ref_time_ticks()
 }
 
-//! The exe host. `argv[0]` locates the bundle: `watchdog.json` and the discovered program sit
-//! beside the executable, exactly where the Python sat beside what it supervised.
+//! The exe host. The executable's resolved path locates the bundle: `watchdog.json` and the
+//! discovered program sit beside it, whatever symlink or PATH lookup started it.
 [export]
 def start(self_pid : int) : bool {
     let argv <- get_command_line_arguments()
     let args <- [for (i in range(1, length(argv))); argv[i]]
-    let program_dir = !empty(argv) ? dir_name(get_full_file_name(argv[0])) : getcwd()
+    let exe = get_executable_path()
+    let program_dir = !empty(exe) ? dir_name(exe) : (!empty(argv) ? dir_name(get_full_file_name(argv[0])) : getcwd())
     if (wants_mode(args, "--stdio")) {
         g_front = stdio_front_start(args, program_dir, g_exit_code)
         return g_front != null

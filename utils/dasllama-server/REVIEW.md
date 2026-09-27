@@ -7,17 +7,20 @@ doc: `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo roo
 `dasllama/*` module, or to `README.md` text stating dasLLAMA engine behavior or a measured
 number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
-**A diff that adds a `main.das` flag, changes what one does or defaults to, or adds or edits any
-copy of its text, leaves the flag's `@clarg_doc`, its `README.md` table row with its `Default`
-cell, the `README.md` section on its config-file key where one exists, and its row in
-`doc/source/reference/utils/dasllama_server.rst` (repo root) stating the same behavior and the
-same default.** A copy left behind sends the user to a flag that no longer does what it says.
+**A diff that adds a `main.das` flag, changes anything its `@clarg_doc` states - its behavior,
+its default, or a file or path it names - or edits any copy of its text, leaves every copy - the
+`@clarg_doc`, its `README.md` table row with its `Default` cell, the `README.md` section on its
+config-file key where one exists, and its row in
+`doc/source/reference/utils/dasllama_server.rst` (repo root) - stating the same behavior, the
+same default and the same files and paths, no copy leaving out one that another states.** A copy left
+behind sends the user to a flag that no longer does what it says.
 
-**A diff that adds a `cli_args.das` flag, changes what one does or defaults to, or adds or edits
-any copy of its text, leaves the flag's `@clarg_doc`, its entry in the `README.md` dasllama-cli
-section (the command's row, or the shared-flags paragraph for a flag more than one command
-takes), and its row in `doc/source/reference/utils/dasllama_cli.rst` (repo root) stating the
-same behavior and the same default.**
+**A diff that adds a `cli_args.das` flag, changes anything its `@clarg_doc` states - its
+behavior, its default, or a file or path it names - or edits any copy of its text, leaves every
+copy - the `@clarg_doc`, its entry in the `README.md` dasllama-cli section (the command's row, or
+the shared-flags paragraph for a flag more than one command takes), and its row in
+`doc/source/reference/utils/dasllama_cli.rst` (repo root) - stating the same behavior, the same
+default and the same files and paths, no copy leaving out one that another states.**
 
 **A diff that changes how `serving_knobs.das` derives a knob updates, for every `main.das` and
 `cli_args.das` flag that reads that knob, the flag's `@clarg_doc`, its `README.md` entry and its

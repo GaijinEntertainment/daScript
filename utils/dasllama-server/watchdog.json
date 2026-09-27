@@ -1,5 +1,7 @@
 {
   "name": "dasllama",
+  "discover_program": "dasllama-server",
+  "state_dir": "~/.dasllama",
   "tray": true,
   "tray_icon": "tray.ico"
 }
