@@ -862,6 +862,27 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
 
 let private ROWS_STACK_BYTES = 4l * 1024l * 1024l   // a stacked chunk stays cache-resident while the GEMM reads it
 
+//! Output rows [rb, re) of a chunk starting at output row r0, each the k input rows its taps read - row (r0 + r) * stride +
+//! tap * dil - pad, `width` elements of src a row - side by side at dst [row][k * width], zeros where a tap leaves the t_in rows.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
+def private stack_tap_rows(var dst : auto(TT)?; src : TT const?; rb, re, r0, k, width, stride, dil, pad, t_in : int64) {
+    for (r in range64(rb, re)) {
+        for (kk in range64(k)) {
+            let s = (r0 + r) * stride + kk * dil - pad
+            var drow = unsafe(dst + (r * k + kk) * width)
+            if (s >= 0l && s < t_in) {
+                unsafe {
+                    memcpy(drow, src + s * width, width * int64(typeinfo sizeof(type<TT>)))
+                }
+            } else {
+                for (j in range64(width)) {
+                    unsafe(drow[j]) = TT(0)
+                }
+            }
+        }
+    }
+}
+
 [arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
 def private conv1d_rows_dense_strided(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
@@ -885,21 +906,7 @@ def private conv1d_rows_dense_strided(c : TtsConv1d; x : array<float>; t_in : in
     while (r0 < t_out) {
         let rows = min(chunk, t_out - r0)
         maybe_parallel_for(0, int(rows), lanes_for_work(rows * kc, 0)) $(rb, re) {
-            unsafe {
-                for (r in range64(int64(rb), int64(re))) {
-                    var drow = xstp + r * kc
-                    for (kk in range64(k)) {
-                        let src = (r0 + r) * stride + kk * dil - pad
-                        if (src >= 0l && src < t_in) {
-                            memcpy(drow + kk * cin, xp + src * cin, cin * 4l)
-                        } else {
-                            for (j in range64(cin)) {
-                                drow[kk * cin + j] = 0.0
-                            }
-                        }
-                    }
-                }
-            }
+            stack_tap_rows(xstp, xp, int64(rb), int64(re), r0, k, cin, stride, dil, pad, t_in)
         }
         let chunks = matmul_chunks(int(rows), ROWS_OVERSPLIT, rows * kc * cout)
         maybe_parallel_for(0, int(rows), chunks) $(rb, re) {
@@ -950,26 +957,8 @@ def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; 
     while (r0 < t_out) {
         let rows = min(chunk, t_out - r0)
         maybe_parallel_for(0, int(rows), lanes_for_work(rows * kc, 0)) $(rb, re) {
-            unsafe {
-                for (r in range64(int64(rb), int64(re))) {
-                    var drow = xstp + r * kc
-                    var srow = xssp + r * knb
-                    for (kk in range64(k)) {
-                        let src = r0 + r + kk * dil - pad
-                        if (src >= 0l && src < t_in) {
-                            memcpy(drow + kk * cin, xqp + src * cin, cin)
-                            memcpy(srow + kk * nb, xsp + src * nb, nb * 4l)
-                        } else {
-                            for (j in range64(cin)) {
-                                drow[kk * cin + j] = int8(0)
-                            }
-                            for (j in range64(nb)) {
-                                srow[kk * nb + j] = 0.0
-                            }
-                        }
-                    }
-                }
-            }
+            stack_tap_rows(xstp, xqp, int64(rb), int64(re), r0, k, cin, 1l, dil, pad, t_in)
+            stack_tap_rows(xssp, xsp, int64(rb), int64(re), r0, k, nb, 1l, dil, pad, t_in)
         }
         invoke(g_mm_q8q8_batch, unsafe(yp + r0 * cout), wqp, wsp, xstp, xssp, kc, cout, rows)
         if (nbias > 0l) {
