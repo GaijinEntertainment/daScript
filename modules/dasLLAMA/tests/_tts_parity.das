@@ -274,7 +274,7 @@ def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : ar
                 styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, null, out, sc)
                 convs = gpu_convs() - c0
             } else {
-                var inscope gen_x <- scaled(gen_in, 3.0)
+                var inscope gen_x <- scaled_copy(gen_in, 3.0)
                 styletts2_generator(m.decoder, gen_x, cw, f2, s_ref, spec, frames, null, out, sc)
             }
         }
@@ -346,14 +346,6 @@ def copy_span(a : array<float>; at, n : int64) : array<float> {
     return <- out
 }
 
-def scaled(a : array<float>; k : float) : array<float> {
-    var r := a
-    for (v in r) {
-        v *= k
-    }
-    return <- r
-}
-
 //! The three runs a seat leg compares.
 enum TowerLeg {
     cpu        //! the knob off: the CPU stage, the reference
@@ -403,7 +395,7 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
         var inscope d_c : array<float>
         let dur_served = seat_leg(t, ST2, tag, "dur_enc", GPU_PRED_BAR, d_c) $(leg : TowerLeg; var out : array<float>) {
             if (leg == TowerLeg.poisoned) {
-                var inscope bert_x <- scaled(bert_c, 3.0)
+                var inscope bert_x <- scaled_copy(bert_c, 3.0)
                 styletts2_duration_encoder(m.predictor, bert_x, n_tok, s_pro, out, sc)
             } else {
                 styletts2_duration_encoder(m.predictor, bert_c, n_tok, s_pro, out, sc)
@@ -417,7 +409,7 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
         let durations_served = seat_leg(t, ST2, tag, "durations", GPU_PRED_BAR, raw_c) $(leg : TowerLeg; var out : array<float>) {
             var inscope dur : array<int>
             if (leg == TowerLeg.poisoned) {
-                var inscope d_x <- scaled(d_c, 3.0)
+                var inscope d_x <- scaled_copy(d_c, 3.0)
                 styletts2_durations(m.predictor, d_x, n_tok, 1.0, dur, out, sc)
             } elif (leg == TowerLeg.served) {
                 frames_g = styletts2_durations(m.predictor, d_c, n_tok, 1.0, dur, out, sc)
@@ -469,7 +461,7 @@ def private gpu_prosody_check(t : T?; m : StyleTts2Model; tag : string; d_c : ar
         var f2g = 0l
         let served = seat_leg(t, ST2, tag, "prosody", GPU_PRED_BAR, f0_c) $(leg : TowerLeg; var out : array<float>) {
             if (leg == TowerLeg.poisoned) {
-                var inscope en_x <- scaled(en, 3.0)
+                var inscope en_x <- scaled_copy(en, 3.0)
                 var inscope n_p : array<float>
                 styletts2_prosody(m.predictor, en_x, dc, frames, s_pro, out, n_p, sc)
             } elif (leg == TowerLeg.served) {
@@ -497,7 +489,7 @@ def private gpu_decode_check(t : T?; m : StyleTts2Model; tag : string; ten_c : a
         var inscope wave_c : array<float>
         seat_leg(t, ST2, tag, "decode", bar, wave_c) $(leg : TowerLeg; var out : array<float>) {
             if (leg == TowerLeg.poisoned) {
-                var inscope asr_x <- scaled(asr, 3.0)
+                var inscope asr_x <- scaled_copy(asr, 3.0)
                 styletts2_decode(m.decoder, m.text_encoder.c, m.source, asr_x, frames, f0_c, n_c, f2, s_ref, noise, 0ul, null, tm, sc)
             } else {
                 styletts2_decode(m.decoder, m.text_encoder.c, m.source, asr, frames, f0_c, n_c, f2, s_ref, noise, 0ul, null, tm, sc)
@@ -535,7 +527,7 @@ def private gpu_served_lane(t : T?; path, text, voice : string) : bool {
             t |> equal(encodes, int64(chunks) * served_seat_count(), "{msg}: one tower encode per seat per chunk")
             let peak = logits_maxabs(b.pcm)
             t |> success(peak > 0.05, "peak {peak}: the tower leg spoke")
-            var inscope silent <- scaled(b.pcm, 0.0)
+            var inscope silent <- scaled_copy(b.pcm, 0.0)
             t |> success(logits_maxabs(silent) <= 0.05, "silence reads under the floor (the floor's control)")
             to_log(LOG_INFO, "{base_name(path)} {voice}: served lane, tower vs CPU: {length(b.pcm)} / {length(a.pcm)} samples, sample-wise rel-rms {rel_rms(b.pcm, a.pcm)} (the q8 chain's own rounding, informational); CPU {timings_line(a.timings, a.sample_rate)}; tower {timings_line(b.timings, b.sample_rate)}\n")
             t |> success(within_twentieth(long_length(b.pcm), long_length(a.pcm)), "the sample counts {length(b.pcm)} against {length(a.pcm)} within a twentieth")

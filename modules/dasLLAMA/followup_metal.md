@@ -783,3 +783,12 @@ mel - so no gate can cover the hook under `REVIEW_TOWER.md`'s covering rule, whi
 counter that rises on a leg where the hook is the only hook raising it. The Vulkan tower counts
 the same hook under `vulkan_tower_stats()`'s `mels`. The work: a `mels` counter in
 `metal_tower_stats()` that the mel hook raises, and the qwen3a Metal cell asserting it rises.
+- **The Pocket frames q8 blob rounds a load-quantized model's scales to f16.** `pk_frames_write`'s
+  34-byte Q8_0 blob (`pk_blob_q8`) stores each block's scale as a halfword, so a Pocket model
+  quantized at load from a float file serves the frames seat with `q * f16(d)` where the CPU q8
+  lane multiplies by the f32 `d` it minted - up to 2^-11 of relative distance per block, the gap
+  the shared slab writer closed for every other seat (`tsw_put_q8` reads the f32 scale). A Q8_0
+  file is untouched: its scales are halfwords already. The work: an f32-scale blob layout for the
+  frames GEMV (a 36-byte block, or the scales as a separate row the kernel reads beside the
+  quants), its kernel arm, and the frames q8 cell on a float-minted file reading the CPU lane's
+  weights exactly.

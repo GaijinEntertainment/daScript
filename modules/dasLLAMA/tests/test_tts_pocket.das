@@ -548,7 +548,7 @@ def private codec_served_leg(t : T?; m : PocketModel; tag : string; latents : ar
                              var cpu : array<float>) : bool {
     return seat_leg(t, TtsKind.pocket, tag, "codec", bar, cpu) $(leg : TowerLeg; var out : array<float>) {
         if (leg == TowerLeg.poisoned) {
-            var inscope lat_x <- scaled(latents, 3.0)
+            var inscope lat_x <- scaled_copy(latents, 3.0)
             pocket_decode_latents(m, lat_x, frames, sc, out)
         } else {
             pocket_decode_latents(m, latents, frames, sc, out)
@@ -637,12 +637,12 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
         }
         var inscope w <- one_wrong(gpu.lat, r.cpu.lat, bar)
         t |> success(rel_rms(w, r.cpu.lat) > bar, "{tag}: one latent moved by twice the bar reds it (the bar's control)")
-        var inscope x0x <- scaled(k.x0, 3.0)
+        var inscope x0x <- scaled_copy(k.x0, 3.0)
         let fx = forced_frames(m, k, x0x, k.x1, sc)
         var inscope gx <- frame_rows(m, sc, min(fx, fc))
         t |> success(rel_rms(gx.lat, r.cpu.lat) > bar, "{tag}: the x3-scaled noise reds the bar (the compare's control)")
         if (all_rows) {
-            var inscope x1x <- scaled(k.x1, 3.0)
+            var inscope x1x <- scaled_copy(k.x1, 3.0)
             let fx1 = forced_frames(m, k, k.x0, x1x, sc)
             var inscope gx1 <- frame_rows(m, sc, min(fx1, fc))
             t |> success(rel_rms(gx1.conds, r.cpu.conds) > bar && rel_rms(gx1.eos, r.cpu.eos) > bar, "{tag}: the x3-scaled forced frames red the conditioning and EOS bars (their control)")

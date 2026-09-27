@@ -1334,7 +1334,8 @@ Vulkan twins share one instrument, `_tower_twin.das`: the seat guard (the tier's
 `vulkan_tower_arms`) and the jfk cells' seat, the three-way encode with the family's counters and
 the bar by metric (the vision canvases' maxdiff in rms, the audio towers' rel_l2), the input
 poison, the exact-lane decline, the vision canvas and dump-poison legs, and the staged tower's
-truncate-and-zero and in-memory mint.
+truncate-and-zero and in-memory mint. The GPU knobs it pins (both towers, the ASR decoder) are
+captured and put back through `_gpu_knobs.das`, the record the TTS rail shares.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - stocked suite; the qwen25v tower (Qwen2.5-Omni's window-attention ViT,
@@ -1461,7 +1462,8 @@ reversed input as the compare's control. The seam check carries the generator se
 oracle's own inputs within `GPU_SEAM_BAR` (5e-3; 1.2e-3 at most), the knob-off leg bit-equal to
 the CPU chain with its decline recorded. The models for these cells mint in memory from the GGUF's
 staging on the lane each cell names, no `.dlim` baked. The GPU cells read the serving driver
-through the rail's helpers (`gpu_knob`, `set_gpu`, `gpu_encodes`, `gpu_declines`): the Metal
+through the rail's helpers (the `_gpu_knobs.das` record - `gpu_knobs`, `set_gpu_knobs`,
+`with_gpu_knobs`, shared with the tower twins - and `set_gpu`, `gpu_encodes`, `gpu_declines`): the Metal
 tower on an Apple build, the Vulkan TTS driver elsewhere. Where no GPU device serves, every cell
 skips loudly, and a driver that registers no seat for a cell's stage skips that cell; a device
 whose seat declines a stage is a red.
