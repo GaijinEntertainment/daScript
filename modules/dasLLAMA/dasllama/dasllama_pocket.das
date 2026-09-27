@@ -14,6 +14,7 @@ require dasllama/dasllama_common   // reserve_resize
 require dasllama/dasllama_math
 require dasllama/dasllama_spm
 require dasllama/dasllama_unicode
+require dasllama/dasllama_tower   // add_inplace_rows: the residual add the block home shares with the towers
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 
@@ -713,7 +714,7 @@ def private layer_attention(l : PocketLayer; tf : PocketTransformer; var x : arr
     if (!empty(l.scale1.a)) {
         layer_scale_rows(sc.xb, t, d, l.scale1.a)
     }
-    add_rows(x, sc.xb, t * d)
+    add_inplace_rows(x, sc.xb, t * d)
 }
 
 def private layer_ffn(l : PocketLayer; tf : PocketTransformer; var x : array<float>; t : int64; var sc : PocketScratch) {
@@ -726,7 +727,7 @@ def private layer_ffn(l : PocketLayer; tf : PocketTransformer; var x : array<flo
     if (!empty(l.scale2.a)) {
         layer_scale_rows(sc.xb, t, d, l.scale2.a)
     }
-    add_rows(x, sc.xb, t * d)
+    add_inplace_rows(x, sc.xb, t * d)
 }
 
 //! `t` rows of x [t][d] through the transformer at positions pos0.., every layer's keys and
@@ -819,7 +820,7 @@ def private res_conv_stream(b : PocketResConv; var cr : PocketConvCarry; x : arr
     stream_conv(b.conv1, cr, sc.cc, t, sc, sc.cpad)
     elu_rows(sc.cpad, t * b.conv1.cout_s)
     conv1d_rows(b.conv2, sc.cpad, t, y)
-    add_rows(y, x, t * w)
+    add_inplace_rows(y, x, t * w)
 }
 
 //! the window in frames a stream runs: the knob, else the whole run

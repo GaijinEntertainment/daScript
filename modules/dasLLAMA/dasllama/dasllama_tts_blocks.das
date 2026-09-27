@@ -1912,23 +1912,6 @@ def adain_rows_into(a : TtsAdaIn; src : array<float>; @scratch @exact_size var d
 
 // ===== elementwise row passes (float4 lanes, row blocks across lanes) =====
 
-//! y += x over n floats (n % 4 == 0).
-def add_rows(var y : array<float>; x : array<float>; n : int64) {
-    rows_width_check(n, "add_rows")
-    var yp = unsafe(addr(y[0]))
-    let xp = unsafe(addr<float const?>(x[0]))
-    let n4 = int(n / 4l)
-    maybe_parallel_for(0, n4, lanes_for_work(n, 0)) $(rb, re) {
-        unsafe {
-            var y4 = reinterpret<float4?>(yp)
-            let x4 = reinterpret<float4 const?>(xp)
-            for (i in range64(int64(rb), int64(re))) {
-                y4[i] += x4[i]
-            }
-        }
-    }
-}
-
 //! y = a + b over n floats (n % 4 == 0); `y` sized here.
 def sum_rows_into(@scratch @exact_size var y : array<float>; a, b : array<float>; n : int64) {
     rows_width_check(n, "sum_rows_into")

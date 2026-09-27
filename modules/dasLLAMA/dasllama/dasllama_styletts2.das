@@ -17,7 +17,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_plane
 require dasllama/dasllama_image
-require dasllama/dasllama_tower   // asr_prof_add: the encode-stage profiling rail
+require dasllama/dasllama_tower   // asr_prof_add: the encode-stage profiling rail; add_inplace_rows: the residual add
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 
@@ -1232,7 +1232,7 @@ def private gen_res_block(b : St2GenResBlock; src : array<float>; @scratch @exac
         if (j == 0) {
             sum_rows_into(y, src, y2, n)
         } else {
-            add_rows(y, y2, n)
+            add_inplace_rows(y, y2, n)
         }
         asr_prof_add("tts.gen.resadd", tc)
     }
@@ -1369,7 +1369,7 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; @sc
     }
     let n = cc * tt
     tc = ref_time_ticks()
-    add_rows(y, src_res, n)
+    add_inplace_rows(y, src_res, n)
     asr_prof_add("tts.gen.stagesum", tc)
     stage_resblocks(d, i, y, out, cc, tt, s, tr, sc)
 }
@@ -1396,7 +1396,7 @@ def private stage_resblocks(d : St2Decoder; i : int64; x : array<float>; @scratc
         if (j == 0l) {
             copy_rows(out, y, n)
         } else {
-            add_rows(out, y, n)
+            add_inplace_rows(out, y, n)
         }
         asr_prof_add("tts.gen.stagesum", tc)
     }
