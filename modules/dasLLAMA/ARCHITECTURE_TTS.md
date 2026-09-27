@@ -84,8 +84,8 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   one teardown). One home: the block home holds the operators, and it names no family type.
 - **`dasllama_tts_slab.das`** - the shared slab writer both GPU tower drivers build their TTS
   slabs through: the writer struct and allocator, the q8 and K-quant dequant into f32 rows over the
-  job pool, the conv, linear and norm row writers, the block slot writers (an LSTM turned or not by
-  `lstm_turned`), the two-pass build, every slab key, `tts_style_rows`, the Pocket frames admission
+  job pool, the conv, linear and norm row writers, the block slot writers (an LSTM transposed or not by
+  `lstm_transposed`), the two-pass build, every slab key, `tts_style_rows`, the Pocket frames admission
   and voice record, and the decoder shape walks, generic over the driver's record and `tts_note_*`
   hooks. Element offsets only - a driver turns them into its own binding offsets - and no device call.
 - **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share: the weight
@@ -154,7 +154,7 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   draw, and `synthesize` and `synthesize_stream` stay sample-identical because both walk the same
   chunk list in the same order. Requires no `audio` module. `REVIEW.das`'s `check_tutorial_floor`
   walks both facade files - `dasllama.das` and this one - and licenses a `def private` one, a
-  `def operator` overload, and the names in the check's `FLOOR_HOOKS` set: `finalize`, the
+  `def operator` overload, and the names in the check's `FACADE_DEFS_WITHOUT_TUTORIAL` set: `finalize`, the
   language's own teardown hook the compiler calls at `delete`, and `tts_finish_styletts2`, the
   loader's tail that the parity rail's in-memory minter shares and that a user reaches only through
   `load_tts_model`. No tutorial calls any of them by name, so none carries a teaching duty.

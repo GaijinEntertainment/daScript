@@ -22,6 +22,11 @@ PARAMETER (the parameterized race helpers) - those the check cannot resolve text
 stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
 `race_envelope_ok` fails closed - the twin silently loses its crown.
 
+The perf lint's PERF032 checks only `@exact_size` arrays: it flags a `resize` with no `reserve`
+or `ensure_capacity` earlier in the function, and never compares the two counts. A buffer that
+grows with a model dimension but is not declared `@exact_size` gets no lint at all, which is why
+the module declares every such buffer `@exact_size` and sizes it through a reserve first.
+
 ### Engine core
 
 - **`dasllama.das`** - the public API facade and nothing else: `load_model` -> `create_session` ->

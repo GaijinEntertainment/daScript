@@ -7,28 +7,29 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
 asserts belong to every cell that calls it. A test file is a `.das` that dastest runs: one
 carrying at least one `[test]` function, or one whose `cant_`, `failed_` or `invalid_` prefix
-makes its compile the assertion. A test file's header is its top comment block.
+makes its compile the assertion. A test file's header is its top comment block. A kernel-unit
+cell is a cell that itself dispatches a `[metal_dispatch]` or `[vk_dispatch]` class or calls a
+CPU kernel in `../dasllama/dasllama_math*.das`. To loosen an assert is to let pass an input the
+old assert failed: a wider bar, a shorter domain, a dropped length check.
 
-**A cell that itself dispatches a `[metal_dispatch]` or `[vk_dispatch]` class or calls a CPU
-kernel in `../dasllama/dasllama_math*.das`, wherever the diff puts it, and a diff that changes a
-CPU kernel in `../dasllama/dasllama_math*.das`, apply `REVIEW_KERNEL_CELLS.md` (beside this file)
-too.**
+**A kernel-unit cell, wherever the diff puts it, and a diff that changes a CPU kernel in
+`../dasllama/dasllama_math*.das`, apply `REVIEW_KERNEL_CELLS.md` (beside this file) too.**
 
 **A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists,
-changes which `run.das` suites list one, or adds a cell or an assert whose expected value must
-match something kept outside the cell or that a checked-in table names as its evidence, applies
-that checklist too.**
+changes which `run.das` suites list one, or adds a cell or an assert whose expected value must be
+kept in step with something maintained outside the cell, or that a checked-in table names as its
+evidence, applies that checklist too.**
 
-**A cell that calls a `set_*` / `pin_*` setter in `../dasllama/` that changes the route, the
-serving lane or the engage mode, or whose claim depends on which route or serving lane runs it -
-a lane pin, a driver hook, a CPU-vs-GPU compare - applies `REVIEW_LANE_PINS.md` (beside this
-file) too.**
+**A cell that calls a `set_*` / `pin_*` function in `../dasllama/` whose value a later load, route
+choice or kernel dispatch in the same process reads, passes a loader parameter that takes a
+family's lane, or whose claim depends on which route or serving lane runs it - a lane pin, a
+driver hook, a CPU-vs-GPU compare - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR
-transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.** An encoder is any model
-stage that turns pixels, audio samples, phonemes, or another stage's output into rows or audio
-samples.
+transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.** An encoder is any stage
+of a vision tower, an audio tower or a speech synthesizer - never the language model that reads
+their rows.
 
 **Weakening `test_metal_float_a_gate.das` - the gate that checks the MSL emitter refuses a float A
 operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without the
@@ -37,12 +38,16 @@ operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without
 **Weakening `st2_source_gate` in `test_metal_prefill_kernels.das` - the check that the StyleTTS2
 harmonic-source kernels match the CPU chain under both resample laws - is a defect.**
 
-**Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the models
-stocked (the stocked files of the areas the change reaches; a core module with no `MODULE_AREAS` row
-reaches every area), plus every test here the change reaches - never the whole directory, never the
-whole `stocked` suite.** A change reaches a test when it alters anything the test's result depends
-on - the test file, a shared helper, engine code it exercises, an in-tree fixture or corpus it
-reads, or a name it asserts on; a comment-only edit reaches none.
+**Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
+models stocked (the stocked files of the areas the change reaches; a core module with no
+`MODULE_AREAS` row reaches every area), plus every test here the change reaches - never the whole
+directory, never the whole `stocked` suite.** A change reaches a test when it alters anything the
+test's result depends on - the test file, a shared helper, engine code it exercises, an in-tree
+fixture or corpus it reads, or a name it asserts on; a comment-only edit reaches none.
+
+**A PR whose change reaches a cell that skips without a device or without a module the build may
+omit runs that cell on a box that has it, and names that box in the PR body.** A reached cell that
+skipped was not run.
 
 **A PR that adds or changes a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
 `_model_tier.das`) also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
@@ -110,8 +115,8 @@ behind sends its reader to a flag that no longer does what the text says.
 returns without asserting - whatever the reason - registers `t |> skip` there, and one whose
 claim needs a capability the box may lack (a device, a window server, an audio device, a module
 the build omits, a stocked model, a stocked fixture - an oracle dump, a clip, a front-end pack)
-registers that skip on the fact before it asserts, never a
-bare return and never a failure; `feint` is a print, not a skip.
+registers that skip on the fact before it asserts, never a bare return and never a failure;
+`feint` is a print, not a skip.
 
 **A cell's skip condition keys on a fact the box owns - a device capability, a run-mode knob's
 value, a host toolchain's presence, a compile-time module-presence check (`typeinfo
@@ -129,18 +134,9 @@ set.** `DASLLAMA_PARITY_FULL=1` is a final pre-PR switch, not the iteration loop
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
 cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
-calls no loader that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset -
-`load_model`, `load_model_cached`, `load_model_image`, `load_<family>_tower`,
-`load_<family>_encoder`, `load_<family>_embedder`, `load_<carrier>_model`, `load_asr_model`,
-`load_whisper_model`, `load_vision_embedder`, `load_audio_embedder`, `load_styletts2`, and
-`load_tts_model` on a StyleTTS2 carrier; such a test loads a media carrier in memory from the
-family's `stage_*` staging - its `mint_*` twin, or `cache_via_image_staged` with an empty image
-path.** A disk bake under a lane pin (a `set_<family>_q8`-class knob or a Metal tensor-crowns pin)
-purges the serving lane's `.dlim` beside the model, and the next direct-image load in another
-suite panics on the wrong identity.
-
-**A diff that adds a loader that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset
-adds it to that list in the same change.**
+calls no loader that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset; such a
+test loads a media carrier in memory from the family's `stage_*` staging - its `mint_*` twin, or
+`cache_via_image_staged` with an empty image path.**
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -204,33 +200,30 @@ stack against a per-session sequential forward - onto a carrier above `LARGE_TIE
 (`_model_tier.das`) is a defect.** The batched code paths get their parity on small models,
 through pins.
 
-**A cell sets an environment-read knob - one the running config reads once, at context init -
-before the process that reads it starts: the child the cell spawns, or the runner's own.** A set
-after that process starts is invisible to a config already read.
+**A cell never sets an environment-read knob - one the running config reads once, at context
+init - in a process that has already read it; it sets the knob in the environment of the child
+it spawns.** A set after that process starts is invisible to a config already read.
 
-**A cell that cannot set an environment-read knob before its reader starts names that knob's
-value in the text a red prints - the cell label or the assert.**
+**A cell whose claim depends on an environment-read knob its own process has already read names
+that knob's value in the text a red prints - the cell label or the assert.**
 
 **A diff that adds or loosens an assert holding a figure the run measures - the difference
 between two computed sides, a rate, an error, or a count the run decides - within a nonzero
-tolerance, or past a floor or ceiling, in a cell that does not itself dispatch a `[vk_dispatch]`
-or `[metal_dispatch]` class or call a CPU kernel in `../dasllama/dasllama_math*.das`, ships in the
-same change, in every such cell that holds the assert, a control that lands outside that bound:
-one that changes an input the computation reads (a zeroed weight region, a poisoned input
-element, a mechanism disabled) and re-runs the compare; a value added to the output after the
-fact is not one.** A bound nothing has exceeded where it is applied is not known to discriminate
-there.
+tolerance, or past a floor or ceiling, in a cell that is not a kernel-unit cell, ships in the same
+change, in each such cell holding the assert, a control that lands outside that bound.** A bound
+nothing has exceeded where it is applied is not known to discriminate there.
+
+**A control for a measured-figure assert in a cell that is not a kernel-unit cell changes an input
+the computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled -
+and re-runs the compare; a value added to the output after the fact is not one.**
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's
 smallest GGUF that sits under `LARGE_TIER_BYTES` (`_model_tier.das`).
 
 **A poison control on a tower the Metal driver serves - a run of the gate with the tower's
-weights zeroed, which must fail - zeroes every weight buffer the served route reads.** Which
-buffers those are depends on the route: a twin-W route reads only the baked halfword copy of
-the GEMM weights (`wblob`), so zeroing that buffer alone is a valid control there; a route
-that also reads the f32 plane (`fblob`) needs both zeroed. A poison the served route never
-reads passes on a broken kernel.
+weights zeroed, which must fail - zeroes every weight buffer the served route reads.** A poison
+the served route never reads passes on a broken kernel.
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`
 never names that module's types in its signature - leave a parameter that would carry one

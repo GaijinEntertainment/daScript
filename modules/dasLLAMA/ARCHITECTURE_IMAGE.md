@@ -219,9 +219,10 @@ The closure, per file in sorted name order: every `Archive` serializer body (a t
 `def serialize*` taking an `Archive`), `build_image`, `parse_image`, every `*_prepare` mint of
 `dasllama_tts_blocks.das` (the TTS blocks' plane packers; a driver's `*_prepare` places no image byte), the
 layout helpers `pad_to_page`, `plane_end`, `image_total_bytes`, `w_append`, `w_zeros`,
-`w_header`, `store_u32` and `store_u64`, and the declaration lines of the layout constants
-`IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND` and
-`METAL_BAND_BLOCKS`. Comments are stripped first, so re-wording one moves nothing, and CRLF
+`w_header`, `store_u32`, `store_u64`, `kq_plane_name`, and the TTS blob's `blob_push`,
+`weight_slot` and `conv1d_weight_row`, and the declaration lines of the layout constants
+`IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND`,
+`METAL_BAND_BLOCKS` and `BLOB_ALIGN_FLOATS`. Comments are stripped first, so re-wording one moves nothing, and CRLF
 line ends fold to LF before anything is hashed, so a checkout under `autocrlf` stamps as the
 LF tree does. A body runs from its `def` line to the column-0 `}` that closes it, or, for a
 `def ... => expr` one-liner, to the end of that one line. Each piece folds into one FNV-1a hash
@@ -235,9 +236,10 @@ which the identity string and `layout_fingerprint()` cover instead.
 
 A red says the closure moved, and the two repairs are not the same thing. A **re-stamp** answers
 a change that provably leaves every byte where it was - a renamed local, a tripwire line, a
-helper split, or a content change that also moved the image PATH, since an image at a path
-nothing reads cannot be reinterpreted: `IMAGE_LAYOUT_STAMP_HASH` takes the value the finding
-prints and both version numbers stand. A **bump** answers a change that moves bytes, or that
+helper split, a field added to or dropped from a meta-serialized struct (which
+`layout_fingerprint()` already refuses), or a content change that also moved the image PATH,
+since an image at a path nothing reads cannot be reinterpreted: `IMAGE_LAYOUT_STAMP_HASH` takes
+the value the finding prints and both version numbers stand. A **bump** answers a change that moves bytes, or that
 changes what an image at an UNCHANGED path contains: `IMAGE_VERSION` (`dasllama_image.das`) goes
 up, `IMAGE_LAYOUT_STAMP_VERSION` follows it, and the hash is re-stamped alongside. Without the
 bump a stale image stays structurally valid and silently serves a different model.

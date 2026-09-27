@@ -5,12 +5,12 @@ docs: `ARCHITECTURE_GPU_TOWER.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`,
 `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`, `ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`,
 `followup_vulkan.md`.
 
-A tower driver is a GPU driver file that serves a family's encoder or synthesis stages through
-hook seats - stage slots the CPU chain calls and the driver fills. A diff reaches a tower when a
-function it touches is, calls, or is reachable from a hook that any `[init]` of that tower's
-driver files registers - a seat, a drop hook, or a reload or weights-epoch listener
-(`dasllama_metal_tower_register`, `dasllama_vulkan_tower_register`,
-`dasllama_vulkan_tts_register`); it reaches the Metal tower also when it touches
+A tower is the Metal or the Vulkan GPU driver set that runs a family's encoder or synthesis
+stages through hooks - stage seats the CPU chain calls, drop hooks, reload or weights-epoch
+listeners - registered by `dasllama_metal_tower_register` (Metal) or by
+`dasllama_vulkan_tower_register` and `dasllama_vulkan_tts_register` (Vulkan)
+(`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A diff reaches a tower when a function it touches is,
+calls, or is reachable from one of those hooks, and reaches the Metal tower also when it touches
 `dasllama/dasllama_metal_asr_dec.das`, `dasllama/dasllama_metal_common.das`, or a kernel class
 or builder the ASR decoder uses.
 
@@ -33,9 +33,10 @@ run.** A family filter skips the other families' cells, and a shared path or bor
 reaches the ASR decoder with no line of its file touched.
 
 **A diff reaching the Vulkan tower runs, on a build without the Metal module,
-`test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`, `test_gemma3v_vulkan_twin` in `tests/test_gemma3v.das`,
-`test_qwen3v_vulkan_twin` in `tests/test_qwen3v.das`, `test_qwen25v_vulkan_twin` in
-`tests/test_qwen25v.das`, `test_whisper_vulkan_twin` in `tests/test_whisper.das`,
+`test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`, `test_gemma3v_vulkan_twin` in
+`tests/test_gemma3v.das`, `test_qwen3v_vulkan_twin` in `tests/test_qwen3v.das`,
+`test_qwen25v_vulkan_twin` in `tests/test_qwen25v.das`, `test_whisper_vulkan_twin` in
+`tests/test_whisper.das`,
 `test_encoder_blocks_vulkan`, `test_gemma4a_vulkan_twin`, `test_canary_vulkan_twin` and
 `test_qwen3a_vulkan_front` in `tests/test_audio.das`, `tests/test_vulkan_tower_kernels.das`, the
 TTS kernel gates `tests/test_vulkan_tts_kernels.das`, `tests/test_vulkan_tts_conv_kernels.das`,
@@ -74,13 +75,16 @@ specific canvas sizes.
 
 **A diff that changes the dispatch sequence of a family's chain in a tower driver keeps the chain
 running the operations of the CPU code the seat's hook replaces, in the same order and at
-the same operand shapes - a chain may fuse consecutive operations into one dispatch; a diff that
-changes what the chain computes changes that CPU code in the same diff.** That CPU code is what the
-hook's call site runs when the hook declines: the CPU block loop, front, tail or mel beside the
-call, plus every CPU step the call site skips when the hook serves.
+the same operand shapes; a chain may fuse consecutive operations into one dispatch, or split one
+operation across several dispatches.** That CPU code is what the hook's call site runs when the
+hook declines: the CPU block loop, front, tail or mel beside the call, plus every CPU step the
+call site skips when the hook serves.
+
+**A diff that makes a tower chain compute anything the CPU code its seat's hook replaces does not
+compute changes that CPU code the same way, in the same diff.**
 
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
-too** - its served-synthesis rule owes the rig's rows on every seat the diff reaches.
+too.**
 
 **In `dasllama/dasllama_vulkan_tower.das`, the block hooks that take an `AudioTower` (both through
 `vt_aud_blocks`) and the conv stem (`vulkan_audio_conv_front`) each get their device weights
@@ -91,6 +95,8 @@ it through those three.** The stem leaves its output rows on the device, in the 
 a path that rebuilds the weights or scratch on its own drops those rows unread, and the CPU block
 loop then reads stale rows.
 
-**A driver route that dispatches a borrowed kernel set - the builders one driver borrows from
-another driver - is gated on every pipeline of that set having compiled, never on a subset; one
-absent pipeline keeps the CPU route.** A partly-armed set dispatches into a null pipeline.
+**A diff that adds or changes a route in a tower driver or an ASR-decoder driver
+(`dasllama/dasllama_metal_asr_dec.das`, `dasllama/dasllama_vulkan_asr_dec.das`) puts every kernel
+class or builder that route dispatches in the route's ensure chain - the pipeline builds the
+route checks before it serves - so one absent pipeline keeps the CPU route.** A class outside the
+chain dispatches into a null pipeline when its build failed.

@@ -1,13 +1,24 @@
 # dasLLAMA Architecture - the tower attention routes and encode chains
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
-carries the three routes that serve tower attention on Metal, the
+carries what a tower driver is and the registrations its hooks come through, the three routes
+that serve tower attention on Metal, the
 one-command-buffer encode chain each family the Metal tower driver serves gets, and the StyleTTS2
 synthesis chain, and the Pocket TTS codec and frames seats. The GPU backend role table these
 sections build on - the tower driver's role row included - stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 - `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower driver's row classes and attention
   routes, its encode chains, and the Vulkan ASR-decoder driver.
+
+### A tower driver and the hooks it registers {#tower-reach}
+
+A tower driver is a GPU driver file that serves a family's encoder or synthesis stages through
+hook seats - stage slots the CPU chain calls and the driver fills. Every hook a tower serves
+through is registered by an `[init]` of that tower's driver files: a seat, a drop hook, or a
+reload or weights-epoch listener. The registrations run in `dasllama_metal_tower_register` (the
+Metal tower), `dasllama_vulkan_tower_register` (the Vulkan tower) and
+`dasllama_vulkan_tts_register` (the Vulkan TTS driver, the Vulkan tower's TTS seats), so the
+hooks a function can reach are the ones those three register.
 
 ### The tower attention routes {#tower-attn-routes}
 
@@ -70,7 +81,7 @@ rebuild runs the family's drop, then the family's writer twice through the share
 (`dasllama_tts_slab.das`, the one the Vulkan seats build from; its keys, shape walks and row
 layouts are the same here - each Metal part writer runs the shared part writer and maps its record
 onto the Metal slots, adapted to byte offsets with the GEMM's uniforms hung on each, and the writer
-lays an LSTM recurrence unturned (`lstm_turned` false), as the Metal recurrence kernel reads it) - the
+lays an LSTM recurrence untransposed (`lstm_transposed` false), as the Metal recurrence kernel reads it) - the
 measuring pass writes into a probe slab to size the host copy, the second fills the resident -
 and the copy uploads, the drop running again when the upload fails. The measuring pass hangs no
 device handle - uniforms and buffers are created on the fill pass alone - so the probe slab is

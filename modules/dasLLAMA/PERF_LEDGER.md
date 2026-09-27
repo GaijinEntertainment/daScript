@@ -11,6 +11,44 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-27) - the Pocket row GEMV (`TtsPkGemvT`) folds its own subgroup reduction
+  onto the shared `WgReduceBase`, and the Vulkan TTS dedup pass's bench rows.** Box: the pod -
+  the RunPod RTX PRO 4500 Blackwell, Linux - one process at a time.
+
+  The race, `debug-jit`: the probe script `modules/dasLLAMA/harness/tts_pk_gemv_race.das`
+  (untracked, deleted after the reading) through `./bin/daslang -jit
+  modules/dasLLAMA/harness/tts_pk_gemv_race.das -- --iters 200 --reps 5` under
+  `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=8`, `DAS_TUNE_POLICY` and
+  `DASLLAMA_COOPMAT` unset, no other overrides, on the tree of 6cdb57a71 (bb7c7a683's code). Its
+  two arms: the shipped GEMV stamp with its own reduction (`gemv_wg_sum` over a 4-slot `red`)
+  against a `WgReduceBase` twin of the same body (a 128-slot `part`, the slot-alternating
+  `wg_sum`), both arms at the same two served frame-loop shapes, ln_qkv (1024 -> 3072) and ln_gelu
+  (1024 -> 4096); device timestamps, 200 dispatches a batch, 5 batches, the min and the median of
+  the per-dispatch time over the batches. The streamed operand is the weights: a ring of 8 weight
+  copies of 16 MiB (128 MiB) that the probe states keeps them out of the card's L2 (the L2 size
+  itself is not recorded). Each stamp writes one output plane that every dispatch rewrites, with a
+  barrier between dispatches on both arms; the untimed warm-up each arm ran before its first timed
+  batch is not recorded, nor is whether each batch issued its dispatches back to back. The twin's
+  binding order was checked by hand against the shipped class's declaration.
+  ln_qkv (1024 -> 3072): median 18.99 us a dispatch on the shipped form against 18.93 on the twin,
+  min 18.91 against 18.93; ln_gelu (1024 -> 4096): 24.57 against 24.57, min the same. The same
+  bits: max abs diff 0 over both outputs (1024 and 4096 values). Workgroup memory 16416 against
+  16928 bytes under the device's 49152-byte cap (the probe's twin kept the retired 16-byte `red`
+  beside the base's `part`; the landed class declares 16912). The occupancy claim does not hold
+  at the served shapes, and the GEMV folds onto the shared base.
+
+  The dedup branch's bench rows at bb7c7a683: `./bin/daslang -jit
+  modules/dasLLAMA/harness/tts_synth.das -- --model <gguf> --voice <voice> --out <dir> --limit
+  20`, the voice `Bella` on the kitten files and the model's default voice on kokoro and Pocket,
+  under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16 DAS_LOG_LEVEL=info`,
+  `DAS_TUNE_POLICY` and `DASLLAMA_COOPMAT` unset, no other overrides, read at commit bb7c7a683
+  (before the reduction fold); the mean generation wall (`gen_ms`) a sentence over the 20
+  sentences, with its min and max. The rows, `direction-grade` against the 2026-09-26 entry's rows
+  below (two commits, one process a run): kitten-nano 44 ms (14-436; the 2026-09-26 row 54),
+  kitten-mini 95 (40-678; the 2026-09-26 row of 302 predates the scratch and attach levers that
+  landed after it), kokoro 87 (33-658; 98), Pocket q8 128 (60-639; 132) - within noise or
+  better. Each row's alternate arm is the same instrument at the 2026-09-26 entry's commit; the
+  Metal row of the same instrument on the M5 is owed.
 - **LANDED (2026-09-26) - the StyleTTS2 and Pocket seats ride the Vulkan TTS driver
   (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`): the kitten and kokoro families' seven
   seats and the Pocket codec and frames seats on the Vulkan tower's knob, the front end on the
@@ -51,18 +89,6 @@ what it costs today and what the fix would change.
   job pool. What the seats hold: the Pocket frames slab 322 MB, the kokoro decoder's scratch past
   3 GB at its widest sentence, the Pocket codec's one-shot column slot about 4 GB at the 512-frame
   cap (`followup_vulkan.md` 108, 109).
-
-  The Pocket row GEMV (`TtsPkGemvT`) with its own subgroup reduction against the `WgReduceBase`
-  form, at the served frame-loop shapes, device timestamps on the pod's RTX PRO 4500 - 200
-  dispatches a batch, 5 batches, a ring of 8 weight copies of 16 MiB so the weights stay out of
-  L2: ln_qkv (1024 -> 3072) 18.99 against 18.93 us a dispatch, ln_gelu (1024 -> 4096) 24.57
-  against 24.57; the same bits, max abs diff 0 over both outputs; workgroup memory 16416 against
-  16928 bytes under a 49152-byte cap (the probe's twin kept the retired 16-byte `red` beside the
-  base's `part`; the landed class declares 16912). The occupancy claim did not hold, and the GEMV folded onto
-  the shared base. The dedup tip's bench rows, re-read on the same box as the mean over 20
-  sentences, read within noise or better: kitten-nano 44 ms (the 54 above), kitten-mini 95 (the
-  302 above predates the scratch and attach levers that landed after that row), kokoro 87 (98),
-  Pocket q8 128 (132).
 - **LANDED (2026-09-26) - three TTS parity bars widened to cover the pod's x64 CPU chain beside
   the M5 Max's.** Every reading `-jit` through `tests/run.das -- --area tts` on the named box: the
   pod (the RunPod RTX PRO 4500, Linux; its x64 CPU chain is the arm under compare) and the M5 Max

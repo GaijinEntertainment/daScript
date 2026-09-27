@@ -22,7 +22,8 @@ written anywhere under `modules/dasLLAMA/` outside a definition home is a defect
 `kq_desc` accessor (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id,
 or through a named constant a definition home declares - in a kernel body, which calls no
 accessor, a `uint` one `dasllama/dasllama_kqformat.das` declares.** A hand-copied value drifts
-from the definition it restates.
+from the definition it restates, and a literal `32` cannot be told apart from a tile width that
+happens to match.
 
 **A diff that adds or changes a `kq_desc` row (`dasllama/dasllama_kqformat.das`) or a
 `ggml_type_bytes` entry (`dasllama/dasllama_gguf.das`) lands the row's pins in
