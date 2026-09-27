@@ -81,13 +81,13 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   (`linear_take_kq`), the kq lane beside f32 and q8; beside every weight array sits its `TtsSpan` into the
   model's blob, and `weights_walk` is the one walk that moves weights into a staging blob or
   binds them as borrowed views over a served plane (`dasllama_common.das`'s `release_plane` is the
-  one teardown). One
-  home: the block home holds the operators, and it names no family type.
+  one teardown). One home: the block home holds the operators, and it names no family type.
 - **`dasllama_tts_slab.das`** - the shared slab writer both GPU tower drivers build their TTS
-  slabs through: the writer struct and its allocator, the q8 and K-quant dequant into f32 rows
-  over the job pool, the conv, linear and norm row writers, the residual and generator block slot
-  writers, the two-pass build (a measuring pass, then the fill), and every slab key and shape
-  check. Element offsets only - a driver turns them into its own binding offsets - and no device call.
+  slabs through: the writer struct and allocator, the q8 and K-quant dequant into f32 rows over the
+  job pool, the conv, linear and norm row writers, the block slot writers (an LSTM turned or not by
+  `lstm_turned`), the two-pass build, every slab key, `tts_style_rows`, the Pocket frames admission
+  and voice record, and the decoder shape walks, generic over the driver's record and `tts_note_*`
+  hooks. Element offsets only - a driver turns them into its own binding offsets - and no device call.
 - **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share: the weight
   map of the converted GGUF (conv geometry rides as `styletts2.conv.<weight>` metadata, so the
   assembly hardcodes the wiring and reads the shapes; the STFT convention - replicate or reflect
@@ -123,7 +123,8 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   names, so a name of any other shape has no language rather than the one its first letter spells.
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
   picked by `general.architecture` - from a GGUF or from a prepared `.dlim`; for a phoneme
-  family the phoneme pack and `tts_postag.bin` read from the model's directory, the full pack
+  family `tts_finish_styletts2` - the one finish a test's minted model runs too - sets the kind
+  and reads the phoneme pack and `tts_postag.bin` from the model's directory, the full pack
   preferred over the American-only twin, `ARCHITECTURE_TTS.md#tts-g2p-pack-tiers`, the packs it leaves out named once in the
   log; a Pocket file stands alone and `tts_needs_packs` says so from the file's architecture
   before any load), `tts_has_phonemes` (whether `tts_phonemize` has an answer for the model),

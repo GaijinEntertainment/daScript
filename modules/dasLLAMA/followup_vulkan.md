@@ -1750,7 +1750,7 @@ module) is independent and can land any time - it is pure structure.
     the compensated sums they protect can fold. Done = the arm sets the knob where the user has not,
     and the source kernels' cells run green on the Mac.
 112. **`tts_div`'s Newton step relies on `mad` being fused.** The source kernels divide as the
-    CPU's IEEE division rounds through `tts_div` (`dasllama_vulkan_classes.das`): a reciprocal
+    CPU's IEEE division rounds through `tts_div` (`dasllama_gpu_math.das`): a reciprocal
     refined once and the quotient corrected by its exact remainder, each correction a `mad` whose
     exactness needs one rounding. `mad` lowers to `Fma`, which the `precise` mark does not decorate
     and which Vulkan lets a driver evaluate as a multiply then an add

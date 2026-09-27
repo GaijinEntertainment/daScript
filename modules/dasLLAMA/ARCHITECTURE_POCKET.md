@@ -33,6 +33,9 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   `ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`): a registered driver gets the first refusal of `pocket_decode_latents` and of the
   loop inside `pocket_synthesize` (once the prompt's rows sit in the caches), and the CPU form
   serves a decline; a served loop's wall reads as the backbone's timing, its head timing zero.
+  Both drivers run the served loop's host side through `pocket_frames_batched` (the batch of
+  frames a submit carries, the noise draws, the end-of-speech check) at the one batch knob
+  `set_pocket_frame_batch` / `pocket_frame_batch()`.
   One language per file:
   `pocket.language` names the package config the GGUF came from, and `lang` the code `caps`
   reports; every roster voice speaks that language.

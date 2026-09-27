@@ -114,7 +114,7 @@ phase past a hundred thousand radians reduced by 2 pi in exact pieces), and its 
 on the pad law's stamp (`TtsStftReflect` / `TtsStftEdge`: the magnitude and the phase); then
 the generator - per stage the leaky ReLU, the source rows through the stage's noise conv and
 Snake residual block (`TtsAdainSnake` on the norm slot's alpha row), the transposed upsample
-conv on the im2col's transposed read, the last stage's reflected row (`TtsReflect1`), the
+conv on the im2col's transposed read, the last stage's reflected row (two row copies on `TtsPkRows`), the
 kernels' blocks averaged into the stage's out (`TtsAxpy`), then the final leaky and conv_post -
 and the inverse STFT (`TtsIstft`, the log magnitudes and phases through the transposed conv
 weights, the window envelope divided out where the model asks). The waveform reads back. The
@@ -155,9 +155,10 @@ bare dot, the layernorm and the layernorm-modulate-SiLU prologues, the gated res
 add-SiLU over the slab vector, the residual joins with and without the scale row, the GELU, the
 qkv rope-and-store - the rope's pairs sit in a workgroup's even and odd rows, so the span sits on
 the four lattice - and the tail that adds the noise row and denormalizes the latent). The frames run in
-batches of eight a submit (`set_vulkan_pocket_frame_batch`), the EOS rule walked on the host
-between batches from the logits read back, the generator rewound past the frames made, as the
-Metal twin does.
+batches of eight a submit (`set_pocket_frame_batch`, the one knob both drivers read), the EOS rule
+walked on the host between batches from the logits read back, the generator rewound past the frames
+made - the one host loop both drivers run (`pocket_frames_batched`, `dasllama_pocket.das`), each
+handing it its noise sink, its submit and its EOS source.
 
 The declines: `knob`, `shape` (a width off the 64 lattice, a head width other than 64 or 128,
 more than 512 tokens for the attention stage, an LSTM direction over 256 hidden), `device` (the

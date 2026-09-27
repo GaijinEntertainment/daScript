@@ -67,9 +67,10 @@ reload never reuses them before the weights epoch drops every slab, which shutdo
 family attaches its slab through one guard and one rebuild (`st2_slab_current`, `st2_slab_rebuild`):
 a slab whose key matches stays resident and the call returns on the guard; otherwise the cold
 rebuild runs the family's drop, then the family's writer twice through the shared host writer
-(`dasllama_tts_slab.das`, the one the Vulkan seats build from; its keys, shape checks and row
-layouts are the same here, the slots adapted to byte offsets with the GEMM's uniforms hung on
-each, and an LSTM recurrence written unturned, as the Metal recurrence kernel reads it) - the
+(`dasllama_tts_slab.das`, the one the Vulkan seats build from; its keys, shape walks and row
+layouts are the same here - each Metal part writer runs the shared part writer and maps its record
+onto the Metal slots, adapted to byte offsets with the GEMM's uniforms hung on each, and the writer
+lays an LSTM recurrence unturned (`lstm_turned` false), as the Metal recurrence kernel reads it) - the
 measuring pass writes into a probe slab to size the host copy, the second fills the resident -
 and the copy uploads, the drop running again when the upload fails. The measuring pass hangs no
 device handle - uniforms and buffers are created on the fill pass alone - so the probe slab is
@@ -162,11 +163,12 @@ the 8-run lattice, a head over 128 wide, a transformer width off the 32 lattice)
 
 The Pocket frame loop - the backbone step and the flow head for every frame of a chunk - rides
 the tower driver as the family's second seat once the prompt's rows sit in the voice's caches:
-the CPU's `pocket_synthesize` loop, dispatch for dispatch, in batches of `g_tw_pk_batch` frames
+the CPU's `pocket_synthesize` loop, dispatch for dispatch, in batches of `pocket_frame_batch()` frames
 (eight) per command buffer, the EOS logits read back and the stop rule walked on the host between
-batches, the latents and the conditioning rows read back once at the end. A voice slot holds the
-device K/V rows `[cap][d]` per backbone layer, keyed on the caches' addresses, their fill and
-capacity and a sample of the rows they hold: the voice's prompt rows are transposed in once at
+batches (`pocket_frames_batched`, the host loop both GPU drivers run), the latents and the
+conditioning rows read back once at the end. A voice slot holds the device K/V rows `[cap][d]` per
+backbone layer, keyed (`tts_pk_voice_current`, the residency both drivers read) on the caches'
+addresses, their fill and capacity and a sample of the rows they hold: the voice's prompt rows are transposed in once at
 attach, a chunk's text rows behind them every chunk, and the frames append after those - nothing
 comes back to the host, since the CPU chain forgets a chunk's rows by resetting the fill. The
 key samples the rows because an address alone outlives the voice that held it: a later voice's
