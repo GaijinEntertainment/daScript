@@ -101,16 +101,15 @@ single model call - applies `REVIEW_VISION.md`.**
 **A `dasllama/dasllama_tower.das` change - the backend-independent encoder-tower home, not a
 backend tower driver - applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
 
-**A change to `dasllama/dasllama_tts.das`, `dasllama/dasllama_tts_types.das`,
-`dasllama/dasllama_tts_blocks.das`, `dasllama/dasllama_tts_slab.das`,
-`dasllama/dasllama_styletts2.das`, a TTS family file - one `dasllama/dasllama_<family>.das`
-holding a single speech-synthesis family - a text front-end file - one stage of the pass that
-turns text into phonemes (`dasllama/dasllama_textnorm.das`, `dasllama/dasllama_postag.das`,
-`dasllama/dasllama_g2p.das`) - the front-end packs' mint (`harness/build_g2p_data.py`,
-`harness/train_postag.py`, `harness/mint_postag_silver.py`, `performance/build_tts_data.das`),
-the Pocket converter and its card (`harness/convert_pocket.py`, `harness/tts_model_card.md`), or
-a call that pins a TTS weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8`),
-wherever the diff puts it, applies `REVIEW_TTS.md`.**
+**A change to a file `dasllama/dasllama_tts*.das` matches, `dasllama/dasllama_styletts2.das`,
+a TTS family file - a `dasllama/dasllama_<family>.das` holding exactly one voice model's code,
+never the two-family carrier `dasllama/dasllama_styletts2.das` - a text front-end file - one stage
+of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
+`dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - the front-end packs' mint
+(`harness/build_g2p_data.py`, `harness/train_postag.py`, `harness/mint_postag_silver.py`,
+`performance/build_tts_data.das`), the Pocket converter and its card (`harness/convert_pocket.py`,
+`harness/tts_model_card.md`), or a call that pins a TTS weight lane (`set_tts_q8` /
+`set_styletts2_q8` / `set_pocket_q8`), wherever the diff puts it, applies `REVIEW_TTS.md`.**
 
 **A diff that adds a file under `dasllama/`, or adds or moves a def, a class, a module global or
 named constant, or a `require` in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
@@ -128,13 +127,14 @@ per-element byte count of one format, wherever it sits, applies `REVIEW_KQ_FORMA
 maintainer's ruling that rows measured before it can no longer be compared with rows after it.**
 Every recorded row, tune sidecar and exchange entry carries the release, so a bump voids them all.
 
-**A change that invalidates only images never bumps `DASLLAMA_RELEASE`.**
+**A change that invalidates only images never bumps `DASLLAMA_RELEASE` - it applies
+`REVIEW_IMAGE.md`.**
 
 **A function-typed module global that a job (a forked context) invokes or a serialized exe calls
 is set by an `[init]` that re-establishes it when it reads null - never by a declaration
-initializer alone.** A serialized
-exe and a forked context restore globals as data, so a declaration initializer alone arrives null
-and dies at the first invoke while every `-jit` gate stays green.
+initializer alone.** A serialized exe and a forked context restore globals as data, so a
+declaration initializer alone arrives null and dies at the first invoke while every `-jit` gate
+stays green.
 
 **A function in `dasllama/dasllama_common.das` that performs work through a hook another module
 registers panics on the unset hook, with a message naming the module to require.** A function
@@ -163,8 +163,9 @@ patches, a clip's frames), or how many regions one buffer is split into (the K/V
 copy, one region per request served at once; an MoE dispatch's expert regions).
 
 **A diff after which an existing allocation's size starts or stops growing with a scaling count
-ships the measured pair - peak footprint and wall-clock - in `PERF_LEDGER.md`, with the decision
-it settles.**
+(a model-file count, tokens per step, rows per media encode, or regions per buffer) ships the
+measured pair - peak footprint and wall-clock - in `PERF_LEDGER.md`, with the decision it
+settles.**
 
 **A new call that runs a matrix multiply over f32 weight rows - `matmul_batch`, `mm_blob_b`,
 `mm_fblob_b`, per-head `gemm_f32` / `gemm_f32_jo`, or an f32 GPU mm - outside a
@@ -237,12 +238,17 @@ the consumer.
 that entry names the re-export; any other re-export is a defect - the file's own requirers reach
 the symbol through `dasllama/dasllama.das` instead.**
 
-**An edit that stops a check of any `REVIEW.das` under this folder firing without fixing what it
-flagged is a defect:** dropping a check, narrowing what the gate walks - a file or folder it stops
-reading - rewriting a finding text so it no longer names what failed, adding a name to a check's
-licensed set - the names that check does not flag - or re-stamping a pinned hash, count or list,
-where that check's own finding text does not sanction the addition or the re-stamp; the gate
-itself says what it enforces.
+**An edit to a `REVIEW.das` under this folder that drops a check while code it guards remains in
+the tree and no lint takes the check over, rewrites a finding text so it no longer names what
+failed, or leaves a check passing code its finding text still names as a defect is a defect - fix
+the flagged code instead.** Narrowing what a check walks (a file or folder it stops reading), or
+re-stamping a pinned hash, count or list the finding text does not tell the author to re-stamp,
+leaves flagged code passing.
+
+**A diff adds a name to a check's licensed set - the names that check does not flag - only when
+the check's finding text names the property the licensed names share and the check's line in the
+`ARCHITECTURE_*.md` section that finding text cites names that property; otherwise it fixes the
+flagged code.**
 
 **A new check in any `REVIEW.das` under this folder, or a check whose licensed set gains a name,
 names in its finding text the `ARCHITECTURE_*.md#<anchor>` section carrying the charter of the
@@ -270,10 +276,10 @@ input into embeddings - onto a GPU hook leaves the CPU form in place and changes
 arithmetic.** The CPU form serves every box with no driver.
 
 **A call to a `set_*_q8` lane setter - one that picks whether a model family's weights run the
-q8 or the float path - in engine or harness code, outside the body of another `set_*_q8` setter,
-is followed at once by a `defer()` calling its `reset_*_q8` twin.** A pin still set after its
-caller returns silently changes the lane of the next model the process loads; a test cell's pins
-answer to `tests/REVIEW_LANE_PINS.md`'s end-state rule instead.
+q8 or the float path - in a file under `dasllama/` or `harness/`, outside the body of another
+`set_*_q8` setter, is followed at once by a `defer()` calling its `reset_*_q8` twin.** A pin
+still set after its
+caller returns silently changes the lane of the next model the process loads.
 
 **A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
 `TUNE_KNOWN_FEATURES` (`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it
@@ -286,12 +292,9 @@ profile re-runs the tuning the profile was meant to save.
 root) - is a `def` returning it, never a module global with a declaration initializer (`let`
 or `var`).** A team lane never runs global initializers, so the global reads zero there.
 
-**A buffer in `dasllama/` whose element count scales with a model dimension - any count the model
-file sets - is declared `@exact_size`, and every `resize` of it follows a `reserve(n)` or
-`ensure_capacity(n)` whose `n` is the resized count - a `dasllama/dasllama_math.das` sizing
-helper (`reserve_resize`, `grow_resize`,
-`ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the
-pair spelled out - however small the count looks.** PERF032 checks only `@exact_size` arrays - it
-flags a `resize` with no `reserve` or `ensure_capacity` earlier in the function, and never
-compares the counts - so an undeclared buffer gets no lint; a bare grow past the heap's
+**A buffer in `dasllama/` whose element count grows with a count the model file sets is declared
+`@exact_size`, and every `resize` of it follows a `reserve(n)` or `ensure_capacity(n)` whose `n`
+is the resized count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`,
+`grow_resize`, `ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a `@scratch`
+carrier, or the pair spelled out - however small the count looks.** A bare grow past the heap's
 unreserved-size cap panics the load on the first big model, not at the call site.

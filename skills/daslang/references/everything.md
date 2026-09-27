@@ -3282,6 +3282,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 - `finalize` - Free the model's planes, the carrier and both packs; `delete m` runs it.
 - `g2p_pack_path`
 - `load_tts_model` - Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared `.dlim` image; the phoneme families read `tts_g2p.bin` and `tts_postag.bin` from the same directory (Pocket needs neither).
+- `tts_finish_styletts2` - A StyleTTS2 carrier in `m.model`, loaded or minted from `path`, made a facade: its family's kind, the phoneme packs its front end reads from the same directory, the voices it cannot speak said once.
 - `tts_has_phonemes` - Whether `tts_phonemize` has an answer for this model: the phoneme families yes, a Pocket model no - it reads text, and its chunks carry no phoneme string.
 - `tts_needs_packs` - Whether the model at `path` reads the front-end packs (`tts_g2p.bin`, `tts_postag.bin`) from its directory: the phoneme families do, a Pocket TTS GGUF reads text and needs neither - decided before any load, by the architecture test `load_tts_model` makes (a `.dlim` is a phoneme family).
 - `tts_voice_lang` - The language the front end reads `voice` in - a canonical name from `caps` or a family alias, resolved the way `synthesize` resolves it.
@@ -6818,6 +6819,10 @@ The MATH_BOOST module adds geometric types (`AABB`, `AABR`, `Ray`), intersection
 - `RGBA_TO_UCOLOR` - conversion from RGBA to ucolor.
 - `UCOLOR_TO_RGB` - conversion from ucolor to RGB.
 - `UCOLOR_TO_RGBA` - conversion from ucolor to RGBA.
+
+### Integer rounding
+
+- `round_up` - `n` rounded up to a multiple of `m` (`m` > 0), in `m`'s integer type
 
 ## option
 

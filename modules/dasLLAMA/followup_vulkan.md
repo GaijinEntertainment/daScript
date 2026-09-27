@@ -1832,16 +1832,15 @@ module) is independent and can land any time - it is pure structure.
     minted at that width, or a kernel-cell pair); the GPU ledger (`vt_pt`, `vt_prof_report`, the
     `vk_prof()` reports) under `DASLLAMA_GPU_PROF=1` - one cell reading the report text; the
     bench's `--asr-clips` override and the served-clip stamping, and the `DASLLAMA_VK_WDEC` knob
-    read; the lower-side guards of `TowerDwConv5` (`t + kk >= 4u`), `TowerCnDw` (`src >= kpad`) and
-    `TowerDwConv` (`iy >= 0`, `ix >= 0`) - a wrapped index lands gigabytes past any buffer and
+    read; the lower-side guards of `TowerDwConv5` and `TowerCnDw` (`st >= 0` in
+    `conv_src_fwd_row`, which their `DwConvRowsT.src_row` calls) and `TowerDwConv` (`iy >= 0`,
+    `ix >= 0`) - a wrapped index lands gigabytes past any buffer and
     robust buffer access reads zero, so the fixtures cannot reach them without a source base offset
     in the args that lets a garbage prefix sit before the block (the upper-side guards are
     covered); the `sdot4` arm of every audio twin (the cm2-off feeds: `vt_tile`'s q8 variant, the
     requant steps, the decoder's non-cm2 buffers) as a standing run, not the one p22 leg.
 103. **The tower dedup pass's leftovers.** The folds the pass ruled out or left, each with its
-    reason. `TowerDwConv5` against `TowerCnDw` (one template over the pad placement, causal or
-    centered, with a gated BatchNorm + silu epilogue): the epilogues compute different things, the
-    weakest fold of the census - deferred. `TowerRms` against `ClsArAddRms` at `add_on = 0`: the
+    reason. `TowerRms` against `ClsArAddRms` at `add_on = 0`: the
     residual class reads a zero add partner, rewrites the row in place and stashes it in a 32 KB
     workgroup array where the tower class reads the row once, so the fold adds two plane passes and
     a workgroup array to a role that reads 1% of the gemma4a chain (176 us over 36 stamps at
@@ -1945,3 +1944,18 @@ module) is independent and can land any time - it is pure structure.
     the ncol cell dispatches the one-column class before the N class, so a grid N leaf that skipped
     `stage_grid` would read the grid the previous dispatch left in workgroup memory (a poisoning
     dispatch between them, or the N class first, pins the call).
+115. **Nineteen TTS kernels are one algorithm under two class shells.** `TtsSrcCumsumT`, `TtsStftT`,
+    `TtsIstft`, `TtsSrcSinesT`, `TtsSrcLowT`, `TtsAdainT`, `TtsConcat`, `TtsPkAttn`, `TtsPkGemvT`,
+    `TtsPoolDw`, `TtsIm2colT`, `TtsElemT`, `TtsAddScale`, `TtsPkRowScale`, `TtsRowGather`,
+    `TtsPkRowsT` (the reflect pad's two copies included), `TtsSigSum`, `TtsAxpy` and
+    `TtsSrcNoise` each have a `MetalSt2*` / `MetalPk*` twin whose body is the same arithmetic; the dedup pass moved that
+    arithmetic into `dasllama_gpu_math.das`, and what stays twice is the shell - the binding
+    declarations (`@push_constant pa` against `@uniform ka`), the entry, the workgroup count. No
+    `class template` is stamped by both the SPIR-V and the Metal emitter today
+    (`modules/dasMetal/ARCHITECTURE.md` section 5: uniform against push-constant bindings, method
+    splicing against calls), so the shells wait on an emitter feature: one template with a
+    per-emitter binding form, about 500 lines across the two homes. The seat chains the two
+    drivers write per backend are the other half of the same picture and a separate arc after
+    the 0.6.5 release (Boris's ruling): the host flow of every TTS seat - the stage ping-pong,
+    the concat when the width differs, the head-block loop - is identical and could run once over
+    an encoder interface, about 450 lines.

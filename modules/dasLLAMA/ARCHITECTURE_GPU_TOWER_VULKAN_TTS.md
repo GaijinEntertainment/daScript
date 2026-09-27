@@ -22,11 +22,18 @@ the Metal twin's f16-staged GEMM does. The part's weights live in a slab the sha
 with column j = tap*cin + ci and its bias row beside it, every norm as a scale and a shift row,
 an LSTM direction as its input linear and its recurrence transposed to [H][4H], so the
 recurrence kernel's lanes read a step's column as consecutive floats; the q8 lane's quants and a
-K-quant linear are dequantized into the slab through the active repack, so the served lane's
-numbers land - the q8 rows gathered over the cold gather's slice and dequantized over the job
-pool, a row range a lane. The slab uploads once to one device buffer and stays resident under a
+K-quant linear are dequantized into the slab through the active repack - a q8 row read out of the
+repack's interleave by `q8_plane_row_f32` (`dasllama_convert.das`, beside the K-quant twin
+`kq_plane_row_f32`), a row range a job lane, each quant times its block's f32 scale - so the served
+lane's weights are the CPU q8 lane's exactly; what still parts
+the two is that lane's per-32 quantization of the activations, which the f32 seat does not do. The slab uploads once to one device buffer and stays resident under a
 key that folds the part's weight addresses and the q8 lane's repack layout; the model-drop sweep
-releases it, and a reload or another lane keys differently and rebuilds. The seats' activation
+releases it, and a reload or another lane keys differently and rebuilds. A part's attach reaches
+the slab build only through its own `[cold_path]` rebuild (`ts_slab_rebuild`, the function that
+holds the writer's block), so the writer's allocations stay off the seat's hot path. The rebuild
+runs the writer's two passes into a fresh slot record, uploads the host floats (with their
+halfword twin for the decoder) and reports its wall. A failed upload releases the resident slab
+and the seat declines. The seats' activation
 rows are a scratch per seat, one device buffer a slot sized in floats a quarter past the call's
 need in 256 KB steps, kept across calls and rebuilt only when a call needs a slot wider than it
 holds (a decoder's scratch runs to gigabytes and a rebuild costs tens of ms, so the headroom is
@@ -114,7 +121,7 @@ phase past a hundred thousand radians reduced by 2 pi in exact pieces), and its 
 on the pad law's stamp (`TtsStftReflect` / `TtsStftEdge`: the magnitude and the phase); then
 the generator - per stage the leaky ReLU, the source rows through the stage's noise conv and
 Snake residual block (`TtsAdainSnake` on the norm slot's alpha row), the transposed upsample
-conv on the im2col's transposed read, the last stage's reflected row (`TtsReflect1`), the
+conv on the im2col's transposed read, the last stage's reflected row (two row copies on `TtsPkRows`), the
 kernels' blocks averaged into the stage's out (`TtsAxpy`), then the final leaky and conv_post -
 and the inverse STFT (`TtsIstft`, the log magnitudes and phases through the transposed conv
 weights, the window envelope divided out where the model asks). The waveform reads back. The
@@ -155,9 +162,10 @@ bare dot, the layernorm and the layernorm-modulate-SiLU prologues, the gated res
 add-SiLU over the slab vector, the residual joins with and without the scale row, the GELU, the
 qkv rope-and-store - the rope's pairs sit in a workgroup's even and odd rows, so the span sits on
 the four lattice - and the tail that adds the noise row and denormalizes the latent). The frames run in
-batches of eight a submit (`set_vulkan_pocket_frame_batch`), the EOS rule walked on the host
-between batches from the logits read back, the generator rewound past the frames made, as the
-Metal twin does.
+batches of eight a submit (`set_pocket_frame_batch`, the one knob both drivers read), the EOS rule
+walked on the host between batches from the logits read back, the generator rewound past the frames
+made - the one host loop both drivers run (`pocket_frames_batched`, `dasllama_pocket.das`), each
+handing it its noise sink, its submit and its EOS source.
 
 The declines: `knob`, `shape` (a width off the 64 lattice, a head width other than 64 or 128,
 more than 512 tokens for the attention stage, an LSTM direction over 256 hidden), `device` (the

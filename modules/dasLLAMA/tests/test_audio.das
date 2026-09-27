@@ -154,14 +154,12 @@ def test_ultravox_tower(t : T?) {
                 mel.data[i] = 1.0
             }
             var enc <- make_encoder_state(tw)
-            let tower_was_on = vulkan_tower_knob()
-            defer() {
-                restore_every_gpu_tower(tower_was_on)
-            }
-            set_every_gpu_tower(false)
-            with_job_que() {
-                setup_dasllama_jobque_()
-                audio_encode(tw, enc, mel)
+            with_gpu_knobs() {
+                set_every_gpu_tower(false)
+                with_job_que() {
+                    setup_dasllama_jobque_()
+                    audio_encode(tw, enc, mel)
+                }
             }
             // llama-mtmd-debug -p encode --audio one -n 3000 (CPU, f32 mmproj): token 0 opens
             // -0.831656 1.679679 0.112337 -0.558047; stats mean=0.002889 max=4.306354.
@@ -201,14 +199,12 @@ def test_voxtral_tower(t : T?) {
                 mel.data[i] = 1.0
             }
             var enc <- make_encoder_state(tw)
-            let tower_was_on = vulkan_tower_knob()
-            defer() {
-                restore_every_gpu_tower(tower_was_on)
-            }
-            set_every_gpu_tower(false)
-            with_job_que() {
-                setup_dasllama_jobque_()
-                audio_encode(tw, enc, mel)
+            with_gpu_knobs() {
+                set_every_gpu_tower(false)
+                with_job_que() {
+                    setup_dasllama_jobque_()
+                    audio_encode(tw, enc, mel)
+                }
             }
             // llama-mtmd-debug -p encode --audio one -n 3000 (CPU, f32 mmproj): token 0 opens
             // 0.967699 -0.765652 0.050477 -0.571310; stats mean=-0.001517 max=1.459851.
@@ -265,9 +261,9 @@ def private vulkan_blocks_twin(t : T?; family, file : string; layers_claimed : i
             return
         }
         let tag = "{family} synthetic mel"
-        let tower_was_on = vulkan_tower_on()
+        let knobs = gpu_knobs()
         defer() {
-            set_vulkan_tower(tower_was_on)
+            set_gpu_knobs(knobs)
         }
         var twx <- mint_aud(path, false, -1l)
         var tw <- mint_aud(path, true, -1l)
@@ -380,7 +376,7 @@ def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto
             invoke(encode, encp, stp, samples, poisoned)
         }
         t |> success(vulkan_tower_stats().encodes > p0, "{tag} poison: device-served (encodes delta)")
-        tower_twin_poison(t, tag, r.reference, poisoned, r.bar)
+        tower_twin_poisoned(t, tag, r.reference, poisoned, r.bar)
         delete poisoned
         delete stp
         delete encp
@@ -557,7 +553,7 @@ def private q3a_leg_state(tw : Qwen3aTower) : Q3aLegState {
 //! the device leg (the knob on) encodes the device mel's `dev_win`, the CPU legs the CPU mel's `win`
 [cold_path]
 def private q3a_twin_encode(tw : Qwen3aTower; var s : Q3aLegState; win, dev_win : MelChunk; var out : array<float>) : int64 {
-    if (vulkan_tower_knob()) {
+    if (gpu_knobs().vulkan_tower) {
         qwen3a_encode(tw, s.enc, s.conv, dev_win)
     } else {
         qwen3a_encode(tw, s.enc, s.conv, win)
@@ -742,13 +738,13 @@ def test_encoder_oracle(t : T?) {
             mel.data[i] = 1.0
         }
         var enc <- make_encoder_state(tw)
-        let tower_was_on = vulkan_tower_knob()
-        set_every_gpu_tower(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
-            audio_encode(tw, enc, mel)
+        with_gpu_knobs() {
+            set_every_gpu_tower(false)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                audio_encode(tw, enc, mel)
+            }
         }
-        restore_every_gpu_tower(tower_was_on)
         // llama-mtmd-debug -p encode --audio one -n 3000 (CPU): token 0 opens
         // 0.251974 0.311756 0.556828 0.005232 -0.838854; stats mean=0.009261 max=7.527778.
         // fp32 CPU re-orders put us ~1e-3 off their flash-attn encoder; gate at 5e-3.

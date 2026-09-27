@@ -50,6 +50,10 @@ enum private VulkanTowerDecline {
     memory       //! a device or pinned allocation failed: the tower stays on the CPU chain
 }
 
+let VK_DECLINE_WORDS_TOWER_KNOB = "the tower knob is off (DASLLAMA_VK_TOWER=0 or set_vulkan_tower(false))"
+let VK_DECLINE_WORDS_DEVICE = "the tier has no device (DASLLAMA_GPU=1 arms it), or a class failed to build"
+let VK_DECLINE_WORDS_MEMORY = "a device allocation failed"
+
 //! Engage / decline counters; `blocks` = transformer blocks the driver ran. Model-level gates assert DELTAS on these.
 def vulkan_tower_stats : tuple<encodes : int64; rows : int64; blocks : int64; declines : int64; convs : int64; mels : int64> {
     return (encodes = g_vt_encodes, rows = g_vt_rows, blocks = g_vt_blocks, declines = g_vt_declines.total, convs = g_vt_convs, mels = g_vt_mels)
@@ -353,7 +357,7 @@ var private @scratch @exact_size g_vt_ln_offs : array<LayerOffs>       //! the p
 [cold_path]
 def private vt_decline_words(why : VulkanTowerDecline) : string {
     if (why == VulkanTowerDecline.knob) {
-        return "the tower knob is off (DASLLAMA_VK_TOWER=0 or set_vulkan_tower(false))"
+        return VK_DECLINE_WORDS_TOWER_KNOB
     } elif (why == VulkanTowerDecline.blocks) {
         return "the whisper-class block hooks are pinned off (set_vulkan_audio_blocks(false)); the stem still serves"
     } elif (why == VulkanTowerDecline.quant_mode) {
@@ -361,15 +365,21 @@ def private vt_decline_words(why : VulkanTowerDecline) : string {
     } elif (why == VulkanTowerDecline.shape) {
         return "a width, head size, row count, window or buffer range the stamps do not serve"
     } elif (why == VulkanTowerDecline.memory) {
-        return "a device allocation failed"
+        return VK_DECLINE_WORDS_MEMORY
     }
-    return "the tier has no device (DASLLAMA_GPU=1 arms it), or a class failed to build"
+    return VK_DECLINE_WORDS_DEVICE
 }
 
 //! the decline counted under the enum's value name, and said once per reason per tower in words (the counter's `note`)
 [cold_path]
 def private vt_decline(r : VtResident; why : VulkanTowerDecline) : bool
     => g_vt_declines |> note("the {r.family} tower", "{why}", "the tower stays on the CPU chain: {vt_decline_words(why)}")
+
+//! a hook's first gate: the tower knob on and the tower's planes the lane the driver serves (`served_lane`); false with the decline counted
+def private vt_gate(r : VtResident; served_lane : bool) : bool {
+    return vt_decline(r, VulkanTowerDecline.knob) if (!g_vt_env_tower)
+    return served_lane || vt_decline(r, VulkanTowerDecline.quant_mode)
+}
 
 [cold_path]
 def private vt_announce(var r : VtResident) {
@@ -446,7 +456,7 @@ def private vt_dev_buf(var r : VtResident; bytes : int64) : uint64 => soft_devic
 def private vt_host_buf(var r : VtResident; bytes : int64; cached : bool) : HostBuf => soft_host_buf(r.oom, bytes, cached)
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_cap_rows(rows : int64) : int64 => (rows + 255l) / 256l * 256l
+def private vt_cap_rows(rows : int64) : int64 => round_up(rows, 256l)
 
 //! the largest buffer the scratch at `cap` rows binds: the range decline reads it against the device's limit
 def private vt_scratch_max_bytes(cap, d, ff, dp, taps : int64; fused, f16w : bool) : int64 {
@@ -467,8 +477,6 @@ def private vt_scratch_max_bytes(cap, d, ff, dp, taps : int64; fused, f16w : boo
 
 //! the q8 chains' GEMM feed: on a coopmat device the cm2 (or KHR) f16 tiles the prefill serves dense q8 GEMMs with, else the mul_mm tiles
 def vt_cm2_feed : bool => g_gpu.coopmat_mode >= COOPMAT_MM
-
-def vt_range_ok(bytes : int64) : bool => bytes <= vk_max_storage_range()
 
 //! the front scratch released on its own; the block chain's scratch rebuild drops it too, and it regrows on demand
 [cold_path]
@@ -583,15 +591,22 @@ def private vt_release(var r : VtResident) {
 //! Release every device object the driver owns (the tests' leak rail beside the tier's shutdown); the next served encode
 //! uploads again.
 def vulkan_tower_shutdown {
-    vt_release(g_vt_g4v)
-    vt_release(g_vt_g3v)
-    vt_release(g_vt_q3v)
-    vt_release(g_vt_q25v)
-    vt_release(g_vt_aud)
-    vt_release(g_vt_g4a)
-    vt_release(g_vt_cn)
-    vt_release(g_vt_q3a_front)
-    vt_release(g_vt_q3am)
+    vt_each_resident() $(var r : VtResident; _family : string) {
+        vt_release(r)
+    }
+}
+
+//! every resident the driver keeps, with the family name its log lines and declines say
+def private vt_each_resident(blk : block<(var r : VtResident; family : string) : void>) {
+    invoke(blk, g_vt_g4v, "gemma4v")
+    invoke(blk, g_vt_g3v, "gemma3v")
+    invoke(blk, g_vt_q3v, "qwen3v")
+    invoke(blk, g_vt_q25v, "qwen25v")
+    invoke(blk, g_vt_aud, "whisper-class")
+    invoke(blk, g_vt_g4a, "gemma4a")
+    invoke(blk, g_vt_cn, "canary")
+    invoke(blk, g_vt_q3a_front, "qwen3a-front")
+    invoke(blk, g_vt_q3am, "qwen3a-mel")
 }
 
 [cold_path]
@@ -628,16 +643,11 @@ def private vt_rel_bufs(var r : VtResident; rows, d : int64) : bool {
 [cold_path]
 def private vt_rel_release(var r : VtResident) {
     if (r.rel_cap_rows > 0l) {
-        for (b in fixed_array(r.rel_tab_dev, r.rel_tabq_dev, r.rel_tabs_dev, r.rel_tabh_dev, r.rel_proj_dev)) {
-            if (b != 0ul) {
-                destroy_device_buf(b)
-            }
-        }
-        r.rel_tab_dev = 0ul
-        r.rel_tabq_dev = 0ul
-        r.rel_tabs_dev = 0ul
-        r.rel_tabh_dev = 0ul
-        r.rel_proj_dev = 0ul
+        release_device_buf(r.rel_tab_dev)
+        release_device_buf(r.rel_tabq_dev)
+        release_device_buf(r.rel_tabs_dev)
+        release_device_buf(r.rel_tabh_dev)
+        release_device_buf(r.rel_proj_dev)
         r.rel_cap_rows = 0l
     }
     r.sets_rel_proj |> clear()
@@ -645,11 +655,17 @@ def private vt_rel_release(var r : VtResident) {
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_rel_proj_set(var r : VtResident; t : VtTile) : VkDescriptorSet {
-    let key = vt_tile_key(t)
-    if (!key_exists(r.sets_rel_proj, key)) {
-        r.sets_rel_proj[key] = vt_rel_proj_build(r, t)
+    return vt_cached(r.sets_rel_proj, vt_tile_key(t)) $() : VkDescriptorSet {
+        return vt_rel_proj_build(r, t)
     }
-    return r.sets_rel_proj[key]
+}
+
+//! the set (or set bundle) cached under `key`, built through `build` on the first ask
+def private vt_cached(@scratch var tab : table<int; auto(TT)>; key : int; build : block<() : TT>) : TT {
+    if (!key_exists(tab, key)) {
+        tab[key] = invoke(build)
+    }
+    return tab[key]
 }
 
 [cold_path]
@@ -672,15 +688,9 @@ def private vt_conformer_sets(var r : VtResident; v, vff, v2d, v_rel : VtTile) :
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_forget {
-    vt_forget_one(g_vt_g4v)
-    vt_forget_one(g_vt_g3v)
-    vt_forget_one(g_vt_q3v)
-    vt_forget_one(g_vt_q25v)
-    vt_forget_one(g_vt_aud)
-    vt_forget_one(g_vt_g4a)
-    vt_forget_one(g_vt_cn)
-    vt_forget_one(g_vt_q3a_front)
-    vt_forget_one(g_vt_q3am)
+    vt_each_resident() $(var r : VtResident; _family : string) {
+        vt_forget_one(r)
+    }
     g_vt_ln_offs |> clear()
 }
 
@@ -1096,12 +1106,9 @@ def private vt_tail_bufs(var r : VtResident; tail_dim : int64) : bool {
 
 //! the tail's GEMM set over its tile: the out-proj into the pt rows, the mm-proj into the po rows, built once per tile key
 def private vt_tail_gemm_set(var r : VtResident; v : VtTile; mmproj : bool) : VkDescriptorSet {
-    let key = (mmproj ? VT_G4A_MMPROJ_KEY : VT_G4A_OUTPROJ_KEY) + vt_tile_key(v)
-    if (!key_exists(r.sets_front, key)) {
-        let bp = r.tail_cap * r.tail_dim * 4l
-        r.sets_front[key] = vt_tile_set(r, v, mmproj ? r.tail_proj_dev : r.tail_out_dev, bp, mmproj ? VT_TAIL_PROJ : VT_TAIL_OUT)
+    return vt_cached(r.sets_front, (mmproj ? VT_G4A_MMPROJ_KEY : VT_G4A_OUTPROJ_KEY) + vt_tile_key(v)) $() : VkDescriptorSet {
+        return vt_tile_set(r, v, mmproj ? r.tail_proj_dev : r.tail_out_dev, r.tail_cap * r.tail_dim * 4l, mmproj ? VT_TAIL_PROJ : VT_TAIL_OUT)
     }
-    return r.sets_front[key]
 }
 
 [cold_path]
@@ -1138,11 +1145,8 @@ def private vt_mm_clamped(raw : VkCommandBuffer; var h : VkHaz; c : Clamp; var s
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_g4a
-    if (!g_vt_env_tower) {
-        return vt_decline(r, VulkanTowerDecline.knob)
-    }
-    if (!t.q8) {
-        return vt_decline(r, VulkanTowerDecline.quant_mode)
+    if (!vt_gate(r, t.q8)) {
+        return false
     }
     let q8e = kq_elems(KqFmt.q8)
     let d = t.d_model
@@ -1159,7 +1163,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     if (!arm.ok) {
         return false
     }
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(t.blob.n * 4l) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(t.blob.n * 4l) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     if (!ensure_tower_rms_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_post_add_cls()
@@ -1231,7 +1235,8 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     let wg_attn = (npos * t.n_head + 63l) / 64l
     var pc_rq_rel = TowerClampRqArgs(inbase = 0u, nblk = uint(rel_cap_rows * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rel = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
-    var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd), woff = 0u)
+    var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd))
+    var pc_dw = DwConvRowsArgs(c = uint(d), t_in = uint(npos))
     var pc_silu_ff = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = BIAS_ACT_SILU)
     var pc_silu_d = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_SILU)
     var pc_attn = TowerG4aAttnArgs(d = uint(d), npos = uint(npos), pdsoff = 0u)
@@ -1285,8 +1290,8 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
             vt_pt(raw, VtProfRole.gemm_pw)
             enc_tower_glu_sig_cls(raw, h, r.s_glu_sig, pc_glu, (nd + 255l) / 256l)
             vt_pt(raw, VtProfRole.glu)
-            pc_glu.woff = uint(lo.conv_dw)
-            enc_tower_dw_conv5_cls(raw, h, r.s_dw, pc_glu, (nd + 255l) / 256l)
+            pc_dw.woff = uint(lo.conv_dw)
+            enc_tower_dw_conv5_cls(raw, h, r.s_dw, pc_dw, (nd + 255l) / 256l)
             vt_pt(raw, VtProfRole.dwconv)
             pc_rms.woff = uint(lo.conv_norm)
             enc_tower_rms_cls(raw, h, r.s_rms_yd, pc_rms, npos)
@@ -1413,8 +1418,8 @@ def private vt_sets_cn(var r : VtResident) {
 
 def private vt_cn_rows_ok(npos, d, ff : int64) : bool {
     let cap = vt_cap_rows(npos)
-    return (vt_range_ok(vt_scratch_max_bytes(cap, d, ff, 0l, 0l, false, false)) && vt_range_ok(2l * cap * d * 4l)
-        && vt_range_ok(cap * (2l * cap - 1l) * 4l))
+    return (vk_range_ok(vt_scratch_max_bytes(cap, d, ff, 0l, 0l, false, false)) && vk_range_ok(2l * cap * d * 4l)
+        && vk_range_ok(cap * (2l * cap - 1l) * 4l))
 }
 
 [cold_path]
@@ -1468,7 +1473,8 @@ def private vt_zero_elems(raw : VkCommandBuffer; var h : VkHaz; dev : uint64; bi
     }
 }
 
-def private vt_bias_act(raw : VkCommandBuffer; var h : VkHaz; var s_bias : VkDescriptorSet; dout, nout, boff : int64; act : uint) {
+//! the row-broadcast bias (and `act`) over `nout` elements of rows `dout` wide, the bias row at `boff` of the set's second binding
+def vt_bias_act(raw : VkCommandBuffer; var h : VkHaz; var s_bias : VkDescriptorSet; dout, nout, boff : int64; act : uint) {
     var pc_b = TowerBiasArgs(d = uint(dout), nelem = uint(nout), boff = uint(boff), act = act)
     enc_tower_bias_act_cls(raw, h, s_bias, pc_b, rq_wgs(false, nout))
 }
@@ -1476,11 +1482,8 @@ def private vt_bias_act(raw : VkCommandBuffer; var h : VkHaz; var s_bias : VkDes
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, ww : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_cn
-    if (!g_vt_env_tower) {
-        return vt_decline(r, VulkanTowerDecline.knob)
-    }
-    if (!t.q8) {
-        return vt_decline(r, VulkanTowerDecline.quant_mode)
+    if (!vt_gate(r, t.q8)) {
+        return false
     }
     let q8e = kq_elems(KqFmt.q8)
     let d = t.d_model
@@ -1494,7 +1497,7 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     if (!arm.ok) {
         return false
     }
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(t.blob.n * 4l) || !vt_cn_rows_ok(npos, d, ff)) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(t.blob.n * 4l) || !vt_cn_rows_ok(npos, d, ff)) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     if (!ensure_tower_ln_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_post_add_ln_cls()
@@ -1562,8 +1565,8 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     var pc_rq_rel = TowerClampRqArgs(inbase = 0u, nblk = uint(ww * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rq_xb = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rel = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
-    var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd), woff = 0u)
-    var pc_dw = TowerCnDwArgs(d = uint(d), nk = uint(t.conv_kernel), npos = uint(npos), woff = 0u, bnwoff = 0u, bnboff = 0u)
+    var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd))
+    var pc_dw = DwConvRowsArgs(c = uint(d), k = uint(t.conv_kernel), t_in = uint(npos))
     var pc_attn_r = TowerCnAttnRArgs(d = uint(d), npos = uint(npos), buoff = 0u, hoff = 0u)
     var pc_ln = TowerLnArgs(d = uint(d), rows = uint(npos), woff = 0u, boff = 0u, eps = t.eps, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
     var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), woff = 0u, boff = 0u, eps = t.eps, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
@@ -1775,23 +1778,19 @@ def private vt_tile_words(t : VtTile) : string => t.tc > 0l ? "token column {t.t
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_sets_d(var r : VtResident; t : VtTile) : VtBatchSetsD {
-    let key = vt_tile_key(t)
-    if (!key_exists(r.sets_d, key)) {
+    return vt_cached(r.sets_d, vt_tile_key(t)) $() : VtBatchSetsD {
         let bx = r.cap_rows * r.d * 4l
-        r.sets_d[key] = VtBatchSetsD(s_q = vt_tile_set(r, t, r.q_dev, bx, VT_Q), s_k = vt_tile_set(r, t, r.k_dev, bx, VT_K),
-            s_v = vt_tile_set(r, t, r.v_dev, bx, VT_V), s_o = vt_tile_set(r, t, r.yo_dev, bx, VT_YO), s_down = vt_tile_set(r, t, r.yd_dev, bx, VT_YD))
         to_log(LOG_INFO, "dasLLAMA vulkan tower: d-wide sets at {r.cap_rows} rows - {vt_tile_words(t)} (d {r.d})\n")
+        return VtBatchSetsD(s_q = vt_tile_set(r, t, r.q_dev, bx, VT_Q), s_k = vt_tile_set(r, t, r.k_dev, bx, VT_K),
+            s_v = vt_tile_set(r, t, r.v_dev, bx, VT_V), s_o = vt_tile_set(r, t, r.yo_dev, bx, VT_YO), s_down = vt_tile_set(r, t, r.yd_dev, bx, VT_YD))
     }
-    return r.sets_d[key]
 }
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_sets_ff(var r : VtResident; t : VtTile) : VtBatchSetsFf {
-    let key = vt_tile_key(t)
-    if (!key_exists(r.sets_ff, key)) {
-        r.sets_ff[key] = vt_sets_ff_build(r, t)
+    return vt_cached(r.sets_ff, vt_tile_key(t)) $() : VtBatchSetsFf {
+        return vt_sets_ff_build(r, t)
     }
-    return r.sets_ff[key]
 }
 
 [cold_path]
@@ -1803,12 +1802,10 @@ def private vt_sets_ff_build(r : VtResident; t : VtTile) : VtBatchSetsFf {
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_set_qkv(var r : VtResident; t : VtTile) : VkDescriptorSet {
-    let key = vt_tile_key(t)
-    if (!key_exists(r.sets_qkv, key)) {
-        r.sets_qkv[key] = vt_tile_set(r, t, r.qkv_dev, 3l * r.cap_rows * r.d * 4l, VT_QKV)
+    return vt_cached(r.sets_qkv, vt_tile_key(t)) $() : VkDescriptorSet {
         to_log(LOG_INFO, "dasLLAMA vulkan tower: fused qkv set at {r.cap_rows} rows - {vt_tile_words(t)} (3d {3l * r.d})\n")
+        return vt_tile_set(r, t, r.qkv_dev, 3l * r.cap_rows * r.d * 4l, VT_QKV)
     }
-    return r.sets_qkv[key]
 }
 
 let private VT_NO_TILE = VtTile(v = -1, tc = 0l)
@@ -1892,7 +1889,7 @@ def private vt_arm(r : VtResident; gemm_off_cm2 : bool = false) : tuple<ok : boo
         return (ok = false, khr = false, gemm_khr = false)
     }
     let khr = !cm2_fa_on()
-    let gemm_khr = gemm_off_cm2 && g_gpu.coopmat_mode != COOPMAT_CM2
+    let gemm_khr = gemm_off_cm2 && f16_gemm_khr()
     if ((khr || gemm_khr) && !khr_kq_tile_on()) {
         vt_decline(r, VulkanTowerDecline.device)
         return (ok = false, khr = khr, gemm_khr = gemm_khr)
@@ -1900,14 +1897,19 @@ def private vt_arm(r : VtResident; gemm_off_cm2 : bool = false) : tuple<ok : boo
     return (ok = true, khr = khr, gemm_khr = gemm_khr)
 }
 
+//! `bytes` of a host readback buffer the chain's own command filled, from byte `src_off`, landed in `x`
+def private vt_readback_copy(var x : array<float>; hb : HostBuf; bytes : int64; src_off : int64 = 0l) {
+    unsafe {
+        memcpy(addr<void?>(x[0]), reinterpret<void?>(intptr(hb.mapped) + uint64(src_off)), bytes)
+    }
+}
+
 //! the encode's landing, one text for every chain: the residual rows back to the host, the counters, the announcement once
 def private vt_served(var r : VtResident; var x : array<float>; bx, npos, n_layer : int64) : bool
     => vt_served_from(r, r.host, x, bx, npos, n_layer)
 
 def private vt_served_from(var r : VtResident; hb : HostBuf; var x : array<float>; bx, npos, n_layer : int64) : bool {
-    unsafe {
-        memcpy(addr<void?>(x[0]), hb.mapped, bx)
-    }
+    vt_readback_copy(x, hb, bx)
     g_vt_encodes++
     g_vt_rows += npos
     g_vt_blocks += n_layer
@@ -1990,7 +1992,7 @@ def private vt_sk_ensure(var r : VtResident; tc, nsplit : int64) : bool {
         return false
     }
     let need = nsplit * r.cap_rows * r.d * 4l
-    if (!vt_range_ok(need) || (r.sk_bytes < need && !vt_sk_build(r, nsplit, need))) {
+    if (!vk_range_ok(need) || (r.sk_bytes < need && !vt_sk_build(r, nsplit, need))) {
         return false
     }
     if (!key_exists(r.sets_sk, int(tc))) {
@@ -2287,11 +2289,11 @@ def private vt_aud_blocks(t : AudioTower; var s : EncoderState; npos : int64; ln
         return false
     }
     let khr = arm.khr
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, d, 0l, false, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, d, 0l, false, false))) {
         return vt_flush_and_decline(r, VulkanTowerDecline.shape)
     }
-    let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
-    let vff = q8_batch_cls_variant(q8_batch_tile_for(ff, npos), q8_batch_aligned(ff, npos))
+    let v = vt_tile(false, d, npos).v
+    let vff = vt_tile(false, ff, npos).v
     if (!vt_ln_chain_ensure(khr, hsp, v, vff)) {
         return vt_flush_and_decline(r, VulkanTowerDecline.device)
     }
@@ -2336,28 +2338,17 @@ let private VT_STEM_COL = 0x2000000u
 let private VT_STEM_Y1 = 0x4000000u
 let private VTA_CONV2_KEY = 5000
 
-//! the f16 image of a staged f32 slab, the f32 rows released
-[cold_path]
-def private vt_slab_f16(var slab : array<float>) : array<uint16> {
-    var slab16 : array<uint16>
-    slab16 |> reserve_resize(long_length(slab))
-    unsafe {
-        cvt_f32_to_f16_sat(addr(slab16[0]), addr(slab[0]), long_length(slab))
-    }
-    delete slab
-    return <- slab16
-}
-
 [cold_path]
 def private vt_aud_front_slab(var r : VtResident; t : AudioTower) : bool {
     let d = t.d_model
     let kreal = 3l * t.n_mel
-    let kdp = (kreal + 63l) / 64l * 64l
+    let kdp = round_up(kreal, 64l)
     r.stem_kdp = kdp
     var slab : array<float>
     slab |> reserve_resize(d * kdp)
     tower_stage_f32_pad_row_stride(slab, t.fblob, t.conv1_w_off, 0l, d, kreal, kdp)
-    var slab16 <- vt_slab_f16(slab)
+    var slab16 <- cvt_f32_to_f16_sat_array(slab)
+    delete slab
     let rows = 2l * d + t.n_ctx * d
     var rows_f : array<float>
     rows_f |> reserve_resize(rows)
@@ -2398,10 +2389,10 @@ def private vt_aud_front_scratch(var r : VtResident; tin, nm, d : int64; gemm_kh
     }
     let bx = r.cap_rows * d * 4l
     let bxh = (r.cap_rows + TILE_READ_SLACK) * max(r.d, r.ff) * 2l
-    r.s_fim[0] = set_tower_im2col1d_cls(fixed_array(r.fxin_dev, r.fcol_dev), fixed_array(bxin, bcol), fixed_array(VT_STEM_MEL, VT_STEM_COL))
+    r.s_fim[0] = set_tts_im2col16_cls(fixed_array(r.fxin_dev, r.fcol_dev), fixed_array(bxin, bcol), fixed_array(VT_STEM_MEL, VT_STEM_COL))
     r.s_fg[0] = f16_gemm_set(gemm_khr, fixed_array(r.fw16_dev, r.fcol_dev, r.fy1_dev), fixed_array(r.fw16_bytes, bcol, by1), fixed_array(0u, VT_STEM_COL, VT_STEM_Y1))
     r.s_fb[0] = set_tower_bias_act_cls(fixed_array(r.fy1_dev, r.fnorm_dev), fixed_array(by1, r.fnorm_bytes), fixed_array(VT_STEM_Y1, 0u))
-    r.s_fim[1] = set_tower_im2col1d_cls(fixed_array(r.fy1_dev, r.xh_dev), fixed_array(by1, bxh), fixed_array(VT_STEM_Y1, VT_XQ))
+    r.s_fim[1] = set_tts_im2col16_cls(fixed_array(r.fy1_dev, r.xh_dev), fixed_array(by1, bxh), fixed_array(VT_STEM_Y1, VT_XQ))
     r.s_fb[1] = set_tower_bias_act_cls(fixed_array(r.x_dev, r.fnorm_dev), fixed_array(bx, r.fnorm_bytes), fixed_array(VT_X, 0u))
     r.s_stem_pos_add = set_tower_bias_act_cls(fixed_array(r.x_dev, r.fnorm_dev), fixed_array(bx, r.fnorm_bytes), fixed_array(VT_X, 0u))
     return true
@@ -2422,11 +2413,8 @@ def private vt_ln16_ensure : bool {
 def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {   // nolint:STYLE038 - the dispatch chain is the shape
     var r & = g_vt_aud
     g_vt_aud_out_bytes = 0l
-    if (!g_vt_env_tower) {
-        return vt_decline(r, VulkanTowerDecline.knob)
-    }
-    if (!t.q8) {
-        return vt_decline(r, VulkanTowerDecline.quant_mode)
+    if (!vt_gate(r, t.q8)) {
+        return false
     }
     let tin = AUDIO_CHUNK_FRAMES
     let tt = t.n_ctx
@@ -2447,14 +2435,14 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
     if (!vt_cm2_feed()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(tt), d, ff, d, 0l, false, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(tt), d, ff, d, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
-    let v = q8_batch_cls_variant(q8_batch_tile_for(d, tt), q8_batch_aligned(d, tt))
-    let vff = q8_batch_cls_variant(q8_batch_tile_for(ff, tt), q8_batch_aligned(ff, tt))
+    let v = vt_tile(false, d, tt).v
+    let vff = vt_tile(false, ff, tt).v
     let tc_d = cm2_tile_cols(d, tt)
     let tc_ff = cm2_tile_cols(ff, tt)
-    if (!vt_ln_chain_ensure(khr, hsp, v, vff) || !f16_gemm_ensure(arm.gemm_khr) || !ensure_tower_im2col1d_cls() || !ensure_tower_bias_act_cls()
+    if (!vt_ln_chain_ensure(khr, hsp, v, vff) || !f16_gemm_ensure(arm.gemm_khr) || !ensure_tts_im2col16_cls() || !ensure_tower_bias_act_cls()
             || !cm2_cls_ensure(int(KqFmt.q8), tc_d) || !cm2_cls_ensure(int(KqFmt.q8), tc_ff)) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
@@ -2487,16 +2475,17 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
     let act = t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF
     let bx = tt * d * 4l
     vt_chain_one_shot("whisper-class stem", 2l, tt) $(raw : VkCommandBuffer; var h : VkHaz) {
-        var pc_im1 = TowerIm2col1dArgs(nch = uint(nm), srclen = uint(tin), stride = 1u, chmajor = 1u, kdp = uint(r.stem_kdp), rows = uint(tin))
-        enc_tower_im2col1d_cls(raw, h, r.s_fim[0], pc_im1, (tin * r.stem_kdp + 255l) / 256l)
+        var pc_im1 = TtsIm2colArgs(cin = uint(nm), tin = uint(tin), tout = uint(tin), k = 3u, stride = 1u, pad_l = 1u, dilation = 1u, kdim = uint(r.stem_kdp),
+            rows = 0u)
+        enc_tts_im2col16_cls(raw, h, r.s_fim[0], pc_im1, tin * r.stem_kdp)
         vt_pt(raw, VtProfRole.im2col)
         var pc_g1 = F16GemmArgs(n = uint(r.stem_kdp), d = uint(d), rows = uint(tin), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
         f16_gemm_enc(arm.gemm_khr, raw, h, r.s_fg[0], pc_g1, tin, d)
         vt_pt(raw, VtProfRole.gemm_pw)
         vt_bias_act(raw, h, r.s_fb[0], d, tin * d, 0l, act)
         vt_pt(raw, VtProfRole.bias)
-        var pc_im2 = TowerIm2col1dArgs(nch = uint(d), srclen = uint(tin), stride = 2u, chmajor = 0u, kdp = uint(3l * d), rows = uint(tt))
-        enc_tower_im2col1d_cls(raw, h, r.s_fim[1], pc_im2, (tt * 3l * d + 255l) / 256l)
+        var pc_im2 = TtsIm2colArgs(cin = uint(d), tin = uint(tin), tout = uint(tt), k = 3u, stride = 2u, pad_l = 1u, dilation = 1u, kdim = uint(3l * d), rows = 1u)
+        enc_tts_im2col16_cls(raw, h, r.s_fim[1], pc_im2, tt * 3l * d)
         vt_pt(raw, VtProfRole.im2col)
         var pc_c2 = BatchArgs(n = uint(3l * d), d = uint(d), map_off = map_off)
         cm2_cls_enc(int(KqFmt.q8), tc_d, raw, h, s_conv2, pc_c2, g_d)
@@ -2517,11 +2506,8 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool {
     var r & = g_vt_g3v
-    if (!g_vt_env_tower) {
-        return vt_decline(r, VulkanTowerDecline.knob)
-    }
-    if (!t.q8) {
-        return vt_decline(r, VulkanTowerDecline.quant_mode)
+    if (!vt_gate(r, t.q8)) {
+        return false
     }
     let q8e = kq_elems(KqFmt.q8)
     let d = t.n_embd
@@ -2537,11 +2523,11 @@ def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos :
         return false
     }
     let khr = arm.khr
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
-    let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
-    let vff = q8_batch_cls_variant(q8_batch_tile_for(ff, npos), q8_batch_aligned(ff, npos))
+    let v = vt_tile(false, d, npos).v
+    let vff = vt_tile(false, ff, npos).v
     if (!vt_ln_chain_ensure(khr, hsp, v, vff)) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
@@ -2587,11 +2573,8 @@ def private vt_upload_q3v(var r : VtResident; key : uint64; t : Qwen3vTower; lay
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_q3v
-    if (!g_vt_env_tower) {
-        return vt_decline(r, VulkanTowerDecline.knob)
-    }
-    if (!t.q8) {
-        return vt_decline(r, VulkanTowerDecline.quant_mode)
+    if (!vt_gate(r, t.q8)) {
+        return false
     }
     let q8e = kq_elems(KqFmt.q8)
     let d = t.n_embd
@@ -2608,7 +2591,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         return false
     }
     let khr = arm.khr
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, nds, true, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, nds, true, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hsp, false, false, false, false, true)
@@ -2616,9 +2599,9 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
             || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls() || !ensure_tower_post_add_ln_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
-    let vff = q8_batch_cls_variant(q8_batch_tile_for(ff, npos), q8_batch_aligned(ff, npos))
-    let vqkv = q8_batch_cls_variant(q8_batch_tile_for(3l * d, npos), q8_batch_aligned(3l * d, npos))
+    let v = vt_tile(false, d, npos).v
+    let vff = vt_tile(false, ff, npos).v
+    let vqkv = vt_tile(false, 3l * d, npos).v
     if (!q8_batch_cls_ensure(v) || !q8_batch_cls_ensure(vff) || !q8_batch_cls_ensure(vqkv)) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
@@ -2674,7 +2657,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = 1.0 / sqrt(float(hs)), window = 0u, sinkoff = 0u)
     var pc_pad_qkv = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(3l * d), soff = 0u)
     var pc_unpad = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)   //! the attention rows are d-wide
-    var pc_rope = TowerRopeTabArgs(sstride = uint(3l * d), soff = 0u, nheads = uint(t.n_head), hs = uint(hs), rows = uint(npos))
+    var pc_rope = RopeTabArgs(rows = uint(npos), qs = uint(3l * d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), coff = 0u, soff = 0u)
     var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rqh = TowerClampRqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_gqkv = BatchArgs(n = uint(d), d = uint(3l * d), map_off = 0u)
@@ -2696,9 +2679,9 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
             q8_batch_cls_enc(vqkv, raw, h, r.s_qkv, pc_gqkv, g_qkv)
             pc_bqkv.boff = uint(o.qkv_b - norms_base)
             enc_tower_bias_act_cls(raw, h, r.s_bias_qkv, pc_bqkv, wg_n3d)
-            pc_rope.soff = 0u
+            pc_rope.col = 0u
             enc_tower_rope_tab_cls(raw, h, r.s_rope_tq, pc_rope, wg_rope)
-            pc_rope.soff = uint(d)
+            pc_rope.col = uint(d)
             enc_tower_rope_tab_cls(raw, h, r.s_rope_tk, pc_rope, wg_rope)
             pc_pad_qkv.soff = 0u
             enc_tower_hpad_cls(raw, h, r.s_pad_q, pc_pad_qkv, wg_pad)
@@ -2744,9 +2727,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         }
     }
     if (nds > 0l) {
-        unsafe {
-            memcpy(addr<void?>(s.ds_xtaps[0]), reinterpret<void?>(intptr(r.host.mapped) + uint64(bx)), nds * bx)
-        }
+        vt_readback_copy(s.ds_xtaps, r.host, nds * bx, bx)
     }
     return vt_served(r, s.x, bx, npos, t.n_layer)
 }
@@ -2754,11 +2735,8 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape, its two attention arms the routing
     var r & = g_vt_q25v
-    if (!g_vt_env_tower) {
-        return vt_decline(r, VulkanTowerDecline.knob)
-    }
-    if (t.wblob.n <= 0l || t.blk_bf16) {
-        return vt_decline(r, VulkanTowerDecline.quant_mode)
+    if (!vt_gate(r, t.wblob.n > 0l && !t.blk_bf16)) {
+        return false
     }
     let d = t.n_embd
     let ff = t.ff_pad
@@ -2780,7 +2758,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     let gemm_khr = arm.gemm_khr
     let w_off = t.layer_w
     let w_n = t.n_layer * t.layer_w_stride
-    if (!vt_range_ok(w_n * 2l) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, true))) {
+    if (!vk_range_ok(w_n * 2l) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, true))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hsp, false, false, false, false, true)
@@ -2824,7 +2802,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     let scale = 1.0 / sqrt(float(hs))
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
     var pc_rs = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)
-    var pc_rope = TowerRopeTabArgs(sstride = uint(d), soff = 0u, nheads = uint(t.n_head), hs = uint(hs), rows = uint(npos))
+    var pc_rope = RopeTabArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), coff = 0u, soff = 0u)
     var pc_gd = F16GemmArgs(n = uint(d), d = uint(d), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
     var pc_gff = F16GemmArgs(n = uint(d), d = uint(ff), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(ff), ksplit = 0u)
     var pc_dn = F16GemmArgs(n = uint(ff), d = uint(d), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
@@ -2915,11 +2893,8 @@ def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; hs
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_g4v
-    if (!g_vt_env_tower) {
-        return vt_decline(r, VulkanTowerDecline.knob)
-    }
-    if (!t.q8) {
-        return vt_decline(r, VulkanTowerDecline.quant_mode)
+    if (!vt_gate(r, t.q8)) {
+        return false
     }
     let q8e = kq_elems(KqFmt.q8)
     let d = t.n_embd
@@ -2933,7 +2908,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
         return false
     }
     let khr = arm.khr
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hs, false, false, false, false, true)
@@ -2941,8 +2916,8 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
             || !ensure_tower_post_add_cls() || !ensure_tower_geglu_cls() || !ensure_tower_clamp_cvt_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
-    let vff = q8_batch_cls_variant(q8_batch_tile_for(ff, npos), q8_batch_aligned(ff, npos))
+    let v = vt_tile(false, d, npos).v
+    let vff = vt_tile(false, ff, npos).v
     if (!q8_batch_cls_ensure(v) || !q8_batch_cls_ensure(vff)) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
@@ -3076,7 +3051,7 @@ struct private VtConvStage {
 def private vt_conv_stage(iw, ih, cin : int64) : VtConvStage {
     let ow = conv_s2_out(iw)
     let oh = conv_s2_out(ih)
-    return VtConvStage(iw = iw, ih = ih, cin = cin, ow = ow, oh = oh, rows = oh * ow, kdp = (cin * 9l + 63l) / 64l * 64l)
+    return VtConvStage(iw = iw, ih = ih, cin = cin, ow = ow, oh = oh, rows = oh * ow, kdp = round_up(cin * 9l, 64l))
 }
 
 var private g_vt_q3a_stages : VtConvStage[3]
@@ -3125,7 +3100,8 @@ def private vt_q3a_slab(var r : VtResident; t : Qwen3aTower; key : uint64; lay :
         let st = g_vt_q3a_stages[s]
         tower_stage_f32_pad_row_stride(slab, t.cblob, woffs[s], st.slab_elem_off, nch, st.cin * 9l, st.kdp)
     }
-    var slab16 <- vt_slab_f16(slab)
+    var slab16 <- cvt_f32_to_f16_sat_array(slab)
+    delete slab
     let span = vt_q3a_norm_span(t)
     var regions : array<VtRegion>
     regions |> push(VtRegion(woff = t.cout_w_off, n = 16l * nch, rows = t.core.d_model))
@@ -3171,7 +3147,7 @@ def private vt_q3a_scratch(var r : VtResident; cap_chunks, nm, d : int64; gemm_k
     let by = fixed_array(cap_chunks * g_vt_q3a_stages[0].rows * nch * 4l, cap_chunks * g_vt_q3a_stages[1].rows * nch * 4l, cap_chunks * g_vt_q3a_stages[2].rows * nch * 4l)
     let bfeat = (r.cap_rows + TILE_READ_SLACK) * featw * 2l
     let bx = r.cap_rows * d * 4l
-    if (!vt_range_ok(max(max(bxin, bcol), max(max(by[0], by[1]), max(by[2], bfeat))))) {
+    if (!vk_range_ok(max(max(bxin, bcol), max(max(by[0], by[1]), max(by[2], bfeat))))) {
         return false
     }
     r.fxin_dev = vt_dev_buf(r, bxin)
@@ -3205,11 +3181,8 @@ def private vt_q3a_scratch(var r : VtResident; cap_chunks, nm, d : int64; gemm_k
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var s : EncoderState) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_q3a_front
-    if (!g_vt_env_tower) {
-        return vt_decline(r, VulkanTowerDecline.knob)
-    }
-    if (!t.cq8) {
-        return vt_decline(r, VulkanTowerDecline.quant_mode)
+    if (!vt_gate(r, t.cq8)) {
+        return false
     }
     let nm = t.core.n_mel
     let nch = t.n_ch
@@ -3297,9 +3270,7 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
         cmd_copy_range(raw, r.fx_dev, 0l, r.host.buf, 0l, bx)
         vt_pt(raw, VtProfRole.copy_out)
     }
-    unsafe {
-        memcpy(addr<void?>(s.x[0]), r.host.mapped, bx)
-    }
+    vt_readback_copy(s.x, r.host, bx)
     g_vt_convs += n_chunks
     vt_announce(r)
     return true
@@ -3311,7 +3282,7 @@ let private VTF_MEL = 0x80u
 def private vt_g4a_front_slab(var r : VtResident; t : Gemma4aEncoder) : bool {
     let kdp0 = 64l
     let kd1 = t.sub_ch0 * 9l
-    let kdp1 = (kd1 + 63l) / 64l * 64l
+    let kdp1 = round_up(kd1, 64l)
     let total = t.sub_ch0 * kdp0 + t.sub_ch1 * kdp1
     var slab : array<float>
     slab |> reserve_resize(total)
@@ -3324,7 +3295,8 @@ def private vt_g4a_front_slab(var r : VtResident; t : Gemma4aEncoder) : bool {
 //! a spectral front's model-owned planes uploaded (the f16 conv slab, the DFT twiddles, the mel filters); false with the buffers released on a failed allocation
 [cold_path]
 def private vt_front_upload(var r : VtResident; var slab : array<float>; twiddles : PlaneF; btw : int64; filters : PlaneF; bfil : int64) : bool {
-    var slab16 <- vt_slab_f16(slab)
+    var slab16 <- cvt_f32_to_f16_sat_array(slab)
+    delete slab
     r.fw16_bytes = long_length(slab16) * 2l
     r.fw16_dev = vt_dev_buf(r, r.fw16_bytes)
     r.front_twiddles_dev = vt_dev_buf(r, btw)
@@ -3355,7 +3327,7 @@ def private vt_g4a_front_scratch(var r : VtResident; t : Gemma4aEncoder; cap : i
     let ch1 = t.sub_ch1
     let d = t.d_model
     let kdp0 = 64l
-    let kdp1 = (ch0 * 9l + 63l) / 64l * 64l
+    let kdp1 = round_up(ch0 * 9l, 64l)
     let t1 = conv_s2_out(cap)
     let w1 = conv_s2_out(n_mel)
     let t2 = conv_s2_out(t1)
@@ -3373,7 +3345,7 @@ def private vt_g4a_front_scratch(var r : VtResident; t : Gemma4aEncoder; cap : i
     let bx = t2 * d * 4l
     let btw = n_fft * 2l * n_bins * 4l
     let bfil = n_mel * n_bins * 4l
-    if (!vt_range_ok(max(max(bxw, bcol), max(max(by0, by1), max(bfeat, bmag))))) {
+    if (!vk_range_ok(max(max(bxw, bcol), max(max(by0, by1), max(bfeat, bmag))))) {
         return false
     }
     r.front_cap = cap
@@ -3407,12 +3379,7 @@ def private vt_g4a_front_scratch(var r : VtResident; t : Gemma4aEncoder; cap : i
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len : int64) : int64 {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_g4a
-    if (!g_vt_env_tower) {
-        vt_decline(r, VulkanTowerDecline.knob)
-        return -1l
-    }
-    if (!t.q8) {
-        vt_decline(r, VulkanTowerDecline.quant_mode)
+    if (!vt_gate(r, t.q8)) {
         return -1l
     }
     let d = t.d_model
@@ -3429,7 +3396,7 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
     let feat = w2 * ch1
     let rows0 = t1 * w1
     let rows1 = t2 * w2
-    let kdp1 = (ch0 * 9l + 63l) / 64l * 64l
+    let kdp1 = round_up(ch0 * 9l, 64l)
     if (n_len < 4l || feat != d || ch0 != n_mel || ch1 % 16l != 0l || d % 64l != 0l || long_length(s.xw) < n_len * n_fft
             || npos > VT_MAX_ENCODE_ROWS) {
         vt_decline(r, VulkanTowerDecline.shape)
@@ -3510,9 +3477,7 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
         vt_pt(raw, VtProfRole.copy_out)
     }
     ensure_length(s.x, npos * d)
-    unsafe {
-        memcpy(addr<void?>(s.x[0]), r.fhost.mapped, bx)
-    }
+    vt_readback_copy(s.x, r.fhost, bx)
     g_vt_convs++
     if (!vulkan_gemma4a_blocks(t, s, npos)) {
         return -1l
@@ -3583,7 +3548,7 @@ def private vt_cn_front_scratch(var r : VtResident; t : CanaryEncoder; cap : int
     let bx = g.t3 * d * 4l
     let btw = n_fft * 2l * n_fb * 4l
     let bfil = n_mel * n_fb * 4l
-    if (!vt_range_ok(max(max(by0, bh), max(bxf, bx)))) {
+    if (!vk_range_ok(max(max(by0, bh), max(bxf, bx)))) {
         return false
     }
     r.front_cap = cap
@@ -3627,23 +3592,16 @@ def private vt_cn_front_scratch(var r : VtResident; t : CanaryEncoder; cap : int
 
 //! the front's cm2 GEMM set of one stage (the pointwise convs into y3 and y6, the input projection into x) at a token column
 def private vt_cn_front_set(var r : VtResident; stage : int; tc : int64; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
-    let key = stage * VT_CN_FRONT_KEY + int(tc)
-    if (!key_exists(r.sets_front, key)) {
-        r.sets_front[key] = cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.fmeta.buf, r.fcn_feed16_dev, y_dev),
+    return vt_cached(r.sets_front, stage * VT_CN_FRONT_KEY + int(tc)) $() : VkDescriptorSet {
+        return cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.fmeta.buf, r.fcn_feed16_dev, y_dev),
             fixed_array(r.wq_bytes, r.ws_bytes, r.fmeta_bytes, r.fh_bytes, y_bytes), fixed_array(0u, 0u, 0u, VTF_H, y_bit))
     }
-    return r.sets_front[key]
 }
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_cn
-    if (!g_vt_env_tower) {
-        vt_decline(r, VulkanTowerDecline.knob)
-        return -1l
-    }
-    if (!t.q8) {
-        vt_decline(r, VulkanTowerDecline.quant_mode)
+    if (!vt_gate(r, t.q8)) {
         return -1l
     }
     let n_len = s.n_len
@@ -3767,9 +3725,7 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
         vt_pt(raw, VtProfRole.copy_out)
     }
     ensure_length(s.x, tt * d)
-    unsafe {
-        memcpy(addr<void?>(s.x[0]), r.fhost.mapped, bx)
-    }
+    vt_readback_copy(s.x, r.fhost, bx)
     g_vt_convs++
     return tt
 }
@@ -3787,7 +3743,7 @@ def private vt_q3a_mel_scratch(var r : VtResident; cap, n_fft, n_bins, n_mel : i
     let bfil = n_mel * n_bins * 4l
     let bpow = cap * n_bins * 4l
     let bout = n_mel * cap * 4l
-    if (!vt_range_ok(max(bxw, max(bpow, bout)))) {
+    if (!vk_range_ok(max(bxw, max(bpow, bout)))) {
         return false
     }
     r.x_dev = vt_dev_buf(r, bxw)
@@ -3840,9 +3796,7 @@ def private vulkan_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int6
         cmd_copy_range(raw, r.yo_dev, 0l, r.host.buf, 0l, bout)
         vt_pt(raw, VtProfRole.copy_out)
     }
-    unsafe {
-        memcpy(addr<void?>(m.data[0]), r.host.mapped, bout)
-    }
+    vt_readback_copy(m.data, r.host, bout)
     vt_announce(r)
     g_vt_mels++
     return true
@@ -3851,24 +3805,10 @@ def private vulkan_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int6
 [init]
 def dasllama_vulkan_tower_register {
     g_vt_env_tower = g_env_vulkan.vk_tower
-    vt_unbind_batch_sets(g_vt_g4v)
-    vt_unbind_batch_sets(g_vt_g3v)
-    vt_unbind_batch_sets(g_vt_q3v)
-    vt_unbind_batch_sets(g_vt_q25v)
-    vt_unbind_batch_sets(g_vt_aud)
-    vt_unbind_batch_sets(g_vt_g4a)
-    vt_unbind_batch_sets(g_vt_cn)
-    vt_unbind_batch_sets(g_vt_q3a_front)
-    vt_unbind_batch_sets(g_vt_q3am)
-    g_vt_q3a_front.family = "qwen3a-front"
-    g_vt_q3am.family = "qwen3a-mel"
-    g_vt_g4v.family = "gemma4v"
-    g_vt_g3v.family = "gemma3v"
-    g_vt_q3v.family = "qwen3v"
-    g_vt_q25v.family = "qwen25v"
-    g_vt_aud.family = "whisper-class"
-    g_vt_g4a.family = "gemma4a"
-    g_vt_cn.family = "canary"
+    vt_each_resident() $(var r : VtResident; family : string) {
+        vt_unbind_batch_sets(r)
+        r.family = family
+    }
     register_vk_drop_hook(@@vt_forget)
     static_if (!typeinfo builtin_module_exists(das_metal)) {
         register_gemma4v_gpu(@@vulkan_gemma4v_blocks, @@vulkan_tower_serves_exact)

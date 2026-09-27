@@ -1079,7 +1079,7 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool
     }
     assert(g_rd != null, "vk_rdec_upload_emb_f32 before prepare")
     let bytes = vocab * dim * 4l
-    if (bytes > min(RDEC_EMB_F32_CAP, vk_max_storage_range()) || g_gpu.resident_bytes + bytes > g_gpu.weight_budget
+    if (bytes > RDEC_EMB_F32_CAP || !vk_range_ok(bytes) || g_gpu.resident_bytes + bytes > g_gpu.weight_budget
             || !ensure_emb_gather_f32_cls()) {
         return false
     }

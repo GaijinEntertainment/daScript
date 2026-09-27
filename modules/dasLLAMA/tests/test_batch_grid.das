@@ -9,6 +9,7 @@ require ?llvm dasllama/dasllama_math_gen  // the gen batch walk (the knob's targ
 require dasllama/dasllama_convert
 require daslib/jobque_boost
 require math
+require _compares   // mismatch_exact: the bit-for-bit compare
 
 // The 2-D batch chunk grid (batch_grid_2d) must be BIT-FOR-BIT the 1-D walk: only chunk
 // boundaries move, never the per-(token,row) dot fold. Every registered backend runs the same
@@ -27,16 +28,6 @@ def private run_batch(var y : array<float>; wq : array<int8>; ws : array<float>;
     set_batch_grid_2d(knob)
     matmul_q8q8_batch(y, wq, ws, xq, xs, n, d, ntok)
     set_batch_grid_2d(0)
-}
-
-def private mismatches(a, b : array<float>) : int {
-    var bad = 0
-    for (va, vb in a, b) {
-        if (va != vb) {
-            bad++
-        }
-    }
-    return bad
 }
 
 def private check_shape(t : T?; n, d, ntok, tb : int64) {
@@ -85,8 +76,8 @@ def private check_shape(t : T?; n, d, ntok, tb : int64) {
         run_batch(y0, wq, ws, xq, xs, n, d, ntok, 0)
         run_batch(y1, wq, ws, xq, xs, n, d, ntok, 1)
         run_batch(y2, wq, ws, xq, xs, n, d, ntok, 2)
-        t |> equal(mismatches(y1, y0), 0, "fine grid == 1-D ({n}x{d} ntok={ntok} tb={tb}, backend {name})")
-        t |> equal(mismatches(y2, y0), 0, "wave-aligned grid == 1-D ({n}x{d} ntok={ntok} tb={tb}, backend {name})")
+        t |> equal(mismatch_exact(y1, y0), 0, "fine grid == 1-D ({n}x{d} ntok={ntok} tb={tb}, backend {name})")
+        t |> equal(mismatch_exact(y2, y0), 0, "wave-aligned grid == 1-D ({n}x{d} ntok={ntok} tb={tb}, backend {name})")
         delete wq
         delete ws
         delete y0

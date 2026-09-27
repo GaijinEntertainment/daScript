@@ -2,13 +2,13 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_MEASUREMENT.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
-`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned work: `followup_metal.md` for the Metal
-tier, `followup_vulkan.md` for the Vulkan tier, `followup_general.md` for everything else.
+`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT_FAT_START.md`. Planned
+work: `followup_metal.md` for the Metal tier, `followup_vulkan.md` for the Vulkan tier,
+`followup_general.md` for everything else.
 
 A figure rule below binds a figure this change writes or changes - in the repo outside `site*/`
-(repo root), in a commit message, or in its PR body. It does not bind a figure a changed line carries unchanged. A reading
-a `tests/` cell's tolerance is set from answers to `tests/REVIEW.md` here for the tolerance value
-itself, and to this list for naming the box and flags it was read on.
+(repo root), in a commit message, or in its PR body. It does not bind a figure a changed line
+carries unchanged.
 
 The words these rules share:
 
@@ -26,6 +26,7 @@ The words these rules share:
   the kernel backend it served on, and, on a GPU backend, the device, and on Vulkan the coopmat
   mode (`DASLLAMA_COOPMAT`). The flags of an instrument run are the tier, the `DAS_TUNE_POLICY`
   value, the device, the coopmat mode where the backend has one, and the instrument's arguments.
+  An environment-variable flag the run left unset is named as unset.
 - An environment override is an env variable given to the run that changes what it compiles,
   tunes, or serves, other than the run's flags.
 - A board cell is a run whose reading lands as a row of `performance/records/<box>.json`: a
@@ -36,6 +37,14 @@ The words these rules share:
 - The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`, not as the
   released exe; a `-jit` reading is a wall or rate, or a ratio of two, that an instrument - the
   `-jit` script included - printed while running under `-jit`.
+- A rig leg is a child cell `performance/gen_bench_records.das` spawns whose record row has
+  `engine` `das`, named by that row's `(backend, flavor)` pair whatever its `workload`.
+- A box can mint a spawned cell when a rig leg drives the path the owed row measures, the box
+  neither refuses nor skips that leg, and `performance/gen_bench_records.das --catalog official`
+  carries the model; it can mint a manual cell when it runs the documented command's OS and
+  backend and holds its model.
+- A third-party row is a figure from a run of a third-party program serving the same model on the
+  same input size.
 
 **The naming a figure rule asks for attaches to a figure only by a sentence, a table heading or
 a provenance line that unambiguously covers it, or by a citation of a passage or board row whose
@@ -44,7 +53,8 @@ harness, flags, box and exe; it covers the rows it names or, when it names none,
 after it up to the next heading or the next provenance line.
 
 **A tag (`external`, `direction-grade`, `out-of-process`, `debug-jit`) covers only the figures of
-the sentence or bullet it sits in, or, on a provenance line, the figures that line covers.**
+the sentence it sits in - of the parenthesis, when it sits inside one - or, on a provenance line,
+the figures that line covers.**
 
 **A `PERF_LEDGER.md` entry states a turn wall (the wall of one whole served request, whatever the
 modality) or a tok/s rate of the engine this repository builds only when
@@ -88,9 +98,10 @@ that spells that run - no placeholder in its exe, model or command line - names 
 **A diff never rests an adoption decision about what the engine serves on a figure from
 another project - it rests on a measurement a cell or instrument of this repository took.**
 
-**A dated `PERF_LEDGER.md` entry - one whose bold head, or the heading it sits under, carries a
-date - never has its figures or conclusion edited; a new dated entry refutes it.** Repointing a
-citation in it is not such an edit.
+**A diff never edits the figures or conclusion of a dated `PERF_LEDGER.md` entry - one whose
+bold head, or the heading it sits under, carries a date - and never adds figures to one; a new
+dated entry carries the new figures, and where they disagree it names the old entry and the
+figure it replaces.**
 
 **A `PERF_LEDGER.md` entry never carries a timing that argues for code the same diff does not
 land - that timing goes in the PR that lands the code.**
@@ -106,13 +117,6 @@ instrument's print - or the profile output that shows the change is faster
 (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
 ledger), with the flags that run took.**
 
-**A box cannot mint a spawned cell when no rig leg - a child cell
-`performance/gen_bench_records.das` spawns whose record row has `engine` `das`, named by that
-row's `(backend, flavor)` pair whatever its `workload` - drives the path the owed row measures,
-when the box refuses or skips it, or when `performance/gen_bench_records.das --catalog official`
-does not carry the model; it can mint a manual cell when it runs the documented command's OS and
-backend and holds its model.**
-
 **A diff that changes `dasllama/dasllama_metal_kernels.das` (the kernel library
 `metal_decode_init` compiles), `performance/profile_common.das`, or a `dasllama/` module
 `benchmarks/lcpp_bench.das` requires directly copies into the PR body the `sanity:` lines and the
@@ -120,11 +124,10 @@ backend and holds its model.**
 run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DAS_TUNE_MODE=fat`,
 `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
 
-**A diff that claims to make an already-served path faster, where a rig leg (a spawned
-`engine` `das` child cell) drives that path, re-mints a board row
-(`performance/records/<box>.json`) that exercises it, in the same change, and names that row in
-the PR body.** The board is the module's committed record of what serving costs; a kernel win
-that never lands there is invisible to the next regression check.
+**A diff that claims to make an already-served path faster, where a rig leg drives that path,
+re-mints a board row (`performance/records/<box>.json`) that exercises it, in the same change, and
+names that row in the PR body.** The board is the module's committed record of what serving
+costs; a kernel win that never lands there is invisible to the next regression check.
 
 **A rate or wall of any served-turn leg written down as a measurement rather than as a
 prediction is a defect unless it cites the committed board row it came from, or names harness,
@@ -133,12 +136,12 @@ over more than one timed run or input - the number of runs or inputs and the spr
 per-run figures: the standard deviation, or the min and max.**
 
 **A diff that records a measured number a `harness/` instrument prints - a time, a rate, or a
-figure computed from one - or changes what such a number measures, ships that number's
-alternate in the same change: a row from the same instrument on the same fixture and input size,
-with exactly one flag or environment override changed, or a third-party row - a figure from a
-run of a third-party program serving the same model on the same input size - that cites the
-architecture section holding its recipe.** A number with no alternate beside it cannot be
-compared to anything.
+figure computed from one - or changes what such a number measures, ships that number's alternate
+in the same change: the same instrument's row on the same fixture and input size with exactly one
+flag or environment override changed; the same instrument's row on the same fixture, input size,
+flags and overrides at a named other commit, tagged `direction-grade`; the other arm of the race
+the number comes from; or a third-party row that cites the architecture section holding its
+recipe.** A number with no alternate beside it cannot be compared to anything.
 
 **A diff that records a third-party row lands that row's recipe - the program, its version, the
 model, the command line, and any environment settings the command line does not show - in the
@@ -163,8 +166,8 @@ skip.
 
 **A shipped exe's startup race races only a GPU pipeline-state twin - two pipeline-state objects
 built from the same shader, raced to set a runtime knob - never a `[tune]` kernel family**
-(`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`). A `[tune]` winner needs a recompiled clone the
-shipped exe does not carry.
+(`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`). A `[tune]` winner needs a recompiled
+clone the shipped exe does not carry.
 
 **A diff never adds a confirm outside `harness/` - it goes there instead.** A confirm is an
 end-to-end A/B: it serves a vehicle model in a spawned child, runs two implementations of this

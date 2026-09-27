@@ -272,11 +272,7 @@ def test_qwen3a_tower(t : T?) {
         }
         // reference-parity cell: pinned to the f32 rail (the q8 rail has its own A/B cell below)
         // and to the CPU conv chain — the documented ~1e-4 reorder bars are CPU claims
-        let tower_was_on = vulkan_tower_knob()
-        {
-            defer() {
-                restore_every_gpu_tower(tower_was_on)
-            }
+        with_gpu_knobs() {
             set_every_gpu_tower(false)
             set_qwen3a_q8(false)
             var inscope tw <- load_qwen3a_tower(path)
@@ -923,13 +919,7 @@ def test_whisper_q8_gate(t : T?) {
             t |> skip("jfk.wav not present")
             return
         }
-        let tower_was_on = vulkan_tower_knob()
-        let wdec_was_on = vulkan_wdec_knob()
-        {
-            defer() {
-                restore_every_gpu_tower(tower_was_on)
-                restore_every_gpu_wdec(wdec_was_on)
-            }
+        with_gpu_knobs() {
             set_every_gpu_tower(false)
             set_every_gpu_wdec(false)
             var inscope m <- load_asr_model(model_path)     // the asr-surface default: q8 tower
@@ -1037,16 +1027,6 @@ def private word_forms(text : string) : array<string> {
     return <- [for (w in split_by_chars(norm, " ")); w; where !empty(w)]
 }
 
-def private word_flips(a, b : array<string>) : int {
-    var flips = 0
-    for (x, y in a, b) {
-        if (x != y) {
-            flips++
-        }
-    }
-    return flips
-}
-
 [test]
 def test_whisper_crowned_word_level(t : T?) {
     t |> run("the CROWNED lanes agree at word level on jfk (the crowned-pipeline quality gate)") @(t : T?) {
@@ -1109,7 +1089,7 @@ def test_whisper_crowned_word_level(t : T?) {
                 let wb <- word_forms(text_mixed)
                 t |> success(!empty(wa) && !empty(wb), "both crowned lanes produced words")
                 t |> equal(length(wa), length(wb), "word count agrees across crowned lanes")
-                let flips = word_flips(wa, wb)
+                let flips = mismatch_exact(wa, wb)
                 t |> equal(flips, 0, "crowned lanes word-identical ({flips}/{length(wa)} word flips)")
             }
             unpin_metal_tensor_crowns()

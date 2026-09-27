@@ -17,7 +17,8 @@ require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_plane
 require dasllama/dasllama_image
-require dasllama/dasllama_tower   // asr_prof_add: the encode-stage profiling rail
+require dasllama/dasllama_tower   // asr_prof_add: the encode-stage profiling rail; add_inplace_rows: the residual add
+require dasllama/dasllama_gpu_math   // sigmoid_f32
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 
@@ -522,7 +523,7 @@ def private read_adain_res_blk(m : GGUFMeta; bytes : array<uint8> | #; prefix : 
     b.learned_sc = gguf_find_tensor(m, "{prefix}.conv1x1.weight") >= 0
     b.upsample = gguf_find_tensor(m, "{prefix}.pool.weight") >= 0
     let pad = pad_in && b.learned_sc && b.dim_in % 32l != 0l
-    b.dim_in_s = pad ? (b.dim_in + 31l) / 32l * 32l : b.dim_in
+    b.dim_in_s = pad ? round_up(b.dim_in, 32l) : b.dim_in
     let cin_s = pad ? b.dim_in_s : 0l
     b.norm1 <- read_adain(m, bytes, "{prefix}.norm1")
     if (pad) {
@@ -660,11 +661,7 @@ def private read_decoder(m : GGUFMeta; bytes : array<uint8> | #; var d : St2Deco
     }
 }
 
-def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) : TtsWeight {
-    var w = TtsWeight()
-    w.a <- read_arr(m, bytes, name)
-    return <- w
-}
+def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) : TtsWeight => TtsWeight(a <- read_arr(m, bytes, name))
 
 //! Read a converted StyleTTS2-lineage GGUF (harness/convert_kitten.py, harness/convert_kokoro.py)
 //! into the mint-side carrier: served layouts minted, voices, STFT convention and the family's
@@ -1084,7 +1081,7 @@ def styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : f
         for (i in range64(t)) {
             var acc = 0.0
             for (j in range64(nb)) {
-                acc += 1.0 / (1.0 + exp(-logits[i * nb + j]))
+                acc += sigmoid_f32(logits[i * nb + j])
             }
             raw[i] = acc / speed
         }
@@ -1232,7 +1229,7 @@ def private gen_res_block(b : St2GenResBlock; src : array<float>; @scratch @exac
         if (j == 0) {
             sum_rows_into(y, src, y2, n)
         } else {
-            add_rows(y, y2, n)
+            add_inplace_rows(y, y2, n)
         }
         asr_prof_add("tts.gen.resadd", tc)
     }
@@ -1260,8 +1257,9 @@ def styletts2_source(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; f0_
                      noise : TtsNoise; seed : uint64; @scratch @exact_size var har : array<float>; var sc : St2Scratch) : int64 {
     let up = cfg.upsample
     let nh = cfg.n_harm
-    let n = f0_frames * up
-    let nlow = resize_len(n, 1.0 / float(up))
+    let geo = sine_source_geometry(cfg, f0_frames)
+    let n = geo.samples
+    let nlow = geo.nlow
     let win = stream_window_for(g_source_window, nlow)
     var rng = TtsRng()
     if (!noise.captured) {
@@ -1368,7 +1366,7 @@ def private generator_stage(d : St2Decoder; i : int64; var x : array<float>; @sc
     }
     let n = cc * tt
     tc = ref_time_ticks()
-    add_rows(y, src_res, n)
+    add_inplace_rows(y, src_res, n)
     asr_prof_add("tts.gen.stagesum", tc)
     stage_resblocks(d, i, y, out, cc, tt, s, tr, sc)
 }
@@ -1395,7 +1393,7 @@ def private stage_resblocks(d : St2Decoder; i : int64; x : array<float>; @scratc
         if (j == 0l) {
             copy_rows(out, y, n)
         } else {
-            add_rows(out, y, n)
+            add_inplace_rows(out, y, n)
         }
         asr_prof_add("tts.gen.stagesum", tc)
     }

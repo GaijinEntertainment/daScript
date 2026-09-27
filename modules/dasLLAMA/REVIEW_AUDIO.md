@@ -3,7 +3,10 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_MEDIA.md`. Planned work: `followup_general.md`, `followup_vulkan.md`.
 
-An ASR family file is a `dasllama/` file holding one speech-recognition family's CPU model.
+An ASR family file is a `dasllama/` file holding one speech-recognition family's CPU model. An
+audio-rail file is `dasllama/dasllama_tower.das`, `dasllama/dasllama_audio.das`,
+`dasllama/dasllama_audio_io.das`, `dasllama/dasllama_audio_embedder.das`,
+`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR family file.
 
 **In `dasllama/dasllama_asr.das` and `dasllama/dasllama_audio_embedder.das` - the union
 carriers that route each facade function to one family - a family arm that does anything but
@@ -22,14 +25,10 @@ or `mm_blob_b` is a defect, hand-written dot-product loops included.**
 **An activation-by-activation product in an ASR family file that does not go through
 `gemm_f32_jo` is a defect, hand-written loops included.**
 
-**A buffer reused across encodes in `dasllama/dasllama_tower.das`,
-`dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_embedder.das`, or an ASR family file
-that is not `@scratch` - on its declaration, or on the parameter of every callee that grows it -
-is a defect.**
+**A buffer reused across encodes in an audio-rail file that is not `@scratch` - on its
+declaration, or on the parameter of every callee that grows it - is a defect.**
 
-**A debug or profiling code path in `dasllama/dasllama_tower.das`,
-`dasllama/dasllama_audio.das`, `dasllama/dasllama_audio_embedder.das`, or an ASR family file
-that is not `[cold_path]` is a defect.**
+**A debug or profiling code path in an audio-rail file that is not `[cold_path]` is a defect.**
 
 **Never implement a transform inside an ASR family file - take the mel frontend's transform
 table from `dasllama/dasllama_audio.das` (`build_dft_twiddles`, or `build_fft_plan` +

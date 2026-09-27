@@ -8,22 +8,20 @@ docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VUL
 the choice at compile time instead.** A `class template` / `def abstract` / `def override`
 splice is compile-time and conforms - check the emission, not the das spelling.
 
-**A host-fixed branch inside the body of a kernel's main loop whose deciding value is not a
-per-call extent is a defect - stamp that value as a `@template_constant`, a literal or a module
-`let` instead, never a module `var`, push constant, uniform or kargs field.** A per-call extent is
-a push-constant, uniform or kargs value (a row, key or frame count) that differs between two
-dispatches of one kernel instance - one class with one set of template constants - among the
-dispatches a model's inference records. The main loop is a loop whose trip count grows with the
-work one thread does, per element or per row; a host-fixed branch in it is a bounds guard, a tail
-guard, a nested loop's own bound, or an `[unroll]` count whose live iterations run different
-bodies, with a deciding value the host fixes before it records the dispatch.
+**A host-fixed branch inside a kernel's main loop whose deciding value is not a per-call extent
+takes that value from a `@template_constant`, a literal or a module `let` - never a module `var`,
+push constant, uniform or kargs (kernel-argument struct) field.** A host-fixed branch
+is a loop bound or branch whose deciding value the host fixes before it records the dispatch: a
+bounds guard, a tail guard, a nested loop's own bound, or an `[unroll]` count whose live
+iterations run different bodies. A per-call extent is a count that differs between two dispatches
+of one kernel instance (one class, one set of template constants) that a model's inference
+records. The main loop is a loop whose trip count grows with the work one thread does, per
+element or per row.
 
-**A host-fixed main-loop branch whose deciding value is a per-call extent - a row, key or frame
-count that differs between two dispatches of one kernel instance among the dispatches a model's
-inference records - is never stamped: peel it (the full chunks run under the stamped chunk
-bound, then one tail pass carries the guard), or, outside an `[unroll]` loop, replace it with an
-index clamp that runs the guarded work on an index inside the extent and never stores that
-iteration's result.**
+**A host-fixed main-loop branch whose deciding value is a per-call extent is never stamped: peel
+it (the full chunks run under the stamped chunk bound, then one tail pass carries the guard), or,
+outside an `[unroll]` loop, replace it with an index clamp that runs the guarded work on an index
+inside the extent and never stores that iteration's result.**
 
 **Inside an `[unroll]` loop, never replace a host-fixed main-loop branch with an index clamp -
 stamp its deciding value, or peel the loop when that value is a per-call extent.** Inside an
@@ -40,19 +38,20 @@ row's bytes.
 
 **A diff that adds or changes a driver that keeps misaligned shapes off a kernel whose addressing
 assumes an alignment of a value its builder receives gates each dispatch site of that kernel on
-that site's own K, the extent that site's loop steps along; one gate shared by several sites
-conforms only when it tests every one of those sites' K.**
+that site's own K - the extent the kernel's fixed-size chunk steps along, in a loop or across
+invocations; one gate shared by several sites conforms only when it tests every one of those
+sites' K.**
 
-**A site's alignment gate on a value that site uses only as its K extent divides by the chunk its
-kernel steps, or by the multiple of that chunk the site's split of K across dispatches forces;
-any other divisor is a defect.** A gate that checks less than the kernel's chunk silently drops a
-tail; a gate that checks more than the site's own split forces never sees a shape the kernel could
-serve. A divisor the source weight format forces is a check that the weights are well-formed, not
-an alignment gate; the site keeps it as a separate check next to the kernel-chunk gate.
+**A site's alignment gate on a value that site uses only as its K divides by the chunk its
+kernel steps along K, or by the multiple of that chunk the site's split of K across dispatches
+forces.** A gate that checks less than the kernel's chunk silently drops a tail; a gate that
+checks more than the site's own split forces never sees a shape the kernel could serve. A divisor
+the source weight format forces is a check that the weights are well-formed, not an alignment
+gate; the site keeps it as a separate check next to the kernel-chunk gate.
 
 **A value that dispatch sites read in more than one role - K at one, the output extent at another -
 is gated, at every one of those sites, on the least common multiple of the divisors each role
-requires; a gate on it at one role's divisor alone is a defect.** A gate at one role's divisor
+requires.** A gate at one role's divisor
 admits a shape that misaligns the other role's kernel, which then drops that site's tail.
 
 **A diff that annotates a kernel class with `[metal_kernel(float_a_ok=true)]` names in the PR
@@ -80,25 +79,25 @@ every row's threadgroup and grows with the bucket count; rows past the last expe
 hold stale pool bytes, not the sentinel, and an equality test sends their token index out of
 bounds.
 
-**A method of a Metal kernel class that folds one plain float sum or max (no compensation term, no
-index carried alongside) across the threadgroup by hand - a `simd_shuffle_xor` loop that halves the lane
-distance each step, a lane-0 loop over a `@workgroup` float array with one slot per simdgroup, one
-`@workgroup` value that one lane writes and every lane reads - is a defect: a class deriving
-`MetalTgReduceBase` calls its fold methods over its own `partial[]`; any other class calls
-`tg_sum_all` / `tg_max_all` over its own `@workgroup` array.**
+**A method of a Metal kernel class that folds one plain float sum or max (no compensation term,
+no index carried alongside) across the threadgroup by hand - a `simd_shuffle_xor` loop that
+halves the lane distance each step, a lane-0 loop over a `@workgroup` float array with one slot
+per simdgroup, one `@workgroup` value that one lane writes and every lane reads - is a defect: a
+class deriving `MetalTgReduceBase` calls its fold methods over its own `partial[]`; any other
+class calls `tg_sum_all` / `tg_max_all` over its own `@workgroup` array.**
 
-**A diff that adds or changes a Vulkan kernel body that folds a value across the workgroup by hand
-- a subgroup shuffle loop, a lane-0 loop over a `@workgroup` array, one `@workgroup` value that one
-lane writes and every lane reads - is a defect: a class deriving `WgReduceBase` folds through its
-`wg_sum` / `wg_max`; a class whose workgroup memory is measured to size (a GEMV or attention row
-that stages its inputs) folds through one subgroup reduction into a slot array one entry a
-subgroup, and its class doc says so.** The base's slots move every stamp on it, so a measured
-kernel keeps its own smaller array.
+**A diff that adds or changes a hand-written fold of one plain float sum or max (no compensation
+term, no index carried alongside) over every lane of a Vulkan kernel's workgroup - a subgroup
+shuffle loop, a lane-0 loop over a `@workgroup` array, one `@workgroup` value that one lane writes
+and every lane reads - is a defect: derive `WgReduceBase` and call its `wg_sum`, `wg_max` or
+`wg_rms_inv` instead.** A fold into more than one result - separate sums over parts of the
+workgroup - is not one value; `ARCHITECTURE_GPU.md#gpu-backends` names the bodies that fold that
+way.
 
 **A diff that adds or changes a Metal kernel body that can run one fold call on a `@workgroup`
 array after another on the same array - two calls to `tg_sum_all` / `tg_max_all` or a
 `MetalTgReduceBase` fold method in sequence, or one such call inside a loop - puts a `barrier()`
-between them - never two folds on one `@workgroup` array with no barrier between.**
+between them.**
 
 **Never put an op every lane of its exchange set must reach together - a `barrier()`, a simdgroup
 matrix op, a subgroup shuffle, vote, ballot or reduction, or a call to a function that runs one,
@@ -115,10 +114,10 @@ fixed-capacity array or buffer by a host-chosen count - a loop with no bounds or
 walk bounded by a stamped constant, a `@workgroup` stage sized by a literal - never lets an
 address pass the allocation: it sizes a device buffer to the walk's last address, and a
 threadgroup stage's literal capacity is held by a check in the dispatching code that declines a
-larger shape before the dispatch is recorded; an encoder without that guarantee is a defect.** A
-`requires =` contract on the class is that guarantee for the dimension it names; an unchecked
-claim that an extent divides evenly is not. A padded chunk's walk can run past the live extent,
-and one read of stale bytes in a shared tile corrupts real rows.
+larger shape before the dispatch is recorded.** A `requires =` contract on the class is that
+guarantee for the dimension it names; an unchecked claim that an extent divides evenly is not. A
+padded chunk's walk can run past the live extent, and one read of stale bytes in a shared tile
+corrupts real rows.
 
 **Never let a pad row that feeds the reduction of a live output row - a pad along the reduction
 axis - reach a `matmul2d` or a staged cooperative tile as an operand; stage it as zero, or bound

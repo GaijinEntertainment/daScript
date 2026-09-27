@@ -5,13 +5,13 @@ options _dasllama_internal = true
 module test_vulkan_tts_pocket_kernels
 
 require dastest/testing_boost public
-require math
 require ?vulkan vulkan
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
 require _compares
 require dasllama/dasllama_tts_blocks
+require dasllama/dasllama_pocket   // modulate: the flow head's adaLN, the GEMV cell's CPU chain
 require dasllama/dasllama_rope
 require dasllama/dasllama_math
 require daslib/jobque_boost
@@ -22,29 +22,6 @@ require daslib/jobque_boost
 //! NaN fill, every compare with its poisoned element.
 
 let private SLACK = 5      //! the elements past a run, left at their fill
-let private GAP = 3        //! the poisoned slots between two runs of one slab plane
-
-//! `a` behind `base` slots of `POISON` and followed by `SLACK` more: a device plane whose run starts at an element base
-def private with_base(a : array<float>; base : int) : array<float> {
-    var out <- poison_plane(base + length(a) + SLACK)
-    for (i in range(length(a))) {
-        out[base + i] = a[i]
-    }
-    return <- out
-}
-
-//! `a` appended to `plane` behind `GAP` poisoned slots; its element base in the plane
-def private put(var plane : array<float>; a : array<float>) : int {
-    let off = length(plane) + GAP
-    plane |> resize(off + length(a))
-    for (i in range(GAP)) {
-        plane[off - GAP + i] = POISON
-    }
-    for (i in range(length(a))) {
-        plane[off + i] = a[i]
-    }
-    return off
-}
 
 let private PR_SROWS = 30
 let private PR_SS = 40
@@ -70,35 +47,9 @@ def test_vkt_pk_rows(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_P = 1u
-            let B_E = 2u
             let nwin = PR_ROWS * PR_WIDTH
             let ndst = PR_DROWS * PR_DS
             let src <- row_fill(PR_SROWS * PR_SS, 41, 7, 0.05, 2.1)
-            let srcd = dev_upload(src)
-            let bsrc = long_length(src) * 4l
-            let bdst = int64(ndst) * 4l
-            let dpd = make_device_buf(bdst)
-            let ded = make_device_buf(bdst)
-            let sizes = fixed_array(bdst, bdst)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            nan_sentinel_upload(dpd, bdst)
-            nan_sentinel_upload(ded, bdst)
-            var s_p = set_tts_pk_rows_cls(fixed_array(srcd, dpd), fixed_array(bsrc, bdst), fixed_array(0u, B_P))
-            var s_e = set_tts_pk_rows_elu_cls(fixed_array(srcd, ded), fixed_array(bsrc, bdst), fixed_array(0u, B_E))
-            var pa = TtsPkRowsArgs(rows = uint(PR_ROWS), width = uint(PR_WIDTH), ss = uint(PR_SS), sc = uint(PR_SC), sr0 = uint(PR_SR0),
-                ds = uint(PR_DS), dc = uint(PR_DC), dr0 = uint(PR_DR0))
-            let wgs = tts_pk_rows_wgs(int64(nwin))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_rows_cls(raw, h, s_p, pa, wgs)
-                enc_tts_pk_rows_elu_cls(raw, h, s_e, pa, wgs)
-                cmd_copy_planes(raw, h, fixed_array(dpd, ded), host, sizes, B_P | B_E)
-            }
-            let dst_p <- staged(host.mapped, at[0], ndst, type<float>)
-            let dst_e <- staged(host.mapped, at[1], ndst, type<float>)
-            let got <- pk_window(dst_p)
-            let got_e <- pk_window(dst_e)
             let want <- [for (e in range(nwin)); src[(PR_SR0 + e / PR_WIDTH) * PR_SS + PR_SC + e % PR_WIDTH]]
             var want_e := want
             want_e |> push(0.0)
@@ -107,32 +58,39 @@ def test_vkt_pk_rows(t0 : T?) {
                 elu_rows(want_e, int64(nwin + 1))
             }
             want_e |> resize(nwin)
-            let bad = mismatch_exact(got, want)
-            t |> success(bad == 0, "tts_pk_rows: the window == the source rows, exact ({bad} of {nwin} off)")
-            t |> success(got[nwin - 1] + 0.5 != want[nwin - 1], "tts_pk_rows: the compare reds a poisoned element")
-            t |> equal(nan_count(dst_p), ndst - nwin, "tts_pk_rows: every element outside the window keeps its sentinel")
-            let bad_e = mismatch_approx(got_e, want_e)
-            let mi = maxdiff_at(got_e, want_e)
-            to_log(LOG_INFO, "tts_pk_rows_elu: max |gpu - cpu| {abs(got_e[mi] - want_e[mi])} at row {mi / PR_WIDTH} col {mi % PR_WIDTH}\n")
-            t |> success(bad_e == 0, "tts_pk_rows_elu: the window == the CPU elu_rows ({bad_e} of {nwin} off)")
-            t |> success(!approx(got_e[0] + 0.5, want_e[0]), "tts_pk_rows_elu: the bar reds a poisoned element")
-            t |> equal(nan_count(dst_e), ndst - nwin, "tts_pk_rows_elu: every element outside the window keeps its sentinel")
-            var neg = 0
-            var pos_kept = true
-            for (e in range(nwin)) {
-                if (want[e] < 0.0 && got_e[e] != got[e]) {
-                    neg++
+            with_cell_planes() $(var cp : CellPlanes) {
+                let sp = cp |> in_(src)
+                let dp = cp |> out_(ndst)
+                let ep = cp |> out_(ndst)
+                var s_p = cp |> cls_set(fixed_array(sp, dp), @@set_tts_pk_rows_cls)
+                var s_e = cp |> cls_set(fixed_array(sp, ep), @@set_tts_pk_rows_elu_cls)
+                var pa = TtsPkRowsArgs(rows = uint(PR_ROWS), width = uint(PR_WIDTH), ss = uint(PR_SS), sc = uint(PR_SC), sr0 = uint(PR_SR0),
+                    ds = uint(PR_DS), dc = uint(PR_DC), dr0 = uint(PR_DR0))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_pk_rows_cls(raw, h, s_p, pa, int64(nwin))
+                    enc_tts_pk_rows_elu_cls(raw, h, s_e, pa, int64(nwin))
                 }
-                if (want[e] >= 0.0 && got_e[e] != got[e]) {
-                    pos_kept = false
+                let dst_p <- cp |> plane_run(dp)
+                let dst_e <- cp |> plane_run(ep)
+                let got <- pk_window(dst_p)
+                let got_e <- pk_window(dst_e)
+                check_rows(t, "tts_pk_rows window vs the source rows", got, want, BAR_EXACT, PR_WIDTH)
+                t |> equal(nan_count(dst_p), ndst - nwin, "tts_pk_rows: every element outside the window keeps its sentinel")
+                check_rows(t, "tts_pk_rows_elu window vs the CPU elu_rows", got_e, want_e, BAR_APPROX, PR_WIDTH)
+                t |> equal(nan_count(dst_e), ndst - nwin, "tts_pk_rows_elu: every element outside the window keeps its sentinel")
+                var neg = 0
+                var pos_kept = true
+                for (e in range(nwin)) {
+                    if (want[e] < 0.0 && got_e[e] != got[e]) {
+                        neg++
+                    }
+                    if (want[e] >= 0.0 && got_e[e] != got[e]) {
+                        pos_kept = false
+                    }
                 }
+                t |> success(neg > 0, "tts_pk_rows_elu control: the negative elements are mapped ({neg} moved off the plain copy)")
+                t |> success(pos_kept, "tts_pk_rows_elu control: the non-negative elements pass unchanged")
             }
-            t |> success(neg > 0, "tts_pk_rows_elu control: the negative elements are mapped ({neg} moved off the plain copy)")
-            t |> success(pos_kept, "tts_pk_rows_elu control: the non-negative elements pass unchanged")
-            destroy_device_buf(srcd)
-            destroy_device_buf(dpd)
-            destroy_device_buf(ded)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -141,51 +99,37 @@ def test_vkt_pk_rows(t0 : T?) {
 
 let private RS_T = 37
 let private RS_C = 72
-let private RS_XOFF = 5
 let private RS_SOFF = 9
 
 [test]
 def test_vkt_pk_row_scale(t0 : T?) {
-    t0 |> run("the layer scale == the CPU layer_scale_rows, exact, at t 37 x 72 with x and the scale row at offsets") <| @(t : T?) {
+    t0 |> run("the layer scale == the CPU layer_scale_rows, exact, at t 37 x 72 with the scale row at an offset") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tts_pk_row_scale_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_X = 1u
             let n = RS_T * RS_C
             let x <- row_fill(n, 41, 7, 0.05, 2.1)
             let scale <- row_fill(RS_C, 29, 3, 0.03, 1.2)
-            let xp <- with_base(x, RS_XOFF)
-            let wn <- with_base(scale, RS_SOFF)
-            let xd = dev_upload(xp)
-            let wnd = dev_upload(wn)
-            let bx = long_length(xp) * 4l
-            let sizes = fixed_array(bx)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            var s = set_tts_pk_row_scale_cls(fixed_array(xd, wnd), fixed_array(bx, long_length(wn) * 4l), fixed_array(B_X, 0u))
-            var pa = TtsPkScaleArgs(rows = uint(RS_T), c = uint(RS_C), xoff = uint(RS_XOFF), soff = uint(RS_SOFF))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_row_scale_cls(raw, h, s, pa, tts_pk_row_scale_wgs(int64(n)))
-                cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
-            }
-            let whole <- staged(host.mapped, at[0], length(xp), type<float>)
-            let got <- [for (i in range(n)); whole[RS_XOFF + i]]
             var want := x
             with_job_que() {
                 setup_dasllama_jobque_()
                 layer_scale_rows(want, int64(RS_T), int64(RS_C), scale)
             }
-            let bad = mismatch_exact(got, want)
-            t |> success(bad == 0, "tts_pk_row_scale: every element == the CPU layer_scale_rows ({bad} of {n} off)")
-            t |> success(got[n - 1] + 0.5 != want[n - 1], "tts_pk_row_scale: the compare reds a poisoned element")
-            t |> success(got[0] != x[0], "tts_pk_row_scale in place control: the input row is overwritten")
-            let outside <- [for (i in range(length(whole))); whole[i]; where i < RS_XOFF || i >= RS_XOFF + n]
-            t |> success(elem_all(outside, POISON), "tts_pk_row_scale: the prefix before xoff and the slack past the rows are untouched")
-            destroy_device_buf(xd)
-            destroy_device_buf(wnd)
-            destroy_host_buf(host)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> io_(x, 0, SLACK)
+                let wp = cp |> in_(scale, RS_SOFF, SLACK)
+                var s = cp |> cls_set(fixed_array(xp, wp), @@set_tts_pk_row_scale_cls)
+                var pa = TowerBiasArgs(d = uint(RS_C), nelem = uint(n), boff = uint(RS_SOFF))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_pk_row_scale_cls(raw, h, s, pa, int64(n))
+                }
+                let got <- cp |> plane_run(xp)
+                check_rows(t, "tts_pk_row_scale vs the CPU layer_scale_rows", got, want, BAR_EXACT, RS_C)
+                t |> success(got[0] != x[0], "tts_pk_row_scale in place control: the input row is overwritten")
+                t |> success(outside_run(cp |> plane_whole(xp), 0, n, POISON), "tts_pk_row_scale: the slack past the rows is untouched")
+            }
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -215,13 +159,13 @@ struct PkCacheRows {
 }
 
 //! the attention cell's outputs: the prompt over every key, the decode step, the decode step over the planes with a key
-//! before its window poisoned, the prompt over the 16-key window, and the prompt output's prefix before ooff
+//! before its window poisoned, the prompt over the 16-key window, and the prompt output's whole plane (its prefix before ooff)
 struct PkAttnOut {
     a : array<float>
     b : array<float>
     x : array<float>
     c : array<float>
-    pre : array<float>
+    a_whole : array<float>
 }
 
 //! the cache as the device's `PA_PROWS` rows [pos][d], the rows past the cache's and the row `blank` poisoned
@@ -262,75 +206,47 @@ def private pk_attn_wants(var kc : TtsKvCache; q : array<float>) : PkAttnOut {
 def private pk_attn_device(kc : TtsKvCache; qfull : array<float>) : PkAttnOut {
     var out : PkAttnOut
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let B_OA = 1u
-        let B_OB = 2u
-        let B_OX = 4u
-        let B_OC = 8u
         let d = PA_D
         var inscope rows <- pk_cache_rows(kc, -1l)
         var inscope rows_x <- pk_cache_rows(kc, int64(PA_DEC_POS - PA_DEC_CTX))
-        let qd = dev_upload(with_base(qfull, PA_QOFF))
-        let kd = dev_upload(with_base(rows.k, PA_KOFF))
-        let vd = dev_upload(with_base(rows.v, PA_VOFF))
-        let kxd = dev_upload(with_base(rows_x.k, PA_KOFF))
-        let vxd = dev_upload(with_base(rows_x.v, PA_VOFF))
-        let bq = int64(PA_QOFF + length(qfull) + SLACK) * 4l
-        let bk = int64(PA_KOFF + length(rows.k) + SLACK) * 4l
-        let bv = int64(PA_VOFF + length(rows.v) + SLACK) * 4l
-        let bo = int64(PA_OOFF + PA_T * d) * 4l
-        let bo1 = int64(PA_OOFF + d) * 4l
-        let outs = fixed_array(make_device_buf(bo), make_device_buf(bo1), make_device_buf(bo1), make_device_buf(bo))
-        let sizes = fixed_array(bo, bo1, bo1, bo)
-        let at <- staged_offsets(sizes)
-        let host = make_host_buf(at[length(sizes)], true, [cached = true])
-        for (o, bytes in outs, sizes) {
-            nan_sentinel_upload(o, bytes)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let qp = cp |> in_(qfull, PA_QOFF, SLACK)
+            let kp = cp |> in_(rows.k, PA_KOFF, SLACK)
+            let vp = cp |> in_(rows.v, PA_VOFF, SLACK)
+            let kxp = cp |> in_(rows_x.k, PA_KOFF, SLACK)
+            let vxp = cp |> in_(rows_x.v, PA_VOFF, SLACK)
+            let oa = cp |> out_(PA_T * d, PA_OOFF)
+            let ob = cp |> out_(d, PA_OOFF)
+            let ox = cp |> out_(d, PA_OOFF)
+            let oc = cp |> out_(PA_T * d, PA_OOFF)
+            var s_a = cp |> cls_set(fixed_array(qp, kp, vp, oa), @@set_tts_pk_attn_cls)
+            var s_b = cp |> cls_set(fixed_array(qp, kp, vp, ob), @@set_tts_pk_attn_cls)
+            var s_x = cp |> cls_set(fixed_array(qp, kxp, vxp, ox), @@set_tts_pk_attn_cls)
+            var s_c = cp |> cls_set(fixed_array(qp, kp, vp, oc), @@set_tts_pk_attn_cls)
+            var pa = TtsPkAttnArgs(t = uint(PA_T), qs = uint(PA_QS), qcol = uint(PA_QCOL), d = uint(d), pos0 = 0u, ctx = 0u,
+                qoff = uint(PA_QOFF), koff = uint(PA_KOFF), voff = uint(PA_VOFF), ooff = uint(PA_OOFF))
+            var pb = pa
+            pb.t = 1u
+            pb.pos0 = uint(PA_DEC_POS)
+            pb.ctx = uint(PA_DEC_CTX)
+            pb.qoff = uint(PA_QOFF + PA_DEC_POS * PA_QS)
+            var pc = pa
+            pc.ctx = uint(PA_WIN_CTX)
+            let heads = int64(PA_HEADS)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tts_pk_attn_cls(raw, h, s_a, pa, tts_attn_wgs(int64(PA_T), heads))
+                enc_tts_pk_attn_cls(raw, h, s_b, pb, tts_attn_wgs(1l, heads))
+                enc_tts_pk_attn_cls(raw, h, s_x, pb, tts_attn_wgs(1l, heads))
+                enc_tts_pk_attn_cls(raw, h, s_c, pc, tts_attn_wgs(int64(PA_T), heads))
+            }
+            out.a <- cp |> plane_run(oa)
+            out.b <- cp |> plane_run(ob)
+            out.x <- cp |> plane_run(ox)
+            out.c <- cp |> plane_run(oc)
+            out.a_whole <- cp |> plane_whole(oa)
         }
-        var s_a = set_tts_pk_attn_cls(fixed_array(qd, kd, vd, outs[0]), fixed_array(bq, bk, bv, bo), fixed_array(0u, 0u, 0u, B_OA))
-        var s_b = set_tts_pk_attn_cls(fixed_array(qd, kd, vd, outs[1]), fixed_array(bq, bk, bv, bo1), fixed_array(0u, 0u, 0u, B_OB))
-        var s_x = set_tts_pk_attn_cls(fixed_array(qd, kxd, vxd, outs[2]), fixed_array(bq, bk, bv, bo1), fixed_array(0u, 0u, 0u, B_OX))
-        var s_c = set_tts_pk_attn_cls(fixed_array(qd, kd, vd, outs[3]), fixed_array(bq, bk, bv, bo), fixed_array(0u, 0u, 0u, B_OC))
-        var pa = TtsPkAttnArgs(t = uint(PA_T), qs = uint(PA_QS), qcol = uint(PA_QCOL), d = uint(d), pos0 = 0u, ctx = 0u,
-            qoff = uint(PA_QOFF), koff = uint(PA_KOFF), voff = uint(PA_VOFF), ooff = uint(PA_OOFF))
-        var pb = pa
-        pb.t = 1u
-        pb.pos0 = uint(PA_DEC_POS)
-        pb.ctx = uint(PA_DEC_CTX)
-        pb.qoff = uint(PA_QOFF + PA_DEC_POS * PA_QS)
-        var pc = pa
-        pc.ctx = uint(PA_WIN_CTX)
-        let heads = int64(PA_HEADS)
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_pk_attn_cls(raw, h, s_a, pa, tts_pk_attn_wgs(heads, int64(PA_T)))
-            enc_tts_pk_attn_cls(raw, h, s_b, pb, tts_pk_attn_wgs(heads, 1l))
-            enc_tts_pk_attn_cls(raw, h, s_x, pb, tts_pk_attn_wgs(heads, 1l))
-            enc_tts_pk_attn_cls(raw, h, s_c, pc, tts_pk_attn_wgs(heads, int64(PA_T)))
-            cmd_copy_planes(raw, h, outs, host, sizes, B_OA | B_OB | B_OX | B_OC)
-        }
-        out.a <- staged(host.mapped, at[0] + int64(PA_OOFF) * 4l, PA_T * d, type<float>)
-        out.b <- staged(host.mapped, at[1] + int64(PA_OOFF) * 4l, d, type<float>)
-        out.x <- staged(host.mapped, at[2] + int64(PA_OOFF) * 4l, d, type<float>)
-        out.c <- staged(host.mapped, at[3] + int64(PA_OOFF) * 4l, PA_T * d, type<float>)
-        out.pre <- staged(host.mapped, at[0], PA_OOFF, type<float>)
-        for (dev in fixed_array(qd, kd, vd, kxd, vxd)) {
-            destroy_device_buf(dev)
-        }
-        for (o in outs) {
-            destroy_device_buf(o)
-        }
-        destroy_host_buf(host)
     }
     return <- out
-}
-
-//! one attention compare with its maxdiff logged and its poisoned element
-def private pk_attn_check(t : T?; tag : string; got, want : array<float>) {
-    let n = length(want)
-    let bad = mismatch_approx(got, want)
-    let mi = maxdiff_at(got, want)
-    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / PA_D} head {(mi % PA_D) / PA_DH} col {mi % PA_DH}\n")
-    t |> success(bad == 0, "{tag}: the device == the CPU attention_causal_rows ({bad} of {n} off)")
-    t |> success(!approx(got[n - 1] + 0.5, want[n - 1]), "{tag}: the bar reds a poisoned element")
 }
 
 [test]
@@ -347,9 +263,9 @@ def test_vkt_pk_attn(t0 : T?) {
             var inscope kc : TtsKvCache
             var inscope want <- pk_attn_wants(kc, q)
             var inscope got <- pk_attn_device(kc, qfull)
-            pk_attn_check(t, "tts_pk_attn prompt t{PA_T} every key", got.a, want.a)
-            pk_attn_check(t, "tts_pk_attn decode pos {PA_DEC_POS} ctx {PA_DEC_CTX}", got.b, want.b)
-            pk_attn_check(t, "tts_pk_attn prompt t{PA_T} ctx {PA_WIN_CTX}", got.c, want.c)
+            check_rows(t, "tts_pk_attn prompt t{PA_T} every key vs the CPU attention_causal_rows", got.a, want.a, BAR_APPROX, PA_D, PA_DH)
+            check_rows(t, "tts_pk_attn decode pos {PA_DEC_POS} ctx {PA_DEC_CTX} vs the CPU attention_causal_rows", got.b, want.b, BAR_APPROX, PA_D, PA_DH)
+            check_rows(t, "tts_pk_attn prompt t{PA_T} ctx {PA_WIN_CTX} vs the CPU attention_causal_rows", got.c, want.c, BAR_APPROX, PA_D, PA_DH)
             t |> equal(mismatch_exact(got.x, got.b), 0, "tts_pk_attn control: a poisoned key before the decode step's window stays silent, bit for bit")
             var moved = 0
             for (e in range(PA_T * d)) {
@@ -358,7 +274,7 @@ def test_vkt_pk_attn(t0 : T?) {
                 }
             }
             t |> success(moved > 0, "tts_pk_attn control: the 16-key window moves the prompt's late rows off the every-key rows ({moved} apart)")
-            t |> equal(nan_count(got.pre), PA_OOFF, "tts_pk_attn: the prefix before ooff keeps its sentinel")
+            t |> success(outside_run(got.a_whole, PA_OOFF, PA_T * d, NAN_SENTINEL), "tts_pk_attn: the prefix before ooff keeps its sentinel")
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -403,14 +319,6 @@ struct PkGemvRows {
     lat : array<float>
 }
 
-//! `put` at the next run base on the four lattice: the quad dot's weight rows
-def private put4(var plane : array<float>; a : array<float>) : int {
-    while ((length(plane) + GAP) % 4 != 0) {
-        plane |> push(POISON)
-    }
-    return put(plane, a)
-}
-
 //! the fixture with its weight rows on the four lattice (`quad`: the float4 dot) or off it (the float dot)
 def private pk_gemv_fixture(quad : bool) : PkGemvFix {
     let nin = PG_NIN
@@ -427,20 +335,13 @@ def private pk_gemv_fixture(quad : bool) : PkGemvFix {
             wst[o * PG_STRIDE + k] = f.lin.w[o * nin + k]
         }
     }
-    f.woff = quad ? put4(f.slab, wst) : put(f.slab, wst)
-    f.boff = put(f.slab, f.lin.b)
-    f.lwoff = put(f.slab, f.norm.w)
-    f.lboff = put(f.slab, f.norm.b)
-    f.aoff = put(f.slab, f.aux)
-    f.slab |> push_from(poison_plane(GAP))
+    f.woff = quad ? put_run4(f.slab, wst) : put_run(f.slab, wst)
+    f.boff = put_run(f.slab, f.lin.b)
+    f.lwoff = put_run(f.slab, f.norm.w)
+    f.lboff = put_run(f.slab, f.norm.b)
+    f.aoff = put_run(f.slab, f.aux)
+    f.slab |> push_from(poison_plane(SLAB_GAP))
     return <- f
-}
-
-//! the CPU `modulate`: x * (1 + scale) + shift, the shift row first in mod
-def private pk_modulate(var x : array<float>; mods : array<float>; n : int) {
-    for (j in range(n)) {
-        x[j] = x[j] * (1.0 + mods[n + j]) + mods[j]
-    }
 }
 
 //! the CPU chain of each stamp: the linear over x or over the normed and modulated x, then the stamp's epilogue
@@ -454,7 +355,7 @@ def private pk_gemv_wants(f : PkGemvFix) : PkGemvRows {
         linear_vec(f.lin, f.x, d_plain)
         var xn := f.x
         layernorm_rows(xn, 1l, int64(nin), f.norm, PG_EPS)
-        pk_modulate(xn, f.mods, nin)
+        modulate(xn, f.mods, int64(nin))
         linear_vec(f.lin, xn, d_norm)
     }
     var out : PkGemvRows
@@ -473,83 +374,43 @@ def private pk_gemv_wants(f : PkGemvFix) : PkGemvRows {
 def private pk_gemv_device(f : PkGemvFix) : PkGemvRows {
     var out : PkGemvRows
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let B_DOT = 1u
-        let B_LN = 2u
-        let B_GATE = 4u
-        let B_ADD = 8u
-        let B_TAIL = 16u
-        let B_LAT = 32u
         let nout = PG_NOUT
-        let ny = PG_YOFF + nout + SLACK
-        let nlat = PG_LOFF + nout + SLACK
-        let wnd = dev_upload(f.slab)
-        let xd = dev_upload(with_base(f.x, PG_XOFF))
-        let md = dev_upload(with_base(f.mods, PG_MOFF))
-        let x0d = dev_upload(with_base(f.x0, PG_X0OFF))
-        let ygd = dev_upload(with_base(f.y0, PG_YOFF))
-        let bwn = long_length(f.slab) * 4l
-        let bx = int64(PG_XOFF + length(f.x) + SLACK) * 4l
-        let bm = int64(PG_MOFF + length(f.mods) + SLACK) * 4l
-        let bx0 = int64(PG_X0OFF + length(f.x0) + SLACK) * 4l
-        let by = int64(ny) * 4l
-        let blat = int64(nlat) * 4l
-        let outs = fixed_array(make_device_buf(by), make_device_buf(by), ygd, make_device_buf(by), make_device_buf(by), make_device_buf(blat))
-        let sizes = fixed_array(by, by, by, by, by, blat)
-        let at <- staged_offsets(sizes)
-        let host = make_host_buf(at[length(sizes)], true, [cached = true])
-        for (o, bytes in outs, sizes) {
-            if (o != ygd) {
-                nan_sentinel_upload(o, bytes)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let wp = cp |> in_(f.slab)
+            let xp = cp |> in_(f.x, PG_XOFF, SLACK)
+            let mp = cp |> in_(f.mods, PG_MOFF, SLACK)
+            let x0p = cp |> in_(f.x0, PG_X0OFF, SLACK)
+            let dotp = cp |> out_(nout, PG_YOFF, SLACK)
+            let lnp = cp |> out_(nout, PG_YOFF, SLACK)
+            let gatep = cp |> io_(f.y0, PG_YOFF, SLACK)
+            let addp = cp |> out_(nout, PG_YOFF, SLACK)
+            let tailp = cp |> out_(nout, PG_YOFF, SLACK)
+            let latp = cp |> out_(nout, PG_LOFF, SLACK)
+            var s_dot = cp |> cls_set(fixed_array(wp, xp, dotp), @@set_tts_pk_gemv_dot_cls)
+            var s_ln = cp |> cls_set(fixed_array(wp, xp, lnp, mp), @@set_tts_pk_gemv_ln_silu_cls)
+            var s_gate = cp |> cls_set(fixed_array(wp, xp, gatep, mp), @@set_tts_pk_gemv_gate_cls)
+            var s_add = cp |> cls_set(fixed_array(wp, xp, addp), @@set_tts_pk_gemv_add_silu_cls)
+            var s_tail = cp |> cls_set(fixed_array(wp, xp, tailp, mp, x0p, latp), @@set_tts_pk_gemv_tail_cls)
+            var pa = TtsPkGemvArgs(nin = uint(PG_NIN), nout = uint(nout), stride = uint(PG_STRIDE), eps = PG_EPS, woff = uint(f.woff),
+                boff = uint(f.boff), xoff = uint(PG_XOFF), yoff = uint(PG_YOFF), moff = uint(PG_MOFF), lwoff = uint(f.lwoff),
+                lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = uint(PG_X0OFF), loff = uint(PG_LOFF))
+            let rows = int64(nout)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tts_pk_gemv_dot_cls(raw, h, s_dot, pa, rows)
+                enc_tts_pk_gemv_ln_silu_cls(raw, h, s_ln, pa, rows)
+                enc_tts_pk_gemv_gate_cls(raw, h, s_gate, pa, rows)
+                enc_tts_pk_gemv_add_silu_cls(raw, h, s_add, pa, rows)
+                enc_tts_pk_gemv_tail_cls(raw, h, s_tail, pa, rows)
             }
+            out.dot <- cp |> plane_whole(dotp)
+            out.ln <- cp |> plane_whole(lnp)
+            out.gate <- cp |> plane_whole(gatep)
+            out.add <- cp |> plane_whole(addp)
+            out.tail <- cp |> plane_whole(tailp)
+            out.lat <- cp |> plane_whole(latp)
         }
-        var s_dot = set_tts_pk_gemv_dot_cls(fixed_array(wnd, xd, outs[0]), fixed_array(bwn, bx, by), fixed_array(0u, 0u, B_DOT))
-        var s_ln = set_tts_pk_gemv_ln_silu_cls(fixed_array(wnd, xd, outs[1], md), fixed_array(bwn, bx, by, bm), fixed_array(0u, 0u, B_LN, 0u))
-        var s_gate = set_tts_pk_gemv_gate_cls(fixed_array(wnd, xd, ygd, md), fixed_array(bwn, bx, by, bm), fixed_array(0u, 0u, B_GATE, 0u))
-        var s_add = set_tts_pk_gemv_add_silu_cls(fixed_array(wnd, xd, outs[3]), fixed_array(bwn, bx, by), fixed_array(0u, 0u, B_ADD))
-        var s_tail = set_tts_pk_gemv_tail_cls(fixed_array(wnd, xd, outs[4], md, x0d, outs[5]), fixed_array(bwn, bx, by, bm, bx0, blat),
-            fixed_array(0u, 0u, B_TAIL, 0u, 0u, B_LAT))
-        var pa = TtsPkGemvArgs(nin = uint(PG_NIN), nout = uint(nout), stride = uint(PG_STRIDE), eps = PG_EPS, woff = uint(f.woff),
-            boff = uint(f.boff), xoff = uint(PG_XOFF), yoff = uint(PG_YOFF), moff = uint(PG_MOFF), lwoff = uint(f.lwoff),
-            lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = uint(PG_X0OFF), loff = uint(PG_LOFF))
-        let wgs = tts_pk_gemv_wgs(int64(nout))
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_pk_gemv_dot_cls(raw, h, s_dot, pa, wgs)
-            enc_tts_pk_gemv_ln_silu_cls(raw, h, s_ln, pa, wgs)
-            enc_tts_pk_gemv_gate_cls(raw, h, s_gate, pa, wgs)
-            enc_tts_pk_gemv_add_silu_cls(raw, h, s_add, pa, wgs)
-            enc_tts_pk_gemv_tail_cls(raw, h, s_tail, pa, wgs)
-            cmd_copy_planes(raw, h, outs, host, sizes, B_DOT | B_LN | B_GATE | B_ADD | B_TAIL | B_LAT)
-        }
-        out.dot <- staged(host.mapped, at[0], ny, type<float>)
-        out.ln <- staged(host.mapped, at[1], ny, type<float>)
-        out.gate <- staged(host.mapped, at[2], ny, type<float>)
-        out.add <- staged(host.mapped, at[3], ny, type<float>)
-        out.tail <- staged(host.mapped, at[4], ny, type<float>)
-        out.lat <- staged(host.mapped, at[5], nlat, type<float>)
-        for (dev in fixed_array(wnd, xd, md, x0d)) {
-            destroy_device_buf(dev)
-        }
-        for (o in outs) {
-            destroy_device_buf(o)
-        }
-        destroy_host_buf(host)
     }
     return <- out
-}
-
-//! the output row out of a staged plane
-def private pk_row(whole : array<float>; off : int) : array<float> {
-    return <- [for (i in range(PG_NOUT)); whole[off + i]]
-}
-
-//! one GEMV stamp's row out of its staged plane against its CPU chain, the maxdiff logged, with its poisoned element
-def private pk_gemv_check(t : T?; tag : string; whole : array<float>; off : int; want : array<float>) {
-    let got <- pk_row(whole, off)
-    let bad = mismatch_approx(got, want)
-    let mi = maxdiff_at(got, want)
-    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi}\n")
-    t |> success(bad == 0, "{tag}: the device == the CPU chain ({bad} of {PG_NOUT} off)")
-    t |> success(!approx(got[PG_NOUT - 1] + 0.5, want[PG_NOUT - 1]), "{tag}: the bar reds a poisoned element")
 }
 
 //! the five stamps over one fixture against their CPU chains, `arm` naming the dot's path
@@ -558,19 +419,18 @@ def private pk_gemv_arm(t : T?; arm : string; quad : bool) {
     t |> equal(f.woff % 4 == 0, quad, "{arm}: the weight rows sit on the lattice the arm names")
     var inscope want <- pk_gemv_wants(f)
     var inscope got <- pk_gemv_device(f)
-    pk_gemv_check(t, "{arm} tts_pk_gemv_dot", got.dot, PG_YOFF, want.dot)
-    pk_gemv_check(t, "{arm} tts_pk_gemv_ln_silu", got.ln, PG_YOFF, want.ln)
-    pk_gemv_check(t, "{arm} tts_pk_gemv_gate", got.gate, PG_YOFF, want.gate)
-    pk_gemv_check(t, "{arm} tts_pk_gemv_add_silu", got.add, PG_YOFF, want.add)
-    pk_gemv_check(t, "{arm} tts_pk_gemv_tail", got.tail, PG_YOFF, want.tail)
-    pk_gemv_check(t, "{arm} tts_pk_gemv_tail latent", got.lat, PG_LOFF, want.lat)
+    check_rows(t, "{arm} tts_pk_gemv_dot vs the CPU chain", copy_span(got.dot, PG_YOFF, PG_NOUT), want.dot, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_ln_silu vs the CPU chain", copy_span(got.ln, PG_YOFF, PG_NOUT), want.ln, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_gate vs the CPU chain", copy_span(got.gate, PG_YOFF, PG_NOUT), want.gate, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_add_silu vs the CPU chain", copy_span(got.add, PG_YOFF, PG_NOUT), want.add, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_tail vs the CPU chain", copy_span(got.tail, PG_YOFF, PG_NOUT), want.tail, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_tail latent vs the CPU chain", copy_span(got.lat, PG_LOFF, PG_NOUT), want.lat, BAR_APPROX, 1)
     t |> success(got.gate[PG_YOFF] != f.y0[0], "{arm} tts_pk_gemv_gate in place control: the residual row is moved off its input")
     let ny = length(got.dot)
     t |> equal(nan_count(got.dot) + nan_count(got.ln) + nan_count(got.add) + nan_count(got.tail), 4 * (ny - PG_NOUT),
         "{arm} tts_pk_gemv: the slots before yoff and the masked rows past nout keep their sentinel")
     t |> equal(nan_count(got.lat), PG_LOFF + SLACK, "{arm} tts_pk_gemv_tail: the latent plane outside its row keeps its sentinel")
-    let gate_out <- [for (i in range(ny)); got.gate[i]; where i < PG_YOFF || i >= PG_YOFF + PG_NOUT]
-    t |> success(elem_all(gate_out, POISON), "{arm} tts_pk_gemv_gate: the residual plane outside its row is untouched")
+    t |> success(outside_run(got.gate, PG_YOFF, PG_NOUT, POISON), "{arm} tts_pk_gemv_gate: the residual plane outside its row is untouched")
 }
 
 [test]
@@ -596,18 +456,16 @@ let private PO_DH = 64
 let private PO_QS = 384        //! q, k and v side by side: the rope turns the k span alone
 let private PO_POS0 = 37
 let private PO_CAP = 64        //! the tables' positions, past the last row's
-let private PO_XOFF = 5
 let private PO_THETA = 10000.0
 
 [test]
 def test_vkt_pk_rope(t0 : T?) {
-    t0 |> run("the rows rope == the CPU rope_rows on the k span of t 23 rows at pos0 37, the q and v spans untouched") <| @(t : T?) {
+    t0 |> run("the rows rope == the CPU rope_rows on the k span of t 23 rows from position 37, the q and v spans untouched") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tts_pk_rope_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let B_X = 1u
             let n = PO_T * PO_QS
             let nk = PO_T * PO_D
             let half = PO_DH / 2
@@ -618,47 +476,34 @@ def test_vkt_pk_rope(t0 : T?) {
             build_rope_tabs(cos_tab, sin_tab, PO_THETA, 1.0, 1.0, no_freqs, false, 0l, int64(PO_CAP), int64(PO_DH))
             t |> equal(length(cos_tab), PO_CAP * half, "tts_pk_rope: the tables carry {PO_CAP} positions of {half} angles")
             var slab : array<float>
-            let coff = put(slab, cos_tab)
-            let soff = put(slab, sin_tab)
+            let coff = put_run(slab, cos_tab) + PO_POS0 * half   // the tables bound at the first row's position: row r reads table row r
+            let soff = put_run(slab, sin_tab) + PO_POS0 * half
             let kspan <- [for (e in range(nk)); x[(e / PO_D) * PO_QS + PO_D + e % PO_D]]
             var want := kspan
             rope_rows(want, int64(PO_T), int64(PO_D), int64(PO_DH), int64(PO_POS0), PO_THETA)
-            let xp <- with_base(x, PO_XOFF)
-            let xd = dev_upload(xp)
-            let wnd = dev_upload(slab)
-            let bx = long_length(xp) * 4l
-            let sizes = fixed_array(bx)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            var s = set_tts_pk_rope_cls(fixed_array(xd, wnd), fixed_array(bx, long_length(slab) * 4l), fixed_array(B_X, 0u))
-            var pa = TtsPkRopeArgs(rows = uint(PO_T), qs = uint(PO_QS), col = uint(PO_D), d = uint(PO_D), dh = uint(PO_DH), pos0 = uint(PO_POS0),
-                xoff = uint(PO_XOFF), coff = uint(coff), soff = uint(soff))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_rope_cls(raw, h, s, pa, tts_pk_rope_wgs(int64(nk / 2)))
-                cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
-            }
-            let whole <- staged(host.mapped, at[0], length(xp), type<float>)
-            let got <- [for (e in range(nk)); whole[PO_XOFF + (e / PO_D) * PO_QS + PO_D + e % PO_D]]
-            let bad = mismatch_approx(got, want)
-            let mi = maxdiff_at(got, want)
-            to_log(LOG_INFO, "tts_pk_rope: max |gpu - cpu| {abs(got[mi] - want[mi])} at row {mi / PO_D} head {(mi % PO_D) / PO_DH} col {mi % PO_DH}\n")
-            t |> success(bad == 0, "tts_pk_rope: the k span == the CPU rope_rows ({bad} of {nk} off)")
-            t |> success(!approx(got[nk - 1] + 0.5, want[nk - 1]), "tts_pk_rope: the bar reds a poisoned element")
-            t |> success(got[2] != kspan[2], "tts_pk_rope in place control: a pair at a nonzero angle is turned off its input")
-            var kept = 0
-            for (r in range(PO_T)) {
-                for (j in range(PO_QS)) {
-                    if ((j < PO_D || j >= 2 * PO_D) && whole[PO_XOFF + r * PO_QS + j] == x[r * PO_QS + j]) {
-                        kept++
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> io_(x, 0, SLACK)
+                let wp = cp |> in_(slab)
+                var s = cp |> cls_set(fixed_array(xp, wp, wp), @@set_tts_pk_rope_cls)
+                var pa = RopeTabArgs(rows = uint(PO_T), qs = uint(PO_QS), col = uint(PO_D), d = uint(PO_D), dh = uint(PO_DH), coff = uint(coff), soff = uint(soff))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_pk_rope_cls(raw, h, s, pa, int64(nk / 2))
+                }
+                let rows <- cp |> plane_run(xp)
+                let got <- [for (e in range(nk)); rows[(e / PO_D) * PO_QS + PO_D + e % PO_D]]
+                check_rows(t, "tts_pk_rope k span vs the CPU rope_rows", got, want, BAR_APPROX, PO_D, PO_DH)
+                t |> success(got[2] != kspan[2], "tts_pk_rope in place control: a pair at a nonzero angle is turned off its input")
+                var kept = 0
+                for (r in range(PO_T)) {
+                    for (j in range(PO_QS)) {
+                        if ((j < PO_D || j >= 2 * PO_D) && rows[r * PO_QS + j] == x[r * PO_QS + j]) {
+                            kept++
+                        }
                     }
                 }
+                t |> equal(kept, PO_T * 2 * PO_D, "tts_pk_rope: the q and v spans are untouched")
+                t |> success(outside_run(cp |> plane_whole(xp), 0, n, POISON), "tts_pk_rope: the slack past the rows is untouched")
             }
-            t |> equal(kept, PO_T * 2 * PO_D, "tts_pk_rope: the q and v spans are untouched")
-            let outside <- [for (i in range(length(whole))); whole[i]; where i < PO_XOFF || i >= PO_XOFF + n]
-            t |> success(elem_all(outside, POISON), "tts_pk_rope: the prefix before xoff and the slack past the rows are untouched")
-            destroy_device_buf(xd)
-            destroy_device_buf(wnd)
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -712,39 +557,25 @@ def private pk_fused_fixture() : PkFusedFix {
             ws[o * PF_STRIDE + k] = f.sq.w[o * d + k]
         }
     }
-    f.woff_q = put(f.slab, wq)
-    f.boff_q = put(f.slab, f.qkv.b)
-    f.woff_s = put(f.slab, ws)
-    f.boff_s = put(f.slab, f.sq.b)
-    f.lwoff = put(f.slab, f.norm.w)
-    f.lboff = put(f.slab, f.norm.b)
-    f.aoff = put(f.slab, f.scale)
-    f.slab |> push_from(poison_plane(GAP))
+    f.woff_q = put_run(f.slab, wq)
+    f.boff_q = put_run(f.slab, f.qkv.b)
+    f.woff_s = put_run(f.slab, ws)
+    f.boff_s = put_run(f.slab, f.sq.b)
+    f.lwoff = put_run(f.slab, f.norm.w)
+    f.lboff = put_run(f.slab, f.norm.b)
+    f.aoff = put_run(f.slab, f.scale)
+    f.slab |> push_from(poison_plane(SLAB_GAP))
     var cos_tab : array<float>
     var sin_tab : array<float>
     let no_freqs : array<float>
     build_rope_tabs(cos_tab, sin_tab, PO_THETA, 1.0, 1.0, no_freqs, false, 0l, int64(PF_CAP), int64(PF_DH))
-    f.coff = put(f.tabs, cos_tab)
-    f.soff = put(f.tabs, sin_tab)
+    f.coff = put_run(f.tabs, cos_tab)
+    f.soff = put_run(f.tabs, sin_tab)
     return <- f
 }
 
-//! a span of a row
-def private span_of(row : array<float>; from, n : int) : array<float> {
-    return <- [for (i in range(n)); row[from + i]]
-}
-
-//! one fused stamp's row against its CPU chain, the maxdiff logged, with its poisoned element
-def private pk_fused_check(t : T?; tag : string; got, want : array<float>) {
-    let bad = mismatch_approx(got, want)
-    let mi = maxdiff_at(got, want)
-    to_log(LOG_INFO, "{tag}: max |gpu - cpu| {abs(got[mi] - want[mi])} at {mi}\n")
-    t |> success(bad == 0, "{tag}: the device == the CPU chain ({bad} of {length(want)} off)")
-    t |> success(!approx(got[length(want) - 1] + 0.5, want[length(want) - 1]), "{tag}: the bar reds a poisoned element")
-}
-
 [test]
-def test_vkt_pk_gemv_fused(t0 : T?) {   // nolint:STYLE038 — one fixture's four stamps over one command buffer, the checks in the order the planes read
+def test_vkt_pk_gemv_fused(t0 : T?) {
     t0 |> run("the frame loop's fused stamps == the CPU chains: the normed qkv row roped into y and the caches, the residual adds, the normed GELU") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tts_pk_gemv_ln_qkv_cls() || !ensure_tts_pk_gemv_add_scale_cls() || !ensure_tts_pk_gemv_add_cls()
@@ -765,88 +596,60 @@ def test_vkt_pk_gemv_fused(t0 : T?) {   // nolint:STYLE038 — one fixture's fou
                 linear_vec(f.sq, f.x, dp)
                 linear_vec(f.sq, xn, dn)
             }
-            var want_q <- span_of(qkv_row, 0, d)
+            var want_q <- copy_span(qkv_row, 0, d)
             rope_rows(want_q, 1l, int64(d), int64(PF_DH), int64(PF_P), PO_THETA)
-            var want_k <- span_of(qkv_row, d, d)
+            var want_k <- copy_span(qkv_row, d, d)
             rope_rows(want_k, 1l, int64(d), int64(PF_DH), int64(PF_P), PO_THETA)
-            let want_v <- span_of(qkv_row, 2 * d, d)
+            let want_v <- copy_span(qkv_row, 2 * d, d)
             let want_as <- [for (o in range(d)); f.y0[o] + dp[o] * f.scale[o]]
             let want_a <- [for (o in range(d)); f.y0[o] + dp[o]]
             var want_g := dn
             gelu(want_g, int64(d))
-            let B_Y = 1u
-            let B_K = 2u
-            let B_V = 4u
-            let B_AS = 8u
-            let B_A = 16u
-            let B_G = 32u
-            let ny = PF_YOFF + 3 * d + SLACK
-            let ng = PF_YOFF + d + SLACK
             let nc = PF_CAP * d
-            let wnd = dev_upload(f.slab)
-            let xd = dev_upload(with_base(f.x, PF_XOFF))
-            let tabsd = dev_upload(f.tabs)
-            let kcd = dev_upload(poison_plane(nc))
-            let vcd = dev_upload(poison_plane(nc))
-            let yasd = dev_upload(with_base(f.y0, PF_YOFF))
-            let yad = dev_upload(with_base(f.y0, PF_YOFF))
-            let yd = make_device_buf(int64(ny) * 4l)
-            let ygd = make_device_buf(int64(ng) * 4l)
-            let bwn = long_length(f.slab) * 4l
-            let bx = int64(PF_XOFF + d + SLACK) * 4l
-            let bt = long_length(f.tabs) * 4l
-            let bc = int64(nc) * 4l
-            let by = int64(ny) * 4l
-            let bg = int64(ng) * 4l
-            let br = int64(PF_YOFF + d) * 4l
-            nan_sentinel_upload(yd, by)
-            nan_sentinel_upload(ygd, bg)
-            let outs = fixed_array(yd, kcd, vcd, yasd, yad, ygd)
-            let sizes = fixed_array(by, bc, bc, br, br, bg)
-            let at <- staged_offsets(sizes)
-            let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            var s_qkv = set_tts_pk_gemv_ln_qkv_cls(fixed_array(wnd, xd, yd, tabsd, kcd, vcd), fixed_array(bwn, bx, by, bt, bc, bc), fixed_array(0u, 0u, B_Y, 0u, B_K, B_V))
-            var s_as = set_tts_pk_gemv_add_scale_cls(fixed_array(wnd, xd, yasd), fixed_array(bwn, bx, br), fixed_array(0u, 0u, B_AS))
-            var s_a = set_tts_pk_gemv_add_cls(fixed_array(wnd, xd, yad), fixed_array(bwn, bx, br), fixed_array(0u, 0u, B_A))
-            var s_g = set_tts_pk_gemv_ln_gelu_cls(fixed_array(wnd, xd, ygd), fixed_array(bwn, bx, bg), fixed_array(0u, 0u, B_G))
-            var pq = TtsPkGemvArgs(nin = uint(d), nout = uint(3 * d), stride = uint(PF_STRIDE), eps = PG_EPS, woff = uint(f.woff_q), boff = uint(f.boff_q),
-                xoff = uint(PF_XOFF), yoff = uint(PF_YOFF), moff = 0u, lwoff = uint(f.lwoff), lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = 0u, loff = 0u,
-                span = uint(d), dh = uint(PF_DH), p = uint(PF_P), coff = uint(f.coff), soff = uint(f.soff))
-            var ps = pq
-            ps.nout = uint(d)
-            ps.woff = uint(f.woff_s)
-            ps.boff = uint(f.boff_s)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_pk_gemv_ln_qkv_cls(raw, h, s_qkv, pq, tts_pk_gemv_wgs(int64(3 * d)))
-                enc_tts_pk_gemv_add_scale_cls(raw, h, s_as, ps, tts_pk_gemv_wgs(int64(d)))
-                enc_tts_pk_gemv_add_cls(raw, h, s_a, ps, tts_pk_gemv_wgs(int64(d)))
-                enc_tts_pk_gemv_ln_gelu_cls(raw, h, s_g, ps, tts_pk_gemv_wgs(int64(d)))
-                cmd_copy_planes(raw, h, outs, host, sizes, B_Y | B_K | B_V | B_AS | B_A | B_G)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let wp = cp |> in_(f.slab)
+                let xp = cp |> in_(f.x, PF_XOFF, SLACK)
+                let tp = cp |> in_(f.tabs)
+                let kcp = cp |> io_(poison_plane(nc))
+                let vcp = cp |> io_(poison_plane(nc))
+                let yasp = cp |> io_(f.y0, PF_YOFF, SLACK)
+                let yap = cp |> io_(f.y0, PF_YOFF, SLACK)
+                let yp = cp |> out_(3 * d, PF_YOFF, SLACK)
+                let ygp = cp |> out_(d, PF_YOFF, SLACK)
+                var s_qkv = cp |> cls_set(fixed_array(wp, xp, yp, tp, kcp, vcp), @@set_tts_pk_gemv_ln_qkv_cls)
+                var s_as = cp |> cls_set(fixed_array(wp, xp, yasp), @@set_tts_pk_gemv_add_scale_cls)
+                var s_a = cp |> cls_set(fixed_array(wp, xp, yap), @@set_tts_pk_gemv_add_cls)
+                var s_g = cp |> cls_set(fixed_array(wp, xp, ygp), @@set_tts_pk_gemv_ln_gelu_cls)
+                var pq = TtsPkGemvArgs(nin = uint(d), nout = uint(3 * d), stride = uint(PF_STRIDE), eps = PG_EPS, woff = uint(f.woff_q), boff = uint(f.boff_q),
+                    xoff = uint(PF_XOFF), yoff = uint(PF_YOFF), moff = 0u, lwoff = uint(f.lwoff), lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = 0u, loff = 0u,
+                    span = uint(d), dh = uint(PF_DH), p = uint(PF_P), coff = uint(f.coff), soff = uint(f.soff))
+                var ps = pq
+                ps.nout = uint(d)
+                ps.woff = uint(f.woff_s)
+                ps.boff = uint(f.boff_s)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tts_pk_gemv_ln_qkv_cls(raw, h, s_qkv, pq, int64(3 * d))
+                    enc_tts_pk_gemv_add_scale_cls(raw, h, s_as, ps, int64(d))
+                    enc_tts_pk_gemv_add_cls(raw, h, s_a, ps, int64(d))
+                    enc_tts_pk_gemv_ln_gelu_cls(raw, h, s_g, ps, int64(d))
+                }
+                let y_run <- cp |> plane_run(yp)
+                let kc <- cp |> plane_run(kcp)
+                let vc <- cp |> plane_run(vcp)
+                let yas <- cp |> plane_run(yasp)
+                let ya <- cp |> plane_run(yap)
+                check_rows(t, "tts_pk_gemv_ln_qkv q vs the CPU chain", copy_span(y_run, 0, d), want_q, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_ln_qkv k cache vs the CPU chain", copy_span(kc, PF_P * d, d), want_k, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_ln_qkv v cache vs the CPU chain", copy_span(vc, PF_P * d, d), want_v, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_add_scale vs the CPU chain", yas, want_as, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_add vs the CPU chain", ya, want_a, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_ln_gelu vs the CPU chain", cp |> plane_run(ygp), want_g, BAR_APPROX, FLAT_ROWS)
+                t |> success(outside_run(cp |> plane_whole(yp), PF_YOFF, d, NAN_SENTINEL), "tts_pk_gemv_ln_qkv: only the q span lands in y - the k and v spans and the slots outside keep their sentinel")
+                let other_rows <- [for (i in range(nc)); kc[i] + vc[i]; where i / d != PF_P]
+                t |> success(elem_all(other_rows, 2.0 * POISON), "tts_pk_gemv_ln_qkv: the caches' other rows are untouched")
+                t |> success(outside_run(cp |> plane_whole(ygp), PF_YOFF, d, NAN_SENTINEL), "tts_pk_gemv_ln_gelu: the slots outside the row keep their sentinel")
+                t |> success(yas[0] != f.y0[0] && ya[0] != f.y0[0], "the adds' in place control: the residual row is moved off its input")
             }
-            let y_whole <- staged(host.mapped, at[0], ny, type<float>)
-            let kc <- staged(host.mapped, at[1], nc, type<float>)
-            let vc <- staged(host.mapped, at[2], nc, type<float>)
-            let yas <- staged(host.mapped, at[3], PF_YOFF + d, type<float>)
-            let ya <- staged(host.mapped, at[4], PF_YOFF + d, type<float>)
-            let yg <- staged(host.mapped, at[5], ng, type<float>)
-            pk_fused_check(t, "tts_pk_gemv_ln_qkv q", span_of(y_whole, PF_YOFF, d), want_q)
-            pk_fused_check(t, "tts_pk_gemv_ln_qkv k cache", span_of(kc, PF_P * d, d), want_k)
-            pk_fused_check(t, "tts_pk_gemv_ln_qkv v cache", span_of(vc, PF_P * d, d), want_v)
-            pk_fused_check(t, "tts_pk_gemv_add_scale", span_of(yas, PF_YOFF, d), want_as)
-            pk_fused_check(t, "tts_pk_gemv_add", span_of(ya, PF_YOFF, d), want_a)
-            pk_fused_check(t, "tts_pk_gemv_ln_gelu", span_of(yg, PF_YOFF, d), want_g)
-            t |> equal(nan_count(y_whole), ny - d, "tts_pk_gemv_ln_qkv: only the q span lands in y - the k and v spans and the slots outside keep their sentinel")
-            let other_rows <- [for (i in range(nc)); kc[i] + vc[i]; where i / d != PF_P]
-            t |> success(elem_all(other_rows, 2.0 * POISON), "tts_pk_gemv_ln_qkv: the caches' other rows are untouched")
-            t |> equal(nan_count(yg), ng - d, "tts_pk_gemv_ln_gelu: the slots outside the row keep their sentinel")
-            t |> success(yas[PF_YOFF] != f.y0[0] && ya[PF_YOFF] != f.y0[0], "the adds' in place control: the residual row is moved off its input")
-            for (dev in fixed_array(wnd, xd, tabsd)) {
-                destroy_device_buf(dev)
-            }
-            for (o in outs) {
-                destroy_device_buf(o)
-            }
-            destroy_host_buf(host)
         } else {
             t |> skip("dasVulkan not present")
         }

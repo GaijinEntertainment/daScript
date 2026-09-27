@@ -2185,7 +2185,7 @@ def test_kq_load_layout(t : T?) {
         dequant_plane_prefix(tr, tr.wq_fmt[l], tr.wq_offs[l], n, have)
         var gt = 0
         var fdq <- read_prefix(path, "blk.{l}.attn_q.weight", n, gt)
-        let r4 = rel_rms(have, fdq)
+        let r4 = rel_l2(have, fdq)
         t |> success(r4 < 1.0e-3, "deep-layer k4 plane matches the file dequant (f16-pair rounding only)")
         delete fdq
         // k6 (verbatim planes): the tied classifier row block — must be bit-exact
@@ -2431,13 +2431,13 @@ def test_kq_fused_qkv_slices(t : T?) {
         for (i in range64(n)) {
             want[i] = fq[i]
         }
-        t |> success(rel_rms(have, want) < 1.0e-3, "q slice matches the file dequant (f16-pair rounding only)")
+        t |> success(rel_l2(have, want) < 1.0e-3, "q slice matches the file dequant (f16-pair rounding only)")
         // k slice (src_off = dim*qd): the fused-split placement this arm exists for
         dequant_plane_prefix(tr, tr.wk_fmt[0], tr.wk_offs[0], n, have)
         for (i in range64(n)) {
             want[i] = fq[dim * qd + i]
         }
-        t |> success(rel_rms(have, want) < 1.0e-3, "k slice at src_off dim*qd matches the file dequant")
+        t |> success(rel_l2(have, want) < 1.0e-3, "k slice at src_off dim*qd matches the file dequant")
         delete fq
         delete want
         delete have
@@ -2476,7 +2476,7 @@ def test_kq_ple_table(t : T?) {
         dequant_plane_prefix(tr, tr.ple_emb_fmt, tr.ple_emb_off, n, have)
         var gt = 0
         var fdq <- read_prefix(path, "per_layer_token_embd.weight", n, gt)
-        t |> success(rel_rms(have, fdq) < 1.0e-3, "PLE table plane rows match the file dequant")
+        t |> success(rel_l2(have, fdq) < 1.0e-3, "PLE table plane rows match the file dequant")
         delete fdq
         delete have
         delete tr
@@ -2500,18 +2500,6 @@ def private read_prefix(path, name : string; n : int64; var gt : int&; first : i
     }
     fclose(f)
     return <- dst
-}
-
-// Relative RMS of (a - b) against RMS(b), double accumulation.
-def private rel_rms(a, b : array<float>) : float {
-    var num = 0.0lf
-    var den = 0.0lf
-    for (x, y in a, b) {
-        let dxy = double(x) - double(y)
-        num += dxy * dxy
-        den += double(y) * double(y)
-    }
-    return float(sqrt(num / den))
 }
 
 
@@ -2959,5 +2947,63 @@ def test_kq_gpu_gather_grp(t : T?) {
         t |> run("moe_gpu_gather_stack_kq kq {fmt}: disk-order and grp planes gather identically") @(t : T?) {
             kq_gpu_gather_gate(t, fmt)
         }
+    }
+}
+
+let private Q8P_NIN = 96l   //! three Q8_0 blocks a row
+
+//! `nout` rows of 96 quantized by `quantize_q8_0_into` (amaxes whose /127 scales sit off the f16 lattice), repacked by
+//! `repack_q8q8_grp` at `mr` / `kgroup` / `wbias`, every row read back by `q8_plane_row_f32` against q x its block's f32 scale
+def private q8_plane_row_arm(t : T?; mr, kgroup, wbias, nout, tail : int64) {
+    let tag = "q8_plane_row_f32 mr {mr} kgroup {kgroup} wbias {wbias} nout {nout}"
+    t |> equal(nout % mr, tail, "{tag}: the rows past the last group of {mr}")
+    let n = nout * Q8P_NIN
+    let nb = Q8P_NIN / 32l
+    var src <- [for (i in range64(n)); float((i * 37l + 11l) % 101l) * 0.0123457 - 0.61]
+    var q : array<int8>
+    var s : array<float>
+    q |> resize(n)
+    s |> resize(nout * nb)
+    quantize_q8_0_into(src, n, q, s, 0l, 0l)
+    var qr := q
+    var sr := s
+    unsafe {
+        repack_q8q8_grp(addr(qr[0]), addr(sr[0]), Q8P_NIN, nout, mr, wbias, kgroup)
+    }
+    let lay : Q8RepackLayout = (repacked = true, mr = mr, kgroup = kgroup, wbias = wbias)
+    var row : array<float>
+    row |> resize(Q8P_NIN)
+    var off_f32 = 0
+    var off_f16 = 0
+    for (r in range64(nout)) {
+        unsafe {
+            q8_plane_row_f32(addr<int8 const?>(qr[0]), addr<float const?>(sr[0]), Q8P_NIN, nout, lay, r, addr(row[0]))
+        }
+        for (j in range64(Q8P_NIN)) {
+            let qv = float(q[r * Q8P_NIN + j])
+            let d = s[r * nb + j / 32l]
+            off_f32 += row[j] == qv * d ? 0 : 1
+            off_f16 += row[j] == qv * float(float16(d)) ? 0 : 1
+        }
+    }
+    t |> equal(off_f32, 0, "{tag}: every element is q x its block's f32 scale, bit for bit")
+    t |> success(off_f16 > 0, "{tag}: the f16-rounded scale's product misses {off_f16} of {n} elements (the control: the compare sees a rounded scale)")
+    delete src
+    delete q
+    delete s
+    delete qr
+    delete sr
+    delete row
+}
+
+[test]
+def test_q8_plane_row_f32(t : T?) {
+    t |> run("q8_plane_row_f32: grp4 kgroup 8 bias128, 12 group rows and 15 with a tail of 3, q x the f32 scale bit for bit") @(t : T?) {
+        q8_plane_row_arm(t, 4l, 8l, 128l, 12l, 0l)
+        q8_plane_row_arm(t, 4l, 8l, 128l, 15l, 3l)
+    }
+    t |> run("q8_plane_row_f32: grp16 kgroup 8 unbiased, 32 group rows and 37 with a tail of 5, q x the f32 scale bit for bit") @(t : T?) {
+        q8_plane_row_arm(t, 16l, 8l, 0l, 32l, 0l)
+        q8_plane_row_arm(t, 16l, 8l, 0l, 37l, 5l)
     }
 }

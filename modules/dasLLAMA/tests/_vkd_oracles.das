@@ -11,7 +11,10 @@ require dasllama/dasllama_lint public
 require math   // tanh, exp: the activation oracles' closed forms
 require daslib/shader_lingua_franca
 require daslib/math_bits   // uint_bits_to_float: the mx4 oracle builds the E8M0 scale from its bits as the decode does
+require vulkan   // VkCommandBuffer: the cell harness's record block
+require daslib/linq   // count: the bucket bounds, the harness's written planes
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_convert   // quantize_q8_0_into, quantize_q8_k_into: the requant oracle
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_vulkan_classes
@@ -84,6 +87,122 @@ def staged(mapped : void?; byte_off : int64; n : int; elem : auto(TT)) : array<T
         memcpy(addr<void?>(a[0]), reinterpret<void?>(intptr(mapped) + uint64(byte_off)), int64(n) * int64(typeinfo sizeof(type<TT>)))
     }
     return <- a
+}
+
+//! One kernel cell's device planes: each plane's buffer, bytes and hazard bit (0 for a plane the kernels only read), the
+//! element base and live run it was declared with, and - after `cell_record` - its host offset in the readback staging.
+struct CellPlanes {
+    dev : array<uint64>
+    bytes : array<int64>
+    hazard_bit : array<uint>
+    base : array<int>
+    run : array<int>
+    host_off : array<int64>
+    host : HostBuf
+}
+
+def private add_plane(var cp : CellPlanes; dev : uint64; bytes : int64; written : bool; base, run : int) : int {
+    let nw = count(cp.hazard_bit, $(b) => b != 0u)
+    cp.dev |> push(dev)
+    cp.bytes |> push(bytes)
+    cp.hazard_bit |> push(written ? 1u << uint(nw) : 0u)
+    cp.base |> push(base)
+    cp.run |> push(run)
+    cp.host_off |> push(-1l)
+    return length(cp.dev) - 1
+}
+
+//! a plane the kernels only read: `a` behind `base` poisoned slots and followed by `slack` more
+def in_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0) : int {
+    return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, false, base, length(a))
+}
+
+//! a plane the kernels only read, `a` uploaded as it is - ids, words, halves
+def in_plain(var cp : CellPlanes; a : array<auto(TT)>) : int {
+    return cp |> add_plane(dev_upload(a), long_length(a) * int64(typeinfo sizeof(type<TT>)), false, 0, length(a))
+}
+
+//! a plane the kernels write: `n` floats behind `base` slots and `slack` more, the whole plane under the NaN sentinel
+def out_(var cp : CellPlanes; n : int; base : int = 0; slack : int = 0) : int {
+    let bytes = int64(base + n + slack) * 4l
+    let dev = make_device_buf(bytes)
+    nan_sentinel_upload(dev, bytes)
+    return cp |> add_plane(dev, bytes, true, base, n)
+}
+
+//! a plane the kernels read and write in place: `a` as `in_` lays it, read back as `out_`
+def io_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0) : int {
+    return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, true, base, length(a))
+}
+
+//! one `CellPlanes` column - `dev`, `bytes` or `hazard_bit` - at the planes `idx` (a fixed array of plane ids in binding order): a descriptor set's argument
+def gather_planes(column : array<auto(TT)>; idx) {
+    var r : TT[typeinfo dim(idx)]
+    for (i in range(typeinfo dim(idx))) {
+        r[i] = column[idx[i]]
+    }
+    return r
+}
+
+//! a class's descriptor set over the planes `idx`: `set_fn` is its generated `set_*_cls`
+def cls_set(cp : CellPlanes; idx; set_fn) {
+    return invoke(set_fn, gather_planes(cp.dev, idx), gather_planes(cp.bytes, idx), gather_planes(cp.hazard_bit, idx))
+}
+
+//! one command buffer: `rec` records the dispatches, then every written plane copies back whole, behind its hazard bit, to the staging
+def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+    var devs : array<uint64>
+    var sizes : array<int64>
+    var ats : array<int64>
+    var bits = 0u
+    var total = 0l
+    for (p in range(length(cp.dev))) {
+        continue if (cp.hazard_bit[p] == 0u)
+        cp.host_off[p] = total
+        devs |> push(cp.dev[p])
+        sizes |> push(cp.bytes[p])
+        ats |> push(total)
+        bits |= cp.hazard_bit[p]
+        total += cp.bytes[p]
+    }
+    if (cp.host.bytes < total) {
+        if (cp.host.buf != 0ul) {
+            destroy_host_buf(cp.host)
+        }
+        cp.host = make_host_buf(total, true, [cached = true])
+    }
+    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+        invoke(rec, raw, h)
+        cmd_copy_planes(raw, h, devs, cp.host, ats, sizes, bits)
+    }
+}
+
+//! plane `p`'s live run as `cell_record` staged it
+def plane_run(cp : CellPlanes; p : int) : array<float> {
+    return <- staged(cp.host.mapped, cp.host_off[p] + int64(cp.base[p]) * 4l, cp.run[p], type<float>)
+}
+
+//! plane `p` whole as `cell_record` staged it: the slots before its base, its run and its slack
+def plane_whole(cp : CellPlanes; p : int) : array<float> {
+    return <- staged(cp.host.mapped, cp.host_off[p], int(cp.bytes[p] / 4l), type<float>)
+}
+
+//! the NaN sentinel over written plane `p` again, before a dispatch that must write it anew
+def plane_refill(cp : CellPlanes; p : int) {
+    nan_sentinel_upload(cp.dev[p], cp.bytes[p])
+}
+
+//! a kernel cell's planes for the length of `blk`, every buffer and the staging released after it
+def with_cell_planes(blk : block<(var cp : CellPlanes) : void>) {
+    var cp : CellPlanes
+    invoke(blk, cp)
+    for (dev in cp.dev) {
+        destroy_device_buf(dev)
+    }
+    if (cp.host.buf != 0ul) {
+        destroy_host_buf(cp.host)
+    }
+    delete cp
 }
 
 def to_u4(w : array<uint>) : array<uint4> {
@@ -281,23 +400,12 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
     return k
 }
 
-// kq GEMV oracle: blk_contrib driven sequentially over the region walk — the device's
-// subgroup fold reassociates, so approx bars
 def kq_gemv_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
                    regions : array<uint>; n, d, nreg : int) : array<float> {
     var k = kq_cls_ref(fmt, wq, ws, xq, xs)
-    var y : array<float>
-    y |> resize(nreg * d)
-    let nsb = uint(n / 256)
-    for (r in range(nreg)) {
-        for (row in range(d)) {
-            let w0 = regions[r * 2] + uint(row) * nsb
-            let x0 = regions[r * 2 + 1]
-            var acc = 0.0
-            for (bb in range(int(nsb) * 8)) {
-                acc += k->blk_contrib(w0 + uint(bb) / 8u, uint(bb) % 8u, x0 + uint(bb) / 8u)
-            }
-            y[r * d + row] = acc
+    var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
+        for (blk in range(8)) {
+            acc += k->blk_contrib(uint(sb), uint(blk), uint(xsb))
         }
     }
     unsafe {
@@ -306,9 +414,7 @@ def kq_gemv_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
-//! the Q8_K-activation GEMV walk the per-format float witnesses share: over `regions` ([wsb0, xsb0] x nreg), row by row,
-//! `sb_dot(acc, weight superblock, activation superblock)` adds each superblock's block terms into the row's accumulator in
-//! block order - the device's subgroup fold reassociates, so approx bars
+//! the Q8_K GEMV walk over `regions` ([wsb0, xsb0] x nreg), `sb_dot` adding a superblock's terms in block order; the device reassociates: approx bars
 def gemv_float_walk(regions : array<uint>; n, d, nreg : int; sb_dot : block<(var acc : float&; sb, xsb : int) : void>) : array<float> {
     var y : array<float>
     y |> resize(nreg * d)
@@ -770,15 +876,6 @@ def act_mul_ref(v, u : float; act : uint) : float {
     return act_mul_ref(v, u, act != 0u)
 }
 
-def pack4_ref(v0, v1, v2, v3, id : float) : uint {
-    let q0 = int(round(v0 * id))
-    let q1 = int(round(v1 * id))
-    let q2 = int(round(v2 * id))
-    let q3 = int(round(v3 * id))
-    return ((uint(q0) & 0xFFu) | ((uint(q1) & 0xFFu) << 8u)
-        | ((uint(q2) & 0xFFu) << 16u) | ((uint(q3) & 0xFFu) << 24u))
-}
-
 // Q8_0 / Q8_K quantize of act(gate)*up rows: sequential amax (max is order-free), linear pack
 def actrq_oracle(gh, uh : array<float>; nelem : int; q8k, gelu : bool;
                  var outq : array<uint>; var outs : array<float>) {
@@ -792,25 +889,23 @@ def actrq_oracle(gh, uh : array<float>; nelem : int; q8k : bool; act : uint;
     requant_oracle(a, 0, nelem, q8k, outq, outs)
 }
 
-// plain Q8_0 / Q8_K requant of f32 rows (no activation — exact modulo round ties)
+//! plain Q8_0 / Q8_K requant of f32 rows from `base` through the engine's quantizers, quants packed four a word as the device stores them
 def requant_oracle(src : array<float>; base, nelem : int; q8k : bool;
                    var outq : array<uint>; var outs : array<float>) {
-    let bsz = q8k ? 256 : 32
-    let nblk = nelem / bsz
+    let part <- [for (i in range(nelem)); src[base + i]]
+    var q8 : array<int8>
+    q8 |> resize(nelem)
+    outs |> resize(nelem / (q8k ? 256 : 32))
+    if (q8k) {
+        var sums : array<int>
+        sums |> resize(nelem / 16)
+        quantize_q8_k_into(part, int64(nelem), q8, outs, sums, 0l, 0l, 0l)
+    } else {
+        quantize_q8_0_into(part, int64(nelem), q8, outs, 0l, 0l)
+    }
     outq |> resize(nelem / 4)
-    outs |> resize(nblk)
-    for (b in range(nblk)) {
-        var m = 0.0
-        for (e in range(bsz)) {
-            m = max(m, abs(src[base + b * bsz + e]))
-        }
-        let d = m / 127.0
-        let id = d != 0.0 ? 1.0 / d : 0.0
-        outs[b] = d
-        for (wj in range(bsz / 4)) {
-            let e0 = base + b * bsz + wj * 4
-            outq[b * (bsz / 4) + wj] = pack4_ref(src[e0], src[e0 + 1], src[e0 + 2], src[e0 + 3], id)
-        }
+    unsafe {
+        memcpy(addr(outq[0]), addr(q8[0]), nelem)
     }
 }
 
@@ -878,25 +973,9 @@ def sched_shape(nk, ne, wt_gu, wt_dn : int) : SchedShape {
 }
 
 //! expert e's bucket: its first row (the slots of the experts before it) and its row count
-def bucket_start(idx : array<uint>; e : int) : int {
-    var run = 0
-    for (r in idx) {
-        if (int(r) < e) {
-            run++
-        }
-    }
-    return run
-}
+def bucket_start(idx : array<uint>; e : int) : int => count(idx, $(r) => int(r) < e)
 
-def bucket_rows(idx : array<uint>; e : int) : int {
-    var n = 0
-    for (r in idx) {
-        if (int(r) == e) {
-            n++
-        }
-    }
-    return n
-}
+def bucket_rows(idx : array<uint>; e : int) : int => count(idx, $(r) => int(r) == e)
 
 //! one piece's record `ri` and its map words on the three planes (the CPU twin of MoeSched.write_piece)
 def oracle_piece(var s1, s3, s2 : array<uint>; bases : uint[6]; e : int; ri : uint; row0, rows, rt, wt_gu, wt_dn, wg_gu, wg_dn, map_gu, map_dn : int) {

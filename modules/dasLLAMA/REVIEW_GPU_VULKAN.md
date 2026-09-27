@@ -22,10 +22,10 @@ the stamps of one `[vk_dispatch]` class template, picked by a shape argument - t
 `dasllama/dasllama_vulkan_classes.das` adds that family's stamp glob to the kernel-home row's
 stamp list in `ARCHITECTURE_GPU.md#gpu-backends`, in the same change.**
 
-**Never size a buffer bound as one SSBO (shader storage buffer) range above
-`vk_max_storage_range()` - compare it where its size is computed: at the site that computes that
-buffer's size, or once at the function that starts the encode chain binding it, against a size no
-buffer of that chain can exceed.** The bind site cannot shrink a buffer that was sized wrong.
+**Never size a buffer bound as one SSBO (shader storage buffer) range above the device limit
+`vk_max_storage_range()` - check the size with `vk_range_ok` at the site that computes it, or
+once at the function that starts the encode chain binding the buffer, against a size no buffer of
+that chain can exceed.** The bind site cannot shrink a buffer that was sized wrong.
 
 **Never take a quant byte out of an `unpack8` select in a cm2 decode body - the `decode` method
 of a format's `<Fmt>Cm2T` class in `dasllama/dasllama_vulkan_classes.das` - or its four-wide twin
@@ -53,6 +53,10 @@ routed off and why.** A silent decline is a fallback a user finds only by profil
 `continue` routes work off the path it armed, to the CPU path, to another path inside the tier, or
 to a slower form inside the same path (a host upload in place of a device-to-device copy) -
 that does not log the concrete reason it declined, once per reason per armed model, is a defect.**
+
+**A `*_decline_words` return that a diff adds or changes, for a reason a `VK_DECLINE_WORDS_*`
+constant in `dasllama/dasllama_vulkan_tower.das` already states, returns that constant or starts
+its text with it - never a second wording of that reason.**
 
 **A diff that adds or changes a function under `dasllama/` outside the tier's arm probe
 `vulkan_moe_gpu_arm` that calls `vk_moe_init()` makes it test `gpu_want_arms_tier()` first, and
@@ -228,15 +232,14 @@ profile to another form's role names.
 returned before it submits any command that writes the buffer that copy reads.** The host's wait
 is the only order between the copy's read and that write.
 
-**An integer division or modulo in `dasllama/dasllama_vulkan_classes.das` kernel code - a kernel
-body or any method it reaches through calls, `dasllama/dasllama_gpu_math.das`'s helpers included -
-whose divisor is not a literal or a template constant (a push-constant field, bare or computed
-from one) either clamps the divisor to at least one (`max(1u, ...)`) before it divides, or sits
-inside an `if` whose condition tests the divisor expression as the division reads it and is false
-when that expression is zero; a test on any other field, one the divisor is computed from
-included, is no guard, and a `?:` select is neither.** Some drivers evaluate both arms of a
-select, and an integer division by zero is undefined in SPIR-V, so the selected arm can carry the
-undefined result.
+**A diff that adds an integer division or modulo to `dasllama/dasllama_vulkan_classes.das` kernel
+code - a kernel body or any method it reaches through calls, `dasllama/dasllama_gpu_math.das`'s
+helpers included - or changes one's divisor, the values that feed it, or the clamp or `if` that
+guards it, where the divisor is not a literal or a template constant, clamps the divisor to at
+least one (`max(1u, ...)`) before the division, or places the division inside an `if` whose
+condition tests that same divisor expression and is false when it is zero.** An integer division
+by zero is undefined in SPIR-V, and some drivers evaluate both arms of a `?:` select, so neither
+a select nor a test on a field the divisor is computed from guards it.
 
 **A diff that adds or changes a path under `dasllama/` that re-records the one-row token
 command's split form - the chain recorded with the attention at `RD_SPLIT_PIECES` key pieces - or

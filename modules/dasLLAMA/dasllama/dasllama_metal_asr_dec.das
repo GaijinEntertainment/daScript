@@ -93,6 +93,9 @@ def set_metal_wdec(on : bool) {
     g_wd_env = on
 }
 
+//! The ASR-decoder knob as it stands, for a cell that puts it back where it found it.
+def metal_wdec_knob() : bool => g_wd_env
+
 //! Pin the DECODE-STEP half on/off (DASLLAMA_METAL_WDEC_STEP's twin): captured at each
 //! window's cross-KV, so a mid-window flip never mixes engines on GPU-only caches.
 def set_metal_wdec_step(on : bool) {

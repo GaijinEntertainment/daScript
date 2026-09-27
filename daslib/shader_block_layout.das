@@ -11,6 +11,7 @@ module shader_block_layout shared public
 
 require math
 require daslib/ast
+require daslib/math_boost
 
 // daslang matrices are handled (tHandle) types named float<W>x<C> — W = column-vector width,
 // C = column count (MatrixAnnotation<floatW, C>, column-major: m[i] is column i). Returns the
@@ -129,10 +130,6 @@ def public block_scalar_align(bt : Type; rules : BlockLayoutRules) : int {
     let cc = component_count(bt)
     let lanes = cc == 1 ? 1 : (cc == 2 ? 2 : 4)
     return lanes * (scalar_width(bt) / 8)
-}
-
-def public round_up(off, a : int) : int {
-    return ((off + a - 1) / a) * a
 }
 
 //! One std140-laid-out field of a @uniform / @push_constant interface block. Returned by compute_block_layout and consumed by host-side bind macros (e.g. dasVulkan's SpirvVulkanShader and dasOpenGL's GlslOpenGLShader) to emit one write per field at the right byte offset.

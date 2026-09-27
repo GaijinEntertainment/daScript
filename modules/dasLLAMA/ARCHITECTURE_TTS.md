@@ -64,7 +64,7 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
 - **`dasllama_tts_blocks.das`** - the TTS block home, the TTS twin of `dasllama_tower.das`, in
   the two layouts of `ARCHITECTURE_TTS.md#tts-two-layouts`: Conv1d (dense, depthwise, forward and transposed), the dense
   layer, LayerNorm over rows and over channels, InstanceNorm and AdaIN, AdaLayerNorm, the
-  bidirectional LSTM (gates i,f,g,o, both bias halves pre-summed), LeakyReLU / Snake / sigmoid /
+  bidirectional LSTM (gates i,f,g,o, both bias halves pre-summed), LeakyReLU / Snake /
   tanh / ELU, nearest and ONNX-half-pixel linear resampling, the duration-to-frame expansion,
   half-to-even rounding, PCG32 with a polar normal (a generator nobody seeded refuses), the
   harmonic-plus-noise sine source over a frame window with its carried phase (`SineSourceCarry`),
@@ -81,13 +81,13 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   (`linear_take_kq`), the kq lane beside f32 and q8; beside every weight array sits its `TtsSpan` into the
   model's blob, and `weights_walk` is the one walk that moves weights into a staging blob or
   binds them as borrowed views over a served plane (`dasllama_common.das`'s `release_plane` is the
-  one teardown). One
-  home: the block home holds the operators, and it names no family type.
+  one teardown). One home: the block home holds the operators, and it names no family type.
 - **`dasllama_tts_slab.das`** - the shared slab writer both GPU tower drivers build their TTS
-  slabs through: the writer struct and its allocator, the q8 and K-quant dequant into f32 rows
-  over the job pool, the conv, linear and norm row writers, the residual and generator block slot
-  writers, the two-pass build (a measuring pass, then the fill), and every slab key and shape
-  check. Element offsets only - a driver turns them into its own binding offsets - and no device call.
+  slabs through: the writer struct and allocator, the q8 and K-quant dequant into f32 rows over the
+  job pool, the conv, linear and norm row writers, the block slot writers (an LSTM transposed or not by
+  `lstm_transposed`), the two-pass build, every slab key, `tts_style_rows`, the Pocket frames admission
+  and voice record, and the decoder shape walks, generic over the driver's record and `tts_note_*`
+  hooks. Element offsets only - a driver turns them into its own binding offsets - and no device call.
 - **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share: the weight
   map of the converted GGUF (conv geometry rides as `styletts2.conv.<weight>` metadata, so the
   assembly hardcodes the wiring and reads the shapes; the STFT convention - replicate or reflect
@@ -123,7 +123,8 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   names, so a name of any other shape has no language rather than the one its first letter spells.
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
   picked by `general.architecture` - from a GGUF or from a prepared `.dlim`; for a phoneme
-  family the phoneme pack and `tts_postag.bin` read from the model's directory, the full pack
+  family `tts_finish_styletts2` - the one finish a test's minted model runs too - sets the kind
+  and reads the phoneme pack and `tts_postag.bin` from the model's directory, the full pack
   preferred over the American-only twin, `ARCHITECTURE_TTS.md#tts-g2p-pack-tiers`, the packs it leaves out named once in the
   log; a Pocket file stands alone and `tts_needs_packs` says so from the file's architecture
   before any load), `tts_has_phonemes` (whether `tts_phonemize` has an answer for the model),
@@ -146,17 +147,17 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   and decimals never split, a whitespace-free run longer than the cap hard-split at the cap on
   a codepoint boundary; a chunk the split left without a closing mark gets a comma under
   Kitten's driver rule and nothing under Kokoro's, whose pipeline sends the text as it is and
-  whose voices render an added mark as an audible breath -> per chunk: phonemize -> the
-  family's symbols
-  and style row -> PCM, timed, delivered to the caller's block as it lands) and `synthesize`
-  (the same, concatenated, timings summed). Every chunk draws its own source noise: the seed
-  is the facade's constant plus the chunk's index, so consecutive sentences of one request
-  never share a draw, and `synthesize` and `synthesize_stream` stay sample-identical because
-  both walk the same chunk list in the same order. Requires no `audio` module. `REVIEW.das`'s
-  `check_tutorial_floor` walks both facade files - `dasllama.das` and this one - and licenses
-  exactly three kinds of def: a `def private` one, a `def operator` overload, and `finalize`,
-  the language's own teardown hook the compiler calls at `delete` (the check's `FLOOR_HOOKS`
-  set); none of the three is a name a tutorial could call, so none carries a teaching duty.
+  whose voices render an added mark as an audible breath -> per chunk: phonemize -> the family's
+  symbols and style row -> PCM, timed, delivered to the caller's block as it lands) and `synthesize`
+  (the same, concatenated, timings summed). Every chunk draws its own source noise: the seed is the
+  facade's constant plus the chunk's index, so consecutive sentences of one request never share a
+  draw, and `synthesize` and `synthesize_stream` stay sample-identical because both walk the same
+  chunk list in the same order. Requires no `audio` module. `REVIEW.das`'s `check_tutorial_floor`
+  walks both facade files - `dasllama.das` and this one - and licenses a `def private` one, a
+  `def operator` overload, and the names in the check's `FACADE_DEFS_WITHOUT_TUTORIAL` set: `finalize`, the
+  language's own teardown hook the compiler calls at `delete`, and `tts_finish_styletts2`, the
+  loader's tail that the parity rail's in-memory minter shares and that a user reaches only through
+  `load_tts_model`. No tutorial calls any of them by name, so none carries a teaching duty.
 
 Every local container on the TTS path is `var inscope`: the persistent heap frees nothing at
 scope exit, so a bare local holding a per-sentence buffer leaks once a sentence until the OS kills a long run.
@@ -255,7 +256,7 @@ served from an image older than its layout panics by name rather than indexing a
 The harmonic source's phase reaches 1e5 radians in float32, where one ulp is a hundredth of a
 radian, and the reference's sine is accurate at that argument. Only the reference's own
 operation order - the cumulative sum, the resampler's arithmetic, the multiply by the harmonic
-index - reproduces its phase, so `sine_source` and `source_resize` keep it exactly and the
+index - reproduces its phase, so `sine_source` and `resize_linear_window` keep it exactly and the
 scalar sine stays on libm. The GPU route keeps the same order on the device: its source kernels
 compile without fast math, the torch law's double accumulator runs as a two-float sum, and the
 sine reduces its argument in exact pieces (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`).

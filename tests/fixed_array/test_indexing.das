@@ -80,6 +80,17 @@ def test_subarray(t : T?) {
         t |> equal(got[1], 20)
         delete got
     }
+    t |> run("subarray range64 view") @(t : T?) {
+        var s : int[4]
+        for (i in range(4)) {
+            s[i] = i * 10
+        }
+        var got <- [for (v in subarray(s, range64(1l, 3l))); v]
+        t |> equal(length(got), 2)
+        t |> equal(got[0], 10)
+        t |> equal(got[1], 20)
+        delete got
+    }
     t |> run("range-index sugar a[r]") @(t : T?) {
         var s : int[4]
         for (i in range(4)) {

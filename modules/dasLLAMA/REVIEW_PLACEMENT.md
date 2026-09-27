@@ -8,7 +8,7 @@ Planned work: `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_
 A charter line is the one line saying what a file under `dasllama/` holds: in
 `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_MEDIA.md`,
 `ARCHITECTURE_TTS.md` or `ARCHITECTURE_POCKET.md` (`ARCHITECTURE.md#file-charters` names which),
-or a role row of `ARCHITECTURE_GPU.md#gpu-backends`.
+or a role row or a file bullet of `ARCHITECTURE_GPU.md#gpu-backends`.
 
 **A per-file inventory restated in this checklist is a defect of the checklist.** The charter
 lines own the per-file list; a rule naming what KIND of code lands in which file is the
@@ -39,24 +39,28 @@ family ships more than one coopmat form (cm2, KHR) lands in
 `dasllama/dasllama_vulkan_classes.das`.**
 
 **A Vulkan host-side ensure/set/encode chain (an if/else over stamps) that picks a stamp from
-its push-constant and shape arguments alone lands in `dasllama/dasllama_vulkan_classes.das`.** A
-stamp is one class stamped from a kernel class template.
+its push-constant and shape arguments and the device's cooperative-matrix mode
+(`g_gpu.coopmat_mode`) alone lands in `dasllama/dasllama_vulkan_classes.das`.** A stamp is one
+class stamped from a kernel class template.
 
 **A Vulkan predicate over shape values alone lands in `dasllama/dasllama_vulkan_classes.das`,
 whichever file calls it.**
 
-**A Vulkan host-side ensure/set/encode chain whose pick reads the driver's state - `g_rd` or an
-`RLayer` field - lands in `dasllama/dasllama_vulkan_decode.das` when the decode step calls it,
-and in `dasllama/dasllama_vulkan_prefill.das` when the prefill pass calls it.**
+**A Vulkan host-side ensure/set/encode chain whose pick reads driver state - `g_rd` or an
+`RLayer` field - lands in the Vulkan driver file whose pass calls it -
+`dasllama/dasllama_vulkan_decode.das` for the decode step, `dasllama/dasllama_vulkan_prefill.das`
+for the prefill pass, the tower, ASR-decoder or TTS driver file for theirs - and in
+`dasllama/dasllama_vulkan_common.das` when both the decode step and the prefill pass call it.**
 
 **A host-side ensure/set/encode chain on any backend that only switches on a stamp it is handed
-lands in the file of the function that decides that stamp.**
+lands in the file of the function that decides that stamp, and a diff that moves that function
+moves the chain with it.**
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
-**A kernel-side decode helper one backend's kernels splice lands in that backend's kernel file
-(`dasllama/dasllama_metal_kernels.das`, `dasllama/dasllama_vulkan_classes.das`); one both
-backends' kernels splice - pure arithmetic, no codebook table - lands in
+**A kernel-side helper that one backend's kernels splice lands in that backend's kernel file
+(`dasllama/dasllama_metal_kernels.das`, `dasllama/dasllama_vulkan_classes.das`); one that both
+backends' kernels splice and that reads no codebook table lands in
 `dasllama/dasllama_gpu_math.das`, never as a copy per home.**
 
 **A disk-order -> compute-order transform lands by its consumer: a transform into the layout
@@ -92,8 +96,8 @@ for a media or speech model).**
 in the kernel's file, and that file's charter line names the condition that selects the
 branch.**
 
-**Logic or a named constant two files in one folder both use lands in a file both already
-require - a new file of its own when they require none in common - never as a second copy.** Two
+**Logic or a named constant two files in one folder both use lands once - in a file both already
+require, or in a new file both require when they share none - never as a second copy.** Two
 spellings drift apart on the first edit to one. A restatement the language or the test contract
 forces - an enum-and-int pair of one predicate, a test's CPU oracle of the arithmetic - is not a
 copy.

@@ -5,30 +5,30 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
-asserts belong to every cell that calls it.
+asserts belong to every cell that calls it. A lane setter is a call whose value a family's
+loader reads to pick its lane, or a facade call that makes that call. A driver setter is any
+other `set_*` / `pin_*` call in `../dasllama/` whose value a later load, route choice or kernel
+dispatch in the same process reads.
 
-**A cell, or the `[init]` of the file where the cell is defined, sets every driver setter - a
-`set_*` / `pin_*` call in `../dasllama/` that changes the driver's route or the engage mode for
-the rest of the process - whose value the cell's claim depends on, even when that value is its
-DEFAULT.**
+**A cell, or the `[init]` of the file where the cell is defined, sets every driver setter whose
+value the cell's claim depends on, even when that value is its DEFAULT.**
 
-**A cell whose claim depends on a family serving lane pins that lane itself, never through the
-file's `[init]`, through a lane setter - a call whose value the family's loader reads to pick its
-lane, or a facade call that makes that call (`set_<family>_q8`; `set_styletts2_q8` for kitten and
-kokoro; `set_tts_q8`, which pins every TTS family; `set_canary_enc_q8`; whisper's `set_asr_fp32` /
-`set_asr_tower_fp32`) - or through a loader parameter that takes the lane; a claim that needs the
-lane unset establishes it with the unset call paired with the setter it pins through -
-`reset_<name>_q8` for a `set_<name>_q8` (`reset_tts_q8` for the TTS facade), whisper's
-`set_asr_fp32(false)` and `set_asr_tower_fp32(false)`.** A cell that counts on the box declining
-the other lane, instead of pinning, measures whichever lane the box's policy picked.
+**A cell whose claim depends on a family serving lane pins that lane in the cell itself - through
+a lane setter (`set_<name>_q8`, or whisper's `set_asr_fp32` / `set_asr_tower_fp32`) or a loader
+parameter that takes the lane - never in the file's `[init]`.** A cell that counts on the box
+declining the other lane, instead of pinning, measures whichever lane the box's policy picked.
+
+**A cell whose claim needs a family serving lane unset first calls that lane's unset call -
+`reset_<name>_q8` for a lane `set_<name>_q8` pins, and whisper's `set_asr_fp32(false)` and
+`set_asr_tower_fp32(false)`.**
 
 **A cell that sets a lane setter or a driver setter - directly, through a helper it calls, or
-through a loader parameter that takes the lane - returns with every pin it set unset through its
-paired unset call, and every setter it set back where it found it; where the driver exposes no
-getter, back at the value the file's `[init]` sets, else at its default.** A pin left set makes
-the next cell measure this cell's lane, not its own; this rule binds a cell's end state, and the
-`defer()` spelling `../REVIEW.md` asks of a `set_*_q8` call binds engine and harness code, where
-an early return skips a reset written by hand.
+through a loader parameter that takes the lane - returns with each lane it pinned unset through
+the lane setter's paired unset call, and each driver setter it set back at the value that
+setter's getter returned before the cell set it.**
+
+**A diff that adds or edits a cell setting a driver setter that has no getter adds that getter
+in `../dasllama/`, in the same change.**
 
 **A cell asserting the unpinned default lane compares against the predicates the family's
 `*_serves_q8` accessor reads for its unpinned default (whatever its body calls), never against a

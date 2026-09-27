@@ -93,14 +93,7 @@ def mm_small_tile : int64 {
 // the small-d cutoff (DASLLAMA_MM_SMALLD). k/v (d = kv_dim) gets only 32 wgs for 36 SMs at
 // d 1024 / cnt 512 — but widening that grid MEASURES WORSE, so k/v is limited by the L-tile's
 // arithmetic efficiency, not parallelism: pp512 L128 4297 > M64 4101 > sdot4-32 3906.
-var g_mm_smalld = -1l
-
-def mm_small_d : int64 {
-    if (g_mm_smalld < 0l) {
-        g_mm_smalld = g_env_vulkan.mm_smalld
-    }
-    return g_mm_smalld
-}
+def mm_small_d : int64 => g_env_vulkan.mm_smalld
 
 // per-dispatch tile router (the l/m ladder, resolved by measurement): in mm mode a
 // small-cnt or small-d dispatch drops to the small tier — the L tile starves the grid and pads
@@ -118,22 +111,11 @@ def q8_batch_aligned(d, cnt : int64) : bool
     => d % 128l == 0l && cnt % 128l == 0l && q8_batch_tile_for(d, cnt) == 128l
 
 // cm2 prefill tile/split instruments (A/B levers; 0 = the occupancy heuristic)
-var g_cm2_tile = -1l
-var g_cm2_splitk = -1l
+var g_cm2_splitk = -1l   //! a test's pin of the split-k lever over the environment's; -1 reads the environment
 
-def cm2_tile_env : int64 {
-    if (g_cm2_tile < 0l) {
-        g_cm2_tile = g_env_vulkan.cm2_tile
-    }
-    return g_cm2_tile
-}
+def cm2_tile_env : int64 => g_env_vulkan.cm2_tile
 
-def cm2_splitk_env : int64 {
-    if (g_cm2_splitk < 0l) {
-        g_cm2_splitk = g_env_vulkan.cm2_splitk
-    }
-    return g_cm2_splitk
-}
+def cm2_splitk_env : int64 => g_cm2_splitk >= 0l ? g_cm2_splitk : g_env_vulkan.cm2_splitk
 
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
@@ -165,9 +147,8 @@ def cm2_tile_cols(d, cnt : int64) : int64 {
     if (cores == 0l) {
         return 256l
     }
-    let wtiles = (d + 127l) / 128l
-    let tiles_l = wtiles * ((cnt + 255l) / 256l)
-    let tiles_m = wtiles * ((cnt + 127l) / 128l)
+    let tiles_l = cm2_tiles_at(d, cnt, 256l)
+    let tiles_m = cm2_tiles_at(d, cnt, 128l)
     if (tiles_m * 4l <= cores) {
         return 32l
     }
@@ -182,7 +163,7 @@ def private cm2_reduce_units(nsplit, cnt, d : int64) : int64 => (9l + ((nsplit +
 
 //! the 256-aligned chunk `nsplit` pieces cut K into; 0 when the last piece would start past K
 def cm2_chunk(n, nsplit : int64) : int64 {
-    let ck = ((n + nsplit - 1l) / nsplit + 255l) & ~255l
+    let ck = round_up((n + nsplit - 1l) / nsplit, 256l)
     return ck * (nsplit - 1l) < n ? ck : 0l
 }
 
@@ -785,18 +766,11 @@ struct GpuState {
 
 var g_gpu : GpuState?
 var g_init_failed = false
-var g_vk_prof = false      // DASLLAMA_GPU_PROF=1: per-piece batch-chain timing to log
-var g_vk_prof_probed = false
 var g_vk_upload_us = 0l
 var g_vk_upload_bytes = 0l
 
-def vk_prof : bool {
-    if (!g_vk_prof_probed) {
-        g_vk_prof_probed = true
-        g_vk_prof = g_env_gpu.gpu_prof
-    }
-    return g_vk_prof
-}
+//! DASLLAMA_GPU_PROF=1: per-piece batch-chain timing to log
+def vk_prof : bool => g_env_gpu.gpu_prof
 
 def dev_raw : VkDevice {
     return boost_value_to_vk(g_gpu.device)
@@ -827,6 +801,14 @@ def private note_device_address(b : Buffer) {
         "dasLLAMA vulkan tier: buffer device address query failed")
 }
 
+//! CONCURRENT sharing across the transfer and compute families where the device has a transfer queue: no ownership transfers
+def private share_with_xfer(var bci : BufferCreateInfo) {
+    if (g_gpu.xfer_fam >= 0) {
+        bci.sharingMode = VkSharingMode.CONCURRENT
+        bci.pQueueFamilyIndices <- [g_gpu.fam, uint(g_gpu.xfer_fam)]
+    }
+}
+
 [cold_path]   // buffer creation — setup, not steady state
 def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_shared : bool = false; soft : bool = false) : HostBuf {
     var bci : BufferCreateInfo
@@ -836,10 +818,8 @@ def make_host_buf(bytes : int64; storage : bool; cached : bool = false; xfer_sha
     bci.usage.transfer_dst = true   // readback staging targets (y DMA copies land here)
     let bda_on = storage && g_gpu.has_bda   // a storage buffer's blocks reach the cm2 decode callbacks as PhysicalStorageBuffer pointers
     bci.usage.shader_device_address = bda_on
-    if (xfer_shared && g_gpu.xfer_fam >= 0) {
-        // stream mirrors: transfer-queue fills + compute-queue heat slices — CONCURRENT dodges ownership transfers
-        bci.sharingMode = VkSharingMode.CONCURRENT
-        bci.pQueueFamilyIndices <- [g_gpu.fam, uint(g_gpu.xfer_fam)]
+    if (xfer_shared) {
+        share_with_xfer(bci)   // stream mirrors: transfer-queue fills + compute-queue heat slices
     }
     var b <- create_buffer(g_gpu.device, bci)   // deliberately never finalized (process-lifetime)
     let req = get_buffer_memory_requirements(g_gpu.device, b)
@@ -915,10 +895,8 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     bci.usage.transfer_dst = true
     bci.usage.transfer_src = true   // y planes DMA back out (device -> host staging)
     bci.usage.shader_device_address = g_gpu.has_bda   // the cm2 decode callbacks reach a plane's blocks as PhysicalStorageBuffer pointers
-    if (xfer_shared && g_gpu.xfer_fam >= 0) {
-        // stream slots: transfer-queue fills + compute-queue reads — CONCURRENT dodges ownership transfers
-        bci.sharingMode = VkSharingMode.CONCURRENT
-        bci.pQueueFamilyIndices <- [g_gpu.fam, uint(g_gpu.xfer_fam)]
+    if (xfer_shared) {
+        share_with_xfer(bci)   // stream slots: transfer-queue fills + compute-queue reads
     }
     var b <- create_buffer(g_gpu.device, bci)
     let req = get_buffer_memory_requirements(g_gpu.device, b)
@@ -966,6 +944,14 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     }
     g_gpu.dev_mem |> insert(b._vk, m._vk)
     return b._vk
+}
+
+//! a device buffer destroyed where its handle is set, the handle zeroed after
+def release_device_buf(var h : uint64&) {
+    if (h != 0ul) {
+        destroy_device_buf(h)
+    }
+    h = 0ul
 }
 
 [arch(at = "../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
@@ -1407,15 +1393,13 @@ def vk_moe_init : bool {
     // every kernel is a [vk_dispatch] class (own set/pipeline layouts, pipelines built lazily
     // via ensure_*); only the shared-memory capability gates settle here (the add+rms family and
     // at_* stage 8192-float rows: 33 KB; Apple caps threadgroup memory at 32 KB and pipeline COMPILE fails)
-    var limits_props : VkPhysicalDeviceProperties
-    vkGetPhysicalDeviceProperties(g_gpu.phys, limits_props)
-    g_gpu.max_wg_bytes = limits_props.limits.maxComputeSharedMemorySize
-    g_gpu.dn_shared_ok = limits_props.limits.maxComputeSharedMemorySize >= 33024u
+    g_gpu.max_wg_bytes = pdp.limits.maxComputeSharedMemorySize
+    g_gpu.dn_shared_ok = pdp.limits.maxComputeSharedMemorySize >= 33024u
     if (!g_gpu.dn_shared_ok) {
         set_moe_gpu_dn_route(false)
         set_moe_gpu_dnd_route(false)
         set_moe_gpu_attn_route(false)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet + prefill-attention chains declined - device shared-memory cap {int(limits_props.limits.maxComputeSharedMemorySize)} B < the 33024 B row slab of the add+rms family and the attention prep; those layers stay on the CPU rail\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet + prefill-attention chains declined - device shared-memory cap {int(pdp.limits.maxComputeSharedMemorySize)} B < the 33024 B row slab of the add+rms family and the attention prep; those layers stay on the CPU rail\n")
     }
 
     var fence <- create_fence(g_gpu.device, FenceCreateInfo())   // never finalized (process-lifetime)
@@ -1433,9 +1417,7 @@ def vk_moe_init : bool {
     }
     if (dasllama_noisy()) {
         // storage-range is the limit that actually binds the arena; allocs/descriptors do not
-        var lp : VkPhysicalDeviceProperties
-        vkGetPhysicalDeviceProperties(g_gpu.phys, lp)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: limits allocs {lp.limits.maxMemoryAllocationCount} storage-range {lp.limits.maxStorageBufferRange} desc-storage {lp.limits.maxDescriptorSetStorageBuffers}\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: limits allocs {pdp.limits.maxMemoryAllocationCount} storage-range {pdp.limits.maxStorageBufferRange} desc-storage {pdp.limits.maxDescriptorSetStorageBuffers}\n")
     }
     return true
 }
@@ -1443,12 +1425,8 @@ def vk_moe_init : bool {
 // ===== upload (loader hook — moe_gpu_upload_resident gathers, we just stage) =====
 
 def staged_upload(dst : uint64; dst_off : int64; bytes : int64) {
-    var region = VkBufferCopy(srcOffset = 0ul, dstOffset = uint64(dst_off), size = uint64(bytes))
     run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
-        unsafe {
-            vkCmdCopyBuffer(boost_value_to_vk(cmd), reinterpret<VkBuffer>(g_gpu.staging.buf),
-                reinterpret<VkBuffer>(dst), 1u, addr(region))
-        }
+        cmd_copy_range(boost_value_to_vk(cmd), g_gpu.staging.buf, 0l, dst, dst_off, bytes)
     }
 }
 
@@ -1543,17 +1521,18 @@ def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64
 // ensure_gemv_scratch). Resident stacks pass their exact plane sizes; streaming pseudo-stacks
 // pass slot capacities and a base of -1 (re-based per layer).
 def make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false) : int {
-    // floor the ws buffer so a scale-less stack's descriptor slot stays valid
-    let wswords = (wscap + 3l) & ~3l   //! whole words: a byte-scale plane (mx4) is read four blocks a word
+    let wswords = round_up(wscap, 4l)   // whole words: a byte-scale plane (mx4) is read four blocks a word
     var st = VkStack(base = base, elems = elems, fmt = fmt, wqbytes = wqcap,
                      wqbuf = g_gpu.dry ? 0ul : make_device_buf(wqcap, xfer_shared),
-                     wsbuf = g_gpu.dry ? 0ul : make_device_buf(max(wswords, 64l), xfer_shared), wsbytes = wswords)
+                     wsbuf = g_gpu.dry ? 0ul : make_device_buf(ws_floored(wswords), xfer_shared), wsbytes = wswords)
     g_gpu.stacks |> push(st)
     return length(g_gpu.stacks) - 1
 }
 
-// the descriptor range for a stack's ws binding — the 64B floor of the shell above
-def ws_range(si : int) : int64 => max(g_gpu.stacks[si].wsbytes, 64l)
+//! a scale plane's buffer and its descriptor range floored at 64 bytes, so a scale-less stack's descriptor slot stays valid
+def ws_floored(bytes : int64) : int64 => max(bytes, 64l)
+
+def ws_range(si : int) : int64 => ws_floored(g_gpu.stacks[si].wsbytes)
 
 // decode/GEMV scratch for one stack (per-stack host bufs + the written 6-binding set). Lazy:
 // only stacks that actually serve GEMV or cls dispatches pay for it — dense-GEMM planes never do.
@@ -1561,12 +1540,17 @@ def ensure_gemv_scratch(si : int) {
     if (g_gpu.stacks[si].gemv_made) {
         return
     }
-    g_gpu.stacks[si].meta = make_host_buf(META_BYTES, true)
-    g_gpu.stacks[si].xq = make_host_buf(XQ_BYTES, true)
-    g_gpu.stacks[si].xs = make_host_buf(XS_BYTES, true)
-    g_gpu.stacks[si].y = make_host_buf(Y_BYTES, false, [cached = true])
-    g_gpu.stacks[si].y_dev = make_device_buf(Y_BYTES)
+    make_gemv_scratch(g_gpu.stacks[si])
     g_gpu.stacks[si].gemv_made = true
+}
+
+//! a GEMV scratch set - a stack's or an arena's: the region meta, the activation's quants and scales, the readback staging, the device y
+def private make_gemv_scratch(var o : auto(TT)) {
+    o.meta = make_host_buf(META_BYTES, true)
+    o.xq = make_host_buf(XQ_BYTES, true)
+    o.xs = make_host_buf(XS_BYTES, true)
+    o.y = make_host_buf(Y_BYTES, false, [cached = true])
+    o.y_dev = make_device_buf(Y_BYTES)
 }
 
 // import support is spec-gray per driver: one decline disables imports for the process (say WHY
@@ -1591,7 +1575,7 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
         return hb
     }
     // the round-up stays inside the mapping: windows start 4KB-aligned, the file is 16KB-padded
-    let sz = (bytes + algn - 1l) / algn * algn
+    let sz = round_up(bytes, algn)
     var ht : VkExternalMemoryHandleTypeFlags
     ht.host_allocation_ext = true
     var hpp = VkMemoryHostPointerPropertiesEXT()
@@ -1605,11 +1589,7 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
     var bci : BufferCreateInfo
     bci.size = uint64(sz)
     bci.usage.transfer_src = true
-    if (g_gpu.xfer_fam >= 0) {
-        // same CONCURRENT sharing the pinned mirrors use (transfer-queue fills + compute heat slices)
-        bci.sharingMode = VkSharingMode.CONCURRENT
-        bci.pQueueFamilyIndices <- [g_gpu.fam, uint(g_gpu.xfer_fam)]
-    }
+    share_with_xfer(bci)   // the pinned mirrors' sharing: transfer-queue fills + compute heat slices
     bci.next = unsafe(addr<void?>(emb))
     var cres = VkResult.SUCCESS
     var b <- create_buffer(g_gpu.device, bci, unsafe(addr(cres)))   // deliberately never finalized (make_host_buf's rule)
@@ -1681,18 +1661,11 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
             var iq = make_imported_buf(win.wq, pb.wq)
             if (iq.buf != 0ul) {
                 // ws: import the real window, or a tiny pinned dummy for the descriptor floor
-                let is_ = pb.ws > 0l ? make_imported_buf(win.ws, pb.ws) : make_host_buf(64l, false, [xfer_shared = true])
+                let is_ = pb.ws > 0l ? make_imported_buf(win.ws, pb.ws) : make_host_buf(ws_floored(0l), false, [xfer_shared = true])
                 if (is_.buf != 0ul) {
                     var ss = StreamStack(base = woff, elems = rows * n, fmt = fmt,
                                          wqbytes = pb.wq, wsbytes = pb.ws, hwq = iq, hws = is_)
-                    if (length(g_gpu.stream_stacks) % 3 == 2) {
-                        g_gpu.stream_max_dn_wq = max(g_gpu.stream_max_dn_wq, pb.wq)
-                        g_gpu.stream_max_dn_ws = max(g_gpu.stream_max_dn_ws, pb.ws)
-                    } else {
-                        g_gpu.stream_max_gu_wq = max(g_gpu.stream_max_gu_wq, pb.wq)
-                        g_gpu.stream_max_gu_ws = max(g_gpu.stream_max_gu_ws, pb.ws)
-                    }
-                    g_gpu.stream_stacks |> emplace(ss)
+                    stream_stack_push(ss)
                     if (!g_vk_import_said) {
                         g_vk_import_said = true
                         to_log(LOG_INFO, "dasLLAMA vulkan tier: stream mirrors IMPORT the mapped image (external_memory_host) - zero pinned copies\n")
@@ -1709,7 +1682,7 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
         if (ss.hwq.buf == 0ul) {
             return false   // pinned-mirror stop: the walk rolls the partial triple back and breaks
         }
-        ss.hws = make_host_buf(max(pb.ws, 64l), false, [xfer_shared = true, soft = true])
+        ss.hws = make_host_buf(ws_floored(pb.ws), false, [xfer_shared = true, soft = true])
         if (ss.hws.buf == 0ul) {
             destroy_host_buf(ss.hwq)
             return false
@@ -1721,15 +1694,20 @@ def vk_moe_stream_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n, r
             }
         }
     }
-    if (length(g_gpu.stream_stacks) % 3 == 2) {   // walk order gate/up/down: this one is a down
-        g_gpu.stream_max_dn_wq = max(g_gpu.stream_max_dn_wq, pb.wq)
-        g_gpu.stream_max_dn_ws = max(g_gpu.stream_max_dn_ws, pb.ws)
+    stream_stack_push(ss)
+    return true
+}
+
+//! a streamed stack registered in walk order (gate, up, down), the down's or the gate/up pair's plane maxima grown by its planes
+def private stream_stack_push(var ss : StreamStack) {
+    if (length(g_gpu.stream_stacks) % 3 == 2) {
+        g_gpu.stream_max_dn_wq = max(g_gpu.stream_max_dn_wq, ss.wqbytes)
+        g_gpu.stream_max_dn_ws = max(g_gpu.stream_max_dn_ws, ss.wsbytes)
     } else {
-        g_gpu.stream_max_gu_wq = max(g_gpu.stream_max_gu_wq, pb.wq)
-        g_gpu.stream_max_gu_ws = max(g_gpu.stream_max_gu_ws, pb.ws)
+        g_gpu.stream_max_gu_wq = max(g_gpu.stream_max_gu_wq, ss.wqbytes)
+        g_gpu.stream_max_gu_ws = max(g_gpu.stream_max_gu_ws, ss.wsbytes)
     }
     g_gpu.stream_stacks |> emplace(ss)
-    return true
 }
 
 // The resident-accept arithmetic, shared by the upload path and the slice replay's would-accept
@@ -1871,6 +1849,24 @@ def register_vk_drop_hook(fn : function<() : void>) {
     g_vk_drop_hooks |> push(fn)
 }
 
+//! a model-owned command list freed from `pool` in one call, the list emptied
+def private free_owned_cmds(pool : CommandPool; var owned : array<VkCommandBuffer>) {
+    return if (empty(owned))
+    vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(pool), uint(length(owned)), unsafe(addr(owned[0])))
+    owned |> clear()
+}
+
+//! every buffer a memory table tracks destroyed with its memory, the table emptied
+def private destroy_owned_bufs(var mem : table<uint64; uint64>) {
+    for (buf, m in keys(mem), values(mem)) {
+        unsafe {
+            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(buf), null)
+            vkFreeMemory(dev_raw(), reinterpret<VkDeviceMemory>(m), null)
+        }
+    }
+    mem |> clear()
+}
+
 //! MoeGpuDropModelFn: destroy every model-owned device object — stacks, arenas, the resident
 //! driver, all lazy dispatch state, their descriptor sets and command buffers. Device-lifetime
 //! state (instance/device/pipelines/staging/fence/profiler) survives and rebuilds lazily.
@@ -1904,15 +1900,8 @@ def vk_drop_model_state {
         }
         g_rd = null
     }
-    // every alloc_cmd result is model-owned — one bulk free
-    if (!empty(g_gpu.model_cmds)) {
-        vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.pool), uint(length(g_gpu.model_cmds)), unsafe(addr(g_gpu.model_cmds[0])))
-        g_gpu.model_cmds |> clear()
-    }
-    if (!empty(g_gpu.model_xcmds)) {
-        vkFreeCommandBuffers(dev_raw(), boost_value_to_vk(g_gpu.xfer_pool), uint(length(g_gpu.model_xcmds)), unsafe(addr(g_gpu.model_xcmds[0])))
-        g_gpu.model_xcmds |> clear()
-    }
+    free_owned_cmds(g_gpu.pool, g_gpu.model_cmds)
+    free_owned_cmds(g_gpu.xfer_pool, g_gpu.model_xcmds)
     // every descriptor set came from the chain and every one is model-owned — reset every chunk
     // (chunks are kept, not destroyed: the next model refills from chunk 0)
     let rdpf : VkDescriptorPoolResetFlags
@@ -1923,26 +1912,14 @@ def vk_drop_model_state {
     g_set_bits |> clear()   // pool reset recycles set handles — stale region bits must not survive
     vkd_set_cache_clear()
     // device buffers: dev_mem tracks every make_device_buf result — all model-owned
-    for (buf, mem in keys(g_gpu.dev_mem), values(g_gpu.dev_mem)) {
-        unsafe {
-            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(buf), null)
-            vkFreeMemory(dev_raw(), reinterpret<VkDeviceMemory>(mem), null)
-        }
-    }
-    g_gpu.dev_mem |> clear()
+    destroy_owned_bufs(g_gpu.dev_mem)
     g_gpu.dev_mapped |> clear()
     g_gpu.kq_grid_dev = 0ul
     g_vk_upload_us = 0l   // per-model upload diagnostics — a reloaded model reports its own numbers
     g_vk_upload_bytes = 0l
     rdq_reset()
     // host-visible buffers: host_mem tracks every make_host_buf result minus the exempt pair
-    for (buf, mem in keys(g_gpu.host_mem), values(g_gpu.host_mem)) {
-        unsafe {
-            vkDestroyBuffer(dev_raw(), reinterpret<VkBuffer>(buf), null)
-            vkFreeMemory(dev_raw(), reinterpret<VkDeviceMemory>(mem), null)
-        }
-    }
-    g_gpu.host_mem |> clear()
+    destroy_owned_bufs(g_gpu.host_mem)
     g_gpu.host_bytes = g_gpu.staging.bytes + g_pfq_buf.bytes   // the process-lifetime pair survives the sweep
     // das-side shells + the lazy-family latches (the ensure_* paths rebuild on next use).
     // clear(), not delete, where values carry VK handles — nothing das-heap-owned lives inside
@@ -1997,22 +1974,16 @@ def vk_drop_model_state {
 // stack resolution is by (format, offset) — weight element offsets live in PER-FORMAT plane
 // spaces (q8 qblob vs the k4/k5/k6 planes), so a bare offset is ambiguous across formats (a k4
 // gate and a k5 down can share the numeric range); within one format's space ranges are disjoint
-def find_stack_idx(w0 : int64; fmt : int) : int {
-    for (i in range(length(g_gpu.stacks))) {
-        if (g_gpu.stacks[i].fmt == fmt && w0 >= g_gpu.stacks[i].base && w0 < g_gpu.stacks[i].base + g_gpu.stacks[i].elems) {
-            return i
-        }
-    }
-    return -1
-}
+def find_stack_idx(w0 : int64; fmt : int) : int => find_stack_in(g_gpu.stacks, 1, w0, fmt)
 
 // the streamed twin: which 3-stack layer group (gate/up/down) holds this gate offset, or -1
-def find_stream_group(w0 : int64; fmt : int) : int {
-    for (i in range(length(g_gpu.stream_stacks) / 3)) {
-        if (g_gpu.stream_stacks[i * 3].fmt == fmt && w0 >= g_gpu.stream_stacks[i * 3].base
-                && w0 < g_gpu.stream_stacks[i * 3].base + g_gpu.stream_stacks[i * 3].elems) {
-            return i
-        }
+def find_stream_group(w0 : int64; fmt : int) : int => find_stack_in(g_gpu.stream_stacks, 3, w0, fmt)
+
+//! the index / `stride` of the stack, every `stride`-th of `stacks`, whose format is `fmt` and whose range holds offset `w0`; -1 when none
+def private find_stack_in(stacks : array<auto(TT)>; stride : int; w0 : int64; fmt : int) : int {
+    for (i in range(length(stacks) / stride)) {
+        let s & = unsafe(stacks[i * stride])
+        return i if (s.fmt == fmt && w0 >= s.base && w0 < s.base + s.elems)
     }
     return -1
 }
@@ -2119,6 +2090,9 @@ def vk_arena_test_slab_cap(blocks : int64) {
 //! the resident KV mirror).
 def vk_max_storage_range : int64 => g_gpu != null ? g_gpu.msr : 0l
 
+//! false where a buffer bound whole as one SSBO range would run past the device's storage range (a binding past it wraps at 32 bits and reads zeros)
+def vk_range_ok(bytes : int64) : bool => bytes <= vk_max_storage_range()
+
 // per-slab block capacity: maxStorageBufferRange is the real ceiling (uint32 indexing reaches
 // 16GiB); NV/AMD report 4GiB, MoltenVK tighter — both plane strides must fit their binding
 def private arena_slab_blocks(fmt : int) : int64 {
@@ -2143,7 +2117,7 @@ def private arena_open_slab(var a : ArenaFmt) : bool {
         to_log(LOG_INFO, "dasLLAMA vulkan arena: fmt {a.fmt} slab {length(a.slabs)} opens ({cap} blocks; {tail} tail blocks unused in slab {length(a.slabs) - 1})\n")
     }
     let qb = cap * bb.wq
-    let sb = max((cap * bb.ws + 3l) & ~3l, 64l)   // ws floor keeps the descriptor slots valid (stack-shell rule); whole words, since a byte-scale plane (mx4) is read four blocks a word
+    let sb = ws_floored(round_up(cap * bb.ws, 4l))   // whole words, since a byte-scale plane (mx4) is read four blocks a word
     let wqbuf = g_gpu.dry ? 0ul : try_device_buf(qb)
     let wsbuf = g_gpu.dry ? 0ul : try_device_buf(sb)
     if (!g_gpu.dry && (wqbuf == 0ul || wsbuf == 0ul)) {   //! the device had no room for the slab: the placement declines instead of dying mid-upload
@@ -2263,11 +2237,7 @@ def arena_ensure_scratch(fmt : int) {
         if (a.ready) {
             return
         }
-        a.meta = make_host_buf(META_BYTES, true)
-        a.xq = make_host_buf(XQ_BYTES, true)
-        a.xs = make_host_buf(XS_BYTES, true)
-        a.y = make_host_buf(Y_BYTES, false, [cached = true])
-        a.y_dev = make_device_buf(Y_BYTES)
+        make_gemv_scratch(a)
         a.ready = true
     }
 }
@@ -2745,14 +2715,6 @@ def fill_gemv_regions_qkv(hb : HostBuf; blk_q, blk_k, blk_v : int64; qpieces, pi
     }
 }
 
-// the f32->f16 convert's meta (arena cm2 chain): word 0 = element count
-def fill_cvt_meta(hb : HostBuf; elems : int64) {
-    unsafe {
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(elems)
-    }
-}
-
 // ===== GPU per-dispatch profiler (DASLLAMA_GPU_PROF=1) =====
 // BOTTOM_OF_PIPE stamps; results ride a same-submit copy, no extra fence. Overlapped hazard
 // levels put the whole level's cost on the LAST member's delta (earlier members read near-zero)
@@ -2786,8 +2748,7 @@ var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP)
 //! stay), since the forms' stamp roles differ
 [cold_path]
 def rdq_form_switch(form : RdForm; pos : int64) {
-    let name = form == RdForm.unsplit ? "unsplit" : (form == RdForm.wide ? "wide" : "split")
-    to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {name} form from position {pos} - the averages restart\n")
+    to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {form} form from position {pos} - the averages restart\n")
     rdq_reset_averages()
 }
 
@@ -3008,14 +2969,6 @@ def hz_set_bits(set_ : VkDescriptorSet; b0, b1, b2, b3, b4, b5 : uint) {
     g_set_bits[intptr(set_)] = sb
 }
 
-def hz_pipe_register(pipe : Pipeline; kernel : string) {
-    if (!key_exists(g_kernel_access, kernel)) {
-        panic("dasLLAMA vulkan tier: no derived access for kernel {kernel}")
-    }
-    g_pipe_access[intptr(boost_value_to_vk(pipe))] = g_kernel_access[kernel]
-    g_pipe_names[intptr(boost_value_to_vk(pipe))] = kernel
-}
-
 // ===== the class-kernel dispatch rail ([vk_dispatch]-generated code calls these) =====
 // A [spirv_kernel] class gets its OWN set/pipeline layout (push range from @push_constant); the
 // hazard rail is unchanged — class pipelines register binding masks, sets carry region bits.
@@ -3180,13 +3133,7 @@ def vkd_pipe_made(c : VkdClass; ord : int) : bool {
 
 // DASLLAMA_VK_SPV_OVERRIDE=<dir>: serve <dir>/<kernel>.spv instead of the emitted words at
 // pipeline creation — the offline-spirv-opt / hand-patched-blob A/B instrument
-var g_spv_override = "\t"   // unread marker (an env value is never a tab)
-def spv_override_dir : string {
-    if (g_spv_override == "\t") {
-        g_spv_override = g_env_vulkan.vk_spv_override
-    }
-    return g_spv_override
-}
+def spv_override_dir : string => g_env_vulkan.vk_spv_override
 
 def private spv_override_load(kernel : string; var spv : array<uint>) {
     let dir = spv_override_dir()
@@ -3197,15 +3144,11 @@ def private spv_override_load(kernel : string; var spv : array<uint>) {
         if (f == null) {
             return
         }
-        fmap(f) $(var data : array<uint8>#) {
-            let nb = length(data) / 4
-            if (nb > 0) {
-                spv |> resize(nb)
-                unsafe {
-                    memcpy(addr<void?>(spv[0]), addr<void?>(data[0]), int64(nb) * 4l)
-                }
-                to_log(LOG_INFO, "dasLLAMA vulkan tier: SPV OVERRIDE {kernel} ({nb} words)\n")
-            }
+        let nb = int64(fstat(f).size) / 4l
+        if (nb > 0l) {
+            spv |> resize(nb)
+            f |> fread(spv)
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: SPV OVERRIDE {kernel} ({nb} words)\n")
         }
     }
 }
@@ -3344,71 +3287,30 @@ def public vk_kernel_coverage_of(kernel : string) : int64 {
     if (!key_exists(g_kernel_access, kernel)) {
         panic("dasLLAMA vulkan tier: no seeded kernel named '{kernel}' in the coverage census")
     }
-    var n = 0l
-    for (k, c in keys(g_vk_kcov), values(g_vk_kcov)) {
-        if ((g_pipe_names?[k] ?? "") == kernel) {
-            n += c
-        }
-    }
-    return n
+    var inscope cov <- vk_kernel_coverage()
+    return cov?[kernel] ?? 0l
 }
 
 def public vk_kernel_coverage_reset {
     g_vk_kcov |> clear()
 }
 
-//! Log the census: dispatched kernels with counts, then a LOUD WARNING per spec'd-but-never-
-//! dispatched kernel. A zero row is a coverage gap or a dead kernel — a human call, never automatic.
+//! Log the census (`kernel_coverage_report`): every seeded kernel, a never-dispatched one warned.
 def public vk_kernel_coverage_report {
-    var cov <- vk_kernel_coverage()
-    var names <- [for (name in keys(cov)); name]
-    names |> sort()
-    var served = 0
-    for (name in names) {
-        if (cov[name] > 0l) {
-            served++
-            to_log(LOG_INFO, "vulkan kernel coverage: {name} = {cov[name]}\n")
-        }
-    }
-    var dead = 0
-    for (name in names) {
-        if (cov[name] == 0l) {
-            dead++
-            to_log(LOG_WARNING, "vulkan kernel coverage: {name} NEVER DISPATCHED this run - coverage gap or dead kernel (human call)\n")
-        }
-    }
-    to_log(LOG_INFO, "vulkan kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} seeded kernels\n")
-    delete names
-    delete cov
+    var inscope cov <- vk_kernel_coverage()
+    kernel_coverage_report("vulkan", "seeded kernels", cov)
 }
 
-var g_vhz_paranoid = -1   // DASLLAMA_VK_HAZARD_PARANOID: barrier before every node
-var g_vhz_trace = -1      // DASLLAMA_VK_HAZARD_TRACE: log every declared node (schedule oracle)
+//! DASLLAMA_VK_HAZARD_PARANOID: barrier before every node
+def vhz_paranoid : bool => g_env_vulkan.vk_hazard_paranoid
 
-def vhz_paranoid : bool {
-    if (g_vhz_paranoid < 0) {
-        g_vhz_paranoid = g_env_vulkan.vk_hazard_paranoid ? 1 : 0
-    }
-    return g_vhz_paranoid != 0
-}
+//! DASLLAMA_VK_HAZARD_TRACE: log every declared node (schedule oracle)
+def vhz_trace : bool => g_env_vulkan.vk_hazard_trace
 
-def vhz_trace : bool {
-    if (g_vhz_trace < 0) {
-        g_vhz_trace = g_env_vulkan.vk_hazard_trace ? 1 : 0
-    }
-    return g_vhz_trace != 0
-}
+//! DASLLAMA_VK_FA=0 pins the generic da_attn_b AND disables the cm2 prefill fa tile (flash-attn bisect hatch)
+def vk_fa_on : bool => g_env_vulkan.vk_fa
 
-var g_vk_fa = -1   // DASLLAMA_VK_FA=0 pins the generic da_attn_b AND disables the cm2 prefill fa tile (flash-attn bisect hatch)
-
-def vk_fa_on : bool {
-    if (g_vk_fa < 0) {
-        g_vk_fa = g_env_vulkan.vk_fa ? 1 : 0
-    }
-    return g_vk_fa != 0
-}
-
-var g_vk_fuse = -1   // DASLLAMA_VK_FUSE=0 pins the split decode-tail dispatches (same-build A/B)
+var g_vk_fuse = -1   //! a cell's pin of DASLLAMA_VK_FUSE (0 pins the split decode-tail dispatches, 1 the fused); -1 reads the environment
 
 var g_vk_fuse_bisect_pin = -1l   //! a cell's pin over the knob (-1 = the environment's value): the bisect cell loads the model once a bit
 
@@ -3429,12 +3331,7 @@ let FUSE_BX_POST_ATT_RQ = 16l  //! the post-attention one (and the wo epilogue, 
 let FUSE_BX_POST_FFN_RQ = 32l  //! the post-FFN one (and the down epilogue)
 let FUSE_BX_QKN_ROPE = 64l     //! the fused qk-norm + rope + store
 
-def vk_fuse_on : bool {
-    if (g_vk_fuse < 0) {
-        g_vk_fuse = g_env_vulkan.vk_fuse ? 1 : 0
-    }
-    return g_vk_fuse != 0
-}
+def vk_fuse_on : bool => g_vk_fuse >= 0 ? g_vk_fuse != 0 : g_env_vulkan.vk_fuse
 
 [cold_path]   // DASLLAMA_VK_HAZARD_TRACE reporting leg
 def private vhz_trace_log(disp : int; rmask, wmask : uint; transfer : bool) {
@@ -3503,13 +3400,20 @@ def free_transient_cmd(var raw : VkCommandBuffer) {
 //! cold KV readbacks); `run_cmd_sync` cannot serve these - it never waits the pending transfer copy `submit_core` attaches
 def cmd_one_shot(rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
     var raw = alloc_transient_cmd()
+    var h : VkHaz
+    record_submit_wait(raw) $(r : VkCommandBuffer) {
+        invoke(rec, r, h)
+    }
+    free_transient_cmd(raw)
+}
+
+//! `rec` recorded into `raw`, submitted on the compute queue and waited: the one-shot commands' shared body
+def private record_submit_wait(var raw : VkCommandBuffer; rec : block<(raw : VkCommandBuffer) : void>) {
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    invoke(rec, raw, h)
+    invoke(rec, raw)
     vk_check(vkEndCommandBuffer(raw), null)
     submit_wait(raw)
-    free_transient_cmd(raw)
 }
 
 //! the DASLLAMA_GPU_PROF=1 ledger of an encode chain: the role of every GPU timestamp the chain wrote (stamp 0 is the baseline)
@@ -3626,26 +3530,21 @@ def batch_cmd_one_shot(rec : block<(raw : VkCommandBuffer) : void>) {
     var raw = g_gpu.batch_cmd
     let rf : VkCommandBufferResetFlags
     vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    invoke(rec, raw)
-    vk_check(vkEndCommandBuffer(raw), null)
-    submit_wait(raw)
+    record_submit_wait(raw, rec)
+}
+
+//! a persistent command on `pool`, model-owned through `owned` (the list the model drop frees)
+def private alloc_owned_cmd(pool : CommandPool; var owned : array<VkCommandBuffer>) : VkCommandBuffer {
+    var raw = alloc_cmd_in(pool)
+    owned |> push(raw)
+    return raw
 }
 
 //! a persistent command on the compute pool, model-owned: freed by the model drop
-def alloc_cmd : VkCommandBuffer {
-    var raw = alloc_cmd_in(g_gpu.pool)
-    g_gpu.model_cmds |> push(raw)
-    return raw
-}
+def alloc_cmd : VkCommandBuffer => alloc_owned_cmd(g_gpu.pool, g_gpu.model_cmds)
 
-//! a persistent command on the transfer queue's pool
-def alloc_xfer_cmd : VkCommandBuffer {
-    var raw = alloc_cmd_in(g_gpu.xfer_pool)
-    g_gpu.model_xcmds |> push(raw)   // model-owned: freed by the model drop, as alloc_cmd's are
-    return raw
-}
+//! a persistent command on the transfer queue's pool, model-owned as `alloc_cmd`'s are
+def alloc_xfer_cmd : VkCommandBuffer => alloc_owned_cmd(g_gpu.xfer_pool, g_gpu.model_xcmds)
 
 //! `bytes` of a device buffer from `off` zeroed by a fill command, no host array
 def upload_zeros(dev : uint64; off, bytes : int64) {
@@ -3654,39 +3553,48 @@ def upload_zeros(dev : uint64; off, bytes : int64) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-def private submit_core(var raw : VkCommandBuffer; fence : VkFence; signal : bool = false) {
+//! one submit under `fence`: waits `wsem` at `wval` (`wstage`), signals `ssem` at `sval`, each only past 0 - timelines start at 1
+def private timeline_submit(queue : VkQueue; var raw : VkCommandBuffer; fence : VkFence; var wsem : VkSemaphore; wval : uint64;
+                            wstage : VkPipelineStageFlags; var ssem : VkSemaphore; sval : uint64) {
     var submit = VkSubmitInfo()
     submit.commandBufferCount = 1u
-    // a pending transfer-queue handoff attaches here — later in-order submits inherit the ordering
     var tss = VkTimelineSemaphoreSubmitInfo()
-    var wval = g_gpu.pend_wait
-    var sem = g_gpu.xfer_sem
+    var wv = wval
+    var sv = sval
+    var st = wstage
+    unsafe {
+        submit.pCommandBuffers = addr(raw)
+        if (wv > 0ul) {
+            tss.waitSemaphoreValueCount = 1u
+            tss.pWaitSemaphoreValues = addr(wv)
+            submit.pNext = addr<void?>(tss)
+            submit.waitSemaphoreCount = 1u
+            submit.pWaitSemaphores = addr(wsem)
+            submit.pWaitDstStageMask = addr<uint?>(st)
+        }
+        if (sv > 0ul) {
+            tss.signalSemaphoreValueCount = 1u
+            tss.pSignalSemaphoreValues = addr(sv)
+            submit.pNext = addr<void?>(tss)
+            submit.signalSemaphoreCount = 1u
+            submit.pSignalSemaphores = addr(ssem)
+        }
+        vk_check(vkQueueSubmit(queue, 1u, addr(submit), fence), null)
+    }
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def private submit_core(var raw : VkCommandBuffer; fence : VkFence; signal : bool = false) {
+    // a pending transfer-queue handoff attaches here — later in-order submits inherit the ordering
+    let wval = g_gpu.pend_wait
+    g_gpu.pend_wait = 0ul
     var wstage : VkPipelineStageFlags
     wstage.transfer = true
     wstage.compute_shader = true
-    var csem = g_gpu.cmp_sem
-    var sval = g_gpu.cmp_value + 1ul
-    unsafe {
-        submit.pCommandBuffers = addr(raw)
-        if (wval > 0ul) {
-            tss.waitSemaphoreValueCount = 1u
-            tss.pWaitSemaphoreValues = addr(wval)
-            submit.pNext = addr<void?>(tss)
-            submit.waitSemaphoreCount = 1u
-            submit.pWaitSemaphores = addr(sem)
-            submit.pWaitDstStageMask = addr<uint?>(wstage)
-            g_gpu.pend_wait = 0ul
-        }
-        if (signal) {   //! the compute timeline: the transfer queue's copy of this command's output waits for it
-            tss.signalSemaphoreValueCount = 1u
-            tss.pSignalSemaphoreValues = addr(sval)
-            submit.pNext = addr<void?>(tss)
-            submit.signalSemaphoreCount = 1u
-            submit.pSignalSemaphores = addr(csem)
-            g_gpu.cmp_value = sval
-        }
-        vk_check(vkQueueSubmit(g_gpu.queue, 1u, addr(submit), fence), null)
+    let sval = signal ? g_gpu.cmp_value + 1ul : 0ul   // the compute timeline: the transfer queue's copy of this command's output waits for it
+    timeline_submit(g_gpu.queue, raw, fence, g_gpu.xfer_sem, wval, wstage, g_gpu.cmp_sem, sval)
+    if (signal) {
+        g_gpu.cmp_value = sval
     }
 }
 
@@ -3702,33 +3610,11 @@ let XFER_NO_WAIT = 0ul   //! `xfer_submit_after`'s compute-timeline value for a 
 //! a transfer-queue submit that waits for the compute timeline at `cmp_val` and signals the transfer timeline; returns the value to wait for
 def xfer_submit_after(var xraw : VkCommandBuffer; cmp_val : uint64) : uint64 {
     g_gpu.xfer_value++
-    var sig = g_gpu.xfer_value
-    var wval = cmp_val
-    var tss = VkTimelineSemaphoreSubmitInfo()
-    var wsem = g_gpu.cmp_sem
-    var ssem = g_gpu.xfer_sem
     var wstage : VkPipelineStageFlags
     wstage.transfer = true
-    var submit = VkSubmitInfo()
-    submit.commandBufferCount = 1u
-    submit.signalSemaphoreCount = 1u
     let nofence : VkFence
-    unsafe {
-        if (cmp_val != XFER_NO_WAIT) {
-            submit.waitSemaphoreCount = 1u
-            tss.waitSemaphoreValueCount = 1u
-            tss.pWaitSemaphoreValues = addr(wval)
-            submit.pWaitSemaphores = addr(wsem)
-            submit.pWaitDstStageMask = addr<uint?>(wstage)
-        }
-        tss.signalSemaphoreValueCount = 1u
-        tss.pSignalSemaphoreValues = addr(sig)
-        submit.pNext = addr<void?>(tss)
-        submit.pCommandBuffers = addr(xraw)
-        submit.pSignalSemaphores = addr(ssem)
-        vk_check(vkQueueSubmit(g_gpu.xfer_queue, 1u, addr(submit), nofence), null)
-    }
-    return sig
+    timeline_submit(g_gpu.xfer_queue, xraw, nofence, g_gpu.cmp_sem, cmp_val, wstage, g_gpu.xfer_sem, g_gpu.xfer_value)
+    return g_gpu.xfer_value
 }
 
 //! wait until the transfer timeline reaches `v`: spinning on its counter where a blocking wait's OS wake-up would cost more than the wait (the logits' landing a step), else blocking
@@ -3875,35 +3761,6 @@ def ensure_batch_state {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: prefill batch tier engaged\n")
 }
 
-// the 20-word deltanet params block — ONE layout for the prefill window chain (dn_meta) and the
-// decode step (dnd_meta, npos_w = 1 and the slab/history words zeroed): the dn kernels' contract
-def fill_dn_meta(hb : HostBuf; npos_w, cd, kd, di, nvh, nkh, ds, dconv : int64; hist_mode : int;
-                 slab : int64 = 0l; o_off : int64 = 0l; nblocks : int64 = 0l; p2_off : int64 = 0l) {
-    unsafe {
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(npos_w)
-        mp[1] = uint(cd)
-        mp[2] = uint(kd)
-        mp[3] = uint(di)
-        mp[4] = uint(nvh)
-        mp[5] = uint(nkh)
-        mp[6] = uint(ds)
-        mp[7] = uint(dconv)
-        mp[8] = uint(hist_mode)
-        mp[9] = uint(slab)
-        mp[10] = uint(o_off)
-        mp[11] = uint(DN_SM_BETA)
-        mp[12] = uint(DN_SM_G)
-        mp[13] = uint(DN_SM_TAPS)
-        mp[14] = uint(DN_SM_WNORM)
-        mp[15] = uint(DN_SM_A)
-        mp[16] = uint(DN_SM_DT)
-        mp[17] = uint(DN_SM_HIST)
-        mp[18] = uint(nblocks)
-        mp[19] = uint(p2_off)
-    }
-}
-
 // parallel host memcpy — the batch chain moves 8-34MB per hop and a single lane runs ~14GB/s
 // while the box's DRAM feeds 3-4x that; jobque lanes are idle while the GPU owns the layer
 let PAR_COPY_CHUNK = 2_097_152l
@@ -3927,10 +3784,7 @@ def par_memcpy(var dst : void?; src : void?; bytes : int64) {
 }
 
 def cmd_copy_whole(raw : VkCommandBuffer; src, dst : uint64; bytes : int64) {
-    var region = VkBufferCopy(srcOffset = 0ul, dstOffset = 0ul, size = uint64(bytes))
-    unsafe {
-        vkCmdCopyBuffer(raw, reinterpret<VkBuffer>(src), reinterpret<VkBuffer>(dst), 1u, addr(region))
-    }
+    cmd_copy_range(raw, src, 0l, dst, 0l, bytes)
 }
 
 def cmd_copy_range(raw : VkCommandBuffer; src : uint64; src_off : int64; dst : uint64; dst_off : int64; bytes : int64) {

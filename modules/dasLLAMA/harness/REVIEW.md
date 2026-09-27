@@ -2,8 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `../ARCHITECTURE_MEASUREMENT.md`, `../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned
-work: `../followup_metal.md` for anything about the Metal backend, `../followup_vulkan.md` for
-anything about the Vulkan backend, `../followup_general.md` for everything else.
+work: `../followup_general.md`, `../followup_metal.md`, `../followup_vulkan.md`.
 
 **A diff to `tune_kernels.das` that adds a race or bench of a kernel that no `benches` row times
 runs it before the `benches` sweep starts - never after the sweep.** Running `dot_q8q8_laneq4x4`

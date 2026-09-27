@@ -39,6 +39,7 @@ require daslib/fio  // the zoo paths
 require math  // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
 require strings
 require _model_tier
+require _gpu_knobs   // nolint:STYLE030,LINT019 — gpu_knobs: the vulkan census's knob record, read inside the vulkan half
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
 // The KERNEL COVERAGE census (REVIEW_GPU_KERNEL_CLASSES.md: a Metal kernel class is dispatched by a census row here or named in
@@ -881,10 +882,6 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // combine, each landing its Q8_0 feed): the same two stocked files via test_whisper_vulkan_wdec; their kernel coverage is
     // test_vkt_wdec_fused_rq in test_vulkan_tower_kernels.das
     "tower_ln_rq_cls_spv", "tower_post_add_ln_rq_cls_spv", "tower_bias_act_rq_cls_spv", "tower_wdec_attn_comb_rq_cls_spv",
-    // the whisper-class conv stem's classes (the tower driver's conv seat - no zoo row): the k3 im2col and the position rows'
-    // add, the same two stocked whisper files via test_whisper_vulkan_twin in test_whisper.das; their kernel coverage is
-    // test_vkt_tower_front_movers in test_vulkan_tower_kernels.das
-    "tower_im2col1d_cls_spv",
     // the pre-LN chain's f16-feed stamps (the cm2 arm: the norms and seams storing the feed, the biased restrides, the unpad and
     // the bias + GELU storing it): the whisper twin and the gemma3v twin (mmproj-gemma-3-4b-it-F16.gguf) dispatch them; their
     // kernel coverage is test_vkt_tower_f16_feeds in test_vulkan_tower_kernels.das
@@ -1087,10 +1084,10 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"), "qwen2moe", none)
             // the UD-IQ2_XXS 30B: the resident MoE block's s and e stamps over iq2xxs expert planes, whole on a 16 GB card
             vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "qwen3moe", none)
-            let tower_found = vulkan_tower_on()   //! the TTS rows serve on the tower knob: pinned on, restored after
+            let knobs = gpu_knobs()   // the TTS rows serve on the tower knob: pinned on, restored after
             set_vulkan_tower(true)
             defer() {
-                set_vulkan_tower(tower_found)
+                set_gpu_knobs(knobs)
             }
             cov_tower_styletts2(t)
             cov_tower_pocket(t)

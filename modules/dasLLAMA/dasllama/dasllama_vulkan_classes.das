@@ -12,6 +12,7 @@ require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gpu_math
+require dasllama/dasllama_math
 require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
 require daslib/math_bits   // uint_bits_to_float: the KHR tile's f32 store bounce read back through its uint staging array
 require daslib/enum_trait   // kq_gemv_fmts walks the enum
@@ -875,7 +876,7 @@ def private act_mul_sel(v, u : float; act : uint) : float {
         return (x / (1.0 + exp(-1.702 * x))) * (y + 1.0)
     }
     return (act == ACT_GELU ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
-        : (v / (1.0 + exp(-v))) * u)
+        : silu_f32(v) * u)
 }
 
 //! the act + requant of a gate / up pair on `RqT`: the element load is the activation
@@ -2259,7 +2260,7 @@ class DnConv {
             let p = p0 + uint(i)
             let x3 = p < pa.npos ? xrow(int(p), cch, taps) : 0.0
             let acc = w[0] * x0 + w[1] * x1 + w[2] * x2 + w[3] * x3
-            y[i] = (live && p < pa.npos) ? acc / (1.0 + exp(-acc)) : 0.0
+            y[i] = (live && p < pa.npos) ? silu_f32(acc) : 0.0
             x0 = x1
             x1 = x2
             x2 = x3
@@ -2409,7 +2410,7 @@ class DnStepFused : WgReduceBase {
                 }
                 smalls[wrb + ch * taps + taps - 1u] = fresh
             }
-            let sv = acc / (1.0 + exp(-acc))
+            let sv = silu_f32(acc)
             if (sl == 0u) {
                 dq[j] = sv
             } elif (sl == 1u) {
@@ -2523,7 +2524,7 @@ class DnStepFused : WgReduceBase {
         while (e < ds) {
             let zv = proj[prow + pa.cd + h * ds + e]
             let xn = dout[e] * oinv * smalls[pa.wnorm_off + e]
-            dout[e] = xn * (zv / (1.0 + exp(-zv)))
+            dout[e] = xn * silu_f32(zv)
             e += 256u
         }
         barrier()
@@ -2872,7 +2873,7 @@ class DnScanP3 {
         while (e < pa.di) {
             let zv = zrows[p * pa.di + e]
             let xn = orows[ob + e] * hinv[e / ds] * smalls[pa.wnorm_off + e % ds]
-            orows[ob + e] = xn * (zv / (1.0 + exp(-zv)))
+            orows[ob + e] = xn * silu_f32(zv)
             e += 256u
         }
     }
@@ -8816,6 +8817,12 @@ def f16_gemm_wgs(khr : bool; rows, d : int64) : int64 {
     return ((rows + tile - 1l) / tile) * ((d + tile - 1l) / tile)
 }
 
+//! an f16 GEMM off a cm2-mode device takes the KHR tile (`f16_gemm_set`'s `khr`)
+def f16_gemm_khr : bool => g_gpu.coopmat_mode != COOPMAT_CM2
+
+//! the f16 GEMM tile serves on a cm2-mode device or where the KHR tile does; elsewhere an f16 GEMM route declines to the f32 tile
+def f16_gemm_on : bool => g_gpu.coopmat_mode == COOPMAT_CM2 || khr_kq_tile_on()
+
 def f16_gemm_ensure(khr : bool) : bool => khr ? ensure_f16_gemm_khr_cls() : ensure_f16_gemm_cm2_cls()
 
 def f16_gemm_set(khr : bool; bufs : uint64 const[3]; sizes : int64 const[3]; gbits : uint const[3]) : VkDescriptorSet
@@ -9006,7 +9013,7 @@ struct TtsGatherArgs {
 
 //! out[t][j] = word[ids[t]][j] + pos[t][j] + type[j], added in that order - the PL-BERT embedding sum of the CPU
 //! `styletts2_albert` - or the word row alone under `adds = 0` (the CPU `gather_rows`), one element an invocation
-[vk_dispatch(name = "tts_row_gather_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_row_gather_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsRowGather {
     @ssbo @binding = 0 slab : array<float>
     @ssbo @binding = 1 ids : array<int>
@@ -9025,9 +9032,6 @@ class TtsRowGather {
         }
     }
 }
-
-//! the row gather's workgroup count over `total` elements
-def tts_row_gather_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 struct TtsElemArgs {
     nelem : uint   //! the elements mapped
@@ -9069,19 +9073,16 @@ class template TtsElemT {
 
 //! the CPU `gelu`'s tanh form in f32 (not the f16 LUT form `tower_act` spells - its roundings would move the front end's
 //! durations); the clamp keeps a device tanh off its exp overflow and changes no f32 result
-[vk_dispatch(name = "tts_gelu_tanh_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_gelu_tanh_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
 class TtsGeluTanh : TtsElemT {
-    def override act(v : float) : float => 0.5 * v * (1.0 + tanh(clamp(0.7978845608028654 * (v + 0.044715 * v * v * v), -15.0, 15.0)))
+    def override act(v : float) : float => tts_gelu_tanh(v)
 }
 
 //! the CPU `leaky_relu`: v > 0 ? v : v * slope
-[vk_dispatch(name = "tts_leaky_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_leaky_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
 class TtsLeaky : TtsElemT {
     def override act(v : float) : float => v > 0.0 ? v : v * pa.slope
 }
-
-//! the elementwise maps' workgroup count over `nelem` elements (four an invocation)
-def tts_elem_wgs(nelem : int64) : int64 => (nelem + 1023l) / 1024l
 
 struct TtsAttnArgs {
     t : uint       //! the rows, queries and keys alike
@@ -9654,45 +9655,6 @@ class TowerFeatShuffle {
     }
 }
 
-struct TowerIm2col1dArgs {
-    nch : uint       //! the source channels
-    srclen : uint    //! the source positions (the pad guard)
-    stride : uint    //! 1 or 2
-    chmajor : uint   //! 1 = the source is [c][t] (the mel), 0 = [t][c] (a conv output)
-    kdp : uint       //! the column row's padded width, a 64-multiple; the columns past 3 nch read zero
-    rows : uint      //! the output rows
-}
-
-//! the whisper-class conv stem's im2col (k 3, "same" pad) as the f16 GEMM's feed: output row i is the 3 x nch columns
-//! in (dk, c) order - the loader's weight permute - so the weights need no permute
-[vk_dispatch(name = "tower_im2col1d_cls", grid = "wgs", params = "wgs : int64")]
-class TowerIm2col1d {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 col : array<float16>
-    @push_constant pa : TowerIm2col1dArgs
-
-    [spirv_kernel(local_size_x = 256, name = "tower_im2col1d_cls_spv")]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        let kdp = max(1u, pa.kdp)
-        if (gid < pa.rows * kdp) {
-            let nch = max(1u, pa.nch)
-            let i = gid / kdp
-            let k = gid % kdp
-            var v = 0.0
-            if (k < 3u * nch) {
-                let dk = k / nch
-                let c = k % nch
-                let sp = int(i * pa.stride + dk) - 1
-                if (sp >= 0 && sp < int(pa.srclen)) {
-                    v = pa.chmajor != 0u ? src[c * pa.srclen + uint(sp)] : src[uint(sp) * nch + c]
-                }
-            }
-            col[gid] = float16(v)
-        }
-    }
-}
-
 let WDEC_KV_F16 = 0u   //! `TowerWdecKvArgs.mode`: the resident f16 store, [heads][tstride][hs] at `dst_off`
 let WDEC_KV_KX = 1u    //! ... the CPU chain's pre-scaled f32 keys, [heads][hs][tstride]
 let WDEC_KV_VX = 2u    //! ... the CPU chain's f32 values, [heads][tstride][hs]
@@ -10080,7 +10042,6 @@ class TowerG4aAttn64 : TowerG4aAttnT {
 struct TowerConvModArgs {
     d : uint        //! the output row width; the GLU's input rows are 2d wide
     nelem : uint    //! npos x d
-    woff : uint     //! the depthwise taps' base in wn ([d x 5], the conv class)
 }
 
 //! the conv module's GLU: y[t][c] = h[t][c] . sigmoid(h[t][d + c]) off the pointwise rows
@@ -10102,34 +10063,99 @@ class TowerGluSig {
     }
 }
 
-//! the causal depthwise conv (k = 5, the taps [d x 5] at `woff`): a row reads the four before it, the chunk's first rows
-//! read nothing before the start
-[vk_dispatch(name = "tower_dw_conv5_cls", grid = "wgs", params = "wgs : int64")]
-class TowerDwConv5 {
+struct DwConvRowsArgs {
+    c : uint       //! the channels, one tap row each
+    k : uint       //! the taps, where the stamp does not fix them
+    stride : uint  //! the transposed stamp's stride
+    pad_l : uint   //! the transposed stamp's cropped left edge
+    dil : uint     //! the transposed stamp's dilation
+    t_in : uint    //! the input rows, and the output rows of the causal and the centered stamps
+    t_out : uint   //! the transposed stamp's output rows
+    woff : uint    //! w [c][k]'s element base in wn
+    boff : uint    //! the transposed stamp's bias row in wn
+    bnwoff : uint  //! the centered stamp's folded BatchNorm scale row in wn
+    bnboff : uint  //! the centered stamp's folded BatchNorm shift row in wn
+}
+
+//! a depthwise conv on rows, y [t_out][c] from x [t_in][c] and w [c][k], one element an invocation; FORM is the source
+//! rule and the epilogue: 0 the transposed conv gathered, the bias row first and one mad a tap (the CPU
+//! `conv1d_rows_transposed_depthwise`); 1 the causal conv, a row reading the k - 1 rows before it (gemma4a's conv module);
+//! 2 the centered conv, the folded BatchNorm and silu after it (canary's conv module tail)
+[ |> template_struct_instance]
+class template DwConvRowsT {
+    @template_constant FORM : int = 0   //!< spelled as its literal: a template constant folds only a literal
+    @template_constant K : uint = 0u    //!< the taps where the stamp fixes them, else 0 and the taps are `pa.k`
     @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 y : array<float>
     @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @push_constant pa : TowerConvModArgs
+    @push_constant pa : DwConvRowsArgs
 
-    [spirv_kernel(local_size_x = 256, name = "tower_dw_conv5_cls_spv")]
+    def rows_out : uint {
+        static_if (FORM == 0) {
+            return pa.t_out
+        } else {
+            return pa.t_in
+        }
+    }
+
+    def taps : uint {
+        static_if (K != 0u) {
+            return K
+        } else {
+            return pa.k
+        }
+    }
+
+    def src_row(t, kk : uint) : int {
+        static_if (FORM == 0) {
+            return conv_src_tr_row(t, kk, 0u, pa.pad_l, pa.dil, max(pa.stride, 1u), pa.t_in)
+        } else {
+            static_if (FORM == 1) {
+                return conv_src_fwd_row(t, kk, 0u, taps() - 1u, 1u, 1u, pa.t_in)
+            } else {
+                return conv_src_fwd_row(t, kk, 0u, (taps() - 1u) / 2u, 1u, 1u, pa.t_in)
+            }
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let e = gl_GlobalInvocationID.x
-        if (e < pa.nelem) {
-            let dd = max(1u, pa.d)
-            let t = e / dd
-            let c = e % dd
+        if (e < rows_out() * pa.c) {
+            let c = max(pa.c, 1u)
+            let t = e / c
+            let j = e % c
+            let nk = taps()
             var acc = 0.0
+            static_if (FORM == 0) {
+                acc = wn[pa.boff + j]
+            }
             var kk = 0u
-            while (kk < 5u) {
-                if (t + kk >= 4u) {
-                    let src = t + kk - 4u
-                    acc += wn[pa.woff + c * 5u + kk] * x[src * pa.d + c]
+            while (kk < nk) {
+                let src = src_row(t, kk)
+                if (src >= 0) {
+                    static_if (FORM == 0) {
+                        acc = mad(wn[pa.woff + j * nk + kk], x[uint(src) * pa.c + j], acc)
+                    } else {
+                        acc += wn[pa.woff + j * nk + kk] * x[uint(src) * pa.c + j]
+                    }
                 }
                 kk++
             }
-            y[e] = acc
+            static_if (FORM == 2) {
+                y[e] = silu_f32(acc * wn[pa.bnwoff + j] + wn[pa.bnboff + j])
+            } else {
+                y[e] = acc
+            }
         }
     }
+}
+
+//! gemma4a's causal depthwise conv, k = 5: the chunk's first rows read nothing before the start
+[vk_dispatch(name = "tower_dw_conv5_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerDwConv5 : DwConvRowsT {
+    override FORM = 1
+    override K = 5u
 }
 
 struct TowerCnAttnRArgs {
@@ -10240,45 +10266,11 @@ class TowerCnAttnR64 : TowerCnAttnRT {
     override HS = 64u
 }
 
-struct TowerCnDwArgs {
-    d : uint
-    nk : uint       //! the taps (odd; canary 9)
-    npos : uint
-    woff : uint     //! the taps [d x nk] in wn
-    bnwoff : uint   //! the folded BatchNorm's scale row [d]
-    bnboff : uint   //! ... and shift row [d]
-}
-
-//! canary's conv module tail: the centered depthwise conv over time (k taps), the folded BatchNorm and silu - one pass,
-//! the CPU loop's form
-[vk_dispatch(name = "tower_cn_dw_cls", grid = "wgs", params = "wgs : int64")]
-class TowerCnDw {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 y : array<float>
-    @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @push_constant pa : TowerCnDwArgs
-
-    [spirv_kernel(local_size_x = 256, name = "tower_cn_dw_cls_spv")]
-    def run {
-        let e = gl_GlobalInvocationID.x
-        if (e < pa.npos * pa.d) {
-            let dd = max(1u, pa.d)
-            let t = e / dd
-            let c = e % dd
-            let kpad = (pa.nk - 1u) / 2u
-            var acc = 0.0
-            var kk = 0u
-            while (kk < pa.nk) {
-                let src = t + kk
-                if (src >= kpad && src - kpad < pa.npos) {
-                    acc += wn[pa.woff + c * pa.nk + kk] * x[(src - kpad) * pa.d + c]
-                }
-                kk++
-            }
-            let bv = acc * wn[pa.bnwoff + c] + wn[pa.bnboff + c]
-            y[e] = bv / (1.0 + exp(-bv))
-        }
-    }
+//! canary's conv module tail: the centered depthwise conv over time (k taps, odd - canary 9), the folded BatchNorm and
+//! silu in one pass, the CPU loop's form
+[vk_dispatch(name = "tower_cn_dw_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerCnDw : DwConvRowsT {
+    override FORM = 2
 }
 
 struct TowerGegluArgs {
@@ -10592,7 +10584,7 @@ def tower_act(v : float; act : uint) : float {
         return tower_gelu_erf(v)
     }
     if (act == BIAS_ACT_SILU) {
-        return v / (1.0 + exp(-v))
+        return silu_f32(v)
     }
     if (act == BIAS_ACT_RELU) {
         return max(v, 0.0)
@@ -10621,7 +10613,8 @@ class TowerBiasActRq : RqT {
     def override load1(e : uint) : float => biased(e)
 }
 
-//! a GEMM output's bias row added in place, then the activation `pa.act` names (`tower_act`)
+//! a GEMM output's bias row added in place, then the activation `pa.act` names (`tower_act`); a stamp overriding `biased`
+//! broadcasts the row another way (TtsPkRowScale's layer scale)
 [ |> template_struct_instance]
 class template TowerBiasActT {
     @template_constant OUT16 : bool = false   //! the biased, activated rows stored as f16 into `outh` (the cm2 tile's feed), x read alone; else in place
@@ -10774,14 +10767,6 @@ class TowerHeadUnpad16 : TowerRestrideT {
     override OUT32 = false
 }
 
-struct TowerRopeTabArgs {
-    sstride : uint  //! the rows' stride and the column the heads start at (a fused [q | k | v] row)
-    soff : uint
-    nheads : uint
-    hs : uint       //! the head width: the rotary half is hs / 2 - pairs (j, j + half), one table row of `half` cos and `half` sin a token
-    rows : uint
-}
-
 struct TowerWinArgs {
     nheads : uint
     scale : float
@@ -10869,33 +10854,79 @@ class template TowerWinAttnT {
 [vk_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
 class TowerWinAttn : TowerWinAttnT {}
 
-//! the full-head NEOX rope over q or k rows in place, the CPU `rope_neox_tab_rows`'s form: one table pair a row shared by
-//! every head (the vision mrope tables), the pairs (j, j + half) rotated - one thread per (row, head, pair)
-[vk_dispatch(name = "tower_rope_tab_cls", grid = "wgs", params = "wgs : int64")]
-class TowerRopeTab {
-    @ssbo @binding = 0 v : array<float>
-    @ssbo @binding = 1 cos_t : array<float>
-    @ssbo @binding = 2 sin_t : array<float>
-    @push_constant pa : TowerRopeTabArgs
+struct RopeTabArgs {
+    rows : uint   //! the rows roped, row r at position r
+    qs : uint     //! x's row stride
+    col : uint    //! the roped span's first column (a fused [q | k | v] row's q or k slot)
+    d : uint      //! the span's width, its heads side by side
+    dh : uint     //! the head size
+    coff : uint   //! the cos table [pos][dh / 2]'s element base in its binding
+    soff : uint   //! the sin table's element base in its binding, laid out as the cos table
+}
 
-    [spirv_kernel(local_size_x = 256, name = "tower_rope_tab_cls_spv")]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        let half = pa.hs / 2u
-        let per_row = pa.nheads * half
-        if (gid < pa.rows * per_row) {
-            let row = gid / per_row
-            let hp = gid % per_row
-            let j = hp % half
-            let base = row * pa.sstride + pa.soff + (hp / half) * pa.hs
-            let x0 = v[base + j]
-            let x1 = v[base + j + half]
-            let c = cos_t[row * half + j]
-            let s = sin_t[row * half + j]
-            v[base + j] = x0 * c - x1 * s
-            v[base + j + half] = x0 * s + x1 * c
+//! the rotary embedding over a span of rows in place from per-position tables: row r at position r turns each pair
+//! of each head by the tables' angle j at that position - NEOX the pairs (j, j + dh / 2), the CPU `rope_neox_tab_rows` (the
+//! vision mrope tables), else the adjacent pairs (2j, 2j + 1), the CPU `rope_rows`; one pair an invocation over rows * d / 2
+[ |> template_struct_instance]
+class template RopeTabT {
+    @template_constant NEOX : bool = false
+    @template_constant SLAB_TABS : bool = false   //!< the tables sit in a weight slab, not in per-encode planes
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 @template_gate = "!SLAB_TABS" cos_t : array<float>
+    @ssbo @binding = 2 @template_gate = "!SLAB_TABS" sin_t : array<float>
+    @ssbo @binding = 1 @role = "weight" @template_gate = SLAB_TABS cos_w : array<float>
+    @ssbo @binding = 2 @role = "weight" @template_gate = SLAB_TABS sin_w : array<float>
+    @push_constant pa : RopeTabArgs
+
+    def pair_first(hb, j : uint) : uint {
+        static_if (NEOX) {
+            return hb + j
+        } else {
+            return hb + 2u * j
         }
     }
+
+    def pair_partner_dist(hh : uint) : uint {
+        static_if (NEOX) {
+            return hh
+        } else {
+            return 1u
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let half = pa.d / 2u
+        if (gid < pa.rows * half) {
+            let r = gid / max(half, 1u)
+            let pi = gid % max(half, 1u)
+            let hh = max(pa.dh / 2u, 1u)
+            let j = pi % hh
+            let i0 = pair_first(r * pa.qs + pa.col + (pi / hh) * pa.dh, j)
+            let i1 = i0 + pair_partner_dist(hh)
+            let tb = r * hh + j
+            var cv = 0.0
+            var sv = 0.0
+            static_if (SLAB_TABS) {
+                cv = cos_w[pa.coff + tb]
+                sv = sin_w[pa.soff + tb]
+            } else {
+                cv = cos_t[pa.coff + tb]
+                sv = sin_t[pa.soff + tb]
+            }
+            let v0 = x[i0]
+            let v1 = x[i1]
+            x[i0] = v0 * cv - v1 * sv
+            x[i1] = v0 * sv + v1 * cv
+        }
+    }
+}
+
+//! the vision towers' full-head NEOX rope over q or k rows, one table row a position shared by every head
+[vk_dispatch(name = "tower_rope_tab_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerRopeTab : RopeTabT {
+    override NEOX = true
 }
 
 struct RopeKvArgs {
@@ -13213,7 +13244,7 @@ def vt_tile_groups(t : VtTile; width, rows : int64) : int64 => t.tc > 0l ? cm2_t
 
 //! the rows a GEMM record carries: on the l column the encode's rounded up to the column, else the raw count
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def vt_tile_rows(t : VtTile; rows : int64) : int64 => t.tc == 256l ? (rows + 255l) / 256l * 256l : rows
+def vt_tile_rows(t : VtTile; rows : int64) : int64 => t.tc == 256l ? round_up(rows, 256l) : rows
 
 def vt_tile_enc(raw : VkCommandBuffer; var h : VkHaz; t : VtTile; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     if (t.tc > 0l) {
@@ -13252,7 +13283,7 @@ struct TtsIm2colArgs {
 //! order, so one weight row [cout][kdim] multiplies it - zero where the tap falls off x and in the columns past k * cin;
 //! a forward tap reads x at t * stride + tap * dilation - pad_l, a transposed one the input position whose stride lands
 //! the tap on t, (t + pad_l - tap * dilation) / stride where that divides exactly (the CPU `conv1d_transposed_dense`'s
-//! scatter read as a gather); one element an invocation, wgs = `tts_im2col_wgs`. The HALF stamp stores the columns as
+//! scatter read as a gather); one element an invocation, four under HALF. The HALF stamp stores the columns as
 //! f16 into `col16`, the f16 tile's feed (the decoder's and generator's convs); the plain stamp as f32, the f32 tile's feed
 [ |> template_struct_instance]
 class template TtsIm2colT {
@@ -13266,15 +13297,9 @@ class template TtsIm2colT {
     //! the input position tap `tap` reads for output row r, or -1 where it falls off x
     def src_pos(r, tap : uint) : int {
         if (pa.transposed != 0u) {
-            let stride = max(pa.stride, 1u)
-            let q = int(r + pa.pad_l) - int(tap * pa.dilation)
-            if (q >= 0 && uint(q) % stride == 0u && uint(q) / stride < pa.tin) {
-                return int(uint(q) / stride)
-            }
-            return -1
+            return conv_src_tr_row(r, tap, 0u, pa.pad_l, pa.dilation, max(pa.stride, 1u), pa.tin)
         }
-        let p = int(r * pa.stride + tap * pa.dilation) - int(pa.pad_l)
-        return p >= 0 && uint(p) < pa.tin ? p : -1
+        return conv_src_fwd_row(r, tap, 0u, pa.pad_l, pa.dilation, pa.stride, pa.tin)
     }
 
     //! column j of output row r
@@ -13352,20 +13377,14 @@ class template TtsIm2colT {
     }
 }
 
-[vk_dispatch(name = "tts_im2col_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_im2col_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsIm2col : TtsIm2colT {}
 
-[vk_dispatch(name = "tts_im2col16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_im2col16_cls", kernel = "run", grid = "total/1024", params = "total : int64")]
 class TtsIm2col16 : TtsIm2colT {
     override HALF = true
     override FULL = false
 }
-
-//! the im2col's workgroup count over `total` = tout * kdim column elements
-def tts_im2col_wgs(total : int64) : int64 => (total + 255l) / 256l
-
-//! ... and the half stamp's, four columns an invocation
-def tts_im2col16_wgs(total : int64) : int64 => (total / 4l + 255l) / 256l
 
 struct TtsLstmArgs {
     t : uint          //! the steps
@@ -13439,10 +13458,10 @@ class TtsLstmDir {
             if (lead) {
                 let ti = pa.backward != 0u ? t_first - step : t_first + step
                 let gb = pa.goff + ti * pa.gstride + j
-                let gi = tts_sigmoid(gates[gb] + gs[lane])
-                let gf = tts_sigmoid(gates[gb + hd] + gs[lane + 1u])
+                let gi = sigmoid_f32(gates[gb] + gs[lane])
+                let gf = sigmoid_f32(gates[gb + hd] + gs[lane + 1u])
                 let gg = tts_tanh(gates[gb + 2u * hd] + gs[lane + 2u])
-                let go = tts_sigmoid(gates[gb + 3u * hd] + gs[lane + 3u])
+                let go = sigmoid_f32(gates[gb + 3u * hd] + gs[lane + 3u])
                 cst = gf * cst + gi * gg
                 let hn = go * tts_tanh(cst)
                 hs[j] = hn
@@ -13466,7 +13485,7 @@ struct TtsConcatArgs {
 
 //! o [rows][width] = cat(x [rows][c], res at stride rs under `with_res`, f0 at stride f0s, nd at stride ns), zero-padded to
 //! width - the CPU `concat_rows`; one element an invocation
-[vk_dispatch(name = "tts_concat_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_concat_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsConcat {
     @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 res : array<float>
@@ -13479,8 +13498,9 @@ class TtsConcat {
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.rows * pa.width) {
-            let r = gid / pa.width
-            let j = gid % pa.width
+            let w = max(pa.width, 1u)
+            let r = gid / w
+            let j = gid % w
             let rc = pa.with_res != 0u ? pa.rc : 0u
             var v = 0.0
             if (j < pa.c) {
@@ -13497,9 +13517,6 @@ class TtsConcat {
     }
 }
 
-//! the concat's workgroup count over `total` = rows * width elements
-def tts_concat_wgs(total : int64) : int64 => (total + 255l) / 256l
-
 struct TtsSigSumArgs {
     t : uint       //! the rows
     nb : uint      //! the logits summed a row
@@ -13509,7 +13526,7 @@ struct TtsSigSumArgs {
 
 //! raw[r] = (the sum of sigmoid(logits[r][j]) over j < nb, in j order) / speed - the CPU `styletts2_durations`' raw
 //! durations; one row an invocation
-[vk_dispatch(name = "tts_sigsum_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_sigsum_cls", kernel = "run", grid = "t/256", params = "t : int64")]
 class TtsSigSum {
     @ssbo @binding = 0 logits : array<float>
     @ssbo @binding = 1 raw : array<float>
@@ -13522,16 +13539,13 @@ class TtsSigSum {
             var acc = 0.0
             var j = 0u
             while (j < pa.nb) {
-                acc += 1.0 / (1.0 + exp(-logits[r * pa.ls + j]))
+                acc += sigmoid_f32(logits[r * pa.ls + j])
                 j++
             }
             raw[r] = acc / pa.speed
         }
     }
 }
-
-//! the sigmoid sums' workgroup count over `t` rows
-def tts_sigsum_wgs(t : int64) : int64 => (t + 255l) / 256l
 
 struct TtsStatsArgs {
     t : uint      //! the rows
@@ -13591,8 +13605,7 @@ class TtsColPartSq : TtsColPartT {
     override SQ = true
 }
 
-//! the partials folded a channel a lane: stats[ch] = the mean, or under SQ stats[c + ch] = the sum of squared deviations;
-//! wgs = `tts_colreduce_wgs`
+//! the partials folded a channel a lane: stats[ch] = the mean, or under SQ stats[c + ch] = the sum of squared deviations
 [ |> template_struct_instance]
 class template TtsColReduceT {
     @template_constant SQ : bool = false
@@ -13619,19 +13632,16 @@ class template TtsColReduceT {
     }
 }
 
-[vk_dispatch(name = "tts_colreduce_mean_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_colreduce_mean_cls", kernel = "run", grid = "c/256", params = "c : int64")]
 class TtsColReduceMean : TtsColReduceT {}
 
-[vk_dispatch(name = "tts_colreduce_sq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_colreduce_sq_cls", kernel = "run", grid = "c/256", params = "c : int64")]
 class TtsColReduceSq : TtsColReduceT {
     override SQ = true
 }
 
 //! the column statistics' blocks over `t` rows
 def tts_stats_blocks(t : int64) : int64 => (t + int64(TTS_STATS_ROWS) - 1l) / int64(TTS_STATS_ROWS)
-
-//! the reduce stamps' workgroup count over `c` channels
-def tts_colreduce_wgs(c : int64) : int64 => (c + 255l) / 256l
 
 //! the stats rows a seat holds for `c_max` channels over `t_max` rows: the mean and squared-deviation rows, then the partials
 def tts_stats_floats(t_max, c_max : int64) : int64 => 2l * c_max + tts_stats_blocks(t_max) * c_max
@@ -13666,11 +13676,10 @@ class template TtsAdainT {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.t * pa.c) {
             let ci = gid % max(pa.c, 1u)
-            let rs = 1.0 / sqrt(stats[pa.c + ci] / float(pa.t) + TTS_ADAIN_EPS)
-            let g = wn[pa.gwoff + ci]
-            let g1 = 1.0 + h[pa.hoff + ci]
-            let scale = rs * g * g1
-            let shift = (wn[pa.gboff + ci] - stats[ci] * rs * g) * g1 + h[pa.hoff + pa.c + ci]
+            var scale = 0.0
+            var shift = 0.0
+            tts_adain_affine(stats[ci], stats[pa.c + ci], float(pa.t), TTS_ADAIN_EPS, wn[pa.gwoff + ci], wn[pa.gboff + ci], h[pa.hoff + ci],
+                h[pa.hoff + pa.c + ci], scale, shift)
             let v = mad(x[pa.xoff + gid], scale, shift)
             static_if (SNAKE) {
                 let a = wn[pa.aoff + ci]
@@ -13683,62 +13692,18 @@ class template TtsAdainT {
     }
 }
 
-[vk_dispatch(name = "tts_adain_leaky_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_adain_leaky_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsAdainLeaky : TtsAdainT {}
 
-[vk_dispatch(name = "tts_adain_snake_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_adain_snake_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsAdainSnake : TtsAdainT {
     override SNAKE = true
 }
 
-//! the AdaIN stamps' workgroup count over `total` = t * c elements
-def tts_adain_wgs(total : int64) : int64 => (total + 255l) / 256l
-
-struct TtsPoolArgs {
-    c : uint       //! the channels, one tap row each
-    k : uint       //! the taps
-    stride : uint
-    pad_l : uint   //! the cropped left edge
-    dil : uint
-    t_in : uint
-    t_out : uint
-    woff : uint    //! w [c][k]'s element base in wn
-    boff : uint    //! the bias row's element base in wn
-}
-
-//! the depthwise transposed pool on rows: y [t_out][c] gathers the rows of x [t_in][c] its taps reach, w [c][k] - the CPU
-//! `conv1d_rows_transposed_depthwise`; one element an invocation
-[vk_dispatch(name = "tts_pool_dw_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsPoolDw {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 y : array<float>
-    @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @push_constant pa : TtsPoolArgs
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.t_out * pa.c) {
-            let c = max(pa.c, 1u)
-            let stride = max(pa.stride, 1u)
-            let p = gid / c
-            let j = gid % c
-            var acc = wn[pa.boff + j]
-            var kk = 0u
-            while (kk < pa.k) {
-                let num = int(p + pa.pad_l) - int(kk * pa.dil)
-                if (num >= 0 && uint(num) % stride == 0u && uint(num) / stride < pa.t_in) {
-                    acc = mad(wn[pa.woff + j * pa.k + kk], x[(uint(num) / stride) * pa.c + j], acc)
-                }
-                kk++
-            }
-            y[gid] = acc
-        }
-    }
-}
-
-//! the pool's workgroup count over `total` = t_out * c elements
-def tts_pool_dw_wgs(total : int64) : int64 => (total + 255l) / 256l
+//! the depthwise transposed pool on rows: y [t_out][c] gathers the rows of x [t_in][c] its taps reach - the CPU
+//! `conv1d_rows_transposed_depthwise`
+[vk_dispatch(name = "tts_pool_dw_cls", kernel = "run", grid = "total/256", params = "total : int64")]
+class TtsPoolDw : DwConvRowsT {}
 
 struct TtsAddScaleArgs {
     nelem : uint
@@ -13750,7 +13715,7 @@ struct TtsAddScaleArgs {
 
 //! o = (a + b) * scale over nelem elements - the residual join's 1 / sqrt(2) and the averaged stage sums; o may be a;
 //! one element an invocation
-[vk_dispatch(name = "tts_add_scale_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_add_scale_cls", kernel = "run", grid = "nelem/256", params = "nelem : int64")]
 class TtsAddScale {
     @ssbo @binding = 0 a : array<float>
     @ssbo @binding = 1 b : array<float>
@@ -13766,9 +13731,6 @@ class TtsAddScale {
     }
 }
 
-//! the add-and-scale's workgroup count over `nelem` elements
-def tts_add_scale_wgs(nelem : int64) : int64 => (nelem + 255l) / 256l
-
 struct TtsAxpyArgs {
     nelem : uint
     scale : float
@@ -13779,7 +13741,7 @@ struct TtsAxpyArgs {
 
 //! o = (zero ? 0 : o) + scale * y over nelem elements - the generator stage's averaged residual-block sum; one element
 //! an invocation
-[vk_dispatch(name = "tts_axpy_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_axpy_cls", kernel = "run", grid = "nelem/256", params = "nelem : int64")]
 class TtsAxpy {
     @ssbo @binding = 0 o : array<float>
     @ssbo @binding = 1 y : array<float>
@@ -13795,36 +13757,6 @@ class TtsAxpy {
     }
 }
 
-//! the axpy's workgroup count over `nelem` elements
-def tts_axpy_wgs(nelem : int64) : int64 => (nelem + 255l) / 256l
-
-struct TtsReflectArgs {
-    c : uint       //! the row width
-    total : uint   //! (t + 1) * c
-}
-
-//! y [t + 1][c] = x [t][c] behind one reflected row (row 0 = x's row 1, row r > 0 = x's row r - 1) - the last stage's
-//! left reflect pad; one element an invocation
-[vk_dispatch(name = "tts_reflect1_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsReflect1 {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 y : array<float>
-    @push_constant pa : TtsReflectArgs
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.total) {
-            let r = gid / pa.c
-            let src = r == 0u ? 1u : r - 1u
-            y[gid] = x[src * pa.c + gid % pa.c]
-        }
-    }
-}
-
-//! the reflect pad's workgroup count over `total` = (t + 1) * c elements
-def tts_reflect1_wgs(total : int64) : int64 => (total + 255l) / 256l
-
 struct TtsSourceArgs {
     n : uint            //! the samples, frames * up
     nlow : uint         //! the phase frames, `resize_len(n, 1 / up)`
@@ -13839,56 +13771,25 @@ struct TtsSourceArgs {
     boff : uint         //! its bias [1] in wn
 }
 
-//! a resample's two taps at one output index: the source positions and their weights
-struct TtsTaps {
-    i0 : uint
-    i1 : uint
-    l0 : float
-    l1 : float
-}
-
-//! a / b as the CPU's IEEE division rounds it: the device's own sits up to 2.5 ulp off, which the phase's cumulative sums carry
-def tts_div(a, b : float) : float {
+//! a / b rounded as the CPU's IEEE divide: a SPIR-V divide sits up to 2.5 ulp off, which the phase sums carry (Metal's `/` is IEEE)
+def private tts_div(a, b : float) : float {
     var r = 1.0 / b
     r = mad(mad(-b, r, 1.0), r, r)
     let q = a * r
     return mad(mad(-q, b, a), r, q)
 }
 
-//! the CPU `sine_phase_frames`' rad: the cycles at sample i of harmonic h off f0 `f0v`, `nu` folded into the overtones' sample 0
-def tts_src_rad(f0v, nu : float; i, h : uint; sr : float) : float {
-    let cyc = tts_div(f0v * float(h + 1u), sr)
-    let r = cyc - floor(cyc)
-    return (i == 0u && h > 0u) ? r + nu : r
-}
-
-//! torch's linear resample taps at output index `to` over `n` inputs: the source position, its floor and the next
-def tts_resize_taps_torch(n, to : uint; scale : float) : TtsTaps {
-    let src = max(0.0, mad(tts_div(1.0, scale), float(to) + 0.5, -0.5))
-    let i0 = min(uint(src), n - 1u)
-    let l1 = src - float(i0)
-    return TtsTaps(i0 = i0, i1 = min(i0 + 1u, n - 1u), l0 = 1.0 - l1, l1 = l1)
-}
-
-//! onnxruntime's taps: the clamped source position, equal weights where the two taps coincide
-def tts_resize_taps_onnx(n, to : uint; scale : float) : TtsTaps {
-    let in_x = clamp(tts_div(float(to) + 0.5, scale) - 0.5, 0.0, float(n - 1u))
-    let i0 = min(uint(in_x), n - 1u)
-    let i1 = min(i0 + 1u, n - 1u)
-    let same = i0 == i1
-    return TtsTaps(i0 = i0, i1 = i1, l0 = same ? 0.5 : abs(in_x - float(i1)), l1 = same ? 0.5 : abs(in_x - float(i0)))
-}
-
-//! the source's resample law - TORCH: torch's taps and mix, else onnxruntime's - the base of the source stamps
+//! the source's resample law - TORCH: torch's taps and mix, else onnxruntime's - the base of the source stamps; the taps'
+//! quotients divide through `tts_div`
 [ |> template_struct_instance]
 class template TtsSrcLawT {
     @template_constant TORCH : bool = false
 
-    def law_taps(n, to : uint; scale : float) : TtsTaps {
+    def law_taps(n, to : uint; scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
         static_if (TORCH) {
-            return tts_resize_taps_torch(n, to, scale)
+            tts_resize_taps_torch(n, to, tts_div(1.0, scale), i0, i1, l0, l1)
         } else {
-            return tts_resize_taps_onnx(n, to, scale)
+            tts_resize_taps_onnx(n, tts_div(float(to) + 0.5, scale), i0, i1, l0, l1)
         }
     }
 
@@ -13917,24 +13818,25 @@ class template TtsSrcLowT : TtsSrcLawT {
             let nlow = max(pa.nlow, 1u)
             let up = max(pa.up, 1u)
             let h = gid / nlow
-            let tp = law_taps(pa.n, gid % nlow, tts_div(1.0, float(pa.up)))
-            let r0 = tts_src_rad(f0[tp.i0 / up], noise_u[h], tp.i0, h, pa.sr)
-            let r1 = tts_src_rad(f0[tp.i1 / up], noise_u[h], tp.i1, h, pa.sr)
-            low[gid] = law_mix(r0, r1, tp.l0, tp.l1, h + 1u == pa.nh)
+            var i0 = 0u
+            var i1 = 0u
+            var l0 = 0.0
+            var l1 = 0.0
+            law_taps(pa.n, gid % nlow, tts_div(1.0, float(pa.up)), i0, i1, l0, l1)
+            let r0 = tts_src_rad(tts_div(f0[i0 / up] * float(h + 1u), pa.sr), noise_u[h], i0, h)
+            let r1 = tts_src_rad(tts_div(f0[i1 / up] * float(h + 1u), pa.sr), noise_u[h], i1, h)
+            low[gid] = law_mix(r0, r1, l0, l1, h + 1u == pa.nh)
         }
     }
 }
 
-[vk_dispatch(name = "tts_src_low_torch_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_src_low_torch_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsSrcLowTorch : TtsSrcLowT {
     override TORCH = true
 }
 
-[vk_dispatch(name = "tts_src_low_onnx_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_src_low_onnx_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsSrcLowOnnx : TtsSrcLowT {}
-
-//! the phase increments' workgroup count over `total` = nh * nlow elements
-def tts_src_low_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 //! the phase per frame lowc [nh][nlow] as the running sum of the increments - TORCH: the double accumulator as a two-float
 //! sum carrying its rounding error, else the plain float sum; one workgroup, invocation h < nh walks its harmonic, wgs = 1
@@ -13954,16 +13856,11 @@ class template TtsSrcCumsumT : TtsSrcLawT {
             while (k < pa.nlow) {
                 let x = low[h * pa.nlow + k]
                 static_if (TORCH) {
-                    let s = acc + x
-                    let bv = s - acc
-                    lo += (acc - (s - bv)) + (x - bv)
-                    let s2 = s + lo
-                    lo = lo - (s2 - s)
-                    acc = s2
+                    tts_two_sum_add(acc, lo, x)
                 } else {
                     acc += x
                 }
-                lowc[h * pa.nlow + k] = ((acc * 2.0) * 3.14159265358979) * float(pa.up)
+                lowc[h * pa.nlow + k] = tts_phase_rad(acc, pa.up)
                 k++
             }
         }
@@ -13980,7 +13877,7 @@ class TtsSrcCumsumOnnx : TtsSrcCumsumT {}
 
 //! the source's own noise draw noise_n [n][nh], `tts_hash_normal` at the seed - the captured stream's seat when no stream
 //! was captured; one element an invocation
-[vk_dispatch(name = "tts_src_noise_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_src_noise_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsSrcNoise {
     @ssbo @binding = 0 noise_n : array<float>
     @push_constant pa : TtsSourceArgs
@@ -13993,9 +13890,6 @@ class TtsSrcNoise {
         }
     }
 }
-
-//! the noise draw's workgroup count over `total` = n * nh elements
-def tts_src_noise_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 //! the mixed source signal har [n] on the stamp's resample law: the harmonics' sines at the interpolated phases, the noise
 //! rows scaled by voicing, the source linear (lw [nh] at woff, lb [1] at boff) and its tanh; one sample an invocation
@@ -14012,15 +13906,18 @@ class template TtsSrcSinesT : TtsSrcLawT {
     def run {
         let i = gl_GlobalInvocationID.x
         if (i < pa.n) {
-            let tp = law_taps(pa.nlow, i, float(pa.up))
+            var i0 = 0u
+            var i1 = 0u
+            var l0 = 0.0
+            var l1 = 0.0
+            law_taps(pa.nlow, i, float(pa.up), i0, i1, l0, l1)
             let uv = f0[i / max(pa.up, 1u)] > pa.voiced_thr ? 1.0 : 0.0
-            let noise_amp = uv * pa.noise_std + (1.0 - uv) * pa.sine_amp / 3.0
+            let noise_amp = tts_noise_amp(uv, pa.noise_std, pa.sine_amp)
             var acc = wn[pa.boff]
             var h = 0u
             while (h < pa.nh) {
-                let phase = law_mix(lowc[h * pa.nlow + tp.i0], lowc[h * pa.nlow + tp.i1], tp.l0, tp.l1, h + 1u == pa.nh)
-                let s = tts_sin_big(phase) * pa.sine_amp
-                acc += wn[pa.woff + h] * (s * uv + noise_amp * noise_n[i * pa.nh + h])
+                let phase = law_mix(lowc[h * pa.nlow + i0], lowc[h * pa.nlow + i1], l0, l1, h + 1u == pa.nh)
+                acc += tts_src_term(wn[pa.woff + h], tts_sin_big(phase) * pa.sine_amp, uv, noise_amp, noise_n[i * pa.nh + h])
                 h++
             }
             har[i] = tts_tanh(acc)
@@ -14028,16 +13925,13 @@ class template TtsSrcSinesT : TtsSrcLawT {
     }
 }
 
-[vk_dispatch(name = "tts_src_sines_torch_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_src_sines_torch_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsSrcSinesTorch : TtsSrcSinesT {
     override TORCH = true
 }
 
-[vk_dispatch(name = "tts_src_sines_onnx_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_src_sines_onnx_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsSrcSinesOnnx : TtsSrcSinesT {}
-
-//! the mixed signal's workgroup count over `n` samples
-def tts_src_sines_wgs(n : int64) : int64 => (n + 255l) / 256l
 
 struct TtsStftArgs {
     n : uint        //! the signal's samples
@@ -14072,15 +13966,12 @@ class template TtsStftT {
             var im = 0.0
             var tap = 0u
             while (tap < pa.k) {
-                var src = int(f * pa.hop + tap) - int(pa.pad)
+                let p = int(f * pa.hop + tap) - int(pa.pad)
+                var src = 0
                 static_if (REFLECT) {
-                    if (src < 0) {
-                        src = -src
-                    } elif (src >= int(pa.n)) {
-                        src = 2 * (int(pa.n) - 1) - src
-                    }
+                    src = tts_pad_reflect(p, int(pa.n))
                 } else {
-                    src = clamp(src, 0, int(pa.n) - 1)
+                    src = clamp(p, 0, int(pa.n) - 1)
                 }
                 let v = har[uint(src)]
                 re += wn[pa.reoff + b * pa.k + tap] * v
@@ -14088,22 +13979,19 @@ class template TtsStftT {
                 tap++
             }
             let row = f * 2u * pa.bins
-            spec[row + b] = sqrt(re * re + im * im + pa.eps)
-            spec[row + pa.bins + b] = im == 0.0 ? (re < 0.0 ? 3.14159265358979 : 0.0) : atan2(im, re)
+            spec[row + b] = tts_stft_mag(re, im, pa.eps)
+            spec[row + pa.bins + b] = tts_stft_phase(re, im)
         }
     }
 }
 
-[vk_dispatch(name = "tts_stft_reflect_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_stft_reflect_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsStftReflect : TtsStftT {
     override REFLECT = true
 }
 
-[vk_dispatch(name = "tts_stft_edge_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_stft_edge_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsStftEdge : TtsStftT {}
-
-//! the STFT's workgroup count over `total` = frames * bins elements
-def tts_stft_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 struct TtsIstftArgs {
     tt : uint         //! the frames
@@ -14121,7 +14009,7 @@ struct TtsIstftArgs {
 
 //! the inverse STFT from conv_post's rows y [tt][stride] - a bin's log magnitude, then its phase - as the overlap-added
 //! transposed conv, a non-negligible envelope divided out under `envelope`; one sample an invocation
-[vk_dispatch(name = "tts_istft_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_istft_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsIstft {
     @ssbo @binding = 0 y : array<float>
     @ssbo @binding = 1 @role = "weight" wn : array<float>
@@ -14143,10 +14031,8 @@ class TtsIstft {
                     if (q < pa.tt) {
                         var b = 0u
                         while (b < pa.bins) {
-                            let mag = exp(y[q * pa.stride + b])
-                            let ph = sin(y[q * pa.stride + pa.bins + b])
                             let wa = tap * pa.bins + b
-                            acc += mag * cos(ph) * wn[pa.reoff + wa] - mag * sin(ph) * wn[pa.imoff + wa]
+                            acc += tts_istft_term(y[q * pa.stride + b], y[q * pa.stride + pa.bins + b], wn[pa.reoff + wa], wn[pa.imoff + wa])
                             b++
                         }
                         let wv = wn[pa.wnoff + tap]
@@ -14159,9 +14045,6 @@ class TtsIstft {
         }
     }
 }
-
-//! the inverse STFT's workgroup count over `n` samples
-def tts_istft_wgs(n : int64) : int64 => (n + 255l) / 256l
 
 struct TtsPkRowsArgs {
     rows : uint
@@ -14188,8 +14071,9 @@ class template TtsPkRowsT {
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.rows * pa.width) {
-            let r = gid / pa.width
-            let j = gid % pa.width
+            let w = max(pa.width, 1u)
+            let r = gid / w
+            let j = gid % w
             var v = src[(pa.sr0 + r) * pa.ss + pa.sc + j]
             static_if (ELU) {
                 v = max(v, 0.0) + min(exp(v) - 1.0, 0.0)
@@ -14199,43 +14083,20 @@ class template TtsPkRowsT {
     }
 }
 
-[vk_dispatch(name = "tts_pk_rows_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_rows_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsPkRows : TtsPkRowsT {}
 
-[vk_dispatch(name = "tts_pk_rows_elu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_rows_elu_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsPkRowsElu : TtsPkRowsT {
     override ELU = true
 }
 
-//! the row copies' workgroup count over `total` = rows * width elements
-def tts_pk_rows_wgs(total : int64) : int64 => (total + 255l) / 256l
-
-struct TtsPkScaleArgs {
-    rows : uint
-    c : uint      //! the row width
-    xoff : uint   //! x's element base
-    soff : uint   //! the scale row's element base in wn
+//! x [rows][d] *= the scale row at boff in place - a transformer layer's per-channel layer scale (the CPU
+//! `layer_scale_rows`) on the bias stamp's row-broadcast shell: four elements an invocation, d a 4-multiple, `act` unread
+[vk_dispatch(name = "tts_pk_row_scale_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
+class TtsPkRowScale : TowerBiasActT {
+    def override biased(e : uint) : float => x[e] * wn[pa.boff + e % max(1u, pa.d)]
 }
-
-//! x [rows][c] *= the scale row [c] in place - a transformer layer's per-channel layer scale (the CPU `layer_scale_rows`);
-//! one element an invocation
-[vk_dispatch(name = "tts_pk_row_scale_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsPkRowScale {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @role = "weight" wn : array<float>
-    @push_constant pa : TtsPkScaleArgs
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.rows * pa.c) {
-            x[pa.xoff + gid] = x[pa.xoff + gid] * wn[pa.soff + gid % pa.c]
-        }
-    }
-}
-
-//! the layer scale's workgroup count over `total` = rows * c elements
-def tts_pk_row_scale_wgs(total : int64) : int64 => (total + 255l) / 256l
 
 let TTS_PK_ATTN_HS = 64u            //! the head size the attention row is stamped for, the body's literal: another head size declines at the driver
 let TTS_PK_ATTN_MAX_KEYS = 2048u    //! the scores a row stages, the body's literal: a longer key range declines at the driver
@@ -14256,7 +14117,7 @@ struct TtsPkAttnArgs {
 //! the causal cached attention of one query row over the caches' rows (the CPU `attention_causal_rows`): query i at
 //! position pos0 + i sees the keys up to itself, the last `ctx` of them when ctx is nonzero; the scaled query staged,
 //! the scores into the stage, the softmax, then the value sum four parts a column (`value_sum`); one workgroup a
-//! (head, query row), wgs = heads * t
+//! (head, query row), wgs = `tts_attn_wgs`
 [vk_dispatch(name = "tts_pk_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TtsPkAttn : WgReduceBase {
     @ssbo @binding = 0 q : array<float>
@@ -14307,7 +14168,7 @@ class TtsPkAttn : WgReduceBase {
         let i = wg % t
         let lid = gl_LocalInvocationID.x
         let p = pa.pos0 + i
-        let j0 = (pa.ctx != 0u && p + 1u > pa.ctx) ? p + 1u - pa.ctx : 0u
+        let j0 = tts_window_start(p, pa.ctx)
         let nk = p + 1u - j0
         if (lid < 64u) {
             qh[lid] = q[pa.qoff + i * pa.qs + pa.qcol + h * 64u + lid] / sqrt(float(64u))
@@ -14366,9 +14227,6 @@ class TtsPkAttn : WgReduceBase {
     }
 }
 
-//! the attention row's workgroup count: a workgroup a (head, query row)
-def tts_pk_attn_wgs(heads, t : int64) : int64 => heads * t
-
 let TTS_PK_GEMV_MAX_NIN = 4096u   //! the x the row GEMV stages, the body's literal: a wider input declines at the driver
 
 struct TtsPkGemvArgs {
@@ -14400,12 +14258,10 @@ struct TtsPkGemvArgs {
 //! into the k cache's row p, the v span into the v cache's (the CPU's rope_rows and kv_cache_append), 6 the residual
 //! y += d * the slab vector (the layer scale), 7 the residual y += d, 8 the tanh GELU; 32 lanes a row, each a float4 of the
 //! row a step when the row base, the stride and nin sit on the four lattice (the slab writer's 16-byte runs) and a float
-//! otherwise, the lanes folded by shuffle; four rows a workgroup, wgs = `tts_pk_gemv_wgs`. The rope-store stamp turns the
-//! pairs (2j, 2j + 1) a workgroup's even and odd rows hold, so it takes a span on the four lattice. The workgroup memory is
-//! measured to size (the staged x, the four dots), so the norm's sums fold through one subgroupAdd into `red`, one slot a
-//! subgroup, not through `WgReduceBase`
+//! otherwise, the lanes folded by shuffle; four rows a workgroup. The rope-store stamp turns the
+//! pairs (2j, 2j + 1) a workgroup's even and odd rows hold, so it takes a span on the four lattice
 [ |> template_struct_instance]
-class template TtsPkGemvT {
+class template TtsPkGemvT : WgReduceBase {
     @template_constant NORM_IN : bool = false       //!< the input through the LayerNorm (lw, lb) alone
     @template_constant NORM_MOD_IN : bool = false
     @template_constant MOD_IN : bool = false   //!< the modulation rows are read: the normed input or the gate epilogue
@@ -14425,25 +14281,7 @@ class template TtsPkGemvT {
     @ssbo @binding = 8 @template_gate = ROPE_STORE vc : array<float>
     @push_constant pa : TtsPkGemvArgs
     @workgroup xs : float[int(TTS_PK_GEMV_MAX_NIN)]
-    @workgroup red : float[4]   //! the subgroups' partials of a workgroup sum
     @workgroup dq : float[4]   //! the rope-store stamp: the workgroup's four dots side by side, so an even row turns its pair
-
-    //! the workgroup sum of one value a lane: the subgroups' sums, every lane adding them in order; `red` is free on return
-    def gemv_wg_sum(v : float) : float {
-        let s = subgroupAdd(v)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = s
-        }
-        barrier()
-        var tot = 0.0
-        var i = 0u
-        while (i < gl_NumSubgroups) {
-            tot += red[i]
-            i++
-        }
-        barrier()
-        return tot
-    }
 
     //! the 32 lanes of a row folded: a butterfly over the row's aligned lane group, every lane holding the row's sum
     def row_sum(v : float) : float {
@@ -14498,7 +14336,7 @@ class template TtsPkGemvT {
             s += x[pa.xoff + k]
             k += 128u
         }
-        let total = gemv_wg_sum(s)
+        let total = wg_sum(s, 0u)
         let mean = total / float(pa.nin)
         var vs = 0.0
         k = tid
@@ -14507,13 +14345,13 @@ class template TtsPkGemvT {
             vs += dv * dv
             k += 128u
         }
-        let var_sum = gemv_wg_sum(vs)
+        let var_sum = wg_sum(vs, 1u)
         let inv = 1.0 / sqrt(var_sum / float(pa.nin) + pa.eps)
         k = tid
         while (k < pa.nin) {
-            let nv = (x[pa.xoff + k] - mean) * inv * wn[pa.lwoff + k] + wn[pa.lboff + k]
+            let nv = tts_ln_affine(x[pa.xoff + k], mean, inv, wn[pa.lwoff + k], wn[pa.lboff + k])
             static_if (NORM_MOD_IN) {
-                xs[k] = nv * (1.0 + mod[pa.moff + pa.nin + k]) + mod[pa.moff + k]
+                xs[k] = tts_modulate(nv, mod[pa.moff + k], mod[pa.moff + pa.nin + k])
             } else {
                 xs[k] = nv
             }
@@ -14548,14 +14386,13 @@ class template TtsPkGemvT {
                 y[pa.yoff + row] = d
             }
             static_if (EPI == 1) {
-                y[pa.yoff + row] = d / (1.0 + exp(-d))
+                y[pa.yoff + row] = silu_f32(d)
             }
             static_if (EPI == 2) {
                 y[pa.yoff + row] = y[pa.yoff + row] + mod[pa.moff + 2u * pa.nin + row] * d
             }
             static_if (EPI == 3) {
-                let av = d + aux_at(row)
-                y[pa.yoff + row] = av / (1.0 + exp(-av))
+                y[pa.yoff + row] = silu_f32(d + aux_at(row))
             }
             static_if (EPI == 4) {
                 let tv = d + x0[pa.x0off + row]
@@ -14572,7 +14409,7 @@ class template TtsPkGemvT {
                 y[pa.yoff + row] = y[pa.yoff + row] + d
             }
             static_if (EPI == 8) {
-                y[pa.yoff + row] = 0.5 * d * (1.0 + tanh(clamp(0.7978845608028654 * (d + 0.044715 * d * d * d), -15.0, 15.0)))
+                y[pa.yoff + row] = tts_gelu_tanh(d)
             }
         }
         static_if (EPI == 5) {
@@ -14613,29 +14450,29 @@ class template TtsPkGemvT {
     }
 }
 
-[vk_dispatch(name = "tts_pk_gemv_dot_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_dot_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvDot : TtsPkGemvT {}
 
-[vk_dispatch(name = "tts_pk_gemv_ln_silu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_ln_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvLnSilu : TtsPkGemvT {
     override NORM_MOD_IN = true
     override MOD_IN = true
     override EPI = 1
 }
 
-[vk_dispatch(name = "tts_pk_gemv_gate_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_gate_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvGate : TtsPkGemvT {
     override MOD_IN = true
     override EPI = 2
 }
 
-[vk_dispatch(name = "tts_pk_gemv_add_silu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_add_silu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvAddSilu : TtsPkGemvT {
     override AUX_IN = true
     override EPI = 3
 }
 
-[vk_dispatch(name = "tts_pk_gemv_tail_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_tail_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvTail : TtsPkGemvT {
     override NORM_MOD_IN = true
     override MOD_IN = true
@@ -14644,73 +14481,32 @@ class TtsPkGemvTail : TtsPkGemvT {
     override EPI = 4
 }
 
-[vk_dispatch(name = "tts_pk_gemv_ln_qkv_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_ln_qkv_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvLnQkv : TtsPkGemvT {
     override NORM_IN = true
     override ROPE_STORE = true
     override EPI = 5
 }
 
-[vk_dispatch(name = "tts_pk_gemv_add_scale_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_add_scale_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvAddScale : TtsPkGemvT {
     override AUX_IN = true
     override EPI = 6
 }
 
-[vk_dispatch(name = "tts_pk_gemv_add_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_add_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvAdd : TtsPkGemvT {
     override EPI = 7
 }
 
-[vk_dispatch(name = "tts_pk_gemv_ln_gelu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[vk_dispatch(name = "tts_pk_gemv_ln_gelu_cls", kernel = "run", grid = "nout/4", params = "nout : int64")]
 class TtsPkGemvLnGelu : TtsPkGemvT {
     override NORM_IN = true
     override EPI = 8
 }
 
-//! the row GEMV's workgroup count over `nout` rows, four a workgroup
-def tts_pk_gemv_wgs(nout : int64) : int64 => (nout + 3l) / 4l
-
-struct TtsPkRopeArgs {
-    rows : uint
-    qs : uint     //! x's row stride
-    col : uint    //! the roped span's first column
-    d : uint      //! the span's width, its heads side by side
-    dh : uint     //! the head size
-    pos0 : uint   //! the first row's position, the tables' row
-    xoff : uint   //! x's element base
-    coff : uint   //! the cos table [pos][dh / 2] in wn
-    soff : uint   //! the sin table, the same layout
+//! the Pocket codec's adjacent-pair rope over the q and k spans, the tables in the slab (cos_w and sin_w bind one buffer)
+[vk_dispatch(name = "tts_pk_rope_cls", kernel = "run", grid = "pairs/256", params = "pairs : int64")]
+class TtsPkRope : RopeTabT {
+    override SLAB_TABS = true
 }
-
-//! the rotary embedding over a span of rows in place (the CPU `rope_rows`): row r at position pos0 + r turns each adjacent
-//! pair (2j, 2j + 1) of each head by the tables' angle j at that position; one pair an invocation over rows * d / 2
-[vk_dispatch(name = "tts_pk_rope_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsPkRope {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @role = "weight" wn : array<float>
-    @push_constant pa : TtsPkRopeArgs
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        let half = pa.d / 2u
-        if (gid < pa.rows * half) {
-            let r = gid / max(half, 1u)
-            let pi = gid % max(half, 1u)
-            let hh = max(pa.dh / 2u, 1u)
-            let j = pi % hh
-            let i = pa.xoff + r * pa.qs + pa.col + (pi / hh) * pa.dh + 2u * j
-            let tb = (pa.pos0 + r) * hh + j
-            let cv = wn[pa.coff + tb]
-            let sv = wn[pa.soff + tb]
-            let v0 = x[i]
-            let v1 = x[i + 1u]
-            x[i] = v0 * cv - v1 * sv
-            x[i + 1u] = v0 * sv + v1 * cv
-        }
-    }
-}
-
-//! the rope's workgroup count over `pairs` = rows * d / 2 pairs
-def tts_pk_rope_wgs(pairs : int64) : int64 => (pairs + 255l) / 256l

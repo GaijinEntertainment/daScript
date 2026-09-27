@@ -11,6 +11,35 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-27) - the Vulkan TTS dedup pass: the Pocket row GEMV (`TtsPkGemvT`) folds
+  its own subgroup reduction onto the shared `WgReduceBase`, and the pass's bench rows against
+  master's.** Box: the pod - the RunPod RTX PRO 4500 Blackwell, Linux, the Vulkan backend - one
+  process at a time.
+
+  The reduction fold's ground is the bits, not a race: the folded stamp writes the same output
+  as the shipped one (max abs diff 0 over both served frame-loop shapes, ln_qkv 1024 -> 3072 and
+  ln_gelu 1024 -> 4096), its workgroup memory is 16912 bytes under the device's 49152-byte cap,
+  and the served Pocket row below reads the same on the folded tree as on master. The one-off
+  probe that timed the two forms did not land, so its figures are not this ledger's.
+
+  The bench rows, `direction-grade`, the same instrument on the same box at two named commits,
+  one process a run: `./bin/daslang -jit modules/dasLLAMA/harness/tts_synth.das -- --model
+  <file> --voice <voice> --out <dir> --limit 20` with `kitten-nano.gguf` and `kitten-mini.gguf`
+  on `Bella`, `kokoro-82m.gguf` on `af_heart`, `pocket-tts-en-q8.gguf` on `alba`, under
+  `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16 DAS_LOG_LEVEL=info`,
+  `DAS_TUNE_POLICY` and `DASLLAMA_COOPMAT` unset, no other overrides; the mean generation wall
+  (`gen_ms`) a sentence over the 20 sentences, with its min and max. At the dedup tree
+  7e06befab against master 45277047d: kitten-nano 45 ms (16-431) against 44 (15-369), kitten-mini
+  94 (36-653) against 91 (36-688), kokoro 87 (37-641) against 86 (37-654), Pocket q8 128 (60-634)
+  against 133 (63-654) - within noise. The Metal row of the same instrument on the M5 is owed.
+
+  The reflect pad's two `TtsPkRows` copies (the last generator stage's one `TtsReflect1` dispatch
+  became two), on the device clock (`pfq_*`, 200 submits after a warm-up, `debug-jit`, the probe
+  a one-run harness file that did not land) over t2 rows of c2 channels, both copies a submit:
+  c2 8: 4.8 us at t2 2 through 4096, 6.5 at 65536, 12.0 at 262144; c2 24: 4.8 through 4096, 10.6
+  at 65536, 24.9 at 262144; c2 64: 4.8 through 256, 6.4 at 4096, 18.6 at 65536, 173.7 at 262144.
+  The pair costs a dispatch's floor at every row count a sentence produces, so the path ships no
+  gate on the row count.
 - **LANDED (2026-09-26) - the StyleTTS2 and Pocket seats ride the Vulkan TTS driver
   (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`): the kitten and kokoro families' seven
   seats and the Pocket codec and frames seats on the Vulkan tower's knob, the front end on the

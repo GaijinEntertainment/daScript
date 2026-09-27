@@ -10,6 +10,7 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/strings_boost
 require daslib/shader_block_layout
+require daslib/math_boost
 
 require glsl/glsl_internal
 require glsl/glsl_common public

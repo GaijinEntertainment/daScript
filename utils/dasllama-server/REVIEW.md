@@ -35,6 +35,10 @@ adding a name to a check's licensed set (the names it does not flag), or bluntin
 text so it no longer names what failed - is a defect.** What the gate enforces is read from
 the gate itself.
 
+**Weakening `test_worker_dispatch.das` - removing its `success` check or a condition its `passed`
+value combines, dropping a call it makes before that check, or removing its `[test]` annotation -
+is a defect; fix the code that fails it instead.** What the test holds is read from the test itself.
+
 **A diff that renames or removes a request field that `openai_server.das` reads updates every
 place `control.html` sends that field, in the same change.**
 

@@ -783,3 +783,26 @@ mel - so no gate can cover the hook under `REVIEW_TOWER.md`'s covering rule, whi
 counter that rises on a leg where the hook is the only hook raising it. The Vulkan tower counts
 the same hook under `vulkan_tower_stats()`'s `mels`. The work: a `mels` counter in
 `metal_tower_stats()` that the mel hook raises, and the qwen3a Metal cell asserting it rises.
+## 29. The Metal tower's K-panel pool release has no cell
+
+The Metal tower's block encodes (`dasllama/dasllama_metal_tower.das`) acquire the K panel from
+`g_tw_pool` at `bytes_rowk` - `nk64` key rows, past the `mp` rows of the other planes - and
+release it at the same size. `MetalBufferPool` re-files a released buffer into the bucket of the
+size it is given, so a release at any other size leaves the K panel's bucket empty and the next
+encode allocates a fresh buffer: a pool that grows on every encode while every parity cell stays
+green. No cell reads the pool's state. The work, on the M5: an accessor that reports a pool's
+bucket counts (beside `MetalBufferPool`'s pool functions, reachable from
+`dasllama/dasllama_metal_common.das`), and a cell on the image suite's `mtower` arm
+(`tests/test_model_image.das`) that encodes one tower chain twice and asserts the bucket counts read the same after the second encode as after the
+first.
+
+## 30. The Pocket frames q8 blob rounds a load-quantized model's scales to f16
+
+`pk_frames_write`'s 34-byte Q8_0 blob (`pk_blob_q8`) stores each block's scale as a halfword, so a Pocket model
+quantized at load from a float file serves the frames seat with `q * f16(d)` where the CPU q8
+lane multiplies by the f32 `d` it minted - up to 2^-11 of relative distance per block, the gap
+the shared slab writer closed for every other seat (`tsw_put_q8` reads the f32 scale). A Q8_0
+file is untouched: its scales are halfwords already. The work: an f32-scale blob layout for the
+frames GEMV (a 36-byte block, or the scales as a separate row the kernel reads beside the
+quants), its kernel arm, and the frames q8 cell on a float-minted file reading the CPU lane's
+weights exactly.

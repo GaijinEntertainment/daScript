@@ -23,9 +23,6 @@ sits on its declaration or on the parameter of every callee that grows it.**
 that is not `[cold_path]` is a defect.**
 
 **A vision family file takes every clamp bound from `read_clamp`, never from a literal.**
-`read_clamp` returns the four scalars stored beside a weight tensor in the projector file
-(`<base>.input_min` / `.input_max` / `.output_min` / `.output_max`), or an inactive +/-FLT_MAX
-clamp where the file carries none.
 
 **A vision family file whose forward applies no clamp at all, and whose opening `//!` doc block
 does not say so, is a defect.**
@@ -52,9 +49,9 @@ such a stream onto a path that panics later, or drops its rows, is a defect.**
 two token spans plus a row block is a defect, everywhere the splice appears** - the two-span form
 is what keeps BPE merges from crossing the media.
 
-**A diff that changes the media row-block shape also updates, in the same change,
-`utils/dasllama-server/openai_server.das` (repo root), and a diff that adds another file building
-or parsing the row block names it here.**
+**A diff that changes the media row-block shape - the encoder's embedding rows a scheduler
+request carries in `media_embd` - also updates, in the same change, every file under
+`utils/dasllama-server/` (repo root) that fills or reads a `media_embd`.**
 
 **A family's new arm for a media kind that reaches the layer stack by any path but
 `forward_prefill_embd` is a defect, a second prefill body for it included** - write a sibling

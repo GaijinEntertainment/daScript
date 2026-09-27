@@ -1,5 +1,6 @@
 options gen2
 require math
+require daslib/math_boost
 require dastest/testing_boost public
 
 options optimize = false
@@ -150,4 +151,13 @@ def test_math_misc(t : T?) { // nolint:STYLE038 one flat assertion per math entr
     // constants
     let mme = "{FLT_MIN} {FLT_MAX} {FLT_EPSILON}"
     t |> equal(mme, "1.1754944e-38 3.4028235e+38 1.1920929e-07")
+}
+
+[test]
+def test_round_up(t : T?) {
+    t |> equal(round_up(13, 8), 16)
+    t |> equal(round_up(16, 8), 16)
+    t |> equal(round_up(0, 8), 0)
+    t |> equal(round_up(13l, 64l), 64l)
+    t |> equal(round_up(13u, 4u), 16u)
 }

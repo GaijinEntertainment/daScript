@@ -1,13 +1,24 @@
 # dasLLAMA Architecture - the tower attention routes and encode chains
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
-carries the three routes that serve tower attention on Metal, the
+carries what a tower driver is and the registrations its hooks come through, the three routes
+that serve tower attention on Metal, the
 one-command-buffer encode chain each family the Metal tower driver serves gets, and the StyleTTS2
 synthesis chain, and the Pocket TTS codec and frames seats. The GPU backend role table these
 sections build on - the tower driver's role row included - stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 - `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower driver's row classes and attention
   routes, its encode chains, and the Vulkan ASR-decoder driver.
+
+### A tower driver and the hooks it registers {#tower-reach}
+
+A tower driver is a GPU driver file that serves a family's encoder or synthesis stages through
+hook seats - stage slots the CPU chain calls and the driver fills. Every hook a tower serves
+through is registered by an `[init]` of that tower's driver files: a seat, a drop hook, or a
+reload or weights-epoch listener. The registrations run in `dasllama_metal_tower_register` (the
+Metal tower), `dasllama_vulkan_tower_register` (the Vulkan tower) and
+`dasllama_vulkan_tts_register` (the Vulkan TTS driver, the Vulkan tower's TTS seats), so the
+hooks a function can reach are the ones those three register.
 
 ### The tower attention routes {#tower-attn-routes}
 
@@ -67,9 +78,10 @@ reload never reuses them before the weights epoch drops every slab, which shutdo
 family attaches its slab through one guard and one rebuild (`st2_slab_current`, `st2_slab_rebuild`):
 a slab whose key matches stays resident and the call returns on the guard; otherwise the cold
 rebuild runs the family's drop, then the family's writer twice through the shared host writer
-(`dasllama_tts_slab.das`, the one the Vulkan seats build from; its keys, shape checks and row
-layouts are the same here, the slots adapted to byte offsets with the GEMM's uniforms hung on
-each, and an LSTM recurrence written unturned, as the Metal recurrence kernel reads it) - the
+(`dasllama_tts_slab.das`, the one the Vulkan seats build from; its keys, shape walks and row
+layouts are the same here - each Metal part writer runs the shared part writer and maps its record
+onto the Metal slots, adapted to byte offsets with the GEMM's uniforms hung on each, and the writer
+lays an LSTM recurrence untransposed (`lstm_transposed` false), as the Metal recurrence kernel reads it) - the
 measuring pass writes into a probe slab to size the host copy, the second fills the resident -
 and the copy uploads, the drop running again when the upload fails. The measuring pass hangs no
 device handle - uniforms and buffers are created on the fill pass alone - so the probe slab is
@@ -84,8 +96,10 @@ AdaIN residual blocks, the harmonic source, the generator and the inverse STFT a
 buffer, the samples back; the generator seat behind it - reached only by the CPU chain a
 declined decode falls into - runs the generator through conv_post as one command buffer and reads
 conv_post's rows back for the CPU's inverse STFT (`styletts2_istft`). The CPU chain is the specification, dispatch for dispatch, and every
-seat serves both weight lanes: the q8 lane's stacked quants are read row-major through the
-active repack's gather and dequantized into the slab, and a K-quant linear (the Pocket small
+seat serves both weight lanes: the q8 lane's stacked quants are read row by row out of the
+active repack's interleave (`q8_plane_row_f32`) and dequantized into the slab with their f32
+scales - the CPU q8 lane's weights exactly, the distance left being that lane's per-32 activation
+quantization, which the f32 seat does not do - and a K-quant linear (the Pocket small
 form's codec transformer) row by row through the active K-quant layout's group gather, its tail
 rows superblock by superblock, so the lane policy does not flip for the tower.
 
@@ -162,11 +176,12 @@ the 8-run lattice, a head over 128 wide, a transformer width off the 32 lattice)
 
 The Pocket frame loop - the backbone step and the flow head for every frame of a chunk - rides
 the tower driver as the family's second seat once the prompt's rows sit in the voice's caches:
-the CPU's `pocket_synthesize` loop, dispatch for dispatch, in batches of `g_tw_pk_batch` frames
+the CPU's `pocket_synthesize` loop, dispatch for dispatch, in batches of `pocket_frame_batch()` frames
 (eight) per command buffer, the EOS logits read back and the stop rule walked on the host between
-batches, the latents and the conditioning rows read back once at the end. A voice slot holds the
-device K/V rows `[cap][d]` per backbone layer, keyed on the caches' addresses, their fill and
-capacity and a sample of the rows they hold: the voice's prompt rows are transposed in once at
+batches (`pocket_frames_batched`, the host loop both GPU drivers run), the latents and the
+conditioning rows read back once at the end. A voice slot holds the device K/V rows `[cap][d]` per
+backbone layer, keyed (`tts_pk_voice_current`, the residency both drivers read) on the caches'
+addresses, their fill and capacity and a sample of the rows they hold: the voice's prompt rows are transposed in once at
 attach, a chunk's text rows behind them every chunk, and the frames append after those - nothing
 comes back to the host, since the CPU chain forgets a chunk's rows by resetting the fill. The
 key samples the rows because an address alone outlives the voice that held it: a later voice's

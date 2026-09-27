@@ -7,9 +7,7 @@ module dasllama_tts_slab shared public
 
 require dasllama/dasllama_lint public
 require math
-require daslib/f16_cvt
 require dasllama/dasllama_kqformat
-require dasllama/dasllama_layout
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert
@@ -30,14 +28,12 @@ struct TtsSlabWriter {
     @exact_size host : array<float>   //! sized once from the measure pass; the write pass only bumps `n`
     n : int64
     measure : bool
+    lstm_transposed : bool = true   //! an LSTM recurrence written transposed to [H][4H] (the Vulkan kernel's read), else as the model stores it (Metal's)
 }
-
-//! n rounded up to a multiple of m - the tile lattices the GEMM panels and the row pads take
-def tts_round_up(n, m : int64) : int64 => (n + m - 1l) / m * m
 
 //! `count` floats at the next 16-byte boundary (every item is a float4 read for some kernel); the element offset
 def tsw_alloc(var w : TtsSlabWriter; count : int64) : int64 {
-    let at = tts_round_up(w.n, 4l)
+    let at = round_up(w.n, 4l)
     w.n = at + count
     return at
 }
@@ -68,7 +64,7 @@ struct TtsNormSlot {
 struct TtsLstmSlot {
     fx : TtsConvSlot    //! the forward direction's input linear [4H][nin] with its bias
     bx : TtsConvSlot
-    fhh : int64         //! ... and its recurrence transposed [H][4H]
+    fhh : int64         //! the forward direction's recurrence, [H][4H] under `lstm_transposed`, else as stored
     bhh : int64
 }
 
@@ -146,26 +142,15 @@ struct TtsDecSlab {
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private tsw_put_q8(var w : TtsSlabWriter; q : array<int8>; qs : array<float>; rows, cols, w0, stride : int64) {
     return if (w.measure)
-    var @exact_size wq : array<uint8>
-    var @exact_size ws : array<uint8>
-    wq |> reserve_resize(rows * cols)
-    ws |> reserve_resize(rows * cols / 32l * 2l)
     let lay = active_q8_repack_layout(g_active_needs_repack)
     unsafe {
-        q8_gather_rows(addr<int8 const?>(q[0]), null, addr<float const?>(qs[0]), cols, rows, q8_gather_slice(rows, lay.mr), lay.mr, lay.kgroup, lay.wbias, wq, ws)
-        let sp = addr<uint16 const?>(ws[0])
-        let qp = addr<uint8 const?>(wq[0])
+        let qp = addr<int8 const?>(q[0])
+        let sp = addr<float const?>(qs[0])
         var hp = addr(w.host[w0])
-        let ncols = int(cols)
         maybe_parallel_for(0, int(rows), lanes_for_work(rows * cols, 0)) $(rb, re) {
             unsafe {
                 for (r in range64(int64(rb), int64(re))) {
-                    var dst = hp + r * stride
-                    let src = qp + r * cols
-                    let srow = sp + (r * cols) / 32l
-                    for (j in range(ncols)) {
-                        dst[j] = float(int8(src[j])) * f16_to_f32(uint(srow[j / 32]))
-                    }
+                    q8_plane_row_f32(qp, sp, cols, rows, lay, r, hp + r * stride)
                 }
             }
         }
@@ -197,23 +182,13 @@ def tts_slab_raw(var w : TtsSlabWriter; src : array<float>; n : int64) : int64 {
 
 def tts_slab_conv(var w : TtsSlabWriter; c : TtsConv1d) : TtsConvSlot {
     let kc = c.k * c.cin
-    var s = TtsConvSlot(cout_p = tts_round_up(c.cout, 64l), kdim_p = tts_round_up(kc, 32l), gathers = c.cin % 8l == 0l)
+    var s = TtsConvSlot(cout_p = round_up(c.cout, 64l), kdim_p = round_up(kc, 32l), gathers = c.cin % 8l == 0l)
     s.woff = tsw_alloc(w, s.cout_p * s.kdim_p)
     if (c.q8) {
         tsw_put_q8(w, c.wq, c.wqs, c.cout, kc, s.woff, s.kdim_p)
     } elif (!w.measure) {
         for (co in range64(c.cout)) {
-            for (ci in range64(c.cin)) {
-                for (tap in range64(c.k)) {
-                    var v = 0.0
-                    if (c.transposed) {
-                        v = !empty(c.wtr) ? c.wtr[(ci * c.k + tap) * c.cout + co] : c.wt[(co * c.k + tap) * c.cin + ci]
-                    } else {
-                        v = !empty(c.wk) ? c.wk[(tap * c.cin + ci) * c.cout_s + co] : c.w[(co * c.cin + ci) * c.k + tap]
-                    }
-                    w.host[s.woff + co * s.kdim_p + tap * c.cin + ci] = v
-                }
-            }
+            conv1d_weight_row(c, co, w.host, s.woff + co * s.kdim_p)
         }
     }
     s.boff = tts_slab_raw(w, c.b, s.cout_p)
@@ -221,7 +196,7 @@ def tts_slab_conv(var w : TtsSlabWriter; c : TtsConv1d) : TtsConvSlot {
 }
 
 def tts_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot {
-    var s = TtsConvSlot(cout_p = tts_round_up(l.nout, 64l), kdim_p = tts_round_up(l.nin, 32l), gathers = false)
+    var s = TtsConvSlot(cout_p = round_up(l.nout, 64l), kdim_p = round_up(l.nin, 32l), gathers = false)
     s.woff = tsw_alloc(w, s.cout_p * s.kdim_p)
     if (l.q8) {
         tsw_put_q8(w, l.wq, l.wqs, l.nout, l.nin, s.woff, s.kdim_p)
@@ -229,9 +204,7 @@ def tts_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot {
         tsw_put_kq(w, l, s.woff, s.kdim_p)
     } elif (!w.measure) {
         for (o in range64(l.nout)) {
-            for (i in range64(l.nin)) {
-                w.host[s.woff + o * s.kdim_p + i] = !empty(l.w) ? l.w[o * l.nin + i] : l.wt[i * l.nout + o]
-            }
+            linear_weight_row(l, o, w.host, s.woff + o * s.kdim_p)
         }
     }
     s.boff = tts_slab_raw(w, l.b, s.cout_p)
@@ -245,6 +218,10 @@ def private tts_slab_lstm_dir(var w : TtsSlabWriter; l : TtsLstm; var xs : TtsCo
     lin.b := l.b
     xs = tts_slab_linear(w, lin)
     let hd = l.hidden
+    if (!w.lstm_transposed) {
+        hh = tts_slab_raw(w, l.w_hh, 4l * hd * hd)
+        return
+    }
     hh = tsw_alloc(w, 4l * hd * hd)
     return if (w.measure)
     for (o in range64(4l * hd)) {
@@ -391,8 +368,8 @@ def tts_dec_write(var w : TtsSlabWriter; d : St2Decoder; var s : TtsDecSlab) {
 }
 
 //! the part's writer run twice (a measuring pass, then the fill); the host floats come back to upload, empty when the part carries nothing
-def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; var s : SS) : void>) : array<float> {
-    var inscope w = TtsSlabWriter(measure = true)
+def tts_slab_build(var slots : auto(SS); write : block<(var w : TtsSlabWriter; var s : SS) : void>; lstm_transposed : bool = true) : array<float> {
+    var inscope w = TtsSlabWriter(measure = true, lstm_transposed = lstm_transposed)
     var probe : SS
     invoke(write, w, probe)
     unsafe {
@@ -651,30 +628,15 @@ def tts_pk_voice_key(vs : PocketVoiceState) : uint64 {
         let d = kc.heads * kc.dh
         let rows = max(vs.len, 1l)
         for (i in range64(64l)) {
-            let kv = kc.k[((i * 131l) % d) * kc.cap + (i * 17l) % rows]
+            let c = (i * 131l) % d
+            let pos = (i * 17l) % rows
+            let kv = kc.k[kv_key_at(kc.dh, kc.cap, c / kc.dh, c % kc.dh, pos)]
             key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(kv))))
-            let vv = kc.v[(((i * 131l) % d) / kc.dh * kc.cap + (i * 17l) % rows) * kc.dh + (i * 131l) % kc.dh]
+            let vv = kc.v[kv_value_at(kc.dh, kc.cap, c / kc.dh, c % kc.dh, pos)]
             key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(vv))))
         }
     }
     return key
-}
-
-//! host rows [r0, r1) of one cache - keys [d][cap], values [heads][cap][dh] - as [pos][d] rows at kp / vp, row r0 landing at row `at`
-def tts_pk_kv_rows(kc : TtsKvCache; r0, r1, at : int64; var kp, vp : float?) {
-    let dh = kc.dh
-    let d = kc.heads * dh
-    let cap = kc.cap
-    unsafe {
-        for (pos in range64(r0, r1)) {
-            for (h in range64(kc.heads)) {
-                for (e in range64(dh)) {
-                    kp[(at + pos - r0) * d + h * dh + e] = kc.k[(h * dh + e) * cap + pos]
-                    vp[(at + pos - r0) * d + h * dh + e] = kc.v[(h * cap + pos) * dh + e]
-                }
-            }
-        }
-    }
 }
 
 //! the harmonic source's geometry for `f2` frames: the samples, the low-rate rows and the STFT frames; `ok` false where the decoder's source parts do not fit the stamps
@@ -688,10 +650,9 @@ struct TtsSourceShape {
 let TTS_SRC_MAX_SAMPLES = 1l << 23   //! past it `float(to) + 0.5` rounds, and the torch law's tap coordinate parts from the CPU's double form
 
 def tts_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64) : TtsSourceShape {
-    let samples = f2 * cfg.upsample
-    var sh = TtsSourceShape(samples = samples, nlow = resize_len(samples, 1.0 / float(cfg.upsample)))
-    return sh if (sh.samples < 1l || sh.samples >= TTS_SRC_MAX_SAMPLES || sh.nlow < 1l || cfg.n_harm < 1l || cfg.n_harm > 64l
-        || resize_len(sh.nlow, float(cfg.upsample)) != sh.samples)
+    let geo = sine_source_geometry(cfg, f2)
+    var sh = TtsSourceShape(samples = geo.samples, nlow = geo.nlow)
+    return sh if (!geo.round_trips || sh.samples < 1l || sh.samples >= TTS_SRC_MAX_SAMPLES || sh.nlow < 1l || cfg.n_harm < 1l || cfg.n_harm > 64l)
     let re & = unsafe(d.stft_fwd_re)
     let im & = unsafe(d.stft_fwd_im)
     return sh if (re.cin != 1l || re.cout != d.bins || re.transposed || im.k != re.k || im.cout != d.bins || im.cin != 1l || im.transposed
@@ -702,14 +663,112 @@ def tts_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64) : TtsSourc
     return sh
 }
 
-//! a row of `n` zeros; the element offset
-def tts_slab_zero(var w : TtsSlabWriter; n : int64) : int64 {
-    let at = tsw_alloc(w, n)
-    for (i in range64(n)) {
-        tsw_put(w, at + i, 0.0)
+//! an AdaIN residual block over `t` rows, noted on `sh`; its output row count, or -1 on a shape the chain does not take
+def tts_res_shape(var sh : auto(SH); b : St2AdainResBlk; t : int64) : int64 {
+    return -1l if (b.dim_in_s % 32l != 0l || b.dim_out % 64l != 0l || b.dim_in_s < b.dim_in || !tts_conv_ok(b.conv1) || !tts_conv_ok(b.conv2)
+        || b.conv1.cin != b.dim_in_s || b.conv1.cout != b.dim_out || b.conv2.cin != b.dim_out || b.conv2.cout != b.dim_out
+        || (b.learned_sc && (!tts_conv_ok(b.conv1x1) || b.conv1x1.cout != b.dim_out || b.conv1x1.cin != b.dim_in_s)))
+    var t1 = t
+    if (b.upsample) {
+        return -1l if (b.pool.groups != b.pool.cin || b.pool.cin != b.pool.cout || !b.pool.transposed || empty(b.pool.w) || b.pool.cin != b.dim_in_s)
+        t1 = conv1d_out_len(b.pool, t)
+        return -1l if (t1 != 2l * t)
     }
-    return at
+    return -1l if (conv1d_out_len(b.conv1, t1) != t1 || conv1d_out_len(b.conv2, t1) != t1 || (b.learned_sc && conv1d_out_len(b.conv1x1, t1) != t1)
+        || !_::tts_note_conv(sh, b.conv1, t1, false) || !_::tts_note_conv(sh, b.conv2, t1, false)
+        || (b.learned_sc && !_::tts_note_conv(sh, b.conv1x1, t1, false)) || !_::tts_note_res(sh, b, t1))
+    return t1
 }
+
+//! a Snake residual block over `t` rows of `c` channels, noted on `sh`; false on a shape the chain does not take
+def tts_gen_block_shape(var sh : auto(SH); b : St2GenResBlock; t, c : int64) : bool {
+    let n = length(b.convs1)
+    return false if (b.c != c || n == 0 || length(b.convs2) != n || length(b.adain1) != n || length(b.adain2) != n
+        || length(b.alpha1) != n || length(b.alpha2) != n)
+    for (j in range(n)) {
+        let c1 & = unsafe(b.convs1[j])
+        let c2 & = unsafe(b.convs2[j])
+        return false if (!tts_conv_ok(c1) || !tts_conv_ok(c2) || c1.cin != c || c1.cout != c || c2.cin != c || c2.cout != c
+            || conv1d_out_len(c1, t) != t || conv1d_out_len(c2, t) != t || long_length(b.alpha1[j].a) < c || long_length(b.alpha2[j].a) < c
+            || !_::tts_note_conv(sh, c1, t, false) || !_::tts_note_conv(sh, c2, t, false))
+    }
+    return _::tts_note_block(sh, b, t, c)
+}
+
+//! the generator over `t` x `c`, at most `max_stages` stages, noted on `sh` with `t_post`, `t_last`, `c_last` set; false on a refused shape
+def tts_gen_shape(d : St2Decoder; c, t, har_frames, max_stages : int64; var sh : auto(SH)) : bool {
+    let nst = long_length(d.ups)
+    return false if (nst == 0l || nst > max_stages || t < 1l || har_frames < 1l || d.n_kernels < 1l
+        || long_length(d.noise_convs) != nst || long_length(d.noise_res) != nst || long_length(d.resblocks) != nst * d.n_kernels)
+    var tt = t
+    var cc = c
+    _::tts_note_rows(sh, t, c)
+    for (i in range64(nst)) {
+        let up & = unsafe(d.ups[i])
+        let nc & = unsafe(d.noise_convs[i])
+        return false if (!tts_conv_ok(up) || !tts_conv_ok(nc) || up.cin != cc || nc.cin != d.noise_convs[0].cin)
+        var t2 = conv1d_out_len(up, tt)
+        if (i == nst - 1l) {
+            t2++
+        }
+        let c2 = up.cout
+        return false if (c2 % 64l != 0l || nc.cout != c2 || conv1d_out_len(nc, har_frames) != t2 || !tts_gen_block_shape(sh, d.noise_res[i], t2, c2))
+        for (j in range64(d.n_kernels)) {
+            return false if (!tts_gen_block_shape(sh, d.resblocks[i * d.n_kernels + j], t2, c2))
+        }
+        return false if (!_::tts_note_conv(sh, up, t2, true) || !_::tts_note_conv(sh, nc, t2, false))
+        _::tts_note_rows(sh, t2, c2)
+        tt = t2
+        cc = c2
+    }
+    return false if (!tts_conv_ok(d.conv_post) || d.conv_post.cin != cc || d.conv_post.cout < 2l * d.bins)
+    sh.t_post = conv1d_out_len(d.conv_post, tt)
+    sh.t_last = tt
+    sh.c_last = cc
+    return _::tts_note_post(sh, d.conv_post, sh.t_post)
+}
+
+//! the decode chain's shape noted on `sh`, the source as `ss` and the inverse STFT's samples as `n_out`; false on a refused shape
+def tts_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceCfg; frames, f2 : int64; noise : TtsNoise; max_stages : int64; var sh : auto(SH)) : bool {
+    let bwd & = unsafe(d.stft_bwd_re)
+    sh.ss = tts_source_shape(d, source, f2)
+    return false if (frames < 1l || f2 < 1l || text_c % 32l != 0l || !sh.ss.ok || !tts_dec_ok(d) || d.f0_conv.cin != 1l || d.n_conv.cin != 1l
+        || d.f0_conv.cout != 1l || d.n_conv.cout != 1l || conv1d_out_len(d.f0_conv, f2) != frames || conv1d_out_len(d.n_conv, f2) != frames
+        || d.asr_res.cin != text_c || d.asr_res.cout % 64l != 0l || conv1d_out_len(d.asr_res, frames) != frames || d.encode.dim_in != text_c + 2l
+        || bwd.cin != d.bins || bwd.cout != 1l || !bwd.transposed || empty(bwd.wt) || d.stft_bwd_im.k != bwd.k
+        || (d.istft_envelope && long_length(d.window.a) < bwd.k) || (noise.captured && long_length(noise.normal) < sh.ss.samples * source.n_harm)
+        || long_length(noise.uniform) < source.n_harm || !_::tts_note_decoder(sh, d) || !_::tts_note_conv(sh, d.f0_conv, frames, false)
+        || !_::tts_note_conv(sh, d.n_conv, frames, false) || !_::tts_note_conv(sh, d.asr_res, frames, false))
+    _::tts_note_rows(sh, frames, max(text_c, d.encode.dim_in_s))
+    sh.dec_rows = tts_res_shape(sh, d.encode, frames)
+    return false if (sh.dec_rows < 0l)
+    sh.dec_width = d.encode.dim_out
+    for (b in d.decode) {
+        return false if ((b.dim_in != sh.dec_width && b.dim_in != sh.dec_width + d.asr_res.cout + 2l) || (b.dim_in == sh.dec_width && b.dim_in_s != b.dim_in))
+        sh.dec_rows = tts_res_shape(sh, b, sh.dec_rows)
+        return false if (sh.dec_rows < 0l)
+        sh.dec_width = b.dim_out
+    }
+    return false if (!tts_gen_shape(d, sh.dec_width, sh.dec_rows, sh.ss.spec_frames, max_stages, sh))
+    sh.n_out = conv1d_out_len(bwd, sh.t_post) - 2l * ST2_STFT_PAD
+    return sh.n_out >= 1l
+}
+
+//! fc(style) as a norm's rows at `dst`: gamma [c] then beta [c], gamma + 1 under `ln_form` (an AdaLN site); `tmp` the fc's scratch
+def tts_style_rows(fc : TtsLinear; s : array<float>; c : int64; ln_form : bool; @scratch @exact_size var tmp : array<float>; var dst : float?) {
+    linear_vec(fc, s, tmp)
+    unsafe {
+        memcpy(dst, addr(tmp[0]), 2l * c * 4l)
+        if (ln_form) {
+            for (i in range64(c)) {
+                dst[i] = dst[i] + 1.0
+            }
+        }
+    }
+}
+
+//! a row of `n` zeros - an allocation alone, since the fill pass's host starts zeroed (`tts_slab_build`); the element offset
+def tts_slab_zero(var w : TtsSlabWriter; n : int64) : int64 => tsw_alloc(w, n)
 
 //! the head's residual block: its norm rows and three linears
 struct TtsPkHeadSlots {
@@ -898,8 +957,8 @@ def tts_pk_codec_ok(mm : PocketMimi; hs, max_keys : int64) : bool {
     return tts_pk_conv_ok(mm.dec_out) && mm.dec_out.cout >= 1l
 }
 
-//! the frame loop's linears the row GEMV serves, and the head's and the backbone's shapes
-def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64) : bool {
+//! the frame loop's shapes, every width within the GEMV's `max_nin` stage and each linear one the driver's GEMV serves (`lin_ok`)
+def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64; lin_ok : block<(l : TtsLinear) : bool>) : bool {
     let tf & = unsafe(m.backbone)
     let d = tf.d
     let ld = m.latent_dim
@@ -908,14 +967,40 @@ def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64) : bool {
     return false if (!tts_pk_tf_ok(tf, hs) || d > max_nin || n > max_nin || tf.ffn > max_nin || ld > max_nin
         || ld < 4l || ld % 4l != 0l || n < 1l || empty(h.blocks) || long_length(h.time_const.a) != n || long_length(m.emb_std.a) != ld
         || long_length(m.emb_mean.a) != ld || long_length(m.bos_emb.a) != ld || long_length(m.out_norm.w) != d
-        || !tts_gemm_lin_ok(m.input_linear) || m.input_linear.nin != ld || m.input_linear.nout != d || !tts_gemm_lin_ok(m.out_eos) || m.out_eos.nin != d || m.out_eos.nout != 1l)
+        || !invoke(lin_ok, m.input_linear) || m.input_linear.nin != ld || m.input_linear.nout != d || !invoke(lin_ok, m.out_eos) || m.out_eos.nin != d || m.out_eos.nout != 1l)
     for (l in tf.layers) {
-        return false if (!tts_pk_layer_ok(l, d, tf.ffn))
+        return false if (!tts_pk_layer_dims_ok(l, d, tf.ffn) || !invoke(lin_ok, l.in_proj) || !invoke(lin_ok, l.out_proj) || !invoke(lin_ok, l.ffn1) || !invoke(lin_ok, l.ffn2))
     }
-    return false if (!tts_gemm_lin_ok(h.cond_embed) || h.cond_embed.nin != d || h.cond_embed.nout != n || !tts_gemm_lin_ok(h.input_proj) || h.input_proj.nin != ld || h.input_proj.nout != n)
+    return false if (!invoke(lin_ok, h.cond_embed) || h.cond_embed.nin != d || h.cond_embed.nout != n || !invoke(lin_ok, h.input_proj) || h.input_proj.nin != ld || h.input_proj.nout != n)
     for (b in h.blocks) {
-        return false if (!tts_gemm_lin_ok(b.adaln) || b.adaln.nin != n || b.adaln.nout != 3l * n || !tts_gemm_lin_ok(b.mlp1) || b.mlp1.nin != n || b.mlp1.nout != n
-            || !tts_gemm_lin_ok(b.mlp2) || b.mlp2.nin != n || b.mlp2.nout != n)
+        return false if (!invoke(lin_ok, b.adaln) || b.adaln.nin != n || b.adaln.nout != 3l * n || !invoke(lin_ok, b.mlp1) || b.mlp1.nin != n || b.mlp1.nout != n
+            || !invoke(lin_ok, b.mlp2) || b.mlp2.nin != n || b.mlp2.nout != n)
     }
-    return tts_gemm_lin_ok(h.final_adaln) && h.final_adaln.nin == n && h.final_adaln.nout == 2l * n && tts_gemm_lin_ok(h.final_linear) && h.final_linear.nin == n && h.final_linear.nout == ld
+    return invoke(lin_ok, h.final_adaln) && h.final_adaln.nin == n && h.final_adaln.nout == 2l * n && invoke(lin_ok, h.final_linear) && h.final_linear.nin == n && h.final_linear.nout == ld
 }
+
+//! the voice's caches hold this frames call: a cache a layer, voice + text + frames within capacity, capacity within `max_keys`
+def tts_pk_frames_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_frames, max_keys : int64) : bool {
+    return (max_frames >= 1l && n_txt >= 0l && !empty(vs.caches) && length(vs.caches) == length(m.backbone.layers)
+        && vs.len + n_txt + max_frames <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
+}
+
+//! the conditioning rows a frames call reads back after the loop stepped `stepped` frames: every frame made and the breaking frame's row, as the CPU loop leaves them
+def tts_pk_cond_rows(frames, stepped : int64) : int64 => min(frames + 1l, stepped)
+
+//! a voice slot's residency: the key over the caches, their capacity and fill, the backbone width
+struct TtsPkVoiceMeta {
+    key : uint64
+    cap : int64
+    len : int64
+    d : int64
+}
+
+//! the slot's meta for this voice at the backbone width `d`
+def tts_pk_voice_meta(vs : PocketVoiceState; d : int64) : TtsPkVoiceMeta
+    => TtsPkVoiceMeta(key = tts_pk_voice_key(vs), cap = vs.caches[0].cap, len = vs.len, d = d)
+
+//! a slot holding `layers` layers of K/V rows stands for this voice at the backbone width `d`: the same key, capacity, fill and width, a layer a cache
+def tts_pk_voice_current(meta : TtsPkVoiceMeta; vs : PocketVoiceState; layers : int; d : int64) : bool
+    => (meta.key == tts_pk_voice_key(vs) && meta.cap == vs.caches[0].cap && meta.len == vs.len && meta.d == d
+        && layers == length(vs.caches))
