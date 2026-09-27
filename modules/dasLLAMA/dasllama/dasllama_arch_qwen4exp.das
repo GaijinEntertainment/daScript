@@ -224,11 +224,13 @@ def private pre_stack_decode_qwen4exp(t : Model; var s : Session; token, pos : i
     hc_init_row(t, s.x, 0l, s.hc_res, 0l)
     var tok : int64[1]
     tok[0] = token
+    let ts_gather = prof_ticks()
     unsafe {
         let toks = temp_array(addr(tok[0]), 1l, type<int64>)
         ngram_gather(t, s, toks, 0l, addr(s.ple_emb[0]))
         ngram_advance(s, toks, 1l)
     }
+    prof_add("ple_gather", ts_gather)
 }
 
 def private pre_stack_prefill_qwen4exp(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
@@ -240,9 +242,13 @@ def private pre_stack_prefill_qwen4exp(t : Model; var s : Session; tokens : arra
     let ind = ple_in_dim(c)
     for (p in range64(npos)) {
         hc_init_row(t, s.x_b, p * c.dim, s.hc_res_b, p * hcd)
+    }
+    let ts_gather = prof_ticks()
+    for (p in range64(npos)) {
         ngram_gather(t, s, tokens, p, unsafe(addr(s.ple_emb_b[p * ind])))
     }
     ngram_advance(s, tokens, npos)
+    prof_add("ple_gather", ts_gather)
 }
 
 //! the side input of one decode token, before layer ple_layer's attention mixer
