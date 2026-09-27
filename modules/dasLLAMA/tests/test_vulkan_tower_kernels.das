@@ -110,10 +110,8 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {   // nolint:STYLE038 �
             }
         }
         // `approx` covers the tile's f16 Q and P staging and the coopmat's reassociated sums; K and V are f16 on both sides
-        let bad = mismatch_approx(y, y_ref)
-        t |> success(bad == 0, "{tag}: every query row attends every key ({bad} of {rows * qd} off the CPU oracle)")
+        check_rows(t, "{tag} every query row attending every key vs the CPU oracle", y, y_ref, Bar(rel = APPROX_REL, poison = 1.5), qd, hs)
         t |> success(logits_maxabs(y) < TOWER_SENTINEL * 0.01, "{tag}: the slack rows past kvlen stayed masked (max |o| {logits_maxabs(y)})")
-        t |> success(!approx(y[rows * qd - 1], y_ref[rows * qd - 1] + 1.5), "{tag}: the bar reds a poisoned oracle element")
         // the causal twin on the same planes: row 0 sees one key there and every key here, so its output moves
         var first_b : array<float>
         var first_c : array<float>
@@ -341,13 +339,9 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
         var h_ref := hrows
         add_bias_rows(h_ref, wn, int64(5 * d), int64(ff), int64(rows))
         gelu_tanh_lut_batch(h_ref, int64(ff), int64(rows))
-        let bad_bias = mismatch_approx(h_dev, h_ref)
-        t |> success(bad_bias == 0, "the bias + tanh GELU ({shape}) matches add_bias_rows + gelu_tanh_lut_batch ({bad_bias} of {nff} off)")
-        t |> success(!approx(h_dev[nff - 1], h_ref[nff - 1] + 0.5), "the bias + tanh GELU ({shape}): the bar reds a poisoned element")
+        check_rows(t, "the bias + tanh GELU ({shape}) vs add_bias_rows + gelu_tanh_lut_batch", h_dev, h_ref, BAR_APPROX, ff)
         var yc_ref <- wdec_comb_ref(pms, py, rows, heads, int(WDEC_HS), nch)
-        let bad_comb = mismatch_approx(yc_dev, yc_ref)
-        t |> success(bad_comb == 0, "the attention combine ({shape}) matches the CPU combine over the chunk partials ({bad_comb} of {nd} off)")
-        t |> success(!approx(yc_dev[nd - 1], yc_ref[nd - 1] + 0.5), "the attention combine ({shape}): the bar reds a poisoned element")
+        check_rows(t, "the attention combine ({shape}) vs the CPU combine over the chunk partials", yc_dev, yc_ref, BAR_APPROX, d, int(WDEC_HS))
         unsafe {
             x[7]++
             y[7 + d]++
@@ -587,15 +581,11 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             var xb_ref : array<float>
             xb_ref |> resize(nd)
             rms_rows(xb_ref, x, wplane, 0l, int64(d), int64(rows), ROWS_EPS)
-            let bad_rms = mismatch_approx(xb_dev, xb_ref)
-            t |> success(bad_rms == 0, "tower_rms: the weighted rms rows match rms_rows ({bad_rms} of {nd} off)")
-            t |> success(!approx(xb_dev[nd - 1], xb_ref[nd - 1] + 0.5), "tower_rms: the bar reds a poisoned element")
+            check_rows(t, "tower_rms weighted rms rows vs rms_rows", xb_dev, xb_ref, BAR_APPROX, d)
             var y_ref : array<float>
             y_ref |> resize(nd)
             clamp_rows(y_ref, y, int64(nd), lo, hi)
-            let bad_clamp = mismatch_exact(y_dev, y_ref)
-            t |> success(bad_clamp == 0, "tower_clamp: the rows clamp in place exactly ({bad_clamp} of {nd} off)")
-            t |> success(y_dev[nd - 1] != y_ref[nd - 1] + 0.5, "tower_clamp: the bar reds a poisoned element")
+            check_rows(t, "tower_clamp rows clamped in place vs clamp_rows", y_dev, y_ref, BAR_EXACT, d)
             var clamped_x : array<float>
             clamped_x |> resize(nd)
             clamp_rows(clamped_x, x, int64(nd), lo2, hi2)
@@ -628,51 +618,36 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 }
             }
             rope_neox_2d_rows(q_ref, int64(rows), int64(ROWS_HEADS), int64(hs), cos_x, sin_x, cos_y, sin_y)
-            let bad_rope = mismatch_approx(q_dev, q_ref)
-            t |> success(bad_rope == 0, "tower_rope2d: the 2D neox rope matches rope_neox_2d_rows ({bad_rope} of {nd} off)")
-            t |> success(!approx(q_dev[0], q_ref[0] + 0.5), "tower_rope2d: the bar reds a poisoned element")
+            check_rows(t, "tower_rope2d 2D neox rope vs rope_neox_2d_rows", q_dev, q_ref, BAR_APPROX, d, hs)
             var x_ref := x
             var ypost : array<float>
             ypost |> resize(nd)
             rms_rows(ypost, y_ref, wplane, int64(d), int64(d), int64(rows), ROWS_EPS)   // the post-add reads y after the clamp the same command applied to it
             add_inplace_rows(x_ref, ypost, int64(nd))
-            let bad_add = mismatch_approx(x_dev, x_ref)
-            t |> success(bad_add == 0, "tower_post_add: x += rms(y) . wpost ({bad_add} of {nd} off)")
-            t |> success(!approx(x_dev[nd - 1], x_ref[nd - 1] + 0.5), "tower_post_add: the bar reds a poisoned element of x")
+            check_rows(t, "tower_post_add x += rms(y) . wpost", x_dev, x_ref, BAR_APPROX, d)
             var xb2_ref : array<float>
             xb2_ref |> resize(nd)
             rms_rows(xb2_ref, x_ref, wplane, 0l, int64(d), int64(rows), ROWS_EPS)
-            let bad_ln = mismatch_approx(xb2_dev, xb2_ref)
-            t |> success(bad_ln == 0, "tower_post_add: the next pre-norm over the updated rows ({bad_ln} of {nd} off)")
-            t |> success(!approx(xb2_dev[nd - 1], xb2_ref[nd - 1] + 0.5), "tower_post_add: the bar reds a poisoned element")
-            let bad_add0 = mismatch_approx(x0_dev, x_ref)
-            t |> success(bad_add0 == 0, "tower_post_add ln_on = 0: the seam alone lands the same x ({bad_add0} of {nd} off)")
+            check_rows(t, "tower_post_add the next pre-norm over the updated rows", xb2_dev, xb2_ref, BAR_APPROX, d)
+            check_rows(t, "tower_post_add ln_on = 0 the seam alone lands the same x", x0_dev, x_ref, BAR_APPROX, d)
             t |> equal(count(xb0_dev, $(w) => w == NAN_SENTINEL_BITS), nd, "tower_post_add ln_on = 0: the pre-norm output stays untouched (every word the sentinel)")
             var xhalf_ref := x
             for (i in range(nd)) {
                 xhalf_ref[i] += 0.5 * ypost[i]
             }
-            let bad_half = mismatch_approx(xhalf_dev, xhalf_ref)
-            t |> success(bad_half == 0, "tower_post_add ascale = 0.5: x += 0.5 . rms(y) . wpost ({bad_half} of {nd} off)")
-            t |> success(!approx(xhalf_dev[nd - 1], xhalf_ref[nd - 1] + 0.5), "tower_post_add ascale = 0.5: the bar reds a poisoned element")
+            check_rows(t, "tower_post_add ascale = 0.5 x += 0.5 . rms(y) . wpost", xhalf_dev, xhalf_ref, BAR_APPROX, d)
             var xp_ref := x
             for (i in range(nd)) {
                 xp_ref[i] += 0.5 * y_ref[i]
             }
-            let bad_plain = mismatch_approx(xp_dev, xp_ref)
-            t |> success(bad_plain == 0, "tower_post_add_plain: x += 0.5 . y with no post-norm ({bad_plain} of {nd} off)")
-            t |> success(!approx(xp_dev[0], xp_ref[0] + 0.5), "tower_post_add_plain: the bar reds a poisoned element of x")
+            check_rows(t, "tower_post_add_plain x += 0.5 . y with no post-norm", xp_dev, xp_ref, BAR_APPROX, d)
             t |> success(mismatch_approx(xp_dev, x_ref) > nd / 4, "tower_post_add_plain: the plain stamp is not the post-norm stamp ({mismatch_approx(xp_dev, x_ref)} of {nd} apart)")
-            let bad_plain0 = mismatch_approx(xp0_dev, xp_ref)
-            t |> success(bad_plain0 == 0, "tower_post_add_plain ln_on = 0: the seam alone lands the same x ({bad_plain0} of {nd} off)")
-            t |> success(!approx(xp0_dev[nd - 1], xp_ref[nd - 1] + 0.5), "tower_post_add_plain ln_on = 0: the bar reds a poisoned element")
+            check_rows(t, "tower_post_add_plain ln_on = 0 the seam alone lands the same x", xp0_dev, xp_ref, BAR_APPROX, d)
             t |> equal(count(xbp0_dev, $(w) => w == NAN_SENTINEL_BITS), nd, "tower_post_add_plain ln_on = 0: the pre-norm output stays untouched (every word the sentinel)")
             var xbp_ref : array<float>
             xbp_ref |> resize(nd)
             rms_rows(xbp_ref, xp_ref, wplane, 0l, int64(d), int64(rows), ROWS_EPS)
-            let bad_plain_ln = mismatch_approx(xbp_dev, xbp_ref)
-            t |> success(bad_plain_ln == 0, "tower_post_add_plain: the next pre-norm over the half-weight rows ({bad_plain_ln} of {nd} off)")
-            t |> success(!approx(xbp_dev[nd - 1], xbp_ref[nd - 1] + 0.5), "tower_post_add_plain: the bar reds a poisoned element")
+            check_rows(t, "tower_post_add_plain the next pre-norm over the half-weight rows", xbp_dev, xbp_ref, BAR_APPROX, d)
             var g_ref : array<float>
             g_ref |> resize(nff)
             for (i in range(nff)) {
@@ -680,9 +655,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 let uv = clamp(u[i], -1.5, 1.75)
                 g_ref[i] = clamp(gelu_quick_ref(gv) * uv, -1.0, 1.2)
             }
-            let bad_geglu = mismatch_approx(g_dev, g_ref)
-            t |> success(bad_geglu == 0, "tower_geglu: the clamped GEGLU-quick matches its closed form ({bad_geglu} of {nff} off)")
-            t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "tower_geglu: the bar reds a poisoned element")
+            check_rows(t, "tower_geglu clamped GEGLU-quick vs its closed form", g_dev, g_ref, BAR_APPROX, ff)
             for (b in fixed_array(xd, yd, xbd, xb2d, qd, gd, ud, wd, td, xhd, xqd, xsd, x0d, xb0d, x_plain_d, xb_plain_d, x_plain0_d, xb_plain0_d, x_half_d, xb_half_d)) {
                 destroy_device_buf(b)
             }
@@ -785,9 +758,7 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let ao_dev <- staged(host.mapped, 3l * bx, nd, type<float>)
             var s_ref := s
             silu(s_ref, int64(nd))
-            let bad_silu = mismatch_approx(s_dev, s_ref)
-            t |> success(bad_silu == 0, "tower_act (the unbiased silu stamp): the rows match silu ({bad_silu} of {nd} off)")
-            t |> success(!approx(s_dev[0], s_ref[0] + 0.5), "tower_act: the bar reds a poisoned element")
+            check_rows(t, "tower_act (the unbiased silu stamp) vs silu", s_dev, s_ref, BAR_APPROX, d)
             var g_ref : array<float>
             g_ref |> resize(nd)
             for (r in range(rows)) {
@@ -796,9 +767,7 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                     g_ref[r * d + c] = glu_pw_rows[r * 2 * d + c] * (1.0 / (1.0 + exp(-gate)))
                 }
             }
-            let bad_glu = mismatch_approx(g_dev, g_ref)
-            t |> success(bad_glu == 0, "tower_glu_sig: value . sigmoid(gate) off the pointwise rows ({bad_glu} of {nd} off)")
-            t |> success(!approx(g_dev[nd - 1], g_ref[nd - 1] + 0.5), "tower_glu_sig: the bar reds a poisoned element")
+            check_rows(t, "tower_glu_sig value . sigmoid(gate) off the pointwise rows", g_dev, g_ref, BAR_APPROX, d)
             var c_ref : array<float>
             c_ref |> resize(nd)
             for (r in range(rows)) {
@@ -813,13 +782,9 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                     c_ref[r * d + c] = acc
                 }
             }
-            let bad_dw = mismatch_approx(c_dev, c_ref)
-            t |> success(bad_dw == 0, "tower_dw_conv5: the causal depthwise taps match the CPU loop ({bad_dw} of {nd} off)")
-            t |> success(!approx(c_dev[0], c_ref[0] + 0.5), "tower_dw_conv5: the bar reds a poisoned element")
+            check_rows(t, "tower_dw_conv5 causal depthwise taps vs the CPU loop", c_dev, c_ref, BAR_APPROX, d)
             let ao_ref <- g4a_attn_ref(q, k, v, rpe, wn, rows, d, ROWS_HEADS, hs, qscale, kscale, G4A_CAP)
-            let bad_attn = mismatch_approx(ao_dev, ao_ref)
-            t |> success(bad_attn == 0, "tower_g4a_attn (64-wide stamp): the windowed RPE attention matches the CPU loop ({bad_attn} of {nd} off)")
-            t |> success(!approx(ao_dev[nd - 1], ao_ref[nd - 1] + 0.5), "tower_g4a_attn: the bar reds a poisoned element")
+            check_rows(t, "tower_g4a_attn (64-wide stamp) windowed RPE attention vs the CPU loop", ao_dev, ao_ref, BAR_APPROX, d, hs)
             let k_scaled <- scaled_copy(k, 1.5)
             let ao_ctl <- g4a_attn_ref(q, k_scaled, v, rpe, wn, rows, d, ROWS_HEADS, hs, qscale, kscale, G4A_CAP)
             let moved = mismatch_approx(ao_dev, ao_ctl)
@@ -841,9 +806,7 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             }
             let ao_knee_dev <- staged(host.mapped, 0l, nd, type<float>)
             let ao_capped_ref <- g4a_attn_ref(q_at_cap_knee, k, v, rpe, wn, rows, d, heads2, hs2, qscale2, kscale, G4A_CAP)
-            let bad_capped = mismatch_approx(ao_knee_dev, ao_capped_ref)
-            t |> success(bad_capped == 0, "tower_g4a_attn (128-wide stamp): the windowed RPE attention over scaled queries matches the CPU loop ({bad_capped} of {nd} off)")
-            t |> success(!approx(ao_knee_dev[0], ao_capped_ref[0] + 0.5), "tower_g4a_attn 128: the bar reds a poisoned element")
+            check_rows(t, "tower_g4a_attn (128-wide stamp) windowed RPE attention over scaled queries vs the CPU loop", ao_knee_dev, ao_capped_ref, BAR_APPROX, d, hs2)
             let ao_cap4_ref <- g4a_attn_ref(q_at_cap_knee, k, v, rpe, wn, rows, d, heads2, hs2, qscale2, kscale, 4.0 * G4A_CAP)
             let moved_cap4 = mismatch_approx(ao_knee_dev, ao_cap4_ref)
             t |> success(moved_cap4 > nd / 4, "tower_g4a_attn 128 control: the softcap engages on the scaled queries - the oracle at four times the cap lands elsewhere ({moved_cap4} of {nd} moved)")
@@ -935,9 +898,7 @@ def test_vkt_tower_fastconformer(t0 : T?) {
                     c_ref[r * d + c] = bv * (1.0 / (1.0 + exp(-bv)))
                 }
             }
-            let bad_dw = mismatch_approx(c_dev, c_ref)
-            t |> success(bad_dw == 0, "tower_cn_dw: the centered taps, the folded BatchNorm and silu match the CPU loop ({bad_dw} of {nd} off)")
-            t |> success(!approx(c_dev[nd - 1], c_ref[nd - 1] + 0.5), "tower_cn_dw: the bar reds a poisoned element")
+            check_rows(t, "tower_cn_dw centered taps, folded BatchNorm and silu vs the CPU loop", c_dev, c_ref, BAR_APPROX, d)
             for (b in fixed_array(gd, cd, wd)) {
                 destroy_device_buf(b)
             }
@@ -1081,64 +1042,43 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             var xb_ref : array<float>
             xb_ref |> resize(nd)
             layernorm_batch(xb_ref, x, wn, 0l, int64(d), int64(d), int64(rows), ROWS_EPS)
-            let bad_ln = mismatch_approx(xb_dev, xb_ref)
-            t |> success(bad_ln == 0, "tower_ln: the layernorm rows match layernorm_batch ({bad_ln} of {nd} off)")
-            t |> success(!approx(xb_dev[nd - 1], xb_ref[nd - 1] + 0.5), "tower_ln: the bar reds a poisoned element")
+            check_rows(t, "tower_ln layernorm rows vs layernorm_batch", xb_dev, xb_ref, BAR_APPROX, d)
             var g_ref := g
             add_bias_rows(g_ref, wn, int64(2 * d), int64(d), int64(rows))
-            let bad_bias0 = mismatch_approx(g0_dev, g_ref)
-            t |> success(bad_bias0 == 0, "tower_bias_act BIAS_ACT_NONE: the bias alone matches add_bias_rows ({bad_bias0} of {nd} off)")
-            t |> success(!approx(g0_dev[0], g_ref[0] + 0.5), "tower_bias_act BIAS_ACT_NONE: the bar reds a poisoned element")
+            check_rows(t, "tower_bias_act BIAS_ACT_NONE the bias alone vs add_bias_rows", g0_dev, g_ref, BAR_APPROX, d)
             var gerf_ref := g_ref
             var gsilu_ref := g_ref
             let grelu_ref <- [for (v in g_ref); max(v, 0.0)]
-            let bad_relu = mismatch_approx(grelu_dev, grelu_ref)
-            t |> success(bad_relu == 0, "tower_bias_act BIAS_ACT_RELU: the bias and relu match max(x + b, 0) ({bad_relu} of {nd} off)")
-            t |> success(!approx(grelu_dev[nd - 1], grelu_ref[nd - 1] + 0.5), "tower_bias_act BIAS_ACT_RELU: the bar reds a poisoned element")
+            check_rows(t, "tower_bias_act BIAS_ACT_RELU the bias and relu vs max(x + b, 0)", grelu_dev, grelu_ref, BAR_APPROX, d)
             gelu_tanh_lut_batch(g_ref, int64(d), int64(rows))
-            let bad_bias = mismatch_approx(g_dev, g_ref)
-            t |> success(bad_bias == 0, "tower_bias_act: the bias and the tanh GELU match add_bias_rows + gelu_tanh_lut_batch ({bad_bias} of {nd} off)")
-            t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "tower_bias_act: the bar reds a poisoned element")
+            check_rows(t, "tower_bias_act the bias and the tanh GELU vs add_bias_rows + gelu_tanh_lut_batch", g_dev, g_ref, BAR_APPROX, d)
             // the erf arm evaluates the CPU's rational erfc in f32 where the CPU evaluates it in double: 1e-5 relative holds the
             // f32 rounding of the polynomial and the exp (a few ulp) and is well under the erf-vs-tanh gap (4.7e-4 at x = -2.7),
             // which the approx bar (2e-3) could not tell apart
             gelu_erf_batch(gerf_ref, int64(d), int64(rows))
             let erf_bar = 1e-5
-            let bad_erf = mismatch_rel(gerf_dev, gerf_ref, erf_bar)
-            t |> success(bad_erf == 0, "tower_bias_act BIAS_ACT_GELU_ERF: the bias and the erf GELU match add_bias_rows + gelu_erf_batch within {erf_bar} ({bad_erf} of {nd} off)")
-            var gerf_poison := gerf_ref
-            gerf_poison[0] += 0.5
-            t |> success(mismatch_rel(gerf_dev, gerf_poison, erf_bar) > 0, "tower_bias_act BIAS_ACT_GELU_ERF: the bar reds a poisoned element")
+            check_rows(t, "tower_bias_act BIAS_ACT_GELU_ERF the bias and the erf GELU vs add_bias_rows + gelu_erf_batch within {erf_bar}", gerf_dev, gerf_ref, bar_rel(erf_bar, 0.5), d)
             let tanh_off_erf = mismatch_rel(g_dev, gerf_ref, erf_bar)
             t |> success(tanh_off_erf > nd / 4, "tower_bias_act BIAS_ACT_GELU_ERF control: the tanh arm's rows miss the erf oracle at this bar ({tanh_off_erf} of {nd} off; the tails past +-10 agree by construction) - the bar tells the forms apart")
             silu(gsilu_ref, int64(nd))
-            let bad_silu_act = mismatch_approx(gsilu_dev, gsilu_ref)
-            t |> success(bad_silu_act == 0, "tower_bias_act BIAS_ACT_SILU: the bias and silu match add_bias_rows + silu ({bad_silu_act} of {nd} off)")
-            t |> success(!approx(gsilu_dev[nd - 1], gsilu_ref[nd - 1] + 0.5), "tower_bias_act BIAS_ACT_SILU: the bar reds a poisoned element")
+            check_rows(t, "tower_bias_act BIAS_ACT_SILU the bias and silu vs add_bias_rows + silu", gsilu_dev, gsilu_ref, BAR_APPROX, d)
             t |> success(mismatch_approx(gsilu_dev, g_ref) > nd / 4, "tower_bias_act BIAS_ACT_SILU control: the silu arm is not the tanh GELU arm ({mismatch_approx(gsilu_dev, g_ref)} of {nd} apart; the positive tail agrees by construction)")
             var x_ref := x
             var yb := y
             add_bias_rows(yb, wn, int64(2 * d), int64(d), int64(rows))
             add_inplace_rows(x_ref, yb, int64(nd))
-            let bad_add = mismatch_approx(x_dev, x_ref)
-            t |> success(bad_add == 0, "tower_post_add_ln: x += y + b ({bad_add} of {nd} off)")
-            t |> success(!approx(x_dev[nd - 1], x_ref[nd - 1] + 0.5), "tower_post_add_ln: the bar reds a poisoned element of x")
+            check_rows(t, "tower_post_add_ln x += y + b", x_dev, x_ref, BAR_APPROX, d)
             var xb2_ref : array<float>
             xb2_ref |> resize(nd)
             layernorm_batch(xb2_ref, x_ref, wn, int64(3 * d), int64(d), int64(d), int64(rows), ROWS_EPS)
-            let bad_ln2 = mismatch_approx(xb2_dev, xb2_ref)
-            t |> success(bad_ln2 == 0, "tower_post_add_ln: the next layernorm over the updated rows ({bad_ln2} of {nd} off)")
-            t |> success(!approx(xb2_dev[nd - 1], xb2_ref[nd - 1] + 0.5), "tower_post_add_ln: the bar reds a poisoned element")
-            let bad_add0 = mismatch_approx(x0_dev, x_ref)
-            t |> success(bad_add0 == 0, "tower_post_add_ln ln_on = 0: the seam alone lands the same x ({bad_add0} of {nd} off)")
+            check_rows(t, "tower_post_add_ln the next layernorm over the updated rows", xb2_dev, xb2_ref, BAR_APPROX, d)
+            check_rows(t, "tower_post_add_ln ln_on = 0 the seam alone lands the same x", x0_dev, x_ref, BAR_APPROX, d)
             t |> equal(count(xb0_dev, $(w) => w == NAN_SENTINEL_BITS), nd, "tower_post_add_ln ln_on = 0: the layernorm output stays untouched (every word the sentinel)")
             var xhalf_ref := x
             for (i in range(nd)) {
                 xhalf_ref[i] += 0.5 * yb[i]
             }
-            let bad_half = mismatch_approx(xhalf_dev, xhalf_ref)
-            t |> success(bad_half == 0, "tower_post_add_ln ascale = 0.5: x += 0.5 . (y + b) ({bad_half} of {nd} off)")
-            t |> success(!approx(xhalf_dev[nd - 1], xhalf_ref[nd - 1] + 0.5), "tower_post_add_ln ascale = 0.5: the bar reds a poisoned element")
+            check_rows(t, "tower_post_add_ln ascale = 0.5 x += 0.5 . (y + b)", xhalf_dev, xhalf_ref, BAR_APPROX, d)
             var bad_pad = 0
             var bad_pad16 = 0
             for (r in range(rows)) {
@@ -1171,9 +1111,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             qp_poison[tail_hi - 1] += 0.5
             qph_poison[tail_hi - 1] = uint16(f32_to_f16(0.5))
             t |> success(count(each(range(tail_lo, tail_hi)), $(i) => qp_poison[i] != 0.0) > 0 && count(each(range(tail_lo, tail_hi)), $(i) => uint(qph_poison[i]) != 0u) > 0, "tower_hpad / hpad16: the tail check reds a poisoned element")
-            let bad_unpad = mismatch_exact(qc_dev, q)
-            t |> success(bad_unpad == 0, "tower_hunpad: the compact rows come back off the padded panel exactly ({bad_unpad} off)")
-            t |> success(qc_dev[0] != q[0] + 0.5, "tower_hunpad: the bar reds a poisoned element")
+            check_rows(t, "tower_hunpad compact rows back off the padded panel", qc_dev, q, BAR_EXACT, d_compact, LN_HS)
             var k_ref : array<float>
             var k_dev : array<float>
             k_ref |> resize(rows * d_compact)
@@ -1189,10 +1127,8 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 }
             }
             rope_neox_tab_rows(k_ref, int64(rows), int64(ROWS_HEADS), int64(LN_HS), cos_t, sin_t)
-            let bad_rope = mismatch_approx(k_dev, k_ref)
-            t |> success(bad_rope == 0, "tower_rope_tab: the k slot of the fused rows matches rope_neox_tab_rows ({bad_rope} of {rows * d_compact} off)")
+            check_rows(t, "tower_rope_tab the k slot of the fused rows vs rope_neox_tab_rows", k_dev, k_ref, BAR_APPROX, d_compact, LN_HS)
             t |> success(bad_slots == 0, "tower_rope_tab: the q and v slots stay untouched ({bad_slots} moved)")
-            t |> success(!approx(k_dev[0], k_ref[0] + 0.5), "tower_rope_tab: the bar reds a poisoned element")
             for (b in fixed_array(xd, xbd, yd, xb2d, x0d, xb0d, x_half_d, xb_half_d, wd, qd, qpd, qphd, qcd, qkvd, cosd, sind)) {
                 destroy_device_buf(b)
             }
@@ -1342,14 +1278,7 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             var xb_ref : array<float>
             xb_ref |> resize(nd)
             layernorm_batch(xb_ref, x, wn, 0l, int64(d), int64(d), int64(rows), ROWS_EPS)
-            var xbh_f : array<float>
-            xbh_f |> resize(nd)
-            for (i in range(nd)) {
-                xbh_f[i] = f16_to_f32(uint(xbh_dev[i]))
-            }
-            let bad_ln_ref = mismatch_approx(xbh_f, xb_ref)
-            t |> success(bad_ln_ref == 0, "tower_ln16: the half rows match layernorm_batch at the approx bar ({bad_ln_ref} of {nd} off)")
-            t |> success(!approx(xbh_f[nd - 1], xb_ref[nd - 1] + 0.5), "tower_ln16 vs layernorm_batch: the bar reds a poisoned element")
+            check_rows(t, "tower_ln16 half rows vs layernorm_batch", [for (hv in xbh_dev); f16_to_f32(uint(hv))], xb_ref, BAR_APPROX, d)
             t |> success(bad_bias16 == 0, "tower_bias_act_cvt16: the f16 rows are the in-place stamp's rows rounded to half, bit for bit ({bad_bias16} of {nd} off)")
             t |> success(uint(gh_dev[0]) != f32_to_f16(g_dev[0] + 0.5), "tower_bias_act_cvt16: the bar reds a poisoned element")
             let bad_erf16 = halves_off(gherf_dev, gerf_dev)
@@ -1362,9 +1291,7 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             var yb := y
             add_bias_rows(yb, wn, int64(2 * d), int64(d), int64(rows))
             add_inplace_rows(x_ref, yb, int64(nd))
-            let bad_add16z = mismatch_approx(x16z_dev, x_ref)
-            t |> success(bad_add16z == 0, "tower_post_add_ln16 ln_on = 0: the seam alone lands x += y + b ({bad_add16z} of {nd} off)")
-            t |> success(!approx(x16z_dev[nd - 1], x_ref[nd - 1] + 0.5), "tower_post_add_ln16 ln_on = 0: the bar reds a poisoned element")
+            check_rows(t, "tower_post_add_ln16 ln_on = 0 the seam alone lands x += y + b", x16z_dev, x_ref, BAR_APPROX, d)
             t |> equal(count(xb2h0_dev, $(w) => w == F16_SENTINEL_BITS), nd / 2, "tower_post_add_ln16 ln_on = 0: the half pre-norm output stays untouched (every word the sentinel)")
             var xb2_ref : array<float>
             xb2_ref |> resize(nd)
@@ -1626,13 +1553,9 @@ def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over
             t |> success(vx_dev[p0 * hs] != src[2 * d] + wn[d] + 0.5, "tower_wdec_kv VX: the bar reds a poisoned element")
             // the reference reads the device planes, so the store's f16 rounding stays out of the attention compare
             let y_ref <- wdec_attn_ref(src, k_dev, v_dev, wn, rows, dim, d, heads, hs, tstride, p0 + 1, 0, true, scale)
-            let bad_self = mismatch_approx(y_dev, y_ref)
-            t |> success(bad_self == 0, "tower_wdec_attn part + comb, causal: the rows match the CPU form across the chunk boundary ({bad_self} of {rows * d} off)")
-            t |> success(!approx(y_dev[0], y_ref[0] + 0.5), "tower_wdec_attn causal: the bar reds a poisoned element")
+            check_rows(t, "tower_wdec_attn part + comb, causal, across the chunk boundary vs the CPU form", y_dev, y_ref, BAR_APPROX, d, hs)
             let yc_ref <- wdec_attn_ref(src, k_dev, v_dev, wn, rows, dim, d, heads, hs, tstride, len_cross, 0, false, scale)
-            let bad_cross = mismatch_approx(yc_dev, yc_ref)
-            t |> success(bad_cross == 0, "tower_wdec_attn part + comb, cross: the rows match the CPU form over {len_cross} keys, the second chunk empty ({bad_cross} of {rows * d} off)")
-            t |> success(!approx(yc_dev[0], yc_ref[0] + 0.5), "tower_wdec_attn cross: the bar reds a poisoned element")
+            check_rows(t, "tower_wdec_attn part + comb, cross, over {len_cross} keys (the second chunk empty) vs the CPU form", yc_dev, yc_ref, BAR_APPROX, d, hs)
             t |> success(mismatch_approx(y_dev, yc_ref) > rows * d / 4, "tower_wdec_attn control: the causal rows are not the cross rows ({mismatch_approx(y_dev, yc_ref)} of {rows * d} apart)")
             let ys_ref <- wdec_attn_ref(src, k_dev, v_dev, wn, rows, dim, d, heads, hs, tstride, p0 + 1, 0, true, scale * 2.0)
             t |> success(mismatch_approx(y_dev, ys_ref) > rows * d / 4, "tower_wdec_attn control: the keys scaled twice move the rows ({mismatch_approx(y_dev, ys_ref)} of {rows * d} apart)")
@@ -1727,9 +1650,7 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
             }
             // the bar: `approx`'s 2e-3 covers the tile's f16 staging of the padded Q panel and of the softmax rows (P) that the
             // f32 oracle keeps in f32, and the coopmat's reassociated sums; K and V are rounded to f16 on both sides
-            let bad = mismatch_approx(att_dev, att_ref)
-            t |> success(bad == 0, "the padded route matches attention_bidir over {PAT_HEADS} heads of {LN_HS} ({bad} of {rows * dc} off)")
-            t |> success(!approx(att_dev[0], att_ref[0] + 0.5), "the bar reds a poisoned element")
+            check_rows(t, "the padded route over {PAT_HEADS} heads of {LN_HS} vs attention_bidir", att_dev, att_ref, BAR_APPROX, dc, LN_HS)
             for (b in fixed_array(qd, kd, vd, qpd, kpd, vpd, attpd, attd)) {
                 destroy_device_buf(b)
             }
@@ -1854,9 +1775,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 setup_dasllama_jobque_()
                 attention_bidir_windows(att_ref, q, k, v, hpp, attsc, win_lo, int64(dc), int64(WIN_HEADS), scale)
             }
-            let bad = mismatch_approx(att_dev, att_ref)
-            t |> success(bad == 0, "tower_win_attn matches attention_bidir_windows over {nslot} windows, one ragged ({bad} of {rows * dc} off)")
-            t |> success(!approx(att_dev[0], att_ref[0] + 0.5), "tower_win_attn: the bar reds a poisoned element")
+            check_rows(t, "tower_win_attn over {nslot} windows, one ragged, vs attention_bidir_windows", att_dev, att_ref, BAR_APPROX, dc, WIN_HS)
             // the leak control: the same rows attended in full differ on the first row, so the windows' walls are the class's doing
             var full_ref : array<float>
             full_ref |> resize(rows * dc)
@@ -1873,27 +1792,20 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             var yb := y
             add_bias_rows(yb, wn, 0l, int64(d), int64(nrows))
             add_inplace_rows(x_ref, yb, int64(nd))
-            let bad_add = mismatch_approx(x_dev, x_ref)
-            t |> success(bad_add == 0, "tower_post_add_rms: x += y + b ({bad_add} of {nd} off)")
-            t |> success(!approx(x_dev[nd - 1], x_ref[nd - 1] + 0.5), "tower_post_add_rms: the bar reds a poisoned element of x")
+            check_rows(t, "tower_post_add_rms x += y + b", x_dev, x_ref, BAR_APPROX, d)
             var xb_ref : array<float>
             xb_ref |> resize(nd)
             let wplane = PlaneF(p = unsafe(addr<float const?>(wn[0])), n = int64(4 * d))
             rms_rows(xb_ref, x_ref, wplane, int64(d), int64(d), int64(nrows), ROWS_EPS)
-            let bad_rms = mismatch_approx(xb_dev, xb_ref)
-            t |> success(bad_rms == 0, "tower_post_add_rms: the next weighted rms over the updated rows ({bad_rms} of {nd} off)")
-            t |> success(!approx(xb_dev[nd - 1], xb_ref[nd - 1] + 0.5), "tower_post_add_rms: the bar reds a poisoned element")
-            let bad_add0 = mismatch_approx(x0_dev, x_ref)
-            t |> success(bad_add0 == 0, "tower_post_add_rms ln_on = 0: the seam alone lands the same x ({bad_add0} of {nd} off)")
+            check_rows(t, "tower_post_add_rms the next weighted rms over the updated rows", xb_dev, xb_ref, BAR_APPROX, d)
+            check_rows(t, "tower_post_add_rms ln_on = 0 the seam alone lands the same x", x0_dev, x_ref, BAR_APPROX, d)
             t |> equal(count(xb0_dev, $(w) => w == NAN_SENTINEL_BITS), nd, "tower_post_add_rms ln_on = 0: the rms output stays untouched (every word the sentinel)")
             var g_ref := g
             var u_ref := u
             add_bias_rows(g_ref, wn, int64(2 * d), int64(d), int64(nrows))
             add_bias_rows(u_ref, wn, int64(3 * d), int64(d), int64(nrows))
             swiglu(g_ref, u_ref, int64(nd))
-            let bad_glu = mismatch_approx(g_dev, g_ref)
-            t |> success(bad_glu == 0, "actf16_b (the gated hidden): silu(g + bg) . (u + bu) as halves matches the CPU form ({bad_glu} of {nd} off)")
-            t |> success(!approx(g_dev[0], g_ref[0] + 0.5), "actf16_b (the gated hidden): the bar reds a poisoned element")
+            check_rows(t, "actf16_b (the gated hidden) silu(g + bg) . (u + bu) as halves vs the CPU form", g_dev, g_ref, BAR_APPROX, d)
             for (b in fixed_array(qd, kd, vd, attd, wld, xd, yd, xbd, x0d, xb0d, gd, ud, wd, gated_h16d, rexd)) {
                 destroy_device_buf(b)
             }
@@ -2133,9 +2045,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                 let rem = gid % (fs_w * fs_c)
                 fs_want[gid] = fs_src[(tt * fs_w + rem % fs_w) * fs_c + rem / fs_w]
             }
-            let bad_fs = mismatch_exact(fs_dev, fs_want)
-            t |> success(bad_fs == 0, "tower_feat_shuffle: the [time][ch][freq] rows off the [time][freq][ch] image, bit for bit ({bad_fs} of {fs_t * fs_w * fs_c} off)")
-            t |> success(fs_dev[0] != fs_want[0] + 0.5, "tower_feat_shuffle: the bar reds a poisoned element")
+            check_rows(t, "tower_feat_shuffle [time][ch][freq] rows off the [time][freq][ch] image", fs_dev, fs_want, BAR_EXACT, fs_w * fs_c)
             var gq_want : array<float>
             var gp_want : array<float>
             gq_want |> resize(rows * hs)
@@ -2167,20 +2077,16 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             for (i in range(add_n)) {
                 add_want[i] = x[i] + wn[d + i]
             }
-            let bad_add = mismatch_exact(add_dev, add_want)
-            t |> success(bad_add == 0 && add_dev[0] != x[0], "tower_bias_act as the plane add (d = nelem): the plane added element for element and nothing past it touched ({bad_add} of {nd} off)")
-            var add_poison := add_want
-            add_poison[add_n - 1] += 0.5
-            t |> success(mismatch_exact(add_dev, add_poison) > 0, "tower_bias_act as the plane add: the bar reds a poisoned element")
+            check_rows(t, "tower_bias_act as the plane add (d = nelem): the plane added element for element and nothing past it touched", add_dev, add_want, BAR_EXACT, d)
+            t |> success(add_dev[0] != x[0], "tower_bias_act as the plane add control: the rows moved off x")
             var fin_want : array<float>
             fin_want |> resize(nd)
             for (gid in range(nd)) {
                 let e = gid % d
                 fin_want[gid] = x[gid] + wn[2 * d + e] + wn[3 * d + ((gid / d) % q3_tok) * d + e]
             }
-            let bad_fin = mismatch_approx(fin_dev, fin_want)
-            t |> success(bad_fin == 0 && !approx(fin_dev[d], x[d]), "tower_bias_act twice as the q3a finish: the conv_out bias and the per-chunk position rows added ({bad_fin} of {nd} off)")
-            t |> success(!approx(fin_dev[0], fin_want[0] + 0.5), "tower_bias_act as the q3a finish: the bar reds a poisoned element")
+            check_rows(t, "tower_bias_act twice as the q3a finish: the conv_out bias and the per-chunk position rows added", fin_dev, fin_want, BAR_APPROX, d)
+            t |> success(!approx(fin_dev[d], x[d]), "tower_bias_act as the q3a finish control: the rows moved off x")
             var ln_want : array<float>
             ln_want |> resize(nd)
             for (r in range(rows)) {
@@ -2199,10 +2105,9 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                     ln_want[r * d + c] = max(float((double(x[r * d + c]) - mean) * inv) * wn[c], 0.0)
                 }
             }
-            let bad_ln = mismatch_approx(ln_dev, ln_want)
+            check_rows(t, "tower_ln_relu channel LayerNorm then ReLU vs the CPU loop", ln_dev, ln_want, BAR_APPROX, d)
             let live_ln = find_index_if(ln_want, $(v) => v != 0.0)
-            t |> success(bad_ln == 0 && ln_dev[live_ln] != x[live_ln], "tower_ln_relu: the channel LayerNorm then ReLU match the CPU loop ({bad_ln} of {nd} off)")
-            t |> success(!approx(ln_dev[live_ln], ln_want[live_ln] + 0.5), "tower_ln_relu: the bar reds a poisoned element")
+            t |> success(ln_dev[live_ln] != x[live_ln], "tower_ln_relu control: a live element moved off x")
             for (b in fixed_array(srcd, cold, mel1d, col1d, cv2d, col2d, y3d, featd, fsd, fsod, xd, wd, gqd, gpd, cvtd, addd, find, lnd)) {
                 destroy_device_buf(b)
             }
@@ -2361,11 +2266,9 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 pow_want[gid] = float(re * re + im * im)
                 mag_want[gid] = float(sqrt(re * re + im * im))
             }
-            let bad_mag = mismatch_approx(mag_dev, mag_want)
-            let bad_pow = mismatch_approx(pow_dev, pow_want)
-            t |> success(bad_mag == 0, "tower_spec_dft (magnitude): the frames' spectra match the double DFT ({bad_mag} of {n_pw} off)")
-            t |> success(bad_pow == 0, "tower_spec_dft (power): the same as re^2 + im^2 ({bad_pow} of {n_pw} off)")
-            t |> success(!approx(mag_dev[0], mag_want[0] + 0.5) && !approx(pow_dev[1], mag_want[1]), "tower_spec_dft: the bar reds a poisoned element, and the power arm is not the magnitude")
+            check_rows(t, "tower_spec_dft (magnitude) frames' spectra vs the double DFT", mag_dev, mag_want, BAR_APPROX, MEL_NBINS)
+            check_rows(t, "tower_spec_dft (power) vs re^2 + im^2", pow_dev, pow_want, BAR_APPROX, MEL_NBINS)
+            t |> success(!approx(pow_dev[1], mag_want[1]), "tower_spec_dft control: the power arm is not the magnitude")
             var g4a_want : array<float>
             var cn_want : array<float>
             var wh_want : array<float>
@@ -2383,16 +2286,10 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                     wh_want[j * MEL_NLEN + frame] = float(log(max(sum, double(MEL_FLOOR_24))) * double(MEL_LOG10_E))
                 }
             }
-            let bad_g4a = mismatch_approx(g4a_dev, g4a_want)
-            let bad_cn = mismatch_approx(cn_dev, cn_want)
-            let bad_wh = mismatch_approx(wh_dev, wh_want)
-            t |> success(bad_g4a == 0, "tower_mel_log (frame-major, max floor): the gemma4a form ({bad_g4a} of {n_mel} off)")
-            t |> success(bad_cn == 0, "tower_mel_log (frame-major, added floor): the canary form ({bad_cn} of {n_mel} off)")
-            t |> success(bad_wh == 0, "tower_mel_log (mel-major, log10): the whisper preprocessors' form ({bad_wh} of {n_mel} off)")
+            check_rows(t, "tower_mel_log (frame-major, max floor) vs the gemma4a form", g4a_dev, g4a_want, BAR_APPROX, MEL_NMEL)
+            check_rows(t, "tower_mel_log (frame-major, added floor) vs the canary form", cn_dev, cn_want, BAR_APPROX, MEL_NMEL)
+            check_rows(t, "tower_mel_log (mel-major, log10) vs the whisper preprocessors' form", wh_dev, wh_want, BAR_APPROX, MEL_NLEN)
             t |> success(approx(g4a_dev[0], log(MEL_MAX_FLOOR_G4A)) && cn_dev[0] < g4a_dev[0] - 1.0, "tower_mel_log: the quiet frame floors on the max arm and reads under the floor on the add arm")
-            t |> success(!approx(g4a_dev[n_mel - 1], g4a_want[n_mel - 1] + 0.5), "tower_mel_log: the bar reds a poisoned element")
-            t |> success(!approx(cn_dev[n_mel - 1], cn_want[n_mel - 1] + 0.5), "tower_mel_log (added floor): the bar reds a poisoned element")
-            t |> success(!approx(wh_dev[n_mel - 1], wh_want[n_mel - 1] + 0.5), "tower_mel_log (log10): the bar reds a poisoned element")
             var norm_want : array<float>
             norm_want |> resize(n_norm)
             for (j in range(MEL_NMEL)) {
@@ -2411,15 +2308,9 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                     norm_want[i * MEL_NMEL + j] = i < NORM_VALID ? float((double(mel_in[i * MEL_NMEL + j]) - mean) / denom) : 0.0
                 }
             }
-            let bad_norm = mismatch_approx(norm_dev, norm_want)
-            var tail_off = 0
-            for (i in range(NORM_VALID * MEL_NMEL, n_norm)) {
-                if (norm_dev[i] != 0.0) {
-                    tail_off++
-                }
-            }
-            t |> success(bad_norm == 0 && tail_off == 0 && norm_dev[0] != mel_in[0], "tower_mel_norm: the column statistics over the valid frames and the zero tail match the CPU loop ({bad_norm} of {n_norm} off, {tail_off} tail words live)")
-            t |> success(!approx(norm_dev[0], norm_want[0] + 0.5), "tower_mel_norm: the bar reds a poisoned element")
+            check_rows(t, "tower_mel_norm column statistics over the valid frames and the zero tail vs the CPU loop", norm_dev, norm_want, BAR_APPROX, MEL_NMEL)
+            let tail_off = count(subarray(norm_dev, range(NORM_VALID * MEL_NMEL, n_norm)), $(v) => v != 0.0)
+            t |> success(tail_off == 0 && norm_dev[0] != mel_in[0], "tower_mel_norm: the tail is exact zeros ({tail_off} tail words live) and the rows moved off the input")
             var dw_want : array<float>
             dw_want |> resize(dw_out)
             for (gid in range(dw_out)) {
@@ -2437,9 +2328,7 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 }
                 dw_want[gid] = float(acc)
             }
-            let bad_dw = mismatch_approx(dw_dev, dw_want)
-            t |> success(bad_dw == 0, "tower_dw_conv: the k3 s2 p1 depthwise taps with the bias match the CPU form ({bad_dw} of {dw_out} off)")
-            t |> success(!approx(dw_dev[0], dw_want[0] + 0.5), "tower_dw_conv: the bar reds a poisoned element")
+            check_rows(t, "tower_dw_conv k3 s2 p1 depthwise taps with the bias vs the CPU form", dw_dev, dw_want, BAR_APPROX, DW_CH)
             t |> equal(count(dw_idle, $(w) => w == NAN_SENTINEL_BITS), dw_lanes - dw_out, "tower_dw_conv: the idle lanes past the output write nothing (every word past it the sentinel)")
             var rel_want : array<float>
             rel_want |> resize(n_rel)
@@ -2452,15 +2341,14 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                     rel_want[w * REL_D + 2 * k + 1] = cos(theta)
                 }
             }
-            let bad_rel = mismatch_approx(rel_dev, rel_want)
+            check_rows(t, "tower_rel_sincos table vs the CPU loop", rel_dev, rel_want, BAR_APPROX, REL_D)
             var zero_row_off = 0
             for (k in range(REL_D / 2)) {
                 if (rel_dev[(tt - 1) * REL_D + 2 * k] != 0.0 || rel_dev[(tt - 1) * REL_D + 2 * k + 1] != 1.0) {
                     zero_row_off++
                 }
             }
-            t |> success(bad_rel == 0 && zero_row_off == 0, "tower_rel_sincos: the table matches the CPU loop, the rel 0 row exactly (0, 1) ({bad_rel} of {n_rel} off, {zero_row_off} of the zero row off)")
-            t |> success(!approx(rel_dev[0], rel_want[0] + 0.5), "tower_rel_sincos: the bar reds a poisoned element")
+            t |> success(zero_row_off == 0, "tower_rel_sincos: the rel 0 row is exactly (0, 1) ({zero_row_off} of the zero row off)")
             for (b in fixed_array(xwd, twd, magd, powd, pwd, fild, g4ad, cnd, whd, normd, dwxd, dwyd, dwwd, reld)) {
                 destroy_device_buf(b)
             }
@@ -2551,11 +2439,8 @@ def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {   // nolint:STYLE038 — one fla
             t |> equal(count(ao_idle, $(w) => w == NAN_SENTINEL_BITS) + count(ao2_idle, $(w) => w == NAN_SENTINEL_BITS), 2 * (ao_rows - rows) * d, "tower_cn_attn_r: the idle lanes write nothing past the live rows on both stamps (every word the sentinel)")
             let ao_ref <- cn_attn_ref(q, k, v, posl, wn, rows, d, ROWS_HEADS, hs, 0, d)
             let ao2_ref <- cn_attn_ref(q, k, v, posl, wn, rows, d, heads2, hs2, 0, d)
-            let bad64 = mismatch_approx(ao_dev, ao_ref)
-            let bad128 = mismatch_approx(ao2_dev, ao2_ref)
-            t |> success(bad64 == 0, "tower_cn_attn_r64: the rel-plane attention over four 64-wide heads matches the CPU loop ({bad64} of {nd} off)")
-            t |> success(bad128 == 0, "tower_cn_attn_r: the same over two 128-wide heads ({bad128} of {nd} off)")
-            t |> success(!approx(ao_dev[0], ao_ref[0] + 0.5) && !approx(ao2_dev[nd - 1], ao2_ref[nd - 1] + 0.5), "tower_cn_attn_r: the bar reds a poisoned element on both stamps")
+            check_rows(t, "tower_cn_attn_r64 rel-plane attention over four 64-wide heads vs the CPU loop", ao_dev, ao_ref, BAR_APPROX, d, hs)
+            check_rows(t, "tower_cn_attn_r rel-plane attention over two 128-wide heads vs the CPU loop", ao2_dev, ao2_ref, BAR_APPROX, d, hs2)
             let k_scaled <- scaled_copy(k, 1.5)
             let posl_scaled <- scaled_copy(posl, 1.5)
             let ctl_k <- cn_attn_ref(q, k_scaled, v, posl, wn, rows, d, ROWS_HEADS, hs, 0, d)
