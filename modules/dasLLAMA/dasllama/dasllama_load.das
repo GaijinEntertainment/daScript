@@ -429,9 +429,18 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         t.mtp_enorm_off = fo
         fo += dim
         t.mtp_hnorm_off = fo
-        fo += dim
+        fo += c.hyper_conn ? hc_dim(c) : dim   // hnorm spans the carry: the wide residual under hyper-connections
         t.mtp_headnorm_off = fo   // loaded only when the tensor exists; reads fall back to rms_final_off
         fo += dim
+        if (c.hyper_conn) {   // the draft head's own head mixer: norm f32, down/up q8
+            let hcd = hc_dim(c)
+            t.mtp_hc_head_norm_off = fo
+            fo += hcd
+            t.mtp_hc_head_down_off = cur.wo
+            cur.wo += hcd * c.hc_low_rank
+            t.mtp_hc_head_up_off = cur.wo
+            cur.wo += c.hc_low_rank * hcd
+        }
     }
     return LayoutSizes(fblob_n = fo, wblob_n = cur.wo, mx_n = mx, bf16_n = bf16, kq_n = cur.kq, q51_n = cur.q51, iq4nl32_n = cur.iq4nl32, pleq8_n = pleq8)
 }
@@ -2584,7 +2593,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (t.config.n_layer_nextn > 0l) {   // MTP/NextN extras (block index n_layers = `layers`)
             load_big(m, bytes, "blk.{layers}.nextn.eh_proj.weight", t, t.mtp_ehproj_off, 2l * dim * dim, scratch, 0l, t.mtp_ehproj_fmt)
             gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.enorm.weight", t.fblob, t.mtp_enorm_off, dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.hnorm.weight", t.fblob, t.mtp_hnorm_off, dim)
+            gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.hnorm.weight", t.fblob, t.mtp_hnorm_off, t.config.hyper_conn ? hc_dim(t.config) : dim)
+            if (t.config.hyper_conn) {   // the draft head collapses its wide residual through its own head mixer
+                let hcd = hc_dim(t.config)
+                let lr = t.config.hc_low_rank
+                gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.hc_head_norm.weight", t.fblob, t.mtp_hc_head_norm_off, hcd)
+                load_big(m, bytes, "blk.{layers}.nextn.hc_head_down.weight", t, t.mtp_hc_head_down_off, hcd * lr, scratch)
+                load_big(m, bytes, "blk.{layers}.nextn.hc_head_up.weight", t, t.mtp_hc_head_up_off, lr * hcd, scratch)
+            }
             if (gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_norm.weight") >= 0) {
                 gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.shared_head_norm.weight", t.fblob, t.mtp_headnorm_off, dim)
             } else {

@@ -39,7 +39,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 42   // the plane table carries the iq3s4 slot (the IQ3_S served form)
+let IMAGE_VERSION = 43   // the meta carries the draft head's hyper-connection head-mixer offsets
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -734,6 +734,9 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.mtp_enorm_off)
     arch |> serialize_raw(t.mtp_hnorm_off)
     arch |> serialize_raw(t.mtp_headnorm_off)
+    arch |> serialize_raw(t.mtp_hc_head_norm_off)
+    arch |> serialize_raw(t.mtp_hc_head_down_off)
+    arch |> serialize_raw(t.mtp_hc_head_up_off)
     arch |> serialize_raw(t.hc_norm_off)
     arch |> serialize_raw(t.hc_inject_off)
     arch |> serialize_raw(t.hc_head_norm_off)
@@ -751,7 +754,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
 }
 
 //! the 4 deliberate skips: blocks, blob_scaled, image_map, image_bytes; the plane table counts as ONE field.
-let IMAGE_META_FIELDS = 78 + 4
+let IMAGE_META_FIELDS = 81 + 4
 
 // the tokenizer's tripwires: the SentencePiece backend's five serialized meta fields + its three
 // derived tables (lookup, pair_merge, bkey_id); the BPE backend's seven (merge_rank rides as the

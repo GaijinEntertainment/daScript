@@ -1160,6 +1160,11 @@ struct Model {
     mtp_enorm_off : int64 = -1      // fblob: nextn.enorm (token-embedding RMS weight), dim
     mtp_hnorm_off : int64 = -1      // fblob: nextn.hnorm (trunk-hidden RMS weight), dim
     mtp_headnorm_off : int64 = -1   // fblob: nextn.shared_head_norm, dim (-1 = output_norm)
+    // under hyper-connections the draft head carries the WIDE residual (hnorm is hc x dim) and
+    // collapses it through its own head mixer before the classifier
+    mtp_hc_head_norm_off : int64 = -1   // fblob: nextn.hc_head_norm, hc x dim
+    mtp_hc_head_down_off : int64 = -1   // q8: [low_rank x hc_dim]
+    mtp_hc_head_up_off : int64 = -1     // q8: [hc_dim x low_rank]
     // qwen4exp hyper-connections (config.hyper_conn). Per layer TWO mixer sites, attn (0) then ffn
     // (1), indexed (l * 2 + site): the grouped norm gammas and the f32 inject matrices in fblob,
     // the low-rank down/up pair on the q8 plane. The head mixer (no inject) replaces output_norm.
@@ -2361,7 +2366,7 @@ struct Session {
     // MTP/NextN self-spec state (empty unless config.n_layer_nextn > 0). mtp_h is the trunk's
     // post-output-norm hidden of the LAST evaluated position (the MTP draft-head handoff);
     // mtp_h_pos1 is that position PLUS ONE (0 = cold, keeps Session zero-init-safe).
-    mtp_h : array<float>           // h_nextn (dim)
+    mtp_h : array<float>           // h_nextn (dim; hc x dim under hyper-connections - the wide residual before the head mixer)
     mtp_h0 : array<float>          // the verify batch's ROW-0 normed hidden (= h_pos). forward_prefill's
                                    // tail only stashes the LAST row, which a reject discards — this is
                                    // what re-seeds mtp_h so a rejected step needs no re-forward
@@ -2369,6 +2374,7 @@ struct Session {
     mtp_cat : array<float>         // eh_proj input [enorm(embed(tok)) ; hnorm(h)] (2*dim)
     mtp_cat_b : array<float>       // prompt-warm eh_proj concat image ((npos-1) x 2*dim, scratch-sized per warm)
     @scratch mtp_xb_save : array<float>     // prompt-warm x_b preservation (the warm's eh_proj output rides x_b for the arch blocks; consumers like mtp_verify_row0 / embed_forward need the trunk hiddens back)
+    @scratch mtp_hc_save : array<float>     // prompt-warm hc_res_b preservation (the warm's eh_proj output is the draft's wide residual rows; the verify reads the trunk's back)
     mtp_logits : array<float>      // verify-batch row-0 logits (vocab; the draft check reads its argmax)
     mtp_vbatch : array<int64>      // the 2-row verify batch [tok, draft] (persistent — no per-step alloc)
     mtp_norm_b : array<float>      // verify-batch final-normed rows (npos x dim), input to the batched classifier
@@ -2498,9 +2504,9 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
         s.dn_qgate |> resize(qd)
     }
     if (c.n_layer_nextn > 0l) {   // MTP/NextN: h_nextn handoff + eh_proj concat input + verify row-0 outputs
-        s.mtp_h |> reserve_resize(c.dim)
-        s.mtp_h0 |> reserve_resize(c.dim)
-        s.mtp_cat |> reserve_resize(2l * MTP_MAX_ROWS * c.dim)   // the verify's embeds (row per verify row) and the warm's cat image
+        s.mtp_h |> reserve_resize(mtp_h_dim(c))
+        s.mtp_h0 |> reserve_resize(mtp_h_dim(c))
+        s.mtp_cat |> reserve_resize(max(2l * MTP_MAX_ROWS * c.dim, c.hc_count * 2l * c.dim))   // the verify's embeds (row per verify row), the warm's cat image, the per-stream cat rows
         s.mtp_logits |> resize(c.vocab_size)
         s.mtp_vbatch |> resize(MTP_MAX_ROWS)
     }
@@ -4531,8 +4537,7 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
         rms_at(s.xb, t, t.rms_final_off, s.x, dim)
     }
     if (c.n_layer_nextn > 0l) {   // stash h_nextn for the MTP draft head
-        copy_floats(s.xb, 0l, s.mtp_h, 0l, dim)
-        s.mtp_h_pos1 = pos + 1l
+        mtp_stash_carry_row(t, s, s.hc_res, 0l, pos + 1l)
     }
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     let tied_f32 = c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
@@ -4549,6 +4554,54 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
         s.logits[id] = -1.0e30
     }
     prof_add("final", ts_final)
+}
+
+//! The draft head's carry width: the trunk's post-norm hidden, or under hyper-connections the wide
+//! residual before the head mixer (the head norms its streams itself)
+def mtp_h_dim(c : Config) : int64 => c.hyper_conn ? hc_dim(c) : c.dim
+
+//! Stash the carry from row `row` of a residual image (`wide` = hc_res / hc_res_b) or from s.xb (the
+//! post-norm hidden the caller just produced), and mark its position
+def private mtp_stash_carry_row(t : Model; var s : Session; wide : array<float>; row, pos1 : int64) {
+    let c = t.config
+    if (c.hyper_conn) {
+        copy_floats(wide, row * hc_dim(c), s.mtp_h, 0l, hc_dim(c))
+    } else {
+        copy_floats(s.xb, 0l, s.mtp_h, 0l, c.dim)
+    }
+    s.mtp_h_pos1 = pos1
+}
+
+//! The verify's row-0 carry (= h_pos): the wide residual row under hyper-connections, else the normed hidden at `normed[noff..]`
+def private mtp_h0_from_row(t : Model; var s : Session; normed : array<float>; noff : int64) {
+    let c = t.config
+    if (c.hyper_conn) {
+        copy_floats(s.hc_res_b, 0l, s.mtp_h0, 0l, hc_dim(c))
+    } else {
+        copy_floats(normed, noff, s.mtp_h0, 0l, c.dim)
+    }
+}
+
+//! The per-stream eh_proj input rows of one token under hyper-connections: row ch of `cat` at
+//! `coff` is [enorm(embed) ; hnorm_ch(h_ch)] - the normed embed row already sits in s.xb
+def private mtp_cat_streams(t : Model; var s : Session; var cat : array<float>; coff : int64; h : array<float>; hoff : int64) {
+    let c = t.config
+    let dim = c.dim
+    unsafe {
+        for (ch in range64(c.hc_count)) {
+            let ro = coff + ch * 2l * dim
+            copy_floats(addr(cat[ro]), addr < float const? >(s.xb[0]), dim)
+            rmsnorm(addr(cat[ro + dim]), addr < float const? >(h[hoff + ch * dim]),
+                addr < float const? >(t.fblob[t.mtp_hnorm_off + ch * dim]), dim, c.norm_eps)
+        }
+    }
+}
+
+//! the batched scratch a draft-side GEMM over `rows` rows of width n reads (a decode session's prefill scratch may be short)
+def private mtp_rows_scratch(var s : Session; rows, n : int64) {
+    s.xqb |> grow_resize(rows * n)
+    s.xsb |> grow_resize(rows * n / 32l)
+    s.xbsb |> grow_resize(rows * n / 16l)
 }
 
 //! One MTP/NextN draft step: from stashed trunk hidden `s.mtp_h` and `token`, produce draft logits
@@ -4684,14 +4737,22 @@ def forward_mtp(t : Model; var s : Session; token, pos : int64; want_logits : bo
     // eh_proj input: [enorm(embed(token)) ; hnorm(h)] — embedding first in the concat
     embed_row(t, token, unsafe(addr(s.x[0])))
     rms_at(s.xb, t, t.mtp_enorm_off, s.x, dim)
-    copy_floats(s.xb, 0l, s.mtp_cat, 0l, dim)
-    rms_at(s.xb, t, t.mtp_hnorm_off, s.mtp_h, dim)
-    copy_floats(s.xb, 0l, s.mtp_cat, dim, dim)
-    // eh_proj: 2*dim -> dim into the residual stream (xq/xs cover 2*dim — sized max(xdim, ffw))
-    if (t.mtp_ehproj_fmt != KqFmt.q8) {
-        mm_kq(s.x, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, s.mtp_cat, s.xq, s.xs, s.xbs, 2l * dim, dim)
+    if (c.hyper_conn) {
+        // per stream, never pooled: stream ch's row [enorm(embed) ; hnorm_ch(h_ch)] projects to the
+        // draft's wide residual stream ch - hc rows of one eh_proj GEMM
+        mtp_cat_streams(t, s, s.mtp_cat, 0l, s.mtp_h, 0l)
+        mtp_rows_scratch(s, c.hc_count, 2l * dim)
+        mm_b_f(s, s.hc_res, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, s.mtp_cat, 2l * dim, dim, c.hc_count)
     } else {
-        mm(s.x, t, t.mtp_ehproj_off, s.mtp_cat, s.xq, s.xs, 2l * dim, dim)
+        copy_floats(s.xb, 0l, s.mtp_cat, 0l, dim)
+        rms_at(s.xb, t, t.mtp_hnorm_off, s.mtp_h, dim)
+        copy_floats(s.xb, 0l, s.mtp_cat, dim, dim)
+        // eh_proj: 2*dim -> dim into the residual stream (xq/xs cover 2*dim — sized max(xdim, ffw))
+        if (t.mtp_ehproj_fmt != KqFmt.q8) {
+            mm_kq(s.x, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, s.mtp_cat, s.xq, s.xs, s.xbs, 2l * dim, dim)
+        } else {
+            mm(s.x, t, t.mtp_ehproj_off, s.mtp_cat, s.xq, s.xs, 2l * dim, dim)
+        }
     }
     // this row's RoPE table (partial rotary span, like forward)
     if (g_use_rope_table) {
@@ -4704,9 +4765,15 @@ def forward_mtp(t : Model; var s : Session; token, pos : int64; want_logits : bo
     // warm/backfill calls only need the KV row written — the head norm + classifier (a large
     // share of the head's cost on small models: vocab x dim) run only when drafting
     return if (!want_logits)
-    // head norm (shared_head_norm when shipped, else output_norm) + the trunk classifier
-    rms_at(s.xb, t, t.mtp_headnorm_off >= 0l ? t.mtp_headnorm_off : t.rms_final_off, s.x, dim)
-    copy_floats(s.xb, 0l, s.mtp_h, 0l, dim)   // the head's own h_nextn — recursive drafting handoff
+    if (c.hyper_conn) {
+        // the head's own h_nextn is its wide residual BEFORE the head mixer - the chain's next input
+        copy_floats(s.hc_res, 0l, s.mtp_h, 0l, hc_dim(c))
+        hc_mix_row(t, s, s.hc_res, 0l, t.mtp_hc_head_norm_off, t.mtp_hc_head_down_off, t.mtp_hc_head_up_off, -1l)
+    } else {
+        // head norm (shared_head_norm when shipped, else output_norm) + the trunk classifier
+        rms_at(s.xb, t, t.mtp_headnorm_off >= 0l ? t.mtp_headnorm_off : t.rms_final_off, s.x, dim)
+        copy_floats(s.xb, 0l, s.mtp_h, 0l, dim)   // the head's own h_nextn — recursive drafting handoff
+    }
     s.mtp_h_pos1 = 0l   // NOT a trunk hidden: the warm's seam row must not consume it
     mm_cls(s.logits, t, s.xb, s.xq, s.xs, s.xbs, dim, c.vocab_size)
 }
@@ -4798,8 +4865,12 @@ def mtp_state_restore(var s : Session) {
 def private mtp_verify_row0(t : Model; var s : Session) {
     let c = t.config
     let dim = c.dim
-    rms_at(s.xb, t, t.rms_final_off, s.x_b, 0l, dim)
-    copy_floats(s.xb, 0l, s.mtp_h0, 0l, dim)   // = h_pos; a reject re-seeds the draft head from it
+    if (t.blocks.final_norm != null) {   // the arch's own tail over row 0 (the hyper-connection head mixer)
+        invoke(t.blocks.final_norm, t, s, 0l, true)
+    } else {
+        rms_at(s.xb, t, t.rms_final_off, s.x_b, 0l, dim)
+    }
+    mtp_h0_from_row(t, s, s.xb, 0l)   // = h_pos; a reject re-seeds the draft head from it
     mm_cls(s.mtp_logits, t, s.xb, s.xq, s.xs, s.xbs, dim, c.vocab_size)
     // mirror the plain classifier tail exactly — `truth` must match plain decode BY CONSTRUCTION
     if (c.final_logit_softcap > 0.0) {
@@ -4829,8 +4900,15 @@ def private mtp_verify_logits(t : Model; var s : Session; npos : int64) {
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     s.mtp_norm_b |> overwrite_resize(npos * dim)
     s.mtp_logits_b |> overwrite_resize(npos * vocab)
-    rms_batch(s.mtp_norm_b, s.x_b, t, t.rms_final_off, dim, npos)
-    copy_floats(s.mtp_norm_b, 0l, s.mtp_h0, 0l, dim)   // = h_pos; a reject re-seeds the draft head from it
+    if (t.blocks.final_norm != null) {   // the arch's own tail per row (the hyper-connection head mixer) into the normed image
+        for (p in range64(npos)) {
+            invoke(t.blocks.final_norm, t, s, p, true)
+            copy_floats(s.xb, 0l, s.mtp_norm_b, p * dim, dim)
+        }
+    } else {
+        rms_batch(s.mtp_norm_b, s.x_b, t, t.rms_final_off, dim, npos)
+    }
+    mtp_h0_from_row(t, s, s.mtp_norm_b, 0l)   // = h_pos; a reject re-seeds the draft head from it
     mm_b_f(s, s.mtp_logits_b, t, cls_fmt, t.wcls_off, s.mtp_norm_b, dim, vocab, npos)
     copy_floats(s.mtp_logits_b, 0l, s.mtp_logits, 0l, vocab)
     copy_floats(s.mtp_logits_b, (npos - 1l) * vocab, s.logits, 0l, vocab)
@@ -4854,20 +4932,40 @@ def private mtp_prefill_warm(t : Model; var s : Session; tokens : array<int64>; 
     if (npos > 1l) {
         s.mtp_xb_save |> overwrite_resize(npos * dim)
         copy_floats(s.x_b, 0l, s.mtp_xb_save, 0l, npos * dim)
-        s.mtp_cat_b |> overwrite_resize((npos - 1l) * 2l * dim)
-        for (p in range64(npos - 1l)) {
-            embed_row(t, tokens[p + 1l], unsafe(addr(s.x[0])))
-            rms_at(s.xb, t, t.mtp_enorm_off, s.x, dim)
-            copy_floats(s.xb, 0l, s.mtp_cat_b, p * 2l * dim, dim)
-            rms_at(s.xb, t, t.rms_final_off, s.x_b, p * dim, dim)   // h_{start_pos+p}
-            copy_floats(s.xb, 0l, s.x, 0l, dim)
-            rms_at(s.xb, t, t.mtp_hnorm_off, s.x, dim)
-            copy_floats(s.xb, 0l, s.mtp_cat_b, p * 2l * dim + dim, dim)
+        if (c.hyper_conn) {
+            // hc cat rows a position, one eh_proj GEMM lands the draft's wide rows 0..npos-2 over the trunk's (saved first)
+            let hcd = hc_dim(c)
+            let nh = c.hc_count
+            s.mtp_hc_save |> overwrite_resize(npos * hcd)
+            copy_floats(s.hc_res_b, 0l, s.mtp_hc_save, 0l, npos * hcd)
+            let rows = (npos - 1l) * nh
+            s.mtp_cat_b |> overwrite_resize(rows * 2l * dim)
+            for (p in range64(npos - 1l)) {
+                embed_row(t, tokens[p + 1l], unsafe(addr(s.x[0])))
+                rms_at(s.xb, t, t.mtp_enorm_off, s.x, dim)
+                mtp_cat_streams(t, s, s.mtp_cat_b, p * nh * 2l * dim, s.mtp_hc_save, p * hcd)
+            }
+            mtp_rows_scratch(s, rows, 2l * dim)
+            mm_b_f(s, s.hc_res_b, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, s.mtp_cat_b, 2l * dim, dim, rows)
+        } else {
+            s.mtp_cat_b |> overwrite_resize((npos - 1l) * 2l * dim)
+            for (p in range64(npos - 1l)) {
+                embed_row(t, tokens[p + 1l], unsafe(addr(s.x[0])))
+                rms_at(s.xb, t, t.mtp_enorm_off, s.x, dim)
+                copy_floats(s.xb, 0l, s.mtp_cat_b, p * 2l * dim, dim)
+                rms_at(s.xb, t, t.rms_final_off, s.x_b, p * dim, dim)   // h_{start_pos+p}
+                copy_floats(s.xb, 0l, s.x, 0l, dim)
+                rms_at(s.xb, t, t.mtp_hnorm_off, s.x, dim)
+                copy_floats(s.xb, 0l, s.mtp_cat_b, p * 2l * dim + dim, dim)
+            }
+            mm_b_f(s, s.x_b, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, s.mtp_cat_b, 2l * dim, dim, npos - 1l)
         }
-        mm_b_f(s, s.x_b, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, s.mtp_cat_b, 2l * dim, dim, npos - 1l)
         t.blocks.attn_prefill(t, s, c.n_layers, npos - 1l, start_pos)
         t.blocks.ffn_prefill(t, s, c.n_layers, npos - 1l)
         copy_floats(s.mtp_xb_save, 0l, s.x_b, 0l, npos * dim)
+        if (c.hyper_conn) {
+            copy_floats(s.mtp_hc_save, 0l, s.hc_res_b, 0l, npos * hc_dim(c))
+        }
     }
     // SEAM row start_pos-1 is written by forward_prefill BEFORE the trunk body, so it can't be done here
 }
@@ -4954,7 +5052,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         copy_floats(s.mtp_logits, 0l, s.logits, 0l, c.vocab_size)
         // forward_prefill's tail stashed the LAST row's h — the draft's, now discarded — so re-seed
         // the draft head from row 0's normed hidden the verify's own classifier computed
-        copy_floats(s.mtp_h0, 0l, s.mtp_h, 0l, c.dim)
+        copy_floats(s.mtp_h0, 0l, s.mtp_h, 0l, mtp_h_dim(c))
         s.mtp_h_pos1 = pos + 1l
         s.n_past = pos + 1l
         return false
@@ -5896,8 +5994,7 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
         rms_at(s.xb, t, t.rms_final_off, s.x_b, last * dim, dim)
     }
     if (c.n_layer_nextn > 0l) {   // stash the last position's h_nextn for the MTP draft head
-        copy_floats(s.xb, 0l, s.mtp_h, 0l, dim)
-        s.mtp_h_pos1 = start_pos + last + 1l
+        mtp_stash_carry_row(t, s, s.hc_res_b, last, start_pos + last + 1l)
     }
     if (skip_logits) {   // MTP verify: the caller runs ONE batched classifier covering every row
         prof_add("final", ts_final)

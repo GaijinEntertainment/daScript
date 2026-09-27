@@ -11,6 +11,7 @@ def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // CPU-correctness test — prefills on the CPU by design
 }
 require dasllama/dasllama_math   // parallel_argmax (engine-level, not re-exported by the facade)
+require dasllama/dasllama_gguf   // set_mtp_head_path - the split-head fixture names its head explicitly
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
@@ -321,6 +322,39 @@ def test_mtp_invariance_glm(t : T?) {
             t |> success(ids_equal(ref_ids, forced_ids), "code-glm forced: spec decode through the reject branch token-for-token vs plain")
             t |> success(nd_forced >= 3l && nd_forced - na_forced >= nd_forced / 3l,
                          "code-glm forced: {nd_forced - na_forced} of {nd_forced} drafts rejected - reject branch covered")
+        }
+        delete tr
+    }
+}
+
+// Qwen3.8-Flash-Next UD-IQ4_XS + its split `shared` Q8_0 head (the MTP/ sibling folder, so the head is
+// named explicitly): the hyper-connection carrier - the draft head takes the trunk's WIDE residual,
+// norms its streams itself, concatenates per stream into eh_proj, runs one hc-mixed attention + MoE
+// block and collapses through its own head mixer before the borrowed classifier. The counting fixture
+// (every Qwen-vocab carrier continues it identically) holds spec decode to plain decode token for
+// token. Large tier (94 GB, 3 shards + 2.6 GB head): DASLLAMA_PARITY_FULL=1.
+[test]
+def test_mtp_invariance_flashnext(t : T?) {
+    t |> run("MTP self-spec output-invariance (Qwen3.8-Flash-Next + split shared head, the wide-residual carry)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf")
+        let head = path_join(models_dir(), "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf")
+        if (!model_available(t, path) || !model_available(t, head)) return
+        set_mtp_head_path(head)
+        var tr <- load_gguf(path, QuantMode.q8)
+        clear_mtp_head_path()
+        t |> equal(tr.config.n_layer_nextn, 1l)
+        t |> equal(tr.config.n_layers, 48l)
+        t |> success(tr.config.hyper_conn, "the carrier is the hyper-connection arch")
+        t |> success(tr.mtp_hc_head_norm_off >= 0l && tr.mtp_hc_head_down_off >= 0l && tr.mtp_hc_head_up_off >= 0l,
+                     "the draft head's own head mixer loaded")
+        tr.config.seq_len = 2048l
+        let count <- [16l, 11l, 220l, 17l, 11l, 220l, 18l, 11l, 220l, 19l, 11l, 220l, 20l, 11l, 220l, 21l, 11l, 220l, 22l, 11l]
+        with_pinned_kernels() {
+            t |> invariance_ok(tr, count, 40, "counting-flashnext")
         }
         delete tr
     }

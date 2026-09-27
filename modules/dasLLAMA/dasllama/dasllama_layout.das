@@ -104,7 +104,8 @@ def private metal_blob_layout_ok(t : Model) : bool {
                 return false
             }
         }
-        if (!metal_blob_off_ok(t.hc_head_down_off, KqFmt.q8) || !metal_blob_off_ok(t.hc_head_up_off, KqFmt.q8)) {
+        if (!metal_blob_off_ok(t.hc_head_down_off, KqFmt.q8) || !metal_blob_off_ok(t.hc_head_up_off, KqFmt.q8)
+                || (c.n_layer_nextn > 0l && (!metal_blob_off_ok(t.mtp_hc_head_down_off, KqFmt.q8) || !metal_blob_off_ok(t.mtp_hc_head_up_off, KqFmt.q8)))) {
             return false
         }
     }
@@ -454,6 +455,10 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
         }
         push_repack(regs, 0, t.hc_head_down_off, hcd, c.hc_low_rank)
         push_repack(regs, 0, t.hc_head_up_off, c.hc_low_rank, hcd)
+        if (c.n_layer_nextn > 0l) {   // the draft head's own head mixer pair
+            push_repack(regs, 0, t.mtp_hc_head_down_off, hcd, c.hc_low_rank)
+            push_repack(regs, 0, t.mtp_hc_head_up_off, c.hc_low_rank, hcd)
+        }
     }
     if (has_ple_ngram(c)) {   // qwen4exp n-gram side input: key [hc_dim x in] + value [dim x in] (the hash table is raw bytes, never repacked)
         push_repack(regs, 0, t.ple_key_off, ple_in_dim(c), hc_dim(c))

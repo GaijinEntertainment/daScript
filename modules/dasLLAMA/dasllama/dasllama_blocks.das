@@ -1965,7 +1965,10 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     let mx4_grouped_pays = !t.experts_mx4 || npos * c.n_expert_used >= 8l * c.n_expert
     // kq-expert layers ride grouped buckets via the kq batch tile; portable/no-kq backends take the per-position path
     let kq_grouped_ok = !moe_layer_sb_kq(t, l) || (t.kq_repacked && kernel_backend_has_kq_batch())
-    if (t.quant == QuantMode.q8 && g_moe_grouped_prefill && mx4_grouped_pays && kq_grouped_ok) {
+    // a speculative verify's rows are decode-shaped: the bucketed GEMM chain over a handful of rows costs several
+    // GEMV rounds of the same experts, so narrow batches take the per-position GEMV route (bit-identical)
+    let narrow = npos <= ATTN_NARROW_NPOS
+    if (t.quant == QuantMode.q8 && g_moe_grouped_prefill && mx4_grouped_pays && kq_grouped_ok && !narrow) {
         ffn_moe_prefill_grouped(t, s, l, npos)
     } else {
         // per-position reference path — moe_ffn_core carries its own section buckets
