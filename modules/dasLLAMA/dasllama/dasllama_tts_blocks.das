@@ -2626,15 +2626,9 @@ def pad_edge_left_rows(x : array<float>; t, c, left : int64; @scratch @exact_siz
     }
 }
 
-//! The rows twin of `pad_reflect_left`: y [t + left][c] from x [t][c].
+//! The rows twin of `pad_reflect_left`: y [t + left][c] from x [t][c] - a copy of x padded by `pad_reflect_left_rows_inplace`.
 def pad_reflect_left_rows(x : array<float>; t, c, left : int64; @scratch @exact_size var y : array<float>) {
-    let t_out = t + left
-    y |> reserve_resize(t_out * c)
-    for (to in range64(t_out)) {
-        let src = abs(to - left) * c
-        let dst = to * c
-        for (ci in range64(c)) {
-            y[dst + ci] = x[src + ci]
-        }
-    }
+    y |> reserve_resize(t * c)
+    copy_floats(x, 0l, y, 0l, t * c)
+    pad_reflect_left_rows_inplace(y, t, c, left)
 }
