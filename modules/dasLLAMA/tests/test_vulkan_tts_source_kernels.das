@@ -142,9 +142,9 @@ let private RF_C = 24
 
 [test]
 def test_vkt_reflect1(t0 : T?) {
-    t0 |> run("the reflect pad y [38][24] == x [37][24] behind x's row 1, exact") <| @(t : T?) {
+    t0 |> run("the reflect pad as the driver's two row copies: y [38][24] == x [37][24] behind x's row 1, exact") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_tts_reflect1_cls()) {
+            if (!vk_moe_init() || !ensure_tts_pk_rows_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -157,20 +157,22 @@ def test_vkt_reflect1(t0 : T?) {
             let yd = make_device_buf(by)
             nan_sentinel_upload(yd, by)
             var host = make_host_buf(by, true, [cached = true])
-            var s = set_tts_reflect1_cls(fixed_array(xd, yd), fixed_array(bx, by), fixed_array(0u, B_Y))
-            var pa = TtsReflectArgs(c = uint(RF_C), total = uint(total))
+            var s = set_tts_pk_rows_cls(fixed_array(xd, yd), fixed_array(bx, by), fixed_array(0u, B_Y))
+            var shift = TtsPkRowsArgs(rows = uint(RF_T), width = uint(RF_C), ss = uint(RF_C), sc = 0u, sr0 = 0u, ds = uint(RF_C), dc = 0u, dr0 = 1u)
+            var head = TtsPkRowsArgs(rows = 1u, width = uint(RF_C), ss = uint(RF_C), sc = 0u, sr0 = 1u, ds = uint(RF_C), dc = 0u, dr0 = 0u)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_tts_reflect1_cls(raw, h, s, pa, int64(total))
+                enc_tts_pk_rows_cls(raw, h, s, shift, int64(RF_T * RF_C))
+                enc_tts_pk_rows_cls(raw, h, s, head, int64(RF_C))
                 cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
             }
             let got <- staged(host.mapped, 0l, total, type<float>)
             let tail <- staged(host.mapped, int64(total) * 4l, SLACK, type<float>)
             let want <- [for (i in range(total)); x[(i / RF_C == 0 ? 1 : i / RF_C - 1) * RF_C + i % RF_C]]
             let bad = mismatch_exact(got, want)
-            t |> success(bad == 0, "tts_reflect1: row 0 == x's row 1, row r == x's row r - 1 over {RF_T + 1} x {RF_C} ({bad} of {total} off)")
-            t |> success(got[RF_C + 1] != poison_of(want[RF_C + 1]), "tts_reflect1: the bar reds a poisoned element")
-            t |> success(got[0] != x[0], "tts_reflect1 control: row 0 is x's row 1, not x's row 0")
-            t |> equal(nan_count(tail), SLACK, "tts_reflect1: the elements past (t + 1) * c keep their sentinel")
+            t |> success(bad == 0, "reflect pad: row 0 == x's row 1, row r == x's row r - 1 over {RF_T + 1} x {RF_C} ({bad} of {total} off)")
+            t |> success(got[RF_C + 1] != poison_of(want[RF_C + 1]), "reflect pad: the bar reds a poisoned element")
+            t |> success(got[0] != x[0], "reflect pad control: row 0 is x's row 1, not x's row 0")
+            t |> equal(nan_count(tail), SLACK, "reflect pad: the elements past (t + 1) * c keep their sentinel")
             destroy_device_buf(xd)
             destroy_device_buf(yd)
             destroy_host_buf(host)

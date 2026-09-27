@@ -1485,9 +1485,11 @@ def private ts_stage(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : 
     ts_conv_at(raw, h, slab, sl.ups[i], d.ups[i], tt, last ? t2 - 1l : t2, bx_in, r_col, r_col16, last ? r_bxt : r_by, true)
     let n = t2 * c2
     if (last) {
-        var s = set_tts_reflect1_cls(fixed_array(r_bxt.dev, r_by.dev), fixed_array(r_bxt.bytes, r_by.bytes), fixed_array(r_bxt.bit, r_by.bit))
-        var pa = TtsReflectArgs(c = uint(c2), total = uint(n))
-        enc_tts_reflect1_cls(raw, h, s, pa, n)
+        var s = set_tts_pk_rows_cls(fixed_array(r_bxt.dev, r_by.dev), fixed_array(r_bxt.bytes, r_by.bytes), fixed_array(r_bxt.bit, r_by.bit))
+        var shift = TtsPkRowsArgs(rows = uint(t2 - 1l), width = uint(c2), ss = uint(c2), sc = 0u, sr0 = 0u, ds = uint(c2), dc = 0u, dr0 = 1u)
+        enc_tts_pk_rows_cls(raw, h, s, shift, n - c2)
+        var head = TtsPkRowsArgs(rows = 1u, width = uint(c2), ss = uint(c2), sc = 0u, sr0 = 1u, ds = uint(c2), dc = 0u, dr0 = 0u)
+        enc_tts_pk_rows_cls(raw, h, s, head, c2)
         vt_pt(raw, VtProfRole.tts_rows)
     }
     ts_add_scale(raw, h, r_by, r_bsres, r_by, n, 1.0)
@@ -1620,7 +1622,7 @@ def private ts_decoder_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows
 
 def private ts_dec_ensure : bool {
     return (ts_pred_ensure() && (!ts_f16_tile_on() || (ensure_tts_im2col16_cls() && f16_gemm_ensure(ts_f16_tile_khr()))) && ensure_tower_bias_act_cls()
-        && ensure_tts_leaky_cls() && ensure_tts_adain_snake_cls() && ensure_tts_axpy_cls() && ensure_tts_reflect1_cls() && ensure_tts_src_noise_cls()
+        && ensure_tts_leaky_cls() && ensure_tts_adain_snake_cls() && ensure_tts_axpy_cls() && ensure_tts_pk_rows_cls() && ensure_tts_src_noise_cls()
         && ensure_tts_src_low_torch_cls() && ensure_tts_src_low_onnx_cls() && ensure_tts_src_cumsum_torch_cls() && ensure_tts_src_cumsum_onnx_cls()
         && ensure_tts_src_sines_torch_cls() && ensure_tts_src_sines_onnx_cls() && ensure_tts_stft_reflect_cls() && ensure_tts_stft_edge_cls()
         && ensure_tts_istft_cls())

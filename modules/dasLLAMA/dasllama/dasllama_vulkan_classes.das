@@ -13736,30 +13736,6 @@ class TtsAxpy {
     }
 }
 
-struct TtsReflectArgs {
-    c : uint       //! the row width
-    total : uint   //! (t + 1) * c
-}
-
-//! y [t + 1][c] = x [t][c] behind one reflected row (row 0 = x's row 1, row r > 0 = x's row r - 1) - the last stage's
-//! left reflect pad; one element an invocation
-[vk_dispatch(name = "tts_reflect1_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsReflect1 {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 y : array<float>
-    @push_constant pa : TtsReflectArgs
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.total) {
-            let r = gid / pa.c
-            let src = r == 0u ? 1u : r - 1u
-            y[gid] = x[src * pa.c + gid % pa.c]
-        }
-    }
-}
-
 struct TtsSourceArgs {
     n : uint            //! the samples, frames * up
     nlow : uint         //! the phase frames, `resize_len(n, 1 / up)`
