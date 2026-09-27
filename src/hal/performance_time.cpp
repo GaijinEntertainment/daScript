@@ -1,5 +1,9 @@
 #include "daScript/misc/platform.h"
 #include "daScript/misc/performance_time.h"
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/emscripten.h>
+#include <cmath>
+#endif
 
 #if DAS_PROFILE_SECTIONS
 namespace das {
@@ -83,19 +87,25 @@ extern "C" DAS_API int64_t ref_time_delta_to_usec ( int64_t ref ) {
     return ref / 1000LL;
 }
 
-#elif __linux__ || defined(_EMSCRIPTEN_VER) || defined __HAIKU__
+#elif __linux__ || defined(__EMSCRIPTEN__) || defined(_EMSCRIPTEN_VER) || defined __HAIKU__
 
 #include <time.h>
 
 const uint64_t NSEC_IN_SEC = 1000000000LL;
 
 extern "C" int64_t ref_time_ticks () {
+#if defined(__EMSCRIPTEN__)
+    // Keep conversion in WASM. The integer WASI bridge allocates BigInts and,
+    // in diagnostic builds, eagerly formats check messages on every query.
+    return int64_t(std::round(emscripten_get_now() * 1000000.0));
+#else
     timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
         DAS_ASSERT(false);
         return -1;
     }
     return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
+#endif
 }
 
 extern "C" int get_time_usec ( int64_t reft ) {

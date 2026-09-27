@@ -1,0 +1,12 @@
+options gen2
+require daslib/daspkg
+[export]
+def package() { package_name("idle_pop") }
+[export]
+def release() {
+    release_main("main.das")
+    release_include_symbols()
+    release_emcc_arg("-sASSERTIONS=2")
+    release_emcc_arg("-sSAFE_HEAP=2")
+    release_emcc_arg("-sSTACK_OVERFLOW_CHECK=2")
+}
