@@ -2183,12 +2183,18 @@ def resize_linear_torch(x : array<float>; x_lo, x_stride, c, t : int64; scale : 
 def resize_linear(torch_math : bool; x : array<float>; c, t : int64; scale : float; @scratch @exact_size var y : array<float>) : int64 {
     let t_out = resize_len(t, scale)
     y |> reserve_resize(c * t_out)
-    if (torch_math) {
-        resize_linear_torch(x, 0l, t, c, t, scale, 0l, t_out, y, t_out)
-    } else {
-        resize_linear(x, 0l, t, c, t, scale, 0l, t_out, y, t_out)
-    }
+    resize_linear_window(torch_math, x, 0l, t, c, t, scale, 0l, t_out, y, t_out)
     return t_out
+}
+
+//! The window form on either kernel's arithmetic - `torch_math`: PyTorch's, else onnxruntime's; the harmonic source's resamples run it.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-phase-law")]
+def private resize_linear_window(torch_math : bool; x : array<float>; x_lo, x_stride, c, t : int64; scale : float; to0, to1 : int64; var y : array<float>; y_stride : int64) {
+    if (torch_math) {
+        resize_linear_torch(x, x_lo, x_stride, c, t, scale, to0, to1, y, y_stride)
+    } else {
+        resize_linear(x, x_lo, x_stride, c, t, scale, to0, to1, y, y_stride)
+    }
 }
 
 //! A stream knob: the frames one step of a windowed stage covers, 0 for the whole run in one step.
@@ -2334,15 +2340,6 @@ struct SineSourceCfg {
     torch_math : bool   // the reference's arithmetic: PyTorch's (double-accumulated cumsum, its resampler), else onnxruntime's
 }
 
-[arch(at = "../ARCHITECTURE_TTS.md#tts-phase-law")]
-def private source_resize(cfg : SineSourceCfg; x : array<float>; x_lo, x_stride, c, t : int64; scale : float; to0, to1 : int64; var y : array<float>; y_stride : int64) {
-    if (cfg.torch_math) {
-        resize_linear_torch(x, x_lo, x_stride, c, t, scale, to0, to1, y, y_stride)
-    } else {
-        resize_linear(x, x_lo, x_stride, c, t, scale, to0, to1, y, y_stride)
-    }
-}
-
 //! What the sine source carries from one frame window to the next: the cumulative phase per
 //! harmonic, and the phase frames [base, next) the next window's upsample taps still read.
 struct SineSourceCarry {
@@ -2393,7 +2390,7 @@ def private sine_phase_frames(cfg : SineSourceCfg; f0 : array<float>; n : int64;
     let count = want - cr.next
     var low & = g_sine_low
     low |> reserve_resize(nh * count)
-    source_resize(cfg, rad, span.lo, width, nh, n, down, cr.next, want, low, count)
+    resize_linear_window(cfg.torch_math, rad, span.lo, width, nh, n, down, cr.next, want, low, count)
     let held = cr.next - keep
     if (held + count > cr.stride) {
         panic("dasLLAMA tts: sine source window of {count} frames past the {cr.stride - 2l} the carry was reset for")
@@ -2458,7 +2455,7 @@ def sine_source(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u 
     }
     var phase & = g_sine_phase
     phase |> reserve_resize(nh * rows)
-    source_resize(cfg, cr.lowc, cr.base, cr.stride, nh, nlow, float(up), sa, sb, phase, rows)
+    resize_linear_window(cfg.torch_math, cr.lowc, cr.base, cr.stride, nh, nlow, float(up), sa, sb, phase, rows)
     out |> reserve_resize(rows * nh)
     for (r in range64(rows)) {
         let i = sa + r

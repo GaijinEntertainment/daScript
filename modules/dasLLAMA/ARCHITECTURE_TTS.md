@@ -256,7 +256,7 @@ served from an image older than its layout panics by name rather than indexing a
 The harmonic source's phase reaches 1e5 radians in float32, where one ulp is a hundredth of a
 radian, and the reference's sine is accurate at that argument. Only the reference's own
 operation order - the cumulative sum, the resampler's arithmetic, the multiply by the harmonic
-index - reproduces its phase, so `sine_source` and `source_resize` keep it exactly and the
+index - reproduces its phase, so `sine_source` and `resize_linear_window` keep it exactly and the
 scalar sine stays on libm. The GPU route keeps the same order on the device: its source kernels
 compile without fast math, the torch law's double accumulator runs as a two-float sum, and the
 sine reduces its argument in exact pieces (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`).
