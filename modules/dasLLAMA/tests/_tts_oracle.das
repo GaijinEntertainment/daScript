@@ -8,6 +8,8 @@ require _compares
 require daslib/fio public
 require strings public
 require dasllama/dasllama_convert   // rd_u32 / rd_i32 over the mapped bytes
+require dasllama/dasllama_tts_types   // TtsNoise: the captured stream
+require dasllama/dasllama_tts_blocks   // TtsRng: the stream's draws
 require daslib/array_boost
 
 // Reader for the KittenTTS oracle dumps (harness/kitten_oracle.py): one `TTSO` container per
@@ -113,6 +115,22 @@ def load_tts_oracle_manifest(dir_path : string) : TtsOracleManifest {
     var m = TtsOracleManifest()
     load_json_manifest(dir_path, m)
     return <- m
+}
+
+//! A captured noise stream from `seed` in the reference's draw order - the `nh` initial phases, then `samples` rows of normals - so two legs read one noise.
+def captured_noise(nh, samples : int64; seed : uint64) : TtsNoise {
+    var rng = TtsRng()
+    rng_seed(rng, seed)
+    var inscope noise = TtsNoise(captured = true)
+    noise.uniform |> resize(nh)
+    for (h in range64(nh)) {
+        noise.uniform[h] = rng_uniform(rng)
+    }
+    noise.normal |> resize(samples * nh)
+    for (i in range64(samples * nh)) {
+        noise.normal[i] = rng_normal(rng)
+    }
+    return <- noise
 }
 
 //! Largest |a - b| over two equal-length tensors (panics on a length mismatch).

@@ -136,14 +136,29 @@ struct TtsParityRig {
     ids : function<(ps : string) : array<int>>
 }
 
-//! `ours` against `ref` within `bar` (absolute, or of the reference's peak), logged either way, with the control: one element moved by twice the bar must fail.
-def bar_diff(t : T?; tag : string; ours, ref : array<float>; bar : float; absolute : bool) {
+//! How `bar_diff` reads a distance, and the poisoned expectation that must red its bar
+enum BarMetric {
+    absolute   //! max |ours - ref| within the bar; the poison moves one element by twice the bar
+    of_peak    //! max |ours - ref| within the bar times the reference's peak; the poison moves one element by twice that
+    rel_rms    //! `rel_rms(ours, ref)` over the shorter length under the bar; the poison shifts every element by `shift`
+}
+
+//! `ours` against `ref` under `bar` read by `metric`, logged either way, with the control: the poisoned expectation must red the bar.
+def bar_diff(t : T?; tag : string; ours, ref : array<float>; bar : float; metric : BarMetric; shift : float = 0.0) {
+    if (metric == BarMetric.rel_rms) {
+        let rel = rel_rms(ours, ref)
+        to_log(LOG_INFO, "{tag}: rel-rms {rel} over {length(ours)} against the reference's {length(ref)} (bar {bar})\n")
+        t |> success(rel < bar, "{tag}: rel-rms {rel} under {bar}")
+        var inscope poisoned <- [for (v in ref); v + shift]
+        t |> success(rel_rms(ours, poisoned) >= bar, "{tag}: the bar discriminates an expectation shifted by {shift}")
+        return
+    }
     if (length(ours) != length(ref)) {
         t |> failure("{tag}: {length(ours)} elements against the reference's {length(ref)}")
         return
     }
     let peak = logits_maxabs(ref)
-    let lim = absolute ? bar : bar * peak
+    let lim = metric == BarMetric.absolute ? bar : bar * peak
     let d = max_abs_diff(ours, ref)
     to_log(LOG_INFO, "{tag}: maxdiff {d} over {length(ref)} (reference peak {peak})\n")
     t |> success(d <= lim, "{tag}: maxdiff {d} <= {lim}")
@@ -155,9 +170,9 @@ def bar_diff(t : T?; tag : string; ours, ref : array<float>; bar : float; absolu
 }
 
 //! One stage against its dump within BAR (of the oracle's peak, or absolute); a stage the dump lacks is skipped.
-def stage_diff(t : T?; tag, name : string; ours : array<float>; dump : table<string; TtsDumpTensor>; absolute : bool = false; bar : float = BAR) {
+def stage_diff(t : T?; tag, name : string; ours : array<float>; dump : table<string; TtsDumpTensor>; metric : BarMetric = BarMetric.of_peak; bar : float = BAR) {
     dump |> get(name) $(tensor) {
-        bar_diff(t, "{tag} {name}", ours, tensor.f, bar, absolute)
+        bar_diff(t, "{tag} {name}", ours, tensor.f, bar, metric)
     }
 }
 
@@ -233,7 +248,7 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     var inscope sc = St2Scratch()
     var inscope har : array<float>
     let n = styletts2_source(m.decoder, m.source, f0, f2, noise, 0ul, har, sc)
-    stage_diff(t, "{tag} SOURCE", "har", har, dump, true, SOURCE_BAR)
+    stage_diff(t, "{tag} SOURCE", "har", har, dump, BarMetric.absolute, SOURCE_BAR)
     var inscope har_ref <- dump_f(dump, "har")
     var inscope spec : array<float>
     let frames = styletts2_har_spectrum(m.decoder, har_ref, n, tr, spec, sc)
@@ -260,7 +275,7 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     stage_diff(t, "{tag} SEAM", "rb2", tr.rb2, dump)
     stage_diff(t, "{tag} SEAM", "ups1", tr.ups1, dump)
     stage_diff(t, "{tag} SEAM", "conv_post", tr.conv_post, dump)
-    stage_diff(t, "{tag} SEAM", "waveform", wave, dump, true)
+    stage_diff(t, "{tag} SEAM", "waveform", wave, dump, BarMetric.absolute)
     unsafe {
         delete tr
     }
@@ -270,25 +285,25 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
 def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : array<float>; cw, f2 : int64; s_ref, spec : array<float>;
                            frames : int64; wave_cpu : array<float>; var sc : St2Scratch) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        return if (!seat_present(t, tag, "generator"))
-        var inscope wave : array<float>
-        let h0 = styletts2_generator_gpu_stats()
-        let e0 = gpu_encodes()
-        let c0 = gpu_convs()
-        set_gpu(true)
-        styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, null, wave, sc)
-        let h1 = styletts2_generator_gpu_stats()
-        let e1 = gpu_encodes()
-        let c1 = gpu_convs()
-        var inscope gen_x <- scaled(gen_in, 3.0)
-        var inscope wave_p : array<float>
-        styletts2_generator(m.decoder, gen_x, cw, f2, s_ref, spec, frames, null, wave_p, sc)
-        return if (!gpu_stage_verdict(t, tag, "SEAM", wave, wave_cpu, wave_p, GPU_SEAM_BAR, h1.calls - h0.calls, h1.served - h0.served,
-                                      e1 - e0, "{gpu_declines()}"))
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            t |> success(c1 - c0 > 0l, "{tag} GPU SEAM: the convs rode the tower")
+        var convs = 0l
+        var inscope cpu : array<float>
+        let served = seat_leg(t, ST2, tag, "generator", GPU_SEAM_BAR, cpu) $(leg : TowerLeg; var out : array<float>) {
+            if (leg == TowerLeg.cpu) {
+                out := wave_cpu   // the traced CPU run's waveform, which the seam's stage cells read too
+            } elif (leg == TowerLeg.served) {
+                let c0 = gpu_convs()
+                styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, null, out, sc)
+                convs = gpu_convs() - c0
+            } else {
+                var inscope gen_x <- scaled(gen_in, 3.0)
+                styletts2_generator(m.decoder, gen_x, cw, f2, s_ref, spec, frames, null, out, sc)
+            }
         }
-        knob_off_leg(t, "{tag} GPU SEAM", 1l, $ => styletts2_generator_gpu_stats()) $ {
+        return if (!served)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            t |> success(convs > 0l, "{tag} GPU generator: the convs rode the tower")
+        }
+        knob_off_leg(t, "{tag} GPU generator", 1l, $ => styletts2_generator_gpu_stats()) $ {
             var inscope wave_off : array<float>
             styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, null, wave_off, sc)
             return rel_rms(wave_off, wave_cpu) == 0.0
@@ -357,19 +372,21 @@ enum TowerLeg {
     poisoned   //! the knob on over a scaled or reversed input: the compare's control
 }
 
-//! One StyleTTS2 stage on its seat: `run` fills each leg (the CPU leg's into `cpu`, which the caller keeps), then the verdict; the knob stays on.
-[unused_argument(t, tag, stage, bar, cpu, run)]   // off-Apple the gated body is empty
-def private seat_leg(t : T?; tag, stage : string; bar : float; var cpu : array<float>; run : block<(leg : TowerLeg; var out : array<float>) : void>) : bool {
+let private ST2 = TtsKind.kitten   //! the StyleTTS2 seats' family: kitten and kokoro share one seat record
+
+//! One stage on the `kind` family's seat `stage`: `run` fills each leg (the CPU leg's into `cpu`, which the caller keeps), then the verdict; the knob stays on. A StyleTTS2 stage no seat serves is a red.
+[unused_argument(t, kind, tag, stage, bar, cpu, run)]   // off-Apple the gated body is empty
+def seat_leg(t : T?; kind : TtsKind; tag, stage : string; bar : float; var cpu : array<float>; run : block<(leg : TowerLeg; var out : array<float>) : void>) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        return false if (!seat_present(t, tag, stage))
+        return false if (kind != TtsKind.pocket && !seat_present(t, tag, stage))
         set_gpu(false)
         invoke(run, TowerLeg.cpu, cpu)
         set_gpu(true)
-        let h0 = styletts2_gpu_stats(stage)
+        let h0 = seat_stats(kind, stage)
         let e0 = gpu_encodes()
         var inscope g : array<float>
         invoke(run, TowerLeg.served, g)
-        let h1 = styletts2_gpu_stats(stage)
+        let h1 = seat_stats(kind, stage)
         let e1 = gpu_encodes()
         var inscope p : array<float>
         invoke(run, TowerLeg.poisoned, p)
@@ -401,7 +418,7 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
         var inscope ten_c : array<float>
         return if (!gpu_front_checks(t, m, tag, ids, bert_c, ten_c, sc))
         var inscope d_c : array<float>
-        let dur_served = seat_leg(t, tag, "dur_enc", GPU_PRED_BAR, d_c) $(leg : TowerLeg; var out : array<float>) {
+        let dur_served = seat_leg(t, ST2, tag, "dur_enc", GPU_PRED_BAR, d_c) $(leg : TowerLeg; var out : array<float>) {
             if (leg == TowerLeg.poisoned) {
                 var inscope bert_x <- scaled(bert_c, 3.0)
                 styletts2_duration_encoder(m.predictor, bert_x, n_tok, s_pro, out, sc)
@@ -414,7 +431,7 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
         var inscope raw_c : array<float>
         var frames = 0l
         var frames_g = 0l
-        let durations_served = seat_leg(t, tag, "durations", GPU_PRED_BAR, raw_c) $(leg : TowerLeg; var out : array<float>) {
+        let durations_served = seat_leg(t, ST2, tag, "durations", GPU_PRED_BAR, raw_c) $(leg : TowerLeg; var out : array<float>) {
             var inscope dur : array<int>
             if (leg == TowerLeg.poisoned) {
                 var inscope d_x <- scaled(d_c, 3.0)
@@ -444,11 +461,11 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
 def private gpu_front_checks(t : T?; m : StyleTts2Model; tag : string; ids : array<int>; var bert_c, ten_c : array<float>; var sc : St2Scratch) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         var inscope rids <- [for (id in reverse(ids)); id]
-        let albert_served = seat_leg(t, tag, "albert", GPU_ALBERT_BAR, bert_c) $(leg : TowerLeg; var out : array<float>) {
+        let albert_served = seat_leg(t, ST2, tag, "albert", GPU_ALBERT_BAR, bert_c) $(leg : TowerLeg; var out : array<float>) {
             styletts2_albert(m.albert, leg == TowerLeg.poisoned ? rids : ids, out, sc)
         }
         return false if (!albert_served)
-        return seat_leg(t, tag, "text", GPU_TEXT_BAR, ten_c) $(leg : TowerLeg; var out : array<float>) {
+        return seat_leg(t, ST2, tag, "text", GPU_TEXT_BAR, ten_c) $(leg : TowerLeg; var out : array<float>) {
             styletts2_text_encoder(m.text_encoder, leg == TowerLeg.poisoned ? rids : ids, out, sc)
         }
     } else {
@@ -467,7 +484,7 @@ def private gpu_prosody_check(t : T?; m : StyleTts2Model; tag : string; d_c : ar
         var inscope n_g : array<float>
         var f2 = 0l
         var f2g = 0l
-        let served = seat_leg(t, tag, "prosody", GPU_PRED_BAR, f0_c) $(leg : TowerLeg; var out : array<float>) {
+        let served = seat_leg(t, ST2, tag, "prosody", GPU_PRED_BAR, f0_c) $(leg : TowerLeg; var out : array<float>) {
             if (leg == TowerLeg.poisoned) {
                 var inscope en_x <- scaled(en, 3.0)
                 var inscope n_p : array<float>
@@ -495,7 +512,7 @@ def private gpu_decode_check(t : T?; m : StyleTts2Model; tag : string; ten_c : a
         align_expand_channels(ten_c, m.text_encoder.c, n_tok, dur_c, asr)
         var tm = TtsTimings()
         var inscope wave_c : array<float>
-        seat_leg(t, tag, "decode", bar, wave_c) $(leg : TowerLeg; var out : array<float>) {
+        seat_leg(t, ST2, tag, "decode", bar, wave_c) $(leg : TowerLeg; var out : array<float>) {
             if (leg == TowerLeg.poisoned) {
                 var inscope asr_x <- scaled(asr, 3.0)
                 styletts2_decode(m.decoder, m.text_encoder.c, m.source, asr_x, frames, f0_c, n_c, f2, s_ref, noise, 0ul, null, tm, sc)
@@ -510,21 +527,6 @@ def private gpu_decode_check(t : T?; m : StyleTts2Model; tag : string; ten_c : a
 //! The seats one served chunk encodes; the generator seat, reached only after a declined decode, is not one.
 //! The seats one served chunk encodes: every seat of the engine's record but the generator, which only a declined decode reaches.
 def private served_seat_count() : int64 => long_length(styletts2_gpu_seats()) - 1l
-
-//! A captured noise stream from `seed` - the initial phases, then `samples` rows of normals - so two legs read one noise.
-def private capture_noise(var noise : TtsNoise; nh, samples : int64; seed : uint64) {
-    var rng = TtsRng()
-    rng_seed(rng, seed)
-    noise.captured = true
-    unsafe(scratch_resize(noise.uniform, nh))
-    for (h in range64(nh)) {
-        noise.uniform[h] = rng_uniform(rng)
-    }
-    unsafe(scratch_resize(noise.normal, samples * nh))
-    for (i in range64(samples * nh)) {
-        noise.normal[i] = rng_normal(rng)
-    }
-}
 
 //! The served synthesis across the tower knob on both lanes; skips without the model, the front-end packs, or a serving tower.
 [unused_argument(path, text, voice)]   // off-Apple the gated body is a skip
@@ -617,7 +619,7 @@ def private gpu_reference_lane(t : T?; path, text, voice : string) {
         var inscope sized <- synthesize(m, text, voice)   //! the untrimmed count the captured stream covers
         let nh = m.model.source.n_harm
         let rows = 2l * sized.timings.samples + 65536l   //! the source's sample count runs past the generator's output; twice covers it
-        capture_noise(m.scratch.noise, nh, rows, 0x5eedul)
+        m.scratch.noise <- captured_noise(nh, rows, 0x5eedul)
         var inscope a <- synthesize(m, text, voice)
         set_gpu(true)
         let h1 = styletts2_gpu_stats("decode")
@@ -644,14 +646,27 @@ def private stage_checks(t : T?; tag : string; tr : StyleTts2Trace?; dump : tabl
     stage_diff(t, tag, "gen_in", tr.gen_in, dump)
 }
 
-//! Every sample finite (a NaN fails the compare too), and the waveform's peak.
-def speech_peak(t : T?; audio : TtsAudio) : float {
+//! One synthesis's speech read: every sample finite (a NaN compares false, and no speech sample reaches ten), the peak and the rms.
+def speech_level(pcm : array<float>) : tuple<finite : bool; peak : float; rms : float> {
     var finite = true
-    for (v in audio.pcm) {
+    for (v in pcm) {
         finite = finite && abs(v) < 10.0
     }
-    t |> success(finite, "every sample finite")
-    return logits_maxabs(audio.pcm)
+    return (finite = finite, peak = logits_maxabs(pcm), rms = rms(pcm))
+}
+
+//! A family's facade cell: the model gated (and the front-end packs where `packs`), loaded through the facade on a set-up job
+//! queue, its caps at 24 kHz listing `n_voices` voices, then `body` over the model and its caps.
+def facade_smoke(t : T?; path : string; packs : bool; n_voices : int; body : block<(var m : TtsModel; c : TtsCaps) : void>) {
+    return if (packs ? tts_data_missing(t, path) : !model_available(t, path))
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var inscope m <- load_tts_model(path)
+        var inscope c <- caps(m)
+        t |> equal(c.sample_rate, 24000)
+        t |> equal(length(c.voices), n_voices, "the voices the facade lists")
+        invoke(body, m, c)
+    }
 }
 
 //! Run one family's rig, or skip loudly when its model or dumps are not stocked.

@@ -74,35 +74,24 @@ def private kitten_ids_of(ps : string) : array<int> {
 }
 
 // text in, speech out through the facade: the front end's packs sit beside the GGUF in the store
-def private facade_smoke(t : T?; size : string) {
-    if (tts_data_missing(t, gguf_path(size))) {
-        return
-    }
-    with_job_que() {
-        setup_dasllama_jobque_()
-        var inscope m <- load_tts_model(gguf_path(size))
-        var inscope c <- caps(m)
-        t |> equal(c.sample_rate, 24000)
-        t |> equal(length(c.voices), 8)
-        let served0 = styletts2_gpu_stats("decode").served
-        var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "Bella")
-        t |> equal(audio.sample_rate, 24000)
-        // 51 characters of text: well over a second of speech, under ten
-        t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
-        let peak = speech_peak(t, audio)
-        t |> success(peak > 0.05, "peak {peak}: the model spoke")
-        let tm & = audio.timings
-        let gen_on_tower = tm.generator_us == 0l && tm.source_us == 0l && styletts2_gpu_stats("decode").served > served0
-        t |> success(tm.total_us > 0l && (tm.generator_us > 0l || gen_on_tower) && tm.decoder_us > 0l && tm.front_end_us > 0l, "the stage clocks ran")
-        t |> success(tm.total_us >= tm.front_end_us + tm.bert_us + tm.decoder_us + tm.generator_us, "the total covers its parts")
-        to_log(LOG_INFO, "{size} facade: {length(audio.pcm)} samples, peak {peak}; {timings_line(tm, audio.sample_rate)}\n")
-    }
-}
-
 [test]
 def test_kitten_facade(t : T?) {
     t |> run("nano: text in, speech out") @(t : T?) {
-        facade_smoke(t, "nano")
+        facade_smoke(t, gguf_path("nano"), true, 8) $(var m : TtsModel; c : TtsCaps) {
+            let served0 = styletts2_gpu_stats("decode").served
+            var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "Bella")
+            t |> equal(audio.sample_rate, 24000)
+            // 51 characters of text: well over a second of speech, under ten
+            t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
+            let lv = speech_level(audio.pcm)
+            t |> success(lv.finite, "every sample finite")
+            t |> success(lv.peak > 0.05, "peak {lv.peak}: the model spoke")
+            let tm & = audio.timings
+            let gen_on_tower = tm.generator_us == 0l && tm.source_us == 0l && styletts2_gpu_stats("decode").served > served0
+            t |> success(tm.total_us > 0l && (tm.generator_us > 0l || gen_on_tower) && tm.decoder_us > 0l && tm.front_end_us > 0l, "the stage clocks ran")
+            t |> success(tm.total_us >= tm.front_end_us + tm.bert_us + tm.decoder_us + tm.generator_us, "the total covers its parts")
+            to_log(LOG_INFO, "nano facade: {length(audio.pcm)} samples, peak {lv.peak}; {timings_line(tm, audio.sample_rate)}\n")
+        }
     }
 }
 
