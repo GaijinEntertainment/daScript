@@ -19,6 +19,7 @@ require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
 require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
+require _attn_oracle   // attn_row_scored: the softmax row the attention oracles share
 require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan arms alone
 require dasllama/dasllama_math
 require daslib/jobque_boost
@@ -699,14 +700,10 @@ let private G4A_CAP = gemma4a_softcap()
 def private g4a_attn_ref(q, k, v, rpe, pds : array<float>; rows, d, heads, hs : int; qscale, kscale, cap : float) : array<float> {
     var ao : array<float>
     ao |> resize(rows * d)
-    var sc : array<float>
-    sc |> resize(G4A_PAST)
     for (hh in range(heads)) {
         let hoff = hh * hs
         for (i in range(rows)) {
-            let j0 = max(0, i - (G4A_PAST - 1))
-            let cnt = i - j0 + 1
-            for (j in range(j0, i + 1)) {
+            attn_row_scored(v, hoff, d, hs, max(0, i - (G4A_PAST - 1)), i + 1, ao, i * d + hoff, false, 0.0) $(j : int) : float {
                 let rr = (G4A_PAST - (i - j)) * d
                 var cs = 0.0
                 var rs = 0.0
@@ -715,23 +712,7 @@ def private g4a_attn_ref(q, k, v, rpe, pds : array<float>; rows, d, heads, hs : 
                     cs += qv * (k[j * d + hoff + n] * kscale)
                     rs += qv * rpe[rr + hoff + n]
                 }
-                sc[j - j0] = cap * tanh((cs + rs) / cap)
-            }
-            var m = -1.0e30
-            for (c in range(cnt)) {
-                m = max(m, sc[c])
-            }
-            var tot = 0.0
-            for (c in range(cnt)) {
-                sc[c] = exp(sc[c] - m)
-                tot += sc[c]
-            }
-            for (n in range(hs)) {
-                var acc = 0.0
-                for (j in range(j0, i + 1)) {
-                    acc += sc[j - j0] * v[j * d + hoff + n]
-                }
-                ao[i * d + hoff + n] = acc / tot
+                return cap * tanh((cs + rs) / cap)
             }
         }
     }
@@ -882,15 +863,12 @@ let private CN_CONV_KERNEL = 9   //! canary's depthwise taps (centered)
 def private cn_attn_ref(q, k, v, posl, wn : array<float>; rows, d, heads, hs, buoff, bvoff : int) : array<float> {
     var ao : array<float>
     ao |> resize(rows * d)
-    var sc : array<float>
-    sc |> resize(rows)
     let scale = 1.0 / sqrt(float(hs))
     for (hh in range(heads)) {
         let hoff = hh * hs
         for (i in range(rows)) {
             let base = rows - 1 - i
-            var m = -1.0e30
-            for (j in range(rows)) {
+            attn_row_scored(v, hoff, d, hs, 0, rows, ao, i * d + hoff, false, 0.0) $(j : int) : float {
                 var cs = 0.0
                 var rs = 0.0
                 for (n in range(hs)) {
@@ -898,20 +876,7 @@ def private cn_attn_ref(q, k, v, posl, wn : array<float>; rows, d, heads, hs, bu
                     cs += (qv + wn[buoff + hoff + n]) * k[j * d + hoff + n]
                     rs += (qv + wn[bvoff + hoff + n]) * posl[(base + j) * d + hoff + n]
                 }
-                sc[j] = (cs + rs) * scale
-                m = max(m, sc[j])
-            }
-            var tot = 0.0
-            for (j in range(rows)) {
-                sc[j] = exp(sc[j] - m)
-                tot += sc[j]
-            }
-            for (n in range(hs)) {
-                var acc = 0.0
-                for (j in range(rows)) {
-                    acc += sc[j] * v[j * d + hoff + n]
-                }
-                ao[i * d + hoff + n] = acc / tot
+                return (cs + rs) * scale
             }
         }
     }
@@ -1473,31 +1438,16 @@ let private WD_ROWS = 3
 def private wdec_attn_ref(q : array<float>; kh, vh : array<uint16>; wn : array<float>; rows, dim, ydim, heads, hs, tstride, len0, qboff : int; causal : bool; scale : float) : array<float> {
     var y : array<float>
     y |> resize(rows * ydim)
-    var sc : array<float>
-    sc |> resize(tstride)
+    let vf <- [for (hv in vh); f16_to_f32(uint(hv))]
     for (r in range(rows)) {
         let len = causal ? len0 + r : len0
         for (h in range(heads)) {
-            var mx = -3.0e38
-            for (tt in range(len)) {
+            attn_row_scored(vf, h * tstride * hs, hs, hs, 0, len, y, r * ydim + h * hs, false, 0.0) $(tt : int) : float {
                 var s = 0.0
                 for (j in range(hs)) {
                     s += (q[r * dim + h * hs + j] + wn[qboff + h * hs + j]) * f16_to_f32(uint(kh[(h * tstride + tt) * hs + j]))
                 }
-                sc[tt] = s * scale
-                mx = max(mx, sc[tt])
-            }
-            var den = 0.0
-            for (tt in range(len)) {
-                sc[tt] = exp(sc[tt] - mx)
-                den += sc[tt]
-            }
-            for (j in range(hs)) {
-                var acc = 0.0
-                for (tt in range(len)) {
-                    acc += sc[tt] * f16_to_f32(uint(vh[(h * tstride + tt) * hs + j]))
-                }
-                y[r * ydim + h * hs + j] = acc / den
+                return s * scale
             }
         }
     }
