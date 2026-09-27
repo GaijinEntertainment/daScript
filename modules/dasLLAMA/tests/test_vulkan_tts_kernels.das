@@ -72,19 +72,14 @@ def test_vkt_f32_gemm(t0 : T?) {
             let bw = int64(nw) * 4l
             let bb = int64(d) * 4l
             let by = int64(ny) * 4l
-            let xd = make_device_buf(bx)
-            let wd = make_device_buf(bw)
-            let bd = make_device_buf(bb)
+            let xd = dev_upload(x)
+            let wd = dev_upload(w)
+            let bd = dev_upload(b)
             let yd = make_device_buf(by)
             let ybd = make_device_buf(by)
             let sizes = fixed_array(by, by)
             let at <- staged_offsets(sizes)
             let host = make_host_buf(at[length(sizes)], true, [cached = true])
-            unsafe {
-                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), bw)
-                upload_region_at(bd, 0l, addr<uint8 const?>(b[0]), bb)
-            }
             nan_sentinel_upload(yd, by)
             nan_sentinel_upload(ybd, by)
             var s_plain = set_f32_gemm_cls(fixed_array(wd, xd, yd), fixed_array(bw, bx, by), fixed_array(0u, 0u, B_Y))

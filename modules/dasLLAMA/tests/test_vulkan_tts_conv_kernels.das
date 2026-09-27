@@ -131,17 +131,12 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom) {
         let bw = long_length(w) * 4l
         let bb = int64(g.cout) * 4l
         let by = int64(ny) * 4l
-        let xd = make_device_buf(bx)
+        let xd = dev_upload(xdev)
         let cold = make_device_buf(bcol)
-        let wd = make_device_buf(bw)
-        let bd = make_device_buf(bb)
+        let wd = dev_upload(w)
+        let bd = dev_upload(c.b)
         let yd = make_device_buf(by)
         var host = make_host_buf(by, true, [cached = true])
-        unsafe {
-            upload_region_at(xd, 0l, addr<uint8 const?>(xdev[0]), bx)
-            upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), bw)
-            upload_region_at(bd, 0l, addr<uint8 const?>(c.b[0]), bb)
-        }
         nan_sentinel_upload(cold, bcol)
         nan_sentinel_upload(yd, by)
         var s_col = set_tts_im2col_cls(fixed_array(xd, cold), fixed_array(bx, bcol), fixed_array(0u, B_COL))
@@ -218,17 +213,12 @@ def private im2col16_arm(t : T?; tag : string; g : ConvGeom) {
         let bw = long_length(w16) * 2l
         let bb = int64(g.cout) * 4l
         let by = int64(ny) * 4l
-        let xd = make_device_buf(bx)
+        let xd = dev_upload(xdev)
         let cold = make_device_buf(bcol)
-        let wd = make_device_buf(bw)
-        let bd = make_device_buf(bb)
+        let wd = dev_upload(w16)
+        let bd = dev_upload(c.b)
         let yd = make_device_buf(by)
         var host = make_host_buf(by, true, [cached = true])
-        unsafe {
-            upload_region_at(xd, 0l, addr<uint8 const?>(xdev[0]), bx)
-            upload_region_at(wd, 0l, addr<uint8 const?>(w16[0]), bw)
-            upload_region_at(bd, 0l, addr<uint8 const?>(c.b[0]), bb)
-        }
         nan_sentinel_upload(cold, bcol)
         nan_sentinel_upload(yd, by)
         var s_col = set_tts_im2col16_cls(fixed_array(xd, cold), fixed_array(bx, bcol), fixed_array(0u, B_COL))
@@ -447,17 +437,13 @@ def private lstm_arm(t : T?; hd : int) {
         let bw = long_length(f.whh) * 4l
         let by = int64(ny) * 4l
         let byc = int64(nyc) * 4l
-        let gd = make_device_buf(bg)
-        let wd = make_device_buf(bw)
+        let gd = dev_upload(f.gates)
+        let wd = dev_upload(f.whh)
         let yd = make_device_buf(by)
         let ycd = make_device_buf(byc)
         let sizes = fixed_array(by, byc)
         let at <- staged_offsets(sizes)
         var host = make_host_buf(at[length(sizes)], true, [cached = true])
-        unsafe {
-            upload_region_at(gd, 0l, addr<uint8 const?>(f.gates[0]), bg)
-            upload_region_at(wd, 0l, addr<uint8 const?>(f.whh[0]), bw)
-        }
         nan_sentinel_upload(yd, by)
         nan_sentinel_upload(ycd, byc)
         var s_y = set_tts_lstm_dir_cls(fixed_array(gd, wd, yd), fixed_array(bg, bw, by), fixed_array(0u, 0u, B_Y))
@@ -570,14 +556,10 @@ def private pool_dw_arm(t : T?) {
         let bx = long_length(x) * 4l
         let bw = long_length(wn) * 4l
         let by = int64(ny) * 4l
-        let xd = make_device_buf(bx)
-        let wd = make_device_buf(bw)
+        let xd = dev_upload(x)
+        let wd = dev_upload(wn)
         let yd = make_device_buf(by)
         var host = make_host_buf(by, true, [cached = true])
-        unsafe {
-            upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
-            upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-        }
         nan_sentinel_upload(yd, by)
         var s = set_tts_pool_dw_cls(fixed_array(xd, yd, wd), fixed_array(bx, by, bw), fixed_array(0u, B_Y, 0u))
         var pa = TtsPoolArgs(c = uint(PD_C), k = uint(PD_K), stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(PD_TIN), t_out = uint(tout),

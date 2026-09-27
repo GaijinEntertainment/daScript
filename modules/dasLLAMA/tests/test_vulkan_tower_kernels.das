@@ -71,19 +71,14 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {   // nolint:STYLE038 �
         let q_bytes = int64(rows * qd) * 4l
         let m_bytes = int64(kpad * qd) * 4l
         let sh_bytes = int64(kpad * qd) * 2l
-        let qdev = make_device_buf(q_bytes)
-        let kdev = make_device_buf(m_bytes)
-        let vdev = make_device_buf(m_bytes)
+        let qdev = dev_upload(qh)
+        let kdev = dev_upload(kh)
+        let vdev = dev_upload(vh)
         let khdev = make_device_buf(sh_bytes)
         let vhdev = make_device_buf(sh_bytes)
         let yd = make_device_buf(q_bytes)
         let ycd = make_device_buf(q_bytes)
         var host = make_host_buf(q_bytes * 2l, true, [cached = true])
-        unsafe {
-            upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-            upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
-            upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
-        }
         fill_upload(khdev, 0l, sh_bytes, F16_SENTINEL_BITS)
         fill_upload(vhdev, 0l, sh_bytes, F16_SENTINEL_BITS)
         nan_sentinel_upload(yd, q_bytes)
@@ -244,18 +239,18 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
         let bs = int64(nd / q8e) * 4l
         let bqh = int64(nff)
         let bsh = int64(nff / q8e) * 4l
-        let xd = make_device_buf(bx)
-        let x2d = make_device_buf(bx)
-        let x3d = make_device_buf(bx)
+        let xd = dev_upload(x)
+        let x2d = dev_upload(x)
+        let x3d = dev_upload(x)
         let xbd = make_device_buf(bx)
         let xb2d = make_device_buf(bx)
-        let yd = make_device_buf(bx)
+        let yd = dev_upload(y)
         let ycd = make_device_buf(bx)
-        let hd = make_device_buf(bh)
-        let h2d = make_device_buf(bh)
-        let wnd = make_device_buf(bw)
-        let pmsd = make_device_buf(bpms)
-        let pyd = make_device_buf(bpy)
+        let hd = dev_upload(hrows)
+        let h2d = dev_upload(hrows)
+        let wnd = dev_upload(wn)
+        let pmsd = dev_upload(pms)
+        let pyd = dev_upload(py)
         let BIAS_PAIR = 2   // the pairs' Q8_0 planes: the separate pass at an even index, the fused stamp at the odd one after it; the bias arm's pair is ff-wide
         var qd : uint64[8]
         var sd : uint64[8]
@@ -275,17 +270,6 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
             }
         }
         invoke(sentinels, false)
-        unsafe {
-            upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
-            upload_region_at(x2d, 0l, addr<uint8 const?>(x[0]), bx)
-            upload_region_at(x3d, 0l, addr<uint8 const?>(x[0]), bx)
-            upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
-            upload_region_at(hd, 0l, addr<uint8 const?>(hrows[0]), bh)
-            upload_region_at(h2d, 0l, addr<uint8 const?>(hrows[0]), bh)
-            upload_region_at(wnd, 0l, addr<uint8 const?>(wn[0]), bw)
-            upload_region_at(pmsd, 0l, addr<uint8 const?>(pms[0]), bpms)
-            upload_region_at(pyd, 0l, addr<uint8 const?>(py[0]), bpy)
-        }
         nan_sentinel_upload(xbd, bx)
         nan_sentinel_upload(xb2d, bx)
         nan_sentinel_upload(ycd, bx)
@@ -508,42 +492,29 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             let bh = int64(nd) * 2l
             let bq = int64(nd)
             let bs = int64(nd / q8e) * 4l
-            let xd = make_device_buf(bx)
-            let yd = make_device_buf(bx)
+            let xd = dev_upload(x)
+            let yd = dev_upload(y)
             let xbd = make_device_buf(bx)
             let xb2d = make_device_buf(bx)
-            let qd = make_device_buf(bx)
-            let gd = make_device_buf(bff)
-            let ud = make_device_buf(bff)
-            let wd = make_device_buf(bw)
-            let td = make_device_buf(btabs)
+            let qd = dev_upload(q)
+            let gd = dev_upload(g)
+            let ud = dev_upload(u)
+            let wd = dev_upload(wn)
+            let td = dev_upload(tabs)
             let xhd = make_device_buf(bh)
             let xqd = make_device_buf(bq)
             let xsd = make_device_buf(bs)
-            let x0d = make_device_buf(bx)    // the ln_on = 0 arm's x: the same seam with no next pre-norm
+            let x0d = dev_upload(x)    // the ln_on = 0 arm's x: the same seam with no next pre-norm
             let xb0d = make_device_buf(bx)   // ... and its pre-norm output, which must stay untouched
-            let x_plain_d = make_device_buf(bx)    // the plain stamp's x: the branch rows added at half weight with no post-norm
+            let x_plain_d = dev_upload(x)    // the plain stamp's x: the branch rows added at half weight with no post-norm
             let xb_plain_d = make_device_buf(bx)   // ... and its next pre-norm
-            let x_plain0_d = make_device_buf(bx)    // the plain stamp at ln_on = 0: the seam alone
+            let x_plain0_d = dev_upload(x)    // the plain stamp at ln_on = 0: the seam alone
             let xb_plain0_d = make_device_buf(bx)   // ... and its pre-norm output, which must stay untouched
-            let x_half_d = make_device_buf(bx)      // the post-norm stamp at ascale = 0.5, ln_on = 0
+            let x_half_d = dev_upload(x)      // the post-norm stamp at ascale = 0.5, ln_on = 0
             let xb_half_d = make_device_buf(bx)
             let sizes = fixed_array(bx, bx, bx, bx, bff, bh, bq, bs, bx, bx, bx, bx, bx, bx, bx)
             let at <- staged_offsets(sizes)
             var host = make_host_buf(at[length(sizes)], true, [cached = true])
-            unsafe {
-                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x0d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x_plain_d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x_plain0_d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x_half_d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
-                upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bx)
-                upload_region_at(gd, 0l, addr<uint8 const?>(g[0]), bff)
-                upload_region_at(ud, 0l, addr<uint8 const?>(u[0]), bff)
-                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-                upload_region_at(td, 0l, addr<uint8 const?>(tabs[0]), btabs)
-            }
             nan_sentinel_upload(xbd, bx)
             nan_sentinel_upload(xb2d, bx)
             nan_sentinel_upload(xb0d, bx)
@@ -801,26 +772,17 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let bh = int64(rows * 2 * d) * 4l
             let brpe = int64((G4A_PAST + 1) * d) * 4l
             let bw = int64(hs + d * 5) * 4l
-            let sd = make_device_buf(bx)
-            let hd = make_device_buf(bh)
+            let sd = dev_upload(s)
+            let hd = dev_upload(glu_pw_rows)
             let gd = make_device_buf(bx)
             let cd = make_device_buf(bx)
-            let qd = make_device_buf(bx)
-            let kd = make_device_buf(bx)
-            let vd = make_device_buf(bx)
+            let qd = dev_upload(q)
+            let kd = dev_upload(k)
+            let vd = dev_upload(v)
             let aod = make_device_buf(bx)
-            let rd = make_device_buf(brpe)
-            let wd = make_device_buf(bw)
+            let rd = dev_upload(rpe)
+            let wd = dev_upload(wn)
             var host = make_host_buf(4l * bx, true, [cached = true])
-            unsafe {
-                upload_region_at(sd, 0l, addr<uint8 const?>(s[0]), bx)
-                upload_region_at(hd, 0l, addr<uint8 const?>(glu_pw_rows[0]), bh)
-                upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bx)
-                upload_region_at(kd, 0l, addr<uint8 const?>(k[0]), bx)
-                upload_region_at(vd, 0l, addr<uint8 const?>(v[0]), bx)
-                upload_region_at(rd, 0l, addr<uint8 const?>(rpe[0]), brpe)
-                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-            }
             nan_sentinel_upload(gd, bx)
             nan_sentinel_upload(cd, bx)
             nan_sentinel_upload(aod, bx)
@@ -987,12 +949,9 @@ def test_vkt_tower_fastconformer(t0 : T?) {
             let bw = int64(2 * d + d * CN_CONV_KERNEL + 2 * d) * 4l
             let gd = make_device_buf(bsrc)
             let cd = make_device_buf(bx)
-            let wd = make_device_buf(bw)
+            let wd = dev_upload(wn)
             var host = make_host_buf(bx, true, [cached = true])
-            unsafe {
-                upload_region_at(gd, 0l, addr<uint8 const?>(glu_out[0]), bx)
-                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-            }
+            upload_region_at(gd, 0l, unsafe(addr<uint8 const?>(glu_out[0])), bx)
             fill_upload(gd, bx, bsrc - bx, GUARD_GARBAGE_BITS)
             nan_sentinel_upload(cd, bx)
             var s_dw = set_tower_cn_dw_cls(fixed_array(gd, cd, wd), fixed_array(bsrc, bx, bw), fixed_array(0u, B_C, 0u))
@@ -1082,44 +1041,30 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             let bq = int64(rows * d_compact) * 4l
             let bp = int64(rows_pad * d_padded) * 4l
             let bph = int64(rows_pad * d_padded) * 2l
-            let xd = make_device_buf(bx)
+            let xd = dev_upload(x)
             let xbd = make_device_buf(bx)
-            let yd = make_device_buf(bx)
+            let yd = dev_upload(y)
             let act_arms = fixed_array((act = BIAS_ACT_GELU_TANH, bit = B_G), (act = BIAS_ACT_NONE, bit = B_G0), (act = BIAS_ACT_GELU_ERF, bit = B_GERF),
                 (act = BIAS_ACT_SILU, bit = B_GSILU), (act = BIAS_ACT_RELU, bit = B_GRELU))
-            let act_d <- [for (_a in act_arms); make_device_buf(bx)]
+            let act_d <- [for (_a in act_arms); dev_upload(g)]
             let xb2d = make_device_buf(bx)
-            let x0d = make_device_buf(bx)    // the ln_on = 0 arm's x: the seam with no next layernorm
+            let x0d = dev_upload(x)    // the ln_on = 0 arm's x: the seam with no next layernorm
             let xb0d = make_device_buf(bx)   // ... and its layernorm output, which must stay untouched
-            let x_half_d = make_device_buf(bx)    // the seam at ascale = 0.5, ln_on = 0
+            let x_half_d = dev_upload(x)    // the seam at ascale = 0.5, ln_on = 0
             let xb_half_d = make_device_buf(bx)
-            let wd = make_device_buf(bw)
-            let qd = make_device_buf(bq)
+            let wd = dev_upload(wn)
+            let qd = dev_upload(q)
             let qpd = make_device_buf(bp)
             let qphd = make_device_buf(bph)
             let qcd = make_device_buf(bq)
             let bqkv = 3l * bq
             let btab = int64(rows * half) * 4l
-            let qkvd = make_device_buf(bqkv)
-            let cosd = make_device_buf(btab)
-            let sind = make_device_buf(btab)
+            let qkvd = dev_upload(qkv)
+            let cosd = dev_upload(cos_t)
+            let sind = dev_upload(sin_t)
             let sizes = fixed_array(bx, bx, bx, bx, bp, bph, bq, bqkv, bx, bx, bx, bx, bx, bx, bx)
             let at <- staged_offsets(sizes)
             var host = make_host_buf(at[length(sizes)], true, [cached = true])
-            unsafe {
-                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x0d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x_half_d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
-                for (b in act_d) {
-                    upload_region_at(b, 0l, addr<uint8 const?>(g[0]), bx)
-                }
-                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-                upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bq)
-                upload_region_at(qkvd, 0l, addr<uint8 const?>(qkv[0]), bqkv)
-                upload_region_at(cosd, 0l, addr<uint8 const?>(cos_t[0]), btab)
-                upload_region_at(sind, 0l, addr<uint8 const?>(sin_t[0]), btab)
-            }
             nan_sentinel_upload(xbd, bx)
             nan_sentinel_upload(xb2d, bx)
             nan_sentinel_upload(xb0d, bx)
@@ -1351,38 +1296,27 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let bqh = int64(rows * d_compact) * 2l
             let bp = int64(rows_pad * d_padded) * 4l
             let bph = int64(rows_pad * d_padded) * 2l
-            let xd = make_device_buf(bx)
-            let x_post16_d = make_device_buf(bx)    // the f16 post-add's own x: both post-adds update x in place from the same start
-            let x_post16z_d = make_device_buf(bx)   // the f16 post-add at ln_on = 0: the seam alone
+            let xd = dev_upload(x)
+            let x_post16_d = dev_upload(x)    // the f16 post-add's own x: both post-adds update x in place from the same start
+            let x_post16z_d = dev_upload(x)   // the f16 post-add at ln_on = 0: the seam alone
             let xb2h0d = make_device_buf(bxh)       // ... and its half pre-norm output, which must stay untouched
             let act_arms = fixed_array((act = BIAS_ACT_GELU_TANH, bit = B_G, hbit = B_GH), (act = BIAS_ACT_GELU_ERF, bit = B_GE, hbit = B_GHE),
                 (act = BIAS_ACT_RELU, bit = B_GR, hbit = B_GHR))
-            let act_d <- [for (_a in act_arms); make_device_buf(bx)]
+            let act_d <- [for (_a in act_arms); dev_upload(g)]
             let act_hd <- [for (_a in act_arms); make_device_buf(bxh)]
             let xbd = make_device_buf(bx)
             let xbhd = make_device_buf(bxh)
-            let yd = make_device_buf(bx)
+            let yd = dev_upload(y)
             let xb2d = make_device_buf(bx)
             let xb2hd = make_device_buf(bxh)
-            let wd = make_device_buf(bw)
-            let qd = make_device_buf(bq)
+            let wd = dev_upload(wn)
+            let qd = dev_upload(q)
             let qpd = make_device_buf(bp)
             let qphd = make_device_buf(bph)
             let qchd = make_device_buf(bqh)
             let sizes = fixed_array(bx, bxh, bx, bxh, bxh, bp, bph, bqh, bx, bxh, bx, bxh, bx, bxh)
             let at <- staged_offsets(sizes)
             var host = make_host_buf(at[length(sizes)], true, [cached = true])
-            unsafe {
-                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x_post16_d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x_post16z_d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
-                for (b in act_d) {
-                    upload_region_at(b, 0l, addr<uint8 const?>(g[0]), bx)
-                }
-                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-                upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bq)
-            }
             nan_sentinel_upload(xbd, bx)
             nan_sentinel_upload(xb2d, bx)
             nan_sentinel_upload(qpd, bp)
@@ -1638,9 +1572,9 @@ def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over
             let bpms = int64(nch * heads * rows * 2) * 4l
             let bpy = int64(nch * heads * rows * hs) * 4l
             let by = int64(rows * d) * 4l
-            let srcd = make_device_buf(bsrc)
-            let histd = make_device_buf(bhist)
-            let wd = make_device_buf(bw)
+            let srcd = dev_upload(src)
+            let histd = dev_upload(hist)
+            let wd = dev_upload(wn)
             let kd = make_device_buf(bkv)
             let vd = make_device_buf(bkv)
             let kxd = make_device_buf(bkvf)
@@ -1654,11 +1588,6 @@ def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over
             let sizes = fixed_array(bkv, bkv, bkvf, bkvf, by, by)
             let at <- staged_offsets(sizes)
             var host = make_host_buf(at[length(sizes)], true, [cached = true])
-            unsafe {
-                upload_region_at(srcd, 0l, addr<uint8 const?>(src[0]), bsrc)
-                upload_region_at(histd, 0l, addr<uint8 const?>(hist[0]), bhist)
-                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-            }
             fill_upload(kd, 0l, bkv, F16_SENTINEL_BITS)
             fill_upload(vd, 0l, bkv, F16_SENTINEL_BITS)
             nan_sentinel_upload(kxd, bkvf)
@@ -1822,20 +1751,15 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
             let bc = int64(rows * dc) * 4l
             let bp = int64(rows_pad * dp) * 4l
             let bph = int64(rows_pad * dp) * 2l
-            let qd = make_device_buf(bc)
-            let kd = make_device_buf(bc)
-            let vd = make_device_buf(bc)
+            let qd = dev_upload(q)
+            let kd = dev_upload(k)
+            let vd = dev_upload(v)
             let qpd = make_device_buf(bp)
             let kpd = make_device_buf(bph)
             let vpd = make_device_buf(bph)
             let attpd = make_device_buf(bp)
             let attd = make_device_buf(bc)
             var host = make_host_buf(bc, true, [cached = true])
-            unsafe {
-                upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bc)
-                upload_region_at(kd, 0l, addr<uint8 const?>(k[0]), bc)
-                upload_region_at(vd, 0l, addr<uint8 const?>(v[0]), bc)
-            }
             nan_sentinel_upload(qpd, bp)
             nan_sentinel_upload(attpd, bp)
             nan_sentinel_upload(attd, bc)
@@ -1930,11 +1854,11 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             var v <- row_fill(rows * dc, 53, 7, 0.04, 1.7)
             let bc = int64(rows * dc) * 4l
             let bwl = int64(nslot + 1) * 4l
-            let qd = make_device_buf(bc)
-            let kd = make_device_buf(bc)
-            let vd = make_device_buf(bc)
+            let qd = dev_upload(q)
+            let kd = dev_upload(k)
+            let vd = dev_upload(v)
             let attd = make_device_buf(bc)
-            let wld = make_device_buf(bwl)
+            let wld = dev_upload(wlo)
             let d = ROWS_D
             let nrows = ROWS_N
             let nd = nrows * d
@@ -1945,14 +1869,14 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             var wn <- row_fill(4 * d, 7, 1, 0.01, -0.6)   // rows: the o bias at 0, the rms weight at d, the gate bias at 2d, the up bias at 3d
             let bx = int64(nd) * 4l
             let bw = int64(4 * d) * 4l
-            let xd = make_device_buf(bx)
-            let yd = make_device_buf(bx)
+            let xd = dev_upload(x)
+            let yd = dev_upload(y)
             let xbd = make_device_buf(bx)
-            let x0d = make_device_buf(bx)    // the ln_on = 0 arm's x: the seam with no next rms
+            let x0d = dev_upload(x)    // the ln_on = 0 arm's x: the seam with no next rms
             let xb0d = make_device_buf(bx)   // ... and its rms output, which must stay untouched
-            let gd = make_device_buf(bx)
-            let ud = make_device_buf(bx)
-            let wd = make_device_buf(bw)
+            let gd = dev_upload(g)
+            let ud = dev_upload(u)
+            let wd = dev_upload(wn)
             let bxh = int64(nd) * 2l
             let brex = int64(nrows) * 4l
             let gated_h16d = make_device_buf(bxh)
@@ -1960,18 +1884,6 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             let sizes = fixed_array(bc, bx, bx, bxh, bx, bx)
             let at <- staged_offsets(sizes)
             var host = make_host_buf(at[length(sizes)], true, [cached = true])
-            unsafe {
-                upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bc)
-                upload_region_at(kd, 0l, addr<uint8 const?>(k[0]), bc)
-                upload_region_at(vd, 0l, addr<uint8 const?>(v[0]), bc)
-                upload_region_at(wld, 0l, addr<uint8 const?>(wlo[0]), bwl)
-                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(x0d, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bx)
-                upload_region_at(gd, 0l, addr<uint8 const?>(g[0]), bx)
-                upload_region_at(ud, 0l, addr<uint8 const?>(u[0]), bx)
-                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-            }
             nan_sentinel_upload(attd, bc)
             nan_sentinel_upload(xbd, bx)
             nan_sentinel_upload(xb0d, bx)
@@ -2149,39 +2061,27 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             let bxh = int64(nd) * 2l
             let bw = int64((3 + q3_tok) * d) * 4l
             let bg = int64(rows * hs) * 2l
-            let srcd = make_device_buf(bsrc)
+            let srcd = dev_upload(src)
             let cold = make_device_buf(bcol)
-            let mel1d = make_device_buf(bmel1)
+            let mel1d = dev_upload(mel1)
             let col1d = make_device_buf(bcol1)
-            let cv2d = make_device_buf(bcv2)
+            let cv2d = dev_upload(cv2)
             let col2d = make_device_buf(bcol2)
-            let y3d = make_device_buf(by3)
+            let y3d = dev_upload(y3)
             let featd = make_device_buf(bfeat)
-            let fsd = make_device_buf(bfs)
+            let fsd = dev_upload(fs_src)
             let fsod = make_device_buf(bfs)
-            let xd = make_device_buf(bx)
-            let wd = make_device_buf(bw)
+            let xd = dev_upload(x)
+            let wd = dev_upload(wn)
             let gqd = make_device_buf(bg)
             let gpd = make_device_buf(bg)
             let cvtd = make_device_buf(bxh)
-            let addd = make_device_buf(bx)
-            let find = make_device_buf(bx)
-            let lnd = make_device_buf(bx)
+            let addd = dev_upload(x)
+            let find = dev_upload(x)
+            let lnd = dev_upload(x)
             let sizes = fixed_array(bcol, bcol1, bcol2, bfeat, bfs, bg, bg, bxh, bx, bx, bx)
             let at <- staged_offsets(sizes)
             var host = make_host_buf(at[length(sizes)], true, [cached = true])
-            unsafe {
-                upload_region_at(srcd, 0l, addr<uint8 const?>(src[0]), bsrc)
-                upload_region_at(mel1d, 0l, addr<uint8 const?>(mel1[0]), bmel1)
-                upload_region_at(cv2d, 0l, addr<uint8 const?>(cv2[0]), bcv2)
-                upload_region_at(y3d, 0l, addr<uint8 const?>(y3[0]), by3)
-                upload_region_at(fsd, 0l, addr<uint8 const?>(fs_src[0]), bfs)
-                upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bx)
-                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-                for (b in fixed_array(addd, find, lnd)) {
-                    upload_region_at(b, 0l, addr<uint8 const?>(x[0]), bx)
-                }
-            }
             for (b in fixed_array(cold, col1d, col2d, featd, gqd, gpd, cvtd)) {
                 fill_upload(b, 0l, b == cold ? bcol : (b == col1d ? bcol1 : (b == col2d ? bcol2 : (b == featd ? bfeat : (b == cvtd ? bxh : bg)))), F16_SENTINEL_BITS)
             }
@@ -2454,32 +2354,24 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let bdwy_lanes = int64(dw_lanes) * 4l
             let bdww = int64(length(dw_w)) * 4l
             let brel = int64(n_rel) * 4l
-            let xwd = make_device_buf(bxw)
-            let twd = make_device_buf(btw)
+            let xwd = dev_upload(xw)
+            let twd = dev_upload(tw)
             let magd = make_device_buf(bpw)
             let powd = make_device_buf(bpw)
-            let pwd = make_device_buf(bpw)
-            let fild = make_device_buf(bfil)
+            let pwd = dev_upload(pw)
+            let fild = dev_upload(fil)
             let g4ad = make_device_buf(bmel)
             let cnd = make_device_buf(bmel)
             let whd = make_device_buf(bmel)
-            let normd = make_device_buf(bnorm)
+            let normd = dev_upload(mel_in)
             let dwxd = make_device_buf(bdwx_slack)
             let dwyd = make_device_buf(bdwy_lanes)
-            let dwwd = make_device_buf(bdww)
+            let dwwd = dev_upload(dw_w)
             let reld = make_device_buf(brel)
             let sizes = fixed_array(bpw, bpw, bmel, bmel, bmel, bnorm, bdwy_lanes, brel)
             let at <- staged_offsets(sizes)
             var host = make_host_buf(at[length(sizes)], true, [cached = true])
-            unsafe {
-                upload_region_at(xwd, 0l, addr<uint8 const?>(xw[0]), bxw)
-                upload_region_at(twd, 0l, addr<uint8 const?>(tw[0]), btw)
-                upload_region_at(pwd, 0l, addr<uint8 const?>(pw[0]), bpw)
-                upload_region_at(fild, 0l, addr<uint8 const?>(fil[0]), bfil)
-                upload_region_at(normd, 0l, addr<uint8 const?>(mel_in[0]), bnorm)
-                upload_region_at(dwxd, 0l, addr<uint8 const?>(dw_x[0]), bdwx)
-                upload_region_at(dwwd, 0l, addr<uint8 const?>(dw_w[0]), bdww)
-            }
+            upload_region_at(dwxd, 0l, unsafe(addr<uint8 const?>(dw_x[0])), bdwx)
             nan_sentinel_upload(magd, bpw)
             nan_sentinel_upload(powd, bpw)
             nan_sentinel_upload(g4ad, bmel)
@@ -2700,28 +2592,15 @@ def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {   // nolint:STYLE038 — one fla
             let bidle = bao - bx
             let br = int64(nr) * 4l
             let bw = int64(2 * d) * 4l
-            let qd = make_device_buf(bx)
-            let kd = make_device_buf(bx)
-            let vd = make_device_buf(bx)
+            let qd = dev_upload(q)
+            let kd = dev_upload(k)
+            let vd = dev_upload(v)
             let aod = make_device_buf(bao)
             let ao2d = make_device_buf(bao)
-            let wd = make_device_buf(bw)
-            var head_rel_planes <- [for (_i in range(ROWS_HEADS + heads2)); make_device_buf(br)]   // a plane a head: the 64-wide heads first, then the two 128-wide ones
+            let wd = dev_upload(wn)
+            var head_rel_planes <- [for (hh in range(ROWS_HEADS + heads2));   // a plane a head: the 64-wide heads first, then the two 128-wide ones
+                dev_upload(cn_rel_plane(q, posl, wn, rows, ww, d, hh < ROWS_HEADS ? hs : hs2, hh < ROWS_HEADS ? hh * hs : (hh - ROWS_HEADS) * hs2, d))]
             var host = make_host_buf(2l * bao, true, [cached = true])
-            unsafe {
-                upload_region_at(qd, 0l, addr<uint8 const?>(q[0]), bx)
-                upload_region_at(kd, 0l, addr<uint8 const?>(k[0]), bx)
-                upload_region_at(vd, 0l, addr<uint8 const?>(v[0]), bx)
-                upload_region_at(wd, 0l, addr<uint8 const?>(wn[0]), bw)
-                for (hh in range(ROWS_HEADS)) {
-                    let plane <- cn_rel_plane(q, posl, wn, rows, ww, d, hs, hh * hs, d)
-                    upload_region_at(head_rel_planes[hh], 0l, addr<uint8 const?>(plane[0]), br)
-                }
-                for (hh in range(heads2)) {
-                    let plane <- cn_rel_plane(q, posl, wn, rows, ww, d, hs2, hh * hs2, d)
-                    upload_region_at(head_rel_planes[ROWS_HEADS + hh], 0l, addr<uint8 const?>(plane[0]), br)
-                }
-            }
             nan_sentinel_upload(aod, bao)
             nan_sentinel_upload(ao2d, bao)
             var sets <- [for (hh in range(ROWS_HEADS + heads2));
