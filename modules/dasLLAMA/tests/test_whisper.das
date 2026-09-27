@@ -1036,6 +1036,16 @@ def private word_forms(text : string) : array<string> {
     return <- [for (w in split_by_chars(norm, " ")); w; where !empty(w)]
 }
 
+def private word_flips(a, b : array<string>) : int {
+    var flips = 0
+    for (x, y in a, b) {
+        if (x != y) {
+            flips++
+        }
+    }
+    return flips
+}
+
 [test]
 def test_whisper_crowned_word_level(t : T?) {
     t |> run("the CROWNED lanes agree at word level on jfk (the crowned-pipeline quality gate)") @(t : T?) {
@@ -1098,7 +1108,7 @@ def test_whisper_crowned_word_level(t : T?) {
                 let wb <- word_forms(text_mixed)
                 t |> success(!empty(wa) && !empty(wb), "both crowned lanes produced words")
                 t |> equal(length(wa), length(wb), "word count agrees across crowned lanes")
-                let flips = mismatch_exact(wa, wb)
+                let flips = word_flips(wa, wb)
                 t |> equal(flips, 0, "crowned lanes word-identical ({flips}/{length(wa)} word flips)")
             }
             unpin_metal_tensor_crowns()
