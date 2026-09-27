@@ -11,6 +11,63 @@ require dasllama/dasllama_lint public
 require math
 require daslib/linq   // sequence_equal
 
+let POISON = 7.5   //! the slots a kernel must never read or write: a large finite value, so a stray read lands in the sum
+
+//! `n` patterned floats: (i * mul + add) % 97 scaled and biased - the kernel cells' input fill
+def row_fill(n : int; mul, add : int; scale, off : float) : array<float> {
+    var a : array<float>
+    a |> resize(n)
+    for (i in range(n)) {
+        a[i] = float((i * mul + add) % 97) * scale - off
+    }
+    return <- a
+}
+
+//! `n` slots of `POISON`
+def poison_plane(n : int) : array<float> {
+    var a : array<float>
+    a |> resize(n)
+    for (v in a) {
+        v = POISON
+    }
+    return <- a
+}
+
+//! the index of the largest |got - want| (0 when every element agrees)
+def maxdiff_at(got, want : array<float>) : int {
+    var m = 0.0
+    var at = 0
+    for (i in range(length(got))) {
+        let dd = abs(got[i] - want[i])
+        if (dd > m) {
+            m = dd
+            at = i
+        }
+    }
+    return at
+}
+
+//! the NaN elements of `a`: the sentinel words a dispatch left
+def nan_count(a : array<float>) : int {
+    var n = 0
+    for (v in a) {
+        if (is_nan(v)) {
+            n++
+        }
+    }
+    return n
+}
+
+//! true when every element of `a` is bit-equal to `v`
+def elem_all(a : array<float>; v : float) : bool {
+    for (e in a) {
+        if (e != v) {
+            return false
+        }
+    }
+    return true
+}
+
 //! Max |a[i] - b[i]| over two float arrays of one length (the shorter's, where they differ) - the compare behind every
 //! logits or kernel-output bar in the suites.
 def logits_maxdiff(a, b : array<float>) : float {

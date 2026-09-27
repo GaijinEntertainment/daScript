@@ -17,6 +17,8 @@ require dasllama/dasllama_g2p   // nolint:STYLE029,LINT019 — the facade's pack
 require dasllama/dasllama_postag   // nolint:STYLE029,LINT019 — the facade's packs, read only inside the Apple half
 require dasllama/dasllama_math   // setup_dasllama_jobque_
 require ?das_metal dasllama/dasllama_metal_tower
+require ?vulkan dasllama/dasllama_vulkan_tower   // nolint:STYLE030,LINT019 — the Vulkan tower knob, read only inside the GPU half
+require ?vulkan dasllama/dasllama_vulkan_tts   // nolint:STYLE030,LINT019 — the Vulkan TTS driver's counters, read only inside the GPU half
 require daslib/jobque_boost
 require daslib/defer
 require daslib/linq
@@ -33,6 +35,7 @@ require _model_tier
 // carries becomes radians of harmonic phase.
 
 let BAR = 1e-4
+let SOURCE_BAR = 5e-3   //! the harmonic source against the oracle's, absolute: the phase past 1e5 radians turns a ulp of an increment into radians, and the pod's x64 chain reads 2.5e-3 on kitten's ONNX law where the M5 Max reads under 1e-4
 
 //! The Metal driver's bars: rel-rms against the CPU chain fed the same inputs on the f32 lane (the readings: tests/CLAUDE.md).
 let GPU_SEAM_BAR = 5e-3
@@ -56,13 +59,104 @@ def rel_rms(a, b : array<float>) : float {
 
 def private within_twentieth(n, m : int64) : bool => abs(n - m) * 20l < m
 
-//! The verdict where the tower served nothing: a skip where no Metal device serves, a red where a present device declined. Always false.
+//! The verdict where the tower served nothing: a skip where no GPU device serves, a red where a present device declined. Always false.
 def tower_served(t : T?; msg, declines : string) : bool {
     if (find(declines, "device") < 0) {
         t |> failure("{msg}: the tower declined (declines {declines})")
     } else {
-        t |> skip("{msg}: no Metal device serves (declines {declines})")
+        t |> skip("{msg}: no GPU device serves (declines {declines})")
     }
+    return false
+}
+
+//! the tower knob as the cell found it
+def gpu_knob() : bool {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return metal_tower_knob()
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return vulkan_tower_on()
+        } else {
+            return false
+        }
+    }
+}
+
+[unused_argument(on)]
+def set_gpu(on : bool) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_metal_tower(on)
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            set_vulkan_tower(on)
+        }
+    }
+}
+
+//! conv dispatches since the process started on the Metal tower; the Vulkan driver keeps no conv counter, so 0 there
+def gpu_convs() : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return metal_tower_stats().convs
+    } else {
+        return 0l
+    }
+}
+
+//! seats served since the process started (the Metal tower's encodes; the Vulkan TTS driver's)
+def gpu_encodes() : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return metal_tower_stats().encodes
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return vulkan_tts_stats().encodes
+        } else {
+            return 0l
+        }
+    }
+}
+
+def gpu_declines() : table<string; int64> {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return <- metal_tower_declines()
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return <- vulkan_tts_declines()
+        } else {
+            var none : table<string; int64>
+            return <- none
+        }
+    }
+}
+
+//! the frames a Pocket submit carries before the host reads the EOS logits: the serving driver's batch knob
+def gpu_pocket_frame_batch() : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return metal_pocket_frame_batch()
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return vulkan_pocket_frame_batch()
+        } else {
+            return 1l
+        }
+    }
+}
+
+[unused_argument(n)]
+def set_gpu_pocket_frame_batch(n : int64) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_metal_pocket_frame_batch(n)
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            set_vulkan_pocket_frame_batch(n)
+        }
+    }
+}
+
+//! both drivers register every StyleTTS2 seat, so a stage no seat serves is a lost registration: a red, never a skip
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
+def private seat_present(t : T?; tag, stage : string) : bool {
+    return true if (styletts2_gpu_seat_present(stage))
+    t |> success(false, "{tag} GPU {stage}: the driver registers no {stage} seat on this backend")
     return false
 }
 
@@ -106,9 +200,9 @@ def bar_diff(t : T?; tag : string; ours, ref : array<float>; bar : float; absolu
 }
 
 //! One stage against its dump within BAR (of the oracle's peak, or absolute); a stage the dump lacks is skipped.
-def stage_diff(t : T?; tag, name : string; ours : array<float>; dump : table<string; TtsDumpTensor>; absolute : bool = false) {
+def stage_diff(t : T?; tag, name : string; ours : array<float>; dump : table<string; TtsDumpTensor>; absolute : bool = false; bar : float = BAR) {
     dump |> get(name) $(tensor) {
-        bar_diff(t, "{tag} {name}", ours, tensor.f, BAR, absolute)
+        bar_diff(t, "{tag} {name}", ours, tensor.f, bar, absolute)
     }
 }
 
@@ -184,7 +278,7 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     var inscope sc = St2Scratch()
     var inscope har : array<float>
     let n = styletts2_source(m.decoder, m.source, f0, f2, noise, 0ul, har, sc)
-    stage_diff(t, "{tag} SOURCE", "har", har, dump, true)
+    stage_diff(t, "{tag} SOURCE", "har", har, dump, true, SOURCE_BAR)
     var inscope har_ref <- dump_f(dump, "har")
     var inscope spec : array<float>
     let frames = styletts2_har_spectrum(m.decoder, har_ref, n, tr, spec, sc)
@@ -218,24 +312,29 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
 [unused_argument(t, m, tag, gen_in, cw, f2, s_ref, spec, frames, wave_cpu, sc)]   // off-Apple the gated body is empty
 def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : array<float>; cw, f2 : int64; s_ref, spec : array<float>;
                            frames : int64; wave_cpu : array<float>; var sc : St2Scratch) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let knob_found = metal_tower_knob()
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        return if (!seat_present(t, tag, "generator"))
+        let knob_found = gpu_knob()
         defer() {
-            set_metal_tower(knob_found)
+            set_gpu(knob_found)
         }
         var inscope wave : array<float>
         let h0 = styletts2_generator_gpu_stats()
-        let s0 = metal_tower_stats()
-        set_metal_tower(true)
+        let e0 = gpu_encodes()
+        let c0 = gpu_convs()
+        set_gpu(true)
         styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, null, wave, sc)
         let h1 = styletts2_generator_gpu_stats()
-        let s1 = metal_tower_stats()
+        let e1 = gpu_encodes()
+        let c1 = gpu_convs()
         var inscope gen_x <- scaled(gen_in, 3.0)
         var inscope wave_p : array<float>
         styletts2_generator(m.decoder, gen_x, cw, f2, s_ref, spec, frames, null, wave_p, sc)
         return if (!gpu_stage_verdict(t, tag, "SEAM", wave, wave_cpu, wave_p, GPU_SEAM_BAR, h1.calls - h0.calls, h1.served - h0.served,
-                                      s1.encodes - s0.encodes, "{metal_tower_declines()}"))
-        t |> success(s1.convs - s0.convs > 0l, "{tag} GPU SEAM: the convs rode the tower")
+                                      e1 - e0, "{gpu_declines()}"))
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            t |> success(c1 - c0 > 0l, "{tag} GPU SEAM: the convs rode the tower")
+        }
         knob_off_leg(t, "{tag} GPU SEAM", 1l, $ => styletts2_generator_gpu_stats()) $ {
             var inscope wave_off : array<float>
             styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, null, wave_off, sc)
@@ -247,13 +346,13 @@ def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : ar
 //! `run` with the tower knob off: one call and no serve at `stats`' seat, `declines` knob declines, `run` answering CPU-equal; the knob stays off after.
 [unused_argument(t, tag, declines, stats, run)]   // off-Apple the gated body is empty
 def knob_off_leg(t : T?; tag : string; declines : int64; stats : block<() : tuple<calls : int; served : int>>; run : block<() : bool>) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(false)
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        set_gpu(false)
         let h0 = invoke(stats)
-        let d0 = metal_tower_declines()
+        let d0 <- gpu_declines()
         let same = invoke(run)
         let h1 = invoke(stats)
-        let d1 = metal_tower_declines()
+        let d1 <- gpu_declines()
         t |> equal(h1.calls - h0.calls, 1, "{tag}: the knob-off leg still reaches the hook")
         t |> equal(h1.served - h0.served, 0, "{tag}: the knob-off leg serves nothing")
         t |> equal((d1?["knob"] ?? 0l) - (d0?["knob"] ?? 0l), declines, "{tag}: the knob-off leg records its decline at every seat it reaches")
@@ -308,19 +407,20 @@ enum TowerLeg {
 //! One StyleTTS2 stage on its seat: `run` fills each leg (the CPU leg's into `cpu`, which the caller keeps), then the verdict; the knob stays on.
 [unused_argument(t, tag, stage, bar, cpu, run)]   // off-Apple the gated body is empty
 def private seat_leg(t : T?; tag, stage : string; bar : float; var cpu : array<float>; run : block<(leg : TowerLeg; var out : array<float>) : void>) : bool {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(false)
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        return false if (!seat_present(t, tag, stage))
+        set_gpu(false)
         invoke(run, TowerLeg.cpu, cpu)
-        set_metal_tower(true)
+        set_gpu(true)
         let h0 = styletts2_gpu_stats(stage)
-        let e0 = metal_tower_stats().encodes
+        let e0 = gpu_encodes()
         var inscope g : array<float>
         invoke(run, TowerLeg.served, g)
         let h1 = styletts2_gpu_stats(stage)
-        let e1 = metal_tower_stats().encodes
+        let e1 = gpu_encodes()
         var inscope p : array<float>
         invoke(run, TowerLeg.poisoned, p)
-        return gpu_stage_verdict(t, tag, stage, g, cpu, p, bar, h1.calls - h0.calls, h1.served - h0.served, e1 - e0, "{metal_tower_declines()}")
+        return gpu_stage_verdict(t, tag, stage, g, cpu, p, bar, h1.calls - h0.calls, h1.served - h0.served, e1 - e0, "{gpu_declines()}")
     } else {
         return false
     }
@@ -331,10 +431,10 @@ def private seat_leg(t : T?; tag, stage : string; bar : float; var cpu : array<f
 //! reversed input as each compare's control; the durations token for token.
 [unused_argument(t, m, m8, tag, dump, noise, sc)]   // off-Apple the gated body is empty
 def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>; var noise : TtsNoise; var sc : St2Scratch) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let knob_found = metal_tower_knob()
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        let knob_found = gpu_knob()
         defer() {
-            set_metal_tower(knob_found)
+            set_gpu(knob_found)
         }
         var inscope ids <- dump_i(dump, "input_ids")
         var inscope style <- dump_f(dump, "style")
@@ -393,10 +493,10 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
 //! PL-BERT and the text encoder on the tower against the CPU stages, the reversed ids as each compare's control; the CPU rows out.
 [unused_argument(t, m, tag, ids, bert_c, ten_c, sc)]   // off-Apple the gated body is empty
 def private gpu_front_checks(t : T?; m : StyleTts2Model; tag : string; ids : array<int>; var bert_c, ten_c : array<float>; var sc : St2Scratch) : bool {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let knob_found = metal_tower_knob()
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        let knob_found = gpu_knob()
         defer() {
-            set_metal_tower(knob_found)
+            set_gpu(knob_found)
         }
         var inscope rids <- [for (id in reverse(ids)); id]
         let albert_served = seat_leg(t, tag, "albert", GPU_ALBERT_BAR, bert_c) $(leg : TowerLeg; var out : array<float>) {
@@ -415,10 +515,10 @@ def private gpu_front_checks(t : T?; m : StyleTts2Model; tag : string; ids : arr
 [unused_argument(t, m, tag, d_c, n_tok, dur_c, frames, s_pro, f0_c, n_c, sc)]   // off-Apple the gated body is empty
 def private gpu_prosody_check(t : T?; m : StyleTts2Model; tag : string; d_c : array<float>; n_tok : int64; dur_c : array<int>; frames : int64;
                               s_pro : array<float>; var f0_c, n_c : array<float>; var sc : St2Scratch) : int64 {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let knob_found = metal_tower_knob()
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        let knob_found = gpu_knob()
         defer() {
-            set_metal_tower(knob_found)
+            set_gpu(knob_found)
         }
         let dc = m.predictor.bert_encoder.nout + m.style_dim / 2l
         var inscope en : array<float>
@@ -449,10 +549,10 @@ def private gpu_prosody_check(t : T?; m : StyleTts2Model; tag : string; d_c : ar
 [unused_argument(t, m, tag, ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, s_ref, noise, sc, bar)]   // off-Apple the gated body is empty
 def private gpu_decode_check(t : T?; m : StyleTts2Model; tag : string; ten_c : array<float>; n_tok : int64; dur_c : array<int>; frames : int64;
                              f0_c, n_c : array<float>; f2 : int64; s_ref : array<float>; var noise : TtsNoise; var sc : St2Scratch; bar : float) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let knob_found = metal_tower_knob()
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        let knob_found = gpu_knob()
         defer() {
-            set_metal_tower(knob_found)
+            set_gpu(knob_found)
         }
         var inscope asr : array<float>
         align_expand_channels(ten_c, m.text_encoder.c, n_tok, dur_c, asr)
@@ -492,7 +592,7 @@ def private capture_noise(var noise : TtsNoise; nh, samples : int64; seed : uint
 //! The served synthesis across the tower knob on both lanes; skips without the model, the front-end packs, or a serving tower.
 [unused_argument(path, text, voice)]   // off-Apple the gated body is a skip
 def tts_gpu_synthesis(t : T?; path, text, voice : string) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         return if (tts_data_missing(t, path))
         with_job_que() {
             setup_dasllama_jobque_()
@@ -500,13 +600,13 @@ def tts_gpu_synthesis(t : T?; path, text, voice : string) {
             gpu_reference_lane(t, path, text, voice)
         }
     } else {
-        t |> skip("no Metal module in this build")
+        t |> skip("no GPU module in this build")
     }
 }
 
 //! The served lane's leg of `tts_gpu_synthesis`: false where the tower did not serve.
 def private gpu_served_lane(t : T?; path, text, voice : string) : bool {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         reset_tts_q8()   //! the served lane is the unpinned default, whatever an earlier cell left
         var inscope m <- mint_tts_model(path, tts_serves_q8())
         let msg = "{base_name(path)} served lane"
@@ -537,28 +637,28 @@ def private seat_counters(kind : TtsKind; seats : array<string>) : array<tuple<c
 [unused_argument(t, m, text, voice, msg, unserved, extra)]   // off-Apple the gated body is empty
 def served_lane_counters(t : T?; var m : TtsModel; text, voice, msg, unserved : string;
                          extra : block<(a, b : TtsAudio; chunks : int; encodes : int64) : void>) : bool {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let knob_found = metal_tower_knob()
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        let knob_found = gpu_knob()
         defer() {
-            set_metal_tower(knob_found)
+            set_gpu(knob_found)
         }
         var inscope seats <- m.kind == TtsKind.pocket ? pocket_gpu_seats() : styletts2_gpu_seats()
-        set_metal_tower(false)
+        set_gpu(false)
         var inscope h0 <- seat_counters(m.kind, seats)
-        let d0 = metal_tower_declines()
+        let d0 <- gpu_declines()
         var inscope a <- synthesize(m, text, voice)
         var inscope h1 <- seat_counters(m.kind, seats)
-        let d1 = metal_tower_declines()
-        set_metal_tower(true)
-        let e1 = metal_tower_stats().encodes
+        let d1 <- gpu_declines()
+        set_gpu(true)
+        let e1 = gpu_encodes()
         var inscope b <- synthesize(m, text, voice)
-        let e2 = metal_tower_stats().encodes
+        let e2 = gpu_encodes()
         var inscope h2 <- seat_counters(m.kind, seats)
         var served = 0
         for (x, y in h1, h2) {
             served += y.served - x.served
         }
-        return tower_served(t, msg, "{metal_tower_declines()}") if (served == 0)
+        return tower_served(t, msg, "{gpu_declines()}") if (served == 0)
         let chunks = h1[0].calls - h0[0].calls
         t |> success(chunks >= 1, "{msg}: {chunks} chunk(s) reached the seats with the tower off")
         for (s, x, y, z in seats, h0, h1, h2) {
@@ -579,26 +679,26 @@ def served_lane_counters(t : T?; var m : TtsModel; text, voice, msg, unserved : 
 }
 
 def private gpu_reference_lane(t : T?; path, text, voice : string) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        let knob_found = metal_tower_knob()
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        let knob_found = gpu_knob()
         defer() {
-            set_metal_tower(knob_found)
+            set_gpu(knob_found)
         }
         var inscope m <- mint_tts_model(path, false)   //! the f32 lane: the durations round as the CPU's only there
-        set_metal_tower(false)
+        set_gpu(false)
         var inscope sized <- synthesize(m, text, voice)   //! the untrimmed count the captured stream covers
         let nh = m.model.source.n_harm
         let rows = 2l * sized.timings.samples + 65536l   //! the source's sample count runs past the generator's output; twice covers it
         capture_noise(m.scratch.noise, nh, rows, 0x5eedul)
         var inscope a <- synthesize(m, text, voice)
-        set_metal_tower(true)
+        set_gpu(true)
         let h1 = styletts2_gpu_stats("decode")
-        let e1 = metal_tower_stats().encodes
+        let e1 = gpu_encodes()
         var inscope b <- synthesize(m, text, voice)
         let h2 = styletts2_gpu_stats("decode")
-        let e2 = metal_tower_stats().encodes
-        set_metal_tower(false)
-        return if (h2.served == h1.served && !tower_served(t, "{base_name(path)} reference lane", "{metal_tower_declines()}"))
+        let e2 = gpu_encodes()
+        set_gpu(false)
+        return if (h2.served == h1.served && !tower_served(t, "{base_name(path)} reference lane", "{gpu_declines()}"))
         t |> success(e2 - e1 >= int64(h2.served - h1.served), "reference lane: the tower encoded every served decode")
         t |> equal(length(b.pcm), length(a.pcm), "reference lane: the sample counts (the durations token for token)")
         to_log(LOG_INFO, "{base_name(path)} {voice}: reference lane, tower vs CPU on one captured noise: {length(b.pcm)} / {length(a.pcm)} samples, sample-wise rel-rms {rel_rms(b.pcm, a.pcm)} (the f32 phase's ulps, informational); CPU {timings_line(a.timings, a.sample_rate)}; tower {timings_line(b.timings, b.sample_rate)}\n")

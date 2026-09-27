@@ -452,15 +452,6 @@ let private ROWS_FF = 512
 let private ROWS_HEADS = 4
 let private ROWS_EPS = 1.0e-6
 
-def private row_fill(n : int; mul, add : int; scale, off : float) : array<float> {
-    var a : array<float>
-    a |> resize(n)
-    for (i in range(n)) {
-        a[i] = float((i * mul + add) % 97) * scale - off
-    }
-    return <- a
-}
-
 def private gelu_quick_ref(x : float) : float => x * (1.0 / (1.0 + exp(-1.702 * x)))
 
 [test]

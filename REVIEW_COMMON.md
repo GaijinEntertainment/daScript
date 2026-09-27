@@ -14,8 +14,8 @@ of the folder.**
 **A term of art is defined in place, in a dozen words, or the rule is rewritten around plain
 words.**
 
-**A checklist never quotes, cites, or restates another rule document** - coupling between rule
-documents is ROUTING ("a diff touching X applies that checklist too", "a `[tune]` change is
+**A checklist never quotes, cites, or restates another checklist, a skill, or a `CLAUDE.md`** -
+coupling between rule documents is ROUTING ("a diff touching X applies that checklist too", "a `[tune]` change is
 reviewed with `skills/tune.md`").
 
 **Every checklist reviews itself: a rule a reviewer cannot apply as written is a defect of the
@@ -27,15 +27,15 @@ reachable branch ships a test that fails without it; a diff that adds a branch n
 distinguishes is a defect. The audit procedure - including how to settle "would this test fail
 without the change?" - is `skills/tdd_audit.md`.
 
-**A diff that changes a function carrying `[arch(at="<doc>#<anchor>")]`, or C++ under a
-`// <doc>#<anchor>` pointer - beyond comments - audits the anchor's other citing functions and
-the cited section: read the section, check it still describes the code and each citer still
-conforms, verdict per function.** The citers of one anchor share one mechanism; MCP
+**A diff that changes a function carrying `[arch(at="<doc>.md#<anchor>")]`, or C++ under a
+`// <doc>.md#<anchor>` pointer - beyond comments - audits the anchor's other citing functions
+and the cited section: read the section, check it still describes the code and each citer
+still conforms, verdict per function.** The citers of one anchor share one mechanism; MCP
 `arch_sites` lists them, both spellings.
 
-**A diff that adds, removes, or retargets an `[arch(at=...)]` citation audits the cited
-section against the code - both sections on a retarget.** The citation claims the section
-describes this function; verify it does.
+**A diff that adds, removes, or retargets an `[arch(at=...)]` citation or a
+`// <doc>.md#<anchor>` pointer audits the cited section against the code - both sections on a
+retarget.** The citation claims the section describes this function; verify it does.
 
 **A diff that changes an anchored section audits every function citing that anchor.** One
 audit pass over an anchor's section text and citer set discharges every audit duty the diff
@@ -43,7 +43,8 @@ triggers on that anchor - the duties never cascade.
 
 **A diff that moves a fact out of a function's comment into an `ARCHITECTURE*.md` lands three
 things in the same change: the statement, a `{#anchor}` on the heading of the section it joins,
-and an `[arch(at=...)]` citation on that function - and the comment goes.** The citation is
+and a citation on that function - `[arch(at=...)]` on a daslang function, a `// <doc>.md#<anchor>`
+pointer on a C or C++ one - and the comment goes.** The citation is
 what keeps the section true: a section nothing cites is never re-checked when the code changes.
 
 **A rule that a test, a lint, or the folder's `REVIEW.das` enforces is deleted.** Automation
@@ -106,13 +107,13 @@ starts with a root directory the folder does not contain (`modules/...`, `daslib
 "`(repo root)`"; when both readings exist - a `tests/` beside the checklist and one at the
 root - the rule must say which.
 
-**Cite files by name; cite the folder's own architecture doc by section, and never require
-that section to be read before the rule can be applied.** No file cites a checklist rule by
-number, position, or nickname. A file outside the rule documents - source, commit message,
-doc - quotes the rule's words; a rule document routes to the checklist instead, and never
-quotes or restates its rule. A criterion whose home is another folder's architecture doc is
-restated in place and cited nowhere. A quote states the reason the code is shaped this way and
-survives any rewording; a position points at whatever sits there today.
+**Cite files by name; cite an architecture doc the checklist's opening names by anchor
+(`<doc>.md#<anchor>`), and never require the cited section to be read before the rule can be
+applied.** No file cites a checklist rule by number, position, or nickname. A file outside the
+rule documents - source, commit message, doc - quotes the rule's words; a rule document routes to
+the checklist instead, and never quotes or restates its rule. A criterion whose home is an
+architecture doc the opening does not name is restated in place and cited nowhere. A quote states the reason the code is shaped this
+way and survives any rewording; a position points at whatever sits there today.
 
 **Name the API a rule is about; never name an example of it.** A rule governing specific
 functions or files must name them or it cannot be checked - that name is the criterion. An

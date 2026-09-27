@@ -234,7 +234,10 @@ SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR
 under `DASLLAMA_PARITY_FULL=1` - the Qwen1.5-MoE Q8_0 and its `-local` Q4_K_M mint, the Qwen3-30B
 Q4_K_M and UD-IQ2_XXS: the resident MoE block's s stamps (the 32-row column) and e stamps (the
 128-row column) on the expert planes those files carry; an e stamp no stocked carrier reaches is a
-`VK_CENSUS_NEVER_DISPATCHED` entry in `test_kernel_coverage.das` naming its kernel-unit cell;
+`VK_CENSUS_NEVER_DISPATCHED` entry in `test_kernel_coverage.das` naming its kernel-unit cell; the
+TTS classes are dispatched by `cov_tower_styletts2` and `cov_tower_pocket` on their carriers, their
+kernel cells the `test_vulkan_tts_*` files, and a box without the carriers reads them at zero - a
+warning, never an entry;
 every prefill tile family is reached through the qwen3 Q8_0 and Q4_K_M and the 1B llama
 requants, machine-local like the other fixtures - the `-local` ones are
 minted from the bartowski Q8_0 with `llama-quantize --allow-requantize [--imatrix llama32_1b.imatrix] <q8> <out> <type>` (the IQ2/IQ3 types need the imatrix; the exact recipes are the catalog rows in `performance/model_specs.das`) - each
@@ -331,6 +334,105 @@ gated (the shared q8 triple beside the routed pair, its gate logit past the rout
 and ungated (the same at unit gate, a second span record after a reset; the reference without the
 shared expert must miss the device row in both) - plus the `vulkan_moe_span` override reached
 through its registry.
+`test_vulkan_tts_conv_kernels.das` - model-free (a Vulkan device, else skips; the half im2col cell
+also skips where the device serves no f16 tile - neither cm2 nor the KHR tile at subgroup 32): the TTS tower's
+Vulkan sequence classes against the CPU chain - `test_vkt_tts_im2col` feeds the conv im2col
+(`TtsIm2col`) through the biased f32 GEMM over the slab-layout weight rows and holds the result to
+the CPU `conv1d` end to end, a forward k5 conv at 22 channels (the column rows' pad past k x cin
+under poisoned weights, the columns at an offset) and a transposed k4 stride-2 one at 16 (x at an
+offset); `test_vkt_tts_im2col16` feeds the half im2col (`TtsIm2col16`) through the f16 tile the
+device serves (cm2, else the KHR twin) over the halfword weight rows and the bias pass
+(`TowerBiasAct`), the decoder's route, on operands of the f16 lattice - every product exact, so the
+bar covers the accumulation alone - the same forward k5 conv, the transposed k4 stride-2 one and a
+k3 conv over 32 channels whose 96-wide row sits off the tile's 64 step, the half column plane
+carrying the driver's slack rows; `test_vkt_tts_lstm_dir` holds one LSTM direction (`TtsLstmDir`) at hidden 64 and 200 over
+gates the CPU `linear_rows` computed, both directions into one shared row set (the backward w_hh
+and gates at offsets) against the CPU `bilstm`, and the forward weights walked backward against the
+CPU's backward walk, which must move the output off the forward walk; `test_vkt_tts_pool_dw` holds
+the depthwise transposed pool (`TtsPoolDw`, k3 stride 2 pad 1 over 22 channels, the output pad
+reaching past the input on the last row) against the CPU `conv1d_rows_transposed_depthwise`, the
+weight and bias rows at offsets in one slab plane between poisoned slots; every output under a NaN
+fill, every compare with its poisoned element.
+`test_vulkan_tts_kernels.das` - model-free (a Vulkan device, else skips): the TTS tower's Vulkan
+kernel classes against their CPU oracles - `test_vkt_f32_gemm` holds the f32-exact tile GEMM's two
+stamps (plain, biased) at shapes off every tile and workgroup multiple against the k-ordered sum,
+with the weight pad past K poisoned and a poisoned-element control on each compare; and the PL-BERT
+seat's row classes - `test_vkt_row_gather` holds the embedding gather bit-exact against the CPU
+word + position + type sum at element bases off zero (controls: the id-0 sum misses the device, two
+positions on one word differ, the prefix before the output base keeps its sentinel),
+`test_vkt_gelu_tanh` the tanh GELU against the CPU `gelu` at the 1e-5 f32 bar over a run with a
+three-element tail and inputs past the tanh clamp (control: the bar tells the f16 LUT form apart),
+`test_vkt_leaky` the leaky ReLU bit-exact against `leaky_relu` (a negative element scaled, a
+positive one passed) - both maps leaving the elements outside their run untouched - and
+`test_vkt_attn` the bidirectional attention against `attention_rows` at the 1e-5 bar at t 37 /
+4 x 64, t 130 / 2 x 128 and the full 512-key row / 2 x 64 (control: zeroing the last key moves the
+first query row); and the predictor and decoder row classes - `test_vkt_concat` the concat rows
+(`TtsConcat`) bit-exact against the CPU concat on two arms, one style row broadcast to every position
+(`rs = 0`) and the f0 and noise columns at their strides with a zero pad past them (control: the
+columns follow their strides), `test_vkt_sigsum` the duration sigmoid sums (`TtsSigSum`, 50 of 64
+columns, the pad columns carrying garbage) against the in-test f32 sum at the approx bar (control:
+the pad columns stay out of the sum), `test_vkt_colstats` the column statistics (the four passes
+`TtsColPartSum`, `TtsColReduceMean`, `TtsColPartSq`, `TtsColReduceSq` over 128-row blocks) against
+double-precision sums at t 45 / 72 channels, t 300 / 20 and t 1000 / 300 (eight blocks, a lane's
+second channel),
+`test_vkt_adain` the statistics then both fused AdaIN stamps (`TtsAdainLeaky`, `TtsAdainSnake`) against
+the CPU `adain_rows_into` followed by `leaky_relu` or `snake_rows`, every plane at an element base
+off zero, plus the leaky stamp in place (bit for bit the out-of-place rows, the input overwritten),
+the prefixes before the bases kept, and `test_vkt_add_scale` the residual join (`TtsAddScale`)
+bit-exact against (a + b) / sqrt(2) in f32 over 1030 elements at offsets, out of place and in place,
+the elements outside the run kept.
+`test_vulkan_tts_source_kernels.das` - model-free (a Vulkan device, else skips): the TTS tower's
+Vulkan decoder tail against the CPU chain - `test_vkt_axpy` holds the stage sum's axpy (`TtsAxpy`)
+bit-exact against o + 0.25 y in f32 over 1030 elements at offsets, accumulating onto a filled o and
+overwriting a NaN-filled one (control: the same dispatch at zero = 0 adds o's old contents), the
+elements outside the run kept; `test_vkt_reflect1` the last stage's reflect pad (`TtsReflect1`,
+37 x 24 rows) bit-exact, the sentinel past (t + 1) x c kept; `test_vkt_source` the harmonic source
+(`TtsSrcLow*`, `TtsSrcCumsum*`, `TtsSrcNoise`, `TtsSrcSines*`) on either resample law's stamps in the
+Metal gate's shape (up 300, three harmonics, 700 frames) and at up 2 x 37 frames (the first taps
+read sample 0, the initial phases in) against the CPU `sine_source` chain through `linear_rows` and
+`tanh_inplace` - the phase frames within one ulp of its carry, the mixed signal within 2e-6, the
+source linear at offsets in a slab plane between poisoned slots, a poisoned f0 frame that must red
+both compares - then on the big shape a 40000-frame cumsum against a double accumulator where the
+two laws part by whole cycles, and the own noise draw against the CPU hash (finite, repeatable per
+seed, moved by seeds 78 and 81, apart from the captured rows' signal); `test_vkt_stft` the STFT on
+either pad law's stamp (`TtsStftReflect`, `TtsStftEdge`; the Metal gate's 10 frames with a fourth
+bin whose imaginary row is zero, reaching the zero-imaginary phase rule on both signs) and
+`test_vkt_istft` the inverse STFT (`TtsIstft`) with and without the window envelope (two zeroed
+window taps leaving a quarter of the samples undivided) against their double-precision forms, each
+with a poisoned input that must red the compare, the weights at offsets in one slab plane; every
+output under a NaN fill, every compare with its poisoned element.
+`test_vulkan_tts_pocket_kernels.das` - model-free (a Vulkan device, else skips): the Pocket TTS
+family's Vulkan classes against the CPU chain - `test_vkt_pk_rows` holds the codec stream's row
+copies (`TtsPkRows`, `TtsPkRowsElu`) over a 7 x 13 window at source and destination strides with
+column and row offsets off zero, the plain copy bit-exact and the ELU stamp against the CPU
+`elu_rows` at the approx bar (controls: the negative elements move off the plain copy, the
+non-negative ones pass bit for bit), every element outside the window left at its sentinel;
+`test_vkt_pk_row_scale` the layer scale (`TtsPkRowScale`) in place at t 37 x 72 bit-exact against
+`layer_scale_rows`, x and the scale row at offsets (control: the input row is overwritten);
+`test_vkt_pk_attn` the causal cached attention row (`TtsPkAttn`) against `attention_causal_rows`
+over a `TtsKvCache` of two 64-wide heads, the device's key and value rows written from the cache's
+own layouts with three poisoned rows past the appended 45 - a 45-query prompt over every key, a
+decode step at position 44 over an 8-key window (the query at a row offset of the q plane) and the
+prompt over a 16-key window - at the approx bar (controls: a poisoned key just before the decode
+step's window leaves its output bit for bit, the 16-key window moves the prompt's rows);
+`test_vkt_pk_gemv` the row GEMV's five stamps (`TtsPkGemvDot`, `TtsPkGemvLnSilu`, `TtsPkGemvGate`,
+`TtsPkGemvAddSilu`, `TtsPkGemvTail`) at nin 200 (off the lane multiple) and nout 45 (off the
+four-row multiple) against `linear_vec` under the CPU chain's norm, modulation, SiLU, gated
+residual and frame tail, the weight rows (their stride pad poisoned), bias, norm rows and slab
+vector at offsets in one slab plane between poisoned slots, x, the modulation rows, the noise row,
+y and the latent row at offsets, in two arms - the weight rows off the four lattice (the float
+dot) and on it (the float4 dot) - each arm asserting its rows' alignment (controls: the gated
+residual moves its row off its input, the masked rows past nout keep their sentinel); `test_vkt_pk_gemv_fused` the frame loop's fused stamps
+(`TtsPkGemvLnQkv`, `TtsPkGemvAddScale`, `TtsPkGemvAdd`, `TtsPkGemvLnGelu`) at a 64-wide backbone of two
+heads against the CPU chains - the normed qkv row's q span roped into y and its k span roped and v span
+copied into the caches' row at the position (`rope_rows` on `linear_vec` over `layernorm_rows`),
+the residual joins with and without the layer scale over a residual row, the normed GELU (controls: the
+k and v spans and the caches' other rows keep their sentinel and poison, the residual row moves off its
+input); `test_vkt_pk_rope` the rows rope (`TtsPkRope`) on the
+k span of 23 rows x 384 at column 128, two 64-wide heads at position 37, the tables from
+`build_rope_tabs`, against `rope_rows` at the approx bar (the q and v spans bit for bit untouched);
+every written-only output under a NaN fill, every compare with its poisoned element.
+
 `test_vulkan_tower_kernels.das` - model-free (a Vulkan device, else skips): the vision and audio towers'
 kernel classes against their CPU oracles - the bidirectional flash tiles (h64 and the padded h128
 on the cm2 and KHR arms) against `attn_row_oracle` over every key, the causal twin as the control
@@ -1341,8 +1443,11 @@ on the q8 slab writes. Each cell carries a scaled or
 reversed input as the compare's control. The seam check carries the generator seat alone on the
 oracle's own inputs within `GPU_SEAM_BAR` (5e-3; 1.2e-3 at most), the knob-off leg bit-equal to
 the CPU chain with its decline recorded. The models for these cells mint in memory from the GGUF's
-staging on the lane each cell names, no `.dlim` baked. Where no Metal device serves, every cell
-skips loudly; a device that declines a stage is a red.
+staging on the lane each cell names, no `.dlim` baked. The GPU cells read the serving driver
+through the rail's helpers (`gpu_knob`, `set_gpu`, `gpu_encodes`, `gpu_declines`): the Metal
+tower on an Apple build, the Vulkan TTS driver elsewhere. Where no GPU device serves, every cell
+skips loudly, and a driver that registers no seat for a cell's stage skips that cell; a device
+whose seat declines a stage is a red.
 The kitten image rail is the `image` suite's `kitten` arm (the TTS area's), not a cell here.
 `test_tts_kokoro.das` - stocked suite; model-free cells: the symbol map over a synthetic phoneme
 string, the out-of-vocabulary drop, the style-row clamps, and the pack-name language rule
@@ -1355,10 +1460,10 @@ phonemized in both dialects, every British symbol proven to be in the model's ow
 the token count, `bf_emma` speaking, and the sample count of that synthesis held against the model
 driven straight from each dialect's string, which is what proves the VOICE's dialect reached the
 synthesis - and the voice refusals (a pack whose language the front end lacks names that language;
-a voice the model has never heard of refuses first, with no language to name); the Metal cells of
+a voice the model has never heard of refuses first, with no language to name); the GPU cells of
 `_tts_parity.das` - the seam check, the per-stage cells with the q8 decode cell, and the served
-synthesis across the tower knob on both lanes - as the kitten entry describes them; and, model-free,
-the seat-name refusal of `styletts2_gpu_stats`.
+synthesis across the tower knob on both lanes - as the kitten entry describes them, the seat-absent
+skip included; and, model-free, the seat-name refusal of `styletts2_gpu_stats`.
 `test_tts_pocket.das` - stocked suite (`pocket-tts-en.gguf` + `tts_oracle/pocket_english_2026-04/`
 under the models dir, minted by `harness/convert_pocket.py` and `harness/pocket_oracle.py`): the
 unigram tokenizer id for id against the package on the 200-sentence corpus and the byte-fallback
@@ -1372,30 +1477,37 @@ multi-sentence texts, one sentence spoken with the family's own timing stages, a
 joining the roster and speaking, and the refusals (an unknown voice, a speed, a phoneme request,
 a clip at another rate); the q8 lane (the served default: the GEMMs minted q8, every codec
 conv f32, teacher-forced frames logged against the f32 oracle at an rms figure, the free run's
-frame count and speech - the rig is the lane's quality gate); the Metal cells - the codec seat
+frame count and speech - the rig is the lane's quality gate); the GPU cells (the Metal tower on an
+Apple build, the Vulkan TTS driver elsewhere, through the rail's helpers) - the codec seat
 against the CPU chain over the oracle's latents on the f32 lane within `GPU_CODEC_BAR` (1e-5;
 reads 1e-6 on the exact stamps on the M5 Max, 9e-4 on the f16-staged route, which is why the seat runs exact)
 with the bar's one-sample control and the x3-scaled latents as the compare's control, one tower
 encode a call, the knob-off leg bit-equal to the CPU chain with its decline recorded; the codec seat
 on the served planes of the q8 and kq files against each file's own CPU chain within
-`GPU_CODEC_SERVED_BAR` (5e-2; reads 1.3e-2 and 7.7e-3) with the x3-scaled latents as the compare's
-control; the frames
+`GPU_CODEC_SERVED_BAR` (2e-1; reads 1.3e-2 and 7.7e-3 on the M5 Max, 9.2e-2 and 1.5e-1 on the pod's
+x64 CPU chain - the CPU's Q8_0 activation blocks, the tower at 3e-6 of the CPU f32 chain on either
+box) with the x3-scaled latents as the compare's control; the frames
 seat against the CPU chain teacher-forced on the oracle's noise and frames, on the f32 lane: the
 latents, conditioning rows and EOS logits within `GPU_FRAME_BAR` (2e-5; reads 2e-6 on the M5 Max) with the
 bar's one-element control and the x3-scaled noise as the compare's control, the generator left
 where the CPU loop leaves it (the last batch's draws past the frames made rewound), one hook
 call, one encode a batch of frames, the knob-off leg bit-equal with its decline, then the free
 run - its own noise, every frame fed its own output - against the CPU chain's on the same seed
-within `GPU_FRAME_FREE_BAR` (1e-3; reads 1.5e-4) with the generator check, batches of three
-(one encode a batch, the latents within the bar, a batch below one clamping to one), and the
+within `GPU_FRAME_FREE_BAR` (5e-3; reads 1.5e-4 and 1.1e-4 on the M5 Max, 7e-5 and 1.8e-3 on the
+pod) with the generator check, batches of three (the encode count within one of the batch count -
+the batch the EOS frame lands in may split the tail - the latents within the bar, a batch below
+one clamping to one), and the
 seats taken by an empty record and given back (`register_pocket_gpu` / `unregister_pocket_gpu`,
-the hook unreached then serving again); the served frames cell takes both oracle voices in turn
+the hook unreached then serving again); the frames seat after the LLM tier's model drop in the same
+process (`test_pocket_frames_after_model_drop`: one served leg on the q8 file, `moe_gpu_drop_model`,
+the same leg again serving and reading the same frame count - the slabs, the scratch and the voice
+slot rebuilt behind the drop); the served frames cell takes both oracle voices in turn
 on each file, so the second voice's slot displaces the first's, within `GPU_FRAME_SERVED_BAR` (1e-1; reads 1.9e-2 to 7.1e-2)
 with the x3-scaled noise as the compare's control; the seat record's refusal of a
 name no seat carries and its seat names in order (`test_pocket_seat_stats`, model-free); the
 long chunk's codec seat declining by shape; and the served synthesis across the knob, every
 chunk's codec and frame loop served, the encodes
-past one a chunk, the knob-off chunks declining at both seats - where no Metal device serves all
+past one a chunk, the knob-off chunks declining at both seats - where no GPU device serves all
 three skip loudly, a present device that declines is a red; the parity, stream and frames cells
 pin the tower off, since the CPU chain is what they hold; the published Q8_0 file
 (`pocket-tts-en-q8.gguf`) against the f16 file's load-time quants - every backbone GEMM arrived
@@ -1467,7 +1579,9 @@ and a drawn noise stream, its mix through `linear_rows` in windows bit-equal to 
 run's on both split axes, and a window past the carry's reset refused.
 `_tts_parity.das` - the rail both families run: token ids against the reference driver on every
 oracle case, identical durations on every case, and on the bring-up set every stage through the
-decoder output within 1e-4 of the oracle's peak, the sine source within 1e-4 fed the oracle's F0,
+decoder output within 1e-4 of the oracle's peak, the sine source within `SOURCE_BAR` (5e-3, absolute:
+the phase past 1e5 radians turns a ulp of an increment into radians; the pod's x64 chain reads
+2.5e-3 on kitten's ONNX law, the M5 Max under 1e-4) fed the oracle's F0,
 the source spectrum's magnitude within 1e-4 of its peak and its phase within 1e-2 rad where the
 magnitude carries signal, and the generator (its stage-0 internals included) within 1e-4 fed the
 oracle's spectrum and decoder output; the end-to-end waveform difference is logged, not gated (the
@@ -1634,7 +1748,7 @@ GC, flavors) lives in the image suites alone (`test_model_image`, `test_model_im
 
 ## Metal fixtures - driver knobs and the two-model pattern
 
-The establish-and-restore obligation is `REVIEW.md`'s. The mechanism: the hooks are on by
+The establish-and-restore obligation is `REVIEW_LANE_PINS.md`'s. The mechanism: the hooks are on by
 default. They flip a q8 leg to the GPU silently, and an f32 leg records a quant_mode decline
 that panics under required mode. Either way the cell stops measuring what its name says. The
 family serving-lane pins (`set_<family>_q8`) are the same trap in the other direction: an
@@ -1659,7 +1773,8 @@ carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`
 `qwen2`, `qwen3`, `phi3`,
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe` (the support-matrix family cells), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
-`gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows),
+`gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows), `kitten` (the image suite's
+kitten arm), `kokoro`, `pocket` (the coverage census TTS rows),
 `gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0 and
 Q4_K_M small-tier always-on, carrying the per-layer-FFN-width and blob-kq-PLE-gather coverage.
 Both E2B rows assert parity through their forced-feed cells, not token equality, because

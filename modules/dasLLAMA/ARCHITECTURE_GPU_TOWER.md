@@ -1,15 +1,15 @@
 # dasLLAMA Architecture - the tower attention routes and encode chains
 
-Companion to `ARCHITECTURE_GPU.md`; section numbers are `ARCHITECTURE.md`'s. This document
-carries sections 2.2w-2.2x and 2.2au - the three routes that serve tower attention on Metal, the
+Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
+carries the three routes that serve tower attention on Metal, the
 one-command-buffer encode chain each family the Metal tower driver serves gets, and the StyleTTS2
-synthesis chain, and sections 2.2av-2.2aw - the Pocket TTS codec and frames seats. The GPU backend role table these sections build on - the tower driver's role row
-included - stays in `ARCHITECTURE_GPU.md` sec.1.5.
+synthesis chain, and the Pocket TTS codec and frames seats. The GPU backend role table these
+sections build on - the tower driver's role row included - stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
-- `ARCHITECTURE_GPU_TOWER_VULKAN.md` - sec.2.2aq-2.2ar, 2.2at: the Vulkan tower driver's row
-  classes and attention routes, and its encode chains, and the Vulkan ASR-decoder driver.
+- `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower driver's row classes and attention
+  routes, its encode chains, and the Vulkan ASR-decoder driver.
 
-### 2.2w The tower attention routes {#tower-attn-routes}
+### The tower attention routes {#tower-attn-routes}
 
 A tower head width is padded to `hs_pad = max(64, ceil32(hs))` - 72 and 80 both land on 96 -
 because the QK stamps walk multiples of 32 while the guarded AV forms carry no multiple-of-64
@@ -30,7 +30,7 @@ rows. Three routes serve tower attention:
   and sizes its score slab at `heads x mp x nk64` halfs. Off the flash route that slab is the
   encode's only attention allocation; on it the driver takes a stub.
 
-### 2.2x The tower driver's encode chains {#tower-encode-chains}
+### The tower driver's encode chains {#tower-encode-chains}
 
 Each family the tower driver serves gets one chain that encodes the whole encode into ONE
 command buffer and reads back once: the block loop, and - for gemma4a and qwen3a - the mel and
@@ -54,21 +54,26 @@ output. The score slabs are per-head scratch reused head after head - each head'
 encoded after the previous head's reader. The head size is held to a multiple of 64 (the AV
 GEMM's column lattice) and the head count to the per-head uniform seats.
 
-### 2.2au The tower driver's StyleTTS2 synthesis chain {#tower-tts-chain}
+### The tower driver's StyleTTS2 synthesis chain {#tower-tts-chain}
 
 The whole StyleTTS2 synthesis of the kitten and kokoro families rides the tower driver as seven
-seats of the family's hook record (`ARCHITECTURE_MEDIA.md` sec.2.14): PL-BERT, the text encoder,
+seats of the family's hook record (`ARCHITECTURE_MEDIA.md#tower-gpu-hook`): PL-BERT, the text encoder,
 the duration encoder, the duration head, prosody, the decode seat and the generator seat. Each
-seat is one command buffer of 2.2x's shape over a per-part weight slab the driver builds once
+seat is one command buffer of the encode chain's shape (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`) over a per-part weight slab the driver builds once
 and keys on a fold of the part's weight addresses - the address of the form each conv serves, the
 q8 quants or the f32 operand - and of the q8 lane's active repack layout, so a reload serving
 another lane or another layout keys differently; the addresses stand for the model because a
 reload never reuses them before the weights epoch drops every slab, which shutdown does too. Every
 family attaches its slab through one guard and one rebuild (`st2_slab_current`, `st2_slab_rebuild`):
 a slab whose key matches stays resident and the call returns on the guard; otherwise the cold
-rebuild runs the family's drop, then the family's writer twice - the measuring pass
-writes into a probe slab to size the host copy, the second fills the resident - and the copy
-uploads, the drop running again when the upload fails. A slab releases through one walk over its
+rebuild runs the family's drop, then the family's writer twice through the shared host writer
+(`dasllama_tts_slab.das`, the one the Vulkan seats build from; its keys, shape checks and row
+layouts are the same here, the slots adapted to byte offsets with the GEMM's uniforms hung on
+each, and an LSTM recurrence written unturned, as the Metal recurrence kernel reads it) - the
+measuring pass writes into a probe slab to size the host copy, the second fills the resident -
+and the copy uploads, the drop running again when the upload fails. The measuring pass hangs no
+device handle - uniforms and buffers are created on the fill pass alone - so the probe slab is
+deleted without the release walk. A slab releases through one walk over its
 fields by type (`st2_release_any`): a conv slot's and a Pocket linear's pooled uniforms, a buffer
 the slab owns, the elements of an array of them and the fields of a struct of them go back to their
 homes, so a slot field a slab gains frees itself. The walk releases and never deletes;
@@ -100,8 +105,7 @@ attention is its own f32 row kernel, one simdgroup a query row with the lanes ov
 stamp (the decoder rows read within 7e-3 of the CPU's on kitten-nano, 5e-4 on kokoro; the
 seam form of the generator alone within 1.2e-3).
 
-The harmonic source is the CPU's `sine_source` on the device, operation for operation (sec.2.33
-of `ARCHITECTURE_TTS.md`): the three source kernels compile without fast math and stamp once a
+The harmonic source is the CPU's `sine_source` on the device, operation for operation (`ARCHITECTURE_TTS.md#tts-phase-law`): the three source kernels compile without fast math and stamp once a
 law (`MetalSt2Src*Torch`, `MetalSt2Src*Onnx`), the resample taps and mixes the stamp's law - the
 torch law's double source coordinate as one fma, the ONNX law's seven-term trilinear mix - the
 cumulative phase the torch stamp's double accumulator (a two-float sum in the CPU's frame order,
@@ -129,13 +133,13 @@ the slab allocation), `gpu_error`. Engage is each seat's `served` counter beside
 cells on identical inputs on the f32 lane (`tests/CLAUDE.md`, the kitten file) and the served
 synthesis across the knob.
 
-### 2.2av The tower driver's Pocket codec seat {#tower-pocket-codec}
+### The tower driver's Pocket codec seat {#tower-pocket-codec}
 
 The Pocket TTS codec decoder rides the tower driver as the first seat of the family's hook record
-(`register_pocket_gpu`, `ARCHITECTURE_MEDIA.md` sec.2.14): the latents of a chunk go up, the
+(`register_pocket_gpu`, `ARCHITECTURE_MEDIA.md#tower-gpu-hook`): the latents of a chunk go up, the
 samples come back, one command buffer. The chain is the CPU's `pocket_decode_latents` run as its
 first window over the whole chunk - the stream's carries are the first window's zero rows, and the
-CPU's windows equal that one shot to float noise (`ARCHITECTURE_POCKET.md` sec.2.46) - so no carry
+CPU's windows equal that one shot to float noise (`ARCHITECTURE_POCKET.md#pocket-codec-stream`) - so no carry
 crosses a dispatch: the 1x1 latent projection and every dense conv on the conv-gathering GEMM stamp
 (a forward conv behind `k - stride` zero rows, a transposed conv's first `t * stride` output rows;
 the input row stride `xs` of `St2ConvArgs` lets a conv read the padded width its producer wrote),
@@ -152,9 +156,9 @@ addresses and the lane as the StyleTTS2 slabs are, and drops with them. A chunk 
 `PK_CODEC_MAX_FRAMES` latent frames declines on its row budget (the one-shot rows scale with the
 chunk) and the CPU's windows serve it; the other declines are `knob`, `shape` (a channel count off
 the 8-run lattice, a head over 128 wide, a transformer width off the 32 lattice), `device` and
-`gpu_error`. The frame loop is the family's second seat (sec.2.2aw).
+`gpu_error`. The frame loop is the family's second seat (`ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`).
 
-### 2.2aw The tower driver's Pocket frames seat {#tower-pocket-frames}
+### The tower driver's Pocket frames seat {#tower-pocket-frames}
 
 The Pocket frame loop - the backbone step and the flow head for every frame of a chunk - rides
 the tower driver as the family's second seat once the prompt's rows sit in the voice's caches:

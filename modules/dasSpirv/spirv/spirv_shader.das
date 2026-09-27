@@ -190,10 +190,11 @@ class SpirvShader : AstFunctionAnnotation {
         if (early_frag && shader_stage() != ShaderStage.Fragment) {
             err |> push("early_fragment_tests is only valid on a fragment shader")
         }
+        let precise = args |> find_arg("precise") ?as tBool ?? false
         var glob <- find_variable(compiling_module(), argName)
         if (glob != null && glob.init == null && glob.name == argName) {
             var refl : SpirvReflection
-            var words <- generate_spirv(func, err, shader_stage(), local_size, local_size_ids, mesh_cfg, early_frag, refl, kernel_self_of(func))
+            var words <- generate_spirv(func, err, shader_stage(), local_size, local_size_ids, mesh_cfg, early_frag, precise, refl, kernel_self_of(func))
             if (err |> empty()) {
                 glob.init = build_uint_array_literal(words, func.at)
                 // Fill the companion reflection global in the same fixup (gated on the blob's

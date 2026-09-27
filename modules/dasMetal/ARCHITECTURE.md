@@ -95,7 +95,8 @@ no kernel body writes it; member write-set collected in a pre-scan), and each re
 builtin global lowers to a builtin-attributed parameter (`gl_GlobalInvocationID` ->
 `uint3 gl_GlobalInvocationID [[thread_position_in_grid]]`). Member access in the method
 body (bare `a` / `self.a`) emits as the bare parameter name, so the body needs no other
-rewriting. `@binding` = the flat `[[buffer(N)]]` index; `@set` must be absent or 0 (clean
+rewriting. A global name the emitter meets that is not a builtin is a compile error naming it:
+a kernel reaches data only through its members and the builtin IDs. `@binding` = the flat `[[buffer(N)]]` index; `@set` must be absent or 0 (clean
 error - Metal has no descriptor sets); duplicate bindings within one class are a clean
 error. Identifiers colliding with MSL keywords (`kernel`, `device`, `constant`, `thread`,
 `half`, ...) are mangled. A `@uniform` member lowers to one `constant KArgs&` parameter
@@ -141,7 +142,7 @@ Three behavioral layers + enforcement gates:
 - **Leak gate.** Metal objects are invisible to the das leak detectors, so the shim counts live
   objects - `metal_live_object_count()`.
 
-## 5. Cross-backend parity - the kernel-model asymmetry ledger
+## 5. Cross-backend parity - the kernel-model asymmetry ledger {#kernel-model-asymmetry-ledger}
 
 This ledger holds every kernel-model capability one emitter has and the other lacks, for both
 backends; `modules/REVIEW_SHADER_EMITTERS.md` routes a diff here. The primary correctness oracle
@@ -194,6 +195,11 @@ Cross-GPU parity of one source is secondary. Current entries:
   and grid quant kernels on Vulkan therefore pack their tables into `uint4` words by hand.
   Done = the SPIR-V twin (a constant-storage array for the same shape) or a lint on a
   dynamically indexed fixed-array local inside a kernel class.
+- **No-contraction is a compile option on Metal and a decoration on Vulkan; deliberate.** Metal
+  carries it by `[metal_kernel(fastmath=false)]`, the library's `fastmath=false` compile option,
+  and writes no MSL text for it; the SPIR-V emitter's `precise` mark decorates each float result
+  `NoContraction` (`modules/dasSpirv/ARCHITECTURE.md`, the `precise` section), so the mark has no
+  Metal twin - a body ported between the emitters carries the property on its annotation.
 
 ## 7. `@uniform` structs - the kargs form
 

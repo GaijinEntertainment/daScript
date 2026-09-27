@@ -36,7 +36,7 @@ def kokoro_synth(voice, device):
     return run
 
 
-def kitten_synth(name, voice, threads):
+def kitten_synth(name, voice, threads, device):
     import numpy as np
     import onnxruntime as ort
     from huggingface_hub import hf_hub_download
@@ -45,8 +45,10 @@ def kitten_synth(name, voice, threads):
     cfg = json.load(open(hf_hub_download(repo, "config.json")))
     so = ort.SessionOptions()
     so.intra_op_num_threads = threads
-    sess = ort.InferenceSession(hf_hub_download(repo, cfg["model_file"]), sess_options=so,
-                                providers=["CPUExecutionProvider"])
+    # the CUDA provider when asked for it and present (onnxruntime-gpu), else the CPU one - the row names which ran
+    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if device == "cuda" else ["CPUExecutionProvider"]
+    sess = ort.InferenceSession(hf_hub_download(repo, cfg["model_file"]), sess_options=so, providers=providers)
+    print(f"  {name}: onnxruntime providers {sess.get_providers()}", flush=True)
     voices = np.load(hf_hub_download(repo, cfg["voices"]))
     vkey = KITTEN_VOICES.get(voice, voice)
     speed = cfg.get("speed_priors", {}).get(vkey, 1.0)
@@ -75,7 +77,7 @@ def _installed(package):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", nargs="+", default=["kokoro-82m:af_heart", "kitten-nano:Bella", "kitten-mini:Bella"])
-    ap.add_argument("--device", default="cpu", help="the kokoro torch device (cpu, mps)")
+    ap.add_argument("--device", default="cpu", help="the kokoro torch device (cpu, mps, cuda); cuda also asks onnxruntime for its CUDA provider on the kitten models")
     ap.add_argument("--threads", type=int, default=8, help="torch and onnxruntime intra-op threads")
     ap.add_argument("--limit", type=int, default=20)
     ap.add_argument("--passes", type=int, default=3)
@@ -87,11 +89,11 @@ def main():
     if a.limit > 0:
         rows = rows[:a.limit]
     import importlib.metadata as md
-    versions = " ".join(f"{p} {md.version(p)}" for p in ("torch", "kokoro", "kittentts", "onnxruntime") if _installed(p))
+    versions = " ".join(f"{p} {md.version(p)}" for p in ("torch", "kokoro", "kittentts", "onnxruntime", "onnxruntime-gpu") if _installed(p))
     print("ref bench:", " ".join(sys.argv[1:]), f"({len(rows)} sentences; {versions})", flush=True)
     for spec in a.models:
         name, voice = spec.split(":")
-        run = kokoro_synth(voice, a.device) if name == "kokoro-82m" else kitten_synth(name, voice, a.threads)
+        run = kokoro_synth(voice, a.device) if name == "kokoro-82m" else kitten_synth(name, voice, a.threads, a.device)
         run(rows[0]["ps_espeak"])   # the first call pays the session's warm-up
         gen_s, audio_s = 0.0, 0.0
         for r in rows:

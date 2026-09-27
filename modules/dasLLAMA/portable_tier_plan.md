@@ -9,7 +9,7 @@ reference bodies), then an AOT compilation target under `examples/dasLLAMA/` on 
 model, and only then WASM64. Main targets are ASR and TTS; a small LLM rides along, and the
 model set may go smaller still. Vectorizing the default kernels is a separate, measured leg
 between the stages (sec. "The vectorization leg"). The `-jit`-only rule in
-`ARCHITECTURE_INVARIANTS.md` sec.3 is adjusted when the AOT stage reaches it, not before.
+`ARCHITECTURE_INVARIANTS.md#inherited-invariants` is adjusted when the AOT stage reaches it, not before.
 
 Companion evidence: the four inventories the 2026-09-04 session produced (the LLVM dependency
 census, the tune-framework coupling, the WASM build state, the require-guard grammar, and the
@@ -179,14 +179,14 @@ kernel named above are already public; only the seven conv-stem helpers and `lst
 are private, and the whisper-class stem is not in the whisper file at all but lines 1300-1333 of
 `audio_encode_blocks` (`dasllama_audio.das`), serving whisper, ultravox, voxtral, qwen2audio and
 omni. Ranked exposure: (1) split that stem into one public kernel in `dasllama_audio.das`
-(ARCHITECTURE_MEDIA sec.2.14 names the seam); (2)-(3) the four mels need no engine change, only
+(ARCHITECTURE_MEDIA `ARCHITECTURE_MEDIA.md#tower-gpu-hook` names the seam); (2)-(3) the four mels need no engine change, only
 an fp64 STFT reference; (4) `bilstm` is public, gate `lstm_direction` through it and run one
 shape twice for the scratch-global reset; (5) `magnitude_phase` / `istft_envelope_divide` are
 pure and now covered; (6) drop `private` on the two parakeet convs; (7) `g4a_conv_stage` splits
 into a public im2col and a LayerNorm+ReLU epilogue that has no twin anywhere; (8)-(10) the
 qwen3a and canary stems converge on the parakeet shape (the three im2col walks are
 near-identical copies); `cn_conv_pw` is a wrapper, not a kernel. `sine_source` cannot take an
-fp64 reference (ARCHITECTURE_TTS sec.2.33 phase law): its gate is a golden vector.
+fp64 reference (`ARCHITECTURE_TTS.md#tts-phase-law`): its gate is a golden vector.
 
 **(i) findings from writing the other units.** `test_kquant.das`'s synthetic plane builders are
 private in a `[test]` root; lift them into a `_kq_fixtures.das` sibling (the
@@ -275,8 +275,7 @@ What it took, each a general fix rather than a dasLLAMA one:
   interprets (`fail_on_no_aot` stays off in the host). Before, only dastest honored the flag.
 - The guards read the AOT tier through `aot_kernels_linked()` - `is_aot_function` on one kernel
   (`dasllama_math::silu`), a runtime probe - never `aot_enabled()`, which folds differently under
-  generation and the consuming run and would desync every caller's hash. `ARCHITECTURE_INVARIANTS.md`
-  sec.3 carries the adjusted rule.
+  generation and the consuming run and would desync every caller's hash. `ARCHITECTURE_INVARIANTS.md#inherited-invariants` carries the adjusted rule.
 - `das_accelerate` had no `aotRequire`, and a C++ module without one AOT-disables every das
   module whose require closure reaches it - the whole engine above `dasllama_math_accelerate`
   emitted empty TUs (`// AOT disabled due to module requirements`) with no error anywhere. The

@@ -38,8 +38,9 @@ author's own out-of-tree notes keep them, and no file in the tree cites them. No
 `ARCHITECTURE*.md` or ledger installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` and
 `ARCHITECTURE_COMMON.md` at the install root are the two vendoring exceptions, and a shipped
 tree with `[arch]` citations installs a GENERATED excerpt of each cited document (the cited
-sections only, banner-marked; `utils/internal/arch-extract`, registered on `DAS_ARCH_EXTRACT_SPECS`
-beside the tree's install rules) so LINT026 stays armed in an installed SDK.
+sections and the sections their own text cites, nothing else, banner-marked;
+`utils/internal/arch-extract`, registered on `DAS_ARCH_EXTRACT_SPECS` beside the tree's install
+rules) so LINT026 stays armed in an installed SDK.
 
 The mood test routes misplaced text: must/never binding a diff -> REVIEW.md; present-tense
 fact -> ARCHITECTURE.md; dated or past-tense -> deleted, git keeps it.
@@ -51,10 +52,12 @@ both spellings) and `arch_sites` lists a document's anchors with their line rang
 dead anchors and dangling citations included. Citation spelling, path resolution, and failure
 reasons: `skills/mcp_tools.md`.
 
-**An architecture-doc heading that code cites carries the `{#anchor}` its citation names, and
-every anchor is cited.** LINT026 fails a citation naming no such file or anchor, and - in every
-folder, no tag arms it - an anchor no `[arch]` cites. An `[arch]` citation replaces the comment
-that would have restated the section: the mechanism lives in the document, the code names it.
+**An architecture-doc section is named, not numbered: its heading carries a `{#anchor}`, every
+citation - `[arch(at=...)]` in code, `// <doc>.md#<anchor>` in C++, `<doc>.md#<anchor>` in a
+rule document or ledger - names that anchor, and every anchor is cited.** LINT026 fails a
+citation naming no such file or anchor, and - in every folder, no tag arms it - an anchor nothing
+cites. An `[arch]` citation replaces the comment that would have restated the section: the
+mechanism lives in the document, the code names it.
 
 **A `REVIEW*.md` or `ARCHITECTURE*.md` past 300 lines, wherever it sits, splits into companions** -
 `ARCHITECTURE_<CONCERN>.md` for an architecture doc, a `REVIEW_<KIND>.md` the parent

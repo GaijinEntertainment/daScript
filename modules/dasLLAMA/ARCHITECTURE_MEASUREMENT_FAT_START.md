@@ -1,11 +1,12 @@
 # dasLLAMA Architecture - a fat exe's first start
 
-Companion to `ARCHITECTURE_MEASUREMENT.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries section 2.42a: how a fat exe, which ships no tuner, mints its sidecar's runtime
-section on its first start, and where that sidecar lives. The benchmark rig, the tune gate and the
-instrumentation rails stay in `ARCHITECTURE_MEASUREMENT.md`.
+Companion to `ARCHITECTURE_MEASUREMENT.md`; a section is cited by its anchor. This document
+carries one section, `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`: how a fat exe,
+which ships no tuner, mints its sidecar's runtime section on its first start, and where that
+sidecar lives. The benchmark rig, the tune gate and the instrumentation rails stay in
+`ARCHITECTURE_MEASUREMENT.md`.
 
-### 2.42a A fat exe races its runtime section at first start {#fat-first-start}
+### A fat exe races its runtime section at first start {#fat-first-start}
 
 A fat exe (`DAS_TUNE_MODE=fat`, `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md` sec.11) ships
 its kernels baked per CPU class and carries no tuner and no policy rail, so nothing would ever

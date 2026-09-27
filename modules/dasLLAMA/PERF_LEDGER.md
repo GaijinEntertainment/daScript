@@ -11,6 +11,60 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-26) - the StyleTTS2 and Pocket seats ride the Vulkan TTS driver
+  (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`): the kitten and kokoro families' seven
+  seats and the Pocket codec and frames seats on the Vulkan tower's knob, the front end on the
+  f32-exact tile, the decoder and generator convs on the f16 tile, every slab through the shared
+  host writer.** Box: the pod - the RunPod RTX PRO 4500 Blackwell, Linux - every das figure
+  `-jit` on this tree under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16
+  DAS_LOG_LEVEL=info`, no other overrides unless named, one process at a time. The served rows:
+  the first 20 sentences of the g2p corpus through `./bin/daslang -jit
+  modules/dasLLAMA/harness/tts_synth.das -- --model <gguf> --voice <voice> --out <dir> --limit
+  20`, the mean generation wall a sentence over the 20 with the first sentence's wall apart (it
+  pays the device bring-up and the slab builds; of the spread only the min named below is in the
+  record, the rest is the run's log). Pocket q8 (`pocket-tts-en-q8.gguf`, alba): 132 ms a
+  sentence, the first 641, a steady sentence about 99 - the prompt 27 ms of it on the CPU chain
+  (`followup_vulkan.md` 107), the backbone 62, the codec 10. kokoro (`kokoro-82m.gguf`): 98 ms,
+  the first 785, min 36, the steady sentences about 62, against the torch CUDA reference row of
+  52 ms a sentence (`external`: `harness/tts_ref_bench.py --device cuda --models
+  kokoro-82m:af_heart --limit 20` on the pod under
+  `ARCHITECTURE_MEASUREMENT.md#the-tts-reference-instrument`'s recipe; the package versions that
+  run printed are not in this branch's record). kitten-nano (`kitten-nano.gguf`): 54 ms against
+  its onnxruntime CUDA EP reference row of 132 (`external`: the same script with `--device cuda
+  --models kitten-nano`, onnxruntime-gpu with the cu12 pip libraries, providers CUDA then CPU);
+  kitten-mini 302 against 4166 (the mini graph runs mostly off the provider). The LSTM recurrence's share,
+  from the same run's per-role GPU ledger under `DASLLAMA_GPU_PROF=1`: a `TtsLstmDir` step 14 us
+  at kokoro's H = 256, 22 ms of a kokoro sentence (`followup_vulkan.md` 106). The device
+  bring-up - the process's first seat call, reported under the info log - 254..257 ms at the 64
+  MB upload staging chunk against 322..349 at 256 MB, `direction-grade` (a process a chunk
+  size): the pinned staging buffer costs 0.4 ms a MB (101 ms at 256 MB, 26 at 64) and a chunk
+  past 64 MB buys no rate - the Pocket frames slab's 322 MB uploads in 27 ms on either, a 1.3 GB
+  Llama file's resident upload reads 129 and 156 ms at 64 MB against 196 and 127 at 256 (two runs
+  a size, the run-to-run noise: `benchmarks/lcpp_bench.das -p 32 -n 0 -r 1`,
+  `Llama-3.2-1B-Instruct-Q8_0`), the Pocket first sentence 708 -> 641 ms with the chunk. The
+  attach costs, same box and flags, `direction-grade` (two commits a pair): a seat's scratch is
+  sized a quarter past the call's need, so a longer sentence after a shorter one reuses it -
+  kokoro's scratch builds over the 20 sentences 9 -> 6, the second sentence's decoder 154 -> 23
+  ms; each seat's host readback buffer is sized to the rows it copies out, never the widest slot
+  - the Pocket codec's 765 MB -> 0.6 MB for a wave, the kokoro decoder's up to 717 MB before; the
+  Pocket frames slab (322 MB) builds in 70 ms against 201 with the q8 rows dequantized over the
+  job pool. What the seats hold: the Pocket frames slab 322 MB, the kokoro decoder's scratch past
+  3 GB at its widest sentence, the Pocket codec's one-shot column slot about 4 GB at the 512-frame
+  cap (`followup_vulkan.md` 108, 109).
+- **LANDED (2026-09-26) - three TTS parity bars widened to cover the pod's x64 CPU chain beside
+  the M5 Max's.** Every reading `-jit` through `tests/run.das -- --area tts` on the named box: the
+  pod (the RunPod RTX PRO 4500, Linux; its x64 CPU chain is the arm under compare) and the M5 Max
+  (Metal). `SOURCE_BAR` (`tests/_tts_parity.das`) 5e-3, absolute - the harmonic source against
+  the oracle's, where the phase past 1e5 radians turns a ulp of an increment into radians: the M5
+  Max reads under 1e-4, the pod's x64 chain 2.5e-3 on kitten's ONNX law. `GPU_CODEC_SERVED_BAR`
+  (`tests/test_tts_pocket.das`) 2e-1 - the codec seat on the served planes against each file's
+  own CPU chain: the M5 Max 1.3e-2 / 7.7e-3 (q8 / kq), the pod 9.2e-2 / 1.5e-1, all of it the
+  CPU's Q8_0 activation blocks of the first layer's rows while the tower sits at 3e-6 of the CPU
+  f32 chain on either box. `GPU_FRAME_FREE_BAR` (the same file) 5e-3 - the frames seat
+  free-running on the f32 lane against the CPU chain's free run on the same seed: the M5 Max
+  1.5e-4 and 1.1e-4 on the two stage cases, the pod 7e-5 and 1.8e-3 (lj028's 150 frames compound
+  the f16 feed's rounding); the 1.8e-3 reading predates the fixes this arc landed after it, and
+  the bar stands over both readings.
 - **LANDED (2026-09-26) - the sampler is a candidate list when top-k is set
   (`ARCHITECTURE_ENGINE.md`, `dasllama_sampling.das`): one pass over the row selects the k
   largest logits into a heap, and the temperature, softmax, nucleus and min-p cuts and the draw run
@@ -26,7 +80,7 @@ what it costs today and what the fix would change.
   before the change: sampled within 5% of greedy. `lcpp_bench` carries no sampler flag (its
   `--mtp-temp` sets a temperature alone), so no board row holds the sampled rate.
 - **LANDED (2026-09-25) - the Pocket TTS frame loop rides the Metal tower as the family's second
-  seat (`ARCHITECTURE_GPU_TOWER.md` sec.2.2aw): the backbone step and the flow head for every
+  seat (`ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`): the backbone step and the flow head for every
   frame, eight frames a command buffer over a per-voice device K/V slot, the EOS rule on the host
   between batches, the q8 backbone on the decode GEMV, the head's GEMVs carrying their norm and
   activations, the attention row a threadgroup a head with its scores staged.** The bare q8
@@ -67,15 +121,14 @@ what it costs today and what the fix would change.
   lane's latents, conditioning rows and EOS logits at 2e-6 rel-rms, the cell asserting the
   tower's encodes rose one a batch, and its free run - the loop's own noise, every frame fed its
   own output - at 1.5e-4 and 1.1e-4 on the two stage cases against the CPU chain's free run on
-  the same seed (`GPU_FRAME_FREE_BAR` 1e-3, the M5 Max); on the served lanes (`test_pocket_frames_metal_served`, which
+  the same seed (`GPU_FRAME_FREE_BAR`, the M5 Max; the bar's value since the pod's reading, and that reading, are the widened-bars entry above); on the served lanes (`test_pocket_frames_metal_served`, which
   logs both distances) the tower reads nearer the f32 oracle than the CPU chain does - the q8
   file's latents 0.012 against the CPU chain's 0.025, the kq file's 0.10 against 0.11 - since the
   CPU quantizes the activations it feeds a q8 or K-quant plane and the tower feeds them f32. Quality,
   `harness/tts_rig.py` on the 200-sentence corpus against the codec-seat rows: q8 4.23 / 4.364 -> 4.18 / 4.364, kq 4.04 / 4.333 -> 3.91 / 4.325, stuart-kq 3.23 / 4.117 -> 3.36 / 4.136 (WER / UTMOS, a word or two of the 2201 either way, the UTMOS within a hundredth). The
   levers left are `followup_metal.md` sec.27.
 
-- **LANDED (2026-09-25) - the Pocket TTS codec rides the Metal tower (`ARCHITECTURE_GPU_TOWER.md`
-  sec.2.2av): a chunk's latents up, its samples back, one command buffer, the CPU's windowed codec
+- **LANDED (2026-09-25) - the Pocket TTS codec rides the Metal tower (`ARCHITECTURE_GPU_TOWER.md#tower-pocket-codec`): a chunk's latents up, its samples back, one command buffer, the CPU's windowed codec
   run as one shot over the chunk on the f32-exact GEMM stamps, the K-quant transformer linears
   dequantized into the slab so the small form serves too.** Box: the M5 Max, every das figure
   `-jit` on this tree with `DAS_TUNE_MANIFEST=performance/m5.tune.json` (its runtime section
@@ -114,7 +167,7 @@ what it costs today and what the fix would change.
   equal). The frames seat is the entry above.
 
 - **LANDED (2026-09-24) - the whole StyleTTS2 synthesis rides the Metal tower
-  (`ARCHITECTURE_GPU_TOWER.md` sec.2.2au): seven seats from PL-BERT to the inverse STFT, the front
+  (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`): seven seats from PL-BERT to the inverse STFT, the front
   end on the f32-exact GEMM stamp and an f32 attention row kernel so the durations round as the
   CPU's, the harmonic source the CPU's operation for operation, the decoder through the
   generator and the inverse STFT as one command buffer.** Box: the M5 Max, every das figure `-jit`
@@ -126,7 +179,7 @@ what it costs today and what the fix would change.
   pays the slab build and the pipeline warm-up), the mean generation wall a sentence with its min
   and max over the 20, and the real-time factor of the run; the CPU arm is a second process under
   `DASLLAMA_METAL_TOWER=0` (`direction-grade`). The reference column is `harness/tts_ref_bench.py`
-  (`ARCHITECTURE_MEASUREMENT.md` sec.2.20a;
+  (`ARCHITECTURE_MEASUREMENT.md#the-tts-reference-instrument`;
   `~/Work/tts-ab/g2p/.venv-g2p/bin/python harness/tts_ref_bench.py --device mps --threads 8
   --limit 20`, and `--device cpu --models kokoro-82m:af_heart` for the torch CPU row; torch
   2.13.0, kokoro 0.9.4, kittentts 0.8.1, onnxruntime 1.29.0, `HF_HOME=~/Work/tts-ab/g2p/.hf`):
@@ -162,7 +215,7 @@ what it costs today and what the fix would change.
   cost and the f32-exact decoder question are `followup_metal.md` sec.27.
 
 - **LANDED (2026-09-24) - the FastConformer Metal chain's rel-pos attention rides the f32 GEMM
-  builder per head (`ARCHITECTURE_GPU_TOWER.md` sec.2.2x), where the per-row kernel it replaced
+  builder per head (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`), where the per-row kernel it replaced
   was most of the encode and lost to the CPU q8 lane past a minute of audio.** Box: the M5 Max,
   every figure below `-jit` on this tree with `DAS_TUNE_MANIFEST=performance/m5.tune.json`
   (its runtime section applied, the kernel winners on their fallback bodies - the sidecar
@@ -197,13 +250,13 @@ what it costs today and what the fix would change.
   distance: on gb1 the q8 lane flips 16 of 655 TDT durations against the f32 planes, token
   ids and text exact.
 - **The resident plan and upload read one plane list (`resident_planes`,
-  `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n).** The list is built twice per load - once
+  `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`).** The list is built twice per load - once
   for the plan's byte sum, once for the upload's reserve - and holds one 24-byte record per
   device plane: about 25 KB on a 94-layer model, a few microseconds each, against a load that
   moves gigabytes. Cost today: nothing measurable; the fix, if the list ever grows per-token
   readers, is to build it once at load and keep it on the resident state.
 - **LANDED (2026-09-18) - a K/V mirror region per stream trades context for concurrency, not
-  for throughput (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2n).** The resident driver's
+  for throughput (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`).** The resident driver's
   mirror is one allocation a side; `set_gpu_resident_regions` splits it, and the residency plan
   pays for the regions out of each stream's context. gemma-4-E2B-it-Q4_K_M.gguf served by
   `daslang -jit utils/dasllama-server/main.das -- --config <toml>` (`backend = "gpu"`, the vulkan
@@ -223,7 +276,7 @@ what it costs today and what the fix would change.
   on the per-op tier at tg128 34.0 tok/s (the server's in-process bench), its paged sessions
   handed to the CPU on every step.
 - **LANDED (2026-09-18) - the StyleTTS2 harmonic source streams in frame windows
-  (`ARCHITECTURE_TTS_MEMORY.md` sec.2.53).** The source held four tables of samples times
+  (`ARCHITECTURE_TTS_MEMORY.md#tts-source-stream`).** The source held four tables of samples times
   harmonics for the whole chunk - the cycles, the upsampled phase, the noise draw and the sine
   rows, 6.2 MB each for a 7 s sentence and 21.5 MB each at 25 s - to hand `linear_rows` nine
   values per sample. Only the cumulative phase sum reaches across the chunk, and it runs at frame
@@ -239,7 +292,7 @@ what it costs today and what the fix would change.
   bounds; the generator itself cannot window, because every Snake block's AdaIN takes its
   statistics over the whole stream.
 - **LANDED (2026-09-18) - the StyleTTS2 generator runs on six buffers, the idle release covers
-  its carrier, and the chunk cap is a knob (`ARCHITECTURE_TTS_MEMORY.md` sec.2.51, 2.52).** A
+  its carrier, and the chunk cap is a knob (`ARCHITECTURE_TTS_MEMORY.md#tts-generator-buffers`).** A
   Kitten or Kokoro say holds its memory in the iSTFTNet generator's `[t][c]` rows, every buffer
   the stage's whole stream and the count of them live at once the footprint: nine same-size
   fields, three of which held values dead by the time the next was written. Six fields now
@@ -264,7 +317,7 @@ what it costs today and what the fix would change.
   row 154).
 
 - **LANDED (2026-09-18) - the Pocket codec streams in windows of 16 latent frames
-  (`ARCHITECTURE_POCKET.md` sec.2.46).** The codec's activations, about 20 MB per second of
+  (`ARCHITECTURE_POCKET.md#pocket-codec-stream`).** The codec's activations, about 20 MB per second of
   audio across the chain's ping-pong rows, were the say's and the clone's working set: 116 MB
   for a 5.7 s chunk, 233 MB for an 11 s clip (das heap counters, the English q8 file, M5 Max);
   at 16 frames they are 41 MB whatever the run's length, 21 MB at 8. On one thread (26 runs, cv
@@ -504,7 +557,7 @@ what it costs today and what the fix would change.
   every other stamp keeps 64.** The cm2 tile template's k step (`BK`) is a stamp constant: the s
   and e stamps (the expert schedule's 32-row and 128-row columns, `CM2_TC_E` in the class ladders)
   of iq2xxs, iq2xs, iq2s, iq3xxs and iq3s run 32-deep, every other stamp 64
-  (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l carries the tile readings behind the split). On the
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default` carries the tile readings behind the split). On the
   RTX 5060 Ti (`benchmarks/lcpp_bench.das -jit --for-debug-purposes -r 3 -p 512 -n 128 -t 16`
   under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU_MIN_CTX=2048`, the
   x64-gen backend, untuned-stamped; the arms' rates sit in `followup_vulkan.md` item 45):
@@ -520,7 +573,7 @@ what it costs today and what the fix would change.
   The split pick (since folded into `cm2_gemm_pick`) still lets the dispatch group (a role plus the neighbours it co-runs beside)
   decide whether k splits, but the chunk count is the SM count over the role's own workgroups,
   since a split role serializes its group through the one scratch plane anyway
-  (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l). On a Linux RTX 5080 (84 SMs, driver 580.173,
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`). On a Linux RTX 5080 (84 SMs, driver 580.173,
   the scalar decode arm, `-t 8`, the bench form of the row above at `-n 32`) the 35B's shared
   expert gate and up move from two chunks of 32 workgroups to four of 64: pp512 1.019x and
   1.014x of the two-chunk arm's two reads, tg32 0.99x and 1.00x; the profiled window's
@@ -539,7 +592,7 @@ what it costs today and what the fix would change.
   cold:k6`'s flush row: 43.0 us against 26.7 warm; 3 us on the RTX 5060 Ti), and four copies run
   the m tiles 10-14% faster hot there (`harness/vk_gemm_probe.das -- cm2:k6` gate m 57.3 -> 64.5
   TFLOP/s, q/wo m 51.1 -> 55.5; the l and s tiles' sweep sits in `followup_vulkan.md` item 45,
-  `ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2l). Pod (the bench form of the two rows above at `-n
+  `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`). Pod (the bench form of the two rows above at `-n
   32`, `-t 8`, the scalar decode arm): pp512 1.021x of the eight-copy form, tg32 1.007x; the
   32-deep expert stamps at 2 copies read below their eight-copy form with e_gate / e_up longer, at
   8 as before. RTX 5060 Ti (`-r 5`, `-t 16`, same session): the 35B twin arm within noise of the
@@ -548,7 +601,7 @@ what it costs today and what the fix would change.
 
 - **LANDED (2026-09-10) - the iq2xxs and iq2s scalar decode callbacks in pair form.** The callback
   derives every shared read from the pair's first element and selects the element last
-  (`ARCHITECTURE_GPU_VULKAN_GEMM.md` sec.2.2k), so the driver's two-wide callback commons the
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`), so the driver's two-wide callback commons the
   pair's work. Linux RTX 5080 (the scalar decode arm, the bench form of the rows above): the skewed
   expert schedule's e+s ladder `moesk:iq2xxs` 0.357 -> 0.316 ms (gate/up) and 0.360 -> 0.320 (down),
   `moesk:iq2s` 0.428 -> 0.380 and 0.484 -> 0.432 (`harness/vk_gemm_probe.das`); the 35B pp512
@@ -2181,7 +2234,7 @@ process, so every bullet is [direction-grade - two processes] unless it says one
   on the bench's synthetic ids, where the drafts are accepted as often as noise and the round pays
   four draft passes (each a NextN layer plus the 248k-row classifier) and a double-width verify for
   them. The arm proves the joint verify at four streams; its served rate is the ruler's question
-  (sec.2.45 of the measurement doc) and the batched draft pass - the four drafts as rows of one
+  (`ARCHITECTURE_MEASUREMENT.md#ruler-records` of the measurement doc) and the batched draft pass - the four drafts as rows of one
   dispatch - is the lever the ledger row names [direction-grade - synthetic ids, two processes].
 - **The sidecar reaches the batched row:** the 1B's tg128@4 read 840 under the shipped class profile
   (`DASLLAMA_ALLOW_UNTUNED=1`) and 944 under the box's fresh mint in the same tree - the runtime knobs
@@ -2254,12 +2307,12 @@ processes throughout].
   reference's plain row (1.10); Qwen3.6-27B-MTP plain 52.2 +/- 2.4 against 38.6 (1.35), spec
   47.5 +/- 5.8 (cv 12%) - 0.91 of plain against 0.89 before, the bar too wide to rank the two
   draft forms on this carrier; on synthetic ids every accepted draft is noise, so the spec row's
-  ceiling is the plain row and the served rate is the ruler's question (sec.2.45 of the
+  ceiling is the plain row and the served rate is the ruler's question (`ARCHITECTURE_MEASUREMENT.md#ruler-records` of the
   measurement doc) [direction-grade - two processes].
 
 ### From the server-MTP arc, the batched pre-encoded step (2026-09-21)
 
-- **What the pre-encoded step holds (`ARCHITECTURE_GPU_MTP_DECODE.md` sec.2.38a).** A pre-encoded
+- **What the pre-encoded step holds (`ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode`).** A pre-encoded
   batched step holds its own set of `batch_step_build`'s pooled buffers beside the step in flight, so
   the pool's peak grows by one step's set. The bytes are `batch_step_build`'s own sizing at four rows
   (the server's default stream count, the fixed-row forms' four-row pad) over each carrier's loaded
@@ -2515,7 +2568,7 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   one slot-mapped dispatch a plane) is already the shape the reference's Vulkan loops per token.
 - **The routed block's rows form (the router's columns, the per-row top-k over the shared record
   base, the expert GEMVs as the one-row leaves over `nrows x k` regions, the act over every slot,
-  the unfolded down, the combine per row; `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao), cm2 /
+  the unfolded down, the combine per row; `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`), cm2 /
   KHR / llama.cpp at tg128@4, three reps ours:** gpt-oss-20b 436 +/- 7 / 434 +/- 8 / 234 (1.86);
   Qwen3-30B-A3B Q4_K_M 460 +/- 14 / 432 +/- 30 / 312 (1.47); Qwen3-30B-A3B UD-IQ2_XXS 348 +/- 5 /
   347 +/- 10 / 196 (1.77); gemma-4-26B-A4B Q4_K_M 363 +/- 4 / 366 +/- 5 / 264 (1.38);
@@ -2573,7 +2626,7 @@ section (the pod: E2B 198.4 -> 198.7, E4B 112.7 -> 112.5; the 5060 Ti: 122.2 -> 
 - **The router's columns and the fused branch's rows form (commit 00ac50e0b: `RouterGemvT` reads
   each row once over every column - the pre-step projection had streamed its 55 MB plane once a
   row - and the branch takes the fused act + requant + proj over the columns where the one-row
-  branch fuses, `ARCHITECTURE_GPU_VULKAN_NROW.md` sec.2.2ao):** the pod E2B 585.0 +/- 0.2 / 185.5
+  branch fuses, `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`):** the pod E2B 585.0 +/- 0.2 / 185.5
   (3.15), E4B 363.4 +/- 0.8 / 360.2 (1.01); the 5060 Ti E2B 394.9 +/- 0.3 / 113.1 (3.49), E4B 234.7
   +/- 0.6 / 213.0 (1.10). Against llama.cpp CUDA on the 5060 Ti (the same checkout built with CUDA
   13.4): E2B 449.7 (0.88), E4B 247.6 (0.95). The E4B's four-row step, us, pod / 5060 Ti: pleproj
@@ -2657,7 +2710,7 @@ rank the shapes and bound them from above; the reference's tg steps launch as on
   re-reads and still loses on this card, so the lever stays at its off default; the E-series' down group (1616 us
   a step against the reference's 1187) waits on another form.
 - **The device argmax pick (`ClsArgmaxPart` + `ClsArgmaxFin` after the epilogue, the picks-only transfer twin;
-  `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` sec.2.2an), tg128@4 before -> after / CUDA:** E2B 578.3 -> 630.0 +/- 0.7 (745.5:
+  `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), tg128@4 before -> after / CUDA:** E2B 578.3 -> 630.0 +/- 0.7 (745.5:
   0.78 -> 0.85), E4B 362.3 -> 382.0 +/- 0.1 (440.2: 0.87), gpt-oss 461.1 -> 476.8 +/- 4.6 (523.3: 0.91), Llama-3.2-1B
   1432.8 -> 1577.4 +/- 3.9, Qwen3-30B-A3B 450.2 -> 467.7 +/- 21.9 (within the spread); flat E2B 198.5 -> 198.8, E4B 112.5 ->
   112.4, Llama-1B 465.0 -> 464.1, gpt-oss 209.2 -> 207.8 (the two passes over a 201k vocab, on a step the flat row still
@@ -2824,7 +2877,7 @@ the two arms, not board figures; the tokenizer rows are `lcpp_bench --tok`.
   took back one to two points; stamping the merge as a generic per backend with the push/pop
   helpers left in `dasllama_bpe.das` took the M5's 1 KB row to 0.98 and left 4 to 16 KB at 0.93
   to 0.96. The SPM heap stays its own body, in the partition of the encode that runs it
-  (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2a); the BPE side keeps the unshared form.
+  (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`); the BPE side keeps the unshared form.
 
 ### From the Vulkan low-format N-row arc (2026-09-23)
 
@@ -2977,7 +3030,7 @@ WHISPER_CPP_MODELS=/workspace/models`, `DASLLAMA_COOPMAT` unset (cm2) and `DAS_T
 (the untuned tier's fallback bodies); the `vk` arm `DASLLAMA_GPU=1` (the block loops on the Vulkan
 tower driver, the cell's engage line reading encodes +N over 3 transcriptions, declines +0, and
 the row stamped `vulkan` - the bench stamps `vulkan` only when the drivers served every clip,
-`ARCHITECTURE_MEASUREMENT.md` sec.2.20), the `cpu` arm `DASLLAMA_GPU=0` (the driver declining `device` on every
+`ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs`), the `cpu` arm `DASLLAMA_GPU=0` (the driver declining `device` on every
 encode, the CPU q8 chain, the decoder on the CPU too - so only the encode column is a tower-vs-tower
 reading; on the `vk` arm the decoder of the LLM-backed families rides the resident driver, which is
 most of the wall's drop on E2B and canary) [direction-grade - two processes]. A wall is the clip's
