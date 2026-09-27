@@ -4,24 +4,25 @@
 doc: `ARCHITECTURE_RUNTIME.md`. Planned work: `followup_general.md`.
 
 A function calls another when its body names that function in a call, a call written inside a
-block or lambda literal included; the function that encloses the literal is the caller.
+block or lambda literal included; the function that encloses the literal is the caller. A
+function reaches another when it calls it, or calls a function that reaches it. A serving step
+is one unit of served work the runtime re-enters a path for: a token, a prefill quantum (one
+batch of prompt tokens the prefill path processes in a single pass), one encoded media input (an
+image, a video frame, an audio chunk), or one synthesized speech chunk or frame.
 
 **Every kernel dispatch (the host function that records it), loop or call path a diff adds that
-the runtime re-enters once per serving step - once per unit of output the served path produces:
-a token, a prefill quantum (one batch of prompt tokens the prefill path processes in a single
-pass), a media encode (an image, a video frame, an audio chunk), a synthesized chunk or frame -
-is reached by an annotated region entry: `[hot_path]`, any of the `[no_alloc]` /
-`[no_env]` / `[no_io]` contracts, or `[cold_path]` on the guarded, rarely-taken function that is
-the path's only entry.** The region entry is the OUTERMOST such function - interior means every
-caller is itself re-entered that way, so a function reached only through a registered function
-value is an entry (`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
+the runtime re-enters once per serving step is, or is reached by, an annotated region entry:
+`[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts, or `[cold_path]` on the
+guarded, rarely-taken function that is the path's only entry.** The region entry is the
+OUTERMOST such function - interior means every caller is itself re-entered that way, so a
+function reached only through a registered function value is an entry
+(`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
 
-**A `[cold_path]` on a function that each serving step reaches on every call it serves is a
-defect - split
-the rarely-taken part (a rebuild, a first-use allocation, a log) into its own `[cold_path]`
-function behind the guard that keeps it rare, and leave the function every serving step reaches
-unmarked.** The annotation is a promise about how often the function runs, and the allocation
-lint stops walking at it.
+**A `[cold_path]` on a function a serving step runs with no guard that skips it on most steps
+is a defect - split the rarely-taken part (a rebuild, a first-use allocation, a log) into its
+own `[cold_path]` function behind the guard that keeps it rare, and leave the function every
+serving step reaches unmarked.** The annotation is a promise about how often the function runs,
+and the allocation lint stops walking at it.
 
 **A diff that renames a function carrying `[hot_path]`, `[cold_path]` or a `[no_alloc]` /
 `[no_env]` / `[no_io]` contract, or inserts a def textually above it in the file, keeps that
@@ -38,9 +39,10 @@ only from a load, stage, bake, or convert path - it is no region entry; it carri
 or nothing.**
 
 **A function a diff adds or changes under this module's `tests/`, `harness/`, `benchmarks/` or
-`performance/` that is not a `[test]` and calls a region entry carries `[cold_path]` if no
-other such non-`[test]` function calls it, and no annotation otherwise.**
+`performance/` that is not a `[test]` and reaches a region entry (the outermost function
+re-entered each serving step) carries `[cold_path]` if no other such non-`[test]` function
+reaches it, and no annotation otherwise.**
 
-**A diff that adds a non-`[test]` caller above a `[cold_path]` function under this module's
-`tests/`, `harness/`, `benchmarks/` or `performance/` removes that function's `[cold_path]` in the
-same change.**
+**A diff that adds a non-`[test]` function under this module's `tests/`, `harness/`,
+`benchmarks/` or `performance/` that reaches a `[cold_path]` function there removes that
+function's `[cold_path]` in the same change.**

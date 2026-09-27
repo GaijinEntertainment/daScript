@@ -177,7 +177,7 @@ decision 8). The `mad` builtin lowers to the explicit `Fma`, which the mark does
 Vulkan's precision rules let a driver evaluate `Fma` as a multiply then an add, so a kernel whose
 correction step depends on a fused multiply-add does not rest it on `mad`.
 
-## 4. Test architecture - "every emitted instruction has a test"
+## 4. Test architecture - "every emitted instruction has a test" {#test-architecture}
 
 The behavioral layers, then the enforcement gates (all in main-tree `tests/spirv/` except the
 real-driver layer, which lives in dasVulkan):

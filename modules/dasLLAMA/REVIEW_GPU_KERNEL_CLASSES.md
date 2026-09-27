@@ -10,35 +10,35 @@ shifts a shared field to a different binding number, is a defect - even where on
 that field; a field a `@template_gate` omits on one twin is a shared field still, and keeps the
 number the other twin binds it at.**
 
-**A kernel class whose compiled body differs from a sibling's only on an axis one value fixes - a
-template constant, a typedef, which base shell's method it inherits, or a run-time count of live
-entries inside a fixed extent (a column count, a row count) - is a defect: such twins stamp one
-`class template`, derive from one base shell, or - where the axis is a run-time count - share one
-class whose body reads the count from its kargs.** A base shell is the dispatch-less base class
+**Two kernel classes whose compiled bodies differ only on an axis one value fixes - a template
+constant, a typedef, which base shell's method it inherits, or a run-time count of live entries
+inside a fixed extent (a column count, a row count) - stamp one `class template`, derive from one
+base shell, or - where the axis is a run-time count - are one class whose body reads the count
+from its kargs; two such classes written as separate class bodies are a defect.** A base shell is the dispatch-less base class
 whose methods the emitter splices flat into each deriving class; two classes with bodies of their
 own that share a base shell's method are not twins. Body divergence is carried by a
 `@template_constant`, by an overridden method spliced flat at emission, or by a run-time value
 the builder passes.
 
 **A diff that adds or changes two kernel bodies that compile to separate shader modules and that
-any cell under `modules/dasLLAMA/tests/` holds bit for bit against each other spells as `mad` in
-both, on the path the compare covers, every multiply that feeds an add and that is not one
-product both bodies take from one shared method or function text.** A driver decides per shader
+any cell under `modules/dasLLAMA/tests/` holds bit for bit against each other spells as `mad`,
+on the path the compare covers, every multiply that feeds an add - shared method or function
+text included.** A driver decides per shader
 module whether to contract a multiply-add into one fma, so two bodies spelled alike round a ulp
 apart.
 
 **A value that no model file and no request can change - a tile width, a math constant, a cap
-fixed by the model architecture the class serves, which shows as one value every production
-dispatch site (a site outside `tests/`, `harness/`, `benchmarks/` and `performance/`) passes
-identically - never reaches a kernel class through a per-dispatch argument channel (a
+fixed by the model architecture the class serves - which every dispatch site under `dasllama/`
+passes identically, never reaches a kernel class through a per-dispatch argument channel (a
 uniform, a `@push_constant` field, a kargs field, an `@off` bind offset): stamp it into the class
 as a `@template_constant` where the class's stamps differ on it, or write it as a literal or a
 module `let` in the body - never a module `var`.**
 
 **A stamp - a kernel class that compiles to a shader module, standalone, a template instance or
-a base-shell derivative - sets only `@template_constant`s its own body resolves at compile time: a
-`static_if` arm, a `@template_gate`, a value select, an array extent.** A constant no such site
-reads is a defect - move it to the template whose body reads it, or make the body read it.
+a base-shell derivative - sets only `@template_constant`s its own compiled body reads: a
+`static_if` arm, a `@template_gate`, an expression, a loop bound, an array extent.** A constant
+no such site reads is a defect - move it to the template whose body reads it, or make the body
+read it.
 
 **A diff that changes an existing stamp's generated source - through the class's own body, the
 template or base shell it stamps, or a helper its body splices - carries in the PR body, for each
@@ -68,10 +68,9 @@ after arming - a binding filled before the first encode and never written again 
 
 **`@role = "weight"` on per-encode data the kernel reads - a pooled buffer the host refills
 each encode - is a defect; a per-encode field either omits `@role` or names the access its body
-performs.** On both lenses `weight` is a declared claim the lens only cross-checks - it refuses
-a body that writes the binding and admits one that never reads it, while the hazard masks derive
-from the body alone - so a per-encode buffer under `weight` passes the lens with its access
-unchecked.
+performs.** The Metal builder records no hazard for a `weight` field, so nothing orders the
+kernel's read after the encode that refilled the buffer; neither lens refuses a `weight` field
+the body only reads.
 
 **A diff that adds a GPU kernel class under `dasllama/` - a `[metal_kernel]` def, a
 `[vk_dispatch]` declaration, or a new instance of a template carrying one - that a census row of

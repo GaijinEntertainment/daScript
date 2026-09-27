@@ -18,16 +18,16 @@ selection or the precision it computes a step at, applies the `tests/` subfolder
 
 **A diff touching a tower driver (`dasllama/dasllama_metal_tower.das`,
 `dasllama/dasllama_vulkan_tower.das`, `dasllama/dasllama_vulkan_tts.das`), a kernel class or
-builder a tower dispatches, a
-kernel-argument struct the Metal tower fills for a dispatch (`dasllama/dasllama_metal_prefill.das`),
-the `[metal_dispatch]` emission those builders are generated from (`dasllama/dasllama_metal_lens.das`),
-a module-level `g_tw_*` seat outside `dasllama/dasllama_metal_tower.das` and
-`dasllama/dasllama_vulkan_tower.das`, an ASR decoder (`dasllama/dasllama_metal_asr_dec.das`,
+builder a tower dispatches, a kernel-argument struct the Metal tower fills for a dispatch
+(`dasllama/dasllama_metal_prefill.das`), the `[metal_dispatch]` emission those builders are
+generated from (`dasllama/dasllama_metal_lens.das`), a module-level `g_tw_*` seat outside those
+three driver files, an ASR decoder (`dasllama/dasllama_metal_asr_dec.das`,
 `dasllama/dasllama_vulkan_asr_dec.das`), a kernel class an ASR decoder dispatches or a builder it
 borrows, `dasllama/dasllama_metal_common.das`, a `register_*` function that
 `dasllama_metal_tower_register`, `dasllama_vulkan_tower_register` or `dasllama_vulkan_tts_register`
-calls with a hook, or a site that calls the hook such a function stores - applies
-`REVIEW_TOWER.md` too.**
+calls with a hook - a stage seat (a hook slot the CPU chain calls to hand a model family's encoder
+or synthesis stage to the GPU), a drop hook, or a reload or weights-epoch listener - or a site
+that calls the hook such a function stores - applies `REVIEW_TOWER.md` too.**
 
 **A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_gpu_math.das`,
 `dasllama/dasllama_gpu_resident.das`, `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a
@@ -134,10 +134,11 @@ spelling absent from `DEVICE_CREATION_CALLS`, weakens it.**
 (`dasllama/`) other than the one that owns its kernel class** - it goes through that file's
 own init/release pair.
 
-**A string-typed decline reason in a GPU driver file - `dasllama/dasllama_metal_*.das`,
-`dasllama/dasllama_*vulkan*.das` and `dasllama/dasllama_gpu_resident.das` - is a defect - a decline
-reason is an enum value, one enum per driver: in `dasllama/dasllama_metal_shapes.das` for Metal,
-and for Vulkan, in the driver's own file.**
+**A decline reason in a GPU driver file - `dasllama/dasllama_metal_*.das`,
+`dasllama/dasllama_*vulkan*.das` and `dasllama/dasllama_gpu_resident.das` - is a value of the
+driver's decline enum, one enum per driver: in `dasllama/dasllama_metal_shapes.das` for Metal,
+and for Vulkan, in the driver's own file; a reason held as a string literal, or as a string built
+anywhere but in the argument of the `note` / `note_decline` call, is a defect.**
 
 **A decline in a GPU driver file - `dasllama/dasllama_metal_*.das`, `dasllama/dasllama_*vulkan*.das`
 and `dasllama/dasllama_gpu_resident.das` - is counted only through a `DeclineCounter`
@@ -168,18 +169,15 @@ same path faster or slower is not such a change.
 
 **A change that can alter what a GPU decode or prefill call on a session computes or selects
 ships GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside
-both, for each of the three that the changed call serves.** That is anything such a call
-executes or that selects what it executes - a driver, a kernel class it dispatches,
-that class's builder, a servability gate, a race that picks which kernel serves, a forwarder
-default, a weight-region or residency path, the tier forwarders and the Vulkan tier-dispatch
-seams (`dasllama/dasllama_vulkan_seams.das`) the call routes through.
-
-**A change that can alter what a GPU decode or prefill call on a session computes or selects and
-ships no parity runs names both compares in the PR body: its emitted kernels byte-identical
-before and after - the `*_msl` globals or the AIR (Metal's compiled shader IR) they build into,
-the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes - and the host's stamp and dispatch selection
-unchanged on every input.** Only both compares together show the change cannot alter what the
-path computes or selects.
+both, for each of the three that the changed call serves - or names both compares in the PR
+body: its emitted kernels byte-identical before and after (the `*_msl` globals or the AIR,
+Metal's compiled shader IR, they build into; the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes) and
+the host's stamp and dispatch selection unchanged on every input.** Such a change is anything the
+call executes or that selects what it executes - a driver, a kernel class it dispatches, that
+class's builder, a servability gate, a race that picks which kernel serves, a forwarder default,
+a weight-region or residency path, the tier forwarders and the Vulkan tier-dispatch seams
+(`dasllama/dasllama_vulkan_seams.das`) the call routes through; only both compares together show
+the change cannot alter what the path computes or selects.
 
 **A diff that adds a call site handing a whole GPU decode or prefill call the device served before
 the diff to the CPU path is a defect - it ships the device path in the same change.** A call that
@@ -247,13 +245,16 @@ or tower model, a TTS voice), gets a model-swap discharge in the same change tha
 the unload or reload of that model runs that returns the variable to its no-model value.** The
 discharge paths: for a Vulkan driver file, a reset `moe_gpu_model_marks_restore_` or
 `moe_gpu_drop_model_` runs - in its body, or in a listener the file registers with
-`register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`), which the drop runs; for every
-Metal driver file, the tower driver included, `register_reload_prep`
-(`dasllama/dasllama_metal_common.das`). A TTS model's reload runs neither reset but
-`bump_weights_epoch` (`dasllama/dasllama_common.das`), so a global built from a TTS model also
-discharges in a listener the file registers with `register_weights_epoch_listener`. A global with
-no discharge survives a model swap and routes the next model's dispatches at the old model's
-planes.
+`register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`), which the drop's sweep runs; for
+every Metal driver file, the tower driver included, `register_reload_prep`
+(`dasllama/dasllama_metal_common.das`). A global with no discharge survives a model swap and
+routes the next model's dispatches at the old model's planes.
+
+**A module-level variable in a Vulkan driver file whose value derives from, or names, sizes or
+points at device content built from, a TTS model (a StyleTTS2 or Pocket model) also discharges
+in a listener the file registers with `register_weights_epoch_listener`
+(`dasllama/dasllama_common.das`), in the same change that adds it.** A TTS model's reload runs
+no Vulkan reset, only `bump_weights_epoch`, which every Metal reload prep already runs under.
 
 **A diff that changes how a dev-W resident panel's cache key is built - a dev-W panel is a
 weight plane dequantized once into a device f16 panel - changes both the seed site and the

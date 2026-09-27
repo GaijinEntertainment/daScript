@@ -288,9 +288,8 @@ def private ts_grown(floats : int64) : int64 {
 def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, stats_floats, hb_floats : int64) : bool {
     var grown : TsFloats
     for (i in range(TS_SCRATCH_BUFS)) {
-        continue if (floats[i] <= 0l)
-        grown[i] = max(ts_grown(floats[i]), s.bytes[i] / 4l)
-        return false if (!ts_range_ok("scratch slot", grown[i] * 4l))
+        grown[i] = max(floats[i] > 0l ? ts_grown(floats[i]) : 0l, s.bytes[i] / 4l)   //! a slot this call leaves idle keeps its size: the seats sharing the scratch alternate
+        return false if (grown[i] > 0l && !ts_range_ok("scratch slot", grown[i] * 4l))
     }
     ts_scratch_release(s)
     let t0 = ref_time_ticks()

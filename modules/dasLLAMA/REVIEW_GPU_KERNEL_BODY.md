@@ -10,27 +10,25 @@ splice is compile-time and conforms - check the emission, not the das spelling.
 
 **A host-fixed branch inside the body of a kernel's main loop whose deciding value is not a
 per-call extent is a defect - stamp that value as a `@template_constant`, a literal or a module
-`let` instead, never a module `var`, push constant, uniform or kargs field.** A per-call extent
-is a push-constant, uniform or kargs value that changes between two dispatches of the same class
-in the served chain - a row, key or frame count; a value every served dispatch passes the same is
-a constant channel, not an extent. The main loop is a loop whose trip count grows with the work
-one thread of the dispatch does, per element or per row; a host-fixed branch in it is a bounds
-guard, a tail guard, a nested loop's own bound, or an `[unroll]` count whose live iterations run
-different bodies, whose deciding value the host fixes before it records the dispatch - its answer
-may differ per thread, as a tail guard's does. A module `let` is a stamp; a module `var` is not, because
-its value at stamp time is whatever the host last wrote. An `[unroll]` count whose every live
-iteration runs the same body is no such branch - the GPU compiler hoists it.
+`let` instead, never a module `var`, push constant, uniform or kargs field.** A per-call extent is
+a push-constant, uniform or kargs value (a row, key or frame count) that differs between two
+dispatches of one kernel instance - one class with one set of template constants - among the
+dispatches a model's inference records. The main loop is a loop whose trip count grows with the
+work one thread does, per element or per row; a host-fixed branch in it is a bounds guard, a tail
+guard, a nested loop's own bound, or an `[unroll]` count whose live iterations run different
+bodies, with a deciding value the host fixes before it records the dispatch.
 
 **A host-fixed main-loop branch whose deciding value is a per-call extent - a row, key or frame
-count - is peeled, never stamped: the full chunks run under the stamped chunk bound, then one
-tail pass carries the guard.**
+count that differs between two dispatches of one kernel instance among the dispatches a model's
+inference records - is never stamped: peel it (the full chunks run under the stamped chunk
+bound, then one tail pass carries the guard), or, outside an `[unroll]` loop, replace it with an
+index clamp that runs the guarded work on an index inside the extent and never stores that
+iteration's result.**
 
 **Inside an `[unroll]` loop, never replace a host-fixed main-loop branch with an index clamp -
-write the value into the body instead.** Inside an `[unroll]` loop a clamp folds every dead
-iteration - one past the live count - against a live one and costs what the branch saves.
-
-**Outside an `[unroll]` loop, a clamp that replaces a host-fixed main-loop branch runs the
-guarded work on an index inside the extent and never stores its result.**
+stamp its deciding value, or peel the loop when that value is a per-call extent.** Inside an
+`[unroll]` loop a clamp folds every dead iteration - one past the live count - against a live one
+and costs what the branch saves.
 
 **A diff that adds or changes a `[metal_dispatch]` kernel whose addressing assumes an alignment
 of a value the builder receives - a `params=` name or a kargs field - declares each such

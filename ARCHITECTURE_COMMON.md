@@ -34,11 +34,12 @@ the heading's words; an anchor is never reused for different content, and a sect
 splits or moves takes its anchor and every citation with it. A section number carries no
 meaning and collides across companions, so a document carries none.
 
-**Every anchor is cited: by an `[arch(at="<doc>#<anchor>")]` on a function in the document's
-own folder tree, by a `// <doc>#<anchor>` pointer in a C or C++ source, or by a `<doc>.md#<anchor>`
-in a rule document or ledger.** One anchor per heading. A C++ pointer's path is root-relative
-(`src/ast/ARCHITECTURE.md#...`), found by walking up from the citing file, and the folder-tree
-rule does not bind it - a header under `include/` answers for a mechanism `src/` documents.
+**Every anchor is cited: by an `[arch(at="<doc>.md#<anchor>")]` on a function in the document's
+own folder tree, by a `// <doc>.md#<anchor>` pointer in a C or C++ source, or by a
+`<doc>.md#<anchor>` in a rule document or ledger.** One anchor per heading. A C++ pointer's path
+is root-relative (`src/ast/ARCHITECTURE.md#...`), found by walking up from the citing file, and
+the folder-tree rule does not bind it - a header under `include/` answers for a mechanism `src/`
+documents.
 An anchor nothing cites, a citation naming no anchor, and a `.das` citation reaching a document
 outside the citer's folder tree are all lint findings (LINT026), in every folder. A mechanism
 another folder's document states is restated here in prose - a paragraph, not a resolved link -

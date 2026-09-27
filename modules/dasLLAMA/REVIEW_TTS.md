@@ -4,6 +4,12 @@
 docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_MEMORY.md`, `ARCHITECTURE_POCKET.md`. Planned
 work: `followup_general.md`.
 
+A TTS source file is a file the glob `dasllama/dasllama_tts*.das` matches,
+`dasllama/dasllama_styletts2.das`, a TTS family file - one `dasllama/dasllama_<family>.das` other
+than `dasllama/dasllama_styletts2.das` that holds a single speech-synthesis family - or a text
+front-end file
+(`dasllama/dasllama_textnorm.das`, `dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`).
+
 **A family's synthesis entry point (`styletts2_synthesize`, `pocket_synthesize`) carries
 `[hot_path]`.**
 
@@ -13,16 +19,12 @@ phonemize before the entry point.**
 
 **An array or table - a module global, or a field of the activation scratch struct one synthesis
 reuses for every stage (`St2Scratch`, `PocketScratch`; never the model struct) - that a synthesis
-sizes or fills, or that model load fills for syntheses to reuse, in a TTS source file under
-`dasllama/`, that is not `@scratch` on its declaration or on the callee parameter it grows
-through, is a defect.** The annotation is what lets `[hot_path]` hold through every stage the
-entry point drives. A TTS source file is `dasllama_tts.das`, `dasllama_tts_types.das`,
-`dasllama_tts_blocks.das`, `dasllama_tts_slab.das`, `dasllama_styletts2.das`, a TTS family file
-(one `dasllama_<family>.das` holding a single speech-synthesis family), or a text front-end file.
+sizes or fills, or that model load fills for syntheses to reuse, in a TTS source file, that is
+not `@scratch` on its declaration or on the callee parameter it grows through, is a defect.** The
+annotation is what lets `[hot_path]` hold through every stage the entry point drives.
 
 **A function that exists only for tests, debugging or profiling - a stats, trace or dump reader
-no synthesis entry point calls - in a TTS source file under `dasllama/`, that is not
-`[cold_path]`, is a defect.**
+no synthesis entry point calls - in a TTS source file, that is not `[cold_path]`, is a defect.**
 
 **A GEMM in `dasllama/dasllama_styletts2.das` or a TTS family file that does not go through
 a kernel `dasllama/dasllama_tts_blocks.das` exports is a defect, hand-written dot-product
@@ -38,8 +40,8 @@ any GPU driver are checked against.
 is a defect.** How a rows kernel stays split-invariant is `ARCHITECTURE_TTS.md#tts-two-layouts`.
 
 **A new arithmetic path in `dasllama/dasllama_tts_blocks.das` - a kernel, a weight lane of one,
-a layout, or a window form of one (a form that computes one window of the whole-row result at a
-time) - ships a numeric cell in the same change, in the `tests/` file that holds that kernel
+or a window form of one (a form that computes one window of the whole-row result at a time) -
+ships a numeric cell in the same change, in the `tests/` file that holds that kernel
 family's cells (`test_tts_blocks.das`; `test_tower_asr_kernels.das` for the shared resamplers),
 against the leaf it applies per row - the single-row reference kernel the path calls for each
 row - or a double-precision form of its arithmetic; a window form also ships a cell holding it
@@ -98,15 +100,17 @@ expose lands as a failing-first case in `tests/test_tts_textnorm.das` or
 `caps().cloning` is false, or a speed other than 1.0 when `caps().speed` is false - panic at
 the call site instead.**
 
-**A diff that makes a windowed stage a family file assembles from kernels - one that runs its
-input a window at a time over a carry, the state one window hands to the next - produce a result
+**A diff that makes a windowed stage `dasllama/dasllama_styletts2.das` or a TTS family file
+assembles from kernels - one that runs its input a window at a time over a carry, the state one
+window hands to the next - produce a result
 on the f32 lane that differs from the same stage run over the whole input in one pass by more
 than float rounding (a few ulp per element) is a defect** (`ARCHITECTURE_TTS_MEMORY.md#tts-source-stream`,
 `ARCHITECTURE_POCKET.md#pocket-codec-stream`).
 
-**A diff that adds a windowed stage a family file assembles from kernels ships, in the same
-change, the cell that runs that stage windowed and over the whole input in one pass and holds the
-two together within float rounding, in the `tests/` file that holds that stage's cells.**
+**A diff that adds a windowed stage `dasllama/dasllama_styletts2.das` or a TTS family file
+assembles from kernels ships, in the same change, the cell that runs that stage windowed and over
+the whole input in one pass and holds the two together within float rounding, in the `tests/`
+file that holds that stage's cells.**
 
 **A Pocket codec conv (`dasllama/dasllama_pocket.das`) carries its causal context as the
 stream's carry - the rows its taps reach before a window, zero or edge-replicated ahead of the

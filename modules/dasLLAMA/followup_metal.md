@@ -773,3 +773,13 @@ take two thirds of that; the 9B takes a third with the same rate, so its round c
 that scales with the model and not with the drafts - the verify's two rows against a 9.7 GB
 weight pass at its bandwidth roof should be nearly free. The work: the round's stage split on
 the 9B (`harness/mtp_ruler.das`, the verify against the plain step) to name the term.
+
+## 28. The Metal tower's qwen3a mel hook raises no counter
+
+`metal_q3a_mel` (`dasllama/dasllama_metal_tower.das`, registered through
+`register_qwen3a_mel_gpu`) serves the qwen3a log-mel front on the device and raises none of
+`metal_tower_stats()`'s counters - `encodes`, `blocks` and `convs` all stay flat across a served
+mel - so no gate can cover the hook under `REVIEW_TOWER.md`'s covering rule, which needs a
+counter that rises on a leg where the hook is the only hook raising it. The Vulkan tower counts
+the same hook under `vulkan_tower_stats()`'s `mels`. The work: a `mels` counter in
+`metal_tower_stats()` that the mel hook raises, and the qwen3a Metal cell asserting it rises.

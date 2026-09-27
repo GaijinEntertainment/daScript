@@ -24,9 +24,11 @@ serving lane or the engage mode, or whose claim depends on which route or servin
 a lane pin, a driver hook, a CPU-vs-GPU compare - applies `REVIEW_LANE_PINS.md` (beside this
 file) too.**
 
-**A cell that feeds, preprocesses, or asserts on media bytes an encoder or embedder consumes -
-pixels or audio samples - or compares ASR transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside
-this file) too.**
+**A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
+audio samples - compares an encoder's output rows against a second source, or compares ASR
+transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.** An encoder is any model
+stage that turns pixels, audio samples, phonemes, or another stage's output into rows or audio
+samples.
 
 **Weakening `test_metal_float_a_gate.das` - the gate that checks the MSL emitter refuses a float A
 operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without the

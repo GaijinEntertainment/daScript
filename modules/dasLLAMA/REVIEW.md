@@ -34,13 +34,14 @@ measured or served run with no flags and no environment overrides computes, appl
 tokens; its compile tier (interpreted, JIT, AOT) and its cross target (a build for another
 platform) are part of it.
 
-**A diff that adds a kernel, loop or call path the runtime re-enters per token, per frame, per
-prefill quantum - one batch of prompt tokens the prefill path processes in a single pass - or per
-media encode (an image, a video frame, an audio chunk), adds, moves, renames or removes a
-`[hot_path]`, `[cold_path]`, `[no_alloc]`, `[no_env]` or `[no_io]` annotation, or adds or
-changes a test, harness, benchmark or performance-rig function that calls into a region entry,
-wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file) together with this
-list.**
+**A diff that adds a kernel, loop or call path the runtime re-enters once per serving step - a
+token, a prefill quantum (one batch of prompt tokens the prefill path processes in a single
+pass), one encoded media input (an image, a video frame, an audio chunk), or one synthesized
+speech chunk or frame - adds, moves, renames or removes a `[hot_path]`, `[cold_path]`,
+`[no_alloc]`, `[no_env]` or `[no_io]` annotation, or adds or changes a test, harness, benchmark
+or performance-rig function that reaches a region entry (the outermost function re-entered each
+serving step), wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file)
+together with this list.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
@@ -101,14 +102,15 @@ single model call - applies `REVIEW_VISION.md`.**
 backend tower driver - applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
 
 **A change to `dasllama/dasllama_tts.das`, `dasllama/dasllama_tts_types.das`,
-`dasllama/dasllama_tts_blocks.das`, `dasllama/dasllama_styletts2.das`, a TTS family file - one
-`dasllama/dasllama_<family>.das` holding a single speech-synthesis family - a text front-end
-file - one stage of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
-`dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - the front-end packs' mint
-(`harness/build_g2p_data.py`, `harness/train_postag.py`, `harness/mint_postag_silver.py`,
-`performance/build_tts_data.das`), the Pocket converter and its card (`harness/convert_pocket.py`,
-`harness/tts_model_card.md`), or a call that pins a TTS weight lane (`set_tts_q8` /
-`set_styletts2_q8` / `set_pocket_q8`), wherever the diff puts it, applies `REVIEW_TTS.md`.**
+`dasllama/dasllama_tts_blocks.das`, `dasllama/dasllama_tts_slab.das`,
+`dasllama/dasllama_styletts2.das`, a TTS family file - one `dasllama/dasllama_<family>.das`
+holding a single speech-synthesis family - a text front-end file - one stage of the pass that
+turns text into phonemes (`dasllama/dasllama_textnorm.das`, `dasllama/dasllama_postag.das`,
+`dasllama/dasllama_g2p.das`) - the front-end packs' mint (`harness/build_g2p_data.py`,
+`harness/train_postag.py`, `harness/mint_postag_silver.py`, `performance/build_tts_data.das`),
+the Pocket converter and its card (`harness/convert_pocket.py`, `harness/tts_model_card.md`), or
+a call that pins a TTS weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8`),
+wherever the diff puts it, applies `REVIEW_TTS.md`.**
 
 **A diff that adds a file under `dasllama/`, or adds or moves a def, a class, a module global or
 named constant, or a `require` in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
@@ -128,8 +130,9 @@ Every recorded row, tune sidecar and exchange entry carries the release, so a bu
 
 **A change that invalidates only images never bumps `DASLLAMA_RELEASE`.**
 
-**The `[init]` that establishes a function-typed global that a job (a forked context) invokes,
-or that a serialized exe must re-establish, re-establishes it when it reads null.** A serialized
+**A function-typed module global that a job (a forked context) invokes or a serialized exe calls
+is set by an `[init]` that re-establishes it when it reads null - never by a declaration
+initializer alone.** A serialized
 exe and a forked context restore globals as data, so a declaration initializer alone arrives null
 and dies at the first invoke while every `-jit` gate stays green.
 
@@ -229,8 +232,10 @@ owns, or a consumer `ARCHITECTURE_ENGINE.md#instrumentation-and-support` names a
 symbol the facade lacks is added to `dasllama/dasllama.das`, not obtained by adding this option to
 the consumer.
 
-**A `require ... public` that re-exports an engine module out of a file carrying
-`options _dasllama_internal`, beyond what that consumer's ruled charter grants, is a defect.**
+**A file whose entry under `ARCHITECTURE_ENGINE.md#instrumentation-and-support` rules its
+`options _dasllama_internal` re-exports an engine module with `require ... public` only where
+that entry names the re-export; any other re-export is a defect - the file's own requirers reach
+the symbol through `dasllama/dasllama.das` instead.**
 
 **An edit that stops a check of any `REVIEW.das` under this folder firing without fixing what it
 flagged is a defect:** dropping a check, narrowing what the gate walks - a file or folder it stops
@@ -240,11 +245,10 @@ where that check's own finding text does not sanction the addition or the re-sta
 itself says what it enforces.
 
 **A new check in any `REVIEW.das` under this folder, or a check whose licensed set gains a name,
-names in its finding text the `ARCHITECTURE_*.md#<anchor>` section holding the statement it
-enforces and ships its line in that section - the companion section carrying the charter of the
-feature the check guards, not the file its sites sit in; never `ARCHITECTURE.md` - in the same
-change.** The line names the check and the names it licenses; when the check licenses no names,
-the line says so.
+names in its finding text the `ARCHITECTURE_*.md#<anchor>` section carrying the charter of the
+feature the check guards - never `ARCHITECTURE.md` - and ships its line in that section, in the
+same change.** The line names the check and the names it licenses; when the check licenses no
+names, the line says so.
 
 **Checked-in text - docs, comments, or string data, any language - that describes a mechanism of
 the reference build (any third-party engine, library or runtime whose figure a sentence compares
@@ -266,7 +270,8 @@ input into embeddings - onto a GPU hook leaves the CPU form in place and changes
 arithmetic.** The CPU form serves every box with no driver.
 
 **A call to a `set_*_q8` lane setter - one that picks whether a model family's weights run the
-q8 or the float path - is followed at once by a `defer()` calling its `reset_*_q8` twin.** A pin
+q8 or the float path - outside the body of another `set_*_q8` setter is followed at once by a
+`defer()` calling its `reset_*_q8` twin.** A pin
 still set after its caller returns silently changes the lane of the next model the process loads.
 
 **A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
@@ -281,8 +286,9 @@ root) - is a `def` returning it, never a module global with a declaration initia
 or `var`).** A team lane never runs global initializers, so the global reads zero there.
 
 **A buffer in `dasllama/` whose element count scales with a model dimension - any count the model
-file sets - is declared `@exact_size`, and every `resize` of it follows a `reserve` of the SAME
-count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`, `grow_resize`,
+file sets - is declared `@exact_size`, and every `resize` of it follows a `reserve(n)` or
+`ensure_capacity(n)` whose `n` is the resized count - a `dasllama/dasllama_math.das` sizing
+helper (`reserve_resize`, `grow_resize`,
 `ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the
 pair spelled out - however small the count looks.** PERF032 checks only `@exact_size` arrays - it
 flags a `resize` with no `reserve` or `ensure_capacity` earlier in the function, and never
