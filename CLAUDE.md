@@ -38,8 +38,9 @@ author's own out-of-tree notes keep them, and no file in the tree cites them. No
 `ARCHITECTURE*.md` or ledger installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` and
 `ARCHITECTURE_COMMON.md` at the install root are the two vendoring exceptions, and a shipped
 tree with `[arch]` citations installs a GENERATED excerpt of each cited document (the cited
-sections only, banner-marked; `utils/internal/arch-extract`, registered on `DAS_ARCH_EXTRACT_SPECS`
-beside the tree's install rules) so LINT026 stays armed in an installed SDK.
+sections and the sections their own text cites, nothing else, banner-marked;
+`utils/internal/arch-extract`, registered on `DAS_ARCH_EXTRACT_SPECS` beside the tree's install
+rules) so LINT026 stays armed in an installed SDK.
 
 The mood test routes misplaced text: must/never binding a diff -> REVIEW.md; present-tense
 fact -> ARCHITECTURE.md; dated or past-tense -> deleted, git keeps it.
