@@ -2502,18 +2502,6 @@ def private read_prefix(path, name : string; n : int64; var gt : int&; first : i
     return <- dst
 }
 
-// Relative RMS of (a - b) against RMS(b), double accumulation.
-def private rel_rms(a, b : array<float>) : float {
-    var num = 0.0lf
-    var den = 0.0lf
-    for (x, y in a, b) {
-        let dxy = double(x) - double(y)
-        num += dxy * dxy
-        den += double(y) * double(y)
-    }
-    return float(sqrt(num / den))
-}
-
 
 [test]
 def test_iq3xxs_planes(t : T?) {

@@ -43,18 +43,6 @@ let GPU_PRED_BAR = 2e-5
 let GPU_DECODE_BAR = 5e-2
 let GPU_DECODE_Q8_BAR = 1e-1   //! the served lane: the CPU q8 chain quantizes its activations, the tower reads the dequantized weights at f32
 
-//! sqrt(sum (a - b)^2 / sum b^2) over the shorter length
-def rel_rms(a, b : array<float>) : float {
-    var num = 0.0lf
-    var den = 0.0lf
-    for (i in range(min(length(a), length(b)))) {
-        let d = double(a[i]) - double(b[i])
-        num += d * d
-        den += double(b[i]) * double(b[i])
-    }
-    return float(sqrt(num / max(den, 1e-30lf)))
-}
-
 def private within_twentieth(n, m : int64) : bool => abs(n - m) * 20l < m
 
 //! The verdict where the tower served nothing: a skip where no GPU device serves, a red where a present device declined. Always false.

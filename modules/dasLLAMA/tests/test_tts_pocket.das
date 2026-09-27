@@ -917,11 +917,7 @@ def private q8_report(t : T?; tag : string; ours, ref : array<float>) {
     to_log(LOG_INFO, "pocket {tag}: rms relative {rel}, max |diff| {max_abs_diff(ours, ref)}\n")
     t |> success(rel < Q8_RMS_BAR, "{tag}: rms relative {rel} is in the same picture as the oracle")
     // the control: the expectation shifted by its own rms lands outside the bar
-    var ssr = 0.0lf
-    for (b in ref) {
-        ssr += double(b * b)
-    }
-    let shift = float(sqrt(ssr / double(max(length(ref), 1))))
+    let shift = rms(ref)
     var inscope poisoned := ref
     for (v in poisoned) {
         v += shift
@@ -1277,12 +1273,10 @@ def test_pocket_languages(t : T?) {
 
 def private speech_stats(pcm : array<float>) : tuple<finite : bool; rms : float> {
     var finite = true
-    var ssq = 0.0lf
     for (v in pcm) {
         finite = finite && abs(v) < 1e6   // a NaN compares false
-        ssq += double(v * v)
     }
-    return (finite = finite, rms = float(sqrt(ssq / double(max(length(pcm), 1)))))
+    return (finite = finite, rms = rms(pcm))
 }
 
 [test]

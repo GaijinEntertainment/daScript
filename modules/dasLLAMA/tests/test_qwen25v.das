@@ -137,7 +137,7 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
             to_log(LOG_INFO, "qwen25v vulkan twin {kind} {w}x{h}: the driver declined - {vulkan_tower_declines()}\n")
         }
         twin_counters(tt, "{kind} {w}x{h}", TwinLegs(exact = d0, cpu = d1, dev = d2, n_cpu = n_cpu, n_dev = n_dev), tw.n_layer, int64(w / 14) * int64(h / 14))
-        let rms = rms_of(cpu)
+        let rms = rms(cpu)
         let dev_ex = logits_maxdiff(dev, cpu)
         let rel = tw.n_layer <= 8l ? TWIN_REL_VK_SHALLOW : TWIN_REL_VK_DEEP
         let bar = TWIN_ABS_VK + rel * rms

@@ -15,7 +15,6 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join: the twin cells' jfk.wav, inside the GPU arms alone
-require math
 require _compares   // logits_maxdiff
 require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twins' bar reads
 require _gpu_knobs public
@@ -134,14 +133,6 @@ def twin_counters(tt : T?; tag : string; legs : TwinLegs; n_layer, npos : int64)
     tt |> equal(legs.dev.rows - legs.cpu.rows, npos, "{tag}: the rows delta is the patch grid")
 }
 
-def rms_of(a : array<float>) : float {
-    var ss = 0.0
-    for (v in a) {
-        ss += v * v
-    }
-    return sqrt(ss / float(max(length(a), 1)))
-}
-
 //! one input three ways - the exact chain, the CPU q8 chain (both knob off), the device chain - then `counters` over the legs and
 //! the bar by `spec.metric`: the device's distance from the exact chain within `TWIN_SLACK_VK` x the CPU q8 chain's own; `encode`
 //! is the family's encode over a tower and its state, returning its token count
@@ -178,7 +169,7 @@ def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); t
         }
         invoke(counters, legs)
         if (spec.metric == TwinMetric.maxdiff) {
-            r.rms = rms_of(r.reference)
+            r.rms = rms(r.reference)
             let q8_ex = logits_maxdiff(cpu, r.reference)
             let dev_ex = logits_maxdiff(dev, r.reference)
             let dev_q8 = logits_maxdiff(dev, cpu)

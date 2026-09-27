@@ -10,7 +10,7 @@ require dasllama/dasllama_metal_tower
 require ../performance/profile_common.das   // tune_gate + apply_box_profile_runtime, the standing pre-measure stack
 require daslib/clargs
 require daslib/jobque_boost
-require math
+require ../tests/_model_tier.das   // rel_rms: the codec compare's distance
 
 // The Pocket TTS stage probe: one chunk's frame loop alone and the codec alone over that
 // chunk's latents, each `--reps` passes on the CPU chain and on the Metal tower in one process
@@ -57,17 +57,6 @@ struct ProbeArgs {
     help : bool
 }
 
-def private rel_rms(a, b : array<float>) : double {
-    var num = 0.0lf
-    var den = 0.0lf
-    for (i in range64(min(long_length(a), long_length(b)))) {
-        let d = double(a[i]) - double(b[i])
-        num += d * d
-        den += double(a[i]) * double(a[i])
-    }
-    return sqrt(num / max(den, 1e-30lf))
-}
-
 //! The codec over the chunk's latents: one row an arm a pass, the tower's compared within the bar;
 //! false when a tower pass did not serve or missed the bar.
 def private codec_arm(m : PocketModel; frames : int64; reps : int; bar : float; var sc : PocketScratch) : bool {
@@ -94,8 +83,8 @@ def private codec_arm(m : PocketModel; frames : int64; reps : int; bar : float; 
         let gpu_us = get_time_usec(t0)
         let s1 = pocket_gpu_stats("codec")
         let served = s1.served - s0.served == 1
-        let d = rel_rms(a, b)
-        let hit = served && length(a) == length(b) && d <= double(bar)
+        let d = rel_rms(b, a)
+        let hit = served && length(a) == length(b) && d <= bar
         ok = ok && hit
         let verdict = hit ? "PASS" : "FAIL"
         let declined = served ? "" : " (declines {metal_tower_declines()})"

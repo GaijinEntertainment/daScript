@@ -1597,19 +1597,19 @@ def test_parakeet_tower_metal(tst : T?) {
                 var inscope stg2 = ParakeetState()
                 set_metal_tower(false)
                 parakeet_log_mel(samples, m.pk, stc)
-                let tt = parakeet_encode(m.pk, stc)
+                parakeet_encode(m.pk, stc)
                 set_metal_tower(true)
                 parakeet_log_mel(samples, m.pk, stg2)
                 let e0 = metal_tower_stats().encodes
                 parakeet_encode(m.pk, stg2)
                 rows_gpu = metal_tower_stats().encodes - e0
-                enc_rel_rms = rel_rms(stc.x, stg2.x, tt * m.pk.n_state)
+                enc_rel_rms = rel_rms(stg2.x, stc.x)
                 // the control: the same clip with its mel scaled x3 through the GPU chain must red the bar
                 for (i in range(length(stg2.mel.data))) {
                     stg2.mel.data[i] *= 3.0
                 }
                 parakeet_encode(m.pk, stg2)
-                poison_rel_rms = rel_rms(stc.x, stg2.x, tt * m.pk.n_state)
+                poison_rel_rms = rel_rms(stg2.x, stc.x)
             }
             t |> success(parakeet_gpu_serves(), "the driver reports serving with the tower on")
             t |> success(!parakeet_serves_q8(), "the un-pinned lane is the f32 planes while the driver serves")
@@ -1682,18 +1682,6 @@ def test_parakeet_tower_q8_decline(tst : T?) {
             t |> skip("no Metal build - the parakeet FastConformer driver has no device to decline")
         }
     }
-}
-
-//! the encoder rows' distance as a fraction of their magnitude: sqrt(sum (a-b)^2 / sum a^2) over the first n
-def private rel_rms(a, b : array<float>; n : int64) : float {
-    var sd = 0.0lf
-    var sa = 0.0lf
-    for (i in range64(n)) {
-        let df = a[i] - b[i]
-        sd += double(df * df)
-        sa += double(a[i] * a[i])
-    }
-    return float(sqrt(sd / max(sa, 1.0e-18lf)))
 }
 
 def private parakeet_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
@@ -2294,7 +2282,7 @@ def test_gemma4a_tower_metal(t : T?) {
                 set_metal_tower(true)
                 gemma4a_log_mel(enc, samples, 0l, long_length(samples), stg)
                 gemma4a_encode(enc, stg)
-                enc_rel_rms = rel_rms(stc.out, stg.out, long_length(stc.out))
+                enc_rel_rms = rel_rms(stg.out, stc.out)
                 reset_gemma4a_q8()
                 delete dec
             }
@@ -2371,13 +2359,13 @@ def test_canary_tower_metal(t : T?) {
                 let e0 = metal_tower_stats().encodes
                 canary_encode(enc, stg)
                 rows_gpu = metal_tower_stats().encodes - e0
-                enc_rel_rms = rel_rms(stc.out, stg.out, long_length(stc.out))
+                enc_rel_rms = rel_rms(stg.out, stc.out)
                 // the control: the same clip with its mel scaled x3 through the GPU chain must red the bar
                 for (i in range(length(stg.mel))) {
                     stg.mel[i] *= 3.0
                 }
                 canary_encode(enc, stg)
-                poison_rel_rms = rel_rms(stc.out, stg.out, long_length(stc.out))
+                poison_rel_rms = rel_rms(stg.out, stc.out)
                 reset_canary_enc_q8()
                 delete dec
             }
@@ -2568,7 +2556,7 @@ def test_qwen3a_metal_tower(tst : T?) {
                 set_metal_tower(true)
                 var inscope w2 <- qwen3a_mel_window(mel, 0l)
                 qwen3a_encode(tw, egpu, c2, w2)
-                enc_rel_rms = rel_rms(ecpu.out, egpu.out, long_length(ecpu.out))
+                enc_rel_rms = rel_rms(egpu.out, ecpu.out)
                 set_metal_tower_f16(true)
                 let tw0 = metal_tower_f16_encodes()
                 var twin_text = ""
