@@ -146,7 +146,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tts_round_up(npos, 32l)
+    let mp = round_up(npos, 32l)
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
     var bx0 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.patch_dim * 4l))
@@ -230,8 +230,8 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tts_round_up(npos, 32l)
-    let nk64 = tts_round_up(npos, 64l)
+    let mp = round_up(npos, 32l)
+    let nk64 = round_up(npos, 64l)
     let ff = t.n_ff
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.fblob, 0l))), uint64(length(t.fblob) * 4l), mapped)
@@ -384,7 +384,7 @@ struct private TwGpuCtx {
 
 def private tw_ctx_make(var c : TwGpuCtx; blob : void?; blob_bytes : uint64; mapped : bool;
                         npos, d, n_ff : int64; eps, half : float; bytes_pos : uint64) {
-    c.mp = tts_round_up(npos, 32l)
+    c.mp = round_up(npos, 32l)
     c.np64 = (npos + 63l) / 64l
     c.npos = npos
     c.bblob = plane_buffer(g_dev, blob, blob_bytes, mapped)
@@ -624,8 +624,8 @@ struct private FcGpuCtx : TwGpuCtx {
 def private fc_ctx_make(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk : int64; eps : float;
                         pos_emb : array<float>; npos, ww : int64; tap_major : bool) : FcGpuCtx {
     let dh = d / n_head
-    var c = FcGpuCtx(wwp = tts_round_up(ww, 32l), ww = ww, n_head = n_head, tap_major = tap_major,
-        nkp = tts_round_up(npos, 64l), wwpad = tts_round_up(ww, 64l))
+    var c = FcGpuCtx(wwp = round_up(ww, 32l), ww = ww, n_head = n_head, tap_major = tap_major,
+        nkp = round_up(npos, 64l), wwpad = round_up(ww, 64l))
     tw_ctx_make(c, unsafe(reinterpret<void?>(plane_at(blob, 0l))), uint64(length(blob) * 4l), mapped,
         npos, d, n_ff, eps, 0.5, uint64(c.wwp * d * 4l))
     c.bposl = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
@@ -880,16 +880,16 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     }
     residency_flush()
     let d = t.d_model
-    let mpd = tts_round_up(n_len, 32l)
-    let dft_out_pad = tts_round_up(2l * n_bins, 64l)
-    let mag_k_pad = tts_round_up(n_bins, 32l)
+    let mpd = round_up(n_len, 32l)
+    let dft_out_pad = round_up(2l * n_bins, 64l)
+    let mag_k_pad = round_up(n_bins, 32l)
     let rows0 = t1 * w1
-    let mp0 = tts_round_up(rows0, 32l)
+    let mp0 = round_up(rows0, 32l)
     let conv0_k_pad = 32l
     let rows1 = t2 * w2
-    let mp1 = tts_round_up(rows1, 32l)
+    let mp1 = round_up(rows1, 32l)
     let kd1 = t.sub_ch0 * 9l
-    let conv1_cout_pad = tts_round_up(t.sub_ch1, 64l)
+    let conv1_cout_pad = round_up(t.sub_ch1, 64l)
     var c <- g4a_ctx_make(t, npos)
     let bytes_xw = uint64(mpd * n_fft * 4l)
     let bytes_tw = uint64(dft_out_pad * n_fft * 4l)
@@ -1081,8 +1081,8 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tts_round_up(npos, 32l)
-    let nk64 = tts_round_up(npos, 64l)
+    let mp = round_up(npos, 32l)
+    let nk64 = round_up(npos, 64l)
     let pairs = hs / 4l   // rotated pairs per rope axis = one packed table row
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
@@ -1231,7 +1231,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     let d = t.n_embd
     let hs = d / t.n_head
     let ff = t.ff_pad
-    let hs_pad = max(64l, tts_round_up(hs, 32l))
+    let hs_pad = max(64l, round_up(hs, 32l))
     if (d % 64l != 0l || ff % 64l != 0l || hs > 128l) {
         return tw_decline(MetalTowerDecline.shape)
     }
@@ -1239,8 +1239,8 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tts_round_up(npos, 32l)
-    let nk64 = tts_round_up(npos, 64l)
+    let mp = round_up(npos, 32l)
+    let nk64 = round_up(npos, 64l)
     let dp = t.n_head * hs_pad   // the padded attention width
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
@@ -1419,7 +1419,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     let hs = d / t.n_head
     let ff = t.ff_pad
     let proj = t.proj_dim
-    let hs_pad = max(64l, tts_round_up(hs, 32l))
+    let hs_pad = max(64l, round_up(hs, 32l))
     //! %4 npos: the x4 merge reshape is the tap/tail GEMMs' row view; %64 patch_dim: the stem GEMM's K
     if (d % 64l != 0l || ff % 64l != 0l || hs > 128l || hs % 2l != 0l || proj % 64l != 0l || npos % 4l != 0l || t.patch_dim % 64l != 0l) {
         return tw_decline(MetalTowerDecline.shape)
@@ -1428,12 +1428,12 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tts_round_up(npos, 32l)
-    let nk64 = tts_round_up(npos, 64l)
+    let mp = round_up(npos, 32l)
+    let nk64 = round_up(npos, 64l)
     let dp = t.n_head * hs_pad   // the padded attention width
     let half = hs / 2l
     let nout = npos / 4l
-    let mp4 = tts_round_up(nout, 32l)
+    let mp4 = round_up(nout, 32l)
     let rows_ext = max(mp, mp4 * 4l)   // bx/bxb double as the [nout x 4d] merged view - pad rows beyond mp
     let mapped = t.image_map != null
     let blob_ptr = unsafe(reinterpret<void?>(plane_at(t.blob, 0l)))
@@ -1639,7 +1639,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     let hs = d / t.n_head
     let ff = t.ff_pad
     let proj = t.proj_dim
-    let hs_pad = max(64l, tts_round_up(hs, 32l))
+    let hs_pad = max(64l, round_up(hs, 32l))
     let nwin = long_length(s.win_lo) - 1l
     let max_wr = qwen25v_window_widest(s)
     let pd = q25v_patch_pad(t)
@@ -1652,12 +1652,12 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
-    let mp = tts_round_up(npos, 32l)
-    let nk64 = tts_round_up(npos, 64l)
+    let mp = round_up(npos, 32l)
+    let nk64 = round_up(npos, 64l)
     let dp = t.n_head * hs_pad   // the padded attention width (the full layers' slab)
     let half = hs / 2l
     let nout = npos / 4l
-    let mp4 = tts_round_up(nout, 32l)
+    let mp4 = round_up(nout, 32l)
     let rows_ext = max(mp, mp4 * 4l)   //! bx/bxb double as the [nout x 4d] merged view - pad rows beyond mp
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), mapped)
@@ -1860,8 +1860,8 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     if ((3l * nm) % 32l != 0l || d % 64l != 0l || (3l * d) % 32l != 0l || !metal_tower_init()) {
         return false
     }
-    let mp1 = tts_round_up(tin, 32l)
-    let mp2 = tts_round_up(tt, 32l)
+    let mp1 = round_up(tin, 32l)
+    let mp2 = round_up(tt, 32l)
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.fblob, 0l))), uint64(length(t.fblob) * 4l), mapped)
     let bytes_mel = uint64(nm * tin * 4l)
@@ -2007,8 +2007,8 @@ def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     }
     let xin_n = QWEN3A_CHUNK * nm
     let y3_rows = 16l * QWEN3A_TOK_PER_CHUNK   // 208 per chunk
-    let mp3 = tts_round_up(y3_rows, 32l)      // the stage-3 GEMM pads to 224 rows
-    let mpn = tts_round_up(npos, 32l)
+    let mp3 = round_up(y3_rows, 32l)      // the stage-3 GEMM pads to 224 rows
+    let mpn = round_up(npos, 32l)
     let o2 = ncp * 32l
     let o3 = o2 + ncp * k2
     let o4 = o3 + ncp * k2
@@ -2132,10 +2132,10 @@ def private metal_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64
     if (n_mel % 64l != 0l || n_len < 1l || !g_tw_env_tower || !metal_tower_init() || !pf_q3a_mel_ready()) {
         return false
     }
-    let mp = tts_round_up(n_len, 32l)
-    let kfp = tts_round_up(n_fft, 32l)
-    let dft_out_pad = tts_round_up(2l * n_bins, 64l)
-    let ldpow = tts_round_up(n_bins, 32l)
+    let mp = round_up(n_len, 32l)
+    let kfp = round_up(n_fft, 32l)
+    let dft_out_pad = round_up(2l * n_bins, 64l)
+    let ldpow = round_up(n_bins, 32l)
     let bytes_xw = uint64(mp * kfp * 4l)
     let bytes_tw = uint64(dft_out_pad * kfp * 4l)
     let bytes_re = uint64(mp * dft_out_pad * 4l)
@@ -2657,7 +2657,7 @@ def private st2_ctx_make(var c : St2GpuCtx; var slab : MetalBuffer?; h_floats, s
 
 //! `rows` rows of `width` floats, the rows up to the 32 lattice zeroed.
 def private st2_rows_buf(var c : St2GpuCtx; rows, width : int64) : MetalBuffer? {
-    let mp = tts_round_up(rows, 32l)
+    let mp = round_up(rows, 32l)
     let bytes = uint64(mp * width * 4l)
     assert(c.n_bufs < ST2_MAX_BUFS)
     var b = pool_acquire_pinned(g_tw_pool, g_dev, bytes)
@@ -2740,7 +2740,7 @@ def private st2_chunk_rows(kdim_p : int64) : int64 => clamp(ST2_IM2COL_CHUNK_MAX
 
 def private st2_cols_bytes(c : TtsConv1d) : uint64 {
     return 0ul if (c.cin % 8l == 0l)
-    let kdim_p = tts_round_up(c.k * c.cin, 32l)
+    let kdim_p = round_up(c.k * c.cin, 32l)
     return uint64(st2_chunk_rows(kdim_p) * kdim_p * 4l)
 }
 
@@ -2751,7 +2751,7 @@ def private st2_conv_args(cv : TtsConv1d; t_in, r0, rows : int64) : St2ConvArgs 
 
 //! One rows conv and its bias into rows of stride slot.cout_p; the output row count.
 def private st2_conv_mm(enc : MetalComputeEncoder?; c : St2GpuCtx; slot : St2ConvSlot; transposed : bool; bx, by : MetalBuffer?; var ka : St2ConvArgs; rows : int64) {
-    let mp = tts_round_up(rows, 32l)
+    let mp = round_up(rows, 32l)
     if (transposed) {
         if (c.exact) {
             enc_st2_conv_tr_exact_mm(enc, c.slab, slot.woff, bx, by, 0ul, slot.u_cout, ka, mp, slot.cout_p)
@@ -2777,7 +2777,7 @@ def private st2_conv(enc : MetalComputeEncoder?; var c : St2GpuCtx; slot : St2Co
     while (r0 < t_out) {
         let rows = min(chunk, t_out - r0)
         var ka = st2_conv_args(cv, t_in, r0, rows)
-        let mp = tts_round_up(rows, 32l)
+        let mp = round_up(rows, 32l)
         if (cv.transposed) {
             enc_st2_im2col_tr(enc, bx, c.bcols, ka, mp * slot.kdim_p)
         } else {
@@ -2807,7 +2807,7 @@ def private st2_mm(enc : MetalComputeEncoder?; c : St2GpuCtx; woff : uint64; bx,
 }
 
 def private st2_lin(enc : MetalComputeEncoder?; var c : St2GpuCtx; slot : St2ConvSlot; bx : MetalBuffer?; rows : int64; by : MetalBuffer?) {
-    st2_mm(enc, c, slot.woff, bx, by, 0ul, slot.u_kdim, slot.u_cout, tts_round_up(rows, 32l), slot.cout_p)
+    st2_mm(enc, c, slot.woff, bx, by, 0ul, slot.u_kdim, slot.u_cout, round_up(rows, 32l), slot.cout_p)
     let n = rows * slot.cout_p
     let u_n = st2_u(c, uint(n))
     enc_add_bias_rows(enc, by, 0ul, c.slab, slot.boff, slot.u_cout, u_n, n)
@@ -3020,7 +3020,7 @@ def private st2_gen_shape(d : St2Decoder; c, t, har_frames : int64; var sh : St2
     var tt = t
     var cc = c
     sh.c_max = max(sh.c_max, c)
-    sh.row_buf_floats = max(sh.row_buf_floats, tts_round_up(t, 32l) * c)
+    sh.row_buf_floats = max(sh.row_buf_floats, round_up(t, 32l) * c)
     for (i in range64(nst)) {
         let up & = unsafe(d.ups[i])
         let nc & = unsafe(d.noise_convs[i])
@@ -3035,7 +3035,7 @@ def private st2_gen_shape(d : St2Decoder; c, t, har_frames : int64; var sh : St2
         for (j in range64(d.n_kernels)) {
             return false if (!st2_note_block(sh, d.resblocks[i * d.n_kernels + j], t2, c2))
         }
-        sh.row_buf_floats = max(sh.row_buf_floats, tts_round_up(t2, 32l) * c2)
+        sh.row_buf_floats = max(sh.row_buf_floats, round_up(t2, 32l) * c2)
         sh.c_max = max(sh.c_max, c2)
         tt = t2
         cc = c2
@@ -3043,7 +3043,7 @@ def private st2_gen_shape(d : St2Decoder; c, t, har_frames : int64; var sh : St2
     return false if (!st2_note_conv(sh, d.conv_post) || d.conv_post.cin != cc || d.conv_post.cout > ST2_POST_WIDTH
         || d.conv_post.cout < 2l * d.bins)
     sh.t_post = conv1d_out_len(d.conv_post, tt)
-    sh.row_buf_floats = max(sh.row_buf_floats, tts_round_up(sh.t_post, 32l) * ST2_POST_WIDTH)
+    sh.row_buf_floats = max(sh.row_buf_floats, round_up(sh.t_post, 32l) * ST2_POST_WIDTH)
     sh.t_last = tt
     sh.c_last = cc
     return true
@@ -3135,7 +3135,7 @@ def private st2_res_shape(var sh : St2Shape; b : St2AdainResBlk; t : int64) : in
     return -1l if (conv1d_out_len(b.conv1, t1) != t1 || conv1d_out_len(b.conv2, t1) != t1)
     sh.style_fc_floats += 2l * (b.dim_in_s + b.dim_out)
     sh.c_max = max(sh.c_max, max(b.dim_in_s, b.dim_out))
-    sh.row_buf_floats = max(sh.row_buf_floats, tts_round_up(t1, 32l) * max(b.dim_in_s, b.dim_out))
+    sh.row_buf_floats = max(sh.row_buf_floats, round_up(t1, 32l) * max(b.dim_in_s, b.dim_out))
     return t1
 }
 
@@ -3202,7 +3202,7 @@ def private st2_decode_shape(d : St2Decoder; text_c : int64; source : SineSource
         sh.dec_width = b.dim_out
     }
     return false if (!st2_gen_shape(d, sh.dec_width, sh.dec_rows, sh.ss.spec_frames, sh))
-    sh.row_buf_floats = max(sh.row_buf_floats, tts_round_up(frames, 32l) * max(d.encode.dim_in_s, text_c))
+    sh.row_buf_floats = max(sh.row_buf_floats, round_up(frames, 32l) * max(d.encode.dim_in_s, text_c))
     sh.n_out = conv1d_out_len(bwd, sh.t_post) - 2l * ST2_STFT_PAD
     return sh.n_out >= 1l
 }
@@ -3381,7 +3381,7 @@ def private metal_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fra
     }
     return tw_decline(MetalTowerDecline.shape) if (tf != tn || p.f0_proj.cin != p.f0[length(p.f0) - 1].dim_out || p.n_proj.cin != p.n[length(p.n) - 1].dim_out
         || conv1d_out_len(p.f0_proj, tf) != tf || conv1d_out_len(p.n_proj, tn) != tn)
-    sh.row_buf_floats = max(sh.row_buf_floats, tts_round_up(frames, 32l) * max(cc, 2l * hd))
+    sh.row_buf_floats = max(sh.row_buf_floats, round_up(frames, 32l) * max(cc, 2l * hd))
     if (!tts_pred_ok(p, ST2_LSTM_MAX_HIDDEN)) {
         return tw_decline(MetalTowerDecline.shape)
     }

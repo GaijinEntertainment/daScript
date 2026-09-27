@@ -104,10 +104,10 @@ def private ts_slab_rows(sl : TsSlab) : TsRows => TsRows(dev = sl.dev, bytes = s
 
 def private ts_slab_rows16(sl : TsSlab) : TsRows => TsRows(dev = sl.dev16, bytes = sl.bytes16, bit = 0u)
 
-//! false where a buffer bound whole as one SSBO range would run past the device's storage range (a binding past it wraps at 32 bits and reads zeros)
+//! `vk_range_ok`, the decline said under the info log naming `what`
 [cold_path]
 def private ts_range_ok(what : string; bytes : int64) : bool {
-    return true if (bytes <= vk_max_storage_range())
+    return true if (vk_range_ok(bytes))
     to_log(LOG_INFO, "vk tts: the {what} of {bytes / 1048576l} MB binds past the device's storage range of {vk_max_storage_range() / 1048576l} MB - the seat declines\n")
     return false
 }
@@ -279,8 +279,8 @@ let private TS_SCRATCH_HEADROOM = 4l   //! a slot is sized this fraction past th
 
 //! `floats` grown by the headroom to the grain; the exact round-up where the grown size would bind past the storage range
 def private ts_grown(floats : int64) : int64 {
-    let grown = tts_round_up(floats + floats / TS_SCRATCH_HEADROOM, TS_SCRATCH_GRAIN)
-    return grown * 4l <= vk_max_storage_range() ? grown : tts_round_up(floats, TS_SCRATCH_GRAIN)
+    let grown = round_up(floats + floats / TS_SCRATCH_HEADROOM, TS_SCRATCH_GRAIN)
+    return vk_range_ok(grown * 4l) ? grown : round_up(floats, TS_SCRATCH_GRAIN)
 }
 
 //! false when an allocation fails or a slot would bind past the storage range; every slot's size is settled before the old scratch goes, and a slot never shrinks
@@ -352,7 +352,7 @@ def private ts_aux_reset {
 
 //! `n` floats of `src` at the next 16-byte boundary of the staged rows; the element offset
 def private ts_aux_push(src : array<float>; n : int64) : int64 {
-    let at = tts_round_up(g_ts_aux_n, 4l)
+    let at = round_up(g_ts_aux_n, 4l)
     g_ts_aux_host |> ensure_length(at + n)
     for (i in range64(n)) {
         g_ts_aux_host[at + i] = src[i]
@@ -637,7 +637,7 @@ def private ts_text_ensure : bool {
 def private ts_text_kdim(te : St2TextEncoder) : int64 {
     var kdim = 32l
     for (cv in te.cnn) {
-        kdim = max(kdim, tts_round_up(cv.k * cv.cin, 32l))
+        kdim = max(kdim, round_up(cv.k * cv.cin, 32l))
     }
     return kdim
 }
@@ -966,7 +966,7 @@ struct private TsShape {
 //! the im2col floats a conv over `rows` output rows takes
 def private ts_col_of(c : TtsConv1d; rows : int64) : int64 => rows * ts_conv_kdim(c)
 
-def private ts_conv_kdim(c : TtsConv1d) : int64 => tts_round_up(c.k * c.cin, 32l)
+def private ts_conv_kdim(c : TtsConv1d) : int64 => round_up(c.k * c.cin, 32l)
 
 //! a conv over `rows` output rows noted on the shape: the widest im2col and the widest padded row
 def private ts_note_col(var sh : TsShape; c : TtsConv1d; rows : int64) {

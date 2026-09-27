@@ -157,6 +157,9 @@ def template copy_floats_template(var d : float ?; s : float const ?; n : int64)
 [hint(unsafe_range_check, noalias = d, noalias = s), tuned]
 def copy_floats(var d : float?; s : float const?; n : int64) {}
 
+//! `n` rounded up to a multiple of `m`: a tile lattice, a row pad, an allocation grain
+def round_up(n, m : auto(TT)) : TT => (n + m - TT(1)) / m * m
+
 //! Exact capacity, then size: the buffer sized once and never regrown.
 def reserve_resize(var a : array<auto(numT)>; n : int | int64) {
     a |> reserve(n)

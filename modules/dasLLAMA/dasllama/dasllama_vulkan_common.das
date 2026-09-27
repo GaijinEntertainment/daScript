@@ -182,7 +182,7 @@ def private cm2_reduce_units(nsplit, cnt, d : int64) : int64 => (9l + ((nsplit +
 
 //! the 256-aligned chunk `nsplit` pieces cut K into; 0 when the last piece would start past K
 def cm2_chunk(n, nsplit : int64) : int64 {
-    let ck = ((n + nsplit - 1l) / nsplit + 255l) & ~255l
+    let ck = round_up((n + nsplit - 1l) / nsplit, 256l)
     return ck * (nsplit - 1l) < n ? ck : 0l
 }
 
@@ -1544,7 +1544,7 @@ def stack_plane_bytes(n, rows : int64; fmt : int) : tuple<wq : int64; ws : int64
 // pass slot capacities and a base of -1 (re-based per layer).
 def make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_shared : bool = false) : int {
     // floor the ws buffer so a scale-less stack's descriptor slot stays valid
-    let wswords = (wscap + 3l) & ~3l   //! whole words: a byte-scale plane (mx4) is read four blocks a word
+    let wswords = round_up(wscap, 4l)   //! whole words: a byte-scale plane (mx4) is read four blocks a word
     var st = VkStack(base = base, elems = elems, fmt = fmt, wqbytes = wqcap,
                      wqbuf = g_gpu.dry ? 0ul : make_device_buf(wqcap, xfer_shared),
                      wsbuf = g_gpu.dry ? 0ul : make_device_buf(max(wswords, 64l), xfer_shared), wsbytes = wswords)
@@ -1591,7 +1591,7 @@ def make_imported_buf(ptr : void?; bytes : int64) : HostBuf {
         return hb
     }
     // the round-up stays inside the mapping: windows start 4KB-aligned, the file is 16KB-padded
-    let sz = (bytes + algn - 1l) / algn * algn
+    let sz = round_up(bytes, algn)
     var ht : VkExternalMemoryHandleTypeFlags
     ht.host_allocation_ext = true
     var hpp = VkMemoryHostPointerPropertiesEXT()
@@ -2119,6 +2119,9 @@ def vk_arena_test_slab_cap(blocks : int64) {
 //! the resident KV mirror).
 def vk_max_storage_range : int64 => g_gpu != null ? g_gpu.msr : 0l
 
+//! false where a buffer bound whole as one SSBO range would run past the device's storage range (a binding past it wraps at 32 bits and reads zeros)
+def vk_range_ok(bytes : int64) : bool => bytes <= vk_max_storage_range()
+
 // per-slab block capacity: maxStorageBufferRange is the real ceiling (uint32 indexing reaches
 // 16GiB); NV/AMD report 4GiB, MoltenVK tighter — both plane strides must fit their binding
 def private arena_slab_blocks(fmt : int) : int64 {
@@ -2143,7 +2146,7 @@ def private arena_open_slab(var a : ArenaFmt) : bool {
         to_log(LOG_INFO, "dasLLAMA vulkan arena: fmt {a.fmt} slab {length(a.slabs)} opens ({cap} blocks; {tail} tail blocks unused in slab {length(a.slabs) - 1})\n")
     }
     let qb = cap * bb.wq
-    let sb = max((cap * bb.ws + 3l) & ~3l, 64l)   // ws floor keeps the descriptor slots valid (stack-shell rule); whole words, since a byte-scale plane (mx4) is read four blocks a word
+    let sb = max(round_up(cap * bb.ws, 4l), 64l)   // ws floor keeps the descriptor slots valid (stack-shell rule); whole words, since a byte-scale plane (mx4) is read four blocks a word
     let wqbuf = g_gpu.dry ? 0ul : try_device_buf(qb)
     let wsbuf = g_gpu.dry ? 0ul : try_device_buf(sb)
     if (!g_gpu.dry && (wqbuf == 0ul || wsbuf == 0ul)) {   //! the device had no room for the slab: the placement declines instead of dying mid-upload

@@ -446,7 +446,7 @@ def private vt_dev_buf(var r : VtResident; bytes : int64) : uint64 => soft_devic
 def private vt_host_buf(var r : VtResident; bytes : int64; cached : bool) : HostBuf => soft_host_buf(r.oom, bytes, cached)
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_cap_rows(rows : int64) : int64 => (rows + 255l) / 256l * 256l
+def private vt_cap_rows(rows : int64) : int64 => round_up(rows, 256l)
 
 //! the largest buffer the scratch at `cap` rows binds: the range decline reads it against the device's limit
 def private vt_scratch_max_bytes(cap, d, ff, dp, taps : int64; fused, f16w : bool) : int64 {
@@ -467,8 +467,6 @@ def private vt_scratch_max_bytes(cap, d, ff, dp, taps : int64; fused, f16w : boo
 
 //! the q8 chains' GEMM feed: on a coopmat device the cm2 (or KHR) f16 tiles the prefill serves dense q8 GEMMs with, else the mul_mm tiles
 def vt_cm2_feed : bool => g_gpu.coopmat_mode >= COOPMAT_MM
-
-def vt_range_ok(bytes : int64) : bool => bytes <= vk_max_storage_range()
 
 //! the front scratch released on its own; the block chain's scratch rebuild drops it too, and it regrows on demand
 [cold_path]
@@ -1159,7 +1157,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     if (!arm.ok) {
         return false
     }
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(t.blob.n * 4l) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(t.blob.n * 4l) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     if (!ensure_tower_rms_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_post_add_cls()
@@ -1414,8 +1412,8 @@ def private vt_sets_cn(var r : VtResident) {
 
 def private vt_cn_rows_ok(npos, d, ff : int64) : bool {
     let cap = vt_cap_rows(npos)
-    return (vt_range_ok(vt_scratch_max_bytes(cap, d, ff, 0l, 0l, false, false)) && vt_range_ok(2l * cap * d * 4l)
-        && vt_range_ok(cap * (2l * cap - 1l) * 4l))
+    return (vk_range_ok(vt_scratch_max_bytes(cap, d, ff, 0l, 0l, false, false)) && vk_range_ok(2l * cap * d * 4l)
+        && vk_range_ok(cap * (2l * cap - 1l) * 4l))
 }
 
 [cold_path]
@@ -1495,7 +1493,7 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     if (!arm.ok) {
         return false
     }
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(t.blob.n * 4l) || !vt_cn_rows_ok(npos, d, ff)) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(t.blob.n * 4l) || !vt_cn_rows_ok(npos, d, ff)) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     if (!ensure_tower_ln_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_post_add_ln_cls()
@@ -1991,7 +1989,7 @@ def private vt_sk_ensure(var r : VtResident; tc, nsplit : int64) : bool {
         return false
     }
     let need = nsplit * r.cap_rows * r.d * 4l
-    if (!vt_range_ok(need) || (r.sk_bytes < need && !vt_sk_build(r, nsplit, need))) {
+    if (!vk_range_ok(need) || (r.sk_bytes < need && !vt_sk_build(r, nsplit, need))) {
         return false
     }
     if (!key_exists(r.sets_sk, int(tc))) {
@@ -2288,7 +2286,7 @@ def private vt_aud_blocks(t : AudioTower; var s : EncoderState; npos : int64; ln
         return false
     }
     let khr = arm.khr
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, d, 0l, false, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, d, 0l, false, false))) {
         return vt_flush_and_decline(r, VulkanTowerDecline.shape)
     }
     let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
@@ -2353,7 +2351,7 @@ def private vt_slab_f16(var slab : array<float>) : array<uint16> {
 def private vt_aud_front_slab(var r : VtResident; t : AudioTower) : bool {
     let d = t.d_model
     let kreal = 3l * t.n_mel
-    let kdp = (kreal + 63l) / 64l * 64l
+    let kdp = round_up(kreal, 64l)
     r.stem_kdp = kdp
     var slab : array<float>
     slab |> reserve_resize(d * kdp)
@@ -2448,7 +2446,7 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
     if (!vt_cm2_feed()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(tt), d, ff, d, 0l, false, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(tt), d, ff, d, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let v = q8_batch_cls_variant(q8_batch_tile_for(d, tt), q8_batch_aligned(d, tt))
@@ -2539,7 +2537,7 @@ def private vulkan_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos :
         return false
     }
     let khr = arm.khr
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let v = q8_batch_cls_variant(q8_batch_tile_for(d, npos), q8_batch_aligned(d, npos))
@@ -2610,7 +2608,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         return false
     }
     let khr = arm.khr
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, nds, true, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, nds, true, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hsp, false, false, false, false, true)
@@ -2783,7 +2781,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     let gemm_khr = arm.gemm_khr
     let w_off = t.layer_w
     let w_n = t.n_layer * t.layer_w_stride
-    if (!vt_range_ok(w_n * 2l) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, true))) {
+    if (!vk_range_ok(w_n * 2l) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, true))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hsp, false, false, false, false, true)
@@ -2936,7 +2934,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
         return false
     }
     let khr = arm.khr
-    if (!vt_range_ok(t.qblob.n) || !vt_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
+    if (!vk_range_ok(t.qblob.n) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hs, false, false, false, false, true)
@@ -3079,7 +3077,7 @@ struct private VtConvStage {
 def private vt_conv_stage(iw, ih, cin : int64) : VtConvStage {
     let ow = conv_s2_out(iw)
     let oh = conv_s2_out(ih)
-    return VtConvStage(iw = iw, ih = ih, cin = cin, ow = ow, oh = oh, rows = oh * ow, kdp = (cin * 9l + 63l) / 64l * 64l)
+    return VtConvStage(iw = iw, ih = ih, cin = cin, ow = ow, oh = oh, rows = oh * ow, kdp = round_up(cin * 9l, 64l))
 }
 
 var private g_vt_q3a_stages : VtConvStage[3]
@@ -3174,7 +3172,7 @@ def private vt_q3a_scratch(var r : VtResident; cap_chunks, nm, d : int64; gemm_k
     let by = fixed_array(cap_chunks * g_vt_q3a_stages[0].rows * nch * 4l, cap_chunks * g_vt_q3a_stages[1].rows * nch * 4l, cap_chunks * g_vt_q3a_stages[2].rows * nch * 4l)
     let bfeat = (r.cap_rows + TILE_READ_SLACK) * featw * 2l
     let bx = r.cap_rows * d * 4l
-    if (!vt_range_ok(max(max(bxin, bcol), max(max(by[0], by[1]), max(by[2], bfeat))))) {
+    if (!vk_range_ok(max(max(bxin, bcol), max(max(by[0], by[1]), max(by[2], bfeat))))) {
         return false
     }
     r.fxin_dev = vt_dev_buf(r, bxin)
@@ -3314,7 +3312,7 @@ let private VTF_MEL = 0x80u
 def private vt_g4a_front_slab(var r : VtResident; t : Gemma4aEncoder) : bool {
     let kdp0 = 64l
     let kd1 = t.sub_ch0 * 9l
-    let kdp1 = (kd1 + 63l) / 64l * 64l
+    let kdp1 = round_up(kd1, 64l)
     let total = t.sub_ch0 * kdp0 + t.sub_ch1 * kdp1
     var slab : array<float>
     slab |> reserve_resize(total)
@@ -3358,7 +3356,7 @@ def private vt_g4a_front_scratch(var r : VtResident; t : Gemma4aEncoder; cap : i
     let ch1 = t.sub_ch1
     let d = t.d_model
     let kdp0 = 64l
-    let kdp1 = (ch0 * 9l + 63l) / 64l * 64l
+    let kdp1 = round_up(ch0 * 9l, 64l)
     let t1 = conv_s2_out(cap)
     let w1 = conv_s2_out(n_mel)
     let t2 = conv_s2_out(t1)
@@ -3376,7 +3374,7 @@ def private vt_g4a_front_scratch(var r : VtResident; t : Gemma4aEncoder; cap : i
     let bx = t2 * d * 4l
     let btw = n_fft * 2l * n_bins * 4l
     let bfil = n_mel * n_bins * 4l
-    if (!vt_range_ok(max(max(bxw, bcol), max(max(by0, by1), max(bfeat, bmag))))) {
+    if (!vk_range_ok(max(max(bxw, bcol), max(max(by0, by1), max(bfeat, bmag))))) {
         return false
     }
     r.front_cap = cap
@@ -3432,7 +3430,7 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
     let feat = w2 * ch1
     let rows0 = t1 * w1
     let rows1 = t2 * w2
-    let kdp1 = (ch0 * 9l + 63l) / 64l * 64l
+    let kdp1 = round_up(ch0 * 9l, 64l)
     if (n_len < 4l || feat != d || ch0 != n_mel || ch1 % 16l != 0l || d % 64l != 0l || long_length(s.xw) < n_len * n_fft
             || npos > VT_MAX_ENCODE_ROWS) {
         vt_decline(r, VulkanTowerDecline.shape)
@@ -3586,7 +3584,7 @@ def private vt_cn_front_scratch(var r : VtResident; t : CanaryEncoder; cap : int
     let bx = g.t3 * d * 4l
     let btw = n_fft * 2l * n_fb * 4l
     let bfil = n_mel * n_fb * 4l
-    if (!vt_range_ok(max(max(by0, bh), max(bxf, bx)))) {
+    if (!vk_range_ok(max(max(by0, bh), max(bxf, bx)))) {
         return false
     }
     r.front_cap = cap
@@ -3790,7 +3788,7 @@ def private vt_q3a_mel_scratch(var r : VtResident; cap, n_fft, n_bins, n_mel : i
     let bfil = n_mel * n_bins * 4l
     let bpow = cap * n_bins * 4l
     let bout = n_mel * cap * 4l
-    if (!vt_range_ok(max(bxw, max(bpow, bout)))) {
+    if (!vk_range_ok(max(bxw, max(bpow, bout)))) {
         return false
     }
     r.x_dev = vt_dev_buf(r, bxw)

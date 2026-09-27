@@ -32,12 +32,9 @@ struct TtsSlabWriter {
     measure : bool
 }
 
-//! n rounded up to a multiple of m - the tile lattices the GEMM panels and the row pads take
-def tts_round_up(n, m : int64) : int64 => (n + m - 1l) / m * m
-
 //! `count` floats at the next 16-byte boundary (every item is a float4 read for some kernel); the element offset
 def tsw_alloc(var w : TtsSlabWriter; count : int64) : int64 {
-    let at = tts_round_up(w.n, 4l)
+    let at = round_up(w.n, 4l)
     w.n = at + count
     return at
 }
@@ -197,7 +194,7 @@ def tts_slab_raw(var w : TtsSlabWriter; src : array<float>; n : int64) : int64 {
 
 def tts_slab_conv(var w : TtsSlabWriter; c : TtsConv1d) : TtsConvSlot {
     let kc = c.k * c.cin
-    var s = TtsConvSlot(cout_p = tts_round_up(c.cout, 64l), kdim_p = tts_round_up(kc, 32l), gathers = c.cin % 8l == 0l)
+    var s = TtsConvSlot(cout_p = round_up(c.cout, 64l), kdim_p = round_up(kc, 32l), gathers = c.cin % 8l == 0l)
     s.woff = tsw_alloc(w, s.cout_p * s.kdim_p)
     if (c.q8) {
         tsw_put_q8(w, c.wq, c.wqs, c.cout, kc, s.woff, s.kdim_p)
@@ -221,7 +218,7 @@ def tts_slab_conv(var w : TtsSlabWriter; c : TtsConv1d) : TtsConvSlot {
 }
 
 def tts_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot {
-    var s = TtsConvSlot(cout_p = tts_round_up(l.nout, 64l), kdim_p = tts_round_up(l.nin, 32l), gathers = false)
+    var s = TtsConvSlot(cout_p = round_up(l.nout, 64l), kdim_p = round_up(l.nin, 32l), gathers = false)
     s.woff = tsw_alloc(w, s.cout_p * s.kdim_p)
     if (l.q8) {
         tsw_put_q8(w, l.wq, l.wqs, l.nout, l.nin, s.woff, s.kdim_p)
