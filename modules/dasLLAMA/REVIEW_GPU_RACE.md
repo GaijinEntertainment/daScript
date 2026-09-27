@@ -101,10 +101,9 @@ timed encoder in an arm of a race whose ranking is decided, makes each timed enc
 dispatches back to back.** An
 encoder that leaves gaps between its dispatches times an idle clock.
 
-**A diff that records the figure of a race whose code the tree does not hold states beside it
-each streamed operand's size against the device's last-level cache, the shape each arm ran,
-whether each timed dispatch had its own output, how each arm ordered its dispatches, the untimed
-work each arm ran first, and that each encoder issued its dispatches back to back.**
+**A diff never records the figure of a race whose code the tree does not hold - it lands the
+race under `harness/` in the same change.** A figure without its race cannot be re-run, and no
+reviewer can check what the fidelity rules ask of an arm that is gone.
 
 **A diff that ports an A/B lab's winning variant into a kernel deletes, in the same change, that
 variant's class and any `*_variants.das` code that exists only for it and is not a live arm.** A

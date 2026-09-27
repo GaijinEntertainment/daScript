@@ -44,9 +44,11 @@ is a defect.** Anything that changes what an image contains - the box profile, t
 flavor, a head that rides the load - goes into `image_identity`, the string the header bakes,
 not only into the image path; a mismatch declines loudly.
 
-**An image save deletes only its own lane's images whose identity no longer matches, and BROKEN
-or version-stale images in any lane; deleting any other image - a current image of another
-flavor or another family - is a defect.** A lane is an identity's (quant, tag) pair.
+**An image save deletes its own lane's images whose identity no longer matches, and any image
+the verdicts prove garbage in any lane - BROKEN, version-stale, or a stale layout of a family
+this process registered; deleting any other image - a current image of another flavor or
+another family, or one whose family this process cannot recompute - is a defect.** A lane is an
+identity's (quant, tag) pair.
 
 **A plane split that follows the source FILE rather than a runtime knob takes ONE image tag**,
 with the meta flags describing the layout - a per-tensor type split is not a second flavor.

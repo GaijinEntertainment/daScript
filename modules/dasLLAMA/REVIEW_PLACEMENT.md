@@ -47,10 +47,10 @@ class stamped from a kernel class template.
 whichever file calls it.**
 
 **A Vulkan host-side ensure/set/encode chain whose pick reads driver state - `g_rd` or an
-`RLayer` field - lands in the Vulkan driver file whose pass
-calls it - `dasllama/dasllama_vulkan_decode.das` for the decode step,
-`dasllama/dasllama_vulkan_prefill.das` for the prefill pass, the tower, ASR-decoder or TTS driver
-file for theirs.**
+`RLayer` field - lands in the Vulkan driver file whose pass calls it -
+`dasllama/dasllama_vulkan_decode.das` for the decode step, `dasllama/dasllama_vulkan_prefill.das`
+for the prefill pass, the tower, ASR-decoder or TTS driver file for theirs - and in
+`dasllama/dasllama_vulkan_common.das` when both the decode step and the prefill pass call it.**
 
 **A host-side ensure/set/encode chain on any backend that only switches on a stamp it is handed
 lands in the file of the function that decides that stamp, and a diff that moves that function
