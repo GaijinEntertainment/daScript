@@ -336,7 +336,6 @@ def gpu_stage_verdict(t : T?; tag, stage : string; g, cpu, gp : array<float>; ba
     return true
 }
 
-//! `n` elements of `a` from `at`, copied out
 def copy_span(a : array<float>; at, n : int64) : array<float> {
     var inscope out : array<float>
     out |> resize(n)
@@ -630,8 +629,7 @@ def speech_level(pcm : array<float>) : tuple<finite : bool; peak : float; rms : 
     return (finite = finite, peak = logits_maxabs(pcm), rms = rms(pcm))
 }
 
-//! A family's facade cell: the model gated (and the front-end packs where `packs`), loaded through the facade on a set-up job
-//! queue, its caps at 24 kHz listing `n_voices` voices, then `body` over the model and its caps.
+//! a facade cell: the model (and packs under `packs`) gated, loaded on a job queue, caps at 24 kHz with `n_voices` voices, then `body`
 def facade_smoke(t : T?; path : string; packs : bool; n_voices : int; body : block<(var m : TtsModel; c : TtsCaps) : void>) {
     return if (packs ? tts_data_missing(t, path) : !model_available(t, path))
     with_job_que() {

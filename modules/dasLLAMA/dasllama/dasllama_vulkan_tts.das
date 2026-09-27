@@ -129,13 +129,9 @@ def private ts_slab_upload(var sl : TsSlab; key : uint64; host : array<float>; h
     return true
 }
 
-//! the slab for `key` stands: its rows are up under that key
 def private ts_slab_current(sl : TsSlab; key : uint64) : bool => sl.rows.dev != 0ul && sl.key == key
 
-//! the writer's two passes into a fresh slot record, the host floats up (their f16 twin under `half`), the slots taken, the wall said; false
-//! on a failed upload, the resident slab released. A part's attach reaches it through its own [cold_path] rebuild, the one that holds the
-//! writer's block, so the writer's allocations stay off the seat's hot path
-[cold_path]
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private ts_slab_rebuild(var sl : TsSlab; var slots : auto(SS); key : uint64; half : bool; what : string;
                             write : block<(var w : TtsSlabWriter; var s : SS) : void>) : bool {
     var inscope fresh : SS
@@ -372,8 +368,7 @@ def private ts_gemm_args(slot : TtsConvSlot; nin, nout, rows : int64) : F32GemmA
     => F32GemmArgs(n = uint(nin), d = uint(nout), rows = uint(rows), woff = uint(slot.woff), wstride = uint(slot.kdim_p), boff = uint(slot.boff),
         xoff = 0u, xstride = uint(nin), yoff = 0u, ystride = uint(nout))
 
-//! a dense linear's GEMM: y[rows x nout] = x[rows x nin] W^T + b over the slab's rows, the f32 tile; `biased` false leaves the bias row for the
-//! residual seam that follows (`ts_add_ln` adds it there)
+//! a dense linear on the f32 tile, y = x W^T + b over the slab's rows; `biased` false leaves the bias to the seam after (`ts_add_ln`)
 def private ts_lin(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : TtsConvSlot; nin, nout : int64; x, y : TsRows; rows : int64; biased : bool = true) {
     var pa = ts_gemm_args(slot, nin, nout, rows)
     if (biased) {
@@ -1666,8 +1661,7 @@ def private ts_ensure_log(seat : string; us, drv0, arms_us : int) {
     }
 }
 
-//! the tier's device armed, then the seat's classes built (`ensure`); false on either (the seat's `device` decline); the bring-up and the pipeline
-//! build wall the call paid past it logged when either reached a ms
+//! the device armed, then the seat's classes built (`ensure`); false on either (`device`); a bring-up or build wall past a ms logged
 def private ts_arm_ensure(seat : string; ensure : function<() : bool>) : bool {
     let te = ref_time_ticks()
     let drv0 = g_vkd_pipe_build_us
@@ -1726,7 +1720,7 @@ def private ts_pk_kv_upload(kc : TtsKvCache; bk, bv : TsRows; r0, r1 : int64) {
     return if (rows <= 0l)
     g_ts_pk_kv_host |> ensure_length(2l * rows * d)
     unsafe {
-        tts_pk_kv_rows(kc, r0, r1, 0l, addr(g_ts_pk_kv_host[0]), addr(g_ts_pk_kv_host[rows * d]))
+        kv_cache_read_rows(kc, r0, r1, 0l, addr(g_ts_pk_kv_host[0]), addr(g_ts_pk_kv_host[rows * d]))
     }
     upload_region_at(bk.dev, r0 * d * 4l, unsafe(addr<uint8 const?>(g_ts_pk_kv_host[0])), rows * d * 4l)
     upload_region_at(bv.dev, r0 * d * 4l, unsafe(addr<uint8 const?>(g_ts_pk_kv_host[rows * d])), rows * d * 4l)
@@ -2240,8 +2234,7 @@ def private ts_pk_frame(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_
 var private @scratch g_ts_pk_noise_host : array<float>
 var private @scratch g_ts_pk_eos_host : array<float>
 
-//! the host frame loop (`pocket_frames_batched`) on this driver: the noise staged host-side and uploaded ahead of each batch's submit, the
-//! batch's EOS logits read back after it
+//! `pocket_frames_batched` here: the noise staged and uploaded ahead of each batch's submit, its EOS logits read back after
 def private ts_pk_frames_loop(m : PocketModel; sl : TtsPkFramesSlab; slab : TsRows; sc_ : TsScratch; base, batch, max_frames, forced_rows : int64; std : float;
                               frames_after_eos : int; captured : array<float>; var sc : PocketScratch; var f0 : int64&) : tuple<frames : int64; eos_at : int64> {
     let ld = m.latent_dim

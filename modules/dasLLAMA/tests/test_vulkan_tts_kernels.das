@@ -416,8 +416,7 @@ def private colstats_ref(x : array<float>; rows, c : int) : array<float> {
     return <- st
 }
 
-//! the four column-statistics passes over plane `xp` [rows][c] into plane `stp`'s stats rows, the partials past them (the
-//! command buffer, hazard set and planes untyped: the file compiles with no vulkan module, where nothing instantiates this)
+//! the four column-stats passes over `xp` [rows][c] into `stp`'s stats rows; its arguments untyped, as a vulkan-less build compiles it
 def private colstats_enc(raw; var h; cp; xp, stp, rows, c : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nblk = tts_stats_blocks(int64(rows))
@@ -463,7 +462,7 @@ def private colstats_arm(t : T?; rows, c : int) {
             }
             let got <- subarray(cp |> plane_run(stp), range(2 * c))
             let want <- colstats_ref(x, rows, c)
-            //! row 0 the means, row 1 the squared deviations; a sum of 300 of them sits past the relative bar's reach of 0.5, so the poison is a percent
+            // row 0 the means, row 1 the squared deviations; a sum of 300 of them sits past the relative bar's reach of 0.5, so the poison is a percent
             check_rows(t, "{tag} means and squared deviations vs the double-precision sums", got, want, Bar(rel = APPROX_REL, poison = 0.01, scaled = true), c)
             t |> success(!approx(got[c - 1], want[c - 1] + 0.5), "{tag}: the bar reds a poisoned mean")
         }

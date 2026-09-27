@@ -36,8 +36,7 @@ struct TtsSpan {
 
 let BLOB_ALIGN_FLOATS = 64l   // every span starts on a 256-byte boundary, a legal GPU buffer offset
 
-//! Append `src` to a staging blob on the alignment boundary - floats into the float blob, int8 quants and byte
-//! planes into the int8 quant blob byte for byte; the span it landed in, counted in the blob's elements.
+//! `src` appended on the alignment boundary (floats to the float blob, int8 and byte planes byte for byte); its span in blob elements
 def blob_push(var blob : array<auto(BT)>; src : array<auto(ST)>) : TtsSpan {
     let n = long_length(src)
     return TtsSpan() if (n == 0l)
@@ -54,8 +53,7 @@ def blob_push(var blob : array<auto(BT)>; src : array<auto(ST)>) : TtsSpan {
     return TtsSpan(off = off, n = n)
 }
 
-//! Bind `a` as a borrowed view over `span` of a served plane - the float plane, or the int8 quant plane a quant
-//! or byte array rides.
+//! bind `a` as a borrowed view over `span` of a served plane: the float plane, or the int8 plane a quant or byte array rides
 def bind_span(blob : auto(PT); span : TtsSpan; var a : array<auto(ET)>) {
     return if (span.n == 0l)
     if (span.off < 0l || span.n > blob.n || span.off > blob.n - span.n) {
@@ -76,8 +74,7 @@ struct TtsBlobIo {
     qplane : PlaneI8 = PlaneI8()
 }
 
-//! One weight through the walk (see TtsBlobIo): a float array rides the float blob and plane, an int8 quant or
-//! byte (K-quant) array the int8 quant blob and plane.
+//! one weight through the walk: a float array on the float blob and plane, an int8 or byte (K-quant) array on the int8 ones
 def weight_slot(var io : TtsBlobIo; var a : array<auto(ET)>; var span : TtsSpan) {
     if (io.staging) {
         static_if (typeinfo stripped_typename(a[0]) == "float") {
@@ -447,8 +444,7 @@ def adain_pad(var a : TtsAdaIn; c, cs : int64) {
     }
 }
 
-//! Row `co` of a dense conv's weight in the tap-major order its stacked forms read, dst[doff + tap * cin + ci], from
-//! the f32 layout it serves: `wtr`, else `wt`, transposed; `wk`, else the ONNX `w`, forward.
+//! row `co` of a dense conv's f32 weight tap-major at dst[doff + tap * cin + ci], from `wtr` / `wt` (transposed), else `wk` / `w`
 def conv1d_weight_row(c : TtsConv1d; co : int64; var dst : array<float>; doff : int64) {
     for (ci in range64(c.cin)) {
         for (tap in range64(c.k)) {
@@ -862,8 +858,7 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
 
 let private ROWS_STACK_BYTES = 4l * 1024l * 1024l   // a stacked chunk stays cache-resident while the GEMM reads it
 
-//! Output rows [rb, re) of a chunk starting at output row r0, each the k input rows its taps read - row (r0 + r) * stride +
-//! tap * dil - pad, `width` elements of src a row - side by side at dst [row][k * width], zeros where a tap leaves the t_in rows.
+//! chunk rows [rb, re) from output row r0: tap j reads input row (r0 + r) * stride + j * dil - pad, `width` wide, at dst [row][j * width]
 [arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
 def private stack_tap_rows(var dst : auto(TT)?; src : TT const?; rb, re, r0, k, width, stride, dil, pad, t_in : int64) {
     for (r in range64(rb, re)) {
@@ -1395,8 +1390,7 @@ def kv_key_at(dh, cap, h, e, pos : int64) : int64 => (h * dh + e) * cap + pos
 //! Where the same cache holds head `h`'s value element `e` at `pos`: values per head, [heads][cap][dh].
 def kv_value_at(dh, cap, h, e, pos : int64) : int64 => (h * cap + pos) * dh + e
 
-//! The cache's positions [r0, r1) as token-major key and value rows [pos][heads * dh] at kp / vp,
-//! position r0 landing at row `at` - `kv_cache_append`'s inverse.
+//! positions [r0, r1) as token-major key and value rows [pos][heads * dh] at kp / vp from row `at` - `kv_cache_append`'s inverse
 def kv_cache_read_rows(kc : TtsKvCache; r0, r1, at : int64; var kp, vp : float?) {
     let dh = kc.dh
     let cap = kc.cap
@@ -2181,7 +2175,7 @@ def resize_linear(torch_math : bool; x : array<float>; c, t : int64; scale : flo
     return t_out
 }
 
-//! The window form on either kernel's arithmetic - `torch_math`: PyTorch's, else onnxruntime's; the harmonic source's resamples run it.
+//! the window form on either law's arithmetic: `torch_math` PyTorch's, else onnxruntime's
 [arch(at = "../ARCHITECTURE_TTS.md#tts-phase-law")]
 def private resize_linear_window(torch_math : bool; x : array<float>; x_lo, x_stride, c, t : int64; scale : float; to0, to1 : int64; var y : array<float>; y_stride : int64) {
     if (torch_math) {

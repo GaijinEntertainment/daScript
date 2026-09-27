@@ -323,8 +323,7 @@ def tower_twin_bar(t : T?; tag : string; exact, cpu, dev : array<float>; n_layer
     return bar
 }
 
-//! a device encode's rel_l2 from the exact chain against the bar a clean three-way set: held within it (a later encode on the
-//! residency, a fresh one after a shutdown), or - `must_exceed`, the input poison over zeroed GEMM planes - past it
+//! a device encode's rel_l2 from the exact chain held within `bar`, or past it under `must_exceed` (the zeroed-plane input poison)
 def tower_twin_check(t : T?; tag : string; exact, dev : array<float>; bar : double; must_exceed : bool) {
     var st = TowerParityStats()
     return if (!tower_parity_stats(t, must_exceed ? "{tag} poisoned vulkan vs exact" : "{tag} vulkan vs exact", exact, dev, st))

@@ -10091,7 +10091,6 @@ class template DwConvRowsT {
         }
     }
 
-    //! the input row tap kk reads for output row t, or -1 off the input
     def src_row(t, kk : uint) : int {
         static_if (FORM == 0) {
             return st2_conv_src_tr_row(t, kk, 0u, pa.pad_l, pa.dil, max(pa.stride, 1u), pa.t_in)
@@ -10863,7 +10862,6 @@ class template RopeTabT {
     @ssbo @binding = 2 sin_t : array<float>
     @push_constant pa : TtsPkRopeArgs
 
-    //! the pair's first element at head base `hb`
     def pair_first(hb, j : uint) : uint {
         static_if (NEOX) {
             return hb + j
@@ -10872,8 +10870,7 @@ class template RopeTabT {
         }
     }
 
-    //! ... and the distance to its partner
-    def pair_step(hh : uint) : uint {
+    def pair_partner_dist(hh : uint) : uint {
         static_if (NEOX) {
             return hh
         } else {
@@ -10891,7 +10888,7 @@ class template RopeTabT {
             let hh = max(pa.dh / 2u, 1u)
             let j = pi % hh
             let i0 = pair_first(pa.xoff + r * pa.qs + pa.col + (pi / hh) * pa.dh, j)
-            let i1 = i0 + pair_step(hh)
+            let i1 = i0 + pair_partner_dist(hh)
             let tb = (pa.pos0 + r) * hh + j
             let cv = cos_t[pa.coff + tb]
             let sv = sin_t[pa.soff + tb]
@@ -14229,11 +14226,9 @@ struct TtsPkGemvArgs {
 //! y += d * the slab vector (the layer scale), 7 the residual y += d, 8 the tanh GELU; 32 lanes a row, each a float4 of the
 //! row a step when the row base, the stride and nin sit on the four lattice (the slab writer's 16-byte runs) and a float
 //! otherwise, the lanes folded by shuffle; four rows a workgroup. The rope-store stamp turns the
-//! pairs (2j, 2j + 1) a workgroup's even and odd rows hold, so it takes a span on the four lattice. The workgroup memory is
-//! measured to size (the staged x, the four dots), so the norm's sums fold through one subgroupAdd into `red`, one slot a
-//! subgroup, not through `WgReduceBase`
+//! pairs (2j, 2j + 1) a workgroup's even and odd rows hold, so it takes a span on the four lattice
 [ |> template_struct_instance]
-class template TtsPkGemvT {
+class template TtsPkGemvT : WgReduceBase {
     @template_constant NORM_IN : bool = false       //!< the input through the LayerNorm (lw, lb) alone
     @template_constant NORM_MOD_IN : bool = false
     @template_constant MOD_IN : bool = false   //!< the modulation rows are read: the normed input or the gate epilogue
@@ -14253,25 +14248,7 @@ class template TtsPkGemvT {
     @ssbo @binding = 8 @template_gate = ROPE_STORE vc : array<float>
     @push_constant pa : TtsPkGemvArgs
     @workgroup xs : float[int(TTS_PK_GEMV_MAX_NIN)]
-    @workgroup red : float[4]   //! the subgroups' partials of a workgroup sum
     @workgroup dq : float[4]   //! the rope-store stamp: the workgroup's four dots side by side, so an even row turns its pair
-
-    //! the workgroup sum of one value a lane: the subgroups' sums, every lane adding them in order; `red` is free on return
-    def gemv_wg_sum(v : float) : float {
-        let s = subgroupAdd(v)
-        if (gl_SubgroupInvocationID == 0u) {
-            red[gl_SubgroupID] = s
-        }
-        barrier()
-        var tot = 0.0
-        var i = 0u
-        while (i < gl_NumSubgroups) {
-            tot += red[i]
-            i++
-        }
-        barrier()
-        return tot
-    }
 
     //! the 32 lanes of a row folded: a butterfly over the row's aligned lane group, every lane holding the row's sum
     def row_sum(v : float) : float {
@@ -14326,7 +14303,7 @@ class template TtsPkGemvT {
             s += x[pa.xoff + k]
             k += 128u
         }
-        let total = gemv_wg_sum(s)
+        let total = wg_sum(s, 0u)
         let mean = total / float(pa.nin)
         var vs = 0.0
         k = tid
@@ -14335,7 +14312,7 @@ class template TtsPkGemvT {
             vs += dv * dv
             k += 128u
         }
-        let var_sum = gemv_wg_sum(vs)
+        let var_sum = wg_sum(vs, 1u)
         let inv = 1.0 / sqrt(var_sum / float(pa.nin) + pa.eps)
         k = tid
         while (k < pa.nin) {

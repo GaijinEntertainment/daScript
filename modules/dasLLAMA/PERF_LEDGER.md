@@ -51,6 +51,18 @@ what it costs today and what the fix would change.
   job pool. What the seats hold: the Pocket frames slab 322 MB, the kokoro decoder's scratch past
   3 GB at its widest sentence, the Pocket codec's one-shot column slot about 4 GB at the 512-frame
   cap (`followup_vulkan.md` 108, 109).
+
+  The Pocket row GEMV (`TtsPkGemvT`) with its own subgroup reduction against the `WgReduceBase`
+  form, at the served frame-loop shapes, device timestamps on the pod's RTX PRO 4500 - 200
+  dispatches a batch, 5 batches, a ring of 8 weight copies of 16 MiB so the weights stay out of
+  L2: ln_qkv (1024 -> 3072) 18.99 against 18.93 us a dispatch, ln_gelu (1024 -> 4096) 24.57
+  against 24.57; the same bits, max abs diff 0 over both outputs; workgroup memory 16416 against
+  16928 bytes under a 49152-byte cap (the probe's twin kept the retired 16-byte `red` beside the
+  base's `part`; the landed class declares 16912). The occupancy claim did not hold, and the GEMV folded onto
+  the shared base. The dedup tip's bench rows, re-read on the same box as the mean over 20
+  sentences, read within noise or better: kitten-nano 44 ms (the 54 above), kitten-mini 95 (the
+  302 above predates the scratch and attach levers that landed after that row), kokoro 87 (98),
+  Pocket q8 128 (132).
 - **LANDED (2026-09-26) - three TTS parity bars widened to cover the pod's x64 CPU chain beside
   the M5 Max's.** Every reading `-jit` through `tests/run.das -- --area tts` on the named box: the
   pod (the RunPod RTX PRO 4500, Linux; its x64 CPU chain is the arm under compare) and the M5 Max

@@ -856,8 +856,7 @@ def private tw_rows_strided(var buf : MetalBuffer?; src : float const?; rows, wi
     }
 }
 
-//! The DFT's transposed twiddle panel [rows_pad x kstride]: row n (an output bin, the real rows then the imaginary) the
-//! twiddles' column n over the n_fft taps, every pad zero.
+//! the DFT's transposed twiddle panel [rows_pad x kstride]: row n (a bin, real rows then imaginary) the twiddles' column n, pads zero
 def private tw_twiddle_panel(var buf : MetalBuffer?; tw : float const?; n_bins, n_fft, kstride, rows_pad : int64) {
     unsafe {
         var tp = reinterpret<float?>(metal_buffer_contents(buf))
@@ -933,7 +932,6 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     upload_rows_padded(bxw, unsafe(addr(s.xw[0])), n_len, mpd, n_fft)   //! pad rows zeroed: the DFT GEMM walks mpd rows
     tw_twiddle_panel(btw, plane_at(t.twiddles, 0l), n_bins, n_fft, n_fft, dft_out_pad)
     tw_rows_strided(bfil, plane_at(t.filters, 0l), n_mel, n_bins, mag_k_pad)   //! the mel filterbank [n_mel x mag_k_pad], k-padded
-    //! conv0 weight [sub_ch0 x conv0_k_pad] (kdim 9 padded), conv1 weight [conv1_cout_pad x kd1] (cout padded)
     tw_rows_strided(bw0, plane_at(t.blob, t.c0_w), t.sub_ch0, 9l, conv0_k_pad)
     upload_rows_padded(bw1, unsafe(reinterpret<void?>(plane_at(t.blob, t.c1_w))), t.sub_ch1, conv1_cout_pad, kd1)
     var u_kfft = uniform_u32(uint(n_fft))
@@ -2240,19 +2238,17 @@ def private st2_slot_of(w : TtsSlabWriter; t : TtsConvSlot) : St2ConvSlot {
 def private st2_norm_of(t : TtsNormSlot) : St2NormSlot
     => St2NormSlot(gwoff = uint64(t.gwoff * 4l), gboff = uint64(t.gboff * 4l), aux_off = uint64(t.aux_off * 4l))
 
-//! the shared writer's element offset as the byte offset a Metal binding takes
-def private st2_off(off : int64) : uint64 => uint64(off * 4l)
+def private st2_byte_off(off : int64) : uint64 => uint64(off * 4l)
 
 def private st2_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : St2ConvSlot => st2_slot_of(w, tts_slab_linear(w, l))
 
 //! n floats of src into the slab, zeros past its length; the byte offset
-def private st2_slab_raw(var w : TtsSlabWriter; src : array<float>; n : int64) : uint64 => st2_off(tts_slab_raw(w, src, n))
+def private st2_slab_raw(var w : TtsSlabWriter; src : array<float>; n : int64) : uint64 => st2_byte_off(tts_slab_raw(w, src, n))
 
 def private st2_slab_norm_rows(var w : TtsSlabWriter; n : TtsNorm; c : int64) : St2NormSlot => st2_norm_of(tts_slab_norm_rows(w, n, c))
 
-//! The shared writer's slot records as the Metal slots - the part writers below run `tts_*_write` and map its record through these.
 def private st2_lstm_of(w : TtsSlabWriter; t : TtsLstmSlot) : St2LstmSlot
-    => St2LstmSlot(fx = st2_slot_of(w, t.fx), bx = st2_slot_of(w, t.bx), fhh = st2_off(t.fhh), bhh = st2_off(t.bhh))
+    => St2LstmSlot(fx = st2_slot_of(w, t.fx), bx = st2_slot_of(w, t.bx), fhh = st2_byte_off(t.fhh), bhh = st2_byte_off(t.bhh))
 
 def private st2_block_of(w : TtsSlabWriter; t : TtsBlockSlots) : St2BlockSlots {
     return <- St2BlockSlots(c1 <- [for (c in t.c1); st2_slot_of(w, c)], c2 <- [for (c in t.c2); st2_slot_of(w, c)],
@@ -2262,7 +2258,7 @@ def private st2_block_of(w : TtsSlabWriter; t : TtsBlockSlots) : St2BlockSlots {
 //! a residual block's slots; its 1x1 shortcut's uniforms only where the block carries one
 def private st2_res_of(w : TtsSlabWriter; b : St2AdainResBlk; t : TtsResSlots) : St2ResSlots {
     var s = St2ResSlots(n1 = st2_norm_of(t.n1), n2 = st2_norm_of(t.n2), c1 = st2_slot_of(w, t.c1), c2 = st2_slot_of(w, t.c2),
-        pool_w = st2_off(t.pool_w), pool_b = st2_off(t.pool_b))
+        pool_w = st2_byte_off(t.pool_w), pool_b = st2_byte_off(t.pool_b))
     if (b.learned_sc) {
         s.c1x1 = st2_slot_of(w, t.c1x1)
     }
@@ -2428,13 +2424,13 @@ def private st2_dec_write(var w : TtsSlabWriter; d : St2Decoder; var s : St2DecS
     s.asr_res = st2_slot_of(w, t.asr_res)
     s.encode = st2_res_of(w, d.encode, t.encode)
     s.decode <- [for (b, r in d.decode, t.decode); st2_res_of(w, b, r)]
-    s.src_w = st2_off(t.src_w)
-    s.src_b = st2_off(t.src_b)
-    s.stft_re = st2_off(t.stft_re)
-    s.stft_im = st2_off(t.stft_im)
-    s.istft_re = st2_off(t.istft_re)
-    s.istft_im = st2_off(t.istft_im)
-    s.window = st2_off(t.window)
+    s.src_w = st2_byte_off(t.src_w)
+    s.src_b = st2_byte_off(t.src_b)
+    s.stft_re = st2_byte_off(t.stft_re)
+    s.stft_im = st2_byte_off(t.stft_im)
+    s.istft_re = st2_byte_off(t.istft_re)
+    s.istft_im = st2_byte_off(t.istft_im)
+    s.window = st2_byte_off(t.window)
 }
 
 
@@ -2480,9 +2476,9 @@ def private st2_pred_rebuild(p : St2Predictor; key : uint64) : bool {
 def private st2_albert_write(var w : TtsSlabWriter; a : St2Albert; var s : St2AlbertSlab) {
     var t : TtsAlbertSlab
     tts_albert_write(w, a, t)
-    s.word_emb = st2_off(t.word_emb)
-    s.pos_emb = st2_off(t.pos_emb)
-    s.type_emb = st2_off(t.type_emb)
+    s.word_emb = st2_byte_off(t.word_emb)
+    s.pos_emb = st2_byte_off(t.pos_emb)
+    s.type_emb = st2_byte_off(t.type_emb)
     s.emb_ln = st2_norm_of(t.emb_ln)
     s.map_in = st2_slot_of(w, t.map_in)
     s.q = st2_slot_of(w, t.q)
@@ -2511,7 +2507,7 @@ def private st2_albert_rebuild(a : St2Albert; key : uint64) : bool {
 def private st2_text_write(var w : TtsSlabWriter; te : St2TextEncoder; var s : St2TextSlab) {
     var inscope t : TtsTextSlab
     tts_text_write(w, te, t)
-    s.emb = st2_off(t.emb)
+    s.emb = st2_byte_off(t.emb)
     s.cnn <- [for (c in t.cnn); st2_slot_of(w, c)]
     s.ln <- [for (n in t.ln); st2_norm_of(n)]
     s.lstm = st2_lstm_of(w, t.lstm)
@@ -3550,8 +3546,8 @@ let private PK_CODEC_MAX_FRAMES = 512l   //!< the one-shot chain's row budget: p
 //! the shared writer's layer slots as the Metal chain binds them: byte offsets, the linears' uniforms hung
 def private pk_layer_of(w : TtsSlabWriter; t : TtsPkLayerSlots) : PkLayerSlots {
     return PkLayerSlots(n1 = st2_norm_of(t.n1), in_proj = st2_slot_of(w, t.in_proj), out_proj = st2_slot_of(w, t.out_proj),
-        scale1_off = st2_off(t.scale1_off), has_s1 = t.has_s1, n2 = st2_norm_of(t.n2), ffn1 = st2_slot_of(w, t.ffn1), ffn2 = st2_slot_of(w, t.ffn2),
-        scale2_off = st2_off(t.scale2_off), has_s2 = t.has_s2)
+        scale1_off = st2_byte_off(t.scale1_off), has_s1 = t.has_s1, n2 = st2_norm_of(t.n2), ffn1 = st2_slot_of(w, t.ffn1), ffn2 = st2_slot_of(w, t.ffn2),
+        scale2_off = st2_byte_off(t.scale2_off), has_s2 = t.has_s2)
 }
 
 //! the shared codec layout with no rope rows in the slab: this driver's rope tables ride their own buffers (`pk_rope_tables`)
@@ -3559,8 +3555,8 @@ def private pk_codec_write(var w : TtsSlabWriter; mm : PocketMimi; var s : PkCod
     var inscope t : TtsPkCodecSlab
     tts_pk_codec_write(w, mm, 0l, t)
     s.quant = st2_slot_of(w, t.quant)
-    s.up_w = st2_off(t.up_w)
-    s.up_b = st2_off(t.up_b)
+    s.up_w = st2_byte_off(t.up_w)
+    s.up_b = st2_byte_off(t.up_b)
     s.layers <- [for (l in t.layers); pk_layer_of(w, l)]
     s.dec_in = st2_slot_of(w, t.dec_in)
     s.ups <- [for (c in t.ups); st2_slot_of(w, c)]
@@ -3570,8 +3566,7 @@ def private pk_codec_write(var w : TtsSlabWriter; mm : PocketMimi; var s : PkCod
 }
 
 
-//! the shared codec admission (every conv dense, a transposed one's taps past its stride), then the gathering stamps' 8-run channel lattice
-//! over every codec conv
+//! the shared codec admission (dense convs, transposed taps past the stride), then the gathering stamps' 8-run channel lattice
 def private pk_codec_ok(mm : PocketMimi) : bool {
     return false if (!tts_pk_codec_ok(mm, int64(PK_ATTN_HS), PK_ATTN_MAX_KEYS) || mm.quant_proj.cin % 8l != 0l || mm.dec_in.cin % 8l != 0l || mm.dec_out.cin % 8l != 0l)
     for (i, c in iter_range(mm.dec_up), mm.dec_up) {
@@ -4027,7 +4022,7 @@ def private pk_kv_rows(kc : TtsKvCache; bk, bv : MetalBuffer?; r0, r1 : int64) {
     unsafe {
         var kp = reinterpret<float?>(metal_buffer_contents(bk))
         var vp = reinterpret<float?>(metal_buffer_contents(bv))
-        tts_pk_kv_rows(kc, r0, r1, r0, kp, vp)
+        kv_cache_read_rows(kc, r0, r1, r0, kp, vp)
     }
 }
 
@@ -4245,8 +4240,7 @@ def private pk_frame(enc : MetalComputeEncoder?; var c : St2GpuCtx; m : PocketMo
     pk_gemv(enc, c, sl.final_linear, PK_GEMV_TAIL, st)
 }
 
-//! The host frame loop (`pocket_frames_batched`) on this driver: each batch one command buffer, the noise drawn straight into the
-//! shared noise buffer, the EOS logits read off the shared rows; frames -1 when a command buffer failed.
+//! `pocket_frames_batched` here: a command buffer a batch, noise into the shared buffer, EOS off the shared rows; frames -1 on failure
 def private pk_frames_loop(m : PocketModel; var sl : PkFramesSlab; var c : St2GpuCtx; var b : PkFrBufs; base, batch, max_frames, forced_rows : int64; std : float;
                            frames_after_eos : int; captured : array<float>; var sc : PocketScratch; var f0 : int64&) : tuple<frames : int64; eos_at : int64> {
     var err = ""

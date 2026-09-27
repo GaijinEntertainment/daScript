@@ -147,17 +147,17 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   and decimals never split, a whitespace-free run longer than the cap hard-split at the cap on
   a codepoint boundary; a chunk the split left without a closing mark gets a comma under
   Kitten's driver rule and nothing under Kokoro's, whose pipeline sends the text as it is and
-  whose voices render an added mark as an audible breath -> per chunk: phonemize -> the
-  family's symbols
-  and style row -> PCM, timed, delivered to the caller's block as it lands) and `synthesize`
-  (the same, concatenated, timings summed). Every chunk draws its own source noise: the seed
-  is the facade's constant plus the chunk's index, so consecutive sentences of one request
-  never share a draw, and `synthesize` and `synthesize_stream` stay sample-identical because
-  both walk the same chunk list in the same order. Requires no `audio` module. `REVIEW.das`'s
-  `check_tutorial_floor` walks both facade files - `dasllama.das` and this one - and licenses
-  exactly three kinds of def: a `def private` one, a `def operator` overload, and `finalize`,
-  the language's own teardown hook the compiler calls at `delete` (the check's `FLOOR_HOOKS`
-  set); none of the three is a name a tutorial could call, so none carries a teaching duty.
+  whose voices render an added mark as an audible breath -> per chunk: phonemize -> the family's
+  symbols and style row -> PCM, timed, delivered to the caller's block as it lands) and `synthesize`
+  (the same, concatenated, timings summed). Every chunk draws its own source noise: the seed is the
+  facade's constant plus the chunk's index, so consecutive sentences of one request never share a
+  draw, and `synthesize` and `synthesize_stream` stay sample-identical because both walk the same
+  chunk list in the same order. Requires no `audio` module. `REVIEW.das`'s `check_tutorial_floor`
+  walks both facade files - `dasllama.das` and this one - and licenses a `def private` one, a
+  `def operator` overload, and the names in the check's `FLOOR_HOOKS` set: `finalize`, the
+  language's own teardown hook the compiler calls at `delete`, and `tts_finish_styletts2`, the
+  loader's tail that the parity rail's in-memory minter shares and that a user reaches only through
+  `load_tts_model`. No tutorial calls any of them by name, so none carries a teaching duty.
 
 Every local container on the TTS path is `var inscope`: the persistent heap frees nothing at
 scope exit, so a bare local holding a per-sentence buffer leaks once a sentence until the OS kills a long run.

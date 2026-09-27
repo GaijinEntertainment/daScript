@@ -37,8 +37,7 @@ struct private ConvGeom {
     rows_x : bool   //! x uploaded row-major [tin][cin] (the tower's rows form) and the im2col told so
 }
 
-//! a raw conv - the ONNX weight ([cout][cin][k] forward, [cin][cout][k] transposed) off `row_fill` at `wscale` and `woff`,
-//! and the bias
+//! a raw conv, the ONNX weight ([cout][cin][k] forward, [cin][cout][k] transposed) and bias off `row_fill` at `wscale` and `woff`
 def private make_conv(g : ConvGeom; wscale, woff : float) : TtsConv1d {
     var c = TtsConv1d(cin = int64(g.cin), cout = int64(g.cout), k = int64(g.k), stride = int64(g.stride), pad_l = int64(g.pad),
         pad_r = int64(g.pad), dilation = 1l, groups = 1l, transposed = g.transposed)
@@ -85,9 +84,7 @@ def private conv_ref(var c : TtsConv1d; x : array<float>; tin : int) : array<flo
 let private COL16_SLACK_ROWS = 64   //! the half column plane's rows past the conv's: the KHR tile loads whole 16-row blocks
 let private F16_LATTICE = 1.0 / 64.0   //! the half route's operand step: sixty-fourths under 0.75, every product exact on the f16 tile
 
-//! one conv through the im2col and its GEMM against the CPU conv1d under NaN-filled outputs. `half`: TtsIm2col16, the f16 tile
-//! and the bias pass on f16-lattice operands (every product exact, the bar covers the accumulation); else TtsIm2col and
-//! F32GemmB, both sides f32 over K <= 128 products, the CPU's matmul_batch reassociating - inside `approx`'s 2e-3 either way
+//! one conv's im2col and GEMM vs the CPU conv1d at `approx` (2e-3): `half` the f16 route on exact products, else f32 over K <= 128 reassociated
 def private im2col_arm(t : T?; tag : string; g : ConvGeom; half : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let khr = g_gpu.coopmat_mode != COOPMAT_CM2   //! the pick the driver makes where an f16 tile serves at all (the half cell skipped otherwise)
@@ -339,7 +336,7 @@ def private lstm_arm(t : T?; hd : int) {
             }
             let y_dev <- cp |> plane_run(yp)
             let yc_dev <- cp |> plane_run(ycp)
-            //! `approx`'s 2e-3: both sides f32, the CPU matmul reassociating the h dot and adding the bias after it, over 23 steps
+            // `approx`'s 2e-3: both sides f32, the CPU matmul reassociating the h dot and adding the bias after it, over 23 steps
             check_rows(t, "{tag} both directions over {LSTM_T} steps vs the CPU bilstm", y_dev, f.y_ref, BAR_APPROX, 2 * hd, hd)
             check_rows(t, "{tag} the forward weights walked backward vs the CPU's backward walk", yc_dev, f.yc_ref, BAR_APPROX, hd)
             let moved = logits_maxdiff(half_rows(y_dev, hd, 0), yc_dev)
@@ -410,7 +407,7 @@ def private pool_dw_arm(t : T?) {
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tts_pool_dw_cls(raw, h, s, pa, int64(ny))
             }
-            //! `approx`'s 2e-3: both sides f32 over at most two taps a channel
+            // `approx`'s 2e-3: both sides f32 over at most two taps a channel
             check_rows(t, "{tag} over {tout} x {PD_C} vs the CPU conv1d_rows_transposed_depthwise", cp |> plane_run(yp), want, BAR_APPROX, PD_C)
         }
         delete c

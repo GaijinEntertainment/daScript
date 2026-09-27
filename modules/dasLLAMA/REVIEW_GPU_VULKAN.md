@@ -54,6 +54,10 @@ routed off and why.** A silent decline is a fallback a user finds only by profil
 to a slower form inside the same path (a host upload in place of a device-to-device copy) -
 that does not log the concrete reason it declined, once per reason per armed model, is a defect.**
 
+**A Vulkan driver's decline text for a reason that one of the `VK_DECLINE_WORDS_*` strings in
+`dasllama/dasllama_vulkan_common.das` already states returns that string, or extends it - never a
+second wording of the same reason.**
+
 **A diff that adds or changes a function under `dasllama/` outside the tier's arm probe
 `vulkan_moe_gpu_arm` that calls `vk_moe_init()` makes it test `gpu_want_arms_tier()` first, and
 decline without calling it when the want is off; a serving hook that keeps a decline counter

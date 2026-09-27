@@ -78,7 +78,6 @@ def outside_run(whole : array<float>; lo, n : int; kept : array<float>) : bool {
     return true
 }
 
-//! a copy of `a` with every element times `k`
 def scaled_copy(a : array<float>; k : float) : array<float> {
     return <- [for (v in a); v * k]
 }
@@ -136,8 +135,7 @@ def bar_ok(g, w, rel : float; absf : float = 0.0) : bool => abs(g - w) <= absf |
 //! within `APPROX_REL` of the larger magnitude, floored at 1
 def approx(x, y : float) : bool => bar_ok(x, y, APPROX_REL)
 
-//! The elements of `got` outside `bar_ok`'s bars, the first six logged under `tag` for the eyeball - enough to tell
-//! tolerance drift from garbage.
+//! the count of `got` outside `bar_ok`'s bars, the first six logged under `tag` - enough to tell tolerance drift from garbage
 def mismatch_rel(got, want : array<float>; rel : float; absf : float = 0.0; tag : string = "") : int {
     var bad = 0
     for (i in range(length(got))) {
@@ -170,15 +168,12 @@ let BAR_APPROX = Bar(rel = APPROX_REL)
 //! the bar `rel` relative and `absf` absolute, its control's expectation `poison` off (times the magnitude under `scaled`)
 def bar_rel(rel : float; poison : float; absf : float = 0.0; scaled : bool = false) : Bar => Bar(rel = rel, absf = absf, poison = poison, scaled = scaled)
 
-//! true when `g` sits inside `bar` of `w`
 def bar_holds(bar : Bar; g, w : float) : bool => bar.exact ? g == w : bar_ok(g, w, bar.rel, bar.absf)
 
 //! The elements of `got` outside `bar` of `want`, the first six logged under `tag` on a tolerance bar.
 def bar_misses(tag : string; got, want : array<float>; bar : Bar) : int => bar.exact ? mismatch_exact(got, want) : mismatch_rel(got, want, bar.rel, bar.absf, tag)
 
-//! A kernel cell's verdict on one compare: every element of `got` inside `bar` of `want`, the measured max difference logged
-//! with the index it sits at (row by `width`, the column split into head and lane by `sub`; 0 = a flat index), and the
-//! poisoned-element control - the last element's expectation moved by the bar's poison must fall outside it.
+//! a cell's verdict: `got` inside `bar` of `want`, the max difference logged at its row (`width`) and head (`sub`), the last element poisoned
 def check_rows(t : T?; tag : string; got, want : array<float>; bar : Bar; width : int; sub : int = 0) {
     let n = length(want)
     let bad = bar_misses(tag, got, want, bar)
@@ -192,8 +187,7 @@ def check_rows(t : T?; tag : string; got, want : array<float>; bar : Bar; width 
     t |> success(!bar_holds(bar, got[n - 1], poisoned), "{tag}: the bar reds a poisoned element")
 }
 
-//! The elements of `got` not equal to `want` - the compare behind a kernel cell's exact bar (a copy, a clamp, a pad), over
-//! floats, bytes or words alike.
+//! the count of `got` not equal to `want` - the exact bar's compare, over floats, bytes or words alike
 def mismatch_exact(got, want : array<auto(TT)>) : int {
     var bad = 0
     for (g, w in got, want) {

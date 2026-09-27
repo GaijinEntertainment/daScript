@@ -40,8 +40,7 @@ struct TtsSrcFixture {
     want_har : array<float>     //! the CPU sines through the source linear and tanh
 }
 
-//! the source fixture at `up` x `frames` on either resample law: an F0 with unvoiced frames, f16-exact initial phases, noise
-//! rows and source linear, and the CPU `sine_source` chain's phase frames and mixed signal
+//! the source fixture at `up` x `frames` on either law: an F0 with unvoiced frames, f16-exact operands, the CPU chain's outputs
 def tts_src_fixture(torch : bool; up, frames : int) : TtsSrcFixture {
     var f = TtsSrcFixture(up = up, frames = frames, n = frames * up)
     f.nlow = int(resize_len(int64(f.n), 1.0 / float(up)))
@@ -78,8 +77,7 @@ struct TtsLongCumsum {
     parted : float        //! the double sum and a plain f32 sum apart over the run, in cycles - the leg's control
 }
 
-//! `nlong` low-rate frames where a plain f32 sum and a double one part by whole cycles, summed on the torch law (the double
-//! carry rounded once a frame) or the ONNX law (the plain f32 sum)
+//! `nlong` low-rate frames where f32 and double sums part by whole cycles, on the torch law (double, rounded a frame) or ONNX's (f32)
 def tts_long_cumsum(torch : bool; up, nlong : int) : TtsLongCumsum {
     var r : TtsLongCumsum
     r.low <- [for (k in range(nlong)); float(float16(0.0071 + 0.0003 * float(k % 13)))]
@@ -97,8 +95,7 @@ def tts_long_cumsum(torch : bool; up, nlong : int) : TtsLongCumsum {
     return <- r
 }
 
-//! the STFT in double - `bins` rows of `k` taps over the signal padded by `pad` on the reflect or the edge law, the
-//! magnitude and phase rounded to f32 with the zero-imaginary phase rule: [frames][magnitudes | phases]
+//! the STFT in double over the signal padded by `pad` (reflect or edge), rounded to f32 [frames][magnitudes | phases]
 def stft_ref(har, wre, wim : array<float>; n, k, hop, pad, bins : int; reflect : bool) : array<float> {
     let frames = (n + 2 * pad - k) / hop + 1
     var want : array<float>
@@ -132,8 +129,7 @@ struct TtsIstftRef {
     bare : int          //! the samples whose envelope is negligible, left undivided
 }
 
-//! the overlap-added inverse STFT in double over `tt` frames of log magnitudes and phases (`stride` apart, `bins` each),
-//! the [k][bins] bases and the window, the envelope divided out under `envelope`
+//! the inverse STFT in double over `tt` frames of log magnitudes then phases (`stride` apart), the envelope divided under `envelope`
 def istft_ref(y, wre, wim, window : array<float>; tt, stride, bins, k, hop, pad : int; envelope : bool) : TtsIstftRef {
     let n = (tt - 1) * hop + k - 2 * pad
     var r : TtsIstftRef
@@ -159,8 +155,7 @@ def istft_ref(y, wre, wim, window : array<float>; tt, stride, bins, k, hop, pad 
     return <- r
 }
 
-//! the CPU concat rows `width` wide: x [rows][c], the residual columns under `with_res` (row stride rs, 0 = one row
-//! broadcast), the f0 and noise columns at their row strides, zeros past them
+//! the CPU concat rows `width` wide: x, the residual under `with_res` (`rs` 0 broadcasts one row), the f0 and noise columns, zeros past
 def concat_ref(x, res, f0, nd : array<float>; rows, c, rc, rs, f0s, ns, width : int; with_res : bool) : array<float> {
     let rcw = with_res ? rc : 0
     var out : array<float>

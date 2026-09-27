@@ -144,7 +144,7 @@ def test_kokoro_synthesis_metal(t : T?) {
 [test]
 def test_kokoro_facade(t : T?) {
     t |> run("text in, speech out") @(t : T?) {
-        // the American and British packs; the other languages wait for their front end
+        // the American and British packs: the front end phonemizes no other language
         facade_smoke(t, gguf_path(), true, 28) $(var m : TtsModel; c : TtsCaps) {
             t |> success(length(c.langs) == 2 && c.langs[0] == "en-us" && c.langs[1] == "en-gb",
                 "{length(c.langs)} language(s), first '{c.langs[0]}'")

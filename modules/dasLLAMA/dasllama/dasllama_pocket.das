@@ -1366,9 +1366,7 @@ def set_pocket_frame_batch(n : int64) {
 
 def pocket_frame_batch() : int64 => g_pocket_frame_batch
 
-//! A GPU seat's host frame loop in batches of up to `batch`: the noise drawn in the CPU loop's order into `noise(k)`, `run(f0, k)` the batch's
-//! frames (false on a failed submit), `eos(f0, i)` frame f0 + i's EOS logit; the EOS rule walked between batches, the last batch's draws past
-//! the frames made rewound as the CPU loop leaves the generator. The frames made and the EOS frame (frames -1 on a failed submit); `f0` the frames run.
+//! a GPU seat's frame loop: `noise(k)` takes a batch's draws, `run(f0, k)` submits it (false fails: frames -1), `eos(f0, i)` reads a logit
 def pocket_frames_batched(m : PocketModel; batch, max_frames : int64; std : float; frames_after_eos : int; captured : array<float>;
                           var sc : PocketScratch; var f0 : int64&; noise : block<(k : int64) : float?>; run : block<(f0, k : int64) : bool>;
                           eos : block<(f0, i : int64) : float>) : tuple<frames : int64; eos_at : int64> {

@@ -1193,9 +1193,7 @@ def kq_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout, mr : int64; r 
     }
 }
 
-//! Row r of a Q8_0 plane pair [nout][nin] as f32 at dst, each quant times its block's f32 scale: `q` / `s` the quants and
-//! scales as `lay` repacked them - the grp<mr> interleave for the whole groups (`kgroup`-byte columns, biased by `wbias`),
-//! row-major for the tail; the pointer core, so a row range runs on each job lane.
+//! row r of the Q8_0 plane pair `q` / `s` as `lay` repacked them, dequantized to f32 at dst; a pointer core, a row range a job lane
 def q8_plane_row_f32(q : int8 const?; s : float const?; nin, nout : int64; lay : Q8RepackLayout; r : int64; var dst : float?) {
     let nb = nin / 32l
     let mr = lay.mr

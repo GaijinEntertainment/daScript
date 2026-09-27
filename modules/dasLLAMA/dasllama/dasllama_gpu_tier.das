@@ -1849,8 +1849,7 @@ def public matmul_moe_gpu_cls(var y : array<float>; woff : int64; xq : array<int
     }
 }
 
-//! Log a backend's kernel census `cov` (name -> dispatches): the dispatched kernels with counts, then a LOUD WARNING per kernel in
-//! the census never dispatched - a coverage gap or a dead kernel, a human call, never automatic. `census` names what the table holds.
+//! log census `cov` (name -> dispatches, `census` naming it): the dispatched with counts, a LOUD WARNING per never-dispatched one
 def public kernel_coverage_report(backend, census : string; cov : table<string; int64>) {
     var names <- [for (name in keys(cov)); name]
     names |> sort()

@@ -28,9 +28,7 @@ def attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kbase0 : i
     }
 }
 
-//! the plain two-pass softmax row every attention oracle here shares: key j in [kstart, cnt) scores `score(j)` (the caller's
-//! logit law - scale, bias, relative position, cap), the output row the weighted value rows vv[vbase + j * kvd + e] over the
-//! denominator; `has_sink` / `sink` joins a phantom key with no value row to the max and the denominator
+//! two-pass softmax row: key j in [kstart, cnt) scores `score(j)`, weighting vv[vbase + j * kvd + e]; `has_sink` adds a valueless `sink` key
 def attn_row_scored(vv : array<float>; vbase, kvd, hs, kstart, cnt : int; var out : array<float>; obase : int;
                     has_sink : bool; sink : float; score : block<(j : int) : float>) {
     var sc : array<float>

@@ -639,11 +639,6 @@ def tts_pk_voice_key(vs : PocketVoiceState) : uint64 {
     return key
 }
 
-//! the GPU drivers' spelling of `kv_cache_read_rows`
-def tts_pk_kv_rows(kc : TtsKvCache; r0, r1, at : int64; var kp, vp : float?) {
-    kv_cache_read_rows(kc, r0, r1, at, kp, vp)
-}
-
 //! the harmonic source's geometry for `f2` frames: the samples, the low-rate rows and the STFT frames; `ok` false where the decoder's source parts do not fit the stamps
 struct TtsSourceShape {
     ok : bool
@@ -667,10 +662,6 @@ def tts_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64) : TtsSourc
     sh.ok = sh.spec_frames >= 1l
     return sh
 }
-
-// The decoder's shape walks: the CPU chain's own length rules, generic over the driver's shape record `SH`. Each driver's overloads of the
-// hooks - tts_note_conv, tts_note_rows, tts_note_block, tts_note_res, tts_note_post, tts_note_decoder, resolved at the driver (`_::`) - note
-// what its scratch is sized by and carry that driver's own declines.
 
 //! an AdaIN residual block over `t` rows, noted on `sh`; its output row count, or -1 on a shape the chain does not take
 def tts_res_shape(var sh : auto(SH); b : St2AdainResBlk; t : int64) : int64 {
@@ -704,8 +695,7 @@ def tts_gen_block_shape(var sh : auto(SH); b : St2GenResBlock; t, c : int64) : b
     return _::tts_note_block(sh, b, t, c)
 }
 
-//! the generator over `t` rows of `c` channels, at most `max_stages` stages: its stages noted on `sh`, conv_post's rows (`t_post`) and the last
-//! stage's rows and width (`t_last`, `c_last`) set; false on a shape the chain does not take
+//! the generator over `t` x `c`, at most `max_stages` stages, noted on `sh` with `t_post`, `t_last`, `c_last` set; false on a refused shape
 def tts_gen_shape(d : St2Decoder; c, t, har_frames, max_stages : int64; var sh : auto(SH)) : bool {
     let nst = long_length(d.ups)
     return false if (nst == 0l || nst > max_stages || t < 1l || har_frames < 1l || d.n_kernels < 1l
@@ -738,8 +728,7 @@ def tts_gen_shape(d : St2Decoder; c, t, har_frames, max_stages : int64; var sh :
     return _::tts_note_post(sh, d.conv_post, sh.t_post)
 }
 
-//! the decode chain's shape: the front convs, the AdaIN residual blocks as the concat rows ask, the source (`ss`), the generator, the inverse STFT
-//! (`n_out`); false on a shape the chain does not take
+//! the decode chain's shape noted on `sh`, the source as `ss` and the inverse STFT's samples as `n_out`; false on a refused shape
 def tts_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceCfg; frames, f2 : int64; noise : TtsNoise; max_stages : int64; var sh : auto(SH)) : bool {
     let bwd & = unsafe(d.stft_bwd_re)
     sh.ss = tts_source_shape(d, source, f2)
@@ -765,8 +754,7 @@ def tts_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceCfg; fra
     return sh.n_out >= 1l
 }
 
-//! fc(style) as a norm's rows at `dst`: gamma [c] then beta [c], gamma + 1 where the norm applies it as a layernorm weight (an AdaLN
-//! site); `tmp` the fc's output scratch
+//! fc(style) as a norm's rows at `dst`: gamma [c] then beta [c], gamma + 1 under `ln_form` (an AdaLN site); `tmp` the fc's scratch
 def tts_style_rows(fc : TtsLinear; s : array<float>; c : int64; ln_form : bool; @scratch @exact_size var tmp : array<float>; var dst : float?) {
     linear_vec(fc, s, tmp)
     unsafe {
@@ -969,8 +957,7 @@ def tts_pk_codec_ok(mm : PocketMimi; hs, max_keys : int64) : bool {
     return tts_pk_conv_ok(mm.dec_out) && mm.dec_out.cout >= 1l
 }
 
-//! the frame loop's shapes - the backbone's and the head's, every width within the GEMV's `max_nin` stage - with each linear one the
-//! driver's GEMV serves (`lin_ok`)
+//! the frame loop's shapes, every width within the GEMV's `max_nin` stage and each linear one the driver's GEMV serves (`lin_ok`)
 def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64; lin_ok : block<(l : TtsLinear) : bool>) : bool {
     let tf & = unsafe(m.backbone)
     let d = tf.d
@@ -992,8 +979,7 @@ def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64; lin_ok : block<(l : T
     return invoke(lin_ok, h.final_adaln) && h.final_adaln.nin == n && h.final_adaln.nout == 2l * n && invoke(lin_ok, h.final_linear) && h.final_linear.nin == n && h.final_linear.nout == ld
 }
 
-//! a frames call the voice's caches hold: frames asked, a cache a backbone layer, the voice, the chunk's text rows and the frames within the
-//! caches' capacity, the capacity within the attention row's `max_keys`
+//! the voice's caches hold this frames call: a cache a layer, voice + text + frames within capacity, capacity within `max_keys`
 def tts_pk_frames_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_frames, max_keys : int64) : bool {
     return (max_frames >= 1l && n_txt >= 0l && !empty(vs.caches) && length(vs.caches) == length(m.backbone.layers)
         && vs.len + n_txt + max_frames <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)

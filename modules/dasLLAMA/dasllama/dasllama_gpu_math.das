@@ -69,8 +69,7 @@ def tts_resize_mix_onnx(x0, x1, l0, l1 : float; last : bool) : float {
     return mad(w1, x1, acc)
 }
 
-//! a / b as the CPU's IEEE division rounds it: a SPIR-V device's own divide sits up to 2.5 ulp off, which the phase's
-//! cumulative sums carry; a Metal body under fastmath=false divides with `/`, already IEEE
+//! a / b rounded as the CPU's IEEE divide: a SPIR-V divide sits up to 2.5 ulp off, which the phase sums carry (Metal's `/` is IEEE)
 def tts_div(a, b : float) : float {
     var r = 1.0 / b
     r = mad(mad(-b, r, 1.0), r, r)
@@ -78,15 +77,13 @@ def tts_div(a, b : float) : float {
     return mad(mad(-q, b, a), r, q)
 }
 
-//! the CPU `sine_phase_frames`' rad from the cycles `cyc` at sample i of harmonic h - f0 * (h + 1) / sr, divided at the call
-//! site the home's way (`tts_div` or `/`): its fraction, `nu` folded into the overtones' sample 0
+//! the CPU `sine_phase_frames`' rad of cycles `cyc` (divided by the caller): its fraction, `nu` folded into the overtones' sample 0
 def tts_src_rad(cyc, nu : float; i, h : uint) : float {
     let r = cyc - floor(cyc)
     return (i == 0u && h > 0u) ? r + nu : r
 }
 
-//! torch's linear resample taps at output index `to` over `n` inputs: the source position, its floor and the next, the two
-//! weights; `inv_scale` is 1 / scale, divided at the call site the home's way
+//! torch's linear resample taps at output `to` over `n` inputs; `inv_scale` is 1 / scale, divided by the caller its home's way
 def tts_resize_taps_torch(n, to : uint; inv_scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
     let src = max(0.0, mad(inv_scale, float(to) + 0.5, -0.5))
     i0 = min(uint(src), n - 1u)
@@ -95,8 +92,7 @@ def tts_resize_taps_torch(n, to : uint; inv_scale : float; var i0, i1 : uint&; v
     l0 = 1.0 - l1
 }
 
-//! onnxruntime's taps at the source quotient `q` = (to + 0.5) / scale, divided at the call site the home's way: the clamped
-//! source position, equal weights where the two taps coincide
+//! onnxruntime's taps at `q` = (to + 0.5) / scale, divided by the caller its home's way; equal weights where the taps coincide
 def tts_resize_taps_onnx(n : uint; q : float; var i0, i1 : uint&; var l0, l1 : float&) {
     let in_x = clamp(q - 0.5, 0.0, float(n - 1u))
     i0 = min(uint(in_x), n - 1u)
@@ -126,8 +122,7 @@ def tts_noise_amp(uv, noise_std, sine_amp : float) : float => uv * noise_std + (
 //! one harmonic's share of the source linear: its weight times the voiced sine `s` plus the scaled noise draw
 def tts_src_term(w, s, uv, noise_amp, nz : float) : float => w * (s * uv + noise_amp * nz)
 
-//! one step of the torch law's double accumulator as a two-float sum, x added to `acc` with its rounding error carried in
-//! `lo`; the kernel compiles without contraction (`precise`, `fastmath=false`), else the correction folds to zero
+//! one two-float step of the torch law's double accumulator, x into `acc` and its rounding error into `lo`; needs a `precise` body
 def tts_two_sum_add(var acc, lo : float&; x : float) {
     let s = acc + x
     let bv = s - acc
@@ -154,16 +149,14 @@ def tts_stft_mag(re, im, eps : float) : float => sqrt(re * re + im * im + eps)
 //! ... and its phase, a zero imaginary part on the negative real axis reading +pi (torch.angle's sign, where atan2 reads -pi)
 def tts_stft_phase(re, im : float) : float => im == 0.0 ? (re < 0.0 ? 3.14159265358979 : 0.0) : atan2(im, re)
 
-//! the inverse STFT's term of one bin: the magnitude exp(logmag) at the phase sin(phrow) through the transposed conv's two
-//! basis weights
+//! one bin's inverse-STFT term: magnitude exp(logmag) at phase sin(phrow) through the transposed conv's two basis weights
 def tts_istft_term(logmag, phrow, wre, wim : float) : float {
     let mag = exp(logmag)
     let ph = sin(phrow)
     return mag * cos(ph) * wre - mag * sin(ph) * wim
 }
 
-//! the CPU `adain_affine`'s per-channel fold: the column stats (the mean, the squared-deviation sum over `tn` rows), the
-//! norm's scale `g` and shift `gb`, the style's gamma and beta, into one scale and shift
+//! the CPU `adain_affine`'s fold of the column stats over `tn` rows, the norm's `g` / `gb` and the style's gamma / beta
 def tts_adain_affine(mean, sqsum, tn, eps, g, gb, gamma, beta : float; var scale, shift : float&) {
     let rs = 1.0 / sqrt(sqsum / tn + eps)
     let g1 = 1.0 + gamma

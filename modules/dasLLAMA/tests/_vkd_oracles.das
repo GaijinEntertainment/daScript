@@ -167,8 +167,7 @@ def cls_set(cp : CellPlanes; idx; set_fn) {
     return invoke(set_fn, cp |> plane_bufs(idx), cp |> plane_sizes(idx), cp |> plane_bits(idx))
 }
 
-//! one command buffer: `rec` records the cell's dispatches, then every written plane is copied back whole behind their
-//! hazard bits into the host staging, back to back
+//! one command buffer: `rec` records the dispatches, then every written plane copies back whole, behind its hazard bit, to the staging
 def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
     var devs : array<uint64>
     var sizes : array<int64>
@@ -419,8 +418,6 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
     return k
 }
 
-// kq GEMV oracle: blk_contrib driven sequentially over the region walk, a superblock's eight blocks in order — the
-// device's subgroup fold reassociates, so approx bars
 def kq_gemv_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
                    regions : array<uint>; n, d, nreg : int) : array<float> {
     var k = kq_cls_ref(fmt, wq, ws, xq, xs)
@@ -435,9 +432,7 @@ def kq_gemv_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
     return <- y
 }
 
-//! the Q8_K-activation GEMV walk the class oracle and the per-format float witnesses share: over `regions` ([wsb0, xsb0]
-//! x nreg), row by row, `sb_dot(acc, weight superblock, activation superblock)` adds each superblock's block terms into
-//! the row's accumulator in block order - the device's subgroup fold reassociates, so approx bars
+//! the Q8_K GEMV walk over `regions` ([wsb0, xsb0] x nreg), `sb_dot` adding a superblock's terms in block order; the device reassociates: approx bars
 def gemv_float_walk(regions : array<uint>; n, d, nreg : int; sb_dot : block<(var acc : float&; sb, xsb : int) : void>) : array<float> {
     var y : array<float>
     y |> resize(nreg * d)
@@ -912,8 +907,7 @@ def actrq_oracle(gh, uh : array<float>; nelem : int; q8k : bool; act : uint;
     requant_oracle(a, 0, nelem, q8k, outq, outs)
 }
 
-//! plain Q8_0 / Q8_K requant of f32 rows from `base` (no activation) through the engine's own quantizers, the quants
-//! packed four to a word as the device stores them
+//! plain Q8_0 / Q8_K requant of f32 rows from `base` through the engine's quantizers, quants packed four a word as the device stores them
 def requant_oracle(src : array<float>; base, nelem : int; q8k : bool;
                    var outq : array<uint>; var outs : array<float>) {
     let part <- [for (i in range(nelem)); src[base + i]]

@@ -807,8 +807,7 @@ def private note_device_address(b : Buffer) {
         "dasLLAMA vulkan tier: buffer device address query failed")
 }
 
-//! a buffer both the transfer and the compute queue touch, where the device has a transfer queue: CONCURRENT sharing across the two
-//! families dodges the ownership transfers
+//! CONCURRENT sharing across the transfer and compute families where the device has a transfer queue: no ownership transfers
 def private share_with_xfer(var bci : BufferCreateInfo) {
     if (g_gpu.xfer_fam >= 0) {
         bci.sharingMode = VkSharingMode.CONCURRENT
@@ -1539,7 +1538,6 @@ def make_stack_shell(base, elems : int64; fmt : int; wqcap, wscap : int64; xfer_
 //! a scale plane's buffer and its descriptor range floored at 64 bytes, so a scale-less stack's descriptor slot stays valid
 def ws_floored(bytes : int64) : int64 => max(bytes, 64l)
 
-// the descriptor range for a stack's ws binding — the floor of the shell above
 def ws_range(si : int) : int64 => ws_floored(g_gpu.stacks[si].wsbytes)
 
 // decode/GEMV scratch for one stack (per-stack host bufs + the written 6-binding set). Lazy:
@@ -1828,7 +1826,6 @@ struct VkDeclineCounter {
     said : table<string>
 }
 
-//! The words the Vulkan drivers' decline enums share: each driver keeps its own enum (one a driver) and says these where a reason means the same
 let VK_DECLINE_WORDS_TOWER_KNOB = "the tower knob is off (DASLLAMA_VK_TOWER=0 or set_vulkan_tower(false))"
 let VK_DECLINE_WORDS_DEVICE = "the tier has no device (DASLLAMA_GPU=1 arms it), or a class failed to build"
 let VK_DECLINE_WORDS_MEMORY = "a device allocation failed"
@@ -3566,8 +3563,7 @@ def upload_zeros(dev : uint64; off, bytes : int64) {
     }
 }
 
-//! one command submitted on `queue` under `fence`: waiting `wsem` at `wval` at `wstage` where `wval` is past 0, signalling `ssem` at
-//! `sval` where `sval` is past 0 - the timelines' values start at 1
+//! one submit under `fence`: waits `wsem` at `wval` (`wstage`), signals `ssem` at `sval`, each only past 0 - timelines start at 1
 def private timeline_submit(queue : VkQueue; var raw : VkCommandBuffer; fence : VkFence; var wsem : VkSemaphore; wval : uint64;
                             wstage : VkPipelineStageFlags; var ssem : VkSemaphore; sval : uint64) {
     var submit = VkSubmitInfo()

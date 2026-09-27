@@ -101,11 +101,10 @@ def private read_rst(folder : string; prefix : string; var out : array<string>) 
     }
 }
 
-// `finalize` is the language's own teardown hook - the compiler calls it at `delete`, so no
-// tutorial calls it by name and it carries no floor duty. `tts_finish_styletts2` is the loader's
-// tail the parity rail's in-memory minter shares; a user reaches it through `load_tts_model`.
+// the names check_floor_of licenses without a tutorial - ARCHITECTURE_TTS.md#text-to-speech says why each
 var private FLOOR_HOOKS <- {"finalize", "tts_finish_styletts2"}
 
+[arch(at = "ARCHITECTURE_TTS.md#text-to-speech")]
 def private check_floor_of(path : string; var seen : table<string>; tut_texts, rst_texts : array<string>) {
     var line_no = 0
     for (line in split(fread(path), "\n")) {
@@ -116,11 +115,11 @@ def private check_floor_of(path : string; var seen : table<string>; tut_texts, r
         seen |> insert(name)
         if (!word_in_any(tut_texts, name)) {
             gate_finding(path, line_no,
-                "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial")
+                "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial (ARCHITECTURE_TTS.md#text-to-speech lists the licensed defs)")
         }
         if (!word_in_any(rst_texts, name)) {
             gate_finding(path, line_no,
-                "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes)")
+                "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes) (ARCHITECTURE_TTS.md#text-to-speech lists the licensed defs)")
         }
     }
 }

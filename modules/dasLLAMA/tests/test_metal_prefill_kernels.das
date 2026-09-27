@@ -958,8 +958,7 @@ def private g4a_attn_gate(t : T?; dev, queue) {
 }
 
 // ===== the StyleTTS2 chain's kernels (the tower driver's TTS seats) =====
-// f16-exact fixture values (`f16_at`, `f16_fill`): every product is exact, so the bars below cover only the f32
-// accumulation order (conv_mm) or the reduction order and sin() rounding (adain_snake)
+//! f16-exact fixtures (`f16_at`, `f16_fill`): products exact, so a bar covers only the sum order (conv_mm) or the reduction and sin() (adain_snake)
 
 def private st2_conv_fixture(dev; transposed : bool) : St2ConvArgs {
     //! forward: 40 channels (an 8-run never straddles a tap; the k-run tail lands past the taps -

@@ -125,8 +125,7 @@ struct private SrcOut {
 
 def private src_boff : int => SRC_WOFF + TTS_SRC_NH + SRC_GAP
 
-//! the source chain on the device (the own draw at `seed` when `own`, else the captured rows), every written buffer under a
-//! NaN fill; the source linear's weight row at SRC_WOFF and its bias at `src_boff` in one slab plane between poisoned slots
+//! the device source chain (the own draw at `seed` under `own`, else captured) under NaN fills, its linear at SRC_WOFF / `src_boff`
 def private src_run(f : TtsSrcFixture; torch : bool; f0 : array<float>; own : bool; seed : uint) : SrcOut {
     var o : SrcOut
     static_if (typeinfo builtin_module_exists(vulkan)) {

@@ -524,8 +524,7 @@ def test_pocket_codec_metal_served(t : T?) {
     }
 }
 
-//! The served cells' walk: each of the q8 and kq files stocked, loaded on the unpinned lane, handed to `leg` - false stops the walk (a
-//! leg that did not serve) - and a skip where neither is stocked.
+//! the served cells' walk: each stocked q8 and kq file on the unpinned lane into `leg` (false stops it); a skip where neither is stocked
 def private pocket_served_files(t : T?; leg : block<(path : string; m : PocketModel; var sc : PocketScratch) : bool>) {
     with_gpu_cell() {
         reset_pocket_q8()
