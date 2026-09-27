@@ -43,11 +43,12 @@ struct private ConvGeom {
     rows_x : bool   //! x uploaded row-major [tin][cin] (the tower's rows form) and the im2col told so
 }
 
-//! a raw conv - the ONNX weight ([cout][cin][k] forward, [cin][cout][k] transposed) and the bias off `row_fill`
-def private make_conv(g : ConvGeom) : TtsConv1d {
+//! a raw conv - the ONNX weight ([cout][cin][k] forward, [cin][cout][k] transposed) off `row_fill` at `wscale` and `woff`,
+//! and the bias
+def private make_conv(g : ConvGeom; wscale, woff : float) : TtsConv1d {
     var c = TtsConv1d(cin = int64(g.cin), cout = int64(g.cout), k = int64(g.k), stride = int64(g.stride), pad_l = int64(g.pad),
         pad_r = int64(g.pad), dilation = 1l, groups = 1l, transposed = g.transposed)
-    c.w <- row_fill(g.cin * g.cout * g.k, 37, 5, 0.004, 0.19)
+    c.w <- row_fill(g.cin * g.cout * g.k, 37, 5, wscale, woff)
     c.b <- row_fill(g.cout, 29, 11, 0.02, 0.9)
     return <- c
 }
@@ -87,99 +88,30 @@ def private conv_ref(var c : TtsConv1d; x : array<float>; tin : int) : array<flo
     return <- y
 }
 
-//! one conv through TtsIm2col + F32GemmB against the CPU conv1d: the columns and the output under a NaN fill first
-def private im2col_arm(t : T?; tag : string; g : ConvGeom) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let B_COL = 1u
-        let B_Y = 2u
-        var c <- make_conv(g)
-        let tout = int(conv1d_out_len(c, int64(g.tin)))
-        t |> equal(tout, g.tout, "{tag}: the output length")
-        let kdim = (g.k * g.cin + 31) / 32 * 32
-        var w <- slab_rows(c, kdim)
-        var x <- row_fill(g.cin * g.tin, 41, 7, 0.05, 2.1)
-        var x_rows : array<float>
-        if (g.rows_x) {
-            transpose_ct(x, int64(g.cin), int64(g.tin), x_rows)
-        }
-        var xdev <- at_base(g.rows_x ? x_rows : x, g.xoff)
-        var y_ref <- conv_ref(c, x, g.tin)
-        let ny = tout * g.cout
-        let bx = long_length(xdev) * 4l
-        let bcol = int64(g.coloff + tout * kdim) * 4l
-        let bw = long_length(w) * 4l
-        let bb = int64(g.cout) * 4l
-        let by = int64(ny) * 4l
-        let xd = dev_upload(xdev)
-        let cold = make_device_buf(bcol)
-        let wd = dev_upload(w)
-        let bd = dev_upload(c.b)
-        let yd = make_device_buf(by)
-        var host = make_host_buf(by, true, [cached = true])
-        nan_sentinel_upload(cold, bcol)
-        nan_sentinel_upload(yd, by)
-        var s_col = set_tts_im2col_cls(fixed_array(xd, cold), fixed_array(bx, bcol), fixed_array(0u, B_COL))
-        var s_mm = set_f32_gemm_b_cls(fixed_array(wd, cold, yd, bd), fixed_array(bw, bcol, by, bb), fixed_array(0u, B_COL, B_Y, 0u))
-        var pc = TtsIm2colArgs(cin = uint(g.cin), tin = uint(g.tin), tout = uint(tout), k = uint(g.k), stride = uint(g.stride),
-            pad_l = uint(g.pad), dilation = 1u, transposed = g.transposed ? 1u : 0u, kdim = uint(kdim), xoff = uint(g.xoff),
-            coloff = uint(g.coloff), rows = g.rows_x ? 1u : 0u)
-        var pm = F32GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, wstride = uint(kdim), boff = 0u,
-            xoff = uint(g.coloff), xstride = uint(kdim), yoff = 0u, ystride = uint(g.cout))
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_im2col_cls(raw, h, s_col, pc, int64(tout * kdim))
-            enc_f32_gemm_b_cls(raw, h, s_mm, pm, f32_gemm_wgs(int64(tout), int64(g.cout)))
-            cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
-        }
-        var y_dev <- staged(host.mapped, 0l, ny, type<float>)
-        //! `approx`'s 2e-3: both sides f32 over K <= 128 products, the CPU's matmul_batch reassociating the k-ordered sum
-        let bad = mismatch_approx(y_dev, y_ref)
-        log_maxdiff(tag, y_dev, y_ref, g.cout)
-        t |> success(bad == 0, "{tag}: im2col + F32GemmB == the CPU conv1d over {tout} x {g.cout} ({bad} of {ny} off)")
-        t |> success(!approx(y_dev[ny - 1], y_ref[ny - 1] + 0.5), "{tag}: the bar reds a poisoned element")
-        destroy_device_buf(xd)
-        destroy_device_buf(cold)
-        destroy_device_buf(wd)
-        destroy_device_buf(bd)
-        destroy_device_buf(yd)
-        destroy_host_buf(host)
-        delete c
-        delete w
-        delete x
-        delete x_rows
-        delete xdev
-        delete y_ref
-        delete y_dev
-    }
-}
-
-//! the conv with its weights and bias on the f16 lattice (sixty-fourths under 0.75): every product exact on the f16 tile
-def private make_conv16(g : ConvGeom) : TtsConv1d {
-    var c = TtsConv1d(cin = int64(g.cin), cout = int64(g.cout), k = int64(g.k), stride = int64(g.stride), pad_l = int64(g.pad),
-        pad_r = int64(g.pad), dilation = 1l, groups = 1l, transposed = g.transposed)
-    c.w <- row_fill(g.cin * g.cout * g.k, 37, 5, 1.0 / 64.0, 0.75)
-    c.b <- row_fill(g.cout, 29, 11, 0.02, 0.9)
-    return <- c
-}
-
 let private COL16_SLACK_ROWS = 64   //! the half column plane's rows past the conv's: the KHR tile loads whole 16-row blocks
+let private F16_LATTICE = 1.0 / 64.0   //! the half route's operand step: sixty-fourths under 0.75, every product exact on the f16 tile
 
-//! one conv through TtsIm2col16, the served f16 tile and the bias pass against the CPU conv1d on f16-lattice operands (every product exact)
-def private im2col16_arm(t : T?; tag : string; g : ConvGeom) {
+//! one conv through the im2col and its GEMM against the CPU conv1d under NaN-filled outputs. `half`: TtsIm2col16, the f16 tile
+//! and the bias pass on f16-lattice operands (every product exact, the bar covers the accumulation); else TtsIm2col and
+//! F32GemmB, both sides f32 over K <= 128 products, the CPU's matmul_batch reassociating - inside `approx`'s 2e-3 either way
+def private im2col_arm(t : T?; tag : string; g : ConvGeom; half : bool) {   // nolint:STYLE038 — one conv on either route: the fixture, the route's dispatches, the oracle and its control
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let B_COL = 1u
         let B_Y = 2u
-        let khr = g_gpu.coopmat_mode != COOPMAT_CM2   //! the pick the driver makes where an f16 tile serves at all (the cell skipped otherwise)
-        var c <- make_conv16(g)
+        let khr = g_gpu.coopmat_mode != COOPMAT_CM2   //! the pick the driver makes where an f16 tile serves at all (the half cell skipped otherwise)
+        var c <- make_conv(g, half ? F16_LATTICE : 0.004, half ? 0.75 : 0.19)
         let tout = int(conv1d_out_len(c, int64(g.tin)))
         t |> equal(tout, g.tout, "{tag}: the output length")
         let kdim = (g.k * g.cin + 31) / 32 * 32
         var w <- slab_rows(c, kdim)
         var w16 : array<uint16>
-        w16 |> resize(length(w))
-        unsafe {
-            cvt_f32_to_f16_sat(addr(w16[0]), addr(w[0]), long_length(w))
+        if (half) {
+            w16 |> resize(length(w))
+            unsafe {
+                cvt_f32_to_f16_sat(addr(w16[0]), addr(w[0]), long_length(w))
+            }
         }
-        var x <- row_fill(g.cin * g.tin, 41, 7, 1.0 / 64.0, 0.75)
+        var x <- row_fill(g.cin * g.tin, 41, 7, half ? F16_LATTICE : 0.05, half ? 0.75 : 2.1)
         var x_rows : array<float>
         if (g.rows_x) {
             transpose_ct(x, int64(g.cin), int64(g.tin), x_rows)
@@ -188,36 +120,49 @@ def private im2col16_arm(t : T?; tag : string; g : ConvGeom) {
         var y_ref <- conv_ref(c, x, g.tin)
         let ny = tout * g.cout
         let bx = long_length(xdev) * 4l
-        let bcol = int64((tout + COL16_SLACK_ROWS) * kdim) * 2l
-        let bw = long_length(w16) * 2l
+        let bcol = half ? int64((tout + COL16_SLACK_ROWS) * kdim) * 2l : int64(g.coloff + tout * kdim) * 4l
+        let bw = half ? long_length(w16) * 2l : long_length(w) * 4l
         let bb = int64(g.cout) * 4l
         let by = int64(ny) * 4l
         let xd = dev_upload(xdev)
         let cold = make_device_buf(bcol)
-        let wd = dev_upload(w16)
+        let wd = half ? dev_upload(w16) : dev_upload(w)
         let bd = dev_upload(c.b)
         let yd = make_device_buf(by)
         var host = make_host_buf(by, true, [cached = true])
         nan_sentinel_upload(cold, bcol)
         nan_sentinel_upload(yd, by)
-        var s_col = set_tts_im2col16_cls(fixed_array(xd, cold), fixed_array(bx, bcol), fixed_array(0u, B_COL))
-        var s_mm = f16_gemm_set(khr, fixed_array(wd, cold, yd), fixed_array(bw, bcol, by), fixed_array(0u, B_COL, B_Y))
-        var s_b = set_tower_bias_act_cls(fixed_array(yd, bd), fixed_array(by, bb), fixed_array(B_Y, 0u))
         var pc = TtsIm2colArgs(cin = uint(g.cin), tin = uint(g.tin), tout = uint(tout), k = uint(g.k), stride = uint(g.stride),
             pad_l = uint(g.pad), dilation = 1u, transposed = g.transposed ? 1u : 0u, kdim = uint(kdim), xoff = uint(g.xoff),
-            coloff = 0u, rows = g.rows_x ? 1u : 0u)
-        var pm = F16GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, ybase = 0u, ystride = uint(g.cout), ksplit = 0u)
-        var pb = TowerBiasArgs(d = uint(g.cout), nelem = uint(ny), boff = 0u, act = BIAS_ACT_NONE)
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_tts_im2col16_cls(raw, h, s_col, pc, int64(tout * kdim))
-            f16_gemm_enc(khr, raw, h, s_mm, pm, int64(tout), int64(g.cout))
-            enc_tower_bias_act_cls(raw, h, s_b, pb, (int64(ny) / 4l + 255l) / 256l)
-            cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
+            coloff = uint(g.coloff), rows = g.rows_x ? 1u : 0u)
+        if (half) {
+            var s_col = set_tts_im2col16_cls(fixed_array(xd, cold), fixed_array(bx, bcol), fixed_array(0u, B_COL))
+            var s_mm = f16_gemm_set(khr, fixed_array(wd, cold, yd), fixed_array(bw, bcol, by), fixed_array(0u, B_COL, B_Y))
+            var s_b = set_tower_bias_act_cls(fixed_array(yd, bd), fixed_array(by, bb), fixed_array(B_Y, 0u))
+            var pm = F16GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, ybase = 0u, ystride = uint(g.cout), ksplit = 0u)
+            var pb = TowerBiasArgs(d = uint(g.cout), nelem = uint(ny), boff = 0u, act = BIAS_ACT_NONE)
+            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tts_im2col16_cls(raw, h, s_col, pc, int64(tout * kdim))
+                f16_gemm_enc(khr, raw, h, s_mm, pm, int64(tout), int64(g.cout))
+                enc_tower_bias_act_cls(raw, h, s_b, pb, (int64(ny) / 4l + 255l) / 256l)
+                cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
+            }
+        } else {
+            var s_col = set_tts_im2col_cls(fixed_array(xd, cold), fixed_array(bx, bcol), fixed_array(0u, B_COL))
+            var s_mm = set_f32_gemm_b_cls(fixed_array(wd, cold, yd, bd), fixed_array(bw, bcol, by, bb), fixed_array(0u, B_COL, B_Y, 0u))
+            var pm = F32GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, wstride = uint(kdim), boff = 0u,
+                xoff = uint(g.coloff), xstride = uint(kdim), yoff = 0u, ystride = uint(g.cout))
+            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_tts_im2col_cls(raw, h, s_col, pc, int64(tout * kdim))
+                enc_f32_gemm_b_cls(raw, h, s_mm, pm, f32_gemm_wgs(int64(tout), int64(g.cout)))
+                cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(by), B_Y)
+            }
         }
         var y_dev <- staged(host.mapped, 0l, ny, type<float>)
+        let route = half ? "im2col16 + the {khr ? "KHR" : "cm2"} f16 tile + the bias" : "im2col + F32GemmB"
         let bad = mismatch_approx(y_dev, y_ref)
         log_maxdiff(tag, y_dev, y_ref, g.cout)
-        t |> success(bad == 0, "{tag}: im2col16 + the {khr ? "KHR" : "cm2"} f16 tile + the bias == the CPU conv1d over {tout} x {g.cout} ({bad} of {ny} off)")
+        t |> success(bad == 0, "{tag}: {route} == the CPU conv1d over {tout} x {g.cout} ({bad} of {ny} off)")
         t |> success(!approx(y_dev[ny - 1], y_ref[ny - 1] + 0.5), "{tag}: the bar reds a poisoned element")
         destroy_device_buf(xd)
         destroy_device_buf(cold)
@@ -248,12 +193,12 @@ def test_vkt_tts_im2col16(t0 : T?) {
                 t |> skip("the f16 tile's classes did not build")
                 return
             }
-            im2col16_arm(t, "im2col16 forward k5 cin22", ConvGeom(cin = 22, cout = 40, k = 5, stride = 1, pad = 2, tin = 37, tout = 37,
-                xoff = 0, coloff = 0, transposed = false))
-            im2col16_arm(t, "im2col16 transposed k4 s2 cin16", ConvGeom(cin = 16, cout = 32, k = 4, stride = 2, pad = 1, tin = 19, tout = 38,
-                xoff = 5, coloff = 0, transposed = true))
-            im2col16_arm(t, "im2col16 forward k3 cin32 rows", ConvGeom(cin = 32, cout = 64, k = 3, stride = 1, pad = 1, tin = 50, tout = 50,
-                xoff = 0, coloff = 0, transposed = false, rows_x = true))
+            im2col_arm(t, "im2col16 forward k5 cin22", ConvGeom(cin = 22, cout = 40, k = 5, stride = 1, pad = 2, tin = 37, tout = 37,
+                xoff = 0, coloff = 0, transposed = false), true)
+            im2col_arm(t, "im2col16 transposed k4 s2 cin16", ConvGeom(cin = 16, cout = 32, k = 4, stride = 2, pad = 1, tin = 19, tout = 38,
+                xoff = 5, coloff = 0, transposed = true), true)
+            im2col_arm(t, "im2col16 forward k3 cin32 rows", ConvGeom(cin = 32, cout = 64, k = 3, stride = 1, pad = 1, tin = 50, tout = 50,
+                xoff = 0, coloff = 0, transposed = false, rows_x = true), true)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -269,7 +214,7 @@ def test_vkt_tts_im2col(t0 : T?) {
                 return
             }
             im2col_arm(t, "im2col forward k5 cin22", ConvGeom(cin = 22, cout = 40, k = 5, stride = 1, pad = 2, tin = 37, tout = 37,
-                xoff = 0, coloff = 96, transposed = false))
+                xoff = 0, coloff = 96, transposed = false), false)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -281,7 +226,7 @@ def test_vkt_tts_im2col(t0 : T?) {
                 return
             }
             im2col_arm(t, "im2col transposed k4 s2 cin16", ConvGeom(cin = 16, cout = 24, k = 4, stride = 2, pad = 1, tin = 19, tout = 38,
-                xoff = 13, coloff = 0, transposed = true))
+                xoff = 13, coloff = 0, transposed = true), false)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -293,7 +238,7 @@ def test_vkt_tts_im2col(t0 : T?) {
                 return
             }
             im2col_arm(t, "im2col forward k5 cin22 rows x", ConvGeom(cin = 22, cout = 40, k = 5, stride = 1, pad = 2, tin = 37, tout = 37,
-                xoff = 5, coloff = 0, transposed = false, rows_x = true))
+                xoff = 5, coloff = 0, transposed = false, rows_x = true), false)
         } else {
             t |> skip("dasVulkan not present")
         }
