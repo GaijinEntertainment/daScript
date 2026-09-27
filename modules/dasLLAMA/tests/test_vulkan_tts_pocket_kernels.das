@@ -140,12 +140,11 @@ def test_vkt_pk_rows(t0 : T?) {
 
 let private RS_T = 37
 let private RS_C = 72
-let private RS_XOFF = 5
 let private RS_SOFF = 9
 
 [test]
 def test_vkt_pk_row_scale(t0 : T?) {
-    t0 |> run("the layer scale == the CPU layer_scale_rows, exact, at t 37 x 72 with x and the scale row at offsets") <| @(t : T?) {
+    t0 |> run("the layer scale == the CPU layer_scale_rows, exact, at t 37 x 72 with the scale row at an offset") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tts_pk_row_scale_cls()) {
                 t |> skip("no Vulkan device")
@@ -155,7 +154,7 @@ def test_vkt_pk_row_scale(t0 : T?) {
             let n = RS_T * RS_C
             let x <- row_fill(n, 41, 7, 0.05, 2.1)
             let scale <- row_fill(RS_C, 29, 3, 0.03, 1.2)
-            let xp <- with_base(x, RS_XOFF)
+            let xp <- with_base(x, 0)
             let wn <- with_base(scale, RS_SOFF)
             let xd = dev_upload(xp)
             let wnd = dev_upload(wn)
@@ -164,13 +163,13 @@ def test_vkt_pk_row_scale(t0 : T?) {
             let at <- staged_offsets(sizes)
             let host = make_host_buf(at[length(sizes)], true, [cached = true])
             var s = set_tts_pk_row_scale_cls(fixed_array(xd, wnd), fixed_array(bx, long_length(wn) * 4l), fixed_array(B_X, 0u))
-            var pa = TtsPkScaleArgs(rows = uint(RS_T), c = uint(RS_C), xoff = uint(RS_XOFF), soff = uint(RS_SOFF))
+            var pa = TowerBiasArgs(d = uint(RS_C), nelem = uint(n), boff = uint(RS_SOFF))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tts_pk_row_scale_cls(raw, h, s, pa, int64(n))
                 cmd_copy_planes(raw, h, fixed_array(xd), host, sizes, B_X)
             }
             let whole <- staged(host.mapped, at[0], length(xp), type<float>)
-            let got <- [for (i in range(n)); whole[RS_XOFF + i]]
+            let got <- [for (i in range(n)); whole[i]]
             var want := x
             with_job_que() {
                 setup_dasllama_jobque_()
@@ -180,8 +179,8 @@ def test_vkt_pk_row_scale(t0 : T?) {
             t |> success(bad == 0, "tts_pk_row_scale: every element == the CPU layer_scale_rows ({bad} of {n} off)")
             t |> success(got[n - 1] + 0.5 != want[n - 1], "tts_pk_row_scale: the compare reds a poisoned element")
             t |> success(got[0] != x[0], "tts_pk_row_scale in place control: the input row is overwritten")
-            let outside <- [for (i in range(length(whole))); whole[i]; where i < RS_XOFF || i >= RS_XOFF + n]
-            t |> success(elem_all(outside, POISON), "tts_pk_row_scale: the prefix before xoff and the slack past the rows are untouched")
+            let outside <- [for (i in range(length(whole))); whole[i]; where i >= n]
+            t |> success(elem_all(outside, POISON), "tts_pk_row_scale: the slack past the rows is untouched")
             destroy_device_buf(xd)
             destroy_device_buf(wnd)
             destroy_host_buf(host)

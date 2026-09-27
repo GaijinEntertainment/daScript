@@ -10638,7 +10638,8 @@ class TowerBiasActRq : RqT {
     def override load1(e : uint) : float => biased(e)
 }
 
-//! a GEMM output's bias row added in place, then the activation `pa.act` names (`tower_act`)
+//! a GEMM output's bias row added in place, then the activation `pa.act` names (`tower_act`); a stamp overriding `biased`
+//! broadcasts the row another way (TtsPkRowScale's layer scale)
 [ |> template_struct_instance]
 class template TowerBiasActT {
     @template_constant OUT16 : bool = false   //! the biased, activated rows stored as f16 into `outh` (the cm2 tile's feed), x read alone; else in place
@@ -14123,28 +14124,11 @@ class TtsPkRowsElu : TtsPkRowsT {
     override ELU = true
 }
 
-struct TtsPkScaleArgs {
-    rows : uint
-    c : uint      //! the row width
-    xoff : uint   //! x's element base
-    soff : uint   //! the scale row's element base in wn
-}
-
-//! x [rows][c] *= the scale row [c] in place - a transformer layer's per-channel layer scale (the CPU `layer_scale_rows`);
-//! one element an invocation
-[vk_dispatch(name = "tts_pk_row_scale_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsPkRowScale {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @role = "weight" wn : array<float>
-    @push_constant pa : TtsPkScaleArgs
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.rows * pa.c) {
-            x[pa.xoff + gid] = x[pa.xoff + gid] * wn[pa.soff + gid % pa.c]
-        }
-    }
+//! x [rows][d] *= the scale row at boff in place - a transformer layer's per-channel layer scale (the CPU
+//! `layer_scale_rows`) on the bias stamp's row-broadcast shell: four elements an invocation, d a 4-multiple, `act` unread
+[vk_dispatch(name = "tts_pk_row_scale_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
+class TtsPkRowScale : TowerBiasActT {
+    def override biased(e : uint) : float => x[e] * wn[pa.boff + e % max(1u, pa.d)]
 }
 
 let TTS_PK_ATTN_HS = 64u            //! the head size the attention row is stamped for, the body's literal: another head size declines at the driver

@@ -1978,7 +1978,7 @@ def private ts_pk_elu(raw : VkCommandBuffer; var h : VkHaz; x : TsRows; rows, wi
 //! x [rows][c] *= the slab's scale row at `soff`
 def private ts_pk_row_scale(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; x : TsRows; rows, c, soff : int64) {
     var s = set_tts_pk_row_scale_cls(fixed_array(x.dev, slab.dev), fixed_array(x.bytes, slab.bytes), fixed_array(x.bit, 0u))
-    var pa = TtsPkScaleArgs(rows = uint(rows), c = uint(c), xoff = 0u, soff = uint(soff))
+    var pa = TowerBiasArgs(d = uint(c), nelem = uint(rows * c), boff = uint(soff))
     enc_tts_pk_row_scale_cls(raw, h, s, pa, rows * c)
     vt_pt(raw, VtProfRole.tts_pk)
 }
