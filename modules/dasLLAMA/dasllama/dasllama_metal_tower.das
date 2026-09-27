@@ -2971,7 +2971,7 @@ def private st2_stage(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Deco
     cc = c2
 }
 
-//! The generator's shape, from the CPU chain's own length rules; false on any shape the kernels do not take.
+//! A seat's shape record, filled by the shared walks (`tts_gen_shape` and its kin) through the hooks below.
 struct private St2Shape {
     t_last : int64
     c_last : int64
@@ -2988,57 +2988,36 @@ def private st2_note_conv(var sh : St2Shape; c : TtsConv1d) : bool {
     return true
 }
 
-def private st2_note_block(var sh : St2Shape; b : St2GenResBlock; t, c : int64) : bool {
-    let n = length(b.convs1)
-    return false if (b.c != c || n == 0 || length(b.convs2) != n || length(b.adain1) != n || length(b.adain2) != n
-        || length(b.alpha1) != n || length(b.alpha2) != n)
-    for (j in range(n)) {
-        let c1 & = unsafe(b.convs1[j])
-        let c2 & = unsafe(b.convs2[j])
-        return false if (!st2_note_conv(sh, c1) || !st2_note_conv(sh, c2)
-            || c1.cin != c || c1.cout != c || c2.cin != c || c2.cout != c
-            || conv1d_out_len(c1, t) != t || conv1d_out_len(c2, t) != t
-            || long_length(b.alpha1[j].a) < c || long_length(b.alpha2[j].a) < c)
-    }
-    sh.style_fc_floats += int64(n) * 2l * 2l * c
+//! The shape walks' hooks (`tts_res_shape` and its kin): a conv's gathered columns, the rows' buffer at the 32 lattice, the style fc rows.
+[unused_argument(rows, upsample)]
+def private tts_note_conv(var sh : St2Shape; c : TtsConv1d; rows : int64; upsample : bool) : bool => st2_note_conv(sh, c)
+
+def private tts_note_rows(var sh : St2Shape; t, c : int64) {
+    sh.c_max = max(sh.c_max, c)
+    sh.row_buf_floats = max(sh.row_buf_floats, round_up(t, 32l) * c)
+}
+
+[unused_argument(t)]
+def private tts_note_block(var sh : St2Shape; b : St2GenResBlock; t, c : int64) : bool {
+    sh.style_fc_floats += long_length(b.convs1) * 2l * 2l * c
     return true
 }
 
-def private st2_gen_shape(d : St2Decoder; c, t, har_frames : int64; var sh : St2Shape) : bool {
-    let nst = long_length(d.ups)
-    return false if (nst == 0l || nst > ST2_MAX_STAGES || t < 1l || har_frames < 1l || d.n_kernels < 1l
-        || long_length(d.noise_convs) != nst || long_length(d.noise_res) != nst || long_length(d.resblocks) != nst * d.n_kernels)
-    var tt = t
-    var cc = c
-    sh.c_max = max(sh.c_max, c)
-    sh.row_buf_floats = max(sh.row_buf_floats, round_up(t, 32l) * c)
-    for (i in range64(nst)) {
-        let up & = unsafe(d.ups[i])
-        let nc & = unsafe(d.noise_convs[i])
-        return false if (!st2_note_conv(sh, up) || !st2_note_conv(sh, nc) || up.cin != cc || nc.cin != d.noise_convs[0].cin)
-        var t2 = conv1d_out_len(up, tt)
-        if (i == nst - 1l) {
-            t2++
-        }
-        let c2 = up.cout
-        return false if (c2 % 64l != 0l || nc.cout != c2 || conv1d_out_len(nc, har_frames) != t2
-            || !st2_note_block(sh, d.noise_res[i], t2, c2))
-        for (j in range64(d.n_kernels)) {
-            return false if (!st2_note_block(sh, d.resblocks[i * d.n_kernels + j], t2, c2))
-        }
-        sh.row_buf_floats = max(sh.row_buf_floats, round_up(t2, 32l) * c2)
-        sh.c_max = max(sh.c_max, c2)
-        tt = t2
-        cc = c2
-    }
-    return false if (!st2_note_conv(sh, d.conv_post) || d.conv_post.cin != cc || d.conv_post.cout > ST2_POST_WIDTH
-        || d.conv_post.cout < 2l * d.bins)
-    sh.t_post = conv1d_out_len(d.conv_post, tt)
-    sh.row_buf_floats = max(sh.row_buf_floats, round_up(sh.t_post, 32l) * ST2_POST_WIDTH)
-    sh.t_last = tt
-    sh.c_last = cc
+def private tts_note_res(var sh : St2Shape; b : St2AdainResBlk; t1 : int64) : bool {
+    sh.style_fc_floats += 2l * (b.dim_in_s + b.dim_out)
+    tts_note_rows(sh, t1, max(b.dim_in_s, b.dim_out))
     return true
 }
+
+//! conv_post's rows ride one ST2_POST_WIDTH row stride
+def private tts_note_post(var sh : St2Shape; post : TtsConv1d; t_post : int64) : bool {
+    return false if (post.cout > ST2_POST_WIDTH || !st2_note_conv(sh, post))
+    sh.row_buf_floats = max(sh.row_buf_floats, round_up(t_post, 32l) * ST2_POST_WIDTH)
+    return true
+}
+
+[unused_argument(sh, d)]
+def private tts_note_decoder(var sh : St2Shape; d : St2Decoder) : bool => true
 
 //! The generator from the rows in bx through conv_post into bpost [t_post][ST2_POST_WIDTH].
 def private st2_generator_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Decoder; g : St2GenBufs; bx, bspec, bpost : MetalBuffer?;
@@ -3065,7 +3044,7 @@ def private metal_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx,
         return tw_decline(MetalTowerDecline.knob)
     }
     var sh = St2Shape()
-    if (!st2_gen_shape(d, cx, t, har_frames, sh)) {
+    if (!tts_gen_shape(d, cx, t, har_frames, ST2_MAX_STAGES, sh)) {
         return tw_decline(MetalTowerDecline.shape)
     }
     var tc = ref_time_ticks()
@@ -3111,32 +3090,7 @@ def private metal_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx,
     return true
 }
 
-//! The block's output row count, or -1 on a shape the kernels do not take.
-def private st2_res_shape(var sh : St2Shape; b : St2AdainResBlk; t : int64) : int64 {
-    return -1l if (b.dim_in_s % 32l != 0l || b.dim_out % 64l != 0l || b.dim_in_s < b.dim_in
-        || !st2_note_conv(sh, b.conv1) || !st2_note_conv(sh, b.conv2) || b.conv1.cout != b.dim_out || b.conv2.cin != b.dim_out
-        || b.conv2.cout != b.dim_out
-        || (b.learned_sc && (!st2_note_conv(sh, b.conv1x1) || b.conv1x1.cout != b.dim_out || b.conv1x1.cin != b.dim_in_s)))
-    var t1 = t
-    if (b.upsample) {
-        return -1l if (b.pool.groups != b.pool.cin || b.pool.cin != b.pool.cout || !b.pool.transposed || empty(b.pool.w) || b.pool.cin != b.dim_in_s)
-        t1 = conv1d_out_len(b.pool, t)
-        return -1l if (t1 != 2l * t)
-    }
-    return -1l if (conv1d_out_len(b.conv1, t1) != t1 || conv1d_out_len(b.conv2, t1) != t1)
-    sh.style_fc_floats += 2l * (b.dim_in_s + b.dim_out)
-    sh.c_max = max(sh.c_max, max(b.dim_in_s, b.dim_out))
-    sh.row_buf_floats = max(sh.row_buf_floats, round_up(t1, 32l) * max(b.dim_in_s, b.dim_out))
-    return t1
-}
-
 let private ST2_MAX_DE_LSTMS = 8   //!< the duration encoder's LSTM stack the seat holds buffers for
-
-//! the shared source geometry into the seat's shape; false where the source parts do not fit the stamps
-def private st2_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64; var ss : TtsSourceShape) : bool {
-    ss = tts_source_shape(d, cfg, f2)
-    return ss.ok
-}
 
 def private st2_source_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Decoder; cfg : SineSourceCfg; ss : TtsSourceShape;
                              bf0, bnu, bnoise, blow, blowc, bhar, bspec : MetalBuffer?; captured : bool; seed : uint64) {
@@ -3173,29 +3127,6 @@ struct private St2DecShape : St2Shape {
     dec_rows : int64
     dec_width : int64
     n_out : int64
-}
-
-def private st2_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceCfg; frames, f2 : int64; noise : TtsNoise; var sh : St2DecShape) : bool {
-    let bwd & = unsafe(d.stft_bwd_re)
-    return false if (frames < 1l || f2 < 1l || text_c % 32l != 0l || !st2_note_conv(sh, d.f0_conv) || !st2_note_conv(sh, d.n_conv)
-        || !st2_note_conv(sh, d.asr_res) || d.f0_conv.cin != 1l || d.n_conv.cin != 1l || d.f0_conv.cout != 1l || d.n_conv.cout != 1l
-        || conv1d_out_len(d.f0_conv, f2) != frames || conv1d_out_len(d.n_conv, f2) != frames || d.asr_res.cin != text_c
-        || d.asr_res.cout % 64l != 0l || d.encode.dim_in != text_c + 2l || !st2_source_shape(d, source, f2, sh.ss)
-        || bwd.cin != d.bins || bwd.cout != 1l || !bwd.transposed || empty(bwd.wt) || d.stft_bwd_im.k != bwd.k
-        || (d.istft_envelope && long_length(d.window.a) < bwd.k) || (noise.captured && long_length(noise.normal) < sh.ss.samples * source.n_harm))
-    sh.dec_rows = st2_res_shape(sh, d.encode, frames)
-    return false if (sh.dec_rows < 0l)
-    sh.dec_width = d.encode.dim_out
-    for (b in d.decode) {
-        return false if ((b.dim_in != sh.dec_width && b.dim_in != sh.dec_width + d.asr_res.cout + 2l) || (b.dim_in == sh.dec_width && b.dim_in_s != b.dim_in))
-        sh.dec_rows = st2_res_shape(sh, b, sh.dec_rows)
-        return false if (sh.dec_rows < 0l)
-        sh.dec_width = b.dim_out
-    }
-    return false if (!st2_gen_shape(d, sh.dec_width, sh.dec_rows, sh.ss.spec_frames, sh))
-    sh.row_buf_floats = max(sh.row_buf_floats, round_up(frames, 32l) * max(d.encode.dim_in_s, text_c))
-    sh.n_out = conv1d_out_len(bwd, sh.t_post) - 2l * ST2_STFT_PAD
-    return sh.n_out >= 1l
 }
 
 struct private St2DecBufs {
@@ -3264,13 +3195,10 @@ def private metal_styletts2_decode(d : St2Decoder; text_c : int64; source : Sine
         return tw_decline(MetalTowerDecline.knob)
     }
     var sh = St2DecShape()
-    if (!st2_decode_shape(d, text_c, source, frames, f2, noise, sh)) {
+    if (!tts_decode_shape(d, text_c, source, frames, f2, noise, ST2_MAX_STAGES, sh)) {
         return tw_decline(MetalTowerDecline.shape)
     }
     var tc = ref_time_ticks()
-    if (!tts_dec_ok(d)) {
-        return tw_decline(MetalTowerDecline.shape)
-    }
     if (!metal_tower_init() || !st2_dec_attach(d)) {
         return tw_decline(MetalTowerDecline.device)
     }
@@ -3366,8 +3294,8 @@ def private metal_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fra
     var tn = frames
     for (i in range(length(p.f0))) {
         return tw_decline(MetalTowerDecline.shape) if (i > 0 && (p.f0[i].dim_in_s != p.f0[i - 1].dim_out || p.n[i].dim_in_s != p.n[i - 1].dim_out))
-        tf = st2_res_shape(sh, p.f0[i], tf)
-        tn = st2_res_shape(sh, p.n[i], tn)
+        tf = tts_res_shape(sh, p.f0[i], tf)
+        tn = tts_res_shape(sh, p.n[i], tn)
         return tw_decline(MetalTowerDecline.shape) if (tf < 0l || tn < 0l)
     }
     return tw_decline(MetalTowerDecline.shape) if (tf != tn || p.f0_proj.cin != p.f0[length(p.f0) - 1].dim_out || p.n_proj.cin != p.n[length(p.n) - 1].dim_out

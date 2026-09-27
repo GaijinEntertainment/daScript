@@ -699,6 +699,103 @@ def tts_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64) : TtsSourc
     return sh
 }
 
+// The decoder's shape walks: the CPU chain's own length rules, generic over the driver's shape record `SH`. Each driver's overloads of the
+// hooks - tts_note_conv, tts_note_rows, tts_note_block, tts_note_res, tts_note_post, tts_note_decoder, resolved at the driver (`_::`) - note
+// what its scratch is sized by and carry that driver's own declines.
+
+//! an AdaIN residual block over `t` rows, noted on `sh`; its output row count, or -1 on a shape the chain does not take
+def tts_res_shape(var sh : auto(SH); b : St2AdainResBlk; t : int64) : int64 {
+    return -1l if (b.dim_in_s % 32l != 0l || b.dim_out % 64l != 0l || b.dim_in_s < b.dim_in || !tts_conv_ok(b.conv1) || !tts_conv_ok(b.conv2)
+        || b.conv1.cin != b.dim_in_s || b.conv1.cout != b.dim_out || b.conv2.cin != b.dim_out || b.conv2.cout != b.dim_out
+        || (b.learned_sc && (!tts_conv_ok(b.conv1x1) || b.conv1x1.cout != b.dim_out || b.conv1x1.cin != b.dim_in_s)))
+    var t1 = t
+    if (b.upsample) {
+        return -1l if (b.pool.groups != b.pool.cin || b.pool.cin != b.pool.cout || !b.pool.transposed || empty(b.pool.w) || b.pool.cin != b.dim_in_s)
+        t1 = conv1d_out_len(b.pool, t)
+        return -1l if (t1 != 2l * t)
+    }
+    return -1l if (conv1d_out_len(b.conv1, t1) != t1 || conv1d_out_len(b.conv2, t1) != t1 || (b.learned_sc && conv1d_out_len(b.conv1x1, t1) != t1)
+        || !_::tts_note_conv(sh, b.conv1, t1, false) || !_::tts_note_conv(sh, b.conv2, t1, false)
+        || (b.learned_sc && !_::tts_note_conv(sh, b.conv1x1, t1, false)) || !_::tts_note_res(sh, b, t1))
+    return t1
+}
+
+//! a Snake residual block over `t` rows of `c` channels, noted on `sh`; false on a shape the chain does not take
+def tts_gen_block_shape(var sh : auto(SH); b : St2GenResBlock; t, c : int64) : bool {
+    let n = length(b.convs1)
+    return false if (b.c != c || n == 0 || length(b.convs2) != n || length(b.adain1) != n || length(b.adain2) != n
+        || length(b.alpha1) != n || length(b.alpha2) != n)
+    for (j in range(n)) {
+        let c1 & = unsafe(b.convs1[j])
+        let c2 & = unsafe(b.convs2[j])
+        return false if (!tts_conv_ok(c1) || !tts_conv_ok(c2) || c1.cin != c || c1.cout != c || c2.cin != c || c2.cout != c
+            || conv1d_out_len(c1, t) != t || conv1d_out_len(c2, t) != t || long_length(b.alpha1[j].a) < c || long_length(b.alpha2[j].a) < c
+            || !_::tts_note_conv(sh, c1, t, false) || !_::tts_note_conv(sh, c2, t, false))
+    }
+    return _::tts_note_block(sh, b, t, c)
+}
+
+//! the generator over `t` rows of `c` channels, at most `max_stages` stages: its stages noted on `sh`, conv_post's rows (`t_post`) and the last
+//! stage's rows and width (`t_last`, `c_last`) set; false on a shape the chain does not take
+def tts_gen_shape(d : St2Decoder; c, t, har_frames, max_stages : int64; var sh : auto(SH)) : bool {
+    let nst = long_length(d.ups)
+    return false if (nst == 0l || nst > max_stages || t < 1l || har_frames < 1l || d.n_kernels < 1l
+        || long_length(d.noise_convs) != nst || long_length(d.noise_res) != nst || long_length(d.resblocks) != nst * d.n_kernels)
+    var tt = t
+    var cc = c
+    _::tts_note_rows(sh, t, c)
+    for (i in range64(nst)) {
+        let up & = unsafe(d.ups[i])
+        let nc & = unsafe(d.noise_convs[i])
+        return false if (!tts_conv_ok(up) || !tts_conv_ok(nc) || up.cin != cc || nc.cin != d.noise_convs[0].cin)
+        var t2 = conv1d_out_len(up, tt)
+        if (i == nst - 1l) {
+            t2++
+        }
+        let c2 = up.cout
+        return false if (c2 % 64l != 0l || nc.cout != c2 || conv1d_out_len(nc, har_frames) != t2 || !tts_gen_block_shape(sh, d.noise_res[i], t2, c2))
+        for (j in range64(d.n_kernels)) {
+            return false if (!tts_gen_block_shape(sh, d.resblocks[i * d.n_kernels + j], t2, c2))
+        }
+        return false if (!_::tts_note_conv(sh, up, t2, true) || !_::tts_note_conv(sh, nc, t2, false))
+        _::tts_note_rows(sh, t2, c2)
+        tt = t2
+        cc = c2
+    }
+    return false if (!tts_conv_ok(d.conv_post) || d.conv_post.cin != cc || d.conv_post.cout < 2l * d.bins)
+    sh.t_post = conv1d_out_len(d.conv_post, tt)
+    sh.t_last = tt
+    sh.c_last = cc
+    return _::tts_note_post(sh, d.conv_post, sh.t_post)
+}
+
+//! the decode chain's shape: the front convs, the AdaIN residual blocks as the concat rows ask, the source (`ss`), the generator, the inverse STFT
+//! (`n_out`); false on a shape the chain does not take
+def tts_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceCfg; frames, f2 : int64; noise : TtsNoise; max_stages : int64; var sh : auto(SH)) : bool {
+    let bwd & = unsafe(d.stft_bwd_re)
+    sh.ss = tts_source_shape(d, source, f2)
+    return false if (frames < 1l || f2 < 1l || text_c % 32l != 0l || !sh.ss.ok || !tts_dec_ok(d) || d.f0_conv.cin != 1l || d.n_conv.cin != 1l
+        || d.f0_conv.cout != 1l || d.n_conv.cout != 1l || conv1d_out_len(d.f0_conv, f2) != frames || conv1d_out_len(d.n_conv, f2) != frames
+        || d.asr_res.cin != text_c || d.asr_res.cout % 64l != 0l || conv1d_out_len(d.asr_res, frames) != frames || d.encode.dim_in != text_c + 2l
+        || bwd.cin != d.bins || bwd.cout != 1l || !bwd.transposed || empty(bwd.wt) || d.stft_bwd_im.k != bwd.k
+        || (d.istft_envelope && long_length(d.window.a) < bwd.k) || (noise.captured && long_length(noise.normal) < sh.ss.samples * source.n_harm)
+        || long_length(noise.uniform) < source.n_harm || !_::tts_note_decoder(sh, d) || !_::tts_note_conv(sh, d.f0_conv, frames, false)
+        || !_::tts_note_conv(sh, d.n_conv, frames, false) || !_::tts_note_conv(sh, d.asr_res, frames, false))
+    _::tts_note_rows(sh, frames, max(text_c, d.encode.dim_in_s))
+    sh.dec_rows = tts_res_shape(sh, d.encode, frames)
+    return false if (sh.dec_rows < 0l)
+    sh.dec_width = d.encode.dim_out
+    for (b in d.decode) {
+        return false if ((b.dim_in != sh.dec_width && b.dim_in != sh.dec_width + d.asr_res.cout + 2l) || (b.dim_in == sh.dec_width && b.dim_in_s != b.dim_in))
+        sh.dec_rows = tts_res_shape(sh, b, sh.dec_rows)
+        return false if (sh.dec_rows < 0l)
+        sh.dec_width = b.dim_out
+    }
+    return false if (!tts_gen_shape(d, sh.dec_width, sh.dec_rows, sh.ss.spec_frames, max_stages, sh))
+    sh.n_out = conv1d_out_len(bwd, sh.t_post) - 2l * ST2_STFT_PAD
+    return sh.n_out >= 1l
+}
+
 //! fc(style) as a norm's rows at `dst`: gamma [c] then beta [c], gamma + 1 where the norm applies it as a layernorm weight (an AdaLN
 //! site); `tmp` the fc's output scratch
 def tts_style_rows(fc : TtsLinear; s : array<float>; c : int64; ln_form : bool; @scratch @exact_size var tmp : array<float>; var dst : float?) {

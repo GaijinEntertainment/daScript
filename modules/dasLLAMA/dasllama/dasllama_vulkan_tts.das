@@ -931,13 +931,15 @@ let private TS_PR_IDX = 12   //! the nearest upsample's row map, r / 2
 let private TS_PR_F0 = 13    //! the F0 branch's projection [t][1]
 let private TS_PR_N = 14     //! ... and the energy branch's
 
-//! a prosody branch's geometry: the widest row count and width its blocks reach, the widest im2col row, the aux floats its norms take
+//! a seat's geometry, the shape walks' record (`tts_res_shape` and its kin): the widest row count and width its blocks reach, the widest im2col
+//! row, the aux floats its norms take, and the style width every AdaIN norm's fc must read
 struct private TsShape {
     t_max : int64
     c_max : int64
     col : int64      //! the widest im2col a conv takes: its output rows x its padded row
     kdim : int64     //! the widest padded row among them
     aux : int64
+    sd : int64
 }
 
 //! the im2col floats a conv over `rows` output rows takes
@@ -956,39 +958,52 @@ let private TS_COL16_SLACK_ROWS = 64l   //! the half column slot's rows past a c
 //! the half column slot's floats: the widest im2col as halves, the slack rows past it
 def private ts_col16_floats(sh : TsShape) : int64 => (sh.col + TS_COL16_SLACK_ROWS * sh.kdim) / 2l + 1l
 
-//! a residual block's rows form on the seat, its norms reading a style `sd` wide, or -1: the block's output row count, the shape noted
-def private ts_res_shape(var sh : TsShape; b : St2AdainResBlk; t, sd : int64) : int64 {
-    return -1l if (b.dim_in_s % 32l != 0l || b.dim_out % 64l != 0l || b.dim_in_s < b.dim_in || !tts_res_ok(b) || b.conv1.transposed || b.conv2.transposed
-        || b.conv1.cin != b.dim_in_s || b.conv1.cout != b.dim_out || b.conv2.cin != b.dim_out || b.conv2.cout != b.dim_out
-        || (b.learned_sc && (b.conv1x1.transposed || b.conv1x1.cout != b.dim_out || b.conv1x1.cin != b.dim_in_s))
-        || !tts_lin_ok(b.norm1.fc) || b.norm1.fc.nout != 2l * b.dim_in_s || !tts_lin_ok(b.norm2.fc) || b.norm2.fc.nout != 2l * b.dim_out
-        || b.norm1.fc.nin != sd || b.norm2.fc.nin != sd)
-    var t1 = t
-    if (b.upsample) {
-        return -1l if (b.pool.groups != b.pool.cin || b.pool.cin != b.pool.cout || !b.pool.transposed || empty(b.pool.w) || b.pool.cin != b.dim_in_s)
-        t1 = conv1d_out_len(b.pool, t)
-        return -1l if (t1 != 2l * t)
-    }
-    return -1l if (conv1d_out_len(b.conv1, t1) != t1 || conv1d_out_len(b.conv2, t1) != t1 || (b.learned_sc && conv1d_out_len(b.conv1x1, t1) != t1))
-    sh.t_max = max(sh.t_max, t1)
-    sh.c_max = max(sh.c_max, max(b.dim_in_s, b.dim_out))
-    ts_note_col(sh, b.conv1, t1)
-    ts_note_col(sh, b.conv2, t1)
-    if (b.learned_sc) {
-        ts_note_col(sh, b.conv1x1, t1)
-    }
-    sh.aux += 2l * (b.dim_in_s + b.dim_out) + 8l
-    return t1
+//! the shape walks' conv hook: a conv over `rows` output rows noted (its im2col and padded row); a transposed conv serves only as an upsample
+def private tts_note_conv(var sh : TsShape; c : TtsConv1d; rows : int64; upsample : bool) : bool {
+    return false if (c.transposed && !upsample)
+    ts_note_col(sh, c, rows)
+    return true
 }
 
+def private tts_note_rows(var sh : TsShape; t, c : int64) {
+    sh.t_max = max(sh.t_max, t)
+    sh.c_max = max(sh.c_max, c)
+}
+
+//! a Snake block's style rows (its norms' fc(style), 16-float aligned) and their fc widths
+[unused_argument(t)]
+def private tts_note_block(var sh : TsShape; b : St2GenResBlock; t, c : int64) : bool {
+    for (j in range(length(b.adain1))) {
+        return false if (!tts_lin_ok(b.adain1[j].fc) || b.adain1[j].fc.nout != 2l * c || !tts_lin_ok(b.adain2[j].fc) || b.adain2[j].fc.nout != 2l * c
+            || b.adain1[j].fc.nin != sh.sd || b.adain2[j].fc.nin != sh.sd)
+    }
+    sh.aux += long_length(b.convs1) * (4l * c + 16l)
+    return true
+}
+
+//! an AdaIN block's pool and norms, its norms' fc widths against the style, its rows and style rows
+def private tts_note_res(var sh : TsShape; b : St2AdainResBlk; t1 : int64) : bool {
+    return false if (!tts_res_ok(b) || !tts_lin_ok(b.norm1.fc) || b.norm1.fc.nout != 2l * b.dim_in_s || !tts_lin_ok(b.norm2.fc) || b.norm2.fc.nout != 2l * b.dim_out
+        || b.norm1.fc.nin != sh.sd || b.norm2.fc.nin != sh.sd)
+    tts_note_rows(sh, t1, max(b.dim_in_s, b.dim_out))
+    sh.aux += 2l * (b.dim_in_s + b.dim_out) + 8l
+    return true
+}
+
+def private tts_note_post(var sh : TsShape; post : TtsConv1d; t_post : int64) : bool => tts_note_conv(sh, post, t_post, false)
+
+//! the decode seat's style-row offsets hold TS_MAX_RES_BLOCKS decode blocks
+[unused_argument(sh)]
+def private tts_note_decoder(var sh : TsShape; d : St2Decoder) : bool => length(d.decode) <= TS_MAX_RES_BLOCKS
+
 //! a branch's blocks then its projection on the seat, or -1: the projection's row count
-def private ts_branch_shape(var sh : TsShape; blocks : array<St2AdainResBlk>; proj : TtsConv1d; frames, cin, sd : int64) : int64 {
+def private ts_branch_shape(var sh : TsShape; blocks : array<St2AdainResBlk>; proj : TtsConv1d; frames, cin : int64) : int64 {
     return -1l if (length(blocks) > TS_MAX_RES_BLOCKS || !tts_conv_ok(proj) || proj.transposed || proj.cout != 1l)
     var t = frames
     var c = cin
     for (b in blocks) {
         return -1l if (b.dim_in_s != c)
-        t = ts_res_shape(sh, b, t, sd)
+        t = tts_res_shape(sh, b, t)
         return -1l if (t < 0l)
         c = b.dim_out
     }
@@ -1113,14 +1128,13 @@ def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fr
         return ts_decline("prosody", VulkanTtsDecline.knob)
     }
     let hd = p.shared_lstm.fwd.hidden
-    let sd = long_length(s)
-    var sh = TsShape(t_max = frames, c_max = max(cc, 2l * hd), col = 32l, aux = 4l)
+    var sh = TsShape(t_max = frames, c_max = max(cc, 2l * hd), col = 32l, aux = 4l, sd = long_length(s))
     if (frames < 1l || cc % 32l != 0l || !tts_lstm_ok(p.shared_lstm, cc, TS_LSTM_MAX_HIDDEN) || empty(p.f0) || long_length(en) < cc * frames
         || !tts_pred_ok(p, TS_LSTM_MAX_HIDDEN)) {
         return ts_decline("prosody", VulkanTtsDecline.shape)
     }
-    let tf = ts_branch_shape(sh, p.f0, p.f0_proj, frames, 2l * hd, sd)
-    let tn = ts_branch_shape(sh, p.n, p.n_proj, frames, 2l * hd, sd)
+    let tf = ts_branch_shape(sh, p.f0, p.f0_proj, frames, 2l * hd)
+    let tn = ts_branch_shape(sh, p.n, p.n_proj, frames, 2l * hd)
     if (tf < 0l || tn < 0l || tf != tn) {
         return ts_decline("prosody", VulkanTtsDecline.shape)
     }
@@ -1215,122 +1229,28 @@ let private TS_D_COL16 = 29   //! the im2col columns as halves, the f16 tile's f
 
 let private TS_D_BLK = TsBlkIdx(r = TS_D_R, pool = TS_D_POOL, c1 = TS_D_C1, sc = TS_D_SC, sc2 = TS_D_SC2, col = TS_D_COL, col16 = TS_D_COL16, idx = TS_D_IDX)
 
-//! the decode chain's geometry: the blocks' widest rows, the generator's stages, the source and the inverse STFT
-struct private TsDecShape {
-    blk : TsShape
+//! the decode chain's geometry (`tts_decode_shape`): the blocks' widest rows, the generator's stages, the source and the inverse STFT
+struct private TsDecShape : TsShape {
     dec_rows : int64
     dec_width : int64
     t_last : int64      //! the generator's last stage: its rows and width
     c_last : int64
     t_post : int64
-    samples : int64
-    nlow : int64
-    spec_frames : int64
+    ss : TtsSourceShape
     n_out : int64
-}
-
-def private ts_gen_block_shape(var sh : TsShape; b : St2GenResBlock; t, c : int64) : bool {
-    let n = length(b.convs1)
-    return false if (b.c != c || n == 0 || length(b.convs2) != n || length(b.adain1) != n || length(b.adain2) != n
-        || length(b.alpha1) != n || length(b.alpha2) != n)
-    for (j in range(n)) {
-        let c1 & = unsafe(b.convs1[j])
-        let c2 & = unsafe(b.convs2[j])
-        return false if (!tts_conv_ok(c1) || !tts_conv_ok(c2) || c1.transposed || c2.transposed || c1.cin != c || c1.cout != c || c2.cin != c || c2.cout != c
-            || conv1d_out_len(c1, t) != t || conv1d_out_len(c2, t) != t || long_length(b.alpha1[j].a) < c || long_length(b.alpha2[j].a) < c
-            || !tts_lin_ok(b.adain1[j].fc) || b.adain1[j].fc.nout != 2l * c || !tts_lin_ok(b.adain2[j].fc) || b.adain2[j].fc.nout != 2l * c)
-        ts_note_col(sh, c1, t)
-        ts_note_col(sh, c2, t)
-    }
-    sh.aux += int64(n) * (4l * c + 16l)
-    return true
-}
-
-//! the generator's shape from the CPU chain's own length rules; false on any shape the kernels do not take
-def private ts_gen_shape(d : St2Decoder; c, t, har_frames : int64; var sh : TsDecShape) : bool {
-    let nst = long_length(d.ups)
-    return false if (nst == 0l || nst > TS_MAX_STAGES || t < 1l || har_frames < 1l || d.n_kernels < 1l
-        || long_length(d.noise_convs) != nst || long_length(d.noise_res) != nst || long_length(d.resblocks) != nst * d.n_kernels)
-    var tt = t
-    var cc = c
-    sh.blk.c_max = max(sh.blk.c_max, c)
-    sh.blk.t_max = max(sh.blk.t_max, t)
-    for (i in range64(nst)) {
-        let up & = unsafe(d.ups[i])
-        let nc & = unsafe(d.noise_convs[i])
-        return false if (!tts_conv_ok(up) || !tts_conv_ok(nc) || nc.transposed || up.cin != cc || nc.cin != d.noise_convs[0].cin)
-        var t2 = conv1d_out_len(up, tt)
-        if (i == nst - 1l) {
-            t2++
-        }
-        let c2 = up.cout
-        return false if (c2 % 64l != 0l || nc.cout != c2 || conv1d_out_len(nc, har_frames) != t2 || !ts_gen_block_shape(sh.blk, d.noise_res[i], t2, c2))
-        for (j in range64(d.n_kernels)) {
-            return false if (!ts_gen_block_shape(sh.blk, d.resblocks[i * d.n_kernels + j], t2, c2))
-        }
-        ts_note_col(sh.blk, up, t2)
-        ts_note_col(sh.blk, nc, t2)
-        sh.blk.t_max = max(sh.blk.t_max, t2)
-        sh.blk.c_max = max(sh.blk.c_max, c2)
-        tt = t2
-        cc = c2
-    }
-    return false if (!tts_conv_ok(d.conv_post) || d.conv_post.transposed || d.conv_post.cin != cc || d.conv_post.cout < 2l * d.bins)
-    sh.t_post = conv1d_out_len(d.conv_post, tt)
-    ts_note_col(sh.blk, d.conv_post, sh.t_post)
-    sh.t_last = tt
-    sh.c_last = cc
-    return true
-}
-
-//! the shared source geometry into the decode shape; false where the source parts do not fit the stamps
-def private ts_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64; var sh : TsDecShape) : bool {
-    let ss = tts_source_shape(d, cfg, f2)
-    sh.samples = ss.samples
-    sh.nlow = ss.nlow
-    sh.spec_frames = ss.spec_frames
-    return ss.ok
-}
-
-//! the decode chain's shape: the front convs and the residual as the concat rows ask, the AdaIN residual blocks, the source, the generator, the inverse STFT
-def private ts_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceCfg; frames, f2 : int64; noise : TtsNoise; sd : int64; var sh : TsDecShape) : bool {
-    let bwd & = unsafe(d.stft_bwd_re)
-    return false if (frames < 1l || f2 < 1l || text_c % 32l != 0l || !tts_conv_ok(d.f0_conv) || !tts_conv_ok(d.n_conv) || !tts_conv_ok(d.asr_res)
-        || d.asr_res.transposed || d.f0_conv.cin != 1l || d.n_conv.cin != 1l || d.f0_conv.cout != 1l || d.n_conv.cout != 1l
-        || conv1d_out_len(d.f0_conv, f2) != frames || conv1d_out_len(d.n_conv, f2) != frames || d.asr_res.cin != text_c || d.asr_res.cout % 64l != 0l
-        || conv1d_out_len(d.asr_res, frames) != frames || d.encode.dim_in != text_c + 2l || !ts_source_shape(d, source, f2, sh)
-        || bwd.cin != d.bins || bwd.cout != 1l || !bwd.transposed || empty(bwd.wt) || d.stft_bwd_im.k != bwd.k
-        || (d.istft_envelope && long_length(d.window.a) < bwd.k) || (noise.captured && long_length(noise.normal) < sh.samples * source.n_harm)
-        || long_length(noise.uniform) < source.n_harm || !tts_dec_ok(d))
-    sh.blk = TsShape(t_max = frames, c_max = max(text_c, d.encode.dim_in_s), col = 32l, aux = 8l)
-    ts_note_col(sh.blk, d.f0_conv, frames)
-    ts_note_col(sh.blk, d.n_conv, frames)
-    ts_note_col(sh.blk, d.asr_res, frames)
-    sh.dec_rows = ts_res_shape(sh.blk, d.encode, frames, sd)
-    return false if (sh.dec_rows < 0l || length(d.decode) > TS_MAX_RES_BLOCKS)
-    sh.dec_width = d.encode.dim_out
-    for (b in d.decode) {
-        return false if ((b.dim_in != sh.dec_width && b.dim_in != sh.dec_width + d.asr_res.cout + 2l) || (b.dim_in == sh.dec_width && b.dim_in_s != b.dim_in))
-        sh.dec_rows = ts_res_shape(sh.blk, b, sh.dec_rows, sd)
-        return false if (sh.dec_rows < 0l)
-        sh.dec_width = b.dim_out
-    }
-    return false if (!ts_gen_shape(d, sh.dec_width, sh.dec_rows, sh.spec_frames, sh))
-    sh.n_out = conv1d_out_len(bwd, sh.t_post) - 2l * ST2_STFT_PAD
-    return sh.n_out >= 1l
 }
 
 //! the generator's slots for this call's geometry: the stream rows, conv_post's rows, the block rows and the columns (the generator seat's whole table)
 def private ts_gen_floats(d : St2Decoder; sh : TsDecShape) : TsFloats {
-    let rows = sh.blk.t_max * sh.blk.c_max
+    let rows = sh.t_max * sh.c_max
     var fl : TsFloats
     fl[TS_D_X] = rows
     fl[TS_D_POST] = sh.t_post * d.conv_post.cout
     for (i in range(TS_D_BY, TS_D_SC2 + 1)) {
         fl[i] = rows
     }
-    fl[TS_D_COL] = sh.blk.col
-    fl[TS_D_COL16] = ts_col16_floats(sh.blk)
+    fl[TS_D_COL] = sh.col
+    fl[TS_D_COL16] = ts_col16_floats(sh)
     return fl
 }
 
@@ -1345,13 +1265,13 @@ def private ts_dec_floats(d : St2Decoder; sh : TsDecShape; nh, text_c, frames, f
     fl[TS_D_ND] = frames
     fl[TS_D_CAT] = fl[TS_D_X]
     fl[TS_D_NU] = nh
-    fl[TS_D_NOISE] = sh.samples * nh
-    fl[TS_D_LOW] = nh * sh.nlow
-    fl[TS_D_LOWC] = nh * sh.nlow
-    fl[TS_D_HAR] = sh.samples
-    fl[TS_D_SPEC] = sh.spec_frames * 2l * d.bins
+    fl[TS_D_NOISE] = sh.ss.samples * nh
+    fl[TS_D_LOW] = nh * sh.ss.nlow
+    fl[TS_D_LOWC] = nh * sh.ss.nlow
+    fl[TS_D_HAR] = sh.ss.samples
+    fl[TS_D_SPEC] = sh.ss.spec_frames * 2l * d.bins
     fl[TS_D_WAVE] = sh.n_out
-    fl[TS_D_IDX] = sh.blk.t_max
+    fl[TS_D_IDX] = sh.t_max
     return fl
 }
 
@@ -1501,11 +1421,11 @@ def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
     let r_lowc = ts_rows(sc_, TS_D_LOWC)
     let r_har = ts_rows(sc_, TS_D_HAR)
     let r_spec = ts_rows(sc_, TS_D_SPEC)
-    var ka = TtsSourceArgs(n = uint(sh.samples), nlow = uint(sh.nlow), nh = uint(nh), up = uint(cfg.upsample), sr = cfg.sample_rate, sine_amp = cfg.sine_amp,
+    var ka = TtsSourceArgs(n = uint(sh.ss.samples), nlow = uint(sh.ss.nlow), nh = uint(nh), up = uint(cfg.upsample), sr = cfg.sample_rate, sine_amp = cfg.sine_amp,
         noise_std = cfg.noise_std, voiced_thr = cfg.voiced_thr, seed = uint(seed ^ (seed >> 32ul)), woff = uint(sl.src_w), boff = uint(sl.src_b))
     if (!captured) {
         var s0 = set_tts_src_noise_cls(fixed_array(r_noise.dev), fixed_array(r_noise.bytes), fixed_array(r_noise.bit))
-        enc_tts_src_noise_cls(raw, h, s0, ka, sh.samples * nh)
+        enc_tts_src_noise_cls(raw, h, s0, ka, sh.ss.samples * nh)
     }
     let low_bufs = fixed_array(r_f0.dev, r_nu.dev, r_low.dev)
     let low_sizes = fixed_array(r_f0.bytes, r_nu.bytes, r_low.bytes)
@@ -1518,33 +1438,33 @@ def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
     let sin_bits = fixed_array(r_f0.bit, r_lowc.bit, r_noise.bit, 0u, r_har.bit)
     if (cfg.torch_math) {
         var s1 = set_tts_src_low_torch_cls(low_bufs, low_sizes, low_bits)
-        enc_tts_src_low_torch_cls(raw, h, s1, ka, nh * sh.nlow)
+        enc_tts_src_low_torch_cls(raw, h, s1, ka, nh * sh.ss.nlow)
         var s2 = set_tts_src_cumsum_torch_cls(cum_bufs, cum_sizes, cum_bits)
         enc_tts_src_cumsum_torch_cls(raw, h, s2, ka, 1l)
         var s3 = set_tts_src_sines_torch_cls(sin_bufs, sin_sizes, sin_bits)
-        enc_tts_src_sines_torch_cls(raw, h, s3, ka, sh.samples)
+        enc_tts_src_sines_torch_cls(raw, h, s3, ka, sh.ss.samples)
         vt_pt(raw, VtProfRole.tts_source)
     } else {
         var s1 = set_tts_src_low_onnx_cls(low_bufs, low_sizes, low_bits)
-        enc_tts_src_low_onnx_cls(raw, h, s1, ka, nh * sh.nlow)
+        enc_tts_src_low_onnx_cls(raw, h, s1, ka, nh * sh.ss.nlow)
         var s2 = set_tts_src_cumsum_onnx_cls(cum_bufs, cum_sizes, cum_bits)
         enc_tts_src_cumsum_onnx_cls(raw, h, s2, ka, 1l)
         var s3 = set_tts_src_sines_onnx_cls(sin_bufs, sin_sizes, sin_bits)
-        enc_tts_src_sines_onnx_cls(raw, h, s3, ka, sh.samples)
+        enc_tts_src_sines_onnx_cls(raw, h, s3, ka, sh.ss.samples)
         vt_pt(raw, VtProfRole.tts_source)
     }
     let re & = unsafe(d.stft_fwd_re)
-    var ks = TtsStftArgs(n = uint(sh.samples), frames = uint(sh.spec_frames), bins = uint(d.bins), k = uint(re.k), hop = uint(re.stride), pad = uint(ST2_STFT_PAD),
+    var ks = TtsStftArgs(n = uint(sh.ss.samples), frames = uint(sh.ss.spec_frames), bins = uint(d.bins), k = uint(re.k), hop = uint(re.stride), pad = uint(ST2_STFT_PAD),
         eps = d.stft_eps, reoff = uint(sl.stft_re), imoff = uint(sl.stft_im))
     let st_bufs = fixed_array(r_har.dev, slab.dev, r_spec.dev)
     let st_sizes = fixed_array(r_har.bytes, slab.bytes, r_spec.bytes)
     let st_bits = fixed_array(r_har.bit, 0u, r_spec.bit)
     if (d.stft_pad_reflect) {
         var s4 = set_tts_stft_reflect_cls(st_bufs, st_sizes, st_bits)
-        enc_tts_stft_reflect_cls(raw, h, s4, ks, sh.spec_frames * d.bins)
+        enc_tts_stft_reflect_cls(raw, h, s4, ks, sh.ss.spec_frames * d.bins)
     } else {
         var s4 = set_tts_stft_edge_cls(st_bufs, st_sizes, st_bits)
-        enc_tts_stft_edge_cls(raw, h, s4, ks, sh.spec_frames * d.bins)
+        enc_tts_stft_edge_cls(raw, h, s4, ks, sh.ss.spec_frames * d.bins)
     }
     vt_pt(raw, VtProfRole.tts_stft)
 }
@@ -1608,8 +1528,8 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
     if (!vulkan_tower_on()) {
         return ts_decline("decode", VulkanTtsDecline.knob)
     }
-    var sh = TsDecShape()
-    if (!ts_decode_shape(d, text_c, source, frames, f2, noise, long_length(s_ref), sh) || long_length(asr) < text_c * frames
+    var sh = TsDecShape(col = 32l, aux = 8l, sd = long_length(s_ref))
+    if (!tts_decode_shape(d, text_c, source, frames, f2, noise, TS_MAX_STAGES, sh) || long_length(asr) < text_c * frames
         || long_length(f0) < f2 || long_length(nrg) < f2) {
         return ts_decline("decode", VulkanTtsDecline.shape)
     }
@@ -1618,7 +1538,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
     }
     let nh = source.n_harm
     let fl = ts_dec_floats(d, sh, nh, text_c, frames, f2)
-    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, tts_stats_floats(sh.blk.t_max, sh.blk.c_max), sh.n_out)) {
+    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.aux, tts_stats_floats(sh.t_max, sh.c_max), sh.n_out)) {
         return ts_decline("decode", VulkanTtsDecline.memory)
     }
     let sl & = g_ts_dec_slots
@@ -1639,9 +1559,9 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
     ts_upload(r_nr, nrg, f2)
     ts_upload(ts_rows(sc_, TS_D_NU), noise.uniform, nh)
     if (noise.captured) {
-        ts_upload(ts_rows(sc_, TS_D_NOISE), noise.normal, sh.samples * nh)
+        ts_upload(ts_rows(sc_, TS_D_NOISE), noise.normal, sh.ss.samples * nh)
     }
-    ts_idx_upload(ts_rows(sc_, TS_D_IDX), sh.blk.t_max)
+    ts_idx_upload(ts_rows(sc_, TS_D_IDX), sh.t_max)
     let bwd & = unsafe(d.stft_bwd_re)
     vt_chain_one_shot("decode", long_length(d.ups), frames) $(raw : VkCommandBuffer; var h : VkHaz) {
         let r_col = ts_rows(sc_, TS_D_COL)
@@ -1651,7 +1571,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
         ts_conv_at(raw, h, slab, sl.asr_res, d.asr_res, frames, frames, r_asr, r_col, r_col16, ts_rows(sc_, TS_D_RES), true)
         ts_decoder_chain(raw, h, slab, sc_, d, dhoff, text_c, frames)
         ts_source_chain(raw, h, slab, sc_, d, source, sh, noise.captured, seed)
-        ts_generator_chain(raw, h, slab, sc_, d, sh.dec_width, sh.dec_rows, sh.spec_frames)
+        ts_generator_chain(raw, h, slab, sc_, d, sh.dec_width, sh.dec_rows, sh.ss.spec_frames)
         let r_post = ts_rows(sc_, TS_D_POST)
         var ki = TtsIstftArgs(tt = uint(sh.t_post), stride = uint(d.conv_post.cout), bins = uint(d.bins), k = uint(bwd.k), hop = uint(bwd.stride),
             pad = uint(ST2_STFT_PAD), envelope = d.istft_envelope ? 1u : 0u, n = uint(sh.n_out), reoff = uint(sl.istft_re), imoff = uint(sl.istft_im),
@@ -1671,21 +1591,17 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
     if (!vulkan_tower_on()) {
         return ts_decline("generator", VulkanTtsDecline.knob)
     }
-    var sh = TsDecShape()
-    sh.blk = TsShape(t_max = t, c_max = cx, col = 32l, aux = 8l)
+    var sh = TsDecShape(col = 32l, aux = 8l, sd = long_length(s))
     let spec_floats = har_frames * (empty(d.noise_convs) ? 0l : d.noise_convs[0].cin)
-    if (cx % 32l != 0l || !ts_gen_shape(d, cx, t, har_frames, sh) || !tts_dec_ok(d) || long_length(x_rows) < t * cx || long_length(har_spec) < spec_floats) {
+    if (cx % 32l != 0l || !tts_gen_shape(d, cx, t, har_frames, TS_MAX_STAGES, sh) || !tts_dec_ok(d) || long_length(x_rows) < t * cx || long_length(har_spec) < spec_floats) {
         return ts_decline("generator", VulkanTtsDecline.shape)
-    }
-    for (b in d.noise_res) {
-        return ts_decline("generator", VulkanTtsDecline.shape) if (!empty(b.adain1) && b.adain1[0].fc.nin != long_length(s))
     }
     if (!vulkan_tower_arms() || !ts_dec_ensure()) {
         return ts_decline("generator", VulkanTtsDecline.device)
     }
     var fl = ts_gen_floats(d, sh)
     fl[TS_D_SPEC] = spec_floats
-    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, tts_stats_floats(sh.blk.t_max, sh.blk.c_max), fl[TS_D_POST])) {
+    if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.aux, tts_stats_floats(sh.t_max, sh.c_max), fl[TS_D_POST])) {
         return ts_decline("generator", VulkanTtsDecline.memory)
     }
     let sc_ & = g_ts_dec_scratch
