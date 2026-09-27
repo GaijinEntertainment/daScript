@@ -35,7 +35,7 @@ require _gpu_knobs public
 let BAR = 1e-4
 let SOURCE_BAR = 5e-3   //! the harmonic source against the oracle's, absolute: the phase past 1e5 radians turns a ulp of an increment into radians, and the pod's x64 chain reads 2.5e-3 on kitten's ONNX law where the M5 Max reads under 1e-4
 
-//! The Metal driver's bars: rel-rms against the CPU chain fed the same inputs on the f32 lane (the readings: tests/CLAUDE.md).
+//! The Metal driver's bars: rel-l2 against the CPU chain fed the same inputs on the f32 lane (the readings: tests/CLAUDE.md).
 let GPU_SEAM_BAR = 5e-3
 let GPU_ALBERT_BAR = 5e-5   //! the f32-exact front end reads 3e-6; the f16-staged route read 2e-3, so the bars sit between
 let GPU_TEXT_BAR = 1e-5
@@ -55,9 +55,9 @@ def tower_served(t : T?; msg, declines : string) : bool {
     return false
 }
 
-//! the serving driver's tower knob: the Metal tower's where das_metal is built in, else the Vulkan one's
+//! the Metal tower's where das_metal is built in, else the Vulkan one's
 [unused_argument(on)]
-def set_gpu(on : bool) {
+def set_serving_gpu_tower(on : bool) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_tower(on)
     } else {
@@ -140,21 +140,21 @@ struct TtsParityRig {
 enum BarMetric {
     absolute   //! max |ours - ref| within the bar; the poison moves one element by twice the bar
     of_peak    //! max |ours - ref| within the bar times the reference's peak; the poison moves one element by twice that
-    rel_rms    //! `rel_rms(ours, ref)` over the shorter length under the bar; the poison shifts every element by `shift`
+    rel_l2     //! `rel_l2(ours, ref)` under the bar; the poison shifts every element by `shift`
 }
 
 //! `ours` against `ref` under `bar` read by `metric`, logged either way, with the control: the poisoned expectation must red the bar.
 def bar_diff(t : T?; tag : string; ours, ref : array<float>; bar : float; metric : BarMetric; shift : float = 0.0) {
-    if (metric == BarMetric.rel_rms) {
-        let rel = rel_rms(ours, ref)
-        to_log(LOG_INFO, "{tag}: rel-rms {rel} over {length(ours)} against the reference's {length(ref)} (bar {bar})\n")
-        t |> success(rel < bar, "{tag}: rel-rms {rel} under {bar}")
-        var inscope poisoned <- [for (v in ref); v + shift]
-        t |> success(rel_rms(ours, poisoned) >= bar, "{tag}: the bar discriminates an expectation shifted by {shift}")
-        return
-    }
     if (length(ours) != length(ref)) {
         t |> failure("{tag}: {length(ours)} elements against the reference's {length(ref)}")
+        return
+    }
+    if (metric == BarMetric.rel_l2) {
+        let rel = rel_l2(ours, ref)
+        to_log(LOG_INFO, "{tag}: rel-l2 {rel} over {length(ref)} (bar {bar})\n")
+        t |> success(rel < bar, "{tag}: rel-l2 {rel} under {bar}")
+        var inscope poisoned <- [for (v in ref); v + shift]
+        t |> success(rel_l2(ours, poisoned) >= bar, "{tag}: the bar discriminates an expectation shifted by {shift}")
         return
     }
     let peak = logits_maxabs(ref)
@@ -219,7 +219,7 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     var inscope f0 <- dump_tensor(dump, type<float>, "f0")
     var inscope gen_in <- dump_tensor(dump, type<float>, "gen_in")
     var inscope style <- dump_tensor(dump, type<float>, "style")
-    var inscope s_ref <- copy_span(style, 0l, m.style_dim / 2l)   // the decoder's half of the style vector
+    var inscope style_dec <- copy_span(style, 0l, m.style_dim / 2l)
     let f2 = long_length(f0)
     let cw = long_length(gen_in) / f2
     var inscope noise <- case_noise(dump)
@@ -240,9 +240,9 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
         spec := spec_ref
     }
     var inscope wave : array<float>
-    styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, tr, wave, sc)
+    styletts2_generator(m.decoder, gen_in, cw, f2, style_dec, spec, frames, tr, wave, sc)
     with_gpu_knobs() {
-        gpu_seam_check(t, m, tag, gen_in, cw, f2, s_ref, spec, frames, wave, sc)
+        gpu_seam_check(t, m, tag, gen_in, cw, f2, style_dec, spec, frames, wave, sc)
         gpu_stage_checks(t, m, m8, tag, dump, noise, sc)
     }
     stage_diff(t, "{tag} SEAM", "stft_re", tr.stft_re, dump)
@@ -260,22 +260,22 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     }
 }
 
-[unused_argument(t, m, tag, gen_in, cw, f2, s_ref, spec, frames, wave_cpu, sc)]   // off-Apple the gated body is empty
-def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : array<float>; cw, f2 : int64; s_ref, spec : array<float>;
+[unused_argument(t, m, tag, gen_in, cw, f2, style_dec, spec, frames, wave_cpu, sc)]   // off-Apple the gated body is empty
+def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : array<float>; cw, f2 : int64; style_dec, spec : array<float>;
                            frames : int64; wave_cpu : array<float>; var sc : St2Scratch) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         var convs = 0l
         var inscope cpu : array<float>
-        let served = seat_leg(t, ST2, tag, "generator", GPU_SEAM_BAR, cpu) $(leg : TowerLeg; var out : array<float>) {
+        let served = seat_leg(t, TtsFamily.styletts2, tag, "generator", GPU_SEAM_BAR, cpu) $(leg : TowerLeg; var out : array<float>) {
             if (leg == TowerLeg.cpu) {
                 out := wave_cpu   // the traced CPU run's waveform, which the seam's stage cells read too
             } elif (leg == TowerLeg.served) {
                 let c0 = gpu_convs()
-                styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, null, out, sc)
+                styletts2_generator(m.decoder, gen_in, cw, f2, style_dec, spec, frames, null, out, sc)
                 convs = gpu_convs() - c0
             } else {
                 var inscope gen_x <- scaled_copy(gen_in, 3.0)
-                styletts2_generator(m.decoder, gen_x, cw, f2, s_ref, spec, frames, null, out, sc)
+                styletts2_generator(m.decoder, gen_x, cw, f2, style_dec, spec, frames, null, out, sc)
             }
         }
         return if (!served)
@@ -284,8 +284,8 @@ def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : ar
         }
         knob_off_leg(t, "{tag} GPU generator", 1l, $ => styletts2_generator_gpu_stats()) $ {
             var inscope wave_off : array<float>
-            styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, null, wave_off, sc)
-            return rel_rms(wave_off, wave_cpu) == 0.0
+            styletts2_generator(m.decoder, gen_in, cw, f2, style_dec, spec, frames, null, wave_off, sc)
+            return length(wave_off) == length(wave_cpu) && rel_l2(wave_off, wave_cpu) == 0.0
         }
     }
 }
@@ -294,7 +294,7 @@ def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : ar
 [unused_argument(t, tag, declines, stats, run)]   // off-Apple the gated body is empty
 def knob_off_leg(t : T?; tag : string; declines : int64; stats : block<() : tuple<calls : int; served : int>>; run : block<() : bool>) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        set_gpu(false)
+        set_serving_gpu_tower(false)
         let h0 = invoke(stats)
         let d0 <- gpu_declines()
         let same = invoke(run)
@@ -307,7 +307,7 @@ def knob_off_leg(t : T?; tag : string; declines : int64; stats : block<() : tupl
     }
 }
 
-//! `g` with one element moved by twice what the rel-rms bar tolerates over the whole row: the smallest wrong output the bar must catch.
+//! `g` with one element moved by twice what the rel-l2 bar tolerates over the whole row: the smallest wrong output the bar must catch.
 def one_wrong(g, cpu : array<float>; bar : float) : array<float> {
     var w := g
     let n = long_length(cpu)
@@ -320,29 +320,22 @@ def one_wrong(g, cpu : array<float>; bar : float) : array<float> {
     return <- w
 }
 
-//! One hook call, one encode, the length, rel-rms within `bar`, the poisoned and one-wrong legs past it; false where the tower did not serve once.
+//! One hook call, one encode, the length, rel-l2 within `bar`, the poisoned and one-wrong legs past it; false where the tower did not serve once.
 def gpu_stage_verdict(t : T?; tag, stage : string; g, cpu, gp : array<float>; bar : float; calls, served : int; encodes : int64; declines : string) : bool {
     return tower_served(t, "{tag} GPU {stage}", declines) if (served != 1)
-    let d = rel_rms(g, cpu)
-    let dp = rel_rms(gp, cpu)
-    to_log(LOG_INFO, "{tag} GPU {stage}: rel-rms {d} against the CPU stage over {length(cpu)} (bar {bar}); poisoned input {dp}\n")
     t |> equal(calls, 1, "{tag} GPU {stage}: one hook call")
     t |> equal(encodes, 1l, "{tag} GPU {stage}: one tower encode served the stage")
     t |> equal(length(g), length(cpu), "{tag} GPU {stage}: the output length")
-    t |> success(d <= bar, "{tag} GPU {stage}: rel-rms {d} within {bar}")
+    t |> equal(length(gp), length(cpu), "{tag} GPU {stage}: the poisoned leg's output length")
+    return true if (length(g) != length(cpu) || length(gp) != length(cpu))
+    let d = rel_l2(g, cpu)
+    let dp = rel_l2(gp, cpu)
+    to_log(LOG_INFO, "{tag} GPU {stage}: rel-l2 {d} against the CPU stage over {length(cpu)} (bar {bar}); poisoned input {dp}\n")
+    t |> success(d <= bar, "{tag} GPU {stage}: rel-l2 {d} within {bar}")
     t |> success(dp > bar, "{tag} GPU {stage}: the poisoned input reds the bar (the compare's control)")
     var inscope w <- one_wrong(g, cpu, bar)
-    t |> success(rel_rms(w, cpu) > bar, "{tag} GPU {stage}: one output element moved by twice the bar reds it (the bar's control)")
+    t |> success(rel_l2(w, cpu) > bar, "{tag} GPU {stage}: one output element moved by twice the bar reds it (the bar's control)")
     return true
-}
-
-def copy_span(a : array<float>; at, n : int64) : array<float> {
-    var inscope out : array<float>
-    out |> resize(n)
-    for (i in range64(n)) {
-        out[i] = a[at + i]
-    }
-    return <- out
 }
 
 //! The three runs a seat leg compares.
@@ -352,21 +345,27 @@ enum TowerLeg {
     poisoned   //! the knob on over a scaled or reversed input: the compare's control
 }
 
-let private ST2 = TtsKind.kitten   //! the StyleTTS2 seats' family: kitten and kokoro share one seat record
+//! The seat record a stage's seats sit in: kitten and kokoro share the StyleTTS2 one.
+enum TtsFamily {
+    styletts2
+    pocket
+}
 
-//! One stage on the `kind` family's seat `stage`: `run` fills each leg (the CPU leg's into `cpu`, which the caller keeps), then the verdict; the knob stays on. A StyleTTS2 stage no seat serves is a red.
-[unused_argument(t, kind, tag, stage, bar, cpu, run)]   // off-Apple the gated body is empty
-def seat_leg(t : T?; kind : TtsKind; tag, stage : string; bar : float; var cpu : array<float>; run : block<(leg : TowerLeg; var out : array<float>) : void>) : bool {
+def tts_family(kind : TtsKind) : TtsFamily => kind == TtsKind.pocket ? TtsFamily.pocket : TtsFamily.styletts2
+
+//! One stage on the `family`'s seat `stage`: `run` fills each leg (the CPU leg's into `cpu`, which the caller keeps), then the verdict; the knob stays on. A StyleTTS2 stage no seat serves is a red.
+[unused_argument(t, family, tag, stage, bar, cpu, run)]   // off-Apple the gated body is empty
+def seat_leg(t : T?; family : TtsFamily; tag, stage : string; bar : float; var cpu : array<float>; run : block<(leg : TowerLeg; var out : array<float>) : void>) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        return false if (kind != TtsKind.pocket && !seat_present(t, tag, stage))
-        set_gpu(false)
+        return false if (family == TtsFamily.styletts2 && !seat_present(t, tag, stage))
+        set_serving_gpu_tower(false)
         invoke(run, TowerLeg.cpu, cpu)
-        set_gpu(true)
-        let h0 = seat_stats(kind, stage)
+        set_serving_gpu_tower(true)
+        let h0 = seat_stats(family, stage)
         let e0 = gpu_encodes()
         var inscope g : array<float>
         invoke(run, TowerLeg.served, g)
-        let h1 = seat_stats(kind, stage)
+        let h1 = seat_stats(family, stage)
         let e1 = gpu_encodes()
         var inscope p : array<float>
         invoke(run, TowerLeg.poisoned, p)
@@ -385,19 +384,19 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
         var inscope ids <- dump_tensor(dump, type<int>, "input_ids")
         var inscope style <- dump_tensor(dump, type<float>, "style")
         let hs = m.style_dim / 2l
-        var inscope s_ref <- copy_span(style, 0l, hs)   // the decoder's half of the style vector
-        var inscope s_pro <- copy_span(style, hs, hs)   // the predictor's half
+        var inscope style_dec <- copy_span(style, 0l, hs)
+        var inscope style_pro <- copy_span(style, hs, hs)
         let n_tok = long_length(ids)
         var inscope bert_c : array<float>
         var inscope ten_c : array<float>
         return if (!gpu_front_checks(t, m, tag, ids, bert_c, ten_c, sc))
         var inscope d_c : array<float>
-        let dur_served = seat_leg(t, ST2, tag, "dur_enc", GPU_PRED_BAR, d_c) $(leg : TowerLeg; var out : array<float>) {
+        let dur_served = seat_leg(t, TtsFamily.styletts2, tag, "dur_enc", GPU_PRED_BAR, d_c) $(leg : TowerLeg; var out : array<float>) {
             if (leg == TowerLeg.poisoned) {
                 var inscope bert_x <- scaled_copy(bert_c, 3.0)
-                styletts2_duration_encoder(m.predictor, bert_x, n_tok, s_pro, out, sc)
+                styletts2_duration_encoder(m.predictor, bert_x, n_tok, style_pro, out, sc)
             } else {
-                styletts2_duration_encoder(m.predictor, bert_c, n_tok, s_pro, out, sc)
+                styletts2_duration_encoder(m.predictor, bert_c, n_tok, style_pro, out, sc)
             }
         }
         return if (!dur_served)
@@ -405,7 +404,7 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
         var inscope raw_c : array<float>
         var frames = 0l
         var frames_g = 0l
-        let durations_served = seat_leg(t, ST2, tag, "durations", GPU_PRED_BAR, raw_c) $(leg : TowerLeg; var out : array<float>) {
+        let durations_served = seat_leg(t, TtsFamily.styletts2, tag, "durations", GPU_PRED_BAR, raw_c) $(leg : TowerLeg; var out : array<float>) {
             var inscope dur : array<int>
             if (leg == TowerLeg.poisoned) {
                 var inscope d_x <- scaled_copy(d_c, 3.0)
@@ -420,13 +419,13 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
         t |> equal(frames_g, frames, "{tag} GPU durations: the rounded frame count")
         var inscope f0_c : array<float>
         var inscope n_c : array<float>
-        let f2 = gpu_prosody_check(t, m, tag, d_c, n_tok, dur_c, frames, s_pro, f0_c, n_c, sc)
+        let f2 = gpu_prosody_check(t, m, tag, d_c, n_tok, dur_c, frames, style_pro, f0_c, n_c, sc)
         return if (f2 < 0l)
-        gpu_decode_check(t, m, tag, ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, s_ref, noise, sc, GPU_DECODE_BAR)
+        gpu_decode_check(t, m, tag, ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, style_dec, noise, sc, GPU_DECODE_BAR)
         // the served q8 lane: the same inputs through the q8 planes, the CPU chain quantizing its
         // activations against the tower's dequantized weights - the q8 slab writes' only numeric gate
         var inscope sc8 = St2Scratch()
-        gpu_decode_check(t, m8, "{tag} q8 lane", ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, s_ref, noise, sc8, GPU_DECODE_Q8_BAR)
+        gpu_decode_check(t, m8, "{tag} q8 lane", ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, style_dec, noise, sc8, GPU_DECODE_Q8_BAR)
     }
 }
 
@@ -435,11 +434,11 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
 def private gpu_front_checks(t : T?; m : StyleTts2Model; tag : string; ids : array<int>; var bert_c, ten_c : array<float>; var sc : St2Scratch) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         var inscope rids <- [for (id in reverse(ids)); id]
-        let albert_served = seat_leg(t, ST2, tag, "albert", GPU_ALBERT_BAR, bert_c) $(leg : TowerLeg; var out : array<float>) {
+        let albert_served = seat_leg(t, TtsFamily.styletts2, tag, "albert", GPU_ALBERT_BAR, bert_c) $(leg : TowerLeg; var out : array<float>) {
             styletts2_albert(m.albert, leg == TowerLeg.poisoned ? rids : ids, out, sc)
         }
         return false if (!albert_served)
-        return seat_leg(t, ST2, tag, "text", GPU_TEXT_BAR, ten_c) $(leg : TowerLeg; var out : array<float>) {
+        return seat_leg(t, TtsFamily.styletts2, tag, "text", GPU_TEXT_BAR, ten_c) $(leg : TowerLeg; var out : array<float>) {
             styletts2_text_encoder(m.text_encoder, leg == TowerLeg.poisoned ? rids : ids, out, sc)
         }
     } else {
@@ -448,9 +447,9 @@ def private gpu_front_checks(t : T?; m : StyleTts2Model; tag : string; ids : arr
 }
 
 //! The CPU F0 and N rows out and f2, or -1 where the tower did not serve or missed its bar.
-[unused_argument(t, m, tag, d_c, n_tok, dur_c, frames, s_pro, f0_c, n_c, sc)]   // off-Apple the gated body is empty
+[unused_argument(t, m, tag, d_c, n_tok, dur_c, frames, style_pro, f0_c, n_c, sc)]   // off-Apple the gated body is empty
 def private gpu_prosody_check(t : T?; m : StyleTts2Model; tag : string; d_c : array<float>; n_tok : int64; dur_c : array<int>; frames : int64;
-                              s_pro : array<float>; var f0_c, n_c : array<float>; var sc : St2Scratch) : int64 {
+                              style_pro : array<float>; var f0_c, n_c : array<float>; var sc : St2Scratch) : int64 {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         let dc = m.predictor.bert_encoder.nout + m.style_dim / 2l
         var inscope en : array<float>
@@ -458,19 +457,23 @@ def private gpu_prosody_check(t : T?; m : StyleTts2Model; tag : string; d_c : ar
         var inscope n_g : array<float>
         var f2 = 0l
         var f2g = 0l
-        let served = seat_leg(t, ST2, tag, "prosody", GPU_PRED_BAR, f0_c) $(leg : TowerLeg; var out : array<float>) {
+        let served = seat_leg(t, TtsFamily.styletts2, tag, "prosody", GPU_PRED_BAR, f0_c) $(leg : TowerLeg; var out : array<float>) {
             if (leg == TowerLeg.poisoned) {
                 var inscope en_x <- scaled_copy(en, 3.0)
                 var inscope n_p : array<float>
-                styletts2_prosody(m.predictor, en_x, dc, frames, s_pro, out, n_p, sc)
+                styletts2_prosody(m.predictor, en_x, dc, frames, style_pro, out, n_p, sc)
             } elif (leg == TowerLeg.served) {
-                f2g = styletts2_prosody(m.predictor, en, dc, frames, s_pro, out, n_g, sc)
+                f2g = styletts2_prosody(m.predictor, en, dc, frames, style_pro, out, n_g, sc)
             } else {
-                f2 = styletts2_prosody(m.predictor, en, dc, frames, s_pro, out, n_c, sc)
+                f2 = styletts2_prosody(m.predictor, en, dc, frames, style_pro, out, n_c, sc)
             }
         }
         return -1l if (!served)
-        t |> success(rel_rms(n_g, n_c) <= GPU_PRED_BAR, "{tag} GPU prosody: the N rows within {GPU_PRED_BAR} (rel-rms {rel_rms(n_g, n_c)})")
+        t |> equal(length(n_g), length(n_c), "{tag} GPU prosody: the N rows' length")
+        if (length(n_g) == length(n_c)) {
+            let dn = rel_l2(n_g, n_c)
+            t |> success(dn <= GPU_PRED_BAR, "{tag} GPU prosody: the N rows within {GPU_PRED_BAR} (rel-l2 {dn})")
+        }
         t |> equal(f2g, f2, "{tag} GPU prosody: the frame count")
         return f2
     } else {
@@ -478,32 +481,31 @@ def private gpu_prosody_check(t : T?; m : StyleTts2Model; tag : string; d_c : ar
     }
 }
 
-[unused_argument(t, m, tag, ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, s_ref, noise, sc, bar)]   // off-Apple the gated body is empty
+[unused_argument(t, m, tag, ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, style_dec, noise, sc, bar)]   // off-Apple the gated body is empty
 def private gpu_decode_check(t : T?; m : StyleTts2Model; tag : string; ten_c : array<float>; n_tok : int64; dur_c : array<int>; frames : int64;
-                             f0_c, n_c : array<float>; f2 : int64; s_ref : array<float>; var noise : TtsNoise; var sc : St2Scratch; bar : float) {
+                             f0_c, n_c : array<float>; f2 : int64; style_dec : array<float>; var noise : TtsNoise; var sc : St2Scratch; bar : float) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         var inscope asr : array<float>
         align_expand_channels(ten_c, m.text_encoder.c, n_tok, dur_c, asr)
         var tm = TtsTimings()
         var inscope wave_c : array<float>
-        seat_leg(t, ST2, tag, "decode", bar, wave_c) $(leg : TowerLeg; var out : array<float>) {
+        seat_leg(t, TtsFamily.styletts2, tag, "decode", bar, wave_c) $(leg : TowerLeg; var out : array<float>) {
             if (leg == TowerLeg.poisoned) {
                 var inscope asr_x <- scaled_copy(asr, 3.0)
-                styletts2_decode(m.decoder, m.text_encoder.c, m.source, asr_x, frames, f0_c, n_c, f2, s_ref, noise, 0ul, null, tm, sc)
+                styletts2_decode(m.decoder, m.text_encoder.c, m.source, asr_x, frames, f0_c, n_c, f2, style_dec, noise, 0ul, null, tm, sc)
             } else {
-                styletts2_decode(m.decoder, m.text_encoder.c, m.source, asr, frames, f0_c, n_c, f2, s_ref, noise, 0ul, null, tm, sc)
+                styletts2_decode(m.decoder, m.text_encoder.c, m.source, asr, frames, f0_c, n_c, f2, style_dec, noise, 0ul, null, tm, sc)
             }
             out := sc.wave
         }
     }
 }
 
-//! The seats one served chunk encodes; the generator seat, reached only after a declined decode, is not one.
 //! The seats one served chunk encodes: every seat of the engine's record but the generator, which only a declined decode reaches.
 def private served_seat_count() : int64 => long_length(styletts2_gpu_seats()) - 1l
 
 //! The served synthesis across the tower knob on both lanes; skips without the model, the front-end packs, or a serving tower.
-[unused_argument(path, text, voice)]   // off-Apple the gated body is a skip
+[unused_argument(path, text, voice), cold_path]   // off-Apple the gated body is a skip
 def tts_gpu_synthesis(t : T?; path, text, voice : string) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         return if (tts_data_missing(t, path))
@@ -519,7 +521,7 @@ def tts_gpu_synthesis(t : T?; path, text, voice : string) {
 //! The served lane's leg of `tts_gpu_synthesis`: false where the tower did not serve.
 def private gpu_served_lane(t : T?; path, text, voice : string) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        reset_tts_q8()   //! the served lane is the unpinned default, whatever an earlier cell left
+        reset_tts_q8()   // the served lane is the unpinned default, whatever an earlier cell left
         var inscope m <- mint_tts_model(path, tts_serves_q8())
         let msg = "{base_name(path)} served lane"
         return served_lane_counters(t, m, text, voice, msg, "generator") $(a, b : TtsAudio; chunks : int; encodes : int64) {
@@ -528,7 +530,7 @@ def private gpu_served_lane(t : T?; path, text, voice : string) : bool {
             t |> success(peak > 0.05, "peak {peak}: the tower leg spoke")
             var inscope silent <- scaled_copy(b.pcm, 0.0)
             t |> success(logits_maxabs(silent) <= 0.05, "silence reads under the floor (the floor's control)")
-            to_log(LOG_INFO, "{base_name(path)} {voice}: served lane, tower vs CPU: {length(b.pcm)} / {length(a.pcm)} samples, sample-wise rel-rms {rel_rms(b.pcm, a.pcm)} (the q8 chain's own rounding, informational); CPU {timings_line(a.timings, a.sample_rate)}; tower {timings_line(b.timings, b.sample_rate)}\n")
+            to_log(LOG_INFO, "{base_name(path)} {voice}: served lane, tower vs CPU: {length(b.pcm)} / {length(a.pcm)} samples, sample-wise rel-l2 {rel_l2_common(b.pcm, a.pcm)} over the common length (the q8 chain's own rounding, informational); CPU {timings_line(a.timings, a.sample_rate)}; tower {timings_line(b.timings, b.sample_rate)}\n")
             t |> success(within_twentieth(long_length(b.pcm), long_length(a.pcm)), "the sample counts {length(b.pcm)} against {length(a.pcm)} within a twentieth")
             t |> success(!within_twentieth(long_length(b.pcm), long_length(a.pcm) / 2l), "half the count reds the twentieth (the bound's control)")
         }
@@ -537,12 +539,12 @@ def private gpu_served_lane(t : T?; path, text, voice : string) : bool {
     }
 }
 
-def private seat_stats(kind : TtsKind; seat : string) : tuple<calls : int; served : int> {
-    return kind == TtsKind.pocket ? pocket_gpu_stats(seat) : styletts2_gpu_stats(seat)
+def private seat_stats(family : TtsFamily; seat : string) : tuple<calls : int; served : int> {
+    return family == TtsFamily.pocket ? pocket_gpu_stats(seat) : styletts2_gpu_stats(seat)
 }
 
-def private seat_counters(kind : TtsKind; seats : array<string>) : array<tuple<calls : int; served : int>> {
-    return <- [for (s in seats); seat_stats(kind, s)]
+def private seat_counters(family : TtsFamily; seats : array<string>) : array<tuple<calls : int; served : int>> {
+    return <- [for (s in seats); seat_stats(family, s)]
 }
 
 //! Knob off: each seat reached once a chunk, none served, one knob decline each; knob on: each but `unserved` served once a chunk; false where none served. The knob stays on.
@@ -550,18 +552,19 @@ def private seat_counters(kind : TtsKind; seats : array<string>) : array<tuple<c
 def served_lane_counters(t : T?; var m : TtsModel; text, voice, msg, unserved : string;
                          extra : block<(a, b : TtsAudio; chunks : int; encodes : int64) : void>) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        var inscope seats <- m.kind == TtsKind.pocket ? pocket_gpu_seats() : styletts2_gpu_seats()
-        set_gpu(false)
-        var inscope h0 <- seat_counters(m.kind, seats)
+        let family = tts_family(m.kind)
+        var inscope seats <- family == TtsFamily.pocket ? pocket_gpu_seats() : styletts2_gpu_seats()
+        set_serving_gpu_tower(false)
+        var inscope h0 <- seat_counters(family, seats)
         let d0 <- gpu_declines()
         var inscope a <- synthesize(m, text, voice)
-        var inscope h1 <- seat_counters(m.kind, seats)
+        var inscope h1 <- seat_counters(family, seats)
         let d1 <- gpu_declines()
-        set_gpu(true)
+        set_serving_gpu_tower(true)
         let e1 = gpu_encodes()
         var inscope b <- synthesize(m, text, voice)
         let e2 = gpu_encodes()
-        var inscope h2 <- seat_counters(m.kind, seats)
+        var inscope h2 <- seat_counters(family, seats)
         var served = 0
         for (x, y in h1, h2) {
             served += y.served - x.served
@@ -588,24 +591,24 @@ def served_lane_counters(t : T?; var m : TtsModel; text, voice, msg, unserved : 
 
 def private gpu_reference_lane(t : T?; path, text, voice : string) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        var inscope m <- mint_tts_model(path, false)   //! the f32 lane: the durations round as the CPU's only there
-        set_gpu(false)
-        var inscope sized <- synthesize(m, text, voice)   //! the untrimmed count the captured stream covers
+        var inscope m <- mint_tts_model(path, false)   // the f32 lane: the durations round as the CPU's only there
+        set_serving_gpu_tower(false)
+        var inscope sized <- synthesize(m, text, voice)   // the untrimmed count the captured stream covers
         let nh = m.model.source.n_harm
-        let rows = 2l * sized.timings.samples + 65536l   //! the source's sample count runs past the generator's output; twice covers it
+        let rows = 2l * sized.timings.samples + 65536l   // the source's sample count runs past the generator's output; twice covers it
         m.scratch.noise <- captured_noise(nh, rows, 0x5eedul)
         var inscope a <- synthesize(m, text, voice)
-        set_gpu(true)
+        set_serving_gpu_tower(true)
         let h1 = styletts2_gpu_stats("decode")
         let e1 = gpu_encodes()
         var inscope b <- synthesize(m, text, voice)
         let h2 = styletts2_gpu_stats("decode")
         let e2 = gpu_encodes()
-        set_gpu(false)
+        set_serving_gpu_tower(false)
         return if (h2.served == h1.served && !tower_served(t, "{base_name(path)} reference lane", "{gpu_declines()}"))
         t |> success(e2 - e1 >= int64(h2.served - h1.served), "reference lane: the tower encoded every served decode")
         t |> equal(length(b.pcm), length(a.pcm), "reference lane: the sample counts (the durations token for token)")
-        to_log(LOG_INFO, "{base_name(path)} {voice}: reference lane, tower vs CPU on one captured noise: {length(b.pcm)} / {length(a.pcm)} samples, sample-wise rel-rms {rel_rms(b.pcm, a.pcm)} (the f32 phase's ulps, informational); CPU {timings_line(a.timings, a.sample_rate)}; tower {timings_line(b.timings, b.sample_rate)}\n")
+        to_log(LOG_INFO, "{base_name(path)} {voice}: reference lane, tower vs CPU on one captured noise: {length(b.pcm)} / {length(a.pcm)} samples, sample-wise rel-l2 {rel_l2_common(b.pcm, a.pcm)} (the f32 phase's ulps, informational); CPU {timings_line(a.timings, a.sample_rate)}; tower {timings_line(b.timings, b.sample_rate)}\n")
     }
 }
 
@@ -629,9 +632,9 @@ def speech_level(pcm : array<float>) : tuple<finite : bool; peak : float; rms : 
     return (finite = finite, peak = logits_maxabs(pcm), rms = rms(pcm))
 }
 
-//! a facade cell: the model (and packs under `packs`) gated, loaded on a job queue, caps at 24 kHz with `n_voices` voices, then `body`
-def facade_smoke(t : T?; path : string; packs : bool; n_voices : int; body : block<(var m : TtsModel; c : TtsCaps) : void>) {
-    return if (packs ? tts_data_missing(t, path) : !model_available(t, path))
+//! a facade cell: the model (and the front-end packs under `gate_on_packs`) gated, loaded on a job queue, caps at 24 kHz with `n_voices` voices, then `body`
+def facade_smoke(t : T?; path : string; gate_on_packs : bool; n_voices : int; body : block<(var m : TtsModel; c : TtsCaps) : void>) {
+    return if (gate_on_packs ? tts_data_missing(t, path) : !model_available(t, path))
     with_job_que() {
         setup_dasllama_jobque_()
         var inscope m <- load_tts_model(path)
@@ -653,11 +656,11 @@ def tts_parity(t : T?; rig : TtsParityRig) {
     }
     with_job_que() {
         setup_dasllama_jobque_()
-        var inscope stg <- stage_styletts2(rig.gguf, false)   //! the bars are the f32 lane's; minted in memory, no .dlim baked
+        var inscope stg <- stage_styletts2(rig.gguf, false)   // the bars are the f32 lane's; minted in memory, no .dlim baked
         var inscope m = StyleTts2Model()
         mint_styletts2(stg, m)
         var inscope stg8 <- stage_styletts2(rig.gguf, true)
-        var inscope m8 = StyleTts2Model()   //! the served lane's planes, for the q8 decode cell
+        var inscope m8 = StyleTts2Model()   // the served lane's planes, for the q8 decode cell
         mint_styletts2(stg8, m8)
         t |> equal(m.family, rig.family)
         t |> equal(m.sample_rate, 24000)

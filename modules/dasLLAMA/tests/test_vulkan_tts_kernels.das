@@ -183,7 +183,7 @@ def test_vkt_gelu_tanh(t0 : T?) {
                 let got <- cp |> plane_run(xp)
                 var want := x
                 gelu(unsafe(addr(want[EL_OFF])), int64(EL_N))
-                check_rows(t, "tts_gelu_tanh vs the CPU gelu", got, want, bar_rel(TTS_REL, 1e-4), 0)
+                check_rows(t, "tts_gelu_tanh vs the CPU gelu", copy_span(got, EL_OFF, EL_N), copy_span(want, EL_OFF, EL_N), Bar(rel = TTS_REL, poison = 1e-4), FLAT_ROWS)
                 t |> success(outside_run(got, EL_OFF, EL_N, x), "tts_gelu_tanh: the elements outside the run are untouched")
                 var lut_off = 0
                 for (i in range(EL_OFF, EL_OFF + EL_N)) {
@@ -207,7 +207,7 @@ def test_vkt_leaky(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            var x <- elem_fixture()
+            let x <- elem_fixture()
             with_cell_planes() $(var cp : CellPlanes) {
                 let xp = cp |> io_(x)
                 var s = cp |> cls_set(fixed_array(xp), @@set_tts_leaky_cls)
@@ -218,11 +218,7 @@ def test_vkt_leaky(t0 : T?) {
                 let got <- cp |> plane_run(xp)
                 var run <- [for (i in range(EL_N)); x[EL_OFF + i]]
                 leaky_relu(run, int64(EL_N), EL_SLOPE)
-                var want := x
-                for (i in range(EL_N)) {
-                    want[EL_OFF + i] = run[i]
-                }
-                check_rows(t, "tts_leaky vs the CPU leaky_relu", got, want, BAR_EXACT, 0)
+                check_rows(t, "tts_leaky vs the CPU leaky_relu", copy_span(got, EL_OFF, EL_N), run, BAR_EXACT, FLAT_ROWS)
                 t |> success(outside_run(got, EL_OFF, EL_N, x), "tts_leaky: the elements outside the run are untouched")
                 let neg = EL_OFF + 1
                 t |> success(got[neg] == x[neg] * EL_SLOPE && got[neg] != x[neg], "tts_leaky control: a negative element is scaled by the slope")
@@ -273,8 +269,8 @@ def private attn_arm(t : T?; rows, heads, hs : int) {
             var wantz : array<float>
             attention_rows(q, k, v, int64(rows), int64(d), int64(heads), want)
             attention_rows(q, kz, v, int64(rows), int64(d), int64(heads), wantz)
-            check_rows(t, "{tag} vs the CPU attention_rows", got, want, bar_rel(TTS_REL, 1e-4), d, hs)
-            check_rows(t, "{tag} the last key zeroed vs the CPU attention_rows", gotz, wantz, bar_rel(TTS_REL, 1e-4), d, hs)
+            check_rows(t, "{tag} vs the CPU attention_rows", got, want, Bar(rel = TTS_REL, poison = 1e-4), d, hs)
+            check_rows(t, "{tag} the last key zeroed vs the CPU attention_rows", gotz, wantz, Bar(rel = TTS_REL, poison = 1e-4), d, hs)
             var moved = 0
             for (e in range(d)) {
                 if (!bar_ok(got[e], gotz[e], TTS_REL)) {
@@ -463,7 +459,7 @@ def private colstats_arm(t : T?; rows, c : int) {
             let got <- subarray(cp |> plane_run(stp), range(2 * c))
             let want <- colstats_ref(x, rows, c)
             // row 0 the means, row 1 the squared deviations; a sum of 300 of them sits past the relative bar's reach of 0.5, so the poison is a percent
-            check_rows(t, "{tag} means and squared deviations vs the double-precision sums", got, want, Bar(rel = APPROX_REL, poison = 0.01, scaled = true), c)
+            check_rows(t, "{tag} means and squared deviations vs the double-precision sums", got, want, Bar(rel = APPROX_REL, poison = 0.01, poison_scaled = true), c)
             t |> success(!approx(got[c - 1], want[c - 1] + 0.5), "{tag}: the bar reds a poisoned mean")
         }
     }
@@ -524,9 +520,9 @@ def private adain_fixture() : AdainFixture {
     var style <- row_fill(AD_SD, 23, 9, 0.06, 2.8)
     var alpha <- row_fill(c, 23, 9, 0.02, -0.3)
     f.x <- row_fill(AD_T * c, 41, 7, 0.05, 2.1)
-    put(f.slab, a.norm.w, AD_GWOFF)
-    f.gboff = put(f.slab, a.norm.b)
-    f.aoff = put(f.slab, alpha, 4)
+    put_run(f.slab, a.norm.w, AD_GWOFF)
+    f.gboff = put_run(f.slab, a.norm.b)
+    f.aoff = put_run(f.slab, alpha, 4)
     f.slab |> push_from(poison_plane(5))
     let n = AD_T * c
     with_job_que() {
@@ -629,8 +625,8 @@ def test_vkt_add_scale(t0 : T?) {
                 }
                 let got_i <- cp |> plane_run(aip)
                 let want <- [for (i in range(n)); (a[i] + b[i]) * scale]
-                check_rows(t, "tts_add_scale vs (a + b) * scale", cp |> plane_run(op), want, BAR_EXACT, 0)
-                check_rows(t, "tts_add_scale in place vs (a + b) * scale", got_i, want, BAR_EXACT, 0)
+                check_rows(t, "tts_add_scale vs (a + b) * scale", cp |> plane_run(op), want, BAR_EXACT, FLAT_ROWS)
+                check_rows(t, "tts_add_scale in place vs (a + b) * scale", got_i, want, BAR_EXACT, FLAT_ROWS)
                 t |> success(got_i[0] != a[0], "tts_add_scale in place control: the input row is overwritten")
                 t |> success(outside_run(cp |> plane_whole(op), AS_OOFF, n, NAN_SENTINEL), "tts_add_scale: the elements outside the run keep their sentinel")
                 t |> success(outside_run(cp |> plane_whole(aip), AS_AOFF, n, POISON), "tts_add_scale in place: the prefix before aoff is untouched")

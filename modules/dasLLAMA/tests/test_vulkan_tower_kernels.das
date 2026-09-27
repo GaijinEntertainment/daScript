@@ -741,7 +741,7 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             var s_attn = set_tower_g4a_attn64_cls(fixed_array(qd, kd, vd, aod, rd, wd), fixed_array(bx, bx, bx, bx, brpe, bw), fixed_array(0u, 0u, 0u, B_AO, 0u, 0u))
             var pa_silu = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_SILU)
             var pa_convmod = TowerConvModArgs(d = uint(d), nelem = uint(nd))
-            var pa_dw = TtsPoolArgs(c = uint(d), t_in = uint(rows), t_out = uint(rows), woff = uint(hs))
+            var pa_dw = DwConvRowsArgs(c = uint(d), t_in = uint(rows), t_out = uint(rows), woff = uint(hs))
             let qscale = (1.0 / sqrt(float(hs))) / log(2.0)
             let kscale = log(1.0 + exp(1.0)) / log(2.0)
             var pa_attn = TowerG4aAttnArgs(d = uint(d), npos = uint(rows), pdsoff = 0u)
@@ -875,7 +875,7 @@ def test_vkt_tower_fastconformer(t0 : T?) {
             fill_upload(gd, bx, bsrc - bx, GUARD_GARBAGE_BITS)
             nan_sentinel_upload(cd, bx)
             var s_dw = set_tower_cn_dw_cls(fixed_array(gd, cd, wd), fixed_array(bsrc, bx, bw), fixed_array(0u, B_C, 0u))
-            var pa_dw = TtsPoolArgs(c = uint(d), k = uint(CN_CONV_KERNEL), t_in = uint(rows), t_out = uint(rows), woff = uint(taps_off), bnwoff = uint(bnw_off),
+            var pa_dw = DwConvRowsArgs(c = uint(d), k = uint(CN_CONV_KERNEL), t_in = uint(rows), t_out = uint(rows), woff = uint(taps_off), bnwoff = uint(bnw_off),
                 bnboff = uint(bnb_off))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tower_cn_dw_cls(raw, h, s_dw, pa_dw, int64((nd + 255) / 256))
@@ -991,8 +991,8 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             nan_sentinel_upload(qcd, bq)
             fill_upload(qphd, 0l, bph, F16_SENTINEL_BITS)
             var s_rope = set_tower_rope_tab_cls(fixed_array(qkvd, cosd, sind), fixed_array(bqkv, btab, btab), fixed_array(B_QKV, 0u, 0u))
-            var pa_rope = TtsPkRopeArgs(rows = uint(rows), qs = uint(3 * d_compact), col = uint(d_compact), d = uint(ROWS_HEADS * LN_HS), dh = uint(LN_HS), pos0 = 0u,
-                xoff = 0u, coff = 0u, soff = 0u)
+            var pa_rope = RopeTabArgs(rows = uint(rows), qs = uint(3 * d_compact), col = uint(d_compact), d = uint(ROWS_HEADS * LN_HS), dh = uint(LN_HS),
+                coff = 0u, soff = 0u)
             var s_ln = set_tower_ln_cls(fixed_array(xd, xbd, wd), fixed_array(bx, bx, bw), fixed_array(B_X, B_XB, 0u))
             var s_acts <- [for (i in range(length(act_arms))); set_tower_bias_act_cls(fixed_array(act_d[i], wd), fixed_array(bx, bw), fixed_array(act_arms[i].bit, 0u))]
             var s_post = set_tower_post_add_ln_cls(fixed_array(xd, yd, xb2d, wd), fixed_array(bx, bx, bx, bw), fixed_array(B_X, B_Y, B_XB2, 0u))
@@ -1057,8 +1057,8 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             // which the approx bar (2e-3) could not tell apart
             gelu_erf_batch(gerf_ref, int64(d), int64(rows))
             let erf_bar = 1e-5
-            check_rows(t, "tower_bias_act BIAS_ACT_GELU_ERF the bias and the erf GELU vs add_bias_rows + gelu_erf_batch within {erf_bar}", gerf_dev, gerf_ref, bar_rel(erf_bar, 0.5), d)
-            let tanh_off_erf = mismatch_rel(g_dev, gerf_ref, erf_bar)
+            check_rows(t, "tower_bias_act BIAS_ACT_GELU_ERF the bias and the erf GELU vs add_bias_rows + gelu_erf_batch within {erf_bar}", gerf_dev, gerf_ref, Bar(rel = erf_bar, poison = 0.5), d)
+            let tanh_off_erf = mismatch_rel("tower_bias_act tanh arm vs the erf oracle (MUST mismatch)", g_dev, gerf_ref, erf_bar)
             t |> success(tanh_off_erf > nd / 4, "tower_bias_act BIAS_ACT_GELU_ERF control: the tanh arm's rows miss the erf oracle at this bar ({tanh_off_erf} of {nd} off; the tails past +-10 agree by construction) - the bar tells the forms apart")
             silu(gsilu_ref, int64(nd))
             check_rows(t, "tower_bias_act BIAS_ACT_SILU the bias and silu vs add_bias_rows + silu", gsilu_dev, gsilu_ref, BAR_APPROX, d)

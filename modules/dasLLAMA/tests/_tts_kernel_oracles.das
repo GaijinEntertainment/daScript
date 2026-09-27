@@ -34,26 +34,26 @@ struct TtsSrcFixture {
     f0 : array<float>
     nu : array<float>
     noise : array<float>        //! the captured noise rows [n][nh]
-    lw : array<float>           //! the source linear's weight row [nh]
-    lb : array<float>           //! its bias
+    lin_w : array<float>        //! the source linear's weight row [nh]
+    lin_b : array<float>        //! its bias
     want_lowc : array<float>    //! the CPU carry's phase frames [nh][nlow]
     want_har : array<float>     //! the CPU sines through the source linear and tanh
 }
 
 //! the source fixture at `up` x `frames` on either law: an F0 with unvoiced frames, f16-exact operands, the CPU chain's outputs
 def tts_src_fixture(torch : bool; up, frames : int) : TtsSrcFixture {
-    var f = TtsSrcFixture(up = up, frames = frames, n = frames * up)
-    f.nlow = int(resize_len(int64(f.n), 1.0 / float(up)))
+    let cfg = SineSourceCfg(upsample = int64(up), sample_rate = TTS_SRC_SR, n_harm = int64(TTS_SRC_NH), sine_amp = 0.1, noise_std = 0.003,
+        voiced_thr = 10.0, torch_math = torch)
+    let geo = sine_source_geometry(cfg, int64(frames))
+    var f = TtsSrcFixture(up = up, frames = frames, n = int(geo.samples), nlow = int(geo.nlow))
     f.f0 <- [for (i in range(frames)); i % 3 == 2 ? 0.0 : float(float16(180.0 + 0.3 * float(i % 97)))]
     f.nu <- f16_fill(TTS_SRC_NH, 3, 0.1, 0.2)
     f.noise <- f16_fill(f.n * TTS_SRC_NH, 7, 0.4, -0.9)
-    f.lw <- f16_fill(TTS_SRC_NH, 5, 0.3, 0.2)
-    f.lb |> push(0.05)
+    f.lin_w <- f16_fill(TTS_SRC_NH, 5, 0.3, 0.2)
+    f.lin_b |> push(0.05)
     var lin = TtsLinear(nin = int64(TTS_SRC_NH), nout = 1l)
-    lin.w := f.lw
-    lin.b := f.lb
-    let cfg = SineSourceCfg(upsample = int64(up), sample_rate = TTS_SRC_SR, n_harm = int64(TTS_SRC_NH), sine_amp = 0.1, noise_std = 0.003,
-        voiced_thr = 10.0, torch_math = torch)
+    lin.w := f.lin_w
+    lin.b := f.lin_b
     var cr = SineSourceCarry()
     var sines : array<float>
     with_job_que() {
@@ -74,7 +74,7 @@ def tts_src_fixture(torch : bool; up, frames : int) : TtsSrcFixture {
 struct TtsLongCumsum {
     low : array<float>    //! the low-rate phase increments of one harmonic, f16-exact
     want : array<float>   //! the law's running sum in radians at the source's upsample
-    parted : float        //! the double sum and a plain f32 sum apart over the run, in cycles - the leg's control
+    f32_drift_cycles : float   //! the double sum and a plain f32 sum apart over the run, in cycles - the leg's control
 }
 
 //! `nlong` low-rate frames where f32 and double sums part by whole cycles, on the torch law (double, rounded a frame) or ONNX's (f32)
@@ -91,12 +91,12 @@ def tts_long_cumsum(torch : bool; up, nlong : int) : TtsLongCumsum {
         accp += r.low[k]
         r.want[k] = ((accf * 2.0) * PI) * float(up)
     }
-    r.parted = abs(float(acc64) - accp)
+    r.f32_drift_cycles = abs(float(acc64) - accp)
     return <- r
 }
 
 //! the STFT in double over the signal padded by `pad` (reflect or edge), rounded to f32 [frames][magnitudes | phases]
-def stft_ref(har, wre, wim : array<float>; n, k, hop, pad, bins : int; reflect : bool) : array<float> {
+def stft_ref(signal, wre, wim : array<float>; n, k, hop, pad, bins : int; reflect : bool) : array<float> {
     let frames = (n + 2 * pad - k) / hop + 1
     var want : array<float>
     want |> resize(frames * 2 * bins)
@@ -111,8 +111,8 @@ def stft_ref(har, wre, wim : array<float>; n, k, hop, pad, bins : int; reflect :
                 } elif (src >= n) {
                     src = reflect ? 2 * (n - 1) - src : n - 1
                 }
-                re += double(wre[b * k + tap]) * double(har[src])
-                im += double(wim[b * k + tap]) * double(har[src])
+                re += double(wre[b * k + tap]) * double(signal[src])
+                im += double(wim[b * k + tap]) * double(signal[src])
             }
             want[f * 2 * bins + b] = float(sqrt(re * re + im * im + 1e-9lf))
             let imf = float(im)
@@ -126,12 +126,12 @@ def stft_ref(har, wre, wim : array<float>; n, k, hop, pad, bins : int; reflect :
 //! the inverse STFT's samples and how many of them carry a negligible envelope
 struct TtsIstftRef {
     want : array<float>
-    bare : int          //! the samples whose envelope is negligible, left undivided
+    undivided : int     //! the samples whose envelope is negligible, left undivided
 }
 
-//! the inverse STFT in double over `tt` frames of log magnitudes then phases (`stride` apart), the envelope divided under `envelope`
-def istft_ref(y, wre, wim, window : array<float>; tt, stride, bins, k, hop, pad : int; envelope : bool) : TtsIstftRef {
-    let n = (tt - 1) * hop + k - 2 * pad
+//! the inverse STFT in double over `frames` frames of log magnitudes then phases (`stride` apart), the envelope divided under `divide_envelope`
+def istft_ref(y, wre, wim, window : array<float>; frames, stride, bins, k, hop, pad : int; divide_envelope : bool) : TtsIstftRef {
+    let n = (frames - 1) * hop + k - 2 * pad
     var r : TtsIstftRef
     r.want |> resize(n)
     for (i in range(n)) {
@@ -141,7 +141,7 @@ def istft_ref(y, wre, wim, window : array<float>; tt, stride, bins, k, hop, pad 
         for (tap in range(k)) {
             continue if (m < tap || (m - tap) % hop != 0)
             let q = (m - tap) / hop
-            continue if (q >= tt)
+            continue if (q >= frames)
             for (b in range(bins)) {
                 let mag = exp(y[q * stride + b])
                 let ph = sin(y[q * stride + bins + b])
@@ -149,8 +149,8 @@ def istft_ref(y, wre, wim, window : array<float>; tt, stride, bins, k, hop, pad 
             }
             env += double(window[tap] * window[tap])
         }
-        r.bare += env > 1e-11lf ? 0 : 1
-        r.want[i] = float((envelope && env > 1e-11lf) ? acc / env : acc)
+        r.undivided += env > 1e-11lf ? 0 : 1
+        r.want[i] = float((divide_envelope && env > 1e-11lf) ? acc / env : acc)
     }
     return <- r
 }

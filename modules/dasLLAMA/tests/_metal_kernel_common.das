@@ -12,6 +12,7 @@ require dasllama/dasllama_convert   // dequant_k{4,5,6}_plane_superblock — the
 require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-plane stride source
 require daslib/f16_cvt              // f32_to_f16 — packing synthetic scale planes
 require dastest/testing_boost
+require _compares   // nolint:STYLE030,LINT019 — bar_ok, read inside the generic compares an Apple build instantiates
 require ?das_metal metal/das_metal_boost public
 
 def buf_u32(dev; v : uint) : auto => buf_fill(dev, 1, v)
@@ -40,17 +41,17 @@ def silu_d(x : double) : double => x * sigmoid_d(x)
 
 let private DUMP_CAP = 6
 
-// relative bar + an absolute floor (absf > 0 serves f16-rounded outputs, whose error scales
+// relative bar + an absolute floor (abs_floor > 0 serves f16-rounded outputs, whose error scales
 // with magnitude, not the possibly-cancelled-small result)
 //! the compare over a buffer of `t` elements read as floats - float, or the f16 payload of a half slab
 [unused_argument(t)]
-def private buf_mismatch_bars_as(buf; t : type<auto(TT)>; want : array<float>; rel, absf : float; tag : string) : int {
+def private buf_mismatch_bars_as(buf; t : type<auto(TT)>; want : array<float>; rel, abs_floor : float; tag : string) : int {
     let p = unsafe(reinterpret<TT const?>(metal_buffer_contents(buf)))
     var bad = 0
     for (k in range(length(want))) {
         let g = float(unsafe(p[k]))   // nolint:PERF020,LINT019 - the half payload's widening; the float instance's identity
         let w = want[k]
-        if (!(abs(g - w) <= absf) && !(abs(g - w) <= rel * max(1.0, max(abs(g), abs(w))))) {
+        if (!bar_ok(g, w, rel, abs_floor)) {
             if (bad < DUMP_CAP) {
                 to_log(LOG_ERROR, "  {tag} mismatch [{k}] gpu {g} cpu {w}\n")
             }
@@ -60,7 +61,7 @@ def private buf_mismatch_bars_as(buf; t : type<auto(TT)>; want : array<float>; r
     return bad
 }
 
-def buf_mismatch_bars(buf; want : array<float>; rel, absf : float; tag : string) : int => buf_mismatch_bars_as(buf, type<float>, want, rel, absf, tag)
+def buf_mismatch_bars(buf; want : array<float>; rel, abs_floor : float; tag : string) : int => buf_mismatch_bars_as(buf, type<float>, want, rel, abs_floor, tag)
 
 def buf_mismatch_approx(buf; want : array<float>; tag : string) : int {
     return buf_mismatch_bars(buf, want, 1e-4, 0.0, tag)
@@ -68,7 +69,7 @@ def buf_mismatch_approx(buf; want : array<float>; tag : string) : int {
 
 // f16-holding buffer vs an f32 expectation: dequant per element, compare under bars (the f16
 // store rounds at 2^-11 relative — pass rel >= 1e-3 so the rounding never reads as a red)
-def buf_mismatch_f16(buf; want : array<float>; rel, absf : float; tag : string) : int => buf_mismatch_bars_as(buf, type<float16>, want, rel, absf, tag)
+def buf_mismatch_f16(buf; want : array<float>; rel, abs_floor : float; tag : string) : int => buf_mismatch_bars_as(buf, type<float16>, want, rel, abs_floor, tag)
 
 // envelope-aware compare for float-accumulating GEMV/GEMM kernels: |gpu-cpu| <= max(rel * env,
 // 1e-3) where env is the output's dot envelope (sum |w·x|); sentinel positions carry env 0

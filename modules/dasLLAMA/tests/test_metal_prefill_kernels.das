@@ -958,7 +958,6 @@ def private g4a_attn_gate(t : T?; dev, queue) {
 }
 
 // ===== the StyleTTS2 chain's kernels (the tower driver's TTS seats) =====
-//! f16-exact fixtures (`f16_at`, `f16_fill`): products exact, so a bar covers only the sum order (conv_mm) or the reduction and sin() (adain_snake)
 
 def private st2_conv_fixture(dev; transposed : bool) : St2ConvArgs {
     //! forward: 40 channels (an 8-run never straddles a tap; the k-run tail lands past the taps -
@@ -980,8 +979,8 @@ def private st2_conv_src(dev; ka; transposed : bool; r, tap : int) : int {
     return (st >= 0 && st < int(ka.t_in)) ? st : -1
 }
 
-//! the conv GEMM on either stamp: the f16-staged one on f16-exact operands (every product exact,
-//! the bar the accumulation order's), the f32-exact one on operands off the f16 lattice at a
+//! the conv GEMM on either stamp: the f16-staged one on f16-exact operands (`f16_at`: every product exact,
+//! the bar the sum order's), the f32-exact one on operands off the f16 lattice at a
 //! bar the f16 stamp must exceed on the same fixture (the stamp's control)
 def private st2_conv_gate(t : T?; dev, queue; transposed : bool; exact : bool) {
     let tag = (exact ? "st2_conv_exact_mm " : "st2_conv_mm ") + (transposed ? "transposed" : "forward")
@@ -1027,9 +1026,9 @@ def private st2_conv_gate(t : T?; dev, queue; transposed : bool; exact : bool) {
         }
     }
     let rel = exact ? 2e-6 : 1e-3
-    let absf = exact ? 2e-6 : 1e-3
+    let abs_floor = exact ? 2e-6 : 1e-3
     var want : array<float>
-    want |> resize(mp * cout)   //! the resize's zeros are the expected pad rows
+    want |> resize(mp * cout)   // the resize's zeros are the expected pad rows
     for (r in range(rows)) {
         for (co in range(cout)) {
             var acc = 0.0lf
@@ -1065,15 +1064,15 @@ def private st2_conv_gate(t : T?; dev, queue; transposed : bool; exact : bool) {
     }
     var bx = buf_upload(dev, x)
     return if (!invoke(run_once, bx, pso))
-    t |> equal(buf_mismatch_bars(by, want, rel, absf, tag), 0)
+    t |> equal(buf_mismatch_bars(by, want, rel, abs_floor, tag), 0)
     if (exact && invoke(run_once, bx, pso_half)) {
-        t |> success(buf_mismatch_bars(by, want, rel, absf, "{tag} f16-staged stamp on the same operands (MUST mismatch)") > 0,
+        t |> success(buf_mismatch_bars(by, want, rel, abs_floor, "{tag} f16-staged stamp on the same operands (MUST mismatch)") > 0,
             "{tag}: the f16-staged stamp misses the exact bar on operands off the f16 lattice (the stamp's control)")
     }
-    x[(t_in / 2) * cin + 5] += 2.0   //! a mid-row element every output row near it reads
+    x[(t_in / 2) * cin + 5] += 2.0   // a mid-row element every output row near it reads
     var bx2 = buf_upload(dev, x)
     if (invoke(run_once, bx2, pso)) {
-        t |> success(buf_mismatch_bars(by, want, rel, absf, "{tag} x poison (MUST mismatch)") > 0,
+        t |> success(buf_mismatch_bars(by, want, rel, abs_floor, "{tag} x poison (MUST mismatch)") > 0,
             "{tag}: a poisoned input element reds the bars")
     }
     metal_release(bw)
@@ -1143,6 +1142,7 @@ def private st2_im2col_gate(t : T?; dev, queue; r0, rows : int; transposed : boo
 }
 
 //! column stats + fused AdaIN against the CPU formula at 24 channels: one stride with a tail, two strides plus a tail
+//! on f16-exact fixtures (`f16_at`: products exact), so the bar covers only the reduction and the Snake's sin()
 def private st2_adain_gate(t : T?; dev, queue; nrows : int; snake : bool) {
     let tag = snake ? "st2_adain_snake t{nrows}" : "st2_adain_leaky t{nrows}"
     var err : string
@@ -1621,7 +1621,7 @@ def private st2_lstm_gate(t : T?; dev, queue) {
     let hd = 8
     let steps = 13
     let xgs = 64
-    var xg <- f16_fill(steps * xgs, 7, 0.05, -1.15)   //! centred, so no gate saturates and the poison stays visible
+    var xg <- f16_fill(steps * xgs, 7, 0.05, -1.15)   // centred, so no gate saturates and the poison stays visible
     let whh <- f16_fill(4 * hd * hd, 5, 0.012, -0.28)
     var want : array<float>
     want |> resize(steps * 2 * hd)
@@ -2227,7 +2227,7 @@ def private pk_gemv_gate(t : T?; dev, queue; q8 : bool; kind, nin : int) {
     q8_blob_fill(nout, max(nin / 32, 1), blob, wdeq)
     if (!q8) {
         delete wdeq
-        wdeq <- f16_fill(nout * nin, 29, 0.5, -0.2)   //! the f32 rows take any width; the q8 blob needs whole blocks
+        wdeq <- f16_fill(nout * nin, 29, 0.5, -0.2)   // the f32 rows take any width; the q8 blob needs whole blocks
     }
     var wf : array<float>
     wf |> resize(nout * stride)
@@ -2455,7 +2455,7 @@ def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
     var pso_noise = pipeline_from_source(dev, metal_st2_src_noise_msl, metal_st2_src_noise_msl_entry, metal_st2_src_noise_msl_fastmath, err)
     t |> success(pso_noise != null, "{tag} noise pipeline: {err}")
     return if (pso_low == null || pso_cum == null || pso_sin == null || pso_noise == null)
-    var src <- tts_src_fixture(torch_math, 300, 700)   //! 210000 samples: the phases past a hundred thousand radians, where a fast sin loses them
+    var src <- tts_src_fixture(torch_math, 300, 700)   // 210000 samples: the phases past a hundred thousand radians, where a fast sin loses them
     let up = src.up
     let nh = TTS_SRC_NH
     let n = src.n
@@ -2463,8 +2463,8 @@ def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
     var f0 <- src.f0
     let nu <- src.nu
     let noise <- src.noise
-    let lw <- src.lw
-    let lb <- src.lb
+    let lin_w <- src.lin_w
+    let lin_b <- src.lin_b
     let want_lowc <- src.want_lowc
     let want_har <- src.want_har
     let ka = St2SourceArgs(n = uint(n), nlow = uint(nlow), nh = uint(nh), up = uint(up), sr = TTS_SRC_SR, sine_amp = 0.1, noise_std = 0.003,
@@ -2472,8 +2472,8 @@ def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
     t |> equal(src.rows, int64(n), "{tag}: the CPU source mixes every sample")
     var bnu = buf_upload(dev, nu)
     var bnoise = buf_upload(dev, noise)
-    var blw = buf_upload(dev, lw)
-    var blb = buf_upload(dev, lb)
+    var blw = buf_upload(dev, lin_w)
+    var blb = buf_upload(dev, lin_b)
     var blow = buf_fill(dev, nh * nlow, -1.0e30)
     var blowc = buf_fill(dev, nh * nlow, -1.0e30)
     var bhar = buf_fill(dev, n, -1.0e30)
@@ -2481,7 +2481,7 @@ def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
         var err2 : string
         var kk = kax
         let ran = with_compute_encoder(queue, err2) $(enc : MetalComputeEncoder?) {
-            if (own) {   //! the driver's own draw: the noise rows hashed on the device before the sines read them
+            if (own) {   // the driver's own draw: the noise rows hashed on the device before the sines read them
                 metal_set_pipeline(enc, pso_noise)
                 metal_set_buffer(enc, bnz, 0ul, 0)
                 metal_set_bytes(enc, unsafe(addr<void?>(kk)), uint64(typeinfo sizeof(kk)), 1)
@@ -2520,7 +2520,7 @@ def private st2_source_gate(t : T?; dev, queue; torch_math : bool) {
     {   // the long cumsum: 40000 low-rate frames of one harmonic, where a plain f32 sum and a double one part by cycles
         let nlong = 40000
         let lc <- tts_long_cumsum(torch_math, up, nlong)
-        t |> success(lc.parted > 0.01, "{tag} long cumsum: the two laws part by {lc.parted} cycles over {nlong} frames (the leg's control)")
+        t |> success(lc.f32_drift_cycles > 0.01, "{tag} long cumsum: the two laws part by {lc.f32_drift_cycles} cycles over {nlong} frames (the leg's control)")
         var blowl = buf_upload(dev, lc.low)
         var blowcl = buf_fill(dev, nlong, -1.0e30)
         var kl = ka
@@ -2666,7 +2666,7 @@ def private st2_istft_gate(t : T?; dev, queue; envelope : bool) {
     let pad = 2
     let n = (tt - 1) * hop + k - 2 * pad
     var y <- f16_fill(tt * stride, 7, 0.15, -1.2)
-    let wre <- f16_fill(k * bins, 5, 0.2, -0.7)   //! [k][bins], the transposed conv's operand layout
+    let wre <- f16_fill(k * bins, 5, 0.2, -0.7)   // [k][bins], the transposed conv's operand layout
     let wim <- f16_fill(k * bins, 3, 0.15, -0.5)
     let window <- f16_fill(k, 11, 0.1, 0.3)
     var ref <- istft_ref(y, wre, wim, window, tt, stride, bins, k, hop, pad, envelope)

@@ -190,12 +190,12 @@ def private tile_cell_arms(t : T?; tag : string; fmt : int; var f : TileFixture;
                 memcpy(addr<void?>(y_cls[0]), host.mapped, f.y_bytes)
             }
             invoke(oracle, f.wqh, f.wsh, f.xfh, sched, 2, f.n, d, y_ref)
-            let bad = mismatch_rel(y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
+            let bad = mismatch_rel("", y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
             to_log(LOG_INFO, "{tag} {tname}-tile batch: {bad} of {f.rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
             t |> success(bad == 0, "{tag} {tname}-tile matches the CPU oracle ({bad} of {f.rows * d} off)")
             var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
             y_poison[0] += 1.0 + 2.0 * logits_maxabs(y_ref)
-            t |> success(mismatch_rel(y_poison, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref)) > 0, "the {tag} {tname}-tile bar reds a poisoned element")
+            t |> success(mismatch_rel("", y_poison, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref)) > 0, "the {tag} {tname}-tile bar reds a poisoned element")
             delete y_poison
             delete sched
         }
@@ -1395,17 +1395,6 @@ def private q8_scale_off(got, d_ref : float) : bool => abs(got - d_ref) > 2e-3 *
 
 def private q8_value_off(deq, want, d_ref : float) : bool => abs(deq - want) > d_ref + 2e-3 * abs(want)
 
-//! `mismatch_approx` over the `n` elements from `base`: one row's slice of a multi-row output
-def private mismatch_approx(got, want : array<float>; base, n : int) : int {
-    var bad = 0
-    for (i in range(n)) {
-        if (!approx(got[base + i], want[base + i])) {
-            bad++
-        }
-    }
-    return bad
-}
-
 // the dot-product cells' bar - 1e-3 of the larger of 1 and the reference - over n outputs from base
 def private rel_mismatches(got, want : array<float>; base, n : int) : int {
     var bad = 0
@@ -1920,7 +1909,7 @@ def test_vkd_act_family(t0 : T?) {
                 for (i in range(nb)) {
                     h_got[i] = half_at(h_cls, i)
                 }
-                let badh = mismatch_rel(h_got, h_ref, 2.0e-3, 2.0e-3 * logits_maxabs(h_ref))
+                let badh = mismatch_rel("", h_got, h_ref, 2.0e-3, 2.0e-3 * logits_maxabs(h_ref))
                 t |> success(badh == 0, "the biased f16 act under the clamped swiglu matches the oracle within the half's rounding ({badh} of {nb} off)")
                 //! the controls: an unbiased oracle must red both forms (the bias rows carry the signal)
                 var q_nb : array<uint>
@@ -1928,7 +1917,7 @@ def test_vkd_act_family(t0 : T?) {
                 actrq_oracle(gh, uh, nb, false, ACT_OAI, q_nb, s_nb)
                 t |> success(mismatch_qbytes(q_cls, q_nb, 1) > 0, "biased actrq control: the unbiased oracle reds the compare")
                 h_ref[7] += 0.5
-                t |> success(mismatch_rel(h_got, h_ref, 2.0e-3, 2.0e-3 * logits_maxabs(h_ref)) == 1, "biased f16 act control: the bar reds one poisoned element")
+                t |> success(mismatch_rel("", h_got, h_ref, 2.0e-3, 2.0e-3 * logits_maxabs(h_ref)) == 1, "biased f16 act control: the bar reds one poisoned element")
                 delete rex
                 delete gb
                 delete ub
@@ -2598,7 +2587,7 @@ def test_vkd_cm_batch_family(t0 : T?) {
                 var y_ref : array<float>
                 y_ref |> resize(rows * d)
                 q8_gemm_oracle(wqh, wsh, xqh, xsh, sched, 2, n, d, y_ref)
-                let bad = mismatch_rel(y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
+                let bad = mismatch_rel("", y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
                 to_log(LOG_INFO, "cm batch variant {v}: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                 t |> success(bad == 0, "cm batch variant {v} matches the CPU oracle ({bad} of {rows * d} off)")
                 delete sched
@@ -2713,7 +2702,7 @@ def test_vkd_kq_q40_cm_batch(t0 : T?) {
             var y_ref : array<float>
             y_ref |> resize(rows * d)
             kq_gemm_oracle(int(KqFmt.q40), wqh, wsuh, xqh, xsh, sched, 2, n, d, y_ref)
-            let bad = mismatch_rel(y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
+            let bad = mismatch_rel("", y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
             to_log(LOG_INFO, "q40 cm batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
             t |> success(bad == 0, "q40 cm batch matches the CPU oracle ({bad} of {rows * d} off)")
             delete sched
@@ -2789,11 +2778,11 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             for (i in range(cnt0 * d)) {
                 y_ref0[i] = y_ref[i]   // the oracle's first region is the split arm's whole answer
             }
-            let bad_s = mismatch_rel(y_split, y_ref0, 2e-2, 4e-3 * logits_maxabs(y_ref0))
+            let bad_s = mismatch_rel("", y_split, y_ref0, 2e-2, 4e-3 * logits_maxabs(y_ref0))
             t |> success(bad_s == 0, "q8 KHR tile split in two k chunks + the reduce matches the CPU oracle ({bad_s} of {cnt0 * d} off)")
             var y_poison_s := y_split
             y_poison_s[cnt0 * d - 1] += 1.0 + 2.0 * logits_maxabs(y_ref0)
-            t |> success(mismatch_rel(y_poison_s, y_ref0, 2e-2, 4e-3 * logits_maxabs(y_ref0)) > 0, "the split arm's bar reds a poisoned element")
+            t |> success(mismatch_rel("", y_poison_s, y_ref0, 2e-2, 4e-3 * logits_maxabs(y_ref0)) > 0, "the split arm's bar reds a poisoned element")
             delete y_poison_s
             delete y_ref0
             delete y_split
@@ -2899,13 +2888,13 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
                     }
                     vkd_run_copy(raw2, h2, f.yd, host, f.y_bytes, 16u)
                     memcpy(addr<void?>(y_cls[0]), host.mapped, f.y_bytes)
-                    let bad = mismatch_rel(y_cls, y_ref, 2e-2, floor)
+                    let bad = mismatch_rel("", y_cls, y_ref, 2e-2, floor)
                     let what = arm == 0 ? "stripped (scalar callback)" : (twin_device ? "the four-wide twin" : "the twin stamp on a device without the callback")
                     to_log(LOG_INFO, "cm2 decode pair, {what}: {bad} of {f.rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
                     t |> success(bad == 0, "{what} matches the CPU oracle ({bad} of {f.rows * d} off)")
                     var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
                     y_poison[0] += 1.0 + 2.0 * logits_maxabs(y_ref)
-                    t |> success(mismatch_rel(y_poison, y_ref, 2e-2, floor) > 0, "the pair's bar reds a poisoned element")
+                    t |> success(mismatch_rel("", y_poison, y_ref, 2e-2, floor) > 0, "the pair's bar reds a poisoned element")
                     delete y_poison
                     delete y_cls
                 }
@@ -3567,7 +3556,7 @@ def test_vkd_cm2l_split(t0 : T?) {
             var y_ref : array<float>
             y_ref |> resize(rows * d)
             q8f16_gemm_oracle(wqh, wsh, xfh, sched, 1, n, d, y_ref)
-            let bad = mismatch_rel(y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
+            let bad = mismatch_rel("", y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
             to_log(LOG_INFO, "cm2 l-tile split-k: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
             t |> success(bad == 0, "cm2 l-tile split-k matches the CPU oracle ({bad} of {rows * d} off)")
             delete sched
@@ -4099,7 +4088,7 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
         }
         let arm = "hs {hs} x {nheads} heads, {kv_mul} a kv head, {cnt} keys, {nsplit} split(s), {nrows} row(s){slab2 ? ", the two-head slab" : ""}"
         for (r in range(nrows)) {
-            let bad = mismatch_approx(y_cls, y_ref, r * qdim, qdim)
+            let bad = mismatch_rel("decode attention ({arm}) row {r}", copy_span(y_cls, r * qdim, qdim), copy_span(y_ref, r * qdim, qdim), APPROX_REL)
             t |> success(bad == 0, "decode attention ({arm}): row {r} matches its own oracle ({bad} of {qdim} off)")
         }
         if (nsplit > 1) {
@@ -4117,13 +4106,14 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
             for (hh in range(nheads)) {
                 attn_row_oracle(qh, qdim + hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_x, qdim + hh * hs)
             }
-            let crossed = mismatch_approx(y_cls, y_x, qdim, qdim)
+            let crossed = mismatch_rel("decode attention ({arm}) row 1 vs row 0's oracle (MUST mismatch)", copy_span(y_cls, qdim, qdim), copy_span(y_x, qdim, qdim), APPROX_REL)
             t |> success(crossed > 0, "decode attention ({arm}): row 1 read its own region - the oracle over row 0's misses ({crossed} of {qdim})")
             delete y_x
         }
         for (r in range(nrows)) {
             y_ref[r * qdim + hs + 3] += 0.5
-            t |> success(mismatch_approx(y_cls, y_ref, r * qdim, qdim) == 1, "decode attention ({arm}): row {r}'s bar reds one poisoned element")
+            t |> success(mismatch_rel("decode attention ({arm}) row {r} poison", copy_span(y_cls, r * qdim, qdim), copy_span(y_ref, r * qdim, qdim), APPROX_REL) == 1,
+                "decode attention ({arm}): row {r}'s bar reds one poisoned element")
         }
         delete qh
         delete kh
@@ -5129,7 +5119,7 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
                         kv_mul, w0 + r + 1, scale, y_ref, r * qd + hh * hs)
                 }
             }
-            let bad = mismatch_rel(y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
+            let bad = mismatch_rel("", y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
             t |> success(bad == 0, "da_attn_b_h128 matches the CPU oracle ({bad} of {npos * qd} off)")
             delete qh
             delete kh
@@ -8277,11 +8267,11 @@ def test_vkd_dn_family(t0 : T?) {
                     delete st_h
                 }
                 let floor = 1e-2 * logits_maxabs(o_ref)
-                let bad = mismatch_rel(o_cls, o_ref, 1e-2, floor)
+                let bad = mismatch_rel("", o_cls, o_ref, 1e-2, floor)
                 t |> success(bad == 0, "dn_scan + out-norm matches the CPU oracle at ds {ds} ({bad} of {cmp_n} off)")
                 var poison := o_cls   //! the bar's control: one normed o value pushed past both bars must red
                 poison[0] += 1.0 + 2.0 * logits_maxabs(o_ref)
-                t |> success(mismatch_rel(poison, o_ref, 1e-2, floor) > 0, "dn_scan + out-norm at ds {ds}: the bar reds a poisoned value")
+                t |> success(mismatch_rel("", poison, o_ref, 1e-2, floor) > 0, "dn_scan + out-norm at ds {ds}: the bar reds a poisoned value")
                 delete poison
                 delete convh
                 delete zh
@@ -8687,11 +8677,11 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
                 }
             }
             let floor = 1e-2 * logits_maxabs(ref)
-            let bad = mismatch_rel(got, ref, 1e-2, floor)
+            let bad = mismatch_rel("", got, ref, 1e-2, floor)
             t |> success(bad == 0, "dn_scan {tag}: {bad} of {length(got)} o-row and state values off the sequential oracle")
             var poison := got   // the bar's control: one o value pushed past both bars must red
             poison[o_off] += 1.0 + 2.0 * logits_maxabs(ref)
-            t |> success(mismatch_rel(poison, ref, 1e-2, floor) > 0, "dn_scan {tag}: the bar reds a poisoned value")
+            t |> success(mismatch_rel("", poison, ref, 1e-2, floor) > 0, "dn_scan {tag}: the bar reds a poisoned value")
             delete poison
             delete convh
             delete sth
@@ -9669,7 +9659,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                             kv_mul, w0 + r + 1, scale, y_ref, r * qd + hh * hs)
                     }
                 }
-                let bad = mismatch_rel(y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
+                let bad = mismatch_rel("", y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
                 t |> success(bad == 0, "da_attn_b_h128_f16 matches the CPU oracle ({bad} of {npos * qd} off)")
                 delete qh
                 delete kh
@@ -10342,7 +10332,7 @@ def private topk_rows_compare(t : T?; tag : string; gidx : array<uint>; gw : arr
             badi++
         }
     }
-    let badw = mismatch_rel(gw, sel.w, 1e-4)
+    let badw = mismatch_rel("", gw, sel.w, 1e-4)
     t |> success(badi == 0, "{tag}: the picks are the host select's ({badi} of {length(gidx)} off)")
     t |> success(badw == 0, "{tag}: the weights match the host select ({badw} of {length(gw)} off)")
 }
@@ -10396,10 +10386,10 @@ def private moe_router_arm(t : T?; ner : int) {
                 want[p * ner + e] = acc
             }
         }
-        let bad = mismatch_rel(got, want, 1e-4)
+        let bad = mismatch_rel("", got, want, 1e-4)
         t |> success(bad == 0, "router GEMM over {ner} rows matches the CPU oracle at the second layer's offset ({bad} of {MR_NPOS * ner} off)")
         want[5 * ner + 3] += 0.5
-        t |> success(mismatch_rel(got, want, 1e-4) == 1, "router GEMM control ({ner} rows): the bar reds one poisoned element")
+        t |> success(mismatch_rel("", got, want, 1e-4) == 1, "router GEMM control ({ner} rows): the bar reds one poisoned element")
         delete wh
         delete xh
         delete got
@@ -10460,7 +10450,7 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGat
         let arm = (gate == MoeGate.softmax_weight ? "softmax over the picks" : (norm ? "renormalized" : "scaled by {wscale}")) + (rbias ? ", router bias" : "")
         topk_rows_compare(t, "per-row top-k ({arm})", gidx, gw, sel)
         sel.w[4] += 0.5
-        t |> success(mismatch_rel(gw, sel.w, 1e-4) == 1, "per-row top-k control: the bar reds one poisoned weight")
+        t |> success(mismatch_rel("", gw, sel.w, 1e-4) == 1, "per-row top-k control: the bar reds one poisoned weight")
         if (rbias) {   //! the bias control: the select over the unbiased logits must pick differently somewhere
             var sel0 <- topk_rows_select(gate, lh, rb, MR_NPOS, MR_NE, MR_K, MR_NER, MR_NE, false, norm, wscale)
             var moved = 0
@@ -10765,7 +10755,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         //! the f16 bar: a half rounds to 2^-11 of the value (4.9e-4 relative); the bar is four halves of
         //! that, and the same fraction of the row's largest value as the floor the near-zero elements read
         let f16_bar = 2.0e-3
-        let bad_h = mismatch_rel(got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y))
+        let bad_h = mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y))
         t |> success(bad_h == 0, "the combine-folded residual step ({arm}): the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
         //! the quantizing twin: every block's scale within 2e-3 of the oracle's amax over 127, every dequantized element within a quant step
         var bad_s = 0
@@ -10798,7 +10788,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         t |> success(mismatch_approx(got_x, want_x) == 1, "combine-folded residual control: the residual bar reds one poisoned element")
         want_y[3 * n + 5] += 0.5
         t |> success(mismatch_approx(got_y, want_y) == 1, "combine-folded residual control: the f32 normed-row bar reds one poisoned element")
-        t |> success(mismatch_rel(got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y)) == 1, "combine-folded residual control: the f16 normed-row bar reds one poisoned element")
+        t |> success(mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y)) == 1, "combine-folded residual control: the f16 normed-row bar reds one poisoned element")
         delete sidx
         delete sw
         delete rows
@@ -10954,7 +10944,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
             got_yf[i] = half_at(got_h, i)
         }
         let f16_bar = 2.0e-3
-        let bad_h = mismatch_rel(got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y))
+        let bad_h = mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y))
         t |> success(bad_h == 0, "the gemma-4 combine step: the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
         //! the quantizing twin: the same step, the normed rows as Q8_0 blocks (two a row) held to the oracle's blocks
         if (ensure_cls_ar_comb_g4_rq()) {
@@ -11021,7 +11011,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
         t |> success(mismatch_approx(got_x, want_x) == 1, "gemma-4 combine control: the residual bar reds one poisoned element")
         want_y[3 * n + 5] += 0.5
         t |> success(mismatch_approx(got_y, want_y) == 1, "gemma-4 combine control: the f32 normed-row bar reds one poisoned element")
-        t |> success(mismatch_rel(got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y)) == 1, "gemma-4 combine control: the f16 normed-row bar reds one poisoned element")
+        t |> success(mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y)) == 1, "gemma-4 combine control: the f16 normed-row bar reds one poisoned element")
         delete sidx
         delete sw
         delete rows

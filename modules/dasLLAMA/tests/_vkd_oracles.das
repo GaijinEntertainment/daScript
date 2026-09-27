@@ -94,21 +94,21 @@ def staged(mapped : void?; byte_off : int64; n : int; elem : auto(TT)) : array<T
 struct CellPlanes {
     dev : array<uint64>
     bytes : array<int64>
-    bit : array<uint>
+    hazard_bit : array<uint>
     base : array<int>
     run : array<int>
-    at : array<int64>
+    host_off : array<int64>
     host : HostBuf
 }
 
 def private add_plane(var cp : CellPlanes; dev : uint64; bytes : int64; written : bool; base, run : int) : int {
-    let nw = count(cp.bit, $(b) => b != 0u)
+    let nw = count(cp.hazard_bit, $(b) => b != 0u)
     cp.dev |> push(dev)
     cp.bytes |> push(bytes)
-    cp.bit |> push(written ? 1u << uint(nw) : 0u)
+    cp.hazard_bit |> push(written ? 1u << uint(nw) : 0u)
     cp.base |> push(base)
     cp.run |> push(run)
-    cp.at |> push(-1l)
+    cp.host_off |> push(-1l)
     return length(cp.dev) - 1
 }
 
@@ -135,36 +135,18 @@ def io_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0) 
     return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, true, base, length(a))
 }
 
-//! the buffers of the planes `idx` (a fixed array of plane ids in binding order), a descriptor set's first argument
-def plane_bufs(cp : CellPlanes; idx) {
-    var r : uint64[typeinfo dim(idx)]
+//! one `CellPlanes` column - `dev`, `bytes` or `hazard_bit` - at the planes `idx` (a fixed array of plane ids in binding order): a descriptor set's argument
+def gather_planes(column : array<auto(TT)>; idx) {
+    var r : TT[typeinfo dim(idx)]
     for (i in range(typeinfo dim(idx))) {
-        r[i] = cp.dev[idx[i]]
-    }
-    return r
-}
-
-//! the bytes of the planes `idx`, a descriptor set's second argument
-def plane_sizes(cp : CellPlanes; idx) {
-    var r : int64[typeinfo dim(idx)]
-    for (i in range(typeinfo dim(idx))) {
-        r[i] = cp.bytes[idx[i]]
-    }
-    return r
-}
-
-//! the hazard bits of the planes `idx`, a descriptor set's third argument
-def plane_bits(cp : CellPlanes; idx) {
-    var r : uint[typeinfo dim(idx)]
-    for (i in range(typeinfo dim(idx))) {
-        r[i] = cp.bit[idx[i]]
+        r[i] = column[idx[i]]
     }
     return r
 }
 
 //! a class's descriptor set over the planes `idx`: `set_fn` is its generated `set_*_cls`
 def cls_set(cp : CellPlanes; idx; set_fn) {
-    return invoke(set_fn, cp |> plane_bufs(idx), cp |> plane_sizes(idx), cp |> plane_bits(idx))
+    return invoke(set_fn, gather_planes(cp.dev, idx), gather_planes(cp.bytes, idx), gather_planes(cp.hazard_bit, idx))
 }
 
 //! one command buffer: `rec` records the dispatches, then every written plane copies back whole, behind its hazard bit, to the staging
@@ -175,12 +157,12 @@ def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h :
     var bits = 0u
     var total = 0l
     for (p in range(length(cp.dev))) {
-        continue if (cp.bit[p] == 0u)
-        cp.at[p] = total
+        continue if (cp.hazard_bit[p] == 0u)
+        cp.host_off[p] = total
         devs |> push(cp.dev[p])
         sizes |> push(cp.bytes[p])
         ats |> push(total)
-        bits |= cp.bit[p]
+        bits |= cp.hazard_bit[p]
         total += cp.bytes[p]
     }
     if (cp.host.bytes < total) {
@@ -197,12 +179,12 @@ def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h :
 
 //! plane `p`'s live run as `cell_record` staged it
 def plane_run(cp : CellPlanes; p : int) : array<float> {
-    return <- staged(cp.host.mapped, cp.at[p] + int64(cp.base[p]) * 4l, cp.run[p], type<float>)
+    return <- staged(cp.host.mapped, cp.host_off[p] + int64(cp.base[p]) * 4l, cp.run[p], type<float>)
 }
 
 //! plane `p` whole as `cell_record` staged it: the slots before its base, its run and its slack
 def plane_whole(cp : CellPlanes; p : int) : array<float> {
-    return <- staged(cp.host.mapped, cp.at[p], int(cp.bytes[p] / 4l), type<float>)
+    return <- staged(cp.host.mapped, cp.host_off[p], int(cp.bytes[p] / 4l), type<float>)
 }
 
 //! the NaN sentinel over written plane `p` again, before a dispatch that must write it anew

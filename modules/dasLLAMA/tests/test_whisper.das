@@ -272,11 +272,7 @@ def test_qwen3a_tower(t : T?) {
         }
         // reference-parity cell: pinned to the f32 rail (the q8 rail has its own A/B cell below)
         // and to the CPU conv chain — the documented ~1e-4 reorder bars are CPU claims
-        let knobs = gpu_knobs()
-        {
-            defer() {
-                set_gpu_knobs(knobs)
-            }
+        with_gpu_knobs() {
             set_every_gpu_tower(false)
             set_qwen3a_q8(false)
             var inscope tw <- load_qwen3a_tower(path)
@@ -923,12 +919,7 @@ def test_whisper_q8_gate(t : T?) {
             t |> skip("jfk.wav not present")
             return
         }
-        let knobs = gpu_knobs()
-        {
-            defer() {
-                set_every_gpu_wdec(true)   // the Metal decoder knob has no getter: back at its default; the record puts the Vulkan one back
-                set_gpu_knobs(knobs)
-            }
+        with_gpu_knobs() {
             set_every_gpu_tower(false)
             set_every_gpu_wdec(false)
             var inscope m <- load_asr_model(model_path)     // the asr-surface default: q8 tower

@@ -13,9 +13,10 @@ require ?das_metal dasllama/dasllama_metal_asr_dec
 require ?vulkan dasllama/dasllama_vulkan_tower
 require ?vulkan dasllama/dasllama_vulkan_asr_dec
 
-//! Every GPU knob with a getter, as a cell found them: false for a driver the build omits. The Metal ASR-decoder knob has no getter, so no record carries it.
+//! Every GPU knob, as a cell found them: false for a driver the build omits.
 struct GpuKnobs {
     metal_tower : bool
+    metal_wdec : bool
     vulkan_tower : bool
     vulkan_wdec : bool
 }
@@ -24,6 +25,7 @@ def gpu_knobs() : GpuKnobs {
     var k = GpuKnobs()
     static_if (typeinfo builtin_module_exists(das_metal)) {
         k.metal_tower = metal_tower_knob()
+        k.metal_wdec = metal_wdec_knob()
     }
     static_if (typeinfo builtin_module_exists(vulkan)) {
         k.vulkan_tower = vulkan_tower_on()
@@ -36,6 +38,7 @@ def gpu_knobs() : GpuKnobs {
 def set_gpu_knobs(k : GpuKnobs) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_tower(k.metal_tower)
+        set_metal_wdec(k.metal_wdec)
     }
     static_if (typeinfo builtin_module_exists(vulkan)) {
         set_vulkan_tower(k.vulkan_tower)
@@ -63,7 +66,7 @@ def set_every_gpu_tower(on : bool) {
     }
 }
 
-//! the CPU-decoder claims pin every whisper ASR-decoder driver off; the Metal knob has no getter, so a cell that pins it puts it back with `set_every_gpu_wdec(true)`, its default
+//! the CPU-decoder claims pin every whisper ASR-decoder driver off
 [unused_argument(on)]
 def set_every_gpu_wdec(on : bool) {
     static_if (typeinfo builtin_module_exists(das_metal)) {

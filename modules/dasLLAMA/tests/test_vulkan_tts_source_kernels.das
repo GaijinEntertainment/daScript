@@ -23,7 +23,7 @@ require dasllama/dasllama_tts_blocks
 
 let private SLACK = 5      //! the elements past a run, left at their fill
 
-let private BAR_EXACT_1PC = Bar(exact = true, poison = 0.01, scaled = true)   //! bit-exact, its poison a hundredth of the magnitude (floored at 1): outside every bar in this file
+let private BAR_EXACT_POISON_PCT = Bar(exact = true, poison = 0.01, poison_scaled = true)   //! bit-exact, its poison a hundredth of the magnitude (floored at 1): outside every bar in this file
 
 let private AX_N = 1030        //! four whole workgroups and six more
 let private AX_OOFF = 3
@@ -56,8 +56,8 @@ def test_vkt_axpy(t0 : T?) {
                 }
                 let got_a <- cp |> plane_run(oap)
                 let got_z <- cp |> plane_run(ozp)
-                check_rows(t, "tts_axpy zero = 0 vs o + 0.25 y", got_a, [for (i in range(n)); ob[i] + AX_SCALE * yv[i]], BAR_EXACT_1PC, 0)
-                check_rows(t, "tts_axpy zero = 1 vs 0.25 y over a NaN-filled o", got_z, [for (i in range(n)); AX_SCALE * yv[i]], BAR_EXACT_1PC, 0)
+                check_rows(t, "tts_axpy zero = 0 vs o + 0.25 y", got_a, [for (i in range(n)); ob[i] + AX_SCALE * yv[i]], BAR_EXACT_POISON_PCT, FLAT_ROWS)
+                check_rows(t, "tts_axpy zero = 1 vs 0.25 y over a NaN-filled o", got_z, [for (i in range(n)); AX_SCALE * yv[i]], BAR_EXACT_POISON_PCT, FLAT_ROWS)
                 t |> success(ob[0] != 0.0 && got_a[0] != got_z[0], "tts_axpy control: the same dispatch at zero = 0 adds o's old contents")
                 t |> success(outside_run(cp |> plane_whole(oap), AX_OOFF, n, POISON), "tts_axpy zero = 0: the elements outside the run are untouched")
                 t |> success(outside_run(cp |> plane_whole(ozp), AX_OOFF, n, NAN_SENTINEL), "tts_axpy zero = 1: the elements outside the run keep their sentinel")
@@ -94,7 +94,7 @@ def test_vkt_reflect1(t0 : T?) {
                     enc_tts_pk_rows_cls(raw, h, s, head, int64(RF_C))
                 }
                 let got <- cp |> plane_run(yp)
-                check_rows(t, "reflect pad [{RF_T + 1}][{RF_C}] vs x behind its row 1", got, want, BAR_EXACT_1PC, RF_C)
+                check_rows(t, "reflect pad [{RF_T + 1}][{RF_C}] vs x behind its row 1", got, want, BAR_EXACT_POISON_PCT, RF_C)
                 t |> success(got[0] != x[0], "reflect pad control: row 0 is x's row 1, not x's row 0")
                 t |> success(outside_run(cp |> plane_whole(yp), 0, total, NAN_SENTINEL), "reflect pad: the elements past (t + 1) * c keep their sentinel")
             }
@@ -112,9 +112,9 @@ let private HAR_ABS = 2e-7
 let private NOISE_REL = 1e-4    //! the own draw: the device log, sqrt and cos - the driver's approximations, 2.8e-5 at most on the RTX PRO 4500 - against the CPU's on the same hashed uniforms, under 5 in magnitude
 let private NOISE_ABS = 1e-5
 
-let private LOWC_BAR = bar_rel(LOWC_REL, 0.01, 0.0, true)
-let private HAR_BAR = bar_rel(HAR_REL, 0.01, HAR_ABS, true)
-let private NOISE_BAR = bar_rel(NOISE_REL, 0.01, NOISE_ABS, true)
+let private LOWC_BAR = Bar(rel = LOWC_REL, poison = 0.01, poison_scaled = true)
+let private HAR_BAR = Bar(rel = HAR_REL, abs_floor = HAR_ABS, poison = 0.01, poison_scaled = true)
+let private NOISE_BAR = Bar(rel = NOISE_REL, abs_floor = NOISE_ABS, poison = 0.01, poison_scaled = true)
 
 struct private SrcOut {
     lowc : array<float>
@@ -125,13 +125,19 @@ struct private SrcOut {
 
 def private src_boff : int => SRC_WOFF + TTS_SRC_NH + SRC_GAP
 
-//! the device source chain (the own draw at `seed` under `own`, else captured) under NaN fills, its linear at SRC_WOFF / `src_boff`
-def private src_run(f : TtsSrcFixture; torch : bool; f0 : array<float>; own : bool; seed : uint) : SrcOut {
+//! Where the source chain's noise rows come from.
+enum private SrcNoise {
+    captured   //! the fixture's rows, uploaded
+    own        //! the device's own draw at the run's seed
+}
+
+//! the device source chain on `noise`'s rows under NaN fills, its linear at SRC_WOFF / `src_boff`
+def private src_run(f : TtsSrcFixture; torch : bool; f0 : array<float>; noise : SrcNoise; seed : uint) : SrcOut {
     var o : SrcOut
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var wn : array<float>
-        put(wn, f.lw, SRC_WOFF)
-        put(wn, f.lb, SRC_GAP)
+        put_run(wn, f.lin_w, SRC_WOFF)
+        put_run(wn, f.lin_b, SRC_GAP)
         wn |> push_from(poison_plane(4))
         let nz = f.n * TTS_SRC_NH
         let nlow = TTS_SRC_NH * f.nlow
@@ -139,7 +145,7 @@ def private src_run(f : TtsSrcFixture; torch : bool; f0 : array<float>; own : bo
             let f0p = cp |> in_(f0)
             let nup = cp |> in_(f.nu)
             let wp = cp |> in_(wn)
-            let nzp = own ? cp |> out_(nz) : cp |> io_(f.noise)
+            let nzp = noise == SrcNoise.own ? cp |> out_(nz) : cp |> io_(f.noise)
             let lowp = cp |> out_(nlow)
             let lowcp = cp |> out_(nlow)
             let harp = cp |> out_(f.n, 0, SLACK)
@@ -153,7 +159,7 @@ def private src_run(f : TtsSrcFixture; torch : bool; f0 : array<float>; own : bo
             let sin_ix = fixed_array(f0p, lowcp, nzp, wp, harp)
             var s_sin = torch ? cp |> cls_set(sin_ix, @@set_tts_src_sines_torch_cls) : cp |> cls_set(sin_ix, @@set_tts_src_sines_onnx_cls)
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                if (own) {
+                if (noise == SrcNoise.own) {
                     enc_tts_src_noise_cls(raw, h, s_nz, pa, int64(nz))
                 }
                 if (torch) {
@@ -187,7 +193,7 @@ def private long_cumsum_arm(t : T?; tag : string; torch : bool; up : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nlong = 40000
         let lc <- tts_long_cumsum(torch, up, nlong)
-        t |> success(lc.parted > 0.01, "{tag} long cumsum: the two laws part by {lc.parted} cycles over {nlong} frames (the leg's control)")
+        t |> success(lc.f32_drift_cycles > 0.01, "{tag} long cumsum: the two laws part by {lc.f32_drift_cycles} cycles over {nlong} frames (the leg's control)")
         with_cell_planes() $(var cp : CellPlanes) {
             let lp = cp |> in_(lc.low)
             let cp_out = cp |> out_(nlong)
@@ -201,7 +207,7 @@ def private long_cumsum_arm(t : T?; tag : string; torch : bool; up : int) {
                     enc_tts_src_cumsum_onnx_cls(raw, h, s, pa, 1l)
                 }
             }
-            check_rows(t, "{tag} long cumsum vs the law's sum", cp |> plane_run(cp_out), lc.want, bar_rel(2e-7, 2.0, 1e-3), 0)   //! two radians on the last frame: the bars are a few ulps of a phase in the thousands
+            check_rows(t, "{tag} long cumsum vs the law's sum", cp |> plane_run(cp_out), lc.want, Bar(rel = 2e-7, abs_floor = 1e-3, poison = 2.0), FLAT_ROWS)   // two radians on the last frame: the bars are a few ulps of a phase in the thousands
         }
     }
 }
@@ -210,7 +216,7 @@ def private long_cumsum_arm(t : T?; tag : string; torch : bool; up : int) {
 def private own_draw_arm(t : T?; tag : string; torch : bool; f : TtsSrcFixture; cap : SrcOut) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nz = f.n * TTS_SRC_NH
-        var own1 <- src_run(f, torch, f.f0, true, 77u)
+        var own1 <- src_run(f, torch, f.f0, SrcNoise.own, 77u)
         check_rows(t, "{tag} own draw vs the CPU hash at seed 77", own1.noise, [for (i in range(nz)); tts_hash_normal(77u, uint(i))], NOISE_BAR, TTS_SRC_NH)
         var in_range = true
         for (v in own1.har) {
@@ -224,10 +230,10 @@ def private own_draw_arm(t : T?; tag : string; torch : bool; f : TtsSrcFixture; 
             }
         }
         t |> success(apart > 0, "{tag}: the own draw's signal differs from the captured rows' ({apart} of {f.n} samples apart)")
-        var own2 <- src_run(f, torch, f.f0, true, 77u)
+        var own2 <- src_run(f, torch, f.f0, SrcNoise.own, 77u)
         t |> equal(mismatch_exact(own2.har, own1.har), 0, "{tag}: the own draw repeats bit for bit at one seed")
         for (other in fixed_array(78u, 81u)) {
-            var own3 <- src_run(f, torch, f.f0, true, other)
+            var own3 <- src_run(f, torch, f.f0, SrcNoise.own, other)
             var moved = 0
             for (i in range(f.n)) {
                 if (!bar_ok(own3.har[i], own1.har[i], HAR_REL, HAR_ABS)) {
@@ -248,14 +254,14 @@ def private source_arm(t : T?; torch : bool; up, frames : int; full : bool) {
         let tag = "tts_source {torch ? "torch" : "onnx"} law up{up} x{frames}"
         var f <- tts_src_fixture(torch, up, frames)
         t |> equal(f.rows, int64(f.n), "{tag}: the CPU source mixes every sample")
-        var cap <- src_run(f, torch, f.f0, false, 0u)
+        var cap <- src_run(f, torch, f.f0, SrcNoise.captured, 0u)
         src_asserts(t, tag, f, cap)
         var f0p := f.f0
-        f0p[4] += 40.0   //! a voiced frame: every later phase moves
-        var moved <- src_run(f, torch, f0p, false, 0u)
+        f0p[4] += 40.0   // a voiced frame: every later phase moves
+        var moved <- src_run(f, torch, f0p, SrcNoise.captured, 0u)
         let nl = TTS_SRC_NH * f.nlow
-        t |> success(mismatch_rel(moved.lowc, f.want_lowc, LOWC_REL, 0.0, "{tag} lowc poison (MUST mismatch)") > 0, "{tag}: a poisoned f0 frame reds the lowc compare over {nl} frames")
-        t |> success(mismatch_rel(moved.har, f.want_har, HAR_REL, HAR_ABS, "{tag} har poison (MUST mismatch)") > 0, "{tag}: a poisoned f0 frame reds the har compare")
+        t |> success(mismatch_rel("{tag} lowc poison (MUST mismatch)", moved.lowc, f.want_lowc, LOWC_REL) > 0, "{tag}: a poisoned f0 frame reds the lowc compare over {nl} frames")
+        t |> success(mismatch_rel("{tag} har poison (MUST mismatch)", moved.har, f.want_har, HAR_REL, HAR_ABS) > 0, "{tag}: a poisoned f0 frame reds the har compare")
         if (full) {
             long_cumsum_arm(t, tag, torch, up)
             own_draw_arm(t, tag, torch, f, cap)
@@ -315,7 +321,7 @@ let private ST_REOFF = 6       //! the real basis in the slab plane, poisoned sl
 let private ST_GAP = 3         //! poisoned slots between the two bases
 let private SPEC_REL = 1e-4    //! the device atan2, sqrt and f32 tap sums against the double sums rounded once
 let private SPEC_ABS = 1e-5
-let private SPEC_BAR = bar_rel(SPEC_REL, 0.01, SPEC_ABS, true)
+let private SPEC_BAR = Bar(rel = SPEC_REL, abs_floor = SPEC_ABS, poison = 0.01, poison_scaled = true)
 
 def private st_frames : int => (ST_N + 2 * ST_PAD - ST_K) / ST_HOP + 1
 
@@ -334,8 +340,8 @@ def private stft_arm(t : T?; reflect : bool) {
             wim[(ST_BINS - 1) * ST_K + tap] = 0.0
         }
         var wn : array<float>
-        put(wn, wre, ST_REOFF)
-        let imoff = put(wn, wim, ST_GAP)
+        put_run(wn, wre, ST_REOFF)
+        let imoff = put_run(wn, wim, ST_GAP)
         wn |> push_from(poison_plane(4))
         let want <- stft_ref(har, wre, wim, ST_N, ST_K, ST_HOP, ST_PAD, ST_BINS, reflect)
         var neg = 0
@@ -347,7 +353,7 @@ def private stft_arm(t : T?; reflect : bool) {
         }
         t |> success(neg > 0 && pos > 0, "{tag}: the zero-imaginary bin reads +pi on {neg} frames and 0 on {pos}")
         var harp := har
-        harp[1] += 2.0   //! the first frame's reflected tap reads it
+        harp[1] += 2.0   // the first frame's reflected tap reads it
         with_cell_planes() $(var cp : CellPlanes) {
             let hp = cp |> in_(har)
             let hpp = cp |> in_(harp)
@@ -369,7 +375,7 @@ def private stft_arm(t : T?; reflect : bool) {
                 }
             }
             check_rows(t, "{tag} {frames} frames x {ST_BINS} bins of magnitude and phase vs the double form", cp |> plane_run(sp), want, SPEC_BAR, 2 * ST_BINS)
-            t |> success(mismatch_rel(cp |> plane_run(spp), want, SPEC_REL, SPEC_ABS, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned sample reds the compare")
+            t |> success(mismatch_rel("{tag} poison (MUST mismatch)", cp |> plane_run(spp), want, SPEC_REL, SPEC_ABS) > 0, "{tag}: a poisoned sample reds the compare")
             t |> success(outside_run(cp |> plane_whole(sp), 0, nspec, NAN_SENTINEL), "{tag}: the elements past the spectrum keep their sentinel")
         }
     }
@@ -403,7 +409,7 @@ let private IS_REOFF = 5      //! the real basis in the slab plane, poisoned slo
 let private IS_GAP = 3        //! poisoned slots between the planes
 let private WAVE_REL = 5e-4   //! the device exp, sin, cos (the driver's approximations: 1.2e-4 at most with the envelope, 3.7e-4 without, on the RTX PRO 4500) and f32 overlap-add against the double sum rounded once
 let private WAVE_ABS = 5e-5
-let private WAVE_BAR = bar_rel(WAVE_REL, 0.01, WAVE_ABS, true)
+let private WAVE_BAR = Bar(rel = WAVE_REL, abs_floor = WAVE_ABS, poison = 0.01, poison_scaled = true)
 
 def private is_n : int => (IS_TT - 1) * IS_HOP + IS_K - 2 * IS_PAD
 
@@ -417,17 +423,17 @@ def private istft_arm(t : T?; envelope : bool) {
         let wre <- f16_fill(nb, 5, 0.2, -0.7)
         let wim <- f16_fill(nb, 3, 0.15, -0.5)
         var window <- f16_fill(IS_K, 11, 0.1, 0.3)
-        window[1] = 0.0   //! taps 1 and 5 carry every sample m = 1 mod 4: their envelope is zero
+        window[1] = 0.0   // taps 1 and 5 carry every sample m = 1 mod 4: their envelope is zero
         window[5] = 0.0
         var wn : array<float>
-        put(wn, wre, IS_REOFF)
-        let imoff = put(wn, wim, IS_GAP)
-        let wnoff = put(wn, window, IS_GAP)
+        put_run(wn, wre, IS_REOFF)
+        let imoff = put_run(wn, wim, IS_GAP)
+        let wnoff = put_run(wn, window, IS_GAP)
         wn |> push_from(poison_plane(4))
         var ref <- istft_ref(y, wre, wim, window, IS_TT, IS_STRIDE, IS_BINS, IS_K, IS_HOP, IS_PAD, envelope)
-        t |> success(ref.bare > 0 && ref.bare < n, "{tag}: {ref.bare} of {n} samples carry a negligible envelope")
+        t |> success(ref.undivided > 0 && ref.undivided < n, "{tag}: {ref.undivided} of {n} samples carry a negligible envelope")
         var yp := y
-        yp[4 * IS_STRIDE + 1] += 2.0   //! a log magnitude: every sample its frame overlaps moves
+        yp[4 * IS_STRIDE + 1] += 2.0   // a log magnitude: every sample its frame overlaps moves
         with_cell_planes() $(var cp : CellPlanes) {
             let yq = cp |> in_(y)
             let ypq = cp |> in_(yp)
@@ -443,7 +449,7 @@ def private istft_arm(t : T?; envelope : bool) {
                 enc_tts_istft_cls(raw, h, sq, pa, int64(n))
             }
             check_rows(t, "{tag} {n} samples vs the double overlap-add", cp |> plane_run(oq), ref.want, WAVE_BAR, IS_HOP)
-            t |> success(mismatch_rel(cp |> plane_run(opq), ref.want, WAVE_REL, WAVE_ABS, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned magnitude reds the compare")
+            t |> success(mismatch_rel("{tag} poison (MUST mismatch)", cp |> plane_run(opq), ref.want, WAVE_REL, WAVE_ABS) > 0, "{tag}: a poisoned magnitude reds the compare")
             t |> success(outside_run(cp |> plane_whole(oq), 0, n, NAN_SENTINEL), "{tag}: the elements past n keep their sentinel")
         }
         delete ref

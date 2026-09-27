@@ -335,11 +335,11 @@ def private pk_gemv_fixture(quad : bool) : PkGemvFix {
             wst[o * PG_STRIDE + k] = f.lin.w[o * nin + k]
         }
     }
-    f.woff = quad ? put4(f.slab, wst) : put(f.slab, wst)
-    f.boff = put(f.slab, f.lin.b)
-    f.lwoff = put(f.slab, f.norm.w)
-    f.lboff = put(f.slab, f.norm.b)
-    f.aoff = put(f.slab, f.aux)
+    f.woff = quad ? put_run4(f.slab, wst) : put_run(f.slab, wst)
+    f.boff = put_run(f.slab, f.lin.b)
+    f.lwoff = put_run(f.slab, f.norm.w)
+    f.lboff = put_run(f.slab, f.norm.b)
+    f.aoff = put_run(f.slab, f.aux)
     f.slab |> push_from(poison_plane(SLAB_GAP))
     return <- f
 }
@@ -419,12 +419,12 @@ def private pk_gemv_arm(t : T?; arm : string; quad : bool) {
     t |> equal(f.woff % 4 == 0, quad, "{arm}: the weight rows sit on the lattice the arm names")
     var inscope want <- pk_gemv_wants(f)
     var inscope got <- pk_gemv_device(f)
-    check_rows(t, "{arm} tts_pk_gemv_dot vs the CPU chain", span_of(got.dot, PG_YOFF, PG_NOUT), want.dot, BAR_APPROX, 1)
-    check_rows(t, "{arm} tts_pk_gemv_ln_silu vs the CPU chain", span_of(got.ln, PG_YOFF, PG_NOUT), want.ln, BAR_APPROX, 1)
-    check_rows(t, "{arm} tts_pk_gemv_gate vs the CPU chain", span_of(got.gate, PG_YOFF, PG_NOUT), want.gate, BAR_APPROX, 1)
-    check_rows(t, "{arm} tts_pk_gemv_add_silu vs the CPU chain", span_of(got.add, PG_YOFF, PG_NOUT), want.add, BAR_APPROX, 1)
-    check_rows(t, "{arm} tts_pk_gemv_tail vs the CPU chain", span_of(got.tail, PG_YOFF, PG_NOUT), want.tail, BAR_APPROX, 1)
-    check_rows(t, "{arm} tts_pk_gemv_tail latent vs the CPU chain", span_of(got.lat, PG_LOFF, PG_NOUT), want.lat, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_dot vs the CPU chain", copy_span(got.dot, PG_YOFF, PG_NOUT), want.dot, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_ln_silu vs the CPU chain", copy_span(got.ln, PG_YOFF, PG_NOUT), want.ln, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_gate vs the CPU chain", copy_span(got.gate, PG_YOFF, PG_NOUT), want.gate, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_add_silu vs the CPU chain", copy_span(got.add, PG_YOFF, PG_NOUT), want.add, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_tail vs the CPU chain", copy_span(got.tail, PG_YOFF, PG_NOUT), want.tail, BAR_APPROX, 1)
+    check_rows(t, "{arm} tts_pk_gemv_tail latent vs the CPU chain", copy_span(got.lat, PG_LOFF, PG_NOUT), want.lat, BAR_APPROX, 1)
     t |> success(got.gate[PG_YOFF] != f.y0[0], "{arm} tts_pk_gemv_gate in place control: the residual row is moved off its input")
     let ny = length(got.dot)
     t |> equal(nan_count(got.dot) + nan_count(got.ln) + nan_count(got.add) + nan_count(got.tail), 4 * (ny - PG_NOUT),
@@ -456,12 +456,11 @@ let private PO_DH = 64
 let private PO_QS = 384        //! q, k and v side by side: the rope turns the k span alone
 let private PO_POS0 = 37
 let private PO_CAP = 64        //! the tables' positions, past the last row's
-let private PO_XOFF = 5
 let private PO_THETA = 10000.0
 
 [test]
 def test_vkt_pk_rope(t0 : T?) {
-    t0 |> run("the rows rope == the CPU rope_rows on the k span of t 23 rows at pos0 37, the q and v spans untouched") <| @(t : T?) {
+    t0 |> run("the rows rope == the CPU rope_rows on the k span of t 23 rows from position 37, the q and v spans untouched") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tts_pk_rope_cls()) {
                 t |> skip("no Vulkan device")
@@ -477,17 +476,16 @@ def test_vkt_pk_rope(t0 : T?) {
             build_rope_tabs(cos_tab, sin_tab, PO_THETA, 1.0, 1.0, no_freqs, false, 0l, int64(PO_CAP), int64(PO_DH))
             t |> equal(length(cos_tab), PO_CAP * half, "tts_pk_rope: the tables carry {PO_CAP} positions of {half} angles")
             var slab : array<float>
-            let coff = put(slab, cos_tab)
-            let soff = put(slab, sin_tab)
+            let coff = put_run(slab, cos_tab) + PO_POS0 * half   // the tables bound at the first row's position: row r reads table row r
+            let soff = put_run(slab, sin_tab) + PO_POS0 * half
             let kspan <- [for (e in range(nk)); x[(e / PO_D) * PO_QS + PO_D + e % PO_D]]
             var want := kspan
             rope_rows(want, int64(PO_T), int64(PO_D), int64(PO_DH), int64(PO_POS0), PO_THETA)
             with_cell_planes() $(var cp : CellPlanes) {
-                let xp = cp |> io_(x, PO_XOFF, SLACK)
+                let xp = cp |> io_(x, 0, SLACK)
                 let wp = cp |> in_(slab)
                 var s = cp |> cls_set(fixed_array(xp, wp, wp), @@set_tts_pk_rope_cls)
-                var pa = TtsPkRopeArgs(rows = uint(PO_T), qs = uint(PO_QS), col = uint(PO_D), d = uint(PO_D), dh = uint(PO_DH), pos0 = uint(PO_POS0),
-                    xoff = uint(PO_XOFF), coff = uint(coff), soff = uint(soff))
+                var pa = RopeTabArgs(rows = uint(PO_T), qs = uint(PO_QS), col = uint(PO_D), d = uint(PO_D), dh = uint(PO_DH), coff = uint(coff), soff = uint(soff))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_pk_rope_cls(raw, h, s, pa, int64(nk / 2))
                 }
@@ -504,7 +502,7 @@ def test_vkt_pk_rope(t0 : T?) {
                     }
                 }
                 t |> equal(kept, PO_T * 2 * PO_D, "tts_pk_rope: the q and v spans are untouched")
-                t |> success(outside_run(cp |> plane_whole(xp), PO_XOFF, n, POISON), "tts_pk_rope: the prefix before xoff and the slack past the rows are untouched")
+                t |> success(outside_run(cp |> plane_whole(xp), 0, n, POISON), "tts_pk_rope: the slack past the rows is untouched")
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -559,25 +557,22 @@ def private pk_fused_fixture() : PkFusedFix {
             ws[o * PF_STRIDE + k] = f.sq.w[o * d + k]
         }
     }
-    f.woff_q = put(f.slab, wq)
-    f.boff_q = put(f.slab, f.qkv.b)
-    f.woff_s = put(f.slab, ws)
-    f.boff_s = put(f.slab, f.sq.b)
-    f.lwoff = put(f.slab, f.norm.w)
-    f.lboff = put(f.slab, f.norm.b)
-    f.aoff = put(f.slab, f.scale)
+    f.woff_q = put_run(f.slab, wq)
+    f.boff_q = put_run(f.slab, f.qkv.b)
+    f.woff_s = put_run(f.slab, ws)
+    f.boff_s = put_run(f.slab, f.sq.b)
+    f.lwoff = put_run(f.slab, f.norm.w)
+    f.lboff = put_run(f.slab, f.norm.b)
+    f.aoff = put_run(f.slab, f.scale)
     f.slab |> push_from(poison_plane(SLAB_GAP))
     var cos_tab : array<float>
     var sin_tab : array<float>
     let no_freqs : array<float>
     build_rope_tabs(cos_tab, sin_tab, PO_THETA, 1.0, 1.0, no_freqs, false, 0l, int64(PF_CAP), int64(PF_DH))
-    f.coff = put(f.tabs, cos_tab)
-    f.soff = put(f.tabs, sin_tab)
+    f.coff = put_run(f.tabs, cos_tab)
+    f.soff = put_run(f.tabs, sin_tab)
     return <- f
 }
-
-//! a span of a row
-def private span_of(row : array<float>; from, n : int) : array<float> => subarray(row, range(from, from + n))
 
 [test]
 def test_vkt_pk_gemv_fused(t0 : T?) {
@@ -601,11 +596,11 @@ def test_vkt_pk_gemv_fused(t0 : T?) {
                 linear_vec(f.sq, f.x, dp)
                 linear_vec(f.sq, xn, dn)
             }
-            var want_q <- span_of(qkv_row, 0, d)
+            var want_q <- copy_span(qkv_row, 0, d)
             rope_rows(want_q, 1l, int64(d), int64(PF_DH), int64(PF_P), PO_THETA)
-            var want_k <- span_of(qkv_row, d, d)
+            var want_k <- copy_span(qkv_row, d, d)
             rope_rows(want_k, 1l, int64(d), int64(PF_DH), int64(PF_P), PO_THETA)
-            let want_v <- span_of(qkv_row, 2 * d, d)
+            let want_v <- copy_span(qkv_row, 2 * d, d)
             let want_as <- [for (o in range(d)); f.y0[o] + dp[o] * f.scale[o]]
             let want_a <- [for (o in range(d)); f.y0[o] + dp[o]]
             var want_g := dn
@@ -643,12 +638,12 @@ def test_vkt_pk_gemv_fused(t0 : T?) {
                 let vc <- cp |> plane_run(vcp)
                 let yas <- cp |> plane_run(yasp)
                 let ya <- cp |> plane_run(yap)
-                check_rows(t, "tts_pk_gemv_ln_qkv q vs the CPU chain", span_of(y_run, 0, d), want_q, BAR_APPROX, 0)
-                check_rows(t, "tts_pk_gemv_ln_qkv k cache vs the CPU chain", span_of(kc, PF_P * d, d), want_k, BAR_APPROX, 0)
-                check_rows(t, "tts_pk_gemv_ln_qkv v cache vs the CPU chain", span_of(vc, PF_P * d, d), want_v, BAR_APPROX, 0)
-                check_rows(t, "tts_pk_gemv_add_scale vs the CPU chain", yas, want_as, BAR_APPROX, 0)
-                check_rows(t, "tts_pk_gemv_add vs the CPU chain", ya, want_a, BAR_APPROX, 0)
-                check_rows(t, "tts_pk_gemv_ln_gelu vs the CPU chain", cp |> plane_run(ygp), want_g, BAR_APPROX, 0)
+                check_rows(t, "tts_pk_gemv_ln_qkv q vs the CPU chain", copy_span(y_run, 0, d), want_q, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_ln_qkv k cache vs the CPU chain", copy_span(kc, PF_P * d, d), want_k, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_ln_qkv v cache vs the CPU chain", copy_span(vc, PF_P * d, d), want_v, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_add_scale vs the CPU chain", yas, want_as, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_add vs the CPU chain", ya, want_a, BAR_APPROX, FLAT_ROWS)
+                check_rows(t, "tts_pk_gemv_ln_gelu vs the CPU chain", cp |> plane_run(ygp), want_g, BAR_APPROX, FLAT_ROWS)
                 t |> success(outside_run(cp |> plane_whole(yp), PF_YOFF, d, NAN_SENTINEL), "tts_pk_gemv_ln_qkv: only the q span lands in y - the k and v spans and the slots outside keep their sentinel")
                 let other_rows <- [for (i in range(nc)); kc[i] + vc[i]; where i / d != PF_P]
                 t |> success(elem_all(other_rows, 2.0 * POISON), "tts_pk_gemv_ln_qkv: the caches' other rows are untouched")

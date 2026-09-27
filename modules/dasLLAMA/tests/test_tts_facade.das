@@ -427,7 +427,7 @@ def test_source_stream_contract(t : T?) {
             f0[i] = i % 13l == 0l ? 0.0 : 120.0 + 200.0 * rng_uniform(r)
         }
         let seed = 77ul
-        var inscope captured <- captured_noise(cfg.n_harm, n, seed)   // the reference's one stream, split between styletts2_draw_noise and the source
+        var inscope captured <- captured_noise(cfg.n_harm, n, seed)
         var inscope sc_c = St2Scratch()
         var inscope har_c : array<float>
         source_from(d, cfg, f0, frames, captured, 0ul, har_c, sc_c)

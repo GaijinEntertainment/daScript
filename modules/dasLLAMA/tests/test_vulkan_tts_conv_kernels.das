@@ -82,25 +82,26 @@ def private conv_ref(var c : TtsConv1d; x : array<float>; tin : int) : array<flo
 }
 
 let private COL16_SLACK_ROWS = 64   //! the half column plane's rows past the conv's: the KHR tile loads whole 16-row blocks
-let private F16_LATTICE = 1.0 / 64.0   //! the half route's operand step: sixty-fourths under 0.75, every product exact on the f16 tile
+let private F16_LATTICE = 1.0 / 64.0   //! the half route's operand step: sixty-fourths within F16_LATTICE_OFF of zero, every product exact on the f16 tile
+let private F16_LATTICE_OFF = 0.75     //! the half route's operand offset: `row_fill`'s sixty-fourths less it span [-0.75, 0.75]
 
-//! one conv's im2col and GEMM vs the CPU conv1d at `approx` (2e-3): `half` the f16 route on exact products, else f32 over K <= 128 reassociated
-def private im2col_arm(t : T?; tag : string; g : ConvGeom; half : bool) {
+//! one conv's im2col and GEMM vs the CPU conv1d at `approx` (2e-3): `on_f16_lattice` the f16 route on exact products, else f32 over K <= 128 reassociated
+def private im2col_arm(t : T?; tag : string; g : ConvGeom; on_f16_lattice : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let khr = g_gpu.coopmat_mode != COOPMAT_CM2   //! the pick the driver makes where an f16 tile serves at all (the half cell skipped otherwise)
-        var c <- make_conv(g, half ? F16_LATTICE : 0.004, half ? 0.75 : 0.19)
+        let khr = g_gpu.coopmat_mode != COOPMAT_CM2   // the pick the driver makes where an f16 tile serves at all (the half cell skipped otherwise)
+        var c <- make_conv(g, on_f16_lattice ? F16_LATTICE : 0.004, on_f16_lattice ? F16_LATTICE_OFF : 0.19)
         let tout = int(conv1d_out_len(c, int64(g.tin)))
         t |> equal(tout, g.tout, "{tag}: the output length")
         let kdim = (g.k * g.cin + 31) / 32 * 32
         var w <- slab_rows(c, kdim)
         var w16 : array<uint16>
-        if (half) {
+        if (on_f16_lattice) {
             w16 |> resize(length(w))
             unsafe {
                 cvt_f32_to_f16_sat(addr(w16[0]), addr(w[0]), long_length(w))
             }
         }
-        var x <- row_fill(g.cin * g.tin, 41, 7, half ? F16_LATTICE : 0.05, half ? 0.75 : 2.1)
+        var x <- row_fill(g.cin * g.tin, 41, 7, on_f16_lattice ? F16_LATTICE : 0.05, on_f16_lattice ? F16_LATTICE_OFF : 2.1)
         var x_rows : array<float>
         if (g.rows_x) {
             transpose_ct(x, int64(g.cin), int64(g.tin), x_rows)
@@ -109,17 +110,17 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom; half : bool) {
         let ny = tout * g.cout
         with_cell_planes() $(var cp : CellPlanes) {
             let xp = cp |> in_(g.rows_x ? x_rows : x, g.xoff)
-            let colp = half ? cp |> out_((tout + COL16_SLACK_ROWS) * kdim / 2) : cp |> out_(tout * kdim, g.coloff)   //! the half plane: two halfwords a float slot
-            let wp = half ? cp |> in_plain(w16) : cp |> in_(w)
+            let colp = on_f16_lattice ? cp |> out_((tout + COL16_SLACK_ROWS) * kdim / 2) : cp |> out_(tout * kdim, g.coloff)   // the half plane: two halfwords a float slot
+            let wp = on_f16_lattice ? cp |> in_plain(w16) : cp |> in_(w)
             let bp = cp |> in_(c.b)
             let yp = cp |> out_(ny)
             var pc = TtsIm2colArgs(cin = uint(g.cin), tin = uint(g.tin), tout = uint(tout), k = uint(g.k), stride = uint(g.stride),
                 pad_l = uint(g.pad), dilation = 1u, transposed = g.transposed ? 1u : 0u, kdim = uint(kdim), xoff = uint(g.xoff),
                 coloff = uint(g.coloff), rows = g.rows_x ? 1u : 0u)
-            if (half) {
+            if (on_f16_lattice) {
                 var s_col = cp |> cls_set(fixed_array(xp, colp), @@set_tts_im2col16_cls)
                 let mm = fixed_array(wp, colp, yp)
-                var s_mm = f16_gemm_set(khr, cp |> plane_bufs(mm), cp |> plane_sizes(mm), cp |> plane_bits(mm))
+                var s_mm = f16_gemm_set(khr, gather_planes(cp.dev, mm), gather_planes(cp.bytes, mm), gather_planes(cp.hazard_bit, mm))
                 var s_b = cp |> cls_set(fixed_array(yp, bp), @@set_tower_bias_act_cls)
                 var pm = F16GemmArgs(n = uint(kdim), d = uint(g.cout), rows = uint(tout), woff = 0u, ybase = 0u, ystride = uint(g.cout), ksplit = 0u)
                 var pb = TowerBiasArgs(d = uint(g.cout), nelem = uint(ny), boff = 0u, act = BIAS_ACT_NONE)
@@ -138,7 +139,7 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom; half : bool) {
                     enc_f32_gemm_b_cls(raw, h, s_mm, pm, f32_gemm_wgs(int64(tout), int64(g.cout)))
                 }
             }
-            let route = half ? "im2col16 + the {khr ? "KHR" : "cm2"} f16 tile + the bias" : "im2col + F32GemmB"
+            let route = on_f16_lattice ? "im2col16 + the {khr ? "KHR" : "cm2"} f16 tile + the bias" : "im2col + F32GemmB"
             check_rows(t, "{tag} {route} over {tout} x {g.cout} vs the CPU conv1d", cp |> plane_run(yp), y_ref, BAR_APPROX, g.cout)
         }
         delete c
@@ -297,9 +298,9 @@ def private lstm_fixture(hd : int) : LstmFixture {
     var gb <- gates_ref(lb, f.x, f.gstride)
     f.gates |> push_from(gb)
     var bwd_whh : array<float>
-    transpose_ct(lf.w_hh, int64(4 * hd), int64(hd), f.whh)   //! each direction's w_hh transposed [H][4H], as the slab lays it
+    transpose_ct(lf.w_hh, int64(4 * hd), int64(hd), f.whh)   // each direction's w_hh transposed [H][4H], as the slab lays it
     transpose_ct(lb.w_hh, int64(4 * hd), int64(hd), bwd_whh)
-    f.bwd_hh = put(f.whh, bwd_whh, LSTM_HH_GAP)
+    f.bwd_hh = put_run(f.whh, bwd_whh, LSTM_HH_GAP)
     f.y_ref <- bilstm_ref(lf, lb, f.x)
     var yff <- bilstm_ref(lf, lf, f.x)
     f.yc_ref <- half_rows(yff, hd, 1)
@@ -373,8 +374,8 @@ let private PD_GAP = 3       //! poisoned slots between the weight rows and the 
 //! the pool's slab plane: w [c][k] at PD_WOFF, the bias row after PD_GAP poisoned slots, four poisoned slots past it
 def private pool_slab(c : TtsConv1d) : array<float> {
     var wn : array<float>
-    put(wn, c.w, PD_WOFF)
-    put(wn, c.b, PD_GAP)
+    put_run(wn, c.w, PD_WOFF)
+    put_run(wn, c.b, PD_GAP)
     wn |> push_from(poison_plane(4))
     return <- wn
 }
@@ -402,7 +403,7 @@ def private pool_dw_arm(t : T?) {
             let yp = cp |> out_(ny)
             let wp = cp |> in_(wn)
             var s = cp |> cls_set(fixed_array(xp, yp, wp), @@set_tts_pool_dw_cls)
-            var pa = TtsPoolArgs(c = uint(PD_C), k = uint(PD_K), stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(PD_TIN), t_out = uint(tout),
+            var pa = DwConvRowsArgs(c = uint(PD_C), k = uint(PD_K), stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(PD_TIN), t_out = uint(tout),
                 woff = uint(PD_WOFF), boff = uint(PD_WOFF + PD_C * PD_K + PD_GAP))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tts_pool_dw_cls(raw, h, s, pa, int64(ny))

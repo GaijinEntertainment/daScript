@@ -10,7 +10,7 @@ require dasllama/dasllama_metal_tower
 require ../performance/profile_common.das   // tune_gate + apply_box_profile_runtime, the standing pre-measure stack
 require daslib/clargs
 require daslib/jobque_boost
-require ../tests/_model_tier.das   // rel_rms: the codec compare's distance
+require ../tests/_model_tier.das   // rel_l2: the codec compare's distance
 
 // The Pocket TTS stage probe: one chunk's frame loop alone and the codec alone over that
 // chunk's latents, each `--reps` passes on the CPU chain and on the Metal tower in one process
@@ -43,7 +43,7 @@ struct ProbeArgs {
     @clarg_doc = "Passes each way (default 3)"
     reps : int
 
-    @clarg_doc = "The codec compare's rel-rms bar (default 5e-2, the served-lane bar; the f32 lane reads under 1e-6)"
+    @clarg_doc = "The codec compare's rel-l2 bar (default 5e-2, the served-lane bar; the f32 lane reads under 1e-6)"
     bar : float
 
     @clarg_doc = "Pin the Q8_0 lane (set_pocket_q8(true)); the default lane is the file's"
@@ -83,12 +83,12 @@ def private codec_arm(m : PocketModel; frames : int64; reps : int; bar : float; 
         let gpu_us = get_time_usec(t0)
         let s1 = pocket_gpu_stats("codec")
         let served = s1.served - s0.served == 1
-        let d = rel_rms(b, a)
-        let hit = served && length(a) == length(b) && d <= bar
+        let d = length(a) == length(b) ? rel_l2(b, a) : 1.0e30
+        let hit = served && d <= bar
         ok = ok && hit
         let verdict = hit ? "PASS" : "FAIL"
         let declined = served ? "" : " (declines {metal_tower_declines()})"
-        print("codec pass {rep} tower: {frames} frames, {length(b)} samples, {gpu_us} us, served {s1.served - s0.served}/{s1.calls - s0.calls}, rel-rms {d} against the CPU chain, bar {bar}: {verdict}{declined}\n")
+        print("codec pass {rep} tower: {frames} frames, {length(b)} samples, {gpu_us} us, served {s1.served - s0.served}/{s1.calls - s0.calls}, rel-l2 {d} against the CPU chain, bar {bar}: {verdict}{declined}\n")
         best_cpu = rep == 0 ? cpu_us : min(best_cpu, cpu_us)
         best_gpu = rep == 0 ? gpu_us : min(best_gpu, gpu_us)
     }

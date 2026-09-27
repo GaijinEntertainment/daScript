@@ -337,7 +337,8 @@ def area_image_arms(area : string) : string {
 //! engine module stem -> the areas a change to it reaches. A module not in the table is CORE and
 //! reaches every area (the safe default for a new module until it gets a row)
 let MODULE_AREAS <- {
-    "dasllama_tower" => "audio,vision", "dasllama_metal_tower" => "audio,vision,tts",
+    "dasllama_tower" => "audio,vision,tts",   // the TTS blocks, Pocket and StyleTTS2 call its row kernels
+    "dasllama_metal_tower" => "audio,vision,tts",
     "dasllama_vulkan_tower" => "audio,vision,tts",   // the Vulkan TTS driver rides the tower's classes
     "dasllama_tts_slab" => "audio,vision,tts",   // the Metal tower requires it for every seat
     "dasllama_vulkan_tts" => "tts",

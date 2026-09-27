@@ -197,12 +197,14 @@ read only where a tensor crown - the pin that compiles a family's half-precision
 (`set_metal_tensor_crowns`) - compiled the half GEMMs - on whisper f16 + qwen3a bf16, each
 engaging by the route counter, plus whisper's own
 twin-knob freeze and whisper's own wblob-ONLY poison that must CHANGE the GPU transcript
-(both legs are whisper's alone; qwen3a carries neither), the gemma4a Metal
-Conformer cell (f32-lane transcript equality CPU vs GPU + encode rel-rms + counter deltas -
+(both legs are whisper's alone; qwen3a carries neither; a twin-W route reads its GEMM weights
+from `wblob` alone, so zeroing that buffer alone poisons it, while a route that also reads the
+f32 plane, `fblob`, is poisoned only with both zeroed), the gemma4a Metal
+Conformer cell (f32-lane transcript equality CPU vs GPU + encode rel-l2 + counter deltas -
 the lane pin/reset discipline mirrors qwen3a's), the canary Metal FastConformer cell (the
 same discipline over the rel-pos XL block loop; decoder = the q8_0 serving artifact), the
 parakeet Metal FastConformer cell (the same chain over parakeet's f32 blob, minted in memory;
-transcript equality CPU vs GPU + the encoder rows' rel-rms + counter deltas), plus
+transcript equality CPU vs GPU + the encoder rows' rel-l2 + counter deltas), plus
 the tower q8-decline - a q8 whisper encoder never dispatches and records the `quant_mode`
 decline, and the whisper serving default IS q8 unless `set_asr_fp32` / `set_asr_tower_fp32`
 asks for f32 (whisper carries no lane policy). Canary, parakeet and gemma4a do: un-pinned,
@@ -1222,7 +1224,10 @@ time, and the key-radix and lattice-predicate cells.
 type and, nested once per side, the sixteen K x V pairs each carry the same address.
 `test_kquant.das` - model-free: the K-quant and grid plane dequants and dots against in-test
 references, including the iq4nl plane dequant on a jobque team lane reading the same values as the
-main thread (its codebook read is fork-safe).
+main thread (its codebook read is fork-safe); and `test_q8_plane_row_f32` - rows quantized with
+`quantize_q8_0_into` and repacked at (mr, kgroup, wbias) = (4, 8, 128) and (16, 8, 0), with and
+without a row tail, read back through `q8_plane_row_f32` as q times the block's f32 scale bit for
+bit (control: the product with the scale rounded to f16 must miss on at least one element).
 `test_softmax.das` - model-free: `softmax`, `parallel_argmax` (the FIRST maximum on ties, the
 empty row a no-op) and `hlse`.
 `test_deltanet.das` - stocked suite; model-free cells: the deltanet session-state sizing at 27B
@@ -1463,7 +1468,7 @@ oracle's own inputs within `GPU_SEAM_BAR` (5e-3; 1.2e-3 at most), the knob-off l
 the CPU chain with its decline recorded. The models for these cells mint in memory from the GGUF's
 staging on the lane each cell names, no `.dlim` baked. The GPU cells read the serving driver
 through the rail's helpers (the `_gpu_knobs.das` record - `gpu_knobs`, `set_gpu_knobs`,
-`with_gpu_knobs`, shared with the tower twins - and `set_gpu`, `gpu_encodes`, `gpu_declines`): the Metal
+`with_gpu_knobs`, shared with the tower twins - and `set_serving_gpu_tower`, `gpu_encodes`, `gpu_declines`): the Metal
 tower on an Apple build, the Vulkan TTS driver elsewhere. Where no GPU device serves, every cell
 skips loudly, and a driver that registers no seat for a cell's stage skips that cell; a device
 whose seat declines a stage is a red.
@@ -1495,7 +1500,7 @@ facade cells - caps (cloning, no speed, one language, the 19-voice roster), the 
 multi-sentence texts, one sentence spoken with the family's own timing stages, a cloned voice
 joining the roster and speaking, and the refusals (an unknown voice, a speed, a phoneme request,
 a clip at another rate); the q8 lane (the served default: the GEMMs minted q8, every codec
-conv f32, teacher-forced frames logged against the f32 oracle at an rms figure, the free run's
+conv f32, teacher-forced frames logged against the f32 oracle at a rel-l2 figure, the free run's
 frame count and speech - the rig is the lane's quality gate); the GPU cells (the Metal tower on an
 Apple build, the Vulkan TTS driver elsewhere, through the rail's helpers) - the codec seat
 against the CPU chain over the oracle's latents on the f32 lane within `GPU_CODEC_BAR` (1e-5;
@@ -1580,7 +1585,9 @@ uncapped length (half the stream the control).
 rows form (token-major [T][C]) held to its channel-major twin at the dot-envelope bar (a
 tolerance times the sum of |w|*|x| feeding each output, with a zeroed-tap poison leg that must
 EXCEED it), the q8 lane at its own 2% bar, the padded input width on both lanes, the
-multi-chunk stacked-tap loop, `adain_rows_into` against `adain_rows`, the norms and the
+multi-chunk stacked-tap loop, `adain_rows_into` against `adain_rows`, `layernorm_rows_into`
+bit for bit against `layernorm_rows` in place on a copy with the source untouched (control: a
+moved source element moves its output row), the norms and the
 duration expansion; plus the split-invariance gate (every rows kernel bit-equal on both axes
 that move the row split - batch lane cap 1 against 0, and jobque worker limit 1 against the
 box's job count, the axis that reaches the AdaIN column stats and the bare `lanes_for_work`
@@ -1757,13 +1764,21 @@ description, not a fragment - with zero tower dispatches and the knob decline co
 
 The loader obligation is `REVIEW.md`'s. The mechanism: the `.dlim` image rail stamps every
 mint with the box identity (backend pin, wscale, tune manifest), and GC-purges sibling
-flavors. A suite child's pinned identity differs from the serving rig's. So a suite on the
+flavors. A suite child's identity under a lane pin or `--no-tune` differs from the serving rig's. So a suite on the
 rail both re-mints multi-GB images the rig cannot use and purges the flavors the rig depends
 on. A cell that loads under a lane pin - a `set_<family>_q8`-class knob, or a
 `set_metal_tensor_crowns` / `pin_metal_tensor_crowns` pin - is the sharpest case: a disk bake
 under the pinned lane purges the serving lane's `.dlim` beside the model, and the next
 direct-image load in another suite panics on the wrong identity. Image-rail coverage (mint, map,
 GC, flavors) lives in the image suites alone (`test_model_image`, `test_model_image_vulkan`).
+
+The kitten-nano and kokoro facade smoke cells (`facade_smoke` in `_tts_parity.das`, called from
+`test_tts_kitten.das` and `test_tts_kokoro.das`) load through the facade's `load_tts_model`, which
+bakes the StyleTTS2 `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, so each mints an
+image per carrier - the ledgered exception to the loader rule, since those cells are the facade's
+own load path under test and run under the suite child's identity - on the tuned arm the box's
+own, with no policy override - so the image they mint is the one the kitten image arm and the
+serving rig read.
 
 ## Metal fixtures - driver knobs and the two-model pattern
 

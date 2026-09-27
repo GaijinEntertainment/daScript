@@ -141,7 +141,7 @@ def test_area_tables_match_the_census(t : T?) {
 def test_areas_for_path(t : T?) {
     let every = join(AREAS, ",")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_audio.das"), ","), "audio", "an audio module reaches audio")
-    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tower.das"), ","), "audio,vision", "the shared tower reaches both towers")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tower.das"), ","), "audio,vision,tts", "the shared tower reaches both towers and the TTS blocks calling its row kernels")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das"), ","), "audio,vision,tts", "the Vulkan tower reaches both towers and the TTS driver riding its classes")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tts_slab.das"), ","), "audio,vision,tts", "the shared TTS slab writer reaches every tower seat")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_tts.das"), ","), "tts", "the Vulkan TTS driver reaches tts")

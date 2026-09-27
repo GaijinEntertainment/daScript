@@ -188,7 +188,7 @@ def twin_poison(tt : T?; r : TwinResult; zero_block : int64; twp : auto(TW); var
             to_log(LOG_INFO, "{r.spec.family} vulkan twin {r.spec.tag} ({r.spec.n_layer} blocks) poison: block {zero_block} zeroed on the device lands {poison_ex} from the exact chain ({poison_ex / r.rms} x rms), bar {r.bar}\n")
             tt |> success(double(poison_ex) > r.bar, "{r.spec.tag}: a zeroed block through the device chain EXCEEDS the bar ({poison_ex} vs {r.bar})")
         } elif (r.bar > 0.0lf) {
-            tower_twin_check(tt, r.spec.tag, r.reference, poisoned, r.bar, true)
+            tower_twin_poisoned(tt, r.spec.tag, r.reference, poisoned, r.bar)
         }
     }
 }
@@ -323,8 +323,17 @@ def tower_twin_bar(t : T?; tag : string; exact, cpu, dev : array<float>; n_layer
     return bar
 }
 
-//! a device encode's rel_l2 from the exact chain held within `bar`, or past it under `must_exceed` (the zeroed-plane input poison)
-def tower_twin_check(t : T?; tag : string; exact, dev : array<float>; bar : double; must_exceed : bool) {
+//! a device encode's rel_l2 from the exact chain held within `bar`
+def tower_twin_held(t : T?; tag : string; exact, dev : array<float>; bar : double) {
+    tower_twin_verdict(t, tag, exact, dev, bar, false)
+}
+
+//! the zeroed-plane input poison: a device encode's rel_l2 from the exact chain past `bar`
+def tower_twin_poisoned(t : T?; tag : string; exact, dev : array<float>; bar : double) {
+    tower_twin_verdict(t, tag, exact, dev, bar, true)
+}
+
+def private tower_twin_verdict(t : T?; tag : string; exact, dev : array<float>; bar : double; must_exceed : bool) {
     var st = TowerParityStats()
     return if (!tower_parity_stats(t, must_exceed ? "{tag} poisoned vulkan vs exact" : "{tag} vulkan vs exact", exact, dev, st))
     if (must_exceed) {

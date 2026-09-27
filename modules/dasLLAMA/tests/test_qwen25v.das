@@ -113,6 +113,7 @@ def private mint_tower(mm : string; nl : int64 = 0l; wa : int64 = -1l; zero_bloc
 
 //! one canvas two ways - the exact CPU chain and the device chain - with the counters and the bar; `zero_block` >= 0 adds the
 //! input poison: the device chain over a fresh tower with that block zeroed must EXCEED the bar the clean chains set
+[cold_path]
 def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let planes <- make_planes(kind, w, h)
