@@ -11,6 +11,21 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-27) - IQ3_S served as a 16-entry codebook plane on the CPU rail (`iq3s4`,
+  `ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2e, `DASLLAMA_IQ3S_SERVE=auto|grid|lut`): every IQ3_S weight
+  is a signed odd 1..15 times its block scale, so grid entry, qh bit and sign fold at transcode into
+  one nibble over `-15, -13, .., 15`, decoded by the iq4xs LUT kernels - one `tbl` per 16 nibbles
+  in place of a 2 KB grid gather, one load per 4 weights.** Qwen3.8-Flash-Next UD-IQ4_XS (gate/up
+  experts IQ3_S) on the M5 Max, 18 threads, `lcpp_bench --for-debug-purposes -p 512 -n 128 -r 3`
+  under the box's scratch manifest, one binary, warm passes (the pass after a mint is void: cv 7%):
+  grid pp512 134.1 ± 2.0 / tg128 18.98 ± 0.13, lut 140.6 ± 0.7 / 26.9 ± 0.5, llama.cpp at 2b129ccfa
+  107.8 ± 3.5 / 19.9 ± 0.4. `decode_prof -n 128 -t 18` under `JOBQUE_PROFILING=1`: 59.5 -> 40.3 ms a
+  token; `mm_moe` 25.1 -> 6.7 ms, the attention block 19.5 / 20.0, the hc mixes 5.8 / 6.0,
+  `mm_moe_dn` 5.0 / 3.5, the head 2.9 / 2.9. Predictions on record before the run: `mm_moe` ~7 ms,
+  the token ~42 ms, tg128 ~25 - all three held. Cost: the planar image 98.1 -> 105.5 GB (+23% on
+  the IQ3_S planes, the scale rows unchanged); the dequant is bit-identical to the grid form's
+  (`test_kquant`). The GPU tiers keep the grid form - their gather is a device read. Provenance:
+  the four bench logs and two profile logs of the 2026-09-27 session, `followup_general.md` 170.
 - **LANDED (2026-09-26) - the sampler is a candidate list when top-k is set
   (`ARCHITECTURE_ENGINE.md`, `dasllama_sampling.das`): one pass over the row selects the k
   largest logits into a heap, and the temperature, softmax, nucleus and min-p cuts and the draw run
