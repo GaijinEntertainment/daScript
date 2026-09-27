@@ -171,7 +171,13 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // lattice takes it, and every stocked StyleTTS2 and Pocket transposed conv sits on the lattice,
     // so the gathering CONV stamp serves. Its coverage is st2_im2col_gate(transposed = true) in
     // test_metal_prefill_kernels.das
-    "metal_st2_im2col_tr"
+    "metal_st2_im2col_tr",
+    // the hyper-connection mixer, its scatter, the n-gram side input and the σ(z) deltanet gate
+    // (qwen4exp): the one carrier is Qwen3.8-Flash-Next (94 GB, the large tier), which no census
+    // row loads. Their coverage is the hc_*/ple_* gates in test_metal_misc_kernels.das and the
+    // sigmoid leg of dn_chain_gate in test_metal_prefill_kernels.das
+    "MetalHcNorm", "MetalHcLo", "MetalHcInit", "MetalHcMix", "MetalHcCombine", "MetalPleGate", "MetalPleConv",
+    "MetalDnGateSig"
 ]
 
 def private counting_prompt(start, last : int) : string {

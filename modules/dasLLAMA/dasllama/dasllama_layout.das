@@ -97,6 +97,19 @@ def private metal_blob_layout_ok(t : Model) : bool {
             return false
         }
     }
+    if (c.hyper_conn) {   // qwen4exp: the mixers' q8 down/up planes bind per site, the head pair once
+        for (si in range64(long_length(t.hc_down_offs))) {
+            if (!metal_blob_off_ok(t.hc_down_offs[si], KqFmt.q8) || !metal_blob_off_ok(t.hc_up_offs[si], KqFmt.q8)) {
+                return false
+            }
+        }
+        if (!metal_blob_off_ok(t.hc_head_down_off, KqFmt.q8) || !metal_blob_off_ok(t.hc_head_up_off, KqFmt.q8)) {
+            return false
+        }
+    }
+    if (has_ple_ngram(c) && (!metal_blob_off_ok(t.ple_key_off, KqFmt.q8) || !metal_blob_off_ok(t.ple_val_off, KqFmt.q8))) {
+        return false
+    }
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     return (metal_blob_off_ok(t.wcls_off, cls_fmt) &&
         (!t.emb_q8 || metal_blob_off_ok(t.emb_q8_off, KqFmt.q8)))

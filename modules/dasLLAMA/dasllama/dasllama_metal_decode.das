@@ -70,7 +70,7 @@ def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDec
     if (s.uid == 0ul) {
         return MetalDecodeDecline.no_uid
     }
-    let shape = decode_shape_decline(t, DECODE_NEEDS_OK, true, true, true)
+    let shape = decode_shape_decline(t, DECODE_NEEDS_OK, true, true, true, allow_hc = true)
     if (shape != MetalDecodeDecline.none) {
         return shape
     }
@@ -273,6 +273,30 @@ struct private StepRes {
     u_ple : MetalBuffer?       // n_embd_per_layer
     u_ple_tot : MetalBuffer?   // nrows x n_embd_per_layer - the batch's row-total for the side multiply
     bytes_ple : uint64
+    // qwen4exp hyper-connections (hc steps only, the single row): the wide residual made on device
+    // from the poked embed row, and the mixer's scratch; the two sites' scatter logits keep apart
+    hc : bool
+    bhc : MetalBuffer?         // [hc x dim] the wide residual
+    bhc_xn : MetalBuffer?      // [hc x dim] the normed streams
+    bhc_lo : MetalBuffer?      // [low_rank]
+    bhc_gate : MetalBuffer?    // [hc x dim] the up projection
+    bhc_inj_a : MetalBuffer?   // [hc] the attention site's scatter logits
+    bhc_inj_f : MetalBuffer?   // [hc] the ffn site's
+    u_hcd : MetalBuffer?       // hc x dim
+    u_hc : MetalBuffer?        // hc
+    u_lr : MetalBuffer?        // low_rank
+    bytes_hcd : uint64
+    bytes_lr : uint64
+    bytes_hc : uint64
+    // the n-gram PLE side input (config.ple_layer >= 0): the CPU-gathered heads poke in; the ring rides the DnMirror
+    png : bool
+    bple_emb : MetalBuffer?    // [in] the gathered heads (poked, GPU-read-only)
+    bple_key : MetalBuffer?    // [hc x dim] the key projection
+    bple_val : MetalBuffer?    // [dim] the value projection
+    bple_gated : MetalBuffer?  // [hc x dim] value x gate per stream
+    ple_ring_base : uint64     // the ring's byte offset inside bdn_state (the live region)
+    u_ple_in : MetalBuffer?
+    bytes_ple_in : uint64
     // deltanet (Wave D) — recurrent-layer scratch + the gated-attention twins; dn steps only
     dn : bool
     bdn_state : MetalBuffer?   // the session's DnMirror buffer (mirror-owned, never released here)
@@ -513,6 +537,30 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.bple = pool_acquire_untracked(g_upool, g_dev, r.bytes_ple)
         r.u_ple = uniform_u32(uint(c.n_embd_per_layer))
     }
+    if (c.hyper_conn) {   // qwen4exp: the wide residual + the mixer scratch (the single row alone serves)
+        r.hc = true
+        r.bytes_hcd = uint64(hc_dim(c) * 4l)
+        r.bytes_lr = uint64(c.hc_low_rank * 4l)
+        r.bytes_hc = uint64(c.hc_count * 4l)
+        r.bhc = pool_acquire(g_pool, g_dev, r.bytes_hcd)
+        r.bhc_xn = pool_acquire(g_pool, g_dev, r.bytes_hcd)
+        r.bhc_gate = pool_acquire(g_pool, g_dev, r.bytes_hcd)
+        r.bhc_lo = pool_acquire(g_pool, g_dev, r.bytes_lr)
+        r.bhc_inj_a = pool_acquire(g_pool, g_dev, r.bytes_hc)
+        r.bhc_inj_f = pool_acquire(g_pool, g_dev, r.bytes_hc)
+        r.u_hcd = uniform_u32(uint(hc_dim(c)))
+        r.u_hc = uniform_u32(uint(c.hc_count))
+        r.u_lr = uniform_u32(uint(c.hc_low_rank))
+    }
+    if (has_ple_ngram(c)) {   // qwen4exp: the poked heads + the two projections' rows
+        r.png = true
+        r.bytes_ple_in = uint64(ple_in_dim(c) * 4l)
+        r.bple_emb = pool_acquire_untracked(g_upool, g_dev, r.bytes_ple_in)
+        r.bple_key = pool_acquire(g_pool, g_dev, r.bytes_hcd)
+        r.bple_gated = pool_acquire(g_pool, g_dev, r.bytes_hcd)
+        r.bple_val = pool_acquire(g_pool, g_dev, r.bytes_x)
+        r.u_ple_in = uniform_u32(uint(ple_in_dim(c)))
+    }
     if (rot != head_size) {
         r.k_rot = uint(rot)
     }
@@ -584,6 +632,9 @@ def private poke_step(s : Session; r : StepRes) {
         }
         if (r.ple) {   // forward()'s ple_pre_decode filled s.ple_inp before the hook
             memcpy(metal_buffer_contents(r.bple), addr < void? >(s.ple_inp[0]), r.bytes_ple)
+        }
+        if (r.png) {   // the arch's pre-stack step gathered this token's heads before the hook
+            memcpy(metal_buffer_contents(r.bple_emb), addr < void? >(s.ple_emb[0]), r.bytes_ple_in)
         }
     }
 }
@@ -780,13 +831,90 @@ def private recurrent_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
             enc_dn_scan(enc, r.bdn_cv, r.bdn_state, soff, r.bdn_b, r.bdn_g, baa, bdt, r.bdn_o,
                 r.bdn_state, soff, dka, c.ssm_d_state, nvh)
             var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
-            enc_dn_gate(enc, r.bdn_o, r.bdn_z, bwn, dka, nvh, 1l)
+            if (c.dn_z_sigmoid) {
+                enc_dn_gate_sig(enc, r.bdn_o, r.bdn_z, bwn, dka, nvh, 1l)
+            } else {
+                enc_dn_gate(enc, r.bdn_o, r.bdn_z, bwn, dka, nvh, 1l)
+            }
         }
         if (g_skip != "gemv") {
             enc_site_gemv(enc, t, KqFmt.q8, t.dnout_offs[l], dim, di, r.bdn_o, r.bxb2, r.u_di, r.u_dim)
         }
     }
     dnli++
+}
+
+// ===== the hyper-connection seams of the single row (qwen4exp) =====
+
+//! One mixer over the wide residual: normed streams -> down -> silu(lo / hc) -> up -> the sigmoid-gated
+//! stream mean into `by`; the scatter logits of the site into `binj` (a null binj = the head mixer)
+def private hc_mix_step(r : StepRes; t : Model; enc : MetalComputeEncoder?; norm_off, down_off, up_off, inject_off : int64; by, binj : MetalBuffer?) {
+    let c = t.config
+    let hcd = hc_dim(c)
+    let lr = c.hc_low_rank
+    unsafe {
+        if (g_skip != "ew") {
+            var bw_n = upload_region(addr < void? >(t.fblob[norm_off]), uint64(hcd * 4l))
+            enc_hc_norm(enc, r.bhc, bw_n, r.bhc_xn, r.u_dim, r.u_eps, r.u_hc, c.hc_count)
+        }
+        if (g_skip != "gemv") {
+            if (binj != null) {
+                var bw_i = upload_region(addr < void? >(t.fblob[inject_off]), uint64(c.hc_count * hcd * 4l))
+                enc_moe_router(enc, bw_i, r.bhc_xn, binj, r.u_hcd, r.u_hc, r.u_hcd, g_one, g_zero, c.hc_count, 1l)
+            }
+            enc_site_gemv(enc, t, KqFmt.q8, down_off, lr, hcd, r.bhc_xn, r.bhc_lo, r.u_hcd, r.u_lr)
+        }
+        if (g_skip != "ew") {
+            enc_hc_lo(enc, r.bhc_lo, 0ul, r.u_lr, r.u_hc, lr)
+        }
+        if (g_skip != "gemv") {
+            enc_site_gemv(enc, t, KqFmt.q8, up_off, hcd, lr, r.bhc_lo, r.bhc_gate, r.u_lr, r.u_hcd)
+        }
+        if (g_skip != "ew") {
+            enc_hc_mix(enc, r.bhc_xn, r.bhc_gate, by, r.u_dim, r.u_hc, r.u_one32, c.dim)
+        }
+    }
+}
+
+//! Layer l's mixer at its attention (ffn = false) or ffn site - the CPU path's mix_decode
+def private hc_mix_site(r : StepRes; t : Model; enc : MetalComputeEncoder?; l : int64; ffn : bool; by, binj : MetalBuffer?) {
+    let site = l * 2l + (ffn ? 1l : 0l)
+    let hcd = hc_dim(t.config)
+    hc_mix_step(r, t, enc, t.hc_norm_off + site * hcd, t.hc_down_offs[site], t.hc_up_offs[site],
+        t.hc_inject_off + site * hcd * t.config.hc_count, by, binj)
+}
+
+//! A block's output scattered into the streams under the site's logits
+def private hc_combine_step(r : StepRes; t : Model; enc : MetalComputeEncoder?; bout, binj : MetalBuffer?) {
+    if (g_skip != "ew") {
+        enc_hc_combine(enc, r.bhc, bout, binj, r.u_dim, r.u_hc, r.u_one32, hc_dim(t.config))
+    }
+}
+
+//! The n-gram side input before layer ple_layer's attention mixer: the key/value projections of the
+//! poked heads, the per-stream gate with the ring write, the dilated conv and the residual add
+def private ple_side_step(r : StepRes; t : Model; enc : MetalComputeEncoder?) {
+    let c = t.config
+    let hcd = hc_dim(c)
+    let ind = ple_in_dim(c)
+    unsafe {
+        if (g_skip != "gemv") {
+            enc_site_gemv(enc, t, KqFmt.q8, t.ple_key_off, hcd, ind, r.bple_emb, r.bple_key, r.u_ple_in, r.u_hcd)
+            enc_site_gemv(enc, t, KqFmt.q8, t.ple_val_off, c.dim, ind, r.bple_emb, r.bple_val, r.u_ple_in, r.u_dim)
+        }
+        if (g_skip != "ew") {
+            let rows = ple_hist_rows(c)   // nolint:LINT021 — the kargs are the kernel's uint fields; the slot modulo runs in 64-bit
+            var bwk = upload_region(addr < void? >(t.fblob[t.ple_nkey_off]), uint64(hcd * 4l))
+            var bwq = upload_region(addr < void? >(t.fblob[t.ple_nquery_off]), uint64(hcd * 4l))
+            var bwc = upload_region(addr < void? >(t.fblob[t.ple_nconv_off]), uint64(hcd * 4l))
+            var gka = PleGateArgs(dim = uint(c.dim), hc = uint(c.hc_count), eps = c.norm_eps, pos0 = uint(r.chain_pos), rows = uint(rows), direct = 0u)
+            enc_ple_gate(enc, r.bhc, r.bple_key, r.bple_val, bwk, bwq, bwc, r.bple_gated, r.bdn_state, r.ple_ring_base, gka, c.hc_count)
+            var bwt = upload_region(addr < void? >(t.fblob[t.ple_conv_off]), uint64(hcd * c.ple_conv_kernel * 4l))
+            var cka = PleConvArgs(dim = uint(c.dim), hc = uint(c.hc_count), kern = uint(c.ple_conv_kernel),
+                dil = uint(c.ple_ngram_size), rows = uint(rows), pos0 = uint(r.chain_pos), nrows = 1u, direct = 0u)
+            enc_ple_conv(enc, r.bhc, r.bple_gated, r.bdn_state, r.ple_ring_base, r.bdn_state, r.ple_ring_base, bwt, cka, hcd)
+        }
+    }
 }
 
 [ |> template_struct_instance]
@@ -821,6 +949,12 @@ struct template LayerEncT {
         let nchunks = (pos + r.nrows + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
         unsafe {
             let recr = layer_is_recurrent(c, l)
+            if (r.hc) {   // the hyper-connection chain: the side input (at its layer) and the attention site's mixer open the layer into bxb
+                if (r.png && l == c.ple_layer) {
+                    ple_side_step(*r, t, enc)
+                }
+                hc_mix_site(*r, t, enc, l, false, r.bxb, r.bhc_inj_a)
+            }
             // attention: fused QKV GEMV -> single-query attention -> out-proj -> fused add+norm; K-quant sites (mixed PER TENSOR formats) split into per-tensor plane GEMVs
             let fq = fmt_at(t.wq_fmt, l)
             let fk = fmt_at(t.wk_fmt, l)
@@ -943,7 +1077,10 @@ struct template LayerEncT {
                 }
             }
             // ffn: [post-attn norm ->] fused add+norm -> W1|W3 -> swiglu/geglu -> W2 [-> post-ffn norm] -> fused add + next attn norm (pre_post_norm norms IN PLACE — the CPU order)
-            if (g_skip != "ew") {
+            if (r.hc) {   // the attention output scatters into the streams; the ffn site's mixer makes the next block input
+                hc_combine_step(*r, t, enc, r.bxb2, r.bhc_inj_a)
+                hc_mix_site(*r, t, enc, l, true, r.bxb, r.bhc_inj_f)
+            } elif (g_skip != "ew") {
                 var bw_ffn = upload_region(addr < void? >(t.fblob[t.rms_ffn_off + l * dim]), uint64(dim * 4l))
                 if (c.pre_post_norm) {
                     var bw_pa = upload_region(addr < void? >(t.fblob[t.rms_post_att_off + l * dim]), uint64(dim * 4l))
@@ -981,7 +1118,9 @@ struct template LayerEncT {
             if (r.ple) {
                 ple(self, t, enc, l)
             }
-            if (g_skip != "ew") {
+            if (r.hc) {
+                hc_combine_step(*r, t, enc, r.bxb, r.bhc_inj_f)
+            } elif (g_skip != "ew") {
                 // gemma4 layer_out_scale: (x + branch) * s folds into the residual add (a 4-byte view into the weights blob)
                 var bosc : MetalBuffer?
                 if (c.layer_out_scale) {
@@ -1207,9 +1346,13 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
 def private encode_cls_tail(t : Model; var r : StepRes; enc : MetalComputeEncoder?; norm_off : int64) {
     let c = t.config
     let dim = c.dim
-    // final rmsnorm (one row) + classifier GEMV — the caller samples straight from s.logits
-    var bwfin = upload_region(unsafe(addr < void? >(t.fblob[norm_off])), uint64(dim * 4l))
-    enc_rms(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps)
+    // final rmsnorm (one row; a hyper-connection model's head mixer stands in) + classifier GEMV — the caller samples straight from s.logits
+    if (r.hc) {
+        hc_mix_step(r, t, enc, t.hc_head_norm_off, t.hc_head_down_off, t.hc_head_up_off, -1l, r.bxf, null)
+    } else {
+        var bwfin = upload_region(unsafe(addr < void? >(t.fblob[norm_off])), uint64(dim * 4l))
+        enc_rms(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps)
+    }
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     var bcls = r.bnc != null ? r.bnc : r.blog
     enc_site_gemv(enc, t, cls_fmt, t.wcls_off, c.vocab_size, dim, r.bxf, bcls, r.u_dim, r.u_vocab)
@@ -1763,8 +1906,8 @@ def private encode_dn_replay(t : Model; var r : StepRes; gi : int64; nrun : int6
 //! mirrors; a cold stream takes one plain step instead of drafting
 def private mtp_round_cold(t : Model; s : Session; pos, k : int64) : bool {
     let c = t.config
-    var cold = (g_dev == null || !t.metal_blob || c.n_layer_nextn <= 0l || pos < 1l ||
-        s.mtp_h_pos1 != pos || pos + k + 1l > c.seq_len || !metal_mtp_verify_ok(t, s))
+    var cold = (g_dev == null || !t.metal_blob || c.n_layer_nextn <= 0l || pos < 1l || c.hyper_conn ||
+        s.mtp_h_pos1 != pos || pos + k + 1l > c.seq_len || !metal_mtp_verify_ok(t, s))   //! the verify has no wide-residual form
     if (!cold && c.recr_mask != 0ul) {
         // the verify scans the decode DnMirror's live region — it must be resident and current
         cold = !key_exists(g_dn_mirrors, s.uid) || g_dn_mirrors[s.uid].pos != pos
@@ -2241,10 +2384,16 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
             enc_embed_k6(enc, bembq.buf, bembq.qoff, bembs.buf, bembs.soff, bembs.doff, r.btok, r.bx, r.u_dim, r.u_embscale, dim)
         }
     }
-    // layer-0 attention norm — the per-layer trailing add+rms is fused and feeds the NEXT layer
+    // layer-0 attention norm — the per-layer trailing add+rms is fused and feeds the NEXT layer; a hyper-connection model makes the wide residual instead (each layer opens with its own mixer)
     if (g_skip != "ew") {
-        var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
-        enc_rms(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps)
+        if (r.hc) {
+            for (ch in range64(c.hc_count)) {
+                enc_copy_row(enc, r.bx, 0ul, r.bhc, uint64(ch * dim * 4l), r.u_dim, dim)
+            }
+        } else {
+            var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
+            enc_rms(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps)
+        }
     }
     var dnli = 0l   // recurrent-layer index — addresses the dn state/conv mirror slices in order
     for (l in range64(c.n_layers)) {
@@ -2289,6 +2438,9 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
         let cap = r.cap
         unsafe {
             memcpy(addr < void? >(s.x[0]), metal_buffer_contents(r.bx), r.bytes_x)
+            if (r.hc) {   // the wide residual is the session's state the CPU path would continue from
+                memcpy(addr < void? >(s.hc_res[0]), metal_buffer_contents(r.bhc), r.bytes_hcd)
+            }
             let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
             let prow = kv_phys_row(s, pos)
             for (l in range64(c.n_layers)) {
@@ -2464,6 +2616,24 @@ def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — fl
         pool_release(g_upool, r.bple, r.bytes_ple)
         pool_release(g_upool, r.u_ple, 4ul)
     }
+    if (r.hc) {
+        pool_release(g_pool, r.bhc, r.bytes_hcd)
+        pool_release(g_pool, r.bhc_xn, r.bytes_hcd)
+        pool_release(g_pool, r.bhc_gate, r.bytes_hcd)
+        pool_release(g_pool, r.bhc_lo, r.bytes_lr)
+        pool_release(g_pool, r.bhc_inj_a, r.bytes_hc)
+        pool_release(g_pool, r.bhc_inj_f, r.bytes_hc)
+        pool_release(g_upool, r.u_hcd, 4ul)
+        pool_release(g_upool, r.u_hc, 4ul)
+        pool_release(g_upool, r.u_lr, 4ul)
+    }
+    if (r.png) {
+        pool_release(g_upool, r.bple_emb, r.bytes_ple_in)
+        pool_release(g_pool, r.bple_key, r.bytes_hcd)
+        pool_release(g_pool, r.bple_gated, r.bytes_hcd)
+        pool_release(g_pool, r.bple_val, r.bytes_x)
+        pool_release(g_upool, r.u_ple_in, 4ul)
+    }
     r.valid = false
 }
 
@@ -2558,6 +2728,7 @@ def private metal_decode_slow(t : Model; var s : Session; pos : int64) : bool {
         r.bdn_state = dm.buf
         r.dn_state_base = dm.state_off
         r.dn_conv_base = dm.conv_off
+        r.ple_ring_base = dm.ple_off
     }
     poke_step(s, r)
     g_us_setup += int64(get_time_usec(ts_all))

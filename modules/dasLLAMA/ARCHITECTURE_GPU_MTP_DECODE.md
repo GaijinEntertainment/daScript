@@ -191,6 +191,26 @@ f16 mirror, the fused pre-norm and PLE. What differs between row shapes is how a
 dispatches and which kernel family serves a phase, never the phase order, so the order cannot drift
 between them.
 
+**A hyper-connection model (qwen4exp) keeps the phase order and changes the seams.** The step
+opens by copying the poked embed row into the `hc` streams of the wide residual (`StepRes.bhc`)
+instead of norming it; each layer's chain then opens with the attention site's mixer
+(`hc_mix_site`: the grouped norm over the streams, the scatter logits off the normed streams, the
+q8 down and up GEMVs around `silu(lo / hc)`, the sigmoid-gated stream mean into `bxb`), the block
+output in `bxb2` (wo, or the recurrent layer's ssm_out) scatters into the streams under those
+logits (`hc_combine_step`), the ffn site's mixer makes the next block input and the FFN's output
+scatters under the ffn site's logits; the head mixer with no scatter stands where the final norm
+would (`encode_cls_tail`). The n-gram side input runs before layer `ple_layer`'s attention mixer
+(`ple_side_step`): the key and value GEMVs read the heads the arch's CPU pre-stack hook gathered
+and poked (`StepRes.bple_emb`), the per-stream gate writes the gated rows and the ring's slot, the
+dilated conv adds its row. The conv history ring is the third region of the session's `DnMirror`
+after the state and conv planes (`dn_mirror_prepare`'s `ple_off`), synced from the CPU prefix
+with them. `finish_step` copies the wide residual back to `Session.hc_res`. Of the decode drivers
+the single row alone serves: `decode_shape_decline` admits `hyper_conn` under `allow_hc`, which
+the single decode and the mint-time gate pass and the batch and verify gates do not, so a batched
+step or a speculative round on such a model declines `graph`; the prefill serves the same seams
+over the window's rows (`ARCHITECTURE_GPU_PREFILL.md`, the hyper-connection window). The deltanet
+gate's σ(z) form is the `MetalDnGateSig` stamp of `MetalDnGateT`, picked on `Config.dn_z_sigmoid`.
+
 The row shapes share their adapters. `VerifyLayerEnc` and `BatchLayerEnc` bind one generic per
 slot - `rms_rows`, `add_rows`, `add_rms_rows`, `moe_args_rows` and `total_rows` - each written
 over `auto(ET)` and reading nothing but the stamp's `StepRes`, so a new row shape binds the set

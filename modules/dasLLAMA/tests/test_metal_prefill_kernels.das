@@ -4846,9 +4846,11 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
     t |> success(pso_l2 != null, "dn l2norm pipeline: {err}")
     var pso_scan = pipeline_from_source(dev, metal_dn_scan_msl, metal_dn_scan_msl_entry, metal_dn_scan_msl_fastmath, err)
     t |> success(pso_scan != null, "dn scan pipeline: {err}")
-    var pso_gate = pipeline_from_source(dev, metal_dn_gate_msl, metal_dn_gate_msl_entry, metal_dn_gate_msl_fastmath, err)
+    var pso_gate = pipeline_from_source(dev, MetalDnGate_metal_dn_gate_msl, MetalDnGate_metal_dn_gate_msl_entry, MetalDnGate_metal_dn_gate_msl_fastmath, err)
     t |> success(pso_gate != null, "dn gate pipeline: {err}")
-    if (pso_conv == null || pso_hist == null || pso_l2 == null || pso_scan == null || pso_gate == null) {
+    var pso_gate_sig = pipeline_from_source(dev, MetalDnGateSig_metal_dn_gate_msl, MetalDnGateSig_metal_dn_gate_msl_entry, MetalDnGateSig_metal_dn_gate_msl_fastmath, err)
+    t |> success(pso_gate_sig != null, "dn gate sig pipeline: {err}")
+    if (pso_conv == null || pso_hist == null || pso_l2 == null || pso_scan == null || pso_gate == null || pso_gate_sig == null) {
         return
     }
     // inputs — hash patterns; ssm_a strictly negative (= -exp(A_log)), nonzero history + state
@@ -5087,6 +5089,35 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
     }
     t |> success(gran, "dn gate dispatch npos={npos}: {err}")
     t |> equal(buf_mismatch_approx(bo, gwant), 0)
+    // the σ(z) stamp (qwen4exp) on the scan oracle's rows, so its leg stands without the scan: the
+    // same norm, the gate a sigmoid; the silu form's oracle is the control it must miss
+    var gsig : array<float>
+    gsig |> resize(npos * di)
+    for (p in range(npos)) {
+        for (h in range(nvh)) {
+            let hb = p * di + h * ds
+            unsafe {
+                rmsnorm(addr(gsig[hb]), addr<float const?>(owant[hb]), addr<float const?>(wn[0]), int64(ds), EPS)
+            }
+            for (j in range(ds)) {
+                gsig[hb + j] *= 1.0 / (1.0 + exp(-zz[hb + j]))
+            }
+        }
+    }
+    var bos = buf_upload(dev, owant)
+    let gsran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso_gate_sig)
+        metal_set_buffer(enc, bos, 0ul, 0)
+        metal_set_buffer(enc, bz, 0ul, 1)
+        metal_set_buffer(enc, bwn, 0ul, 2)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
+        metal_dispatch_threadgroups(enc, uint3(uint((nvh + 7) / 8), uint(npos), 1u), uint3(256u, 1u, 1u))
+    }
+    t |> success(gsran, "dn gate sig dispatch npos={npos}: {err}")
+    t |> equal(buf_mismatch_approx(bos, gsig), 0)
+    t |> success(buf_mismatch_approx(bos, gwant) > 0, "dn gate sig control: the silu form's rows must miss")
+    metal_release(bos)
+    delete gsig
     metal_release(bx)
     metal_release(bh)
     metal_release(bw)
@@ -5110,6 +5141,7 @@ def private dn_chain_gate(t : T?; dev, queue; nkh, nvh, dconv, npos : int) {
     metal_release(pso_l2)
     metal_release(pso_scan)
     metal_release(pso_gate)
+    metal_release(pso_gate_sig)
     delete xq
     delete hist
     delete cw

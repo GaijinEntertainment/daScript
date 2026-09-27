@@ -760,6 +760,25 @@ waits on a rows form of the rope-and-store (`MetalRopeStoreBKvT` with a row tabl
 candidate) and one K/V home for both loops (the codec's per-chunk rows buffers against the frames'
 per-voice slot).
 
+## 28. The hyper-connection model has no board row and no stocked parity cell
+
+Qwen3.8-Flash-Next (qwen4exp) serves on the Metal prefill and single-row decode drivers, and the
+counting fixture holds token for token through a probe; no cell in `tests/` pins it, because the
+file is the large tier (94 GB, a 116 GB planar image) and a cell holding the planar model beside its
+blob twin does not fit the 128 GB box. The work: a parity cell of the `harness/parity.das --ngl 99`
+form on the blob-only load (one model, the spec's pinned ids as the oracle - `test_parity_pregate`'s
+shape) under `DASLLAMA_PARITY_FULL=1`, and the sweep's rows (sec.7): pp512 and tg128 against
+llama.cpp on the M5 Max at or above 0.9, the box crowns applied.
+
+## 29. The hyper-connection model has no batched or speculative Metal step
+
+`decode_shape_decline` admits `hyper_conn` for the single row alone (`allow_hc`): the batch driver
+declines it `graph`, `mtp_round_cold` keeps the round cold, and the MTP head the file ships beside
+(the wide-residual `nextn.hnorm`, the head mixer pair) has no Metal verify. The work, in order: the
+rows forms of sec.28 bound into `BatchLayerEnc` (the wide residual per row, the scatter logits per
+row and site), the verify's rows over one slab with the wide residual carried into the draft head,
+and the `hc` arm of the shape gate opened per driver as each lands.
+
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 
 `lcpp_bench --mtp-ab` (single stream, Metal, tg-real128 `-p 0 -n 128`, greedy, depth 1, M5 Max,

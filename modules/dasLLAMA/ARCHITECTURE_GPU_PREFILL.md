@@ -1,10 +1,10 @@
 # dasLLAMA Architecture - the Metal prefill driver
 
 Companion to `ARCHITECTURE.md`; section numbers are that document's. This document carries
-sections 2.2c-2.2f, 2.2h-2.2i, 2.2u-2.2v and 2.2aa: the GEMM form ladder, the dev-W panel knee
-map, the GEMV tail peel, the attention slab, the pad-row and cooperative-op constraints, chunked
-submission, the f16 twin dual-store, the last-layer FFN tail, and the dense-KQ tensor mul_mm
-scaffold. The driver's routed block - the MoE bucket rail, its tensor-twin scaffold and the
+sections 2.2c-2.2f, 2.2h-2.2i, 2.2u-2.2v, 2.2aa and 2.2ab: the GEMM form ladder, the dev-W panel
+knee map, the GEMV tail peel, the attention slab, the pad-row and cooperative-op constraints, chunked
+submission, the f16 twin dual-store, the last-layer FFN tail, the dense-KQ tensor mul_mm scaffold
+and the hyper-connection window. The driver's routed block - the MoE bucket rail, its tensor-twin scaffold and the
 split-format expert twins - is `ARCHITECTURE_GPU_PREFILL_MOE.md` section 2.2g.
 
 ### 2.2c The prefill GEMM form ladder {#prefill-gemm-ladder}
@@ -285,3 +285,15 @@ and every format's dequant pass compile wherever `g_pf_tensor_ok` holds, and `pf
 offers the arm before it reads any `kq_mulmm_<fmt>` crown. The q8 site takes the same arm through
 `pf_q8_devw` while the q8 tensor twins stay behind their own crown. Dev-W's win is the one-time
 dequant, not the tensor lane, so a box whose dense race crowned nothing still gets it.
+
+### 2.2ab The hyper-connection window {#prefill-hc-window}
+
+A hyper-connection model (qwen4exp) prefills with the decode's seams over the window's rows (`PfHc`):
+`enc_hc_init` makes the wide residual (`hc` copies of every embed row) at layer 0; each layer opens with
+the attention site's mixer (`pf_hc_mix_site`: the grouped norm over `npos x hc` stream rows, the scatter
+logits as a rows GEMV, the down and up q8 mul_mm over the padded panel, the gated stream mean into `bxb`),
+the attention output scatters under those logits (`pf_hc_combine`), the ffn site's mixer makes the FFN
+rows and the FFN output scatters under its own; the head mixer runs the single-row chain over the last
+wide row for the logits. The n-gram side input (`pf_ple_side`, before layer `ple_layer`'s mixer) gates
+every row into a window panel, runs the conv over the panel and the ring (`PleConvArgs.direct`), and
+copies the window's last `rows` panel rows into the ring, one slot each, for the rows after the window.
