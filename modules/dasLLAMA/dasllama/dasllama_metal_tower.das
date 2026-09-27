@@ -3871,14 +3871,6 @@ var private g_tw_pk_frames : PkFramesSlab
 var private g_tw_pk_voice : PkVoiceSlot
 let private PK_ZERO_ROW = 4096l   //!< the zero bias row's width: the widest q8 linear a frame's GEMVs serve
 
-[cold_path]
-def set_metal_pocket_frame_batch(n : int64) {
-    set_pocket_frame_batch(n)
-}
-
-[cold_path]
-def metal_pocket_frame_batch() : int64 => pocket_frame_batch()
-
 def private pk_blob_q8(var qb : PkBlobWriter; l : TtsLinear) : uint64 {
     qb.n = round_up(qb.n, 16l)
     let at = qb.n

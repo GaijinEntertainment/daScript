@@ -44,24 +44,6 @@ let GPU_CODEC_SERVED_BAR = 2e-1   //! the codec seat on the served planes: reads
 let GPU_FRAME_SERVED_BAR = 1e-1   //! the frames seat on the served planes, teacher-forced: reads 1.9e-2 / 3.7e-2 on the q8 file, 3.8e-2 / 7.1e-2 on the kq file (alba / caro_davy) on the M5 Max
 let GPU_FRAME_FREE_BAR = 5e-3   //! the frames seat free-running on the f32 lane, its own noise from the same seed, every frame fed its own output: reads 1.5e-4 and 1.1e-4 on the two stage cases on the M5 Max, 7e-5 and 1.8e-3 on the pod (lj028's 150 frames compound the f16 GEMM feed's rounding)
 
-//! The tower knob off for a cell that holds the CPU chain; the knob it found, for the restore.
-def private tower_pin_off() : bool {
-    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        let found = gpu_knob()
-        set_gpu(false)
-        return found
-    } else {
-        return false
-    }
-}
-
-[unused_argument(found)]   //! off-Apple there is no knob
-def private tower_restore(found : bool) {
-    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        set_gpu(found)
-    }
-}
-
 def private gguf_path() : string {
     return path_join(models_dir(), "pocket-tts-en.gguf")
 }
@@ -289,16 +271,12 @@ def test_pocket_parity(t : T?) {
         t |> skip("no oracle dumps under {oracle_dir()}")
         return
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_gpu_cell() {
         defer() {
             reset_pocket_q8()
         }
         set_pocket_q8(false)   // the parity rail holds the f32 lane
-        let knob = tower_pin_off()
-        defer() {
-            tower_restore(knob)
-        }
+        set_gpu(false)
         var inscope m <- load_pocket(path)
         var inscope sc = PocketScratch()
         t |> success(!m.q8, "the reference lane serves f32")
@@ -401,17 +379,13 @@ def test_pocket_codec_stream(t : T?) {
         return
     }
     let c & = unsafe(man.cases[picked])
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_gpu_cell() {
         defer() {
             reset_pocket_q8()
             set_pocket_codec_window(POCKET_CODEC_WINDOW_DEFAULT)
         }
         set_pocket_q8(false)   // the f32 lane: the served GEMMs' result depends on how many rows they batch
-        let knob = tower_pin_off()
-        defer() {
-            tower_restore(knob)
-        }
+        set_gpu(false)
         var inscope m <- load_pocket(path)
         var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
         let frames = int64(c.n_frames)
@@ -464,16 +438,12 @@ def test_pocket_frames(t : T?) {
         t |> skip("no oracle dumps under {oracle_dir()}")
         return
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_gpu_cell() {
         defer() {
             reset_pocket_q8()
         }
         set_pocket_q8(false)
-        let knob = tower_pin_off()
-        defer() {
-            tower_restore(knob)
-        }
+        set_gpu(false)
         var inscope m <- load_pocket(path)
         var inscope sc = PocketScratch()
         var done = 0
@@ -522,16 +492,11 @@ def test_pocket_codec_metal(t : T?) {
         return
     }
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_gpu_cell() {
             defer() {
                 reset_pocket_q8()
             }
             set_pocket_q8(false)
-            let knob_found = gpu_knob()
-            defer() {
-                set_gpu(knob_found)
-            }
             var inscope m <- load_pocket(path)
             var inscope sc = PocketScratch()
             var done = 0
@@ -568,12 +533,7 @@ def test_pocket_codec_metal_served(t : T?) {
         return
     }
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        with_job_que() {
-            setup_dasllama_jobque_()
-            let knob_found = gpu_knob()
-            defer() {
-                set_gpu(knob_found)
-            }
+        with_gpu_cell() {
             reset_pocket_q8()
             var files = 0
             for (path in [q8_gguf_path(), kq_gguf_path()]) {
@@ -697,7 +657,7 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
         t |> equal(h1.calls - h0.calls, 1, "{tag}: one hook call")
         t |> equal(fg, fc, "{tag}: the frame count")
         t |> success(same_rng(sc.rng, rng_cpu), "{tag}: the generator ends where the CPU loop's does")
-        let batch = gpu_pocket_frame_batch()
+        let batch = pocket_frame_batch()
         t |> equal(e1 - e0, (fc + batch) / batch + 1l, "{tag}: one tower encode a batch of {batch}, and the codec's")
         var inscope gpu <- frame_rows(m, sc, fg)
         let dl = rel_rms(gpu.lat, r.cpu.lat)
@@ -765,16 +725,11 @@ def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs,
         return
     }
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_gpu_cell() {
             defer() {
                 reset_pocket_q8()
             }
             set_pocket_q8(false)
-            let knob_found = gpu_knob()
-            defer() {
-                set_gpu(knob_found)
-            }
             var inscope m <- load_pocket(path)
             var inscope sc = PocketScratch()
             var done = 0
@@ -811,8 +766,8 @@ def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs,
                 let free_other = forced_frames(m, k, none, none, sc, 1ul)
                 var inscope gpu_other <- frame_rows(m, sc, min(free_other, free_cpu))
                 t |> success(rel_rms(gpu_other.lat, cpu_free.lat) > GPU_FRAME_FREE_BAR, "{tag}: the next seed's free run reds the bar (the compare's control)")
-                let batch_found = gpu_pocket_frame_batch()
-                set_gpu_pocket_frame_batch(3l)
+                let batch_found = pocket_frame_batch()
+                set_pocket_frame_batch(3l)
                 let eb0 = gpu_encodes()
                 let f3 = forced_frames(m, k, k.x0, k.x1, sc)
                 let eb1 = gpu_encodes()
@@ -822,9 +777,9 @@ def test_pocket_frames_metal(t : T?) {   // nolint:STYLE038 — one case's legs,
                 let extra = eb1 - eb0 - batches3
                 t |> success(extra >= 0l && extra <= 1l, "{tag}: one tower encode a batch of three, and the codec's ({eb1 - eb0} encodes over {fc} frames, {batches3} or one more)")
                 t |> success(rel_rms(b3.lat, leg.cpu.lat) <= GPU_FRAME_BAR, "{tag}: batches of three land within {GPU_FRAME_BAR}")
-                set_gpu_pocket_frame_batch(0l)
-                t |> equal(gpu_pocket_frame_batch(), 1l, "{tag}: a batch below one clamps to one")
-                set_gpu_pocket_frame_batch(batch_found)
+                set_pocket_frame_batch(0l)
+                t |> equal(pocket_frame_batch(), 1l, "{tag}: a batch below one clamps to one")
+                set_pocket_frame_batch(batch_found)
                 register_pocket_gpu(PocketGpuDriver())   //! the seats taken by an empty record: the tower's registration is displaced
                 let ht0 = pocket_gpu_stats("frames")
                 let ft = forced_frames(m, k, k.x0, k.x1, sc)
@@ -859,12 +814,7 @@ def test_pocket_frames_metal_served(t : T?) {
         return
     }
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        with_job_que() {
-            setup_dasllama_jobque_()
-            let knob_found = gpu_knob()
-            defer() {
-                set_gpu(knob_found)
-            }
+        with_gpu_cell() {
             reset_pocket_q8()
             var files = 0
             for (path in [q8_gguf_path(), kq_gguf_path()]) {
@@ -903,12 +853,7 @@ def test_pocket_frames_after_model_drop(t : T?) {
         return
     }
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        with_job_que() {
-            setup_dasllama_jobque_()
-            let knob_found = gpu_knob()
-            defer() {
-                set_gpu(knob_found)
-            }
+        with_gpu_cell() {
             reset_pocket_q8()
             let path = q8_gguf_path()
             return if (!model_available(t, path))
@@ -942,8 +887,7 @@ def test_pocket_synthesis_metal(t : T?) {
         return
     }
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_gpu_cell() {
             reset_pocket_q8()   //! the served lane is the unpinned default, whatever an earlier cell left
             var inscope m <- load_tts_model(path)
             let text = "The tower serves the codec, and the words still land. Then it slept."
@@ -1543,16 +1487,14 @@ def test_pocket_long_chunk(t : T?) {
         var inscope ids <- pocket_text_ids(m.pocket, chunks[0])
         t |> success(length(ids) > POCKET_MAX_TOKENS, "{length(ids)} tokens: past the budget the caches were sized for")
         static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-            let knob_found = gpu_knob()
-            defer() {
-                set_gpu(knob_found)
+            with_gpu_knobs() {
+                set_gpu(true)
+                let d0 <- gpu_declines()
+                var inscope a <- synthesize(m, text, "alba")
+                t |> success(speech_stats(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")
+                let d1 <- gpu_declines()
+                t |> success((d1?["shape"] ?? 0l) - (d0?["shape"] ?? 0l) >= 1l, "the chunk past the codec seat's frame cap declines by shape, and the CPU codec speaks it")
             }
-            set_gpu(true)
-            let d0 <- gpu_declines()
-            var inscope a <- synthesize(m, text, "alba")
-            t |> success(speech_stats(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")
-            let d1 <- gpu_declines()
-            t |> success((d1?["shape"] ?? 0l) - (d0?["shape"] ?? 0l) >= 1l, "the chunk past the codec seat's frame cap declines by shape, and the CPU codec speaks it")
         } else {
             var inscope a <- synthesize(m, text, "alba")
             t |> success(speech_stats(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")

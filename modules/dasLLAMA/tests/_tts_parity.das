@@ -18,10 +18,10 @@ require ?das_metal dasllama/dasllama_metal_tower
 require ?vulkan dasllama/dasllama_vulkan_tower   // nolint:STYLE030,LINT019 — the Vulkan tower knob, read only inside the GPU half
 require ?vulkan dasllama/dasllama_vulkan_tts   // nolint:STYLE030,LINT019 — the Vulkan TTS driver's counters, read only inside the GPU half
 require daslib/jobque_boost
-require daslib/defer
 require daslib/linq
 require _tts_oracle
 require _model_tier
+require _gpu_knobs public
 
 // The parity rail both StyleTTS2 families run against their onnxruntime / PyTorch oracle
 // dumps (harness/kitten_oracle.py, harness/kokoro_oracle.py): the token ids against the
@@ -67,19 +67,7 @@ def tower_served(t : T?; msg, declines : string) : bool {
     return false
 }
 
-//! the tower knob as the cell found it
-def gpu_knob() : bool {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        return metal_tower_knob()
-    } else {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            return vulkan_tower_on()
-        } else {
-            return false
-        }
-    }
-}
-
+//! the serving driver's tower knob: the Metal tower's where das_metal is built in, else the Vulkan one's
 [unused_argument(on)]
 def set_gpu(on : bool) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -126,27 +114,11 @@ def gpu_declines() : table<string; int64> {
     }
 }
 
-//! the frames a Pocket submit carries before the host reads the EOS logits: the serving driver's batch knob
-def gpu_pocket_frame_batch() : int64 {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        return metal_pocket_frame_batch()
-    } else {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            return vulkan_pocket_frame_batch()
-        } else {
-            return 1l
-        }
-    }
-}
-
-[unused_argument(n)]
-def set_gpu_pocket_frame_batch(n : int64) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_pocket_frame_batch(n)
-    } else {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            set_vulkan_pocket_frame_batch(n)
-        }
+//! `body` on a set-up job queue, every GPU knob put back after as the cell found them
+def with_gpu_cell(body : block<() : void>) {
+    with_job_que() {
+        setup_dasllama_jobque_()
+        with_gpu_knobs(body)
     }
 }
 
@@ -287,8 +259,10 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     }
     var inscope wave : array<float>
     styletts2_generator(m.decoder, gen_in, cw, f2, s_ref, spec, frames, tr, wave, sc)
-    gpu_seam_check(t, m, tag, gen_in, cw, f2, s_ref, spec, frames, wave, sc)
-    gpu_stage_checks(t, m, m8, tag, dump, noise, sc)
+    with_gpu_knobs() {
+        gpu_seam_check(t, m, tag, gen_in, cw, f2, s_ref, spec, frames, wave, sc)
+        gpu_stage_checks(t, m, m8, tag, dump, noise, sc)
+    }
     stage_diff(t, "{tag} SEAM", "stft_re", tr.stft_re, dump)
     stage_diff(t, "{tag} SEAM", "ups0", tr.ups0, dump)
     stage_diff(t, "{tag} SEAM", "src0", tr.src0, dump)
@@ -309,10 +283,6 @@ def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : ar
                            frames : int64; wave_cpu : array<float>; var sc : St2Scratch) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         return if (!seat_present(t, tag, "generator"))
-        let knob_found = gpu_knob()
-        defer() {
-            set_gpu(knob_found)
-        }
         var inscope wave : array<float>
         let h0 = styletts2_generator_gpu_stats()
         let e0 = gpu_encodes()
@@ -427,10 +397,6 @@ def private seat_leg(t : T?; tag, stage : string; bar : float; var cpu : array<f
 [unused_argument(t, m, m8, tag, dump, noise, sc)]   // off-Apple the gated body is empty
 def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>; var noise : TtsNoise; var sc : St2Scratch) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        let knob_found = gpu_knob()
-        defer() {
-            set_gpu(knob_found)
-        }
         var inscope ids <- dump_i(dump, "input_ids")
         var inscope style <- dump_f(dump, "style")
         let hs = m.style_dim / 2l
@@ -489,10 +455,6 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
 [unused_argument(t, m, tag, ids, bert_c, ten_c, sc)]   // off-Apple the gated body is empty
 def private gpu_front_checks(t : T?; m : StyleTts2Model; tag : string; ids : array<int>; var bert_c, ten_c : array<float>; var sc : St2Scratch) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        let knob_found = gpu_knob()
-        defer() {
-            set_gpu(knob_found)
-        }
         var inscope rids <- [for (id in reverse(ids)); id]
         let albert_served = seat_leg(t, tag, "albert", GPU_ALBERT_BAR, bert_c) $(leg : TowerLeg; var out : array<float>) {
             styletts2_albert(m.albert, leg == TowerLeg.poisoned ? rids : ids, out, sc)
@@ -511,10 +473,6 @@ def private gpu_front_checks(t : T?; m : StyleTts2Model; tag : string; ids : arr
 def private gpu_prosody_check(t : T?; m : StyleTts2Model; tag : string; d_c : array<float>; n_tok : int64; dur_c : array<int>; frames : int64;
                               s_pro : array<float>; var f0_c, n_c : array<float>; var sc : St2Scratch) : int64 {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        let knob_found = gpu_knob()
-        defer() {
-            set_gpu(knob_found)
-        }
         let dc = m.predictor.bert_encoder.nout + m.style_dim / 2l
         var inscope en : array<float>
         align_expand_rows(d_c, n_tok, dc, dur_c, en)
@@ -545,10 +503,6 @@ def private gpu_prosody_check(t : T?; m : StyleTts2Model; tag : string; d_c : ar
 def private gpu_decode_check(t : T?; m : StyleTts2Model; tag : string; ten_c : array<float>; n_tok : int64; dur_c : array<int>; frames : int64;
                              f0_c, n_c : array<float>; f2 : int64; s_ref : array<float>; var noise : TtsNoise; var sc : St2Scratch; bar : float) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        let knob_found = gpu_knob()
-        defer() {
-            set_gpu(knob_found)
-        }
         var inscope asr : array<float>
         align_expand_channels(ten_c, m.text_encoder.c, n_tok, dur_c, asr)
         var tm = TtsTimings()
@@ -589,8 +543,7 @@ def private capture_noise(var noise : TtsNoise; nh, samples : int64; seed : uint
 def tts_gpu_synthesis(t : T?; path, text, voice : string) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         return if (tts_data_missing(t, path))
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_gpu_cell() {
             return if (!gpu_served_lane(t, path, text, voice))
             gpu_reference_lane(t, path, text, voice)
         }
@@ -628,15 +581,11 @@ def private seat_counters(kind : TtsKind; seats : array<string>) : array<tuple<c
     return <- [for (s in seats); seat_stats(kind, s)]
 }
 
-//! Knob off: each seat reached once a chunk, none served, one knob decline each; knob on: each but `unserved` served once a chunk; false where none served.
+//! Knob off: each seat reached once a chunk, none served, one knob decline each; knob on: each but `unserved` served once a chunk; false where none served. The knob stays on.
 [unused_argument(t, m, text, voice, msg, unserved, extra)]   // off-Apple the gated body is empty
 def served_lane_counters(t : T?; var m : TtsModel; text, voice, msg, unserved : string;
                          extra : block<(a, b : TtsAudio; chunks : int; encodes : int64) : void>) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        let knob_found = gpu_knob()
-        defer() {
-            set_gpu(knob_found)
-        }
         var inscope seats <- m.kind == TtsKind.pocket ? pocket_gpu_seats() : styletts2_gpu_seats()
         set_gpu(false)
         var inscope h0 <- seat_counters(m.kind, seats)
@@ -675,10 +624,6 @@ def served_lane_counters(t : T?; var m : TtsModel; text, voice, msg, unserved : 
 
 def private gpu_reference_lane(t : T?; path, text, voice : string) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        let knob_found = gpu_knob()
-        defer() {
-            set_gpu(knob_found)
-        }
         var inscope m <- mint_tts_model(path, false)   //! the f32 lane: the durations round as the CPU's only there
         set_gpu(false)
         var inscope sized <- synthesize(m, text, voice)   //! the untrimmed count the captured stream covers

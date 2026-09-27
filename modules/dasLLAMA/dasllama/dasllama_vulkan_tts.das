@@ -1636,14 +1636,6 @@ var private g_ts_pkf_scratch : TsScratch
 var private @scratch g_ts_pk_rows : array<int64>   //! the codec chain's row counts: the frames, the 200 Hz rows, each stage's rows
 var private @scratch g_ts_pk_kv_host : array<float>
 
-[cold_path]
-def set_vulkan_pocket_frame_batch(n : int64) {
-    set_pocket_frame_batch(n)
-}
-
-[cold_path]
-def vulkan_pocket_frame_batch() : int64 => pocket_frame_batch()
-
 def private ts_pk_codec_attach(mm : PocketMimi) : bool {
     let key = tts_pk_codec_key(mm)
     return ts_slab_current(g_ts_pk_codec, key) || ts_pk_codec_rebuild(mm, key)

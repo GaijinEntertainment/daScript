@@ -154,9 +154,9 @@ def test_ultravox_tower(t : T?) {
                 mel.data[i] = 1.0
             }
             var enc <- make_encoder_state(tw)
-            let tower_was_on = vulkan_tower_knob()
+            let knobs = gpu_knobs()
             defer() {
-                restore_every_gpu_tower(tower_was_on)
+                set_gpu_knobs(knobs)
             }
             set_every_gpu_tower(false)
             with_job_que() {
@@ -201,9 +201,9 @@ def test_voxtral_tower(t : T?) {
                 mel.data[i] = 1.0
             }
             var enc <- make_encoder_state(tw)
-            let tower_was_on = vulkan_tower_knob()
+            let knobs = gpu_knobs()
             defer() {
-                restore_every_gpu_tower(tower_was_on)
+                set_gpu_knobs(knobs)
             }
             set_every_gpu_tower(false)
             with_job_que() {
@@ -557,7 +557,7 @@ def private q3a_leg_state(tw : Qwen3aTower) : Q3aLegState {
 //! the device leg (the knob on) encodes the device mel's `dev_win`, the CPU legs the CPU mel's `win`
 [cold_path]
 def private q3a_twin_encode(tw : Qwen3aTower; var s : Q3aLegState; win, dev_win : MelChunk; var out : array<float>) : int64 {
-    if (vulkan_tower_knob()) {
+    if (gpu_knobs().vulkan_tower) {
         qwen3a_encode(tw, s.enc, s.conv, dev_win)
     } else {
         qwen3a_encode(tw, s.enc, s.conv, win)
@@ -742,13 +742,13 @@ def test_encoder_oracle(t : T?) {
             mel.data[i] = 1.0
         }
         var enc <- make_encoder_state(tw)
-        let tower_was_on = vulkan_tower_knob()
+        let knobs = gpu_knobs()
         set_every_gpu_tower(false)
         with_job_que() {
             setup_dasllama_jobque_()
             audio_encode(tw, enc, mel)
         }
-        restore_every_gpu_tower(tower_was_on)
+        set_gpu_knobs(knobs)
         // llama-mtmd-debug -p encode --audio one -n 3000 (CPU): token 0 opens
         // 0.251974 0.311756 0.556828 0.005232 -0.838854; stats mean=0.009261 max=7.527778.
         // fp32 CPU re-orders put us ~1e-3 off their flash-attn encoder; gate at 5e-3.
