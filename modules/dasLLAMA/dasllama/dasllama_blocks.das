@@ -1939,7 +1939,11 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     if (c.pre_post_norm) {
         rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
     }
-    add_batch(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    if (c.hyper_conn) {
+        block_resid_b(t, s, s.xb2_b, npos)
+    } else {
+        add_batch(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    }
     prof_add("act_resid", ts_resid)
 }
 
@@ -1961,8 +1965,7 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     let mx4_grouped_pays = !t.experts_mx4 || npos * c.n_expert_used >= 8l * c.n_expert
     // kq-expert layers ride grouped buckets via the kq batch tile; portable/no-kq backends take the per-position path
     let kq_grouped_ok = !moe_layer_sb_kq(t, l) || (t.kq_repacked && kernel_backend_has_kq_batch())
-    // the grouped path adds its rows straight into x_b - the hyper-connection scatter has no seam there
-    if (t.quant == QuantMode.q8 && g_moe_grouped_prefill && mx4_grouped_pays && kq_grouped_ok && !c.hyper_conn) {
+    if (t.quant == QuantMode.q8 && g_moe_grouped_prefill && mx4_grouped_pays && kq_grouped_ok) {
         ffn_moe_prefill_grouped(t, s, l, npos)
     } else {
         // per-position reference path — moe_ffn_core carries its own section buckets
