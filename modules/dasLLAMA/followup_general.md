@@ -1840,3 +1840,16 @@
     the 16 random 90-byte rows a token touches each faulting a 16 KB page from disk. The lever
     beyond the view is the gather on the device (the table as a Metal plane, the rows read where
     the key/value GEMMs consume them) or the table pinned resident where the box has the room.
+
+170. **The CPU decode of Qwen3.8-Flash-Next is compute-bound in the IQ3_S expert GEMVs.** On the
+    M5 Max at 18 threads the token reads 57 ms (17.5 tok/s in the profile window, 19.0 ± 0.2 on
+    the tg128 row; llama.cpp 19.9 ± 0.4). The forward buckets per token: the gate/up expert
+    GEMVs (`mm_moe`, IQ3_S) 22 ms for 14 MB of planes - 0.6 GB/s, a decode cost, not a
+    bandwidth one; the attention block 18 ms (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9); the
+    hyper-connection mixes 5.4 ms; the down expert GEMVs (`mm_moe_dn`, iq4nl32 on the gen family)
+    3.9 ms; the head 2.7 ms. The IQ3_S rail gathers each superblock's grid rows into a byte panel
+    before its dots (`emit_iq3s_gather`), and that gather is the token's largest cost. Done = a
+    per-bucket GB/s reading at the tg128 shape for every expert format the box serves, then the
+    IQ3_S gate/up path measured against a stated prediction - the grid gather off the packed
+    plane at the dot's width, or the expert stacks served in a byte-expanded form where the box
+    has the room - and the Flash-Next CPU tg128 row moved on the board.
