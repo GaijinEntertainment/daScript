@@ -168,7 +168,7 @@ def private pointers_in_line(line : string; scan_start, lineno : int; folder : s
                 stop ++
             }
             from = stop
-            //! prose `.md#` (no path or no name) and a web URL (`/`-led, or a dotted first segment) are not pointers; `./` and `../` lead a relative path
+            // prose `.md#` (no path or no name) and a web URL (`/`-led, or a dotted first segment) are not pointers; `./` and `../` lead a relative path
             continue if (stop == hash + 1 || start == ext || int(d[start]) == '/')
             let first_slash = find(line, "/", start)
             let first_seg = first_slash > start ? slice(d, start, first_slash) : ""
