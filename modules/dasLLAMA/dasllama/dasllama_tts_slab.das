@@ -699,14 +699,8 @@ def tts_source_shape(d : St2Decoder; cfg : SineSourceCfg; f2 : int64) : TtsSourc
     return sh
 }
 
-//! a row of `n` zeros; the element offset
-def tts_slab_zero(var w : TtsSlabWriter; n : int64) : int64 {
-    let at = tsw_alloc(w, n)
-    for (i in range64(n)) {
-        tsw_put(w, at + i, 0.0)
-    }
-    return at
-}
+//! a row of `n` zeros - an allocation alone, since the fill pass's host starts zeroed (`tts_slab_build`); the element offset
+def tts_slab_zero(var w : TtsSlabWriter; n : int64) : int64 => tsw_alloc(w, n)
 
 //! the head's residual block: its norm rows and three linears
 struct TtsPkHeadSlots {

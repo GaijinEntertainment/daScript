@@ -42,10 +42,7 @@ let private TS_LSTM_MAX_HIDDEN = int64(TTS_LSTM_LANES)   //! the recurrence stam
 def vulkan_tts_stats : tuple<encodes : int64; declines : int64> => (encodes = g_ts_encodes, declines = g_ts_declines.total)
 
 //! the declines by reason name
-def vulkan_tts_declines : table<string; int64> {
-    var out <- {for (k, v in keys(g_ts_declines.counts), values(g_ts_declines.counts)); k => v}
-    return <- out
-}
+def vulkan_tts_declines : table<string; int64> => clone_to_move(g_ts_declines.counts)
 
 def private ts_decline_words(why : VulkanTtsDecline) : string {
     if (why == VulkanTtsDecline.knob) {
@@ -71,12 +68,12 @@ struct private TsRows {
     bit : uint
 }
 
+//! a part's slab on the device: its f32 rows (read-only, bit 0) and, for the decoder, `rows16`, the halfword twin of the whole slab
+//! at the same element offsets - the f16 tile's feed; `rows16.dev` 0 = none
 struct private TsSlab {
     key : uint64
-    dev : uint64
-    bytes : int64
-    dev16 : uint64     //! the halfword twin of the whole slab at the same element offsets - the decoder's f16 tile feed; 0 = none
-    bytes16 : int64
+    rows : TsRows
+    rows16 : TsRows
 }
 
 var private g_ts_albert : TsSlab
@@ -87,22 +84,10 @@ var private g_ts_pred : TsSlab
 var private g_ts_pred_slots : TtsPredSlab
 
 def private ts_slab_release(var sl : TsSlab) {
-    if (sl.dev != 0ul) {
-        destroy_device_buf(sl.dev)
-    }
-    if (sl.dev16 != 0ul) {
-        destroy_device_buf(sl.dev16)
-    }
-    sl.dev = 0ul
-    sl.dev16 = 0ul
+    ts_rows_release(sl.rows)
+    ts_rows_release(sl.rows16)
     sl.key = 0ul
-    sl.bytes = 0l
-    sl.bytes16 = 0l
 }
-
-def private ts_slab_rows(sl : TsSlab) : TsRows => TsRows(dev = sl.dev, bytes = sl.bytes, bit = 0u)
-
-def private ts_slab_rows16(sl : TsSlab) : TsRows => TsRows(dev = sl.dev16, bytes = sl.bytes16, bit = 0u)
 
 //! `vk_range_ok`, the decline said under the info log naming `what`
 [cold_path]
@@ -112,30 +97,33 @@ def private ts_range_ok(what : string; bytes : int64) : bool {
     return false
 }
 
+//! the first `n` elements of `src` onto the rows at element 0
+def private ts_upload(r : TsRows; src : array<auto(TT)>; n : int64) {
+    upload_region(r.dev, unsafe(addr<uint8 const?>(src[0])), n * int64(typeinfo sizeof(type<TT>)))
+}
+
+//! the rows' first `n` floats back into `out`, sized to them, through the seat scratch's readback buffer
+def private ts_readback(r : TsRows; sc_ : TsScratch; @scratch @exact_size var out : array<float>; n : int64) {
+    unsafe(scratch_resize(out, n))
+    return if (n <= 0l)
+    var dst = unsafe(addr(out[0]))
+    readback_range(r.dev, r.bit, sc_.hb, dst, n * 4l)
+}
+
 //! the host floats onto the device under `key`, and under `half` their f16 image beside them; false on an allocation failure or a slab past the storage range
 [cold_path]
 def private ts_slab_upload(var sl : TsSlab; key : uint64; host : array<float>; half : bool) : bool {
     ts_slab_release(sl)
-    let bytes = long_length(host) * 4l
-    return false if (bytes <= 0l || !ts_range_ok("slab", bytes) || (half && !ts_range_ok("halfword slab", long_length(host) * 2l)))
-    var oom = false
-    sl.dev = soft_device_buf(oom, bytes)
-    return false if (oom || sl.dev == 0ul)
-    upload_region_at(sl.dev, 0l, unsafe(addr<uint8 const?>(host[0])), bytes)
-    sl.bytes = bytes
+    let n = long_length(host)
+    return false if (n <= 0l || !ts_rows_alloc(sl.rows, n * 4l, 0u, "slab"))
+    ts_upload(sl.rows, host, n)
     if (half) {
-        var inscope @exact_size slab16 : array<uint16>
-        slab16 |> reserve_resize(long_length(host))
-        unsafe {
-            cvt_f32_to_f16_sat(addr(slab16[0]), addr(host[0]), long_length(host))
-        }
-        sl.bytes16 = long_length(host) * 2l
-        sl.dev16 = soft_device_buf(oom, sl.bytes16)
-        if (oom || sl.dev16 == 0ul) {
+        var inscope slab16 <- cvt_f32_to_f16_sat_array(host)
+        if (!ts_rows_alloc(sl.rows16, n * 2l, 0u, "halfword slab")) {
             ts_slab_release(sl)
             return false
         }
-        upload_region_at(sl.dev16, 0l, unsafe(addr<uint8 const?>(slab16[0])), sl.bytes16)
+        ts_upload(sl.rows16, slab16, n)
     }
     sl.key = key
     return true
@@ -143,7 +131,7 @@ def private ts_slab_upload(var sl : TsSlab; key : uint64; host : array<float>; h
 
 def private ts_albert_attach(a : St2Albert) : bool {
     let key = tts_albert_key(a)
-    return true if (g_ts_albert.dev != 0ul && g_ts_albert.key == key)
+    return true if (g_ts_albert.rows.dev != 0ul && g_ts_albert.key == key)
     return ts_albert_rebuild(a, key)
 }
 
@@ -160,7 +148,7 @@ def private ts_albert_rebuild(a : St2Albert; key : uint64) : bool {
 
 def private ts_text_attach(te : St2TextEncoder) : bool {
     let key = tts_text_key(te)
-    return true if (g_ts_text.dev != 0ul && g_ts_text.key == key)
+    return true if (g_ts_text.rows.dev != 0ul && g_ts_text.key == key)
     return ts_text_rebuild(te, key)
 }
 
@@ -178,7 +166,7 @@ def private ts_text_rebuild(te : St2TextEncoder; key : uint64) : bool {
 
 def private ts_pred_attach(p : St2Predictor) : bool {
     let key = tts_pred_key(p)
-    return true if (g_ts_pred.dev != 0ul && g_ts_pred.key == key)
+    return true if (g_ts_pred.rows.dev != 0ul && g_ts_pred.key == key)
     return ts_pred_rebuild(p, key)
 }
 
@@ -263,14 +251,14 @@ def private ts_scratch_fits(s : TsScratch; floats : TsFloats; aux_floats, stats_
     return s.hb_bytes >= ts_hb_floats(floats, hb_floats) * 4l
 }
 
-//! `floats` floats on the device under `bit`, none at zero; false when the allocation failed or the rows would bind past the storage range
+//! `bytes` on the device under `bit`, none at zero; false when the allocation failed or the rows would bind past the storage range (said naming `what`)
 [cold_path]
-def private ts_rows_alloc(var r : TsRows; floats : int64; bit : uint) : bool {
+def private ts_rows_alloc(var r : TsRows; bytes : int64; bit : uint; what : string = "rows") : bool {
     r = TsRows(bit = bit)
-    return true if (floats <= 0l)
-    return false if (!ts_range_ok("rows", floats * 4l))
+    return true if (bytes <= 0l)
+    return false if (!ts_range_ok(what, bytes))
     var oom = false
-    r.bytes = floats * 4l
+    r.bytes = bytes
     r.dev = soft_device_buf(oom, r.bytes)
     return !oom && r.dev != 0ul
 }
@@ -305,7 +293,7 @@ def private ts_scratch_build(var s : TsScratch; floats : TsFloats; aux_floats, s
     let dev_us = get_time_usec(t0)
     s.hb_bytes = ts_grown(max(ts_hb_floats(floats, hb_floats), 1l)) * 4l
     s.hb = make_host_buf(s.hb_bytes, false, [cached = true, soft = true])
-    if (oom || s.hb.buf == 0ul || !ts_rows_alloc(s.aux, ts_grown(aux_floats), TS_AUX_BIT) || !ts_rows_alloc(s.stats, ts_grown(stats_floats), TS_STATS_BIT)) {
+    if (oom || s.hb.buf == 0ul || !ts_rows_alloc(s.aux, ts_grown(aux_floats) * 4l, TS_AUX_BIT) || !ts_rows_alloc(s.stats, ts_grown(stats_floats) * 4l, TS_STATS_BIT)) {
         ts_scratch_release(s)
         return false
     }
@@ -378,7 +366,7 @@ def private ts_aux_upload(s : TsScratch) : bool {
     let n = g_ts_aux_n
     return true if (n == 0l)
     return false if (n * 4l > s.aux.bytes)
-    upload_region_at(s.aux.dev, 0l, unsafe(addr<uint8 const?>(g_ts_aux_host[0])), n * 4l)
+    ts_upload(s.aux, g_ts_aux_host, n)
     return true
 }
 
@@ -386,25 +374,23 @@ def private ts_gemm_args(slot : TtsConvSlot; nin, nout, rows : int64) : F32GemmA
     => F32GemmArgs(n = uint(nin), d = uint(nout), rows = uint(rows), woff = uint(slot.woff), wstride = uint(slot.kdim_p), boff = uint(slot.boff),
         xoff = 0u, xstride = uint(nin), yoff = 0u, ystride = uint(nout))
 
-//! a dense linear's GEMM: y[rows x nout] = x[rows x nin] W^T + b over the slab's rows, the f32 tile
-def private ts_lin(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : TtsConvSlot; nin, nout : int64; x, y : TsRows; rows : int64) {
-    var s = set_f32_gemm_b_cls(fixed_array(slab.dev, x.dev, y.dev, slab.dev), fixed_array(slab.bytes, x.bytes, y.bytes, slab.bytes), fixed_array(0u, x.bit, y.bit, 0u))
+//! a dense linear's GEMM: y[rows x nout] = x[rows x nin] W^T + b over the slab's rows, the f32 tile; `biased` false leaves the bias row for the
+//! residual seam that follows (`ts_add_ln` adds it there)
+def private ts_lin(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : TtsConvSlot; nin, nout : int64; x, y : TsRows; rows : int64; biased : bool = true) {
     var pa = ts_gemm_args(slot, nin, nout, rows)
-    enc_f32_gemm_b_cls(raw, h, s, pa, f32_gemm_wgs(rows, nout))
+    if (biased) {
+        var s = set_f32_gemm_b_cls(fixed_array(slab.dev, x.dev, y.dev, slab.dev), fixed_array(slab.bytes, x.bytes, y.bytes, slab.bytes), fixed_array(0u, x.bit, y.bit, 0u))
+        enc_f32_gemm_b_cls(raw, h, s, pa, f32_gemm_wgs(rows, nout))
+    } else {
+        var s = set_f32_gemm_cls(fixed_array(slab.dev, x.dev, y.dev), fixed_array(slab.bytes, x.bytes, y.bytes), fixed_array(0u, x.bit, y.bit))
+        enc_f32_gemm_cls(raw, h, s, pa, f32_gemm_wgs(rows, nout))
+    }
     vt_pt(raw, VtProfRole.tts_gemm)
 }
 
-//! the same GEMM with its bias row left for the residual seam that follows it (`ts_add_ln` adds it there)
-def private ts_lin_branch(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : TtsConvSlot; nin, nout : int64; x, y : TsRows; rows : int64) {
-    var s = set_f32_gemm_cls(fixed_array(slab.dev, x.dev, y.dev), fixed_array(slab.bytes, x.bytes, y.bytes), fixed_array(0u, x.bit, y.bit))
-    var pa = ts_gemm_args(slot, nin, nout, rows)
-    enc_f32_gemm_cls(raw, h, s, pa, f32_gemm_wgs(rows, nout))
-    vt_pt(raw, VtProfRole.tts_gemm)
-}
-
-//! layernorm rows in place against a norm slot's scale and shift rows
-def private ts_ln(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; ns : TtsNormSlot; x : TsRows; rows, d : int64; eps : float) {
-    ts_ln_at(raw, h, slab, ns.gwoff, ns.gboff, x, x, rows, d, eps)
+//! layernorm rows from x into y (y may be x) against a norm slot's scale and shift rows
+def private ts_ln(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; ns : TtsNormSlot; x, y : TsRows; rows, d : int64; eps : float) {
+    ts_ln_at(raw, h, slab, ns.gwoff, ns.gboff, x, y, rows, d, eps)
 }
 
 //! layernorm rows from x into y (y may be x) against scale and shift rows at `woff` / `boff` of `wn` (the slab, or the aux rows fc(style) landed in)
@@ -436,13 +422,23 @@ def private ts_conv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : 
     ts_conv_padded(raw, h, slab, slot, cv, tin, tout, cv.pad_l, x, col, y)
 }
 
-//! the same under a left pad of the caller's choosing (the codec convs run the CPU's first-window pad, not the conv's own)
-def private ts_conv_padded(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : TtsConvSlot; cv : TtsConv1d; tin, tout, pad_l : int64; x, col, y : TsRows) {
-    var sc = set_tts_im2col_cls(fixed_array(x.dev, col.dev), fixed_array(x.bytes, col.bytes), fixed_array(x.bit, col.bit))
+//! x [tin][cin] gathered into col [tout][kdim_p] under the left pad `pad_l`, the columns as halves under `half`
+def private ts_im2col(raw : VkCommandBuffer; var h : VkHaz; slot : TtsConvSlot; cv : TtsConv1d; tin, tout, pad_l : int64; x, col : TsRows; half : bool) {
     var pc = TtsIm2colArgs(cin = uint(cv.cin), tin = uint(tin), tout = uint(tout), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(pad_l),
         dilation = uint(cv.dilation), transposed = cv.transposed ? 1u : 0u, kdim = uint(slot.kdim_p), xoff = 0u, coloff = 0u, rows = 1u)
-    enc_tts_im2col_cls(raw, h, sc, pc, tout * slot.kdim_p)
+    if (half) {
+        var sc = set_tts_im2col16_cls(fixed_array(x.dev, col.dev), fixed_array(x.bytes, col.bytes), fixed_array(x.bit, col.bit))
+        enc_tts_im2col16_cls(raw, h, sc, pc, tout * slot.kdim_p)
+    } else {
+        var sc = set_tts_im2col_cls(fixed_array(x.dev, col.dev), fixed_array(x.bytes, col.bytes), fixed_array(x.bit, col.bit))
+        enc_tts_im2col_cls(raw, h, sc, pc, tout * slot.kdim_p)
+    }
     vt_pt(raw, VtProfRole.tts_im2col)
+}
+
+//! the same under a left pad of the caller's choosing (the codec convs run the CPU's first-window pad, not the conv's own)
+def private ts_conv_padded(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : TtsConvSlot; cv : TtsConv1d; tin, tout, pad_l : int64; x, col, y : TsRows) {
+    ts_im2col(raw, h, slot, cv, tin, tout, pad_l, x, col, false)
     var sm = set_f32_gemm_b_cls(fixed_array(slab.dev, col.dev, y.dev, slab.dev), fixed_array(slab.bytes, col.bytes, y.bytes, slab.bytes), fixed_array(0u, col.bit, y.bit, 0u))
     var pm = F32GemmArgs(n = uint(cv.k * cv.cin), d = uint(cv.cout), rows = uint(tout), woff = uint(slot.woff), wstride = uint(slot.kdim_p), boff = uint(slot.boff),
         xoff = 0u, xstride = uint(slot.kdim_p), yoff = 0u, ystride = uint(cv.cout))
@@ -450,37 +446,27 @@ def private ts_conv_padded(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
     vt_pt(raw, VtProfRole.tts_gemm)
 }
 
-def private ts_f16_tile_khr : bool => g_gpu.coopmat_mode != COOPMAT_CM2
-
-//! the f16 tile serves on a cm2 device or where the KHR tile does (`khr_kq_tile_on`: cooperative matrices at subgroup 32); elsewhere every conv rides the f32 tile
-def private ts_f16_tile_on : bool => g_gpu.coopmat_mode == COOPMAT_CM2 || khr_kq_tile_on()
-
 //! the recurrence stamp's workgroup is four invocations a lane; a device whose compute limit is under that declines the LSTM seats
 def private ts_lstm_wg_ok : bool => g_gpu.dry || g_gpu.max_wg_invocations >= 4l * int64(TTS_LSTM_LANES)
 
 //! a conv on rows through the f16 tile over the decoder slab's halfword twin: col16 [tout][kdim_p] as halves, y [tout][cout], the bias after
 def private ts_conv16(raw : VkCommandBuffer; var h : VkHaz; slab, slab16 : TsRows; slot : TtsConvSlot; cv : TtsConv1d; tin, tout : int64; x, col16, y : TsRows) {
-    var sc = set_tts_im2col16_cls(fixed_array(x.dev, col16.dev), fixed_array(x.bytes, col16.bytes), fixed_array(x.bit, col16.bit))
-    var pc = TtsIm2colArgs(cin = uint(cv.cin), tin = uint(tin), tout = uint(tout), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(cv.pad_l),
-        dilation = uint(cv.dilation), transposed = cv.transposed ? 1u : 0u, kdim = uint(slot.kdim_p), xoff = 0u, coloff = 0u, rows = 1u)
-    enc_tts_im2col16_cls(raw, h, sc, pc, tout * slot.kdim_p)
-    vt_pt(raw, VtProfRole.tts_im2col)
-    let khr = ts_f16_tile_khr()
+    ts_im2col(raw, h, slot, cv, tin, tout, cv.pad_l, x, col16, true)
+    let khr = f16_gemm_khr()
     var sm = f16_gemm_set(khr, fixed_array(slab16.dev, col16.dev, y.dev), fixed_array(slab16.bytes, col16.bytes, y.bytes), fixed_array(0u, col16.bit, y.bit))
     var pm = F16GemmArgs(n = uint(slot.kdim_p), d = uint(cv.cout), rows = uint(tout), woff = uint(slot.woff), ybase = 0u, ystride = uint(cv.cout), ksplit = 0u)
     f16_gemm_enc(khr, raw, h, sm, pm, tout, cv.cout)
     vt_pt(raw, VtProfRole.tts_gemm)
     var sb = set_tower_bias_act_cls(fixed_array(y.dev, slab.dev), fixed_array(y.bytes, slab.bytes), fixed_array(y.bit, 0u))
-    var pb = TowerBiasArgs(d = uint(cv.cout), nelem = uint(tout * cv.cout), boff = uint(slot.boff), act = BIAS_ACT_NONE)
-    enc_tower_bias_act_cls(raw, h, sb, pb, (tout * cv.cout / 4l + 255l) / 256l)
+    vt_bias_act(raw, h, sb, cv.cout, tout * cv.cout, slot.boff, BIAS_ACT_NONE)
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
 //! a conv on rows: under `half`, a width on the bias pass's four lattice rides the f16 tile; every other conv the f32 tile
 def private ts_conv_at(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : TtsConvSlot; cv : TtsConv1d; tin, tout : int64; x, col, col16, y : TsRows;
                        half : bool) {
-    if (half && ts_f16_tile_on() && g_ts_dec.dev16 != 0ul && col16.dev != 0ul && cv.cout % 4l == 0l && cv.cout >= 16l) {
-        ts_conv16(raw, h, slab, ts_slab_rows16(g_ts_dec), slot, cv, tin, tout, x, col16, y)
+    if (half && f16_gemm_on() && g_ts_dec.rows16.dev != 0ul && col16.dev != 0ul && cv.cout % 4l == 0l && cv.cout >= 16l) {
+        ts_conv16(raw, h, slab, g_ts_dec.rows16, slot, cv, tin, tout, x, col16, y)
     } else {
         ts_conv(raw, h, slab, slot, cv, tin, tout, x, col, y)
     }
@@ -560,7 +546,7 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     }
     let sl & = g_ts_albert_slots
     let sc_ & = g_ts_albert_scratch
-    let slab = ts_slab_rows(g_ts_albert)
+    let slab = g_ts_albert.rows
     let r_ids = ts_rows(sc_, TS_A_IDS)
     let r_e = ts_rows(sc_, TS_A_E)
     let r_x = ts_rows(sc_, TS_A_X)
@@ -571,7 +557,7 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     let r_v = ts_rows(sc_, TS_A_V)
     let r_ffn = ts_rows(sc_, TS_A_FFN)
     let r_f2 = ts_rows(sc_, TS_A_F2)
-    upload_region_at(r_ids.dev, 0l, unsafe(addr<uint8 const?>(ids[0])), t * 4l)
+    ts_upload(r_ids, ids, t)
     var s_gather = set_tts_row_gather_cls(fixed_array(slab.dev, r_ids.dev, r_e.dev), fixed_array(slab.bytes, r_ids.bytes, r_e.bytes), fixed_array(0u, r_ids.bit, r_e.bit))
     var s_attn = set_tts_attn_cls(fixed_array(r_q.dev, r_k.dev, r_v.dev, r_xb2.dev), fixed_array(r_q.bytes, r_k.bytes, r_v.bytes, r_xb2.bytes),
         fixed_array(r_q.bit, r_k.bit, r_v.bit, r_xb2.bit))
@@ -586,7 +572,7 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     vt_chain_one_shot("albert", a.n_layers, t) $(raw : VkCommandBuffer; var h : VkHaz) {
         enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, t * a.emb_dim)
         vt_pt(raw, VtProfRole.tts_rows)
-        ts_ln(raw, h, slab, sl.emb_ln, r_e, t, a.emb_dim, eps)
+        ts_ln(raw, h, slab, sl.emb_ln, r_e, r_e, t, a.emb_dim, eps)
         ts_lin(raw, h, slab, sl.map_in, a.emb_dim, d, r_e, r_x, t)
         for (_l in range64(a.n_layers)) {
             ts_lin(raw, h, slab, sl.q, d, d, r_x, r_q, t)
@@ -594,18 +580,16 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
             ts_lin(raw, h, slab, sl.v, d, d, r_x, r_v, t)
             enc_tts_attn_cls(raw, h, s_attn, pa_attn, tts_attn_wgs(t, a.heads))
             vt_pt(raw, VtProfRole.tts_attn)
-            ts_lin_branch(raw, h, slab, sl.dense, d, d, r_xb2, r_xb, t)
+            ts_lin(raw, h, slab, sl.dense, d, d, r_xb2, r_xb, t, false)
             ts_add_ln(raw, h, slab, sl.dense, sl.attn_ln, r_x, r_xb, r_xb2, t, d, eps)
             ts_lin(raw, h, slab, sl.ffn, d, ff, r_xb2, r_ffn, t)
             enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, t * ff)
             vt_pt(raw, VtProfRole.tts_act)
-            ts_lin_branch(raw, h, slab, sl.ffn_out, ff, d, r_ffn, r_f2, t)
+            ts_lin(raw, h, slab, sl.ffn_out, ff, d, r_ffn, r_f2, t, false)
             ts_add_ln(raw, h, slab, sl.ffn_out, sl.full_ln, r_xb2, r_f2, r_x, t, d, eps)
         }
     }
-    unsafe(scratch_resize(out, t * d))
-    var dst = unsafe(addr(out[0]))
-    readback_range(r_x.dev, r_x.bit, sc_.hb, dst, t * d * 4l)
+    ts_readback(r_x, sc_, out, t * d)
     g_ts_encodes++
     return true
 }
@@ -672,7 +656,7 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     }
     let sl & = g_ts_text_slots
     let sc_ & = g_ts_text_scratch
-    let slab = ts_slab_rows(g_ts_text)
+    let slab = g_ts_text.rows
     let r_ids = ts_rows(sc_, TS_T_IDS)
     let r_a = ts_rows(sc_, TS_T_A)
     let r_b = ts_rows(sc_, TS_T_B)
@@ -680,7 +664,7 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     let r_gf = ts_rows(sc_, TS_T_GF)
     let r_gb = ts_rows(sc_, TS_T_GB)
     let r_y = ts_rows(sc_, TS_T_Y)
-    upload_region_at(r_ids.dev, 0l, unsafe(addr<uint8 const?>(ids[0])), t * 4l)
+    ts_upload(r_ids, ids, t)
     var s_gather = set_tts_row_gather_cls(fixed_array(slab.dev, r_ids.dev, r_a.dev), fixed_array(slab.bytes, r_ids.bytes, r_a.bytes), fixed_array(0u, r_ids.bit, r_a.bit))
     var pa_gather = TtsGatherArgs(c = uint(cc), rows = uint(t), word_off = uint(sl.emb), pos_off = 0u, type_off = 0u, out_off = 0u, adds = 0u)
     let ncnn = length(te.cnn)
@@ -691,16 +675,14 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
             let src = i % 2 == 0 ? r_a : r_b
             let dst = i % 2 == 0 ? r_b : r_a
             ts_conv(raw, h, slab, sl.cnn[i], te.cnn[i], t, t, src, r_col, dst)
-            ts_ln(raw, h, slab, sl.ln[i], dst, t, cc, ST2_ADAIN_EPS)
+            ts_ln(raw, h, slab, sl.ln[i], dst, dst, t, cc, ST2_ADAIN_EPS)
             ts_leaky(raw, h, dst, t * cc, 0.2)
         }
         let fin = ncnn % 2 == 1 ? r_b : r_a
         ts_bilstm(raw, h, slab, sl.lstm, te.lstm, t, fin, r_gf, r_gb, r_y)
     }
     var rows & = unsafe(sc.te_a)
-    unsafe(scratch_resize(rows, t * cc))
-    var dst = unsafe(addr(rows[0]))
-    readback_range(r_y.dev, r_y.bit, sc_.hb, dst, t * cc * 4l)
+    ts_readback(r_y, sc_, rows, t * cc)
     unsafe(scratch_resize(out, cc * t))
     transpose_tc(rows, t, cc, out)
     g_ts_encodes++
@@ -710,11 +692,6 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
 let private TS_JOIN = 0.70710678118654752   //! the AdaIN residual blocks' join: (out + shortcut) / sqrt 2
 let private TS_MAX_DE_LSTMS = 8              //! the duration encoder's LSTM stack the seat holds style rows for
 let private TS_MAX_RES_BLOCKS = 8            //! ... and a prosody branch's residual blocks
-
-//! layernorm rows in place against scale and shift rows at `woff` / `boff` of `wn`
-def private ts_ln_rows(raw : VkCommandBuffer; var h : VkHaz; wn : TsRows; woff, boff : int64; x : TsRows; rows, d : int64; eps : float) {
-    ts_ln_at(raw, h, wn, woff, boff, x, x, rows, d, eps)
-}
 
 //! o [rows][width] = cat(x [rows][c], the res rows, the f0 and n columns) zero-padded, as `pa` lays them (rs = 0 broadcasts one res row)
 def private ts_concat(raw : VkCommandBuffer; var h : VkHaz; x, res, f0, nd, o : TsRows; pa : TtsConcatArgs) {
@@ -849,7 +826,7 @@ def private vulkan_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : 
     }
     let sl & = g_ts_pred_slots
     let sc_ & = g_ts_de_scratch
-    let slab = ts_slab_rows(g_ts_pred)
+    let slab = g_ts_pred.rows
     let r_bert = ts_rows(sc_, TS_DE_BERT)
     let r_den = ts_rows(sc_, TS_DE_DEN)
     let r_x = ts_rows(sc_, TS_DE_X)
@@ -866,20 +843,18 @@ def private vulkan_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : 
     if (!ts_aux_upload(sc_)) {
         return ts_decline("dur_enc", VulkanTtsDecline.memory)
     }
-    upload_region_at(r_bert.dev, 0l, unsafe(addr<uint8 const?>(bert[0])), t * hidden * 4l)
+    ts_upload(r_bert, bert, t * hidden)
     let pa_cat = TtsConcatArgs(c = uint(cc), rc = uint(sd), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(width), rows = uint(t))
     vt_chain_one_shot("dur_enc", int64(nl), t) $(raw : VkCommandBuffer; var h : VkHaz) {
         ts_lin(raw, h, slab, sl.bert_enc, hidden, cc, r_bert, r_den, t)
         ts_concat(raw, h, r_den, aux, aux, aux, r_x, pa_cat)
         for (i in range(nl)) {
             ts_bilstm(raw, h, slab, sl.de_lstm[i], p.lstms[i], t, r_x, r_gf, r_gb, r_y)
-            ts_ln_rows(raw, h, aux, hoff[i], hoff[i] + cc, r_y, t, cc, ST2_ADAIN_EPS)
+            ts_ln_at(raw, h, aux, hoff[i], hoff[i] + cc, r_y, r_y, t, cc, ST2_ADAIN_EPS)
             ts_concat(raw, h, r_y, aux, aux, aux, r_x, pa_cat)
         }
     }
-    unsafe(scratch_resize(out, t * width))
-    var dst = unsafe(addr(out[0]))
-    readback_range(r_x.dev, r_x.bit, sc_.hb, dst, t * width * 4l)
+    ts_readback(r_x, sc_, out, t * width)
     g_ts_encodes++
     return true
 }
@@ -918,22 +893,20 @@ def private vulkan_styletts2_durations(p : St2Predictor; d : array<float>; t : i
     }
     let sl & = g_ts_pred_slots
     let sc_ & = g_ts_du_scratch
-    let slab = ts_slab_rows(g_ts_pred)
+    let slab = g_ts_pred.rows
     let r_d = ts_rows(sc_, TS_DU_D)
     let r_y = ts_rows(sc_, TS_DU_Y)
     let r_gf = ts_rows(sc_, TS_DU_GF)
     let r_gb = ts_rows(sc_, TS_DU_GB)
     let r_log = ts_rows(sc_, TS_DU_LOG)
     let r_raw = ts_rows(sc_, TS_DU_RAW)
-    upload_region_at(r_d.dev, 0l, unsafe(addr<uint8 const?>(d[0])), t * width * 4l)
+    ts_upload(r_d, d, t * width)
     vt_chain_one_shot("durations", 1l, t) $(raw_ : VkCommandBuffer; var h : VkHaz) {
         ts_bilstm(raw_, h, slab, sl.dur_lstm, p.lstm, t, r_d, r_gf, r_gb, r_y)
         ts_lin(raw_, h, slab, sl.dur_proj, 2l * hd, nb, r_y, r_log, t)
         ts_sigsum(raw_, h, r_log, r_raw, t, nb, speed)
     }
-    unsafe(scratch_resize(raw, t))
-    var dst = unsafe(addr(raw[0]))
-    readback_range(r_raw.dev, r_raw.bit, sc_.hb, dst, t * 4l)
+    ts_readback(r_raw, sc_, raw, t)
     g_ts_encodes++
     return true
 }
@@ -979,12 +952,13 @@ let private TS_COL16_SLACK_ROWS = 64l   //! the half column slot's rows past a c
 //! the half column slot's floats: the widest im2col as halves, the slack rows past it
 def private ts_col16_floats(sh : TsShape) : int64 => (sh.col + TS_COL16_SLACK_ROWS * sh.kdim) / 2l + 1l
 
-//! a residual block's rows form on the seat, or -1: the block's output row count, the shape noted
-def private ts_res_shape(var sh : TsShape; b : St2AdainResBlk; t : int64) : int64 {
+//! a residual block's rows form on the seat, its norms reading a style `sd` wide, or -1: the block's output row count, the shape noted
+def private ts_res_shape(var sh : TsShape; b : St2AdainResBlk; t, sd : int64) : int64 {
     return -1l if (b.dim_in_s % 32l != 0l || b.dim_out % 64l != 0l || b.dim_in_s < b.dim_in || !tts_res_ok(b) || b.conv1.transposed || b.conv2.transposed
         || b.conv1.cin != b.dim_in_s || b.conv1.cout != b.dim_out || b.conv2.cin != b.dim_out || b.conv2.cout != b.dim_out
         || (b.learned_sc && (b.conv1x1.transposed || b.conv1x1.cout != b.dim_out || b.conv1x1.cin != b.dim_in_s))
-        || !tts_lin_ok(b.norm1.fc) || b.norm1.fc.nout != 2l * b.dim_in_s || !tts_lin_ok(b.norm2.fc) || b.norm2.fc.nout != 2l * b.dim_out)
+        || !tts_lin_ok(b.norm1.fc) || b.norm1.fc.nout != 2l * b.dim_in_s || !tts_lin_ok(b.norm2.fc) || b.norm2.fc.nout != 2l * b.dim_out
+        || b.norm1.fc.nin != sd || b.norm2.fc.nin != sd)
     var t1 = t
     if (b.upsample) {
         return -1l if (b.pool.groups != b.pool.cin || b.pool.cin != b.pool.cout || !b.pool.transposed || empty(b.pool.w) || b.pool.cin != b.dim_in_s)
@@ -1004,13 +978,13 @@ def private ts_res_shape(var sh : TsShape; b : St2AdainResBlk; t : int64) : int6
 }
 
 //! a branch's blocks then its projection on the seat, or -1: the projection's row count
-def private ts_branch_shape(var sh : TsShape; blocks : array<St2AdainResBlk>; proj : TtsConv1d; frames, cin : int64) : int64 {
+def private ts_branch_shape(var sh : TsShape; blocks : array<St2AdainResBlk>; proj : TtsConv1d; frames, cin, sd : int64) : int64 {
     return -1l if (length(blocks) > TS_MAX_RES_BLOCKS || !tts_conv_ok(proj) || proj.transposed || proj.cout != 1l)
     var t = frames
     var c = cin
     for (b in blocks) {
         return -1l if (b.dim_in_s != c)
-        t = ts_res_shape(sh, b, t)
+        t = ts_res_shape(sh, b, t, sd)
         return -1l if (t < 0l)
         c = b.dim_out
     }
@@ -1114,14 +1088,18 @@ def private ts_pr_floats(sh : TsShape; cc, hd, frames : int64) : TsFloats {
 def private ts_pr_style_rows(p : St2Predictor; s : array<float>; var hoffs : int64[TS_MAX_RES_BLOCKS * 4]; nbase : int; sc_ : TsScratch) : bool {
     ts_aux_reset()
     for (i in range(length(p.f0))) {
-        hoffs[2 * i] = ts_style_rows(p.f0[i].norm1.fc, s, p.f0[i].dim_in_s, false)
-        hoffs[2 * i + 1] = ts_style_rows(p.f0[i].norm2.fc, s, p.f0[i].dim_out, false)
+        ts_res_style_rows(hoffs, 2 * i, p.f0[i], s)
     }
     for (i in range(length(p.n))) {
-        hoffs[nbase + 2 * i] = ts_style_rows(p.n[i].norm1.fc, s, p.n[i].dim_in_s, false)
-        hoffs[nbase + 2 * i + 1] = ts_style_rows(p.n[i].norm2.fc, s, p.n[i].dim_out, false)
+        ts_res_style_rows(hoffs, nbase + 2 * i, p.n[i], s)
     }
     return ts_aux_upload(sc_)
+}
+
+//! an AdaIN residual block's two norms' fc(style) staged, their offsets into `hoffs[at]` and `hoffs[at + 1]`
+def private ts_res_style_rows(var hoffs : auto(HA); at : int; b : St2AdainResBlk; s : array<float>) {
+    hoffs[at] = ts_style_rows(b.norm1.fc, s, b.dim_in_s, false)
+    hoffs[at + 1] = ts_style_rows(b.norm2.fc, s, b.dim_out, false)
 }
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
@@ -1137,16 +1115,10 @@ def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fr
         || !tts_pred_ok(p, TS_LSTM_MAX_HIDDEN)) {
         return ts_decline("prosody", VulkanTtsDecline.shape)
     }
-    let tf = ts_branch_shape(sh, p.f0, p.f0_proj, frames, 2l * hd)
-    let tn = ts_branch_shape(sh, p.n, p.n_proj, frames, 2l * hd)
+    let tf = ts_branch_shape(sh, p.f0, p.f0_proj, frames, 2l * hd, sd)
+    let tn = ts_branch_shape(sh, p.n, p.n_proj, frames, 2l * hd, sd)
     if (tf < 0l || tn < 0l || tf != tn) {
         return ts_decline("prosody", VulkanTtsDecline.shape)
-    }
-    for (b in p.f0) {
-        return ts_decline("prosody", VulkanTtsDecline.shape) if (b.norm1.fc.nin != sd || b.norm2.fc.nin != sd)
-    }
-    for (b in p.n) {
-        return ts_decline("prosody", VulkanTtsDecline.shape) if (b.norm1.fc.nin != sd || b.norm2.fc.nin != sd)
     }
     if (!vulkan_tower_arms() || !ts_pred_ensure()) {
         return ts_decline("prosody", VulkanTtsDecline.device)
@@ -1157,7 +1129,7 @@ def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fr
     }
     let sl & = g_ts_pred_slots
     let sc_ & = g_ts_pr_scratch
-    let slab = ts_slab_rows(g_ts_pred)
+    let slab = g_ts_pred.rows
     let r_en = ts_rows(sc_, TS_PR_EN)
     let r_y = ts_rows(sc_, TS_PR_Y)
     let r_gf = ts_rows(sc_, TS_PR_GF)
@@ -1170,25 +1142,17 @@ def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fr
     if (!ts_pr_style_rows(p, s, hoffs, nbase, sc_)) {
         return ts_decline("prosody", VulkanTtsDecline.memory)
     }
-    g_ts_idx_host |> ensure_length(sh.t_max)
-    for (i in range64(sh.t_max)) {
-        g_ts_idx_host[i] = int(i / 2l)
-    }
-    upload_region_at(r_idx.dev, 0l, unsafe(addr<uint8 const?>(g_ts_idx_host[0])), sh.t_max * 4l)
+    ts_idx_upload(r_idx, sh.t_max)
     var en_tm & = unsafe(sc.pr_en_tm)
     transpose_ct(en, cc, frames, en_tm)
-    upload_region_at(r_en.dev, 0l, unsafe(addr<uint8 const?>(en_tm[0])), frames * cc * 4l)
+    ts_upload(r_en, en_tm, frames * cc)
     vt_chain_one_shot("prosody", int64(length(p.f0) + length(p.n)), frames) $(raw : VkCommandBuffer; var h : VkHaz) {
         ts_bilstm(raw, h, slab, sl.sh_lstm, p.shared_lstm, frames, r_en, r_gf, r_gb, r_y)
         ts_branch(raw, h, slab, sc_, p.f0, sl.f0b, p.f0_proj, sl.f0_proj, hoffs, 0, r_y, frames, r_f0)
         ts_branch(raw, h, slab, sc_, p.n, sl.nb, p.n_proj, sl.n_proj, hoffs, nbase, r_y, frames, r_n)
     }
-    unsafe(scratch_resize(f0, tf))
-    unsafe(scratch_resize(n, tn))
-    var dst_f0 = unsafe(addr(f0[0]))
-    readback_range(r_f0.dev, r_f0.bit, sc_.hb, dst_f0, tf * 4l)
-    var dst_n = unsafe(addr(n[0]))
-    readback_range(r_n.dev, r_n.bit, sc_.hb, dst_n, tn * 4l)
+    ts_readback(r_f0, sc_, f0, tf)
+    ts_readback(r_n, sc_, n, tn)
     f2 = tf
     g_ts_encodes++
     return true
@@ -1204,7 +1168,7 @@ let private TS_MAX_STAGES = 8l   //! the generator stages the seat holds slots f
 
 def private ts_dec_attach(d : St2Decoder) : bool {
     let key = tts_dec_key(d)
-    return true if (g_ts_dec.dev != 0ul && g_ts_dec.key == key)
+    return true if (g_ts_dec.rows.dev != 0ul && g_ts_dec.key == key)
     return ts_dec_rebuild(d, key)
 }
 
@@ -1214,7 +1178,7 @@ def private ts_dec_rebuild(d : St2Decoder; key : uint64) : bool {
     var inscope host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsDecSlab) {
         tts_dec_write(w, d, s)
     }
-    return false if (!ts_slab_upload(g_ts_dec, key, host, ts_f16_tile_on()))
+    return false if (!ts_slab_upload(g_ts_dec, key, host, f16_gemm_on()))
     delete g_ts_dec_slots
     g_ts_dec_slots <- slots
     return true
@@ -1339,18 +1303,17 @@ def private ts_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceC
         || conv1d_out_len(d.asr_res, frames) != frames || d.encode.dim_in != text_c + 2l || !ts_source_shape(d, source, f2, sh)
         || bwd.cin != d.bins || bwd.cout != 1l || !bwd.transposed || empty(bwd.wt) || d.stft_bwd_im.k != bwd.k
         || (d.istft_envelope && long_length(d.window.a) < bwd.k) || (noise.captured && long_length(noise.normal) < sh.samples * source.n_harm)
-        || long_length(noise.uniform) < source.n_harm || d.encode.norm1.fc.nin != sd || d.encode.norm2.fc.nin != sd || !tts_dec_ok(d))
+        || long_length(noise.uniform) < source.n_harm || !tts_dec_ok(d))
     sh.blk = TsShape(t_max = frames, c_max = max(text_c, d.encode.dim_in_s), col = 32l, aux = 8l)
     ts_note_col(sh.blk, d.f0_conv, frames)
     ts_note_col(sh.blk, d.n_conv, frames)
     ts_note_col(sh.blk, d.asr_res, frames)
-    sh.dec_rows = ts_res_shape(sh.blk, d.encode, frames)
+    sh.dec_rows = ts_res_shape(sh.blk, d.encode, frames, sd)
     return false if (sh.dec_rows < 0l || length(d.decode) > TS_MAX_RES_BLOCKS)
     sh.dec_width = d.encode.dim_out
     for (b in d.decode) {
-        return false if ((b.dim_in != sh.dec_width && b.dim_in != sh.dec_width + d.asr_res.cout + 2l) || (b.dim_in == sh.dec_width && b.dim_in_s != b.dim_in)
-            || b.norm1.fc.nin != sd || b.norm2.fc.nin != sd)
-        sh.dec_rows = ts_res_shape(sh.blk, b, sh.dec_rows)
+        return false if ((b.dim_in != sh.dec_width && b.dim_in != sh.dec_width + d.asr_res.cout + 2l) || (b.dim_in == sh.dec_width && b.dim_in_s != b.dim_in))
+        sh.dec_rows = ts_res_shape(sh.blk, b, sh.dec_rows, sd)
         return false if (sh.dec_rows < 0l)
         sh.dec_width = b.dim_out
     }
@@ -1359,18 +1322,30 @@ def private ts_decode_shape(d : St2Decoder; text_c : int64; source : SineSourceC
     return sh.n_out >= 1l
 }
 
-//! the decode seat's slots for this call's geometry
-def private ts_dec_floats(d : St2Decoder; sh : TsDecShape; nh, text_c, frames, f2 : int64) : TsFloats {
+//! the generator's slots for this call's geometry: the stream rows, conv_post's rows, the block rows and the columns (the generator seat's whole table)
+def private ts_gen_floats(d : St2Decoder; sh : TsDecShape) : TsFloats {
     let rows = sh.blk.t_max * sh.blk.c_max
     var fl : TsFloats
     fl[TS_D_X] = rows
+    fl[TS_D_POST] = sh.t_post * d.conv_post.cout
+    for (i in range(TS_D_BY, TS_D_SC2 + 1)) {
+        fl[i] = rows
+    }
+    fl[TS_D_COL] = sh.blk.col
+    fl[TS_D_COL16] = ts_col16_floats(sh.blk)
+    return fl
+}
+
+//! the decode seat's slots for this call's geometry: the generator's, then the front, the concat rows, the source and the wave
+def private ts_dec_floats(d : St2Decoder; sh : TsDecShape; nh, text_c, frames, f2 : int64) : TsFloats {
+    var fl = ts_gen_floats(d, sh)
     fl[TS_D_ASR] = frames * text_c
     fl[TS_D_RES] = frames * d.asr_res.cout
     fl[TS_D_F0R] = f2
     fl[TS_D_NR] = f2
     fl[TS_D_F0D] = frames
     fl[TS_D_ND] = frames
-    fl[TS_D_CAT] = rows
+    fl[TS_D_CAT] = fl[TS_D_X]
     fl[TS_D_NU] = nh
     fl[TS_D_NOISE] = sh.samples * nh
     fl[TS_D_LOW] = nh * sh.nlow
@@ -1378,12 +1353,6 @@ def private ts_dec_floats(d : St2Decoder; sh : TsDecShape; nh, text_c, frames, f
     fl[TS_D_HAR] = sh.samples
     fl[TS_D_SPEC] = sh.spec_frames * 2l * d.bins
     fl[TS_D_WAVE] = sh.n_out
-    fl[TS_D_POST] = sh.t_post * d.conv_post.cout
-    for (i in range(TS_D_BY, TS_D_SC2 + 1)) {
-        fl[i] = rows
-    }
-    fl[TS_D_COL] = sh.blk.col
-    fl[TS_D_COL16] = ts_col16_floats(sh.blk)
     fl[TS_D_IDX] = sh.blk.t_max
     return fl
 }
@@ -1391,11 +1360,9 @@ def private ts_dec_floats(d : St2Decoder; sh : TsDecShape; nh, text_c, frames, f
 //! the decode blocks' style rows (two a block into `dhoff`), then the generator's (`ts_gen_style_rows`); false where the aux rows ran short
 def private ts_dec_style_rows(d : St2Decoder; s : array<float>; var dhoff : int64[2 + 2 * TS_MAX_RES_BLOCKS]; sc_ : TsScratch) : bool {
     ts_aux_reset()
-    dhoff[0] = ts_style_rows(d.encode.norm1.fc, s, d.encode.dim_in_s, false)
-    dhoff[1] = ts_style_rows(d.encode.norm2.fc, s, d.encode.dim_out, false)
+    ts_res_style_rows(dhoff, 0, d.encode, s)
     for (i in range(length(d.decode))) {
-        dhoff[2 + 2 * i] = ts_style_rows(d.decode[i].norm1.fc, s, d.decode[i].dim_in_s, false)
-        dhoff[3 + 2 * i] = ts_style_rows(d.decode[i].norm2.fc, s, d.decode[i].dim_out, false)
+        ts_res_style_rows(dhoff, 2 + 2 * i, d.decode[i], s)
     }
     ts_gen_style_rows(d, s)
     return ts_aux_upload(sc_)
@@ -1621,7 +1588,7 @@ def private ts_decoder_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows
 }
 
 def private ts_dec_ensure : bool {
-    return (ts_pred_ensure() && (!ts_f16_tile_on() || (ensure_tts_im2col16_cls() && f16_gemm_ensure(ts_f16_tile_khr()))) && ensure_tower_bias_act_cls()
+    return (ts_pred_ensure() && (!f16_gemm_on() || (ensure_tts_im2col16_cls() && f16_gemm_ensure(f16_gemm_khr()))) && ensure_tower_bias_act_cls()
         && ensure_tts_leaky_cls() && ensure_tts_adain_snake_cls() && ensure_tts_axpy_cls() && ensure_tts_pk_rows_cls() && ensure_tts_src_noise_cls()
         && ensure_tts_src_low_torch_cls() && ensure_tts_src_low_onnx_cls() && ensure_tts_src_cumsum_torch_cls() && ensure_tts_src_cumsum_onnx_cls()
         && ensure_tts_src_sines_torch_cls() && ensure_tts_src_sines_onnx_cls() && ensure_tts_stft_reflect_cls() && ensure_tts_stft_edge_cls()
@@ -1634,7 +1601,7 @@ def private ts_idx_upload(r_idx : TsRows; rows : int64) {
     for (i in range64(rows)) {
         g_ts_idx_host[i] = int(i / 2l)
     }
-    upload_region_at(r_idx.dev, 0l, unsafe(addr<uint8 const?>(g_ts_idx_host[0])), rows * 4l)
+    ts_upload(r_idx, g_ts_idx_host, rows)
 }
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
@@ -1658,7 +1625,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
     }
     let sl & = g_ts_dec_slots
     let sc_ & = g_ts_dec_scratch
-    let slab = ts_slab_rows(g_ts_dec)
+    let slab = g_ts_dec.rows
     var dhoff : int64[2 + 2 * TS_MAX_RES_BLOCKS]
     if (!ts_dec_style_rows(d, s_ref, dhoff, sc_)) {
         return ts_decline("decode", VulkanTtsDecline.memory)
@@ -1669,12 +1636,12 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
     let r_wave = ts_rows(sc_, TS_D_WAVE)
     var asr_tm & = unsafe(sc.dec_asr_tm)
     transpose_ct(asr, text_c, frames, asr_tm)
-    upload_region_at(r_asr.dev, 0l, unsafe(addr<uint8 const?>(asr_tm[0])), frames * text_c * 4l)
-    upload_region_at(r_f0.dev, 0l, unsafe(addr<uint8 const?>(f0[0])), f2 * 4l)
-    upload_region_at(r_nr.dev, 0l, unsafe(addr<uint8 const?>(nrg[0])), f2 * 4l)
-    upload_region_at(sc_.devs[TS_D_NU], 0l, unsafe(addr<uint8 const?>(noise.uniform[0])), nh * 4l)
+    ts_upload(r_asr, asr_tm, frames * text_c)
+    ts_upload(r_f0, f0, f2)
+    ts_upload(r_nr, nrg, f2)
+    ts_upload(ts_rows(sc_, TS_D_NU), noise.uniform, nh)
     if (noise.captured) {
-        upload_region_at(sc_.devs[TS_D_NOISE], 0l, unsafe(addr<uint8 const?>(noise.normal[0])), sh.samples * nh * 4l)
+        ts_upload(ts_rows(sc_, TS_D_NOISE), noise.normal, sh.samples * nh)
     }
     ts_idx_upload(ts_rows(sc_, TS_D_IDX), sh.blk.t_max)
     let bwd & = unsafe(d.stft_bwd_re)
@@ -1695,9 +1662,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
         enc_tts_istft_cls(raw, h, s, ki, sh.n_out)
         vt_pt(raw, VtProfRole.tts_stft)
     }
-    unsafe(scratch_resize(wave, sh.n_out))
-    var dst = unsafe(addr(wave[0]))
-    readback_range(r_wave.dev, r_wave.bit, sc_.hb, dst, sh.n_out * 4l)
+    ts_readback(r_wave, sc_, wave, sh.n_out)
     g_ts_encodes++
     return true
 }
@@ -1720,21 +1685,13 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
     if (!vulkan_tower_arms() || !ts_dec_ensure()) {
         return ts_decline("generator", VulkanTtsDecline.device)
     }
-    var fl : TsFloats
-    let rows = sh.blk.t_max * sh.blk.c_max
-    fl[TS_D_X] = rows
+    var fl = ts_gen_floats(d, sh)
     fl[TS_D_SPEC] = spec_floats
-    fl[TS_D_POST] = sh.t_post * d.conv_post.cout
-    for (i in range(TS_D_BY, TS_D_SC2 + 1)) {
-        fl[i] = rows
-    }
-    fl[TS_D_COL] = sh.blk.col
-    fl[TS_D_COL16] = ts_col16_floats(sh.blk)
     if (!ts_dec_attach(d) || !ts_scratch_ready(g_ts_dec_scratch, fl, sh.blk.aux, tts_stats_floats(sh.blk.t_max, sh.blk.c_max), fl[TS_D_POST])) {
         return ts_decline("generator", VulkanTtsDecline.memory)
     }
     let sc_ & = g_ts_dec_scratch
-    let slab = ts_slab_rows(g_ts_dec)
+    let slab = g_ts_dec.rows
     ts_aux_reset()
     ts_gen_style_rows(d, s)
     if (!ts_aux_upload(sc_)) {
@@ -1743,16 +1700,13 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
     let r_x = ts_rows(sc_, TS_D_X)
     let r_spec = ts_rows(sc_, TS_D_SPEC)
     let r_post = ts_rows(sc_, TS_D_POST)
-    upload_region_at(r_x.dev, 0l, unsafe(addr<uint8 const?>(x_rows[0])), t * cx * 4l)
-    upload_region_at(r_spec.dev, 0l, unsafe(addr<uint8 const?>(har_spec[0])), spec_floats * 4l)
+    ts_upload(r_x, x_rows, t * cx)
+    ts_upload(r_spec, har_spec, spec_floats)
     vt_chain_one_shot("generator", long_length(d.ups), t) $(raw : VkCommandBuffer; var h : VkHaz) {
         ts_generator_chain(raw, h, slab, sc_, d, cx, t, har_frames)
     }
-    let n_post = sh.t_post * d.conv_post.cout
-    unsafe(scratch_resize(sc.gen_post, n_post))
     var y & = unsafe(sc.gen_post)
-    var dst = unsafe(addr(y[0]))
-    readback_range(r_post.dev, r_post.bit, sc_.hb, dst, n_post * 4l)
+    ts_readback(r_post, sc_, y, sh.t_post * d.conv_post.cout)
     styletts2_istft(d, y, d.conv_post.cout, sh.t_post, wave, sc)
     g_ts_encodes++
     return true
@@ -1786,7 +1740,7 @@ def vulkan_pocket_frame_batch() : int64 => g_ts_pk_batch
 
 def private ts_pk_codec_attach(mm : PocketMimi) : bool {
     let key = tts_pk_codec_key(mm)
-    return true if (g_ts_pk_codec.dev != 0ul && g_ts_pk_codec.key == key)
+    return true if (g_ts_pk_codec.rows.dev != 0ul && g_ts_pk_codec.key == key)
     return ts_pk_codec_rebuild(mm, key)
 }
 
@@ -1823,17 +1777,24 @@ def private ts_ensure_log(seat : string; us, drv0, arms_us : int) {
     }
 }
 
-//! the pipeline build wall the call paid past `arms_us` of bring-up, when either reached a ms
-def private ts_ensure_paid(seat : string; te : int64; drv0 : int; arms_us : int) {
+//! the tier's device armed, then the seat's classes built (`ensure`); false on either (the seat's `device` decline); the bring-up and the pipeline
+//! build wall the call paid past it logged when either reached a ms
+def private ts_arm_ensure(seat : string; ensure : function<() : bool>) : bool {
+    let te = ref_time_ticks()
+    let drv0 = g_vkd_pipe_build_us
+    return false if (!vulkan_tower_arms())
+    let arms_us = get_time_usec(te)
+    return false if (!invoke(ensure))
     let us = get_time_usec(te) - arms_us
     if (us >= 1000 || arms_us >= 1000) {
         ts_ensure_log(seat, us, drv0, arms_us)
     }
+    return true
 }
 
 def private ts_pk_frames_attach(m : PocketModel) : bool {
     let key = tts_pk_frames_key(m)
-    return true if (g_ts_pk_frames.dev != 0ul && g_ts_pk_frames.key == key)
+    return true if (g_ts_pk_frames.rows.dev != 0ul && g_ts_pk_frames.key == key)
     return ts_pk_frames_rebuild(m, key)
 }
 
@@ -1916,7 +1877,7 @@ def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer; k
     for (kc in vs.caches) {
         var bk : TsRows
         var bv : TsRows
-        if (!ts_rows_alloc(bk, cap * d, TS_PK_KV_BIT) || !ts_rows_alloc(bv, cap * d, TS_PK_VV_BIT)) {
+        if (!ts_rows_alloc(bk, cap * d * 4l, TS_PK_KV_BIT) || !ts_rows_alloc(bv, cap * d * 4l, TS_PK_VV_BIT)) {
             ts_rows_release(bk)
             ts_pk_voice_drop()
             return false
@@ -1928,11 +1889,11 @@ def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer; k
     var inscope @exact_size tcos : array<float>
     var inscope @exact_size tsin : array<float>
     tts_pk_rope_tabs(tf, cap, tcos, tsin)
-    if (!ts_rows_alloc(v.rope, 2l * cap * half, 0u)) {
+    if (!ts_rows_alloc(v.rope, 2l * cap * half * 4l, 0u)) {
         ts_pk_voice_drop()
         return false
     }
-    upload_region_at(v.rope.dev, 0l, unsafe(addr<uint8 const?>(tcos[0])), cap * half * 4l)
+    ts_upload(v.rope, tcos, cap * half)
     upload_region_at(v.rope.dev, cap * half * 4l, unsafe(addr<uint8 const?>(tsin[0])), cap * half * 4l)
     v.sin_off = cap * half
     v.key = key
@@ -1948,11 +1909,6 @@ def private ts_pk_conv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot
     let rows = cv.transposed ? t * cv.stride : t
     ts_conv_padded(raw, h, slab, slot, cv, t, rows, cv.transposed ? 0l : cv.k - cv.stride, x, col, y)
     return rows
-}
-
-//! layernorm rows from x into y (the residual kept) on a norm slot's rows
-def private ts_ln_into(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; ns : TtsNormSlot; x, y : TsRows; rows, d : int64; eps : float) {
-    ts_ln_at(raw, h, slab, ns.gwoff, ns.gboff, x, y, rows, d, eps)
 }
 
 //! a window of rows copied: `rows` x `width` from src [.][ss] at column sc, rows sr0.., into dst [.][ds] at column dc, rows dr0.., the ELU on the way where asked
@@ -2159,7 +2115,7 @@ def private ts_pk_transformer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRow
     var s_gelu = set_tts_gelu_tanh_cls(fixed_array(r_h.dev), fixed_array(r_h.bytes), fixed_array(r_h.bit))
     for (i in range(length(tf.layers))) {
         let s & = unsafe(sl.layers[i])
-        ts_ln_into(raw, h, slab, s.n1, r_x, r_xb, t, d, tf.eps)
+        ts_ln(raw, h, slab, s.n1, r_x, r_xb, t, d, tf.eps)
         ts_lin(raw, h, slab, s.in_proj, d, 3l * d, r_xb, r_qkv, t)
         ts_pk_rope(raw, h, slab, sl.rope_cos, sl.rope_sin, r_qkv, t, 3l * d, 0l, d, dh, 0l)
         ts_pk_rope(raw, h, slab, sl.rope_cos, sl.rope_sin, r_qkv, t, 3l * d, d, d, dh, 0l)
@@ -2244,16 +2200,9 @@ def private vulkan_pocket_codec(m : PocketModel; latents : array<float>; frames 
         || long_length(latents) < frames * mm.quant_proj.cin) {
         return ts_decline("codec", VulkanTtsDecline.shape)
     }
-    let te = ref_time_ticks()
-    let drv0 = g_vkd_pipe_build_us
-    if (!vulkan_tower_arms()) {
+    if (!ts_arm_ensure("pocket codec", @@ts_pk_codec_ensure)) {
         return ts_decline("codec", VulkanTtsDecline.device)
     }
-    let arms_us = get_time_usec(te)
-    if (!ts_pk_codec_ensure()) {
-        return ts_decline("codec", VulkanTtsDecline.device)
-    }
-    ts_ensure_paid("pocket codec", te, drv0, arms_us)
     tts_pk_stage_rows(mm, frames, g_ts_pk_rows)
     let samples = g_ts_pk_rows[long_length(g_ts_pk_rows) - 1l]
     if (!ts_pk_codec_attach(mm)) {
@@ -2265,16 +2214,14 @@ def private vulkan_pocket_codec(m : PocketModel; latents : array<float>; frames 
         return ts_decline("codec", VulkanTtsDecline.memory)
     }
     let sc_ & = g_ts_pkc_scratch
-    let slab = ts_slab_rows(g_ts_pk_codec)
+    let slab = g_ts_pk_codec.rows
     let r_lat = ts_rows(sc_, TS_C_LAT)
     let r_wave = ts_rows(sc_, TS_C_WAVE)
-    upload_region_at(r_lat.dev, 0l, unsafe(addr<uint8 const?>(latents[0])), frames * mm.quant_proj.cin * 4l)
+    ts_upload(r_lat, latents, frames * mm.quant_proj.cin)
     vt_chain_one_shot("pocket codec", long_length(mm.dec_tf.layers), g_ts_pk_rows[1]) $(raw : VkCommandBuffer; var h : VkHaz) {
         ts_pk_codec_chain(raw, h, slab, sc_, mm, sl)
     }
-    unsafe(scratch_resize(wave, samples))
-    var dst = unsafe(addr(wave[0]))
-    readback_range(r_wave.dev, r_wave.bit, sc_.hb, dst, samples * 4l)
+    ts_readback(r_wave, sc_, wave, samples)
     g_ts_encodes++
     return true
 }
@@ -2388,7 +2335,7 @@ def private ts_pk_frame(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_
     for (li in range(length(sl.layers))) {
         ts_pk_fr_layer(raw, h, slab, sc_, m.backbone, sl.layers[li], li, p)
     }
-    ts_ln_into(raw, h, slab, sl.out_norm, r_x, r_xb, 1l, d, m.backbone.eps)
+    ts_ln(raw, h, slab, sl.out_norm, r_x, r_xb, 1l, d, m.backbone.eps)
     let coff = f * d
     let kc = TtsPkRowsArgs(rows = 1u, width = uint(d), ss = uint(d), sc = 0u, sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f))
     ts_pk_rows(raw, h, r_xb, r_conds, kc, false)
@@ -2443,7 +2390,7 @@ def private ts_pk_frames_loop(m : PocketModel; sl : TtsPkFramesSlab; slab : TsRo
         for (i in range64(k * ld)) {
             g_ts_pk_noise_host[i] = pocket_noise_at(sc, captured, f0 * ld + i, std)
         }
-        upload_region_at(r_noise.dev, 0l, unsafe(addr<uint8 const?>(g_ts_pk_noise_host[0])), k * ld * 4l)
+        ts_upload(r_noise, g_ts_pk_noise_host, k * ld)
         let fbase = f0
         vt_chain_one_shot("pocket frames", long_length(m.backbone.layers), k) $(raw : VkCommandBuffer; var h : VkHaz) {
             for (i in range64(k)) {
@@ -2493,18 +2440,10 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
         ts_decline("frames", VulkanTtsDecline.shape)
         return none
     }
-    let te = ref_time_ticks()
-    let drv0 = g_vkd_pipe_build_us
-    if (!vulkan_tower_arms()) {
+    if (!ts_arm_ensure("pocket frames", @@ts_pk_frames_ensure)) {
         ts_decline("frames", VulkanTtsDecline.device)
         return none
     }
-    let arms_us = get_time_usec(te)
-    if (!ts_pk_frames_ensure()) {
-        ts_decline("frames", VulkanTtsDecline.device)
-        return none
-    }
-    ts_ensure_paid("pocket frames", te, drv0, arms_us)
     let batch = min(g_ts_pk_batch, max_frames)
     let forced_rows = long_length(forced) / ld
     let fl = ts_pk_frames_floats(m, max_frames, batch, forced_rows)
@@ -2517,22 +2456,16 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
     }
     let sl & = g_ts_pk_frames_slots
     let sc_ & = g_ts_pkf_scratch
-    let slab = ts_slab_rows(g_ts_pk_frames)
+    let slab = g_ts_pk_frames.rows
     if (forced_rows > 0l) {
-        upload_region_at(sc_.devs[TS_F_FORCED], 0l, unsafe(addr<uint8 const?>(forced[0])), forced_rows * ld * 4l)
+        ts_upload(ts_rows(sc_, TS_F_FORCED), forced, forced_rows * ld)
     }
     var f0 = 0l
     let r = ts_pk_frames_loop(m, sl, slab, sc_, base, batch, max_frames, forced_rows, std, frames_after_eos, captured, sc, f0)
     if (r.frames >= 0l) {
-        unsafe(scratch_resize(sc.latents, r.frames * ld))
-        if (r.frames > 0l) {
-            var dl = unsafe(addr(sc.latents[0]))
-            readback_range(sc_.devs[TS_F_LATENTS], ts_rows(sc_, TS_F_LATENTS).bit, sc_.hb, dl, r.frames * ld * 4l)
-        }
+        ts_readback(ts_rows(sc_, TS_F_LATENTS), sc_, sc.latents, r.frames * ld)
         let crows = min(r.frames + 1l, f0)   //! the breaking frame's row too, as the CPU loop leaves it
-        unsafe(scratch_resize(sc.conds, crows * d))
-        var dc = unsafe(addr(sc.conds[0]))
-        readback_range(sc_.devs[TS_F_CONDS], ts_rows(sc_, TS_F_CONDS).bit, sc_.hb, dc, crows * d * 4l)
+        ts_readback(ts_rows(sc_, TS_F_CONDS), sc_, sc.conds, crows * d)
     }
     return r
 }

@@ -1546,6 +1546,18 @@ def cvt_f32_to_f16_sat(var d : uint16?; s : float const?; n : int64) {
     }
 }
 
+//! the saturating f16 image of a staged f32 slab, one halfword an element - the halfword twin a device upload takes
+def cvt_f32_to_f16_sat_array(src : array<float>) : array<uint16> {
+    var out : array<uint16>
+    out |> reserve_resize(long_length(src))
+    if (!empty(src)) {
+        unsafe {
+            cvt_f32_to_f16_sat(addr(out[0]), addr(src[0]), long_length(src))
+        }
+    }
+    return <- out
+}
+
 //! CPU mirror of the GPU dev-W q8 dequant (MetalDequantQ8H), bit-exact: the scale narrows to
 //! f16 exactly as the blob stores it, the product computes in f32 (exact for half x int8) and
 //! rounds ONCE to f16 — a baked panel equals what the runtime dequant kernel writes

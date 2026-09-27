@@ -1467,7 +1467,8 @@ def private vt_zero_elems(raw : VkCommandBuffer; var h : VkHaz; dev : uint64; bi
     }
 }
 
-def private vt_bias_act(raw : VkCommandBuffer; var h : VkHaz; var s_bias : VkDescriptorSet; dout, nout, boff : int64; act : uint) {
+//! the row-broadcast bias (and `act`) over `nout` elements of rows `dout` wide, the bias row at `boff` of the set's second binding
+def vt_bias_act(raw : VkCommandBuffer; var h : VkHaz; var s_bias : VkDescriptorSet; dout, nout, boff : int64; act : uint) {
     var pc_b = TowerBiasArgs(d = uint(dout), nelem = uint(nout), boff = uint(boff), act = act)
     enc_tower_bias_act_cls(raw, h, s_bias, pc_b, rq_wgs(false, nout))
 }
@@ -1891,7 +1892,7 @@ def private vt_arm(r : VtResident; gemm_off_cm2 : bool = false) : tuple<ok : boo
         return (ok = false, khr = false, gemm_khr = false)
     }
     let khr = !cm2_fa_on()
-    let gemm_khr = gemm_off_cm2 && g_gpu.coopmat_mode != COOPMAT_CM2
+    let gemm_khr = gemm_off_cm2 && f16_gemm_khr()
     if ((khr || gemm_khr) && !khr_kq_tile_on()) {
         vt_decline(r, VulkanTowerDecline.device)
         return (ok = false, khr = khr, gemm_khr = gemm_khr)
@@ -2335,18 +2336,6 @@ let private VT_STEM_COL = 0x2000000u
 let private VT_STEM_Y1 = 0x4000000u
 let private VTA_CONV2_KEY = 5000
 
-//! the f16 image of a staged f32 slab, the f32 rows released
-[cold_path]
-def private vt_slab_f16(var slab : array<float>) : array<uint16> {
-    var slab16 : array<uint16>
-    slab16 |> reserve_resize(long_length(slab))
-    unsafe {
-        cvt_f32_to_f16_sat(addr(slab16[0]), addr(slab[0]), long_length(slab))
-    }
-    delete slab
-    return <- slab16
-}
-
 [cold_path]
 def private vt_aud_front_slab(var r : VtResident; t : AudioTower) : bool {
     let d = t.d_model
@@ -2356,7 +2345,8 @@ def private vt_aud_front_slab(var r : VtResident; t : AudioTower) : bool {
     var slab : array<float>
     slab |> reserve_resize(d * kdp)
     tower_stage_f32_pad_row_stride(slab, t.fblob, t.conv1_w_off, 0l, d, kreal, kdp)
-    var slab16 <- vt_slab_f16(slab)
+    var slab16 <- cvt_f32_to_f16_sat_array(slab)
+    delete slab
     let rows = 2l * d + t.n_ctx * d
     var rows_f : array<float>
     rows_f |> reserve_resize(rows)
@@ -3126,7 +3116,8 @@ def private vt_q3a_slab(var r : VtResident; t : Qwen3aTower; key : uint64; lay :
         let st = g_vt_q3a_stages[s]
         tower_stage_f32_pad_row_stride(slab, t.cblob, woffs[s], st.slab_elem_off, nch, st.cin * 9l, st.kdp)
     }
-    var slab16 <- vt_slab_f16(slab)
+    var slab16 <- cvt_f32_to_f16_sat_array(slab)
+    delete slab
     let span = vt_q3a_norm_span(t)
     var regions : array<VtRegion>
     regions |> push(VtRegion(woff = t.cout_w_off, n = 16l * nch, rows = t.core.d_model))
@@ -3325,7 +3316,8 @@ def private vt_g4a_front_slab(var r : VtResident; t : Gemma4aEncoder) : bool {
 //! a spectral front's model-owned planes uploaded (the f16 conv slab, the DFT twiddles, the mel filters); false with the buffers released on a failed allocation
 [cold_path]
 def private vt_front_upload(var r : VtResident; var slab : array<float>; twiddles : PlaneF; btw : int64; filters : PlaneF; bfil : int64) : bool {
-    var slab16 <- vt_slab_f16(slab)
+    var slab16 <- cvt_f32_to_f16_sat_array(slab)
+    delete slab
     r.fw16_bytes = long_length(slab16) * 2l
     r.fw16_dev = vt_dev_buf(r, r.fw16_bytes)
     r.front_twiddles_dev = vt_dev_buf(r, btw)
