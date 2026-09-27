@@ -4045,17 +4045,15 @@ struct private PkVoiceSlot {
 
 var private g_tw_pk_frames : PkFramesSlab
 var private g_tw_pk_voice : PkVoiceSlot
-var private g_tw_pk_batch = 8l   //!< frames a command buffer: the EOS rule runs on the host between them
 let private PK_ZERO_ROW = 4096l   //!< the zero bias row's width: the widest q8 linear a frame's GEMVs serve
 
-//! The frames one command buffer carries before the host reads the EOS logits.
 [cold_path]
 def set_metal_pocket_frame_batch(n : int64) {
-    g_tw_pk_batch = max(n, 1l)
+    set_pocket_frame_batch(n)
 }
 
 [cold_path]
-def metal_pocket_frame_batch() : int64 => g_tw_pk_batch
+def metal_pocket_frame_batch() : int64 => pocket_frame_batch()
 
 def private pk_blob_q8(var qb : PkBlobWriter; l : TtsLinear) : uint64 {
     qb.n = (qb.n + 15l) & ~15l
@@ -4436,58 +4434,26 @@ def private pk_frame(enc : MetalComputeEncoder?; var c : St2GpuCtx; m : PocketMo
     pk_gemv(enc, c, sl.final_linear, PK_GEMV_TAIL, st)
 }
 
-//! The batches: each one command buffer of `batch` frames over its pre-drawn noise, the EOS rule
-//! walked on the host between them, the last batch's draws past the frames made rewound so the
-//! generator ends where the CPU loop's does; the frames made and the EOS frame, or a count below zero when a command buffer failed.
+//! The host frame loop (`pocket_frames_batched`) on this driver: each batch one command buffer, the noise drawn straight into the
+//! shared noise buffer, the EOS logits read off the shared rows; frames -1 when a command buffer failed.
 def private pk_frames_loop(m : PocketModel; var sl : PkFramesSlab; var c : St2GpuCtx; var b : PkFrBufs; base, batch, max_frames, forced_rows : int64; std : float;
                            frames_after_eos : int; captured : array<float>; var sc : PocketScratch; var f0 : int64&) : tuple<frames : int64; eos_at : int64> {
-    let ld = m.latent_dim
-    var frames = 0l
-    var eos_at = -1l
-    var done = false
     var err = ""
-    while (!done && f0 < max_frames) {
-        let k = min(batch, max_frames - f0)
-        let rb = sc.rng
-        let fb = frames
-        unsafe {
-            var np = reinterpret<float?>(metal_buffer_contents(b.noise))
-            for (i in range64(k * ld)) {
-                let at = f0 * ld + i
-                np[i] = pocket_noise_at(sc, captured, at, std)
-            }
-        }
+    return pocket_frames_batched(m, batch, max_frames, std, frames_after_eos, captured, sc, f0, $(_k : int64) : float? {
+        return unsafe(reinterpret<float?>(metal_buffer_contents(b.noise)))
+    }, $(fb, k : int64) : bool {
         let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026,LINT019 — the error-text fetch runs only on the failure leg
             for (i in range64(k)) {
-                pk_frame(enc, c, m, sl, b, base + f0 + i, f0 + i, i, forced_rows)
+                pk_frame(enc, c, m, sl, b, base + fb + i, fb + i, i, forced_rows)
             }
         }
-        return (frames = -1l, eos_at = -1l) if (!ran)
-        g_tower_encodes++
-        unsafe {
-            let ep = reinterpret<float const?>(metal_buffer_contents(b.eos))
-            for (i in range64(k)) {
-                let f = f0 + i
-                let eos = ep[f]
-                sc.eos_logits[f] = eos
-                if (pocket_eos_stops(m, eos, f, frames_after_eos, eos_at)) {
-                    done = true
-                    break
-                }
-                frames++
-            }
+        if (ran) {
+            g_tower_encodes++
         }
-        if (frames - fb < k) {
-            sc.rng = rb
-            for (i in range64((frames - fb) * ld)) {
-                if (f0 * ld + i >= long_length(captured)) {
-                    rng_normal(sc.rng)
-                }
-            }
-        }
-        f0 += k
-    }
-    return (frames = frames, eos_at = eos_at)
+        return ran
+    }, $(fb, i : int64) : float {
+        return unsafe(reinterpret<float const?>(metal_buffer_contents(b.eos))[fb + i])
+    })
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames")]
@@ -4518,7 +4484,7 @@ def private metal_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_tx
         pk_kv_rows(kc, g_tw_pk_voice.bk[li], g_tw_pk_voice.bv[li], vs.len, base)
     }
     var sl & = g_tw_pk_frames
-    let batch = min(g_tw_pk_batch, max_frames)
+    let batch = min(pocket_frame_batch(), max_frames)
     let forced_rows = long_length(forced) / ld
     var c = St2GpuCtx()
     st2_ctx_make(c, sl.buf, 1l, 1l, 0ul)

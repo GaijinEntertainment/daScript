@@ -1723,18 +1723,16 @@ var private g_ts_pk_frames : TsSlab
 var private g_ts_pk_frames_slots : TtsPkFramesSlab
 var private g_ts_pkc_scratch : TsScratch
 var private g_ts_pkf_scratch : TsScratch
-var private g_ts_pk_batch = 8l               //! frames a submit: the EOS rule runs on the host between them
 var private @scratch g_ts_pk_rows : array<int64>   //! the codec chain's row counts: the frames, the 200 Hz rows, each stage's rows
 var private @scratch g_ts_pk_kv_host : array<float>
 
-//! the frames one submit carries before the host reads the EOS logits
 [cold_path]
 def set_vulkan_pocket_frame_batch(n : int64) {
-    g_ts_pk_batch = max(n, 1l)
+    set_pocket_frame_batch(n)
 }
 
 [cold_path]
-def vulkan_pocket_frame_batch() : int64 => g_ts_pk_batch
+def vulkan_pocket_frame_batch() : int64 => pocket_frame_batch()
 
 def private ts_pk_codec_attach(mm : PocketMimi) : bool {
     let key = tts_pk_codec_key(mm)
@@ -2340,55 +2338,31 @@ def private ts_pk_frame(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_
 var private @scratch g_ts_pk_noise_host : array<float>
 var private @scratch g_ts_pk_eos_host : array<float>
 
-//! the batches, a submit of `batch` frames each, the EOS rule walked on the host between them; the frames made and the EOS frame
+//! the host frame loop (`pocket_frames_batched`) on this driver: the noise staged host-side and uploaded ahead of each batch's submit, the
+//! batch's EOS logits read back after it
 def private ts_pk_frames_loop(m : PocketModel; sl : TtsPkFramesSlab; slab : TsRows; sc_ : TsScratch; base, batch, max_frames, forced_rows : int64; std : float;
                               frames_after_eos : int; captured : array<float>; var sc : PocketScratch; var f0 : int64&) : tuple<frames : int64; eos_at : int64> {
     let ld = m.latent_dim
-    var frames = 0l
-    var eos_at = -1l
-    var done = false
     let r_noise = ts_rows(sc_, TS_F_NOISE)
     let r_eos = ts_rows(sc_, TS_F_EOS)
     g_ts_pk_noise_host |> ensure_length(batch * ld)
     g_ts_pk_eos_host |> ensure_length(batch)
-    while (!done && f0 < max_frames) {
-        let k = min(batch, max_frames - f0)
-        let rb = sc.rng
-        let fb = frames
-        for (i in range64(k * ld)) {
-            g_ts_pk_noise_host[i] = pocket_noise_at(sc, captured, f0 * ld + i, std)
-        }
+    return pocket_frames_batched(m, batch, max_frames, std, frames_after_eos, captured, sc, f0, $(_k : int64) : float? {
+        return unsafe(addr(g_ts_pk_noise_host[0]))
+    }, $(fb, k : int64) : bool {
         ts_upload(r_noise, g_ts_pk_noise_host, k * ld)
-        let fbase = f0
         vt_chain_one_shot("pocket frames", long_length(m.backbone.layers), k) $(raw : VkCommandBuffer; var h : VkHaz) {
             for (i in range64(k)) {
-                ts_pk_frame(raw, h, slab, sc_, m, sl, base + fbase + i, fbase + i, i, forced_rows)
+                ts_pk_frame(raw, h, slab, sc_, m, sl, base + fb + i, fb + i, i, forced_rows)
             }
         }
         g_ts_encodes++
         var ep = unsafe(addr(g_ts_pk_eos_host[0]))
-        readback_range(r_eos.dev, r_eos.bit, f0 * 4l, sc_.hb, ep, k * 4l)
-        for (i in range64(k)) {
-            let f = f0 + i
-            let eos = g_ts_pk_eos_host[i]
-            sc.eos_logits[f] = eos
-            if (pocket_eos_stops(m, eos, f, frames_after_eos, eos_at)) {
-                done = true
-                break
-            }
-            frames++
-        }
-        if (frames - fb < k) {
-            sc.rng = rb
-            for (i in range64((frames - fb) * ld)) {
-                if (f0 * ld + i >= long_length(captured)) {
-                    rng_normal(sc.rng)
-                }
-            }
-        }
-        f0 += k
-    }
-    return (frames = frames, eos_at = eos_at)
+        readback_range(r_eos.dev, r_eos.bit, fb * 4l, sc_.hb, ep, k * 4l)
+        return true
+    }, $(_fb, i : int64) : float {
+        return g_ts_pk_eos_host[i]
+    })
 }
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-pocket-chain")]
@@ -2414,7 +2388,7 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
         ts_decline("frames", VulkanTtsDecline.device)
         return none
     }
-    let batch = min(g_ts_pk_batch, max_frames)
+    let batch = min(pocket_frame_batch(), max_frames)
     let forced_rows = long_length(forced) / ld
     let fl = ts_pk_frames_floats(m, max_frames, batch, forced_rows)
     if (!ts_pk_frames_attach(m) || !ts_pk_voice_attach(vs, tf) || !ts_scratch_ready(g_ts_pkf_scratch, fl, 0l, 0l, max((max_frames + 1l) * d, max_frames * ld))) {

@@ -1365,6 +1365,58 @@ def pocket_eos_stops(m : PocketModel; eos : float; frame : int64; frames_after_e
     return eos_at >= 0l && frame >= eos_at + int64(frames_after_eos)
 }
 
+var private g_pocket_frame_batch = 8l   //! the frames a GPU seat's submit carries: the host walks the EOS rule between submits
+
+//! the frames one GPU submit of the frame loop carries before the host reads their EOS logits, clamped to one or more
+[cold_path]
+def set_pocket_frame_batch(n : int64) {
+    g_pocket_frame_batch = max(n, 1l)
+}
+
+def pocket_frame_batch() : int64 => g_pocket_frame_batch
+
+//! A GPU seat's host frame loop in batches of up to `batch`: the noise drawn in the CPU loop's order into `noise(k)`, `run(f0, k)` the batch's
+//! frames (false on a failed submit), `eos(f0, i)` frame f0 + i's EOS logit; the EOS rule walked between batches, the last batch's draws past
+//! the frames made rewound as the CPU loop leaves the generator. The frames made and the EOS frame (frames -1 on a failed submit); `f0` the frames run.
+def pocket_frames_batched(m : PocketModel; batch, max_frames : int64; std : float; frames_after_eos : int; captured : array<float>;
+                          var sc : PocketScratch; var f0 : int64&; noise : block<(k : int64) : float?>; run : block<(f0, k : int64) : bool>;
+                          eos : block<(f0, i : int64) : float>) : tuple<frames : int64; eos_at : int64> {
+    let ld = m.latent_dim
+    var frames = 0l
+    var eos_at = -1l
+    var done = false
+    while (!done && f0 < max_frames) {
+        let k = min(batch, max_frames - f0)
+        let rb = sc.rng
+        let fb = frames
+        var np = invoke(noise, k)
+        for (i in range64(k * ld)) {
+            unsafe(np[i]) = pocket_noise_at(sc, captured, f0 * ld + i, std)
+        }
+        return (frames = -1l, eos_at = -1l) if (!invoke(run, f0, k))
+        for (i in range64(k)) {
+            let f = f0 + i
+            let e = invoke(eos, f0, i)
+            sc.eos_logits[f] = e
+            if (pocket_eos_stops(m, e, f, frames_after_eos, eos_at)) {
+                done = true
+                break
+            }
+            frames++
+        }
+        if (frames - fb < k) {
+            sc.rng = rb
+            for (i in range64((frames - fb) * ld)) {
+                if (f0 * ld + i >= long_length(captured)) {
+                    rng_normal(sc.rng)
+                }
+            }
+        }
+        f0 += k
+    }
+    return (frames = frames, eos_at = eos_at)
+}
+
 [cold_path]
 def private warn_no_eos(frames, n_txt : int64) {
     to_log(LOG_WARNING, "dasLLAMA pocket: {frames} frames without an end of speech - the cap for {n_txt} tokens\n")
