@@ -10560,18 +10560,19 @@ def tower_gelu_tanh(v : float) : float {
         return v
     }
     let xr = float(float16(v))
-    let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * mad(0.044715 * xr, xr, 1.0)))
+    let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))
     return float(float16(g))
 }
 
 //! the erf GELU, the CPU `gelu_erf`'s rational erfc in f32
 def tower_gelu_erf(v : float) : float {
     let z = abs(v) * 0.7071067811865476
-    let t = 1.0 / mad(0.5, z, 1.0)
-    let inner = mad(t, mad(t, mad(t, mad(t, 0.17087277, -0.82215223), 1.48851587), -1.13520398), 0.27886807)
-    let poly = mad(t, mad(t, mad(t, mad(t, mad(t, inner, -0.18628806), 0.09678418), 0.37409196), 1.00002368), mad(-z, z, -1.26551223))
-    let erfc = t * exp(poly)
-    return v >= 0.0 ? mad(-0.5 * v, erfc, v) : 0.5 * v * erfc
+    let t = 1.0 / (1.0 + 0.5 * z)
+    let erfc = t * exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 +
+        t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 +
+        t * (-0.82215223 + t * 0.17087277)))))))))
+    let half_v_erfc = 0.5 * v * erfc
+    return v >= 0.0 ? v - half_v_erfc : half_v_erfc
 }
 
 //! the tower activations by `TowerBiasArgs.act` code
