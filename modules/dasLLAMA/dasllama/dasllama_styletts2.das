@@ -18,6 +18,7 @@ require dasllama/dasllama_par
 require dasllama/dasllama_plane
 require dasllama/dasllama_image
 require dasllama/dasllama_tower   // asr_prof_add: the encode-stage profiling rail; add_inplace_rows: the residual add
+require dasllama/dasllama_gpu_math   // tts_sigmoid
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 
@@ -1084,7 +1085,7 @@ def styletts2_durations(p : St2Predictor; d : array<float>; t : int64; speed : f
         for (i in range64(t)) {
             var acc = 0.0
             for (j in range64(nb)) {
-                acc += 1.0 / (1.0 + exp(-logits[i * nb + j]))
+                acc += tts_sigmoid(logits[i * nb + j])
             }
             raw[i] = acc / speed
         }

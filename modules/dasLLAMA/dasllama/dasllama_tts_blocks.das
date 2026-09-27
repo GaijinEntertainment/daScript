@@ -13,6 +13,7 @@ require dasllama/dasllama_par
 require dasllama/dasllama_plane
 require dasllama/dasllama_convert
 require dasllama/dasllama_tower
+require dasllama/dasllama_gpu_math   // tts_sigmoid: the one logistic sigmoid the CPU chain and the kernel homes share
 require dasllama/dasllama_common
 require dasllama/dasllama_image   // count_meta_fields - the leaf serializers' field tripwire
 
@@ -1993,10 +1994,6 @@ def private layernorm_channels_rows(var x : array<float>; t, c : int64; eps : fl
 
 // ===== recurrent =====
 
-def private sigmoid_f(x : float) : float {
-    return 1.0 / (1.0 + exp(-x))
-}
-
 //! One direction over token-major x [T][nin]; writes h_t into y[t*ystride + yoff ..].
 def private lstm_direction(l : TtsLstm; x : array<float>; t : int64; reverse : bool;
                            var y : array<float>; ystride, yoff : int64) {
@@ -2023,10 +2020,10 @@ def private lstm_direction(l : TtsLstm; x : array<float>; t : int64; reverse : b
         matmul(gates, l.w_ih, xin, l.nin, 4l * hd)
         matmul(gates2, l.w_hh, h, hd, 4l * hd)
         for (j in range64(hd)) {
-            let gi = sigmoid_f(gates[j] + gates2[j] + l.b[j])
-            let gf = sigmoid_f(gates[hd + j] + gates2[hd + j] + l.b[hd + j])
+            let gi = tts_sigmoid(gates[j] + gates2[j] + l.b[j])
+            let gf = tts_sigmoid(gates[hd + j] + gates2[hd + j] + l.b[hd + j])
             let gg = tanh(gates[2l * hd + j] + gates2[2l * hd + j] + l.b[2l * hd + j])
-            let go = sigmoid_f(gates[3l * hd + j] + gates2[3l * hd + j] + l.b[3l * hd + j])
+            let go = tts_sigmoid(gates[3l * hd + j] + gates2[3l * hd + j] + l.b[3l * hd + j])
             let cn = gf * cst[j] + gi * gg
             cst[j] = cn
             h[j] = go * tanh(cn)
@@ -2093,7 +2090,7 @@ def snake_rows(var x : array<float>; t, c : int64; alpha : array<float>) {
 
 def sigmoid_inplace(var x : array<float>; n : int64) {
     for (i in range64(n)) {
-        x[i] = sigmoid_f(x[i])
+        x[i] = tts_sigmoid(x[i])
     }
 }
 

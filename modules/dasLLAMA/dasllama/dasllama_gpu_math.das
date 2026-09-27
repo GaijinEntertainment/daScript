@@ -26,7 +26,7 @@ def softcap_exp(v, cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v
 //! tanh clamped to +-15, where it already saturates in f32: past that a device tanh built from exp answers NaN, the CPU +-1
 def tts_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
 
-//! the CPU `sigmoid_f`
+//! the logistic sigmoid, one form for the CPU chains (the TTS LSTM and duration head, the G2P GRU, the VAD) and both kernel homes
 def tts_sigmoid(v : float) : float => 1.0 / (1.0 + exp(-v))
 
 //! SiLU as the one quotient v / (1 + exp(-v)), the CPU `silu`'s form
