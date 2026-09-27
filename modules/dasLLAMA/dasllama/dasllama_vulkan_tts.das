@@ -129,57 +129,60 @@ def private ts_slab_upload(var sl : TsSlab; key : uint64; host : array<float>; h
     return true
 }
 
+//! the slab for `key` stands: its rows are up under that key
+def private ts_slab_current(sl : TsSlab; key : uint64) : bool => sl.rows.dev != 0ul && sl.key == key
+
+//! the writer's two passes into a fresh slot record, the host floats up (their f16 twin under `half`), the slots taken, the wall said; false
+//! on a failed upload, the resident slab released. A part's attach reaches it through its own [cold_path] rebuild, the one that holds the
+//! writer's block, so the writer's allocations stay off the seat's hot path
+[cold_path]
+def private ts_slab_rebuild(var sl : TsSlab; var slots : auto(SS); key : uint64; half : bool; what : string;
+                            write : block<(var w : TtsSlabWriter; var s : SS) : void>) : bool {
+    var inscope fresh : SS
+    let t0 = ref_time_ticks()
+    var inscope host <- tts_slab_build(fresh, write)
+    let built = get_time_usec(t0)
+    return false if (!ts_slab_upload(sl, key, host, half))
+    ts_attach_log(what, long_length(host), built, get_time_usec(t0) - built)
+    delete slots
+    slots <- fresh
+    return true
+}
+
 def private ts_albert_attach(a : St2Albert) : bool {
     let key = tts_albert_key(a)
-    return true if (g_ts_albert.rows.dev != 0ul && g_ts_albert.key == key)
-    return ts_albert_rebuild(a, key)
+    return ts_slab_current(g_ts_albert, key) || ts_albert_rebuild(a, key)
 }
 
 [cold_path]
 def private ts_albert_rebuild(a : St2Albert; key : uint64) : bool {
-    var slots : TtsAlbertSlab
-    var inscope host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsAlbertSlab) {
+    return ts_slab_rebuild(g_ts_albert, g_ts_albert_slots, key, false, "albert slab") $(var w : TtsSlabWriter; var s : TtsAlbertSlab) {
         tts_albert_write(w, a, s)
     }
-    return false if (!ts_slab_upload(g_ts_albert, key, host, false))
-    g_ts_albert_slots = slots
-    return true
 }
 
 def private ts_text_attach(te : St2TextEncoder) : bool {
     let key = tts_text_key(te)
-    return true if (g_ts_text.rows.dev != 0ul && g_ts_text.key == key)
-    return ts_text_rebuild(te, key)
+    return ts_slab_current(g_ts_text, key) || ts_text_rebuild(te, key)
 }
 
 [cold_path]
 def private ts_text_rebuild(te : St2TextEncoder; key : uint64) : bool {
-    var slots : TtsTextSlab
-    var inscope host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsTextSlab) {
+    return ts_slab_rebuild(g_ts_text, g_ts_text_slots, key, false, "text slab") $(var w : TtsSlabWriter; var s : TtsTextSlab) {
         tts_text_write(w, te, s)
     }
-    return false if (!ts_slab_upload(g_ts_text, key, host, false))
-    delete g_ts_text_slots
-    g_ts_text_slots <- slots
-    return true
 }
 
 def private ts_pred_attach(p : St2Predictor) : bool {
     let key = tts_pred_key(p)
-    return true if (g_ts_pred.rows.dev != 0ul && g_ts_pred.key == key)
-    return ts_pred_rebuild(p, key)
+    return ts_slab_current(g_ts_pred, key) || ts_pred_rebuild(p, key)
 }
 
 [cold_path]
 def private ts_pred_rebuild(p : St2Predictor; key : uint64) : bool {
-    var slots : TtsPredSlab
-    var inscope host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsPredSlab) {
+    return ts_slab_rebuild(g_ts_pred, g_ts_pred_slots, key, false, "predictor slab") $(var w : TtsSlabWriter; var s : TtsPredSlab) {
         tts_pred_write(w, p, s)
     }
-    return false if (!ts_slab_upload(g_ts_pred, key, host, false))
-    delete g_ts_pred_slots
-    g_ts_pred_slots <- slots
-    return true
 }
 
 let private TS_SCRATCH_BUFS = 30
@@ -1168,20 +1171,14 @@ let private TS_MAX_STAGES = 8l   //! the generator stages the seat holds slots f
 
 def private ts_dec_attach(d : St2Decoder) : bool {
     let key = tts_dec_key(d)
-    return true if (g_ts_dec.rows.dev != 0ul && g_ts_dec.key == key)
-    return ts_dec_rebuild(d, key)
+    return ts_slab_current(g_ts_dec, key) || ts_dec_rebuild(d, key)
 }
 
 [cold_path]
 def private ts_dec_rebuild(d : St2Decoder; key : uint64) : bool {
-    var slots : TtsDecSlab
-    var inscope host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsDecSlab) {
+    return ts_slab_rebuild(g_ts_dec, g_ts_dec_slots, key, f16_gemm_on(), "decoder slab") $(var w : TtsSlabWriter; var s : TtsDecSlab) {
         tts_dec_write(w, d, s)
     }
-    return false if (!ts_slab_upload(g_ts_dec, key, host, f16_gemm_on()))
-    delete g_ts_dec_slots
-    g_ts_dec_slots <- slots
-    return true
 }
 
 let private TS_D_X = 0        //! the stream rows the decode blocks and the generator ping-pong with BO
@@ -1740,24 +1737,15 @@ def vulkan_pocket_frame_batch() : int64 => g_ts_pk_batch
 
 def private ts_pk_codec_attach(mm : PocketMimi) : bool {
     let key = tts_pk_codec_key(mm)
-    return true if (g_ts_pk_codec.rows.dev != 0ul && g_ts_pk_codec.key == key)
-    return ts_pk_codec_rebuild(mm, key)
+    return ts_slab_current(g_ts_pk_codec, key) || ts_pk_codec_rebuild(mm, key)
 }
 
 [cold_path]
 def private ts_pk_codec_rebuild(mm : PocketMimi; key : uint64) : bool {
-    var slots : TtsPkCodecSlab
     let rope_rows = TS_PK_CODEC_MAX_FRAMES * mm.frame_steps
-    let t0 = ref_time_ticks()
-    var inscope host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsPkCodecSlab) {
+    return ts_slab_rebuild(g_ts_pk_codec, g_ts_pk_codec_slots, key, false, "pocket codec slab") $(var w : TtsSlabWriter; var s : TtsPkCodecSlab) {
         tts_pk_codec_write(w, mm, rope_rows, s)
     }
-    let built = get_time_usec(t0)
-    return false if (!ts_slab_upload(g_ts_pk_codec, key, host, false))
-    ts_attach_log("pocket codec slab", long_length(host), built, get_time_usec(t0) - built)
-    delete g_ts_pk_codec_slots
-    g_ts_pk_codec_slots <- slots
-    return true
 }
 
 //! the attach ledger under the info log: a slab's floats, its host build and its upload
@@ -1794,23 +1782,14 @@ def private ts_arm_ensure(seat : string; ensure : function<() : bool>) : bool {
 
 def private ts_pk_frames_attach(m : PocketModel) : bool {
     let key = tts_pk_frames_key(m)
-    return true if (g_ts_pk_frames.rows.dev != 0ul && g_ts_pk_frames.key == key)
-    return ts_pk_frames_rebuild(m, key)
+    return ts_slab_current(g_ts_pk_frames, key) || ts_pk_frames_rebuild(m, key)
 }
 
 [cold_path]
 def private ts_pk_frames_rebuild(m : PocketModel; key : uint64) : bool {
-    var slots : TtsPkFramesSlab
-    let t0 = ref_time_ticks()
-    var inscope host <- tts_slab_build(slots) $(var w : TtsSlabWriter; var s : TtsPkFramesSlab) {
+    return ts_slab_rebuild(g_ts_pk_frames, g_ts_pk_frames_slots, key, false, "pocket frames slab") $(var w : TtsSlabWriter; var s : TtsPkFramesSlab) {
         tts_pk_frames_write(w, m, s)
     }
-    let built = get_time_usec(t0)
-    return false if (!ts_slab_upload(g_ts_pk_frames, key, host, false))
-    ts_attach_log("pocket frames slab", long_length(host), built, get_time_usec(t0) - built)
-    delete g_ts_pk_frames_slots
-    g_ts_pk_frames_slots <- slots
-    return true
 }
 
 //! one voice's device K/V rows [cap][d] per backbone layer, and the rope tables (cos then sin) for every position they can hold
