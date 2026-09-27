@@ -26,12 +26,10 @@ require dasllama/dasllama_pocket
 require dasllama/dasllama_convert
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS, Q8_QPB, Q8_SPB - the q8 blob's block shape
-require dasllama/dasllama_rope   // build_rope_tabs - the Pocket kernels' tables
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_layout
 require dasllama/dasllama_tts_slab
-require daslib/f16_cvt
 require daslib/apply
 require dasllama/dasllama_tower   // Clamp — the calibration record the gemma4a sites carry
 require metal/das_metal_boost
@@ -2325,12 +2323,8 @@ def private st2_slab_norm(var w : TtsSlabWriter; a : TtsAdaIn; alpha : TtsWeight
 
 def private st2_slab_block(var w : TtsSlabWriter; b : St2GenResBlock) : St2BlockSlots {
     var inscope t <- tts_slab_block(w, b)
-    var s : St2BlockSlots
-    s.c1 <- [for (c in t.c1); st2_slot_of(w, c)]
-    s.c2 <- [for (c in t.c2); st2_slot_of(w, c)]
-    s.n1 <- [for (n in t.n1); st2_norm_of(n)]
-    s.n2 <- [for (n in t.n2); st2_norm_of(n)]
-    return <- s
+    return <- St2BlockSlots(c1 <- [for (c in t.c1); st2_slot_of(w, c)], c2 <- [for (c in t.c2); st2_slot_of(w, c)],
+        n1 <- [for (n in t.n1); st2_norm_of(n)], n2 <- [for (n in t.n2); st2_norm_of(n)])
 }
 
 def private st2_slab_res(var w : TtsSlabWriter; b : St2AdainResBlk) : St2ResSlots {
