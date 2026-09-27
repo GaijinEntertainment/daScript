@@ -829,14 +829,15 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             var s_dw = set_tower_dw_conv5_cls(fixed_array(gd, cd, wd), fixed_array(bx, bx, bw), fixed_array(B_G, B_C, 0u))
             var s_attn = set_tower_g4a_attn64_cls(fixed_array(qd, kd, vd, aod, rd, wd), fixed_array(bx, bx, bx, bx, brpe, bw), fixed_array(0u, 0u, 0u, B_AO, 0u, 0u))
             var pa_silu = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_SILU)
-            var pa_convmod = TowerConvModArgs(d = uint(d), nelem = uint(nd), woff = uint(hs))
+            var pa_convmod = TowerConvModArgs(d = uint(d), nelem = uint(nd))
+            var pa_dw = TtsPoolArgs(c = uint(d), t_in = uint(rows), t_out = uint(rows), woff = uint(hs))
             let qscale = (1.0 / sqrt(float(hs))) / log(2.0)
             let kscale = log(1.0 + exp(1.0)) / log(2.0)
             var pa_attn = TowerG4aAttnArgs(d = uint(d), npos = uint(rows), pdsoff = 0u)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tower_act_cls(raw, h, s_silu, pa_silu, int64((nd / 4 + 255) / 256))
                 enc_tower_glu_sig_cls(raw, h, s_glu, pa_convmod, int64((nd + 255) / 256))
-                enc_tower_dw_conv5_cls(raw, h, s_dw, pa_convmod, int64((nd + 255) / 256))
+                enc_tower_dw_conv5_cls(raw, h, s_dw, pa_dw, int64((nd + 255) / 256))
                 enc_tower_g4a_attn64_cls(raw, h, s_attn, pa_attn, int64((rows * ROWS_HEADS + 63) / 64))
                 cmd_copy_planes(raw, h, fixed_array(sd, gd, cd, aod), host, fixed_array(bx, bx, bx, bx), B_S | B_G | B_C | B_AO)
             }
@@ -995,7 +996,8 @@ def test_vkt_tower_fastconformer(t0 : T?) {
             fill_upload(gd, bx, bsrc - bx, GUARD_GARBAGE_BITS)
             nan_sentinel_upload(cd, bx)
             var s_dw = set_tower_cn_dw_cls(fixed_array(gd, cd, wd), fixed_array(bsrc, bx, bw), fixed_array(0u, B_C, 0u))
-            var pa_dw = TowerCnDwArgs(d = uint(d), nk = uint(CN_CONV_KERNEL), npos = uint(rows), woff = uint(taps_off), bnwoff = uint(bnw_off), bnboff = uint(bnb_off))
+            var pa_dw = TtsPoolArgs(c = uint(d), k = uint(CN_CONV_KERNEL), t_in = uint(rows), t_out = uint(rows), woff = uint(taps_off), bnwoff = uint(bnw_off),
+                bnboff = uint(bnb_off))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tower_cn_dw_cls(raw, h, s_dw, pa_dw, int64((nd + 255) / 256))
                 vhz_dep(raw, h, B_C, 0u, true)

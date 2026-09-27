@@ -10074,7 +10074,6 @@ class TowerG4aAttn64 : TowerG4aAttnT {
 struct TowerConvModArgs {
     d : uint        //! the output row width; the GLU's input rows are 2d wide
     nelem : uint    //! npos x d
-    woff : uint     //! the depthwise taps' base in wn ([d x 5], the conv class)
 }
 
 //! the conv module's GLU: y[t][c] = h[t][c] . sigmoid(h[t][d + c]) off the pointwise rows
@@ -10096,34 +10095,92 @@ class TowerGluSig {
     }
 }
 
-//! the causal depthwise conv (k = 5, the taps [d x 5] at `woff`): a row reads the four before it, the chunk's first rows
-//! read nothing before the start
-[vk_dispatch(name = "tower_dw_conv5_cls", grid = "wgs", params = "wgs : int64")]
-class TowerDwConv5 {
+struct TtsPoolArgs {
+    c : uint       //! the channels, one tap row each
+    k : uint       //! the taps, where the stamp does not fix them
+    stride : uint  //! the transposed stamp's stride
+    pad_l : uint   //! ... its cropped left edge
+    dil : uint     //! ... its dilation
+    t_in : uint
+    t_out : uint
+    woff : uint    //! w [c][k]'s element base in wn
+    boff : uint    //! the transposed stamp's bias row in wn
+    bnwoff : uint  //! the centered stamp's folded BatchNorm scale row in wn
+    bnboff : uint  //! ... and shift row
+}
+
+//! a depthwise conv on rows, y [t_out][c] from x [t_in][c] and w [c][k], one element an invocation; FORM is the source
+//! rule and the epilogue: 0 the transposed conv gathered, the bias row first and one mad a tap (the CPU
+//! `conv1d_rows_transposed_depthwise`); 1 the causal conv, a row reading the k - 1 rows before it (gemma4a's conv module);
+//! 2 the centered conv, the folded BatchNorm and silu after it (canary's conv module tail)
+[ |> template_struct_instance]
+class template DwConvRowsT {
+    @template_constant FORM : int = 0   //!< spelled as its literal: a template constant folds only a literal
+    @template_constant K : uint = 0u    //!< the taps where the stamp fixes them, else 0 and the taps are `pa.k`
     @ssbo @binding = 0 x : array<float>
     @ssbo @binding = 1 y : array<float>
     @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @push_constant pa : TowerConvModArgs
+    @push_constant pa : TtsPoolArgs
 
-    [spirv_kernel(local_size_x = 256, name = "tower_dw_conv5_cls_spv")]
+    def taps : uint {
+        static_if (K != 0u) {
+            return K
+        } else {
+            return pa.k
+        }
+    }
+
+    //! the input row tap kk reads for output row t, or -1 off the input
+    def src_row(t, kk : uint) : int {
+        static_if (FORM == 0) {
+            return st2_conv_src_tr_row(t, kk, 0u, pa.pad_l, pa.dil, max(pa.stride, 1u), pa.t_in)
+        } else {
+            static_if (FORM == 1) {
+                return st2_conv_src_fwd_row(t, kk, 0u, taps() - 1u, 1u, 1u, pa.t_in)
+            } else {
+                return st2_conv_src_fwd_row(t, kk, 0u, (taps() - 1u) / 2u, 1u, 1u, pa.t_in)
+            }
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let e = gl_GlobalInvocationID.x
-        if (e < pa.nelem) {
-            let dd = max(1u, pa.d)
-            let t = e / dd
-            let c = e % dd
+        if (e < pa.t_out * pa.c) {
+            let c = max(pa.c, 1u)
+            let t = e / c
+            let j = e % c
+            let nk = taps()
             var acc = 0.0
+            static_if (FORM == 0) {
+                acc = wn[pa.boff + j]
+            }
             var kk = 0u
-            while (kk < 5u) {
-                if (t + kk >= 4u) {
-                    let src = t + kk - 4u
-                    acc += wn[pa.woff + c * 5u + kk] * x[src * pa.d + c]
+            while (kk < nk) {
+                let src = src_row(t, kk)
+                if (src >= 0) {
+                    static_if (FORM == 0) {
+                        acc = mad(wn[pa.woff + j * nk + kk], x[uint(src) * pa.c + j], acc)
+                    } else {
+                        acc += wn[pa.woff + j * nk + kk] * x[uint(src) * pa.c + j]
+                    }
                 }
                 kk++
             }
-            y[e] = acc
+            static_if (FORM == 2) {
+                y[e] = tts_silu(acc * wn[pa.bnwoff + j] + wn[pa.bnboff + j])
+            } else {
+                y[e] = acc
+            }
         }
     }
+}
+
+//! gemma4a's causal depthwise conv, k = 5: the chunk's first rows read nothing before the start
+[vk_dispatch(name = "tower_dw_conv5_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerDwConv5 : DwConvRowsT {
+    override FORM = 1
+    override K = 5u
 }
 
 struct TowerCnAttnRArgs {
@@ -10234,45 +10291,11 @@ class TowerCnAttnR64 : TowerCnAttnRT {
     override HS = 64u
 }
 
-struct TowerCnDwArgs {
-    d : uint
-    nk : uint       //! the taps (odd; canary 9)
-    npos : uint
-    woff : uint     //! the taps [d x nk] in wn
-    bnwoff : uint   //! the folded BatchNorm's scale row [d]
-    bnboff : uint   //! ... and shift row [d]
-}
-
-//! canary's conv module tail: the centered depthwise conv over time (k taps), the folded BatchNorm and silu - one pass,
-//! the CPU loop's form
-[vk_dispatch(name = "tower_cn_dw_cls", grid = "wgs", params = "wgs : int64")]
-class TowerCnDw {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 y : array<float>
-    @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @push_constant pa : TowerCnDwArgs
-
-    [spirv_kernel(local_size_x = 256, name = "tower_cn_dw_cls_spv")]
-    def run {
-        let e = gl_GlobalInvocationID.x
-        if (e < pa.npos * pa.d) {
-            let dd = max(1u, pa.d)
-            let t = e / dd
-            let c = e % dd
-            let kpad = (pa.nk - 1u) / 2u
-            var acc = 0.0
-            var kk = 0u
-            while (kk < pa.nk) {
-                let src = t + kk
-                if (src >= kpad && src - kpad < pa.npos) {
-                    acc += wn[pa.woff + c * pa.nk + kk] * x[(src - kpad) * pa.d + c]
-                }
-                kk++
-            }
-            let bv = acc * wn[pa.bnwoff + c] + wn[pa.bnboff + c]
-            y[e] = tts_silu(bv)
-        }
-    }
+//! canary's conv module tail: the centered depthwise conv over time (k taps, odd - canary 9), the folded BatchNorm and
+//! silu in one pass, the CPU loop's form
+[vk_dispatch(name = "tower_cn_dw_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerCnDw : DwConvRowsT {
+    override FORM = 2
 }
 
 struct TowerGegluArgs {
@@ -13694,48 +13717,10 @@ class TtsAdainSnake : TtsAdainT {
     override SNAKE = true
 }
 
-struct TtsPoolArgs {
-    c : uint       //! the channels, one tap row each
-    k : uint       //! the taps
-    stride : uint
-    pad_l : uint   //! the cropped left edge
-    dil : uint
-    t_in : uint
-    t_out : uint
-    woff : uint    //! w [c][k]'s element base in wn
-    boff : uint    //! the bias row's element base in wn
-}
-
-//! the depthwise transposed pool on rows: y [t_out][c] gathers the rows of x [t_in][c] its taps reach, w [c][k] - the CPU
-//! `conv1d_rows_transposed_depthwise`; one element an invocation
+//! the depthwise transposed pool on rows: y [t_out][c] gathers the rows of x [t_in][c] its taps reach - the CPU
+//! `conv1d_rows_transposed_depthwise`
 [vk_dispatch(name = "tts_pool_dw_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsPoolDw {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 y : array<float>
-    @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @push_constant pa : TtsPoolArgs
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.t_out * pa.c) {
-            let c = max(pa.c, 1u)
-            let stride = max(pa.stride, 1u)
-            let p = gid / c
-            let j = gid % c
-            var acc = wn[pa.boff + j]
-            var kk = 0u
-            while (kk < pa.k) {
-                let src = st2_conv_src_tr_row(p, kk, 0u, pa.pad_l, pa.dil, stride, pa.t_in)
-                if (src >= 0) {
-                    acc = mad(wn[pa.woff + j * pa.k + kk], x[uint(src) * pa.c + j], acc)
-                }
-                kk++
-            }
-            y[gid] = acc
-        }
-    }
-}
+class TtsPoolDw : DwConvRowsT {}
 
 struct TtsAddScaleArgs {
     nelem : uint
