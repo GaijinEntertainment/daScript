@@ -119,12 +119,26 @@ stay the reviewer's. A mis-numbered arm dispatches, reads the wrong buffer, and
 
 ### 1.6 Architecture registrations
 
-Thirteen files registering eighteen names:
-`dasllama_arch_llama.das` * `dasllama_arch_phi3.das` * `dasllama_arch_qwen2.das` * `dasllama_arch_qwen2moe.das` * `dasllama_arch_qwen3.das` * `dasllama_arch_qwen3moe.das` * `dasllama_arch_qwen35.das` * `dasllama_arch_gemma2.das` * `dasllama_arch_gemma3.das` * `dasllama_arch_gemma4.das` * `dasllama_arch_glm4moe.das` * `dasllama_arch_gptoss.das` * `dasllama_arch_mistral3.das`. They are DECLARATIVE: an arch
+Fourteen files registering nineteen names:
+`dasllama_arch_llama.das` * `dasllama_arch_phi3.das` * `dasllama_arch_qwen2.das` * `dasllama_arch_qwen2moe.das` * `dasllama_arch_qwen3.das` * `dasllama_arch_qwen3moe.das` * `dasllama_arch_qwen35.das` * `dasllama_arch_qwen4exp.das` * `dasllama_arch_gemma2.das` * `dasllama_arch_gemma3.das` * `dasllama_arch_gemma4.das` * `dasllama_arch_glm4moe.das` * `dasllama_arch_gptoss.das` * `dasllama_arch_mistral3.das`. They are DECLARATIVE: an arch
 file builds an `ArchDesc` (name * `configure` * the `ArchBlocks` fn-ptr set - `attn_decode`,
-`ffn_decode`, `attn_prefill`, `ffn_prefill`, and the optional `attn_batch` a non-standard graph
-names * `ChatTemplate` * `LlmCaps`) and calls `register_arch` at `[init]`. Adding an arch touches no
+`ffn_decode`, `attn_prefill`, `ffn_prefill`, the optional `attn_batch` a non-standard graph
+names, and the optional residual-shape seams `pre_stack_decode` / `pre_stack_prefill` (after the
+embedding, before the layer loop) and `final_norm` (in place of the output_norm rmsnorm) * `ChatTemplate` * `LlmCaps`) and calls `register_arch` at `[init]`. Adding an arch touches no
 forward loop.
+
+`dasllama_arch_qwen4exp.das` (Qwen3.8-Flash-Next, the Qwen4 preview) is the qwen35moe hybrid
+inside hyper-connections: the residual is `hc_count` parallel streams (`Session.hc_res` /
+`hc_res_b`), every block reads the mixer's collapsed row from `xb` and scatters its output back
+through the `block_in` / `block_resid` seams every block kernel routes its norm and residual add
+through (`dasllama_common`, the hyper-connection section: `hc_mix_row`, `hc_combine_row`); the
+head mixer stands where `output_norm` would. The n-gram PLE side input hashes the token and its
+predecessors into rows of `Model.ngram_tab` (the disk block form, gathered per token, never a
+plane) and adds a gated value plus a dilated causal conv into the wide residual before layer
+`ple_layer`'s attention mixer; its window and conv ring are session state that resets at position 0
+with the deltanet's. The deltanet out-gate is `sigmoid(z)` (`Config.dn_z_sigmoid`). The QSA
+indexer's projections load (`Model.idx_*_offs`) and attention runs dense - bit-identical to the
+reference below the indexer's `indexer_top_k` budget.
 
 ### 1.8 Instrumentation and support
 

@@ -179,6 +179,27 @@ struct Config {
     // MTP/NextN (qwen35 family -MTP files): block_count includes the appended draft block(s).
     // n_layers stays the TRUNK count everywhere; the MTP block lives at layer index n_layers.
     n_layer_nextn : int64 = 0          // 0 = no MTP block; 1 = single NextN head (only value supported)
+    // qwen4exp (Qwen3.8-Flash-Next): the residual is hc_count parallel streams, mixed into every block's input and
+    // scattered back after it (hyper-connections); the mixers carry the norms (no attn_norm / ffn_norm / output_norm
+    // tensors). The bools are arch opt-ins (configure); the geometry is loader-filled from {arch}.hyper_connection.*
+    hyper_conn : bool = false
+    hc_count : int64 = 0               // parallel residual streams (4)
+    hc_low_rank : int64 = 0            // the mixer's bottleneck width (320)
+    dn_z_sigmoid : bool = false        // deltanet out-gate σ(z) (qwen4exp) instead of silu(z) (qwen35)
+    // qwen4exp PLE: an n-gram HASH table (not gemma-4's per-token-id table): loader-detected from
+    // {arch}.ple.layers; the hash constants (multipliers, head offsets, head vocab sizes) are Model arrays
+    ple_ngram : bool = false           // arch opt-in: read the ple.* keys when the file carries them
+    ple_layer : int64 = -1             // the ONE layer whose block the n-gram side input precedes (-1 = none)
+    ple_ngram_size : int64 = 0         // n of the widest n-gram (3: bigram + trigram heads)
+    ple_heads_per_ngram : int64 = 0    // rows gathered per n-gram order (8)
+    ple_head_dim : int64 = 0           // row width of the hash table (160) - NOT n_embd_per_layer (gemma-4's rail)
+    ple_conv_kernel : int64 = 0        // the depthwise causal conv's taps (4), dilated by ple_ngram_size
+    ple_eos_token : int64 = 0          // resets the n-gram window (a missing predecessor reads as this)
+    ple_image_token : int64 = 0        // stands in for an embedding-fed row (0 = the EOS id)
+    // qwen4exp QSA (query-sparse attention) indexer geometry; a compress ratio per layer is a Model array
+    indexer_n_head : int64 = 0         // indexer query heads (4)
+    indexer_head_size : int64 = 0      // indexer key width (128)
+    indexer_top_k : int64 = 0          // the attended-token budget (2048); dense attention below it
 }
 
 // Swappable block kernels — one per (attention|ffn) x (decode|prefill). Decode is the fused
@@ -191,6 +212,11 @@ typedef FfnPrefillFn  = function<(t : Model; var s : Session; l : int64; npos : 
 //! One layer of the CPU batched decode step over B sessions: the arch's own form where the std
 //! batched attention (`attention_batch_decode`) does not fit its graph - null keeps the std form.
 typedef AttnBatchFn   = function<(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; l : int64; nrows : int64) : void>
+//! The arch's residual-shape seams around the layer loop (ArchBlocks.pre_stack_* / final_norm): the pre-stack step sees the
+//! embedded row(s) and the token ids; final_norm writes the classifier's input row into xb from residual row `row` (decode: x; prefill: x_b)
+typedef PreStackDecodeFn  = function<(t : Model; var s : Session; token : int64; pos : int64) : void>
+typedef PreStackPrefillFn = function<(t : Model; var s : Session; tokens : array<int64>; npos : int64; start_pos : int64) : void>
+typedef FinalNormFn       = function<(t : Model; var s : Session; row : int64; batched : bool) : void>
 
 //! A whole-prefill override: claims the ENTIRE per-layer stack of one prefill. On true the KV
 //! cache is filled for every position; x_b holds the final residual stream at row npos-1 always,
@@ -884,6 +910,11 @@ struct ArchBlocks {
     // Metal gate: the FFN is the plain dense gated pair (ffn_dense_*). Block sets that route
     // experts (or MAY, per file — gemma4) set this false and the GPU drivers decline `graph`.
     ffn_is_dense : bool = true
+    // the residual's shape is the arch's: pre_stack_* runs after the embedding lands in x / x_b (null = nothing),
+    // final_norm replaces the output_norm rmsnorm into xb (null = rms_at(rms_final_off)) - qwen4exp binds both
+    pre_stack_decode : PreStackDecodeFn
+    pre_stack_prefill : PreStackPrefillFn
+    final_norm : FinalNormFn
 }
 
 //! One lattice format's planes on a Model: the quant plane, the scale plane, and the grp<mr>
@@ -1111,6 +1142,38 @@ struct Model {
     mtp_enorm_off : int64 = -1      // fblob: nextn.enorm (token-embedding RMS weight), dim
     mtp_hnorm_off : int64 = -1      // fblob: nextn.hnorm (trunk-hidden RMS weight), dim
     mtp_headnorm_off : int64 = -1   // fblob: nextn.shared_head_norm, dim (-1 = output_norm)
+    // qwen4exp hyper-connections (config.hyper_conn). Per layer TWO mixer sites, attn (0) then ffn
+    // (1), indexed (l * 2 + site): the grouped norm gammas and the f32 inject matrices in fblob,
+    // the low-rank down/up pair on the q8 plane. The head mixer (no inject) replaces output_norm.
+    hc_norm_off : int64 = -1        // fblob: sites x (hc x dim), the converter's folded (1 + w)
+    hc_inject_off : int64 = -1      // fblob: sites x (hc x (hc x dim)) - one hc_dim row per stream
+    hc_down_offs : array<int64>     // q8: per site [low_rank x hc_dim]
+    hc_up_offs : array<int64>       // q8: per site [hc_dim x low_rank]
+    hc_head_norm_off : int64 = -1   // fblob: hc x dim
+    hc_head_down_off : int64 = -1   // q8: [low_rank x hc_dim]
+    hc_head_up_off : int64 = -1     // q8: [hc_dim x low_rank]
+    // qwen4exp PLE n-gram side input (config.ple_layer >= 0): the hash table stays in its DISK
+    // block form and is gathered per token (ple_head_dim elements per row); the two projections
+    // ride the q8 plane, the three grouped norms and the conv taps are fblob
+    ngram_tab : array<uint8>        // per_layer_token_embd raw rows: ngram_rows x ngram_row_bytes
+    ngram_type : int = 0            // the table's GGML type (IQ4_NL / Q8_0 / F16 / BF16 / F32 decode)
+    ngram_rows : int64 = 0
+    ngram_row_bytes : int64 = 0
+    ple_mult : array<uint64>        // ple.layer_multipliers: one per n-gram position
+    ple_head_off : array<int64>     // ple.head_offsets: first row of head h
+    ple_head_vocab : array<int64>   // ple.head_vocab_sizes: rows of head h (the modulus)
+    ple_key_off : int64 = -1        // q8: [hc_dim x (heads x head_dim)]
+    ple_val_off : int64 = -1        // q8: [dim x (heads x head_dim)]
+    ple_nkey_off : int64 = -1       // fblob: hc x dim
+    ple_nquery_off : int64 = -1     // fblob: hc x dim
+    ple_nconv_off : int64 = -1      // fblob: hc x dim
+    ple_conv_off : int64 = -1       // fblob: (hc x dim) x conv_kernel, taps contiguous per channel
+    // qwen4exp QSA indexer (config.indexer_n_head > 0): f32 in fblob, attention layers only
+    idx_q_offs : array<int64>       // per layer [ (n_head x head_size) x dim ], -1 on recurrent layers
+    idx_k_offs : array<int64>       // per layer [ head_size x dim ]
+    idx_qn_offs : array<int64>      // per layer [head_size]
+    idx_kn_offs : array<int64>      // per layer [head_size]
+    qsa_ratio : array<int64>        // {arch}.attention.compress_ratios per layer (0 = dense)
     // vulkan-flavor bake (dasllama_image): the GPU walk's gathered device-layout planes + the
     // walk-order plan. Empty on planar/metal flavors (empty planes never save); borrowed
     // views on a flavor load — the generic finalizer walk covers both.
@@ -2232,6 +2295,29 @@ struct Session {
     @scratch dn_wtap : array<float>         // conv weights transposed tap-major for the batched form (d_conv x conv_dim)
     @scratch dn_cws : array<float>          // per-v-head chunk workspace slabs (dt_rank x dn_cws_head_size)
     @scratch dn_tail : array<float>         // GPU deltanet chain: last taps qkv rows back (conv-history store)
+    // hyper-connections (config.hyper_conn): the wide residual and the mixer scratch. hc_res is
+    // the residual the blocks scatter into; x / x_b hold the mixed block INPUT rows meanwhile
+    hc_res : array<float>          // decode: hc x dim
+    hc_xn : array<float>           // grouped-normed streams (hc x dim)
+    hc_lo : array<float>           // low-rank (low_rank)
+    hc_gate : array<float>         // the up projection (hc x dim)
+    hc_inject : array<float>       // this block's scatter logits (hc), set by the mixer, read by the combine
+    @scratch hc_res_b : array<float>       // prefill: npos x hc x dim
+    @scratch hc_xn_b : array<float>        // npos x hc x dim
+    @scratch hc_lo_b : array<float>        // npos x low_rank
+    @scratch hc_gate_b : array<float>      // npos x hc x dim
+    @scratch hc_inject_b : array<float>    // npos x hc
+    // PLE n-gram side input (config.ple_layer >= 0): forward-only state like the deltanet's
+    ple_prev : array<int64>        // the last (ngram_size - 1) token ids, oldest first (-1 = none yet)
+    @exact_size ple_conv_hist : array<float>   // the conv's history ring: (taps-1)*dilation + 1 rows of hc x dim
+    ple_emb : array<float>         // decode: the gathered heads x head_dim row
+    ple_key : array<float>         // hc x dim
+    ple_val : array<float>         // dim
+    ple_gated : array<float>       // hc x dim
+    ple_conv_out : array<float>    // hc x dim
+    @scratch ple_emb_b : array<float>      // prefill: npos x (heads x head_dim)
+    @scratch ple_key_b : array<float>      // npos x hc x dim
+    @scratch ple_val_b : array<float>      // npos x dim
     // MTP/NextN self-spec state (empty unless config.n_layer_nextn > 0). mtp_h is the trunk's
     // post-output-norm hidden of the LAST evaluated position (the MTP draft-head handoff);
     // mtp_h_pos1 is that position PLUS ONE (0 = cold, keeps Session zero-init-safe).
@@ -2378,11 +2464,31 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
         s.mtp_logits |> resize(c.vocab_size)
         s.mtp_vbatch |> resize(MTP_MAX_ROWS)
     }
+    if (c.hyper_conn) {   // hyper-connections: the wide residual + the mixer's four scratch rows
+        s.hc_res |> resize(hc_dim(c))
+        s.hc_xn |> resize(hc_dim(c))
+        s.hc_lo |> resize(c.hc_low_rank)
+        s.hc_gate |> resize(hc_dim(c))
+        s.hc_inject |> resize(c.hc_count)
+    }
+    if (has_ple_ngram(c)) {   // n-gram PLE: the window, the conv ring (zeroed by resize), the decode rows
+        s.ple_prev |> resize(c.ple_ngram_size - 1l)
+        for (i in range64(c.ple_ngram_size - 1l)) {
+            s.ple_prev[i] = -1l
+        }
+        s.ple_conv_hist |> reserve_resize(ple_hist_rows(c) * hc_dim(c))
+        s.ple_emb |> resize(ple_in_dim(c))
+        s.ple_key |> resize(hc_dim(c))
+        s.ple_val |> resize(c.dim)
+        s.ple_gated |> resize(hc_dim(c))
+        s.ple_conv_out |> resize(hc_dim(c))
+    }
     s.ffn_offs |> resize(4)
     s.ffn_gu |> resize(2l * ffw)
     // the Q8·Q8 path quantizes whichever activation feeds a matmul; the MTP eh_proj feeds a
-    // 2*dim concat row (don't rely on qd/ffw happening to cover it — 35B-A3B's qd == 2*dim is luck)
-    let maxn = max(max(xdim, ffw), c.n_layer_nextn > 0l ? 2l * c.dim : 0l)
+    // 2*dim concat row (don't rely on qd/ffw happening to cover it — 35B-A3B's qd == 2*dim is luck);
+    // the hyper-connection mixer's down projection feeds the whole hc_dim-wide normed residual
+    let maxn = max(max(max(xdim, ffw), c.n_layer_nextn > 0l ? 2l * c.dim : 0l), max(hc_dim(c), ple_in_dim(c)))
     s.xq |> resize(maxn)
     s.xs |> resize(maxn / 32l)
     s.xq2 |> resize(ffw)        // fused-FFN chain requant (see the Session field comment)
@@ -2656,6 +2762,161 @@ def rms_batch(var out : array<float>; src : array<float>; t : Model; woff : int6
                     rmsnorm(op + off, ip + off, wp, dim, eps)
                 }
             }
+        }
+    }
+}
+
+// ===== hyper-connections (config.hyper_conn): the wide residual and the block seams =====
+
+//! grouped RMSNorm of one wide row: stream ch of res[roff..] normalizes over dim and scales by gamma row ch
+def hc_grouped_norm(t : Model; res : array<float>; roff, woff : int64; var out : array<float>; ooff : int64) {
+    let c = t.config
+    let dim = c.dim
+    unsafe {
+        for (ch in range64(c.hc_count)) {
+            rmsnorm(addr(out[ooff + ch * dim]), addr < float const? >(res[roff + ch * dim]),
+                addr < float const? >(t.fblob[woff + ch * dim]), dim, c.norm_eps)
+        }
+    }
+}
+
+//! One mixer over the wide row res[roff..]: xb <- the mean of the normed streams, each sigmoid-gated by a
+//! low-rank projection; s.hc_inject <- the scatter logits (inject_off < 0 = the head mixer, no scatter)
+def hc_mix_row(t : Model; var s : Session; res : array<float>; roff, norm_off, down_off, up_off, inject_off : int64) {
+    let c = t.config
+    let dim = c.dim
+    let hcd = hc_dim(c)
+    let nh = c.hc_count
+    let lr = c.hc_low_rank
+    let inv = 1.0 / float(nh)
+    hc_grouped_norm(t, res, roff, norm_off, s.hc_xn, 0l)
+    mm_f(s.hc_lo, t, KqFmt.q8, down_off, s.hc_xn, s.xq, s.xs, s.xbs, hcd, lr)
+    for (j in range64(lr)) {
+        let v = s.hc_lo[j] * inv
+        s.hc_lo[j] = v / (1.0 + exp(-v))
+    }
+    mm_f(s.hc_gate, t, KqFmt.q8, up_off, s.hc_lo, s.xq, s.xs, s.xbs, lr, hcd)
+    unsafe {
+        var xn = addr(s.hc_xn[0])
+        if (inject_off >= 0l) {   // the scatter logits read the normed streams BEFORE the gate lands in them
+            for (ch in range64(nh)) {
+                s.hc_inject[ch] = dot(addr < float const? >(t.fblob[inject_off + ch * hcd]), xn, hcd)
+            }
+        }
+        sigmoid_gate(xn, addr < float const? >(s.hc_gate[0]), hcd)
+        var xb = addr(s.xb[0])
+        copy_floats(xb, xn, dim)
+        for (ch in range64(1l, nh)) {
+            add_inplace(xb, xn + ch * dim, dim)
+        }
+        scale_inplace(xb, inv, dim)
+    }
+}
+
+//! The mixer over the decode residual (s.hc_res) into xb
+def hc_mix(t : Model; var s : Session; norm_off, down_off, up_off, inject_off : int64) {
+    hc_mix_row(t, s, s.hc_res, 0l, norm_off, down_off, up_off, inject_off)
+}
+
+//! The mixer over every row of the prefill residual (s.hc_res_b) into xb_b, the scatter logits into hc_inject_b
+def hc_mix_b(t : Model; var s : Session; norm_off, down_off, up_off, inject_off, npos : int64) {
+    let c = t.config
+    let dim = c.dim
+    let hcd = hc_dim(c)
+    let nh = c.hc_count
+    let lr = c.hc_low_rank
+    let inv = 1.0 / float(nh)
+    for (p in range64(npos)) {
+        hc_grouped_norm(t, s.hc_res_b, p * hcd, norm_off, s.hc_xn_b, p * hcd)
+    }
+    mm_b_f(s, s.hc_lo_b, t, KqFmt.q8, down_off, s.hc_xn_b, hcd, lr, npos)
+    for (j in range64(npos * lr)) {
+        let v = s.hc_lo_b[j] * inv
+        s.hc_lo_b[j] = v / (1.0 + exp(-v))
+    }
+    mm_b_f(s, s.hc_gate_b, t, KqFmt.q8, up_off, s.hc_lo_b, lr, hcd, npos)
+    unsafe {
+        for (p in range64(npos)) {
+            var xn = addr(s.hc_xn_b[p * hcd])
+            for (ch in range64(nh)) {
+                s.hc_inject_b[p * nh + ch] = dot(addr < float const? >(t.fblob[inject_off + ch * hcd]), xn, hcd)
+            }
+            sigmoid_gate(xn, addr < float const? >(s.hc_gate_b[p * hcd]), hcd)
+            var xb = addr(s.xb_b[p * dim])
+            copy_floats(xb, xn, dim)
+            for (ch in range64(1l, nh)) {
+                add_inplace(xb, xn + ch * dim, dim)
+            }
+            scale_inplace(xb, inv, dim)
+        }
+    }
+}
+
+//! Scatter a block's output into the streams: res_ch += out * 2 sigmoid(inject_ch / hc) - a zero logit is a plain residual add
+def hc_combine_row(t : Model; var res : array<float>; roff : int64; out : float const?; inject : float const?) {
+    let c = t.config
+    let nh = c.hc_count
+    let dim = c.dim
+    unsafe {
+        for (ch in range64(nh)) {
+            let w = 2.0 / (1.0 + exp(-inject[ch] / float(nh)))
+            var r = addr(res[roff + ch * dim])
+            for (i in range64(dim)) {
+                r[i] += out[i] * w
+            }
+        }
+    }
+}
+
+//! A block's input row is xb: the residual through the layer norm at fblob[woff], or - under hyper-connections - the
+//! mixed stream the arch's mixer already left there
+def block_in(t : Model; var s : Session; woff : int64) {
+    if (!t.config.hyper_conn) {
+        rms_at(s.xb, t, woff, s.x, t.config.dim)
+    }
+}
+
+def block_in_b(t : Model; var s : Session; woff, npos : int64) {
+    if (!t.config.hyper_conn) {
+        rms_batch(s.xb_b, s.x_b, t, woff, t.config.dim, npos)
+    }
+}
+
+//! A block's output joins the residual: a plain add into x, or the hyper-connection scatter into hc_res
+def block_resid(t : Model; var s : Session; out : array<float>) {
+    unsafe {
+        if (t.config.hyper_conn) {
+            hc_combine_row(t, s.hc_res, 0l, addr < float const? >(out[0]), addr < float const? >(s.hc_inject[0]))
+        } else {
+            add_inplace(addr(s.x[0]), addr < float const? >(out[0]), t.config.dim)
+        }
+    }
+}
+
+//! block_resid over npos rows of out_b (row p is dim-wide at p * dim)
+def block_resid_b(t : Model; var s : Session; out_b : array<float>; npos : int64) {
+    let c = t.config
+    unsafe {
+        if (c.hyper_conn) {
+            for (p in range64(npos)) {
+                hc_combine_row(t, s.hc_res_b, p * hc_dim(c), addr < float const? >(out_b[p * c.dim]),
+                    addr < float const? >(s.hc_inject_b[p * c.hc_count]))
+            }
+        } else {
+            add_inplace(addr(s.x_b[0]), addr < float const? >(out_b[0]), npos * c.dim)
+        }
+    }
+}
+
+//! block_resid for ONE row p of a batched block output landing in row p of the residual (the per-position MoE prefill)
+def block_resid_row(t : Model; var s : Session; out : array<float>; p : int64) {
+    let c = t.config
+    unsafe {
+        if (c.hyper_conn) {
+            hc_combine_row(t, s.hc_res_b, p * hc_dim(c), addr < float const? >(out[0]),
+                addr < float const? >(s.hc_inject_b[p * c.hc_count]))
+        } else {
+            add_inplace(addr(s.x_b[p * c.dim]), addr < float const? >(out[0]), c.dim)
         }
     }
 }
@@ -3815,6 +4076,21 @@ def dn_key_dim(c : Config) : int64 => c.ssm_n_group * c.ssm_d_state
 //! deltanet fused-projection / conv channel count: [q (key_dim) ; k (key_dim) ; v (d_inner)].
 def dn_conv_dim(c : Config) : int64 => 2l * dn_key_dim(c) + c.ssm_d_inner
 
+//! the hyper-connection residual's width: hc_count streams of dim (0 on every other arch)
+def hc_dim(c : Config) : int64 => c.hyper_conn ? c.hc_count * c.dim : 0l
+
+//! the n-gram PLE side input is on: one layer's block is preceded by the hashed rows
+def has_ple_ngram(c : Config) : bool => c.ple_layer >= 0l
+
+//! rows the n-gram gather lands per token: heads_per_ngram per n-gram order from bigram up
+def ple_n_heads(c : Config) : int64 => (c.ple_ngram_size - 1l) * c.ple_heads_per_ngram
+
+//! the gathered side input's width - the key/value projections' K
+def ple_in_dim(c : Config) : int64 => ple_n_heads(c) * c.ple_head_dim
+
+//! rows of the PLE conv's history ring: the deepest tap (taps - 1) x dilation back, plus the current row
+def ple_hist_rows(c : Config) : int64 => (c.ple_conv_kernel - 1l) * c.ple_ngram_size + 1l
+
 // Chunk length (CS) for the blocked (chunked) gated-deltanet prefill.
 let DN_CHUNK = 64l
 
@@ -4131,6 +4407,9 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
         scale_inplace(unsafe(addr(s.x[0])), c.embed_scale, dim)
     }
     prof_add("embed", ts_embed)
+    if (t.blocks.pre_stack_decode != null) {   // the arch's residual shape (hyper-connection streams, the n-gram gather)
+        invoke(t.blocks.pre_stack_decode, t, s, token, pos)
+    }
     if (has_ple(c)) {  // gemma-4 E-series: build this token's per-(layer) side input before the stack
         let ts_ple = prof_ticks()
         if (ple_gpu_decode_gate(t, s, 1l, pos)) {
@@ -4184,7 +4463,11 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     blob_only_panic(t, "final-norm/classifier step")
     let ts_final = prof_ticks()
     trace_tag(TRACE_TAG_CLS)
-    rms_at(s.xb, t, t.rms_final_off, s.x, dim)
+    if (t.blocks.final_norm != null) {
+        invoke(t.blocks.final_norm, t, s, 0l, false)
+    } else {
+        rms_at(s.xb, t, t.rms_final_off, s.x, dim)
+    }
     if (c.n_layer_nextn > 0l) {   // stash h_nextn for the MTP draft head
         copy_floats(s.xb, 0l, s.mtp_h, 0l, dim)
         s.mtp_h_pos1 = pos + 1l
@@ -5107,7 +5390,7 @@ def attn_qkv_rope_prefix(t : Model; var s : Session; l : int64; npos : int64; st
     let kv_shared = t.kv_src[l] != l
     // attention rmsnorm, per position
     let ts_norm0 = prof_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
+    block_in_b(t, s, t.rms_att_off + l * dim, npos)
     prof_add("norm", ts_norm0)
     // batched q/k/v projections (each re-quantizes xb_b — cheap vs the matmul)
     let ts_qkv = prof_ticks()
@@ -5194,7 +5477,7 @@ def attn_out_suffix(t : Model; var s : Session; l : int64; npos : int64) {
     if (c.pre_post_norm) {  // Gemma2: post-attention RMSNorm per position before residual
         rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_att_off + l * dim, dim, npos)
     }
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    block_resid_b(t, s, s.xb2_b, npos)
     prof_add("act_resid", ts_resid0)
 }
 
@@ -5247,6 +5530,12 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         }
     }
     prof_add("embed", ts_embed)
+    if (t.blocks.pre_stack_prefill != null) {   // the arch's residual shape (hyper-connection streams, the n-gram gather)
+        if (s.embed_gpu_pending) {
+            embed_backfill_cpu(t, s, npos)   // the streams are made from the rows, so the rows come first
+        }
+        invoke(t.blocks.pre_stack_prefill, t, s, tokens, npos, start_pos)
+    }
     if (has_ple(c)) {  // gemma-4 E-series: build each position's per-(layer) side input before the stack
         let ts_ple = prof_ticks()
         if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
@@ -5341,7 +5630,7 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
     let n_heads = c.n_heads
     let qd = n_heads * head_size       // query / attention-output width (== dim except Gemma2/gemma4)
     let xdim = max(dim, qd)            // xb_b holds the norm output (dim) then the attn output (qd)
-    let maxn = max(xdim, hidden)
+    let maxn = max(max(xdim, hidden), max(hc_dim(c), ple_in_dim(c)))   // the hyper-connection mixer's down projection eats the whole wide row
     // no-init: every array here is stage output, fully overwritten before read — zero-fill was ~5ms waste
     s.x_b |> overwrite_resize(npos * dim)
     s.xb_b |> overwrite_resize(npos * xdim)
@@ -5363,6 +5652,19 @@ def forward_prefill_alloc(t : Model; var s : Session; npos, start_pos : int64) {
         s.ple_gate |> grow_resize(npos * c.n_embd_per_layer)
     }
     hybrid_rows_alloc(c, s, npos)
+    if (c.hyper_conn) {   // the wide residual rows + the mixer's row scratch
+        let hcd = hc_dim(c)
+        s.hc_res_b |> grow_resize(npos * hcd)
+        s.hc_xn_b |> grow_resize(npos * hcd)
+        s.hc_gate_b |> grow_resize(npos * hcd)
+        s.hc_lo_b |> grow_resize(npos * c.hc_low_rank)
+        s.hc_inject_b |> grow_resize(npos * c.hc_count)
+    }
+    if (has_ple_ngram(c)) {   // the n-gram rows and the two projections, per position
+        s.ple_emb_b |> grow_resize(npos * ple_in_dim(c))
+        s.ple_key_b |> grow_resize(npos * hc_dim(c))
+        s.ple_val_b |> grow_resize(npos * dim)
+    }
     if (c.recr_mask != 0ul && g_dn_prefill_mode == DnPrefillMode.chunked) {   // batched conv rows + per-head chunk slabs
         s.dn_conv_b |> grow_resize(npos * dn_conv_dim(c))
         s.dn_wtap |> grow_resize(c.ssm_d_conv * dn_conv_dim(c))
@@ -5526,7 +5828,11 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
     blob_only_panic(t, "prefill final-norm/classifier step")
     let ts_final = prof_ticks()
     let last = npos - 1l
-    rms_at(s.xb, t, t.rms_final_off, s.x_b, last * dim, dim)
+    if (t.blocks.final_norm != null) {
+        invoke(t.blocks.final_norm, t, s, last, true)
+    } else {
+        rms_at(s.xb, t, t.rms_final_off, s.x_b, last * dim, dim)
+    }
     if (c.n_layer_nextn > 0l) {   // stash the last position's h_nextn for the MTP draft head
         copy_floats(s.xb, 0l, s.mtp_h, 0l, dim)
         s.mtp_h_pos1 = start_pos + last + 1l

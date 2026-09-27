@@ -364,6 +364,59 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
             cur.wo += c.vocab_size * dim
         }
     }
+    if (c.hyper_conn) {   // qwen4exp mixers: two sites per layer (attn, ffn) + the head; norms and inject f32, down/up q8
+        let hcd = hc_dim(c)
+        let lr = c.hc_low_rank
+        let sites = layers * 2l
+        t.hc_norm_off = fo
+        fo += sites * hcd
+        t.hc_inject_off = fo
+        fo += sites * hcd * c.hc_count
+        t.hc_head_norm_off = fo
+        fo += hcd
+        t.hc_down_offs |> clear(); t.hc_down_offs |> reserve(sites)
+        for (_si in range64(sites)) { t.hc_down_offs |> push(cur.wo); cur.wo += hcd * lr }
+        t.hc_up_offs |> clear(); t.hc_up_offs |> reserve(sites)
+        for (_si in range64(sites)) { t.hc_up_offs |> push(cur.wo); cur.wo += lr * hcd }
+        t.hc_head_down_off = cur.wo
+        cur.wo += hcd * lr
+        t.hc_head_up_off = cur.wo
+        cur.wo += lr * hcd
+    }
+    if (has_ple_ngram(c)) {   // qwen4exp n-gram side input: three grouped norms + the conv taps f32, key/value q8 (the table is its own byte array)
+        let hcd = hc_dim(c)
+        let ind = ple_in_dim(c)
+        t.ple_nkey_off = fo
+        fo += hcd
+        t.ple_nquery_off = fo
+        fo += hcd
+        t.ple_nconv_off = fo
+        fo += hcd
+        t.ple_conv_off = fo
+        fo += hcd * c.ple_conv_kernel
+        t.ple_key_off = cur.wo
+        cur.wo += ind * hcd
+        t.ple_val_off = cur.wo
+        cur.wo += ind * dim
+    }
+    if (c.indexer_n_head > 0l) {   // qwen4exp QSA indexer: f32 projections + norms on the attention layers (-1 on recurrent ones)
+        let hs = c.indexer_head_size
+        let qw = c.indexer_n_head * hs
+        t.idx_q_offs |> clear(); t.idx_q_offs |> reserve(layers)
+        t.idx_k_offs |> clear(); t.idx_k_offs |> reserve(layers)
+        t.idx_qn_offs |> clear(); t.idx_qn_offs |> reserve(layers)
+        t.idx_kn_offs |> clear(); t.idx_kn_offs |> reserve(layers)
+        for (l in range64(layers)) {
+            if (layer_is_recurrent(c, l)) {
+                t.idx_q_offs |> push(-1l); t.idx_k_offs |> push(-1l); t.idx_qn_offs |> push(-1l); t.idx_kn_offs |> push(-1l)
+                continue
+            }
+            t.idx_q_offs |> push(fo); fo += dim * qw
+            t.idx_k_offs |> push(fo); fo += dim * hs
+            t.idx_qn_offs |> push(fo); fo += hs
+            t.idx_kn_offs |> push(fo); fo += hs
+        }
+    }
     if (c.n_layer_nextn > 0l) {   // MTP/NextN extras (the block's standard tensors rode the walks above)
         t.mtp_ehproj_off = kq_take(cur, t.mtp_ehproj_fmt, 2l * dim * dim)
         t.mtp_enorm_off = fo
@@ -1744,6 +1797,66 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 panic("dasLLAMA: deltanet conv_dim {dn_conv_dim(t.config)} must be a multiple of 4")
             }
         }
+        // qwen4exp: the hyper-connection geometry, the n-gram PLE hash constants (Model arrays - a
+        // Config travels by value) and the QSA indexer geometry
+        if (t.config.hyper_conn) {
+            t.config.hc_count = gguf_int(m, bytes, "{arch}.hyper_connection.count")
+            t.config.hc_low_rank = gguf_int(m, bytes, "{arch}.hyper_connection.low_rank")
+            if (t.config.hc_count < 2l || t.config.hc_low_rank <= 0l || t.config.hc_low_rank % 32l != 0l) {
+                panic("dasLLAMA: unsupported hyper-connection geometry (count {t.config.hc_count}, low_rank {t.config.hc_low_rank} - the low rank rides the q8 GEMV, a multiple of 32)")
+            }
+            if (gguf_has(m, "{arch}.attention.indexer.head_count")) {
+                t.config.indexer_n_head = gguf_int(m, bytes, "{arch}.attention.indexer.head_count")
+                t.config.indexer_head_size = gguf_int(m, bytes, "{arch}.attention.indexer.key_length")
+                t.config.indexer_top_k = gguf_int(m, bytes, "{arch}.attention.indexer.top_k")
+                if (t.config.indexer_n_head <= 0l || t.config.indexer_head_size <= 0l || t.config.indexer_top_k <= 0l) {
+                    panic("dasLLAMA: bad QSA indexer geometry (heads {t.config.indexer_n_head}, key {t.config.indexer_head_size}, top_k {t.config.indexer_top_k})")
+                }
+                if (gguf_is_array(m, "{arch}.attention.compress_ratios")) {
+                    t.qsa_ratio <- gguf_int_array(m, bytes, "{arch}.attention.compress_ratios")
+                    if (long_length(t.qsa_ratio) < layers) {
+                        panic("dasLLAMA: {arch}.attention.compress_ratios has {long_length(t.qsa_ratio)} entries, expected {layers}")
+                    }
+                }
+            }
+        }
+        if (t.config.ple_ngram && gguf_is_array(m, "{arch}.ple.layers")) {
+            let pl <- gguf_int_array(m, bytes, "{arch}.ple.layers")
+            if (length(pl) != 1) {
+                panic("dasLLAMA: {arch}.ple.layers lists {length(pl)} layers - one PLE layer is supported")
+            }
+            t.config.ple_layer = pl[0]
+            if (t.config.ple_layer < 0l || t.config.ple_layer >= layers || !layer_is_recurrent(t.config, t.config.ple_layer)) {
+                panic("dasLLAMA: PLE layer {t.config.ple_layer} is not a recurrent layer of the {layers}-layer trunk")
+            }
+            t.config.ple_ngram_size = gguf_int(m, bytes, "{arch}.ple.ngram_size")
+            t.config.ple_heads_per_ngram = gguf_int(m, bytes, "{arch}.ple.heads_per_ngram")
+            t.config.ple_conv_kernel = gguf_int(m, bytes, "{arch}.ple.conv_kernel")
+            t.config.ple_eos_token = gguf_int(m, bytes, "{arch}.ple.eos_token_id")
+            t.config.ple_image_token = gguf_has(m, "{arch}.ple.image_token_id") ? gguf_int(m, bytes, "{arch}.ple.image_token_id") : 0l
+            t.config.ple_head_dim = gguf_int(m, bytes, "{arch}.embedding_length_per_layer_input")
+            if (t.config.ple_ngram_size < 2l || t.config.ple_ngram_size > 8l || t.config.ple_heads_per_ngram <= 0l
+                    || t.config.ple_conv_kernel <= 0l || t.config.ple_head_dim <= 0l || t.config.ple_head_dim % 32l != 0l
+                    || ple_in_dim(t.config) % 32l != 0l) {
+                panic("dasLLAMA: unsupported PLE n-gram geometry (ngram {t.config.ple_ngram_size}, heads/ngram {t.config.ple_heads_per_ngram}, head dim {t.config.ple_head_dim}, conv {t.config.ple_conv_kernel})")
+            }
+            let nheads = ple_n_heads(t.config)
+            let mult <- gguf_int_array(m, bytes, "{arch}.ple.layer_multipliers")
+            t.ple_head_off <- gguf_int_array(m, bytes, "{arch}.ple.head_offsets")
+            t.ple_head_vocab <- gguf_int_array(m, bytes, "{arch}.ple.head_vocab_sizes")
+            if (long_length(mult) < t.config.ple_ngram_size || long_length(t.ple_head_off) < nheads || long_length(t.ple_head_vocab) < nheads) {
+                panic("dasLLAMA: the PLE hash constants are shorter than the n-gram size / head count ({long_length(mult)} multipliers, {long_length(t.ple_head_off)} offsets, {long_length(t.ple_head_vocab)} vocab sizes)")
+            }
+            t.ple_mult |> resize(length(mult))
+            for (i, v in count(), mult) {
+                t.ple_mult[i] = uint64(v)
+            }
+            for (h in range64(nheads)) {
+                if (t.ple_head_vocab[h] <= 0l || t.ple_head_off[h] < 0l) {
+                    panic("dasLLAMA: PLE head {h} has an empty row range")
+                }
+            }
+        }
         // MTP/NextN consistency (arch-agnostic — qwen35 hybrids AND glm4moe carry draft blocks):
         // the metadata and the tensor directory must agree, and an MTP-only sidecar (trunk
         // stripped) is not loadable standalone
@@ -1751,7 +1864,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             if (gguf_find_tensor(m, "blk.{layers}.nextn.eh_proj.weight") < 0) {
                 panic("dasLLAMA: nextn_predict_layers = {t.config.n_layer_nextn} but blk.{layers}.nextn.eh_proj.weight is missing")
             }
-            if (gguf_find_tensor(m, "blk.0.attn_norm.weight") < 0) {
+            if (gguf_find_tensor(m, t.config.hyper_conn ? "blk.0.hc_attn_norm.weight" : "blk.0.attn_norm.weight") < 0) {
                 panic("dasLLAMA: MTP-only sidecar GGUF (no trunk tensors) is not supported - use the full -MTP file")
             }
             // glm4moe's MTP shares the trunk's embedding and classifier with the draft head, and the
@@ -1866,8 +1979,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
         }
         // gemma-4 E-series: per-layer embeddings (PLE) — a per-(token, layer) side input mixed into
-        // each layer's output. n_embd_per_layer = 0 on the dense 12B/31B (feature off).
-        if (gguf_has(m, "{arch}.embedding_length_per_layer_input")) {
+        // each layer's output. n_embd_per_layer = 0 on the dense 12B/31B (feature off). qwen4exp
+        // carries the same key for its n-gram table's row width - a different rail (ple_head_dim)
+        if (!t.config.ple_ngram && gguf_has(m, "{arch}.embedding_length_per_layer_input")) {
             t.config.n_embd_per_layer = gguf_int(m, bytes, "{arch}.embedding_length_per_layer_input")
         }
         // gemma4 is MoE only when the file carries experts (12B/31B dense, 26B-A4B MoE)
@@ -2219,8 +2333,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // attention layer whose norms/weights load through the standard arms
         let layers_ld = layers + t.config.n_layer_nextn
         for (l in range64(layers_ld)) {
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_norm.weight", t.fblob, t.rms_att_off + l * dim, dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.{ffn_norm_name}.weight", t.fblob, t.rms_ffn_off + l * dim, dim)
+            if (!t.config.hyper_conn) {   // the hyper-connection mixers carry the norms - no per-layer norm tensors exist
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_norm.weight", t.fblob, t.rms_att_off + l * dim, dim)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.{ffn_norm_name}.weight", t.fblob, t.rms_ffn_off + l * dim, dim)
+            }
             if (t.config.pre_post_norm) {  // Gemma2: post-attn + post-FFN norms (already +1-baked in the GGUF)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.post_attention_norm.weight", t.fblob, t.rms_post_att_off + l * dim, dim)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.post_ffw_norm.weight", t.fblob, t.rms_post_ffn_off + l * dim, dim)
@@ -2289,7 +2405,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 t.fblob[t.rms_ones_off + i] = 1.0
             }
         }
-        gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.fblob, t.rms_final_off, dim)
+        if (!t.config.hyper_conn) {   // the head mixer stands where output_norm would
+            gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.fblob, t.rms_final_off, dim)
+        }
         if (has_ple(t.config)) {  // gemma-4 E-series PLE globals: model-proj (native bf16 when on disk) + proj-norm
             let ple = t.config.n_embd_per_layer
             if (t.ple_model_bf16) {
@@ -2436,6 +2554,71 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             // nextn.embed_tokens / nextn.shared_head_head are the trunk's own tables under the
             // head's prefix (shape-vetted at config parse) — deliberately never loaded
+        }
+        if (t.config.hyper_conn) {   // qwen4exp mixers: per (layer, site) norm + inject f32, down/up q8; the head mixer
+            let hcd = hc_dim(t.config)
+            let nh = t.config.hc_count
+            let lr = t.config.hc_low_rank
+            for (l in range64(layers_ld)) {
+                for (site in range64(2l)) {
+                    let nm = site == 0l ? "attn" : "ffn"
+                    let si = l * 2l + site
+                    gguf_read_tensor_f32(m, bytes, "blk.{l}.hc_{nm}_norm.weight", t.fblob, t.hc_norm_off + si * hcd, hcd)
+                    gguf_read_tensor_f32(m, bytes, "blk.{l}.hc_{nm}_inject.weight", t.fblob, t.hc_inject_off + si * hcd * nh, hcd * nh)
+                    load_big(m, bytes, "blk.{l}.hc_{nm}_down.weight", t, t.hc_down_offs[si], hcd * lr, scratch)
+                    load_big(m, bytes, "blk.{l}.hc_{nm}_up.weight", t, t.hc_up_offs[si], lr * hcd, scratch)
+                }
+            }
+            gguf_read_tensor_f32(m, bytes, "output_hc_norm.weight", t.fblob, t.hc_head_norm_off, hcd)
+            load_big(m, bytes, "output_hc_down.weight", t, t.hc_head_down_off, hcd * lr, scratch)
+            load_big(m, bytes, "output_hc_up.weight", t, t.hc_head_up_off, lr * hcd, scratch)
+        }
+        if (has_ple_ngram(t.config)) {   // qwen4exp n-gram side input: the layer's norms, taps and projections + the raw hash table
+            let hcd = hc_dim(t.config)
+            let ind = ple_in_dim(t.config)
+            let l = t.config.ple_layer
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_key.weight", t.fblob, t.ple_nkey_off, hcd)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_query.weight", t.fblob, t.ple_nquery_off, hcd)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_conv.weight", t.fblob, t.ple_nconv_off, hcd)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_conv1d.weight", t.fblob, t.ple_conv_off, hcd * t.config.ple_conv_kernel)
+            load_big(m, bytes, "blk.{l}.ple_key.weight", t, t.ple_key_off, ind * hcd, scratch)
+            load_big(m, bytes, "blk.{l}.ple_value.weight", t, t.ple_val_off, ind * dim, scratch)
+            let ti = gguf_find_tensor(m, "per_layer_token_embd.weight")
+            if (ti < 0) {
+                panic("dasLLAMA: per_layer_token_embd.weight (the PLE n-gram hash table) is missing")
+            }
+            let hd = t.config.ple_head_dim
+            if (length(m.tensors[ti].dims) != 2 || m.tensors[ti].dims[0] != hd) {
+                panic("dasLLAMA: per_layer_token_embd.weight is not [{hd} x rows]")
+            }
+            t.ngram_type = m.tensors[ti].ggml_type
+            if (t.ngram_type != GGML_TYPE_IQ4_NL && t.ngram_type != GGML_TYPE_Q8_0 && t.ngram_type != GGML_TYPE_F16
+                    && t.ngram_type != GGML_TYPE_BF16 && t.ngram_type != GGML_TYPE_F32) {
+                panic("dasLLAMA: per_layer_token_embd.weight type {t.ngram_type} has no row decoder (IQ4_NL / Q8_0 / F16 / BF16 / F32)")
+            }
+            t.ngram_rows = m.tensors[ti].dims[1]
+            t.ngram_row_bytes = ggml_type_bytes(t.ngram_type, hd)
+            for (h in range64(ple_n_heads(t.config))) {
+                if (t.ple_head_off[h] + t.ple_head_vocab[h] > t.ngram_rows) {
+                    panic("dasLLAMA: PLE head {h} rows [{t.ple_head_off[h]}, +{t.ple_head_vocab[h]}) exceed the table's {t.ngram_rows} rows")
+                }
+            }
+            let ts_tab = ref_time_ticks()
+            let nbytes = gguf_read_tensor_raw(m, bytes, "per_layer_token_embd.weight", t.ngram_tab)
+            to_log(LOG_INFO, "dasLLAMA: PLE n-gram table {t.ngram_rows} rows x {hd}, {nbytes >> 20l} MB raw: {get_time_usec(ts_tab) / 1000} ms\n")
+        }
+        if (t.config.indexer_n_head > 0l) {   // qwen4exp QSA indexer: f32 (BF16 on disk widens exactly)
+            let hs = t.config.indexer_head_size
+            let qw = t.config.indexer_n_head * hs
+            for (l in range64(layers_ld)) {
+                if (t.idx_q_offs[l] < 0l) {
+                    continue
+                }
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.indexer.q_proj.weight", t.fblob, t.idx_q_offs[l], dim * qw)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.indexer.k_proj.weight", t.fblob, t.idx_k_offs[l], dim * hs)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.indexer.q_norm.weight", t.fblob, t.idx_qn_offs[l], hs)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.indexer.k_norm.weight", t.fblob, t.idx_kn_offs[l], hs)
+            }
         }
         if (has_ple(t.config)) {  // the per-layer token-embedding table [vocab x (ple*layers)], gathered per token, never repacked
             let pn = vocab * t.config.n_embd_per_layer * layers

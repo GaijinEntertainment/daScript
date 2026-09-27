@@ -425,6 +425,19 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
     if (c.n_layer_nextn > 0l && t.mtp_ehproj_fmt == KqFmt.q8) {   // NextN eh_proj: 2*dim -> dim
         push_repack(regs, 0, t.mtp_ehproj_off, 2l * dim, dim)
     }
+    if (c.hyper_conn) {   // qwen4exp mixers: per (layer, site) down [low_rank x hc_dim] + up [hc_dim x low_rank], and the head pair
+        let hcd = hc_dim(c)
+        for (si in range64(long_length(t.hc_down_offs))) {
+            push_repack(regs, 0, t.hc_down_offs[si], hcd, c.hc_low_rank)
+            push_repack(regs, 0, t.hc_up_offs[si], c.hc_low_rank, hcd)
+        }
+        push_repack(regs, 0, t.hc_head_down_off, hcd, c.hc_low_rank)
+        push_repack(regs, 0, t.hc_head_up_off, c.hc_low_rank, hcd)
+    }
+    if (has_ple_ngram(c)) {   // qwen4exp n-gram side input: key [hc_dim x in] + value [dim x in] (the hash table is raw bytes, never repacked)
+        push_repack(regs, 0, t.ple_key_off, ple_in_dim(c), hc_dim(c))
+        push_repack(regs, 0, t.ple_val_off, ple_in_dim(c), dim)
+    }
 }
 
 def private repack_q8_weights(var t : Model) {

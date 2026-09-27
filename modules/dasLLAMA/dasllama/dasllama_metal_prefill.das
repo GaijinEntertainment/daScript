@@ -4682,8 +4682,9 @@ def private prefill_decline_caps(t : Model; npos : int64; span : bool = false) :
             return MetalPrefillDecline.wscale_f16
         }
     }
-    //! non-std graphs decline; deltanet hybrids serve via dn_metal_ok (ds == 128 makes every dn GEMM width %128)
-    if ((!t.blocks.attn_is_std && !(t.config.hybrid_deltanet && dn_metal_ok(t))) ||
+    //! non-std graphs decline; deltanet hybrids serve via dn_metal_ok (ds == 128 makes every dn GEMM width %128); the hyper-connection residual (qwen4exp) has no Metal form yet
+    if (t.config.hyper_conn ||
+            (!t.blocks.attn_is_std && !(t.config.hybrid_deltanet && dn_metal_ok(t))) ||
             (!t.blocks.ffn_is_dense && (!moe_metal_ok(t) ||
              (t.config.n_ff_exp % 64l) != 0l || (t.config.dim % 64l) != 0l))) {
         return MetalPrefillDecline.graph

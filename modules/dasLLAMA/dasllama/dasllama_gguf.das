@@ -960,6 +960,34 @@ def gguf_transcode_bf16(m : GGUFMeta; srcbytes : array<uint8> | #; name : string
     }
 }
 
+//! Copy tensor `name`'s bytes VERBATIM into dst (resized to the tensor's disk size) - the gather-only tables
+//! that stay in their block form (qwen4exp's n-gram hash table: rows too narrow for a superblock plane)
+def gguf_read_tensor_raw(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; var dst : array<uint8>) : int64 {
+    let ti = gguf_find_tensor(m, name)
+    if (ti < 0) {
+        panic("gguf: tensor '{name}' not found")
+    }
+    let nbytes = ggml_type_bytes(m.tensors[ti].ggml_type, m.tensors[ti].n_elem)
+    dst |> reserve_resize(nbytes)
+    with_tensor_view(m, srcbytes, ti) $(bytes, base) {
+        unsafe {
+            let sp = addr < uint8 const? >(bytes[base])
+            var dp = addr(dst[0])
+            let blk = 1l << 24l
+            let nblk = int((nbytes + blk - 1l) / blk)
+            maybe_parallel_for(0, nblk, transcode_jobs(nbytes, 1l)) $(rb, re) {
+                unsafe {
+                    for (b in range(rb, re)) {
+                        let o = int64(b) * blk
+                        memcpy(reinterpret<void?>(dp + o), reinterpret<void const?>(sp + o), min(blk, nbytes - o))
+                    }
+                }
+            }
+        }
+    }
+    return nbytes
+}
+
 //! The on-disk upstream type of tensor `name` (GGML_TYPE_*), or -1 if the tensor is absent. Lets a
 //! caller pick the direct-transcode path when the disk type already matches the target precision.
 def gguf_tensor_type(m : GGUFMeta; name : string) : int {

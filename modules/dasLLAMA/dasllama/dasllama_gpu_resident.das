@@ -1103,6 +1103,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
     }
     if (n_attn == 0l) return rdec_decline("no attention layer (the whole-model driver serves attention or hybrid stacks)")
+    if (c.hyper_conn) return rdec_decline("hyper-connection residual (qwen4exp) - the token command has no wide-residual form")
     let n_recurrent = c.n_layers - n_attn
     let dim = c.dim
     let neox = c.rope_neox

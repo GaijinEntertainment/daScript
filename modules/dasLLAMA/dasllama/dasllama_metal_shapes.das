@@ -402,8 +402,10 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
     if (!kq_load_gpu_supported(t)) {   // a fmt without a GPU kernel (the q4_0 QAT tier, ...) must not dispatch
         return MetalDecodeDecline.kquant_native
     }
-    // non-std graphs decline; MoE (Wave C) + deltanet hybrid (Wave D) serve when their kernels cover it
-    if ((!t.blocks.attn_is_std && !(t.config.hybrid_deltanet && dn_metal_ok(t))) ||
+    // non-std graphs decline; MoE (Wave C) + deltanet hybrid (Wave D) serve when their kernels cover it;
+    // the hyper-connection residual (qwen4exp) has no Metal form yet
+    if (t.config.hyper_conn ||
+            (!t.blocks.attn_is_std && !(t.config.hybrid_deltanet && dn_metal_ok(t))) ||
             (!t.blocks.ffn_is_dense && !(allow_moe && moe_metal_ok(t)))) {
         return MetalDecodeDecline.graph
     }
