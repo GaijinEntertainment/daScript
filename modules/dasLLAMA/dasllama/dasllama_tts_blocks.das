@@ -36,24 +36,30 @@ struct TtsSpan {
 
 let BLOB_ALIGN_FLOATS = 64l   // every span starts on a 256-byte boundary, a legal GPU buffer offset
 
-//! Append `src` to a staging blob on the alignment boundary; the span it landed in.
-def blob_push(var blob : array<float>; src : array<float>) : TtsSpan {
+//! Append `src` to a staging blob on the alignment boundary - floats into the float blob, int8 quants and byte
+//! planes into the int8 quant blob byte for byte; the span it landed in, counted in the blob's elements.
+def blob_push(var blob : array<auto(BT)>; src : array<auto(ST)>) : TtsSpan {
     let n = long_length(src)
     return TtsSpan() if (n == 0l)
-    let off = (long_length(blob) + BLOB_ALIGN_FLOATS - 1l) / BLOB_ALIGN_FLOATS * BLOB_ALIGN_FLOATS
+    let off = round_up(long_length(blob), BLOB_ALIGN_FLOATS)
     blob |> ensure_capacity(off + n)
     blob |> resize(off + n)
     for (i in range64(n)) {
-        blob[off + i] = src[i]
+        static_if (typeinfo stripped_typename(src[0]) == "uint8") {
+            blob[off + i] = int8(src[i])
+        } else {
+            blob[off + i] = src[i]
+        }
     }
     return TtsSpan(off = off, n = n)
 }
 
-//! Bind `a` as a borrowed view over `span` of a served blob.
-def bind_span(blob : PlaneF; span : TtsSpan; var a : array<float>) {
+//! Bind `a` as a borrowed view over `span` of a served plane - the float plane, or the int8 quant plane a quant
+//! or byte array rides.
+def bind_span(blob : auto(PT); span : TtsSpan; var a : array<auto(ET)>) {
     return if (span.n == 0l)
     if (span.off < 0l || span.n > blob.n || span.off > blob.n - span.n) {
-        panic("dasLLAMA tts: weight span {span.off}+{span.n} lies outside the {blob.n}-float blob")
+        panic("dasLLAMA tts: {typeinfo stripped_typename(a[0])} span {span.off}+{span.n} lies outside the {blob.n}-element blob")
     }
     unsafe {
         _builtin_make_temp_array_i64(a, reinterpret<void?>(plane_at(blob, span.off)), span.n)
@@ -70,81 +76,22 @@ struct TtsBlobIo {
     qplane : PlaneI8 = PlaneI8()
 }
 
-//! One weight through the walk (see TtsBlobIo).
-def weight_slot(var io : TtsBlobIo; var a : array<float>; var span : TtsSpan) {
+//! One weight through the walk (see TtsBlobIo): a float array rides the float blob and plane, an int8 quant or
+//! byte (K-quant) array the int8 quant blob and plane.
+def weight_slot(var io : TtsBlobIo; var a : array<auto(ET)>; var span : TtsSpan) {
     if (io.staging) {
-        span = blob_push(*io.blob, a)
+        static_if (typeinfo stripped_typename(a[0]) == "float") {
+            span = blob_push(*io.blob, a)
+        } else {
+            span = blob_push(*io.qblob, a)
+        }
         delete a
     } else {
-        bind_span(io.plane, span, a)
-    }
-}
-
-//! `blob_push` for the int8 quant blob (a span counts int8 elements there).
-def blob_push_q8(var qblob : array<int8>; src : array<int8>) : TtsSpan {
-    let n = long_length(src)
-    return TtsSpan() if (n == 0l)
-    let off = (long_length(qblob) + BLOB_ALIGN_FLOATS - 1l) / BLOB_ALIGN_FLOATS * BLOB_ALIGN_FLOATS
-    qblob |> ensure_capacity(off + n)
-    qblob |> resize(off + n)
-    for (i in range64(n)) {
-        qblob[off + i] = src[i]
-    }
-    return TtsSpan(off = off, n = n)
-}
-
-//! `bind_span` over the int8 quant plane.
-def bind_span_q8(qplane : PlaneI8; span : TtsSpan; var a : array<int8>) {
-    return if (span.n == 0l)
-    if (span.off < 0l || span.n > qplane.n || span.off > qplane.n - span.n) {
-        panic("dasLLAMA tts: quant span {span.off}+{span.n} lies outside the {qplane.n}-byte quant blob")
-    }
-    unsafe {
-        _builtin_make_temp_array_i64(a, reinterpret<void?>(plane_at(qplane, span.off)), span.n)
-    }
-}
-
-//! `weight_slot` for an int8 quant array.
-def weight_slot_q8(var io : TtsBlobIo; var a : array<int8>; var span : TtsSpan) {
-    if (io.staging) {
-        span = blob_push_q8(*io.qblob, a)
-        delete a
-    } else {
-        bind_span_q8(io.qplane, span, a)
-    }
-}
-
-//! `blob_push_q8` for a byte plane: it rides the int8 quant blob byte for byte.
-def blob_push_u8(var qblob : array<int8>; src : array<uint8>) : TtsSpan {
-    let n = long_length(src)
-    return TtsSpan() if (n == 0l)
-    let off = (long_length(qblob) + BLOB_ALIGN_FLOATS - 1l) / BLOB_ALIGN_FLOATS * BLOB_ALIGN_FLOATS
-    qblob |> ensure_capacity(off + n)
-    qblob |> resize(off + n)
-    for (i in range64(n)) {
-        qblob[off + i] = int8(src[i])
-    }
-    return TtsSpan(off = off, n = n)
-}
-
-//! `bind_span_q8` for a byte plane over the int8 quant plane.
-def bind_span_u8(qplane : PlaneI8; span : TtsSpan; var a : array<uint8>) {
-    return if (span.n == 0l)
-    if (span.off < 0l || span.n > qplane.n || span.off > qplane.n - span.n) {
-        panic("dasLLAMA tts: kq span {span.off}+{span.n} lies outside the {qplane.n}-byte quant blob")
-    }
-    unsafe {
-        _builtin_make_temp_array_i64(a, reinterpret<void?>(plane_at(qplane, span.off)), span.n)
-    }
-}
-
-//! `weight_slot` for a byte plane.
-def weight_slot_u8(var io : TtsBlobIo; var a : array<uint8>; var span : TtsSpan) {
-    if (io.staging) {
-        span = blob_push_u8(*io.qblob, a)
-        delete a
-    } else {
-        bind_span_u8(io.qplane, span, a)
+        static_if (typeinfo stripped_typename(a[0]) == "float") {
+            bind_span(io.plane, span, a)
+        } else {
+            bind_span(io.qplane, span, a)
+        }
     }
 }
 
@@ -249,7 +196,7 @@ def weights_walk(var io : TtsBlobIo; var c : TtsConv1d) {
     weight_slot(io, c.wt, c.wt_span)
     weight_slot(io, c.wk, c.wk_span)
     weight_slot(io, c.wtr, c.wtr_span)
-    weight_slot_q8(io, c.wq, c.wq_span)
+    weight_slot(io, c.wq, c.wq_span)
     weight_slot(io, c.wqs, c.wqs_span)
     weight_slot(io, c.b, c.b_span)
 }
@@ -307,10 +254,10 @@ def finalize(var l : TtsLinear) {
 def weights_walk(var io : TtsBlobIo; var l : TtsLinear) {
     weight_slot(io, l.w, l.w_span)
     weight_slot(io, l.wt, l.wt_span)
-    weight_slot_q8(io, l.wq, l.wq_span)
+    weight_slot(io, l.wq, l.wq_span)
     weight_slot(io, l.wqs, l.wqs_span)
-    weight_slot_u8(io, l.kq, l.kq_span)
-    weight_slot_u8(io, l.ks, l.ks_span)
+    weight_slot(io, l.kq, l.kq_span)
+    weight_slot(io, l.ks, l.ks_span)
     weight_slot(io, l.b, l.b_span)
 }
 
