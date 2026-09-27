@@ -305,11 +305,7 @@ def private read_arr(m : GGUFMeta; bytes : array<uint8> | #; name : string) : ar
     return <- gguf_read_f32_arr(m, bytes, name, "pocket")
 }
 
-def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) : TtsWeight {
-    var w = TtsWeight()
-    w.a <- read_arr(m, bytes, name)
-    return <- w
-}
+def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) : TtsWeight => TtsWeight(a <- read_arr(m, bytes, name))
 
 // a Q8_0 tensor of the published file: its blocks go straight into the int8 plane on the q8 lane
 var private g_stage_file_q8 = false   // the file's `pocket.weights` says q8: its Q8_0 tensors are in the kernels' layout

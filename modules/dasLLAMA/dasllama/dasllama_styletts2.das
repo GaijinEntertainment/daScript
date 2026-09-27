@@ -661,11 +661,7 @@ def private read_decoder(m : GGUFMeta; bytes : array<uint8> | #; var d : St2Deco
     }
 }
 
-def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) : TtsWeight {
-    var w = TtsWeight()
-    w.a <- read_arr(m, bytes, name)
-    return <- w
-}
+def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) : TtsWeight => TtsWeight(a <- read_arr(m, bytes, name))
 
 //! Read a converted StyleTTS2-lineage GGUF (harness/convert_kitten.py, harness/convert_kokoro.py)
 //! into the mint-side carrier: served layouts minted, voices, STFT convention and the family's
