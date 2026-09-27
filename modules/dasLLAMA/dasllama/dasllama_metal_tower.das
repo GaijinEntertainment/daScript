@@ -2609,7 +2609,10 @@ def private st2_readback(b : MetalBuffer?; var dst : array<float>; n : int64) {
 def private st2_style_rows(var c : St2GpuCtx; fc : TtsLinear; s : array<float>; cc : int64; ln_form : bool) : uint64 {
     let hoff = c.hcur
     assert(hoff + 2l * cc <= c.hcap)
-    tts_style_rows(fc, s, cc, ln_form, g_tw_st2_style_fc, unsafe(reinterpret<float?>(metal_buffer_contents(c.bh)) + hoff))
+    unsafe {
+        var p = reinterpret<float?>(metal_buffer_contents(c.bh)) + hoff
+        tts_style_rows(fc, s, cc, ln_form, g_tw_st2_style_fc, p)
+    }
     c.hcur += 2l * cc
     return uint64(hoff * 4l)
 }
@@ -4247,7 +4250,10 @@ def private pk_frames_loop(m : PocketModel; var sl : PkFramesSlab; var c : St2Gp
         }
         return ran
     }, $(first, i : int64) : float {
-        return unsafe(reinterpret<float const?>(metal_buffer_contents(b.eos))[first + i])
+        unsafe {
+            let ep = reinterpret<float const?>(metal_buffer_contents(b.eos))
+            return ep[first + i]
+        }
     })
 }
 
