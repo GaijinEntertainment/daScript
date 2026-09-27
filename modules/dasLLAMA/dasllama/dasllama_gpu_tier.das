@@ -1849,6 +1849,30 @@ def public matmul_moe_gpu_cls(var y : array<float>; woff : int64; xq : array<int
     }
 }
 
+//! Log a backend's kernel census `cov` (name -> dispatches): the dispatched kernels with counts, then a LOUD WARNING per kernel in
+//! the census never dispatched - a coverage gap or a dead kernel, a human call, never automatic. `census` names what the table holds.
+def public kernel_coverage_report(backend, census : string; cov : table<string; int64>) {
+    var names <- [for (name in keys(cov)); name]
+    names |> sort()
+    var served = 0
+    for (name in names) {
+        let n = cov?[name] ?? 0l
+        if (n > 0l) {
+            served++
+            to_log(LOG_INFO, "{backend} kernel coverage: {name} = {n}\n")
+        }
+    }
+    var dead = 0
+    for (name in names) {
+        if ((cov?[name] ?? 0l) == 0l) {
+            dead++
+            to_log(LOG_WARNING, "{backend} kernel coverage: {name} NEVER DISPATCHED this run - coverage gap or dead kernel (human call)\n")
+        }
+    }
+    to_log(LOG_INFO, "{backend} kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} {census}\n")
+    delete names
+}
+
 
 // Function values do not survive the -exe bake's global serialization (the
 // dasllama_config restore names the defect) — every @@-defaulted seam in this

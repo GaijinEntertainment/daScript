@@ -626,16 +626,11 @@ def private vt_rel_bufs(var r : VtResident; rows, d : int64) : bool {
 [cold_path]
 def private vt_rel_release(var r : VtResident) {
     if (r.rel_cap_rows > 0l) {
-        for (b in fixed_array(r.rel_tab_dev, r.rel_tabq_dev, r.rel_tabs_dev, r.rel_tabh_dev, r.rel_proj_dev)) {
-            if (b != 0ul) {
-                destroy_device_buf(b)
-            }
-        }
-        r.rel_tab_dev = 0ul
-        r.rel_tabq_dev = 0ul
-        r.rel_tabs_dev = 0ul
-        r.rel_tabh_dev = 0ul
-        r.rel_proj_dev = 0ul
+        release_device_buf(r.rel_tab_dev)
+        release_device_buf(r.rel_tabq_dev)
+        release_device_buf(r.rel_tabs_dev)
+        release_device_buf(r.rel_tabh_dev)
+        release_device_buf(r.rel_proj_dev)
         r.rel_cap_rows = 0l
     }
     r.sets_rel_proj |> clear()

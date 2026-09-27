@@ -1592,29 +1592,10 @@ def public metal_kernel_coverage_reset {
     g_kcov_folded |> clear()
 }
 
-//! Log the census: dispatched kernels with counts, then a LOUD WARNING per compiled-but-never-
-//! dispatched kernel. A zero row is a coverage gap or a dead kernel — a human call, never automatic.
+//! Log the census (`kernel_coverage_report`): every compiled kernel, a never-dispatched one warned.
 def public metal_kernel_coverage_report {
-    var cov <- metal_kernel_coverage()
-    var names <- [for (name in keys(cov)); name]
-    names |> sort()
-    var served = 0
-    for (name in names) {
-        if (cov[name] > 0l) {
-            served++
-            to_log(LOG_INFO, "metal kernel coverage: {name} = {cov[name]}\n")
-        }
-    }
-    var dead = 0
-    for (name in names) {
-        if (cov[name] == 0l) {
-            dead++
-            to_log(LOG_WARNING, "metal kernel coverage: {name} NEVER DISPATCHED this run - coverage gap or dead kernel (human call)\n")
-        }
-    }
-    to_log(LOG_INFO, "metal kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} compiled\n")
-    delete names
-    delete cov
+    var inscope cov <- metal_kernel_coverage()
+    kernel_coverage_report("metal", "compiled", cov)
 }
 
 def kn_pipeline(enc : MetalComputeEncoder?; pso : MetalComputePipeline?) {

@@ -212,19 +212,13 @@ var private g_ts_du_scratch : TsScratch
 var private g_ts_pr_scratch : TsScratch
 
 def private ts_rows_release(var r : TsRows) {
-    if (r.dev != 0ul) {
-        destroy_device_buf(r.dev)
-    }
-    r.dev = 0ul
+    release_device_buf(r.dev)
     r.bytes = 0l
 }
 
 def private ts_scratch_release(var s : TsScratch) {
     for (i in range(TS_SCRATCH_BUFS)) {
-        if (s.devs[i] != 0ul) {
-            destroy_device_buf(s.devs[i])
-        }
-        s.devs[i] = 0ul
+        release_device_buf(s.devs[i])
         s.bytes[i] = 0l
     }
     ts_rows_release(s.aux)
