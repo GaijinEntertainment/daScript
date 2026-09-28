@@ -11,6 +11,35 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-27) - the Metal speculative round on the hyper-connection model
+  (Qwen3.8-Flash-Next + its split shared head): the verify's rows carry the wide residual into the
+  draft head, the n-gram side input takes the panel form with the accepted rows committed after the
+  walk, and every row form picks the deltanet z activation through `enc_dn_zgate`.** M5 Max,
+  `lcpp_bench --ngl 99 --mtp-ab -r 3 --for-debug-purposes` under the box's scratch manifest, tg-real128
+  over eight prompts, greedy, depth 1: off 55.32 +/- 0.49 tok/s, on 59.97 +/- 0.96 (1.08x), 1323 of 1716
+  drafts accepted (77.1%; per prompt 55.6% to 98.4%, x0.94 to x1.23 - the round loses at 56%
+  accept and wins from ~68%). The counting probe is token-exact at depth 1, 2 and 4 (100% accept,
+  spec 2x plain wall) and the prose probe at depth 1 (77%, 0 flips). The same shape as the 9B's
+  round (`followup_metal.md` row 26): an accept rate this high buys 1.77 tokens a round and the
+  round returns a tenth of it, so the verify's two rows cost most of a plain step here too - the
+  stage split (`harness/mtp_ruler.das`) is the next lever. The CPU round on this model is a loss
+  (`followup_general.md` row 178).
+
+- **LANDED (2026-09-27) - IQ3_S served as a 16-entry codebook plane on the CPU rail (`iq3s4`,
+  `ARCHITECTURE_ENGINE_FORMATS.md#served-form`, `DASLLAMA_IQ3S_SERVE=auto|grid|lut`): every IQ3_S weight
+  is a signed odd 1..15 times its block scale, so grid entry, qh bit and sign fold at transcode into
+  one nibble over `-15, -13, .., 15`, decoded by the iq4xs LUT kernels - one `tbl` per 16 nibbles
+  in place of a 2 KB grid gather, one load per 4 weights.** Qwen3.8-Flash-Next UD-IQ4_XS (gate/up
+  experts IQ3_S) on the M5 Max, 18 threads, `lcpp_bench --for-debug-purposes -p 512 -n 128 -r 3`
+  under the box's scratch manifest, one binary, warm passes (the pass after a mint is void: cv 7%):
+  grid pp512 134.1 +/- 2.0 / tg128 18.98 +/- 0.13, lut 140.6 +/- 0.7 / 26.9 +/- 0.5, llama.cpp at 2b129ccfa
+  107.8 +/- 3.5 / 19.9 +/- 0.4. `decode_prof -n 128 -t 18` under `JOBQUE_PROFILING=1`: 59.5 -> 40.3 ms a
+  token; `mm_moe` 25.1 -> 6.7 ms, the attention block 19.5 / 20.0, the hc mixes 5.8 / 6.0,
+  `mm_moe_dn` 5.0 / 3.5, the head 2.9 / 2.9. Predictions on record before the run: `mm_moe` ~7 ms,
+  the token ~42 ms, tg128 ~25 - all three held. Cost: the planar image 98.1 -> 105.5 GB (+23% on
+  the IQ3_S planes, the scale rows unchanged); the dequant is bit-identical to the grid form's
+  (`test_kquant`). The GPU tiers keep the grid form - their gather is a device read. Provenance:
+  the four bench logs and two profile logs of the 2026-09-27 session, `followup_general.md` 170.
 - **LANDED (2026-09-27) - the Vulkan TTS dedup pass: the Pocket row GEMV (`TtsPkGemvT`) folds
   its own subgroup reduction onto the shared `WgReduceBase`, and the pass's bench rows against
   master's.** Box: the pod - the RunPod RTX PRO 4500 Blackwell, Linux, the Vulkan backend - one

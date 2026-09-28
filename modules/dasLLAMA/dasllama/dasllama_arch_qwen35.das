@@ -30,7 +30,7 @@ def private configure_qwen35(var c : Config) {
 // qwen35moe (Qwen3.6-35B-A3B, Qwen3.5-397B): hybrid attention + routed-experts FFN, softmax top-k
 // with renorm + qwen2moe-style sigmoid-gated shared expert (loader-detected via ffn_up_shexp).
 // qwen3next (Qwen3-Next-80B/Coder-Next) is the parent hybrid — same config, geometry via {arch}. prefix.
-def private configure_qwen35moe(var c : Config) {
+def configure_qwen35moe(var c : Config) {
     configure_qwen35(c)
     c.moe = true
     c.norm_topk_prob = true
@@ -152,6 +152,7 @@ def private dn_token_head(c : Config; var s : Session; l, h : int64; var o : flo
     }
 }
 
+//! the gated out-norm: rmsnorm per v-head, then the z gate - silu(z) (qwen35) or σ(z) (qwen4exp, config.dn_z_sigmoid)
 def private dn_token_epilogue(t : Model; l : int64; var z : float?; var o : float?) {
     let c = t.config
     let ds = c.ssm_d_state
@@ -160,8 +161,12 @@ def private dn_token_epilogue(t : Model; l : int64; var z : float?; var o : floa
         for (h in range64(c.ssm_dt_rank)) {
             rmsnorm(o + h * ds, reinterpret<float const?>(o + h * ds), wnorm, ds, c.norm_eps)
         }
-        silu(z, c.ssm_d_inner)
-        mul_inplace(o, reinterpret<float const?>(z), c.ssm_d_inner)
+        if (c.dn_z_sigmoid) {
+            sigmoid_gate(o, reinterpret<float const?>(z), c.ssm_d_inner)
+        } else {
+            silu(z, c.ssm_d_inner)
+            mul_inplace(o, reinterpret<float const?>(z), c.ssm_d_inner)
+        }
     }
 }
 
@@ -208,7 +213,7 @@ def private dn_in_proj(t : Model; var s : Session; l, npos : int64; norm_bucket,
     let c = t.config
     let dim = c.dim
     let ts_norm0 = prof_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
+    block_in_b(t, s, t.rms_att_off + l * dim, npos)
     prof_add(norm_bucket, ts_norm0)
     let ts_qkv = prof_ticks()
     mm_b_f(s, s.dn_qkv_b, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], s.xb_b, dim, dn_conv_dim(c), npos)
@@ -225,7 +230,7 @@ def private dn_out_proj(t : Model; var s : Session; l, npos : int64; wo_bucket, 
     mm_b_f(s, s.xb2_b, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], s.dn_o_b, t.config.ssm_d_inner, dim, npos)
     prof_add(wo_bucket, ts_wo)
     let ts_resid = prof_ticks()
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    block_resid_b(t, s, s.xb2_b, npos)
     prof_add(resid_bucket, ts_resid)
 }
 
@@ -322,7 +327,7 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
     let dconv = c.ssm_d_conv
     let taps = dconv - 1l
     let ts_norm0 = prof_ticks()
-    rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
+    block_in(t, s, t.rms_att_off + l * dim)
     prof_add("norm", ts_norm0)
     let ts_qkv = prof_ticks()
     if (t.dn_ba_f32) {   // F32-on-disk beta/alpha matmul fp32
@@ -349,13 +354,13 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
     }
     prof_add("dn_gpu", ts_gpu)
     let ts_resid = prof_ticks()
-    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
+    block_resid(t, s, s.xb2)
     prof_add("act_resid", ts_resid)
 }
 
 // attn-norm → fused qkv/z/β/α projections → per-token deltanet core → ssm_out projection → residual.
 def private deltanet_decode(t : Model; var s : Session; l : int64) {
-    if (moe_gpu_dnd_on_gpu(l)) {
+    if (!t.config.dn_z_sigmoid && moe_gpu_dnd_on_gpu(l)) {   // the device chain gates with silu(z) only
         deltanet_decode_gpu(t, s, l)
         return
     }
@@ -366,7 +371,7 @@ def private deltanet_decode(t : Model; var s : Session; l : int64) {
     let di = c.ssm_d_inner
     let nvh = c.ssm_dt_rank
     let ts_norm0 = prof_ticks()
-    rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
+    block_in(t, s, t.rms_att_off + l * dim)
     prof_add("norm", ts_norm0)
     let ts_qkv = prof_ticks()
     mm_f(s.dn_qkv, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, cd)
@@ -389,7 +394,7 @@ def private deltanet_decode(t : Model; var s : Session; l : int64) {
     mm_f(s.xb2, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], s.dn_o, s.xq, s.xs, s.xbs, di, dim)
     prof_add("mm_wo", ts_wo)
     let ts_resid = prof_ticks()
-    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
+    block_resid(t, s, s.xb2)
     prof_add("act_resid", ts_resid)
 }
 
@@ -412,7 +417,7 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
     let kstart = 0l
     let cnt = pos + 1l
     let ts_norm0 = prof_ticks()
-    rms_at(s.xb, t, t.rms_att_off + l * dim, s.x, dim)
+    block_in(t, s, t.rms_att_off + l * dim)
     prof_add("norm", ts_norm0)
     let ts_qkv = prof_ticks()
     mm_f(s.dn_qg, t, fmt_at(t.wq_fmt, l), t.wq_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, 2l * qd)
@@ -540,7 +545,7 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
     mm_f(s.xb2, t, fmt_at(t.wo_fmt, l), t.wo_offs[l], s.xb, s.xq, s.xs, s.xbs, qd, dim)
     prof_add("mm_wo", ts_wo)
     let ts_resid = prof_ticks()
-    add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
+    block_resid(t, s, s.xb2)
     prof_add("act_resid", ts_resid)
 }
 
@@ -548,8 +553,9 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
 
 // The qwen35 decode attention block: forward-only state guard, then deltanet or gated attention
 // per the layer mask.
+//! Public: qwen4exp wraps this hybrid dispatch inside its hyper-connection mixers
 [no_alloc, no_env, no_io]
-def private attention_qwen35_decode(t : Model; var s : Session; l : int64; pos : int64) {
+def attention_qwen35_decode(t : Model; var s : Session; l : int64; pos : int64) {
     if (l == 0l) {
         dn_forward_only_guard(s, pos, pos + 1l)
     }
@@ -651,7 +657,7 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
                             bp, gp : float const?; bg_stride : int64;
                             zp : float const?; var op : float?; o_stride : int64;
                             var stp : float?; var ws : float?; wnorm : float const?;
-                            aa, dtb, eps : float; vec : bool; npos, ds : int64) {
+                            aa, dtb, eps : float; vec, zsig : bool; npos, ds : int64) {
     let CS = DN_CHUNK
     unsafe {
         var qc = ws                         // CS x ds: q rows, scaled to q ⊙ e^{gcum} after the KQ GEMM
@@ -758,7 +764,11 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
                 rmsnorm(och + i * ds, reinterpret<float const?>(och + i * ds), wnorm, ds, eps)
                 var orow = op + (c0 + i) * o_stride
                 let zrow = zp + (c0 + i) * o_stride
-                if (vec) {
+                if (zsig) {   // qwen4exp: σ(z) gates the normed output
+                    for (j in range64(ds)) {
+                        orow[j] = och[i * ds + j] / (1.0 + exp(-zrow[j]))
+                    }
+                } elif (vec) {
                     silu_mul4(orow, och + i * ds, zrow, ds)
                 } else {
                     for (j in range64(ds)) {
@@ -823,6 +833,7 @@ def private deltanet_prefill_chunked(t : Model; var s : Session; l : int64; npos
     }
     let wssz = dn_cws_head_size(c)
     let vec = g_act_vec   // read on the caller, captured — fork workers must not read globals
+    let zsig = c.dn_z_sigmoid
     let ts_scan = prof_ticks()
     maybe_parallel_for(0, int(nvh), min(int(nvh), get_dispatch_lanes())) $(rb, re) {
         unsafe {
@@ -832,7 +843,7 @@ def private deltanet_prefill_chunked(t : Model; var s : Session; l : int64; npos
                 dn_chunked_head(conv0, kh * ds, kd + kh * ds, 2l * kd + h * ds, cd,
                     bp0 + h, gp0 + h, nvh, zp0 + h * ds, op0 + h * ds, di,
                     st0 + h * ds * ds, ws0 + h * wssz, wnorm0,
-                    ab0[h], dtb0[h], c.norm_eps, vec, npos, ds)
+                    ab0[h], dtb0[h], c.norm_eps, vec, zsig, npos, ds)
             }
         }
     }
@@ -854,7 +865,7 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
     let dconv = c.ssm_d_conv
     let taps = dconv - 1l
     let ts_norm0 = prof_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_att_off + l * dim, dim, npos)
+    block_in_b(t, s, t.rms_att_off + l * dim, npos)
     prof_add("dn_norm", ts_norm0)
     let ts_in = prof_ticks()
     dn_beta_alpha_proj(t, s, l, npos)   // raw beta/alpha rows - the transforms run in-kernel
@@ -884,7 +895,7 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
             }
         }
     }
-    add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    block_resid_b(t, s, s.xb2_b, npos)
     prof_add("dn_resid", ts_resid)
 }
 
@@ -893,7 +904,7 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
 def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     trace_tag(TRACE_TAG_DN)   // override the loop's attn_std stamp: dn layers color separately
     dn_flush_layer(s, l)   // every prefill branch reads/round-trips CPU state buffers
-    if (g_dn_prefill_mode == DnPrefillMode.chunked && npos >= 32l && moe_gpu_dn_on_gpu(l)) {
+    if (g_dn_prefill_mode == DnPrefillMode.chunked && npos >= 32l && !t.config.dn_z_sigmoid && moe_gpu_dn_on_gpu(l)) {
         deltanet_prefill_gpu(t, s, l, npos)   // buckets dn_norm / dn_mm_in / dn_gpu / dn_resid
         return
     }
@@ -922,7 +933,7 @@ def private deltanet_prefill(t : Model; var s : Session; l : int64; npos : int64
 }
 
 [no_alloc, no_env, no_io]
-def private attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
+def attention_qwen35_prefill(t : Model; var s : Session; l : int64; npos : int64; start_pos : int64) {
     if (l == 0l) {
         dn_forward_only_guard(s, start_pos, start_pos + npos)
     }

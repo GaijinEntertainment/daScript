@@ -675,6 +675,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // arch qwen3next: the FILE layout differs from qwen35 (fused Q4_K ssm_ba, HF
             // grouped v-head order) — this fixture proves the loader's grouped->tiled permutes
             parity <- ev_qwen_count([dn_chunked = true])),
+        // arch qwen4exp (Qwen3.8-Flash-Next, 125B-A6B): the qwen35moe hybrid inside hyper-connections
+        // + the n-gram PLE side input; a 3-shard file named by its first shard (the split-shard walk
+        // maps the rest). No board row yet: the 640-wide expert down rows demote to q8 (followup 168)
+        ModelSpec(file = "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+            display = "Qwen3.8-Flash-Next-iq4xs", quant_label = "iq4_xs",
+            parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
         // the Metal sweep's Qwen quant matrix - every Qwen text file the M5 box stocks that the
         // rows above do not name; no board row, no provenance, the counting fixture as the
         // correctness gate

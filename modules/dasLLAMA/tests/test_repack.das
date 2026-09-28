@@ -148,6 +148,14 @@ def private build_q51(n, d : int64; var q : array<uint8>; var s : array<uint8>) 
     fill_bytes(s, rng)
 }
 
+def private build_iq4nl32(n, d : int64; var q : array<uint8>; var s : array<uint8>) {
+    var rng = Rng(state = 0x4a4e4c32ul)
+    q |> resize(d * (n / 32l) * IQ4NL32_QB)
+    s |> resize(d * (n / 32l) * IQ4NL32_SB)
+    fill_bytes(q, rng)
+    fill_bytes(s, rng)
+}
+
 // ===== q8q8: identity at mr=1, inverse map at mr=4, wbias, tails =====
 
 [test]
@@ -396,6 +404,80 @@ def test_repack_q51(t : T?) {
             }
         }
         t |> success(ok, "q51 grp bytes must match the inverse map")
+        delete q0
+        delete s0
+        delete q
+        delete s
+    }
+}
+
+// ===== iq4nl32: identity at mr=1, inverse map at mr=2 (16 nibble bytes as 4 dwords, a 2B scale) =====
+
+[test]
+def test_repack_iq4nl32(t : T?) {
+    t |> run("mr=1 is the identity (grp1 == disk order)") @(t : T?) {
+        let n = 64l
+        let d = 8l
+        var q0 : array<uint8>
+        var s0 : array<uint8>
+        build_iq4nl32(n, d, q0, s0)
+        var q := q0
+        var s := s0
+        unsafe {
+            repack_kq_grp(KqFmt.iq4nl32, addr(q[0]), addr(s[0]), n, d, 1l)
+        }
+        var same = true
+        for (a, b in q, q0) {
+            same &&= a == b
+        }
+        for (a, b in s, s0) {
+            same &&= a == b
+        }
+        t |> success(same, "grp1 must be the disk order byte-for-byte")
+        delete q0
+        delete s0
+        delete q
+        delete s
+    }
+    t |> run("mr=2 matches the documented inverse map") @(t : T?) {
+        let n = 64l
+        let d = 8l
+        let nb = n / 32l
+        let mr = 2l
+        var q0 : array<uint8>
+        var s0 : array<uint8>
+        build_iq4nl32(n, d, q0, s0)
+        var q := q0
+        var s := s0
+        unsafe {
+            repack_kq_grp(KqFmt.iq4nl32, addr(q[0]), addr(s[0]), n, d, mr)
+        }
+        let ng = d / mr
+        var ok = true
+        var moved = 0
+        for (g in range64(ng)) {
+            for (bi in range64(nb)) {
+                let dst = g * mr * nb * IQ4NL32_QB + bi * IQ4NL32_QB * mr
+                for (r in range64(mr)) {
+                    let src = ((g * mr + r) * nb + bi) * IQ4NL32_QB
+                    for (j in range64(4l)) {
+                        for (b in range64(4l)) {
+                            ok &&= q[int(dst + j * 4l * mr + r * 4l + b)] == q0[int(src + j * 4l + b)]
+                            if (q[int(src + j * 4l + b)] != q0[int(src + j * 4l + b)]) {
+                                moved++
+                            }
+                        }
+                    }
+                    let ds = g * mr * nb * IQ4NL32_SB + bi * IQ4NL32_SB * mr + r * IQ4NL32_SB
+                    let ss = ((g * mr + r) * nb + bi) * IQ4NL32_SB
+                    for (b in range64(IQ4NL32_SB)) {
+                        ok &&= s[int(ds + b)] == s0[int(ss + b)]
+                    }
+                }
+            }
+        }
+        t |> success(ok, "iq4nl32 grp bytes must match the inverse map")
+        t |> success(moved > 0, "the repack moved bytes (the map is not the identity at mr=2)")
         delete q0
         delete s0
         delete q

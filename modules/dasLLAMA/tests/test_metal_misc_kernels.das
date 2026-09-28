@@ -1583,6 +1583,536 @@ def private softcap_row_gate(t : T?; dev, queue; total : int; cap : float) {
     delete want
 }
 
+// ===== the hyper-connection mixer + the n-gram side input (qwen4exp) =====
+
+//! the compare's control: the same want with one element moved past the bar must red the compare
+def private poisoned(want : array<float>; at : int) : array<float> {
+    var p := want
+    p[at] += 0.5
+    return <- p
+}
+
+//! one element of a float buffer - the in-place witnesses read the moved element back
+def private buf_at(buf; i : int) : float {
+    unsafe {
+        let p = reinterpret<float const?>(metal_buffer_contents(buf))
+        return p[i]
+    }
+}
+
+// the grouped norm over nrows wide rows: stream c of every row normalizes over dim and scales by gamma row c
+def private hc_norm_gate(t : T?; dev, queue; dim, hc, nrows : int) {
+    let tag = "hc_norm dim={dim} hc={hc} nrows={nrows}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_hc_norm_msl, metal_hc_norm_msl_entry, metal_hc_norm_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let hcd = hc * dim
+    let rows = nrows * hc
+    var x : array<float>
+    var w : array<float>
+    var want : array<float>
+    x |> resize(rows * dim)
+    w |> resize(hcd)
+    want |> resize(rows * dim)
+    for (i in range(rows * dim)) {
+        x[i] = 0.23 * float(i % 41) - 3.1 + 0.7 * float(i / dim)
+    }
+    for (i in range(hcd)) {
+        w[i] = 0.4 + 0.02 * float(i % 11) + 0.1 * float(i / dim)
+    }
+    unsafe {
+        for (r in range(rows)) {
+            rmsnorm(addr(want[r * dim]), addr<float const?>(x[r * dim]), addr<float const?>(w[(r % hc) * dim]), int64(dim), EPS)
+        }
+    }
+    var bx = buf_upload(dev, x)
+    var bw = buf_upload(dev, w)
+    var by = buf_fill(dev, rows * dim, -1000.0)
+    var bdim = buf_u32(dev, uint(dim))
+    var beps = buf_f32(dev, EPS)
+    var bhc = buf_u32(dev, uint(hc))
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_hc_norm_msl_tgmem, 0)
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, bw, 0ul, 1)
+        metal_set_buffer(enc, by, 0ul, 2)
+        metal_set_buffer(enc, bdim, 0ul, 3)
+        metal_set_buffer(enc, beps, 0ul, 4)
+        metal_set_buffer(enc, bhc, 0ul, 5)
+        metal_dispatch_threadgroups(enc, uint3(uint(rows), 1u, 1u), uint3(1024u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(by, want, tag), 0)
+        t |> success(buf_mismatch_approx(by, poisoned(want, (rows - 1) * dim + 3), "{tag} control") > 0, "{tag}: the poisoned want must miss")
+    }
+    metal_release(bx)
+    metal_release(bw)
+    metal_release(by)
+    metal_release(bdim)
+    metal_release(beps)
+    metal_release(bhc)
+    metal_release(pso)
+    delete x
+    delete w
+    delete want
+}
+
+// the wide residual rows from the embed rows: every stream of row p reads row p
+def private hc_init_gate(t : T?; dev, queue; dim, hc, nrows : int) {
+    let tag = "hc_init dim={dim} hc={hc} nrows={nrows}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_hc_init_msl, metal_hc_init_msl_entry, metal_hc_init_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let hcd = hc * dim
+    var x : array<float>
+    var want : array<float>
+    x |> resize(nrows * dim)
+    want |> resize(nrows * hcd)
+    for (i in range(nrows * dim)) {
+        x[i] = 0.13 * float(i % 59) - 3.7
+    }
+    for (p in range(nrows)) {
+        for (c in range(hc)) {
+            for (i in range(dim)) {
+                want[(p * hc + c) * dim + i] = x[p * dim + i]
+            }
+        }
+    }
+    var bx = buf_upload(dev, x)
+    var bres = buf_fill(dev, nrows * hcd, -1000.0)
+    var bdim = buf_u32(dev, uint(dim))
+    var bhc = buf_u32(dev, uint(hc))
+    var btot = buf_u32(dev, uint(nrows * hcd))
+    let ran = dispatch_64_lanes(t, queue, tag, pso, nrows * hcd) $(enc) {
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, bres, 0ul, 1)
+        metal_set_buffer(enc, bdim, 0ul, 2)
+        metal_set_buffer(enc, bhc, 0ul, 3)
+        metal_set_buffer(enc, btot, 0ul, 4)
+    }
+    if (ran) {
+        t |> equal(buf_mismatch_exact(bres, want, tag), 0)
+        t |> success(buf_mismatch_exact(bres, poisoned(want, nrows * hcd - 1), "{tag} control") > 0, "{tag}: the poisoned want must miss")
+    }
+    metal_release(bx)
+    metal_release(bres)
+    metal_release(bdim)
+    metal_release(bhc)
+    metal_release(btot)
+    metal_release(pso)
+    delete x
+    delete want
+}
+
+// the mixer's gate input in place: lo = silu(lo / hc)
+def private hc_lo_gate(t : T?; dev, queue; lr, hc : int) {
+    let tag = "hc_lo lr={lr} hc={hc}"
+    var err : string
+    var pso = pipeline_from_source(dev, MetalHcLo_metal_ew1_msl, MetalHcLo_metal_ew1_msl_entry, MetalHcLo_metal_ew1_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    var x : array<float>
+    var want : array<float>
+    x |> resize(lr)
+    want |> resize(lr)
+    for (i in range(lr)) {
+        x[i] = 0.37 * float(i % 29) - 5.0
+        want[i] = float(silu_d(double(x[i]) / double(hc)))
+    }
+    x[0] = 2.0   //! the in-place witness: silu(2 / hc) is not 2
+    want[0] = float(silu_d(2.0lf / double(hc)))
+    var bx = buf_upload(dev, x)
+    var btot = buf_u32(dev, uint(lr))
+    var bhc = buf_u32(dev, uint(hc))
+    let ran = dispatch_64_lanes(t, queue, tag, pso, lr) $(enc) {
+        metal_set_buffer(enc, bx, 0ul, 0)
+        metal_set_buffer(enc, btot, 0ul, 1)
+        metal_set_buffer(enc, bhc, 0ul, 2)
+    }
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bx, want, tag), 0)
+        let g0 = buf_at(bx, 0)
+        t |> success(abs(g0 - 2.0) > 1.0, "{tag}: the row moved off its input at [0] ({g0})")
+        t |> success(buf_mismatch_approx(bx, poisoned(want, 1), "{tag} control") > 0, "{tag}: the poisoned want must miss")
+    }
+    metal_release(bx)
+    metal_release(btot)
+    metal_release(bhc)
+    metal_release(pso)
+    delete x
+    delete want
+}
+
+// the mixer's collapse over nrows wide rows: y[p][i] = the stream mean of xn[p][c][i] * σ(gate[p][c][i])
+def private hc_mix_gate(t : T?; dev, queue; dim, hc, nrows : int) {
+    let tag = "hc_mix dim={dim} hc={hc} nrows={nrows}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_hc_mix_msl, metal_hc_mix_msl_entry, metal_hc_mix_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let hcd = hc * dim
+    var xn : array<float>
+    var gt : array<float>
+    var want : array<float>
+    xn |> resize(nrows * hcd)
+    gt |> resize(nrows * hcd)
+    want |> resize(nrows * dim)
+    for (i in range(nrows * hcd)) {
+        xn[i] = 0.11 * float(i % 43) - 2.2
+        gt[i] = 0.29 * float(i % 31) - 4.3
+    }
+    for (p in range(nrows)) {
+        for (i in range(dim)) {
+            var acc = 0.0lf
+            for (c in range(hc)) {
+                acc += double(xn[(p * hc + c) * dim + i]) * sigmoid_d(double(gt[(p * hc + c) * dim + i]))
+            }
+            want[p * dim + i] = float(acc / double(hc))
+        }
+    }
+    var bxn = buf_upload(dev, xn)
+    var bgt = buf_upload(dev, gt)
+    var by = buf_fill(dev, nrows * dim, -1000.0)
+    var bdim = buf_u32(dev, uint(dim))
+    var bhc = buf_u32(dev, uint(hc))
+    var bnr = buf_u32(dev, uint(nrows))
+    let ran = dispatch_64_lanes(t, queue, tag, pso, nrows * dim) $(enc) {
+        metal_set_buffer(enc, bxn, 0ul, 0)
+        metal_set_buffer(enc, bgt, 0ul, 1)
+        metal_set_buffer(enc, by, 0ul, 2)
+        metal_set_buffer(enc, bdim, 0ul, 3)
+        metal_set_buffer(enc, bhc, 0ul, 4)
+        metal_set_buffer(enc, bnr, 0ul, 5)
+    }
+    if (ran) {
+        t |> equal(buf_mismatch_approx(by, want, tag), 0)
+        t |> success(buf_mismatch_approx(by, poisoned(want, nrows * dim - 1), "{tag} control") > 0, "{tag}: the poisoned want must miss")
+    }
+    metal_release(bxn)
+    metal_release(bgt)
+    metal_release(by)
+    metal_release(bdim)
+    metal_release(bhc)
+    metal_release(bnr)
+    metal_release(pso)
+    delete xn
+    delete gt
+    delete want
+}
+
+// the scatter in place over nrows rows: res[p][c] += o[p] * 2 σ(inj[p][c] / hc); row 0's stream 1 carries a zero logit (the plain add)
+def private hc_combine_gate(t : T?; dev, queue; dim, hc, nrows : int) {
+    let tag = "hc_combine dim={dim} hc={hc} nrows={nrows}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_hc_combine_msl, metal_hc_combine_msl_entry, metal_hc_combine_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let hcd = hc * dim
+    var res : array<float>
+    var o : array<float>
+    var inj : array<float>
+    var want : array<float>
+    res |> resize(nrows * hcd)
+    o |> resize(nrows * dim)
+    inj |> resize(nrows * hc)
+    want |> resize(nrows * hcd)
+    for (i in range(nrows * hcd)) {
+        res[i] = 0.17 * float(i % 37) - 3.0
+    }
+    for (i in range(nrows * dim)) {
+        o[i] = 0.5 + 0.13 * float(i % 23)   //! positive: every stream moves off its input
+    }
+    for (j in range(nrows * hc)) {
+        inj[j] = j == 1 ? 0.0 : 1.7 * float(j % hc) - 2.6 + 0.3 * float(j / hc)
+    }
+    for (p in range(nrows)) {
+        for (c in range(hc)) {
+            let wgt = 2.0lf * sigmoid_d(double(inj[p * hc + c]) / double(hc))
+            for (i in range(dim)) {
+                let k = (p * hc + c) * dim + i
+                want[k] = float(double(res[k]) + double(o[p * dim + i]) * wgt)
+            }
+        }
+    }
+    var bres = buf_upload(dev, res)
+    var bo = buf_upload(dev, o)
+    var binj = buf_upload(dev, inj)
+    var bdim = buf_u32(dev, uint(dim))
+    var bhc = buf_u32(dev, uint(hc))
+    var bnr = buf_u32(dev, uint(nrows))
+    let ran = dispatch_64_lanes(t, queue, tag, pso, nrows * hcd) $(enc) {
+        metal_set_buffer(enc, bres, 0ul, 0)
+        metal_set_buffer(enc, bo, 0ul, 1)
+        metal_set_buffer(enc, binj, 0ul, 2)
+        metal_set_buffer(enc, bdim, 0ul, 3)
+        metal_set_buffer(enc, bhc, 0ul, 4)
+        metal_set_buffer(enc, bnr, 0ul, 5)
+    }
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bres, want, tag), 0)
+        let g1 = buf_at(bres, dim)
+        t |> success(abs(g1 - res[dim]) > 0.4, "{tag}: stream 1 moved off its input at [0] ({g1} from {res[dim]})")
+        t |> success(buf_mismatch_approx(bres, poisoned(want, nrows * hcd - 1), "{tag} control") > 0, "{tag}: the poisoned want must miss")
+    }
+    metal_release(bres)
+    metal_release(bo)
+    metal_release(binj)
+    metal_release(bdim)
+    metal_release(bhc)
+    metal_release(bnr)
+    metal_release(pso)
+    delete res
+    delete o
+    delete inj
+    delete want
+}
+
+// one (row, stream) a threadgroup: the normed key . normed query gate (signed sqrt, σ) scales the value
+// row into the stream's gated row, and the grouped-normed gated row lands as the conv input - the
+// decode form (direct = 0) at ring slot (pos0 + p) % rows, the window form (direct = 1) at panel row p -
+// the destination bound at a row offset; row 0's stream 0 dot is positive, stream 1's negative,
+// stream 2's key is zero (the sign-free arm, g = 1/2)
+def private ple_gate_gate(t : T?; dev, queue; dim, hc, rows, pos0, roff_rows, nrows : int; direct : bool) {
+    let tag = "ple_gate dim={dim} hc={hc} pos0={pos0} roff_rows={roff_rows} nrows={nrows} direct={direct}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_ple_gate_msl, metal_ple_gate_msl_entry, metal_ple_gate_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let hcd = hc * dim
+    let dst_rows = direct ? nrows : rows   //! the panel holds the window's rows, the ring `rows` slots
+    var res : array<float>
+    var key : array<float>
+    var val : array<float>
+    var wk : array<float>
+    var wq : array<float>
+    var wc : array<float>
+    res |> resize(nrows * hcd)
+    key |> resize(nrows * hcd)
+    val |> resize(nrows * dim)
+    wk |> resize(hcd)
+    wq |> resize(hcd)
+    wc |> resize(hcd)
+    for (i in range(nrows * hcd)) {
+        res[i] = 0.21 * float(i % 47) - 4.0
+    }
+    for (i in range(hcd)) {
+        wk[i] = 0.7 + 0.01 * float(i % 13)
+        wq[i] = 0.9 + 0.02 * float(i % 7)
+        wc[i] = 0.5 + 0.03 * float(i % 5)
+    }
+    for (p in range(nrows)) {
+        for (c in range(hc)) {
+            for (i in range(dim)) {
+                let k = (p * hc + c) * dim + i
+                let r = res[k]
+                key[k] = c == 0 ? r + 0.3 : (c == 1 ? -r : (c == 2 ? 0.0 : 0.05 * float((i + p) % 9) - 0.2))
+            }
+        }
+    }
+    for (i in range(nrows * dim)) {
+        val[i] = 0.31 * float(i % 19) - 2.7
+    }
+    // the oracle: ple_apply_row's gate half in plain code, a row at a time
+    var gwant : array<float>
+    var kn : array<float>
+    var qn : array<float>
+    gwant |> resize(nrows * hcd)
+    kn |> resize(nrows * hcd)
+    qn |> resize(nrows * hcd)
+    var dst_want : array<float>
+    dst_want |> resize((roff_rows + dst_rows) * hcd)
+    for (i in range((roff_rows + dst_rows) * hcd)) {
+        dst_want[i] = -1000.0
+    }
+    var gates : float[8]
+    unsafe {
+        for (p in range(nrows)) {
+            let slot = direct ? p : (pos0 + p) % rows
+            for (c in range(hc)) {
+                let b = (p * hc + c) * dim
+                rmsnorm(addr(kn[b]), addr<float const?>(key[b]), addr<float const?>(wk[c * dim]), int64(dim), EPS)
+                rmsnorm(addr(qn[b]), addr<float const?>(res[b]), addr<float const?>(wq[c * dim]), int64(dim), EPS)
+                var s = 0.0lf
+                for (i in range(dim)) {
+                    s += double(kn[b + i]) * double(qn[b + i])
+                }
+                s /= sqrt(double(dim))
+                let mag = sqrt(max(abs(s), 1.0e-6lf))
+                let sg = s > 0.0lf ? mag : (s < 0.0lf ? -mag : 0.0lf)
+                let g = sigmoid_d(sg)
+                if (p == 0) {
+                    gates[c] = float(g)
+                }
+                for (i in range(dim)) {
+                    gwant[b + i] = float(double(val[p * dim + i]) * g)
+                }
+                rmsnorm(addr(dst_want[(roff_rows + slot) * hcd + c * dim]), addr<float const?>(gwant[b]), addr<float const?>(wc[c * dim]), int64(dim), EPS)
+            }
+        }
+    }
+    t |> success(gates[0] > 0.5 && gates[1] < 0.5 && abs(gates[2] - 0.5) < 1.0e-6, "{tag}: the fixture reaches all three sign arms ({gates[0]}, {gates[1]}, {gates[2]})")
+    var bres = buf_upload(dev, res)
+    var bkey = buf_upload(dev, key)
+    var bval = buf_upload(dev, val)
+    var bwk = buf_upload(dev, wk)
+    var bwq = buf_upload(dev, wq)
+    var bwc = buf_upload(dev, wc)
+    var bg = buf_fill(dev, nrows * hcd, -1000.0)
+    var bdst = buf_fill(dev, (roff_rows + dst_rows) * hcd, -1000.0)
+    var ka = PleGateArgs(dim = uint(dim), hc = uint(hc), eps = EPS, pos0 = uint(pos0), rows = uint(rows), direct = direct ? 1u : 0u)
+    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+        metal_set_pipeline(enc, pso)
+        metal_set_threadgroup_memory_length(enc, metal_ple_gate_msl_tgmem, 0)
+        metal_set_buffer(enc, bres, 0ul, 0)
+        metal_set_buffer(enc, bkey, 0ul, 1)
+        metal_set_buffer(enc, bval, 0ul, 2)
+        metal_set_buffer(enc, bwk, 0ul, 3)
+        metal_set_buffer(enc, bwq, 0ul, 4)
+        metal_set_buffer(enc, bwc, 0ul, 5)
+        metal_set_buffer(enc, bg, 0ul, 6)
+        metal_set_buffer(enc, bdst, uint64(roff_rows * hcd * 4), 7)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 8)
+        metal_dispatch_threadgroups(enc, uint3(uint(nrows * hc), 1u, 1u), uint3(1024u, 1u, 1u))
+    }
+    t |> success(ran, "{tag}: encode: {err}")
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bg, gwant, tag), 0)
+        t |> equal(buf_mismatch_approx(bdst, dst_want, "{tag} dst"), 0)   //! the whole destination: the written rows, every other row at the sentinel
+        t |> success(buf_mismatch_approx(bg, poisoned(gwant, 2 * dim + 1), "{tag} control") > 0, "{tag}: the poisoned gated want must miss")
+        let slot0 = direct ? 0 : pos0 % rows
+        t |> success(buf_mismatch_approx(bdst, poisoned(dst_want, (roff_rows + slot0) * hcd + 5), "{tag} dst control") > 0, "{tag}: the poisoned destination want must miss")
+    }
+    metal_release(bres)
+    metal_release(bkey)
+    metal_release(bval)
+    metal_release(bwk)
+    metal_release(bwq)
+    metal_release(bwc)
+    metal_release(bg)
+    metal_release(bdst)
+    metal_release(pso)
+    delete res
+    delete key
+    delete val
+    delete wk
+    delete wq
+    delete wc
+    delete gwant
+    delete kn
+    delete qn
+    delete dst_want
+}
+
+// the dilated causal conv over the conv-input rows + the residual add in place over nrows rows:
+// res += gated + silu(conv). The ring holds the positions before the window at slot p % rows (the
+// newest wins), zero where nothing wrote, so a tap before the sequence reads zero; the window form
+// (direct = 1) reads positions pos0.. from the panel, the decode form (direct = 0, nrows 1) reads every
+// tap from the ring - pos0 picks the live-tap regime (one, some, all; wrapped past rows)
+def private ple_conv_gate(t : T?; dev, queue; dim, hc, kern, dil, rows, pos0, nrows : int; direct : bool) {
+    let tag = "ple_conv dim={dim} hc={hc} kern={kern} dil={dil} rows={rows} pos0={pos0} nrows={nrows} direct={direct}"
+    var err : string
+    var pso = pipeline_from_source(dev, metal_ple_conv_msl, metal_ple_conv_msl_entry, metal_ple_conv_msl_fastmath, err)
+    t |> success(pso != null, "{tag}: pipeline: {err}")
+    return if (pso == null)
+    let hcd = hc * dim
+    let roff_rows = 2
+    let coff_rows = 1
+    var res : array<float>
+    var gated : array<float>
+    var w : array<float>
+    var ring : array<float>
+    var panel : array<float>
+    res |> resize(nrows * hcd)
+    gated |> resize(nrows * hcd)
+    w |> resize(hcd * kern)
+    ring |> resize((roff_rows + rows) * hcd)
+    panel |> resize((coff_rows + nrows) * hcd)
+    for (i in range(nrows * hcd)) {
+        res[i] = 0.19 * float(i % 53) - 5.0
+        gated[i] = 0.7 + 0.07 * float(i % 17)   //! positive: the add moves every element off its input
+    }
+    for (i in range(hcd * kern)) {
+        w[i] = 0.23 * float(i % 29) - 3.2
+    }
+    for (i in range((roff_rows + rows) * hcd)) {
+        ring[i] = i < roff_rows * hcd ? -1000.0 : 0.0   //! rows under the offset carry the sentinel, the ring itself is zero-filled
+    }
+    for (i in range((coff_rows + nrows) * hcd)) {
+        panel[i] = i < coff_rows * hcd ? -1000.0 : 0.0
+    }
+    // the rows the ring holds: every position before the window (direct), or every position through the row (decode)
+    let ring_end = direct ? pos0 : pos0 + nrows
+    for (p in range(ring_end)) {   // the driver's order: every position lands at its slot, the newest wins
+        let rb = (roff_rows + p % rows) * hcd
+        for (i in range(hcd)) {
+            ring[rb + i] = 0.11 * float((i + 7 * p) % 31) - 1.6
+        }
+    }
+    if (direct) {
+        for (p in range(nrows)) {
+            for (i in range(hcd)) {
+                panel[(coff_rows + p) * hcd + i] = 0.11 * float((i + 7 * (pos0 + p)) % 31) - 1.6
+            }
+        }
+    }
+    var want : array<float>
+    want |> resize(nrows * hcd)
+    for (p in range(nrows)) {
+        let pos = pos0 + p
+        for (chn in range(hcd)) {
+            var acc = 0.0lf
+            for (k in range(kern)) {
+                let src = pos - (kern - 1 - k) * dil
+                if (src < 0) {
+                    continue
+                }
+                let v = (direct && src >= pos0) ? panel[(coff_rows + src - pos0) * hcd + chn] : ring[(roff_rows + src % rows) * hcd + chn]
+                acc += double(w[chn * kern + k]) * double(v)
+            }
+            want[p * hcd + chn] = float(double(res[p * hcd + chn]) + double(gated[p * hcd + chn]) + silu_d(acc))
+        }
+    }
+    var bres = buf_upload(dev, res)
+    var bg = buf_upload(dev, gated)
+    var bring = buf_upload(dev, ring)
+    var bpanel = buf_upload(dev, panel)
+    var bw = buf_upload(dev, w)
+    var ka = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(kern), dil = uint(dil), rows = uint(rows),
+        pos0 = uint(pos0), nrows = uint(nrows), direct = direct ? 1u : 0u)
+    let ran = dispatch_64_lanes(t, queue, tag, pso, nrows * hcd) $(enc) {
+        metal_set_buffer(enc, bres, 0ul, 0)
+        metal_set_buffer(enc, bg, 0ul, 1)
+        metal_set_buffer(enc, bpanel, uint64(coff_rows * hcd * 4), 2)
+        metal_set_buffer(enc, bring, uint64(roff_rows * hcd * 4), 3)
+        metal_set_buffer(enc, bw, 0ul, 4)
+        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
+    }
+    if (ran) {
+        t |> equal(buf_mismatch_approx(bres, want, tag), 0)
+        let g0 = buf_at(bres, 0)
+        t |> success(abs(g0 - res[0]) > 0.5, "{tag}: the row moved off its input at [0] ({g0} from {res[0]})")
+        t |> success(buf_mismatch_approx(bres, poisoned(want, nrows * hcd / 2), "{tag} control") > 0, "{tag}: the poisoned want must miss")
+        t |> equal(buf_mismatch_exact(bring, ring, "{tag} ring"), 0)   //! the conv reads the ring and the panel and writes neither
+        t |> equal(buf_mismatch_exact(bpanel, panel, "{tag} panel"), 0)
+    }
+    metal_release(bres)
+    metal_release(bg)
+    metal_release(bring)
+    metal_release(bpanel)
+    metal_release(bw)
+    metal_release(pso)
+    delete res
+    delete gated
+    delete w
+    delete ring
+    delete panel
+    delete want
+}
+
 // The [metal_dispatch] multi-kernel mechanism, end to end: MtlToy's two kernel= instances
 // dispatch through their GENERATED builders (kn_ rail, not hand binds) chained in one encoder
 // — scale (ys = xs*gain) then shift (ys += gain). The per-kernel STAGING divergence (shift
@@ -1746,6 +2276,26 @@ def test_metal_misc_kernels(t : T?) {
                 im2col2d_gate(t, dev, queue, 5, 6, 4, 36, 4)        // odd grid, tight source
                 suppress_row_gate(t, dev, queue, 2000, 37)
                 softcap_row_gate(t, dev, queue, 900, 30.0)
+                // ===== the hyper-connection mixer + the n-gram side input (qwen4exp) =====
+                hc_norm_gate(t, dev, queue, 2560, 4, 1)      // the served shape, the single row
+                hc_norm_gate(t, dev, queue, 100, 3, 5)       // under one threadgroup stride, five rows
+                hc_lo_gate(t, dev, queue, 320, 4)
+                hc_lo_gate(t, dev, queue, 100, 4)            // %64 tail
+                hc_init_gate(t, dev, queue, 2560, 4, 1)
+                hc_init_gate(t, dev, queue, 100, 3, 5)       // %64 tail, five rows
+                hc_mix_gate(t, dev, queue, 2560, 4, 1)
+                hc_mix_gate(t, dev, queue, 100, 3, 5)
+                hc_combine_gate(t, dev, queue, 2560, 4, 1)
+                hc_combine_gate(t, dev, queue, 100, 3, 5)
+                ple_gate_gate(t, dev, queue, 2560, 4, 10, 17, 3, 1, false)   // the decode form: the ring bound three rows in, slot 7
+                ple_gate_gate(t, dev, queue, 100, 4, 10, 0, 0, 1, false)     // slot 0 at offset 0, under a stride
+                ple_gate_gate(t, dev, queue, 100, 4, 10, 30, 2, 6, true)     // the window form: six rows into the panel
+                ple_conv_gate(t, dev, queue, 256, 4, 4, 3, 10, 0, 1, false)     // one live tap
+                ple_conv_gate(t, dev, queue, 256, 4, 4, 3, 10, 5, 1, false)     // two live taps
+                ple_conv_gate(t, dev, queue, 256, 4, 4, 3, 10, 25, 1, false)    // every tap live, the ring wrapped
+                ple_conv_gate(t, dev, queue, 100, 3, 4, 3, 10, 12, 1, false)    // %64 tail, the first wrap
+                ple_conv_gate(t, dev, queue, 100, 3, 4, 3, 10, 0, 14, true)     // the window form from position 0: taps before the sequence and inside the panel
+                ple_conv_gate(t, dev, queue, 100, 3, 4, 3, 10, 23, 6, true)     // a later window: taps in the ring (wrapped) and in the panel
                 mtl_toy_lens_gate(t, dev, queue, 1000)      // n%64 != 0 — the tail workgroup's guard
                 metal_release(queue)
             }

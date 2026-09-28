@@ -3006,6 +3006,44 @@ def test_vkd_q51_cm2_batch(t0 : T?) {
     }
 }
 
+//! the iq4nl32 cells' scale words: cool f16 d, two blocks a word, so the tile's f16 sums stay far from 65504
+def private iq4nl32_scale_words(totblk : int; mul : float) : array<uint> {
+    var w : array<uint>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        w |> resize((totblk + 1) / 2)
+        for (i in range(length(w))) {
+            w[i] = packHalf2x16(float2(mul * float(1 + (2 * i) % 7), mul * float(1 + (2 * i + 1) % 7)))
+        }
+    }
+    return <- w
+}
+
+[test]
+def test_vkd_iq4nl32_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 IQ4_NL per-32 s and e tiles == the CPU oracle (the per-32 plane verbatim: d * LUT[nibble] off a half-word d)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
+                t |> skip("no Vulkan device")
+                return
+            }
+            let n = 640                //! Qwen3.8-Flash-Next's expert width: 20 blocks, two unrolled 256-passes and a 128 tail
+            let totblk = 2 * TILE_CELL_D * (n / 32)
+            var wqh : array<uint>
+            wqh |> resize(totblk * 4)
+            for (i in range(totblk * 4)) {
+                wqh[i] = hash_word(uint(i) + 41u)     // arbitrary nibbles: every codebook slot reached
+            }
+            var wsh <- iq4nl32_scale_words(totblk, 0.0002)
+            var f <- tile_fixture(n, 32, wqh, wsh, 3u, 5u)
+            var y_ref <- tile_cell_arms(t, "iq4nl32", int(KqFmt.iq4nl32), f, [ARM_CM2_S, ARM_CM2_E, ARM_KHR], @@iq4nl32f16_gemm_oracle)
+            delete y_ref
+            delete f
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! the mx4 cells' E8M0 bytes: exponents 112..124 (2^-16 .. 2^-4 halved), four a word, so the tile's f16 sums stay far from 65504
 def private mx4_scale_words(totblk : int) : array<uint> {
     var w : array<uint>
@@ -5539,6 +5577,102 @@ def test_vkd_q51_gemv(t0 : T?) {
                 var y_poison := y_cls   // the bar's control
                 y_poison[0] += 1.0 + 2.0 * logits_maxabs(y_ref)
                 t |> success(mismatch_approx(y_poison, y_ref) > 0, "the q51 GEMV bar reds a poisoned element")
+                delete y_poison
+                delete regs
+                delete y_ref
+                delete wqh
+                delete wsh
+                delete xqh
+                delete xsh
+                delete y_cls
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vkd_iq4nl32_gemv(t0 : T?) {
+    t0 |> run("iq4nl32 GEMV class kernel == the scalar dot's float order (one lane a block over Q8_0 activations; 640 and 1280 wide)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_iq4nl32_gemv_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            for (n in [640, 1280]) {   // 20 blocks: one subgroup pass with idle lanes; 40: a second, partial pass
+                let nb = n / 32
+                let d = 3
+                let nreg = 2
+                let rows = nreg * d
+                let totblk = rows * nb
+                let wq_bytes = int64(totblk) * 16l
+                var wqh : array<uint>
+                var xqh : array<uint>
+                var xsh : array<float>
+                wqh |> resize(totblk * 4)
+                xqh |> resize(nb * 8)
+                xsh |> resize(nb)
+                for (i in range(totblk * 4)) {
+                    wqh[i] = hash_word(uint(i) + 67u)
+                }
+                var wsh <- iq4nl32_scale_words(totblk, 0.002)
+                let ws_bytes = long_length(wsh) * 4l
+                for (i in range(nb * 8)) {
+                    xqh[i] = hash_word(uint(i) * 23u + 5u)
+                }
+                for (i in range(nb)) {
+                    xsh[i] = 0.25 + float(i % 5) * 0.125
+                }
+                let xq_bytes = int64(nb) * 32l
+                let xs_bytes = int64(nb) * 4l
+                let y_bytes = int64(rows) * 4l
+                let wqd = make_device_buf(wq_bytes)
+                let wsd = make_device_buf(ws_bytes)
+                let xqd = make_device_buf(xq_bytes)
+                let xsd = make_device_buf(xs_bytes)
+                let yd2 = make_device_buf(y_bytes)
+                let rgd = make_device_buf(int64(nreg) * 8l)
+                var host = make_host_buf(y_bytes, true, [cached = true])
+                var y_cls : array<float>
+                y_cls |> resize(rows)
+                var regs : array<uint>
+                regs |> resize(nreg * 2)
+                for (r in range(nreg)) {
+                    regs[r * 2] = uint(r * d * nb)
+                    regs[r * 2 + 1] = 0u
+                }
+                unsafe {
+                    upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
+                    upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
+                    upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
+                    upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
+                    upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), int64(nreg) * 8l)
+                    nan_sentinel_upload(yd2, y_bytes)
+                    var s_cls = gemv_cls_set(int(KqFmt.iq4nl32), fixed_array(wqd, wsd, rgd, xqd, xsd, yd2),
+                        fixed_array(wq_bytes, ws_bytes, int64(nreg) * 8l, xq_bytes, xs_bytes, y_bytes),
+                        fixed_array(1u, 2u, 4u, 8u, 16u, 32u))
+                    var raw2 = alloc_cmd()
+                    let begin = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raw2, begin), null)
+                    var h2 : VkHaz
+                    var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u)
+                    gemv_enc(int(KqFmt.iq4nl32), raw2, h2, s_cls, pc, int64(rows))
+                    vkd_run_copy(raw2, h2, yd2, host, y_bytes, 32u)
+                    memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
+                }
+                var y_ref : array<float>
+                y_ref |> resize(rows)
+                for (r in range(nreg)) {
+                    for (row in range(d)) {
+                        y_ref[r * d + row] = iq4nl32_gemv_row_oracle(wqh, wsh, xqh, xsh, r * d * nb + row * nb, nb)
+                    }
+                }
+                let bad = mismatch_approx(y_cls, y_ref)
+                t |> success(bad == 0, "iq4nl32 GEMV at n {n} matches the scalar dot ({bad} of {rows} rows off)")
+                var y_poison := y_cls   // the bar's control
+                y_poison[0] += 1.0 + 2.0 * logits_maxabs(y_ref)
+                t |> success(mismatch_approx(y_poison, y_ref) > 0, "the iq4nl32 GEMV bar reds a poisoned element")
                 delete y_poison
                 delete regs
                 delete y_ref

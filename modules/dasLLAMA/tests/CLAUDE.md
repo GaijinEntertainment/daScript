@@ -91,9 +91,14 @@ batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`, `batch-ff` (rea
 GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance).
 
 MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
-mtp-vff-<tag> mtp-count-<tag>` per fixture tag `0.8b 4b 9b 27b 35b 3.8-27b` (4b = Qwen3.5-4B-MTP
+mtp-vff-<tag> mtp-count-<tag>` per fixture tag `0.8b 4b 9b 27b 35b 3.8-27b 3.8fn` (4b = Qwen3.5-4B-MTP
 Q8_0, the mid tier; 9b = Qwen3.5-9B-MTP UD-Q5_K_XL, large tier; 3.8-27b = the Qwen3.8-27B
-trunk + its split Q8_0 head; the 4b and 9b blocks carry the `qwen35` family tag; every fixture
+trunk + its split Q8_0 head; 3.8fn = Qwen3.8-Flash-Next UD-IQ4_XS + its split `shared` Q8_0 head,
+large tier, the SERVED-ONLY form - planar and blob together do not fit the box, so every arm runs
+GPU against GPU on the twin alone, mapped under the rig's identity with no pins and no mint of its
+own, and its ff arms hold the plain-MoE bar (2.0: the rows and single GEMV forms round the router's
+logits apart and a near-tie flips an expert - prose-a reads 0.89 with zero argmax flips); the 4b and
+9b blocks carry the `qwen35` family tag; every other fixture
 loads its served twin through `load_model_cached`, so the file mints a `.dlim` per carrier - the
 ledgered exception to the loader rule, since the metal MTP rail is what the image flavor serves;
 ctrl = plain-vs-plain forced feed must be bit-identical; ff = the

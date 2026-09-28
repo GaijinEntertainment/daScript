@@ -1116,6 +1116,12 @@ struct KernelBackend {
     q51_batch_groupn : MatmulQ51Q8BatchGroupNFn = @@q51q8_batch_groupn_kernel
     repack_q51 : RepackQ51Fn = @@repack_q51_identity
     q51_layout : function<() : int> = @@q51_layout_grp1
+    // the iq4nl32 slots: q51's shapes over the per-32 IQ4_NL planes (16 nibble bytes + f16 d a block, the LUT decode)
+    iq4nl32_batch : MatmulQ51Q8BatchFn = @@iq4nl32q8_batch_kernel
+    groupn_iq4nl32 : MatmulQ51GroupNFn = @@iq4nl32q8_groupn_kernel
+    iq4nl32_batch_groupn : MatmulQ51Q8BatchGroupNFn = @@iq4nl32q8_batch_groupn_kernel
+    repack_iq4nl32 : RepackQ51Fn = @@repack_iq4nl32_identity
+    iq4nl32_layout : function<() : int> = @@q51_layout_grp1
     // Optional row-range GEMV core (see MatmulQ8Q8RowsFn) — backends without one keep the panic
     // stub, and the fused multi-stage decode falls back to the per-op dispatch path.
     mm_rows : MatmulQ8Q8RowsFn = @@q8q8_unset_rows
@@ -1146,6 +1152,7 @@ struct KernelBackend {
     kq_rows_iq2s : MatmulKqRowsFn = @@kq_unset_rows
     kq_rows_iq2xs : MatmulKqRowsFn = @@kq_unset_rows
     kq_rows_iq2xxs : MatmulKqRowsFn = @@kq_unset_rows
+    kq_rows_iq3s4 : MatmulKqRowsFn = @@kq_unset_rows
     kq_batch : MatmulKqBatchFn = @@kq_unset_batch
     kq_groupn : MatmulKqGroupNFn = @@kq_unset_groupn
     kq_batch_groupn : MatmulKqBatchGroupNFn = @@kq_unset_batch_groupn
@@ -1192,6 +1199,9 @@ var g_mm_mx4q8_groupn = @@mx4q8_unset_groupn
 var g_mm_q51q8_batch = @@q51q8_batch_kernel
 var g_mm_q51q8_groupn = @@q51q8_groupn_kernel
 var g_mm_q51q8_batch_groupn = @@q51q8_batch_groupn_kernel
+var g_mm_iq4nl32q8_batch = @@iq4nl32q8_batch_kernel
+var g_mm_iq4nl32q8_groupn = @@iq4nl32q8_groupn_kernel
+var g_mm_iq4nl32q8_batch_groupn = @@iq4nl32q8_batch_groupn_kernel
 var g_mm_q8q8_rows = @@q8q8_unset_rows
 var g_active_has_rows = false       // does the active backend carry a row-range GEMV core?
 var g_mm_mx4q8_rows = @@mx4q8_unset_rows
@@ -1217,6 +1227,7 @@ var g_kq_rows_k2 = @@kq_unset_rows
 var g_kq_rows_iq2s = @@kq_unset_rows
 var g_kq_rows_iq2xs = @@kq_unset_rows
 var g_kq_rows_iq2xxs = @@kq_unset_rows
+var g_kq_rows_iq3s4 = @@kq_unset_rows
 var g_mm_kq_batch = @@kq_unset_batch
 var g_mm_kq_groupn = @@kq_unset_groupn
 var g_mm_kq_batch_groupn = @@kq_unset_batch_groupn
@@ -1227,6 +1238,7 @@ var g_active_has_kq_batch_groupn = false   // ... and the fused batched region-l
 var g_repack_q8q8 = @@repack_q8q8_identity   // no-op until a repack backend is selected
 var g_repack_mx4 = @@repack_mx4_identity     // no-op until a repack backend is selected
 var g_repack_q51 = @@repack_q51_identity     // no-op until a repack backend is selected
+var g_repack_iq4nl32 = @@repack_iq4nl32_identity   // no-op until a repack backend is selected
 var g_repack_kq = @@repack_kq_identity       // no-op until a kq-capable backend is selected
 
 var g_kernel_backends : table<string; KernelBackend>
@@ -1238,6 +1250,7 @@ var g_active_mx4_native_batch = false         // see KernelBackend.mx4_native_ba
 var g_active_q8_layout_mr = 4l                // see KernelBackend.q8_layout (activation-time cache)
 var g_active_kq_layout = @@kq_layout_grp4_fmt // see KernelBackend.kq_layout (activation-time cache)
 var g_active_q51_layout_mr = 1l               // see KernelBackend.q51_layout (activation-time cache)
+var g_active_iq4nl32_layout_mr = 1l           // see KernelBackend.iq4nl32_layout (activation-time cache)
 var g_active_q8_wbias = 0l                    // see KernelBackend.q8_wbias (activation-time cache)
 var g_active_q8_kgroup = 4l                   // see KernelBackend.q8_kgroup (activation-time cache)
 var g_backend_pin = ""              // A/B: force this backend by name; "" = auto-select
@@ -1259,6 +1272,263 @@ def repack_kq_identity(fmt : int; var kq : uint8?; var ks : uint8?; n, d : int64
 //! Default q51 repack: no-op — the q51 planes stay disk-order for the portable kernels.
 [unused_argument(qp, sp, n, d)]
 def repack_q51_identity(var qp : uint8?; var sp : uint8?; n, d : int64) {}
+
+//! Default iq4nl32 repack: no-op — the planes stay disk-order for the portable kernels.
+[unused_argument(qp, sp, n, d)]
+def repack_iq4nl32_identity(var qp : uint8?; var sp : uint8?; n, d : int64) {}
+
+//! IQ4_NL·Q8 dot, scalar reference form — THE iq4nl32 float-order contract every iq4nl32 kernel
+//! reproduces: per 32-block isum = Σ lut[q]·a (elem k off byte k's low nibble, k + 16 off its high);
+//! f += d·isum·xs[b]. The codebook is signed, so no activation sum enters.
+[hint(unsafe_range_check, noalias = wq, noalias = ws, noalias = xq, noalias = xs)]
+def dot_iq4nl32q8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    let nb = n / 32l
+    let lut = iq4nl_lut()
+    var f = 0.0
+    unsafe {
+        for (bi in range64(nb)) {
+            let wb = bi * IQ4NL32_QB
+            let xb = bi * 32l
+            var isum = 0
+            for (j in range64(16l)) {
+                let b = int(wq[wb + j])
+                isum += int(lut[b & 15]) * int(xq[xb + j]) + int(lut[b >> 4]) * int(xq[xb + j + 16l])
+            }
+            let d = f16_to_f32(uint(ws[bi * IQ4NL32_SB]) | (uint(ws[bi * IQ4NL32_SB + 1l]) << 8u))
+            f += d * float(isum) * xs[bi]
+        }
+    }
+    return f
+}
+
+//! Expand one iq4nl32 plane row through the codebook to int8 bytes in `qe` (n bytes) — the
+//! expanded row the fast kernels MAC over, exact (every codebook level is an int8).
+[hint(unsafe_range_check, noalias = wq, noalias = qe)]
+def expand_iq4nl32_row(wq : uint8 const?; var qe : int8?; nb : int64) {
+    let lut = iq4nl_lut()
+    unsafe {
+        for (bi in range64(nb)) {
+            let wb = bi * IQ4NL32_QB
+            let xb = bi * 32l
+            for (j in range64(16l)) {
+                let b = int(wq[wb + j])
+                qe[xb + j] = lut[b & 15]
+                qe[xb + j + 16l] = lut[b >> 4]
+            }
+        }
+    }
+}
+
+[hint(unsafe_range_check, noalias = qe, noalias = ws, noalias = xq, noalias = xs)]
+def template dot_iq4nl32e_template(qe : int8 const ?; ws : uint8 const ?; xq : int8 const ?; xs : float const ?; n : int64) : float {
+    let nb = n / 32l
+    var f = 0.0
+    for (bi in range64(nb)) {
+        let xb = bi * 32l
+        var isum = 0
+        for [tune = 1] (k in range64(32l)) {
+            isum += int(unsafe(qe[xb + k])) * int(unsafe(xq[xb + k]))
+        }
+        let d = f16_to_f32(uint(unsafe(ws[bi * 2l])) | (uint(unsafe(ws[bi * 2l + 1l])) << 8u))
+        f += d * float(isum) * unsafe(xs[bi])
+    }
+    return f
+}
+
+//! The iq4nl32 MAC over an expand_iq4nl32_row-expanded row — the fast kernels' core. Bit-identical
+//! to dot_iq4nl32q8_scalar (exact int sums, same per-block float fold order).
+[hint(unsafe_range_check, noalias = qe, noalias = ws, noalias = xq, noalias = xs), tuned(fallback = "vec16")]
+def dot_iq4nl32e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
+
+//! expand_iq4nl32_row's grp<mr> twin: row r of one mr-row group off the interleaved plane (the
+//! nibble dwords at j·4·mr + r·4 - mx4's column order). Bit-identical expansion.
+def expand_iq4nl32_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64) {
+    let lut = iq4nl_lut()
+    unsafe {
+        for (bi in range64(nb)) {
+            let base = bi * IQ4NL32_QB * mr
+            for (j in range64(16l)) {
+                let b = int(gq[base + (j / 4l) * 4l * mr + r * 4l + j % 4l])
+                qe[bi * 32l + j] = lut[b & 15]
+                qe[bi * 32l + j + 16l] = lut[b >> 4]
+            }
+        }
+    }
+}
+
+//! One row's f16 d bytes gathered contiguous off the grp<mr> scale plane (dot_iq4nl32e reads a
+//! packed 2B-per-block row).
+def gather_iq4nl32_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64) {
+    unsafe {
+        for (bi in range64(nb)) {
+            let src = bi * IQ4NL32_SB * mr + r * IQ4NL32_SB
+            ss[bi * IQ4NL32_SB] = gs[src]
+            ss[bi * IQ4NL32_SB + 1l] = gs[src + 1l]
+        }
+    }
+}
+
+// ===== the per-32 expanded-row kernel shapes, one body over the format tag =====
+// A per-32 plane format (q51, iq4nl32) expands a row to int8 once and MACs over it; the tag picks
+// the plane strides, the expand and the fold - the three kernel shapes below are written once.
+
+def private b32_qb(_f : KqTag_q51) : int64 => Q51_QB
+def private b32_qb(_f : KqTag_iq4nl32) : int64 => IQ4NL32_QB
+def private b32_sb(_f : KqTag_q51) : int64 => Q51_SB
+def private b32_sb(_f : KqTag_iq4nl32) : int64 => IQ4NL32_SB
+def private b32_layout_mr(_f : KqTag_q51) : int64 => active_q51_layout_mr()
+def private b32_layout_mr(_f : KqTag_iq4nl32) : int64 => active_iq4nl32_layout_mr()
+
+def private b32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_q51) {
+    expand_q51_row(wq, qe, nb)
+}
+def private b32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_iq4nl32) {
+    expand_iq4nl32_row(wq, qe, nb)
+}
+def private b32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; _f : KqTag_q51) {
+    expand_q51_grp_row(gq, r, mr, qe, nb)
+}
+def private b32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; _f : KqTag_iq4nl32) {
+    expand_iq4nl32_grp_row(gq, r, mr, qe, nb)
+}
+def private b32_gather_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64; _f : KqTag_q51) {
+    gather_q51_grp_scales(gs, r, mr, ss, nb)
+}
+def private b32_gather_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64; _f : KqTag_iq4nl32) {
+    gather_iq4nl32_grp_scales(gs, r, mr, ss, nb)
+}
+def private b32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q51) : float => dot_q51e(qe, ws, xq, xs, n)
+def private b32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_iq4nl32) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
+
+//! One (region, row) expanded into the worker's scratch: the disk-order row, or the grp<mr> group's row with its scales gathered
+def private b32_expand_at(wq : uint8 const?; ws : uint8 const?; blk0, row, nb, mr, grpRows : int64; var qep : int8?; var scp : uint8?; var srow : uint8 const?&; f : auto(TT)) {
+    unsafe {
+        srow = ws + (blk0 + row * nb) * b32_sb(f)
+        if (mr == 1l || row >= grpRows) {
+            b32_expand_row(wq + (blk0 + row * nb) * b32_qb(f), qep, nb, f)
+        } else {
+            let gbase = blk0 + (row / mr) * mr * nb
+            b32_expand_grp_row(wq + gbase * b32_qb(f), row % mr, mr, qep, nb, f)
+            b32_gather_grp_scales(ws + gbase * b32_sb(f), row % mr, mr, scp, nb, f)
+            srow = scp
+        }
+    }
+}
+
+// Portable per-32 batch (the *_batch slot default): rows-outer/tokens-inner — each row expands
+// ONCE into the worker's scratch, then ntok MAC passes (the mm_b_*_pre core).
+def private b32_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64; f : auto(TT)) {
+    let nb = n / 32l
+    let mr = b32_layout_mr(f)   // grp<mr> planes on the gen backend; tail rows stay disk-order
+    let grpRows = (d / mr) * mr
+    let sb = b32_sb(f)
+    var myp = yp
+    unsafe {
+        maybe_parallel_for(0, int(d), matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)) $(rb, re) {
+            var qe : array<int8>
+            qe |> resize(n)
+            var sc : array<uint8>
+            sc |> resize(nb * sb)
+            unsafe {
+                var qep = addr(qe[0])
+                var scp = addr(sc[0])
+                for (i in range(rb, re)) {
+                    let row = int64(i)
+                    var srow : uint8 const?
+                    b32_expand_at(wq, ws, 0l, row, nb, mr, grpRows, qep, scp, srow, f)
+                    for (tk in range64(ntok)) {
+                        myp[tk * d + row] = b32_dot_e(qep, srow, xqp + tk * n, xsp + tk * nb, n, f)
+                    }
+                }
+            }
+            delete qe
+            delete sc
+        }
+    }
+}
+
+// Portable per-32 groupN (the groupn_* slot default — MoE decode dispatch): (element woff,
+// activation xoff) pairs, expand-then-MAC per (region, row). No bias form — no biased per-32 arch exists.
+def private b32_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64; f : auto(TT)) {
+    let nb = n / 32l
+    let mr = b32_layout_mr(f)   // grp<mr> planes on the gen backend; tail rows stay disk-order
+    let grpRows = (d / mr) * mr
+    let sb = b32_sb(f)
+    var myp = yp
+    unsafe {
+        maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), 1, n * d * nregions)) $(rb, re) {
+            var qe : array<int8>
+            qe |> resize(n)
+            var sc : array<uint8>
+            sc |> resize(nb * sb)
+            unsafe {
+                var qep = addr(qe[0])
+                var scp = addr(sc[0])
+                for (i in range(rb, re)) {
+                    let ii = int64(i)
+                    let r = ii / d
+                    let row = ii % d
+                    let woff = offs[r * 2l]
+                    let xoff = offs[r * 2l + 1l]
+                    var srow : uint8 const?
+                    b32_expand_at(wq, ws, woff / 32l, row, nb, mr, grpRows, qep, scp, srow, f)
+                    myp[ii] = b32_dot_e(qep, srow, xqp + xoff, xsp + xoff / 32l, n, f)
+                }
+            }
+            delete qe
+            delete sc
+        }
+    }
+}
+
+// Portable per-32 batch groupN (the *_batch_groupn slot default — fused MoE prefill): (element woff,
+// row0, cnt) triples; each (region, row) expands once, then cnt token MACs.
+def private b32_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64; f : auto(TT)) {
+    let nb = n / 32l
+    let mr = b32_layout_mr(f)   // grp<mr> planes on the gen backend; tail rows stay disk-order
+    let grpRows = (d / mr) * mr
+    let sb = b32_sb(f)
+    var myp = yp
+    unsafe {
+        maybe_parallel_for(0, int(nregions * d), matmul_chunks(int(nregions * d), get_q8_batch_chunks_per_job(), n * d * nregions)) $(rb, re) {
+            var qe : array<int8>
+            qe |> resize(n)
+            var sc : array<uint8>
+            sc |> resize(nb * sb)
+            unsafe {
+                var qep = addr(qe[0])
+                var scp = addr(sc[0])
+                for (i in range(rb, re)) {
+                    let ii = int64(i)
+                    let r = ii / d
+                    let row = ii % d
+                    let woff = offs[r * 3l]
+                    let row0 = offs[r * 3l + 1l]
+                    let cnt = offs[r * 3l + 2l]
+                    var srow : uint8 const?
+                    b32_expand_at(wq, ws, woff / 32l, row, nb, mr, grpRows, qep, scp, srow, f)
+                    for (tk in range64(cnt)) {
+                        myp[(row0 + tk) * d + row] = b32_dot_e(qep, srow, xqp + (row0 + tk) * n, xsp + (row0 + tk) * nb, n, f)
+                    }
+                }
+            }
+            delete qe
+            delete sc
+        }
+    }
+}
+
+def iq4nl32q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_iq4nl32())
+}
+
+def iq4nl32q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_iq4nl32())
+}
+
+def iq4nl32q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_iq4nl32())
+}
 
 //! Q5_1·Q8 dot, scalar reference form — THE q51 float-order contract every q51 kernel
 //! reproduces: per 32-block isum = Σ q·a (q = nibble | qh_bit << 4, unsigned [0,31]), asum = Σ a
@@ -1373,125 +1643,17 @@ def gather_q51_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb 
     }
 }
 
-// Portable q51 batch (the KernelBackend.q51_batch default): rows-outer/tokens-inner — each row
-// expands ONCE into the worker's scratch, then ntok MAC passes (the mm_b_q51_pre core).
+// The q51 slots' portable defaults: the per-32 expanded-row shapes over the q51 tag (b32_* below)
 def q51q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    let nb = n / 32l
-    let mr = active_q51_layout_mr()   // grp<mr> planes on the gen backend; tail rows stay disk-order
-    let grpRows = (d / mr) * mr
-    var myp = yp
-    unsafe {
-        maybe_parallel_for(0, int(d), matmul_chunks(int(d), get_q8_batch_chunks_per_job(), n * d * ntok)) $(rb, re) {
-            var qe : array<int8>
-            qe |> resize(n)
-            var sc : array<uint8>
-            sc |> resize(nb * 4l)
-            unsafe {
-                var qep = addr(qe[0])
-                var scp = addr(sc[0])
-                for (i in range(rb, re)) {
-                    let row = int64(i)
-                    var srow = ws + row * nb * 4l
-                    if (mr == 1l || row >= grpRows) {
-                        expand_q51_row(wq + row * nb * 20l, qep, nb)
-                    } else {
-                        let gbase = (row / mr) * mr * nb
-                        expand_q51_grp_row(wq + gbase * 20l, row % mr, mr, qep, nb)
-                        gather_q51_grp_scales(ws + gbase * 4l, row % mr, mr, scp, nb)
-                        srow = scp
-                    }
-                    for (tk in range64(ntok)) {
-                        myp[tk * d + row] = dot_q51e(qep, srow, xqp + tk * n, xsp + tk * nb, n)
-                    }
-                }
-            }
-            delete qe
-            delete sc
-        }
-    }
+    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_q51())
 }
 
-// Portable q51 groupN (the groupn_q51 default — MoE decode dispatch): (element woff, activation
-// xoff) pairs, expand-then-MAC per (region, row). No bias form — no biased-q51 arch exists.
 def q51q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    let nb = n / 32l
-    let mr = active_q51_layout_mr()   // grp<mr> planes on the gen backend; tail rows stay disk-order
-    let grpRows = (d / mr) * mr
-    var myp = yp
-    unsafe {
-        maybe_parallel_for(0, int(nregions * d), matmul_chunks_gemv(int(nregions * d), 1, n * d * nregions)) $(rb, re) {
-            var qe : array<int8>
-            qe |> resize(n)
-            var sc : array<uint8>
-            sc |> resize(nb * 4l)
-            unsafe {
-                var qep = addr(qe[0])
-                var scp = addr(sc[0])
-                for (i in range(rb, re)) {
-                    let ii = int64(i)
-                    let r = ii / d
-                    let row = ii % d
-                    let woff = offs[r * 2l]
-                    let xoff = offs[r * 2l + 1l]
-                    var srow = ws + (woff / 32l + row * nb) * 4l
-                    if (mr == 1l || row >= grpRows) {
-                        expand_q51_row(wq + (woff / 32l + row * nb) * 20l, qep, nb)
-                    } else {
-                        let gbase = woff / 32l + (row / mr) * mr * nb
-                        expand_q51_grp_row(wq + gbase * 20l, row % mr, mr, qep, nb)
-                        gather_q51_grp_scales(ws + gbase * 4l, row % mr, mr, scp, nb)
-                        srow = scp
-                    }
-                    myp[ii] = dot_q51e(qep, srow, xqp + xoff, xsp + xoff / 32l, n)
-                }
-            }
-            delete qe
-            delete sc
-        }
-    }
+    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q51())
 }
 
-// Portable q51 batch groupN (the q51_batch_groupn default — fused MoE prefill): (element woff,
-// row0, cnt) triples; each (region, row) expands once, then cnt token MACs.
 def q51q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    let nb = n / 32l
-    let mr = active_q51_layout_mr()   // grp<mr> planes on the gen backend; tail rows stay disk-order
-    let grpRows = (d / mr) * mr
-    var myp = yp
-    unsafe {
-        maybe_parallel_for(0, int(nregions * d), matmul_chunks(int(nregions * d), get_q8_batch_chunks_per_job(), n * d * nregions)) $(rb, re) {
-            var qe : array<int8>
-            qe |> resize(n)
-            var sc : array<uint8>
-            sc |> resize(nb * 4l)
-            unsafe {
-                var qep = addr(qe[0])
-                var scp = addr(sc[0])
-                for (i in range(rb, re)) {
-                    let ii = int64(i)
-                    let r = ii / d
-                    let row = ii % d
-                    let woff = offs[r * 3l]
-                    let row0 = offs[r * 3l + 1l]
-                    let cnt = offs[r * 3l + 2l]
-                    var srow = ws + (woff / 32l + row * nb) * 4l
-                    if (mr == 1l || row >= grpRows) {
-                        expand_q51_row(wq + (woff / 32l + row * nb) * 20l, qep, nb)
-                    } else {
-                        let gbase = woff / 32l + (row / mr) * mr * nb
-                        expand_q51_grp_row(wq + gbase * 20l, row % mr, mr, qep, nb)
-                        gather_q51_grp_scales(ws + gbase * 4l, row % mr, mr, scp, nb)
-                        srow = scp
-                    }
-                    for (tk in range64(cnt)) {
-                        myp[(row0 + tk) * d + row] = dot_q51e(qep, srow, xqp + (row0 + tk) * n, xsp + (row0 + tk) * nb, n)
-                    }
-                }
-            }
-            delete qe
-            delete sc
-        }
-    }
+    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q51())
 }
 
 def private no_backend() {
@@ -1562,6 +1724,10 @@ def active_kq_layout_mr(fmt : int) : int64 {
 //! mr on the arm64-gen backend (the self-anchored q51 GEMV family).
 def active_q51_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.q51_mr : g_active_q51_layout_mr
 
+//! The active backend's iq4nl32 plane interleave — 1 (disk order) on every hand tier; the stamped
+//! mr on a gen backend that carries the iq4nl32 GEMV family.
+def active_iq4nl32_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.iq4nl32_mr : g_active_iq4nl32_layout_mr
+
 //! The weight-plane bias of the ACTIVE backend's Q8 layout — cached at activation from
 //! KernelBackend.q8_wbias (0 for every hand tier; 128 on a bias128 gen stamp). The mx4->Q8
 //! expand biases its LUT writes to match.
@@ -1585,6 +1751,17 @@ def set_bake_q51_repack(f : RepackQ51Fn) {
 //! grp<mr> q51 target, else the active backend's slot.
 def active_repack_q51() : RepackQ51Fn {
     return g_bake_cpu_override && g_bake_cpu.q51_mr > 1l ? g_bake_q51_repack : g_repack_q51
+}
+
+var private g_bake_iq4nl32_repack = @@repack_iq4nl32_identity
+
+def set_bake_iq4nl32_repack(f : RepackQ51Fn) {
+    g_bake_iq4nl32_repack = f
+}
+
+//! The iq4nl32 repack the LOAD path invokes — active_repack_q51's twin over the iq4nl32 planes.
+def active_repack_iq4nl32() : RepackQ51Fn {
+    return g_bake_cpu_override && g_bake_cpu.iq4nl32_mr > 1l ? g_bake_iq4nl32_repack : g_repack_iq4nl32
 }
 
 // The bake twins (registered by math_gen like set_bake_q51_repack): override-getter bodies that
@@ -1713,6 +1890,9 @@ def private activate(be : KernelBackend) {
     g_mm_q51q8_batch = be.q51_batch
     g_mm_q51q8_groupn = be.groupn_q51
     g_mm_q51q8_batch_groupn = be.q51_batch_groupn
+    g_mm_iq4nl32q8_batch = be.iq4nl32_batch
+    g_mm_iq4nl32q8_groupn = be.groupn_iq4nl32
+    g_mm_iq4nl32q8_batch_groupn = be.iq4nl32_batch_groupn
     g_mm_q8q8_rows = be.mm_rows
     g_active_has_rows = !(be.mm_rows == @@q8q8_unset_rows)
     g_mm_mx4q8_rows = be.mx4_rows
@@ -1738,6 +1918,7 @@ def private activate(be : KernelBackend) {
     g_kq_rows_iq2s = be.kq_rows_iq2s
     g_kq_rows_iq2xs = be.kq_rows_iq2xs
     g_kq_rows_iq2xxs = be.kq_rows_iq2xxs
+    g_kq_rows_iq3s4 = be.kq_rows_iq3s4
     g_mm_kq_batch = be.kq_batch
     g_mm_kq_groupn = be.kq_groupn
     g_mm_kq_batch_groupn = be.kq_batch_groupn
@@ -1748,6 +1929,7 @@ def private activate(be : KernelBackend) {
     g_repack_q8q8 = be.repack
     g_repack_mx4 = be.repack_mx4
     g_repack_q51 = be.repack_q51
+    g_repack_iq4nl32 = be.repack_iq4nl32
     g_repack_kq = be.repack_kq
     g_active_backend = be.name
     g_active_needs_repack = be.needs_repack
@@ -1756,6 +1938,7 @@ def private activate(be : KernelBackend) {
     g_active_q8_layout_mr = int64(invoke(be.q8_layout))
     g_active_kq_layout = be.kq_layout
     g_active_q51_layout_mr = int64(invoke(be.q51_layout))
+    g_active_iq4nl32_layout_mr = int64(invoke(be.iq4nl32_layout))
     g_active_q8_wbias = int64(invoke(be.q8_wbias))
     g_active_q8_kgroup = int64(invoke(be.q8_kgroup))
     g_active_batch_backend = be.name
@@ -1941,6 +2124,7 @@ def kq_rows_fn(fmt : int) : MatmulKqRowsFn {
     if (fmt == 6) return g_kq_rows_k6
     if (fmt == 40) return g_kq_rows_q40
     if (fmt == 44) return g_kq_rows_iq4xs
+    if (fmt == 35) return g_kq_rows_iq3s4
     if (fmt == 3) return g_kq_rows_k3
     if (fmt == 33) return g_kq_rows_iq3s
     if (fmt == 34) return g_kq_rows_iq3xxs
@@ -2377,6 +2561,35 @@ def matmul_q51q8_batch_groupn(var y : array<float>; wq : array<uint8> | #; ws : 
                               xq : array<int8>; xs : array<float>; n, d : int64) {
     unsafe {
         invoke(g_mm_q51q8_batch_groupn, addr(y[0]),
+            addr<uint8 const?>(wq[0]), addr<uint8 const?>(ws[0]),
+            addr<int64 const?>(offs[0]), nregions,
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d)
+    }
+}
+
+//! The iq4nl32 twins of the three q51 wrappers over the iq4nl32 planes (quants at (woff/32)*16, d at (woff/32)*2)
+def matmul_iq4nl32q8_batch(var y : array<float>; wq : array<uint8>; ws : array<uint8>; woff : int64; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
+    unsafe {
+        invoke(g_mm_iq4nl32q8_batch, addr(y[0]),
+            addr<uint8 const?>(wq[(woff / 32l) * IQ4NL32_QB]), addr<uint8 const?>(ws[(woff / 32l) * IQ4NL32_SB]),
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d, ntok)
+    }
+}
+
+def matmul_iq4nl32q8_groupn(var y : array<float>; wq : array<uint8> | #; ws : array<uint8> | #; offs : array<int64>; nregions : int64;
+                            xq : array<int8>; xs : array<float>; n, d : int64) {
+    unsafe {
+        invoke(g_mm_iq4nl32q8_groupn, addr(y[0]),
+            addr<uint8 const?>(wq[0]), addr<uint8 const?>(ws[0]),
+            addr<int64 const?>(offs[0]), nregions,
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d)
+    }
+}
+
+def matmul_iq4nl32q8_batch_groupn(var y : array<float>; wq : array<uint8> | #; ws : array<uint8> | #; offs : array<int64>; nregions : int64;
+                                  xq : array<int8>; xs : array<float>; n, d : int64) {
+    unsafe {
+        invoke(g_mm_iq4nl32q8_batch_groupn, addr(y[0]),
             addr<uint8 const?>(wq[0]), addr<uint8 const?>(ws[0]),
             addr<int64 const?>(offs[0]), nregions,
             addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d)
@@ -3243,6 +3456,15 @@ def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam
     if (g_mm_q51q8_batch_groupn == null) {
         g_mm_q51q8_batch_groupn = @@q51q8_batch_groupn_kernel
     }
+    if (g_mm_iq4nl32q8_batch == null) {
+        g_mm_iq4nl32q8_batch = @@iq4nl32q8_batch_kernel
+    }
+    if (g_mm_iq4nl32q8_groupn == null) {
+        g_mm_iq4nl32q8_groupn = @@iq4nl32q8_groupn_kernel
+    }
+    if (g_mm_iq4nl32q8_batch_groupn == null) {
+        g_mm_iq4nl32q8_batch_groupn = @@iq4nl32q8_batch_groupn_kernel
+    }
     if (g_mm_q8q8_rows == null) {
         g_mm_q8q8_rows = @@q8q8_unset_rows
     }
@@ -3303,6 +3525,9 @@ def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam
     if (g_kq_rows_iq2xs == null) {
         g_kq_rows_iq2xs = @@kq_unset_rows
     }
+    if (g_kq_rows_iq3s4 == null) {
+        g_kq_rows_iq3s4 = @@kq_unset_rows
+    }
     if (g_kq_rows_iq2xxs == null) {
         g_kq_rows_iq2xxs = @@kq_unset_rows
     }
@@ -3317,6 +3542,12 @@ def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam
     }
     if (g_bake_q51_repack == null) {
         g_bake_q51_repack = @@repack_q51_identity
+    }
+    if (g_bake_iq4nl32_repack == null) {
+        g_bake_iq4nl32_repack = @@repack_iq4nl32_identity
+    }
+    if (g_repack_iq4nl32 == null) {
+        g_repack_iq4nl32 = @@repack_iq4nl32_identity
     }
     if (g_bake_q8q8_repack == null) {
         g_bake_q8q8_repack = @@repack_q8q8_identity

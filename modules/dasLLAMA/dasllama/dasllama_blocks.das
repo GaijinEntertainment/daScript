@@ -619,7 +619,7 @@ def private attention_gpu_decode(t : Model; var s : Session; l : int64; pos : in
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb2[0])), dim)
     prof_add("act_resid", ts_resid0)
     let tail_shape = (g_env_gpu.gpu_dec_tail && moe_gpu_ffn_tail_ok() && c.n_ff_shexp == 0l && !c.pre_post_norm && !c.layer_out_scale
-        && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai && t.quant == QuantMode.q8 && c.n_expert_used <= 64l)
+        && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai && t.quant == QuantMode.q8 && c.n_expert_used <= 64l && !c.hyper_conn)
     s.tail_next1 = 0l
     if (tail_shape && !c.moe_exps_bias && l >= c.n_layer_dense_lead && moe_gpu_layer_on_gpu(l) && attn_dec_gpu_next_serves(t, s, l + 1l, pos)) {
         s.tail_next1 = l + 1l
@@ -1939,7 +1939,11 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     if (c.pre_post_norm) {
         rms_batch(s.xb2_b, s.xb2_b, t, t.rms_post_ffn_off + l * dim, dim, npos)
     }
-    add_batch(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    if (c.hyper_conn) {
+        block_resid_b(t, s, s.xb2_b, npos)
+    } else {
+        add_batch(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb2_b[0])), npos * dim)
+    }
     prof_add("act_resid", ts_resid)
 }
 
@@ -1955,13 +1959,16 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     }
     let dim = c.dim
     let ts_norm = prof_ticks()
-    rms_batch(s.xb_b, s.x_b, t, t.rms_ffn_off + l * dim, dim, npos)
+    block_in_b(t, s, t.rms_ffn_off + l * dim, npos)
     prof_add("norm", ts_norm)
     // native-MXFP4 grouped path pays a per-touched-expert Q8 expansion (~120MB/expert); under ~8 rows/expert the per-position mx4 GEMVs are cheaper
     let mx4_grouped_pays = !t.experts_mx4 || npos * c.n_expert_used >= 8l * c.n_expert
     // kq-expert layers ride grouped buckets via the kq batch tile; portable/no-kq backends take the per-position path
     let kq_grouped_ok = !moe_layer_sb_kq(t, l) || (t.kq_repacked && kernel_backend_has_kq_batch())
-    if (t.quant == QuantMode.q8 && g_moe_grouped_prefill && mx4_grouped_pays && kq_grouped_ok) {
+    // a speculative verify's rows are decode-shaped: the bucketed GEMM chain over a handful of rows costs several
+    // GEMV rounds of the same experts, so narrow batches take the per-position GEMV route (bit-identical)
+    let narrow = npos <= ATTN_NARROW_NPOS
+    if (t.quant == QuantMode.q8 && g_moe_grouped_prefill && mx4_grouped_pays && kq_grouped_ok && !narrow) {
         ffn_moe_prefill_grouped(t, s, l, npos)
     } else {
         // per-position reference path — moe_ffn_core carries its own section buckets
@@ -1971,7 +1978,7 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
             if (c.pre_post_norm) {
                 rms_at(s.moe_acc, t, t.rms_post_ffn_off + l * dim, s.moe_acc, dim)
             }
-            add_inplace(unsafe(addr(s.x_b[p * dim])), unsafe(addr(s.moe_acc[0])), dim)   // residual add into this position's x_b row
+            block_resid_row(t, s, s.moe_acc, p)   // residual add into this position's row
         }
     }
     if (c.layer_out_scale) {
@@ -2269,7 +2276,7 @@ def ffn_moe_decode(t : Model; var s : Session; l : int64) {
     }
     let dim = c.dim
     let ts_norm = prof_ticks()
-    rms_at(s.xb, t, t.rms_ffn_off + l * dim, s.x, dim)
+    block_in(t, s, t.rms_ffn_off + l * dim)
     prof_add("norm", ts_norm)
     moe_ffn_core(t, s, l)
     if (s.tail_taken) {
@@ -2283,7 +2290,7 @@ def ffn_moe_decode(t : Model; var s : Session; l : int64) {
     if (c.layer_out_scale) {
         add_scale_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), t.fblob[t.out_scale_off + l], dim)
     } else {
-        add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.moe_acc[0])), dim)
+        block_resid(t, s, s.moe_acc)
     }
     prof_add("act_resid", ts_resid)
 }

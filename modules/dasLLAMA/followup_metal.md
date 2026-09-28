@@ -760,6 +760,36 @@ waits on a rows form of the rope-and-store (`MetalRopeStoreBKvT` with a row tabl
 candidate) and one K/V home for both loops (the codec's per-chunk rows buffers against the frames'
 per-voice slot).
 
+## 28. The hyper-connection model has no board row and no stocked parity cell
+
+Qwen3.8-Flash-Next (qwen4exp) serves on the Metal prefill and single-row decode drivers, and the
+counting fixture holds token for token through a probe; no cell in `tests/` pins it, because the
+file is the large tier (94 GB, a 116 GB planar image) and a cell holding the planar model beside its
+blob twin does not fit the 128 GB box. The work: a parity cell of the `harness/parity.das --ngl 99`
+form on the blob-only load (one model, the spec's pinned ids as the oracle - `test_parity_pregate`'s
+shape) under `DASLLAMA_PARITY_FULL=1`, and the sweep's rows (sec.7): pp512 and tg128 against
+llama.cpp on the M5 Max at or above 0.9, the box crowns applied.
+
+## 29. The hyper-connection model has no batched Metal step
+
+`decode_shape_decline` admits `hyper_conn` for the single row and the speculative verify
+(`allow_hc`); the batch driver declines it `graph`. The verify's rows forms (the wide residual per
+row, the scatter logits per row and site, the n-gram side input in the prefill's panel form with the
+accepted rows committed after the walk, the wide carry into the draft head) are the ones
+`BatchLayerEnc` needs: bind them there and open the `hc` arm of the batch gate. The batch rail's
+deltanet gate already takes the family's z activation through `enc_dn_zgate`.
+
+## 30. Flash-Next's verify row 0 reads 0.89 logits off the plain step at one prose position
+
+`mtp-ff-3.8fn` prose-a: over 48 forced-feed steps the verify's row 0 and the plain GPU step agree to
+7e-4 everywhere but one step, which reads 0.89 with the argmax unmoved (prose-b 7e-4 throughout,
+counting token-exact at depth 1, 2 and 4). The fixture holds the plain-MoE bar (2.0) on the reading
+that the rows and single GEMV forms round the router's logits apart and a near-tie flips an expert -
+the same reading the q30 batch-rail fixture rests on - but nothing has shown the flipped expert. The
+work: dump the router logits and the selected experts at that step in both forms (`harness/mtp_ruler.das`
+is the rig's shape), name the layer and the margin; a difference that is not a routing flip is a
+rows-form defect and the bar goes back to 0.5.
+
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 
 `lcpp_bench --mtp-ab` (single stream, Metal, tg-real128 `-p 0 -n 128`, greedy, depth 1, M5 Max,

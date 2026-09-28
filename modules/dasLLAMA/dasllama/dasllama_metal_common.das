@@ -232,6 +232,7 @@ var g_pso_moe_wscale : MetalComputePipeline?   // gemma4 per-expert down-scale f
 var g_pso_swiglu_oai : MetalComputePipeline?   // gpt-oss clamped swiglu (stage 4)
 var g_pso_moe_gemv_mx4 : MetalComputePipeline?  // gpt-oss MXFP4 expert GEMV
 var g_pso_moe_gemv_q51 : MetalComputePipeline?  // Q5_1 expert GEMV (per-32 planes)
+var g_pso_moe_gemv_iq4nl32 : MetalComputePipeline?  // IQ4_NL per-32 expert GEMV
 var g_mx4_vtab : MetalBuffer?                   // [16] signed doubled-e2m1 values
 var g_pso_dn_conv : MetalComputePipeline?      // deltanet (Wave D): causal conv + SiLU
 var g_pso_dn_hist : MetalComputePipeline?      // conv-history advance
@@ -284,7 +285,15 @@ var g_pso_pk_gemv_q8_tail : MetalComputePipeline?
 var g_pso_dn_l2 : MetalComputePipeline?        // q/k per-head L2 norm + q pre-scale
 var g_pso_dn_scan : MetalComputePipeline?      // the fused sequential delta rule
 var g_pso_dn_gate : MetalComputePipeline?      // z-gated out-norm
+var g_pso_dn_gate_sig : MetalComputePipeline?  // ... its σ(z) twin (qwen4exp)
 var g_pso_dn_deint : MetalComputePipeline?     // 2x-wide [q|gate] deinterleave
+var g_pso_hc_norm : MetalComputePipeline?      // hyper-connections: the grouped stream norm
+var g_pso_hc_lo : MetalComputePipeline?        // ... silu(lo / hc) on the low-rank row
+var g_pso_hc_init : MetalComputePipeline?      // ... the wide residual rows as hc copies of the embed rows
+var g_pso_hc_mix : MetalComputePipeline?       // ... the sigmoid-gated stream mean
+var g_pso_hc_combine : MetalComputePipeline?   // ... the scatter of a block output into the streams
+var g_pso_ple_gate : MetalComputePipeline?     // the n-gram side input's per-stream gate + conv-input row
+var g_pso_ple_conv : MetalComputePipeline?     // ... its dilated causal conv + residual add
 var g_pso_sigmul : MetalComputePipeline?       // x ⊙ σ(g) — the gated-attention out-gate
 var g_pso_axpy_sig : MetalComputePipeline?     // y += x ⊙ σ(g[row]) — the shexp combine (stage 3)
 var g_pso_qkvrs16 : MetalComputePipeline?   // fused QKV+rope+store (s16 path)
@@ -1060,6 +1069,19 @@ def q51_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : Met
     }
 }
 
+//! One iq4nl32 tensor's plane pair bind: nibble plane (16B/block, uint-viewable) at (off/32)*16 and
+//! the f16 d plane at (off/32)*2 — verbatim disk splits, never rebaked. off % 256 keeps both binds 16B-aligned.
+def iq4nl32_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
+    assert(t.metal_blob)
+    let b0 = off / 32l
+    unsafe {
+        return (qbuf = plane_buffer(dev, addr < void? >(t.iq4nl32q[0]), uint64(long_length(t.iq4nl32q)), t.image_map != null),
+                qoff = uint64(b0 * IQ4NL32_QB),
+                sbuf = plane_buffer(dev, addr < void? >(t.iq4nl32s[0]), uint64(long_length(t.iq4nl32s)), t.image_map != null),
+                soff = uint64(b0 * IQ4NL32_SB))
+    }
+}
+
 //! A 4-byte buffer holding one scalar - the caller says where the bytes come from.
 def scalar_buffer(var buf : MetalBuffer?; v : auto(TT)) : MetalBuffer? {
     unsafe {
@@ -1331,13 +1353,17 @@ def dn_mirror_release(mr : DnMirror) {
     }
 }
 
-def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok : bool; buf : MetalBuffer?; state_off : uint64; conv_off : uint64; state_alt : uint64; conv_alt : uint64> {
+//! A region is [state planes][conv planes]; the n-gram PLE conv ring sits ONCE past every region - it rides
+//! the recurrent mirror because it is the same kind of state (forward-only, per session, synced from the CPU
+//! prefix), but the verify's shadow flip must never retire it: its rows land only for committed positions
+def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok : bool; buf : MetalBuffer?; state_off : uint64; conv_off : uint64; state_alt : uint64; conv_alt : uint64; ple_off : uint64> {
     let sbytes = uint64(long_length(s.dn_state)) * 4ul
     let cbytes = uint64(long_length(s.dn_conv_state)) * 4ul
+    let pbytes = uint64(long_length(s.ple_conv_hist)) * 4ul
     let rb = sbytes + cbytes
-    let total = rb * uint64(regions)
+    let total = rb * uint64(regions) + pbytes
     if (sbytes == 0ul) {
-        return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul)
+        return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul, ple_off = 0ul)
     }
     if (key_exists(g_dn_mirrors, s.uid) && g_dn_mirrors[s.uid].bytes != total) {
         dn_mirror_release(g_dn_mirrors[s.uid])
@@ -1346,7 +1372,7 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
     let have = key_exists(g_dn_mirrors, s.uid)
     let cpu_prefix = s.dn_pos == pos
     if (!have && pos != 0l && !cpu_prefix) {
-        return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul)
+        return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul, ple_off = 0ul)
     }
     if (!have) {
         while (long_length(g_dn_mirrors) >= g_dn_mirrors_max) {
@@ -1367,13 +1393,16 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
         g_dn_mirrors[s.uid].pos = 0l
     } elif (g_dn_mirrors[s.uid].pos != pos) {
         if (!cpu_prefix) {
-            return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul)
+            return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul, ple_off = 0ul)
         }
         // the CPU ran positions [0, pos) — its state is the source of truth; sync it into region 0
         unsafe {
             var dst = reinterpret<uint8?>(metal_buffer_contents(g_dn_mirrors[s.uid].buf))
             memcpy(reinterpret<void?>(dst), addr<void?>(s.dn_state[0]), sbytes)
             memcpy(reinterpret<void?>(dst + sbytes), addr<void?>(s.dn_conv_state[0]), cbytes)
+            if (pbytes > 0ul) {
+                memcpy(reinterpret<void?>(dst + rb * uint64(regions)), addr<void?>(s.ple_conv_hist[0]), pbytes)
+            }
         }
         g_dn_mirrors[s.uid].cur = 0l
         g_dn_mirrors[s.uid].pos = pos
@@ -1384,7 +1413,7 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
     let base = uint64(mr.cur) * mr.region_bytes
     let alt = mr.regions == 2l ? uint64(mr.cur ^ 1l) * mr.region_bytes : base
     return (ok = true, buf = mr.buf, state_off = base, conv_off = base + mr.conv_off,
-        state_alt = alt, conv_alt = alt + mr.conv_off)
+        state_alt = alt, conv_alt = alt + mr.conv_off, ple_off = mr.region_bytes * uint64(mr.regions))
 }
 
 // the step served and its command buffer completed — the GPU state now holds position pos's update

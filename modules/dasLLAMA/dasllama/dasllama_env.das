@@ -50,6 +50,9 @@ struct public EngineEnv {
     @clarg_doc = "Pin the matmul backend by name, bypassing the measured auto-selection."
     pin_backend : string = ""
 
+    @clarg_doc = "How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut on a CPU-only load, grid where a GPU tier targets the load (its grid gather is cheap)."
+    iq3s_serve : string = "auto"
+
     @clarg_doc = "Pin the batched (prefill) matmul backend independently of the decode one."
     pin_batch_backend : string = ""
 

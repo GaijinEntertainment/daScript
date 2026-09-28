@@ -110,8 +110,9 @@ of these is a bug, not a style choice.
   change dataflow (MoE, QK-norm, per-layer attention patterns, shared KV, PLE, sinks, parallel
   attn+FFN). Tier 3 = deep forks needing a pluggable KV/attention core. The hybrid
   Gated-DeltaNet lane is a Tier-3 fork that serves: `dasllama_arch_qwen35.das`
-  registers `qwen35`/`qwen35moe`/`qwen3next`, gated by `tests/test_deltanet.das`. The arch registry
-  (18 names across 13 `dasllama/dasllama_arch_*.das` files) is the truth for what exists.
+  registers `qwen35`/`qwen35moe`/`qwen3next`, gated by `tests/test_deltanet.das`;
+  `dasllama_arch_qwen4exp.das` wraps that lane in hyper-connections (`qwen4exp`). The arch registry
+  (19 names across 14 `dasllama/dasllama_arch_*.das` files) is the truth for what exists.
 - **Family behavior is distributed by `Config` flag, not dispatched by name.** GeGLU-vs-SwiGLU is an
   `ffn_act` flag *inside* the shared dense FFN block; only a genuinely new dataflow (MoE) earns its
   own `ffn_*` block pointer. An `if (arch == "...")` on a shared path is the anti-pattern.

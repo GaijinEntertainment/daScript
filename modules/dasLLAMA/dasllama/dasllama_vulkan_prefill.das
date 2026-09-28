@@ -42,10 +42,13 @@ var private @scratch g_pf_ids_stage : array<uint>
 //! whether the prefill's f16 feed admits a plane of format `f` on the armed coopmat mode - the tests read the same answer the driver acts on
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def public pf_f16_feed(f : int) : bool {
-    if (g_gpu.coopmat_mode == COOPMAT_CM2) {
-        return f == int(KqFmt.q8) || f == int(KqFmt.q51) || f == int(KqFmt.mx4) || kq_sb(f)
+    if (f == int(KqFmt.iq3s4)) {   //! the IQ3_S served form is the CPU rail's; the tier carries no iq3s4 tile
+        return false
     }
-    return g_gpu.coopmat_mode == COOPMAT_MM && (kq_sb(f) || f == int(KqFmt.q8) || f == int(KqFmt.q51) || f == int(KqFmt.mx4)) && khr_kq_tile_on()
+    if (g_gpu.coopmat_mode == COOPMAT_CM2) {
+        return f == int(KqFmt.q8) || kq_block32(f) || kq_sb(f)
+    }
+    return g_gpu.coopmat_mode == COOPMAT_MM && (kq_sb(f) || f == int(KqFmt.q8) || kq_block32(f)) && khr_kq_tile_on()
 }
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]

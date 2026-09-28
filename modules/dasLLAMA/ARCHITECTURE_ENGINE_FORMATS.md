@@ -99,6 +99,35 @@ Every materialized cos/sin table is the same fill; the position source is what d
 
 `Model.kq : KqPlanes[KQ_FMT_COUNT]` is the one `dim` field a `Model` carries, so every `apply` walk over it - the finalizer, the image build, the image parse, the layout describe - spells its plane-table arm as the `typeinfo is_dim(field)` branch and reaches each element's arrays from there. The table's interleaves serialize in enum order, so an appended `KqFmt` member lands last and no earlier slot moves.
 
+### The per-32 rail is one kernel body over a format tag {#per-32-rail}
+
+The per-32 formats (`q51`, `iq4nl32`) sit off the superblock lattice: 32-weight blocks, Q8_0-form
+activations, dedicated `Model` plane pairs (`ARCHITECTURE_IMAGE.md#image-kq-table-sb-only`), and in
+`dasllama_math.das` one body per kernel shape (`b32_batch_kernel`, `b32_groupn_kernel`,
+`b32_batch_groupn_kernel`) generic over the `KqTag_<fmt>` it takes last - the tag picks the
+strides, the row expand, the grp scale gather and the expanded-row dot. `iq4nl32` is the IQ4_NL
+disk block served per-32: `kq_fmt_expert_ok` chooses it for an expert stack whose rows are off
+the 256 lattice and on the 32 lattice (the superblock member `iq4nl` serves a `% 256` row), and a
+dense plane off the lattice still demotes to q8. The codebook levels are int8, so the q8 rail's
+requant of an IQ4_NL block is value-exact and the per-32 form's gain is bytes - 18 a block
+against 34 - not precision.
+
+### A served form is a second member over the same disk type {#served-form}
+
+`iq3s4` is IQ3_S served as a 16-entry codebook plane: every IQ3_S weight is a signed odd
+magnitude 1..15 times its block scale, so the grid entry, the `qh` ninth bit and the sign fold
+at transcode into one nibble index (`iq3s4_lut`, `-15, -13, .., 15`) laid in the k4 tiling, and
+the scale row is iq3s's own. The dequant is value-exact against the grid form; the planes cost
+17% more bytes (128 against 104 a superblock) and decode through the iq4xs codebook kernels -
+one table lookup a nibble in place of the grid gather, which is where the IQ3_S CPU decode spent
+its time. The member's descriptor row names the source type (`GGML_TYPE_IQ3_S`, 110 disk bytes)
+with its own schema and stream ids, so the image and the stream rail carry it like any lattice
+member. The choice is `kq_fmt_of`'s at the load (`iq3s_serve_lut`, the `DASLLAMA_IQ3S_SERVE`
+knob: `grid`, `lut`, `auto` = lut on a CPU-only load), and it is an image identity bit
+(`DlimCpuConfig.iq3s_lut`), because it changes plane bytes. The GPU tiers keep the grid form:
+their gather is a device read, and no Metal or Vulkan kernel decodes `iq3s4`, so it sits on every
+Vulkan ladder's skip list and off the Metal roster, and a load a GPU tier targets serves `iq3s`.
+
 ### The load and image rail {#the-load-and-image-rail}
 
 **`dasllama_load.das`** is the GGUF load walk: metadata to `Config`, the plane layout, disk-format

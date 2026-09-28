@@ -99,6 +99,12 @@ at `bcat` row `nr`, and `h_i` is verify post-norm row `i-1`. It norms the embeds
 and the hiddens with `mtp_hnorm`, interleaves `[enorm(embed_i) ; hnorm(h_i)]` per row into the cat
 image, runs `mtp_ehproj`, and encodes the verify layer once more at `l == n_layers`. The head
 therefore enters the next round on rows the trunk actually committed, not on the chain's own drafts.
+On a hyper-connection model the carry is the trunk's WIDE residual row before the head mixer
+(`hc_dim` floats, `StepRes.bhc_carry` / `bhc_save`, `Session.mtp_h` sized by `mtp_h_dim`): the
+head's prelude (`hc_draft_prelude`) norms each carry's streams under `mtp_hnorm`, repeats the
+`mtp_enorm` embed row per stream and runs one eh_proj GEMV over every (row, stream) pair, so the
+head's block opens on a wide residual of its own; the head mixer's own weights
+(`mtp_hc_head_{norm,down,up}`) stand where the shared head's would.
 
 ### A recurrent verify writes a shadow region and replays into it {#mtp-dn-shadow-replay}
 

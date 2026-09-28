@@ -572,9 +572,15 @@ def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : 
 //! exact int), folded as sum sc_blk * idot_blk over the superblock, then * (d * xs). No bsum
 //! term — the codebook carries the sign, so xbsp is unused.
 [unused_argument(xbsp)]
-def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq4xs) : float {
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq4xs) : float => dot_kq_lut(kqrow, ksrow, xqp, xsp, n, iq4nl_lut())
+
+//! The iq3s4 row dot: iq4xs's walk over the iq3s4 codebook (the sub-scale byte is 1 + 2s).
+[unused_argument(xbsp)]
+def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; _f : KqTag_iq3s4) : float => dot_kq_lut(kqrow, ksrow, xqp, xsp, n, iq3s4_lut())
+
+//! The LUT-plane row dot the iq4xs and iq3s4 forms share (the disk-order planes, `lut` the format's codebook).
+def private dot_kq_lut(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : float const?; n : int64; lut : int8[16]) : float {
     var acc = 0.0
-    let lut = iq4nl_lut()
     unsafe {
         for (sb in range64(n / 256l)) {
             let kqo = sb * 128l
@@ -780,6 +786,11 @@ def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xs
     return 0.0
 }
 
+def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_iq4nl32) : float {
+    panic("iq4nl32 rides the per-32 planes, not the kq lattice dot")
+    return 0.0
+}
+
 //! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot: y[i] = the
 //! dot of row i, the row strides off the descriptor. Generic in the tag; the gen tier's row tails
 //! and the fused chains thread it.
@@ -914,10 +925,9 @@ def private dequant_q40_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, n
     }
 }
 
-//! iq4xs grp row dequant: the k4 tiling + the k4 scale-row interleave (d, signed int8 sc, no
-//! min) — w = (d·sc)·IQ4NL_LUT[q].
-def private dequant_iq4xs_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?) {
-    let lut = iq4nl_lut()
+//! iq4xs / iq3s4 grp row dequant: the k4 tiling + the k4 scale-row interleave (d, signed int8 sc, no
+//! min) — w = (d·sc)·lut[q] over the format's codebook.
+def private dequant_lut_row_grp(kqg : uint8 const?; ksg : uint8 const?; r, mr, nsb : int64; var dst : float?; lut : int8[16]) {
     unsafe {
         for (sbi in range64(nsb)) {
             let qb = sbi * 128l * mr
@@ -1164,7 +1174,11 @@ def dequant_kq_row_grp(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, m
         return
     }
     if (fmt == 44l) {
-        dequant_iq4xs_row_grp(kqg, ksg, r, mr, nsb, dst)
+        dequant_lut_row_grp(kqg, ksg, r, mr, nsb, dst, iq4nl_lut())
+        return
+    }
+    if (fmt == 35l) {
+        dequant_lut_row_grp(kqg, ksg, r, mr, nsb, dst, iq3s4_lut())
         return
     }
     if (fmt == 3l) {

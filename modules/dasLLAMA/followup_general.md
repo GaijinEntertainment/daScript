@@ -1819,6 +1819,105 @@
     candidate-list sampler's `PERF_LEDGER.md` entry reads its rates off `dasllama-cli`'s stats
     line. Done = `--temp/--top-k/--top-p` on the tg row, a `tg128@sampled` cell beside `tg128`,
     and the ledger entry re-minted from it.
+
+171. **The iq4nl32 rail's Vulkan device run.** The per-32 IQ4_NL plane pair
+    (`iq4nl32q`/`iq4nl32s`) serves Qwen3.8-Flash-Next's 640-wide `ffn_down_exps` stacks on the
+    CPU (the portable kernels and the `iq4nl32q8_*_gen` family), on Metal and through the Vulkan
+    classes (`Iq4nl32Cm2T`'s three stamps, `Iq4nl32Gemv`), but the Vulkan tile cells
+    (`test_vkd_iq4nl32_cm2_batch`) have run on no coopmat device - this Mac's MoltenVK serves the
+    GEMV cell alone. Done = the cm2 and KHR arms green on the 5060 Ti and the Flash-Next decode
+    rows re-measured on the Vulkan tier.
+
+172. **The n-gram hash table as a mapped view.** Qwen3.8-Flash-Next's `per_layer_token_embd` is
+    28.8 GB of gather-only rows the load copies into `Model.ngram_tab`; every other read of a
+    model file leaves the mapping when the load ends. Done = the table stays a borrowed view over
+    a mapping the Model owns (the `.dlim` plane borrow is the precedent: `image_map` plus the
+    finalizer's release), so a cold start pays no copy and the pages the OS evicts come back
+    from the file. The image-mapped table is where the gather's cost shows: on the M5 Max the
+    CPU gather of a 512-row window reads 51 ms with the pages warm (the `ple_gather` bucket, 11%
+    of a 447 ms Metal pp512 window, the only host bucket) and seconds with them cold - the two
+    pp512 runs after the image mint read 518 +/- 121 and 666 +/- 290 tok/s against 1293 +/- 31 warm,
+    the 16 random 90-byte rows a token touches each faulting a 16 KB page from disk. The lever
+    beyond the view is the gather on the device (the table as a Metal plane, the rows read where
+    the key/value GEMMs consume them) or the table pinned resident where the box has the room.
+
+173. **The CPU decode of Qwen3.8-Flash-Next is compute-bound in the IQ3_S expert GEMVs.** On the
+    M5 Max at 18 threads the token reads 57 ms (17.5 tok/s in the profile window, 19.0 +/- 0.2 on
+    the tg128 row; llama.cpp 19.9 +/- 0.4). The forward buckets per token: the gate/up expert
+    GEMVs (`mm_moe`, IQ3_S) 22 ms for 14 MB of planes - 0.6 GB/s, a decode cost, not a
+    bandwidth one; the attention block 18 ms (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9); the
+    hyper-connection mixes 5.4 ms; the down expert GEMVs (`mm_moe_dn`, iq4nl32 on the gen family)
+    3.9 ms; the head 2.7 ms. The IQ3_S rail gathers each superblock's grid rows into a byte panel
+    before its dots (`emit_iq3s_gather`), and that gather is the token's largest cost. The lever
+    landed as the `iq3s4` served form (`ARCHITECTURE_ENGINE_FORMATS.md#served-form`, the
+    `DASLLAMA_IQ3S_SERVE` knob): on the same binary and box, warm passes, grid 134.1 +/- 2.0 pp512 /
+    18.98 +/- 0.13 tg128 against lut 140.6 +/- 0.7 / 26.9 +/- 0.5 (llama.cpp 107.8 / 19.9); the decode
+    profile 59.5 -> 40.3 ms a token, `mm_moe` 25.1 -> 6.7 ms, every other bucket unchanged (the
+    attention block 20 ms, the hc mixes 6, `mm_moe_dn` 3.5-5, the head 2.9); the planar image
+    98.1 -> 105.5 GB. Still open: the grid form's emitter path - a dword read of the qs column in
+    the row-group form (`ARCHITECTURE_CPU_KERNELS.md#grid-decode-forms` says it did not pay on the panel
+    form's box; unmeasured on the M5) buys at most 1.3-1.5x on a bucket the codebook form beats 3.7x,
+    so it is a GPU-rail question (the GPUs keep the grid) more than a CPU one; the attention block
+    (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9 ms) is the CPU token's largest bucket now, and the
+    Flash-Next CPU tg128 board row is not re-minted yet.
+
+174. **A `.dlim` is named by its identity hash, so a mint purges what a person meant to keep.** The
+    image GC keeps one image per lane, lane = (quant, tag) with the tag `""` for planar and
+    `metal` for the blob flavor, and deletes a lane's other identities plus every version-stale
+    image on a mint; a served-form flip (`DASLLAMA_IQ3S_SERVE`) or a box-class change is a new
+    identity in the SAME lane, so it costs the other form a re-mint, and an `IMAGE_VERSION` bump
+    took the Metal image with it. Boris's direction: name the file by a readable lane -
+    `foo.gguf.metal.dlim`, `foo.gguf.cpu-arm-i8mm.dlim`, `foo.gguf.vulkan.dlim`, the served-form
+    override as a lane suffix - with the header's identity deciding current/stale and a stale file
+    re-baked in place (temp + rename), so flavors and classes coexist on one disk and in `ls`. Lane
+    = what a person deliberately switches between on one box; tune winners, pack and image versions,
+    backend pins stay identity and supersede. Until it lands, an image to keep across a mint is
+    renamed by hand off the `*.dlim` suffix the inventory globs. Done = the lane name, the in-place
+    re-bake, `dlim_gc_stale` keyed by lane name, the converter's `--list` and the server page
+    reading lanes, `test_model_image`'s GC cells over two lanes and a same-lane stale re-bake.
+
+175. **A cold image costs its first tokens, not its map.** The Flash-Next planar image maps in 67 ms
+    whether cached or not; a decode profile on an image nothing had touched for 90 minutes (the
+    page cache spent on two other 100 GB passes) ran 163 ms a token over its 128-token window, every
+    bucket ~3x, and the same command a minute later 40.3 ms. The mint pass itself is 57 s (planes
+    write 44 s at 2.1 GB/s), and a warm map-and-bench pass under a minute. `prefetch_map` (madvise
+    WILLNEED / PrefetchVirtualMemory, `DASLLAMA_PREFETCH`) is armed on the GGUF source mapping and
+    NOT on the `.dlim` mapping (`load_image`). Done = the cold case measured on purpose (`sudo purge`,
+    then the profile's first window against its second), the prefetch armed on the image map as the
+    first arm, a pool-side sequential touch of the hot planes (the routed experts' stacks, not the
+    gather-only PLE table) as the second if the advisory alone does not carry 100 GB, each against
+    the cold reading.
+
+176. **YaRN as a runtime setting, and on partial rotary.** The loader folds a file's YaRN metadata
+    into the per-pair `rope_freqs` divisor and the `1 + 0.1*ln(s)` mscale (gpt-oss, the Mistral 3
+    family ride it) but refuses partial rotary + YaRN and `yarn_log_multiplier != 0`, and the Qwen
+    files carry no `rope.scaling.*` keys at all - Qwen enables YaRN as a setting (factor 4 over the
+    original context, only when the context needs it), llama.cpp users through `--rope-scaling yarn
+    --rope-scale 4 --yarn-orig-ctx N`. Done = an override knob (env + CLI + server option) feeding
+    the same fold; the partial-rotary arm (the correction band over `rope_dim`, `rope_freqs` at
+    `rope_dim / 2`, the `_part` leaves passed the factors, the "partial => no factors" guarantee
+    retired, the GPU decode's partial-rope table indexing checked at the pair stride); a
+    partial+factors arm in `test_rope_apply`; parity on Flash-Next past 262K positions against
+    llama.cpp under the same flags. The `yarn_log_multiplier` arm waits for a DeepSeek-class carrier.
+
+177. **The CPU verify writes every row's n-gram ring slot, and the ring is exactly the conv
+    window.** `ple_apply_row` lands row p's conv input at slot `(pos + p) % rows` before its own conv
+    reads, in row order, so within one batch no row reads a later row's slot; but slot `pos + p`
+    aliases position `pos + p - rows`, the oldest tap of the conv at `pos + p - 1`. At depth 1 the
+    rejected row's slot is one no later conv reads; at depth 2 and past, a rejected row `p >= a + 2`
+    clobbers a slot the conv at the next real token (`pos + a + 1`) still reads, and
+    `mtp_state_snapshot` saves the window (`ple_prev`) but not the ring rows. The Metal verify takes
+    the prefill's panel form and commits the accepted rows alone (`commit_ple_rows`). Done = the CPU
+    round snapshots the k ring rows its verify overwrites and restores them on a reject (k x hc_dim
+    floats, `mtp_snap_ple` beside the window), or takes the panel form; a depth-2 forced-reject
+    leg on the Flash-Next counting fixture in `test_mtp.das` (the depth-1 leg cannot see it).
+
+178. **A CPU verify of two rows costs two decode steps on Flash-Next.** `ffn_moe_prefill` takes the
+    per-position GEMV route under `ATTN_NARROW_NPOS`, which took the verify from 77 to 67 ms, and the
+    rest of the 2x is the dense sites' q8q8 tile padding two rows to a four-token tile - the
+    speculative round on the CPU rail is slower than plain decode on this model (CPU tg128 with MTP
+    is a loss at 75% accept). Done = a two-token tile or a GEMV-pair route for the narrow verify's
+    dense sites, measured as the CPU `--mtp-ab` row.
 168. **`harness/tune_kernels.das`'s validation re-times CPU benches after the backend pin.**
    `run_validation` re-runs the changed CPU benches after `dot_q8q8_laneq4x4` has pinned one
    matmul backend for the rest of the process, so a re-timed bench runs against the pinned

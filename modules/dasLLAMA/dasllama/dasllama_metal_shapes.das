@@ -251,14 +251,20 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.q51) {   // per-32 planes: off % 128 keeps the 20B/4B binds 16B-aligned
         return off >= 0l && (off % 128l) == 0l && (ege % 32l) == 0l
     }
+    if (fmt == KqFmt.iq4nl32) {   // per-32 planes: off % 256 keeps the 16B/2B binds 16B-aligned
+        return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
+    }
     return false
 }
 
 //! the expert plane formats the Metal routed block has kernels for (mx4 rides its own gpt-oss arm)
 def moe_fmt_metal_served(f : KqFmt) : bool {
-    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
+    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
         || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs)
 }
+
+//! the per-32 expert plane formats with their own Metal kernels (the 32-block reduction, 64-deep tensor twins)
+def private moe_fmt_b32(f : KqFmt) : bool => f == KqFmt.q51 || f == KqFmt.iq4nl32
 
 // The MoE serve gate — covered graph shapes: plain routed FFN (qwen3moe, silu, no biases)
 // + optional sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared dual branch, and
@@ -334,7 +340,7 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
             return false
         }
         // per-site alignment + reduction dims: superblock kq kernels iterate whole 256-rows,
-        // q51 whole 32-blocks (+ the mul_mm's 64-col output tiles)
+        // the per-32 formats whole 32-blocks (+ the mul_mm's 64-col output tiles)
         let sb1 = kq_sb(f1)
         let sb3 = kq_sb(f3)
         let sb2 = kq_sb(f2)
@@ -343,8 +349,8 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
                 !moe_site_ok(f3, t.we3_offs[l], ege) ||
                 ((sb1 || sb3) && (c.dim % 256l) != 0l) ||
                 (sb2 && (nfe % 256l) != 0l) ||
-                ((f1 == KqFmt.q51 || f3 == KqFmt.q51) && ((c.dim % 32l) != 0l || (nfe % 64l) != 0l)) ||
-                (f2 == KqFmt.q51 && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l))) {
+                ((moe_fmt_b32(f1) || moe_fmt_b32(f3)) && ((c.dim % 32l) != 0l || (nfe % 64l) != 0l)) ||
+                (moe_fmt_b32(f2) && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l))) {
             return false
         }
     }
@@ -395,15 +401,17 @@ def ffn_second_hidden(t : Model) : int64 {
     return h1
 }
 
-def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = false; allow_kv_share : bool = false; allow_hetero_hidden : bool = false; mint_time : bool = false) : MetalDecodeDecline {
+def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = false; allow_kv_share : bool = false; allow_hetero_hidden : bool = false; mint_time : bool = false; allow_hc : bool = false) : MetalDecodeDecline {
     if (t.quant != QuantMode.q8) {
         return MetalDecodeDecline.quant_mode
     }
     if (!kq_load_gpu_supported(t)) {   // a fmt without a GPU kernel (the q4_0 QAT tier, ...) must not dispatch
         return MetalDecodeDecline.kquant_native
     }
-    // non-std graphs decline; MoE (Wave C) + deltanet hybrid (Wave D) serve when their kernels cover it
-    if ((!t.blocks.attn_is_std && !(t.config.hybrid_deltanet && dn_metal_ok(t))) ||
+    // non-std graphs decline; MoE (Wave C) + deltanet hybrid (Wave D) serve when their kernels cover it;
+    // the hyper-connection residual (qwen4exp) has the single row's form alone (allow_hc)
+    if ((t.config.hyper_conn && !allow_hc) ||
+            (!t.blocks.attn_is_std && !(t.config.hybrid_deltanet && dn_metal_ok(t))) ||
             (!t.blocks.ffn_is_dense && !(allow_moe && moe_metal_ok(t)))) {
         return MetalDecodeDecline.graph
     }
@@ -457,7 +465,7 @@ def private metal_model_servable_impl(t : Model) : bool {
     if (t.config.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8) {
         return false
     }
-    return decode_shape_decline(t, DECODE_NEEDS_OK, true, true, true, mint_time = true) == MetalDecodeDecline.none
+    return decode_shape_decline(t, DECODE_NEEDS_OK, true, true, true, mint_time = true, allow_hc = true) == MetalDecodeDecline.none
 }
 
 [init]
