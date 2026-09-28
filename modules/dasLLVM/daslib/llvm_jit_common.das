@@ -528,6 +528,29 @@ def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLV
     return rv
 }
 
+//! the optimizer reads the MODULE triple and data layout - its library-call table, type sizes and alignments, an
+//! instrumentation pass's shadow mapping - while codegen reads the target machine's; a module built for the host
+//! carries neither, so the target machine's go on it before the passes. A cross target's module has its own already
+def public stamp_module_target(mod : LLVMOpaqueModule?; tm : LLVMTargetMachineRef) {
+    return if (!empty(LLVMGetTarget(mod)))
+    let triple = LLVMGetTargetMachineTriple(tm)
+    LLVMSetTarget(mod, triple)
+    LLVMDisposeMessage(triple)
+    let dl = LLVMCreateTargetDataLayout(tm)
+    LLVMSetModuleDataLayout(mod, dl)
+    LLVMDisposeTargetData(dl)
+}
+
+//! asan instruments only the functions that carry `sanitize_address`
+def public mark_sanitize_address(mod : LLVMOpaqueModule?) {
+    let attr = LLVMCreateEnumAttribute(LLVMGetModuleContext(mod), LLVMGetEnumAttributeKindForName("sanitize_address"), 0ul)
+    var fn = LLVMGetFirstFunction(mod)
+    while (fn != null) {
+        LLVMAddAttributeToFunction(fn, attr)
+        fn = LLVMGetNextFunction(fn)
+    }
+}
+
 // ===== extern-helper declaration =====
 // jit_add_extern declares one C++ runtime helper (add + global-mapping + function attrs, plus optional
 // per-arg attrs). Pair with jit_fn_type(signature) (llvm_dsl) to derive `typ` from a das signature.
@@ -828,10 +851,16 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
     // NO willreturn: this aborts (DAS_FATAL_ERROR) on any mismatch, so it may not return normally.
     jit_add_extern(FN_JIT_HANDLED_ABI_CHECK_REPORT, jit_fn_type($() : void {}),
         get_jit_handled_abi_check_report(), fixed_array(nounwind))
-    jit_add_extern(FN_JIT_ALLOC_HEAP, jit_fn_type($(size : int; ctx : void?) : void? {}),
+    var alloc_heap = jit_add_extern(FN_JIT_ALLOC_HEAP, jit_fn_type($(size : int; ctx : void?) : void? {}),
         get_jit_alloc_heap(), fixed_array(nounwind, willreturn, nofree, memory_inaccessible_rw), (nocapture, [1]))
-    jit_add_extern(FN_JIT_ALLOC_PERSISTENT, jit_fn_type($(size : int; ctx : void?) : void? {}),
+    var alloc_persistent = jit_add_extern(FN_JIT_ALLOC_PERSISTENT, jit_fn_type($(size : int; ctx : void?) : void? {}),
         get_jit_alloc_persistent(), fixed_array(nounwind, willreturn, nofree, memory_inaccessible_rw), (nocapture, [1]))
+    //! the object size LLVM's bounds checks read off the call; a vec3 load past a 12-byte object would be UB against it
+    if (!LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS) {
+        for (alloc in fixed_array(alloc_heap, alloc_persistent)) {
+            LLVMAddAttributeToFunction(alloc, LLVMCreateEnumAttribute(g_ctx, LLVMGetEnumAttributeKindForName("allocsize"), 0xFFFFFFFFul))
+        }
+    }
     jit_add_extern(FN_JIT_FREE_HEAP, jit_fn_type($(bytes : void?; size : int; ctx : void?) : void {}),
         get_jit_free_heap(), fixed_array(nounwind, willreturn, memory_arg_inaccessible_rw), (nocapture, [0, 2]))
     jit_add_extern(FN_JIT_FREE_PERSISTENT, jit_fn_type($(bytes, ctx : void?) : void {}),

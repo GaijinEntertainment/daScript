@@ -4,6 +4,7 @@
 #include "daScript/daScript.h"
 #include "daScript/daScriptModule.h"
 #include "daScript/misc/das_common.h"
+#include "daScript/misc/das_asan.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/ast/ast_aot_cpp.h"
 #include "daScript/ast/ast_serializer.h"
@@ -47,6 +48,13 @@ static bool astVerifyRequired = false;
 static bool scopedStackAllocator = true;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
+
+#if DAS_ASAN
+extern "C" const char * __asan_default_options() {
+    return "quarantine_size_mb=32";
+}
+#endif
+
 #ifndef MAIN_FUNC_NAME
   #define MAIN_FUNC_NAME main
   // the process ends when this returns: the fusion table is orphaned, not torn down - unless

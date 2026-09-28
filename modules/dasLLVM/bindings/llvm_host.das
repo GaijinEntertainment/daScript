@@ -12,3 +12,7 @@ def LLVMGetDefaultTargetTriple() : string {}
 def LLVMGetHostCPUName() : string {}
 [extern(cdecl, name="LLVMGetHostCPUFeatures", library="LLVM.dll")]
 def LLVMGetHostCPUFeatures() : string {}
+[extern(cdecl, name="LLVMLoadLibraryPermanently", library="LLVM.dll")]
+def LLVMLoadLibraryPermanently(Filename : string implicit) : int {}
+[extern(cdecl, name="LLVMSearchForAddressOfSymbol", library="LLVM.dll")]
+def LLVMSearchForAddressOfSymbol(symbolName : string implicit) : void? {}

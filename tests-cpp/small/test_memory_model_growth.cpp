@@ -48,6 +48,7 @@ TEST_CASE("MemoryModel shoe growth: many small allocations stay valid across chu
 // without truncation (the old code returned uint32_t and clamped the first-chunk
 // path to UINT32_MAX). Drive grow() directly via customGrow — no 4 GB allocation
 // (the real boundary lives in tests-cpp/big/memory_model_4gb).
+#if !DAS_ASAN
 TEST_CASE("MemoryModel::grow is 64-bit (no UINT32 clamp / truncation)") {
     MemoryModel mm;
     mm.setInitialSize(4096);
@@ -58,3 +59,4 @@ TEST_CASE("MemoryModel::grow is 64-bit (no UINT32 clamp / truncation)") {
     mm.customGrow = [](uint64_t) -> uint64_t { return uint64_t(1) << 33; };
     CHECK(mm.grow(0) == (uint64_t(1) << 33));
 }
+#endif

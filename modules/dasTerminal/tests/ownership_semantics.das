@@ -5,7 +5,7 @@ options gc
 require terminal/terminal
 require strings
 
-[export]
+[export, unsafe_heap_collect]
 def main {
     unsafe(heap_collect(true, true))
     var inscope terminal <- terminal_create(240, 100)
