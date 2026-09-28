@@ -82,11 +82,12 @@ let PROSE_B = "In the spring of that year the river rose higher than anyone in t
 //! the Metal prefill forced under the short prompts' length - the only prefill a blob-only model has
 def private gpu_prefill(trg : Model; var s : Session; prompt : array<int64>) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
+        let floor_before = get_metal_prefill_min_npos()
         select_prefill_override("metal")
         set_metal_prefill_min_npos(1l)
         eval_(trg, s, prompt)
         select_prefill_override("")
-        set_metal_prefill_min_npos(64l)
+        set_metal_prefill_min_npos(floor_before)
     }
 }
 

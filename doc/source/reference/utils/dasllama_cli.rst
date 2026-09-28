@@ -120,6 +120,12 @@ server's names; the config file fills whatever they leave empty (below).
      - vulkan: resident-weight VRAM cap override in MB (default: query the device)
    * - ``--ctx``
      - Context-length cap in tokens (default: the model's trained ``context_length``)
+   * - ``--rope-scaling``
+     - RoPE scaling override: ``yarn`` | ``linear`` | ``none`` (default: the model file's own ``rope.scaling`` keys; ``none`` drops them, a file's per-pair factor tensors stay). Qwen enables YaRN as a setting: ``--rope-scaling yarn --rope-scale 4``. The override is baked into the prepared image under its own lane
+   * - ``--rope-scale``
+     - RoPE scaling factor for the override (default: the file's ``rope.scaling.factor``; ``yarn`` needs one)
+   * - ``--yarn-orig-ctx``
+     - YaRN: the original training context the factor extends (default: the file's ``original_context_length``, else its ``context_length``)
    * - ``--threads`` / ``-t``
      - Worker-lane cap for the matmul dispatch (default 16; ``-1`` = all cores)
    * - ``--models-dir``

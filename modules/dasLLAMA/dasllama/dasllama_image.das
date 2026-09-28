@@ -78,12 +78,13 @@ def image_identity_of(c : DlimConfiguration; tag : string = "") : string {
     return dlim_identity(c, IMAGE_VERSION, tag, PACK_VERSION)
 }
 
-//! the CPU lane's spelling: the box's tune class where the tune framework is built, the active backend otherwise
+//! the CPU lane's spelling: the box's tune class where the tune framework is built, the architecture alone otherwise -
+//! never the active backend, which is a pin the identity supersedes
 def private image_cpu_class() : string {
     static_if (typeinfo builtin_module_exists(llvm)) {
         return tune_cpu_class()
     } else {
-        return dlim_backend_name()
+        return get_architecture_name()
     }
 }
 
@@ -97,8 +98,9 @@ def private lane_sanitize(s : string) : string {
     }
 }
 
+//! `with_head`: a split NextN head rides the load, so the trunk-alone and the headed image never share a path
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-lane-name")]
-def image_lane_name(tag : string = ""; quant : string = "q8") : string {
+def image_lane_name(tag : string = ""; quant : string = "q8"; with_head : bool = false) : string {
     var lane = ""
     if (tag == "") {
         lane = "cpu-{image_cpu_class()}"
@@ -106,19 +108,21 @@ def image_lane_name(tag : string = ""; quant : string = "q8") : string {
         if (serve == "lut" || serve == "grid") {
             lane = "{lane}-{serve}"
         }
-    } elif (tag == METAL_IMAGE_TAG) {
-        lane = METAL_IMAGE_TAG
     } elif (tag |> starts_with("vulkan")) {
         lane = "vulkan"
     } else {
         lane = tag
     }
-    let rope = rope_override_lane()
+    // a config-free family's identity carries no rope override, so its lane takes none either
+    let rope = (tag != "" && has_value(g_config_free_tags, tag)) ? "" : rope_override_lane()
     if (!empty(rope)) {
         lane = "{lane}-{rope}"
     }
     if (quant != "q8") {
         lane = "{lane}-{quant}"
+    }
+    if (with_head) {
+        lane = "{lane}-mtp"
     }
     return lane_sanitize(lane)
 }
@@ -132,9 +136,8 @@ def private legacy_image_path(gguf_path : string; tag : string; quant : string) 
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-lane-name"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-head-fold")]
 def image_path_for(gguf_path : string; tag : string = ""; quant : string = "q8") : string {
-    let lane = image_lane_name(tag, quant)
-    let head = empty(mtp_head_sidecar(gguf_path)) ? "" : "-mtp"
-    let path = "{gguf_path}.{lane}{head}.dlim"
+    let lane = image_lane_name(tag, quant, !empty(mtp_head_sidecar(gguf_path)))
+    let path = "{gguf_path}.{lane}.dlim"
     if (!stat(path).is_valid) {
         let old = legacy_image_path(gguf_path, tag, quant)
         if (stat(old).is_valid && rename(old, path)) {
@@ -149,10 +152,8 @@ def dlim_file_lane(name : string) : string {
     if (!(name |> ends_with(".dlim"))) {
         return ""
     }
-    let stem = slice(name, 0, length(name) - 5)
-    let dot = rfind(stem, ".")
-    let seg = dot < 0 ? stem : slice(stem, dot + 1, length(stem))
-    return (seg |> starts_with("0x")) ? "" : seg
+    let seg = extension(stem(name))   // ".<lane>"
+    return (empty(seg) || (seg |> starts_with(".0x"))) ? "" : slice(seg, 1, length(seg))
 }
 
 //! What list/GC tooling reads from an image WITHOUT loading it: the header fields plus the

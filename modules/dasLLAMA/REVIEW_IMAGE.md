@@ -46,16 +46,21 @@ not only into the image path; a mismatch declines loudly.
 
 **An image save deletes its own lane's images whose identity no longer matches, and any image
 the verdicts prove garbage in any lane - BROKEN, version-stale, or a stale layout of a family
-this process registered; deleting any other image - a current image of another flavor or
-another family, another lane's image whatever its identity, or one whose family this process
-cannot recompute - is a defect.** A lane is the file name's lane segment
-(`ARCHITECTURE_IMAGE.md#image-lane-name`); a hash-named legacy image's lane is its identity's
-(quant, tag) pair.
+this process registered.** A lane is the last dot-separated segment of the file name before
+`.dlim`; a hash-named legacy image's lane is its identity's (quant, tag) pair.
 
-**A knob a person switches between on one box and wants both results of on disk is a lane
-suffix in `image_lane_name`; a knob that supersedes its predecessor - a tune winner, a backend
-pin, a version - stays in the identity alone.** A lane suffix for a superseding knob leaves dead
-images no save reaps; an identity-only spelling of a coexisting knob re-mints on every switch.
+**A deletion an image save makes of any other image - a current image of another flavor or
+another family, another lane's image whatever its identity, or one whose family this process
+cannot recompute - is a defect.** The explicit GC (`dlim_clean_`, the converter's `--clean`, the
+server's boot) deletes the same garbage plus a hash-named legacy image of another identity, and
+never a lane-named image of another identity.
+
+**A diff that adds a segment to `image_lane_name` or a field to the identity records in
+`ARCHITECTURE_IMAGE.md#image-lane-name` whether the knob coexists (a lane segment AND an identity
+element) or supersedes (the identity alone), and a lane segment lands only on the flavors whose
+identity carries the same knob.** A lane segment for a superseding knob leaves dead images no
+save reaps; an identity-only spelling of a coexisting knob re-mints on every switch; a segment on
+a flavor whose identity lacks the knob mints the same bytes twice.
 
 **A plane split that follows the source FILE rather than a runtime knob takes ONE image tag**,
 with the meta flags describing the layout - a per-tensor type split is not a second flavor.
@@ -103,17 +108,17 @@ what is still whole - the image already built in memory, or the carrier as loade
 **A bounds check on an image section or the meta blob in `dasllama/dasllama_image.das` is
 written `bytes > msize || off > msize - bytes`, never `off + bytes > msize`, which wraps.**
 
-**On the lane that serves the file's own planes, a weight plane's element type follows its
+**On the serving form that serves the file's own planes, a weight plane's element type follows its
 SOURCE tensors, per weight region - the set of source tensors a carrier stores in one plane
 (a block stack, a merger/projector).**
 
 **A weight region whose source tensors disagree on element type is refused in a message naming
 the offending tensor and both element types.**
 
-**A lane that PERSISTS a converted form of the file's planes is a separate flavor under its
-own image identity.** A persisted form is one an image could carry. The load that picks such a
-lane prints which lane it picked. A conversion made and dropped inside one forward pass
-persists nothing and is not such a lane.
+**A serving form that PERSISTS a converted form of the file's planes is a separate flavor under
+its own image identity.** A persisted form is one an image could carry. The load that picks such
+a form prints which form it picked. A conversion made and dropped inside one forward pass
+persists nothing and is not such a form.
 
 **Never regroup or refactor the float products in a mint-side dequant mirror
 (`devw_dequant_q8_core` / `devw_dequant_k45_core` / `devw_dequant_k6_core`,

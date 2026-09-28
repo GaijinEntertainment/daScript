@@ -146,7 +146,7 @@ struct ServerArgs {
     @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) host-cached, off at several streams or on a device-resident (--gpu vulkan) slot; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
     mtp : bool
 
-    @clarg_doc = "RoPE scaling override for the load: yarn | linear | none (default: the model file's own keys). Qwen enables YaRN as a setting: --rope-scaling yarn --rope-scale 4. Per-model in a [[models]] roster: rope_scaling"
+    @clarg_doc = "RoPE scaling override for the load: yarn | linear | none (default: the model file's own rope.scaling keys; none drops them, a file's per-pair factor tensors stay). Qwen enables YaRN as a setting: --rope-scaling yarn --rope-scale 4. The override is baked into the prepared image under its own lane (model.gguf.metal-yarn4.dlim). Per-model in a [[models]] roster: rope_scaling"
     rope_scaling : string
 
     @clarg_doc = "RoPE scaling factor for the override (default: the file's; yarn needs one)"
@@ -951,6 +951,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         // A serving process prefers degrading (warn + nearest working mode) over dying on an
         // unsupported model/quant combo; API-facing tools keep the strict fail-loud default.
         set_resilient_load(true)
+        let env_rope = rope_scaling_override()   //! the env-seeded override every slot starts from; the flat keys, then the entry's, replace fields on top
         for (i in range(length(g_models))) {
             var ent & = unsafe(g_models[i])
             if (empty(ent.name)) {
@@ -962,8 +963,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                 gpu_residency_ask(ent.streams > 0 ? int64(ent.streams) : streams, ectx)
             }
             print("loading {ent.path} ...\n")
-            //! the flat keys, each replaced by the entry's where set; the override is read at the load, so it lands before every slot's
-            set_rope_scaling_override(RopeScalingOverride())
+            set_rope_scaling_override(env_rope)
             apply_rope_scaling(g_cfg.rope_scaling, g_cfg.rope_scale, int64(g_cfg.yarn_orig_ctx))
             apply_rope_scaling(ent.rope_scaling, ent.rope_scale, int64(ent.yarn_orig_ctx))
             var m <- load_model(ent.path, pick_quant(!empty(ent.quant) ? ent.quant : g_cfg.quant))

@@ -1833,6 +1833,7 @@ def private rope_override_from_env {
 }
 
 //! The tools' spelling of DASLLAMA_ROPE_SCALING / ROPE_SCALE / YARN_ORIG_CTX, set before the load; the loader checks the kind
+[arch(at = "../ARCHITECTURE_ENGINE.md#rope-scaling-bake")]
 def public set_rope_scaling_override(o : RopeScalingOverride) {
     g_rope_override = o
     g_rope_override.kind = to_lower(o.kind)
@@ -1840,7 +1841,7 @@ def public set_rope_scaling_override(o : RopeScalingOverride) {
 
 def public rope_scaling_override() : RopeScalingOverride => g_rope_override
 
-def private num_spelling(x : float) : string => x == floor(x) ? "{int(x)}" : "{x}"
+def private num_spelling(x : float) : string => fmt(":g", x)   // 4.0 reads "4", 2.5 stays "2.5"
 
 //! The override as an image identity reads it: "" when unset, else yarn<s>/<orig>[/<beta_fast>/<beta_slow>] | linear<s> | none
 def public rope_override_spelling() : string {

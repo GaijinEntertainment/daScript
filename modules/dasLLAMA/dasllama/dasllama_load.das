@@ -2171,7 +2171,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         t.config.rope_mscale = gguf_has(m, mskey) ? gguf_f32(m, bytes, mskey) : 1.0
         // YaRN (gpt-oss: factor 32 over a 4096 original context; the Qwen files as the override). Folds into
         // the per-pair machinery: rope_freqs[j] = 1/eff_j over the rotated span (factors DIVIDE θ), rope_freq_scale
-        // stays 1, the magnitude correction 1 + 0.1·ln(factor) lands in rope_mscale (ARCHITECTURE_ENGINE.md#rope-scaling-bake)
+        // stays 1, the magnitude correction 1 + 0.1·ln(factor) lands in rope_mscale
         if (rope_type == "yarn") {
             if (!empty(t.rope_freqs)) {
                 panic("dasLLAMA: YaRN combined with per-pair rope factors is not supported")

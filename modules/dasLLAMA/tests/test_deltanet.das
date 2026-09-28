@@ -12,6 +12,7 @@ def private allow_cpu_prefill_intent() {
 }
 require daslib/jobque_boost
 require daslib/fio
+require daslib/rtti   // this_context().last_exception - the refused loads' text
 require dasllama/dasllama_math  // setup_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // the deltanet chain and decode-step route pins
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
@@ -26,6 +27,8 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 // within the bar at every step — which also proves the conv/S state the chunked prefill leaves
 // behind feeds the recurrent decode correctly. The claim is the CPU chunk algebra, so the cell
 // pins the GPU tier's deltanet chain and decode step off along with the vector activation forms.
+// The YaRN cell loads the same 0.8B under the override kinds: every model cell here skips off the
+// interpreter and off a missing Qwen3.5-0.8B-Q8_0.gguf.
 
 let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit|; the two forms measure ~0.015 of it apart
 
@@ -122,11 +125,38 @@ def test_deltanet_chunked_prefill(t : T?) {
     }
 }
 
-//! llama.cpp's greedy continuation of the prompt on Qwen3.5-0.8B-Q8_0 (-ngl 0, --temp 0) - the harness control;
-//! under YaRN the greedy text is a near-tie discriminator on a model this small (llama.cpp itself parts at
-//! the second token between --yarn-orig-ctx 32768 and 262144), so the fold is gated on its numbers instead
+//! llama.cpp's greedy continuations of the prompt on Qwen3.5-0.8B-Q8_0 (-ngl 0, --temp 0), plain and under
+//! `--rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 32768`, logged beside ours; the greedy text is a near-tie
+//! discriminator on a model this small (llama.cpp itself parts at the second token between --yarn-orig-ctx
+//! 32768 and 262144), so the fold is gated on its numbers and the texts are read, never asserted
 let private YARN_PROMPT = "Once upon a time, there was a"
 let private YARN_PLAIN_HEAD = " very special kind of animal called a \"puppy\"."
+let private YARN_LCPP_HEAD = " young boy named Leo. Leo was a very curious and imaginative child."
+
+//! the fold spelled out in fp64: pair j of a `rot`-wide rotation at `pos`, its frequency divided by the YaRN divisor
+def private fold_angle(pos, rot, j : int64; theta, ff : float) : double
+    => double(pos) * (1.0lf / pow(double(theta), double(2l * j) / double(rot))) / double(ff)
+
+//! a logits array with one element pushed off by `by` - the control that a bar must red
+def private poisoned(v : array<float>; by : float) : array<float> {
+    var out := v
+    out[0] += by
+    return <- out
+}
+
+//! one load's rope-scaling outcome - the rejections and the linear / none kinds, cheap at the config stage
+def private load_outcome(path : string; o : RopeScalingOverride) : string {
+    set_rope_scaling_override(o)
+    var why = ""
+    try {
+        var m <- load_model_(path, QuantMode.q8)
+        why = "loaded: freq_scale {m.config.rope_freq_scale} factors {long_length(m.rope_freqs)} mscale {m.config.rope_mscale}"
+        delete m
+    } recover {
+        why = this_context().last_exception |> rtrim
+    }
+    return why
+}
 
 def private greedy_text(tr : Model; steps : int) : string {
     var out = ""
@@ -176,11 +206,19 @@ def test_deltanet_yarn_override(t : T?) {
         set_rope_scaling_override(RopeScalingOverride())
         var plain <- load_model_(path, QuantMode.q8)   // the engine entry with the tokenizer; load_gguf leaves it out
         plain.config.seq_len = min(plain.config.seq_len, 2048l)
-        t |> success(empty(plain.rope_freqs), "the file carries no rope scaling of its own")
-        let plain_text = greedy_text(plain, 20)
-        t |> success(find(plain_text, YARN_PLAIN_HEAD) >= 0, "the plain load continues as llama.cpp does: {plain_text}")
+        t |> success(empty(plain.rope_freqs) && plain.config.rope_freq_scale == 1.0, "the file carries no rope scaling of its own")
+        to_log(LOG_INFO, "plain: ours{greedy_text(plain, 20)} | llama.cpp ...{YARN_PLAIN_HEAD}\n")
         var plain_step <- step_logits(plain, true)
         delete plain
+        // the rejections and the other kinds, at the config stage of a load
+        let bogus = load_outcome(path, RopeScalingOverride(kind = "bogus"))
+        t |> success(find(bogus, "is not none | linear | yarn") >= 0, "an unknown kind is refused by name: {bogus}")
+        let unscaled = load_outcome(path, RopeScalingOverride(kind = "yarn"))
+        t |> success(find(unscaled, "YaRN needs a scaling factor") >= 0, "yarn on a file with no factor and no --rope-scale is refused: {unscaled}")
+        let linear = load_outcome(path, RopeScalingOverride(kind = "linear", scale = 2.0))
+        t |> equal(linear, "loaded: freq_scale 0.5 factors 0 mscale 1", "linear x2 halves the position and folds nothing else")
+        let none = load_outcome(path, RopeScalingOverride(kind = "none"))
+        t |> equal(none, "loaded: freq_scale 1 factors 0 mscale 1", "none leaves a key-less file as it is")
         set_rope_scaling_override(RopeScalingOverride(kind = "yarn", scale = 4.0, orig_ctx = 32768l))
         var yarn <- load_model_(path, QuantMode.q8)
         yarn.config.seq_len = min(yarn.config.seq_len, 2048l)
@@ -189,30 +227,43 @@ def test_deltanet_yarn_override(t : T?) {
         let mscale = 1.0 + 0.1 * log(4.0)
         t |> equal(long_length(yarn.rope_freqs), rot / 2l, "the YaRN divisors run over the rotated span")
         t |> success(abs(c.rope_mscale - mscale) < 1.0e-6, "the magnitude correction lands in rope_mscale ({c.rope_mscale})")
+        var want_ff <- yarn_rope_freqs(rot, c.rope_freq_base, 4.0, 32.0, 1.0, 32768l)
+        t |> equal(logits_maxdiff(yarn.rope_freqs, want_ff), 0.0, "the divisors are the band over the OVERRIDE's original context, not the file's")
         // the row the decode drivers read, against the fold spelled out: cos(pos * theta^(-2j/rot) / ff_j) * mscale
         var ct : array<float>
         var st : array<float>
         let pos = 777l
         build_decode_rope_row(yarn, pos, ct, st)
-        var worst = 0.0
-        for (j in range64(rot / 2l)) {
-            let a = double(pos) * (1.0lf / pow(double(c.rope_freq_base), double(2l * j) / double(rot))) / double(yarn.rope_freqs[j])
-            worst = max(worst, abs(ct[j] - float(cos(a) * double(mscale))))
-            worst = max(worst, abs(st[j] - float(sin(a) * double(mscale))))
-        }
-        t |> success(worst < 2.0e-3, "the decode rope row folds the divisors and the magnitude (maxdiff {worst})")
+        var want_c <- [for (j in range64(rot / 2l)); float(cos(fold_angle(pos, rot, j, c.rope_freq_base, yarn.rope_freqs[j])) * double(mscale))]
+        var want_s <- [for (j in range64(rot / 2l)); float(sin(fold_angle(pos, rot, j, c.rope_freq_base, yarn.rope_freqs[j])) * double(mscale))]
+        let row_bar = 2.0e-3
+        let worst = max(logits_maxdiff(ct, want_c), logits_maxdiff(st, want_s))
+        t |> success(worst < row_bar, "the decode rope row folds the divisors and the magnitude (maxdiff {worst})")
+        var ct_poison <- poisoned(want_c, 0.01)
+        t |> success(logits_maxdiff(ct, ct_poison) >= row_bar, "the row bar reds a +0.01 poison on one expected element ({logits_maxdiff(ct, ct_poison)})")
         var yarn_tab <- step_logits(yarn, true)
         var yarn_direct <- step_logits(yarn, false)
         let bar = DN_LOGIT_BAR_REL * logits_maxabs(yarn_tab)
         let paths_diff = logits_maxdiff(yarn_tab, yarn_direct)
+        let a_tab = argmax_of(yarn_tab)
+        let a_dir = argmax_of(yarn_direct)
+        let a_plain = argmax_of(plain_step)
+        to_log(LOG_INFO, "yarn step: table argmax {a_tab} '{piece_(yarn, a_tab)}' ({yarn_tab[a_tab]}), direct argmax {a_dir} '{piece_(yarn, a_dir)}' ({yarn_direct[a_dir]}), plain argmax {a_plain} '{piece_(yarn, a_plain)}' ({plain_step[a_plain]}); paths maxdiff {paths_diff}, fold maxdiff {logits_maxdiff(yarn_tab, plain_step)}, bar {bar}\n")
         t |> success(paths_diff <= bar, "the table and the direct rope paths of the attention agree under the fold (maxdiff {paths_diff}, bar {bar})")
+        var step_poison <- poisoned(yarn_direct, 2.0 * bar)
+        t |> success(logits_maxdiff(yarn_tab, step_poison) > bar, "the bar reds a step one element off by twice the bar ({logits_maxdiff(yarn_tab, step_poison)})")
         let fold_diff = logits_maxdiff(yarn_tab, plain_step)
         let noise = 10.0 * max(paths_diff, 1.0e-3)   //! a fold that did nothing leaves the two loads apart by the paths' own rounding alone
         t |> success(fold_diff > noise, "the fold moves the step's logits past the paths' own noise (maxdiff {fold_diff} vs {noise})")
-        to_log(LOG_INFO, "yarn x4 over 32768: {greedy_text(yarn, 20)}\n")
+        to_log(LOG_INFO, "yarn x4 over 32768: ours{greedy_text(yarn, 20)} | llama.cpp ...{YARN_LCPP_HEAD}\n")
         delete yarn_tab
         delete yarn_direct
+        delete step_poison
         delete plain_step
+        delete want_ff
+        delete want_c
+        delete want_s
+        delete ct_poison
         delete ct
         delete st
         delete yarn

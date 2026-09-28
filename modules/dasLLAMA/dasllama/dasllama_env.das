@@ -47,7 +47,7 @@ struct public EngineEnv {
     @clarg_doc = "Split NextN/MTP head GGUF to attach to the trunk being loaded (the split mtp-<model>.gguf form: its blk.<n_layers>.* tensors become the draft block; its copies of the trunk's tables are ignored). Default: the mtp-<trunk basename> sibling beside the trunk when present. The head rides the split-shard walk, so one prepared image carries trunk and head."
     mtp_head : string = ""
 
-    @clarg_doc = "RoPE scaling override for the load: yarn | linear | none; unset keeps the file's rope.scaling keys. yarn folds the NTK-by-parts frequency ramp and the 1 + 0.1 ln(s) magnitude into the rope tables (llama.cpp --rope-scaling yarn) - the Qwen files ship no scaling keys and enable YaRN as a setting. The override is baked into the prepared image, under its own lane."
+    @clarg_doc = "RoPE scaling override for the load: yarn | linear | none; unset keeps the file's rope.scaling keys, none drops them (a file's per-pair factor tensors and attn_factor stay, as llama.cpp keeps them). yarn folds the NTK-by-parts frequency ramp and the 1 + 0.1 ln(s) magnitude into the rope tables (llama.cpp --rope-scaling yarn) - the Qwen files ship no scaling keys and enable YaRN as a setting. The override is baked into the prepared image, under its own lane."
     rope_scaling : string = ""
 
     @clarg_doc = "The RoPE scaling factor s (the context multiplier) for the override; 0 = the file's rope.scaling.factor, and yarn needs one."

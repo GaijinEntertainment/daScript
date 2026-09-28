@@ -511,10 +511,23 @@ def test_image_mechanics(t : T?) {
         t |> equal(dlim_file_lane("m.gguf.metal.dlim"), "metal", "the last dot-segment is the lane")
         t |> equal(dlim_file_lane("m.Q4_K_M.gguf.cpu-arm-i8mm-fp32.dlim"), "cpu-arm-i8mm-fp32", "the source's own dots stay out of the lane")
         t |> equal(dlim_file_lane("m.gguf.0xc09d7ce0fafeac5c.dlim"), "", "a hash-named legacy image has no lane")
+        t |> equal(dlim_file_lane("m.gguf"), "", "a file that is no image has no lane")
+        t |> equal(dlim_file_lane("m.dlim"), "", "an image with no lane segment has none")
+        let prev_rope = rope_scaling_override()
+        set_rope_scaling_override(RopeScalingOverride())   // the cells below spell lanes with the override off; the env may have seeded one
         t |> equal(image_lane_name("whisper-f32"), "whisper-f32", "a family tag is its own lane")
+        t |> equal(image_lane_name(METAL_IMAGE_TAG), "metal", "the blob flavor's lane")
         t |> equal(image_lane_name("vulkan|m2n b8192 l4"), "vulkan", "the vulkan plan folds to one lane")
+        t |> equal(image_lane_name("a b|c/d"), "a-b-c-d", "a lane keeps letters, digits, _ and - alone")
         t |> equal(image_lane_name("", "fp32"), "{image_lane_name()}-fp32", "an off-q8 quant suffixes the lane")
-        t |> success(image_lane_name() |> starts_with("cpu-"), "the planar lane names the box's class ({image_lane_name()})")
+        t |> equal(image_lane_name(METAL_IMAGE_TAG, "q8", true), "metal-mtp", "a split head riding the load suffixes the lane")
+        static_if (typeinfo builtin_module_exists(llvm)) {
+            t |> equal(image_lane_name(), "cpu-{tune_cpu_class()}", "the planar lane names the box's tune class")
+        } else {
+            t |> equal(image_lane_name(), "cpu-{get_architecture_name()}", "the planar lane names the architecture where no tune framework is built")
+        }
+        let eight = "v{IMAGE_VERSION}|q8|arm64-gen|s16|q8 mr8 b0 g4|kq 8/8/4/8|q51 mr4|nat 1101"
+        t |> equal(dlim_identity_lane(eight), eight, "an identity short of DLIM_IDENTITY_FIELDS is its own lane, never cross-matched")
         // two images baked under the box-bound identity, then the tags registered config-free: the
         // same lanes, another identity - OTHER, never FOREIGN
         var p <- make_probe()
@@ -538,17 +551,19 @@ def test_image_mechanics(t : T?) {
             t |> equal(im.lane, im.path == stray ? "" : (im.path == path ? "img-lane" : "img-lane-2"), "{im.file}: the lane the name spells")
         }
         delete inv
-        // the clean policy: a lane-named OTHER stays, the legacy-named OTHER goes
-        let r = dlim_clean_(fake, true)
-        t |> equal(r.removed, 1, "the clean removed the legacy-named other ({r.removed})")
-        t |> success(!stat(stray).is_valid && stat(path).is_valid && stat(lane2).is_valid, "the lane-named images stay")
-        // the lane's own save: the image at the lane path is rewritten, the other lane untouched
+        // the lane's own save: the image at the lane path is rewritten; its GC reaps the legacy-named other of
+        // its own (quant, tag) and leaves the other lane's OTHER alone
         t |> success(save_image(p, path, "img-lane"), "re-bake in place")
         dlim_gc_stale(fake, "img-lane")
+        t |> success(!stat(stray).is_valid, "a legacy-named image of this lane's (quant, tag) under another identity goes with the save")
         t |> success(stat(lane2).is_valid, "another lane's OTHER image survives this lane's save")
         var m = ImgProbe()
         t |> success(load_image(path, m, "img-lane"), "the re-baked lane image maps")
         delete m
+        // the explicit clean: a lane-named OTHER stays
+        let r = dlim_clean_(fake, true)
+        t |> equal(r.removed, 0, "the clean removes no lane-named image ({r.removed})")
+        t |> success(stat(path).is_valid && stat(lane2).is_valid, "both lanes stay")
         // version-stale goes in any lane
         patch_u32(t, lane2, 4l, 0xDEADu)
         dlim_gc_stale(fake, "img-lane")
@@ -556,23 +571,36 @@ def test_image_mechanics(t : T?) {
         delete p
         remove(path)
         remove(fake)
+        set_rope_scaling_override(prev_rope)
     }
     t |> run("lanes: the rope-scaling override is a lane suffix and an identity element") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
         let prev = rope_scaling_override()
+        set_rope_scaling_override(RopeScalingOverride())   // the plain spellings, whatever DASLLAMA_ROPE_SCALING seeded ({prev.kind})
         let plain_lane = image_lane_name()
         let plain_id = image_identity()
-        set_rope_scaling_override(RopeScalingOverride(kind = "yarn", scale = 4.0, orig_ctx = 32768l))
+        set_rope_scaling_override(RopeScalingOverride(kind = "YARN", scale = 4.0, orig_ctx = 32768l))
+        t |> equal(rope_scaling_override().kind, "yarn", "the kind reads lower-case")
         t |> equal(image_lane_name(), "{plain_lane}-yarn4", "the planar lane takes the yarn suffix")
         t |> equal(image_lane_name(METAL_IMAGE_TAG), "metal-yarn4", "so does the blob lane")
+        register_image_family_tag("img-lane-free", true)
+        t |> equal(image_lane_name("img-lane-free"), "img-lane-free", "a config-free family's lane takes none - its identity carries no override")
         t |> success(find(image_identity(), " rope yarn4/32768") >= 0, "the identity spells the factor and the original context ({image_identity()})")
         t |> equal(dlim_identity_tag(image_identity("img-lane")), "img-lane", "the element rides inside the last fixed field - the tag still parses")
+        set_rope_scaling_override(RopeScalingOverride(kind = "yarn", scale = 4.0, orig_ctx = 32768l, beta_fast = 16.0, beta_slow = 2.0))
+        t |> success(find(image_identity(), " rope yarn4/32768/16/2") >= 0, "set betas ride the identity ({image_identity()})")
+        t |> equal(image_lane_name(), "{plain_lane}-yarn4", "and not the lane")
+        set_rope_scaling_override(RopeScalingOverride(kind = "linear", scale = 2.5))
+        t |> success(find(image_identity(), " rope linear2.5") >= 0, "a linear factor spells as it reads ({image_identity()})")
+        t |> equal(image_lane_name(), "{plain_lane}-linear2-5", "the linear lane - the dot yields to the file name's segment reader")
         set_rope_scaling_override(RopeScalingOverride(kind = "none"))
         t |> equal(image_lane_name(), "{plain_lane}-norope", "dropping a file's scaling is its own lane")
-        set_rope_scaling_override(prev)
+        t |> success(find(image_identity(), " rope none") >= 0, "and its own identity ({image_identity()})")
+        set_rope_scaling_override(RopeScalingOverride())
         t |> equal(image_identity(), plain_id, "the override off leaves the identity as it was")
+        set_rope_scaling_override(prev)
     }
 }
 

@@ -3396,6 +3396,7 @@ def rope_scaled_neox_tab_part(var v : float?; head_size, rot, n : int64; cosrow 
 //! YaRN's per-pair rope divisors over `rot` rotated dims: a pair under the NTK-by-parts band rotates at full
 //! frequency, a pair above it interpolates by `factor`, the band ramps between (pair j against the band's dims,
 //! as llama.cpp's rope_yarn_ramp reads i0/2); the 1 + 0.1 ln(factor) magnitude is the caller's
+[arch(at = "../ARCHITECTURE_ENGINE.md#rope-scaling-bake")]
 def yarn_rope_freqs(rot : int64; theta, factor, beta_fast, beta_slow : float; orig_ctx : int64) : array<float> {
     let fscale = 1.0 / factor
     let denom = 2.0 * log(theta)

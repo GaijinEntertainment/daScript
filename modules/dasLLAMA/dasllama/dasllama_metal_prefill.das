@@ -4324,6 +4324,8 @@ def public set_metal_prefill_min_npos(v : int64) {
     g_min_npos = v
 }
 
+def public get_metal_prefill_min_npos() : int64 => g_min_npos
+
 //! Pin the CPU final-norm/classifier step (logits-on-GPU off) — the A/B and fallback rail.
 //! `DASLLAMA_METAL_LOGITS=0` pins it process-wide.
 def public set_metal_prefill_logits_cpu(v : bool) {

@@ -39,9 +39,12 @@ what licenses deletion without judgment.
 
 A `.dlim` sits beside its source as `<file>.<lane>.dlim`, and the lane is what a person
 deliberately switches between on one box: `metal` (the blob flavor), `vulkan`, `cpu-<class>` (the
-planar flavor under the box's tune class - `cpu-arm-i8mm`, `cpu-x86-vnni512`), a family's own tag
-(`whisper-f32`), with `-lut` / `-grid` appended where `DASLLAMA_IQ3S_SERVE` pins the served form,
-`-<quant>` off q8, and `-mtp` when a split head rides the load. `image_lane_name` spells it and
+planar flavor under the box's tune class - `cpu-arm-i8mm`, `cpu-x86-vnni512`; a build without the
+tune framework spells the architecture alone, never the active backend, which is a pin the
+identity supersedes), a family's own tag (`whisper-f32`), with `-lut` / `-grid` appended where
+`DASLLAMA_IQ3S_SERVE` pins the served form, `-yarn<s>` / `-linear<s>` / `-norope` where the rope
+scaling override rides (on the flavors whose identity carries it - a config-free family's does
+not), `-<quant>` off q8, and `-mtp` when a split head rides the load. `image_lane_name` spells it and
 `dlim_file_lane` reads it back off a file name (a hash-named legacy image reads as no lane). The
 lane names the FILE; the header's identity still decides whether the file is current: tune
 winners, backend pins, pack and image versions stay in the identity and supersede within the

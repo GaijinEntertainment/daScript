@@ -178,7 +178,11 @@ batched driver gained, deltanet rows against per-session mirrors and the shared 
 site; fam-qwen35moe keeps the per-row FALLBACK assertion until the MoE hybrid's arm lands).
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
-carrier, model-free - runs with no model stocked; also the layout fingerprint; the per-format
+carrier, model-free - runs with no model stocked; also the layout fingerprint; the lane naming -
+the file name's lane segment read back, a hash-named legacy image adopted into its lane, a save
+reaping only its own lane's legacy other while another lane's OTHER survives, a version-stale
+image going in any lane, and the rope-scaling override as a lane suffix and an identity element
+that leaves the tag parsing intact; the per-format
 plane table's slot claim - a `kq_sb` slot's planes ride the image under the slot's section names
 while a non-sb slot rides no section, its planes being the top-level pair; the split-scale
 plane's two arms against hand-built superblocks - k6 and k3 strip-first at `strip_at` 0 / `tail_at` 16,
@@ -1242,7 +1246,11 @@ empty row a no-op) and `hlse`.
 geometry through `make_run_state` (S state + widened-conv history past the guard); model-gated:
 the chunked-vs-recurrent prefill equivalence probe on Qwen3.5-0.8B, in the forced-feed
 logits-tolerance form with the tier's deltanet chain and decode step pinned off (its claim is the
-CPU chunk algebra).
+CPU chunk algebra); the YaRN override on the same partial-rotary 0.8B - the divisors over the
+rotated span and the magnitude in `rope_mscale`, the decode rope row against the fold spelled out,
+the table and the direct rope paths of the attention agreeing under it within the deltanet bar, and
+the fold moving the step's logits past the two paths' own noise (the greedy text under YaRN is a
+near-tie on a model this small, so llama.cpp's continuation is logged, not asserted).
 `test_vision.das` - model-free: the vision preprocessing rail (geometry, letterbox, normalize)
 bit-exact against pinned mtmd oracle hashes (dumps + mint scripts in the models dir's
 `gemma4-vision-oracle/` and `qwen3vl-vision-oracle/` - the qwen rail letterboxes at align 32),
@@ -1705,7 +1713,10 @@ holds on the reference bodies.
 `test_rope_apply.das` - model-free: the CPU rope APPLICATION leaves (`dasllama_math`'s
 `rope_scaled`, `rope_scaled_neox`, the `_tab` and `_part` twins and `rope_apply`) against an
 in-test fp64 angle reference over the same theta schedule, on head sizes 40/64/96/256 with
-tails, positions 0/1/7/37/512, two thetas, fscale and mscale arms and the `rope_freqs` divisor
+tails, positions 0/1/7/37/512 (4096 on the factored partial forms), two thetas, fscale and mscale
+arms, the `rope_freqs` divisor on the full and the partial (`_part`, table and direct) forms, and
+`yarn_rope_freqs`'s band against the NTK-by-parts formula spelled out in fp64 (full frequency
+under the band, the factor above it, the ramp between, a shifted-band poison past the bar)
 - the bar is one rotation's f32 accumulation plus the f32 angle's own rounding, each with an
 added-value poison that must exceed it. The `_tab` forms also ride a tight twin bar against the
 un-tabled forms (loose only by the cross-compilation-unit cos/sin ulp drift), the `_part` forms
