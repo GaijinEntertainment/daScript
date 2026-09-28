@@ -1546,8 +1546,8 @@ def private release_manifest_env(manifest : string) : string {
 
 //! Bake one release_program companion: `<bundle_dir>/<name>.exe` (extensionless inside a macOS
 //! .app, like the main exe) under the same fat class and mode - or, in a plain release, under
-//! the main program's freshly minted manifest - its `.o` dropped, its rpaths scrubbed, the MSVC
-//! `.lib` recorded, and its deps JSON gated: every tune scope it declares is one the main
+//! the main program's freshly minted manifest - its link residue dropped, its rpaths scrubbed,
+//! and its deps JSON gated: every tune scope it declares is one the main
 //! program declared (that is the scope the mint measured; a scope only the companion carries
 //! was never measured on this box), and under `--fat` the fat gate refuses the release the way
 //! the main exe's does. Returns 0, or 1 with the reason logged and the half-built files removed;
@@ -1590,14 +1590,8 @@ def private release_build_program(daslang, main_path, bundle_dir, name, deps_fil
             log("  tune: companion {name} ships scope `{ts.name}`'s {fat}-and-up profile clones\n")
         }
     }
-    let obj_path = "{exe_path}.o"
-    if (fexist(obj_path)) {
-        remove(obj_path)
-    }
+    release_drop_link_residue(exe_path)
     shipped |> push(is_mac_app ? name : "{name}.exe")
-    if (fexist("{exe_path}.lib")) {
-        shipped |> push("{name}.lib")
-    }
     if (is_mac_app) {
         var rerr : string
         if (!rename("{exe_path}.exe", exe_path, rerr)) {
@@ -1610,14 +1604,29 @@ def private release_build_program(daslang, main_path, bundle_dir, name, deps_fil
     return 0
 }
 
+//! `daslang -exe` leaves `<exe>.o` (the build-time object) and, on MSVC, the linker's `<exe>.map`,
+//! `<exe>.lib` and `<exe>.exp` beside the runnable binary. None serves at run time - the map
+//! resolves crash frames only against the object it was linked from, which never ships, and the
+//! import library links a consumer against the exe's exports, which nothing does - and left in
+//! place they ride into the archive.
+def private release_drop_link_residue(exe_path : string) {
+    for (suffix in [".o", ".map", ".lib", ".exp"]) {
+        let p = "{exe_path}{suffix}"
+        if (fexist(p)) {
+            remove(p)
+        }
+    }
+}
+
 //! a companion that failed after its build leaves nothing behind: the exe, its object file and
 //! the MSVC side artifacts are outside every manifest, so a later release would never sweep them
 def private release_drop_program_files(exe_path : string) {
-    for (suffix in [".exe", ".o", ".lib", ".map", ".pdb"]) {
+    for (suffix in [".exe", ".pdb"]) {
         if (fexist("{exe_path}{suffix}")) {
             remove("{exe_path}{suffix}")
         }
     }
+    release_drop_link_residue(exe_path)
 }
 
 // the env prefix a fat release builds its exe under: the baseline class and the fat tune mode
@@ -2607,16 +2616,8 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
             }
         }
     }
-    // daslang -exe writes <exe_path>.exe (the runnable binary) and <exe_path>.o
-    // (a build-time object file). Drop the .o — it's not needed at runtime.
-    let obj_path = "{exe_path}.o"
-    if (fexist(obj_path)) {
-        remove(obj_path)
-    }
+    release_drop_link_residue(exe_path)
     shipped |> push(is_mac_app ? bundle_name : "{bundle_name}.exe")
-    if (fexist("{exe_path}.lib")) {   // MSVC linker side artifact lands next to the exe
-        shipped |> push("{bundle_name}.lib")
-    }
     // macOS .app: drop the .exe extension (Mac convention). Info.plist's
     // CFBundleExecutable matches the renamed binary.
     if (is_mac_app) {

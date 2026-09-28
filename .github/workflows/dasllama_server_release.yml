@@ -185,6 +185,16 @@ jobs:
           test -f "$APP/control.html"
           test -f "$APP/tray.ico"
           test -f "$APP/watchdog.json"
+          # the notices ride in every bundle: the daslang license, and the engine's and a shipped
+          # module's third-party terms as the samples (the .das_package lists the full set)
+          test -f "$APP/licenses/LICENSE"
+          test -f "$APP/licenses/LLAMA_CPP.LICENSE"
+          test -f "$APP/licenses/OPENSSL.LICENSE"
+          # nothing the linker left beside the exes ships: no object file, no MSVC map or import
+          # library (each glob on its own - an unmatched one stays literal and fails the -e test)
+          for f in "$APP"/*.o "$APP"/*.map "$APP"/*.lib "$APP"/*.exp; do
+            if [ -e "$f" ]; then echo "linker residue in the bundle: $f"; exit 1; fi
+          done
           "$WATCHDOG" --help
           # the companion loads the same runtime and modules the server does; -m is required, so
           # the help form carries a placeholder

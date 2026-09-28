@@ -31,7 +31,7 @@ row in `doc/source/reference/utils/dasllama_server.rst` or
 `tests/` subfolder's `REVIEW.md` (beside this file) too.**
 
 **Weakening `REVIEW.das` (beside this file) - dropping a check, narrowing what a check scans,
-adding a name to a check's licensed set (the names it does not flag), or blunting a finding
+adding a name to a check's exempt set (the names it does not flag), or blunting a finding
 text so it no longer names what failed - is a defect.** What the gate enforces is read from
 the gate itself.
 
