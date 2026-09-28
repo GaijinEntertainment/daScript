@@ -1842,3 +1842,27 @@
    cells stand against it until the rig fetches jfk (it is whisper.cpp's sample) and the gemma4a
    clip is replaced by a traceable one or built by the test. Done = both clips come from the rig
    or the repository and the cells' expectations are re-pinned on them.
+
+171. **A Vulkan-served model's first load writes its planes twice - the planar image and then a
+   flavor image that carries the planar planes again beside the device-layout twin.**
+   `vulkan_bake_flavor` (`dasllama/dasllama_image.das`) saves through `build_image`'s whole
+   field walk with a hook that refuses nothing, so the flavor holds every planar plane (the q8
+   blobs and scales, the fp32 token table an untied classifier keeps) plus `vkblob`: on
+   Qwen3.8-27B-Q4_K_M the planar image is 24.1 GB and the flavor 43.0 GB for 18.1 GB of device
+   planes, 67 GB and about forty minutes on a network volume (the gather 24 of them). The P3 trim
+   (`trim_model_planes`) would drop the CPU families the resident driver never reads, but it
+   declines a model with a NextN head, and the flavor save never consults `image_save_enabled`
+   (`DASLLAMA_IMAGE_SAVE=0` skips the planar file only). Done = the flavor carries the device
+   twin, the plan and what the CPU still reads (the trim past the NextN decline, the untied fp32
+   table packed), the flavor save honours `image_save_enabled`, and a first load under an armed
+   backend bakes the flavor from the in-memory image instead of persisting the planar file first.
+
+172. **An uncaught panic on a job context ends the process with exit code 0 and its message on
+   stderr only.** On Linux `DAS_ENABLE_EXCEPTIONS` is off, so `Context::throw_fatal_error`
+   (`src/simulate/simulate_exceptions.cpp`) on a context with no `throwBuf` - every jobque clone,
+   the lanes the resident gather and upload run on - prints "unhandled exception" through
+   `to_err` and calls `exit(0)`. A bench whose stdout is captured reads as a clean run that
+   printed no rows; two of three 27B first loads on the pod ended this way. Done = an uncaught
+   panic exits non-zero everywhere (`exit(1)` at the two sites), and the team-chunk invocation
+   (`src/builtin/module_builtin_jobque.cpp`, `team_parallel_for_invoke`) runs under
+   `runWithCatch` and reports `JOB EXCEPTION` as the fifo path does.
