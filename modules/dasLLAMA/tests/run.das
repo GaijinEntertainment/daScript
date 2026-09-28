@@ -167,6 +167,10 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vision.das",
                     "modules/dasLLAMA/tests/test_vulkan_dec_tail.das",
                     "modules/dasLLAMA/tests/test_vulkan_tower_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tts_conv_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tts_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tts_pocket_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_tts_source_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das" ]
@@ -285,7 +289,8 @@ def area_tests(area : string) : array<string> {
     } elif (area == "tts") {
         return <- [ "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
                     "test_tts_g2p.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
-                    "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_voice_prompts.das" ]
+                    "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_voice_prompts.das", "test_vulkan_tts_conv_kernels.das",
+                    "test_vulkan_tts_kernels.das", "test_vulkan_tts_pocket_kernels.das", "test_vulkan_tts_source_kernels.das" ]
     } elif (area == "infra") {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das", "test_bench_rows.das",
                     "test_box_ident.das", "test_box_profile.das", "test_dasllama_lint_contracts.das",
@@ -333,7 +338,11 @@ def area_image_arms(area : string) : string {
 //! engine module stem -> the areas a change to it reaches. A module not in the table is CORE and
 //! reaches every area (the safe default for a new module until it gets a row)
 let MODULE_AREAS <- {
-    "dasllama_tower" => "audio,vision", "dasllama_metal_tower" => "audio,vision,tts", "dasllama_vulkan_tower" => "audio,vision",
+    "dasllama_tower" => "audio,vision,tts",   // the TTS blocks, Pocket and StyleTTS2 call its row kernels
+    "dasllama_metal_tower" => "audio,vision,tts",
+    "dasllama_vulkan_tower" => "audio,vision,tts",   // the Vulkan TTS driver rides the tower's classes
+    "dasllama_tts_slab" => "audio,vision,tts",   // the Metal tower requires it for every seat
+    "dasllama_vulkan_tts" => "tts",
     "dasllama_asr" => "audio", "dasllama_asr_types" => "audio", "dasllama_audio" => "audio",
     "dasllama_audio_embedder" => "audio", "dasllama_audio_io" => "audio", "dasllama_canary" => "audio",
     "dasllama_gemma4a" => "audio", "dasllama_metal_asr_dec" => "audio", "dasllama_vulkan_asr_dec" => "audio", "dasllama_parakeet" => "audio",
@@ -357,7 +366,8 @@ let MODULE_AREAS <- {
     "dasllama_metal_prefill" => "llm,tts",   // its rope serves the Pocket codec transformer
     "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
-    "dasllama_rope" => "llm", "dasllama_sampling" => "llm,vision,audio", "dasllama_scheduler" => "llm",
+    "dasllama_rope" => "llm,tts",   // the TTS slab builds its rope tables through it
+    "dasllama_sampling" => "llm,vision,audio", "dasllama_scheduler" => "llm",
     "dasllama_spm" => "llm,tts",   // the unigram arm is the Pocket tokenizer (test_tts_pocket)
     "dasllama_bench" => "llm,infra",   // the rows serve lcpp_bench (llm) and the server's /bench (infra's tooling)
     "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm",

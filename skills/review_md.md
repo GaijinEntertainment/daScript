@@ -19,7 +19,7 @@ block, verbatim except for the module name and the architecture-doc path:
 ```
 
 A checklist whose folder has a follow-up ledger appends `` Planned work: `<ledger>`. `` to
-the same line - `` Planned work: `<ledger>` (sec. <name>). `` when the ledger is one section
+the same line - `` Planned work: `<doc>.md#<anchor>`. `` when the ledger is one section
 of a larger document, so the pointer still finds it. A checklist whose folder's architecture
 doc has split into companions writes the plural - `` Architecture docs: `<A>`, `<B>`. `` -
 listing every doc its rules cite. A checklist whose folder has no rationale document - a

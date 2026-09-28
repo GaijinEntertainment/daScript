@@ -8,7 +8,10 @@ require _compares
 require daslib/fio public
 require strings public
 require dasllama/dasllama_convert   // rd_u32 / rd_i32 over the mapped bytes
+require dasllama/dasllama_tts_types   // TtsNoise: the captured stream
+require dasllama/dasllama_tts_blocks   // TtsRng: the stream's draws
 require daslib/array_boost
+require _tts_corpus   // load_json_file
 
 // Reader for the KittenTTS oracle dumps (harness/kitten_oracle.py): one `TTSO` container per
 // case - named f32 / i32 tensors - and the per-size manifest.json listing the cases.
@@ -98,21 +101,43 @@ def load_tts_dump(path : string) : table<string; TtsDumpTensor> {
     return <- out
 }
 
-//! `dir_path`/manifest.json into `m` (its type picks the schema): false when the directory is not stocked, a panic when the file does not parse.
-def load_json_manifest(dir_path : string; var m : auto(TT)) : bool {
-    let text = fread(path_join(dir_path, "manifest.json"))
-    return false if (empty(text))
-    if (!sscan_json(text, m)) {
-        panic("{dir_path}/manifest.json does not parse")
+//! Tensor `name` of `dump` copied out as `elem`'s type - `type<float>` its f32 rows, `type<int>` its i32 ones - empty when the dump lacks it.
+def dump_tensor(dump : table<string; TtsDumpTensor>; elem : auto(TT); name : string) : array<TT -const> {
+    var inscope out : array<TT -const>
+    dump |> get(name) $(tensor) {
+        static_if (typeinfo is_float(type<TT>)) {
+            out := tensor.f
+        } else {
+            out := tensor.i
+        }
     }
-    return true
+    return <- out
 }
+
+//! `dir_path`/manifest.json into `m` (its type picks the schema): false when the directory is not stocked, a panic when the file does not parse.
+def load_json_manifest(dir_path : string; var m : auto(TT)) : bool => load_json_file(path_join(dir_path, "manifest.json"), m)
 
 //! The manifest of one size's dumps; `cases` empty when the directory is not stocked.
 def load_tts_oracle_manifest(dir_path : string) : TtsOracleManifest {
     var m = TtsOracleManifest()
     load_json_manifest(dir_path, m)
     return <- m
+}
+
+//! A captured noise stream from `seed` in the reference's draw order - the `nh` initial phases, then `samples` rows of normals - so two legs read one noise.
+def captured_noise(nh, samples : int64; seed : uint64) : TtsNoise {
+    var rng = TtsRng()
+    rng_seed(rng, seed)
+    var inscope noise = TtsNoise(captured = true)
+    noise.uniform |> resize(nh)
+    for (h in range64(nh)) {
+        noise.uniform[h] = rng_uniform(rng)
+    }
+    noise.normal |> resize(samples * nh)
+    for (i in range64(samples * nh)) {
+        noise.normal[i] = rng_normal(rng)
+    }
+    return <- noise
 }
 
 //! Largest |a - b| over two equal-length tensors (panics on a length mismatch).

@@ -84,6 +84,15 @@ def private plant_doc(dir, name : string; anchors : array<string>) {
 }
 
 
+// A .md declaring one anchor whose body cites `citeDoc#citeAnchor` in the markdown spelling.
+def private plant_citing_doc(dir, name, anchor, citeDoc, citeAnchor : string) {
+    plant(dir, name, build_string() $(var w) {
+        w |> write("# {name}\n\n")
+        w |> write("## Section {anchor} \{#{anchor}\}\nbody of {anchor} rides on `{citeDoc}#{citeAnchor}`\n\n")
+    })
+}
+
+
 // argv[0] is the running interpreter - dastest itself is spawned as
 // `daslang(.exe) dastest/dastest.das ...`, so it names the binary to spawn.
 def private das_exe() : string {
@@ -236,6 +245,43 @@ def test_nested_sections(t : T?) {
         var out : string
         let rc = run_extract(root, out_dir, "base", ["base"], out)
         t |> equal(rc, 0, "a `//` line is prose, not a citation\n{out}")
+    }
+}
+
+
+[test]
+def test_section_closure(t : T?) {
+    t |> run("a section the code cites pulls in the sections its own text cites, to a fixed point") @(t : T?) {
+        let root = path_join(tmp_root(), "closure")
+        let base = path_join(root, "base")
+        mkdir_rec(base)
+        plant_citing_doc(base, "ARCHITECTURE.md", "alpha", "ARCHITECTURE_B.md", "beta")
+        plant_citing_doc(base, "ARCHITECTURE_B.md", "beta", "ARCHITECTURE_C.md", "gamma")
+        plant_doc(base, "ARCHITECTURE_C.md", ["gamma", "orphan"])
+        plant_code(base, "code.das", [Cite(doc = "ARCHITECTURE.md", anchor = "alpha", fn = "a")])
+        let out_dir = path_join(root, "out")
+        var out : string
+        let rc = run_extract(root, out_dir, "base", ["base"], out)
+        t |> equal(rc, 0, "a tree whose sections cite resolvable sections extracts cleanly\n{out}")
+        let b = fread(path_join(out_dir, "base/ARCHITECTURE_B.md"))
+        t |> success(find(b, "body of beta") >= 0, "the section the code-cited section cites ships, though no code cites it\n{b}")
+        let c = fread(path_join(out_dir, "base/ARCHITECTURE_C.md"))
+        t |> success(find(c, "body of gamma") >= 0, "and the section that one cites, two hops from the code\n{c}")
+        t |> success(find(c, "orphan") < 0, "the uncited neighbour still does not ship\n{c}")
+    }
+    t |> run("a dangling citation inside an excerpted section fails the run") @(t : T?) {
+        let root = path_join(tmp_root(), "closure_dangling")
+        let base = path_join(root, "base")
+        mkdir_rec(base)
+        plant_citing_doc(base, "ARCHITECTURE.md", "alpha", "ARCHITECTURE_B.md", "nope")
+        plant_doc(base, "ARCHITECTURE_B.md", ["beta"])
+        plant_code(base, "code.das", [Cite(doc = "ARCHITECTURE.md", anchor = "alpha", fn = "a")])
+        let out_dir = path_join(root, "out")
+        var out : string
+        let rc = run_extract(root, out_dir, "base", ["base"], out)
+        t |> success(rc != 0, "the section's own citation is checked\n{out}")
+        t |> success(find(out, "excerpted section") >= 0 && find(out, "no such anchor") >= 0, "named as the section's citation, in LINT026's words\n{out}")
+        t |> success(!stat(path_join(out_dir, "base/ARCHITECTURE.md")).is_valid, "and nothing is written\n{out}")
     }
 }
 

@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
 
-**A diff touching what an emitter compiles into a kernel - a function carrying `[metal_kernel]`,
+**A diff that changes GPU kernel code - a function carrying `[metal_kernel]`,
 `[spirv_kernel]` or a `_shader` annotation from `dasSpirv`, `dasVulkan` or `dasMetal`, every
 `def` it reaches, the class and base classes such a method belongs to with their member
 declarations, and the structs their `@push_constant` members name - applies

@@ -1082,7 +1082,7 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool
     }
     assert(g_rd != null, "vk_rdec_upload_emb_f32 before prepare")
     let bytes = vocab * dim * 4l
-    if (bytes > min(RDEC_EMB_F32_CAP, vk_max_storage_range()) || g_gpu.resident_bytes + bytes > g_gpu.weight_budget
+    if (bytes > RDEC_EMB_F32_CAP || !vk_range_ok(bytes) || g_gpu.resident_bytes + bytes > g_gpu.weight_budget
             || !ensure_emb_gather_f32_cls()) {
         return false
     }
@@ -2511,7 +2511,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     pfq_ts(raw)
     vhz_dep(raw, h, VHB_Y1, 0u, true)
     cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, rows * dim * 4l)
-    //! the K/V host DMAs stay at the END of the chain (ARCHITECTURE_GPU_VULKAN.md sec.2.2j: a driver drops the in-cmd barrier)
+    //! the K/V host DMAs stay at the END of the chain (ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain: a driver drops the in-cmd barrier)
     vhz_dep(raw, h, VHB_ATK, 0u, true)
     cmd_copy_range(raw, g_gpu.at_k_dev, w0 * kv_dim * 4l, g_gpu.at_kv_host.buf, 0l, rows * kv_dim * 4l)
     vhz_dep(raw, h, VHB_VRAW, 0u, true)

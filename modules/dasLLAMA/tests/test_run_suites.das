@@ -141,8 +141,11 @@ def test_area_tables_match_the_census(t : T?) {
 def test_areas_for_path(t : T?) {
     let every = join(AREAS, ",")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_audio.das"), ","), "audio", "an audio module reaches audio")
-    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tower.das"), ","), "audio,vision", "the shared tower reaches both towers")
-    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das"), ","), "audio,vision", "the Vulkan tower reaches both towers")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tower.das"), ","), "audio,vision,tts", "the shared tower reaches both towers and the TTS blocks calling its row kernels")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das"), ","), "audio,vision,tts", "the Vulkan tower reaches both towers and the TTS driver riding its classes")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tts_slab.das"), ","), "audio,vision,tts", "the shared TTS slab writer reaches every tower seat")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_tts.das"), ","), "tts", "the Vulkan TTS driver reaches tts")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_rope.das"), ","), "llm,tts", "the rope tables reach the engine and the TTS slab that builds through them")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_asr_dec.das"), ","), "audio", "the Vulkan ASR decoder reaches audio")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_math.das"), ","), every, "a core module reaches every area")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_brand_new.das"), ","), every, "a module without a row reaches every area - the safe default")
@@ -150,6 +153,10 @@ def test_areas_for_path(t : T?) {
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_gemma3v.das"), ","), "vision", "a test file reaches its own area")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_tower_helpers.das"), ","), "audio,vision", "a two-area test reaches both")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tower_kernels.das"), ","), "audio,vision", "the Vulkan tower kernel cells reach both towers")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tts_conv_kernels.das"), ","), "tts", "the Vulkan TTS sequence-class cells reach the tts area")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tts_kernels.das"), ","), "tts", "the Vulkan TTS kernel cells reach the tts area")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tts_pocket_kernels.das"), ","), "tts", "the Vulkan Pocket TTS cells reach the tts area")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_vulkan_tts_source_kernels.das"), ","), "tts", "the Vulkan TTS source and STFT cells reach the tts area")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_tower_twin.das"), ","), "audio,vision", "the tower twin fixture reaches both towers")
     t |> equal(length(areas_for_path("modules/dasLLAMA/tests/test_metal_decode_parity.das")), 0, "a model-suite file reaches no area - it takes --arm")
     t |> equal(join(areas_for_path("modules/dasLLAMA/tests/_tts_oracle.das"), ","), "tts", "a TTS fixture reaches tts")
@@ -175,7 +182,7 @@ def test_areas_for_path(t : T?) {
 [test]
 def test_area_plan(t : T?) {
     let tts <- area_plan(["tts"])
-    t |> equal(length(tts.files), 13, "tts plans its twelve files and the image file its kitten arm rides")
+    t |> equal(length(tts.files), 17, "tts plans its sixteen files and the image file its kitten arm rides")
     t |> equal(tts.image_arms, "kitten", "tts owns the kitten image arm")
     t |> equal(tts.files[length(tts.files) - 1], "{TESTS_DIR}/test_model_image.das", "the image file rides last")
     for (i in range(1, length(tts.files) - 1)) {
@@ -197,7 +204,7 @@ def test_area_plan(t : T?) {
     t |> equal(length(suite.files), 1, "a suite run plans the suite table")
     t |> equal(suite.image_arms, "arm12", "a suite run passes --arm through")
     let area <- plan_files(cfg, ["tts"])
-    t |> equal(length(area.files), 13, "an area run plans the area, whatever --suite says")
+    t |> equal(length(area.files), 17, "an area run plans the area, whatever --suite says")
 }
 
 //! the argument contracts: an area run refuses --arm/--full/--suite and an unknown area; a per-PR

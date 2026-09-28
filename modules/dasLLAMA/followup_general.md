@@ -29,7 +29,7 @@
    deletes.** `finish_pending_step` (dasllama_metal_common) lands the in-flight batch step by
    memcpy-ing KV rows and logits through `BatchLanding.sessions[i]` - raw borrowed pointers - and
    the batch driver's pre-encoded step parks the same pointers, uncommitted, in the other slot
-   (`ARCHITECTURE_GPU_MTP_DECODE.md` sec.2.38a). Nothing
+   (`ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode`). Nothing
    quiesces on session death, `metal_decode_flush` (the public landing call) has zero callers,
    and every test helper deletes its sessions right after `eval_batch_` with a step potentially
    pending - a landing after those deletes writes into freed heap. Empirically quiet today
@@ -899,7 +899,7 @@
     `trace_marker`, `JOBQUE_PROFILING`-compiled, `utils/jobque-timeline` with per-category stats),
     the `prof_add` / `forward_profile_*` decode buckets (197 sites in 17 files) and the
     `asr_prof_add` encode buckets (147 sites in 12 files, the TTS generator's `tts.gen.*` among
-    them) - and `REVIEW.md`'s clock rule plus `ARCHITECTURE_MEASUREMENT.md` sec.2.10 name all
+    them) - and `REVIEW.md`'s clock rule plus `ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails` name all
     three, which is how the second and third were built without anyone noticing. Done, as its own
     PR: (1) every `prof_add` / `asr_prof_add` site becomes a marker category (a `TRACE_TAG_*` block
     per family beside the ASR ones); (2) the consumers of the bucket tables - the `PROF` rows in
@@ -1334,7 +1334,7 @@
    or `lint.rst` section whose id no module still emits). (g) `utils/REVIEW.das`: a test file under
    `utils/` named in no workflow row, or only in a `--compile-only` row. (h) `site-dasllama`: a
    `_stories/*.md` entry with neither a figures comment nor a date and sha. (i) `dasLLVM`: every
-   `[EnvConfig]` field of `llvm_env.das` named in `ARCHITECTURE.md` sec.3; every `requires=` /
+   `[EnvConfig]` field of `llvm_env.das` named in `ARCHITECTURE.md#inherited-invariants`; every `requires=` /
    `g_target_x64_*` feature name present in `das_cpu_supports`. (j) `dasllama-server`: a fixture's
    top-level key absent from `README.md`. (k) `REVIEW_IMAGE`: an addition on the left of a
    `> msize` compare in `dasllama_image.das`; `REVIEW_TTS`: `styletts2_synthesize` carries
@@ -1619,7 +1619,7 @@
     here.
 146. **ACCEPTED, not planned: the dev-W bake set follows the minting program, not the box.** The
     split-scale `devwf16` panels bake only where the Metal prefill module registered its CPU
-    mirror (`ARCHITECTURE_IMAGE.md` sec.2.1h), so a program on the same box built without that
+    mirror (`ARCHITECTURE_IMAGE.md#image-devw-plane`), so a program on the same box built without that
     module mints a thinner image at the SAME identity and every site it skipped serves off the
     runtime dequant until a program carrying the mirror re-mints. Ruled acceptable: a `.dlim` is
     a box-local cache, so the thinner image costs a dequant pass and never a different answer.
@@ -1767,7 +1767,7 @@
     `dasllama_config.das`) is a global, a setter with its clamp and a getter written by hand,
     and `apply_box_profile_runtime_at` walks the same facts a third time. Done looks like: one
     knob declaration (name, default, clamp, env name, JSON key) generating the pair and the
-    profile apply, the `[EnvConfig]` shape `ARCHITECTURE_RUNTIME.md` sec.2.9 uses; the unused
+    profile apply, the `[EnvConfig]` shape `ARCHITECTURE_RUNTIME.md#env-knobs` uses; the unused
     `set/get_embed_par_threshold` pair goes with it.
 161. **`kq_fmt_of`'s native-knob gates branch on the format by hand.** Which formats a box's knobs
     admit natively is an if-ladder over the enum where every other lookup walks `kq_desc`. Done
@@ -1820,7 +1820,7 @@
     line. Done = `--temp/--top-k/--top-p` on the tg row, a `tg128@sampled` cell beside `tg128`,
     and the ledger entry re-minted from it.
 
-168. **The iq4nl32 rail's Vulkan device run.** The per-32 IQ4_NL plane pair
+171. **The iq4nl32 rail's Vulkan device run.** The per-32 IQ4_NL plane pair
     (`iq4nl32q`/`iq4nl32s`) serves Qwen3.8-Flash-Next's 640-wide `ffn_down_exps` stacks on the
     CPU (the portable kernels and the `iq4nl32q8_*_gen` family), on Metal and through the Vulkan
     classes (`Iq4nl32Cm2T`'s three stamps, `Iq4nl32Gemv`), but the Vulkan tile cells
@@ -1828,7 +1828,7 @@
     GEMV cell alone. Done = the cm2 and KHR arms green on the 5060 Ti and the Flash-Next decode
     rows re-measured on the Vulkan tier.
 
-169. **The n-gram hash table as a mapped view.** Qwen3.8-Flash-Next's `per_layer_token_embd` is
+172. **The n-gram hash table as a mapped view.** Qwen3.8-Flash-Next's `per_layer_token_embd` is
     28.8 GB of gather-only rows the load copies into `Model.ngram_tab`; every other read of a
     model file leaves the mapping when the load ends. Done = the table stays a borrowed view over
     a mapping the Model owns (the `.dlim` plane borrow is the precedent: `image_map` plus the
@@ -1841,7 +1841,7 @@
     beyond the view is the gather on the device (the table as a Metal plane, the rows read where
     the key/value GEMMs consume them) or the table pinned resident where the box has the room.
 
-170. **The CPU decode of Qwen3.8-Flash-Next is compute-bound in the IQ3_S expert GEMVs.** On the
+173. **The CPU decode of Qwen3.8-Flash-Next is compute-bound in the IQ3_S expert GEMVs.** On the
     M5 Max at 18 threads the token reads 57 ms (17.5 tok/s in the profile window, 19.0 ± 0.2 on
     the tg128 row; llama.cpp 19.9 ± 0.4). The forward buckets per token: the gate/up expert
     GEMVs (`mm_moe`, IQ3_S) 22 ms for 14 MB of planes - 0.6 GB/s, a decode cost, not a
@@ -1861,7 +1861,7 @@
     (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9 ms) is the CPU token's largest bucket now, and the
     Flash-Next CPU tg128 board row is not re-minted yet.
 
-171. **A `.dlim` is named by its identity hash, so a mint purges what a person meant to keep.** The
+174. **A `.dlim` is named by its identity hash, so a mint purges what a person meant to keep.** The
     image GC keeps one image per lane, lane = (quant, tag) with the tag `""` for planar and
     `metal` for the blob flavor, and deletes a lane's other identities plus every version-stale
     image on a mint; a served-form flip (`DASLLAMA_IQ3S_SERVE`) or a box-class change is a new
@@ -1876,7 +1876,7 @@
     re-bake, `dlim_gc_stale` keyed by lane name, the converter's `--list` and the server page
     reading lanes, `test_model_image`'s GC cells over two lanes and a same-lane stale re-bake.
 
-172. **A cold image costs its first tokens, not its map.** The Flash-Next planar image maps in 67 ms
+175. **A cold image costs its first tokens, not its map.** The Flash-Next planar image maps in 67 ms
     whether cached or not; a decode profile on an image nothing had touched for 90 minutes (the
     page cache spent on two other 100 GB passes) ran 163 ms a token over its 128-token window, every
     bucket ~3x, and the same command a minute later 40.3 ms. The mint pass itself is 57 s (planes
@@ -1888,7 +1888,7 @@
     gather-only PLE table) as the second if the advisory alone does not carry 100 GB, each against
     the cold reading.
 
-173. **YaRN as a runtime setting, and on partial rotary.** The loader folds a file's YaRN metadata
+176. **YaRN as a runtime setting, and on partial rotary.** The loader folds a file's YaRN metadata
     into the per-pair `rope_freqs` divisor and the `1 + 0.1·ln(s)` mscale (gpt-oss, the Mistral 3
     family ride it) but refuses partial rotary + YaRN and `yarn_log_multiplier != 0`, and the Qwen
     files carry no `rope.scaling.*` keys at all - Qwen enables YaRN as a setting (factor 4 over the
@@ -1900,7 +1900,7 @@
     partial+factors arm in `test_rope_apply`; parity on Flash-Next past 262K positions against
     llama.cpp under the same flags. The `yarn_log_multiplier` arm waits for a DeepSeek-class carrier.
 
-174. **The CPU verify writes every row's n-gram ring slot, and the ring is exactly the conv
+177. **The CPU verify writes every row's n-gram ring slot, and the ring is exactly the conv
     window.** `ple_apply_row` lands row p's conv input at slot `(pos + p) % rows` before its own conv
     reads, in row order, so within one batch no row reads a later row's slot; but slot `pos + p`
     aliases position `pos + p - rows`, the oldest tap of the conv at `pos + p - 1`. At depth 1 the
@@ -1912,9 +1912,32 @@
     floats, `mtp_snap_ple` beside the window), or takes the panel form; a depth-2 forced-reject
     leg on the Flash-Next counting fixture in `test_mtp.das` (the depth-1 leg cannot see it).
 
-175. **A CPU verify of two rows costs two decode steps on Flash-Next.** `ffn_moe_prefill` takes the
+178. **A CPU verify of two rows costs two decode steps on Flash-Next.** `ffn_moe_prefill` takes the
     per-position GEMV route under `ATTN_NARROW_NPOS`, which took the verify from 77 to 67 ms, and the
     rest of the 2x is the dense sites' q8q8 tile padding two rows to a four-token tile - the
     speculative round on the CPU rail is slower than plain decode on this model (CPU tg128 with MTP
     is a loss at 75% accept). Done = a two-token tile or a GEMV-pair route for the narrow verify's
     dense sites, measured as the CPU `--mtp-ab` row.
+168. **`harness/tune_kernels.das`'s validation re-times CPU benches after the backend pin.**
+   `run_validation` re-runs the changed CPU benches after `dot_q8q8_laneq4x4` has pinned one
+   matmul backend for the rest of the process, so a re-timed bench runs against the pinned
+   backend instead of the one it would have picked - the ordering `harness/REVIEW.md`'s timing
+   rule forbids for a new timing. Done = the validation pass orders its re-runs ahead of the
+   pinning bench, or re-runs them in a child process, and a cell holds the order.
+169. **`generate_spirv` gained a positional `precise : bool` ahead of `var reflection`.** The
+   `precise` shader property (`modules/dasSpirv/ARCHITECTURE.md`, the `precise` section) landed
+   as a positional parameter before `var reflection : SpirvReflection` in `generate_spirv`'s
+   signature, so every external caller of the emitter - a module repo compiling kernels against
+   dasSpirv - stops compiling until it passes the flag: the sweep `skills/internal/abi_break_sweep.md`
+   describes is owed. A trailing defaulted parameter (after `kernel_self`) would have kept every
+   caller compiling. Done = the sweep run over the external module repos, or the parameter moved
+   to the defaulted tail before the next release.
+
+170. **The jfk twin cells read a clip nobody can fetch.** `tests/_tower_twin.das` reads `jfk.wav`
+   from the models dir, a copy each box stocks by hand, and `test_whisper.das` reads
+   `gemma4a_test2.wav` from the ASR corpus folder, the one corpus clip with no traceable
+   provenance (`performance/profile_common.das`). `tests/REVIEW_MEDIA_CELLS.md` admits only a clip
+   the test builds, the repository tracks, or `performance/setup_asr_rig.das` fetches, so both
+   cells stand against it until the rig fetches jfk (it is whisper.cpp's sample) and the gemma4a
+   clip is replaced by a traceable one or built by the test. Done = both clips come from the rig
+   or the repository and the cells' expectations are re-pinned on them.

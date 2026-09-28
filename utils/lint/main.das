@@ -137,7 +137,7 @@ def is_skip_file(name : string) : bool {
 }
 
 def is_skip_dir(name : string) : bool {
-    return name |> starts_with(".")
+    return name |> starts_with(".") || name == "node_modules"
 }
 
 // A CMake build tree is not source, whatever it is named: FetchContent checkouts under it
@@ -590,10 +590,23 @@ def run_arch_pass(roots : array<string>) : int {
         }
     }
     for (md in mds) {
+        let text = fread(md)
+        continue if (empty(text) || find(text, ".md#") < 0)
+        for (c in collect_md_citations(md, text)) {
+            let reason = citation_failure_reason(docs, c)
+            if (!empty(reason)) {
+                print("{md}:{c.line}: LINT026: citation does not resolve - {reason} (\"{c.raw}\")\n")
+                found ++
+                continue
+            }
+            cited |> insert("{c.doc}#{c.anchor}")
+        }
+    }
+    for (md in mds) {
         let doc = arch_path(md)
         each_arch_anchor(docs, doc) $(a) {
             return if (cited |> key_exists("{doc}#{a.name}"))
-            print("{md}:{a.line}: LINT026: anchor \{#{a.name}\} has no [arch] citation - cite it from the owning code, or strip the anchor to demote the section to narrative\n")
+            print("{md}:{a.line}: LINT026: anchor \{#{a.name}\} has no citation - cite it from the owning code or from the rule document that leans on it, or strip the anchor to demote the section to narrative\n")
             found ++
         }
     }

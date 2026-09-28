@@ -1,8 +1,8 @@
 // The Vulkan tower twins' shared instrument - the seat guard, the three-way encode (the exact chain, the CPU q8 chain,
 // the device chain) with the family's counters and the bar by metric (the vision canvases' maxdiff, the audio towers'
 // rel_l2), the input poison and the exact-lane decline, the vision canvas and dump-poison legs, the in-memory tower mint,
-// the GPU knobs' capture and restore - one text the vision and audio families' test files call with their own tower,
-// state and encode; no fixture root beside it.
+// the GPU knobs' capture and restore (`_gpu_knobs`, re-exported) - one text the vision and audio families' test files call
+// with their own tower, state and encode; no fixture root beside it.
 
 options gen2
 options _dasllama_internal = true
@@ -15,75 +15,14 @@ require dasllama/dasllama_math   // setup_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join: the twin cells' jfk.wav, inside the GPU arms alone
-require math
 require _compares   // logits_maxdiff
 require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twins' bar reads
-require ?das_metal dasllama/dasllama_metal_tower
-require ?das_metal dasllama/dasllama_metal_asr_dec
+require _gpu_knobs public
 require ?vulkan dasllama/dasllama_vulkan_tower
-require ?vulkan dasllama/dasllama_vulkan_asr_dec
 
 let TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order, the closed-form GELU against the f16 LUT
 let TWIN_ABS_VK = 2e-4    //! the tier-1 dumps' absolute floor, the bar's other term
 let TWIN_REL_L2_FLOOR = 1e-4lf   //! the audio twins' absolute floor over rel_l2, a unit-free ratio
-
-//! the Vulkan tower knob as the cell found it (false on a build without dasVulkan)
-def vulkan_tower_knob() : bool {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return vulkan_tower_on()
-    } else {
-        return false
-    }
-}
-
-//! puts back the Vulkan tower knob a cell captured with `vulkan_tower_knob` (a no-op without dasVulkan)
-[unused_argument(on)]
-def restore_vulkan_tower(on : bool) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        set_vulkan_tower(on)
-    }
-}
-
-//! the Vulkan ASR-decoder knob as the cell found it (false on a build without dasVulkan)
-def vulkan_wdec_knob() : bool {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return vulkan_wdec_on()
-    } else {
-        return false
-    }
-}
-
-//! undoes `set_every_gpu_tower`: the Metal tower knob back to its default (it has no getter), the Vulkan one to what `vulkan_tower_knob` captured
-def restore_every_gpu_tower(vulkan_was_on : bool) => set_every_gpu_tower(true, vulkan_was_on)
-
-//! undoes `set_every_gpu_wdec`: the Metal ASR-decoder knob back to its default (it has no getter), the Vulkan one to what `vulkan_wdec_knob` captured
-def restore_every_gpu_wdec(vulkan_was_on : bool) => set_every_gpu_wdec(true, vulkan_was_on)
-
-//! the CPU-decoder claims pin every whisper ASR-decoder driver off (a hook that serves silently stops the cell measuring the CPU chain)
-def set_every_gpu_wdec(on : bool) => set_every_gpu_wdec(on, on)
-
-[unused_argument(metal_on, vulkan_on)]
-def set_every_gpu_wdec(metal_on, vulkan_on : bool) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_wdec(metal_on)
-    }
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        set_vulkan_wdec(vulkan_on)
-    }
-}
-
-//! the CPU-lane claims pin every GPU tower driver off (a hook that serves silently stops the cell measuring the CPU chain)
-def set_every_gpu_tower(on : bool) => set_every_gpu_tower(on, on)
-
-[unused_argument(metal_on, vulkan_on)]
-def set_every_gpu_tower(metal_on, vulkan_on : bool) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(metal_on)
-    }
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        set_vulkan_tower(vulkan_on)
-    }
-}
 
 //! a front's witness follows its route: on the f16 GEMM feed (cm2 or KHR) the front served every dispatch, off it
 //! (DASLLAMA_COOPMAT=sdot4) the driver declined `device` and served none while the blocks served either way; `declines_delta` is
@@ -120,12 +59,8 @@ def jfk_twin_cell(tt : T?; model_path : string; jit_only : bool; body : block<(s
         if (!vulkan_twin_seat(tt)) {
             return
         }
-        {
-            let tower_was_on = vulkan_tower_knob()
-            let wdec_was_on = vulkan_wdec_knob()
+        with_gpu_knobs() {
             defer() {
-                restore_vulkan_tower(tower_was_on)
-                set_vulkan_wdec(wdec_was_on)
                 set_vulkan_audio_blocks(true)
             }
             set_vulkan_audio_blocks(true)
@@ -198,14 +133,6 @@ def twin_counters(tt : T?; tag : string; legs : TwinLegs; n_layer, npos : int64)
     tt |> equal(legs.dev.rows - legs.cpu.rows, npos, "{tag}: the rows delta is the patch grid")
 }
 
-def rms_of(a : array<float>) : float {
-    var ss = 0.0
-    for (v in a) {
-        ss += v * v
-    }
-    return sqrt(ss / float(max(length(a), 1)))
-}
-
 //! one input three ways - the exact chain, the CPU q8 chain (both knob off), the device chain - then `counters` over the legs and
 //! the bar by `spec.metric`: the device's distance from the exact chain within `TWIN_SLACK_VK` x the CPU q8 chain's own; `encode`
 //! is the family's encode over a tower and its state, returning its token count
@@ -217,34 +144,23 @@ def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); t
         var cpu : array<float>
         var dev : array<float>
         var legs = TwinLegs()
-        let knob = vulkan_tower_knob()
-        defer() {
-            restore_vulkan_tower(knob)
+        with_gpu_knobs() {
+            set_vulkan_tower(false)
+            legs.pre = vulkan_tower_stats()
+            legs.n_exact = queued_encode(tw_exact, st_exact, r.reference, encode)
+            legs.exact = vulkan_tower_stats()
+            legs.n_cpu = queued_encode(tw, st, cpu, encode)
+            legs.cpu = vulkan_tower_stats()
+            set_vulkan_tower(true)
+            legs.n_dev = queued_encode(tw, st, dev, encode)
+            legs.dev = vulkan_tower_stats()
         }
-        set_vulkan_tower(false)
-        legs.pre = vulkan_tower_stats()
-        with_job_que() {
-            setup_dasllama_jobque_()
-            legs.n_exact = invoke(encode, tw_exact, st_exact, r.reference)
-        }
-        legs.exact = vulkan_tower_stats()
-        with_job_que() {
-            setup_dasllama_jobque_()
-            legs.n_cpu = invoke(encode, tw, st, cpu)
-        }
-        legs.cpu = vulkan_tower_stats()
-        set_vulkan_tower(true)
-        with_job_que() {
-            setup_dasllama_jobque_()
-            legs.n_dev = invoke(encode, tw, st, dev)
-        }
-        legs.dev = vulkan_tower_stats()
         if (legs.dev.encodes == legs.cpu.encodes) {
             to_log(LOG_INFO, "{spec.family} vulkan twin {spec.tag}: the driver declined - {vulkan_tower_declines()}\n")
         }
         invoke(counters, legs)
         if (spec.metric == TwinMetric.maxdiff) {
-            r.rms = rms_of(r.reference)
+            r.rms = rms(r.reference)
             let q8_ex = logits_maxdiff(cpu, r.reference)
             let dev_ex = logits_maxdiff(dev, r.reference)
             let dev_q8 = logits_maxdiff(dev, cpu)
@@ -266,27 +182,37 @@ def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); t
 def twin_poison(tt : T?; r : TwinResult; zero_block : int64; twp : auto(TW); var stp : auto(ST);
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        var poisoned : array<float>
-        let knob = vulkan_tower_knob()
-        defer() {
-            restore_vulkan_tower(knob)
-        }
-        set_vulkan_tower(true)
-        let p0 = vulkan_tower_stats()
-        with_job_que() {
-            setup_dasllama_jobque_()
-            invoke(encode, twp, stp, poisoned)
-        }
-        tt |> equal(vulkan_tower_stats().encodes - p0.encodes, 1l, "{r.spec.tag} poison: device-served (encodes delta)")
+        var inscope poisoned <- device_poison_leg(tt, r.spec.tag, twp, stp, encode)
         if (r.spec.metric == TwinMetric.maxdiff) {
             let poison_ex = logits_maxdiff(poisoned, r.reference)
             to_log(LOG_INFO, "{r.spec.family} vulkan twin {r.spec.tag} ({r.spec.n_layer} blocks) poison: block {zero_block} zeroed on the device lands {poison_ex} from the exact chain ({poison_ex / r.rms} x rms), bar {r.bar}\n")
             tt |> success(double(poison_ex) > r.bar, "{r.spec.tag}: a zeroed block through the device chain EXCEEDS the bar ({poison_ex} vs {r.bar})")
         } elif (r.bar > 0.0lf) {
-            tower_twin_poison(tt, r.spec.tag, r.reference, poisoned, r.bar)
+            tower_twin_poisoned(tt, r.spec.tag, r.reference, poisoned, r.bar)
         }
-        delete poisoned
     }
+}
+
+//! `encode` over a tower and its state on a set-up job queue; the encode's token count
+def private queued_encode(tw : auto(TW); var st : auto(ST); var out : array<float>; encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) : int64 {
+    var n = 0l
+    with_job_que() {
+        setup_dasllama_jobque_()
+        n = invoke(encode, tw, st, out)
+    }
+    return n
+}
+
+//! a poison's device leg: `encode` over the zeroed tower `twp` with the Vulkan tower knob on, one device encode asserted; the rows it wrote
+def private device_poison_leg(tt : T?; tag : string; twp : auto(TW); var stp : auto(ST); encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) : array<float> {
+    var inscope out : array<float>
+    let e0 = vulkan_tower_stats().encodes
+    with_gpu_knobs() {
+        set_vulkan_tower(true)
+        queued_encode(twp, stp, out, encode)
+    }
+    tt |> equal(vulkan_tower_stats().encodes - e0, 1l, "{tag} poison: device-served (encodes delta)")
+    return <- out
 }
 
 //! a vision canvas three ways on the patch grid's counters, then - `zero_block` >= 0 - the input poison over the q8 tower
@@ -315,22 +241,10 @@ def twin_canvas(tt : T?; family, kind : string; w, h : int; patch : int64; log_s
 def dump_poison(tt : T?; family, tag : string; zero_block : int64; bar_rms : float; twp : auto(TW); var stp : auto(ST);
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>; excess : block<(out : array<float>) : float>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        var out : array<float>
-        let knob = vulkan_tower_knob()
-        defer() {
-            restore_vulkan_tower(knob)
-        }
-        set_vulkan_tower(true)
-        let e0 = vulkan_tower_stats().encodes
-        with_job_que() {
-            setup_dasllama_jobque_()
-            invoke(encode, twp, stp, out)
-        }
-        tt |> equal(vulkan_tower_stats().encodes - e0, 1l, "{tag} poison: device-served (encodes delta)")
+        var inscope out <- device_poison_leg(tt, tag, twp, stp, encode)
         let ex = invoke(excess, out)
         to_log(LOG_INFO, "{family} vulkan poison leg {tag}: block {zero_block} zeroed -> excess {ex} over the {bar_rms} x rms bar\n")
         tt |> success(ex > 0.0, "{tag}: a zeroed block through the device chain reds the bar (excess {ex})")
-        delete out
     }
 }
 
@@ -409,19 +323,23 @@ def tower_twin_bar(t : T?; tag : string; exact, cpu, dev : array<float>; n_layer
     return bar
 }
 
-//! a device encode over the same input held to the bar a clean three-way set (a later encode on the residency, a fresh one after a shutdown)
+//! a device encode's rel_l2 from the exact chain held within `bar`
 def tower_twin_held(t : T?; tag : string; exact, dev : array<float>; bar : double) {
-    var st = TowerParityStats()
-    if (tower_parity_stats(t, "{tag} vulkan vs exact", exact, dev, st)) {
-        t |> success(st.rel_l2 <= bar, "{tag}: the device chain sits within the bar the first encode set ({st.rel_l2} vs {bar})")
-    }
+    tower_twin_verdict(t, tag, exact, dev, bar, false)
 }
 
-//! the input poison: a device encode over a tower with zeroed GEMM planes must EXCEED the bar the clean chains set
-def tower_twin_poison(t : T?; tag : string; exact, poisoned : array<float>; bar : double) {
+//! the zeroed-plane input poison: a device encode's rel_l2 from the exact chain past `bar`
+def tower_twin_poisoned(t : T?; tag : string; exact, dev : array<float>; bar : double) {
+    tower_twin_verdict(t, tag, exact, dev, bar, true)
+}
+
+def private tower_twin_verdict(t : T?; tag : string; exact, dev : array<float>; bar : double; must_exceed : bool) {
     var st = TowerParityStats()
-    if (tower_parity_stats(t, "{tag} poisoned vulkan vs exact", exact, poisoned, st)) {
+    return if (!tower_parity_stats(t, must_exceed ? "{tag} poisoned vulkan vs exact" : "{tag} vulkan vs exact", exact, dev, st))
+    if (must_exceed) {
         t |> success(st.rel_l2 > bar, "{tag}: a zeroed block through the device chain EXCEEDS the bar ({st.rel_l2} vs {bar})")
+    } else {
+        t |> success(st.rel_l2 <= bar, "{tag}: the device chain sits within the bar the first encode set ({st.rel_l2} vs {bar})")
     }
 }
 

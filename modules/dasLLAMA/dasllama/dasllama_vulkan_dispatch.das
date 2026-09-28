@@ -431,22 +431,13 @@ class VkDispatch : AstStructureAnnotation {
         // set_<family>(bufs, sizes, gbits) : VkDescriptorSet — a set over the FAMILY layout
         if (ord == 0) {
             var body : array<ExpressionPtr>
-            var sv = new Variable(at = at, name := "set_", _type = new TypeDecl(at = at, baseType = Type.autoinfer))
-            var ac = new ExprCall(at = at, name := "vkd_alloc_set")   //! the family's name rides along, so a set asked before the class's ensure names its class
-            ac.arguments |> emplace_new <| mk_gvar(at, gname)
-            ac.arguments |> emplace_new <| new ExprConstString(at = at, value := family)
-            sv.init = ac
-            var letd = new ExprLet(at = at)
-            letd.variables |> emplace(sv)
-            body |> push(letd)
-            var ws = new ExprCall(at = at, name := "vkd_set")
+            var ws = new ExprCall(at = at, name := "vkd_cached_set")   //! the family's name rides along, so a set asked before the class's ensure names its class
             ws.arguments |> emplace_new <| mk_gvar(at, gname)
-            ws.arguments |> emplace_new <| mk_gvar(at, "set_")
+            ws.arguments |> emplace_new <| new ExprConstString(at = at, value := family)
             ws.arguments |> emplace_new <| mk_gvar(at, "bufs")
             ws.arguments |> emplace_new <| mk_gvar(at, "sizes")
             ws.arguments |> emplace_new <| mk_gvar(at, "gbits")
-            body |> push(ws)
-            body |> push(new ExprReturn(at = at, subexpr = mk_gvar(at, "set_")))
+            body |> push(new ExprReturn(at = at, subexpr = ws))
             var fn = new Function(at = at, atDecl = at, name := "set_{family}",
                 flags = FunctionFlags.generated,
                 result = mk_alias_t(at, "VkDescriptorSet", false))

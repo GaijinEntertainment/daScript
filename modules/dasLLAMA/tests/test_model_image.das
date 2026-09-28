@@ -1571,8 +1571,8 @@ def test_parakeet_tower_metal(tst : T?) {
             var blk_delta = 0l
             var off_encodes = 0l
             var off_declines = 0l
-            var enc_rel_rms = 0.0
-            var poison_rel_rms = 0.0
+            var enc_rel_l2 = 0.0
+            var poison_rel_l2 = 0.0
             var rows_gpu = 0l
             with_job_que() {
                 setup_dasllama_jobque_()
@@ -1605,19 +1605,19 @@ def test_parakeet_tower_metal(tst : T?) {
                 var inscope stg2 = ParakeetState()
                 set_metal_tower(false)
                 parakeet_log_mel(samples, m.pk, stc)
-                let tt = parakeet_encode(m.pk, stc)
+                parakeet_encode(m.pk, stc)
                 set_metal_tower(true)
                 parakeet_log_mel(samples, m.pk, stg2)
                 let e0 = metal_tower_stats().encodes
                 parakeet_encode(m.pk, stg2)
                 rows_gpu = metal_tower_stats().encodes - e0
-                enc_rel_rms = rel_rms(stc.x, stg2.x, tt * m.pk.n_state)
+                enc_rel_l2 = rel_l2(stg2.x, stc.x)
                 // the control: the same clip with its mel scaled x3 through the GPU chain must red the bar
                 for (i in range(length(stg2.mel.data))) {
                     stg2.mel.data[i] *= 3.0
                 }
                 parakeet_encode(m.pk, stg2)
-                poison_rel_rms = rel_rms(stc.x, stg2.x, tt * m.pk.n_state)
+                poison_rel_l2 = rel_l2(stg2.x, stc.x)
             }
             t |> success(parakeet_gpu_serves(), "the driver reports serving with the tower on")
             t |> success(!parakeet_serves_q8(), "the un-pinned lane is the f32 planes while the driver serves")
@@ -1627,9 +1627,9 @@ def test_parakeet_tower_metal(tst : T?) {
             t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
             t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
             // the canary cell's bar (f32 GEMMs both sides; the device GEMM tiles re-order accumulation), logged either way
-            t |> success(enc_rel_rms < 5.0e-2, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
-            t |> success(poison_rel_rms >= 5.0e-2, "a poisoned GPU element reds the bar (rel-rms {poison_rel_rms})")
-            to_log(LOG_INFO, "parakeet mtower encode rel-rms: {enc_rel_rms}\n")
+            t |> success(enc_rel_l2 < 5.0e-2, "GPU encode tracks the CPU rail element-level (rel-l2 {enc_rel_l2})")
+            t |> success(poison_rel_l2 >= 5.0e-2, "a poisoned GPU element reds the bar (rel-l2 {poison_rel_l2})")
+            to_log(LOG_INFO, "parakeet mtower encode rel-l2: {enc_rel_l2}\n")
             to_log(LOG_INFO, "parakeet mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "parakeet mtower GPU eyeball: {gpu_text}\n")
             t |> success(!empty(gpu_text), "non-empty transcript")
@@ -1690,18 +1690,6 @@ def test_parakeet_tower_q8_decline(tst : T?) {
             t |> skip("no Metal build - the parakeet FastConformer driver has no device to decline")
         }
     }
-}
-
-//! the encoder rows' distance as a fraction of their magnitude: sqrt(sum (a-b)^2 / sum a^2) over the first n
-def private rel_rms(a, b : array<float>; n : int64) : float {
-    var sd = 0.0lf
-    var sa = 0.0lf
-    for (i in range64(n)) {
-        let df = a[i] - b[i]
-        sd += double(df * df)
-        sa += double(a[i] * a[i])
-    }
-    return float(sqrt(sd / max(sa, 1.0e-18lf)))
 }
 
 def private parakeet_transcribe_text(path : string; samples : array<float>; cached : bool = true) : tuple<text : string; mapped : bool> {
@@ -2271,7 +2259,7 @@ def test_gemma4a_tower_metal(t : T?) {
             var nlayer = 0l
             var enc_delta = 0l
             var blk_delta = 0l
-            var enc_rel_rms = 0.0
+            var enc_rel_l2 = 0.0
             with_job_que() {
                 setup_dasllama_jobque_()
                 var dec <- load_model_(dec_path, QuantMode.q8)
@@ -2302,14 +2290,14 @@ def test_gemma4a_tower_metal(t : T?) {
                 set_metal_tower(true)
                 gemma4a_log_mel(enc, samples, 0l, long_length(samples), stg)
                 gemma4a_encode(enc, stg)
-                enc_rel_rms = rel_rms(stc.out, stg.out, long_length(stc.out))
+                enc_rel_l2 = rel_l2(stg.out, stc.out)
                 reset_gemma4a_q8()
                 delete dec
             }
             t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
             t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
             //! measured 3.9e-4 on the jfk fixture (12 blocks, window-12 attention caps the mixing)
-            t |> success(enc_rel_rms < 5.0e-3, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
+            t |> success(enc_rel_l2 < 5.0e-3, "GPU encode tracks the CPU rail element-level (rel-l2 {enc_rel_l2})")
             to_log(LOG_INFO, "gemma4a mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "gemma4a mtower GPU eyeball: {gpu_text}\n")
             t |> success(!empty(gpu_text), "non-empty transcript")
@@ -2343,8 +2331,8 @@ def test_canary_tower_metal(t : T?) {
             var nlayer = 0l
             var enc_delta = 0l
             var blk_delta = 0l
-            var enc_rel_rms = 0.0
-            var poison_rel_rms = 0.0
+            var enc_rel_l2 = 0.0
+            var poison_rel_l2 = 0.0
             var rows_gpu = 0l
             with_job_que() {
                 setup_dasllama_jobque_()
@@ -2379,13 +2367,13 @@ def test_canary_tower_metal(t : T?) {
                 let e0 = metal_tower_stats().encodes
                 canary_encode(enc, stg)
                 rows_gpu = metal_tower_stats().encodes - e0
-                enc_rel_rms = rel_rms(stc.out, stg.out, long_length(stc.out))
+                enc_rel_l2 = rel_l2(stg.out, stc.out)
                 // the control: the same clip with its mel scaled x3 through the GPU chain must red the bar
                 for (i in range(length(stg.mel))) {
                     stg.mel[i] *= 3.0
                 }
                 canary_encode(enc, stg)
-                poison_rel_rms = rel_rms(stc.out, stg.out, long_length(stc.out))
+                poison_rel_l2 = rel_l2(stg.out, stc.out)
                 reset_canary_enc_q8()
                 delete dec
             }
@@ -2394,9 +2382,9 @@ def test_canary_tower_metal(t : T?) {
             //! measured 3.1e-4 on the jfk fixture (f32 GEMMs both sides; the online-softmax
             //! attention re-orders accumulation) - the bar leaves deep-GPU headroom
             t |> equal(rows_gpu, 1l, "the rows compare's GPU encode dispatched")
-            t |> success(enc_rel_rms < 5.0e-2, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
-            t |> success(poison_rel_rms >= 5.0e-2, "a poisoned GPU element reds the bar (rel-rms {poison_rel_rms})")
-            to_log(LOG_INFO, "canary mtower encode rel-rms: {enc_rel_rms}\n")
+            t |> success(enc_rel_l2 < 5.0e-2, "GPU encode tracks the CPU rail element-level (rel-l2 {enc_rel_l2})")
+            t |> success(poison_rel_l2 >= 5.0e-2, "a poisoned GPU element reds the bar (rel-l2 {poison_rel_l2})")
+            to_log(LOG_INFO, "canary mtower encode rel-l2: {enc_rel_l2}\n")
             to_log(LOG_INFO, "canary mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "canary mtower GPU eyeball: {gpu_text}\n")
             t |> success(!empty(gpu_text), "non-empty transcript")
@@ -2442,22 +2430,14 @@ def test_qwen3a_tower_q8_ab(t : T?) {
             var inscope winf <- qwen3a_mel_window(mel, 0l)
             qwen3a_encode(twf, encf, csf, winf)
         }
-        var maxd = 0.0
-        var maxa = 0.0
-        var sd = 0.0lf
-        var sa = 0.0lf
         let nv = long_length(encq.out)
-        for (i in range64(nv)) {
-            let df = encq.out[i] - encf.out[i]
-            maxd = max(maxd, abs(df))
-            maxa = max(maxa, abs(encf.out[i]))
-            sd += double(df * df)
-            sa += double(encf.out[i] * encf.out[i])
+        t |> equal(nv, long_length(encf.out), "the q8 and f32 cores encode one window's rows")
+        if (nv == long_length(encf.out)) {
+            let rel = rel_l2(encq.out, encf.out)
+            to_log(LOG_INFO, "qwen3a q8-vs-f32 window 0: rel-l2 {rel}, maxdiff {logits_maxdiff(encq.out, encf.out)} (signal max {logits_maxabs(encf.out)}) over {nv} values\n")
+            // element-level tripwire; the real gate is transcript-level (test_qwen3a_transcribe_q8_ab)
+            t |> success(rel < 0.05, "q8 core tracks the f32 rail (element-level bar)")
         }
-        let rel_rms = float(sqrt(sd / max(sa, 1.0e-18lf)))
-        to_log(LOG_INFO, "qwen3a q8-vs-f32 window 0: rel-rms {rel_rms}, maxdiff {maxd} (signal max {maxa}) over {nv} values\n")
-        // element-level tripwire; the real gate is transcript-level (test_qwen3a_transcribe_q8_ab)
-        t |> success(rel_rms < 0.05, "q8 core tracks the f32 rail (element-level bar)")
         reset_qwen3a_q8()
         delete samples
     }
@@ -2538,7 +2518,7 @@ def test_qwen3a_metal_tower(tst : T?) {
             var enc_delta = 0l
             var blk_delta = 0l
             var conv_delta = 0l
-            var enc_rel_rms = 0.0
+            var enc_rel_l2 = 0.0
             with_job_que() {
                 setup_dasllama_jobque_()
                 var dec <- load_model_(dec_path, QuantMode.q8)
@@ -2576,7 +2556,7 @@ def test_qwen3a_metal_tower(tst : T?) {
                 set_metal_tower(true)
                 var inscope w2 <- qwen3a_mel_window(mel, 0l)
                 qwen3a_encode(tw, egpu, c2, w2)
-                enc_rel_rms = rel_rms(ecpu.out, egpu.out, long_length(ecpu.out))
+                enc_rel_l2 = rel_l2(egpu.out, ecpu.out)
                 set_metal_tower_f16(true)
                 let tw0 = metal_tower_f16_encodes()
                 var twin_text = ""
@@ -2594,7 +2574,7 @@ def test_qwen3a_metal_tower(tst : T?) {
             t |> success(conv_delta >= 1l, "the conv2d frontend served on the GPU ({conv_delta} convs)")
             // 5e-3, not 1e-3: the tower's attention score slab is f16 (written half once,
             // read half twice) - measured 2.5e-3 on the jfk fixture; transcripts stay exact
-            t |> success(enc_rel_rms < 5.0e-3, "GPU encode tracks the CPU rail element-level (rel-rms {enc_rel_rms})")
+            t |> success(enc_rel_l2 < 5.0e-3, "GPU encode tracks the CPU rail element-level (rel-l2 {enc_rel_l2})")
             to_log(LOG_INFO, "qwen3a mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "qwen3a mtower GPU eyeball: {gpu_text}\n")
             t |> success(!empty(gpu_text), "non-empty transcript")

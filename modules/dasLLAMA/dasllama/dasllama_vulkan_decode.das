@@ -56,7 +56,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     let esz = kv16 ? 2l : 4l
     // every region and its slack bind in one range: past maxStorageBufferRange, or the shaders' uint word index, every mirror read is undefined
     let mir_bound = (mir_elems + RDEC_MIR_SLACK) * regions
-    if (mir_bound * esz > vk_max_storage_range() || mir_bound > 4_294_967_295l) {
+    if (!vk_range_ok(mir_bound * esz) || mir_bound > 4_294_967_295l) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_attn} layers x {seq_cap} positions, {mir_elems} elements a side plus the {RDEC_MIR_SLACK} slack) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index\n")
         return false
     }
@@ -77,8 +77,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     if (g_gpu.dry) {
         return true   // guards above ARE the plan decision; everything below is device state
     }
-    if (hybrid && (dn.nvh * dn.ds * dn.ds * 4l * regions > vk_max_storage_range()
-            || (DN_SM_HIST + regions * 2l * dn.cd * (dn.dconv - 1l) + DN_SM_SLACK) * 4l > vk_max_storage_range())) {   //! a layer's state slots and its ring pairs each bind as one range
+    if (hybrid && (!vk_range_ok(dn.nvh * dn.ds * dn.ds * 4l * regions)
+            || !vk_range_ok((DN_SM_HIST + regions * 2l * dn.cd * (dn.dconv - 1l) + DN_SM_SLACK) * 4l))) {   //! a layer's state slots and its ring pairs each bind as one range
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the deltanet state slots ({regions} regions x {dn.nvh} heads x {dn.ds}^2) pass the device's storage range {vk_max_storage_range()}\n")
         return false
     }
@@ -474,7 +474,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the MoE geometry ({ne} experts, {k} routed, expert width {nfe}, dim {dim}) is outside the routing kernels' reach\n")
         return false
     }
-    if (n_moe * ner * dim * 4l > vk_max_storage_range()) {   //! the router plane binds as one range
+    if (!vk_range_ok(n_moe * ner * dim * 4l)) {   //! the router plane binds as one range
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the router plane ({n_moe} layers x {ner} rows x {dim}) passes the device's storage range {vk_max_storage_range()}\n")
         return false
     }
@@ -520,7 +520,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     } else {
         assert(long_length(gbias) == n_moe * ne * nfe && long_length(ubias) == n_moe * ne * nfe && long_length(dbias) == n_moe * ne * dim,
             "vk_rdec_prepare_moe: the expert-bias planes are not [n_moe x ne x nfe] / [n_moe x ne x dim]")
-        if (max(long_length(gbias), long_length(dbias)) * 4l > vk_max_storage_range()) {   //! each bias plane binds as one range
+        if (!vk_range_ok(max(long_length(gbias), long_length(dbias)) * 4l)) {   //! each bias plane binds as one range
             to_log(LOG_WARNING, "dasLLAMA vulkan resident: an expert-bias plane ({n_moe} layers x {ne} experts x {max(nfe, dim)}) passes the device's storage range {vk_max_storage_range()}\n")
             return false
         }
@@ -1123,7 +1123,7 @@ def private rd_form_at(pos : int64) : RdForm {
     return (g_rd.wide_on && pos >= RD_WIDE_POS) ? RdForm.wide : RdForm.split
 }
 
-//! the wide twin: the same chain at RD_SPLIT_WIDE_PIECES into `cmd_wide`, its stamp names kept apart (sec.2.2al)
+//! the wide twin: the same chain at RD_SPLIT_WIDE_PIECES into `cmd_wide`, its stamp names kept apart (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
 [cold_path]
 def private rd_record_wide_twin {
     var split_names <- g_rdq_stamp_names
@@ -2347,7 +2347,7 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
         maxpos = max(maxpos, poss[i])
     }
     //! the rows' form is the batch's furthest row's: the unsplit twin while every row sits under RD_UNSPLIT_POS, the split
-    //! form past it at every span (the ruler reads the wide form slower at four rows, sec.2.2al)
+    //! form past it at every span (the ruler reads the wide form slower at four rows, ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
     let unsplit = g_rd.unsplit_on && maxpos < RD_UNSPLIT_POS
     let form = unsplit ? RdForm.unsplit : RdForm.split
     let prof = vk_prof()

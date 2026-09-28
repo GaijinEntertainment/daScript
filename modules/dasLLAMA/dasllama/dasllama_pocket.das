@@ -14,6 +14,8 @@ require dasllama/dasllama_common   // reserve_resize
 require dasllama/dasllama_math
 require dasllama/dasllama_spm
 require dasllama/dasllama_unicode
+require dasllama/dasllama_tower   // add_inplace_rows: the residual add the block home shares with the towers
+require dasllama/dasllama_gpu_math   // tts_modulate
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 
@@ -208,7 +210,7 @@ def finalize(var m : PocketModel) {
     delete m.tok
 }
 
-//! The activation carrier one synthesis reuses (`ARCHITECTURE_TTS_MEMORY.md` sec.2.31's discipline): every stage buffer a
+//! The activation carrier one synthesis reuses (`ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier`'s discipline): every stage buffer a
 //! `@scratch` field grown once, the waveform the output.
 struct PocketScratch {
     @scratch @exact_size rows : array<float>     // the transformer's residual rows
@@ -304,11 +306,7 @@ def private read_arr(m : GGUFMeta; bytes : array<uint8> | #; name : string) : ar
     return <- gguf_read_f32_arr(m, bytes, name, "pocket")
 }
 
-def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) : TtsWeight {
-    var w = TtsWeight()
-    w.a <- read_arr(m, bytes, name)
-    return <- w
-}
+def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) : TtsWeight => TtsWeight(a <- read_arr(m, bytes, name))
 
 // a Q8_0 tensor of the published file: its blocks go straight into the int8 plane on the q8 lane
 var private g_stage_file_q8 = false   // the file's `pocket.weights` says q8: its Q8_0 tensors are in the kernels' layout
@@ -701,8 +699,7 @@ def private layer_attention(l : PocketLayer; tf : PocketTransformer; var x : arr
                             var kc : TtsKvCache; var sc : PocketScratch) {
     let d = tf.d
     let dh = d / tf.heads
-    copy_rows(sc.xb, x, t * d)
-    layernorm_rows(sc.xb, t, d, l.norm1, tf.eps)
+    layernorm_rows_into(x, sc.xb, t, d, l.norm1, tf.eps)
     proj(l.in_proj, sc.xb, t, sc.qkv)
     split_qkv(sc.qkv, t, d, sc.q, sc.k, sc.v)
     rope_rows(sc.q, t, d, dh, pos0, tf.period)
@@ -713,20 +710,19 @@ def private layer_attention(l : PocketLayer; tf : PocketTransformer; var x : arr
     if (!empty(l.scale1.a)) {
         layer_scale_rows(sc.xb, t, d, l.scale1.a)
     }
-    add_rows(x, sc.xb, t * d)
+    add_inplace_rows(x, sc.xb, t * d)
 }
 
 def private layer_ffn(l : PocketLayer; tf : PocketTransformer; var x : array<float>; t : int64; var sc : PocketScratch) {
     let d = tf.d
-    copy_rows(sc.xb, x, t * d)
-    layernorm_rows(sc.xb, t, d, l.norm2, tf.eps)
+    layernorm_rows_into(x, sc.xb, t, d, l.norm2, tf.eps)
     proj(l.ffn1, sc.xb, t, sc.h)
     gelu(sc.h, t * tf.ffn)
     proj(l.ffn2, sc.h, t, sc.xb)
     if (!empty(l.scale2.a)) {
         layer_scale_rows(sc.xb, t, d, l.scale2.a)
     }
-    add_rows(x, sc.xb, t * d)
+    add_inplace_rows(x, sc.xb, t * d)
 }
 
 //! `t` rows of x [t][d] through the transformer at positions pos0.., every layer's keys and
@@ -767,10 +763,7 @@ def private carry_init(var cr : PocketConvCarry; c : TtsConv1d) {
 //! the first window's carry for a conv whose pad replicates the edge: `n` copies of the window's first row
 def private carry_replicate(var cr : PocketConvCarry; x : array<float>; n, w : int64) {
     cr.n = n
-    cr.rows |> reserve_resize(n * w)
-    for (r in range64(n)) {
-        copy_floats(x, 0l, cr.rows, r * w, w)
-    }
+    pad_edge_left_rows(x, 0l, w, n, cr.rows)
 }
 
 //! x [n][cin], one window of a stream, through a codec conv: the carried rows lead the window,
@@ -819,7 +812,7 @@ def private res_conv_stream(b : PocketResConv; var cr : PocketConvCarry; x : arr
     stream_conv(b.conv1, cr, sc.cc, t, sc, sc.cpad)
     elu_rows(sc.cpad, t * b.conv1.cout_s)
     conv1d_rows(b.conv2, sc.cpad, t, y)
-    add_rows(y, x, t * w)
+    add_inplace_rows(y, x, t * w)
 }
 
 //! the window in frames a stream runs: the knob, else the whole run
@@ -1268,15 +1261,15 @@ def private frame_step(m : PocketModel; var vs : PocketVoiceState; pos : int64; 
     let d = m.backbone.d
     linear_rows_decode(m.input_linear, sc.x_in, sc.rows)
     transformer_rows(m.backbone, sc.rows, 1l, pos, vs.caches, sc)
-    copy_rows(sc.cond, sc.rows, d)
-    layernorm_rows(sc.cond, 1l, d, m.out_norm, m.backbone.eps)
+    layernorm_rows_into(sc.rows, sc.cond, 1l, d, m.out_norm, m.backbone.eps)
     linear_vec(m.out_eos, sc.cond, sc.eos)
     return sc.eos[0]
 }
 
-def private modulate(var x : array<float>; mod : array<float>; n : int64) {
+//! The flow head's adaLN modulation of one row in place: x * (1 + scale) + shift, `mod` holding the shift half then the scale half.
+def modulate(var x : array<float>; mod : array<float>; n : int64) {
     for (j in range64(n)) {
-        x[j] = x[j] * (1.0 + mod[n + j]) + mod[j]
+        x[j] = tts_modulate(x[j], mod[j], mod[n + j])
     }
 }
 
@@ -1291,8 +1284,7 @@ def private head_step(hd : PocketHead; var sc : PocketScratch) {
     linear_vec(hd.input_proj, sc.x0, sc.hx)
     for (b in hd.blocks) {
         linear_vec(b.adaln, sc.hy, sc.hmod)
-        copy_rows(sc.hn, sc.hx, n)
-        layernorm_rows(sc.hn, 1l, n, b.ln, POCKET_HEAD_LN_EPS)
+        layernorm_rows_into(sc.hx, sc.hn, 1l, n, b.ln, POCKET_HEAD_LN_EPS)
         modulate(sc.hn, sc.hmod, n)
         linear_vec(b.mlp1, sc.hn, sc.hm)
         silu(sc.hm, n)
@@ -1302,8 +1294,7 @@ def private head_step(hd : PocketHead; var sc : PocketScratch) {
         }
     }
     linear_vec(hd.final_adaln, sc.hy, sc.hmod)
-    copy_rows(sc.hn, sc.hx, n)
-    layernorm_rows(sc.hn, 1l, n, hd.final_ln, POCKET_HEAD_LN_EPS)
+    layernorm_rows_into(sc.hx, sc.hn, 1l, n, hd.final_ln, POCKET_HEAD_LN_EPS)
     modulate(sc.hn, sc.hmod, n)
     linear_vec(hd.final_linear, sc.hn, sc.x1)
     for (j in range64(long_length(sc.x1))) {
@@ -1314,7 +1305,8 @@ def private head_step(hd : PocketHead; var sc : PocketScratch) {
 //! The flow head alone, the parity rail's seam: the normalized frame `x1` the head samples from a
 //! conditioning row and a noise draw.
 def pocket_head(m : PocketModel; cond, x0 : array<float>; var sc : PocketScratch; @scratch @exact_size var x1 : array<float>) {
-    copy_rows(sc.cond, cond, m.backbone.d)
+    sc.cond |> reserve_resize(m.backbone.d)
+    copy_floats(cond, 0l, sc.cond, 0l, m.backbone.d)
     sc.x0 |> reserve_resize(m.latent_dim)
     for (j in range64(m.latent_dim)) {
         sc.x0[j] = x0[j]
@@ -1363,6 +1355,56 @@ def pocket_eos_stops(m : PocketModel; eos : float; frame : int64; frames_after_e
         eos_at = frame
     }
     return eos_at >= 0l && frame >= eos_at + int64(frames_after_eos)
+}
+
+var private g_pocket_frame_batch = 8l   //! the frames a GPU seat's submit carries: the host walks the EOS rule between submits
+
+//! the frames one GPU submit of the frame loop carries before the host reads their EOS logits, clamped to one or more
+[cold_path]
+def set_pocket_frame_batch(n : int64) {
+    g_pocket_frame_batch = max(n, 1l)
+}
+
+def pocket_frame_batch() : int64 => g_pocket_frame_batch
+
+//! a GPU seat's frame loop: `noise(k)` takes a batch's draws, `run(first, k)` submits the batch at its first frame (false fails: frames -1), `eos(first, i)` reads a logit
+def pocket_frames_batched(m : PocketModel; batch, max_frames : int64; std : float; frames_after_eos : int; captured : array<float>;
+                          var sc : PocketScratch; var f0 : int64&; noise : block<(k : int64) : float?>; run : block<(first, k : int64) : bool>;
+                          eos : block<(first, i : int64) : float>) : tuple<frames : int64; eos_at : int64> {
+    let ld = m.latent_dim
+    var frames = 0l
+    var eos_at = -1l
+    var done = false
+    while (!done && f0 < max_frames) {
+        let k = min(batch, max_frames - f0)
+        let rb = sc.rng
+        let frames_before = frames
+        var np = invoke(noise, k)
+        for (i in range64(k * ld)) {
+            unsafe(np[i]) = pocket_noise_at(sc, captured, f0 * ld + i, std)
+        }
+        return (frames = -1l, eos_at = -1l) if (!invoke(run, f0, k))
+        for (i in range64(k)) {
+            let f = f0 + i
+            let e = invoke(eos, f0, i)
+            sc.eos_logits[f] = e
+            if (pocket_eos_stops(m, e, f, frames_after_eos, eos_at)) {
+                done = true
+                break
+            }
+            frames++
+        }
+        if (frames - frames_before < k) {
+            sc.rng = rb
+            for (i in range64((frames - frames_before) * ld)) {
+                if (f0 * ld + i >= long_length(captured)) {
+                    rng_normal(sc.rng)
+                }
+            }
+        }
+        f0 += k
+    }
+    return (frames = frames, eos_at = eos_at)
 }
 
 [cold_path]

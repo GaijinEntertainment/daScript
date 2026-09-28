@@ -2303,6 +2303,39 @@ def subarray(a : array<auto(TT)>; r : urange) {
     return <- ra
 }
 
+def subarray(a : auto(TT)[]; r : range64) {
+    var ra : array<TT -const -&>
+    if (r.x < r.y) {
+        ra |> reserve(r.y - r.x)
+        for (t in r) {
+            ra |> push_clone(a[t])
+        }
+    }
+    return <- ra
+}
+
+def subarray(a : array<auto(TT)> ==const; r : range64) {
+    var ra : array<TT -const -&>
+    if (r.x < r.y) {
+        ra |> reserve(r.y - r.x)
+        for (t in r) {
+            ra |> push_clone(a[t])
+        }
+    }
+    return <- ra
+}
+
+def subarray(var a : array<auto(TT)> ==const; r : range64) {
+    var ra : array<TT -const -&>
+    if (r.x < r.y) {
+        ra |> reserve(r.y - r.x)
+        for (t in r) {
+            ra |> push_clone(a[t])
+        }
+    }
+    return <- ra
+}
+
 def move_to_ref(var a : auto&; var b) {
     static_if (typeinfo is_ref_type(a)) {
         static_if (typeinfo can_move(a)) {

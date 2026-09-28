@@ -375,7 +375,7 @@ struct public VulkanEnv {
     @clarg_doc = "Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths."
     vk_fa : bool = true
 
-    @clarg_doc = "Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v) and the audio towers' (the whisper-class towers, gemma4a, canary) on the Vulkan tower driver - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 pins the CPU tower chain, announced once as the knob decline."
+    @clarg_doc = "Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v), the audio towers' (the whisper-class towers, gemma4a, canary) and the TTS seats (the StyleTTS2 families kitten and kokoro, Pocket) on the Vulkan tower and TTS drivers - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 pins the CPU chains, announced once as the knob decline."
     vk_tower : bool = true
 
     @clarg_doc = "Serve the whisper decoder side (the per-window cross-KV and the decode step) on the Vulkan ASR-decoder driver - the announce is `dasLLAMA vulkan wdec: the whisper decoder serves on the device`, once per model; 0 pins the CPU decoder, announced once as the knob decline."

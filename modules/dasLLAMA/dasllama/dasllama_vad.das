@@ -11,6 +11,7 @@ require daslib/fio
 require daslib/array_boost
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
+require dasllama/dasllama_gpu_math   // sigmoid_f32
 
 // Silero-VAD (v6, 16 kHz) — native reimplementation. Oracle = onnxruntime on the official
 // silero_vad_16k_op15.onnx (proven bit-exact); weights convert from that graph's initializers
@@ -218,10 +219,6 @@ def private sv_conv1d_relu(var out : array<float>; inp : array<float>; w : array
     }
 }
 
-def private sv_sigmoid(x : float) : float {
-    return 1.0 / (1.0 + exp(-x))
-}
-
 //! Advance one 512-sample chunk and return its speech probability, updating streaming state.
 //! `chunk` must hold exactly SV_CHUNK samples (16 kHz mono f32).
 [hot_path]
@@ -258,9 +255,9 @@ def vad_chunk_prob(m : VadModel; var st : VadState; chunk : array<float> | #) : 
         let gf = st.gates[SV_HIDDEN + j]      + st.gates2[SV_HIDDEN + j]      + m.lstm_b[SV_HIDDEN + j]
         let gg = st.gates[2l * SV_HIDDEN + j] + st.gates2[2l * SV_HIDDEN + j] + m.lstm_b[2l * SV_HIDDEN + j]
         let go = st.gates[3l * SV_HIDDEN + j] + st.gates2[3l * SV_HIDDEN + j] + m.lstm_b[3l * SV_HIDDEN + j]
-        let ig = sv_sigmoid(gi)
-        let fg = sv_sigmoid(gf)
-        let og = sv_sigmoid(go)
+        let ig = sigmoid_f32(gi)
+        let fg = sigmoid_f32(gf)
+        let og = sigmoid_f32(go)
         let cg = tanh(gg)
         let cn = fg * st.c[j] + ig * cg
         st.c[j] = cn
@@ -270,7 +267,7 @@ def vad_chunk_prob(m : VadModel; var st : VadState; chunk : array<float> | #) : 
     // 5. decoder: relu(h) -> final_conv (128->1) -> sigmoid
     for (j in range64(SV_HIDDEN)) { st.reluh[j] = max(st.h[j], 0.0) }
     matmul(st.out1, m.final_w, st.reluh, SV_HIDDEN, 1l)
-    let prob = sv_sigmoid(st.out1[0] + m.final_b)
+    let prob = sigmoid_f32(st.out1[0] + m.final_b)
 
     // 6. carry context forward (last 64 of chunk)
     for (i in range64(SV_CONTEXT)) { st.context[i] = chunk[SV_CHUNK - SV_CONTEXT + i] }

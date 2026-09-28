@@ -71,7 +71,7 @@ workload, a program this repository does not build - write a reference-engine ro
 
 **A file under `records/mtp/` is written only by `../harness/mtp_ruler.das`, never by hand; a
 diff that adds one names the ruler command line in the PR body.** The ruler record is the
-speculative round's cell (`../ARCHITECTURE_MEASUREMENT.md` sec.2.45); its shape is the ruler's,
+speculative round's cell (`../ARCHITECTURE_MEASUREMENT.md#ruler-records`); its shape is the ruler's,
 and the board walkers (`list_record_stores`) do not read it.
 
 **A diff that adds or changes a `records/mtp/` file names its engines in `meta.das_sha`, and in

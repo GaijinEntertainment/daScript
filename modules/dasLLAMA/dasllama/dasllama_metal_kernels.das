@@ -5442,24 +5442,12 @@ struct St2ConvArgs {
     xs : uint
 }
 
-//! A forward conv's source row for output row r at tap - (r0 + r) * stride + tap * dil - pad_l - or -1 off the input.
-def st2_conv_src_fwd_row(r, tap, r0, pad_l, dil, stride, t_in : uint) : int {
-    let st = int((r0 + r) * stride + tap * dil) - int(pad_l)
-    return (st >= 0 && uint(st) < t_in) ? st : -1
-}
-
-//! The transposed conv's: the source row whose stride lands the tap on output row r, or -1.
-def st2_conv_src_tr_row(r, tap, r0, pad_l, dil, stride, t_in : uint) : int {
-    let q = int(r0 + r + pad_l) - int(tap * dil)
-    return (q >= 0 && uint(q) % stride == 0u && uint(q) / stride < t_in) ? int(uint(q) / stride) : -1
-}
-
 //! The float4 index of a forward conv's output row rr 8-run at column kk, or 0xFFFFFFFF where the run reads zeros.
 def st2_conv_b_src_fwd(rr, kk, rows, k, cin, r0, pad_l, dil, stride, t_in, xs : uint) : uint {
     if (rr >= rows || kk >= k * cin) {
         return 0xFFFFFFFF
     }
-    let st = st2_conv_src_fwd_row(rr, kk / cin, r0, pad_l, dil, stride, t_in)
+    let st = conv_src_fwd_row(rr, kk / cin, r0, pad_l, dil, stride, t_in)
     return st >= 0 ? (uint(st) * xs + kk % cin) / 4u : 0xFFFFFFFF
 }
 
@@ -5468,7 +5456,7 @@ def st2_conv_b_src_tr(rr, kk, rows, k, cin, r0, pad_l, dil, stride, t_in, xs : u
     if (rr >= rows || kk >= k * cin) {
         return 0xFFFFFFFF
     }
-    let st = st2_conv_src_tr_row(rr, kk / cin, r0, pad_l, dil, stride, t_in)
+    let st = conv_src_tr_row(rr, kk / cin, r0, pad_l, dil, stride, t_in)
     return st >= 0 ? (uint(st) * xs + kk % cin) / 4u : 0xFFFFFFFF
 }
 
@@ -8688,7 +8676,7 @@ class MetalMoeGemvIq2xxs : MetalKqGemvIq2xxsFam {
     }
 }
 
-// the F4 twin serves only under the box's serving-confirm crown (ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md sec.2.21)
+// the F4 twin serves only under the box's serving-confirm crown (ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity)
 [metal_dispatch(name = "enc_kq_iq2xxs_f4_c", pso = "g_pso_kq_iq2xxs_f4", tgmem = "MetalKqGemvIq2xxsF4_metal_kq_gemv_iq2xxs_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvIq2xxsF4 : MetalKqGemvIq2xxsFam {
     @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
@@ -9924,7 +9912,7 @@ class MetalDnConv {
             acc += xv * w[ch * dconv + k]
             k++
         }
-        y[(ka.row + p) * cd + ch] = acc / (1.0 + exp(-acc))
+        y[(ka.row + p) * cd + ch] = silu_f32(acc)
     }
 }
 
@@ -10059,7 +10047,7 @@ class MetalDnScan {
         while (p < npos) {
             let gr = graw[(ka.row + p) * nvh + h] + dt_h
             let dec = exp(a_h * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
-            let beta = 1.0 / (1.0 + exp(-braw[(ka.row + p) * nvh + h]))
+            let beta = sigmoid_f32(braw[(ka.row + p) * nvh + h])
             let cb = (ka.row + p) * cd
             var kv4 : float[4]
             var sk = 0.0
@@ -10480,9 +10468,9 @@ class template MetalSt2Im2colT {
             let ci = j % ka.cin
             var st = -1
             static_if (TRANSPOSED) {
-                st = st2_conv_src_tr_row(r, tap, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in)
+                st = conv_src_tr_row(r, tap, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in)
             } else {
-                st = st2_conv_src_fwd_row(r, tap, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in)
+                st = conv_src_fwd_row(r, tap, ka.r0, ka.pad_l, ka.dil, ka.stride, ka.t_in)
             }
             if (st >= 0) {
                 v = src_at(uint(st), ci)
@@ -10583,11 +10571,9 @@ class template MetalSt2AdainT {
             return
         }
         let ci = gid % ka.c
-        let rs = 1.0 / sqrt(stats[ka.c + ci] / float(ka.t) + ka.eps)
-        let g = gw[ci]
-        let g1 = 1.0 + h[ci]
-        let scale = rs * g * g1
-        let shift = (gb[ci] - stats[ci] * rs * g) * g1 + h[ka.c + ci]
+        var scale = 0.0
+        var shift = 0.0
+        tts_adain_affine(stats[ci], stats[ka.c + ci], float(ka.t), ka.eps, gw[ci], gb[ci], h[ci], h[ka.c + ci], scale, shift)
         let v = x[gid] * scale + shift
         static_if (SNAKE) {
             let a = alpha[ci]
@@ -10791,7 +10777,7 @@ class MetalSt2PoolDw {
         var acc = b[j]
         var kk = 0u
         while (kk < ka.k) {
-            let src = st2_conv_src_tr_row(p, kk, 0u, ka.pad_l, ka.dil, ka.stride, ka.t_in)
+            let src = conv_src_tr_row(p, kk, 0u, ka.pad_l, ka.dil, ka.stride, ka.t_in)
             if (src >= 0) {
                 acc += w[j * ka.k + kk] * x[uint(src) * ka.c + j]
             }
@@ -10800,9 +10786,6 @@ class MetalSt2PoolDw {
         y[gid] = acc
     }
 }
-
-//! tanh clamped to +-15, where it already saturates: past that the fast-math tanh answers NaN, the CPU +-1.
-def st2_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
 
 //! One LSTM direction on 4 x hidden lanes; xg holds the GEMM's input gates x . w_ih^T + b as [t x xgs].
 struct St2LstmArgs {
@@ -10855,11 +10838,11 @@ class MetalSt2Lstm {
                 let gf = xg[ti * ka.xgs + hd + j] + gsh[hd + j]
                 let gg = xg[ti * ka.xgs + 2u * hd + j] + gsh[2u * hd + j]
                 let go = xg[ti * ka.xgs + 3u * hd + j] + gsh[3u * hd + j]
-                let si = 1.0 / (1.0 + exp(-gi))
-                let sf = 1.0 / (1.0 + exp(-gf))
-                let so = 1.0 / (1.0 + exp(-go))
-                cst = sf * cst + si * st2_tanh(gg)
-                let hn = so * st2_tanh(cst)
+                let si = sigmoid_f32(gi)
+                let sf = sigmoid_f32(gf)
+                let so = sigmoid_f32(go)
+                cst = sf * cst + si * tts_tanh(gg)
+                let hn = so * tts_tanh(cst)
                 hsh[j] = hn
                 y[ti * ka.ystride + ka.yoff + j] = hn
             }
@@ -10942,7 +10925,7 @@ class MetalSt2Attn {
 //! The CPU gelu's tanh form at full precision: the LUT form's two f16 roundings would move the front end's durations.
 [metal_dispatch(name = "enc_st2_gelu_tanh", pso = "g_pso_st2_gelu_tanh", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalSt2GeluTanh : MetalEw1BaseT {
-    def override map(a : float) : float => 0.5 * a * (1.0 + st2_tanh(0.7978845608028654 * (a + 0.044715 * a * a * a)))
+    def override map(a : float) : float => tts_gelu_tanh(a)
 
     [metal_kernel(name="metal_st2_gelu_tanh_msl")]
     def metal_st2_gelu_tanh {
@@ -10968,7 +10951,7 @@ class MetalSt2SigSum {
         var acc = 0.0
         var j = 0u
         while (j < nb) {
-            acc += 1.0 / (1.0 + exp(-logits[gid * ls + j]))
+            acc += sigmoid_f32(logits[gid * ls + j])
             j++
         }
         raw[gid] = acc / speed   //! the CPU divides; a reciprocal multiply rounds a raw duration apart from it
@@ -10986,68 +10969,6 @@ struct St2SourceArgs {
     voiced_thr : float
     seed : uint
     total : uint
-}
-
-//! The cycles at sample i of harmonic h, the initial phase folded into sample 0 of the overtones.
-def st2_src_rad(f0 : array<float>; noise_u : array<float>; i, h, up : uint; sr : float) : float {
-    let cyc = f0[i / up] * float(h + 1u) / sr
-    let r = cyc - floor(cyc)
-    return (i == 0u && h > 0u) ? r + noise_u[h] : r
-}
-
-//! torch's linear resample taps at output index `to`: the source position, its floor and the next, the two weights.
-def st2_resize_taps_torch(n, to : uint; scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
-    let src = max(0.0, mad(1.0 / scale, float(to) + 0.5, -0.5))
-    i0 = min(uint(src), n - 1u)
-    i1 = min(i0 + 1u, n - 1u)
-    l1 = src - float(i0)
-    l0 = 1.0 - l1
-}
-
-//! onnxruntime's taps: the clamped source position, equal weights where the two taps coincide.
-def st2_resize_taps_onnx(n, to : uint; scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
-    let in_x = clamp((float(to) + 0.5) / scale - 0.5, 0.0, float(n - 1u))
-    i0 = min(uint(in_x), n - 1u)
-    i1 = min(i0 + 1u, n - 1u)
-    if (i0 == i1) {
-        l0 = 0.5
-        l1 = 0.5
-    } else {
-        l0 = abs(in_x - float(i1))
-        l1 = abs(in_x - float(i0))
-    }
-}
-
-def st2_resize_mix_torch(x0, x1, l0, l1 : float) : float => mad(l0, x0, l1 * x1)
-
-//! onnxruntime's trilinear mix in the reference's operation order: the last channel averages itself at quarter weights
-//! through all seven fma terms, every other channel carries only its two nonzero terms (the zero-weight fmas are exact).
-def st2_resize_mix_onnx(x0, x1, l0, l1 : float; last : bool) : float {
-    if (last) {
-        let q0 = (l0 * 0.5) * 0.5
-        let q1 = (l1 * 0.5) * 0.5
-        var acc = mad(q0, x0, q1 * x1)
-        acc = mad(q0, x0, acc)
-        acc = mad(q1, x1, acc)
-        acc = mad(q0, x0, acc)
-        acc = mad(q1, x1, acc)
-        acc = mad(q0, x0, acc)
-        return mad(q1, x1, acc)
-    }
-    let w0 = l0 * 0.5
-    let w1 = l1 * 0.5
-    var acc = mad(w0, x0, w1 * x1)
-    acc = mad(w0, x0, acc)
-    return mad(w1, x1, acc)
-}
-
-def st2_sin_big(phase : float) : float {
-    let k = round(phase * 0.15915493667125702)
-    var r = mad(-k, 6.25, phase)   //! 2 pi in pieces of five significant bits, so k times a piece is exact past a million radians
-    r = mad(-k, 0.033203125, r)
-    r = mad(-k, -1.781781975296326e-05, r)
-    r = mad(-k, -6.608047442568932e-13, r)
-    return sin(r)
 }
 
 //! The low-rate phase increments per harmonic on either resample law (TORCH: the torch taps and
@@ -11071,17 +10992,18 @@ class template MetalSt2SrcLowT {
         var i1 = 0u
         var l0 = 0.0
         var l1 = 0.0
+        let scale = 1.0 / float(ka.up)
         static_if (TORCH) {
-            st2_resize_taps_torch(ka.n, k, 1.0 / float(ka.up), i0, i1, l0, l1)
+            tts_resize_taps_torch(ka.n, k, 1.0 / scale, i0, i1, l0, l1)
         } else {
-            st2_resize_taps_onnx(ka.n, k, 1.0 / float(ka.up), i0, i1, l0, l1)
+            tts_resize_taps_onnx(ka.n, (float(k) + 0.5) / scale, i0, i1, l0, l1)
         }
-        let r0 = st2_src_rad(f0, noise_u, i0, h, ka.up, ka.sr)
-        let r1 = st2_src_rad(f0, noise_u, i1, h, ka.up, ka.sr)
+        let r0 = tts_src_rad(f0[i0 / ka.up] * float(h + 1u) / ka.sr, noise_u[h], i0, h)
+        let r1 = tts_src_rad(f0[i1 / ka.up] * float(h + 1u) / ka.sr, noise_u[h], i1, h)
         static_if (TORCH) {
-            low[gid] = st2_resize_mix_torch(r0, r1, l0, l1)
+            low[gid] = tts_resize_mix_torch(r0, r1, l0, l1)
         } else {
-            low[gid] = st2_resize_mix_onnx(r0, r1, l0, l1, h + 1u == ka.nh)
+            low[gid] = tts_resize_mix_onnx(r0, r1, l0, l1, h + 1u == ka.nh)
         }
     }
 }
@@ -11124,16 +11046,11 @@ class template MetalSt2SrcCumsumT {
         while (k < ka.nlow) {
             let x = low[h * ka.nlow + k]
             static_if (TORCH) {
-                let s = acc + x
-                let bv = s - acc
-                lo += (acc - (s - bv)) + (x - bv)
-                let s2 = s + lo
-                lo = lo - (s2 - s)
-                acc = s2
+                tts_two_sum_add(acc, lo, x)
             } else {
                 acc += x
             }
-            lowc[h * ka.nlow + k] = ((acc * 2.0) * 3.14159265358979) * float(ka.up)
+            lowc[h * ka.nlow + k] = tts_phase_rad(acc, ka.up)
             k++
         }
     }
@@ -11157,26 +11074,6 @@ class MetalSt2SrcCumsumOnnx : MetalSt2SrcCumsumT {
     }
 }
 
-//! The source's own noise: a counter-keyed normal, two hashed uniforms through Box-Muller, not the CPU's PCG32 stream.
-def st2_hash_u32(x : uint) : uint {
-    var v = x * 0x9E3779B1u
-    v ^= v >> 15u
-    v *= 0x85EBCA77u
-    v ^= v >> 13u
-    v *= 0xC2B2AE3Du
-    v ^= v >> 16u
-    return v
-}
-
-def st2_hash_normal(seed, idx : uint) : float {
-    let sh = st2_hash_u32(seed)   //! the seed hashed first: xor-ing a raw seed into the counter aliases seeds a multiple of four apart
-    let a = st2_hash_u32(sh ^ (idx * 2u + 1u))
-    let b = st2_hash_u32(sh ^ (idx * 2u + 2u) ^ 0x6A09E667u)
-    let u1 = (float(a >> 8u) + 1.0) * (1.0 / 16777217.0)
-    let u2 = float(b >> 8u) * (1.0 / 16777216.0)
-    return sqrt(-2.0 * log(u1)) * cos(6.28318530717959 * u2)
-}
-
 //! The source's own noise draw, one normal per (sample, harmonic), into the rows the sines
 //! kernel reads - the captured stream's seat when no stream was captured.
 [metal_dispatch(name = "enc_st2_src_noise", pso = "g_pso_st2_src_noise", tg = 64, grid = "total/64", params = "total : int64")]
@@ -11190,7 +11087,7 @@ class MetalSt2SrcNoise {
         if (gid >= ka.n * ka.nh) {
             return
         }
-        noise_n[gid] = st2_hash_normal(ka.seed, gid)
+        noise_n[gid] = tts_hash_normal(ka.seed, gid)
     }
 }
 
@@ -11217,26 +11114,25 @@ class template MetalSt2SrcSinesT {
         var l0 = 0.0
         var l1 = 0.0
         static_if (TORCH) {
-            st2_resize_taps_torch(ka.nlow, i, float(ka.up), i0, i1, l0, l1)
+            tts_resize_taps_torch(ka.nlow, i, 1.0 / float(ka.up), i0, i1, l0, l1)
         } else {
-            st2_resize_taps_onnx(ka.nlow, i, float(ka.up), i0, i1, l0, l1)
+            tts_resize_taps_onnx(ka.nlow, (float(i) + 0.5) / float(ka.up), i0, i1, l0, l1)
         }
         let uv = f0[i / ka.up] > ka.voiced_thr ? 1.0 : 0.0
-        let noise_amp = uv * ka.noise_std + (1.0 - uv) * ka.sine_amp / 3.0
+        let noise_amp = tts_noise_amp(uv, ka.noise_std, ka.sine_amp)
         var acc = lb[0]
         var h = 0u
         while (h < ka.nh) {
             var phase = 0.0
             static_if (TORCH) {
-                phase = st2_resize_mix_torch(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1)
+                phase = tts_resize_mix_torch(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1)
             } else {
-                phase = st2_resize_mix_onnx(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1, h + 1u == ka.nh)
+                phase = tts_resize_mix_onnx(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1, h + 1u == ka.nh)
             }
-            let s = st2_sin_big(phase) * ka.sine_amp
-            acc += lw[h] * (s * uv + noise_amp * noise_n[i * ka.nh + h])
+            acc += tts_src_term(lw[h], tts_sin_big(phase) * ka.sine_amp, uv, noise_amp, noise_n[i * ka.nh + h])
             h++
         }
-        har[i] = st2_tanh(acc)
+        har[i] = tts_tanh(acc)
     }
 }
 
@@ -11292,23 +11188,20 @@ class template MetalSt2StftT {
         var im = 0.0
         var tap = 0u
         while (tap < ka.k) {
-            var src = int(f * ka.hop + tap) - int(ka.pad)
+            let p = int(f * ka.hop + tap) - int(ka.pad)
+            var src = 0
             static_if (REFLECT) {
-                if (src < 0) {
-                    src = -src
-                } elif (src >= int(ka.n)) {
-                    src = 2 * (int(ka.n) - 1) - src
-                }
+                src = tts_pad_reflect(p, int(ka.n))
             } else {
-                src = clamp(src, 0, int(ka.n) - 1)
+                src = clamp(p, 0, int(ka.n) - 1)
             }
             let v = har[uint(src)]
             re += wre[b * ka.k + tap] * v
             im += wim[b * ka.k + tap] * v
             tap++
         }
-        spec[f * 2u * ka.bins + b] = sqrt(re * re + im * im + ka.eps)
-        spec[f * 2u * ka.bins + ka.bins + b] = im == 0.0 ? (re < 0.0 ? 3.14159265358979 : 0.0) : atan2(im, re)
+        spec[f * 2u * ka.bins + b] = tts_stft_mag(re, im, ka.eps)
+        spec[f * 2u * ka.bins + ka.bins + b] = tts_stft_phase(re, im)
     }
 }
 
@@ -11367,9 +11260,7 @@ class MetalSt2Istft {
                 if (q < ka.tt) {
                     var b = 0u
                     while (b < ka.bins) {
-                        let mag = exp(y[q * ka.stride + b])
-                        let ph = sin(y[q * ka.stride + ka.bins + b])
-                        acc += mag * cos(ph) * wre[tap * ka.bins + b] - mag * sin(ph) * wim[tap * ka.bins + b]
+                        acc += tts_istft_term(y[q * ka.stride + b], y[q * ka.stride + ka.bins + b], wre[tap * ka.bins + b], wim[tap * ka.bins + b])
                         b++
                     }
                     env += window[tap] * window[tap]
@@ -11471,7 +11362,7 @@ class MetalPkAttn {
     @workgroup qh : float[128]
     @workgroup sc : float[2048]   // == PK_ATTN_MAX_KEYS
     @workgroup po : float[512]
-    @workgroup red : float[8]
+    @workgroup red : float[16]
 
     //! the scaled scores of keys j0.. into the stage, then their normalized softmax weights
     def pk_attn_scores(h, j0, nk, lid : uint) {
@@ -11490,16 +11381,8 @@ class MetalPkAttn {
             j += 256u
         }
         let mall = tg_max_all(m, red)
-        var l = 0.0
-        j = lid
-        while (j < nk) {
-            let pw = exp(sc[j] - mall)
-            sc[j] = pw
-            l += pw
-            j += 256u
-        }
         barrier()
-        let inv = 1.0 / tg_sum_all(l, red)
+        let inv = 1.0 / sq_exp_sum(sc, red, mall, nk, lid, 256u)
         j = lid
         while (j < nk) {
             sc[j] *= inv
@@ -11515,7 +11398,7 @@ class MetalPkAttn {
         let i = wg % ka.t
         let lid = gl_LocalInvocationID.x
         let p = ka.pos0 + i
-        let j0 = (ka.ctx != 0u && p + 1u > ka.ctx) ? p + 1u - ka.ctx : 0u
+        let j0 = tts_window_start(p, ka.ctx)
         let nk = p + 1u - j0
         if (lid < 64u) {
             qh[lid] = q[i * ka.qs + ka.qcol + h * 64u + lid] / sqrt(float(64u))
@@ -11626,8 +11509,7 @@ class template MetalPkGemvT {
             let inv = rsqrt(vtot / float(ka.nin) + ka.eps)
             k = lid
             while (k < ka.nin) {
-                let v = (x[k] - mean) * inv * lw[k] + lb[k]
-                xs[k] = v * (1.0 + mod[ka.nin + k]) + mod[k]
+                xs[k] = tts_modulate(tts_ln_affine(x[k], mean, inv, lw[k], lb[k]), mod[k], mod[ka.nin + k])
                 k += 128u
             }
         } else {
@@ -11668,14 +11550,13 @@ class template MetalPkGemvT {
                 y[row] = d
             }
             static_if (EPI == 1) {
-                y[row] = d / (1.0 + exp(-d))
+                y[row] = silu_f32(d)
             }
             static_if (EPI == 2) {
                 y[row] += mod[2u * ka.nin + row] * d
             }
             static_if (EPI == 3) {
-                let v = d + aux[row]
-                y[row] = v / (1.0 + exp(-v))
+                y[row] = silu_f32(d + aux[row])
             }
             static_if (EPI == 4) {
                 let v = d + x0[row]

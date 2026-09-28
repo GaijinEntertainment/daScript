@@ -19,18 +19,23 @@ def attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kbase0 : i
                     scale : float; var out : array<float>; obase : int; kstart : int = 0; cap : float = 0.0;
                     has_sink : bool = false; sink : float = 0.0) {
     let khoff = (hh / kv_mul) * hs
-    var sc : array<float>
-    sc |> resize(cnt)
-    var mm = has_sink ? sink : -3.0e38
-    for (j in range(kstart, cnt)) {
+    attn_row_scored(vv, vbase0 + khoff, kvd, hs, kstart, cnt, out, obase, has_sink, sink) $(j : int) : float {
         var s = 0.0
         for (e in range(hs)) {
             s += q[qbase + e] * kk[kbase0 + j * kvd + khoff + e]
         }
-        sc[j] = s * scale
-        if (cap != 0.0) {
-            sc[j] = softcap_exp(sc[j], cap)
-        }
+        return cap != 0.0 ? softcap_exp(s * scale, cap) : s * scale
+    }
+}
+
+//! two-pass softmax row: key j in [kstart, cnt) scores `score(j)`, weighting vv[vbase + j * kvd + e]; `has_sink` adds a valueless `sink` key
+def attn_row_scored(vv : array<float>; vbase, kvd, hs, kstart, cnt : int; var out : array<float>; obase : int;
+                    has_sink : bool; sink : float; score : block<(j : int) : float>) {
+    var sc : array<float>
+    sc |> resize(cnt)
+    var mm = has_sink ? sink : -3.0e38
+    for (j in range(kstart, cnt)) {
+        sc[j] = invoke(score, j)
         mm = max(mm, sc[j])
     }
     var tot = has_sink ? exp(sink - mm) : 0.0
@@ -41,7 +46,7 @@ def attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kbase0 : i
     for (e in range(hs)) {
         var acc = 0.0
         for (j in range(kstart, cnt)) {
-            acc += sc[j] * vv[vbase0 + j * kvd + khoff + e]
+            acc += sc[j] * vv[vbase + j * kvd + e]
         }
         out[obase + e] = acc / tot
     }

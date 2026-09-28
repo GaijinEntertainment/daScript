@@ -20,6 +20,7 @@ require daslib/strings_boost
 require math
 require _model_tier
 require _tts_corpus   // the 200-sentence front-end fixture: the phonemes arm E was scored against
+require _tts_oracle   // captured_noise: the source's noise stream in the reference's draw order
 
 // The TTS facade above the families. Model-free: the sentence chunker (the reference driver's
 // boundary rule - abbreviations, decimals, a.m./p.m. - the 400-CODEPOINT cap, the hard split of
@@ -386,23 +387,6 @@ def test_chunk_cap_knob(t : T?) {
     }
 }
 
-// the source's noise is one stream the reference draws in one order - the harmonics' initial
-// phases, then the normals row by row - split between styletts2_draw_noise and the source
-def private captured_stream(cfg : SineSourceCfg; n : int64; seed : uint64) : TtsNoise {
-    var r = TtsRng()
-    rng_seed(r, seed)
-    var inscope noise = TtsNoise(captured = true)
-    noise.uniform |> resize(cfg.n_harm)
-    for (h in range64(cfg.n_harm)) {
-        noise.uniform[h] = rng_uniform(r)
-    }
-    noise.normal |> resize(n * cfg.n_harm)
-    for (i in range64(n * cfg.n_harm)) {
-        noise.normal[i] = rng_normal(r)
-    }
-    return <- noise
-}
-
 def private source_from(d : St2Decoder; cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise : TtsNoise; seed : uint64;
                         var har : array<float>; var sc : St2Scratch) {
     styletts2_source(d, cfg, f0, frames, noise, seed, har, sc)
@@ -443,7 +427,7 @@ def test_source_stream_contract(t : T?) {
             f0[i] = i % 13l == 0l ? 0.0 : 120.0 + 200.0 * rng_uniform(r)
         }
         let seed = 77ul
-        var inscope captured <- captured_stream(cfg, n, seed)
+        var inscope captured <- captured_noise(cfg.n_harm, n, seed)
         var inscope sc_c = St2Scratch()
         var inscope har_c : array<float>
         source_from(d, cfg, f0, frames, captured, 0ul, har_c, sc_c)

@@ -608,6 +608,19 @@ def upload_rows_padded(var buf : MetalBuffer?; src : void?; rows, mp, width : in
     zero_rows(buf, rows, mp, width)
 }
 
+//! `rows` rows of `width` floats from `src` laid in `buf` at the row stride `stride`, each row's tail past `width` zeroed.
+def upload_rows_strided(var buf : MetalBuffer?; src : float const?; rows, width, stride : int64) {
+    unsafe {
+        var dp = reinterpret<float?>(metal_buffer_contents(buf))
+        for (r in range64(rows)) {
+            memcpy(dp + r * stride, src + r * width, width * 4l)
+            for (k in range64(width, stride)) {
+                dp[r * stride + k] = 0.0
+            }
+        }
+    }
+}
+
 //! One mirror row of layer `l` - K and V - copied from the arena back into the session's CPU KV.
 def mirror_row_writeback(var s : Session; seq_len, l, pos, prow, rowb, lb : int64; ab : uint8?; koff, voff : uint64) {
     unsafe {
@@ -1621,29 +1634,10 @@ def public metal_kernel_coverage_reset {
     g_kcov_folded |> clear()
 }
 
-//! Log the census: dispatched kernels with counts, then a LOUD WARNING per compiled-but-never-
-//! dispatched kernel. A zero row is a coverage gap or a dead kernel — a human call, never automatic.
+//! Log the census (`kernel_coverage_report`): every compiled kernel, a never-dispatched one warned.
 def public metal_kernel_coverage_report {
-    var cov <- metal_kernel_coverage()
-    var names <- [for (name in keys(cov)); name]
-    names |> sort()
-    var served = 0
-    for (name in names) {
-        if (cov[name] > 0l) {
-            served++
-            to_log(LOG_INFO, "metal kernel coverage: {name} = {cov[name]}\n")
-        }
-    }
-    var dead = 0
-    for (name in names) {
-        if (cov[name] == 0l) {
-            dead++
-            to_log(LOG_WARNING, "metal kernel coverage: {name} NEVER DISPATCHED this run - coverage gap or dead kernel (human call)\n")
-        }
-    }
-    to_log(LOG_INFO, "metal kernel coverage: {served} dispatched, {dead} never-dispatched of {length(names)} compiled\n")
-    delete names
-    delete cov
+    var inscope cov <- metal_kernel_coverage()
+    kernel_coverage_report("metal", "compiled", cov)
 }
 
 def kn_pipeline(enc : MetalComputeEncoder?; pso : MetalComputePipeline?) {

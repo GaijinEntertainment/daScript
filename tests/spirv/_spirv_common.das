@@ -82,6 +82,57 @@ def public farith_words : array<uint> {
     return clone_to_move(farith_spv)
 }
 
+var @ssbo @binding = 0 pr_x : array<float>
+var @ssbo @binding = 1 pr_y : array<float2>
+
+def private two_float_step(acc, x : float) : float {
+    let s = acc + x
+    let bv = s - acc
+    return s + ((acc - (s - bv)) + (x - bv))
+}
+
+//! the body both twins share: the two-float step, the vector products from either side, `fmod`, `mod`, `dot`, a compound step and an increment
+def private precise_body(i : uint) {
+    var s = two_float_step(pr_y[i].x, pr_x[i])
+    s += dot(pr_y[i], float2(0.5, 0.25))
+    s++
+    let v = 2.0 * pr_y[i] * 0.5 - float2(-s, s / 4.0 % 3.0)
+    pr_y[i] = float2(fmod(v.x, 7.0), mod(v.y, 5.0))
+}
+
+[compute_shader(local_size_x=64, name="precise_spv", precise=true), marker(no_coverage)]
+def precise_sum {
+    precise_body(gl_GlobalInvocationID.x)
+}
+
+[compute_shader(local_size_x=64, name="plain_sum_spv"), marker(no_coverage)]
+def plain_sum {
+    precise_body(gl_GlobalInvocationID.x)
+}
+
+class PreciseKern {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+
+    [spirv_kernel(local_size_x=64, name="precise_kern_spv", precise=true)]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        ys[i] = two_float_step(ys[i], xs[i])
+    }
+}
+
+def public precise_words : array<uint> {
+    return clone_to_move(precise_spv)
+}
+
+def public plain_sum_words : array<uint> {
+    return clone_to_move(plain_sum_spv)
+}
+
+def public precise_kern_words : array<uint> {
+    return clone_to_move(precise_kern_spv)
+}
+
 // ===== Phase-2 control-flow fixtures: mutable locals (Function OpVariables), compound assignment,
 // ++/--, comparisons (signed/unsigned/float), logical &&/||/!, and if/else (OpSelectionMerge +
 // OpBranchConditional). One fixture per scalar class so every comparison-opcode flavor is covered. =====
@@ -1501,7 +1552,7 @@ def public phase2_emitter_opcodes : table<uint> {
         SpvOp.TypeBool, SpvOp.TypeFloat,
         // arithmetic breadth
         SpvOp.IAdd, SpvOp.ISub, SpvOp.UDiv, SpvOp.UMod, SpvOp.SDiv, SpvOp.SRem, SpvOp.SNegate, SpvOp.Not,
-        SpvOp.FAdd, SpvOp.FSub, SpvOp.FMul, SpvOp.FDiv, SpvOp.FRem, SpvOp.FNegate,
+        SpvOp.FAdd, SpvOp.FSub, SpvOp.FMul, SpvOp.FDiv, SpvOp.FRem, SpvOp.FMod, SpvOp.FNegate,   // FMod: the precise fixture's mod()
         // comparisons (only the flavors the fixtures actually exercise)
         SpvOp.IEqual, SpvOp.INotEqual, SpvOp.UGreaterThan, SpvOp.ULessThan,
         SpvOp.SGreaterThan, SpvOp.SLessThan, SpvOp.SGreaterThanEqual, SpvOp.SLessThanEqual,

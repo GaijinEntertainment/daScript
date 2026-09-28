@@ -1,18 +1,16 @@
 # dasLLAMA Architecture - the Vulkan tier's model residency
 
-Companion to `ARCHITECTURE_GPU_VULKAN.md`; section numbers are `ARCHITECTURE.md`'s. This
-document carries sections 2.2n-2.2o and 2.2an: the residency plan that sizes a whole model
-before a byte uploads, the marks swap that lets one GPU slot serve many models, and the token
-command's logits landing on the transfer queue. The N-row token command a batched step's rows go
-through, and the residual step's two forms it holds bit for bit, are `ARCHITECTURE_GPU_VULKAN_NROW.md`
-sections 2.2ao and 2.2ap. The prefill chain and byte
-stores that run once a model is resident are `ARCHITECTURE_GPU_VULKAN.md` sections 2.2j, 2.2p,
-2.2ab, 2.2ac and 2.2ad, and the cooperative-matrix GEMM tiles under them are
-`ARCHITECTURE_GPU_VULKAN_GEMM.md` sections 2.2k-2.2m, 2.2q and 2.2ae; the per-op tier's decode era is
-`ARCHITECTURE_GPU_VULKAN_DECODE.md` sections 2.2r-2.2v. The GPU backend role table these
-sections build on stays in `ARCHITECTURE_GPU.md` sec.1.5.
+Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
+document carries the residency plan that sizes a whole model before a byte uploads, the marks
+swap that lets one GPU slot serve many models, and the token command's logits landing on the
+transfer queue. The N-row token command a batched step's rows go through, and the residual
+step's two forms it holds bit for bit, are in `ARCHITECTURE_GPU_VULKAN_NROW.md`. The prefill
+chain and byte stores that run once a model is resident are in `ARCHITECTURE_GPU_VULKAN.md`, and
+the cooperative-matrix GEMM tiles under them are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the per-op
+tier's decode era is in `ARCHITECTURE_GPU_VULKAN_DECODE.md`. The GPU backend role table these
+sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
-### 2.2n The residency plan sizes a whole model before a byte uploads {#resident-plan}
+### The residency plan sizes a whole model before a byte uploads {#resident-plan}
 
 The resident driver is all-or-nothing, so the plan IS the decision, and it is computed from
 `Model` metadata alone. It sizes four numbers against the tier's weight budget: the dense weight
@@ -176,14 +174,13 @@ a MoE whose stacks do not fit takes the per-op rails, which stream what the card
 The plan is sized BEFORE the per-op reserves (the streamed slot, the decode mirrors), and a
 fitting plan forgoes them - they would only shrink its room - so a decline past the plan (a
 placement, a class rail) leaves the per-op rails without a streamed slot, said out loud. The
-tile family the routed block rides is the f16-fed cm2 tiles (`ARCHITECTURE_GPU_VULKAN_MOE.md`
-sec.2.2af), and `DASLLAMA_GPU_RESIDENT=0` keeps the per-op rails for any model, the A/B lever.
+tile family the routed block rides is the f16-fed cm2 tiles (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`), and `DASLLAMA_GPU_RESIDENT=0` keeps the per-op rails for any model, the A/B lever.
 The driver is attempted only when asked for (`gpu_resident_requested`): the measured-best set
 asks (`DASLLAMA_GPU=1`, or `auto_tier` on the want), and so does a want that spells its rails
 out one by one and sets `resident` - the server's serving shape, where `gpu_dn = false` must
 still turn one rail off. Rails alone, by env or by want, keep the per-op tier.
 
-### 2.2o One GPU slot, many models: the marks swap {#gpu-slot-marks}
+### One GPU slot, many models: the marks swap {#gpu-slot-marks}
 
 A multi-model host runs one device tier under several loaded models, and the tier's per-model
 state is offset-keyed - two models' marks installed together route one model's dispatches at
@@ -203,7 +200,7 @@ land beside the first's, and the offset-keyed stack lookup serves whichever mode
 registered that offset first: the decode attention block asserts on the geometry change, and a
 model whose geometry matches decodes the earlier model's weights.
 
-### 2.2an The token command's logits leave on the transfer queue {#logits-transfer-queue}
+### The token command's logits leave on the transfer queue {#logits-transfer-queue}
 
 **A token command signals the compute timeline, and its logits copy follows on the transfer
 queue.** On a box behind an IOMMU the compute queue's `vkCmdCopyBuffer` into cached host memory
@@ -254,7 +251,7 @@ the pod's (RTX PRO 4500, `-jit`, cm2): the `DASLLAMA_GPU_PROF=1` token profile o
 `benchmarks/lcpp_bench.das` for the step times and rates, `harness/vk_dma_probe.das` for the copy
 rates; `PERF_LEDGER.md`'s 2026-09-19 section is the record.
 
-### 2.2as A call that passes to the CPU rails hydrates first {#resident-pass-hydrate}
+### A call that passes to the CPU rails hydrates first {#resident-pass-hydrate}
 
 Every pass of a host-cached session's call to the CPU rails - whatever the reason - brings the
 region's device-only rows down to the host cache first (`rdec_pass_hydrated`), so the CPU

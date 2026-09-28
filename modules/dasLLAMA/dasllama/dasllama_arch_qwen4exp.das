@@ -121,9 +121,7 @@ def ngram_gather(t : Model; s : Session; tokens : array<int64>; p : int64; var d
         for (g in range64(per)) {
             let h = base + g
             let row = int64(mixed % uint64(t.ple_head_vocab[h])) + t.ple_head_off[h]
-            unsafe {
-                ngram_row(t, row, dst + h * hd)
-            }
+            ngram_row(t, row, unsafe(dst + h * hd))
         }
     }
 }

@@ -94,6 +94,13 @@ def load_tts_model(path : string) : TtsModel {
         return <- m
     }
     m.model <- load_styletts2(path)
+    tts_finish_styletts2(m, path)
+    return <- m
+}
+
+def tts_finish_styletts2(var m : TtsModel; path : string) {
+    //! A StyleTTS2 carrier in ``m.model``, loaded or minted from ``path``, made a facade: its family's kind, the
+    //! phoneme packs its front end reads from the same directory, the voices it cannot speak said once.
     if (m.model.family == "kitten-tts") {
         m.kind = TtsKind.kitten
     } elif (m.model.family == "kokoro") {
@@ -105,7 +112,6 @@ def load_tts_model(path : string) : TtsModel {
     m.g2p <- load_g2p(g2p_pack_path(dir))
     m.tagger <- load_pos_tagger(path_join(dir, "tts_postag.bin"))
     log_dropped_voices(m)
-    return <- m
 }
 
 //! The phoneme pack a model directory serves: the full pack when present, else the American-only

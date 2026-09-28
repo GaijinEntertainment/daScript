@@ -21,7 +21,7 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 require _resident_feed   // feed_logits, the per-step bar
 
 // The shared expert's prefill on the device: a qwen2moe layer's shexp triple rides the routed
-// experts' chain as one region over every position (ARCHITECTURE_GPU_VULKAN_GEMM.md sec.2.2q). The
+// experts' chain as one region over every position (ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain). The
 // device chain and the CPU form are not bit-identical (the f16 gather, f32 accumulation order),
 // so the gate is the forced-feed logits-tolerance form over the tier's in-process route lever:
 // the same prompt and fed tokens with the route ON (the device arm) and OFF (the CPU form), the

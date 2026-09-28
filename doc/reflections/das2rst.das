@@ -413,7 +413,7 @@ def document_module_dasllama_tts(_root : string) {
     }
     var mod = [find_module("dasllama_tts"), find_module("dasllama_tts_types")]
     var groups <- array<DocGroup>(
-        group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|g2p_pack_path|caps|tts_voice_lang|tts_needs_packs|tts_has_phonemes|finalize)$%%),
+        group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|tts_finish_styletts2|g2p_pack_path|caps|tts_voice_lang|tts_needs_packs|tts_has_phonemes|finalize)$%%),
         group_by_regex("Voices", mod, %regex~(tts_register_voice|tts_prepare_voice_prompt|tts_voice_prompt_valid|tts_register_voice_prompt)$%%),
         group_by_regex("Text front end", mod, %regex~(tts_normalize|tts_phonemize|tts_chunks)$%%),
         group_by_regex("Synthesis", mod, %regex~(synthesize|synthesize_stream|tts_release_scratch|tts_set_chunk_chars)$%%),
@@ -916,7 +916,8 @@ def document_module_math_boost(_root : string) {
         group_by_regex("Matrices", mod, %regex~(look_at_lh|look_at_rh|perspective_lh|perspective_rh|perspective_rh_opengl|perspective_rh_0_to_1|perspective_rh_minus1_to_1|ortho_rh|planar_shadow)$%%),
         group_by_regex("Plane", mod, %regex~(plane_dot|plane_normalize|plane_from_point_normal)$%%),
         group_by_regex("Color conversions", mod, %regex~(linear_to_SRGB)$%%),
-        group_by_regex("Color packing and unpacking", mod, %regex~(RGBA_TO_UCOLOR|UCOLOR_TO_RGBA|UCOLOR_TO_RGB)$%%)
+        group_by_regex("Color packing and unpacking", mod, %regex~(RGBA_TO_UCOLOR|UCOLOR_TO_RGBA|UCOLOR_TO_RGB)$%%),
+        group_by_regex("Integer rounding", mod, %regex~(round_up)$%%)
     )
     document("Boost package for math", mod, "math_boost.rst", groups)
 }

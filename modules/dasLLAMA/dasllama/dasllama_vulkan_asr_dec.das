@@ -185,11 +185,11 @@ def private wd_decline_words(why : VulkanWdecDecline) : string {
     } elif (why == VulkanWdecDecline.shape) {
         return "a width or head size the stamps do not serve"
     } elif (why == VulkanWdecDecline.memory) {
-        return "a device allocation failed"
+        return VK_DECLINE_WORDS_MEMORY
     } elif (why == VulkanWdecDecline.rows) {
         return "the window's first batch is wider than the step's {WD_ROW_CAP}-row cap"
     }
-    return "the tier has no device, or a class failed to build"
+    return VK_DECLINE_WORDS_DEVICE
 }
 
 [cold_path]
@@ -466,7 +466,7 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     if (!wd_ensure_classes(r.cm2, r.xkv_tile)) {
         return false
     }
-    if (!vt_range_ok(w.dqblob.n) || !vt_range_ok(nl * d * r.ta * 4l) || !vt_range_ok(nl * d * r.tmax * 2l) || !vt_range_ok(2l * nl * d * r.ta * 4l)) {
+    if (!vk_range_ok(w.dqblob.n) || !vk_range_ok(nl * d * r.ta * 4l) || !vk_range_ok(nl * d * r.tmax * 2l) || !vk_range_ok(2l * nl * d * r.ta * 4l)) {
         return wd_decline(VulkanWdecDecline.shape)
     }
     r.key = key

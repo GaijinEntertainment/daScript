@@ -101,32 +101,31 @@ def private read_rst(folder : string; prefix : string; var out : array<string>) 
     }
 }
 
-// `finalize` is the language's own teardown hook - the compiler calls it at `delete`, so no
-// tutorial calls it by name and it carries no floor duty.
-var private FLOOR_HOOKS <- {"finalize"}
+var private FACADE_DEFS_WITHOUT_TUTORIAL <- {"finalize", "tts_finish_styletts2"}   //! defs the runtime or a loader chain calls, never a user - `ARCHITECTURE_TTS.md#text-to-speech` lists them
 
+[arch(at = "ARCHITECTURE_TTS.md#text-to-speech")]
 def private check_floor_of(path : string; var seen : table<string>; tut_texts, rst_texts : array<string>) {
     var line_no = 0
     for (line in split(fread(path), "\n")) {
         line_no++
         continue if (!starts_with(line, "def ") || starts_with(line, "def private ") || starts_with(line, "def operator"))
         let name = ident_prefix(slice(line, 4))
-        continue if (empty(name) || key_exists(FLOOR_HOOKS, name) || key_exists(seen, name))
+        continue if (empty(name) || key_exists(FACADE_DEFS_WITHOUT_TUTORIAL, name) || key_exists(seen, name))
         seen |> insert(name)
         if (!word_in_any(tut_texts, name)) {
             gate_finding(path, line_no,
-                "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial")
+                "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial, or is a def the runtime or a loader chain calls, never a user, that ARCHITECTURE_TTS.md#text-to-speech lists")
         }
         if (!word_in_any(rst_texts, name)) {
             gate_finding(path, line_no,
-                "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes)")
+                "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes), or it is a def the runtime or a loader chain calls, never a user, that ARCHITECTURE_TTS.md#text-to-speech lists")
         }
     }
 }
 
 // The tutorial-coverage floor: every def the facade files themselves define appears in at
-// least one tutorial source and one tutorial page. REVIEW.md keeps the judgment half (covered
-// means TAUGHT); this gate only proves presence.
+// least one tutorial source and one tutorial page. REVIEW_FACADE.md keeps the judgment half
+// (covered means TAUGHT); this gate only proves presence.
 def private check_tutorial_floor(tut_texts, rst_texts : array<string>) {
     var seen : table<string>
     for (path in FACADE_FILES) {
@@ -234,12 +233,13 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
 }
 
 // The backend-role partition, mechanically: every dasllama_<gpu>_*.das file's suffix is a role
-// ARCHITECTURE_GPU.md sec.1.5's role table carries — a new role file adds its role to BOTH.
+// ARCHITECTURE_GPU.md#gpu-backends's role table carries — a new role file adds its role to BOTH.
 var private GPU_ROLES_METAL <- {
     "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "lens", "mtp_gemma"
 }
 
 var private GPU_ROLES_VULKAN <- {
+    "tts",
     "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec"
 }
 
@@ -276,7 +276,7 @@ def private check_fastmath_default {
         var line_no = 0
         for (line in split(fread(p), "\n")) {
             line_no++
-            continue if (find(line, "fastmath=false") < 0 && find(line, "fastmath = false") < 0)
+            continue if ((find(line, "fastmath=false") < 0 && find(line, "fastmath = false") < 0) || (strip(line) |> starts_with("//")))
             if (!key_exists(FASTMATH_OFF_EXEMPT, metal_kernel_name(line))) {
                 gate_finding(p, line_no,
                     "kernel declares fastmath=false without an exemption row naming the test that fails under fastmath - fastmath is the default; the opt-out ships its demonstrated breakage")
@@ -299,7 +299,7 @@ def private check_gpu_role_partition {
             let known = backend == "metal" ? key_exists(GPU_ROLES_METAL, role) : key_exists(GPU_ROLES_VULKAN, role)
             if (!known) {
                 gate_finding("modules/dasLLAMA/dasllama/{name}",
-                    "backend file with role '{role}' that the partition does not carry - add the role to ARCHITECTURE_GPU.md sec.1.5's role table and this gate's set in the same change")
+                    "backend file with role '{role}' that the partition does not carry - add the role to ARCHITECTURE_GPU.md#gpu-backends's role table and this gate's set in the same change")
             }
         }
     }
@@ -645,15 +645,17 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 39
-let private IMAGE_LAYOUT_STAMP_HASH = 0x5c8989fb70eb6c07ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0xa9934049a903053cul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
-// writer's append / zero-fill / header patch, the header's scalar stores, and the lattice
-// plane's section name. Changing one moves every plane offset (or renames every lattice
-// section) while every serializer body reads the same.
+// writer's append / zero-fill / header patch, the header's scalar stores, the lattice
+// plane's section name, and the TTS blob's aligned append, its per-weight walk slot and the
+// conv's stacked-row gather the q8 mint quantizes. Changing one moves every plane offset (or
+// renames every lattice section) while every serializer body reads the same.
 var private LAYOUT_HELPERS <- {
     "pad_to_page", "plane_end", "image_total_bytes",
-    "w_append", "w_zeros", "w_header", "store_u32", "store_u64", "kq_plane_name"
+    "w_append", "w_zeros", "w_header", "store_u32", "store_u64", "kq_plane_name",
+    "blob_push", "weight_slot", "conv1d_weight_row"
 }
 
 // The constants those helpers place bytes by, and the bands the two streaming writers stage
@@ -662,7 +664,7 @@ var private LAYOUT_HELPERS <- {
 // change that provably moves nothing re-stamps the hash alone.
 var private LAYOUT_CONSTANTS <- {
     "IMAGE_PAGE", "IMAGE_HEADER_BYTES", "SECTION_TABLE_SLACK",
-    "DWRITE_STAGING_BAND", "METAL_BAND_BLOCKS"
+    "DWRITE_STAGING_BAND", "METAL_BAND_BLOCKS", "BLOB_ALIGN_FLOATS"
 }
 
 def private is_archive_serializer(header : string) : bool {
@@ -832,7 +834,7 @@ def private check_image_layout_stamp {
     return if (h == IMAGE_LAYOUT_STAMP_HASH && version == IMAGE_LAYOUT_STAMP_VERSION)
     if (version == IMAGE_LAYOUT_STAMP_VERSION) {
         gate_finding(IMAGE_FILE,
-            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint of dasllama_tts_blocks.das, the layout helpers pad_to_page/plane_end/image_total_bytes/w_append/w_zeros/w_header/store_u32/store_u64/kq_plane_name, and the layout constants IMAGE_PAGE/IMAGE_HEADER_BYTES/SECTION_TABLE_SLACK/DWRITE_STAGING_BAND/METAL_BAND_BLOCKS): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
+            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint of dasllama_tts_blocks.das, the layout helpers pad_to_page/plane_end/image_total_bytes/w_append/w_zeros/w_header/store_u32/store_u64/kq_plane_name/blob_push/weight_slot/conv1d_weight_row, and the layout constants IMAGE_PAGE/IMAGE_HEADER_BYTES/SECTION_TABLE_SLACK/DWRITE_STAGING_BAND/METAL_BAND_BLOCKS/BLOB_ALIGN_FLOATS): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
     } else {
         gate_finding("modules/dasLLAMA/REVIEW.das",
             "the layout stamp is behind IMAGE_VERSION {version} - re-stamp: IMAGE_LAYOUT_STAMP_HASH = {h}ul, IMAGE_LAYOUT_STAMP_VERSION = {version}")
@@ -1436,7 +1438,7 @@ def private check_unicode_tables_stamp {
 }
 
 // One device and queue per GPU family, from its _common file's init. The exceptions the rule
-// names: dasllama_metal_gemm.das owns its device (ARCHITECTURE_GPU.md sec.1.5), and the two
+// names: dasllama_metal_gemm.das owns its device (ARCHITECTURE_GPU.md#gpu-backends), and the two
 // tuner race entries build theirs because the tuner runs before the driver inits.
 let private DEVICE_CREATION_FILES <- {"dasllama_metal_common.das", "dasllama_vulkan_common.das", "dasllama_metal_gemm.das"}
 let private DEVICE_CREATION_FUNCTIONS <- {"metal_tensor_race", "metal_tensor_race_decode"}
@@ -1526,6 +1528,153 @@ def private check_ple_gather_sites {
     }
 }
 
+//! every file under `folder` ending in `suffix` (a rule document or a source), build trees and `.`/`_` names skipped
+def private collect_files_ending(folder, suffix : string; var out : array<string>) {
+    dir(folder) $(fname) {
+        return if (fname == "." || fname == ".." || fname |> starts_with(".") || fname |> starts_with("_"))
+        let p = "{folder}/{fname}"
+        let st = stat(p)
+        if (st.is_valid && st.is_dir) {
+            return if (fexist("{p}/CMakeCache.txt"))
+            collect_files_ending(p, suffix, out)
+        } elif (ends_with(fname, suffix)) {
+            out |> push(p)
+        }
+    }
+}
+
+//! the `.md` name the word before `at` on `line` spells (backticks and brackets stripped), "" when none
+def private md_name_before(line : string; at : int) : string {
+    var tok = strip(slice(line, 0, at))
+    let sp = rfind(tok, " ")
+    tok = sp >= 0 ? slice(tok, sp + 1) : tok
+    tok = tok |> replace("`", "") |> replace("(", "") |> replace("'s", "")
+    return find(tok, ".md") >= 0 ? tok : ""
+}
+
+//! a `sec.N` pointer at one of this module's documents names a number no heading carries (`ARCHITECTURE_COMMON.md`); a
+//! ledger's own numbered sections, a HOW_TO's steps and another folder's still-numbered document stay citable by number
+def private check_arch_cites_by_name {
+    var docs : array<string>
+    collect_files_ending("modules/dasLLAMA", ".md", docs)
+    var sources : array<string>
+    collect_das_files("modules/dasLLAMA", sources, true)
+    for (path in docs) {
+        let base = base_name(path)
+        continue if (!(base |> starts_with("ARCHITECTURE")) && !(base |> starts_with("REVIEW")))
+        var line_no = 0
+        for (line in split(read_lf(path), "\n")) {
+            line_no++
+            peek_data(line) $(d) {
+                var from = 0
+                while (true) {
+                    let at = find(line, "sec.", from)
+                    break if (at < 0)
+                    from = at + 4
+                    continue if (at + 4 >= length(d) || !is_number(int(d[at + 4])))
+                    let named = md_name_before(line, at)
+                    continue if (find(named, "/") >= 0 || named |> starts_with("followup_") || named |> starts_with("BRINGUP") || named |> starts_with("HOW_TO"))
+                    gate_finding(path, line_no, "cites an architecture section by number - the set is cited by `<doc>.md#<anchor>` (ARCHITECTURE_COMMON.md); name the heading's anchor")
+                    break
+                }
+                //! the bare form: `ARCHITECTURE_X.md` 2.2b - a document name, a space and a section number with no prefix
+                var from2 = 0
+                while (true) {
+                    let tick = find(line, ".md` ", from2)
+                    break if (tick < 0)
+                    from2 = tick + 5
+                    continue if (tick + 5 >= length(d) || !is_number(int(d[tick + 5])) || find(md_name_before(line, tick + 4), "ARCHITECTURE") < 0)
+                    gate_finding(path, line_no, "cites an architecture section by number - the set is cited by `<doc>.md#<anchor>` (ARCHITECTURE_COMMON.md); name the heading's anchor")
+                    break
+                }
+            }
+        }
+    }
+    for (path in sources) {
+        var line_no = 0
+        for (line in split(read_lf(path), "\n")) {
+            line_no++
+            let arch = find(line, "ARCHITECTURE")
+            continue if (arch < 0)
+            let at = find(line, "sec.", arch)
+            continue if (at < 0 || at - arch > 60)
+            var numbered = false
+            peek_data(line) $(d) {
+                numbered = at + 4 < length(d) && is_number(int(d[at + 4]))
+            }
+            continue if (!numbered)
+            gate_finding(path, line_no, "cites an architecture section by number - the set is cited by `<doc>.md#<anchor>` (ARCHITECTURE_COMMON.md); name the heading's anchor")
+        }
+    }
+}
+
+let private ENGINE_DIR = "modules/dasLLAMA/dasllama"
+let private TOWER_FILE = "modules/dasLLAMA/dasllama/dasllama_tower.das"
+let private TTS_FAMILY_FILES <- ["dasllama_kitten", "dasllama_kokoro", "dasllama_pocket", "dasllama_styletts2"]
+
+//! the module names a file's `require` lines name, the path form folded to its last segment
+def private required_modules(path : string) : array<string> {
+    var out : array<string>
+    for (line in split(strip_line_comments(read_lf(path)), "\n")) {
+        continue if (!(line |> starts_with("require ")))
+        var rest = strip(slice(line, 8))
+        let sp = find(rest, " ")
+        rest = sp >= 0 ? slice(rest, 0, sp) : rest
+        let slash = rfind(rest, "/")
+        out |> push(slash >= 0 ? slice(rest, slash + 1) : rest)
+    }
+    return <- out
+}
+
+[arch(at = "ARCHITECTURE_MEDIA.md#tower-audio-charters")]
+def private check_require_bans {
+    if (fexist(TOWER_FILE)) {
+        var banned <- { "dasllama_audio", "dasllama_vision" }
+        for (fam in carried_families(AUDIO_CARRIER, "AudioKind")) {
+            banned |> insert(fam)
+        }
+        for (fam in carried_families(VISION_CARRIER, "VisionKind")) {
+            banned |> insert(fam)
+        }
+        for (fam in TTS_FAMILY_FILES) {
+            banned |> insert(fam)
+        }
+        for (m in required_modules(TOWER_FILE)) {
+            if (key_exists(banned, m)) {
+                gate_finding(TOWER_FILE, "requires `{m}` - the tower helper file requires no carrier and no family file (ARCHITECTURE_MEDIA.md#tower-audio-charters); the shared shape lands in dasllama_asr_types.das, the family-specific helper in the family's file")
+            }
+        }
+    }
+    var files : array<string>
+    collect_das_files(ENGINE_DIR, files, true)
+    for (path in files) {
+        let base = base_name(path)
+        for (m in required_modules(path)) {
+            if (m == "audio" && base != "dasllama_audio_io.das") {
+                gate_finding(path, "requires `audio` - only dasllama_audio_io.das decodes audio containers (ARCHITECTURE_MEDIA.md#tower-audio-charters); decode through that file")
+            } elif (m == "stbimage" && base != "dasllama_vision_io.das") {
+                gate_finding(path, "requires `stbimage` - only dasllama_vision_io.das decodes images (ARCHITECTURE_MEDIA.md#tower-audio-charters); decode through that file")
+            }
+        }
+    }
+}
+
+[arch(at = "ARCHITECTURE_ENGINE.md#instrumentation-and-support")]
+def private check_harness_dashv {
+    var files : array<string>
+    collect_das_files("modules/dasLLAMA/harness", files, true)
+    for (path in files) {
+        var speaks_http = false
+        for (m in required_modules(path)) {
+            speaks_http = speaks_http || m |> starts_with("dashv")
+        }
+        continue if (!speaks_http)
+        if (find(read_lf(path), "dasllama.io") >= 0) {
+            gate_finding(path, "requires dashv and names dasllama.io - a harness tool reaches the sidecar exchange through dasllama/dasllama_exchange, never with its own HTTP call (ARCHITECTURE_ENGINE.md#instrumentation-and-support)")
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
@@ -1550,6 +1699,9 @@ def main() : int {
     check_unicode_tables_stamp()
     check_device_creation_sites()
     check_ple_gather_sites()
+    check_arch_cites_by_name()
+    check_require_bans()
+    check_harness_dashv()
     var inscope tut_texts : array<string>
     read_das_stripped(TUTORIAL_DIR, tut_texts)
     var inscope rst_texts : array<string>

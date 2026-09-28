@@ -163,7 +163,21 @@ names the slack it allocates, and a read past the in-range end stays inside the 
 it is out of range. The rule over these reads is `modules/REVIEW_SHADER_EMITTERS.md`'s (repo
 root); this section carries the mechanism it names.
 
-## 4. Test architecture - "every emitted instruction has a test"
+### 3.10 A `precise` shader decorates its float arithmetic NoContraction {#precise-no-contraction}
+
+`precise = true` on any shader annotation (`[spirv_kernel(local_size_x = 256, precise = true)]`,
+`[compute_shader(...)]`, the graphics stages alike) decorates every float arithmetic result the
+module emits - `OpFAdd`, `OpFSub`, `OpFMul`, `OpFDiv`, `OpFRem`, `OpFNegate` and the vector and
+matrix products - `NoContraction`, the functions the body calls included, since one visitor emits
+the whole module. Without the decoration a device compiler may contract and reassociate: NVIDIA's
+folds a two-float sum's correction terms - `(acc - (s - bv)) + (x - bv)` - to zero, so a
+compensated accumulator reads as a plain float sum there, cycles off after forty thousand frames.
+It is the twin of `[metal_kernel(fastmath=false)]` (`modules/dasMetal/ARCHITECTURE.md` section 2,
+decision 8). The `mad` builtin lowers to the explicit `Fma`, which the mark does not decorate;
+Vulkan's precision rules let a driver evaluate `Fma` as a multiply then an add, so a kernel whose
+correction step depends on a fused multiply-add does not rest it on `mad`.
+
+## 4. Test architecture - "every emitted instruction has a test" {#test-architecture}
 
 The behavioral layers, then the enforcement gates (all in main-tree `tests/spirv/` except the
 real-driver layer, which lives in dasVulkan):

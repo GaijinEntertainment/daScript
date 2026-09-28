@@ -31,19 +31,23 @@ struct TtsCorpusRow {
 
 def tts_corpus_path() : string => "{get_das_root()}/modules/dasLLAMA/tests/_tts_fixtures/g2p_corpus.json"
 
+//! The JSON file at `path` into `m` (its type picks the schema): false when the file is missing or empty, a panic when it does not parse.
+def load_json_file(path : string; var m : auto(TT)) : bool {
+    let text = fread(path)
+    return false if (empty(text))
+    if (!sscan_json(text, m)) {
+        panic("{path} does not parse")
+    }
+    return true
+}
+
 //! The whole fixture, in file order. Panics on a missing or malformed file: the fixture is
 //! checked in, so its absence is a defect, never a skip.
 def load_tts_corpus() : array<TtsCorpusRow> {
     let path = tts_corpus_path()
-    let f = fopen(path, "rb")
-    if (f == null) {
-        panic("tts corpus fixture missing: {path}")
-    }
-    let text = fread(f)
-    fclose(f)
     var rows : array<TtsCorpusRow>
-    if (!sscan_json(text, rows)) {
-        panic("tts corpus fixture does not parse: {path}")
+    if (!load_json_file(path, rows)) {
+        panic("tts corpus fixture missing: {path}")
     }
     if (length(rows) != 200) {
         panic("tts corpus fixture has {length(rows)} rows, expected 200")

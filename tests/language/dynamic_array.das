@@ -103,6 +103,29 @@ def test_dynamic_array(t : T?) { // nolint:STYLE038 — flat list of independent
     }
 }
 
+[test]
+def test_subarray(t : T?) {
+    t |> run("subarray range64 of a const array") @(t : T?) {
+        let arr <- [0, 10, 20, 30]
+        let got <- subarray(arr, range64(1l, 3l))
+        t |> equal(length(got), 2)
+        t |> equal(got[0], 10)
+        t |> equal(got[1], 20)
+    }
+    t |> run("subarray range64 of a var array") @(t : T?) {
+        var arr <- [0, 10, 20, 30]
+        let got <- subarray(arr, range64(2l, 4l))
+        t |> equal(length(got), 2)
+        t |> equal(got[0], 20)
+        t |> equal(got[1], 30)
+    }
+    t |> run("subarray empty range64") @(t : T?) {
+        var arr <- [0, 10, 20, 30]
+        let got <- subarray(arr, range64(3l, 3l))
+        t |> equal(length(got), 0)
+    }
+}
+
 def pass_array_helper(var arr : array<int>) {
     push(arr, 4)
 }

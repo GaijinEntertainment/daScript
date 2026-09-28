@@ -113,6 +113,7 @@ def private mint_tower(mm : string; nl : int64 = 0l; wa : int64 = -1l; zero_bloc
 
 //! one canvas two ways - the exact CPU chain and the device chain - with the counters and the bar; `zero_block` >= 0 adds the
 //! input poison: the device chain over a fresh tower with that block zeroed must EXCEED the bar the clean chains set
+[cold_path]
 def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let planes <- make_planes(kind, w, h)
@@ -137,7 +138,7 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
             to_log(LOG_INFO, "qwen25v vulkan twin {kind} {w}x{h}: the driver declined - {vulkan_tower_declines()}\n")
         }
         twin_counters(tt, "{kind} {w}x{h}", TwinLegs(exact = d0, cpu = d1, dev = d2, n_cpu = n_cpu, n_dev = n_dev), tw.n_layer, int64(w / 14) * int64(h / 14))
-        let rms = rms_of(cpu)
+        let rms = rms(cpu)
         let dev_ex = logits_maxdiff(dev, cpu)
         let rel = tw.n_layer <= 8l ? TWIN_REL_VK_SHALLOW : TWIN_REL_VK_DEEP
         let bar = TWIN_ABS_VK + rel * rms

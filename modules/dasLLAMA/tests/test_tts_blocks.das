@@ -216,9 +216,9 @@ def private pad_and_polar_case() : BlockCase {
     var inscope x_rows : array<float>
     transpose_ct(x_ct, c, t, x_rows)
     var inscope want : array<float>
-    var inscope y_rows : array<float>
+    var inscope y_rows := x_rows
     pad_reflect_left(x_ct, c, t, 1l, want)
-    pad_reflect_left_rows(x_rows, t, c, 1l, y_rows)
+    pad_reflect_left_rows_inplace(y_rows, t, c, 1l)
     var inscope got : array<float>
     transpose_tc(y_rows, t + 1l, c, got)
     var inscope env : array<float>
@@ -722,6 +722,44 @@ def private adain_into_case(c : int64) : BlockCase {
     return res
 }
 
+//! one `layernorm_rows_into` arm: `off` elements of the copy apart from `layernorm_rows` in place, and whether the source kept its bits
+struct private LnIntoCase {
+    off : int
+    same_length : bool
+    src_kept : bool
+}
+
+//! `layernorm_rows_into` of [T_ROWS][c] against `layernorm_rows` in place on a copy; `poison_at` >= 0 moves that source element first
+def private layernorm_into_case(c : int64; poison_at : int64 = -1l) : LnIntoCase {
+    var r = TtsRng()
+    rng_seed(r, 0x1a3ul + uint64(c))
+    let t = T_ROWS
+    var inscope n = TtsNorm()
+    rand_fill(r, n.w, c, 1.0)
+    rand_fill(r, n.b, c, 0.5)
+    var inscope src : array<float>
+    rand_fill(r, src, t * c, 3.0)
+    var inscope inplace := src
+    layernorm_rows(inplace, t, c, n, 1.0e-5)
+    if (poison_at >= 0l) {
+        src[poison_at]++
+    }
+    var inscope src_before := src
+    var inscope dst : array<float>
+    layernorm_rows_into(src, dst, t, c, n, 1.0e-5)
+    var res = LnIntoCase(same_length = length(dst) == length(inplace))
+    if (res.same_length) {
+        for (x, y in dst, inplace) {
+            res.off += x == y ? 0 : 1
+        }
+    }
+    res.src_kept = true
+    for (x, y in src, src_before) {
+        res.src_kept = res.src_kept && x == y
+    }
+    return res
+}
+
 // layernorm_rows against layernorm_channels, the same affine on both
 def private layernorm_case() : BlockCase {
     var r = TtsRng()
@@ -1061,6 +1099,16 @@ def test_rows_convs(t : T?) {
             report(t, ada_layernorm_case())
             report(t, align_expand_case())
         }
+        t |> run("layernorm_rows_into at 64 and 66 channels: bit for bit layernorm_rows in place on a copy, the source untouched") @(t : T?) {
+            for (c in fixed_array(64l, 66l)) {
+                let lc = layernorm_into_case(c)
+                t |> success(lc.same_length, "c={c}: the copy is sized [{T_ROWS}][{c}]")
+                t |> equal(lc.off, 0, "c={c}: elements of the copy apart from layernorm_rows in place")
+                t |> success(lc.src_kept, "c={c}: the source keeps its bits")
+            }
+            let poisoned = layernorm_into_case(64l, 5l * 64l + 7l)
+            t |> success(poisoned.off >= 64, "the control: one moved source element moves its row of the copy off the in-place rows ({poisoned.off} elements)")
+        }
         t |> run("the residual block's pool and nearest shortcut") @(t : T?) {
             report(t, pool_and_nearest_case())
         }
@@ -1115,7 +1163,7 @@ def test_conv1d_dims_of(t : T?) {
     }
 }
 
-// ARCHITECTURE_TTS.md sec.2.28: a rows kernel's result never depends on how its rows split
+// ARCHITECTURE_TTS.md#tts-two-layouts: a rows kernel's result never depends on how its rows split
 // across the parallel workers. Two axes move that split, and every kernel runs both. The batch
 // lane cap: 1 collapses every rows GEMM to one inline chunk, 0 gives the box's lanes times the
 // oversplit. The jobque worker limit: 1 leaves one live worker plus the caller lane, the box's
@@ -1544,7 +1592,7 @@ def private append_range(var dst : array<float>; src : array<float>; off, n : in
 // of every window in order
 def private sine_run(cfg : SineSourceCfg; f0 : array<float>; frames : int64; noise_u, noise_n : array<float>;
                      window : int64; var out : array<float>) {
-    let nlow = resize_len(frames * cfg.upsample, 1.0 / float(cfg.upsample))
+    let nlow = sine_source_geometry(cfg, frames).nlow
     let win = window <= 0l ? nlow : window
     var inscope cr = SineSourceCarry()
     sine_carry_reset(cr, cfg.n_harm, win)

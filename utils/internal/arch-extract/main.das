@@ -4,8 +4,8 @@ options indenting = 4
 // Extracts, for a shipped source tree, the architecture-document sections its [arch]
 // annotations cite, into an output tree the SDK install rules copy beside the shipped code.
 // The rule documents themselves never install, but a shipped citation must still resolve, so
-// the bundle carries a generated excerpt - the cited sections verbatim, nothing else - and
-// LINT026 stays armed in an installed SDK. Resolution semantics are the shared scanner's
+// the bundle carries a generated excerpt - the cited sections verbatim, plus the sections those
+// sections cite in turn, nothing else - and LINT026 stays armed in an installed SDK. Resolution semantics are the shared scanner's
 // (utils/common/arch_citations.das): a section this tool extracts is exactly what lint
 // accepts, and a citation it rejects is one lint reports.
 
@@ -93,6 +93,45 @@ def private collect_cited(files : array<string>; var citedDocs, citedAnchors : t
 }
 
 
+// An emitted section is itself a citer: every `<doc>.md#<anchor>` in its text must resolve in the
+// installed tree, so the cited set closes over the sections it pulls in, to a fixed point. A
+// section's citations are checked as LINT026 checks the document's. Returns the failure count.
+def private close_over_sections(var citedDocs, citedAnchors : table<string; void?>; var citations : int&) : int {
+    var docs : ArchDocs
+    var failures = 0
+    var scanned : table<string; void?>
+    var pending <- [for (k in keys(citedAnchors)); k]
+    while (!empty(pending)) {
+        var next : array<string>
+        for (key in pending) {
+            continue if (scanned |> key_exists(key))
+            scanned |> insert(key, null)
+            let hash = find(key, "#")
+            let doc = slice(key, 0, hash)
+            let anchor = slice(key, hash + 1)
+            let firstLine = section_span(doc, anchor).x - 1
+            for (c in collect_arch_citations(doc, section_text(doc, anchor))) {
+                let reason = citation_failure_reason(docs, doc, c)
+                if (!empty(reason)) {
+                    to_log(LOG_ERROR, "{doc}:{c.line + firstLine}: citation in an excerpted section does not resolve - {reason} (\"{c.raw}\")\n")
+                    failures ++
+                    continue
+                }
+                let ckey = "{c.doc}#{c.anchor}"
+                continue if (citedAnchors |> key_exists(ckey))
+                citations ++
+                citedDocs |> insert(c.doc, null)
+                citedAnchors |> insert(ckey, null)
+                next |> push(ckey)
+            }
+        }
+        delete pending
+        pending <- next
+    }
+    return failures
+}
+
+
 // Writes one excerpt: the banner line, then the cited sections in DOCUMENT order, so the
 // excerpt reads as the source doc does. A cited anchor nested inside an already-emitted
 // section is on the page once - emitting its section again would declare the anchor twice,
@@ -150,7 +189,10 @@ def main : int {
     var citedDocs : table<string; void?>
     var citedAnchors : table<string; void?>
     var citations = 0
-    let failures = collect_cited(files, citedDocs, citedAnchors, citations)
+    var failures = collect_cited(files, citedDocs, citedAnchors, citations)
+    if (failures == 0) {
+        failures = close_over_sections(citedDocs, citedAnchors, citations)
+    }
     if (failures > 0) {
         to_log(LOG_ERROR, "arch-extract: {failures} unresolved citation(s) - nothing written\n")
         return 1

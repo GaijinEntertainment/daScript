@@ -115,6 +115,36 @@ def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
     to_log(LOG_INFO, "{tag} GPU text: {eyeball_text(m, gpu_ids)}\n")
 }
 
+//! `a`'s root mean square, accumulated in double; 0 for an empty row
+def rms(a : array<float>) : float {
+    var ss = 0.0lf
+    for (v in a) {
+        ss += double(v) * double(v)
+    }
+    return float(sqrt(ss / double(max(long_length(a), 1l))))
+}
+
+//! sqrt(sum (got - ref)^2 / sum ref^2), accumulated in double: `got`'s distance from `ref` in `ref`'s magnitude; two lengths panic
+def rel_l2(got, ref : array<float>) : float {
+    if (long_length(got) != long_length(ref)) {
+        panic("rel_l2: {length(got)} elements against the reference's {length(ref)}")
+    }
+    var num = 0.0lf
+    var den = 0.0lf
+    for (g, r in got, ref) {
+        let d = double(g) - double(r)
+        num += d * d
+        den += double(r) * double(r)
+    }
+    return float(sqrt(num / max(den, 1e-30lf)))
+}
+
+//! `rel_l2` over the first min(length) elements of each - the deliberate trim of two runs whose lengths may part (a free run, a control)
+def rel_l2_common(got, ref : array<float>) : float {
+    let n = min(long_length(got), long_length(ref))
+    return rel_l2(copy_span(got, 0l, n), copy_span(ref, 0l, n))
+}
+
 // the shared statistic core of the two tower_parity forms below
 struct TowerParityStats {
     max_ad : double
@@ -130,7 +160,6 @@ def tower_parity_stats(t : T?; tag : string; ref, got : array<float>; var st : T
     if (long_length(ref) != long_length(got) || empty(ref)) {
         return false
     }
-    var l2n = 0.0lf
     var na = 0.0lf
     var nb = 0.0lf
     var dot = 0.0lf
@@ -138,14 +167,13 @@ def tower_parity_stats(t : T?; tag : string; ref, got : array<float>; var st : T
         let a = double(rv)
         let b = double(gv)
         st.max_ad = max(st.max_ad, abs(a - b))
-        l2n += (a - b) * (a - b)
         na += a * a
         nb += b * b
         dot += a * b
     }
-    st.rms = sqrt(na / double(long_length(ref)))
+    st.rms = double(rms(ref))
     st.rel_elem = st.max_ad / max(st.rms, 1e-30lf)
-    st.rel_l2 = sqrt(l2n) / max(sqrt(na), 1e-30lf)
+    st.rel_l2 = double(rel_l2(got, ref))
     st.cos = dot / max(sqrt(na) * sqrt(nb), 1e-30lf)
     st.norm_dev = abs(sqrt(nb) - sqrt(na)) / max(sqrt(na), 1e-30lf)
     to_log(LOG_INFO, "{tag}: rel_elem={st.rel_elem} rel_l2={st.rel_l2} cos={st.cos} norm_dev={st.norm_dev} maxdiff={st.max_ad} rms={st.rms} n={long_length(ref)}\n")

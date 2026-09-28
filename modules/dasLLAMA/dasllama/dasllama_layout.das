@@ -676,6 +676,12 @@ def moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; m
     }
 }
 
+let Q8_GATHER_SLICE_ROWS = 64l   //! a cold gather's parallel slice, where a region's rows divide by it
+
+//! a whole region's gather slice: the fixed slice where it divides the rows and the group, else the whole region
+def q8_gather_slice(rows, mr : int64) : int64
+    => rows % Q8_GATHER_SLICE_ROWS == 0l && Q8_GATHER_SLICE_ROWS % mr == 0l ? Q8_GATHER_SLICE_ROWS : rows
+
 //! The gather's core over raw planes: `rows` x `n` prepared Q8 rows at `wp` (grp<mr> interleaved per `slice_rows`, or plain
 //! row-major at mr 1) with their scales (f16 halfwords at `s16p`, else f32 at `s32p`) into row-major int8 quants at
 //! `wq[dst_q..]` and f16 halfword scales at halfword `dst_s` of `ws` - the tower drivers gather region by region through it
