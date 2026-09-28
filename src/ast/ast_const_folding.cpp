@@ -475,7 +475,7 @@ namespace das {
         ExprConstString * str = nullptr;
         for ( auto it=expr->elements.begin(); it != expr->elements.end(); ) { // note - loop has erase, don't store 'end'
             auto & elem = *it;
-            if ( elem->rtti_isStringConstant() ) {
+            if ( elem->rtti_isStringConstant() && !static_cast<ExprConstString*>(elem)->isBlob() ) {
                 auto selem = static_cast<ExprConstString*>(elem);
                 if ( str ) {
                     str->text += selem->text;

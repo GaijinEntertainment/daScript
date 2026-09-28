@@ -3467,6 +3467,7 @@ namespace das {
     DAS_API const char * pass_string( const char * str );
     DAS_API char * clone_pass_string( char * str, Context * ctx, LineInfoArg * at);
     DAS_API void set_das_string(string & str, const char * bs);
+    DAS_API void set_das_string_bytes(string & str, const TArray<uint8_t> & bytes);
     DAS_API void set_string_das(char * & bs, const string & str, Context * ctx, LineInfoArg * at);
 
     __forceinline bool das_str_equ ( const string & a, const string & b ) { return a==b; }

@@ -290,6 +290,12 @@ namespace das {
         LinearChunkAllocator::reset();
         das_string_set dummy;
         swap(internMap, dummy);
+        blobLengths.clear();
+    }
+
+    uint32_t ConstStringAllocator::blobLength ( const char * str ) const {
+        auto it = blobLengths.find(str);
+        return it != blobLengths.end() ? it->second : 0;
     }
 
     char * ConstStringAllocator::impl_allocateString ( const char * text, uint64_t length ) {
@@ -307,6 +313,7 @@ namespace das {
                 if ( text ) memcpy(str, text, length);
                 str[length] = 0;
                 internMap.insert(StrHashEntry(str,uint32_t(length)));
+                if ( text && memchr(text, 0, length) ) blobLengths[str] = uint32_t(length);
                 return str;
             }
         }

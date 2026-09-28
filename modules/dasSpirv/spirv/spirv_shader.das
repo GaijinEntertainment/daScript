@@ -25,30 +25,21 @@ require daslib/templates_boost
 require daslib/strings_boost
 require strings
 
-// `spirv_reflect::unpack_spirv_words(array<uint4>(c0, c1, ...), n)` — one ExprConstUInt4 per
-// four words, a quarter of the AST nodes a per-word literal costs every pass over the program;
-// the gen2 array literal is ExprMakeArray(makeType=uint4, gen2=true) wrapped in to_array_move.
-// The expander lives in spirv_reflect: a runtime function the host's AOT set compiles, where
-// this macro-only module is not.
 [macro_function]
 def private build_uint_array_literal(words : array<uint>; at : LineInfo) : ExpressionPtr {
-    var mkArr = new ExprMakeArray(at = at, makeType = new TypeDecl(at = at, baseType = Type.tUInt4))
-    mkArr.gen2 = true
     let n = length(words)
-    for (q in range((n + 3) / 4)) {
-        var v : uint4
-        for (j in range(4)) {
-            let i = q * 4 + j
-            if (i < n) {
-                v[j] = words[i]
-            }
+    var bytes : array<uint8>
+    bytes |> resize(n * 4)
+    if (n > 0) {
+        unsafe {
+            memcpy(addr(bytes[0]), addr(words[0]), n * 4)
         }
-        mkArr.values |> emplace_new() <| new ExprConstUInt4(at = at, value = v)
     }
-    var toMove = new ExprCall(at = at, name := "to_array_move")
-    toMove.arguments |> emplace(mkArr)
+    var blob = new ExprConstString(at = at)
+    blob.value |> clone(bytes)
+    delete bytes
     var unpack = new ExprCall(at = at, name := "spirv_reflect::unpack_spirv_words")
-    unpack.arguments |> emplace(toMove)
+    unpack.arguments |> emplace(blob)
     unpack.arguments |> emplace_new() <| new ExprConstInt(at = at, value = n)
     return unpack
 }

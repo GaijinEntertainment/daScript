@@ -71,7 +71,10 @@ namespace das {
             write(argN);
         }
         virtual void arg ( const char * argV,  const char * argN  ) override {
-            if ( argV ) write(argV);
+            if ( argV ) {
+                write(argV);
+                if ( auto blobLength = context && context->constStringHeap ? context->constStringHeap->blobLength(argV) : 0 ) write(argV, blobLength);
+            }
             write(argN);
         }
         virtual void arg ( vec4f argV,  const char * argN ) override {

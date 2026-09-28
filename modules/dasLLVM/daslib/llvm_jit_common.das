@@ -1269,7 +1269,12 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
 
 def public build_string_constant(message : string) {
     if (g_str2v |> key_exists(message)) return g_str2v[message]
-    let msg_size = uint(length(message))
+    var str = build_string_constant(message, uint(length(message)))
+    g_str2v[message] = str
+    return str
+}
+
+def public build_string_constant(message : string implicit; msg_size : uint) {
     var strType = LLVMArrayType(g_prim_t.t_int8, msg_size + 1u)
     // Prefix all string variable names to not intersect with function names.
     var str = LLVMAddGlobal(g_mod, strType, ".str.{message}")
@@ -1278,7 +1283,6 @@ def public build_string_constant(message : string) {
     LLVMSetLinkage(str, LLVMLinkage.LLVMPrivateLinkage)
     LLVMSetUnnamedAddress(str, LLVMUnnamedAddr.LLVMGlobalUnnamedAddr)
     LLVMSetAlignment(str, 1u)
-    g_str2v[message] = str
     return str
 }
 
@@ -1302,6 +1306,15 @@ def public get_string_constant_ptr(builder : LLVMOpaqueBuilder?; message : strin
     if (empty(message)) return LLVMConstPointerNull(g_prim_t.get_type_string())
     var str = build_string_constant(message)
     return LLVMBuildPointerCast(builder, str, g_prim_t.get_type_string(), "string_constant {message}")
+}
+
+def public get_string_constant_ptr(builder : LLVMOpaqueBuilder?; value : das_string) {
+    if (empty(value)) return LLVMConstPointerNull(g_prim_t.get_type_string())
+    var str : LLVMOpaqueValue?
+    peek(value) $(text) {
+        str = build_string_constant(text, uint(length(value)))
+    }
+    return LLVMBuildPointerCast(builder, str, g_prim_t.get_type_string(), "string_constant {value}")
 }
 
 def public failed(msg : string) {
