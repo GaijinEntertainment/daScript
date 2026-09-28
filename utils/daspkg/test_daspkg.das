@@ -418,11 +418,22 @@ def private write_passing_pkg(src_dir, pkg_name : string) {
 
 // Writes a .das_package with optional dependencies (each entry is a require_package source).
 def private write_passing_pkg(src_dir, pkg_name : string; deps : array<string>) {
+    let no_lines : array<string>
+    write_passing_pkg(src_dir, pkg_name, no_lines, deps)
+}
+
+// Writes a .das_package whose package() holds package_name plus `package_lines`, with optional
+// dependencies (each entry is a require_package source).
+def private write_passing_pkg(src_dir, pkg_name : string; package_lines, deps : array<string>) {
     mkdir(src_dir)
     let manifest = build_string() $(var w) {
         w |> write("options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"")
         w |> write(pkg_name)
-        w |> write("\")\n\}\n")
+        w |> write("\")\n")
+        for (line in package_lines) {
+            w |> write("    {line}\n")
+        }
+        w |> write("\}\n")
         if (!empty(deps)) {
             w |> write("[export]\ndef dependencies(version : string) \{\n")
             for (d in deps) {
@@ -2792,4 +2803,306 @@ def test_ship_external_files(t : T?) {
     t |> equal(length(failed_copy), 0)
     let cleanup = rmdir_rec_result(root)
     t |> success(cleanup is value && cleanup as value, "temp directory removed")
+}
+
+// --- platform declarations ---
+
+let PKG_PLATFORMS_FIXTURE = "utils/daspkg/fixtures/test_platforms.das_package"
+
+// A known platform name that is not this host's.
+def private other_platform() : string {
+    for (p in PLATFORM_NAMES) {
+        if (p != get_platform_name()) return p
+    }
+    return ""
+}
+
+[test]
+def test_run_das_package_platforms(t : T?) {
+    t |> run("reads and normalizes package_platform / package_platforms") @(t : T?) {
+        var meta : PackageMeta
+        t |> success(run_das_package_meta(PKG_PLATFORMS_FIXTURE, meta))
+        t |> equal(3, length(meta.platforms))
+        t |> equal("windows", meta.platforms[0])
+        t |> equal("emscripten", meta.platforms[1])
+        t |> equal("darwin", meta.platforms[2])
+    }
+    t |> run("a manifest without a declaration has none") @(t : T?) {
+        var meta : PackageMeta
+        t |> success(run_das_package_meta(PKG_FIXTURE, meta))
+        t |> equal(0, length(meta.platforms))
+    }
+    t |> run("vocabulary helpers") @(t : T?) {
+        t |> equal("emscripten", normalize_platform_name(" WASM "))
+        t |> equal("linux", normalize_platform_name("linux"))
+        t |> equal("amiga", normalize_platform_name("amiga"))
+        t |> success(is_known_platform("darwin"))
+        t |> success(!is_known_platform("amiga"))
+        let bad <- unknown_platforms(["windows", "amiga", "beos"])
+        t |> equal(2, length(bad))
+        t |> equal("amiga", bad[0])
+    }
+}
+
+[test]
+def test_platform_gate(t : T?) {
+    let host = get_platform_name()
+    let other = other_platform()
+    t |> run("no declaration passes") @(t : T?) {
+        let none : array<string>
+        t |> equal(0, platform_gate("pkg", host, none, false))
+    }
+    t |> run("host among the declared passes") @(t : T?) {
+        t |> equal(0, platform_gate("pkg", host, [other, host], false))
+    }
+    t |> run("host outside the declared refuses with the sweep's skip code") @(t : T?) {
+        t |> equal(RC_UNSUPPORTED_PLATFORM, platform_gate("pkg", host, [other], false))
+    }
+    t |> run("--force turns the refusal into a warning") @(t : T?) {
+        t |> equal(0, platform_gate("pkg", host, [other], true))
+    }
+    t |> run("an unknown name is an error even under --force") @(t : T?) {
+        t |> equal(1, platform_gate("pkg", host, ["amiga"], true))
+    }
+    t |> run("a directory without a manifest passes") @(t : T?) {
+        let tmp_dir = "{get_das_root()}/_daspkg_test_gate_nomanifest"
+        mkdir(tmp_dir)
+        t |> equal(0, platform_gate(tmp_dir, "pkg", host, false))
+        force_rmdir(tmp_dir)
+    }
+    t |> run("a manifest that does not compile passes - the install fails on it later, not here") @(t : T?) {
+        let tmp_dir = "{get_das_root()}/_daspkg_test_gate_broken"
+        mkdir(tmp_dir)
+        fwrite("{tmp_dir}/.das_package", "this is not daslang\n")
+        t |> equal(0, platform_gate(tmp_dir, "pkg", host, false))
+        force_rmdir(tmp_dir)
+    }
+}
+
+// Writes a releasable package (main.das + release_main) declaring `platform` as its only platform.
+def private write_release_platform_pkg(src_dir, pkg_name, platform : string) {
+    mkdir(src_dir)
+    fwrite("{src_dir}/main.das", "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+    fwrite("{src_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"{pkg_name}\")\n    package_platform(\"{platform}\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+}
+
+[test]
+def test_release_platform_gate(t : T?) {
+    t |> run("release refuses a package declaring another platform before writing anything") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_relgate"
+        let out_dir = "{get_das_root()}/_daspkg_test_relgate_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        write_release_platform_pkg(tmp_root, "relgate", other_platform())
+        t |> equal(RC_UNSUPPORTED_PLATFORM, cmd_release(tmp_root, out_dir))
+        t |> success(!fexist(out_dir))
+        force_rmdir(tmp_root)
+    }
+    t |> run("release wasm checks the declaration against emscripten, not the host") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_relgate"
+        let out_dir = "{get_das_root()}/_daspkg_test_relgate_out"
+        let empty_lib = "{get_das_root()}/_daspkg_test_relgate_lib"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(empty_lib)
+        write_release_platform_pkg(tmp_root, "relgate", get_platform_name())
+        t |> equal(RC_UNSUPPORTED_PLATFORM, cmd_release_wasm(tmp_root, out_dir, empty_lib))
+        write_release_platform_pkg(tmp_root, "relgate", "wasm")
+        t |> equal(1, cmd_release_wasm(tmp_root, out_dir, empty_lib), "past the gate, the empty archive dir is the next refusal")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        force_rmdir(empty_lib)
+    }
+}
+
+[test]
+def test_index_sweep_skips_other_platforms(t : T?) {
+    t |> run("an index entry declaring other platforms only is a skip row, never an install") @(t : T?) {
+        var cmake_out : string
+        if (run_cmd("cmake --version", cmake_out) != 0) {
+            t |> skip("cmake not on PATH")
+            return
+        }
+        let tmp = "{get_das_root()}/_daspkg_test_sweep"
+        force_rmdir(tmp)
+        mkdir(tmp)
+        mkdir("{tmp}/root")
+        mkdir("{tmp}/out")
+        let entry = "[\{\"name\":\"elsewhere\",\"url\":\"github.com/nobody/elsewhere\",\"description\":\"d\",\"platforms\":[\"{other_platform()}\"]\}]"
+        fwrite("{tmp}/packages.json", entry)
+        var output : string
+        let rc = run_cmd("cmake -DDASLANG=\"{get_das_root()}/bin/daslang\" -DROOT=\"{tmp}/root\" -DOUT=\"{tmp}/out\" -DPACKAGES_JSON=\"{tmp}/packages.json\" -P \"{get_das_root()}/utils/daspkg/index_sweep.cmake\"", output)
+        t |> equal(0, rc, output)
+        t |> success(find(output, "skip elsewhere:") >= 0, output)
+        t |> success(!fexist("{tmp}/root/modules/elsewhere"))
+        force_rmdir(tmp)
+    }
+}
+
+// Writes a .das_package with no build() that declares `platform` as its only platform.
+def private write_platform_pkg(src_dir, pkg_name, platform : string) {
+    let no_deps : array<string>
+    write_passing_pkg(src_dir, pkg_name, ["package_platform(\"{platform}\")"], no_deps)
+}
+
+[test]
+def test_install_local_platform_gate(t : T?) {
+    let other = other_platform()
+    t |> run("an unsupported package is refused before anything lands") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_plat_root"
+        let tmp_src = "{get_das_root()}/_daspkg_test_plat_src"
+        mkdir(tmp_root)
+        write_platform_pkg(tmp_src, "foreign", other)
+        var lf : LockFile
+        t |> equal(RC_UNSUPPORTED_PLATFORM, install_local(tmp_root, "foreign", tmp_src, lf))
+        t |> success(!has_package(lf, "foreign"))
+        t |> success(!fexist("{tmp_root}/modules/foreign"))
+        force_rmdir(tmp_root)
+        force_rmdir(tmp_src)
+    }
+    t |> run("--force installs it") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_plat_root"
+        let tmp_src = "{get_das_root()}/_daspkg_test_plat_src"
+        mkdir(tmp_root)
+        write_platform_pkg(tmp_src, "foreign", other)
+        var lf : LockFile
+        t |> equal(0, install_local(tmp_root, "foreign", tmp_src, lf, [force = true]))
+        t |> success(has_package(lf, "foreign"))
+        t |> success(fexist("{tmp_root}/modules/foreign/.das_package"))
+        force_rmdir(tmp_root)
+        force_rmdir(tmp_src)
+    }
+    t |> run("a supported package installs") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_plat_root"
+        let tmp_src = "{get_das_root()}/_daspkg_test_plat_src"
+        mkdir(tmp_root)
+        write_platform_pkg(tmp_src, "native", get_platform_name())
+        var lf : LockFile
+        t |> equal(0, install_local(tmp_root, "native", tmp_src, lf))
+        t |> success(has_package(lf, "native"))
+        force_rmdir(tmp_root)
+        force_rmdir(tmp_src)
+    }
+    t |> run("an unsupported dependency refuses the parent and rolls it back") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_plat_root"
+        let tmp_src = "{get_das_root()}/_daspkg_test_plat_src"
+        let dep_src = "{get_das_root()}/_daspkg_test_plat_dep"
+        mkdir(tmp_root)
+        write_platform_pkg(dep_src, "foreigndep", other)
+        write_passing_pkg(tmp_src, "parent", [dep_src])
+        var lf : LockFile
+        t |> equal(RC_UNSUPPORTED_PLATFORM, install_local(tmp_root, "parent", tmp_src, lf))
+        t |> success(!has_package(lf, "parent"))
+        t |> success(!has_package(lf, "_daspkg_test_plat_dep"))
+        t |> success(!fexist("{tmp_root}/modules/parent"))
+        force_rmdir(tmp_root)
+        force_rmdir(tmp_src)
+        force_rmdir(dep_src)
+    }
+    t |> run("--force reaches the dependency") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_plat_root"
+        let tmp_src = "{get_das_root()}/_daspkg_test_plat_src"
+        let dep_src = "{get_das_root()}/_daspkg_test_plat_dep"
+        mkdir(tmp_root)
+        write_platform_pkg(dep_src, "foreigndep", other)
+        write_passing_pkg(tmp_src, "parent", [dep_src])
+        var lf : LockFile
+        t |> equal(0, install_local(tmp_root, "parent", tmp_src, lf, [force = true]))
+        t |> success(has_package(lf, "parent"))
+        t |> success(has_package(lf, "_daspkg_test_plat_dep"))
+        force_rmdir(tmp_root)
+        force_rmdir(tmp_src)
+        force_rmdir(dep_src)
+    }
+}
+
+[test]
+def test_index_platforms(t : T?) {
+    t |> run("parses, serializes and renders platforms") @(t : T?) {
+        let json_text = "[\{\"name\":\"winpkg\",\"url\":\"github.com/u/winpkg\",\"description\":\"windows only\",\"platforms\":[\"windows\",\"emscripten\"]\}]"
+        var index : table<string; IndexEntry>
+        t |> success(parse_index_json(json_text, index))
+        unsafe {
+            let e & = index["winpkg"]
+            t |> equal(2, length(e.platforms))
+            t |> equal("windows", e.platforms[0])
+            t |> equal("emscripten", e.platforms[1])
+        }
+        let serialized = serialize_index(index)
+        t |> success(find(serialized, "\"platforms\"") >= 0)
+        var index2 : table<string; IndexEntry>
+        t |> success(parse_index_json(serialized, index2))
+        t |> equal(2, unsafe(length(index2["winpkg"].platforms)))
+        let readme = generate_index_readme(json_text)
+        t |> success(find(readme, "**Platforms:** windows, emscripten") >= 0)
+    }
+    t |> run("an entry without platforms stays without them") @(t : T?) {
+        let json_text = "[\{\"name\":\"bare\",\"url\":\"github.com/u/bare\",\"description\":\"minimal\"\}]"
+        var index : table<string; IndexEntry>
+        t |> success(parse_index_json(json_text, index))
+        t |> equal(0, unsafe(length(index["bare"].platforms)))
+        t |> success(find(serialize_index(index), "\"platforms\"") < 0)
+        t |> success(find(generate_index_readme(json_text), "**Platforms:**") < 0)
+    }
+    t |> run("a refresh replaces the entry's platforms with the manifest's, an empty declaration included") @(t : T?) {
+        var entry : IndexEntry
+        entry.platforms |> push_clone("windows")
+        var restricted = PackageManifest(name = "p", description = "d")
+        restricted.platforms |> push_clone("linux")
+        apply_manifest_to_entry(restricted, entry)
+        t |> equal(1, length(entry.platforms))
+        t |> equal("linux", entry.platforms[0])
+        let unrestricted = PackageManifest(name = "p", description = "d")
+        apply_manifest_to_entry(unrestricted, entry)
+        t |> equal(0, length(entry.platforms))
+    }
+    t |> run("introduce carries the manifest's platforms into the entry") @(t : T?) {
+        var manifest = PackageManifest(name = "winpkg", description = "windows only")
+        manifest.platforms |> push_clone("windows")
+        let result = add_to_index_json_rich("[]", "winpkg", manifest, "github.com/u/winpkg")
+        var index : table<string; IndexEntry>
+        t |> success(parse_index_json(result, index))
+        unsafe {
+            t |> equal(1, length(index["winpkg"].platforms))
+            t |> equal("windows", index["winpkg"].platforms[0])
+        }
+    }
+}
+
+[test]
+def test_read_manifest_platforms(t : T?) {
+    t |> run("reads a declaration") @(t : T?) {
+        let tmp_dir = "{get_das_root()}/_daspkg_test_manifest_platforms"
+        let no_deps : array<string>
+        write_passing_pkg(tmp_dir, "winpkg", ["package_description(\"d\")", "package_platform(\"windows\")"], no_deps)
+        var manifest : PackageManifest
+        t |> success(read_manifest(tmp_dir, manifest))
+        t |> equal(1, length(manifest.platforms))
+        t |> equal("windows", manifest.platforms[0])
+        force_rmdir(tmp_dir)
+    }
+    t |> run("an unknown platform name fails the manifest") @(t : T?) {
+        let tmp_dir = "{get_das_root()}/_daspkg_test_manifest_platforms"
+        let no_deps : array<string>
+        write_passing_pkg(tmp_dir, "badpkg", ["package_description(\"d\")", "package_platform(\"amiga\")"], no_deps)
+        var manifest : PackageManifest
+        t |> success(!read_manifest(tmp_dir, manifest))
+        force_rmdir(tmp_dir)
+    }
+}
+
+[test]
+def test_parse_args_update_index_flags(t : T?) {
+    t |> run("--commit and --dry-run parse and default off") @(t : T?) {
+        var r <- parse_args(type<DaspkgArgs>, ["update-index", "--commit"])
+        t |> success(r |> is_ok, "parse succeeds")
+        let parsed <- r |> move_unwrap
+        t |> success(parsed.commit)
+        t |> success(!parsed.dry_run)
+        var r2 <- parse_args(type<DaspkgArgs>, ["update-index", "--dry-run"])
+        t |> success(r2 |> is_ok, "parse succeeds")
+        let parsed2 <- r2 |> move_unwrap
+        t |> success(parsed2.dry_run)
+        t |> success(!parsed2.commit)
+    }
 }

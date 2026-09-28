@@ -5,6 +5,9 @@ options strict_smart_pointers = true
 
 module daspkg shared public
 
+require strings
+require daslib/strings_boost
+
 // Package manager API for .das_package manifests.
 //
 // .das_package scripts `require daslib/daspkg` and call these functions
@@ -22,6 +25,7 @@ struct PackageMeta {
     license : string
     tags : array<string>
     min_sdk : string
+    platforms : array<string>           //!< `get_platform_name()` values the package installs on; empty = every platform
 }
 
 var _pkg_meta : PackageMeta
@@ -56,6 +60,45 @@ def package_tags(tags : array<string>) {
 
 def package_min_sdk(version : string) {
     _pkg_meta.min_sdk = version
+}
+
+//! The platform names a manifest may declare - the `get_platform_name()` vocabulary. `PLATFORM_ALIASES` maps the spellings people type (`wasm`, `macos`) onto it.
+let PLATFORM_NAMES <- ["windows", "darwin", "linux", "emscripten"]
+let PLATFORM_ALIASES : table<string; string> <- { "wasm" => "emscripten", "wasm32" => "emscripten", "wasm64" => "emscripten", "macos" => "darwin", "osx" => "darwin", "win" => "windows", "win32" => "windows", "win64" => "windows" }
+
+//! True for a name in `PLATFORM_NAMES`.
+def is_known_platform(name : string) : bool {
+    return find_index(PLATFORM_NAMES, name) >= 0
+}
+
+//! The names in `platforms` outside `PLATFORM_NAMES`; empty when every name is known.
+def unknown_platforms(platforms : array<string>) : array<string> {
+    return <- [for (p in platforms); p; where !is_known_platform(p)]
+}
+
+//! The refusal for a declaration naming a platform outside the vocabulary, `subject` being the package or manifest refused; empty when every name is known.
+def unknown_platforms_error(subject : string; platforms : array<string>) : string {
+    let bad <- unknown_platforms(platforms)
+    if (empty(bad)) return ""
+    return "Error: {subject} names unknown platform(s) {join(bad, ", ")} - package_platform takes {join(PLATFORM_NAMES, ", ")}\n"
+}
+
+//! `name` normalized to the `get_platform_name()` vocabulary: an alias resolves, a canonical name passes, anything else comes back unchanged for the tool to reject.
+def normalize_platform_name(name : string) : string {
+    let lower = to_lower(strip(name))
+    return unsafe(PLATFORM_ALIASES?[lower] ?? lower)
+}
+
+//! Declare a platform the package installs and releases on (repeatable). A manifest that declares none runs everywhere; one that declares some is refused elsewhere unless `--force` - the check is a declaration, not a build probe. Names are the `get_platform_name()` vocabulary (`windows`, `darwin`, `linux`, `emscripten`); `wasm` and `macos` are accepted spellings of the last two.
+def package_platform(name : string) {
+    _pkg_meta.platforms |> push(normalize_platform_name(name))
+}
+
+//! `package_platform` over a list.
+def package_platforms(names : array<string>) {
+    for (n in names) {
+        package_platform(n)
+    }
 }
 
 enum DownloadKind {

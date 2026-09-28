@@ -71,6 +71,9 @@ def run_das_package_meta(das_package_path : string; var meta : PackageMeta) : bo
             for (t in src.tags) {
                 meta.tags |> push(clone_string(t))
             }
+            for (pl in src.platforms) {
+                meta.platforms |> push(clone_string(pl))
+            }
         }
     }
     return ok

@@ -32,6 +32,7 @@ The `--root` flag sets the project root directory (default: current directory). 
 | `release wasm` | `release wasm --root <dir> [--out <dir>] [--wasm-lib-dir <dir>]` | Cross-compile the project to a standalone wasm64 web app (`<name>.{html,js,wasm}`) - see WebAssembly section |
 | `introduce` | `introduce` | Register package in the public index (creates PR on daspkg-index) |
 | `withdraw` | `withdraw` | Remove package from the public index |
+| `update-index` | `update-index [--commit \| --dry-run]` | Re-read every index entry's manifest and refresh the index: a PR by default, `--commit` pushes to the index's main, `--dry-run` prints the diff |
 
 ## Install Sources
 
@@ -45,7 +46,7 @@ The `--root` flag sets the project root directory (default: current directory). 
 | Flag | Description |
 |---|---|
 | `--root <path>` | Project root directory (default: current directory) |
-| `--force` | Force reinstall (overrides duplicate/version checks) |
+| `--force` | Force reinstall (overrides duplicate/version checks); also lets `install`, `update` and `upgrade` take a package whose manifest declares other platforms only |
 | `--global`, `-g` | Operate on global modules in `{das_root}/modules/` (see below) |
 | `--fat <class>` | `release` only: build a fat exe for the CPU class (`x86-avx2`, `arm-neon`, ...) - no mint, no sidecar; a kernel with no profile for its baseline clone refuses |
 | `--color` | Enable colored output |
@@ -137,6 +138,7 @@ def package() {
     package_license("MIT")
     package_tag("networking")
     package_min_sdk("0.4")
+    package_platform("windows")     // optional, repeatable; or package_platforms([...]); none = every platform
 }
 
 [export]
@@ -159,6 +161,13 @@ def build() {
     cmake_build()       // or: custom_build("make all"), or: no_build() (default)
 }
 ```
+
+**Platforms.** `package_platform(name)` names a platform the package installs and releases on -
+`windows`, `darwin`, `linux`, `emscripten` (the `get_platform_name()` vocabulary; `wasm` and
+`macos` are accepted spellings). No declaration means every platform. On a host outside the list
+`install` refuses with exit code 3 before anything lands in `modules/`, for a dependency too;
+`--force` installs anyway. `release wasm` checks the list against `emscripten`. The index sweep
+skips such packages instead of failing.
 
 ## `.das_module` for Packages
 
