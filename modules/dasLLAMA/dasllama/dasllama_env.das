@@ -96,7 +96,7 @@ struct public EngineEnv {
     @clarg_doc = "Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB."
     allow_interp_load : bool = false
 
-    @clarg_doc = "Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting."
+    @clarg_doc = "Advisory readahead on the mappings a load opens - the gguf source (the cold-conversion fix) and the prepared image (a purged page cache costs the routed expert stacks 2.5x over the first 128 tokens); =0 restores on-demand faulting."
     prefetch : bool = true
 }
 

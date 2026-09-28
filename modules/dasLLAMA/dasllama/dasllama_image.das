@@ -1421,6 +1421,9 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
         }
         return false
     }
+    if (g_env_engine.prefetch && unsafe(prefetch_map(base, msize))) {
+        to_log(LOG_INFO, "dasLLAMA image: prefetch armed ({msize >> 20ul} MB)\n")
+    }
     if (parse_image(base, msize, path, t, tag, quant)) {
         return true
     }

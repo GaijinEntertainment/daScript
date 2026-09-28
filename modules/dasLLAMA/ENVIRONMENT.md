@@ -38,7 +38,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_TRUTH_REFRESH` | flag | off | Regenerate the stored parity truth files instead of comparing against them. |
 | `DASLLAMA_CONV_PROF` | flag | off | Bucket gguf -> image conversion time by kind over the weight walk; one clock pair per tensor. |
 | `DASLLAMA_ALLOW_INTERP_LOAD` | flag | off | Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB. |
-| `DASLLAMA_PREFETCH` | flag | on | Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting. |
+| `DASLLAMA_PREFETCH` | flag | on | Advisory readahead on the mappings a load opens - the gguf source (the cold-conversion fix) and the prepared image (a purged page cache costs the routed expert stacks 2.5x over the first 128 tokens); =0 restores on-demand faulting. |
 | `DASLLAMA_GPU` | flag | off | One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the tower driver reads before any device init: the vision and audio towers' block loops serve on the device only while it is on, and decline `device` otherwise. |
 | `DASLLAMA_GPU_MOE_LAYERS` | number | -1 (auto) | How many MoE expert layers to hold resident on the GPU; -1 lets the upload walk place the split. |
 | `DASLLAMA_GPU_MOE_STREAM` | number | -1 (auto) | How many MoE layers to stream rather than hold resident; -1 is auto. |

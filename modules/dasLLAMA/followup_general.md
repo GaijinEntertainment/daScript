@@ -1861,17 +1861,18 @@
     (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9 ms) is the CPU token's largest bucket now, and the
     Flash-Next CPU tg128 board row is not re-minted yet.
 
-175. **A cold image costs its first tokens, not its map.** The Flash-Next planar image maps in 67 ms
-    whether cached or not; a decode profile on an image nothing had touched for 90 minutes (the
-    page cache spent on two other 100 GB passes) ran 163 ms a token over its 128-token window, every
-    bucket ~3x, and the same command a minute later 40.3 ms. The mint pass itself is 57 s (planes
-    write 44 s at 2.1 GB/s), and a warm map-and-bench pass under a minute. `prefetch_map` (madvise
-    WILLNEED / PrefetchVirtualMemory, `DASLLAMA_PREFETCH`) is armed on the GGUF source mapping and
-    NOT on the `.dlim` mapping (`load_image`). Done = the cold case measured on purpose (`sudo purge`,
-    then the profile's first window against its second), the prefetch armed on the image map as the
-    first arm, a pool-side sequential touch of the hot planes (the routed experts' stacks, not the
-    gather-only PLE table) as the second if the advisory alone does not carry 100 GB, each against
-    the cold reading.
+175. **A cold image costs its first tokens, not its map.** The Flash-Next planar image maps in 81 ms
+    on a purged page cache and 65 ms warm; the decode profile's 128-token window (`decode_prof -n 128
+    -t 18`, the lut image with the head) reads 99.8 ms a token cold against 39.5 warm, and the whole
+    gap sits in the routed expert stacks - `mm_moe` 5.75 s against 0.85 s, `mm_moe_dn` 2.91 s
+    against 0.45 s - while the attention block, the mixers and the head read the same in both
+    windows, since every token touches their planes and the first fault warms them. Ten of 512
+    experts a token fault their pages in one by one over the window. The mint pass itself is 57 s
+    (planes write 44 s at 2.1 GB/s). `prefetch_map` (madvise WILLNEED / PrefetchVirtualMemory,
+    `DASLLAMA_PREFETCH`) is armed on the image map as on the gguf source. Done = the armed image
+    map measured against the 99.8 ms reading behind another `sudo purge`, and, if the advisory alone
+    does not carry 100 GB, a pool-side sequential touch of the routed experts' stacks (not the
+    gather-only PLE table) as the second arm.
 
 176. **The `yarn_log_multiplier` YaRN arm.** The loader refuses a file whose
     `rope.scaling.yarn_log_multiplier` is not 0 (the DeepSeek-2 lineage replaces the 0.1 in the
