@@ -143,6 +143,9 @@ def private kq_mr_identity(c : DlimCpuConfig) : string {
     return join(parts, "/")
 }
 
+//! the pipe-separated fields `dlim_identity` writes BEFORE the tag - the tag parsers skip exactly this many
+let public DLIM_IDENTITY_FIELDS = 9
+
 //! The identity string an image file/header is keyed by — a pure formatter of the struct.
 //! `image_version` / `pack_version` come from the caller (dasllama_image owns the schema
 //! version, dasllama_layout the pack-code version; 0 = the pre-versioned pack spelling).

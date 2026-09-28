@@ -19,9 +19,10 @@ start on purpose, under the tiebreak in `ARCHITECTURE_INVARIANTS.md#inherited-in
 that handoff for every weight carrier; the streaming forms transcode planes from the gguf
 mapping straight into the image so they never materialize at all.
 
-**An image is judged only where its identity can be recomputed - the LANE rule.** An identity's
-(quant, tag) pair is its lane, and lanes coexist by design: a bake proves dead only its OWN lane's
-siblings, plus BROKEN and version-stale images anywhere. Everything else is `FOREIGN` - kept, and
+**An image is judged only where its identity can be recomputed - the LANE rule.** A lane is the
+file name's lane segment (`#image-lane-name`; for a hash-named legacy image, the identity's
+(quant, tag) pair), and lanes coexist by design: a bake proves dead only its OWN lane's siblings,
+plus BROKEN and version-stale images anywhere. Everything else is `FOREIGN` - kept, and
 counted in the log. Two contexts produce lanes this process cannot reproduce: a GPU flavor (a blob
 bake selects its own backend and winners, so the string differs even where the tag matches:
 `portable|q8 mr4` against a planar `arm64-gen|q8 mr8`), and a family tag whose module is not loaded
@@ -33,6 +34,22 @@ rigs own the model dirs for a whole run, so `dlim_wipe` (verdict-blind, `dasllam
 clears them behind the exe gate at batch start and after each model's last cell, with every image
 re-baked from its gguf on demand. Judging stays forbidden; owning the directory for the batch is
 what licenses deletion without judgment.
+
+### An image is named by its lane {#image-lane-name}
+
+A `.dlim` sits beside its source as `<file>.<lane>.dlim`, and the lane is what a person
+deliberately switches between on one box: `metal` (the blob flavor), `vulkan`, `cpu-<class>` (the
+planar flavor under the box's tune class - `cpu-arm-i8mm`, `cpu-x86-vnni512`), a family's own tag
+(`whisper-f32`), with `-lut` / `-grid` appended where `DASLLAMA_IQ3S_SERVE` pins the served form,
+`-<quant>` off q8, and `-mtp` when a split head rides the load. `image_lane_name` spells it and
+`dlim_file_lane` reads it back off a file name (a hash-named legacy image reads as no lane). The
+lane names the FILE; the header's identity still decides whether the file is current: tune
+winners, backend pins, pack and image versions stay in the identity and supersede within the
+lane, so a stale lane re-bakes in place - the publish writes a temp beside it and renames over -
+and two lanes never reap each other. A lane is a per-box coexistence unit, not a portability
+promise: the class in the CPU lane's name is the box's, and a box of another class re-bakes.
+`image_path_for` adopts a hash-named image at the exact legacy path (identity hash, head fold) by
+renaming it into the lane once, so the switch costs no re-mint.
 
 ### A planar image never stands in for the blob flavor {#image-flavor-rebake}
 
@@ -192,13 +209,13 @@ without it the f16 arm silently stays unavailable and every encode takes the f32
 
 **An image path folds in the split NextN head that rides the load.** `image_path_for` resolves
 `mtp_head_sidecar` for the gguf - the resolver excludes an assistant drafter (`gguf_is_assistant`),
-whose weights never enter the trunk's image - and, when a head exists, hashes
-`|mtp:<basename>:<size>` alongside the configuration identity, so a trunk loaded alone and the same
-trunk loaded with its head never share a `.dlim` path. The head's tensors are baked INSIDE the
-minted image - one file serves both - so two identities sharing a path would re-save over each
-other forever. Because the fold changes the path, the head's arrival needed no `IMAGE_VERSION`
-bump: no image at an unchanged path changed content. The fold lives in the path and not yet in
-the baked identity string (`followup_general.md` #99).
+whose weights never enter the trunk's image - and, when a head exists, the lane carries `-mtp`, so a
+trunk loaded alone and the same trunk loaded with its head never share a `.dlim` path. The head's
+tensors are baked INSIDE the minted image - one file serves both - so two identities sharing a
+path would re-save over each other forever. Because the fold changes the path, the head's arrival
+needed no `IMAGE_VERSION` bump: no image at an unchanged path changed content. The fold lives in
+the path and not yet in the baked identity string (`followup_general.md` #99), so two different
+heads on one trunk share the lane and re-bake each other.
 
 ### The assistant drafter is a ledgered non-image lane {#drafter-non-image-lane}
 

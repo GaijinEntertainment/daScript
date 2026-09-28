@@ -498,6 +498,65 @@ def test_image_mechanics(t : T?) {
         var junk = DlimConfiguration()
         t |> success(!dlim_config_from_json("not a config", junk), "garbage declines")
     }
+    t |> run("lanes: the file name spells the lane, a legacy image is adopted, a save reaps its own lane only, a stale lane re-bakes in place") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var terr : string
+        let tmp = temp_directory(terr)
+        let fake = path_join(empty(tmp) ? "." : tmp, "dasllama_lane_{ref_time_ticks()}.gguf")
+        let fk = fopen(fake, "wb")   // the inventory scans the siblings of an existing source file
+        t |> success(fk != null, "the fake source exists")
+        fclose(fk)
+        t |> equal(dlim_file_lane("m.gguf.metal.dlim"), "metal", "the last dot-segment is the lane")
+        t |> equal(dlim_file_lane("m.Q4_K_M.gguf.cpu-arm-i8mm-fp32.dlim"), "cpu-arm-i8mm-fp32", "the source's own dots stay out of the lane")
+        t |> equal(dlim_file_lane("m.gguf.0xc09d7ce0fafeac5c.dlim"), "", "a hash-named legacy image has no lane")
+        t |> equal(image_lane_name("whisper-f32"), "whisper-f32", "a family tag is its own lane")
+        t |> equal(image_lane_name("vulkan|m2n b8192 l4"), "vulkan", "the vulkan plan folds to one lane")
+        t |> equal(image_lane_name("", "fp32"), "{image_lane_name()}-fp32", "an off-q8 quant suffixes the lane")
+        t |> success(image_lane_name() |> starts_with("cpu-"), "the planar lane names the box's class ({image_lane_name()})")
+        // two images baked under the box-bound identity, then the tags registered config-free: the
+        // same lanes, another identity - OTHER, never FOREIGN
+        var p <- make_probe()
+        let stray = "{fake}.0xfeedfacecafebeef.dlim"
+        t |> success(save_image(p, stray, "img-lane"), "a legacy-named image of the lane's (quant, tag) off the hash path")
+        let lane2 = "{fake}.img-lane-2.dlim"
+        t |> success(save_image(p, lane2, "img-lane-2"), "a second lane's image")
+        register_image_family_tag("img-lane", true)
+        register_image_family_tag("img-lane-2", true)
+        t |> equal(dlim_identity_tag(image_identity("img-lane")), "img-lane", "the identity writes DLIM_IDENTITY_FIELDS fields before the tag")
+        // the image a pre-lane build minted: the identity hash names it, the lane adopts it
+        let legacy = "{fake}.{hash(image_identity("img-lane", "q8"))}.dlim"
+        t |> success(save_image(p, legacy, "img-lane"), "a legacy-named image at the identity-hash path")
+        let path = image_path_for(fake, "img-lane")
+        t |> equal(base_name(path), "{base_name(fake)}.img-lane.dlim", "the lane path")
+        t |> success(!stat(legacy).is_valid && stat(path).is_valid, "the image at the identity-hash path is adopted into the lane")
+        var inv <- dlim_inventory_(fake)
+        t |> equal(length(inv), 3, "three images beside the source")
+        for (im in inv) {
+            t |> equal(im.verdict, im.path == path ? "CURRENT" : "OTHER", "{im.file}: the box-bound identity against the config-free one")
+            t |> equal(im.lane, im.path == stray ? "" : (im.path == path ? "img-lane" : "img-lane-2"), "{im.file}: the lane the name spells")
+        }
+        delete inv
+        // the clean policy: a lane-named OTHER stays, the legacy-named OTHER goes
+        let r = dlim_clean_(fake, true)
+        t |> equal(r.removed, 1, "the clean removed the legacy-named other ({r.removed})")
+        t |> success(!stat(stray).is_valid && stat(path).is_valid && stat(lane2).is_valid, "the lane-named images stay")
+        // the lane's own save: the image at the lane path is rewritten, the other lane untouched
+        t |> success(save_image(p, path, "img-lane"), "re-bake in place")
+        dlim_gc_stale(fake, "img-lane")
+        t |> success(stat(lane2).is_valid, "another lane's OTHER image survives this lane's save")
+        var m = ImgProbe()
+        t |> success(load_image(path, m, "img-lane"), "the re-baked lane image maps")
+        delete m
+        // version-stale goes in any lane
+        patch_u32(t, lane2, 4l, 0xDEADu)
+        dlim_gc_stale(fake, "img-lane")
+        t |> success(!stat(lane2).is_valid, "a version-stale image of another lane goes")
+        delete p
+        remove(path)
+        remove(fake)
+    }
 }
 
 // ===== real carriers: gguf load vs mapped image load =====
@@ -2648,14 +2707,14 @@ def test_dlim_flavor_lanes(t : T?) {
         t |> equal(dlim_image_verdict(p, current), "CURRENT", "own planar identity")
         // a cross-context GPU identity: winners impossible on any box (mr9/kq9), so it can never
         // coincide with THIS process's own identity the way a realistic fixture once did
-        p.identity = "v{IMAGE_VERSION}|q8|foreignbox|s16|q8 mr9 b7 g5|kq 9/9/9/9|q51 mr9|nat 0000|metal"
+        p.identity = "v{IMAGE_VERSION}|q8|foreignbox|s16|q8 mr9 b7 g5|kq 9/9/9/9|q51 mr9|iq4nl32 mr9|nat 00000|metal"
         t |> equal(dlim_image_verdict(p, current), "FOREIGN", "cross-context metal image is FOREIGN, not OTHER")
-        p.identity = "v{IMAGE_VERSION}|q8|foreignbox|s16|q8 mr9 b7 g5|kq 9/9/9/9|q51 mr9|nat 0000|{vk_tag}"
+        p.identity = "v{IMAGE_VERSION}|q8|foreignbox|s16|q8 mr9 b7 g5|kq 9/9/9/9|q51 mr9|iq4nl32 mr9|nat 00000|{vk_tag}"
         t |> equal(dlim_image_verdict(p, current), "FOREIGN", "cross-context vulkan image is FOREIGN")
         // a family tag whose module is not loaded in the judging process: unrecomputable, so
         // FOREIGN — the 2026-08-02 board's step-zero GC reaped every whisper/parakeet image
         // this way before the rule generalized
-        p.identity = "v{IMAGE_VERSION}|q8|arm64-gen|s16|q8 mr8 b0 g4|kq 8/8/4/8|q51 mr4|nat 1101|not-a-registered-family"
+        p.identity = "v{IMAGE_VERSION}|q8|arm64-gen|s16|q8 mr8 b0 g4|kq 8/8/4/8|q51 mr4|iq4nl32 mr4|nat 11010|not-a-registered-family"
         t |> equal(dlim_image_verdict(p, current), "FOREIGN", "unregistered family tag is FOREIGN")
         // a REGISTERED family tag is judgeable — whisper's module is required by this suite
         p.identity = image_identity("whisper-q8")

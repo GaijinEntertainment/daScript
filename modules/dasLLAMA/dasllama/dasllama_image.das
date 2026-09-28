@@ -78,12 +78,77 @@ def image_identity_of(c : DlimConfiguration; tag : string = "") : string {
     return dlim_identity(c, IMAGE_VERSION, tag, PACK_VERSION)
 }
 
-// a 64-bit identity hash per file: a collision would leave two identities re-saving over one path forever
-[arch(at="../ARCHITECTURE_IMAGE.md#image-identity-head-fold")]
-def image_path_for(gguf_path : string; tag : string = ""; quant : string = "q8") : string {
+//! the CPU lane's spelling: the box's tune class where the tune framework is built, the active backend otherwise
+def private image_cpu_class() : string {
+    static_if (typeinfo builtin_module_exists(llvm)) {
+        return tune_cpu_class()
+    } else {
+        return dlim_backend_name()
+    }
+}
+
+//! a lane keeps [A-Za-z0-9_-] - a tag spelling pipes or spaces (the vulkan plan) never reaches a file name whole
+def private lane_sanitize(s : string) : string {
+    return build_string() $(var w) {
+        for (ch in s) {
+            let ok = is_alpha(ch) || is_number(ch) || ch == '_' || ch == '-'
+            write_char(w, ok ? ch : '-')
+        }
+    }
+}
+
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-lane-name")]
+def image_lane_name(tag : string = ""; quant : string = "q8") : string {
+    var lane = ""
+    if (tag == "") {
+        lane = "cpu-{image_cpu_class()}"
+        let serve = g_env_engine.iq3s_serve
+        if (serve == "lut" || serve == "grid") {
+            lane = "{lane}-{serve}"
+        }
+    } elif (tag == METAL_IMAGE_TAG) {
+        lane = METAL_IMAGE_TAG
+    } elif (tag |> starts_with("vulkan")) {
+        lane = "vulkan"
+    } else {
+        lane = tag
+    }
+    if (quant != "q8") {
+        lane = "{lane}-{quant}"
+    }
+    return lane_sanitize(lane)
+}
+
+//! the file name an image would have carried before lanes named it - the identity hash, the head folded in
+def private legacy_image_path(gguf_path : string; tag : string; quant : string) : string {
     let side = mtp_head_sidecar(gguf_path)
     let fold = empty(side) ? "" : "|mtp:{base_name(side)}:{stat(side).size}"
     return "{gguf_path}.{hash(image_identity(tag, quant) + fold)}.dlim"
+}
+
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-lane-name"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-head-fold")]
+def image_path_for(gguf_path : string; tag : string = ""; quant : string = "q8") : string {
+    let lane = image_lane_name(tag, quant)
+    let head = empty(mtp_head_sidecar(gguf_path)) ? "" : "-mtp"
+    let path = "{gguf_path}.{lane}{head}.dlim"
+    if (!stat(path).is_valid) {
+        let old = legacy_image_path(gguf_path, tag, quant)
+        if (stat(old).is_valid && rename(old, path)) {
+            to_log(LOG_INFO, "dasLLAMA image: adopted {base_name(old)} as {base_name(path)}\n")
+        }
+    }
+    return path
+}
+
+//! the lane a `.dlim` file name spells - its last dot-segment - or "" for a hash-named legacy image
+def dlim_file_lane(name : string) : string {
+    if (!(name |> ends_with(".dlim"))) {
+        return ""
+    }
+    let stem = slice(name, 0, length(name) - 5)
+    let dot = rfind(stem, ".")
+    let seg = dot < 0 ? stem : slice(stem, dot + 1, length(stem))
+    return (seg |> starts_with("0x")) ? "" : seg
 }
 
 //! What list/GC tooling reads from an image WITHOUT loading it: the header fields plus the
@@ -161,6 +226,7 @@ def image_family_tag(path : string) : string {
 struct DlimImageInfo {
     file : string         //!< basename
     path : string
+    lane : string         //!< the lane the file name spells; "" for a hash-named legacy image
     bytes : int64
     version : int
     verdict : string      //!< CURRENT | OTHER | STALE vN | BROKEN
@@ -221,7 +287,7 @@ def dlim_current_identities : table<string> {
 //! lanes, and a bake can prove staleness only inside its own lane.
 def dlim_identity_lane(identity : string) : string {
     var parts <- split(identity, "|")
-    if (length(parts) < 8) {
+    if (length(parts) < DLIM_IDENTITY_FIELDS) {
         delete parts
         return identity   // malformed/pre-v7 — its own lane, never cross-matched
     }
@@ -235,7 +301,7 @@ def dlim_identity_lane(identity : string) : string {
 def dlim_identity_tag(identity : string) : string {
     var parts <- split(identity, "|")
     var tag = ""
-    for (i in range(8, length(parts))) {
+    for (i in range(DLIM_IDENTITY_FIELDS, length(parts))) {
         tag = empty(tag) ? parts[i] : "{tag}|{parts[i]}"
     }
     delete parts
@@ -295,25 +361,29 @@ def dlim_inventory_(gguf_path : string) : array<DlimImageInfo> {
         }
         let full = path_join(dirp, name)
         let p = image_peek(full)
-        out |> push(DlimImageInfo(file = name, path = full, bytes = p.bytes, version = p.version,
+        out |> push(DlimImageInfo(file = name, path = full, lane = dlim_file_lane(name), bytes = p.bytes, version = p.version,
                                   verdict = dlim_image_verdict(p, current), identity = p.identity))
     }
     delete current
     return <- out
 }
 
-//! GC-after-save: a fresh bake proves dead the non-current siblings of ITS OWN LANE (the
-//! (quant, tag) it just wrote), plus BROKEN and version-stale images in any lane. Other lanes'
-//! identities fold other bake contexts' backend/winner state — this save proves nothing there.
+//! GC-after-save: a fresh bake proves dead the non-current siblings of ITS OWN LANE (the file name's
+//! lane; a hash-named legacy image's is the identity's (quant, tag)) plus BROKEN and version-stale
+//! images anywhere - other lanes fold other bake contexts' state, and this save proves nothing there
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-lane-name")]
 def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8") {
-    let lane = "{quant}#{tag}"
+    let keep = image_path_for(source_path, tag, quant)
+    let lane = dlim_file_lane(base_name(keep))
+    let legacy_lane = "{quant}#{tag}"
     var inv <- dlim_inventory_(source_path)
     var removed = 0
     var freed = 0l
     for (im in inv) {
         let stale_any = im.verdict == "BROKEN" || (im.verdict |> starts_with("STALE"))
-        let lane_dead = ((im.verdict == "OTHER" || im.verdict == "FOREIGN")
-            && dlim_identity_lane(im.identity) == lane)
+        let other = im.verdict == "OTHER" || im.verdict == "FOREIGN"
+        let same_lane = empty(im.lane) ? dlim_identity_lane(im.identity) == legacy_lane : im.lane == lane
+        let lane_dead = other && im.path != keep && same_lane
         continue if (!(stale_any || lane_dead))
         if (remove(im.path)) {
             removed++
@@ -327,16 +397,16 @@ def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8"
     }
 }
 
-//! The dlim GC beside `gguf_path`: everything non-CURRENT goes by default — BROKEN,
-//! version-stale, AND valid other-identity siblings (old identities pile up across re-mints).
-//! ``keep_other = true`` is the opt-out for a bake deliberately carried from another box.
+//! The dlim GC beside `gguf_path`: BROKEN, version-stale and hash-named legacy images of another identity go;
+//! a lane-named image of another identity is a lane someone switched away from and stays, like a FOREIGN one
+//! (``keep_other = true`` spares the legacy others too - a bake deliberately carried from another box)
 def dlim_clean_(gguf_path : string; apply : bool; keep_other : bool = false) : tuple<total : int; stale : int; removed : int; freed : int64> {
     var r = (total = 0, stale = 0, removed = 0, freed = 0l)
     var inv <- dlim_inventory_(gguf_path)
     var foreign_kept = 0
     for (im in inv) {
         r.total++
-        if (im.verdict == "FOREIGN") {
+        if (im.verdict == "FOREIGN" || (im.verdict == "OTHER" && !empty(im.lane))) {
             foreign_kept++
             continue
         }
@@ -350,7 +420,7 @@ def dlim_clean_(gguf_path : string; apply : bool; keep_other : bool = false) : t
     }
     delete inv
     if (foreign_kept > 0) {
-        to_log(LOG_INFO, "dasLLAMA image: GC kept {foreign_kept} foreign-flavor image(s) - their bake contexts own them\n")
+        to_log(LOG_INFO, "dasLLAMA image: GC kept {foreign_kept} image(s) of other lanes or bake contexts - their own loads judge them\n")
     }
     return r
 }

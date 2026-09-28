@@ -47,8 +47,15 @@ not only into the image path; a mismatch declines loudly.
 **An image save deletes its own lane's images whose identity no longer matches, and any image
 the verdicts prove garbage in any lane - BROKEN, version-stale, or a stale layout of a family
 this process registered; deleting any other image - a current image of another flavor or
-another family, or one whose family this process cannot recompute - is a defect.** A lane is an
-identity's (quant, tag) pair.
+another family, another lane's image whatever its identity, or one whose family this process
+cannot recompute - is a defect.** A lane is the file name's lane segment
+(`ARCHITECTURE_IMAGE.md#image-lane-name`); a hash-named legacy image's lane is its identity's
+(quant, tag) pair.
+
+**A knob a person switches between on one box and wants both results of on disk is a lane
+suffix in `image_lane_name`; a knob that supersedes its predecessor - a tune winner, a backend
+pin, a version - stays in the identity alone.** A lane suffix for a superseding knob leaves dead
+images no save reaps; an identity-only spelling of a coexisting knob re-mints on every switch.
 
 **A plane split that follows the source FILE rather than a runtime knob takes ONE image tag**,
 with the meta flags describing the layout - a per-tensor type split is not a second flavor.

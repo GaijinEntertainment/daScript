@@ -1861,21 +1861,6 @@
     (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9 ms) is the CPU token's largest bucket now, and the
     Flash-Next CPU tg128 board row is not re-minted yet.
 
-174. **A `.dlim` is named by its identity hash, so a mint purges what a person meant to keep.** The
-    image GC keeps one image per lane, lane = (quant, tag) with the tag `""` for planar and
-    `metal` for the blob flavor, and deletes a lane's other identities plus every version-stale
-    image on a mint; a served-form flip (`DASLLAMA_IQ3S_SERVE`) or a box-class change is a new
-    identity in the SAME lane, so it costs the other form a re-mint, and an `IMAGE_VERSION` bump
-    took the Metal image with it. Boris's direction: name the file by a readable lane -
-    `foo.gguf.metal.dlim`, `foo.gguf.cpu-arm-i8mm.dlim`, `foo.gguf.vulkan.dlim`, the served-form
-    override as a lane suffix - with the header's identity deciding current/stale and a stale file
-    re-baked in place (temp + rename), so flavors and classes coexist on one disk and in `ls`. Lane
-    = what a person deliberately switches between on one box; tune winners, pack and image versions,
-    backend pins stay identity and supersede. Until it lands, an image to keep across a mint is
-    renamed by hand off the `*.dlim` suffix the inventory globs. Done = the lane name, the in-place
-    re-bake, `dlim_gc_stale` keyed by lane name, the converter's `--list` and the server page
-    reading lanes, `test_model_image`'s GC cells over two lanes and a same-lane stale re-bake.
-
 175. **A cold image costs its first tokens, not its map.** The Flash-Next planar image maps in 67 ms
     whether cached or not; a decode profile on an image nothing had touched for 90 minutes (the
     page cache spent on two other 100 GB passes) ran 163 ms a token over its 128-token window, every
