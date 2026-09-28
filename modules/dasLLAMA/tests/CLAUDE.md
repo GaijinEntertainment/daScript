@@ -633,13 +633,12 @@ runs the scan at ds 32 over 64 rows, and `test_vkd_dn_9b_scan` at the 9B geometr
 one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate arrays' exact
 bound); `test_vkd_dn_step_rows` runs the fused step over two rows in two region slots against the
 one-row dispatch a row at a time - the row's o row on both forms, its slot's state and both of its
-slot's conv-history ring images, bit for bit; `test_vkd_dn_step_rows_sameslot` runs it over two
-and three rows of one slot in one dispatch that loops them (the row count in the push, the
-same-slab verify's form) against the one-row dispatch run a row at a time on the state and ring
-the row before it left - every row's o row, the slot's state and both ring images after the last
-row, and every rollback scratch row the state and ring pair after its row, bit for bit, the state
-and the second row's ring image asserted moved off their inputs, row 1 stepped from the untouched
-state and a scratch row held against the row after it as the controls that miss. The gemma arc's cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K gate + up GEMVs with the act and
+slot's conv-history ring images, bit for bit; `test_vkd_dn_step_rows_sameslot` runs it over three
+rows of one slot a dispatch a row (the row in the push, the same-slab verify's form) against the
+one-row dispatch run a row at a time on the state and ring the row before it left - every row's o
+row, then the slot's state and both ring images after the last row, bit for bit, the state and the
+second row's ring image asserted moved off their inputs, and row 1 stepped from the untouched state
+as the control that misses. The gemma arc's cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K gate + up GEMVs with the act and
 its Q8_0 requant in one dispatch, against the three-kernel path byte for byte and the CPU chain),
 `test_vkd_q8_gemv_gu` (the fused q8 gate + up + act + requant, gelu and silu, two depths),
 `test_vkd_topk_n` (the N-row command's per-row top-k over four rows against the one-row top-k run a row at a time - the

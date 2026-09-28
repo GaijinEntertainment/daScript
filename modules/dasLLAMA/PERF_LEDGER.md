@@ -49,26 +49,29 @@ what it costs today and what the fix would change.
   `DASLLAMA_GPU=1` with `--prof` and `JOBQUE_PROFILING=1` - the `mtp.verify` section against a
   one-row step's wall and against the CPU verify's on the same box; the reject's `mtp.rollback`
   section against the `mtp.snapshot` + `mtp.replay` the CPU restore paid (the recurrent state's
-  round trip, about 20 MB down and up on the 0.8B, retired: each recurrent layer's step kernel
-  writes its slot state and ring pair after every row but its last into a rollback scratch of
-  `depth x n_rec x (nvh x ds x ds + 2 x cd x (dconv - 1)) x 4` bytes plus a layer's staging image
-  and arrival word, `n_rec x (cd x (dconv - 1) + 1) x 4`, and the reject copies one row back - on
-  Qwen3.5-0.8B-MTP (18 recurrent layers, 16 heads of 128, cd 6144, dconv 4) 21,528,576 bytes at
-  depth 1 and 150,700,032 at depth 7, the staging 1,327,176 at any depth, counted in the plan's
-  scratch term, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`); the verify command's own
+  round trip, about 20 MB down and up on the 0.8B, retired: the verify command copies each
+  recurrent layer's slot state and ring pair after every row but its last into a rollback scratch
+  of `depth x n_rec x (nvh x ds x ds + 2 x cd x (dconv - 1)) x 4` bytes, and the reject copies one
+  row back - on Qwen3.5-0.8B-MTP (18 recurrent layers, 16 heads of 128, cd 6144, dconv 4)
+  21,528,576 bytes at depth 1 and 150,700,032 at depth 7, counted in the plan's scratch term,
+  `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`); the verify command's own
   `DASLLAMA_GPU_PROF=1` ledger (`vk_rdec gpu avg/verify` with its `dn avg/verify` line and
   `vk_rdec host wall/verify`, `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`) against the
-  one-row `vk_rdec gpu avg/token` line of the same run's off arm, role by role - the recurrent
-  rows of a layer in one `dn_step` dispatch that keeps the state in registers between rows and
-  writes the scratch itself (`dn_seq` measured 421 us a row pair over the 18 layers against the
-  one-row `step`'s 243 with a dispatch a row and 36 transfer copies under barriers billed to `roll`
-  at 74; the one-dispatch form owes its `dn_seq` reading, with `roll` gone) - under the greedy
+  one-row `vk_rdec gpu avg/token` line of the same run's off arm, role by role - under the greedy
   `--mtp-ab` arms' pick ask the verify lands the picks and two hidden rows alone (the
   2 x vocab x 4-byte logits plane, its host copy, the four row copies and both host argmaxes gone
   from the round), the re-warm runs no q GEMV and the store pass over the k heads alone
   (`warm_q` gone from the ledger, `warm_qknrope` smaller), and no head row is read back (the `kv
   readback` piece gone from `host wall/verify`); and the on/off rate with the drafts' acceptance -
-  the pod measures.
+  the pod measures. Measured on the RTX PRO 4500 (`-n 96`, microseconds a round): the two-row
+  verify's `dn_seq` reads 421 against the one-row `step` 243 and the rollback copies (`roll`) 74 -
+  a recurrent layer's row costs its dispatch latency (16 workgroups, one a head), not the state's
+  reload. A form that looped the rows inside one dispatch a layer with the scratch stored in-kernel
+  and the final ring pair written by a last-arriving workgroup was bit for bit the chained steps and
+  read `dn_seq` 721: the loop serializes the rows a workgroup already ran back to back, and the
+  epilogue's barrier and staged copy add to every layer - the per-row dispatch stays. What moves
+  `dn_seq` is more workgroups a head (the ds x ds state split across workgroups), a step-kernel
+  change the one-row decode shares.
 
 - **OPEN (2026-09-27) - the Vulkan resident driver's NextN draft head: its plane and slot bytes,
   and the device draft against the CPU draft.** Where the driver takes a model's head

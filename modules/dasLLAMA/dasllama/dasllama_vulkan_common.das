@@ -2353,7 +2353,6 @@ struct RLayer {
     m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
     dn : array<DnStep>
     roll_off : int64                //! this layer's byte offset in a rollback scratch row (`RDec.roll_dev`): its slot state, then its ring pair
-    roll_fin_off : int64            //! ... and of its staging past the rows: one ring image the step kernel's last workgroup copies over the image every row read, then the arrival word
     // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
     pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
     pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
@@ -2498,10 +2497,9 @@ struct RDec {
     v_recorded : array<bool>
     v_rail : NRail = NRail.unasked   //! the verify's form on the armed model: the head, the N-row rail and the head planes' N-column leaves, decided once
     verify_rows : int64           //! the rows one stream's verify steps at once: the round's depth plus one, within `nb` (0 = the head off or the verify uninstalled)
-    roll_dev : uint64             //! the verify's rollback scratch, written by the step kernel: a row per verify row the round can reject past (`roll_rows` = `verify_rows` - 1), each row every recurrent layer's slot state and ring pair in layer order (`RLayer.roll_off`), then a staging image and arrival word a layer (`roll_fin_off`); 0 = none
+    roll_dev : uint64             //! the verify's rollback scratch: a row per verify row the round can reject past (`roll_rows` = `verify_rows` - 1), each row every recurrent layer's slot state and ring pair in layer order (`RLayer.roll_off`); 0 = none
     roll_rows : int64
     roll_row_bytes : int64
-    roll_bytes : int64            //! ... the whole buffer, the rows and the staging
     roll_region : int64 = -1l     //! ... the region whose slots the last verify copied (-1 = none to roll back), and that verify's rows
     roll_vrows : int64
     pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)

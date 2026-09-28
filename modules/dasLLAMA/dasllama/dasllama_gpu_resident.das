@@ -618,7 +618,7 @@ def private rdec_scratch_bytes(t : Model) : int64 {
 }
 
 //! the verify's rollback scratch on a hybrid whose head the driver takes: a row per verify row the round can reject past (the
-//! depth), each row every recurrent layer's state slot and ring pair, then a layer's staging image and arrival word
+//! depth), each row every recurrent layer's state slot and ring pair
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
 def private rdec_rollback_bytes(t : Model) : int64 {
     let c = t.config
@@ -633,8 +633,7 @@ def private rdec_rollback_bytes(t : Model) : int64 {
             nrec++
         }
     }
-    let ring = dng.cd * (dng.dconv - 1l)
-    return rows * nrec * (dng.nvh * dng.ds * dng.ds + 2l * ring) * 4l + nrec * (ring + 1l) * 4l
+    return rows * nrec * (dng.nvh * dng.ds * dng.ds + 2l * dng.cd * (dng.dconv - 1l)) * 4l
 }
 
 //! The auto arm's headroom where no OS answers: the WDDM share on Windows (the demotion collapse

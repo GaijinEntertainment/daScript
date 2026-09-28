@@ -96,36 +96,24 @@ head's k and v projections over the prompt plus the last layer's FFN over the wh
 ### A rejected device verify rolls the region back on the device {#resident-verify-rollback}
 
 **A verify the resident seat served rejects with no host snapshot and no replayed step: the
-recurrent state the verify advanced past the committed rows comes back from a copy the step
-kernel itself wrote.** The CPU round's reject on a recurrent model restores the snapshot it took
+recurrent state the verify advanced past the committed rows comes back from a copy the verify
+command itself took.** The CPU round's reject on a recurrent model restores the snapshot it took
 before the verify (`mtp_state_snapshot`: every recurrent slot flushed home, the host state
-copied) and re-forwards the committed token. Where the driver homes the head on a hybrid, each
-recurrent layer's fused step runs the verify's rows in one dispatch of a workgroup a head
-(`dn_step_cls` at `DnStepArgs.rows`): the head's state slice stays in that workgroup's registers
-from row to row, and after every row but the last the kernel stores the slice and the slot's ring
-pair as the rows through it leave them into row `i` of a rollback scratch the push names
-(`roll_base`, `roll_stride`, binding 7) - for rows `0 .. n - 2`, a reject past the last row being
-an accept - so scratch row `a` holds the state the region would hold had the round stepped rows
-`0 .. a` alone: the same arithmetic on the same values, the store taken from the registers the
-next row reads, so the copy is that state bit for bit and nothing re-derives it. The rows of one
-dispatch share no ring image while they run: the heads at or past `nkh` read the q and k
-history a lower head advances, so a row's conv reads only the image the dispatch started on (the
-region's parity at row 0) and, for the taps the dispatch itself stepped, the projection rows
-already landed (`hist_at`); the final pair is written once, the image no row read in place and the
-image every row read staged in the layer's slot past the rows (`roll_fin`, one image and an
-arrival word) and copied over by the last workgroup to arrive, after every workgroup's reads. The
-one-row form (`rows` 1) takes the same code at one iteration - one load, one store, the ring
-advanced in place, the scratch binding untouched, so a one-row set binds the smalls in its slot -
-and the parallel N-row form is the one-row form a (row, slot) a workgroup. The scratch is one
-buffer for every region (one session verifies at a time; `RDec.roll_region` names whose rows it
-holds), `verify_rows - 1` rows deep - the round's depth at one region - each row every recurrent
-layer's `nvh x ds x ds` floats of state and `2 x cd x (dconv - 1)` floats of ring at the layer's
-`roll_off`, then a layer's staging image and arrival word at its `roll_fin_off`, sized at the
-head's arm once every recurrent layer is set (`rd_roll_alloc`, which rebinds the step sets over it
-and zeroes the arrival words; the plan counts the same bytes, `rdec_rollback_bytes` - 21,528,576 a
-row plus 1,327,176 of staging on Qwen3.5-0.8B, `PERF_LEDGER.md`'s entry). The scratch offsets ride
-the push and the slot rides the row's `TokMeta`, so a verify command records once per row count
-on a hybrid as on an attention model. The reject is then one small command:
+copied) and re-forwards the committed token. Where the driver homes the head on a hybrid, the
+verify command copies, after row `i`'s fused step in each recurrent layer and before row
+`i + 1`'s, that layer's slot state and both ring images into row `i` of a rollback scratch
+(`rd_encode_roll_copy`: two device-to-device copies under the hazard rail - a transfer read of
+what the step wrote, the next row's step ordered behind it - for rows `0 .. n - 2`, a reject past
+the last row being an accept), so scratch row `a` holds the state the region would hold had the
+round stepped rows `0 .. a` alone: the same dispatches on the same inputs, so the copy is that
+state bit for bit and nothing re-derives it. The scratch is one buffer for every region (one
+session verifies at a time; `RDec.roll_region` names whose rows it holds), `verify_rows - 1`
+rows deep - the round's depth at one region - each row every recurrent layer's `nvh x ds x ds`
+floats of state and `2 x cd x (dconv - 1)` floats of ring at the layer's `roll_off`, sized at the
+head's arm once every recurrent layer is set (`rd_roll_alloc`; the plan counts the same bytes,
+`rdec_rollback_bytes` - 21,528,576 a row on Qwen3.5-0.8B, `PERF_LEDGER.md`'s entry). Because the
+copies bake the region's slot offsets, a hybrid records its verify commands per region
+(`rd_v_idx`) where an attention model's stay region-free. The reject is then one small command:
 the rollback seat (`vk_rdec_rollback`, through the tier's `install_rdec_rollback` and the
 engine's `register_mtp_rollback_override("vulkan", ...)`) copies scratch row `a` back over the
 live slots in a one-shot submission after the verify's landing - the verify completed at its
@@ -150,9 +138,7 @@ snapshots right before its own prefill (`mtp_verify_two`), and a served verify s
 where the owner registered no rollback seat; a rollback seat that declines after its verify seat
 served is an engine bug the round panics on by name, since no snapshot holds the state. The CPU
 depth-1 round asks two rows, so one scratch row serves it; a round of depth k would reject to any
-`a < k` through the same copies. `test_vkd_dn_step_rows_sameslot` holds every scratch row to the
-state and ring pair the chained one-row dispatches leave after its row (a scratch row against the
-row after it as the control), `test_gpu_resident_hybrid_mtp_verify_reject` holds the
+`a < k` through the same copies. `test_gpu_resident_hybrid_mtp_verify_reject` holds the
 rolled-back slots and the next step bit for bit to a one-row session's, `test_mtp.das`'s
 forced-reject round holds the stream to plain decode on both rails, and the profiler's
 `mtp.rollback` section prices the reject where `mtp.snapshot` and `mtp.replay` did.
