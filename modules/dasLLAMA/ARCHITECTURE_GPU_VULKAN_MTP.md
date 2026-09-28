@@ -35,7 +35,16 @@ row the device writes - a draft's, the verify's re-warm rows, the prompt warm's 
 them, so the CPU round's reject path and a draft the seat declines read what the device holds. The
 "vulkan" owner (`register_mtp_seat_owner`: the driver armed on a NextN model) registers the draft
 and verify seats (`register_mtp_draft_override`, `register_mtp_verify_override`); the round stays
-the CPU's.
+the CPU's. Under `DASLLAMA_GPU_PROF=1` the draft command stamps its dispatches into a list of its
+own (`g_rdq_draft`): the upload, the cat rows' norms and requant (`draft_cat`), the eh_proj GEMV
+(`draft_eh`), the head's attention norm and feed requant (`draft_attnorm`), the head layer's
+roles under the trunk's names (`q`, `kv`, `qknrope`, `attn`, `wo`, `ar1`, `rq_f`, the FFN's), the
+head norm and classifier feed (`draft_norm`), the classifier (`draft_cls`) and the picks
+(`draft_pick`); its samples go to the draft's own ledger (`g_rdq_d`), printed every 32 drafts as
+`vk_rdec gpu avg/draft over N: ...` (the idle at its end is the gap since the verify sampled
+before it) and `vk_rdec host wall/draft over N: ...` - the memcpys piece holds the hydrate's
+upload where one ran, the wait the transfer-queue landing, and the head row's readback its own
+piece.
 
 ### The window chain warms the head's slab over the prompt {#resident-head-prompt-warm}
 

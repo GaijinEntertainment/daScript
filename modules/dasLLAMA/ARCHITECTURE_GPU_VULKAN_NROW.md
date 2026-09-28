@@ -193,8 +193,28 @@ session's state comes up, so a decline leaves the session to the CPU verify unto
 takes the rollback seat, not a snapshot: the command copied each recurrent layer's slot after
 every row but its last, and the seat puts row `a`'s copy back and cuts the region's rows to
 `pos + a + 1`, the rows past them dead (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`).
-The trunk's K/V rows stay on the device, as a one-row step's do. The command records no GPU
-stamps; the round's profiler sections (`mtp.verify`, `mtp.rollback`) price it.
+The trunk's K/V rows stay on the device, as a one-row step's do.
+
+**The verify command stamps its dispatches under its own ledger.** Under `DASLLAMA_GPU_PROF=1`
+the command records a timestamp a dispatch role as the token command does, into a stamp list of
+its own per row count and attention form (`g_rdq_verify`, `g_rdq_verify_unsplit`; the split
+form's list is borrowed for the record and put back): the trunk's roles under the one-row
+command's names - a GEMV over the rows as columns bills to the role it bills at one row - with
+the sequential recurrent rows a stamp a row's step (`dn_seq`) and a stamp a rollback copy
+(`roll`, the two summing over the rows and layers), the classifier over n columns (`cls`, the
+epilogue and the picks as the token command names them), and the head re-warm under `warm_*`:
+the cat rows' copies, norms and requant (`warm_cat`), the eh_proj GEMV (`warm_eh`), the head's
+attention norm and feed requant (`warm_norm`), and its q, k and v projections, norm and rope
+store under the trunk's role names prefixed `warm_` (`warm_q`, `warm_kv`, `warm_qknrope`, or
+`warm_qkn` and `warm_rope` on the split pair). The samples go to the verify's own ledger
+(`g_rdq_v`), so the round's alternating draft and verify commands never restart the token
+ledger's averages, and every 32 verifies the driver prints `vk_rdec gpu avg/verify over N: ...`
+in the token line's shape (`vk_rdec dn avg/verify` beside it on a hybrid, the idle since the
+command sampled before - the draft's - at its end) and `vk_rdec host wall/verify over N of n
+rows: ...` - the memcpys and meta, the submit, the wait (the transfer-queue landing of the n
+logits rows, picks and hidden rows is inside it), the landing copy, and the head rows' readback
+(its own transient submit and wait). The round's profiler sections (`mtp.verify`,
+`mtp.rollback`) price the seat's whole wall from the engine's side, the draft's `mtp.draft`.
 
 ### The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
 

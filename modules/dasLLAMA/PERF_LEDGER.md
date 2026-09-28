@@ -54,8 +54,11 @@ what it costs today and what the fix would change.
   of `depth x n_rec x (nvh x ds x ds + 2 x cd x (dconv - 1)) x 4` bytes, and the reject copies one
   row back - on Qwen3.5-0.8B-MTP (18 recurrent layers, 16 heads of 128, cd 6144, dconv 4)
   21,528,576 bytes at depth 1 and 150,700,032 at depth 7, counted in the plan's scratch term,
-  `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`); and the on/off rate with the drafts'
-  acceptance - the pod measures.
+  `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`); the verify command's own
+  `DASLLAMA_GPU_PROF=1` ledger (`vk_rdec gpu avg/verify` with its `dn avg/verify` line and
+  `vk_rdec host wall/verify`, `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`) against the
+  one-row `vk_rdec gpu avg/token` line of the same run's off arm, role by role; and the on/off
+  rate with the drafts' acceptance - the pod measures.
 
 - **OPEN (2026-09-27) - the Vulkan resident driver's NextN draft head: its plane and slot bytes,
   and the device draft against the CPU draft.** Where the driver takes a model's head
@@ -73,7 +76,10 @@ what it costs today and what the fix would change.
   and `NextN draft head in the arena` load lines (the bytes read, not computed); the draft's wall
   against the CPU `forward_mtp` - `lcpp_bench --mtp-ab` under `DASLLAMA_GPU=1` with `--prof` and
   `JOBQUE_PROFILING=1`, the `mtp.draft` section against the CPU draft's on the same box - including
-  the hydrate's upload and the head row's readback, submits of their own beside the draft's; and the acceptance the
+  the hydrate's upload and the head row's readback, submits of their own beside the draft's; the
+  draft command's own `DASLLAMA_GPU_PROF=1` ledger (`vk_rdec gpu avg/draft` and `vk_rdec host
+  wall/draft`, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), the classifier's share of it
+  against the one-row `cls` role; and the acceptance the
   device draft reads off the head's slab the window chain warmed (the entry above).
 
 - **OPEN (2026-09-27) - the Vulkan resident driver's speculative carry: its landing plane and its

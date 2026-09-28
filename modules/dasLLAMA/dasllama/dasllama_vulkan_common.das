@@ -2759,29 +2759,39 @@ def fill_gemv_regions_qkv(hb : HostBuf; blk_q, blk_k, blk_v : int64; qpieces, pi
 // BOTTOM_OF_PIPE stamps; results ride a same-submit copy, no extra fence. Overlapped hazard
 // levels put the whole level's cost on the LAST member's delta (earlier members read near-zero)
 
+//! a recorded form's stamp list: the recorder's names in stamp order (stamp 0 the anchor), its stamp count, and whether the pool overflowed
+struct RdqStamps {
+    names : array<string>
+    n : uint
+    overflow : bool
+}
+
+//! a form's ledger: the stamps' summed intervals by name over the commands sampled, and the host side of the same commands
+struct RdqLedger {
+    us_by_name : table<string; double>   //! a name repeated in a command sums: every layer's "q", both kv halves
+    print_order : array<string>          //! the names in first-seen order, the tables' print order
+    total : double                       //! the commands' device spans, first stamp to last, summed
+    count : int64                        //! the commands sampled
+    idle_us : double                     //! the device's idle between the command sampled before it (any form's) and this form's, summed
+    wall_us : double                     //! the host wall of the same commands
+    host_us : double[5]                  //! ... split into its pieces: the memcpys and meta, the submit, the wait, the landing copy, the K/V rows' readback
+}
+
 // decode per-role accumulation across tokens (stamps overwrite each submit); printed every 32
 var g_rdq_n = 0u
-var g_rdq_count = 0l
-var g_rdq_total = 0.0lf
 var g_rdq_stamp_names : array<string>        //! the recorded token command's stamp names in stamp order, the recorder's own account of what each interval bills
-var g_rdq_names_unsplit : array<string>        //! ... the unsplit twin's, its stamp count and its overflow flag
-var g_rdq_n_unsplit = 0u
-var g_rdq_overflow_unsplit = false
-var g_rdq_names_wide : array<string>        //! ... and the wide twin's
-var g_rdq_n_wide = 0u
-var g_rdq_overflow_wide = false
+var g_rdq_unsplit : RdqStamps   //! the unsplit twin's list, stamp count and overflow flag
+var g_rdq_wide : RdqStamps      //! ... and the wide twin's
 var g_rdq_attn_form = RdForm.split   //! the attention form the last sampled token took: a switch restarts the averages
-var g_rdq_names_n : array<string>   //! the N-row command's stamp names, its stamp count and overflow flag, and its unsplit twin's
-var g_rdq_n_n = 0u
-var g_rdq_overflow_n = false
-var g_rdq_names_n_unsplit : array<string>
-var g_rdq_n_n_unsplit = 0u
-var g_rdq_overflow_n_unsplit = false
+var g_rdq_nrow : RdqStamps      //! the N-row command's, and its unsplit twin's
+var g_rdq_nrow_unsplit : RdqStamps
 var g_rdq_form_n = false   //! the last sampled submit was an N-row step: a switch between the one-row and N-row forms restarts the averages
-var g_rdq_us_by_name : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
-var g_rdq_print_order : array<string>        //! the names in first-seen order, the tables' print order
-var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
-var g_rdq_host_us : double[4]   //! ... split into its pieces: the memcpys and meta, the submit, the fence spin, the logits copy
+var g_rdq_verify : array<RdqStamps>   //! the same-slab verify commands' by row count (index 0 unused), and their unsplit twins'
+var g_rdq_verify_unsplit : array<RdqStamps>
+var g_rdq_draft : RdqStamps           //! the draft command's
+var g_rdq : RdqLedger      //! the token command's ledger: the one-row forms and the N-row command, a switch between them restarting it
+var g_rdq_v : RdqLedger    //! the verify command's - its own, so the round's alternating commands never restart the token ledger
+var g_rdq_d : RdqLedger    //! the draft command's
 var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP): the recorded names and the pool saturate together, so the sampler reads this instead
 
 //! the token command changed attention forms mid-run: say so and restart the ledger's averages (the recorded stamp names
@@ -2789,40 +2799,44 @@ var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP)
 [cold_path]
 def rdq_form_switch(form : RdForm; pos : int64) {
     to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {form} form from position {pos} - the averages restart\n")
-    rdq_reset_averages()
+    rdq_reset_averages(g_rdq)
 }
 
-def rdq_reset_averages {
-    g_rdq_count = 0l
-    g_rdq_total = 0.0lf
-    g_rdq_wall_us = 0.0lf
-    for (i in range(4)) {
-        g_rdq_host_us[i] = 0.0lf
+def rdq_reset_averages(var led : RdqLedger) {
+    led.count = 0l
+    led.total = 0.0lf
+    led.idle_us = 0.0lf
+    led.wall_us = 0.0lf
+    for (i in range(5)) {
+        led.host_us[i] = 0.0lf
     }
-    g_rdq_us_by_name |> clear()
-    g_rdq_print_order |> clear()
+    led.us_by_name |> clear()
+    led.print_order |> clear()
+}
+
+def private rdq_clear_stamps(var st : RdqStamps) {
+    st.names |> clear()
+    st.n = 0u
+    st.overflow = false
 }
 
 //! the decode profiler's accumulators back to zero: a model drop or a new resident model - averages never span models
 def rdq_reset {
-    rdq_reset_averages()
+    rdq_reset_averages(g_rdq)
+    rdq_reset_averages(g_rdq_v)
+    rdq_reset_averages(g_rdq_d)
     g_rdq_n = 0u
     g_rdq_overflow = false
     g_rdq_stamp_names |> clear()
-    g_rdq_names_unsplit |> clear()
-    g_rdq_n_unsplit = 0u
-    g_rdq_overflow_unsplit = false
-    g_rdq_names_wide |> clear()
-    g_rdq_n_wide = 0u
-    g_rdq_overflow_wide = false
+    rdq_clear_stamps(g_rdq_unsplit)
+    rdq_clear_stamps(g_rdq_wide)
     g_rdq_attn_form = RdForm.split
-    g_rdq_names_n |> clear()
-    g_rdq_n_n = 0u
-    g_rdq_overflow_n = false
-    g_rdq_names_n_unsplit |> clear()
-    g_rdq_n_n_unsplit = 0u
-    g_rdq_overflow_n_unsplit = false
+    rdq_clear_stamps(g_rdq_nrow)
+    rdq_clear_stamps(g_rdq_nrow_unsplit)
     g_rdq_form_n = false
+    delete g_rdq_verify
+    delete g_rdq_verify_unsplit
+    rdq_clear_stamps(g_rdq_draft)
 }
 
 let PFQ_CAP = 2048u
