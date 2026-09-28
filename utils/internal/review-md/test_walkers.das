@@ -475,7 +475,7 @@ def make_server_fixture(t : T?; tree, root : string) {
         "options gen2\n\nclass X \{\n    def onInit \{\n        GET(\"/v1/models\") <| $() \{\n        \}\n        POST(\"/gc\") <| $() \{\n        \}\n        STREAM(\"/sse\") <| $() \{\n        \}\n        ANY(\"*\") <| $() \{\n        \}\n    \}\n\}\n")
     // the flag check's inputs: one documented server flag, and the CLI's structs empty
     write_at(t, root, "utils/dasllama-server/main.das",
-        "options gen2\n\n[CommandLineArgs]\nstruct ServerArgs \{\n    @clarg_doc = \"Listen port\"\n    port : int\n\}\n")
+        "options gen2\nrequire hv\n\n[CommandLineArgs]\nstruct ServerArgs \{\n    @clarg_doc = \"Listen port\"\n    port : int\n\}\n")
     write_at(t, root, "utils/dasllama-server/cli_args.das",
         "options gen2\nmodule cli_args shared\nrequire daslib/clargs\n" +
         "[CommandLineArgs]\nstruct CommonArgs \{\n\}\n[CommandLineArgs]\nstruct SamplerArgs \{\n\}\n[CommandLineArgs]\nstruct PlayArgs \{\n\}\n" +
@@ -486,6 +486,15 @@ def make_server_fixture(t : T?; tree, root : string) {
     write_at(t, root, "utils/dasllama-server/README.md", "routes: `/v1/models` and `/gc` and `/sse`; flags: `--port`\n")
     write_at(t, root, "doc/source/reference/utils/dasllama_server.rst", "``/v1/models`` and ``/gc`` and ``/sse``; ``--port``\n")
     write_at(t, root, "utils/dasllama-server/control.html", "<script>fetch(\"/gc\")</script>\n")
+    // the license check's inputs: the core CMakeLists with a doc-root notice install spelled
+    // bare and one through PROJECT_SOURCE_DIR, a module main.das requires (`hv` -> modules/dasHV)
+    // installing one through a DAS_*_DIR variable with a RENAME, a module nothing requires whose
+    // notice the bundle does not owe, and the package rows that mirror the three owed ones
+    write_at(t, root, "CMakeLists.txt", "install(FILES LICENSE $\{PROJECT_SOURCE_DIR\}/THIRD_PARTY_NOTICES.md DESTINATION $\{DAS_INSTALL_DOCDIR\})\n")
+    write_at(t, root, "modules/dasHV/CMakeLists.txt", "install(FILES $\{DAS_HV_DIR\}/HV.LICENSE\n    DESTINATION $\{DAS_INSTALL_DOCDIR\} RENAME HV.LICENSE)\n")
+    write_at(t, root, "modules/dasGlfw/CMakeLists.txt", "install(FILES $\{DAS_GLFW_DIR\}/GLFW.LICENSE DESTINATION $\{DAS_INSTALL_DOCDIR\})\n")
+    write_at(t, root, "utils/dasllama-server/.das_package",
+        "release_include_from(\"LICENSE\", \"licenses/LICENSE\")\nrelease_include_from(\"THIRD_PARTY_NOTICES.md\", \"licenses/THIRD_PARTY_NOTICES.md\")\nrelease_include_from(\"modules/dasHV/HV.LICENSE\", \"licenses/HV.LICENSE\")\n")
     var err : string
     t |> success(copy_file(path_join(tree, "utils/dasllama-server/REVIEW.das"), path_join(root, "utils/dasllama-server/REVIEW.das"), true, err), "copied the real server gate")
 }
@@ -513,12 +522,23 @@ def test_server_gate_fixtures(t : T?) {
     write_at(t, fixture, "doc/source/reference/utils/dasllama_server.rst", "``/v1/models`` and ``/gc`` and ``/sse`` and ``/rstdead``\n")
     write_at(t, fixture, "utils/dasllama-server/control.html", "<script>fetch(\"/gc\");fetch(\"/nope\")</script>\n")
     // a second server flag with no help string, and the rst page losing the first
+    // main.das now requires a daslang-only module (`audio/audio_boost` -> modules/dasAudio) whose
+    // notice install names a variable the gate cannot resolve; the package loses the LICENSE row,
+    // comments the HV row out, and gains one no install rule backs
     write_at(t, fixture, "utils/dasllama-server/main.das",
-        "options gen2\n\n[CommandLineArgs]\nstruct ServerArgs \{\n    @clarg_doc = \"Listen port\"\n    port : int\n\n    @clarg_name = \"show-help\"\n    help : bool\n\}\n")
+        "options gen2\nrequire hv\nrequire audio/audio_boost\n\n[CommandLineArgs]\nstruct ServerArgs \{\n    @clarg_doc = \"Listen port\"\n    port : int\n\n    @clarg_name = \"show-help\"\n    help : bool\n\}\n")
+    write_at(t, fixture, "modules/dasAudio/CMakeLists.txt",
+        "install(FILES $\{miniaudio_SOURCE_DIR\}/LICENSE DESTINATION $\{DAS_INSTALL_DOCDIR\} RENAME MINIAUDIO.LICENSE)\n")
+    write_at(t, fixture, "utils/dasllama-server/.das_package",
+        "release_include_from(\"THIRD_PARTY_NOTICES.md\", \"licenses/THIRD_PARTY_NOTICES.md\")\n// release_include_from(\"modules/dasHV/HV.LICENSE\", \"licenses/HV.LICENSE\")\nrelease_include_from(\"modules/dasHV/BOGUS.LICENSE\", \"licenses/BOGUS.LICENSE\")\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "utils/dasllama-server/REVIEW.das")])
     t |> equal(1, red.rc, "planted fixture is red")
-    for (needle in ["served route /vad has no `/vad` mention",
+    for (needle in ["the bundle carries no licenses/LICENSE, which CMakeLists.txt installs at the SDK doc root - add release_include_from(\"LICENSE\", \"licenses/LICENSE\")",
+                    "the bundle carries no licenses/HV.LICENSE, which modules/dasHV/CMakeLists.txt installs at the SDK doc root",
+                    "release_include_from(\"modules/dasHV/BOGUS.LICENSE\", \"licenses/BOGUS.LICENSE\") ships a notice no doc-root install rule",
+                    "modules/dasAudio/CMakeLists.txt: doc-root install source `$\{miniaudio_SOURCE_DIR\}/LICENSE` names a variable this gate cannot resolve",
+                    "served route /vad has no `/vad` mention",
                     "served route /vad has no ``/vad`` mention",
                     "served route /anyroute has no `/anyroute` mention",
                     "README.md: documents route /dead, which the server does not register",
