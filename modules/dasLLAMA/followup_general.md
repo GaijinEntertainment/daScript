@@ -1967,6 +1967,10 @@
    (exit 137) in every stocked run on the RTX PRO 4500 pod since 09-24, on master's code, while
    the container's `memory.max` reads 62 GB against the box's 251 GB (`memory.events` counts 18
    kills); the file's earlier cells pass, so a `--changed` run on the pod reads one red it did not
-   cause. Open: the cell's peak resident size on that path (a 4B model and a 300-row quantum have
-   no business near 62 GB - the CPU loop's per-row allocation is the suspect) and, once it is known,
-   either the allocation or a documented pod cap the runner's REPORT names.
+   cause. Measured alone (the cell under a 2 s sampler of the cgroup and the process): the daslang
+   process itself reaches 60.7 GB resident before the kill, page cache aside - a 4B model and a
+   300-row quantum have no business there. The suspect is the session's K/V at the file's full
+   context on the CPU rails (a Qwen3-VL 4B session at 262144 positions in f32 is ~77 GB of cache,
+   and the CPU loop the mrope quantum falls to is the one path that touches it row by row), so
+   the fix is the cell's session sized to its turn (or the cache grown lazily on that path), never
+   a documented pod cap.
