@@ -12,33 +12,28 @@ require daslib/ast
 require daslib/ast_boost
 require spirv/spirv_grammar
 require spirv/spirv_dis
+require strings
 
 def fixture_path() : string {
     return "{get_das_root()}/tests/spirv/_lint_fold_fixture.das"
 }
 
-// The [compute_shader] macro stores the emitted blob as `name : array<uint>` initialized with
-// unpack_spirv_words(to_array_move([uint4 literals]), count) -- unwrap both calls and read the
-// words off the packed array literal, count of them.
 def shader_words(program : ProgramPtr; name : string) : array<uint> {
     var words : array<uint>
     let gv = find_variable(get_this_module(program), name)
     let unpack = gv != null ? gv.init ?as ExprCall : null
     if (unpack != null && length(unpack.arguments) == 2) {
         let count = (unpack.arguments[1] ?as ExprConstInt)?.value ?? 0
-        let call = unpack.arguments[0] ?as ExprCall
-        let mk = call != null && length(call.arguments) == 1 ? call.arguments[0] ?as ExprMakeArray : null
-        if (mk != null) {
-            for (v in mk.values) {
-                let cu = v ?as ExprConstUInt4
-                if (cu != null) {
-                    for (j in range(4)) {
-                        if (length(words) < count) {
-                            words |> push(cu.value[j])
-                        }
-                    }
+        let blob = unpack.arguments[0] ?as ExprConstString
+        if (blob != null && length(blob.value) == count * 4) {
+            var bytes <- to_bytes(blob.value)
+            words |> resize(count)
+            if (count > 0) {
+                unsafe {
+                    memcpy(addr(words[0]), addr(bytes[0]), count * 4)
                 }
             }
+            delete bytes
         }
     }
     return <- words
