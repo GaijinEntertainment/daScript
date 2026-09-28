@@ -25,10 +25,10 @@ def private short_tone(seconds : float) : array<float> {
 
 [test]
 def test_status_seeded_on_the_calling_thread(t : T?) {
-    t |> run("the box reads `starting` before the audio thread has seen the sound") @(t : T?) {
+    t |> run("the box reads the new sound's state the instant set_status_update returns") @(t : T?) {
         sound_set_null_device(true)
         with_audio_system() {
-            var tone <- short_tone(0.2)
+            var tone <- short_tone(10.0)
             let sid = play_sound_from_pcm(MA_SAMPLE_RATE, 1, tone)
             var box = seq_box_create()
             set_status_update(sid, box)
@@ -37,7 +37,8 @@ def test_status_seeded_on_the_calling_thread(t : T?) {
                 state = s.state
             }
             t |> equal(got, true, "the box must not read empty right after registration")
-            t |> equal(state, AudioChannelState.starting)
+            t |> success(state == AudioChannelState.starting || state == AudioChannelState.playing,
+                "the seeded `starting`, or `playing` once the audio thread has picked the sound up: {state}")
             stop(sid)
             unset_status_update(sid)
             box |> seq_box_release

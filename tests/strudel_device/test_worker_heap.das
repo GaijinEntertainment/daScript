@@ -9,7 +9,7 @@ require dastest/testing_boost
 require strudel/strudel
 require strudel/strudel_player
 require audio/audio_boost
-require daslib/fio
+require _strudel_device_common
 
 // The playback worker's context is its own: nothing else collects it, and a bed that queries
 // four patterns every tick leaves megabytes of garbage a second behind. The number the worker
@@ -27,7 +27,6 @@ let WARM_UP_SECONDS = 6.0lf
 let STRETCH_SECONDS = 3.0lf
 let MIN_DROPS = 6                                 // an idle 64-core box reads ~28 per two stretches
 let FLOOR_DRIFT_LIMIT = 4ul * 1024ul * 1024ul     // twice the worker's collect window; uncollected grows ~10 MB a stretch
-let WALL_CAP_MS = 90000u                          // a worker that never advances is its own failure
 
 [unsafe_heap_collect]
 def worker_setup() {
@@ -39,35 +38,20 @@ def worker_setup() {
     strudel_play()
 }
 
-def worker_seconds() : double {
-    return strudel_get_playback_time()._0
-}
-
-// Sleeps until the worker's clock reaches `until`, or the wall cap passes; false on the cap.
-def wait_worker_until(until : double; var wall_ms : uint&) : bool {
-    while (worker_seconds() < until) {
-        return false if (wall_ms >= WALL_CAP_MS)
-        sleep(20u)
-        wall_ms += 20u
-    }
-    return true
-}
-
 struct Stretch {
     samples : int      // distinct published numbers seen; a stretch with none measured nothing
     lo : uint64
     drops : int
+    finished : bool    // false: the worker's clock stalled before the stretch ended
 }
 
 // The least published heap over one stretch of worker time, and how many times a tick published
 // less than the tick before it; `prev` carries the last number across stretches.
-def sample_stretch(until : double; var prev : uint64&; var wall_ms : uint&) : Stretch {
+def sample_stretch(until : double; var prev : uint64&) : Stretch {
     var st = Stretch(lo = 0xFFFFFFFFFFFFFFFFul)
-    while (worker_seconds() < until && wall_ms < WALL_CAP_MS) {
-        sleep(20u)
-        wall_ms += 20u
+    st.finished = wait_worker_until(until) $ {
         let h = strudel_get_worker_heap_bytes()
-        continue if (h == prev)          // the same tick as last time
+        return if (h == prev)          // the same tick as last time
         if (prev != 0ul && h < prev) { st.drops++ }
         prev = h
         st.lo = min(st.lo, h)
@@ -82,14 +66,14 @@ def test_worker_heap_stays_flat(t : T?) {
         sound_set_null_device(true)
         with_audio_system() {
             strudel_init(@@worker_setup)
-            var wall_ms = 0u
-            let warm = wait_worker_until(WARM_UP_SECONDS, wall_ms)
-            t |> success(warm, "the worker reached {WARM_UP_SECONDS} s of pattern time inside {WALL_CAP_MS} ms of wall time")
+            let warm = wait_worker_until(WARM_UP_SECONDS)
+            t |> success(warm, "the worker reached {WARM_UP_SECONDS} s of pattern time without its clock standing still for {WORKER_STALL_MS} ms")
             if (warm) {
                 var prev = 0ul
                 let w0 = worker_seconds()
-                let early = sample_stretch(w0 + STRETCH_SECONDS, prev, wall_ms)
-                let late = sample_stretch(w0 + 2.0lf * STRETCH_SECONDS, prev, wall_ms)
+                let early = sample_stretch(w0 + STRETCH_SECONDS, prev)
+                let late = sample_stretch(w0 + 2.0lf * STRETCH_SECONDS, prev)
+                t |> success(early.finished && late.finished, "the worker's clock reached {worker_seconds()} s of {w0 + 2.0lf * STRETCH_SECONDS} without standing still for {WORKER_STALL_MS} ms")
                 // a stretch that saw no published number leaves `lo` at its sentinel, which would
                 // pass a bare `lo > 0`; the sample counts are what say the worker published at all
                 t |> success(early.samples > 0 && late.samples > 0, "the worker publishes its heap: {early.samples} then {late.samples} distinct numbers")

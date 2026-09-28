@@ -156,12 +156,14 @@ def test_vowel_filter_tick_produces_output(t : T?) {
     vowel_filter_init(vf, "a")
     var seed = 12345u
     var maxAbs = 0.0
+    var energy = 0.0
     for (_i in range(4800)) {
         let inp = noise(seed)
         let out = vowel_filter_tick(vf, inp)
         maxAbs = max(maxAbs, abs(out))
+        energy += out * out
     }
-    t |> success(maxAbs > 0.1)
+    t |> success(maxAbs > 0.1, "peak {maxAbs}, energy {energy} over 4800 samples - this seed peaks near 0.28")
 }
 
 [test]
