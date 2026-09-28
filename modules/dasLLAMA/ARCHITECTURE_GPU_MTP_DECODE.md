@@ -215,8 +215,8 @@ rejected row never clobbers a slot a later conv reads and the shadow flip retire
 `finish_step` copies the wide residual back to `Session.hc_res`. `decode_shape_decline` admits
 `hyper_conn` under `allow_hc` on the single decode, the mint-time gate and the verify; the batch
 gate does not, so a batched step on such a model declines `graph`; the prefill serves the same
-seams over the window's rows (`ARCHITECTURE_GPU_PREFILL.md`, the hyper-connection window). The
-deltanet gate's σ(z) form is the `MetalDnGateSig` stamp of `MetalDnGateT`, picked on
+seams over the window's rows (`ARCHITECTURE_GPU_PREFILL.md#prefill-hc-window`). The
+deltanet gate's sigma(z) form is the `MetalDnGateSig` stamp of `MetalDnGateT`, picked on
 `Config.dn_z_sigmoid` by every row form through `enc_dn_zgate`.
 
 The row shapes share their adapters. `VerifyLayerEnc` and `BatchLayerEnc` bind one generic per

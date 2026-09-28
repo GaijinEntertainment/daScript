@@ -4476,22 +4476,24 @@ enum private B32MmForm {
 }
 
 //! one per-32 format's mul_mm stamp sources by form - the same cell's (source, entry, fastmath, tgmem) tuple
-def private b32_mm_stamp(fmt : MoeGemvFmt; form : B32MmForm) : tuple<src : string; entry : string; fm : bool; tgm : uint64> {
-    if (fmt == MoeGemvFmt.q51) {
-        if (form == B32MmForm.base) return (src = metal_moe_mulmm_q51_msl, entry = metal_moe_mulmm_q51_msl_entry, fm = metal_moe_mulmm_q51_msl_fastmath, tgm = metal_moe_mulmm_q51_msl_tgmem)
-        if (form == B32MmForm.t) return (src = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_tgmem)
-        if (form == B32MmForm.th) return (src = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_tgmem)
-        if (form == B32MmForm.th128) return (src = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_tgmem)
-        return (src = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_tgmem)
+def private b32_mm_stamp(fmt : MoeGemvFmt; form : B32MmForm) : tuple<src : string; entry : string; fm : bool; tgm : uint64> {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (fmt == MoeGemvFmt.q51) {
+            if (form == B32MmForm.base) return (src = metal_moe_mulmm_q51_msl, entry = metal_moe_mulmm_q51_msl_entry, fm = metal_moe_mulmm_q51_msl_fastmath, tgm = metal_moe_mulmm_q51_msl_tgmem)
+            if (form == B32MmForm.t) return (src = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl_tgmem)
+            if (form == B32MmForm.th) return (src = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51TH_metal_moe_mulmm_q51_t_msl_tgmem)
+            if (form == B32MmForm.th128) return (src = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51TH128_metal_moe_mulmm_q51_t_msl_tgmem)
+            return (src = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl, entry = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_entry, fm = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_fastmath, tgm = MetalMoeMulMmQ51THR_metal_moe_mulmm_q51_t_msl_tgmem)
+        }
+        if (fmt == MoeGemvFmt.iq4nl32) {
+            if (form == B32MmForm.base) return (src = metal_moe_mulmm_iq4nl32_msl, entry = metal_moe_mulmm_iq4nl32_msl_entry, fm = metal_moe_mulmm_iq4nl32_msl_fastmath, tgm = metal_moe_mulmm_iq4nl32_msl_tgmem)
+            if (form == B32MmForm.t) return (src = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
+            if (form == B32MmForm.th) return (src = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
+            if (form == B32MmForm.th128) return (src = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
+            return (src = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
+        }
+        panic("b32_mm_stamp: {fmt} is not a per-32 expert mul_mm format")
     }
-    if (fmt == MoeGemvFmt.iq4nl32) {
-        if (form == B32MmForm.base) return (src = metal_moe_mulmm_iq4nl32_msl, entry = metal_moe_mulmm_iq4nl32_msl_entry, fm = metal_moe_mulmm_iq4nl32_msl_fastmath, tgm = metal_moe_mulmm_iq4nl32_msl_tgmem)
-        if (form == B32MmForm.t) return (src = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32T_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
-        if (form == B32MmForm.th) return (src = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32TH_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
-        if (form == B32MmForm.th128) return (src = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32TH128_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
-        return (src = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl, entry = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl_entry, fm = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl_fastmath, tgm = MetalMoeMulMmIq4nl32THR_metal_moe_mulmm_iq4nl32_t_msl_tgmem)
-    }
-    panic("b32_mm_stamp: {fmt} is not a per-32 expert mul_mm format")
     return (src = "", entry = "", fm = false, tgm = 0ul)
 }
 

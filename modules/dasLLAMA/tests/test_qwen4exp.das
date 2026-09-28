@@ -212,9 +212,7 @@ def test_ngram_gather(t : T?) {
         var dst : array<float>
         dst |> resize(4l * HD)
         var toks <- [4l, 9l, 2l]
-        unsafe {
-            ngram_gather(m, s, toks, 2l, addr(dst[0]))
-        }
+        ngram_gather(m, s, toks, 2l, unsafe(addr(dst[0])))
         // ctx = [2, 9, 4]: bigram 2*3 ^ 9*5 = 43; trigram 43 ^ 4*7 = 43 ^ 28 = 55
         var rows <- gathered_rows(dst)
         t |> equal(rows[0], 43l)
@@ -235,18 +233,14 @@ def test_ngram_gather(t : T?) {
         var dst : array<float>
         dst |> resize(4l * HD)
         var toks <- [4l, 7l, 9l, 2l]
-        unsafe {
-            ngram_gather(m, s, toks, 3l, addr(dst[0]))
-        }
+        ngram_gather(m, s, toks, 3l, unsafe(addr(dst[0])))
         // ctx = [2, 9, eos]: the eos two back replaces 4; bigram 6 ^ 45 = 43; trigram 43 ^ 49 = 26
         var rows <- gathered_rows(dst)
         t |> equal(rows[0], 43l)
         t |> equal(rows[2], 126l)
         delete rows
         var toks2 <- [4l, 9l, 7l]
-        unsafe {
-            ngram_gather(m, s, toks2, 2l, addr(dst[0]))
-        }
+        ngram_gather(m, s, toks2, 2l, unsafe(addr(dst[0])))
         // ctx = [eos, 9, 4]: the token's own eos keeps its predecessors; bigram 21 ^ 45 = 56 -> row 6 / 56; trigram 56 ^ 28 = 36
         var rows2 <- gathered_rows(dst)
         t |> equal(rows2[0], 6l)
@@ -272,18 +266,14 @@ def test_ngram_window(t : T?) {
         var dst : array<float>
         dst |> resize(4l * HD)
         var toks <- [8l]
-        unsafe {
-            ngram_gather(m, s, toks, 0l, addr(dst[0]))
-        }
+        ngram_gather(m, s, toks, 0l, unsafe(addr(dst[0])))
         // an empty window: ctx = [8, eos, eos]: bigram 24 ^ 35 = 59 -> 9; trigram 59 ^ 49 = 10
         var rows <- gathered_rows(dst)
         t |> equal(rows[0], 9l)
         t |> equal(rows[2], 110l)
         delete rows
         s.ple_prev[1] = 5l   // the newest window slot is the immediate predecessor; the older one is still missing
-        unsafe {
-            ngram_gather(m, s, toks, 0l, addr(dst[0]))
-        }
+        ngram_gather(m, s, toks, 0l, unsafe(addr(dst[0])))
         // ctx = [8, 5, eos]: bigram 24 ^ 25 = 1; trigram 1 ^ 49 = 48
         var rows2 <- gathered_rows(dst)
         t |> equal(rows2[0], 1l)
@@ -323,15 +313,11 @@ def test_ngram_row_decoders(t : T?) {
             }
         }
         var toks <- [3l]   // ctx = [3, eos = 0]: mixed = 3 -> row 1
-        unsafe {
-            ngram_gather(m, s, toks, 0l, addr(dst[0]))
-        }
+        ngram_gather(m, s, toks, 0l, unsafe(addr(dst[0])))
         t |> equal(dst[0], -1.0)
         t |> equal(dst[31], -32.0)
         var toks0 <- [2l]   // mixed = 2 -> row 0
-        unsafe {
-            ngram_gather(m, s, toks0, 0l, addr(dst[0]))
-        }
+        ngram_gather(m, s, toks0, 0l, unsafe(addr(dst[0])))
         t |> equal(dst[5], 5.0)
         // IQ4_NL: d = 1.0, nibble j in the low half, 15 - j in the high half of byte j
         m.ngram_type = GGML_TYPE_IQ4_NL
@@ -344,9 +330,7 @@ def test_ngram_row_decoders(t : T?) {
                 m.ngram_tab[r * 18l + 2l + k] = uint8(k | ((15l - k) << 4l))
             }
         }
-        unsafe {
-            ngram_gather(m, s, toks0, 0l, addr(dst[0]))
-        }
+        ngram_gather(m, s, toks0, 0l, unsafe(addr(dst[0])))
         let lut = iq4nl_lut()
         var bad = 0
         for (k in range64(16l)) {

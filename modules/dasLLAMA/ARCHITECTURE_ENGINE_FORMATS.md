@@ -102,7 +102,7 @@ Every materialized cos/sin table is the same fill; the position source is what d
 ### The per-32 rail is one kernel body over a format tag {#per-32-rail}
 
 The per-32 formats (`q51`, `iq4nl32`) sit off the superblock lattice: 32-weight blocks, Q8_0-form
-activations, dedicated `Model` plane pairs (`ARCHITECTURE_IMAGE.md`, the per-32 planes), and in
+activations, dedicated `Model` plane pairs (`ARCHITECTURE_IMAGE.md#image-kq-table-sb-only`), and in
 `dasllama_math.das` one body per kernel shape (`b32_batch_kernel`, `b32_groupn_kernel`,
 `b32_batch_groupn_kernel`) generic over the `KqTag_<fmt>` it takes last - the tag picks the
 strides, the row expand, the grp scale gather and the expanded-row dot. `iq4nl32` is the IQ4_NL

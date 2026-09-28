@@ -19,8 +19,8 @@ Three questions decide which existing family the format rides; answer them from
 1. **Block geometry.** 256-weight superblock (every K-quant, every i-quant) or 32-weight block
    (`Q4_0`, `Q5_1`, `IQ4_NL`)? A superblock format joins the `kq_sb` lattice (Q8_K activations,
    `% 256` rows, the grp<mr> repack, the stamped kq kernels); a 32-block format rides per-32
-   planes like `q51` and `iq4nl32`. `ARCHITECTURE_ENGINE_FORMATS.md#formats-and-data-movement` owns
-   the lattice split. A disk type may ride BOTH: IQ4_NL is `iq4nl` (a superblock member, eight
+   planes like `q51` and `iq4nl32` (`ARCHITECTURE_ENGINE_FORMATS.md#per-32-rail`).
+   `ARCHITECTURE_ENGINE_FORMATS.md#formats-and-data-movement` owns the lattice split. A disk type may ride BOTH: IQ4_NL is `iq4nl` (a superblock member, eight
    32-blocks a superblock) on a `% 256` row and `iq4nl32` on an expert stack whose rows are off the
    256 lattice and on the 32 lattice (`kq_fmt_expert_ok`) - the per-32 twin exists for the expert
    stacks alone, a dense plane off the lattice still demotes to q8.
@@ -41,7 +41,7 @@ Three questions decide which existing family the format rides; answer them from
 Write the answers down; they are the first lines of the PR body's format section.
 
 **A served form of an existing disk type** (`iq3s4` = IQ3_S as a codebook plane,
-`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2e) is a member like any other, with four differences:
+`ARCHITECTURE_ENGINE_FORMATS.md#served-form`) is a member like any other, with four differences:
 the descriptor row names the SOURCE type (`ggml_type`, `disk_bytes`) under its own schema and
 stream ids; `kq_transcode_p` reads the source disk block and folds its decode into the served
 plane (exactness against the source form is a `test_kquant.das` cell - both transcodes of one
@@ -147,7 +147,7 @@ by hand:
 - `dasllama_image.das`: bump `IMAGE_VERSION` when the plane table's shape or the meta order
   moves; the interleaves serialize in enum order, so an appended member lands last.
 
-A per-32 format is OFF the plane table (`ARCHITECTURE_IMAGE.md` sec.2.1p): its planes are the
+A per-32 format is OFF the plane table (`ARCHITECTURE_IMAGE.md#image-kq-table-sb-only`): its planes are the
 top-level `Model` pair `<fmt>q` / `<fmt>s` (the `kq_desc` row still sizes them - `qsb`/`ssb` per
 32-block), and every consumer that indexes the table by slot needs its arm by hand. iq4nl32
 took, each a twin of q51's line beside it: `Model.<fmt>q`/`<fmt>s` and the served-bytes

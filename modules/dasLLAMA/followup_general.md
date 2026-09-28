@@ -1836,26 +1836,26 @@
     from the file. The image-mapped table is where the gather's cost shows: on the M5 Max the
     CPU gather of a 512-row window reads 51 ms with the pages warm (the `ple_gather` bucket, 11%
     of a 447 ms Metal pp512 window, the only host bucket) and seconds with them cold - the two
-    pp512 runs after the image mint read 518 ± 121 and 666 ± 290 tok/s against 1293 ± 31 warm,
+    pp512 runs after the image mint read 518 +/- 121 and 666 +/- 290 tok/s against 1293 +/- 31 warm,
     the 16 random 90-byte rows a token touches each faulting a 16 KB page from disk. The lever
     beyond the view is the gather on the device (the table as a Metal plane, the rows read where
     the key/value GEMMs consume them) or the table pinned resident where the box has the room.
 
 173. **The CPU decode of Qwen3.8-Flash-Next is compute-bound in the IQ3_S expert GEMVs.** On the
-    M5 Max at 18 threads the token reads 57 ms (17.5 tok/s in the profile window, 19.0 ± 0.2 on
-    the tg128 row; llama.cpp 19.9 ± 0.4). The forward buckets per token: the gate/up expert
+    M5 Max at 18 threads the token reads 57 ms (17.5 tok/s in the profile window, 19.0 +/- 0.2 on
+    the tg128 row; llama.cpp 19.9 +/- 0.4). The forward buckets per token: the gate/up expert
     GEMVs (`mm_moe`, IQ3_S) 22 ms for 14 MB of planes - 0.6 GB/s, a decode cost, not a
     bandwidth one; the attention block 18 ms (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9); the
     hyper-connection mixes 5.4 ms; the down expert GEMVs (`mm_moe_dn`, iq4nl32 on the gen family)
     3.9 ms; the head 2.7 ms. The IQ3_S rail gathers each superblock's grid rows into a byte panel
     before its dots (`emit_iq3s_gather`), and that gather is the token's largest cost. The lever
-    landed as the `iq3s4` served form (`ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2e, the
-    `DASLLAMA_IQ3S_SERVE` knob): on the same binary and box, warm passes, grid 134.1 ± 2.0 pp512 /
-    18.98 ± 0.13 tg128 against lut 140.6 ± 0.7 / 26.9 ± 0.5 (llama.cpp 107.8 / 19.9); the decode
+    landed as the `iq3s4` served form (`ARCHITECTURE_ENGINE_FORMATS.md#served-form`, the
+    `DASLLAMA_IQ3S_SERVE` knob): on the same binary and box, warm passes, grid 134.1 +/- 2.0 pp512 /
+    18.98 +/- 0.13 tg128 against lut 140.6 +/- 0.7 / 26.9 +/- 0.5 (llama.cpp 107.8 / 19.9); the decode
     profile 59.5 -> 40.3 ms a token, `mm_moe` 25.1 -> 6.7 ms, every other bucket unchanged (the
     attention block 20 ms, the hc mixes 6, `mm_moe_dn` 3.5-5, the head 2.9); the planar image
     98.1 -> 105.5 GB. Still open: the grid form's emitter path - a dword read of the qs column in
-    the row-group form (sec.2.23 of `ARCHITECTURE_CPU_KERNELS.md` says it did not pay on the panel
+    the row-group form (`ARCHITECTURE_CPU_KERNELS.md#grid-decode-forms` says it did not pay on the panel
     form's box; unmeasured on the M5) buys at most 1.3-1.5x on a bucket the codebook form beats 3.7x,
     so it is a GPU-rail question (the GPUs keep the grid) more than a CPU one; the attention block
     (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9 ms) is the CPU token's largest bucket now, and the
@@ -1889,13 +1889,13 @@
     the cold reading.
 
 176. **YaRN as a runtime setting, and on partial rotary.** The loader folds a file's YaRN metadata
-    into the per-pair `rope_freqs` divisor and the `1 + 0.1·ln(s)` mscale (gpt-oss, the Mistral 3
+    into the per-pair `rope_freqs` divisor and the `1 + 0.1*ln(s)` mscale (gpt-oss, the Mistral 3
     family ride it) but refuses partial rotary + YaRN and `yarn_log_multiplier != 0`, and the Qwen
     files carry no `rope.scaling.*` keys at all - Qwen enables YaRN as a setting (factor 4 over the
     original context, only when the context needs it), llama.cpp users through `--rope-scaling yarn
     --rope-scale 4 --yarn-orig-ctx N`. Done = an override knob (env + CLI + server option) feeding
     the same fold; the partial-rotary arm (the correction band over `rope_dim`, `rope_freqs` at
-    `rope_dim / 2`, the `_part` leaves passed the factors, the "partial ⇒ no factors" guarantee
+    `rope_dim / 2`, the `_part` leaves passed the factors, the "partial => no factors" guarantee
     retired, the GPU decode's partial-rope table indexing checked at the pair stride); a
     partial+factors arm in `test_rope_apply`; parity on Flash-Next past 262K positions against
     llama.cpp under the same flags. The `yarn_log_multiplier` arm waits for a DeepSeek-class carrier.

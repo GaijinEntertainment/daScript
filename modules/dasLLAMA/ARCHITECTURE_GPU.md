@@ -88,9 +88,8 @@ that a question answered for one backend has an obvious address in the other. Th
   seats, one per direction: `register_ple_gpu_gate` for a prefill override that builds the side input
   on device off the stashed token ids (Metal and Vulkan), `register_ple_gpu_decode_gate` for a decode
   override that gathers the token's row on device (Vulkan alone); the hub skips the CPU pre-step only
-  for the direction whose gate answers yes, so the Metal decode reads the CPU-built side input. qwen4exp's
-  n-gram side input splits the same way with no gate: the arch's pre-stack hook gathers the token's hashed
-  heads on the CPU (the 28 GB table stays host-side), the Metal decode projects, gates and convolves them (`ARCHITECTURE_GPU_MTP_DECODE.md` sec.2.39a).
+  for the direction whose gate answers yes, so the Metal decode reads the CPU-built side input. qwen4exp's n-gram
+  side input splits the same way with no gate: the CPU pre-stack hook gathers the token's hashed heads (the 28 GB table stays host-side), the Metal decode projects, gates and convolves them (`ARCHITECTURE_GPU_MTP_DECODE.md#metal-layer-enc`).
 - **Per-layer FFN widths (MatFormer E-series, at most two - `ffn_second_hidden`) serve on Metal
   and on the Vulkan whole-model driver**: the Metal decode, batch and prefill drivers bind the
   width per layer (dense trunks, no MTP; the batch sizes its panels to the wider width and carries

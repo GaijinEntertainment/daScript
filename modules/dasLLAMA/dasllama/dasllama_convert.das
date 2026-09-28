@@ -1122,10 +1122,8 @@ def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : Kq
 //! Transcode one IQ4_NL disk block (18 bytes at `src`: d f16, 16 nibble bytes) into the iq4nl32
 //! planes — verbatim splits, exact: the 2 scale bytes to ks, the 16 nibble bytes to kq.
 def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq4nl32) {
-    unsafe {
-        bcopy(ks, src, 2l)
-        bcopy(kq, src + 2l, 16l)
-    }
+    bcopy(ks, src, 2l)
+    bcopy(kq, unsafe(src + 2l), 16l)
 }
 
 //! Reference dequant of one iq4nl32-plane 32-block: w = d * lut[q], elem k off the low nibble of
