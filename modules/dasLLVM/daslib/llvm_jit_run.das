@@ -38,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x462f14b19ca32cc7ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x7422625d18ab654ul
 
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
@@ -588,6 +588,10 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
     let totalTime = ref_time_ticks()
     var phase_tm = ref_time_ticks()
     var plan <- make_jit_plan(prog, ctx, false, cli_opts)
+    if (report_collect_errors(plan)) {
+        run.ok = false
+        return run
+    }
     assume aot_host = plan.aot_host
     assume jit_all_functions = plan.jit_all_functions
     assume debug_info = plan.debug_info

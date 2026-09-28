@@ -27,6 +27,14 @@ def computed_goto_in_a_captured_block {
     pass
 }
 
+// A type macro allocated with new, in the dim of an option result type that also holds an
+// auto. The macro type carries no alias name, so looking it up as one matched the whole result
+// type - the very type the new sits in - and copied it into itself.
+def new_of_type_macro_in_option_result : auto(v) | int[(new<$T>())] {
+    return 1
+}
+
 [export]
 def main {
+    new_of_type_macro_in_option_result()
 }

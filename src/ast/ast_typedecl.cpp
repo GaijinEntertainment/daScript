@@ -1035,6 +1035,7 @@ namespace das
         return hasAny;
     }
     TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto, bool * constUnderDim ) {
+        if (name.empty()) return nullptr;
         if (!aliasCacheValid) computeAliasCache();
         if (!aliasCacheHasAlias) return nullptr;        // proven no aliases anywhere
         if (baseType == Type::alias) {

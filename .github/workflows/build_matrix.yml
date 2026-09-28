@@ -214,11 +214,7 @@ jobs:
           -DDAS_FAST_MATH=${{ matrix.fast_math }} \
           ${{ matrix.cmake_extra }}
 
-    # NOTE: the "Prewarm JIT cache" step (jit_cache_all_tests, ~17 min on the
-    # win64 lane) is GONE: the JIT sweep now runs isolated-PARALLEL and mints
-    # the dll cache itself — cold-cache parallel measured faster than the old
-    # warm sequential sweep, so a separate prewarm only duplicated the
-    # frontend-compile of every test. The target still exists for local use.
+    # No separate JIT prewarm step: each run_tests_jit chunk warms its own files with jit.exe.
     - name: "Test"
       if: (inputs.lane == 'build' || matrix.nightly_only == 'ON') && (matrix.phase == 'all' || matrix.phase == 'tests')
       run: |

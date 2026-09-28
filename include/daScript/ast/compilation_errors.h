@@ -266,7 +266,7 @@ namespace das
     ,   invalid_typeinfo                                            =   30265    // 1 site(s)
     ,   invalid_typeinfo_annotation                                 =   30266    // 1 site(s)
     ,   invalid_typeinfo_annotation_argument_type                   =   30267    // 1 site(s)
-    ,   invalid_typeinfo_dim                                        =   30268    // 1 site(s)
+    ,   invalid_typeinfo_dim                                        =   30268    // 2 site(s)
     ,   invalid_typeinfo_dim_table                                  =   30269    // 1 site(s)
     ,   invalid_typeinfo_dim_table_type                             =   30270    // 2 site(s)
     ,   invalid_typeinfo_function                                   =   30271    // 1 site(s)

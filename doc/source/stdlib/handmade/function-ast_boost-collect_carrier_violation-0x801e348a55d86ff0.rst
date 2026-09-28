@@ -1,0 +1,1 @@
+Returns an empty string when ``fn`` cannot reach a heap collection, or when its frame provably holds nothing the collector must walk: no argument or named local of a collectable type, no reference local, no block reaching a collect, and every call to a carrier a statement of its own; ``[unsafe_heap_collect]`` skips the proof. Otherwise returns the reason the proof fails.

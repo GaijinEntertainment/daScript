@@ -215,6 +215,7 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 - `no_alloc` - Declares that the function, and everything it calls, must not touch the heap — no array or table growth, no `new` or `delete`, no string interpolation, no lambda capture frame.
 - `expect_ref` - Contract annotation requiring a function argument to be passed by reference.
 - `unsafe_operation` - Marks a function as an unsafe operation, requiring callers to wrap the call in an `unsafe` block.
+- `unsafe_heap_collect` - Declares that a heap collection reached through this function or lambda is safe even though the compile-time proof cannot show it - for example a thread body the host starts on an empty stack.
 - `type_function` - Marks a function as a type function, meaning it operates on types at compile time and does not generate runtime code.
 - `nodiscard` - Enforces that the return value of the function must be used by the caller; discarding the result produces a compilation error.
 - `never_inline` - Keeps the function out of best-effort (automatic) inlining: block-literal call-site splicing and the heuristic plain-call tier (options auto_inline_functions) both skip it.
@@ -3863,6 +3864,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `TypeDecl.canWrite` - Returns whether the given type can be written to.
 - `TypeDecl.isAotAlias` - Returns whether the type definition contains an AOT alias type.
 - `TypeDecl.isShareable` - Returns whether the given type is shareable across contexts.
+- `TypeDecl.gcFlags` - Returns the type's garbage-collection flags: non-zero when a value of the type holds something the collector walks - a heap pointer, a string, or a container or structure holding one.
 - `TypeDecl.isIndex` - Returns whether the given type is an index type.
 - `TypeDecl.isBool` - Returns whether the given type is a boolean type.
 - `TypeDecl.isInteger` - Returns whether the given type is an integer type.
@@ -4949,6 +4951,10 @@ The AST_BOOST module provides high-level utilities for working with the AST. It 
 - `describe` - Returns a human-readable textual representation of an AST object (`AnnotationArgumentList`, `AnnotationDeclaration`, `AnnotationList`, `Variable`, or `Expression`).
 - `describe_bitfield` - Returns a textual representation of the set bits in a bitfield value, listing the names of all active flags joined by the specified `merger` string.
 - `describe_function_short` - Returns a short human-readable description of the given function, including its name and signature.
+
+### Collect carriers
+
+- `collect_carrier_violation` - Returns an empty string when `fn` cannot reach a heap collection, or when its frame provably holds nothing the collector must walk.
 
 ### Queries
 

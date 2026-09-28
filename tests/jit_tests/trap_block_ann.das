@@ -47,6 +47,16 @@ def test_annotated_block(t : T?) {
     t |> equal(ad, DATA_BLOCK_PAYLOAD)
 }
 
+// finish reaches a lambda's block too: block folding used to merge that block into the lambda
+// function's body, dropping its annotations before finalize ran.
+[test]
+def test_finish_reaches_lambda(t : T?) {
+    let l <- @ [finish_mark] () : int {
+        return 0
+    }
+    t |> equal(invoke(l), 1)
+}
+
 def probe_annotation_data(blk : block<(x : int) : int>) : uint64 {
     return testBlockAnnotationData(blk)
 }

@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options gc
 options persistent_heap
+options no_aot
 
 require dastest/testing_boost public
 

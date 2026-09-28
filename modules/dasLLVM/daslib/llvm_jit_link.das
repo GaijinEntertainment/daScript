@@ -63,6 +63,7 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
     let totalTime = ref_time_ticks()
     var phase_tm = ref_time_ticks()
     var plan <- make_jit_plan(prog, ctx, true)
+    return false if (report_collect_errors(plan))
     let t_hash = get_time_usec(phase_tm)
     if (!plan.use_dll) {
         return run_jit_in_emitter(prog, ctx, plan.log_jit_time, t_hash, 0)

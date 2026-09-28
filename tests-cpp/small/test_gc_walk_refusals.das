@@ -5,6 +5,8 @@ options persistent_heap
 
 require gc_walk_test
 
+var private g_suffix = 1234
+
 def inner_collect() {
     var pad = 1
     unsafe(heap_collect(true, false))
@@ -15,7 +17,7 @@ def inner_collect() {
 def outer_reenter() : bool {
     // a live heap-string local is the point: the walk must refuse rather than sweep it
     // (interpolated so it is a runtime allocation, not a static literal)
-    var precious = "outer_holds_{1000 + 234}"
+    var precious = "outer_holds_{g_suffix}"
     var refused = false
     try {
         reenter_null_line(@@inner_collect)
