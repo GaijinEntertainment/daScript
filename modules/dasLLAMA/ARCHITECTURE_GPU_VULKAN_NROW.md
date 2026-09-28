@@ -1,8 +1,9 @@
 # dasLLAMA Architecture - the Vulkan tier's N-row token command
 
 Companion to `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; a section is cited by its anchor. This
-document carries the N-row token command a batched step's rows go through, and the residual
-step's two forms it holds bit for bit. The residency plan, the marks swap and the logits landing
+document carries the N-row token command a batched step's rows go through, its same-slab form the
+speculative verify steps one stream's rows through, and the residual step's two forms it holds bit
+for bit. The residency plan, the marks swap and the logits landing
 that the command runs under are in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; the decode
 attention's forms are `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`; the per-op tier's
 decode era, whose routed block the command's rows form mirrors, is `ARCHITECTURE_GPU_VULKAN_DECODE.md`.
@@ -11,7 +12,8 @@ decode era, whose routed block the command's rows form mirrors, is `ARCHITECTURE
 
 **A batched decode step runs its rows through ONE recorded command, so a layer's weights stream
 once for the step instead of once a row.** The driver sizes every per-token plane to `RDec.nb`
-rows - `min(regions, RD_NB_MAX)`, eight at most, the N-column GEMV leaves' width - and
+rows - one a region, or the speculative verify's rows where a NextN model asks more
+(`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), `RD_NB_MAX` at most, eight, the N-column GEMV leaves' width - and
 `vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense,
 MoE, per-layer-embedding, shared-KV and recurrent layers and a gated q, and none where a layer or
 the tail has no N-row form - a dense plane in a per-32 expert format (q51, mx4: the two formats
@@ -142,6 +144,54 @@ host-cached row's K/V back and lands its logits; it returns false when a row fin
 two rows share one, and the caller's row-at-a-time loop serves that step. `DASLLAMA_VK_NROW_BISECT`
 (`ENVIRONMENT.md`) drops a class of dispatch from the recorded command so a profile prices it; the
 logits are garbage under any bit.
+
+### The same-slab verify: one stream's rows in one region {#nrow-verify-command}
+
+**A speculative round's verify steps one stream's k+1 rows through the N-row command, every row in
+that stream's region.** Row i is the round's token or draft i at position `pos + i`: its `TokMeta`
+names the region's mirror base and state slot, the position and a cached count of `pos + i + 1`.
+The command stores every row's K/V before any row attends, and the count masks each row to the keys
+at or below its own position, so row i reads the rows the same command stored below it and never
+one above. The per-row planes hold the rows: where the driver homes a NextN head it sizes them at
+the larger of the region count and the verify's rows - the round's depth plus one, read at load
+(`get_mtp_depth`) - `RD_NB_MAX` capping both, so a verify of more rows passes to the CPU (`verify_rows`). The
+command records once per row count and attention form (`RDec.v_cmd`, `v_cmd_unsplit`), the rows'
+form the furthest row's, over the N-row command's sets; `vk_rdec_verify_rows` answers the rows, 0
+where the head, the N-row command or an N-column leaf of the head's planes is off the device, each
+reason logged once.
+
+**The recurrent heads step the rows one at a time.** The N-row command's fused step runs every row
+at once, each against its own slot; the rows of one slot would all read the pre-step state. So the
+verify's GEMVs still take the rows as the columns of one dispatch, and the fused step (`dn_step_cls`)
+runs a dispatch a row with the row in the push (`DnStepArgs.row0`): the hazard rail orders each
+dispatch after the one before through the state's write, and row i's `TokMeta` carries the ring
+parity the row before it left (the region's word xor i), so it reads the image row i - 1 wrote. The
+driver flips the region's word once a row after the submit. A row's step is the one-row dispatch's
+arithmetic on the state the row before it left (`test_vkd_dn_step_rows_sameslot`), so a verify row
+reads the one-row command's logits bit for bit wherever the N-row command does.
+
+**The draft head re-warms in the same command, in Metal's shape**
+(`ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm`). After the picks, head row i takes
+`[enorm(embed tok_i) ; hnorm(h_i)]` - `h_0` the pre-draft carry the host uploads, `h_i` the trunk's
+post-norm row `i - 1`, copied out of `xb` into the cat plane on the device - through eh_proj with the
+rows as columns, the head's attention norm and requant, and its q/k/v projections, rope and store:
+its K/V rows `pos - 1` .. `pos + n - 2` and nothing past them, since no verify reads the head's
+attention output. The head's rows sit a position below the trunk's, so the head reads a `TokMeta`
+block and rope rows of its own (`RDec.head_tok`, `head_cos_dev`), which its draft command reads too;
+its attention norm lands in the cat plane, so `xb` keeps the trunk rows the landing copies. The
+head's K/V rows come back to the host after the command, as a draft's row does.
+
+**The seat leaves the session as the CPU verify does.** Every row's logits, pick and post-norm
+hidden leave on the transfer queue (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`);
+the seat (`vulkan_resident_verify`, `register_mtp_verify_override`) lands them in `mtp_logits_b`,
+`mtp_logits` (row 0), `logits` (the last row) and `mtp_hrows`, `mtp_h` the last row's at `pos + n`,
+the region's rows at `pos + n`, the recurrent state n rows on, and reads the pre-draft carry the
+round saved in `mtp_xb_save` before its draft. Every check that can decline runs before the
+session's state comes up, so a decline leaves the session to the CPU verify untouched. A reject
+stays the CPU round's: its snapshot sends the device state home before the verify, its restore drops
+the device slots, and the replayed step at `pos` rewrites row `pos` and cuts the region's rows back
+to `pos + 1`, the rows past them dead. The trunk's K/V rows stay on the device, as a one-row step's
+do. The command records no GPU stamps; the round's profiler sections (`mtp.verify`) price it.
 
 ### The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
 

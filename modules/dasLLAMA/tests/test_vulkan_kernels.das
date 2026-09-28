@@ -8295,9 +8295,10 @@ struct DnRowsOut {
     of32 : array<float>
 }
 
-//! one `dn_step_cls` dispatch over `nrows` rows on buffers of its own: two calls share no device plane
+//! `dn_step_cls` over `nrows` rows on buffers of its own - one dispatch, or under `seq` a dispatch a row in order (the rows' first
+//! row in the push, the same-slab verify's form) - two calls share no device plane
 def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, nslots, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv : int;
-                             offs : int[8]; eps, qscale : float; out_f32 : bool) : DnRowsOut {
+                             offs : int[8]; eps, qscale : float; out_f32 : bool; seq : bool = false) : DnRowsOut {
     var r : DnRowsOut
     let proj_bytes = int64(nrows * prow) * 4l
     let st_bytes = int64(nslots * st_n) * 4l
@@ -8323,7 +8324,7 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
             upload_region_at(projd, 0l, addr<uint8 const?>(proj[0]), proj_bytes)
             upload_region_at(std, 0l, addr<uint8 const?>(st[0]), st_bytes)
             upload_region_at(smd, 0l, addr<uint8 const?>(sm[0]), sm_bytes)
-            for (i in range(nrows)) {   //! the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal
+            for (i in range(seq ? 1 : nrows)) {   //! the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal (sequential rows write the image a row before reads, so the first row's alone)
                 nan_sentinel_upload(smd, int64(ring) * 4l, int64(offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4l)
             }
             nan_sentinel_upload(scd, sc_bytes)
@@ -8346,7 +8347,14 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
                 beta_off = uint(offs[0]), g_off = uint(offs[1]), a_off = uint(offs[2]), dt_off = uint(offs[3]),
                 taps_off = uint(offs[4]), wnorm_off = uint(offs[5]), hist_off = uint(offs[6]),
                 eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, beta_row_stride = uint(offs[7]))
-            enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
+            if (seq) {
+                for (i in range(nrows)) {
+                    pc.row0 = uint(i)
+                    enc_dn_step_cls(raw, h, sc, pc, int64(nvh))
+                }
+            } else {
+                enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
+            }
             vkd_run_copy(raw, h, fixed_array(std, smd, scd, qd, ofd), host,
                 fixed_array(0l, st_bytes, st_bytes + sm_bytes, st_bytes + sm_bytes + sc_bytes, st_bytes + sm_bytes + sc_bytes + q_bytes),
                 fixed_array(st_bytes, sm_bytes, sc_bytes, q_bytes, of_bytes), 1u | 2u | 4u | 8u | 32u)
@@ -8370,6 +8378,14 @@ def private n_differing(got, want : array<auto(TT)>; gbase, wbase, n : int) : in
         }
     }
     return bad
+}
+
+//! the first differing element's index in the compared run, -1 where none differs
+def private first_differing(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
+    for (i in range(n)) {
+        return i if (got[gbase + i] != want[wbase + i])
+    }
+    return -1
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
@@ -8455,6 +8471,146 @@ def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
     delete smh
     delete pars
     delete slots
+}
+
+//! a row's beta and alpha rows moved to row 0's place in a copy of `sm`: the one-row dispatch reads row 0
+def private dn_row_smalls(sm : array<float>; r, beta_off, g_off, bstride, nvh : int) : array<float> {
+    var sm1 := sm
+    for (i in range(nvh)) {
+        sm1[beta_off + i] = sm[beta_off + r * bstride + i]
+        sm1[g_off + i] = sm[g_off + r * nvh + i]
+    }
+    return <- sm1
+}
+
+//! the same-slab verify's form: three rows of one stream in one slot, a dispatch a row with the row in the push, against the
+//! one-row dispatch run a row at a time on the state and ring the row before it left - every row's o row, then the slot's state
+//! and both ring images after the last row, bit for bit
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
+def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
+    let nrows = 3
+    let nkh = 2
+    let nvh = 4
+    let kd = nkh * ds
+    let cd = 2 * kd + nvh * ds
+    let dconv = 4
+    let taps = dconv - 1
+    let eps = 0.00001
+    let qscale = 1.25
+    let bstride = 2 * nvh
+    let beta_off = 16
+    let g_off = beta_off + nrows * bstride
+    let a_off = g_off + nrows * nvh
+    let dt_off = a_off + nvh
+    let taps_off = dt_off + nvh
+    let wnorm_off = taps_off + cd * dconv
+    let hist_off = wnorm_off + ds
+    let ring = cd * taps
+    let sm_n = hist_off + 2 * ring
+    let prow = cd + nvh * ds
+    let st_n = nvh * ds * ds
+    let nblk = nvh * ds / 32
+    let orow = out_f32 ? nvh * ds : nblk * 8
+    let offs = fixed_array(beta_off, g_off, a_off, dt_off, taps_off, wnorm_off, hist_off, bstride)
+    var projh : array<float>
+    var sth : array<float>
+    var smh : array<float>
+    projh |> resize(nrows * prow)
+    sth |> resize(st_n)
+    smh |> resize(sm_n)
+    for (i in range(nrows * prow)) {
+        projh[i] = float((i * 29) % 67) * 0.03 - 1.0
+    }
+    for (i in range(st_n)) {
+        sth[i] = float((i * 13) % 53) * 0.02 - 0.5
+    }
+    for (i in range(sm_n)) {
+        smh[i] = float((i * 17) % 43) * 0.02 - 0.4
+    }
+    smh[0] = eps
+    smh[1] = qscale
+    for (i in range(nvh)) {
+        smh[a_off + i] = -0.4 - float(i) * 0.1   //! a stays negative (decay)
+    }
+    var pars <- [1, 0, 1]   //! the ring parity flips a row: each row reads the image the row before it wrote
+    var slots <- [0, 0, 0]
+    var got <- dn_step_rows_run(projh, sth, smh, pars, slots, nrows, 1, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32, true)
+    let tag = "dn_step_fused, {nrows} rows of one slot a dispatch a row, ds {ds}, o as {out_f32 ? "f32" : "q8"}"
+    t |> success(n_differing(got.state, sth, 0, 0, st_n) > 0, "{tag}: the slot's state moved off its input")
+    t |> success(n_differing(got.smalls, smh, hist_off + ring, hist_off + ring, ring) > 0, "{tag}: the second row's ring image moved off its input")
+    var st_r := sth
+    var sm_r := smh
+    for (r in range(nrows)) {
+        var proj1 : array<float>
+        proj1 |> resize(prow)
+        for (i in range(prow)) {
+            proj1[i] = projh[r * prow + i]
+        }
+        var sm1 <- dn_row_smalls(sm_r, r, beta_off, g_off, bstride, nvh)
+        var pars1 <- [pars[r]]
+        var slots1 <- [0]
+        var want <- dn_step_rows_run(proj1, st_r, sm1, pars1, slots1, 1, 1, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
+        let o_diffs = (out_f32 ? n_differing(got.of32, want.of32, r * nvh * ds, 0, nvh * ds)
+            : n_differing(got.oscales, want.oscales, r * nblk, 0, nblk) + n_differing(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8))
+        let o_first = (out_f32 ? first_differing(got.of32, want.of32, r * nvh * ds, 0, nvh * ds)
+            : first_differing(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8))
+        to_log(LOG_INFO, "{tag}: row {r}'s o row {o_diffs} elements off, the first at {o_first}\n")
+        t |> success(o_diffs == 0, "{tag}: row {r}'s o row {o_diffs} of {orow} elements off the one-row dispatch on the state row {r - 1} left (the first at {o_first})")
+        if (r == 1) {   //! the control: the one-row dispatch of row 1 on the untouched state must miss the sequential row 1 - the rows stepped in order, never from one pre-state
+            var sm0 <- dn_row_smalls(smh, r, beta_off, g_off, bstride, nvh)
+            var cold <- dn_step_rows_run(proj1, sth, sm0, pars1, slots1, 1, 1, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
+            let ctrl = out_f32 ? n_differing(got.of32, cold.of32, r * nvh * ds, 0, nvh * ds) : n_differing(got.oquants, cold.oquants, r * nblk * 8, 0, nblk * 8)
+            t |> success(ctrl > 0, "{tag} control: row 1 from the untouched state misses the sequential row 1 ({ctrl} elements apart)")
+            delete sm0
+            delete cold
+        }
+        if (r == nrows - 1) {
+            let st_diffs = n_differing(got.state, want.state, 0, 0, st_n)
+            let ring_diffs = n_differing(got.smalls, want.smalls, hist_off, hist_off, 2 * ring)
+            let st_first = first_differing(got.state, want.state, 0, 0, st_n)
+            let ring_first = first_differing(got.smalls, want.smalls, hist_off, hist_off, 2 * ring)
+            to_log(LOG_INFO, "{tag}: after the last row the state {st_diffs} (first {st_first}) and the rings {ring_diffs} (first {ring_first}) elements off\n")
+            t |> success(st_diffs == 0 && ring_diffs == 0, "{tag}: after the last row the state {st_diffs} (first at {st_first}) and the two ring images {ring_diffs} (first at {ring_first}) elements off the chained one-row dispatches")
+        }
+        st_r := want.state
+        sm_r := want.smalls
+        delete proj1
+        delete sm1
+        delete pars1
+        delete slots1
+        delete want
+    }
+    delete st_r
+    delete sm_r
+    delete got
+    delete projh
+    delete sth
+    delete smh
+    delete pars
+    delete slots
+}
+
+[test]
+def test_vkd_dn_step_rows_sameslot(t0 : T?) {
+    t0 |> run("dn_step_fused over three rows of one slot a dispatch a row == the one-row dispatch a row at a time, chained") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!g_gpu.dn_shared_ok) {
+                t |> skip("dn chain declined on this device (shared-memory cap)")
+                return
+            }
+            verify(ensure_dn_step_cls(), "the dn step class rail must engage on a device over the shared cap")
+            for (ds in fixed_array(64, 128)) {
+                dn_step_sameslot_arm(t, ds, false)
+                dn_step_sameslot_arm(t, ds, true)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
 }
 
 [test]

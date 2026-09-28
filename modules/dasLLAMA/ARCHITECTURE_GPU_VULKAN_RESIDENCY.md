@@ -289,10 +289,11 @@ plane takes the head's q/k rows at index `n_layers` of the q/k block and five ro
 carry and head norms, the final norm's row where the file ships no head norm (`rdec_norms_len`) - since layer
 `n_layers`' own rows would index the final norm's. The layer sits outside `RDec.layers`, so no trunk walk sees it. The
 draft command, one per region, norms the uploaded embed row and carry `h` into one `[enorm ; hnorm]` row, runs eh_proj
-into x, the layer through the token command's attention and FFN encoders on its slot at row `pos - 1`, the head norm
-into the carry's row, the classifier and the pick; the logits, the pick and that row land (`mtp_h`, `mtp_h_pos1` 0) and
-the row's K/V comes back to the host. The host's head rows stay the authority - the CPU prompt warm, the seam and a CPU
-draft write them - so a region tracks the rows its slot holds as the host does (`RdecRegion.head_cnt`: a claim zeroes
-it, every prefill call lowers it to `start_pos - 1`, a declined draft to its row) and a draft uploads the rows past it
-first. The "vulkan" owner (`register_mtp_seat_owner`: the driver armed on a NextN model) registers the draft seat alone
-(`register_mtp_draft_override`), so the verify stays the CPU round's.
+into x, the layer through the token command's attention and FFN encoders on its slot at row `pos - 1` (the head's own
+`TokMeta` block and rope rows), the head norm into the carry's row, the classifier and the pick; the logits, the pick and
+that row land (`mtp_h`, `mtp_h_pos1` 0) and the row's K/V comes back to the host. The host's head rows stay the authority -
+the CPU prompt warm, the seam and a CPU draft write them, the verify's re-warm reads its rows back - so a region tracks the
+rows its slot holds as the host does (`RdecRegion.head_cnt`: a claim zeroes it, every prefill call lowers it to
+`start_pos - 1`, a declined draft to its row, a verify raises it past its rows where the held rows reach them) and a draft
+uploads the rows past it first. The "vulkan" owner (`register_mtp_seat_owner`: the driver armed on a NextN model) registers
+the draft and verify seats (`register_mtp_draft_override`, `register_mtp_verify_override`); the round stays the CPU's.

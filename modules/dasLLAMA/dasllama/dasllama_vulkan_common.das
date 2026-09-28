@@ -2477,10 +2477,18 @@ struct RDec {
     eh_fmt : int
     m_eh : HostBuf
     s_eh, s_cat_ar, s_cat_rq : VkDescriptorSet   //! ... the eh_proj GEMV, the embed and carry norms, the concatenated row's requant
-    cat_in_dev, cat_dev : uint64  //! ... the draft's [embed ; carry] rows as the host uploads them, and their [enorm ; hnorm] image the eh_proj GEMV reads
+    cat_in_dev, cat_dev : uint64  //! ... the [embed ; carry] rows as the host uploads them, a row pair a head row (`nb` pairs), and their [enorm ; hnorm] image the eh_proj GEMV reads
     cat_host : HostBuf
+    head_tok : HostBuf            //! ... the head rows' own TokMeta block and rope rows: the verify's head rows sit a position below its trunk rows
+    head_cos_dev : uint64
+    head_cos_host : HostBuf
+    s_hx_ar : VkDescriptorSet     //! ... the verify's head attention norm of the eh_proj rows into cat (`s_cat_rq` quantizes them): xb keeps the trunk rows the landing reads
     draft_cmd : array<VkCommandBuffer>   //! ... one recorded draft command per region: the head's mirror base rides its push, as the token command's does
     draft_recorded : array<bool>
+    v_cmd : array<VkCommandBuffer>   //! the same-slab verify commands by row count (index 0 unused), region-free as the N-row command's, and their unsplit twins
+    v_cmd_unsplit : array<VkCommandBuffer>
+    v_recorded : array<bool>
+    v_rail : NRail = NRail.unasked   //! the verify's form on the armed model: the head, the N-row rail and the head planes' N-column leaves, decided once
     pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
     s_pick_part, s_pick_fin : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
@@ -2510,7 +2518,7 @@ struct RDec {
     cmd_wide : array<VkCommandBuffer>   //! the wide twin: the same chain with the attention at RD_SPLIT_WIDE_PIECES, submitted from RD_WIDE_POS, recorded on first use
     wide_on : bool                //! ... exists: the device's split count reaches past the split form's pieces
     tok_wide_recorded : array<bool>
-    nb : int64 = 1l               //! the rows the per-row planes hold: the N-row token command's most, one per region to RD_NB_MAX
+    nb : int64 = 1l               //! the rows the per-row planes hold: one per region, or the speculative verify's rows where it asks more, to RD_NB_MAX
     cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
     cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS; the rows take no wide form (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
     tok_n_recorded : array<bool>
@@ -2630,7 +2638,7 @@ def rd_unmake_sets {
     g_rd.comb_sets_made = false
 }
 
-//! every region's token and draft commands re-record: the sets or planes they reference were replaced
+//! every region's token and draft commands and the verify commands re-record: the sets or planes they reference were replaced
 def rd_invalidate_token {
     for (rec in g_rd.tok_recorded) {
         rec = false
@@ -2642,6 +2650,9 @@ def rd_invalidate_token {
         rec = false
     }
     for (rec in g_rd.draft_recorded) {
+        rec = false
+    }
+    for (rec in g_rd.v_recorded) {
         rec = false
     }
 }

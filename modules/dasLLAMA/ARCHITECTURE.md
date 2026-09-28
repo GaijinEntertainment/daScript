@@ -87,7 +87,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   runs - the residency plan, and the GPU-slot marks swap that lets one slot serve many models -
   the token command's logits landing, and the NextN draft head the driver homes beside the trunk.
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - the N-row token command a batched step's rows go through,
-  and the residual step's two forms it holds bit for bit.
+  its same-slab form the speculative verify steps one stream's rows through, and the residual
+  step's two forms it holds bit for bit.
 - `ARCHITECTURE_GPU_VULKAN_DECODE.md` - the per-op tier's decode era - the decode attention block
   over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, the whole-token decode
   span, the deltanet decode step's per-session resident state, and the whole-model driver's

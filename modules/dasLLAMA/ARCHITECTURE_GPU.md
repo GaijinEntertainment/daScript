@@ -159,7 +159,7 @@ that a question answered for one backend has an obvious address in the other. Th
   the resident driver: `rows` answers how many rows it steps at once on the armed model, 0 = none; `rdec_token_n` steps
   them), all behind the route lever `set_gpu_resident_route` / `gpu_want_resident`, the
   OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the weight-bytes seat
-  `install_rdec_note_weight_bytes` the decode warm-up guard reads, the speculative carry's landing `install_rdec_carry` (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), the NextN draft head's seat `install_rdec_draft` (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head`), and the per-layer-embedding seats `install_rdec_ple`
+  `install_rdec_note_weight_bytes` the decode warm-up guard reads, the speculative carry's landing `install_rdec_carry` (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), the NextN draft head's seat `install_rdec_draft` (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head`), the same-slab verify's `install_rdec_verify` (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), and the per-layer-embedding seats `install_rdec_ple`
   - the branch's width, its per-layer gate and proj planes, the pre-step's projection and the token table on the
   device). The installs are one-way (a test that arms the tier never restores them) but for `unset_rdec_draft`, the CPU
   draft's control, which answers the seat for `reinstall_rdec_draft`; a seat serves whatever model loads next. Metal deliberately does not - UMA makes residency moot there, and
@@ -239,10 +239,9 @@ decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both pat
 - **The batched pre-encoded step is Metal-only**: the batch driver encodes the next step under the
   current one's GPU run (`ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode`, `DASLLAMA_METAL_BATCH_PRE`);
   Vulkan's N-row token command records once and resubmits, so it has no encode to move.
-- **The speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one
-  registrant, `gemma_mtp_spec_round` (falling through to `metal_mtp_spec_round` with no drafter);
-  the same-slab verify exists only in the Metal decode driver, and Vulkan serves the CPU round
-  around its draft seat (`ARCHITECTURE_GPU_MTP.md`).
+- **The speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one registrant, `gemma_mtp_spec_round`
+  (falling through to `metal_mtp_spec_round` with no drafter); Vulkan serves the CPU round around its draft and verify seats (`ARCHITECTURE_GPU_MTP.md`).
+- **The same-slab verify seat is Vulkan-only.** `register_mtp_verify_override("vulkan", ...)` has one registrant, the resident driver's same-slab verify (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), which the CPU round takes in place of its two-row prefill; Metal's same-slab verify runs inside its round seat.
 - **The joint speculative tick is Metal-only.** `register_mtp_spec_batch_override("metal", ...)`
   has one registrant, `metal_mtp_spec_eval_batch`: the scheduler's tick hands every speculative
   stream to it and one same-slab verify carries all their rows (`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`); on Vulkan and the CPU the tick steps each stream through its own round.

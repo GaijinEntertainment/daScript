@@ -37,7 +37,8 @@ require _resident_feed
 // speculative carry the driver lands - the prefill's last row and every step's post-final-norm
 // hidden as `mtp_h`, its watermark as `mtp_h_pos1` - one row at a time and through the N-row command,
 // and the NextN draft through the head the driver homes against the CPU `forward_mtp` on one token,
-// carry and row, then the round's drafts with the draft seat unset and put back.
+// carry and row, then the round's drafts with the draft seat unset and put back, and the round's
+// same-slab verify rows bit for bit against one-row steps of the same tokens, accepted and rejected.
 // Every model cell skips interpreted, without its model file, or without the armed tier; the
 // K-quant cells skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`) too.
 
@@ -451,6 +452,168 @@ def test_gpu_resident_hybrid_mtp_draft(t : T?) {
             set_mtp_spec(spec0)
             t |> equal(s.mtp_drafted, 2l, "the second round drafted")
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the second round's draft ran on the device: the seat back took it")
+            delete s
+            delete prompt
+        }
+        delete tr
+    }
+}
+
+//! row `row` (`n` wide) of the rows `a`
+def private row_of(a : array<float>; row, n : int64) : array<float> => <- [for (i in range64(n)); a[row * n + i]]
+
+//! the elements two rows hold apart, bit for bit (a NaN differs from everything)
+def private apart(a, b : array<auto(TT)>) : int64 {
+    var bad = 0l
+    for (x, y in a, b) {
+        if (x != y) {
+            bad++
+        }
+    }
+    return bad
+}
+
+//! the host bytes of the NextN head's K row `row`
+def private head_k_row(tr : Model; var s : Session; row : int64) : array<uint8> {
+    let c = tr.config
+    let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, c.n_layers))
+    let kp = kv_layer_kbase(s, c.n_layers, c.seq_len)
+    return <- [for (i in range64(rowb)); unsafe(kp[row * rowb + i])]
+}
+
+//! a verify row against the one-row step of the same token, bit for bit: its logits and its post-norm hidden, the argmax both
+//! sides read logged, and the step one row off (the other row's) as the control the compare can fail
+def private verify_row_is_step(t : T?; tr : Model; row : int64; vlog, vhid : array<float>; step_log, step_h, off_log : array<float>) {
+    let la = apart(vlog, step_log)
+    let ha = apart(vhid, step_h)
+    let ag = argmax_of(vlog)
+    let ac = argmax_of(step_log)
+    to_log(LOG_INFO, "verify row {row}: logits {la} apart (maxdiff {logits_maxdiff(vlog, step_log)}), hidden {ha} apart (maxdiff {logits_maxdiff(vhid, step_h)}); argmax verify {ag} '{decode_(tr, [ag])}', step {ac} '{decode_(tr, [ac])}'\n")
+    t |> equal(la, 0l, "verify row {row}'s logits are the one-row step's bit for bit ({la} elements apart)")
+    t |> equal(ha, 0l, "verify row {row}'s post-norm hidden is the one-row step's bit for bit ({ha} elements apart)")
+    t |> success(apart(vlog, off_log) > 0l, "control: verify row {row} misses the other row's step logits")
+}
+
+let private VERIFY_ROWS = 2l   //! the CPU round's depth-1 verify: the committed token and its draft
+
+//! a run of one-row steps: each step's logits and carry
+struct private StepRows {
+    logits : array<array<float>>
+    h : array<array<float>>
+}
+
+//! `prompt` then `toks` through a fresh session a row at a time on the resident driver
+def private steps_alone(tr : Model; prompt, toks : array<int64>) : StepRows {
+    var s <- create_session(tr, mirror_kv_dtype())
+    prefill_warm(tr, s, prompt)
+    var out : StepRows
+    let n = long_length(prompt)
+    out.logits |> reserve(long_length(toks))
+    out.h |> reserve(long_length(toks))
+    for (st in range64(long_length(toks))) {
+        forward(tr, s, toks[st], n + st)
+        out.logits |> emplace <| [for (x in s.logits); x]
+        out.h |> emplace <| [for (x in s.mtp_h); x]
+    }
+    delete s
+    return <- out
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_verify(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: the round's two verify rows as same-slab rows through the resident seat, bit for bit the two one-row steps of the same tokens") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let c = tr.config
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var s <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, s, prompt)
+            let pos = DRAFT_PROMPT
+            var head_row0 <- head_k_row(tr, s, pos)
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(true)
+            let verifies0 = moe_gpu_resident_verifies()
+            let drafts0 = moe_gpu_resident_drafts()
+            var acc = 0l
+            let hit = mtp_spec_eval(tr, s, DRAFT_TOKEN, acc)
+            set_mtp_spec(spec0)
+            t |> equal(moe_gpu_resident_verifies(), verifies0 + 1l, "the round's verify ran on the device")
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the round's draft ran on the device")
+            served_every_call(t)
+            let d = s.mtp_vbatch[1]
+            t |> equal(long_length(s.mtp_logits_b), VERIFY_ROWS * c.vocab_size, "every verify row's logits landed")
+            t |> equal(long_length(s.mtp_hrows), VERIFY_ROWS * c.dim, "every verify row's hidden landed")
+            var vlog0 <- row_of(s.mtp_logits_b, 0l, c.vocab_size)
+            var vlog1 <- row_of(s.mtp_logits_b, 1l, c.vocab_size)
+            var vhid0 <- row_of(s.mtp_hrows, 0l, c.dim)
+            var vhid1 <- row_of(s.mtp_hrows, 1l, c.dim)
+            t |> equal(moe_gpu_resident_verify_pick(0l), argmax_of(vlog0), "row 0's device pick is the argmax of the logits it landed")
+            t |> equal(moe_gpu_resident_verify_pick(1l), argmax_of(vlog1), "row 1's device pick is the argmax of the logits it landed")
+            t |> equal(s.n_past, pos + (hit ? VERIFY_ROWS : 1l), "the round committed the draft on an accept, the token alone on a reject")
+            t |> equal(moe_gpu_resident_rows(s), s.n_past, "the region's rows end at the session's position ({hit ? "an accept keeps both verify rows" : "the reject's replay rewrote row pos"})")
+            var head_row1 <- head_k_row(tr, s, pos)
+            t |> success(apart(head_row0, head_row1) > 0l, "the verify's head re-warm wrote the head's K row {pos} and read it back to the host")
+            delete s
+            var toks <- [DRAFT_TOKEN, d]
+            var steps <- steps_alone(tr, prompt, toks)
+            verify_row_is_step(t, tr, 0l, vlog0, vhid0, steps.logits[0], steps.h[0], steps.logits[1])
+            verify_row_is_step(t, tr, 1l, vlog1, vhid1, steps.logits[1], steps.h[1], steps.logits[0])
+            delete steps
+            delete toks
+            delete vlog0
+            delete vlog1
+            delete vhid0
+            delete vhid1
+            delete head_row0
+            delete head_row1
+            delete prompt
+        }
+        delete tr
+    }
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: a rejected device verify rolls back - the restore and the replayed step read the verify's row 0 bit for bit, the region's rows at the session's position, the next round on the device again") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            let c = tr.config
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var s <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, s, prompt)
+            let pos = DRAFT_PROMPT
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(true)
+            set_mtp_force_reject_every(1l)   //! every draft rejected: the recurrent round restores its state and replays the token
+            let verifies0 = moe_gpu_resident_verifies()
+            var acc = 0l
+            let hit = mtp_spec_eval(tr, s, DRAFT_TOKEN, acc)
+            set_mtp_force_reject_every(0l)
+            t |> success(!hit, "the forced reject rejected the draft")
+            t |> equal(moe_gpu_resident_verifies(), verifies0 + 1l, "the rejected round's verify ran on the device")
+            t |> equal(s.n_past, pos + 1l, "the reject committed the token alone")
+            t |> equal(moe_gpu_resident_rows(s), pos + 1l, "the replay cut the region's rows back to the token's")
+            t |> equal(s.mtp_h_pos1, pos + 1l, "the replay's carry sits at the token's row")
+            var vlog0 <- row_of(s.mtp_logits_b, 0l, c.vocab_size)
+            var vhid0 <- row_of(s.mtp_hrows, 0l, c.dim)
+            var vlog1 <- row_of(s.mtp_logits_b, 1l, c.vocab_size)
+            var replay_log <- [for (x in s.logits); x]
+            var replay_h <- [for (x in s.mtp_h); x]
+            verify_row_is_step(t, tr, 0l, vlog0, vhid0, replay_log, replay_h, vlog1)
+            mtp_spec_eval(tr, s, argmax_of(s.logits), acc)
+            set_mtp_spec(spec0)
+            t |> equal(moe_gpu_resident_verifies(), verifies0 + 2l, "the round after the reject verified on the device again")
+            t |> equal(moe_gpu_resident_rows(s), s.n_past, "the region's rows end at the session's position after the next round")
+            served_every_call(t)
+            delete vlog0
+            delete vhid0
+            delete vlog1
+            delete replay_log
+            delete replay_h
             delete s
             delete prompt
         }

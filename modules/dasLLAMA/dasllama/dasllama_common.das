@@ -461,6 +461,16 @@ def register_mtp_draft_override(name : string; fn : MtpDraftOverrideFn) {
     g_mtp_draft_overrides[name] = fn
 }
 
+//! The MTP verify seat, the CPU verify's GPU twin over one stream's `n` rows `toks` at `pos`: it leaves the session as `forward_prefill`,
+//! `mtp_prefill_warm` and `mtp_verify_logits` do, the head re-warmed from the pre-draft carry in `s.mtp_xb_save`; false declines to
+//! the CPU verify with the session untouched. Consulted where the active decode override owns the model (`mtp_seats_own`)
+typedef MtpVerifyOverrideFn = function<(t : Model; var s : Session; toks : array<int64>; n, pos : int64) : bool>
+var private g_mtp_verify_overrides : table<string; MtpVerifyOverrideFn>
+
+def register_mtp_verify_override(name : string; fn : MtpVerifyOverrideFn) {
+    g_mtp_verify_overrides[name] = fn
+}
+
 //! whether the MTP seats registered under a decode override's name serve model `t`: the override that owns `t`'s
 //! round - an override with no owner registered never takes a round, and a model its owner refuses runs the CPU round
 typedef MtpSeatOwnerFn = function<(t : Model) : bool>
@@ -481,6 +491,13 @@ def private mtp_draft_served(t : Model; var s : Session; token, pos : int64) : b
     return (mtp_seats_own(t) && key_exists(g_mtp_draft_overrides, g_decode_override_name)
         && invoke(g_mtp_draft_overrides[g_decode_override_name], t, s, token, pos))   // nolint:PERF026 — key_exists guards the index, so it cannot insert
 }
+
+//! the active decode override owns `t`'s round and registered a verify seat: the round saves the pre-draft carry for it
+def private mtp_verify_seated(t : Model) : bool => mtp_seats_own(t) && key_exists(g_mtp_verify_overrides, g_decode_override_name)
+
+//! the verify seat took the round's `n` rows `toks` at `pos` (the caller asked `mtp_verify_seated` first)
+def private mtp_verify_served(t : Model; var s : Session; toks : array<int64>; n, pos : int64) : bool
+    => invoke(g_mtp_verify_overrides[g_decode_override_name], t, s, toks, n, pos)   // nolint:PERF026 — the caller's mtp_verify_seated holds key_exists, so the index cannot insert
 
 //! The accept walk's sampler seam (the decode-override shape: the engine never requires the sampler):
 //! draws one token from row `off` of `rows` through the session's spec_params, consuming the row.
@@ -4564,6 +4581,31 @@ def private mtp_verify_served_panic {
     panic("dasLLAMA: the `{g_prefill_override_name}` prefill driver served a speculative verify window; the CPU round cannot read its rows - run without --mtp or on the CPU rails")
 }
 
+//! whether the verify seat will take the round: where it will, the pre-draft carry its head re-warm reads is saved in `s.mtp_xb_save`
+//! before the draft overwrites `s.mtp_h` with the head's own hidden
+def private mtp_verify_seat_carry(t : Model; var s : Session) : bool {
+    return false if (!mtp_verify_seated(t))
+    s.mtp_xb_save |> overwrite_resize(t.config.dim)
+    copy_floats(s.mtp_h, 0l, s.mtp_xb_save, 0l, t.config.dim)
+    return true
+}
+
+//! the round's two verify rows `s.mtp_vbatch` [tok, d] at `pos`: the verify seat where it is `seated` and serves, else the CPU
+//! two-row prefill and its classifier
+def private mtp_verify_two(t : Model; var s : Session; seated : bool; pos : int64) {
+    return if (seated && mtp_verify_served(t, s, s.mtp_vbatch, 2l, pos))
+    let batch_cls = mtp_cls_batch_ok(t)
+    forward_prefill(t, s, s.mtp_vbatch, 2l, pos, batch_cls)
+    if (g_prefill_logits_done) {   //! a driver that landed the window's logits left the host x_b rows the verify's classifier reads unwritten
+        mtp_verify_served_panic()
+    }
+    if (batch_cls) {
+        mtp_verify_logits(t, s, 2l)   // both rows from one classifier stream
+    } else {
+        mtp_verify_row0(t, s)
+    }
+}
+
 //! the depth-1 speculative step over every stream at once: a registered batch override verifies every
 //! stream's rows in one pass; without one each stream steps alone through `mtp_spec_eval`. `accepted[i]`
 //! is stream i's accepted draft or -1; returns how many streams' rows a joint verify carried (0 = none)
@@ -4599,6 +4641,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         s.n_past = pos + 1l
         return false
     }
+    let seated = mtp_verify_seat_carry(t, s)
     // draft x_{pos+1} from (h_{pos-1}, tok) at row pos-1 (rewrites that row's draft KV in place)
     let ts_draft = prof_ticks()
     forward_mtp(t, s, tok, pos - 1l)
@@ -4614,16 +4657,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     let ts_verify = prof_ticks()
     s.mtp_vbatch[0] = tok
     s.mtp_vbatch[1] = d
-    let batch_cls = mtp_cls_batch_ok(t)
-    forward_prefill(t, s, s.mtp_vbatch, 2l, pos, batch_cls)
-    if (g_prefill_logits_done) {   //! a driver that landed the window's logits left the host x_b rows the verify's classifier reads unwritten
-        mtp_verify_served_panic()
-    }
-    if (batch_cls) {
-        mtp_verify_logits(t, s, 2l)   // both rows from one classifier stream
-    } else {
-        mtp_verify_row0(t, s)
-    }
+    mtp_verify_two(t, s, seated, pos)
     prof_add("mtp.verify", ts_verify)
     let ts_walk = prof_ticks()
     var hit = false

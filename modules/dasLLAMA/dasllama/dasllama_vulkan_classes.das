@@ -2352,6 +2352,7 @@ struct DnStepArgs {
     qscale : float
     out_f32 : uint
     beta_row_stride : uint
+    row0 : uint   //! the dispatch's first row: the same-slab verify steps one stream's rows one dispatch a row in one slot, each reading the state the row before it wrote
 }
 
 [vk_dispatch(name = "dn_step_cls", grid = "wgs", params = "wgs : int64")]
@@ -2379,7 +2380,7 @@ class DnStepFused : WgReduceBase {
     def run {   // nolint:STYLE037,STYLE038 — the fused chain: conv, norms, the delta rule, out-norm and the o row in one dispatch
         let ds = pa.ds
         let nvh = max(1u, (pa.cd - 2u * pa.kd) / ds)   //! the head count the geometry pins: cd = 2 kd + nvh ds
-        let row = gl_WorkGroupID.x / nvh
+        let row = pa.row0 + gl_WorkGroupID.x / nvh
         let h = gl_WorkGroupID.x % nvh
         let taps = pa.dconv - 1u
         let par = tok[row].parity

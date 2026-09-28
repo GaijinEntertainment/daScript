@@ -167,10 +167,10 @@ struct RdecLayerGeom {
     attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
     moe_g4 : bool                   //! the gemma-4 MoE layer: a parallel dense shared expert, the routed branch and the router each on their own norm of x
 }
-//! qd / kv_dim / head_size / hidden / rot are the layers' maxima (the scratch's size); `mir_elems` one mirror side's elements over every
-//! attention layer, `cos_elems` a position's cos/sin plane; `carry`: every step lands its rows' post-final-norm hidden for
-//! `rdec_land_carry`; `head`: the NextN draft head rides the driver, its norm rows in the plane and its slot in `mir_elems`
-typedef RdecPrepareFn = function<(n_layers : int64; n_attn : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems : int64; cos_elems : int64; regions : int64; carry : bool; head : bool) : bool>
+//! qd / kv_dim / head_size / hidden / rot are the layers' maxima; `mir_elems` one mirror side's elements, `cos_elems` a position's cos/sin
+//! plane; `carry`: every step lands its rows' post-final-norm hidden (`rdec_land_carry`); `head`: the NextN draft head rides the driver,
+//! its norm rows in the plane and its slot in `mir_elems`; `verify_rows`: one stream's verify rows the per-row planes hold too
+typedef RdecPrepareFn = function<(n_layers : int64; n_attn : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems : int64; cos_elems : int64; regions : int64; carry : bool; head : bool; verify_rows : int64) : bool>
 //! `obias`: the plane's `RDEC_NORM_ROWS`-th row a layer is the attention output bias the residual step adds (gpt-oss); zero rows otherwise
 typedef RdecNormsFn = function<(norms : array<float>; obias : bool) : void>
 typedef RdecSetLayerFn = function<(l : int64; mir_idx : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; g : RdecLayerGeom) : void>
@@ -194,8 +194,8 @@ typedef RdecReadKvBulkFn = function<(l : int64; var kp : uint8?; var vp : uint8?
 def private rdec_unset_reserve(fmt : int; cap_blocks : int64) : bool => false
 [unused_argument(wq, ws, n, rows, fmt)]
 def private rdec_unset_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => -1l
-[unused_argument(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16, q_gated, rot, dn, mir_elems, cos_elems, regions, carry, head)]
-def private rdec_unset_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64; carry, head : bool) : bool => false
+[unused_argument(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16, q_gated, rot, dn, mir_elems, cos_elems, regions, carry, head, verify_rows)]
+def private rdec_unset_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool => false
 [unused_argument(norms, obias)]
 def private rdec_unset_norms(norms : array<float>; obias : bool) {}
 [unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
@@ -507,6 +507,30 @@ def public rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : in
 def public rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>) : int64
     => invoke(g_rdec_draft, x, h, cossin, row, hyd0, kp, vp, logits)
 
+//! the same-slab verify of one stream's `n` rows at `pos` in the selected region: `x` / `cossin` the rows' residuals and rope rows,
+//! `hemb` / `hcos` the head rows' unscaled embeds and rope rows a position below, `h0` the pre-draft carry; the rows' logits, picks and
+//! hidden land in `logits` / `picks` / `hid`, the head's K/V rows `pos - 1` .. back at `kp` / `vp`. False where it steps no `n` rows
+typedef RdecVerifyFn = function<(x : array<float>; cossin : array<float>; hemb : array<float>; hcos : array<float>; h0 : array<float>; pos : int64; n : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool>
+[unused_argument(x, cossin, hemb, hcos, h0, pos, n, kp, vp, logits, picks, hid)]
+def private rdec_unset_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool => false
+def private rdec_no_verify_rows : int64 => 0l
+var g_rdec_verify = @@rdec_unset_verify
+var g_rdec_verify_rows = @@rdec_no_verify_rows
+var g_rdec_verify_installed = false
+
+//! Install the same-slab verify beside the draft seat: `rows` answers how many rows of one stream it steps at once (0 = none)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
+def public install_rdec_verify(verify : RdecVerifyFn; rows : function<() : int64>) {
+    g_rdec_verify = verify
+    g_rdec_verify_rows = rows
+    g_rdec_verify_installed = true
+}
+
+def public rdec_verify_installed() : bool => g_rdec_verify_installed
+def public rdec_verify_rows() : int64 => invoke(g_rdec_verify_rows)
+def public rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool
+    => invoke(g_rdec_verify, x, cossin, hemb, hcos, h0, pos, n, kp, vp, logits, picks, hid)
+
 //! the per-layer-embedding seats (gemma-4 E-series): `set_ple` sizes the side-input rows at the model's ple width
 //! (after prepare, before the layers); `set_ple_layer` wires one layer's gate [dim x ple] and proj [ple x dim] planes
 typedef RdecSetPleFn = function<(ple : int64) : bool>
@@ -557,7 +581,7 @@ def public rdec_ple_proj_set(on : bool) { g_rdec_ple_proj_on = on }
 def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)
 def public rdec_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => invoke(g_rdec_place, wq, ws, n, rows, fmt)
-def public rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64; carry, head : bool) : bool => invoke(g_rdec_prepare, n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16, q_gated, rot, dn, mir_elems, cos_elems, regions, carry, head)
+def public rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool => invoke(g_rdec_prepare, n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv16, q_gated, rot, dn, mir_elems, cos_elems, regions, carry, head, verify_rows)
 def public rdec_upload_norms(norms : array<float>; obias : bool) { invoke(g_rdec_norms, norms, obias) }
 def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
@@ -2147,6 +2171,12 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_draft == null) {
         g_rdec_draft = @@rdec_unset_draft
+    }
+    if (g_rdec_verify == null) {
+        g_rdec_verify = @@rdec_unset_verify
+    }
+    if (g_rdec_verify_rows == null) {
+        g_rdec_verify_rows = @@rdec_no_verify_rows
     }
     if (g_moe_gpu_ffn_xf == null) {
         g_moe_gpu_ffn_xf = @@moe_gpu_unset_ffn_xf

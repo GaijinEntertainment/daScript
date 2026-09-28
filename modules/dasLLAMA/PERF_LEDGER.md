@@ -11,6 +11,26 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **OPEN (2026-09-27) - the Vulkan resident driver's same-slab speculative verify: its row
+  buffers and its round against the CPU verify.** Where the driver homes a NextN head
+  (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`) the per-row planes hold
+  max(regions, depth + 1) rows, eight at most, so a one-region load gains `depth` rows.
+  A row is 2 x vocab x 4 bytes of logits (the device plane and its host landing) beside the
+  activation rows: 4 dim + 2 hid + 2 qd + 2 kvd (+ 2 qd under a gated q) floats, the quant
+  rows' wide + wide / 8 + qd + qd / 8 bytes, the attention partials' n_heads x (splits x (hs + 2)
+  + 1) floats, the host x, carry, rope and TokMeta rows, the picks' 520 bytes, on a hybrid the deltanet projection (cd + di floats)
+  and o rows (the step's fixed 8,192 + 1,024 + 32,768 bytes), and under the head its three cat
+  rows (6 dim floats), its TokMeta row and two rope rows. On Qwen3.5-0.8B-MTP (vocab 248,320,
+  dim 1024, hid 3584, qd 2048, kvd 512, gated q, cd 6144, di 2048, 8 heads of 256, a 64-wide rope
+  row) that is 1,986,560 bytes of logits and 197,384 of the rest, 2,183,944 a row, plus the
+  partials' 8 x (splits x 1,032) + 32 (132,128 at 16 splits): one region gains 2,316,072 bytes at
+  depth 1 (nb 1 -> 2) and 16,212,504 at depth 7 (nb 8), both at 16 splits. The plan's scratch
+  term counts the same rows. Owed from the pod: `lcpp_bench --mtp-ab` on the 0.8B-MTP under
+  `DASLLAMA_GPU=1` with `--prof` and `JOBQUE_PROFILING=1` - the `mtp.verify` section against a
+  one-row step's wall and against the CPU verify's on the same box, and `mtp.snapshot` /
+  `mtp.replay`, the recurrent state's round trip the reject still pays (about 20 MB down and up on
+  the 0.8B), which a device rollback retires; and the on/off rate with the drafts' acceptance.
+
 - **OPEN (2026-09-27) - the Vulkan resident driver's NextN draft head: its plane and slot bytes,
   and the device draft against the CPU draft.** Where the driver takes a model's head
   (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head`) the plan grows by the head's eight
@@ -22,7 +42,8 @@ what it costs today and what the fix would change.
   regions x seq_cap x kvd x 2 sides x 2 bytes (f16), regions x seq_cap x 2,048 bytes on the 0.8B:
   8,388,608 at one region of 4096 positions, 67,108,864 at four regions of 8192. The norms plane
   gains (5 dim + 2 head_size) x 4 bytes (22,528 on the 0.8B) and the draft's staging 3 x 2 dim x 4
-  (24,576 at dim 1024, 122,880 at dim 5120). Owed from the pod: the 0.8B-MTP's `resident image`
+  bytes a row of the per-row planes (24,576 a row at dim 1024, 122,880 at dim 5120; the next entry
+  prices the rows). Owed from the pod: the 0.8B-MTP's `resident image`
   and `NextN draft head in the arena` load lines (the bytes read, not computed); the draft's wall
   against the CPU `forward_mtp` - `lcpp_bench --mtp-ab` under `DASLLAMA_GPU=1` with `--prof` and
   `JOBQUE_PROFILING=1`, the `mtp.draft` section against the CPU draft's on the same box - including
@@ -31,8 +52,9 @@ what it costs today and what the fix would change.
 
 - **OPEN (2026-09-27) - the Vulkan resident driver's speculative carry: its landing plane and its
   step cost on a NextN-headed model.** The landing plane (`RDec.hid_host`, host-visible, allocated
-  only where the driver is prepared with `carry`) is dim x 4 x nb bytes, nb = min(regions, 8):
-  Qwen3.5-0.8B-MTP (dim 1024) 4,096 bytes at one region and 32,768 at eight. Each step moves
+  only where the driver is prepared with `carry`) is dim x 4 x nb bytes, nb the per-row planes'
+  rows (a row a region, or the speculative verify's rows where more, eight at most):
+  Qwen3.5-0.8B-MTP (dim 1024) 4,096 bytes a row, 32,768 at eight. Each step moves
   dim x 4 bytes a row over the logits' path (4 KB a token on the 0.8B), and the last layer's
   residual step leaves the q8 down GEMV's epilogue for the row-storing stamp, one dispatch more a
   token. Owed from the pod: tg128 of `Qwen3.5-0.8B-MTP-Q8_0.gguf` against `Qwen3.5-0.8B-Q8_0.gguf`

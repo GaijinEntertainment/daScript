@@ -495,6 +495,11 @@ def private resident_head_decline(t : Model) : string {
 //! the resident driver takes the model's NextN draft head (`resident_head_decline`)
 def private resident_head_on(t : Model) : bool => t.config.n_layer_nextn > 0l && empty(resident_head_decline(t))
 
+//! the rows of one stream the speculative verify steps, which the per-row planes hold where the driver takes the head and the tier
+//! installed the verify: the round's depth plus its committed token (the planes cap it at the tier's row limit); 0 otherwise
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
+def private rdec_verify_rows_want(t : Model) : int64 => (resident_head_on(t) && rdec_verify_installed()) ? get_mtp_depth() + 1l : 0l
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool) : array<tuple<n : int64; rows : int64; f : KqFmt>> {
     let c = t.config
@@ -606,7 +611,7 @@ def private rdec_scratch_bytes(t : Model) : int64 {
         moe = ((nk + TILE_READ_SLACK) * (c.dim + nfe) * 2l + nk * (2l * nfe + c.dim) * 4l
             + RDEC_PF_ROWS * (c.n_expert + 1l) * 4l + nk * 12l)
     }
-    let nb = max(g_rdec_regions_want, 1l)   //! the N-row command's planes hold a row a region: the logits and the attention pieces scale with it
+    let nb = max(max(g_rdec_regions_want, 1l), rdec_verify_rows_want(t))   //! the per-row planes hold a row a region, or the verify's rows: the logits and the attention pieces scale with it
     let pieces = hs > 0l ? (qd / hs) * RDEC_ATTN_SPLIT_CAP * (hs + 2l) * 4l : 0l
     return RDEC_PF_ROWS * (16l * c.dim + 2l * wide + 10l * qd + 12l * kvd
         + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe
@@ -1247,7 +1252,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let rot = resident_rot(c)
     if (!rdec_prepare(c.n_layers, n_attn, dim, qd, kvd, hs, c.n_heads, resident_hidden(t), c.vocab_size, seq_cap, neox,
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
-                      rkdt == KVDtype.f16, c.q_gated, rot, dng, mir_elems, cos_elems, g_rdec_regions_want, rdec_carry_on(c), head)) {
+                      rkdt == KVDtype.f16, c.q_gated, rot, dng, mir_elems, cos_elems, g_rdec_regions_want, rdec_carry_on(c), head, head ? rdec_verify_rows_want(t) : 0l)) {
         return rdec_decline("the device prepare declined (a kernel class or the mirror range - the tier's line above)")
     }
     rdec_note_weight_bytes(plan.weight_bytes)
@@ -1739,6 +1744,7 @@ enum private RdecPass {
     rewind
     busy
     unhomed
+    verify_rows
 }
 
 var private g_rdec_pass_said : table<int>
@@ -1789,6 +1795,7 @@ def private rdec_pass_words(kind : RdecPass) : string {
     if (kind == RdecPass.rewind) return "the stream stepped back in a conversation the GPU only steps forward"
     if (kind == RdecPass.busy) return "every GPU cache slot was held by a live stream"
     if (kind == RdecPass.unhomed) return "the stream's cache never reached the GPU"
+    if (kind == RdecPass.verify_rows) return "the GPU checks fewer drafted tokens at once than the stream drafted"
     if (kind == RdecPass.pinned_off) return "a prompt was read on the CPU: the server keeps host-cached streams off the GPU's prompt path"
     return "{kind}"
 }
@@ -1816,6 +1823,8 @@ def private rdec_pass_text(kind : RdecPass; a, b : int64) : string {
         why = "all {a} mirror regions hold a live device-home session"
     } elif (kind == RdecPass.unhomed) {
         why = "the session holds no mirror region (its history never came to the device), so the NextN head has no slot to draft in"
+    } elif (kind == RdecPass.verify_rows) {
+        why = "the speculative verify's {a} rows pass the {b} rows the driver's same-slab verify steps at once (0: the NextN head or an N-column leaf is off the device - the lines above name it)"
     } else {
         why = "the resident prefill is pinned off (a multi-stream scheduler owns the sessions)"
     }
@@ -1943,6 +1952,113 @@ def private vulkan_resident_draft_go(t : Model; var s : Session; token, row : in
     g_rdec_regions[r].head_cnt = row + 1l
     g_rdec_draft_pick = pick
     g_rdec_drafts++
+    return true
+}
+
+var private g_rdec_verifies = 0l
+var private @scratch g_rdec_verify_picks : array<int64>   //! the last device verify's per-row picks, each the argmax of the row's landed logits
+var private @scratch @exact_size g_rdec_vhemb : array<float>   //! the verify's head rows' unscaled embeds, and the head rows' rope rows
+var private @scratch @exact_size g_rdec_vhcos : array<float>
+
+//! How many speculative verifies the resident driver served in this process (a cell's served witness)
+def moe_gpu_resident_verifies() : int64 => g_rdec_verifies
+
+//! Row `i`'s pick of the last device verify, the argmax of the logits it landed (-1 past its rows)
+def moe_gpu_resident_verify_pick(i : int64) : int64 => (i >= 0l && i < long_length(g_rdec_verify_picks)) ? g_rdec_verify_picks[i] : -1l
+
+//! The positions the mirror region `s` owns holds (-1 where it owns none): the rows past them are dead
+def moe_gpu_resident_rows(s : Session) : int64 => rdec_owns(s, s.rdec_region) ? g_rdec_regions[s.rdec_region].cnt : -1l
+
+//! the resident speculative verify (`register_mtp_verify_override("vulkan", ...)`): one stream's `n` rows `toks` at `pos` .. as
+//! same-slab rows of the region `s` owns; every check that can decline runs before the session's recurrent state comes up
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   // per speculative round
+def private vulkan_resident_verify(t : Model; var s : Session; toks : array<int64>; n, pos : int64) : bool {
+    if (!g_rdec_active || !rdec_verify_installed()) {
+        return false
+    }
+    if (s.device_kv) {
+        panic("dasLLAMA resident verify: a device-home session keeps no host K/V rows for the NextN head - the speculative round serves host-cached sessions")
+    }
+    if (s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt) {
+        rdec_pass_once(RdecPass.codec, int64(int(s.kv_dtype_k)), int64(int(s.kv_dtype_v)))
+        return false
+    }
+    if (s.kv_pool != null) {
+        rdec_pass_once(RdecPass.paged, 0l, 0l)
+        return false
+    }
+    if (pos + n > g_rdec_cap) {
+        rdec_pass_once(RdecPass.cap, pos + n, g_rdec_cap)
+        return false
+    }
+    let r = s.rdec_region
+    if (!rdec_owns(s, r)) {
+        rdec_pass_once(s.rdec_gen != 0l ? RdecPass.superseded : RdecPass.unhomed, 0l, 0l)
+        return false
+    }
+    if (pos > g_rdec_regions[r].cnt) {
+        rdec_pass_once(RdecPass.gap, pos, g_rdec_regions[r].cnt)
+        return false
+    }
+    let c = t.config
+    if (c.recr_mask != 0ul && pos != s.dn_pos) {
+        rdec_pass_once(RdecPass.rewind, pos, s.dn_pos)
+        return false
+    }
+    rdec_select_region(r)
+    let rows = rdec_verify_rows()
+    if (n > rows) {
+        rdec_pass_once(RdecPass.verify_rows, n, rows)
+        return false
+    }
+    g_rdec_regions[r].used = ++g_rdec_tick
+    return vulkan_resident_verify_go(t, s, toks, n, pos, r)
+}
+
+def private vulkan_resident_verify_go(t : Model; var s : Session; toks : array<int64>; n, pos, r : int64) : bool {
+    let c = t.config
+    let dim = c.dim
+    let vocab = c.vocab_size
+    let ce = g_rdec_cos_elems
+    let l = c.n_layers
+    kv_ensure(s, pos + n)
+    if (c.recr_mask != 0ul) {
+        s.dn_pos = pos + n
+        rdec_dn_own_all(s, c.n_layers)
+    }
+    g_rdec_x_n |> grow_resize(dim * n)
+    g_rdec_cos_n |> grow_resize(ce * n)
+    g_rdec_vhemb |> grow_resize(dim * n)
+    g_rdec_vhcos |> grow_resize(ce * n)
+    for (i in range64(n)) {
+        unsafe {
+            embed_row(t, toks[i], addr(g_rdec_x_n[i * dim]))
+            embed_row(t, toks[i], addr(g_rdec_vhemb[i * dim]))   //! unscaled, as `forward_mtp` embeds
+        }
+        rdec_rope_rows(t, pos + i + s.rope_pos_delta, g_rdec_cos_n, i * ce)
+        rdec_rope_rows(t, pos - 1l + i, g_rdec_vhcos, i * ce)   //! the head row a position below its trunk row, as the draft ropes it
+    }
+    if (c.embed_scale != 1.0) {
+        scale_inplace(unsafe(addr(g_rdec_x_n[0])), c.embed_scale, dim * n)
+    }
+    s.mtp_logits_b |> overwrite_resize(n * vocab)
+    s.mtp_hrows |> overwrite_resize(n * dim)
+    g_rdec_verify_picks |> resize(n)
+    verify(long_length(s.mtp_xb_save) >= dim, "dasLLAMA resident verify: the round saved no pre-draft carry in mtp_xb_save - engine bug")
+    let ok = rdec_verify(g_rdec_x_n, g_rdec_cos_n, g_rdec_vhemb, g_rdec_vhcos, s.mtp_xb_save, pos, n,
+        kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), s.mtp_logits_b, g_rdec_verify_picks, s.mtp_hrows)
+    verify(ok, "dasLLAMA resident verify: the driver declined rows it answered it steps - engine bug")
+    copy_floats(s.mtp_logits_b, 0l, s.mtp_logits, 0l, vocab)
+    copy_floats(s.mtp_logits_b, (n - 1l) * vocab, s.logits, 0l, vocab)
+    copy_floats(s.mtp_hrows, 0l, s.mtp_h0, 0l, dim)
+    copy_floats(s.mtp_hrows, (n - 1l) * dim, s.mtp_h, 0l, dim)
+    s.mtp_h_pos1 = pos + n
+    g_rdec_regions[r].cnt = pos + n
+    if (g_rdec_regions[r].head_cnt >= pos - 1l) {   //! the rows below pos - 1 the device held stay held; a stale stretch below them stays stale
+        g_rdec_regions[r].head_cnt = pos + n - 1l
+    }
+    s.rdec_host_current = false   // the mirror advanced past any earlier hydration
+    g_rdec_verifies++
     return true
 }
 
@@ -2376,6 +2492,7 @@ def resident_driver_register() {
     register_prefill_override("vulkan", @@vulkan_resident_prefill)
     register_mtp_seat_owner("vulkan", @@vulkan_mtp_owns)
     register_mtp_draft_override("vulkan", @@vulkan_resident_draft)
+    register_mtp_verify_override("vulkan", @@vulkan_resident_verify)
     register_ple_gpu_gate(@@vulkan_ple_gate)
     register_ple_gpu_decode_gate(@@vulkan_ple_gate)   //! the token command gathers the row on device too
     register_prefill_override_split_span("vulkan")
@@ -2539,6 +2656,7 @@ def moe_gpu_drop_model_() {
     rdec_set_active(false)
     reset_gpu_cpu_passes()
     g_rdec_draft_pick = -1l
+    g_rdec_verify_picks |> clear()
     g_rdec_regions |> clear()
     g_rdec_cap = 0l
     g_rdec_emb_gpu = false

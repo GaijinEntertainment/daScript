@@ -29,6 +29,7 @@ var private g_prepared_rot = -1l
 var private g_prepared_dn_cd = -1l
 var private g_prepared_carry = false
 var private g_prepared_head = false
+var private g_prepared_verify_rows = -1l
 var private g_dn_layer_l = -1l
 var private g_dn_layer_ba_off = -1l
 var private g_dn_ba_rows = -1l
@@ -45,7 +46,7 @@ def private d_reserve(fmt : int; cap_blocks : int64) : bool {
 def private d_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => 7l
 
 [unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, mir_elems, cos_elems, regions)]
-def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64; carry, head : bool) : bool {
+def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool {
     g_prepared = true
     g_prepared_kv16 = kv16
     g_prepared_n_attn = n_attn
@@ -54,6 +55,7 @@ def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hid
     g_prepared_dn_cd = dn.cd
     g_prepared_carry = carry
     g_prepared_head = head
+    g_prepared_verify_rows = verify_rows
     return true
 }
 
@@ -175,6 +177,24 @@ def private d_draft(x : array<float>; h : array<float>; cossin : array<float>; r
     return 7l
 }
 
+var private g_verify_pos = -1l
+var private g_verify_n = -1l
+
+//! the verify double: the position and row count it was asked for, a sentinel logit and hidden, a distinctive pick a row
+[unused_argument(x, cossin, hemb, hcos, h0, kp, vp)]
+def private d_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool {
+    g_verify_pos = pos
+    g_verify_n = n
+    logits[0] = 45.0
+    hid[0] = 46.0
+    for (i in range64(n)) {
+        picks[i] = 10l + i
+    }
+    return true
+}
+
+def private d_verify_rows : int64 => 4l
+
 def private arm_on() : bool => true
 
 def private arm_off() : bool => false
@@ -203,9 +223,9 @@ def test_gpu_tier_contract(t : T?) {
         var ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 512l, 2l, 5), 7l)
         t |> success(rdec_prepare(2l, 1l, 64l, 64l, 64l, 8l, 8l, 128l, 100l, 32l, true, 1e-5, 1.0, false, true, true, 4l,
-            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true), 0l, 0l, 1l, true, true))
+            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true), 0l, 0l, 1l, true, true, 3l))
         t |> success(g_prepared, "prepare double must have run")
-        t |> success(g_prepared_carry && g_prepared_head, "the carry and NextN head flags must forward to the double")
+        t |> success(g_prepared_carry && g_prepared_head && g_prepared_verify_rows == 3l, "the carry and NextN head flags and the verify's row ask must forward to the double")
         t |> success(g_prepared_kv16, "kv16 must forward to the double")
         t |> equal(g_prepared_n_attn, 1l)
         t |> success(g_prepared_gated, "the gated-q flag must forward to the double")
@@ -362,6 +382,34 @@ def test_rdec_draft_seat(t : T?) {
         t |> equal(rdec_norms_len(24l, 1024l, 256l, true), rdec_head_norm_base(24l, 1024l, 256l) + RDEC_HEAD_NORM_ROWS * 1024l)
         t |> equal(rdec_head_norm_base(24l, 1024l, 0l), trunk, "without q/k norms the block follows the final norm")
         t |> success(rdec_head_norm_base(24l, 1024l, 0l) > 24l * RDEC_NORM_ROWS * 1024l, "the block never lands on the final norm's row, where layer n_layers' own rows would index")
+    }
+}
+
+[test]
+def test_rdec_verify_seat(t : T?) {
+    t |> run("the same-slab verify seat installs apart and forwards the rows, the position and every landing") @(t : T?) {
+        let rows : array<float>
+        var logits : array<float>
+        var hid : array<float>
+        var picks : array<int64>
+        logits |> resize(4)
+        hid |> resize(4)
+        picks |> resize(3)
+        t |> success(!rdec_verify_installed(), "no verify seat before its install")
+        t |> equal(rdec_verify_rows(), 0l, "an unset verify steps no rows")
+        t |> success(!rdec_verify(rows, rows, rows, rows, rows, 5l, 2l, null, null, logits, picks, hid), "an unset verify declines - the CPU verify serves")
+        install_rdec_verify(@@d_verify, @@d_verify_rows)
+        t |> success(rdec_verify_installed(), "the verify install must flip its witness")
+        t |> equal(rdec_verify_rows(), 4l, "the rows answer forwards")
+        t |> success(rdec_verify(rows, rows, rows, rows, rows, 41l, 3l, null, null, logits, picks, hid), "the double's answer forwards")
+        t |> equal(g_verify_pos, 41l)
+        t |> equal(g_verify_n, 3l)
+        t |> equal(logits[0], 45.0, "the double writes through the logits the forwarder handed it")
+        t |> equal(hid[0], 46.0, "the double writes through the hidden rows the forwarder handed it")
+        t |> equal(picks[2], 12l, "the double writes every row's pick through the picks the forwarder handed it")
+        delete logits
+        delete hid
+        delete picks
     }
 }
 
