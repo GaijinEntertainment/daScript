@@ -749,8 +749,8 @@ once for the window's first token at its start), a declined seat on the planar m
 seam rewrite it (the control), and a declined seat on the model flagged a blob, a fake prefill
 driver claiming the window, leaves it and warns - `test_mtp_verify_window` - the CPU round's
 fail-closed exit: a fake prefill driver that serves the speculative verify window makes the round
-panic naming the driver, the verify-window flag (`mtp_verify_window_active`) read up inside the
-window and down for the prompt's own prefill and after the round - the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
+panic naming the driver, the session's verify window (`mtp_verify_window_active(s)`) read up inside
+the window and down for the prompt's own prefill and on the session after the round - the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
 non-recurrent MTP model, so the only reach of the depth-1 step's shortcut reject (row 0's logits
 and hidden stand, no re-forward): its code fixture runs plain, then again with
 `set_mtp_force_reject_every(3)` rejecting every third draft, both token-for-token against plain
@@ -986,13 +986,21 @@ round over the head's host rows poisoned with NaN as the control (another draft,
 rows). The gates around the round: `test_gpu_resident_hybrid_mtp_nonfinite` fills the carry with
 NaN before a device draft and holds that the draft panics naming the row it landed non-finite logits
 on, the drafts counter unmoved; `test_gpu_resident_hybrid_mtp_pass_arms` shapes a session for each
-of the draft and verify seats' pass arms and holds the round completing on the CPU rails with the
-reason counted (`pass_count` over `gpu_cpu_passes_`) and the device verify counter unmoved - an f32
-session under the f16 mirror (codec: the prefill, the draft and the verify; skips under
-`DASLLAMA_VK_KV32=1`), a session the device never homed with a homed session's carry (unhomed),
-a round five rows past the region's rows (gap - the draft, which has no gap arm, serves) and a
-round off the recurrent state's position (rewind - the draft serves); the cap and paged arms are
-not shaped (a prompt past the region's cap, a pooled session); `test_gpu_resident_hybrid_mtp_head_off`
+of the draft and verify seats' pass arms and holds the reason counted (`pass_count` over
+`gpu_cpu_passes_`) and the device verify counter unmoved - an f32 session under the f16 mirror
+(codec: the prefill, the draft and the verify; skips under `DASLLAMA_VK_KV32=1`), a session the
+device never homed, its prompt read on the CPU rails under the server's prefill pin
+(`set_resident_prefill_allowed(false)`, the pass counted as pinned_off, no mirror region, the
+recurrent state and the carry at the prompt's end) (unhomed: the draft and the verify), and a
+round five rows past the region's rows, the rows served on the CPU rails as a continuation the
+hybrid's resident prefill passes (the region's rows still at the prompt, the recurrent state and
+the carry five past it) (gap - the draft, which has no gap arm, serves) - each round completing
+on the CPU rails with no panic, the CPU verify over the recurrent state the CPU rails hold; the
+cap and paged arms are not shaped (a prompt past the region's cap, a pooled session);
+`test_gpu_resident_hybrid_mtp_rewind_refused` shapes a round off the recurrent state's position
+by hand: the draft serves, the verify passes as rewind, and the CPU rails then refuse the rewind
+by name with both positions in the text, since the recurrent state is forward-only on every
+rail; `test_gpu_resident_hybrid_mtp_head_off`
 loads the twin with the draft seat unset so the plan keeps the head off the device (the seat put
 back after the load, `rdec_verify_rows` reading 0, the chain warming no head row) and runs one
 round: the verify passes as verify_rows, the CPU verify's two-row window passes the resident prefill

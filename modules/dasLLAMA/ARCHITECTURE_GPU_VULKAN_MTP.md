@@ -162,19 +162,29 @@ forced-reject round holds the stream to plain decode on both rails, and the prof
 ### A declined verify seat runs the CPU verify inside a window the resident prefill declines {#resident-verify-window}
 
 **A speculative round whose verify seat declines runs the CPU verify's two-row `forward_prefill`
-inside a verify window, and the resident prefill declines that window by name before any state
-moves.** The CPU verify (`mtp_verify_two`) raises `mtp_verify_window_active` around its two-row
-prefill; the resident prefill override reads it before it binds a region or touches a slot and
-passes the call as `RdecPass.verify_window`, so the CPU rails take the two rows: the head runs on
-the CPU over the host rows the seat's decline hydrated, the trunk's rows the region holds stay
-on the device, and the round reads only rows the side that ran them wrote. Without the window
-a model with no recurrent layer - a routed-head carrier in GLM-4.5-Air's shape, whose head the
-driver declines - would have its two rows served by the window chain, which leaves the host
-`x_b` rows the CPU verify's classifier reads unwritten; the fail-closed guard for that case stays
-(`mtp_verify_served_panic`: a prefill driver that landed the logits inside the window), and the
-decline is what keeps it unreachable. A hybrid's window passes the same way, the seat's decline
-having hydrated its state; the resident verify seat and this window are the two ways a round's
-verify rows run, and a round never mixes them.
+inside a verify window the session carries, and the resident prefill declines that window by name
+as the first rung of its ladder.** The CPU verify (`mtp_verify_two`) names the session in
+`mtp_verify_window_active` around its two-row prefill; the resident prefill override reads it
+before it binds a region, takes or claims a mirror or touches a recurrent slot, and passes the call
+as `RdecPass.verify_window` through the hydrate every pass takes (`rdec_pass_hydrated`,
+`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate`): the region's device-only trunk K/V
+rows and head rows come down to the host cache, and the CPU rails take the two rows - the head
+over the host rows the seat's decline hydrated, the trunk's rows the region holds staying on the
+device, the round reading only rows the side that ran them wrote. A hybrid's recurrent state
+needs no hydrate of the window's own: the CPU verify's snapshot (`mtp_state_snapshot`,
+`dn_flush_all`) and the CPU chain's per-layer `dn_flush_layer` send each device slot home before
+the CPU reads it, and the CPU chain runs only at the session's recurrent position
+(`dn_forward_only_guard`) - a round off it, which the verify seat passes as `rewind`, the CPU
+rails refuse by name, since the recurrent state is forward-only on every rail
+(`test_gpu_resident_hybrid_mtp_rewind_refused` holds the pass and the refusal by name).
+The window is the session's (`Session.uid`), so a panic inside it - that refusal among them -
+strands the window on the session that died and every other session's prefill serves as before.
+Without the window a model with no recurrent layer - a routed-head carrier in GLM-4.5-Air's
+shape, whose head the driver declines - would have its two rows served by the window chain,
+which leaves the host `x_b` rows the CPU verify's classifier reads unwritten; the fail-closed
+guard for that case stays (`mtp_verify_served_panic`: a prefill driver that landed the logits
+inside the window), and the decline is what keeps it unreachable. The resident verify seat and
+this window are the two ways a round's verify rows run, and a round never mixes them.
 
 ### The speculative knob gates the carry per step, never the plan {#resident-spec-knob-gate}
 
@@ -185,7 +195,16 @@ keeps the last layer's fusions.** The token command's last layer stores its clas
 that store is what turns the fused residual-plus-requant forms off at that site (`rd_rows_fuse`,
 and `comb_rq` on a MoE last layer); with the knob off the last layer takes the fused forms a
 headless model takes, no `xb_dev -> hid_host` copy runs and no carry is stashed. What the knob
-never moves is the plan: the head planes, the head's K/V slot, the verify rows and the rollback
-scratch are provisioned at the arm whether the knob is on or off, so a knob flip
-(`set_mtp_spec`, the server's `--mtp`) never re-plans the residency - a NextN model with
-speculation off carries the head's bytes and runs the step a headless model runs.
+never moves is the plan: the head planes, the head's K/V slot, the verify rows, the rollback
+scratch and the landing's own planes (`hid_host`, the transfer-shared `xb_dev`) are provisioned
+at the arm whether the knob is on or off - `RDec.carry` is set on every NextN model whose tier
+installed the landing (`rdec_carry_planned`), `RDec.carry_live` is the step's reading of the knob
+(`rd_carry_sync` at every served entry re-records the commands whose last site stores or lands
+the row when it flips), the landing (`vk_rdec_land_carry`) asserts the plan and the per-step
+stash (`rdec_carry_on`) reads the knob - so a knob flip (`set_mtp_spec`, the server's `--mtp`,
+the scheduler's per-tick arm) never re-plans the residency and a knob turned on after the load
+lands the carry from its first step: a NextN model with speculation off carries the head's bytes
+and runs the step a headless model runs. The draft's hidden is the head's own row and lands
+whatever the knob says - the draft command copies it itself wherever the transfer command would
+not (no transfer family, or the knob off) - and a verify with the knob off has no stored row to
+land, so the verify seat declines it to the CPU verify.

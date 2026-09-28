@@ -1288,7 +1288,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let rot = resident_rot(c)
     if (!rdec_prepare(c.n_layers, n_attn, dim, qd, kvd, hs, c.n_heads, resident_hidden(t), c.vocab_size, seq_cap, neox,
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
-                      rkdt == KVDtype.f16, c.q_gated, rot, dng, mir_elems, cos_elems, g_rdec_regions_want, rdec_carry_on(c), head, head ? rdec_verify_rows_want(t) : 0l)) {
+                      rkdt == KVDtype.f16, c.q_gated, rot, dng, mir_elems, cos_elems, g_rdec_regions_want, rdec_carry_planned(c), head, head ? rdec_verify_rows_want(t) : 0l)) {
         return rdec_decline("the device prepare declined (a kernel class or the mirror range - the tier's line above)")
     }
     rdec_note_weight_bytes(plan.weight_bytes)
@@ -1902,9 +1902,13 @@ def private rdec_dn_own_all(var s : Session; n_layers : int64) {
 
 var private @scratch g_rdec_one_tok : array<int64>   //! the token's id as the gather's one-row list
 
-//! the carry lands this step: a NextN head, the tier's landing, and the speculative round on - the knob read per step, so a round switched off pays no carry
+//! the plan carries the landing's planes: a NextN head and the tier's landing, whatever the knob says at the load
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate")]
-def private rdec_carry_on(c : Config) : bool => c.n_layer_nextn > 0l && get_mtp_spec() && rdec_carry_installed()
+def private rdec_carry_planned(c : Config) : bool => c.n_layer_nextn > 0l && rdec_carry_installed()
+
+//! the carry lands this step: the planned landing and the speculative round on - the knob read per step, so a round switched off pays no carry
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate")]
+def private rdec_carry_on(c : Config) : bool => rdec_carry_planned(c) && get_mtp_spec()
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
 def private rdec_stash_carry(c : Config; var s : Session; row, pos1 : int64) {
@@ -2127,7 +2131,7 @@ def private vulkan_resident_verify(t : Model; var s : Session; toks : array<int6
 }
 
 def private vulkan_resident_verify_gated(t : Model; var s : Session; toks : array<int64>; n, pos : int64; pick_only : bool) : bool {
-    return false if (!g_rdec_active || !rdec_verify_installed())
+    return false if (!g_rdec_active || !rdec_verify_installed() || !get_mtp_spec())   //! with the knob off the last layer stores no row for the verify to land
     let r = rdec_head_seat_region(s, "verify", pos + n)
     return false if (r < 0l)
     if (pos > g_rdec_regions[r].cnt) {
@@ -2366,7 +2370,7 @@ def private rdec_prefill_region(t : Model; var s : Session; start_pos : int64) :
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window")]
 def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_pos : int64) : bool {
     return false if (!g_rdec_active)
-    if (mtp_verify_window_active()) {
+    if (mtp_verify_window_active(s)) {
         return rdec_pass_hydrated(t, s, RdecPass.verify_window, 0l, 0l)
     }
     if (!g_resident_prefill_allowed && !s.device_kv) {
@@ -2637,7 +2641,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
 
 [hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
 def private vulkan_embed_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
-    return (active_prefill_override() == "vulkan" && g_rdec_active && !mtp_verify_window_active() && (g_resident_prefill_allowed || s.device_kv) && g_rdec_emb_gpu
+    return (active_prefill_override() == "vulkan" && g_rdec_active && !mtp_verify_window_active(s) && (g_resident_prefill_allowed || s.device_kv) && g_rdec_emb_gpu
         && (start_pos == 0l || t.config.recr_mask == 0ul) && start_pos + npos <= g_rdec_cap
         && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null
         && s.attn_uniform_end == 0l && empty(s.mrope_pos) && !s.ds_active)

@@ -5136,11 +5136,12 @@ def private mtp_snapshot_timed(var s : Session) {
     prof_add("mtp.snapshot", ts_snap)
 }
 
-var private g_mtp_verify_window = false
+var private g_mtp_verify_window_uid : uint64   //! the session whose CPU verify's two-row prefill is in flight (0: none)
 
-//! The CPU verify's two-row prefill is in flight: a prefill driver that homes the head declines the call, since the round reads the rows back on the host.
+//! `s`'s CPU verify's two-row prefill is in flight: a prefill driver that homes the head declines the call, since the round reads
+//! the rows back on the host. The window is the session's, so a panic inside it strands the window on that session alone
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window")]
-def mtp_verify_window_active() : bool => g_mtp_verify_window
+def mtp_verify_window_active(s : Session) : bool => g_mtp_verify_window_uid != 0ul && s.uid == g_mtp_verify_window_uid
 
 //! true where the verify seat served the round's two rows; false where the CPU two-row verify ran
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window")]
@@ -5161,9 +5162,9 @@ def private mtp_verify_two(t : Model; var s : Session; seated : bool; pos : int6
     }
     let ts_verify = prof_ticks()
     let batch_cls = mtp_cls_batch_ok(t)
-    g_mtp_verify_window = true
+    g_mtp_verify_window_uid = s.uid
     forward_prefill(t, s, s.mtp_vbatch, 2l, pos, batch_cls)
-    g_mtp_verify_window = false
+    g_mtp_verify_window_uid = 0ul
     if (g_prefill_logits_done) {
         mtp_verify_served_panic()
     }

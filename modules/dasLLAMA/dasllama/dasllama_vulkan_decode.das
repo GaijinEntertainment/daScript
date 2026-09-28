@@ -2536,11 +2536,14 @@ def private rd_record_draft {
     enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
     enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, 1l)
     rd_ts(raw, "t:draft_pick")
+    if (!g_rd.log_xfer || !g_rd.carry_live) {   //! the head's own hidden lands whatever the knob says: the draft command copies it wherever the transfer command will not
+        vhz_dep(raw, h, VHZ_XB, 0u, true)
+        cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hid_host.buf, dim * 4l)
+    }
     if (!g_rd.log_xfer) {
-        vhz_dep(raw, h, VHZ_LOG | VHZ_XB, 0u, true)
+        vhz_dep(raw, h, VHZ_LOG, 0u, true)
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
         cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l)
-        cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hid_host.buf, dim * 4l)
         rd_ts(raw, "t:dma")
     }
     pfq_end(raw)

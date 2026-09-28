@@ -316,11 +316,11 @@ def private probe_seam(t : Model; var s : Session; token, pos : int64) : bool {
     return g_probe_seam_serves
 }
 
-//! the prefill probe: claims the whole stack and its logits without computing either, and reads the verify-window flag as it runs
-[unused_argument(t, s, npos, start_pos)]
+//! the prefill probe: claims the whole stack and its logits without computing either, and reads the session's verify window as it runs
+[unused_argument(t, npos, start_pos)]
 def private probe_prefill(t : Model; var s : Session; npos, start_pos : int64) : bool {
     g_probe_prefill_calls++
-    g_probe_window_active = mtp_verify_window_active()
+    g_probe_window_active = mtp_verify_window_active(s)
     prefill_override_logits_done()
     return true
 }
@@ -434,8 +434,8 @@ def test_mtp_verify_window(t : T?) {
         let why = verify_window_panic(tr)
         to_log(LOG_INFO, "served verify window: {empty(why) ? "no panic" : why}\n")
         t |> success(says(why, "served a speculative verify window") && says(why, PROBE_PREFILL), "the CPU round panics naming the prefill driver that served its verify window: '{why}'")
-        t |> success(g_probe_window_active, "the verify-window flag was up while the driver served the window")
-        t |> success(!mtp_verify_window_active(), "... and is down outside the round")
+        t |> success(g_probe_window_active, "the session's verify window was up while the driver served it")
+        t |> success(!g_probe_window_after, "... and is down on the session outside the round")
         t |> success(!g_probe_window_outside, "... and was down for the prompt's own prefill under the same driver")
         delete tr
     }
@@ -444,9 +444,11 @@ def test_mtp_verify_window(t : T?) {
 def private says(s : string; part : string) : bool => find(s, part) >= 0
 
 var private g_probe_window_outside = false
+var private g_probe_window_after = false
 
 //! the fixture prefilled on the CPU with speculation on, then one round under the prefill probe claiming every window: the
-//! panic's text, "" where none fired; the probe's window-flag reading for the prompt's own prefill lands in `g_probe_window_outside`
+//! panic's text, "" where none fired; the probe's window reading for the prompt's own prefill lands in `g_probe_window_outside`,
+//! the session's window after the round in `g_probe_window_after`
 [cold_path]
 def private verify_window_panic(tr : Model) : string {
     var why = ""
@@ -472,6 +474,7 @@ def private verify_window_panic(tr : Model) : string {
         } recover {
             why = this_context().last_exception |> rtrim
         }
+        g_probe_window_after = mtp_verify_window_active(s)
         select_prefill_override(prefill0)
         set_mtp_spec(spec0)
         delete s

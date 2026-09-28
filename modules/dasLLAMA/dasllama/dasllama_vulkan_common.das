@@ -2472,7 +2472,7 @@ struct RDec {
     xlog_pick_recorded : array<bool>
     pick_dev : uint64             //! the rows' argmax ids (`ClsArgmaxPart` then `ClsArgmaxFin`, after the epilogue), and their host landing
     pick_host : HostBuf
-    carry : bool                  //! the driver was prepared with the carry: the final site can store the rows' post-final-norm hidden in xb_dev and land it into hid_host beside the logits (a NextN-headed model)
+    carry : bool                  //! the plan's carry, whatever the knob said at the load: the landing's planes exist, and the final site can store the rows' post-final-norm hidden in xb_dev and land it into hid_host beside the logits (a NextN-headed model whose tier installed the landing)
     carry_live : bool             //! the carry as this step wants it - `carry` and the speculative round on; a flip re-records the commands whose last site stores or lands the row (`rd_carry_sync`)
     hid_host : HostBuf            //! the landed carry rows: the token command's, or the window chain's last row at row 0
     head_norm_base : int64        //! the NextN draft head's norm block in the norms plane (`rdec_head_norm_base`); 0 = prepared without the head

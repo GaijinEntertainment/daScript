@@ -46,9 +46,10 @@ require _resident_feed
 // prefill leave the draft bit for bit, the head's warmed K rows against the CPU warm's within twice
 // the deltanet bar over one window and over two, and six speculative rounds against the CPU round from
 // one prompt. The gates around the round: speculation off lands no carry, a NaN carry panics the draft
-// by row, the pass arms (codec, unhomed, gap, rewind) hand the round to the CPU rails by name, and a
-// head kept off the device passes the verify as verify_rows with the resident prefill declining the CPU
-// verify's window as verify_window.
+// by row, the pass arms (codec, unhomed, gap) hand the round to the CPU rails by name and the CPU verify
+// completes over the recurrent state the CPU rails hold, a rewind passes the verify by name and the CPU
+// rails then refuse it by name, and a head kept off the device passes the verify as verify_rows with
+// the resident prefill declining the CPU verify's window as verify_window.
 // Every model cell skips interpreted, without its model file, or without the armed tier; the
 // K-quant cells and the codec pass arm skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`) too.
 
@@ -448,13 +449,14 @@ def private draft_from(tr : Model; var s : Session; tok, row : int64; h0 : array
     return <- Draft(logits <- [for (x in s.logits); x], h <- [for (x in s.mtp_h); x])
 }
 
-//! `n` prompt tokens through the resident prefill with the speculative warm on, so the head's host rows the draft hydrates hold history
-def private prefill_warm(tr : Model; var s : Session; prompt : array<int64>) {
+//! `prompt` through the prefill at `start_pos` with the speculative warm on, so the head's host rows the draft hydrates hold history;
+//! a continuation (`start_pos` past 0) on the hybrid passes to the CPU rails, which leave the recurrent state and the carry at its end
+def private prefill_warm(tr : Model; var s : Session; prompt : array<int64>; start_pos : int64 = 0l) {
     let spec0 = get_mtp_spec()
     set_mtp_spec(true)
-    forward_prefill(tr, s, prompt, long_length(prompt), 0l)
+    forward_prefill(tr, s, prompt, long_length(prompt), start_pos)
     set_mtp_spec(spec0)
-    s.n_past = long_length(prompt)
+    s.n_past = start_pos + long_length(prompt)
 }
 
 //! one device row `gpu` within the deltanet bar of the CPU row `cpu`, the CPU row `off` - one step or one row away - as the control past it
@@ -1275,14 +1277,21 @@ def private pass_arm_round(tr : Model; var s : Session; tok : int64) : string {
     return why
 }
 
-//! the arm's witnesses: no panic, `arm.reason` passed at least `min_passes` calls, the device draft counter moved by `drafts`, the verify counter unmoved
-def private pass_arm_holds(t : T?; arm : PassArm; why : string; min_passes, drafts : int64) {
-    t |> success(empty(why), "{arm.reason}: the round completed without a panic ({why})")
+//! the arm's counters: `arm.reason` passed at least `min_passes` calls, the device draft counter moved by `drafts`, the verify counter unmoved
+def private pass_arm_counted(t : T?; arm : PassArm; min_passes, drafts : int64) {
     let n = pass_count(arm.reason) - arm.passes0
     t |> success(n >= min_passes, "{arm.reason}: at least {min_passes} call(s) passed to the CPU rails as {arm.reason} ({n} counted)")
     t |> equal(moe_gpu_resident_drafts() - arm.drafts0, drafts, "{arm.reason}: {drafts} device draft(s) - the draft seat {drafts > 0l ? "has no such arm and served" : "passed too"}")
     t |> equal(moe_gpu_resident_verifies() - arm.verifies0, 0l, "{arm.reason}: no device verify ran")
 }
+
+//! the arm's witnesses: the round completed on the CPU rails without a panic, and its counters
+def private pass_arm_holds(t : T?; arm : PassArm; why : string; min_passes, drafts : int64) {
+    t |> success(empty(why), "{arm.reason}: the round completed without a panic ({why})")
+    pass_arm_counted(t, arm, min_passes, drafts)
+}
+
+let private GAP_ROWS = 5l   //! the rows the CPU rails serve past the region's, so the round's position is past the mirror's
 
 [test]
 def test_gpu_resident_hybrid_mtp_pass_arms(t : T?) {
@@ -1306,47 +1315,59 @@ def test_gpu_resident_hybrid_mtp_pass_arms(t : T?) {
         }
         delete tr
     }
-    t |> run("Qwen3.5-0.8B-MTP: a session the device never homed - its carry copied from a homed one - drafts and verifies on the CPU rails as unhomed") @(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: a session the device never homed - its prompt read on the CPU rails under the server's prefill pin - drafts and verifies on the CPU rails as unhomed, the CPU verify over the recurrent state the CPU rails left at the prompt's end") @(t : T?) {
         if (!mtp_carry_ready(t)) return
         var tr <- load_mtp_carrier(t, 1l)
         with_job_que() {
             setup_dasllama_jobque_()
             var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
-            var homed <- create_session(tr, mirror_kv_dtype())
-            prefill_warm(tr, homed, prompt)
             var s <- create_session(tr, mirror_kv_dtype())
-            copy_floats(homed.mtp_h, 0l, s.mtp_h, 0l, long_length(homed.mtp_h))
-            s.mtp_h_pos1 = DRAFT_PROMPT
-            s.n_past = DRAFT_PROMPT
+            let pinned0 = pass_count("pinned_off")
+            set_resident_prefill_allowed(false)
+            prefill_warm(tr, s, prompt)
+            set_resident_prefill_allowed(true)
+            t |> success(pass_count("pinned_off") - pinned0 >= 1l, "the prompt passed to the CPU rails as pinned_off ({pass_count("pinned_off") - pinned0} counted)")
+            t |> equal(moe_gpu_resident_rows(s), -1l, "the session holds no mirror region: the device never homed it")
+            t |> equal(s.dn_pos, DRAFT_PROMPT, "the CPU rails left the recurrent state at the prompt's end")
+            t |> equal(s.mtp_h_pos1, DRAFT_PROMPT, "... and stashed the carry there")
             let arm = pass_arm_begin("unhomed")
             let why = pass_arm_round(tr, s, DRAFT_TOKEN)
             pass_arm_holds(t, arm, why, 2l, 0l)
             delete s
-            delete homed
             delete prompt
         }
         delete tr
     }
-    t |> run("Qwen3.5-0.8B-MTP: a round five rows past the region's rows - the draft, which has no gap arm, serves on the device; the verify passes as gap") @(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: a round five rows past the region's rows - rows the CPU rails served as a continuation the hybrid's resident prefill passes - the draft, which has no gap arm, serves on the device; the verify passes as gap and the CPU verify completes over the recurrent state the CPU rails left") @(t : T?) {
         if (!mtp_carry_ready(t)) return
         var tr <- load_mtp_carrier(t, 1l)
         with_job_que() {
             setup_dasllama_jobque_()
             var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var more <- [for (i in range64(GAP_ROWS)); 3000l + (i * 61l) % 4000l]
             var s <- create_session(tr, mirror_kv_dtype())
             prefill_warm(tr, s, prompt)
             t |> equal(moe_gpu_resident_rows(s), DRAFT_PROMPT, "the region's rows end at the prompt")
-            s.n_past = DRAFT_PROMPT + 5l
-            s.mtp_h_pos1 = DRAFT_PROMPT + 5l
+            let cont0 = pass_count("continuation")
+            prefill_warm(tr, s, more, DRAFT_PROMPT)
+            t |> success(pass_count("continuation") - cont0 >= 1l, "the continuation passed to the CPU rails as continuation ({pass_count("continuation") - cont0} counted): a hybrid's resident prefill serves a prompt from its start alone")
+            t |> equal(moe_gpu_resident_rows(s), DRAFT_PROMPT, "the region's rows still end at the prompt: the CPU rails served the {GAP_ROWS} past it")
+            t |> equal(s.dn_pos, DRAFT_PROMPT + GAP_ROWS, "the recurrent state sits past the CPU-served rows")
+            t |> equal(s.mtp_h_pos1, DRAFT_PROMPT + GAP_ROWS, "the CPU tail stashed the carry at the last CPU-served row")
             let arm = pass_arm_begin("gap")
             let why = pass_arm_round(tr, s, DRAFT_TOKEN)
             pass_arm_holds(t, arm, why, 1l, 1l)
             delete s
+            delete more
             delete prompt
         }
         delete tr
     }
-    t |> run("Qwen3.5-0.8B-MTP: a round off the recurrent state's position - the draft serves on the device; the verify passes as rewind") @(t : T?) {
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_rewind_refused(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: a round off the recurrent state's position - the draft, which has no rewind arm, serves on the device; the verify passes as rewind, and the CPU rails refuse the rewind by name: the recurrent state is forward-only on every rail") @(t : T?) {
         if (!mtp_carry_ready(t)) return
         var tr <- load_mtp_carrier(t, 1l)
         with_job_que() {
@@ -1358,7 +1379,8 @@ def test_gpu_resident_hybrid_mtp_pass_arms(t : T?) {
             s.dn_pos = DRAFT_PROMPT - 1l
             let arm = pass_arm_begin("rewind")
             let why = pass_arm_round(tr, s, DRAFT_TOKEN)
-            pass_arm_holds(t, arm, why, 1l, 1l)
+            t |> success(says(why, "deltanet state is forward-only") && says(why, "position {DRAFT_PROMPT}") && says(why, "session is at {DRAFT_PROMPT - 1l}"), "the CPU verify refused the rewind by name, both positions in the text: '{why}'")
+            pass_arm_counted(t, arm, 1l, 1l)
             delete s
             delete prompt
         }
