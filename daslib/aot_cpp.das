@@ -781,7 +781,7 @@ class public DebugVarCache {
 
 
 // `\?` is `?` to a C compiler and hides the ??-sequences it would otherwise read as trigraphs
-def private c_literal(s : string implicit) : string {
+def private c_literal(s : auto implicit) : string {
     return escape(s) |> replace("?", "\\?")
 }
 
@@ -2788,12 +2788,20 @@ class public CppAot : AstVisitor {
         return c;
     }
     def override visitExprConstString(var c : ExprConstString?) : ExpressionPtr {
+        var blob = false
+        peek(c.value) $(text) {
+            blob = length(text) != length(c.value)
+        }
         if (c.value.empty()) {
             write(*ss, "nullptr");
-        } else {
-            peek(c.value) $(sv) {
-                write(*ss, "((char *) \"{c_literal(sv)}\")");
+        } elif (blob) {
+            write(*ss, "([]() -> char * \{ static const unsigned char blob[] = \{");
+            for (b in to_bytes(c.value)) {
+                write(*ss, "{int(b)},");
             }
+            write(*ss, "0 \}; return (char *) blob; \}())");
+        } else {
+            write(*ss, "((char *) \"{c_literal(c.value)}\")");
         }
         return c;
     }

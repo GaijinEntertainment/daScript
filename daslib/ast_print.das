@@ -951,9 +951,7 @@ class PrintVisitor : AstVisitor {
     }
     def override preVisitExprConstString(expr : ExprConstString?) : void {
         //! Prints a string constant with proper escaping.
-        peek(expr.value) $(str) {
-            write(*writer, "\"{escape(str)}\"");
-        }
+        write(*writer, "\"{escape(expr.value)}\"");
     }
     def override preVisitExprConstEnumeration(expr : ExprConstEnumeration?) : void {
         //! Prints a constant enumeration value with module prefix.

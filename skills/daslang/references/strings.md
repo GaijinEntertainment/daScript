@@ -135,6 +135,11 @@ heap string - a slice-per-element loop over a big string is O(n^2).
 
 - **`find` returns `int`** - `>= 0` means found, never compare to `false`. `find(s, ch)` matches
   `ch` as an unsigned byte: a code outside `0..255` matches nothing.
+- **A literal can embed a null byte** - `\x00` or `\u0000`. The constant keeps every byte,
+  but a runtime `string` ends at the first null: `length("a\x00b")` is `1`, and interpolation
+  drops the tail (`"{"a\x00b"}tail"` is `"atail"`). Carry the byte count beside it and read the
+  bytes through a pointer. In a macro, `escape(expr.value)` on the constant's `das_string` keeps
+  them all; `peek` hands back a `string` and stops at the null.
 - **Escape a literal brace as `\{` / `\}`** - an unescaped `{` starts an interpolation even in
   JSON-looking text, and the errors point somewhere else entirely.
 - **A nested string literal inside an interpolation is written plain** - `"{s == "abc"}"` works;

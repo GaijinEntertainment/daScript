@@ -74,6 +74,10 @@ struct public JitCliOptions {
     @clarg_doc = "JIT (-exe): emit a startup check that compares every used handled-type's HOST-baked size + field offsets against the TARGET runtime annotation and warns on stderr — reporting ALL divergences — on any mismatch; a clean run prints nothing and the program runs either way. Diagnostic for the cross-compile C++ ABI layout class (wasm). Off by default."
     check_abi : Option<bool>
 
+    @clarg_name = "jit-sanitize"
+    @clarg_doc = "JIT: instrument the emitted IR - address runs LLVM's asan pass, undefined runs LLVM's bounds check on every access to an object of known size, which reports through the ubsan runtime; address,undefined combines them and none turns both off. With no list, a daslang built under a sanitizer instruments with its own. The code calls the sanitizer runtime, so the host daslang must be built with it (-DDAS_USE_SANITIZER); an -exe or -lib links with -fsanitize= for the host's sanitizers and the requested ones, through clang++ unless --jit-path-to-linker names another driver. Script-level pin: options jit_sanitize = \"address\""
+    sanitize : Option<string>
+
     @clarg_name = "jit-linker-string"
     @clarg_doc = "JIT: extra args inserted verbatim into the host linker cmd. POSIX/mingw drive a compiler driver (e.g. -fsanitize=undefined works); Windows-MSVC drives lld-link, so pass link.exe-style flags."
     linker_string : Option<string>

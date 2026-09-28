@@ -768,6 +768,10 @@ namespace das
         return context->allocateString(escapeString(str,false), at);
     }
 
+    char * builtin_das_string_escape ( const string & str, Context * context, LineInfoArg * at ) {
+        return context->allocateString(escapeString(str,false), at);
+    }
+
     char * builtin_string_unescape ( const char *str, Context * context, LineInfoArg * at ) {
         bool err = false;
         auto estr = unescapeString(str, &err, false);
@@ -808,10 +812,9 @@ namespace das
 
     // the materializing inverse of string(array<uint8>): a fresh owned copy of the bytes, no
     // terminator appended, so string(to_bytes(s)) round-trips every NUL-free string
-    TArray<uint8_t> builtin_string_to_bytes ( const char * str, Context * context, LineInfoArg * at ) {
+    static TArray<uint8_t> bytes_of ( const char * str, uint32_t len, Context * context, LineInfoArg * at ) {
         TArray<uint8_t> bytes;
         das_zero(bytes);
-        uint32_t len = stringLength(*context, str);
         if ( len ) {
             // exact reserve first: known final size, so the resize never grows - no pow2
             // slack on big strings, and no max_unreserved_size panic
@@ -820,6 +823,14 @@ namespace das
             memcpy(bytes.data, str, len);
         }
         return bytes;
+    }
+
+    TArray<uint8_t> builtin_string_to_bytes ( const char * str, Context * context, LineInfoArg * at ) {
+        return bytes_of(str, stringLength(*context, str), context, at);
+    }
+
+    TArray<uint8_t> builtin_das_string_to_bytes ( const string & str, Context * context, LineInfoArg * at ) {
+        return bytes_of(str.data(), uint32_t(str.size()), context, at);
     }
 
     bool delete_string ( char * & str, Context * context, LineInfoArg * at ) {
@@ -1181,6 +1192,8 @@ namespace das
                 SideEffects::none, "builtin_string_from_array")->args({"bytes","context","at"})->setTempStringResult();
             addExtern<DAS_BIND_FUN(builtin_string_to_bytes),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "to_bytes",
                 SideEffects::none, "builtin_string_to_bytes")->args({"str","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_das_string_to_bytes),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "to_bytes",
+                SideEffects::none, "builtin_das_string_to_bytes")->args({"str","context","at"});
             // dup
             addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
                 SideEffects::modifyArgumentAndExternal, "builtin_strdup")->arg("anything")->unsafeOperation = true;
@@ -1382,6 +1395,8 @@ namespace das
             // escaping etc
             addExternInline<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
                 SideEffects::none, "builtin_string_escape")->args({"str","context","at"})->setTempStringResult();
+            addExternInline<DAS_BIND_FUN(builtin_das_string_escape)>(*this, lib, "escape",
+                SideEffects::none, "builtin_das_string_escape")->args({"str","context","at"})->setTempStringResult();
             addExternInline<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",
                 SideEffects::none, "builtin_string_unescape")->args({"str","context", "at"})->setTempStringResult();
             addExternInline<DAS_BIND_FUN(builtin_string_safe_unescape)>(*this, lib, "safe_unescape",

@@ -105,8 +105,12 @@ Commands
      - Bundle the project as a redistributable standalone (exe +
        shared modules + assets) under ``<--out>/<bundle>/``.
        ``release wasm`` cross-compiles to a standalone web app instead.
-   * - ``update-index``
-     - Refresh every index entry's metadata from its source repo.
+   * - ``update-index [--commit | --dry-run]``
+     - Re-read every index entry's manifest from its source repo and
+       refresh the entry.  Opens a PR by default; ``--commit`` pushes
+       straight to the index's main branch; ``--dry-run`` prints the
+       diff and changes nothing.  Exits 1 when any package's clone or
+       manifest failed, after the rest refreshed.
    * - ``introduce [url]``
      - Submit a package to the index via PR (requires ``gh`` CLI).
    * - ``withdraw <name>``
@@ -119,7 +123,9 @@ accept the ``--global`` flag.
 Options:
 
 - ``--root <path>`` -- project root (default: current directory).
-- ``--force`` -- force reinstall even if already installed.
+- ``--force`` -- force reinstall even if already installed; also lets
+  ``install``, ``update`` and ``upgrade`` take a package whose manifest
+  declares other platforms only.
 - ``--global``, ``-g`` -- operate on global modules in
   ``{das_root}/modules/`` (see :ref:`daspkg_global_modules`).
 - ``--branch <name>``, ``-b`` -- install from a branch instead of a tag.
@@ -130,6 +136,8 @@ Options:
   ``check``).
 - ``--out <path>`` -- output directory for ``release`` (default:
   current directory).
+- ``--commit`` / ``--dry-run`` -- on ``update-index``, push the
+  refreshed index straight to main / print the diff and change nothing.
 - ``--quick`` -- on ``release``, accept a complete existing ``[tune]``
   sidecar instead of re-minting (``--paranoid`` is accepted for
   compatibility; the tuner runs one margin-decided protocol).
@@ -225,6 +233,15 @@ Manifest functions
      (both append)
    - ``package_min_sdk(version)`` -- declared minimum daslang SDK
      version (index metadata; not enforced at install time)
+   - ``package_platform(name)`` / ``package_platforms(names)`` -- a
+     platform the package installs and releases on: ``windows``,
+     ``darwin``, ``linux``, ``emscripten`` (``wasm`` and ``macos`` are
+     accepted spellings).  None declared means every platform.  On a
+     host outside the list ``install`` refuses with exit code 3 before
+     anything lands in ``modules/`` -- for a dependency on the chain
+     too -- and ``--force`` installs anyway; ``release wasm`` checks the
+     list against ``emscripten``.  A name outside the vocabulary fails
+     the manifest.
 
 ``resolve(sdk_version, version : string)``
    Optional.  Receives the user-requested version string -- the leading

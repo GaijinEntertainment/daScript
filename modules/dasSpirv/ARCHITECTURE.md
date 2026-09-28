@@ -81,9 +81,10 @@ debug -> decorations -> types+constants+global-vars (interleaved, define-before-
 deduplicated) -> functions.
 
 **Capture mechanism (dasGlsl analog).** dasGlsl's `fixup` sets
-`glob.init = new ExprConstString(value := text)`; ours builds an `ExprMakeArray` of
-`ExprConstUInt4` (one per four SPIR-V words - a quarter of the nodes every compiler pass walks)
-that `unpack_spirv_words` expands to the exact word count at global init, for an `array<uint>`
+`glob.init = new ExprConstString(value := text)`; ours builds one `ExprConstString` holding the
+blob's bytes, null bytes included - one node however long the blob, where an array literal costs
+a node per element on every compiler pass - that `unpack_spirv_words` copies out at the word
+count it is handed, since the runtime string ends at its first null, for an `array<uint>`
 global named by the annotation's
 `name=` argument, or `` "{func.name}`spirv" `` when it has none, beside a `{name}_reflect`
 companion holding the encoded reflection. `generate_spirv` is a standalone `[macro_function]`

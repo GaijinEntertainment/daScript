@@ -160,3 +160,11 @@ multi line string"
         t |> success(true)
     }
 }
+
+[test]
+def test_unicode_null_escape(t : T?) {
+    t |> run("\\u0000 and \\U00000000 decode to a null byte, not to nothing") @(t : T?) {
+        t |> equal(length("a\u0000b"), 1)
+        t |> equal(length("a\U00000000b"), 1)
+    }
+}

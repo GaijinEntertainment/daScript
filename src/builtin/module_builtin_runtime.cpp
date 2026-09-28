@@ -1856,6 +1856,10 @@ namespace das
         str = bs ? bs : "";
     }
 
+    void set_das_string_bytes(string & str, const TArray<uint8_t> & bytes) {
+        str.assign((const char *)bytes.data, bytes.size);
+    }
+
     void set_string_das(char * & bs, const string & str, Context * ctx, LineInfoArg * at ) {
         bs = ctx->allocateString(str, at);
     }
@@ -2902,6 +2906,9 @@ namespace das
         addExternInline<DAS_BIND_FUN(set_das_string)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_das_string")
                 ->args({"target","src"});
+        addExternInline<DAS_BIND_FUN(set_das_string_bytes)>(*this, lib, "clone",
+            SideEffects::modifyArgument,"set_das_string_bytes")
+                ->args({"target","bytes"});
         addExternInline<DAS_BIND_FUN(set_string_das)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_string_das")
                 ->args({"target","src","context","at"});
