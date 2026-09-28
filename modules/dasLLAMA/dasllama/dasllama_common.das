@@ -320,6 +320,15 @@ def register_embed_gpu_gate(fn : EmbedGpuGateFn) {
     g_embed_gpu_gate_set = true
 }
 
+//! the gate as a fixture finds it, put back by `register_embed_gpu_gate` or, where none was installed, `unregister_embed_gpu_gate`
+def embed_gpu_gate_installed() : bool => g_embed_gpu_gate_set
+
+def embed_gpu_gate() : EmbedGpuGateFn => g_embed_gpu_gate
+
+def unregister_embed_gpu_gate() {
+    g_embed_gpu_gate_set = false
+}
+
 // ===== gemma-4 PLE pre-step hooks (registered by dasllama_ple at [init]) =====
 // PLE needs Model/Session, so it requires this module back and cannot be required from here — the
 // forward path reaches its per-pass pre-step through these hooks, and the umbrella breaks the cycle.

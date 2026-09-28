@@ -271,7 +271,7 @@ def test_mtp_reject_rollback(t : T?) {
         }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
         if (!model_available(t, path)) return
-        var tr <- load_gguf(path, QuantMode.q8)
+        var tr <- load_model_(path, QuantMode.q8)   // the engine entry with the tokenizer, for the decoded streams below; load_gguf leaves it out
         tr.config.seq_len = 2048l
         with_pinned_kernels() {
             var want : array<int64>
@@ -325,6 +325,10 @@ def private probe_prefill(t : Model; var s : Session; npos, start_pos : int64) :
     return true
 }
 
+//! the embed probe: claims the prompt's embed rows without gathering them, so a planar model flagged a blob reads no blob plane before the prefill probe claims the window
+[unused_argument(t, s, npos, start_pos)]
+def private probe_embed(t : Model; s : Session; npos, start_pos : int64) : bool => true
+
 let private PROBE_SEAM = "mtp_seam_probe"   //! a fake decode override whose owner claims every model and whose seam seat is the probe
 let private PROBE_PREFILL = "mtp_prefill_probe"   //! a fake prefill override that serves every window without computing it
 
@@ -376,14 +380,22 @@ def private seam_row_kept(var tr : Model; serves, blob : bool) : bool {
         let decode0 = active_decode_override()
         let prefill0 = active_prefill_override()
         select_decode_override(PROBE_SEAM)
+        let embed_had = embed_gpu_gate_installed()
+        let embed0 = embed_gpu_gate()
         if (blob) {
             select_prefill_override(PROBE_PREFILL)
+            register_embed_gpu_gate(@@probe_embed)
             tr.metal_blob = true
         }
         g_probe_seam_serves = serves
         g_probe_seam_calls = 0l
         forward_prefill(tr, s, next, long_length(next), SEAM_PROMPT)
         tr.metal_blob = false
+        if (embed_had) {
+            register_embed_gpu_gate(embed0)
+        } else {
+            unregister_embed_gpu_gate()
+        }
         select_prefill_override(prefill0)
         select_decode_override(decode0)
         set_mtp_spec(spec0)

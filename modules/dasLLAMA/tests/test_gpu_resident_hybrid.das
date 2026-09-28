@@ -630,11 +630,14 @@ def private steps_alone(tr : Model; prompt, toks : array<int64>) : StepRows {
     let n = long_length(prompt)
     out.logits |> reserve(long_length(toks))
     out.h |> reserve(long_length(toks))
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(true)   //! the carry lands only while the round is on: the steps are the round's rows, so they run under its knob
     for (st in range64(long_length(toks))) {
         forward(tr, s, toks[st], n + st)
         out.logits |> emplace <| [for (x in s.logits); x]
         out.h |> emplace <| [for (x in s.mtp_h); x]
     }
+    set_mtp_spec(spec0)
     delete s
     return <- out
 }
