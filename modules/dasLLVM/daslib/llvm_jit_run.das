@@ -760,6 +760,8 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 if (!sres.main_ok) {
                     reset_codegen_accumulators()
                     finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
+                    to_log(LOG_ERROR, "LLVM EXE: no executable written for {output_path}\n")
+                    run.ok = false
                     return run
                 }
                 LINK_WHOLE_LIB = sres.link_whole_lib
@@ -810,8 +812,8 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                     di_finalize()
                     reset_codegen_accumulators()
                     finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
-                    // JIT failed. Couldn't create executable.
-                    // Still return true, codegen ran correctly.
+                    to_log(LOG_ERROR, "LLVM EXE: no executable written for {output_path}\n")
+                    run.ok = false
                     return run
                 }
             }
