@@ -34,7 +34,7 @@ struct DaspkgArgs {
     @clarg_doc = "Project root (default: current directory)"
     root : string = "."
 
-    @clarg_doc = "Force reinstall"
+    @clarg_doc = "Force reinstall; also installs a package whose manifest declares other platforms only"
     force : bool
 
     @clarg_name = "global"
@@ -84,6 +84,43 @@ struct DaspkgArgs {
     @clarg_name = "wasm-lib-dir"
     @clarg_doc = "Directory holding the wasm64 archives (liblibDaScript_runtime.a + liblibDasModule*.a); default <das_root>/web/output64/lib"
     wasm_lib_dir : string
+
+    @clarg_name = "commit"
+    @clarg_doc = "During `update-index`, commit the refreshed index straight to the index repo's main branch instead of opening a PR (needs push access)"
+    commit : bool
+
+    @clarg_name = "dry-run"
+    @clarg_doc = "During `update-index`, print the refreshed packages.json as a diff against the index and change nothing"
+    dry_run : bool
+}
+
+//! Exit code of an install refused because the manifest declares other platforms only; `index_sweep.cmake` reads the literal 3 as a skip, not a failure.
+let RC_UNSUPPORTED_PLATFORM = 3
+
+//! Refuse a package whose declared platforms leave out `platform`: `RC_UNSUPPORTED_PLATFORM`, or 1 for a name outside the vocabulary. An empty declaration passes, and `force` turns the refusal into a warning - the declaration is not a build probe.
+def platform_gate(pkg_name, platform : string; platforms : array<string>; force : bool) : int {
+    if (empty(platforms)) return 0
+    let bad = unknown_platforms_error("'{pkg_name}'", platforms)
+    if (!empty(bad)) {
+        to_log(LOG_ERROR, bad)
+        return 1
+    }
+    if (find_index(platforms, platform) >= 0) return 0
+    if (force) {
+        log("Warning: '{pkg_name}' declares {join(platforms, ", ")} only; installing on {platform} because of --force\n")
+        return 0
+    }
+    to_log(LOG_ERROR, "Error: '{pkg_name}' supports {join(platforms, ", ")} only; this is {platform} (--force installs it anyway)\n")
+    return RC_UNSUPPORTED_PLATFORM
+}
+
+//! `platform_gate` over the manifest in `pkg_dir`; a directory without one passes.
+def platform_gate(pkg_dir, pkg_name, platform : string; force : bool) : int {
+    let das_package = "{pkg_dir}/.das_package"
+    if (!fexist(das_package)) return 0
+    var meta : PackageMeta
+    if (!run_das_package_meta(das_package, meta)) return 0
+    return platform_gate(pkg_name, platform, meta.platforms, force)
 }
 
 // undo a failed install: drop the directory, then the lock entry it referred to (only if one
@@ -161,12 +198,12 @@ def cmd_list(root : string; json : bool = false; is_global : bool = false) {
     return 0
 }
 
-def install_local(root, pkg_name, source : string; var lf : LockFile; is_global : bool = false) {
+def install_local(root, pkg_name, source : string; var lf : LockFile; is_global : bool = false; force : bool = false) {
     var visiting : table<string; bool>
-    return install_local(root, pkg_name, source, lf, visiting, [is_global = is_global])
+    return install_local(root, pkg_name, source, lf, visiting, [is_global = is_global, force = force])
 }
 
-def install_local(root, pkg_name, source : string; var lf : LockFile; var visiting : table<string; bool>; is_global : bool = false; is_root : bool = true) {
+def install_local(root, pkg_name, source : string; var lf : LockFile; var visiting : table<string; bool>; is_global : bool = false; is_root : bool = true; force : bool = false) {
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let target = "{modules_dir}/{pkg_name}"
     // relative "./" or "../" paths are resolved against `root`, not the current working directory
@@ -178,6 +215,8 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; var visiti
         to_log(LOG_ERROR, "Error: local path '{full_source}' does not exist\n")
         return 1
     }
+    let gate_rc = platform_gate(full_source, pkg_name, get_platform_name(), force)
+    if (gate_rc != 0) return gate_rc
 
     mkdir(modules_dir)
 
@@ -193,7 +232,7 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; var visiti
     }
 
     // install dependencies before build (matches install_git ordering)
-    let dep_rc = install_dependencies(root, pkg_name, lf, visiting, is_global)
+    let dep_rc = install_dependencies(root, pkg_name, lf, visiting, is_global, force)
     if (dep_rc != 0) {
         rollback_partial_install(root, target, pkg_name, lf, is_global)
         return dep_rc
@@ -236,7 +275,7 @@ def resolve_dep_source(root, source : string) : string {
     return source
 }
 
-def install_dependencies(root, pkg_name : string; var lf : LockFile; var visiting : table<string; bool>; is_global : bool = false) { // nolint:STYLE038
+def install_dependencies(root, pkg_name : string; var lf : LockFile; var visiting : table<string; bool>; is_global : bool = false; force : bool = false) { // nolint:STYLE038
     // `visiting` is a STACK of pkgs currently in flight on the install chain, not
     // a "visited" set — we erase pkg_name before returning so a sibling dep
     // (diamond graph) sees it via has_package, not via the cycle path.
@@ -303,9 +342,9 @@ def install_dependencies(root, pkg_name : string; var lf : LockFile; var visitin
                 }
                 var drc = 0
                 if (is_local_path(dep_source)) {
-                    drc = install_local(root, dep_name, dep_source, lf, visiting, [is_global = is_global, is_root = false])
+                    drc = install_local(root, dep_name, dep_source, lf, visiting, [is_global = is_global, is_root = false, force = force])
                 } else {
-                    drc = install_git(root, dep_name, dep_source, "", lf, visiting, [is_root = false, is_global = is_global])
+                    drc = install_git(root, dep_name, dep_source, "", lf, visiting, [is_root = false, is_global = is_global, force = force])
                 }
                 if (drc != 0) {
                     rc = drc
@@ -365,12 +404,12 @@ def private log_rename_locked_hint() {
     to_log(LOG_ERROR, "  hint: a running process is holding the package's .shared_module - close daslang/daslang-live and retry\n")
 }
 
-def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_root : bool = true; is_global : bool = false; branch : string = "") {
+def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_root : bool = true; is_global : bool = false; branch : string = ""; force : bool = false) {
     var visiting : table<string; bool>
-    return install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, branch = branch])
+    return install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, branch = branch, force = force])
 }
 
-def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false; branch : string = "") { // nolint:STYLE037,STYLE038 — the install ladder: clone/resolve/checkout/move/lock/deps/build arms are one sequential flow
+def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false; branch : string = ""; force : bool = false) { // nolint:STYLE037,STYLE038 — the install ladder: clone/resolve/checkout/move/lock/deps/build arms are one sequential flow
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let tmp_dir = "{modules_dir}/.daspkg_tmp/{pkg_name}"
     let target_dir = "{modules_dir}/{pkg_name}"
@@ -480,6 +519,13 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
         }
     }
 
+    // step 2b: the manifest's platform declaration, before anything lands in modules/
+    let gate_rc = platform_gate(tmp_dir, pkg_name, get_platform_name(), force)
+    if (gate_rc != 0) {
+        force_rmdir(tmp_dir)
+        return gate_rc
+    }
+
     // step 3: move to final location
     log_debug("moving {tmp_dir} -> {target_dir}")
     if (fexist(target_dir)) {
@@ -494,7 +540,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
 
     // step 4: install dependencies
     log_debug("checking dependencies for '{pkg_name}'")
-    let dep_rc = install_dependencies(root, pkg_name, lf, visiting, is_global)
+    let dep_rc = install_dependencies(root, pkg_name, lf, visiting, is_global, force)
     if (dep_rc != 0) {
         rollback_partial_install(root, target_dir, pkg_name, lf, is_global)
         return dep_rc
@@ -570,7 +616,7 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
             return 0
         }
         if (is_local_path(source)) {
-            return install_local(root, pkg_name, source, glf, [is_global = true])
+            return install_local(root, pkg_name, source, glf, [is_global = true, force = force])
         } elif (is_index_name(source)) {
             let url = resolve_from_index(root, source)
             if (empty(url)) {
@@ -579,10 +625,10 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
             }
             log("Resolved '{source}' -> {url}\n")
             var visiting : table<string; bool>
-            return install_git(root, pkg_name, url, version, glf, visiting, [is_root = true, is_global = true, branch = branch])
+            return install_git(root, pkg_name, url, version, glf, visiting, [is_root = true, is_global = true, branch = branch, force = force])
         } else {
             var visiting : table<string; bool>
-            return install_git(root, pkg_name, source, version, glf, visiting, [is_root = true, is_global = true, branch = branch])
+            return install_git(root, pkg_name, source, version, glf, visiting, [is_root = true, is_global = true, branch = branch, force = force])
         }
     }
 
@@ -635,7 +681,7 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
     }
 
     if (is_local_path(source)) {
-        return install_local(root, pkg_name, source, lf)
+        return install_local(root, pkg_name, source, lf, [force = force])
     } elif (is_index_name(source)) {
         // resolve from index
         log("Installing {source} from {source}...\n")
@@ -646,10 +692,10 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
         }
         log("Resolved '{source}' -> {url}\n")
         var visiting : table<string; bool>
-        return install_git(root, pkg_name, url, version, lf, visiting, [is_root = true, branch = branch])
+        return install_git(root, pkg_name, url, version, lf, visiting, [is_root = true, branch = branch, force = force])
     } else {
         var visiting : table<string; bool>
-        return install_git(root, pkg_name, source, version, lf, visiting, [is_root = true, branch = branch])
+        return install_git(root, pkg_name, source, version, lf, visiting, [is_root = true, branch = branch, force = force])
     }
 }
 
@@ -738,7 +784,7 @@ def cmd_remove(root, name : string; is_global : bool = false) {
     return 0
 }
 
-def cmd_update(root, name : string; is_global : bool = false) { // nolint:STYLE037,STYLE038 — flat per-entry update arms (root/dep/local/global) mirror the lock schema
+def cmd_update(root, name : string; is_global : bool = false; force : bool = false) { // nolint:STYLE037,STYLE038 — flat per-entry update arms (root/dep/local/global) mirror the lock schema
     var lf : LockFile
     if (is_global) {
         if (!read_global_lock_file(lf)) {
@@ -803,7 +849,7 @@ def cmd_update(root, name : string; is_global : bool = false) { // nolint:STYLE0
     }
     remove_package(lf, name)
     var visiting : table<string; bool>
-    let install_rc = install_git(root, name, source, version, lf, visiting, [is_root = is_root, is_global = is_global])
+    let install_rc = install_git(root, name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, force = force])
     // check if install succeeded
     if (!has_package(lf, name)) {
         log_debug("install failed — restoring from {backup_dir}")
@@ -844,7 +890,7 @@ def private resolve_latest(source : string; var res : ResolveResult) : bool {
     return ok
 }
 
-def cmd_upgrade(root, name : string; is_global : bool = false) {
+def cmd_upgrade(root, name : string; is_global : bool = false; force : bool = false) {
     var lf : LockFile
     if (is_global) {
         if (!read_global_lock_file(lf)) {
@@ -899,13 +945,13 @@ def cmd_upgrade(root, name : string; is_global : bool = false) {
     }
     remove_package(lf, name)
     var visiting : table<string; bool>
-    let install_rc = install_git(root, name, source, "", lf, visiting, [is_root = is_root, is_global = is_global])
+    let install_rc = install_git(root, name, source, "", lf, visiting, [is_root = is_root, is_global = is_global, force = force])
     // check if deps need upgrading
-    upgrade_dependencies(root, name, lf, is_global)
+    upgrade_dependencies(root, name, lf, is_global, force)
     return install_rc
 }
 
-def upgrade_dependencies(root, pkg_name : string; var lf : LockFile; is_global : bool = false) {
+def upgrade_dependencies(root, pkg_name : string; var lf : LockFile; is_global : bool = false; force : bool = false) {
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let pkg_dir = "{modules_dir}/{pkg_name}"
     let das_package = "{pkg_dir}/.das_package"
@@ -920,7 +966,7 @@ def upgrade_dependencies(root, pkg_name : string; var lf : LockFile; is_global :
             let dep_source = resolve_dep_source(root, d.source)
             if (empty(dep_source)) continue
             var visiting : table<string; bool>
-            let drc = install_git(root, dep_name, dep_source, "", lf, visiting, [is_root = false, is_global = is_global])
+            let drc = install_git(root, dep_name, dep_source, "", lf, visiting, [is_root = false, is_global = is_global, force = force])
             if (drc != 0) {
                 to_log(LOG_ERROR, "Error: failed to install new dependency '{dep_name}' (rc={drc})\n")
             }
@@ -932,12 +978,12 @@ def upgrade_dependencies(root, pkg_name : string; var lf : LockFile; is_global :
         let dep_version = dep_entry.tag
         if (!satisfies_constraint(dep_version, d.version_constraint)) {
             log("  Dependency '{dep_name}' @ {dep_version} does not satisfy {d.version_constraint} — upgrading...\n")
-            cmd_upgrade(root, dep_name, is_global)
+            cmd_upgrade(root, dep_name, is_global, force)
         }
     }
 }
 
-def cmd_upgrade_all(root : string; is_global : bool = false) {
+def cmd_upgrade_all(root : string; is_global : bool = false; force : bool = false) {
     var lf : LockFile
     if (is_global) {
         if (!read_global_lock_file(lf)) {
@@ -958,7 +1004,7 @@ def cmd_upgrade_all(root : string; is_global : bool = false) {
     }
     var rc = 0
     for (name in names) {
-        let drc = cmd_upgrade(root, name, is_global)
+        let drc = cmd_upgrade(root, name, is_global, force)
         if (drc != 0) {
             rc = drc
         }
@@ -966,7 +1012,7 @@ def cmd_upgrade_all(root : string; is_global : bool = false) {
     return rc
 }
 
-def cmd_update_all(root : string; is_global : bool = false) {
+def cmd_update_all(root : string; is_global : bool = false; force : bool = false) {
     var lf : LockFile
     if (is_global) {
         if (!read_global_lock_file(lf)) {
@@ -987,7 +1033,7 @@ def cmd_update_all(root : string; is_global : bool = false) {
     }
     var rc = 0
     for (name in names) {
-        let drc = cmd_update(root, name, is_global)
+        let drc = cmd_update(root, name, is_global, force)
         if (drc != 0) {
             rc = drc
         }
@@ -2386,6 +2432,8 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
             bundle_name = base_name(get_full_file_name(root))
         }
     }
+    let gate_rc = platform_gate(bundle_name, get_platform_name(), pkg.platforms, false)
+    if (gate_rc != 0) return gate_rc
     // bundle_name flows from .das_package metadata (release_name() /
     // package_name()) — possibly authored by a downloaded dep. Reject path
     // separators / `..` so a hostile or typo'd name can't escape out_dir
@@ -3289,6 +3337,8 @@ def cmd_release_wasm(root : string; out_dir : string; wasm_lib_dir_override : st
     if (empty(bundle_name)) {
         bundle_name = (have_pkg && !empty(pkg.pkg_name)) ? pkg.pkg_name : base_name(get_full_file_name(root))
     }
+    let gate_rc = platform_gate(bundle_name, "emscripten", pkg.platforms, false)
+    if (gate_rc != 0) return gate_rc
 
     // Archive cache (`daspkg build --wasm` output) + the wasm64 runtime archive.
     let wasm_lib_dir = empty(wasm_lib_dir_override) ? "{get_das_root()}/web/output64/lib" : wasm_lib_dir_override

@@ -44,6 +44,7 @@ daslang utils/daspkg/main.das -- install --global dasImgui
 | `release [--out <dir>] [--paranoid \| --quick \| --fat <class>]` | Bundle project as a redistributable standalone. A plain release mints the tune sidecar on the build box and ships it; `--quick` inherits a complete existing one instead of minting; `--fat <class>` builds a fat exe from the class profiles - no mint, no sidecar |
 | `introduce [url]` | Submit a package to the index via PR |
 | `withdraw <name>` | Remove a package from the index via PR |
+| `update-index [--commit \| --dry-run]` | Re-read every index entry's manifest from its repo and refresh the entry. Default opens a PR on the index repo; `--commit` pushes straight to its main branch; `--dry-run` prints the diff and changes nothing. A package whose clone or manifest fails is reported and exits 1 after the rest refreshed |
 
 All package commands accept `--global` / `-g` to operate on global modules.
 
@@ -52,7 +53,7 @@ All package commands accept `--global` / `-g` to operate on global modules.
 | Flag | Description |
 |------|-------------|
 | `--root <path>` | Project root (default: current directory) |
-| `--force` | Force reinstall (overrides duplicate/version checks) |
+| `--force` | Force reinstall (overrides duplicate/version checks); also lets `install`, `update` and `upgrade` take a package whose manifest declares other platforms only |
 | `--global`, `-g` | Operate on global modules in `{das_root}/modules/` |
 | `--color` / `--no-color` | Enable/disable ANSI colored output |
 | `--verbose`, `-v` | Print debug details (git commands, resolve steps) |
@@ -63,6 +64,8 @@ All package commands accept `--global` / `-g` to operate on global modules.
 | `--wasm-lib-dir <path>` | Directory holding the wasm64 archives `release wasm` links (default `<das_root>/web/output64/lib`) |
 | `--paranoid` | Accepted for compatibility; the tuner runs one margin-decided protocol and this flag no longer changes the budget |
 | `--quick` | During `release`, accept a complete existing sidecar instead of re-minting (an incomplete or stale scope still mints - an exe never ships unmeasured). Forgetting it costs one re-mint, never correctness |
+| `--commit` | During `update-index`, commit the refreshed index straight to the index repo's main branch (needs push access) |
+| `--dry-run` | During `update-index`, print the refreshed `packages.json` as a diff and change nothing |
 | `--fat <class>` | During `release`, build a fat exe for a CPU class (`x86-avx2`, `x86-vnni512`, `x86-amx`, `arm-neon`, `arm-i8mm`, ...): the plain code targets the class, every `[tune]` kernel ships one clone per class the library has a profile for, and the exe picks the clone from cpuid at startup. No mint and no shipped sidecar; a kernel with no profile entry for the class refuses the release. `skills/tune.md`, *The fat exe* |
 
 ## Global modules
@@ -98,6 +101,7 @@ def package() {
     package_license("MIT")
     package_tag("networking")
     package_min_sdk("0.4")
+    package_platform("windows")     // optional; repeatable, or package_platforms(["windows", "wasm"]) - none declared = every platform
 }
 
 [export]
@@ -216,6 +220,20 @@ The global lock file (`{das_root}/modules/.daspkg_global.lock`) uses the same fo
 | `daslib/daspkg.das` | API module that `.das_package` scripts `require` |
 
 The **package runner** compiles `.das_package` scripts in-process using `compile_file` + `simulate` + `invoke_in_context`. It calls exported functions and reads state from `daslib/daspkg` module globals via `get_context_global_variable`.
+
+### Platform declaration
+
+A manifest's `package_platform` list is a declaration, not a build probe: it names the
+`get_platform_name()` values (`windows`, `darwin`, `linux`, `emscripten`; `wasm` and `macos` are
+accepted spellings) the author supports, and an empty list means every platform. `install`
+reads it from the cloned checkout before anything lands in `modules/` and refuses a host outside
+the list with exit code 3 (`RC_UNSUPPORTED_PLATFORM`), the same for a dependency on the chain;
+`--force` installs anyway with a warning, on `update` and `upgrade` too. `release` checks the
+root package against the host and `release wasm` against `emscripten`. The index carries the
+list as `platforms`, so `search` shows it and the nightly index sweep (`index_sweep.cmake`)
+skips an entry whose list leaves out the sweep host instead of failing on it; an install that
+exits 3 under the sweep is also a skip, flagged as a stale index entry until the next
+`update-index`. A name outside the vocabulary fails the manifest outright, under `--force` too.
 
 ### Wasm archive staging {#wasm-archive-staging}
 

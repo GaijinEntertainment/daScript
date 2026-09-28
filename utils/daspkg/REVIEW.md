@@ -7,24 +7,27 @@
 suite is `bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das` - fast, no
 network, interpreted.
 
-**A diff whose changed lines sit inside a function that runs a git command - in
-`commands.das`, `index.das`, or `utils.das` - also runs the integration suite, in the same
+**A diff whose changed lines sit inside `run_cmd` (`utils.das`), or inside a function whose
+body passes a `git` command line to `run_cmd`, also runs the integration suite, in the same
 change.** The integration suite is `bin/daslang dastest/dastest.das -- --test
 utils/daspkg/test_daspkg_git.das`, and it needs network (the `borisbat/daspkg-test-*` fixture
 repos).
 
-**A diff that changes `cmd_release` or `cmd_release_wasm`, or a function either one runs that
-writes a file into the bundle, chooses a file's name or location inside it, or builds the command
-that compiles or links an exe, states in the review which platform the release was run on.** The native release layout differs per platform (`.app` bundle
-vs flat directory), and the wasm release links with the emsdk installed on that platform.
+**A diff whose changed lines - in `cmd_release`, `cmd_release_wasm`, or a function either one
+runs - write a file into the bundle, choose a file's name or location inside it, or build the
+command that compiles or links an exe, runs that release and states in the review which
+platform it ran on.** The native release layout differs per platform (`.app` bundle vs flat
+directory), and the wasm release links with the emsdk installed on that platform.
 
 **A diff that adds a command also adds its `print_usage` line and its row in the `README.md`
 Commands table, in the same change.**
 
-**A diff that adds a `daspkg` command-line flag, or changes a flag's `@clarg_doc` text on its
-`DaspkgArgs` field, lands that annotation and the matching row in the `README.md` Options table
-in the same change** - the help text renders the annotation, so a field without one is a blank
-help line.
+**A diff that adds a `daspkg` command-line flag gives its `DaspkgArgs` field a `@clarg_doc`
+annotation and adds a row for the flag to the `README.md` Options table, in the same change** -
+the help text renders the annotation, so a field without one is a blank help line.
+
+**A diff that changes a flag's `@clarg_doc` text updates that flag's row in the `README.md`
+Options table to say the same thing, in the same change.**
 
 **A diff that adds a `.das_package` manifest function - a function `daslib/daspkg.das` (repo
 root) exports for a manifest body to call - also adds it to the `README.md` `.das_package`

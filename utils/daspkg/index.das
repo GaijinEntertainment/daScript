@@ -29,6 +29,7 @@ struct IndexEntry {
     last_updated : string
     has_native : bool
     dependencies : array<string>
+    platforms : array<string>
 }
 
 def get_index_cache_dir(root : string) : string {
@@ -110,7 +111,8 @@ def parse_index_json(text : string; var index : table<string; IndexEntry>) : boo
                     latest_version = val?.latest_version ?? "",
                     last_updated = val?.last_updated ?? "",
                     tags <- parse_string_array(val, "tags"),
-                    dependencies <- parse_string_array(val, "dependencies")
+                    dependencies <- parse_string_array(val, "dependencies"),
+                    platforms <- parse_string_array(val, "platforms")
                 )
                 let native_val = val?["has_native"]
                 if (native_val != null && native_val.value is _bool) {
@@ -169,6 +171,7 @@ struct PackageInfo {
     last_updated : string
     has_native : bool
     dependencies : array<string>
+    platforms : array<string>
 }
 
 def private make_package_info(name : string; entry : IndexEntry) : PackageInfo {
@@ -183,7 +186,8 @@ def private make_package_info(name : string; entry : IndexEntry) : PackageInfo {
         latest_version = entry.latest_version,
         last_updated = entry.last_updated,
         has_native = entry.has_native,
-        dependencies := entry.dependencies
+        dependencies := entry.dependencies,
+        platforms := entry.platforms
     )
 }
 
@@ -271,6 +275,9 @@ def private format_entry(name : string; entry : IndexEntry) {
     }
     if (!empty(entry.dependencies)) {
         cat_parts |> push("deps: {join(entry.dependencies, ", ")}")
+    }
+    if (!empty(entry.platforms)) {
+        cat_parts |> push("platforms: {yellow_str(join(entry.platforms, ", "))}")
     }
     if (!empty(cat_parts)) {
         print("    {join(cat_parts, " | ")}\n")
@@ -367,6 +374,7 @@ struct PackageManifest {
     min_sdk : string
     has_native : bool
     dependencies : array<string>
+    platforms : array<string>
 }
 
 def read_manifest(pkg_dir : string; var manifest : PackageManifest) : bool {
@@ -386,8 +394,14 @@ def read_manifest(pkg_dir : string; var manifest : PackageManifest) : bool {
     manifest.license = meta.license
     manifest.min_sdk = meta.min_sdk
     manifest.tags |> push_clone_from(meta.tags)
+    manifest.platforms |> push_clone_from(meta.platforms)
     if (empty(manifest.name)) {
         to_log(LOG_ERROR, "Error: .das_package missing package_name()\n")
+        return false
+    }
+    let bad_platforms = unknown_platforms_error(".das_package", manifest.platforms)
+    if (!empty(bad_platforms)) {
+        to_log(LOG_ERROR, bad_platforms)
         return false
     }
     if (empty(manifest.description)) {
@@ -446,13 +460,8 @@ def private entry_to_jv(name : string; entry : IndexEntry) : JsonValue? {
         }
     }
     if (!empty(entry.tags)) {
-        var arr : array<JsonValue?>
-        arr |> reserve(length(entry.tags))
-        for (t in entry.tags) {
-            arr |> push(JV(t))
-        }
         unsafe {
-            (obj.value as _object)["tags"] = JV(arr)
+            (obj.value as _object)["tags"] = JV(entry.tags)
         }
     }
     if (!empty(entry.min_sdk)) {
@@ -475,14 +484,14 @@ def private entry_to_jv(name : string; entry : IndexEntry) : JsonValue? {
             (obj.value as _object)["has_native"] = JV(true)
         }
     }
-    if (!empty(entry.dependencies)) {
-        var arr : array<JsonValue?>
-        arr |> reserve(length(entry.dependencies))
-        for (d in entry.dependencies) {
-            arr |> push(JV(d))
-        }
+    if (!empty(entry.platforms)) {
         unsafe {
-            (obj.value as _object)["dependencies"] = JV(arr)
+            (obj.value as _object)["platforms"] = JV(entry.platforms)
+        }
+    }
+    if (!empty(entry.dependencies)) {
+        unsafe {
+            (obj.value as _object)["dependencies"] = JV(entry.dependencies)
         }
     }
     return <- obj
@@ -498,6 +507,7 @@ def private manifest_to_entry(manifest : PackageManifest; url : string) : IndexE
         has_native = manifest.has_native)
     entry.tags |> push_clone_from(manifest.tags)
     entry.dependencies |> push_clone_from(manifest.dependencies)
+    entry.platforms |> push_clone_from(manifest.platforms)
     return <- entry
 }
 
@@ -610,6 +620,9 @@ def private entry_detail_lines(entry : IndexEntry) : array<string> {
     }
     if (!empty(entry.dependencies)) {
         details |> push("**Dependencies:** {join(entry.dependencies, ", ")}")
+    }
+    if (!empty(entry.platforms)) {
+        details |> push("**Platforms:** {join(entry.platforms, ", ")}")
     }
     return <- details
 }
@@ -915,8 +928,9 @@ def cmd_withdraw(root, name : string) : int {
 // ── update-index ────────────────────────────────────────────────────
 
 // Copy the manifest-owned fields onto an index entry; a blank manifest field keeps whatever
-// the index already carried.
-def private apply_manifest_to_entry(manifest : PackageManifest; var entry : IndexEntry) {
+// the index already carried, except platforms - there an empty declaration means every
+// platform, so the manifest always wins.
+def apply_manifest_to_entry(manifest : PackageManifest; var entry : IndexEntry) {
     entry.description = manifest.description
     if (!empty(manifest.author)) {
         entry.author = manifest.author
@@ -928,19 +942,19 @@ def private apply_manifest_to_entry(manifest : PackageManifest; var entry : Inde
         entry.min_sdk = manifest.min_sdk
     }
     if (!empty(manifest.tags)) {
-        delete entry.tags
-        entry.tags |> push_clone_from(manifest.tags)
+        entry.tags := manifest.tags
     }
     entry.has_native = manifest.has_native
     if (!empty(manifest.dependencies)) {
-        delete entry.dependencies
-        entry.dependencies |> push_clone_from(manifest.dependencies)
+        entry.dependencies := manifest.dependencies
     }
+    entry.platforms := manifest.platforms
 }
 
 // Refresh one entry from a shallow clone of its repo: manifest metadata, latest tag, last
-// commit date, then GitHub API fallbacks. False when the clone failed.
-def private refresh_index_entry(tmp_base, name, url : string; var entry : IndexEntry) : bool {
+// commit date, then GitHub API fallbacks. Returns the reason the refresh failed - the clone,
+// or a manifest that does not compile or read against this SDK - empty on success.
+def private refresh_index_entry(tmp_base, name, url : string; var entry : IndexEntry) : string {
     let tmp_dir = "{tmp_base}/{name}"
     if (fexist(tmp_dir)) {
         force_rmdir(tmp_dir)
@@ -949,14 +963,15 @@ def private refresh_index_entry(tmp_base, name, url : string; var entry : IndexE
     var output : string
     let exit_code = run_cmd("git clone --depth 1 \"{git_url}\" \"{tmp_dir}\"", output)
     if (exit_code != 0) {
-        print("  Warning: failed to clone {url}: {output}\n")
-        return false
+        return "clone failed: {strip(output)}"
     }
 
     var manifest : PackageManifest
-    if (read_manifest(tmp_dir, manifest)) {
-        apply_manifest_to_entry(manifest, entry)
+    if (!read_manifest(tmp_dir, manifest)) {
+        force_rmdir(tmp_dir)
+        return "manifest failed to read"
     }
+    apply_manifest_to_entry(manifest, entry)
 
     var tag_output : string
     let tag_exit = run_cmd("git -C \"{tmp_dir}\" describe --tags --abbrev=0", tag_output)
@@ -987,10 +1002,38 @@ def private refresh_index_entry(tmp_base, name, url : string; var entry : IndexE
     }
 
     force_rmdir(tmp_dir)
-    return true
+    return ""
 }
 
-def cmd_update_index(root : string) : int {
+// Print the refreshed index as a diff against the cached one; nothing is written to the cache.
+def private print_index_diff(cache_dir, new_text : string) {
+    let tmp_file = "{cache_dir}/../packages.refreshed.json"
+    fwrite(tmp_file, "{new_text}\n")
+    var output : string
+    run_cmd("git -C \"{cache_dir}\" diff --no-index -- packages.json \"{tmp_file}\"", output)
+    remove(tmp_file)
+    print(empty(strip(output)) ? "index unchanged\n" : "{output}\n")
+}
+
+// Commit the refreshed index on the index repo's main branch and push it. Nothing to commit
+// when the text matches what main already carries.
+def private commit_index_to_main(cache_dir, new_text, readme : string) : int {
+    prepare_index_branch(cache_dir, "main")
+    if (strip(fread("{cache_dir}/packages.json")) == strip(new_text)) {
+        print("index unchanged\n")
+        return 0
+    }
+    commit_index_change(cache_dir, new_text, readme, "Update index metadata")
+    var output : string
+    if (run_cmd("git -C \"{cache_dir}\" push origin main", output) != 0) {
+        to_log(LOG_ERROR, "Error: failed to push main: {output}\n")
+        return 1
+    }
+    print("index updated on main\n")
+    return 0
+}
+
+def cmd_update_index(root : string; commit : bool = false; dry_run : bool = false) : int {
     var index : table<string; IndexEntry>
     if (!fetch_index(root, index)) {
         to_log(LOG_ERROR, "Error: failed to fetch package index\n")
@@ -1009,26 +1052,40 @@ def cmd_update_index(root : string) : int {
     }
 
     var updated = 0
+    var failed : array<string>
     for (name, url in pkg_names, pkg_urls) {
         print("Updating {name}...\n")
-        if (refresh_index_entry(tmp_base, name, url, index[name])) {
+        let why = refresh_index_entry(tmp_base, name, url, index[name])
+        if (empty(why)) {
             updated ++
+        } else {
+            to_log(LOG_ERROR, "Error: {name}: {why}\n")
+            failed |> push(name)
         }
     }
 
     force_rmdir(tmp_base)
 
-    // write updated index
     let cache_dir = get_index_cache_dir(root)
-    let branch_name = "update-index"
-    prepare_index_branch(cache_dir, branch_name)
-
     let new_text = serialize_index(index)
-    commit_index_change(cache_dir, new_text, generate_index_readme_from_index(index), "Update index metadata")
-    let rc = push_and_pr(cache_dir, branch_name,
-        "Update index metadata",
-        "Refreshed metadata for {updated} package(s).")
+    var rc = 0
+    if (dry_run) {
+        print_index_diff(cache_dir, new_text)
+    } elif (commit) {
+        rc = commit_index_to_main(cache_dir, new_text, generate_index_readme_from_index(index))
+    } else {
+        let branch_name = "update-index"
+        prepare_index_branch(cache_dir, branch_name)
+        commit_index_change(cache_dir, new_text, generate_index_readme_from_index(index), "Update index metadata")
+        rc = push_and_pr(cache_dir, branch_name,
+            "Update index metadata",
+            "Refreshed metadata for {updated} package(s).")
+    }
     print("Updated {updated} package(s)\n")
+    if (!empty(failed)) {
+        to_log(LOG_ERROR, "Error: {length(failed)} package(s) did not refresh: {join(failed, ", ")}\n")
+        return 1
+    }
     return rc
 }
 
