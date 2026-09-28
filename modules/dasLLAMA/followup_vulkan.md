@@ -1959,3 +1959,21 @@ module) is independent and can land any time - it is pure structure.
     the 0.6.5 release (Boris's ruling): the host flow of every TTS seat - the stage ping-pong,
     the concat when the width differs, the head-block loop - is identical and could run once over
     an encoder interface, about 450 lines.
+
+116. **The speculative round has no Vulkan seat.** The round's four backend seats
+    (`register_mtp_spec_override`, `_spec_batch_`, `_round_`, `_seam_` in `dasllama_common.das`)
+    are filled by the Metal decode driver and the Metal gemma drafter alone; no Vulkan file names
+    MTP or NextN. An `-MTP-` GGUF loads on a Vulkan box as a plain model - the resident driver
+    serves its trunk and the NextN block is dead weight - and with `set_mtp_spec` or the server's
+    `--mtp` the draft step and the k+1-row verify run the CPU rail under the resident trunk, which
+    no ledger row rates. The work, in Metal's shape (`ARCHITECTURE_GPU_MTP.md`) on the resident
+    driver: the draft head in the arena with a one-row step through it at layer index `n_layers`
+    on its own slab; the verify as k+1 consecutive rows of one stream (the window chain at `pos`,
+    the mirror rolled back to `pos + a + 1` on a reject, or a same-slab k+1-row form of the token
+    command); the deltanet shadow region and its replay of rows `0..a` for the hybrids every Qwen
+    MTP carrier is; the landing of logits, per-row argmax and the post-norm hidden carry; then the
+    joint verify across streams and the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
+    Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at
+    depth 3 on the M5 Max), gemma-4-26B with the assistant drafter as the second round kind; the
+    invariance cells of `tests/test_mtp.das` and the scheduler arm are the parity, `lcpp_bench
+    --mtp-ab` on the pod the rate, a CUDA reference row per carrier beside it.
