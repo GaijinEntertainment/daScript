@@ -1964,9 +1964,13 @@ module) is independent and can land any time - it is pure structure.
     (`register_mtp_spec_override`, `_spec_batch_`, `_round_`, `_seam_` in `dasllama_common.das`)
     are filled by the Metal decode driver and the Metal gemma drafter alone; no Vulkan file names
     MTP or NextN. An `-MTP-` GGUF loads on a Vulkan box as a plain model - the resident driver
-    serves its trunk and the NextN block is dead weight - and with `set_mtp_spec` or the server's
-    `--mtp` the draft step and the k+1-row verify run the CPU rail under the resident trunk, which
-    no ledger row rates. The work, in Metal's shape (`ARCHITECTURE_GPU_MTP.md`) on the resident
+    serves its trunk and the NextN block is dead weight, its planes never uploaded - and with
+    `set_mtp_spec` or the server's `--mtp` the round never drafts: the four seats are gated on
+    `t.metal_blob`, and the resident overrides mark their logits done before the CPU tail that
+    saves the draft head's input hidden runs, so the round's cold gate trips every step and each
+    step is one plain resident step (the pod reads on == off at 0 drafts on Qwen3.5-0.8B-MTP;
+    `test_mtp.das`'s sessions carry f32 K/V and never reach the f16 mirror, so its cells pass on
+    the CPU rail). The work, in Metal's shape (`ARCHITECTURE_GPU_MTP.md`) on the resident
     driver: the draft head in the arena with a one-row step through it at layer index `n_layers`
     on its own slab; the verify as k+1 consecutive rows of one stream (the window chain at `pos`,
     the mirror rolled back to `pos + a + 1` on a reject, or a same-slab k+1-row form of the token
