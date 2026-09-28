@@ -121,6 +121,23 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
 - **`dasllama_par.das`** - `maybe_parallel_for` plus the dispatch counters its arms call at RUN
   time, so the module AOTs, and the single-thread gate those arms read (`set_single_thread_`, `ARCHITECTURE_RUNTIME.md#single-thread`). Threading policy (job counts, thresholds) belongs to the caller.
 
+### RoPE scaling is folded at the load {#rope-scaling-bake}
+
+The gguf loader folds a file's `rope.scaling.*` keys into two `Model` fields once: `linear`
+scales the position (`Config.rope_freq_scale`), `yarn` synthesizes the per-pair `rope_freqs`
+divisors over the NTK-by-parts band (`yarn_rope_freqs`) and multiplies the `1 + 0.1 ln(s)`
+magnitude into `Config.rope_mscale`. Every rope consumer - the CPU leaves, the cos/sin tables
+the GPU drivers read - takes those fields and never the metadata, and both run over the ROTATED
+span, so a partial-rotary head (`rope_dim` under `head_size`) takes the band and the factors
+like a full one. A serving override (`set_rope_scaling_override`, seeded from
+`DASLLAMA_ROPE_SCALING` / `ROPE_SCALE` / `YARN_ORIG_CTX`, the tools' `--rope-scaling` flags and
+the server's config keys) replaces the file's keys at the same fold, because the Qwen files ship
+none and enable YaRN as a setting. The fold is image BYTES, so `DlimCpuConfig.rope_override`
+carries the override in the identity and `image_lane_name` as a lane suffix: an image minted
+under it and one without coexist, and a load under the other never reinterprets either. A file
+that ships per-pair `rope_freqs` (Llama-3.1) refuses the override - two factor sets on one pair
+have no defined product.
+
 ### Architecture registrations {#architecture-registrations}
 
 Fourteen files registering nineteen names:

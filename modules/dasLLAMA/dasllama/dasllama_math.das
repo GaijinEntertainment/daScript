@@ -3393,6 +3393,18 @@ def rope_scaled_neox_tab_part(var v : float?; head_size, rot, n : int64; cosrow 
     }
 }
 
+//! YaRN's per-pair rope divisors over `rot` rotated dims: a pair under the NTK-by-parts band rotates at full
+//! frequency, a pair above it interpolates by `factor`, the band ramps between (pair j against the band's dims,
+//! as llama.cpp's rope_yarn_ramp reads i0/2); the 1 + 0.1 ln(factor) magnitude is the caller's
+[arch(at = "../ARCHITECTURE_ENGINE.md#rope-scaling-bake")]
+def yarn_rope_freqs(rot : int64; theta, factor, beta_fast, beta_slow : float; orig_ctx : int64) : array<float> {
+    let fscale = 1.0 / factor
+    let denom = 2.0 * log(theta)
+    let lo = max(0.0, floor(float(rot) * log(float(orig_ctx) / (beta_fast * 2.0 * PI)) / denom))
+    let hi = min(float(rot - 1l), ceil(float(rot) * log(float(orig_ctx) / (beta_slow * 2.0 * PI)) / denom))
+    return <- [for (j in range64(rot / 2l)); 1.0 / (fscale + (1.0 - clamp((float(j) - lo) / max(0.001, hi - lo), 0.0, 1.0)) * (1.0 - fscale))]
+}
+
 //! Dispatch RoPE by the model's convention: NEOX (Qwen2/Phi3/Gemma2) or default NORM (Llama).
 //! mscale is the YaRN/LongRoPE magnitude factor; both paths apply it (mistral3 = NORM + YaRN).
 def rope_apply(var vec : float?; pos, head_size, n : int64; theta, fscale : float; has_ff : bool; ff : float const?; neox : bool; mscale : float = 1.0) {

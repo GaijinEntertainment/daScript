@@ -12,6 +12,25 @@ require model_catalog           // gpu_env_master_off — the env rail's GPU mas
 require daslib/fio
 require strings
 
+//! The rope-scaling override both programs spell alike: an empty kind and zero numbers leave the env-seeded
+//! override alone, else each set flag replaces its field (the betas stay the env's); the loader checks the kind
+def apply_rope_scaling(kind : string; scale : float; orig_ctx : int64) {
+    if (empty(kind) && scale <= 0.0 && orig_ctx <= 0l) {
+        return
+    }
+    var o = rope_scaling_override()
+    if (!empty(kind)) {
+        o.kind = kind
+    }
+    if (scale > 0.0) {
+        o.scale = scale
+    }
+    if (orig_ctx > 0l) {
+        o.orig_ctx = orig_ctx
+    }
+    set_rope_scaling_override(o)
+}
+
 //! True when ``s`` is a quant spelling ``pick_quant`` maps deliberately (any case): the serving
 //! modes fp32/f32 | q8 | q4, plus the gguf FILE formats that serve under the kq tier —
 //! q8_0 / q4_0 / q4_k / q5_k / q6_k (_M/_S suffixes fine), mxfp4, f16 / bf16.

@@ -1861,44 +1861,27 @@
     (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9 ms) is the CPU token's largest bucket now, and the
     Flash-Next CPU tg128 board row is not re-minted yet.
 
-174. **A `.dlim` is named by its identity hash, so a mint purges what a person meant to keep.** The
-    image GC keeps one image per lane, lane = (quant, tag) with the tag `""` for planar and
-    `metal` for the blob flavor, and deletes a lane's other identities plus every version-stale
-    image on a mint; a served-form flip (`DASLLAMA_IQ3S_SERVE`) or a box-class change is a new
-    identity in the SAME lane, so it costs the other form a re-mint, and an `IMAGE_VERSION` bump
-    took the Metal image with it. Boris's direction: name the file by a readable lane -
-    `foo.gguf.metal.dlim`, `foo.gguf.cpu-arm-i8mm.dlim`, `foo.gguf.vulkan.dlim`, the served-form
-    override as a lane suffix - with the header's identity deciding current/stale and a stale file
-    re-baked in place (temp + rename), so flavors and classes coexist on one disk and in `ls`. Lane
-    = what a person deliberately switches between on one box; tune winners, pack and image versions,
-    backend pins stay identity and supersede. Until it lands, an image to keep across a mint is
-    renamed by hand off the `*.dlim` suffix the inventory globs. Done = the lane name, the in-place
-    re-bake, `dlim_gc_stale` keyed by lane name, the converter's `--list` and the server page
-    reading lanes, `test_model_image`'s GC cells over two lanes and a same-lane stale re-bake.
+175. **A cold image costs its first tokens, not its map.** The Flash-Next planar image maps in 81 ms
+    on a purged page cache and 65 ms warm; the decode profile's 128-token window (`decode_prof -n 128
+    -t 18`, the lut image with the head) reads 99.8 ms a token cold against 39.5 warm, and the whole
+    gap sits in the routed expert stacks - `mm_moe` 5.75 s against 0.85 s, `mm_moe_dn` 2.91 s
+    against 0.45 s - while the attention block, the mixers and the head read the same in both
+    windows, since every token touches their planes and the first fault warms them. Ten of 512
+    experts a token fault their pages in one by one over the window. The mint pass itself is 57 s
+    (planes write 44 s at 2.1 GB/s). `prefetch_map` (madvise WILLNEED / PrefetchVirtualMemory) on
+    the image map is SYNCHRONOUS on macOS: behind a purge it reads the 103 GB in 15.0 s at the map
+    and the window then runs warm (40.2 ms a token), so the cold process wall stays 41 s either way,
+    and a WARM map pays 2.5 s for the page walk in place of 65 ms - so it rides its own knob,
+    `DASLLAMA_PREFETCH_IMAGE`, off by default. Open = whether the server arms it (a process that runs
+    for hours pays 2.5 s once), and a pool-side sequential touch of the routed experts' stacks alone
+    (not the gather-only PLE table, not the planes the first token warms) as the arm that moves the
+    total: the window's random 4 KiB faults read a fraction of the image slower than a sequential
+    pass reads the stacks.
 
-175. **A cold image costs its first tokens, not its map.** The Flash-Next planar image maps in 67 ms
-    whether cached or not; a decode profile on an image nothing had touched for 90 minutes (the
-    page cache spent on two other 100 GB passes) ran 163 ms a token over its 128-token window, every
-    bucket ~3x, and the same command a minute later 40.3 ms. The mint pass itself is 57 s (planes
-    write 44 s at 2.1 GB/s), and a warm map-and-bench pass under a minute. `prefetch_map` (madvise
-    WILLNEED / PrefetchVirtualMemory, `DASLLAMA_PREFETCH`) is armed on the GGUF source mapping and
-    NOT on the `.dlim` mapping (`load_image`). Done = the cold case measured on purpose (`sudo purge`,
-    then the profile's first window against its second), the prefetch armed on the image map as the
-    first arm, a pool-side sequential touch of the hot planes (the routed experts' stacks, not the
-    gather-only PLE table) as the second if the advisory alone does not carry 100 GB, each against
-    the cold reading.
-
-176. **YaRN as a runtime setting, and on partial rotary.** The loader folds a file's YaRN metadata
-    into the per-pair `rope_freqs` divisor and the `1 + 0.1*ln(s)` mscale (gpt-oss, the Mistral 3
-    family ride it) but refuses partial rotary + YaRN and `yarn_log_multiplier != 0`, and the Qwen
-    files carry no `rope.scaling.*` keys at all - Qwen enables YaRN as a setting (factor 4 over the
-    original context, only when the context needs it), llama.cpp users through `--rope-scaling yarn
-    --rope-scale 4 --yarn-orig-ctx N`. Done = an override knob (env + CLI + server option) feeding
-    the same fold; the partial-rotary arm (the correction band over `rope_dim`, `rope_freqs` at
-    `rope_dim / 2`, the `_part` leaves passed the factors, the "partial => no factors" guarantee
-    retired, the GPU decode's partial-rope table indexing checked at the pair stride); a
-    partial+factors arm in `test_rope_apply`; parity on Flash-Next past 262K positions against
-    llama.cpp under the same flags. The `yarn_log_multiplier` arm waits for a DeepSeek-class carrier.
+176. **The `yarn_log_multiplier` YaRN arm.** The loader refuses a file whose
+    `rope.scaling.yarn_log_multiplier` is not 0 (the DeepSeek-2 lineage replaces the 0.1 in the
+    `1 + 0.1 ln(s)` magnitude with it, and the cancel-and-reapply the reference does around the
+    stored `attn_factor` is unwritten). Done = the arm, on a DeepSeek-class carrier that ships the key.
 
 177. **The CPU verify writes every row's n-gram ring slot, and the ring is exactly the conv
     window.** `ple_apply_row` lands row p's conv input at slot `(pos + p) % rows` before its own conv

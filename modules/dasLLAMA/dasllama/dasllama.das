@@ -507,16 +507,16 @@ def gpu_model_marks_init() : dasllama_gpu_resident::GpuModelMarks {
 }
 
 def dlim_inventory(gguf_path : string) : array<dasllama_image::DlimImageInfo> {
-    //! List the prepared images (``.dlim``) minted beside ``gguf_path`` — per image: file, bytes,
-    //! image version, identity, and a verdict (``CURRENT`` loads; ``STALE vN`` is an older image
-    //! version; ``OTHER`` a different bake configuration or box; ``FOREIGN`` a different flavor).
+    //! List the prepared images (``.dlim``) minted beside ``gguf_path`` — per image: file, lane (the file name's
+    //! ``metal`` / ``cpu-<class>`` / ``vulkan`` / family segment, "" for a hash-named legacy image), bytes, version,
+    //! identity, verdict (``CURRENT`` loads; ``STALE vN`` an older version; ``OTHER`` another bake config or box; ``FOREIGN`` another flavor).
     return <- dlim_inventory_(gguf_path)
 }
 
 def dlim_clean(gguf_path : string; apply : bool; keep_other : bool = false) : tuple<total : int; stale : int; removed : int; freed : int64> {
-    //! Garbage-collect ``STALE`` and ``OTHER`` images beside ``gguf_path`` (``FOREIGN``, another
-    //! flavor's, are always left alone): ``apply = false`` only reports, ``true`` removes;
-    //! ``keep_other`` spares ``OTHER``. Returns (total, stale, removed, freed bytes).
+    //! Garbage-collect ``STALE`` images beside ``gguf_path`` and hash-named legacy images of another identity; a
+    //! lane-named ``OTHER`` and every ``FOREIGN`` image stay (their own loads re-bake them in place). ``apply = false``
+    //! only reports, ``true`` removes; ``keep_other`` spares the legacy others too. Returns (total, stale, removed, freed bytes).
     return dlim_clean_(gguf_path, apply, keep_other)
 }
 

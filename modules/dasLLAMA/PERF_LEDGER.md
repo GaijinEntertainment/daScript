@@ -11,6 +11,22 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-28) - the Metal batch rail's hyper-connection arm (Qwen3.8-Flash-Next tg128@4):
+  the batched step opens the rows' wide residual, runs the mixers through the shared layer body,
+  gathers each row's n-gram heads on its own session and writes each row's conv ring in place.**
+  M5 Max, `lcpp_bench --ngl 99 --npl 4 --npl-plen 512 -n 128 -r 5 --for-debug-purposes` under the
+  box's scratch manifest: tg128 56.86 +/- 0.05 tok/s, tg128@4 119.58 +/- 2.51 summed (2.10x; reps
+  124.0 / 118.5 / 117.9 / 118.9 / 118.6 - the first rep of every run reads 3-5% high, a 3-rep read
+  lands at cv 3-9%, five reps hold cv 2%). The step is device-bound: `--prof` reads the batched step
+  at setup 0.08 / encode 1.5 / wait 31.7 ms (gpu 30.7) against the single step's 1.0 / 1.4 / 19.8
+  (gpu 18.9), so four rows cost 1.63x one row's GPU time and the host is 5% of the wall. The MoE
+  siblings on this box read the same shape (Qwen3-30B-A3B 165 -> 314, 1.9x; Qwen3.6-35B-A3B 128 ->
+  269, 2.1x): four rows' top-10 of 512 experts barely overlap, so the expert traffic scales with the
+  rows and only the dense and attention passes amortize. Prediction on record before the run:
+  140-180 summed (2.5-3.2x) - missed on the expert-traffic term. Parity: the batch probe holds
+  B=2 and B=4 to 5e-4 logits against the single step over 16 steps (0 argmax flips), and
+  `mtp-dff-3.8fn` pins it in the suite.
+
 - **LANDED (2026-09-27) - the Metal speculative round on the hyper-connection model
   (Qwen3.8-Flash-Next + its split shared head): the verify's rows carry the wide residual into the
   draft head, the n-gram side input takes the panel form with the accepted rows committed after the

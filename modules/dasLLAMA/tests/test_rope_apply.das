@@ -303,16 +303,20 @@ def private part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscale : 
     delete ff
 }
 
-def private tab_part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscale : float) {
+//! the partial-rotary table twin against the fp64 reference and the direct part leaf; `ff` empty = no per-pair
+//! factors, else rot/2 divisors (the YaRN fold on a qwen35-shaped head) that both forms must take alike
+def private tab_part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscale : float; ff : array<float>) {
     let n = hs * nh
+    let has_ff = !empty(ff)
+    let tag = has_ff ? " with factors" : ""
     var v : array<float>
     fill_vec(v, n)
-    var ff <- ff_none()
     var want : array<float>
-    ref_neox(v, want, pos, hs, rot, n, theta, fscale, mscale, ff, false)
+    ref_neox(v, want, pos, hs, rot, n, theta, fscale, mscale, ff, has_ff)
     var direct : array<float>
     copy_vec(v, direct, n)
-    rope_scaled_neox_part(unsafe(addr(direct[0])), pos, hs, rot, n, theta, fscale, false, null, mscale)
+    rope_scaled_neox_part(unsafe(addr(direct[0])), pos, hs, rot, n, theta, fscale, has_ff, ff_ptr(ff), mscale)
+    cmp_bar(t, direct, want, n, ROPE_BAR, "rope_scaled_neox_part{tag} hs={int(hs)} rot={int(rot)} pos={int(pos)}")
     var ct : array<float>
     var st : array<float>
     build_rope_tabs(ct, st, theta, fscale, mscale, ff, true, pos, 1l, rot)
@@ -321,15 +325,64 @@ def private tab_part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscal
     unsafe {
         rope_scaled_neox_tab_part(addr(got[0]), hs, rot, n, addr<float const?>(ct[0]), addr<float const?>(st[0]))
     }
-    cmp_bar(t, got, want, n, ROPE_BAR, "rope_scaled_neox_tab_part hs={int(hs)} rot={int(rot)} pos={int(pos)}")
-    cmp_bar(t, got, direct, n, TWIN_BAR, "rope_scaled_neox_tab_part twin of the direct part form hs={int(hs)} rot={int(rot)}")
+    cmp_bar(t, got, want, n, ROPE_BAR, "rope_scaled_neox_tab_part{tag} hs={int(hs)} rot={int(rot)} pos={int(pos)}")
+    cmp_bar(t, got, direct, n, TWIN_BAR, "rope_scaled_neox_tab_part{tag} twin of the direct part form hs={int(hs)} rot={int(rot)}")
     delete v
     delete got
     delete direct
     delete want
     delete ct
     delete st
-    delete ff
+}
+
+def private ff_ramp(half, period : int64) : array<float> {
+    return <- [for (j in range64(half)); 1.0 + 0.5 * float(j % period)]
+}
+
+[test]
+def test_rope_apply_part_factors(t : T?) {
+    for (pos in [1l, 37l, 4096l]) {
+        t |> run("partial rotary takes per-pair factors at pos {pos}: 64 of 256 (qwen35), 20 of 40") @(t : T?) {
+            var ff64 <- ff_ramp(32l, 5l)
+            var ff20 <- ff_ramp(10l, 5l)
+            tab_part_gate(t, pos, 256l, 64l, 2l, 10000000.0, 1.0, 1.139, ff64)
+            tab_part_gate(t, pos, 40l, 20l, 3l, 10000.0, 1.0, 1.0, ff20)
+            delete ff64
+            delete ff20
+        }
+    }
+}
+
+//! llama.cpp's YaRN band in fp64, as `rope_yarn_corr_dims` + `rope_yarn_ramp` spell it: the correction dims
+//! over the rotated span, the ramp against the PAIR index (i0 / 2), the divisor 1 / (fscale + ramp (1 - fscale))
+def private ref_yarn_divisors(rot : int64; theta, factor, beta_fast, beta_slow : double; orig_ctx : int64) : array<float> {
+    let denom = 2.0lf * log(theta)
+    let lo = max(0.0lf, floor(double(rot) * log(double(orig_ctx) / (beta_fast * 2.0lf * 3.14159265358979323846lf)) / denom))
+    let hi = min(double(rot - 1l), ceil(double(rot) * log(double(orig_ctx) / (beta_slow * 2.0lf * 3.14159265358979323846lf)) / denom))
+    let fscale = 1.0lf / factor
+    return <- [for (j in range64(rot / 2l)); float(1.0lf / (fscale + (1.0lf - clamp((double(j) - lo) / max(0.001lf, hi - lo), 0.0lf, 1.0lf)) * (1.0lf - fscale)))]
+}
+
+[test]
+def test_yarn_rope_freqs_band(tst : T?) {
+    tst |> run("yarn_rope_freqs: the NTK-by-parts band of llama.cpp's rope_yarn, spelled out in fp64") @(t : T?) {
+        let bar = 1.0e-5
+        for (geom in [(rot = 64l, theta = 10000000.0, factor = 4.0, orig = 32768l), (rot = 64l, theta = 10000000.0, factor = 4.0, orig = 262144l),
+                      (rot = 128l, theta = 150000.0, factor = 32.0, orig = 4096l), (rot = 20l, theta = 10000.0, factor = 2.5, orig = 512l)]) {
+            var ff <- yarn_rope_freqs(geom.rot, geom.theta, geom.factor, 32.0, 1.0, geom.orig)
+            var want <- ref_yarn_divisors(geom.rot, double(geom.theta), double(geom.factor), 32.0lf, 1.0lf, geom.orig)
+            t |> equal(long_length(ff), geom.rot / 2l, "one divisor a pair (rot {geom.rot})")
+            cmp_bar(t, ff, want, geom.rot / 2l, bar, "yarn_rope_freqs rot={int(geom.rot)} x{geom.factor} over {geom.orig}")
+            t |> success(abs(ff[0] - 1.0) < 1.0e-6 && abs(ff[geom.rot / 2l - 1l] - geom.factor) < 1.0e-5,
+                "the highest pair keeps full frequency, the lowest interpolates by the factor ({ff[0]} .. {ff[geom.rot / 2l - 1l]})")
+            // the poison: the band of a wider beta_fast sits elsewhere, so a ramp in the wrong units or at the wrong edge reads past the bar
+            var shifted <- ref_yarn_divisors(geom.rot, double(geom.theta), double(geom.factor), 4.0lf, 1.0lf, geom.orig)
+            t |> success(maxdiff(ff, shifted, geom.rot / 2l) > bar, "a shifted band lands outside the bar (maxdiff {maxdiff(ff, shifted, geom.rot / 2l)})")
+            delete ff
+            delete want
+            delete shifted
+        }
+    }
 }
 
 [test]
@@ -341,8 +394,10 @@ def test_rope_apply_part(t : T?) {
             part_gate(t, pos, 40l, 20l, 3l, 10000.0, 1.0, 1.0)
         }
         t |> run("rope_scaled_neox_tab_part at pos {pos}: the fp64 angles, and the direct twin") @(t : T?) {
-            tab_part_gate(t, pos, 256l, 64l, 2l, 1000000.0, 1.0, 1.0)
-            tab_part_gate(t, pos, 40l, 20l, 3l, 10000.0, 1.0, 1.0)
+            var none <- ff_none()
+            tab_part_gate(t, pos, 256l, 64l, 2l, 1000000.0, 1.0, 1.0, none)
+            tab_part_gate(t, pos, 40l, 20l, 3l, 10000.0, 1.0, 1.0, none)
+            delete none
         }
     }
 }
@@ -423,11 +478,7 @@ def private ff_gate(t : T?; pos, hs, nh : int64; neox : bool) {
     let n = hs * nh
     var v : array<float>
     fill_vec(v, n)
-    var ff : array<float>
-    ff |> resize(hs / 2l)
-    for (j in range64(hs / 2l)) {
-        ff[j] = 1.0 + 0.5 * float(j % 7l)
-    }
+    var ff <- ff_ramp(hs / 2l, 7l)
     var want : array<float>
     if (neox) {
         ref_neox(v, want, pos, hs, hs, n, 500000.0, 1.0, 1.0, ff, true)

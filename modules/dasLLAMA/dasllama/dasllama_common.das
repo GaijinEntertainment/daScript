@@ -1813,6 +1813,59 @@ def public iq3s_serve_lut() : bool {
     return get_metal_mode() == MetalMode.off && !moe_gpu_tier_installed()
 }
 
+//! The rope-scaling override a load bakes in place of the file's rope.scaling keys: `kind` "" keeps the
+//! file's, yarn / linear replace them, none drops them; a 0 number reads the file's value, else YaRN's
+//! defaults (beta 32 / 1, the original context = the file's context_length)
+struct public RopeScalingOverride {
+    kind : string = ""
+    scale : float = 0.0
+    orig_ctx : int64 = 0l
+    beta_fast : float = 0.0
+    beta_slow : float = 0.0
+}
+
+var private g_rope_override = RopeScalingOverride()
+
+[init]
+def private rope_override_from_env {
+    g_rope_override = RopeScalingOverride(kind = to_lower(g_env_engine.rope_scaling), scale = g_env_engine.rope_scale,
+        orig_ctx = g_env_engine.yarn_orig_ctx, beta_fast = g_env_engine.yarn_beta_fast, beta_slow = g_env_engine.yarn_beta_slow)
+}
+
+//! The tools' spelling of DASLLAMA_ROPE_SCALING / ROPE_SCALE / YARN_ORIG_CTX, set before the load; the loader checks the kind
+[arch(at = "../ARCHITECTURE_ENGINE.md#rope-scaling-bake")]
+def public set_rope_scaling_override(o : RopeScalingOverride) {
+    g_rope_override = o
+    g_rope_override.kind = to_lower(o.kind)
+}
+
+def public rope_scaling_override() : RopeScalingOverride => g_rope_override
+
+def private num_spelling(x : float) : string => fmt(":g", x)   // 4.0 reads "4", 2.5 stays "2.5"
+
+//! The override as an image identity reads it: "" when unset, else yarn<s>/<orig>[/<beta_fast>/<beta_slow>] | linear<s> | none
+def public rope_override_spelling() : string {
+    let o = g_rope_override
+    if (empty(o.kind) || o.kind == "none") {
+        return o.kind
+    }
+    let s = num_spelling(o.scale)
+    if (o.kind != "yarn") {
+        return "{o.kind}{s}"
+    }
+    let betas = (o.beta_fast > 0.0 || o.beta_slow > 0.0) ? "/{num_spelling(o.beta_fast)}/{num_spelling(o.beta_slow)}" : ""
+    return "yarn{s}/{o.orig_ctx}{betas}"
+}
+
+//! The override as an image lane suffix: "" when unset, else yarn<s> | linear<s> | norope
+def public rope_override_lane() : string {
+    let o = g_rope_override
+    if (empty(o.kind)) {
+        return ""
+    }
+    return o.kind == "none" ? "norope" : "{o.kind}{num_spelling(o.scale)}"
+}
+
 // ===== DlimConfiguration sources (dasllama_config) =====
 
 def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
@@ -1837,6 +1890,7 @@ def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
     c.kq_q50_native = g_kq_q50_native
     c.kq_q51_native = g_kq_q51_native
     c.iq3s_lut = iq3s_serve_lut()
+    c.rope_override = rope_override_spelling()
 }
 
 def private dlim_metal_source_impl(var c : DlimMetalConfig) : bool {

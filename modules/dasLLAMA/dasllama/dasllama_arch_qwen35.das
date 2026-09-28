@@ -452,8 +452,10 @@ def private attention_qwen35_gated_decode(t : Model; var s : Session; l : int64;
         }
     } else {
         unsafe {
-            rope_scaled_neox_part(addr(s.q[0]), pos, head_size, rot, qd, c.rope_freq_base, c.rope_freq_scale, false, null, c.rope_mscale)
-            rope_scaled_neox_part(addr(s.k[0]), pos, head_size, rot, kv_dim, c.rope_freq_base, c.rope_freq_scale, false, null, c.rope_mscale)
+            let has_ff = !empty(t.rope_freqs)   // YaRN's per-pair divisors over the rotated span, like the table twin's
+            let ffp = has_ff ? addr < float const? >(t.rope_freqs[0]) : null
+            rope_scaled_neox_part(addr(s.q[0]), pos, head_size, rot, qd, c.rope_freq_base, c.rope_freq_scale, has_ff, ffp, c.rope_mscale)
+            rope_scaled_neox_part(addr(s.k[0]), pos, head_size, rot, kv_dim, c.rope_freq_base, c.rope_freq_scale, has_ff, ffp, c.rope_mscale)
         }
     }
     prof_add("rope", ts_rope)

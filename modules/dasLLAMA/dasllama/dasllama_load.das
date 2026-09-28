@@ -2125,11 +2125,23 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
         t.config.rope_freq_base = gguf_has(m, "{arch}.rope.freq_base") ? gguf_f32(m, bytes, "{arch}.rope.freq_base") : 10000.0
-        // linear RoPE position scaling (Gemma3-4B: factor 8 on global layers); YaRN / LongRoPE
-        // variants keep their own handling (rope_freqs factors + attn_factor below)
-        if (gguf_has(m, "{arch}.rope.scaling.type") && gguf_str(m, bytes, "{arch}.rope.scaling.type") == "linear"
-                && gguf_has(m, "{arch}.rope.scaling.factor")) {
-            t.config.rope_freq_scale = 1.0 / gguf_f32(m, bytes, "{arch}.rope.scaling.factor")
+        // the file's rope.scaling keys, or the serving override in their place
+        let rope_ov = rope_scaling_override()
+        let sc_key = "{arch}.rope.scaling.type"
+        let rope_type = !empty(rope_ov.kind) ? rope_ov.kind : (gguf_has(m, sc_key) ? gguf_str(m, bytes, sc_key) : "")
+        let rope_src = empty(rope_ov.kind) ? "the file's {sc_key}" : "the DASLLAMA_ROPE_SCALING override"
+        if (rope_type != "" && rope_type != "none" && rope_type != "linear" && rope_type != "yarn") {
+            panic("dasLLAMA: rope scaling '{rope_type}' is not none | linear | yarn ({rope_src})")
+        }
+        // the Qwen families publish the recipe (factor 4 over the trained context); nobody validates it elsewhere
+        if (!empty(rope_ov.kind) && rope_ov.kind != "none" && !(arch |> starts_with("qwen"))) {
+            to_log(LOG_WARNING, "dasLLAMA: rope scaling {rope_type} overrides a {arch} file - no vendor publishes a YaRN recipe for this family (the Qwen cards do), so expect degraded output\n")
+        }
+        let fac_key = "{arch}.rope.scaling.factor"
+        let rope_factor = rope_ov.scale > 0.0 ? rope_ov.scale : (gguf_has(m, fac_key) ? gguf_f32(m, bytes, fac_key) : 0.0)
+        // linear RoPE position scaling (Gemma3-4B: factor 8 on global layers); YaRN folds below
+        if (rope_type == "linear" && rope_factor > 0.0) {
+            t.config.rope_freq_scale = 1.0 / rope_factor
         }
         // sliding layers' θ: metadata override when present, else configure's value; the 0 sentinel
         // (arch didn't set it) resolves to the global θ so per-layer selection is uniform
@@ -2161,15 +2173,15 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // Phi3 LongRoPE magnitude factor (attn_factor) scales the rope output; absent (=1.0) elsewhere
         let mskey = "{arch}.rope.scaling.attn_factor"
         t.config.rope_mscale = gguf_has(m, mskey) ? gguf_f32(m, bytes, mskey) : 1.0
-        // YaRN (gpt-oss: factor 32 over a 4096 original context). Folds into the existing per-pair
-        // machinery: synthesize rope_freqs[j] = 1/eff_j (factors DIVIDE θ), keep rope_freq_scale = 1,
-        // fold the magnitude correction 1 + 0.1·ln(factor) into rope_mscale.
-        if (gguf_has(m, "{arch}.rope.scaling.type") && gguf_str(m, bytes, "{arch}.rope.scaling.type") == "yarn") {
+        // YaRN (gpt-oss: factor 32 over a 4096 original context; the Qwen files as the override). Folds into
+        // the per-pair machinery: rope_freqs[j] = 1/eff_j over the rotated span (factors DIVIDE θ), rope_freq_scale
+        // stays 1, the magnitude correction 1 + 0.1·ln(factor) lands in rope_mscale
+        if (rope_type == "yarn") {
             if (!empty(t.rope_freqs)) {
                 panic("dasLLAMA: YaRN combined with per-pair rope factors is not supported")
             }
-            if (t.config.rope_dim > 0l && t.config.rope_dim != t.config.head_size) {
-                panic("dasLLAMA: partial rotary combined with YaRN is not supported")
+            if (rope_factor <= 0.0) {
+                panic("dasLLAMA: YaRN needs a scaling factor - the file carries no rope.scaling.factor; set DASLLAMA_ROPE_SCALE (llama.cpp --rope-scale)")
             }
             // yarn_log_multiplier replaces the 0.1 in the mscale correction (DeepSeek-2 lineage);
             // mistral3 files carry it as 0, where the cancel-and-reapply dance nets out to
@@ -2178,30 +2190,20 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             if (gguf_has(m, lmkey) && gguf_f32(m, bytes, lmkey) != 0.0) {
                 panic("dasLLAMA: {arch} YaRN yarn_log_multiplier != 0 is not supported")
             }
-            let yfactor = gguf_f32(m, bytes, "{arch}.rope.scaling.factor")
-            let yorig = (gguf_has(m, "{arch}.rope.scaling.original_context_length")
-                ? gguf_int(m, bytes, "{arch}.rope.scaling.original_context_length") : seq_len)
-            let fscale = 1.0 / yfactor
-            // NTK-by-parts correction band (beta_fast/slow from metadata,
-            // defaults 32/1): pairs below `lo` rotate at full frequency (extrapolate),
-            // above `hi` fully interpolate (mistral3: beta_fast 4 widens the band vs gpt-oss's 32)
+            let okey = "{arch}.rope.scaling.original_context_length"
+            let yorig = rope_ov.orig_ctx > 0l ? rope_ov.orig_ctx : (gguf_has(m, okey) ? gguf_int(m, bytes, okey) : seq_len)
+            // NTK-by-parts correction band (beta_fast/slow from the override, the metadata, or 32/1)
             let bfkey = "{arch}.rope.scaling.yarn_beta_fast"
             let bskey = "{arch}.rope.scaling.yarn_beta_slow"
-            let beta_fast = gguf_has(m, bfkey) ? gguf_f32(m, bytes, bfkey) : 32.0
-            let beta_slow = gguf_has(m, bskey) ? gguf_f32(m, bytes, bskey) : 1.0
-            if (beta_fast <= 0.0 || beta_slow <= 0.0) {   // divisors inside log() below — fail closed on a malformed file
+            let beta_fast = rope_ov.beta_fast > 0.0 ? rope_ov.beta_fast : (gguf_has(m, bfkey) ? gguf_f32(m, bytes, bfkey) : 32.0)
+            let beta_slow = rope_ov.beta_slow > 0.0 ? rope_ov.beta_slow : (gguf_has(m, bskey) ? gguf_f32(m, bytes, bskey) : 1.0)
+            if (beta_fast <= 0.0 || beta_slow <= 0.0) {   // divisors inside log() — fail closed on a malformed file
                 panic("dasLLAMA: YaRN beta_fast/beta_slow must be > 0 (got {beta_fast}/{beta_slow})")
             }
-            let hs = t.config.head_size
-            let denom = 2.0 * log(t.config.rope_freq_base)
-            let lo = max(0.0, floor(float(hs) * log(float(yorig) / (beta_fast * 2.0 * PI)) / denom))
-            let hi = min(float(hs - 1l), ceil(float(hs) * log(float(yorig) / (beta_slow * 2.0 * PI)) / denom))
-            t.rope_freqs |> resize(hs / 2l)
-            for (j in range64(hs / 2l)) {
-                let ramp = 1.0 - clamp((float(j) - lo) / max(0.001, hi - lo), 0.0, 1.0)  // ramp in pair units - j is already the pair index (i0 = 2j halved), matching lo/hi
-                t.rope_freqs[j] = 1.0 / (fscale + ramp * (1.0 - fscale))
-            }
-            t.config.rope_mscale *= 1.0 + 0.1 * log(1.0 / fscale)
+            let rot = t.config.rope_dim > 0l ? t.config.rope_dim : t.config.head_size
+            t.rope_freqs <- yarn_rope_freqs(rot, t.config.rope_freq_base, rope_factor, beta_fast, beta_slow, yorig)
+            t.config.rope_mscale *= 1.0 + 0.1 * log(rope_factor)
+            to_log(LOG_INFO, "dasLLAMA: rope scaling yarn x{rope_factor} over {yorig} positions, beta {beta_fast}/{beta_slow}, {rot} rotated dims ({rope_src})\n")
         }
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0

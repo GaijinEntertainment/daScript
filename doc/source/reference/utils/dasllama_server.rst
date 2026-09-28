@@ -301,6 +301,18 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - *auto*
      - MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (``streams = 1``) host-cached and leaves it off otherwise: at one stream the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x), at several streams the plain batched step is faster, and a device-resident slot (``--gpu vulkan``) keeps plain decode, since an armed round keeps every stream's cache on the host. ``true`` / ``false`` set it outright. It needs a model with an in-file NextN head (the ``-MTP-`` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. ``/v1/stats`` reports ``mtp_drafted`` / ``mtp_accepted``
+   * - ``--rope-scaling``
+     -
+     - *file*
+     - RoPE scaling override for the load: ``yarn`` | ``linear`` | ``none``; unset keeps the model file's own ``rope.scaling`` keys, ``none`` drops them (a file's per-pair factor tensors stay, as llama.cpp keeps them). ``yarn`` folds the NTK-by-parts frequency ramp and the ``1 + 0.1 ln(s)`` magnitude into the rope tables the way llama.cpp's ``--rope-scaling yarn`` does. The Qwen families publish the recipe (Qwen2.5-Instruct 7B and up, Qwen3, Qwen3-Next / 3.5 / 3.8: factor 4 over the trained context) and ship no scaling keys because static YaRN costs a little on short texts - arm it when a conversation needs the length; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (``model.gguf.metal-yarn4.dlim``), so the first load with it mints once. Per-model in a ``[[models]]`` roster: ``rope_scaling`` (config key ``rope_scaling``)
+   * - ``--rope-scale``
+     -
+     - *file*
+     - The scaling factor ``s`` (the context multiplier) for the override; unset reads the file's ``rope.scaling.factor``, and ``yarn`` needs one (config key ``rope_scale``)
+   * - ``--yarn-orig-ctx``
+     -
+     - *file*
+     - YaRN: the original training context the factor extends; unset reads the file's ``original_context_length``, else its ``context_length`` (config key ``yarn_orig_ctx``; llama.cpp's ``--yarn-orig-ctx``)
    * - ``--lcpp-bin``
      -
      - ---
@@ -349,7 +361,7 @@ model's GPU state lives in VRAM at a time (the tier drops and re-arms on
 switch; ``backend = "cpu"`` slots never evict the GPU owner). Blank keys
 inherit the flat defaults; ``backend`` is ``auto`` | ``cpu`` | ``gpu``, and
 per-entry ``ctx``, ``quant``, ``kv_dtype``, ``streams``, ``chunk``,
-``page_rows``, ``prefix``, ``mtp`` and ``image_mmproj`` override per model:
+``page_rows``, ``prefix``, ``mtp``, ``rope_scaling``, ``rope_scale``, ``yarn_orig_ctx`` and ``image_mmproj`` override per model:
 
 .. code-block:: toml
 

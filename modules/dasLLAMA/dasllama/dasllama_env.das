@@ -47,6 +47,21 @@ struct public EngineEnv {
     @clarg_doc = "Split NextN/MTP head GGUF to attach to the trunk being loaded (the split mtp-<model>.gguf form: its blk.<n_layers>.* tensors become the draft block; its copies of the trunk's tables are ignored). Default: the mtp-<trunk basename> sibling beside the trunk when present. The head rides the split-shard walk, so one prepared image carries trunk and head."
     mtp_head : string = ""
 
+    @clarg_doc = "RoPE scaling override for the load: yarn | linear | none; unset keeps the file's rope.scaling keys, none drops them (a file's per-pair factor tensors and attn_factor stay, as llama.cpp keeps them). yarn folds the NTK-by-parts frequency ramp and the 1 + 0.1 ln(s) magnitude into the rope tables (llama.cpp --rope-scaling yarn). The Qwen families publish the recipe (Qwen2.5-Instruct 7B and up, Qwen3, Qwen3-Next / 3.5 / 3.8: factor 4 over the trained context) and ship no scaling keys because static YaRN costs a little on short texts - arm it when a conversation needs the length; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image, under its own lane."
+    rope_scaling : string = ""
+
+    @clarg_doc = "The RoPE scaling factor s (the context multiplier) for the override; 0 = the file's rope.scaling.factor, and yarn needs one."
+    rope_scale : float = 0.0
+
+    @clarg_doc = "YaRN: the original training context the factor extends; 0 = the file's original_context_length, else its context_length (llama.cpp --yarn-orig-ctx)."
+    yarn_orig_ctx : int64 = 0l
+
+    @clarg_doc = "YaRN: the low correction dim beta_fast; 0 = the file's, else 32."
+    yarn_beta_fast : float = 0.0
+
+    @clarg_doc = "YaRN: the high correction dim beta_slow; 0 = the file's, else 1."
+    yarn_beta_slow : float = 0.0
+
     @clarg_doc = "Pin the matmul backend by name, bypassing the measured auto-selection."
     pin_backend : string = ""
 
@@ -83,6 +98,9 @@ struct public EngineEnv {
 
     @clarg_doc = "Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting."
     prefetch : bool = true
+
+    @clarg_doc = "Readahead of the prepared image at its map (madvise WILLNEED, synchronous on macOS): a purged page cache then reads the whole image at the SSD's rate before the first token - 103 GB in 15 s on the M5 - instead of paying 2.5x on the routed expert stacks over the first 128 tokens, and a WARM map pays ~2.5 s for the page walk in place of 65 ms. A serving process that runs for hours wants it; a bench, a test or a short session does not."
+    prefetch_image : bool = false
 }
 
 // Tri-state on purpose: the tier's effective defaults are computed from set_gpu_tier_want state
