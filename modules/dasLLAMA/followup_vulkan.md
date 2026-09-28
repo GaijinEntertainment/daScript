@@ -2005,3 +2005,18 @@ module) is independent and can land any time - it is pure structure.
     depth 3 on the M5 Max), gemma-4-26B with the assistant drafter as the second round kind; the
     invariance cells of `tests/test_mtp.das` and the scheduler arm are the parity, `lcpp_bench
     --mtp-ab` on the pod the rate, a CUDA reference row per carrier beside it.
+117. **The Vulkan MTP arc's declined folds are one dedup pass.** The arc's dupe audit folded the
+    seat lookup, the draft and verify decline ladders, the head prologue, the host timing block and
+    the test helpers it named duplicates; four sibling sets stayed by ruling, each a fold whose
+    evidence is the kernel cells and the hybrid file on the pod, in the shape of the TTS dedup pass:
+    (a) the head's K/V row seats as one more layer - `vk_rdec_head_sync_rows` and
+    `vk_rdec_head_read_rows` beside `vk_rdec_sync_kv` and the tier's forwarders differ on the head
+    (`l == n_layers`) alone, and the fold changes the seat signatures the Metal twin shares; (b) the
+    hybrid file's bar-and-control helpers `carries_within` and `head_rows_within` beside
+    `_resident_feed.das`'s `rows_within_control` - one form over a row list with the bar and the
+    control's rows passed in; (c) the hybrid file's feed collectors (`feed_under_spec` and the
+    per-cell copies of a session's logits and carry rows) - one collector over a step list; (d) the
+    reject cells' helpers (the rolled-back state read-back, the fresh-session control) shared with
+    `test_mtp.das`'s `reject_round_ids`. A kernel fold's identity gate is `harness/vk_spv_diff.das`
+    over `DASLLAMA_VK_SPV_DUMP` at the base and the tip; a test fold's is the file's cell count and
+    skip count unchanged on the pod under both mirrors.
