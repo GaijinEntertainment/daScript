@@ -33,7 +33,11 @@ require _resident_feed
 // (both conv-tail edges: the last window shorter than the taps); the K-quant twin (Q4_K_M) over one
 // and two windows; and the mixed twin (Q4_K_M with the deltanet out plane at Q8_0) over the same
 // two, whose recurrent layers take a K-quant x feed and a Q8_0 o feed - the routing witness below
-// holds that the x feed rode the coopmat tiles.
+// holds that the x feed rode the coopmat tiles. The NextN-headed twin (the -MTP- file) holds the
+// speculative carry the driver lands - the prefill's last row and every step's post-final-norm
+// hidden as `mtp_h`, its watermark as `mtp_h_pos1` - one row at a time and through the N-row command.
+// Every model cell skips interpreted, without its model file, or without the armed tier; the
+// K-quant cells skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`) too.
 
 let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit| - the deltanet bar test_deltanet.das holds too
 //! the K-quant bar on the f16 feed and mirror: CPU-vs-device rounding sits flat at 0.39-0.57 of a ~12.5 max logit at every step (the Q8 file 0.19-0.36), with no growth and the one-step-off control well past it
@@ -182,6 +186,170 @@ def test_gpu_resident_hybrid_kq_q8out(t : T?) {
     t |> run("Qwen3.5-0.8B-Q4_K_M-q8out: the same across two windows") @(t : T?) {
         window_pin(t)
         hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", HybridPlanes.kq_q8out)
+    }
+}
+
+let private MTP_CARRY_FILE = "Qwen3.5-0.8B-MTP-Q8_0.gguf"   //! the hybrid's NextN-headed twin: the driver lands the carry only on a model whose head reads it
+let private CARRY_STEPS = 4l
+let private CARRY_RIG_CTX = 4096l   //! the host sessions' context: the file's 262144 would size every session's K/V cache in gigabytes
+
+//! the speculative carry a session holds: `mtp_h`, the post-final-norm hidden of its last row, and `mtp_h_pos1`, that row's position plus one
+struct private Carry {
+    h : array<float>
+    pos1 : int64
+}
+
+def private carry_of(s : Session) : Carry => <- Carry(h <- [for (x in s.mtp_h); x], pos1 = s.mtp_h_pos1)
+
+//! `prompt` then `toks` through a fresh session a row at a time, the carry kept after the prefill and after each step
+def private carries_alone(tr : Model; prompt, toks : array<int64>) : array<Carry> {
+    var s <- create_session(tr, mirror_kv_dtype())
+    let n = long_length(prompt)
+    var out : array<Carry>
+    out |> reserve(long_length(toks) + 1l)
+    forward_prefill(tr, s, prompt, n, 0l)
+    out |> emplace <| carry_of(s)
+    for (st in range64(long_length(toks))) {
+        forward(tr, s, toks[st], n + st)
+        out |> emplace <| carry_of(s)
+    }
+    delete s
+    return <- out
+}
+
+//! every resident carry's watermark at its row's position plus one and its hidden within the deltanet bar of the CPU chain's,
+//! with the CPU chain's previous carry (one step off) past the bar
+def private carries_within(t : T?; what : string; nprompt : int64; gpu, cpu : array<Carry>) {
+    for (st in range64(long_length(cpu))) {
+        let tag = what + (st == 0l ? " prefill ({nprompt} tokens)" : " step {st - 1l}")
+        t |> equal(gpu[st].pos1, nprompt + st, "{tag}: the resident carry's watermark is its row's position plus one")
+        t |> equal(cpu[st].pos1, nprompt + st, "{tag}: the CPU chain's watermark")
+        t |> equal(long_length(gpu[st].h), long_length(cpu[st].h), "{tag}: one hidden row a side")
+        let bar = DN_LOGIT_BAR_REL * logits_maxabs(cpu[st].h)
+        let diff = logits_maxdiff(gpu[st].h, cpu[st].h)
+        to_log(LOG_INFO, "{tag}: carry maxdiff {diff} (bar {bar})\n")
+        t |> success(diff <= bar, "{tag}: the resident carry within {bar} of the CPU chain's post-norm hidden (maxdiff {diff})")
+        if (st > 0l) {
+            let off = logits_maxdiff(gpu[st].h, cpu[st - 1l].h)
+            to_log(LOG_INFO, "{tag}: one-step-off control maxdiff {off} (bar {bar})\n")
+            t |> success(off > bar, "{tag} control: the bar discriminates the carry one step off (maxdiff {off} vs bar {bar})")
+        }
+    }
+}
+
+def private mtp_carry_ready(t : T?) : bool {
+    if (!jit_enabled()) {
+        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+        return false
+    }
+    if (!model_available(t, path_join(models_dir(), MTP_CARRY_FILE))) return false
+    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
+        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
+        return false
+    }
+    return true
+}
+
+//! the -MTP- file at `regions` mirror regions on the resident route, the driver armed on it, the host sessions' context capped;
+//! both levers go back where they stood
+def private load_mtp_carrier(t : T?; regions : int64) : Model {
+    let regions0 = gpu_resident_regions_()
+    let route0 = gpu_want_resident()
+    set_gpu_resident_regions_(regions)
+    set_gpu_resident_route(true)
+    var tr <- load_model_(path_join(models_dir(), MTP_CARRY_FILE), QuantMode.q8)
+    set_gpu_resident_route(route0)
+    set_gpu_resident_regions_(regions0)
+    tr.config.seq_len = min(tr.config.seq_len, CARRY_RIG_CTX)
+    t |> equal(tr.config.n_layer_nextn, 1l, "the -MTP- file carries its NextN head")
+    t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid at {regions} regions (the load log names any decline)")
+    return <- tr
+}
+
+def private served_every_call(t : T?) {
+    var passes <- gpu_cpu_passes_()
+    t |> equal(length(passes), 0, "the device served every call: {passes}")
+    delete passes
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_carry(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: the resident prefill and each step land the post-norm hidden as the speculative carry, against the CPU chain's") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(40l)); 1000l + (i * 37l) % 5000l]
+            var toks <- [for (i in range64(CARRY_STEPS)); 2000l + (i * 53l) % 4000l]
+            let served0 = moe_gpu_resident_prefills()
+            var gpu <- carries_alone(tr, prompt, toks)
+            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
+            served_every_call(t)
+            moe_gpu_drop_model()   //! every later step is the CPU chain
+            var cpu <- carries_alone(tr, prompt, toks)
+            carries_within(t, "one row:", long_length(prompt), gpu, cpu)
+            delete gpu
+            delete cpu
+            delete prompt
+            delete toks
+        }
+        delete tr
+    }
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: two sessions batched through the N-row command land each row's carry, against each session alone on the CPU chain") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 2l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var pa <- [for (i in range64(40l)); 1000l + (i * 37l) % 5000l]
+            var pb <- [for (i in range64(57l)); 3000l + (i * 91l) % 6000l]
+            var fa <- [for (i in range64(CARRY_STEPS)); 2000l + (i * 53l) % 4000l]
+            var fb <- [for (i in range64(CARRY_STEPS)); 2500l + (i * 71l) % 4500l]
+            var sa <- create_session(tr, mirror_kv_dtype())
+            var sb <- create_session(tr, mirror_kv_dtype())
+            eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
+            eval(tr, sb, pb)
+            var ga : array<Carry>
+            var gb : array<Carry>
+            ga |> emplace <| carry_of(sa)
+            gb |> emplace <| carry_of(sb)
+            var ws <- create_batch_workspace(tr)
+            var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+            let steps0 = rdec_nrow_steps()
+            for (st in range64(CARRY_STEPS)) {
+                var toks <- [fa[st], fb[st]]
+                eval_batch(tr, ws, sess, toks)
+                delete toks
+                ga |> emplace <| carry_of(sa)
+                gb |> emplace <| carry_of(sb)
+            }
+            t |> equal(rdec_nrow_steps() - steps0, CARRY_STEPS, "every batched step went through the N-row command")
+            served_every_call(t)
+            sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
+            unsafe {
+                delete ws
+                delete sess
+            }
+            delete sa
+            delete sb
+            moe_gpu_drop_model()   //! every later step is the CPU chain
+            var ca <- carries_alone(tr, pa, fa)
+            var cb <- carries_alone(tr, pb, fb)
+            carries_within(t, "batched row A:", long_length(pa), ga, ca)
+            carries_within(t, "batched row B:", long_length(pb), gb, cb)
+            delete ga
+            delete gb
+            delete ca
+            delete cb
+            delete pa
+            delete pb
+            delete fa
+            delete fb
+        }
+        delete tr
     }
 }
 

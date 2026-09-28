@@ -11,6 +11,16 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **OPEN (2026-09-27) - the Vulkan resident driver's speculative carry: its landing plane and its
+  step cost on a NextN-headed model.** The landing plane (`RDec.hid_host`, host-visible, allocated
+  only where the driver is prepared with `carry`) is dim x 4 x nb bytes, nb = min(regions, 8):
+  Qwen3.5-0.8B-MTP (dim 1024) 4,096 bytes at one region and 32,768 at eight. Each step moves
+  dim x 4 bytes a row over the logits' path (4 KB a token on the 0.8B), and the last layer's
+  residual step leaves the q8 down GEMV's epilogue for the row-storing stamp, one dispatch more a
+  token. Owed from the pod: tg128 of `Qwen3.5-0.8B-MTP-Q8_0.gguf` against `Qwen3.5-0.8B-Q8_0.gguf`
+  (the same trunk, no carry) under `DASLLAMA_GPU=1`, with the `DASLLAMA_GPU_PROF=1` token profile
+  of each, so the step's delta is read rather than estimated.
+
 - **LANDED (2026-09-27) - the Vulkan TTS dedup pass: the Pocket row GEMV (`TtsPkGemvT`) folds
   its own subgroup reduction onto the shared `WgReduceBase`, and the pass's bench rows against
   master's.** Box: the pod - the RunPod RTX PRO 4500 Blackwell, Linux, the Vulkan backend - one

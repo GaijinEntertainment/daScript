@@ -2468,6 +2468,8 @@ struct RDec {
     xlog_pick_recorded : array<bool>
     pick_dev : uint64             //! the rows' argmax ids (`ClsArgmaxPart` then `ClsArgmaxFin`, after the epilogue), and their host landing
     pick_host : HostBuf
+    carry : bool                  //! the final site stores the rows' post-final-norm hidden in xb_dev, and every step lands it into hid_host beside the logits (a NextN-headed model)
+    hid_host : HostBuf            //! ... the landed rows: the token command's, or the window chain's last row at row 0
     pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
     s_pick_part, s_pick_fin : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback

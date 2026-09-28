@@ -727,7 +727,9 @@ and hidden stand, no re-forward): its code fixture runs plain, then again with
 `set_mtp_force_reject_every(3)` rejecting every third draft, both token-for-token against plain
 decode, the forced run's reject count asserted at a third of its drafts or more (the fixture's own
 reject count rides the kernels' summation order and has read zero). The 27B and GLM arms are
-large-tier (`DASLLAMA_PARITY_FULL=1`).
+large-tier (`DASLLAMA_PARITY_FULL=1`). Under `DASLLAMA_GPU=1` the file reaches the resident driver
+only with `DASLLAMA_VK_KV32=1`: its sessions are f32, and without the f32 mirrors every call passes
+to the CPU rails as `codec`.
 `test_mtp_snapshot.das` - model-free: the speculative round's deltanet rollback sizes its two
 snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB, past the
 `max_unreserved_size` guard) and restores the state from them.
@@ -837,6 +839,15 @@ mirror. Under `DASLLAMA_COOPMAT=mm` this file is the KHR arm's end-to-end gate: 
 planes prefill on the KHR kq tile (mode 3), and the 6% bar holds there too.
 `DASLLAMA_COOPMAT=sdot4` names the integer dot tile and forces the quant feed, so the 10% bar
 applies there.
+
+The NextN-headed twin is `Qwen3.5-0.8B-MTP-Q8_0.gguf`, the file whose head makes the driver land
+the speculative carry. `test_gpu_resident_hybrid_mtp_carry` holds the carry - `mtp_h`, the
+post-final-norm hidden, and `mtp_h_pos1`, its row's position plus one - after the resident prefill
+and after each of four resident steps against the CPU chain's: the watermark exact, the hidden
+within the 4% deltanet bar, and the one-step-off control past it.
+`test_gpu_resident_hybrid_mtp_carry_batched` holds the same for two sessions in two regions, both
+batched through the N-row command at every step (the step counter witnesses it), each row's carry
+against its session alone on the CPU chain.
 
 One cell is model-free: `test_kernel_census_by_name` holds that the census accessor panics on a
 kernel name nothing seeded, so a misspelt key cannot read as a zero count.

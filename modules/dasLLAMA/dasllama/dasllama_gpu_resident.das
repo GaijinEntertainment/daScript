@@ -681,6 +681,9 @@ def set_gpu_resident_regions_(n : int64) {
     g_rdec_regions_want = max(n, 1l)
 }
 
+//! The mirror regions the next load asks for (`set_gpu_resident_regions_`).
+def gpu_resident_regions_() : int64 => g_rdec_regions_want
+
 //! The mirror region `s` prefills and decodes in, or -1 when every region holds a live device-home session and the call must pass.
 def private rdec_bind_region(var s : Session) : int64 {
     var r = s.rdec_region
@@ -1162,7 +1165,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let rot = resident_rot(c)
     if (!rdec_prepare(c.n_layers, n_attn, dim, qd, kvd, hs, c.n_heads, resident_hidden(t), c.vocab_size, seq_cap, neox,
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
-                      rkdt == KVDtype.f16, c.q_gated, rot, dng, mir_elems, cos_elems, g_rdec_regions_want)) {
+                      rkdt == KVDtype.f16, c.q_gated, rot, dng, mir_elems, cos_elems, g_rdec_regions_want, rdec_carry_on(c))) {
         return rdec_decline("the device prepare declined (a kernel class or the mirror range - the tier's line above)")
     }
     rdec_note_weight_bytes(plan.weight_bytes)
@@ -1723,6 +1726,18 @@ def private rdec_dn_own_all(var s : Session; n_layers : int64) {
 
 var private @scratch g_rdec_one_tok : array<int64>   //! the token's id as the gather's one-row list
 
+//! the speculative carry lands on a NextN-headed model, where the tier installed its landing
+def private rdec_carry_on(c : Config) : bool => c.n_layer_nextn > 0l && rdec_carry_installed()
+
+//! The CPU tail's stash (`forward`, `forward_prefill_body`): row `row` of the post-final-norm rows the device landed becomes
+//! `s.mtp_h`, and `pos1` its watermark. A device-home session has no host rows the CPU round could draft or verify against.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
+def private rdec_stash_carry(c : Config; var s : Session; row, pos1 : int64) {
+    return if (!rdec_carry_on(c) || s.device_kv)
+    rdec_land_carry(row, s.mtp_h)
+    s.mtp_h_pos1 = pos1
+}
+
 // the resident whole-stack decode override (registered as "vulkan") — the mirror builds as positions arrive
 [hot_path]   // per token
 def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int64) : bool {
@@ -1793,6 +1808,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
     } else {
         rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, pos, cnt, s.pick_asked, s.logits))   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
     }
+    rdec_stash_carry(c, s, 0l, pos + 1l)
     g_rdec_regions[r].cnt = pos + 1l
     s.rdec_host_current = false   // the mirror advanced past any earlier hydration
     decode_override_logits_done()   // logits produced on device
@@ -1907,6 +1923,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
             rdec_prefill(s.x_b, cb, s.ple_inp, false, npos, start_pos, s.logits)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
         }
     }
+    rdec_stash_carry(c, s, 0l, start_pos + npos)
     if (g_env_gpu.gpu_prof) {
         to_log(LOG_INFO, "dasLLAMA: resident prefill host: {npos} rows, rope rows {us_rope} us, ple gather {us_gather} us, the driver's run {get_time_usec(ts_run) - us_gather} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
     }
@@ -2047,6 +2064,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         rdec_land_pick(s, g_rdec_picks[i])
         let pos = g_rdec_poss[i]
         let r = g_rdec_regs[i]
+        rdec_stash_carry(c, s, i, pos + 1l)
         if (!s.device_kv) {
             rdec_select_region(r)   //! the readback reads the selected region: this row's, bound above
             for (l in range64(c.n_layers)) {
@@ -2110,6 +2128,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
             rdec_batch_ple_row(t, ws, i)
         }
         let picked = rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, s.pick_asked, g_rdec_tmp)
+        rdec_stash_carry(c, s, 0l, pos + 1l)
         for (l in range64(c.n_layers)) {
             continue if (s.device_kv || layer_is_recurrent(c, l) || t.kv_src[l] != l)
             let kvd = layer_kv_dim(c, l)

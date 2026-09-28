@@ -49,7 +49,7 @@ def da_nsplit(n_heads, sm_count : int64) : int64 {
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64;
                     neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom;
-                    mir_elems, cos_elems, regions : int64) : bool {
+                    mir_elems, cos_elems, regions : int64; carry : bool) : bool {
     if (!vk_moe_init()) {
         return false
     }
@@ -122,8 +122,13 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.nb = min(regions, RD_NB_MAX)   //! the per-row planes hold a row per region the N-row command can step at once
     let nb = r.nb
     let wide = max(max(qd, hidden), dim)
+    r.log_xfer = g_gpu.xfer_fam >= 0
+    r.carry = carry
     r.x_dev = make_device_buf(dim * 4l * nb)
-    r.xb_dev = make_device_buf(dim * 4l * nb)
+    r.xb_dev = make_device_buf(dim * 4l * nb, carry && r.log_xfer)   //! the carry's rows leave on the transfer queue as the logits do
+    if (carry) {
+        r.hid_host = make_host_buf(dim * 4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
+    }
     r.xq_dev = make_device_buf(wide * nb)              // int8 quants, 1 byte/elem
     r.xs_dev = make_device_buf((wide / 32l) * 4l * nb)
     r.kv_dev = make_device_buf((qd + 2l * kv_dim) * 4l * nb)
@@ -176,7 +181,6 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     // (the qkn class twin reads its norm rows from the norms buffer directly, so nothing else rides the cos plane)
     r.cos_elems = cos_elems
     r.cos_dev = make_device_buf(r.cos_elems * 4l * nb)   //! a row's rope row each, the N-row command's rows behind the first
-    r.log_xfer = g_gpu.xfer_fam >= 0
     r.logits_dev = make_device_buf(vocab * 4l * nb, r.log_xfer)
     r.dummy = make_device_buf(256l)
     r.x_host = make_host_buf(dim * 4l * nb, false, [cached = true])
@@ -1246,9 +1250,9 @@ def private enc_ar_rq_stamp(stamp : RqStamp; raw : VkCommandBuffer; var h : VkHa
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_head_feed(L : RLayer) : tuple<fmt : int; storex : bool> => (fmt = L.recurrent ? L.fqkv : L.fq, storex = L.recurrent)
 
-//! the feed of the head after layer `l`: the next layer's, or the classifier's
+//! the feed of the head after layer `l`: the next layer's, or the classifier's - which stores the float row where the step lands the carry
 def private rd_next_feed(l : int64) : tuple<fmt : int; storex : bool>
-    => l + 1l < g_rd.n_layers ? rd_head_feed(g_rd.layers[l + 1l]) : (fmt = g_rd.cls_fmt_marker, storex = false)
+    => l + 1l < g_rd.n_layers ? rd_head_feed(g_rd.layers[l + 1l]) : (fmt = g_rd.cls_fmt_marker, storex = g_rd.carry)
 
 //! the rows form's fused add+rms+requant stamp writes Q8_0 blocks and no float row: it serves a head whose feed is that and nothing more
 def private rd_rows_fuse(feed : tuple<fmt : int; storex : bool>) : bool => !kq_sb(feed.fmt) && !feed.storex
@@ -1898,6 +1902,10 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64) {
             vhz_dep(raw, h, VHZ_LOG, 0u, true)   // compute -> transfer for the logits DMA
             cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
             cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l * nrows)
+            if (g_rd.carry) {
+                vhz_dep(raw, h, VHZ_XB, 0u, true)
+                cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hid_host.buf, dim * 4l * nrows)
+            }
             rd_ts(raw, "t:dma")   //! the logits' trip to host memory, billed apart: on a box whose host-visible memory is slow it is the step's largest interval
         }
         pfq_end(raw)
@@ -2014,7 +2022,7 @@ def private rd_warmup_check(wall_us : int64) {
 }
 
 //! the logits' trip to host memory on the transfer queue: the copy command for `nrows` rows (the rows' picks behind them), or
-//! under `picks_only` the picks alone, each recorded on first use
+//! under `picks_only` the picks alone, each recorded on first use; the carry's rows ride both
 def private rd_xlog(nrows : int64; picks_only : bool) : VkCommandBuffer {
     var raw = picks_only ? g_rd.xlog_pick_cmd[nrows] : g_rd.xlog_cmd[nrows]
     let recorded = picks_only ? g_rd.xlog_pick_recorded[nrows] : g_rd.xlog_recorded[nrows]
@@ -2025,6 +2033,9 @@ def private rd_xlog(nrows : int64; picks_only : bool) : VkCommandBuffer {
             cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
         }
         cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l * nrows)
+        if (g_rd.carry) {
+            cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hid_host.buf, g_rd.dim * 4l * nrows)
+        }
         vk_check(vkEndCommandBuffer(raw), null)
         if (picks_only) {
             g_rd.xlog_pick_recorded[nrows] = true
@@ -2296,6 +2307,17 @@ def private rd_land_one(pick_only : bool; var logits : array<float>) : int64 {
         memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
     }
     return -1l
+}
+
+//! the carry's landing (`RdecLandCarryFn`): row `row` of the post-final-norm rows the last token step landed, or the prefill's last row at row 0
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]   // per token, reached through the tier's registered seat
+def vk_rdec_land_carry(row : int64; var dst : array<float>) {
+    assert(g_rd != null && g_rd.carry, "vk_rdec_land_carry on a driver prepared without the carry")
+    assert(row >= 0l && row < g_rd.nb && long_length(dst) >= g_rd.dim, "vk_rdec_land_carry: the row is past the landed rows, or the destination is short of a row")
+    let row_bytes = g_rd.dim * 4l
+    unsafe {
+        memcpy(addr<void?>(dst[0]), reinterpret<void?>(reinterpret<uint8?>(g_rd.hid_host.mapped) + row * row_bytes), row_bytes)
+    }
 }
 
 //! the N-row landing: each row's logits at its pointer, or - where the pointer is null - its pick into `picks` (-1 on a landed row)

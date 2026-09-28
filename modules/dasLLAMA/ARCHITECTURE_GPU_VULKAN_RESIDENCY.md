@@ -251,6 +251,24 @@ the pod's (RTX PRO 4500, `-jit`, cm2): the `DASLLAMA_GPU_PROF=1` token profile o
 `benchmarks/lcpp_bench.das` for the step times and rates, `harness/vk_dma_probe.das` for the copy
 rates; `PERF_LEDGER.md`'s 2026-09-19 section is the record.
 
+**A NextN-headed model's steps land the speculative carry beside their logits.** The speculative
+round drafts from `Session.mtp_h`, the post-final-norm hidden of the last evaluated row, and runs
+cold unless `mtp_h_pos1` names the position it starts at (`ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`);
+the CPU tail stashes both after every decode and prefill, and the resident overrides return before
+that tail. So a driver prepared with `carry` - set where the model has a NextN head and the tier
+installed the landing (`install_rdec_carry`) - takes the row-storing form of the classifier feed's
+stamp at the token command's final site (`storex`: the normed float rows stay in `xb_dev` beside
+the Q8_0 blocks), and every step copies those rows home on the logits' path - in the transfer
+command, the picks-only twin included, or inside the token command on a device without the
+transfer family; the window chain's last window copies its last row's normed hidden out of the
+prefill plane beside its logits. The overrides then write the row into `mtp_h` and move
+`mtp_h_pos1` as the CPU tail does - a step's row to `pos + 1`, a prompt's last row to
+`start_pos + npos`, each batched row into its own session (`rdec_stash_carry`). A device-home
+session takes no carry: the CPU round has no host rows to draft or verify it against. The
+carry costs `dim x 4` bytes a row over the bus (4 KB a token on Qwen3.5-0.8B) and the last
+layer's fused down epilogue, which writes Q8_0 blocks and no float row, so that layer's residual
+step runs as its own dispatch; a model without a head records the command it always did.
+
 ### A call that passes to the CPU rails hydrates first {#resident-pass-hydrate}
 
 Every pass of a host-cached session's call to the CPU rails - whatever the reason - brings the

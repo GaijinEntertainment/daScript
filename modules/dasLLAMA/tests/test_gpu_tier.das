@@ -27,6 +27,7 @@ var private g_prepared_n_attn = -1l
 var private g_prepared_gated = false
 var private g_prepared_rot = -1l
 var private g_prepared_dn_cd = -1l
+var private g_prepared_carry = false
 var private g_dn_layer_l = -1l
 var private g_dn_layer_ba_off = -1l
 var private g_dn_ba_rows = -1l
@@ -43,13 +44,14 @@ def private d_reserve(fmt : int; cap_blocks : int64) : bool {
 def private d_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => 7l
 
 [unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, mir_elems, cos_elems, regions)]
-def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64) : bool {
+def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64; carry : bool) : bool {
     g_prepared = true
     g_prepared_kv16 = kv16
     g_prepared_n_attn = n_attn
     g_prepared_gated = q_gated
     g_prepared_rot = rot
     g_prepared_dn_cd = dn.cd
+    g_prepared_carry = carry
     return true
 }
 
@@ -144,6 +146,14 @@ def private d_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bo
     return vocab > 0l
 }
 
+var private g_carry_row = -1l
+
+//! the carry landing's double: the row it was asked for, written into the destination's first element
+def private d_land_carry(row : int64; var dst : array<float>) {
+    g_carry_row = row
+    dst[0] = float(row)
+}
+
 def private arm_on() : bool => true
 
 def private arm_off() : bool => false
@@ -172,8 +182,9 @@ def test_gpu_tier_contract(t : T?) {
         var ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 512l, 2l, 5), 7l)
         t |> success(rdec_prepare(2l, 1l, 64l, 64l, 64l, 8l, 8l, 128l, 100l, 32l, true, 1e-5, 1.0, false, true, true, 4l,
-            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true), 0l, 0l, 1l))
+            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true), 0l, 0l, 1l, true))
         t |> success(g_prepared, "prepare double must have run")
+        t |> success(g_prepared_carry, "the carry flag must forward to the double")
         t |> success(g_prepared_kv16, "kv16 must forward to the double")
         t |> equal(g_prepared_n_attn, 1l)
         t |> success(g_prepared_gated, "the gated-q flag must forward to the double")
@@ -278,6 +289,21 @@ def test_rdec_readback_reaches_the_doubles(t : T?) {
     t |> equal(g_read_bulk_npos, 7l)
     t |> equal(int(krow[1]), 7, "the bulk double writes back through kp")
     t |> equal(int(vrow[1]), 2, "the bulk double writes back through vp")
+}
+
+[test]
+def test_rdec_carry_seat(t : T?) {
+    t |> run("the speculative carry's landing installs separately and forwards the row and destination") @(t : T?) {
+        t |> success(!rdec_carry_installed(), "no carry landing before its install")
+        install_rdec_carry(@@d_land_carry)
+        t |> success(rdec_carry_installed(), "the carry install must flip its witness")
+        var dst : array<float>
+        dst |> resize(4)
+        rdec_land_carry(3l, dst)
+        t |> equal(g_carry_row, 3l)
+        t |> equal(dst[0], 3.0, "the double writes through the destination the forwarder handed it")
+        delete dst
+    }
 }
 
 [test]

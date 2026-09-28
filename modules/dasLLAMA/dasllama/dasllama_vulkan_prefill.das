@@ -1445,6 +1445,10 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pfq_ts(raw)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
+                if (g_rd.carry) {   //! the last row's normed hidden, the classifier's own feed row, lands at the carry's row 0
+                    vhz_dep(raw, h, VHZ_XB, 0u, true)
+                    cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * dim * 4l, g_rd.hid_host.buf, 0l, dim * 4l)
+                }
             }
             if (vk_prof()) {
                 to_log(LOG_INFO, "vk_rdpf hz: {h.disp} nodes, {h.barriers} barriers\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
