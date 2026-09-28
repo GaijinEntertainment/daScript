@@ -3009,9 +3009,11 @@ def test_vkd_q51_cm2_batch(t0 : T?) {
 //! the iq4nl32 cells' scale words: cool f16 d, two blocks a word, so the tile's f16 sums stay far from 65504
 def private iq4nl32_scale_words(totblk : int; mul : float) : array<uint> {
     var w : array<uint>
-    w |> resize((totblk + 1) / 2)
-    for (i in range(length(w))) {
-        w[i] = packHalf2x16(float2(mul * float(1 + (2 * i) % 7), mul * float(1 + (2 * i + 1) % 7)))
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        w |> resize((totblk + 1) / 2)
+        for (i in range(length(w))) {
+            w[i] = packHalf2x16(float2(mul * float(1 + (2 * i) % 7), mul * float(1 + (2 * i + 1) % 7)))
+        }
     }
     return <- w
 }
