@@ -230,6 +230,11 @@ def test_argument_contracts(t : T?) {
     t |> equal(check_suite_args(RunArgs(suite = "decode")), 2, "a model suite with neither --arm nor --full is refused")
     t |> equal(check_suite_args(RunArgs(suite = "decode", arm = "arm12")), 0, "a model suite with --arm runs")
     t |> equal(check_suite_args(RunArgs(suite = "decode", full = true)), 2, "--full is refused while the Metal build-out is in progress")
+    t |> equal(child_timeout(RunArgs(suite = "stocked")), 3600, "the stocked gate's child holds the large tier's tails")
+    t |> equal(child_timeout(RunArgs(changed = true)), 3600, "--changed runs the stocked files, so its child holds the same tails")
+    t |> equal(child_timeout(RunArgs(suite = "decode", full = true)), 3600, "the full gate's child too")
+    t |> equal(child_timeout(RunArgs(suite = "decode", arm = "arm12")), 1200, "an arm run keeps the arm-mode budget")
+    t |> equal(child_timeout(RunArgs(area = "tts")), 1200, "... and so does an area run")
 }
 
 def private das_exe() : string {

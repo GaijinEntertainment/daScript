@@ -620,6 +620,11 @@ def select_areas(cfg : RunArgs) : tuple<status : int; areas : array<string>> {
     return <- (status = -1, areas <- areas)
 }
 
+//! a child's dastest timeout in seconds: the full gate, the stocked gate and --changed (the stocked files of the areas a
+//! change reaches) hold the large tier's tails - the parity file alone runs past 20 min there, the llama resident file's
+//! CPU chains past 1200 s on a cold JIT cache; 1200 s is the arm-mode budget
+def child_timeout(cfg : RunArgs) : int => (cfg.full || cfg.suite == "stocked" || cfg.changed) ? 3600 : 1200
+
 //! the suite forms' argument contract: 0 = run, else main's exit code
 def check_suite_args(cfg : RunArgs) : int {
     if (cfg.no_tune && (cfg.suite == "image" || cfg.suite == "image-vulkan")) {   //! the arm runs with the image rail off, and the image suites ARE the rail
@@ -672,7 +677,7 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
     let win = get_platform_name() == "windows"
     let envs = child_envs(cfg, win, cfg.arm)
     let image_envs = child_envs(cfg, win, image_arms)
-    let tmo = (cfg.full || cfg.suite == "stocked") ? 3600 : 1200   //! the full gate and the stocked gate hold the large tier's tails (the parity file alone runs past 20 min there); 1200 s is the arm-mode budget
+    let tmo = child_timeout(cfg)
     let reps = max(cfg.nreps, 1)
     let das_exe = empty(cfg.das) ? get_command_line_arguments()[0] : cfg.das
     mkdir(dir_name(MODULE_CACHE))
