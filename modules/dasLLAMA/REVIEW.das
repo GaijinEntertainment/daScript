@@ -1401,6 +1401,7 @@ def private check_verify_decline_before_state_move {
         }
         return false
     }
+    return if (empty(fns))   //! a tree without the seat bodies (the walker fixtures, a build without the Vulkan seats) has no decline to order
     var moved = false
     for (name in VERIFY_SEAT_BODIES) {
         var seen = false
