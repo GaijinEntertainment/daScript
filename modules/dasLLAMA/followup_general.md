@@ -1899,3 +1899,22 @@
     retired, the GPU decode's partial-rope table indexing checked at the pair stride); a
     partial+factors arm in `test_rope_apply`; parity on Flash-Next past 262K positions against
     llama.cpp under the same flags. The `yarn_log_multiplier` arm waits for a DeepSeek-class carrier.
+
+174. **The CPU verify writes every row's n-gram ring slot, and the ring is exactly the conv
+    window.** `ple_apply_row` lands row p's conv input at slot `(pos + p) % rows` before its own conv
+    reads, in row order, so within one batch no row reads a later row's slot; but slot `pos + p`
+    aliases position `pos + p - rows`, the oldest tap of the conv at `pos + p - 1`. At depth 1 the
+    rejected row's slot is one no later conv reads; at depth 2 and past, a rejected row `p >= a + 2`
+    clobbers a slot the conv at the next real token (`pos + a + 1`) still reads, and
+    `mtp_state_snapshot` saves the window (`ple_prev`) but not the ring rows. The Metal verify takes
+    the prefill's panel form and commits the accepted rows alone (`commit_ple_rows`). Done = the CPU
+    round snapshots the k ring rows its verify overwrites and restores them on a reject (k x hc_dim
+    floats, `mtp_snap_ple` beside the window), or takes the panel form; a depth-2 forced-reject
+    leg on the Flash-Next counting fixture in `test_mtp.das` (the depth-1 leg cannot see it).
+
+175. **A CPU verify of two rows costs two decode steps on Flash-Next.** `ffn_moe_prefill` takes the
+    per-position GEMV route under `ATTN_NARROW_NPOS`, which took the verify from 77 to 67 ms, and the
+    rest of the 2x is the dense sites' q8q8 tile padding two rows to a four-token tile - the
+    speculative round on the CPU rail is slower than plain decode on this model (CPU tg128 with MTP
+    is a loss at 75% accept). Done = a two-token tile or a GEMV-pair route for the narrow verify's
+    dense sites, measured as the CPU `--mtp-ab` row.

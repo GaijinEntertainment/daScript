@@ -1340,14 +1340,15 @@ def dn_mirror_release(mr : DnMirror) {
     }
 }
 
-//! A region is [state planes][conv planes][the n-gram PLE conv ring] - the ring rides the recurrent
-//! mirror because it is the same kind of state: forward-only, per session, synced from the CPU prefix
+//! A region is [state planes][conv planes]; the n-gram PLE conv ring sits ONCE past every region - it rides
+//! the recurrent mirror because it is the same kind of state (forward-only, per session, synced from the CPU
+//! prefix), but the verify's shadow flip must never retire it: its rows land only for committed positions
 def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok : bool; buf : MetalBuffer?; state_off : uint64; conv_off : uint64; state_alt : uint64; conv_alt : uint64; ple_off : uint64> {
     let sbytes = uint64(long_length(s.dn_state)) * 4ul
     let cbytes = uint64(long_length(s.dn_conv_state)) * 4ul
     let pbytes = uint64(long_length(s.ple_conv_hist)) * 4ul
-    let rb = sbytes + cbytes + pbytes
-    let total = rb * uint64(regions)
+    let rb = sbytes + cbytes
+    let total = rb * uint64(regions) + pbytes
     if (sbytes == 0ul) {
         return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul, ple_off = 0ul)
     }
@@ -1387,7 +1388,7 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
             memcpy(reinterpret<void?>(dst), addr<void?>(s.dn_state[0]), sbytes)
             memcpy(reinterpret<void?>(dst + sbytes), addr<void?>(s.dn_conv_state[0]), cbytes)
             if (pbytes > 0ul) {
-                memcpy(reinterpret<void?>(dst + sbytes + cbytes), addr<void?>(s.ple_conv_hist[0]), pbytes)
+                memcpy(reinterpret<void?>(dst + rb * uint64(regions)), addr<void?>(s.ple_conv_hist[0]), pbytes)
             }
         }
         g_dn_mirrors[s.uid].cur = 0l
@@ -1399,7 +1400,7 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
     let base = uint64(mr.cur) * mr.region_bytes
     let alt = mr.regions == 2l ? uint64(mr.cur ^ 1l) * mr.region_bytes : base
     return (ok = true, buf = mr.buf, state_off = base, conv_off = base + mr.conv_off,
-        state_alt = alt, conv_alt = alt + mr.conv_off, ple_off = base + sbytes + cbytes)
+        state_alt = alt, conv_alt = alt + mr.conv_off, ple_off = mr.region_bytes * uint64(mr.regions))
 }
 
 // the step served and its command buffer completed — the GPU state now holds position pos's update

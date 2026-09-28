@@ -6125,11 +6125,11 @@ def private pf_ple_side(enc : MetalComputeEncoder?; t : Model; h : PfHc; p : PfP
             var bwq = upload_region(addr < void? >(t.fblob[t.ple_nquery_off]), uint64(hcd * 4l))
             var bwc = upload_region(addr < void? >(t.fblob[t.ple_nconv_off]), uint64(hcd * 4l))
             var gka = PleGateArgs(dim = uint(c.dim), hc = uint(c.hc_count), eps = c.norm_eps, pos0 = uint(start_pos), rows = uint(rows), direct = 1u)
-            enc_ple_gate(enc, h.bhc, p.bkey, p.bval, bwk, bwq, bwc, p.bgated, p.bcin, 0ul, gka, h.npos * c.hc_count)
+            enc_ple_gate(enc, h.bhc, 0ul, p.bkey, 0ul, p.bval, 0ul, bwk, bwq, bwc, p.bgated, 0ul, p.bcin, 0ul, gka, h.npos * c.hc_count)
             var bwt = upload_region(addr < void? >(t.fblob[t.ple_conv_off]), uint64(hcd * c.ple_conv_kernel * 4l))
             var cka = PleConvArgs(dim = uint(c.dim), hc = uint(c.hc_count), kern = uint(c.ple_conv_kernel), dil = uint(c.ple_ngram_size),
                 rows = uint(rows), pos0 = uint(start_pos), nrows = uint(h.npos), direct = 1u)
-            enc_ple_conv(enc, h.bhc, p.bgated, p.bcin, 0ul, bring, ring_base, bwt, cka, h.npos * hcd)
+            enc_ple_conv(enc, h.bhc, 0ul, p.bgated, 0ul, p.bcin, 0ul, bring, ring_base, bwt, cka, h.npos * hcd)
             for (r in range64(max(0l, h.npos - rows), h.npos)) {
                 enc_copy_row(enc, p.bcin, uint64(r * hcd * 4l), bring, ring_base + uint64(((start_pos + r) % rows) * hcd * 4l), h.u_hcd, hcd)
             }
@@ -6529,17 +6529,25 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let n_enc_layers = c.n_layers + (warm ? 1l : 0l)
     var bwm_res : MetalBuffer?    //!< warm: trunk residual save (x_b readback + the cls tail read it)
     var bwm_emb : MetalBuffer?    //!< warm: shifted embed rows
-    var bwm_cat : MetalBuffer?    //!< warm: [mp x 2dim] eh_proj input
-    var bwm_tmp : MetalBuffer?    //!< warm: rms_final intermediate
+    var bwm_cat : MetalBuffer?    //!< warm: [mp x 2dim] eh_proj input (a hyper-connection model: [mp_hc x 2dim], one row a stream)
+    var bwm_tmp : MetalBuffer?    //!< warm: rms_final intermediate (a hyper-connection model: the enorm rows repeated per stream)
+    var bwm_hc : MetalBuffer?     //!< warm, hyper-connections: the trunk's wide residual rows saved past the draft head's rows
     var u_dim2 : MetalBuffer?
     var u_wm_tot : MetalBuffer?
+    var u_wm_hc_tot : MetalBuffer?
+    let wm_rows = hcs.on ? npos * c.hc_count : npos   //! the eh_proj rows: one a position, or one a stream of a position
+    let mp_hc = ((wm_rows + 31l) / 32l) * 32l
     if (warm) {
         bwm_res = pool_acquire_pinned(g_pf_pool, g_dev, uint64(npos * dim * 4l))
         bwm_emb = pool_acquire_pinned(g_pf_pool, g_dev, uint64(npos * dim * 4l))
-        bwm_cat = pool_acquire_pinned(g_pf_pool, g_dev, uint64(mp * 2l * dim * 4l))
-        bwm_tmp = pool_acquire_pinned(g_pf_pool, g_dev, uint64(npos * dim * 4l))
+        bwm_cat = pool_acquire_pinned(g_pf_pool, g_dev, uint64(mp_hc * 2l * dim * 4l))
+        bwm_tmp = pool_acquire_pinned(g_pf_pool, g_dev, uint64(wm_rows * dim * 4l))
         u_dim2 = uniform_u32(uint(2l * dim))
         u_wm_tot = uniform_u32(uint(npos * dim))
+        if (hcs.on) {
+            bwm_hc = pool_acquire_pinned(g_pf_pool, g_dev, uint64(npos * hcd * 4l))
+            u_wm_hc_tot = uniform_u32(uint(npos * hcd))
+        }
         if (wide) {   //! this edge reads x_b host-side - split the borrow first
             ds_split_quantum(t, s, npos)
         }
@@ -6617,17 +6625,28 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     enc_copy_row(enc, bx, 0ul, bwm_res, 0ul, u_wm_tot, npos * dim)
                     var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), uint64(dim * 4l))
                     pf_enc_rms(enc, bwm_emb, 0ul, bw_en, bxb, u_dim, u_eps, npos)
-                    var bw_fin = upload_region(addr < void? >(t.fblob[t.rms_final_off]), uint64(dim * 4l))
-                    pf_enc_rms(enc, bx, 0ul, bw_fin, bwm_tmp, u_dim, u_eps, npos)
-                    var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
-                    pf_enc_rms(enc, bwm_tmp, 0ul, bw_hn, bxb2, u_dim, u_eps, npos)
-                    pf_enc_cat2(enc, bwm_cat, bxb, bxb2, u_dim, u_wm_tot, npos * dim)
-                    let bxh_cat = pf_cvt_panel(enc, bwm_cat, mp, 2l * dim, g_pf_skip == "act_cvt")
+                    if (hcs.on) {
+                        //! the carry is the wide residual row: its streams norm under hnorm, the enorm row repeats per stream,
+                        //! and one eh_proj GEMM over every (position, stream) row lands the draft's wide rows in place of the trunk's
+                        enc_copy_row(enc, hcs.bhc, 0ul, bwm_hc, 0ul, u_wm_hc_tot, npos * hcd)
+                        enc_hc_init(enc, bxb, bwm_tmp, u_dim, hcs.u_hc, u_wm_hc_tot, npos * hcd)
+                        var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(hcd * 4l))
+                        enc_hc_norm(enc, hcs.bhc, bw_hn, hcs.bxn, u_dim, u_eps, hcs.u_hc, wm_rows)
+                        pf_enc_cat2(enc, bwm_cat, bwm_tmp, hcs.bxn, u_dim, u_wm_hc_tot, npos * hcd)
+                    } else {
+                        var bw_fin = upload_region(addr < void? >(t.fblob[t.rms_final_off]), uint64(dim * 4l))
+                        pf_enc_rms(enc, bx, 0ul, bw_fin, bwm_tmp, u_dim, u_eps, npos)
+                        var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
+                        pf_enc_rms(enc, bwm_tmp, 0ul, bw_hn, bxb2, u_dim, u_eps, npos)
+                        pf_enc_cat2(enc, bwm_cat, bxb, bxb2, u_dim, u_wm_tot, npos * dim)
+                    }
+                    var bwm_out = hcs.on ? hcs.bhc : bx
+                    let bxh_cat = pf_cvt_panel(enc, bwm_cat, mp_hc, 2l * dim, g_pf_skip == "act_cvt")
                     if (t.mtp_ehproj_fmt == KqFmt.q8) {
                         let behp = blob_of(g_dev, t, t.mtp_ehproj_off)
-                        enc_gemm_mm(enc, behp.buf, behp.boff, bwm_cat, bx, u_dim2, u_dim, mp, dim, 0ul, 2l * dim, npos, bxh_cat)
+                        enc_gemm_mm(enc, behp.buf, behp.boff, bwm_cat, bwm_out, u_dim2, u_dim, mp_hc, dim, 0ul, 2l * dim, wm_rows, bxh_cat)
                     } else {
-                        pf_enc_kq_site_mm(enc, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, bwm_cat, bx, u_dim2, u_dim, mp, 0ul, bxh_cat, 2l * dim)
+                        pf_enc_kq_site_mm(enc, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, bwm_cat, bwm_out, u_dim2, u_dim, mp_hc, 0ul, bxh_cat, 2l * dim)
                     }
                 }
             }
@@ -7187,8 +7206,12 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         if (gpu_logits) {
             //! the caller samples from s.logits, so this closes the whole forward inside the GPU window
             unsafe {
-                if (hcs.on) {   //! the head mixer stands where the final norm would
-                    pf_hc_head(enc, t, hcs, bxf, u_dim, u_eps)
+                if (hcs.on) {   //! the head mixer stands where the final norm would - over the TRUNK's last wide row (the warm swapped the draft's in)
+                    var hcs_t = hcs
+                    if (warm) {
+                        hcs_t.bhc = bwm_hc
+                    }
+                    pf_hc_head(enc, t, hcs_t, bxf, u_dim, u_eps)
                 } else {
                     var bwfin = upload_region(addr < void? >(t.fblob[t.rms_final_off]), uint64(dim * 4l))
                     pf_enc_rms(enc, warm ? bwm_res : bx, uint64((npos - 1l) * dim * 4l), bwfin, bxf, u_dim, u_eps, 1l)
@@ -7291,8 +7314,16 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         }
         if (gpu_logits) {
             if (c.n_layer_nextn > 0l) {
-                //! forward_prefill's mtp_h contract - bxf holds the last row's post-final-norm hidden
-                stash_mtp_carry(s, metal_buffer_contents(bxf), uint64(dim * 4l), start_pos + npos)
+                //! forward_prefill's mtp_h contract - bxf holds the last row's post-final-norm hidden; a hyper-connection
+                //! model carries the trunk's last WIDE row instead (saved past the warm, else still in the residual rows)
+                if (hcs.on) {
+                    unsafe {
+                        let wrows = reinterpret<uint8?>(metal_buffer_contents(warm ? bwm_hc : hcs.bhc))
+                        stash_mtp_carry(s, reinterpret<void?>(wrows + uint64((npos - 1l) * hcd * 4l)), uint64(hcd * 4l), start_pos + npos)
+                    }
+                } else {
+                    stash_mtp_carry(s, metal_buffer_contents(bxf), uint64(dim * 4l), start_pos + npos)
+                }
             }
             prefill_override_logits_done()
         }
@@ -7398,10 +7429,14 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     if (warm) {
         pool_release(g_pf_pool, bwm_res, uint64(npos * dim * 4l))
         pool_release(g_pf_pool, bwm_emb, uint64(npos * dim * 4l))
-        pool_release(g_pf_pool, bwm_cat, uint64(mp * 2l * dim * 4l))
-        pool_release(g_pf_pool, bwm_tmp, uint64(npos * dim * 4l))
+        pool_release(g_pf_pool, bwm_cat, uint64(mp_hc * 2l * dim * 4l))
+        pool_release(g_pf_pool, bwm_tmp, uint64(wm_rows * dim * 4l))
         pool_release(g_pf_upool, u_dim2, 4ul)
         pool_release(g_pf_upool, u_wm_tot, 4ul)
+        if (hcs.on) {
+            pool_release(g_pf_pool, bwm_hc, uint64(npos * hcd * 4l))
+            pool_release(g_pf_upool, u_wm_hc_tot, 4ul)
+        }
     }
     if (bds != null) {
         pool_release(g_pf_pool, bds, bytes_ds)

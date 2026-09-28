@@ -11,6 +11,20 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-27) - the Metal speculative round on the hyper-connection model
+  (Qwen3.8-Flash-Next + its split shared head): the verify's rows carry the wide residual into the
+  draft head, the n-gram side input takes the panel form with the accepted rows committed after the
+  walk, and every row form picks the deltanet z activation through `enc_dn_zgate`.** M5 Max,
+  `lcpp_bench --ngl 99 --mtp-ab -r 3 --for-debug-purposes` under the box's scratch manifest, tg-real128
+  over eight prompts, greedy, depth 1: off 55.32 ± 0.49 tok/s, on 59.97 ± 0.96 (1.08x), 1323 of 1716
+  drafts accepted (77.1%; per prompt 55.6% to 98.4%, x0.94 to x1.23 - the round loses at 56%
+  accept and wins from ~68%). The counting probe is token-exact at depth 1, 2 and 4 (100% accept,
+  spec 2x plain wall) and the prose probe at depth 1 (77%, 0 flips). The same shape as the 9B's
+  round (`followup_metal.md` row 26): an accept rate this high buys 1.77 tokens a round and the
+  round returns a tenth of it, so the verify's two rows cost most of a plain step here too - the
+  stage split (`harness/mtp_ruler.das`) is the next lever. The CPU round on this model is a loss
+  (`followup_general.md` row 175).
+
 - **LANDED (2026-09-27) - IQ3_S served as a 16-entry codebook plane on the CPU rail (`iq3s4`,
   `ARCHITECTURE_ENGINE_FORMATS.md` sec.1.2e, `DASLLAMA_IQ3S_SERVE=auto|grid|lut`): every IQ3_S weight
   is a signed odd 1..15 times its block scale, so grid entry, qh bit and sign fold at transcode into

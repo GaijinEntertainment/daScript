@@ -355,6 +355,17 @@ def test_mtp_invariance_flashnext(t : T?) {
         let count <- [16l, 11l, 220l, 17l, 11l, 220l, 18l, 11l, 220l, 19l, 11l, 220l, 20l, 11l, 220l, 21l, 11l, 220l, 22l, 11l]
         with_pinned_kernels() {
             t |> invariance_ok(tr, count, 40, "counting-flashnext")
+            // the reject branch on demand: the n-gram window and the recurrent state both roll back past a rejected draft
+            let total = length(count) + 40
+            let ref_ids <- gen_plain(tr, count, total)
+            set_mtp_force_reject_every(3l)
+            var nd_forced = 0l
+            var na_forced = 0l
+            let forced_ids <- gen_spec(tr, count, total, nd_forced, na_forced)
+            set_mtp_force_reject_every(0l)
+            t |> success(ids_equal(ref_ids, forced_ids), "counting-flashnext forced: spec decode through the reject branch token-for-token vs plain")
+            t |> success(nd_forced >= 3l && nd_forced - na_forced >= nd_forced / 3l,
+                         "counting-flashnext forced: {nd_forced - na_forced} of {nd_forced} drafts rejected - reject branch covered")
         }
         delete tr
     }

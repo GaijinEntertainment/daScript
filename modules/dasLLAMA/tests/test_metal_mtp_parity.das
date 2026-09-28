@@ -252,13 +252,16 @@ def private served_twin(path : string; seq_cap : int64) : Model {
 // GPU-vs-GPU forced-feed envelope: two metal rails on the same feeds differ by kernel spelling
 // only (the standing kernel-swap gates sit near 0.01); 0.5 is the one-step decode gate's bar.
 let FF_TOL = 0.5
+//! the plain-MoE bar of the batch-rail fixtures (q30's): the rows and single GEMV forms round the router's
+//! logits apart, and a near-tie flips an expert - Flash-Next prose-a reads 0.89 with zero argmax flips
+let MOE_FF_TOL = 2.0
 //! the nine-row kq mul_mm stages x to half - a wider envelope than the f32-x GEMV forms', flips still zero
 let MM_TOL = 1.0
 let FF_STEPS = 48l
 let COUNT_STEPS = 40l
 
 // one forced-feed cell: engaged-or-skip, then the tolerance gate with its flip telemetry
-def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<int64>; depth : int64 = 1l) {
+def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<int64>; depth : int64 = 1l; tol : float = FF_TOL) {
     let st = ff_pair(tr, trg, prompt, FF_STEPS, true, depth)
     if (st.served == 0l) {
         t |> skip("metal decode declined (no Metal device?)")
@@ -266,8 +269,8 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
         t |> skip("{tag} {pn}: the spec rail never engaged ({st.cold} cold rounds) - nothing verified")
     } else {
         t |> success(st.cold == 0l, "{tag} {pn}: every round drafted+verified ({st.drafted} drafted, {st.cold} cold)")
-        t |> success(st.maxd <= FF_TOL, "{tag} {pn}: verify row0 vs plain step within {FF_TOL} over {st.steps} forced-feed steps (maxd {st.maxd}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max})")
-        t |> success(st.off_min > FF_TOL, "{tag} {pn} control: verify row0 against the PREVIOUS plain step lands outside {FF_TOL} at every step (smallest {st.off_min})")
+        t |> success(st.maxd <= tol, "{tag} {pn}: verify row0 vs plain step within {tol} over {st.steps} forced-feed steps (maxd {st.maxd}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max})")
+        t |> success(st.off_min > tol, "{tag} {pn} control: verify row0 against the PREVIOUS plain step lands outside {tol} at every step (smallest {st.off_min})")
         to_log(LOG_INFO, "metal mtp {tag} {pn} forced-feed: maxd={st.maxd} flips={st.flips}/{st.steps} widest_margin={st.flip_margin_max} drafted={st.drafted} cold={st.cold} one_step_off_min={st.off_min}\n")
     }
 }
@@ -634,7 +637,7 @@ def private run_fixture(t : T?; file, tag : string) {   // nolint:LINT012,LINT01
 }
 
 // the fixture's arms, one gate each
-def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, count : array<int64>) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, count : array<int64>; tol : float = FF_TOL) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         // control: plain vs plain on the GPU, the SAME feeds - the harness must read exactly zero
         if (arm_on(t, "mtp-ctrl-{tag}")) {
@@ -648,8 +651,8 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
 
         // forced-feed: the verify's row 0 vs the plain step, identical tokens every round
         if (arm_on(t, "mtp-ff-{tag}")) {
-            ff_cell(t, tr, trg, tag, "prose-a", prose_a)
-            ff_cell(t, tr, trg, tag, "prose-b", prose_b)
+            ff_cell(t, tr, trg, tag, "prose-a", prose_a, 1l, tol)
+            ff_cell(t, tr, trg, tag, "prose-b", prose_b, 1l, tol)
         }
 
         // the batch-rail same-slab verify (the gemma drafter's verify) vs plain steps, GPU-vs-GPU
@@ -660,8 +663,8 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
         // depth N under forced reject: every round verifies k+1 rows and replays row 0 from the
         // pre-verify recurrent state - the rollback path exercised on every single round
         if (arm_on(t, "mtp-ffk-{tag}")) {
-            ff_cell(t, tr, trg, "{tag} k2", "prose-a", prose_a, 2l)
-            ff_cell(t, tr, trg, "{tag} k4", "prose-b", prose_b, 4l)
+            ff_cell(t, tr, trg, "{tag} k2", "prose-a", prose_a, 2l, tol)
+            ff_cell(t, tr, trg, "{tag} k4", "prose-b", prose_b, 4l, tol)
         }
 
         // counting: free-running speculation == free-running plain, token for token, at depth 1
@@ -737,6 +740,55 @@ def test_metal_mtp_parity_qwen38_split_head(t : T?) {
         set_mtp_head_path(head)
         run_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "3.8-27b")
         clear_mtp_head_path()
+    }
+}
+
+// A served-only fixture: the arms run GPU against GPU on the served twin alone (the form every arm
+// here takes - the planar model only lends its config and tokenizer), so a carrier whose planar and
+// blob forms would not fit the box together still gets the rail's gates. The twin maps under the rig's
+// own identity (no wscale or backend pin), so the fixture mints no image of its own.
+def private run_fixture_served(t : T?; file, head, tag : string; tol : float) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), file)
+        let hpath = path_join(models_dir(), head)
+        if (!model_available(t, path) || !model_available(t, hpath)) {
+            return
+        }
+        set_mtp_spec(true)
+        set_mtp_head_path(hpath)
+        var trg <- served_twin(path, 512l)
+        clear_mtp_head_path()
+        if (!trg.metal_blob || trg.config.n_layer_nextn <= 0l) {
+            t |> skip("{file}: the served image is not a metal-blob NextN carrier on this box - GPU arms have nothing to run")
+            set_mtp_spec(false)
+            delete trg
+            return
+        }
+        var prose_a <- encode(trg, PROSE_A, true, false)
+        var prose_b <- encode(trg, PROSE_B, true, false)
+        var count <- encode(trg, counting_prompt(1, 40), true, false)
+        run_arms(t, trg, trg, tag, prose_a, prose_b, count, tol)
+        metal_decode_shutdown()
+        metal_prefill_shutdown()
+        set_mtp_spec(false)
+        delete prose_a
+        delete prose_b
+        delete count
+        delete trg
+        t |> equal(metal_live_object_count(), 0l, "{tag}: no leaked Metal objects after shutdown")
+    } else {
+        t |> skip("no das_metal on this build")
+    }
+}
+
+// The hyper-connection carrier: Qwen3.8-Flash-Next UD-IQ4_XS (three shards, 94 GB) with its split
+// `shared` Q8_0 head - the wide-residual carry into the draft head, the n-gram side input's panel form
+// and the sigmoid deltanet gate all ride the verify rows here and nowhere else. Large tier.
+[test]
+def test_metal_mtp_parity_flashnext(t : T?) {
+    t |> run("metal MTP rail vs plain GPU decode - Qwen3.8-Flash-Next UD-IQ4_XS + split shared head (large tier)") <| @(t : T?) {
+        run_fixture_served(t, "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+            "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf", "3.8fn", MOE_FF_TOL)
     }
 }
 

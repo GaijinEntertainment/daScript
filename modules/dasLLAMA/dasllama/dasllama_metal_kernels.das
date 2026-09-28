@@ -4306,8 +4306,14 @@ def enc_rows_tiles(nrows, n, ys : int64; tile : block<(four : bool; live : int64
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad")]
 def enc_gemv_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; boff : uint64;
                   bx, by, bn, bd, bys : MetalBuffer?; n, d, ys : int64; yoff : uint64 = 0ul) {
-    enc_rows_tiles(nrows, n, ys) $(four; _live; xo, yo) {
-        enc_gemv_b(enc, four, bw, boff, bx, by, bn, bd, bys, d, yoff + yo, xo)
+    var base = 0l
+    while (base < nrows) {   // the tile ladder repeats every twelve rows, each pass offset by its first row
+        let xb = uint64(base * n * 4l)
+        let yb = uint64(base * ys * 4l)
+        enc_rows_tiles(min(nrows - base, 12l), n, ys) $(four; _live; xo, yo) {
+            enc_gemv_b(enc, four, bw, boff, bx, by, bn, bd, bys, d, yoff + yb + yo, xb + xo)
+        }
+        base += 12l
     }
 }
 
@@ -10334,13 +10340,13 @@ struct PleConvArgs {
 // grouped norm is the conv input row - into the history ring at the position's slot, or row p of a window panel.
 [metal_dispatch(name = "enc_ple_gate", pso = "g_pso_ple_gate", tgmem = "metal_ple_gate_msl_tgmem", tg = 1024, grid = "wgs", params = "wgs : int64")]
 class MetalPleGate : MetalTgReduceBase {
-    @ssbo @binding = 0 @role = "read" res : array<float>       // [nrows x hc x dim] the wide residual (the query)
-    @ssbo @binding = 1 @role = "read" key : array<float>       // [nrows x hc x dim] the key projection
-    @ssbo @binding = 2 @role = "read" val : array<float>       // [nrows x dim] the value projection
+    @ssbo @binding = 0 @role = "read" @off = "rb" res : array<float>       // [nrows x hc x dim] the wide residual (the query); the offsets pick one stream's rows out of a joint verify
+    @ssbo @binding = 1 @role = "read" @off = "kb" key : array<float>       // [nrows x hc x dim] the key projection
+    @ssbo @binding = 2 @role = "read" @off = "vb" val : array<float>       // [nrows x dim] the value projection
     @ssbo @binding = 3 @role = "weight" wk : array<float>      // [hc x dim] key norm gammas
     @ssbo @binding = 4 @role = "weight" wq : array<float>      // [hc x dim] query norm gammas
     @ssbo @binding = 5 @role = "weight" wc : array<float>      // [hc x dim] conv-input norm gammas
-    @ssbo @binding = 6 @role = "write" gated : array<float>    // [nrows x hc x dim] value x gate, per stream
+    @ssbo @binding = 6 @role = "write" @off = "gb" gated : array<float>    // [nrows x hc x dim] value x gate, per stream
     @ssbo @binding = 7 @role = "write" @off = "coff" cin : array<float>   // the conv input rows: the ring (rows x hc x dim) or the window panel
     @uniform @binding = 8 ka : PleGateArgs
 
@@ -10404,8 +10410,8 @@ class MetalPleGate : MetalTgReduceBase {
 // input's residual add: res += gated + silu(conv). A position before the sequence reads zero.
 [metal_dispatch(name = "enc_ple_conv", pso = "g_pso_ple_conv", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalPleConv {
-    @ssbo @binding = 0 @role = "readwrite" res : array<float>   // [nrows x hc x dim] the wide residual
-    @ssbo @binding = 1 @role = "read" gated : array<float>      // [nrows x hc x dim]
+    @ssbo @binding = 0 @role = "readwrite" @off = "rb" res : array<float>   // [nrows x hc x dim] the wide residual; the offsets pick one stream's rows out of a joint verify
+    @ssbo @binding = 1 @role = "read" @off = "gb" gated : array<float>      // [nrows x hc x dim]
     @ssbo @binding = 2 @role = "read" @off = "coff" cin : array<float>    // the window panel (nrows x hc x dim); direct = 0 leaves it unread
     @ssbo @binding = 3 @role = "read" @off = "roff" ring : array<float>   // the history ring (rows x hc x dim)
     @ssbo @binding = 4 @role = "weight" w : array<float>        // [(hc x dim) x kern] taps, contiguous per channel

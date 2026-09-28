@@ -770,14 +770,14 @@ form on the blob-only load (one model, the spec's pinned ids as the oracle - `te
 shape) under `DASLLAMA_PARITY_FULL=1`, and the sweep's rows (sec.7): pp512 and tg128 against
 llama.cpp on the M5 Max at or above 0.9, the box crowns applied.
 
-## 29. The hyper-connection model has no batched or speculative Metal step
+## 29. The hyper-connection model has no batched Metal step
 
-`decode_shape_decline` admits `hyper_conn` for the single row alone (`allow_hc`): the batch driver
-declines it `graph`, `mtp_round_cold` keeps the round cold, and the MTP head the file ships beside
-(the wide-residual `nextn.hnorm`, the head mixer pair) has no Metal verify. The work, in order: the
-rows forms of sec.28 bound into `BatchLayerEnc` (the wide residual per row, the scatter logits per
-row and site), the verify's rows over one slab with the wide residual carried into the draft head,
-and the `hc` arm of the shape gate opened per driver as each lands.
+`decode_shape_decline` admits `hyper_conn` for the single row and the speculative verify
+(`allow_hc`); the batch driver declines it `graph`. The verify's rows forms (the wide residual per
+row, the scatter logits per row and site, the n-gram side input in the prefill's panel form with the
+accepted rows committed after the walk, the wide carry into the draft head) are the ones
+`BatchLayerEnc` needs: bind them there and open the `hc` arm of the batch gate. The batch rail's
+deltanet gate already takes the family's z activation through `enc_dn_zgate`.
 
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 

@@ -2385,6 +2385,7 @@ struct Session {
     // deltanet rollback for a rejected verify batch, sized lazily on the first snapshot (a 27B hybrid's state is 151 MB)
     @scratch mtp_snap_conv : array<float>
     @scratch mtp_snap_state : array<float>
+    @scratch mtp_snap_ple : array<int64>   // the n-gram window before the verify (forward-only state like the deltanet's)
     mtp_snap_pos : int64
 }
 
@@ -4849,6 +4850,11 @@ def mtp_state_snapshot(var s : Session) {
     copy_floats_par(s.dn_conv_state, s.mtp_snap_conv, nc)
     copy_floats_par(s.dn_state, s.mtp_snap_state, ns)
     s.mtp_snap_pos = s.dn_pos
+    // the n-gram window is forward-only state too: a rejected draft must not stay a predecessor
+    s.mtp_snap_ple |> overwrite_resize(long_length(s.ple_prev))
+    for (i in range64(long_length(s.ple_prev))) {
+        s.mtp_snap_ple[i] = s.ple_prev[i]
+    }
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
@@ -4856,6 +4862,9 @@ def mtp_state_restore(var s : Session) {
     copy_floats_par(s.mtp_snap_conv, s.dn_conv_state, long_length(s.mtp_snap_conv))
     copy_floats_par(s.mtp_snap_state, s.dn_state, long_length(s.mtp_snap_state))
     s.dn_pos = s.mtp_snap_pos
+    for (i in range64(long_length(s.mtp_snap_ple))) {
+        s.ple_prev[i] = s.mtp_snap_ple[i]
+    }
     moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
 }
 
