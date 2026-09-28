@@ -12,6 +12,7 @@ require daslib/defer
 require daslib/strings_boost
 require daslib/json_boost
 require gates
+require ../../common/log_floor.das
 
 [CommandLineArgs]
 struct Config {
@@ -293,6 +294,7 @@ def private want(gate : string) : bool {
 
 [export]
 def main() : int {
+    default_log_floor_to_info()
     let rc = parse_args_with_help(g_cfg, "make-pr")
     return rc if (rc >= 0)
     let bad <- unknown_gate_names(g_cfg.only, g_cfg.skip)
@@ -321,7 +323,7 @@ def main() : int {
         var out = ""
         let code = run([daslang, "utils/internal/preflight/main.das", "--", "--full"], out, 7200.0)
         if (code != 0) {
-            to_log(LOG_ERROR, out)   //! the run's own gate lines, at the level the default log floor lets through
+            to_log(LOG_ERROR, out)
             to_log(LOG_ERROR, "preflight --full failed - fix each, validate with the TARGETED gate, never a second full run\n")
             return 2
         }

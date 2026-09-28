@@ -2,7 +2,34 @@ options gen2
 
 require dastest/testing_boost public
 require daslib/fio
+require daslib/command_line
+require strings
 require gates
+require ../../common/log_floor.das
+
+[test]
+def test_default_log_floor_to_info(t : T?) {
+    let saved = get_env_variable("DAS_LOG_LEVEL")
+    set_env_variable("DAS_LOG_LEVEL", "")
+    default_log_floor_to_info()
+    t |> success(get_env_variable("DAS_LOG_LEVEL") == "info", "an unset floor reads at info")
+    set_env_variable("DAS_LOG_LEVEL", "error")
+    default_log_floor_to_info()
+    t |> success(get_env_variable("DAS_LOG_LEVEL") == "error", "a floor the caller set stands")
+    set_env_variable("DAS_LOG_LEVEL", saved)
+}
+
+[test]
+def test_main_prints_its_gate_lines_with_no_floor_set(t : T?) {
+    let no_floor_prefix = get_platform_name() == "windows" ? "set \"DAS_LOG_LEVEL=\"&& " : "env -u DAS_LOG_LEVEL "
+    var out : string
+    unsafe(popen_timeout("{no_floor_prefix}{get_das_exe()} utils/internal/make-pr/main.das -- --only stamp-reach", 120.0) $(f) {
+        if (f != null) {
+            out = fread(f)
+        }
+    })
+    t |> success(find(out, "stamp-reach:") >= 0, "make-pr's gate lines print with DAS_LOG_LEVEL unset:\n{out}")
+}
 
 [test]
 def test_want_gate(t : T?) {

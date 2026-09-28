@@ -179,12 +179,14 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		URL https://github.com/ithewei/libhv/archive/5da5fc22cdfd1b59ba2b0520abb34f95d050975c.tar.gz
 		URL_HASH SHA256=b4f774936ccd6981df74b23f9e033e0b3ab584f6682d889490377dc9450b5f54
 		DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+		PATCH_COMMAND ${CMAKE_COMMAND} -DLIBHV_SRC_DIR=<SOURCE_DIR> -P ${DAS_HV_DIR}/patch_libhv.cmake
 		PREFIX ${CMAKE_CURRENT_BINARY_DIR}/libhv
 		CMAKE_ARGS ${HV_CMAKE_FLAGS}
 		BUILD_BYPRODUCTS ${HV_LIBRARIES}
 		BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
 		INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config $<CONFIG> --prefix ${DAS_HV_DIR}/hv/$<CONFIG>
 	)
+	ExternalProject_Add_StepDependencies(LIBHV patch ${DAS_HV_DIR}/patch_libhv.cmake)
 	# Copy cert files from downloaded libhv source (not stored in repo to avoid pushing private keys)
 	SET(LIBHV_SRC_DIR ${CMAKE_CURRENT_BINARY_DIR}/libhv/src/LIBHV)
 	ExternalProject_Add_Step(LIBHV copy_certs
