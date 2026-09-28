@@ -66,8 +66,13 @@ TEST_CASE("seq box survives concurrent writers") {
         }
     });
 
+    const auto landingDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     start.store(true, std::memory_order_release);
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    while ((published.load(std::memory_order_relaxed) == 0 || reads.load(std::memory_order_relaxed) == 0)
+           && std::chrono::steady_clock::now() < landingDeadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
     stop.store(true, std::memory_order_relaxed);
     publisherA.join(); publisherB.join(); clearer.join(); reader.join();
 

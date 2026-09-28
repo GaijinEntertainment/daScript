@@ -76,7 +76,22 @@ def private check_source_property_paths(f : string; text : string) {
     }
 }
 
-// Every lane a file labels tests into is a lane that file also builds for.
+//! true only when every test runs cmake or ctest itself and the file declares no target or custom command - nothing a lane could leave stale
+def private builds_nothing_for_its_tests(text : string) : bool {
+    var inscope commands <- cmake_test_commands(text)
+    var inscope tests <- cmake_command_blocks(text, "add_test")
+    return false if (empty(commands) || length(commands) != length(tests))
+    for (c in commands) {
+        return false if (c != "$\{CMAKE_COMMAND\}" && c != "$\{CMAKE_CTEST_COMMAND\}")
+    }
+    for (kind in ["add_executable", "add_library", "add_custom_target", "add_custom_command"]) {
+        var inscope declared <- cmake_command_blocks(text, kind)
+        return false if (!empty(declared))
+    }
+    return true
+}
+
+// A file whose tests run something it builds wires every lane it labels them into.
 def private check_lane_wiring {
     let top_cmake = "tests-cpp/CMakeLists.txt"
     var inscope aggregate_lanes <- lanes_of(fread(top_cmake), "add_custom_target")
@@ -88,10 +103,12 @@ def private check_lane_wiring {
         // a file that defines an aggregate wires its dependencies at the definition site
         wired_lanes |> push_from(lanes_of(text, "add_custom_target"))
         var inscope labels <- cmake_test_labels(text)
-        for (lab in labels) {
-            // a label with no test-<lane> target is a ctest filter — nothing to wire to
-            continue if (find_index(aggregate_lanes, lab) < 0 || find_index(wired_lanes, lab) >= 0)
-            gate_finding(f, "labels a test \"{lab}\" but wires nothing into test-{lab} — wire it with add_dependencies(test-{lab} <target>), or the lane runs a binary it never built")
+        if (!builds_nothing_for_its_tests(text)) {
+            for (lab in labels) {
+                // a label with no test-<lane> target is a ctest filter — nothing to wire to
+                continue if (find_index(aggregate_lanes, lab) < 0 || find_index(wired_lanes, lab) >= 0)
+                gate_finding(f, "labels a test \"{lab}\" but wires nothing into test-{lab} — wire it with add_dependencies(test-{lab} <target>), or the lane runs a binary it never built")
+            }
         }
         check_test_targets(f, text)
         check_source_property_paths(f, text)
