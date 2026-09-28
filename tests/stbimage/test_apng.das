@@ -21,6 +21,11 @@ struct ChunkSummary {
     bad        : bool             // signature mismatch or truncated stream
 }
 
+def private temp_output(ext : string) : string {
+    var error : string
+    return create_temp_file("stbimage_test", ext, error)
+}
+
 def be_u32_at(b0, b1, b2, b3 : uint8) : uint {
     return ((uint(b0) << 24u) | (uint(b1) << 16u) | (uint(b2) << 8u) | uint(b3))
 }
@@ -99,7 +104,7 @@ def make_gradient_frame(var pixels : array<uint8>; w : int; h : int; frame_idx :
 [test]
 def test_apng_basic(t : T?) {
     t |> run("APNG: encode 4 frames, parse chunks, decode frame 0") <| @(tt : T?) {
-        let fname = "{get_das_root()}/tests/stbimage/_test_output.apng"
+        let fname = temp_output(".apng")
         let W = 32; let H = 32
         var writer = stbi_apng_begin(fname, W, H, 4)
         tt |> success(writer != null, "stbi_apng_begin succeeded")
@@ -145,7 +150,7 @@ def test_apng_basic(t : T?) {
 [test]
 def test_apng_rgb_channels(t : T?) {
     t |> run("APNG: 3-channel RGB encode works") <| @(tt : T?) {
-        let fname = "{get_das_root()}/tests/stbimage/_test_output_rgb.apng"
+        let fname = temp_output(".apng")
         let W = 8; let H = 8
         var writer = stbi_apng_begin(fname, W, H, 3)
         tt |> success(writer != null, "begin RGB succeeded")
@@ -181,7 +186,7 @@ def test_apng_begin_bad_filename(t : T?) {
 [test]
 def test_apng_drop_accounting(t : T?) {
     t |> run("APNG: submitted == emitted + dropped (worker race-tolerant invariant)") <| @(tt : T?) {
-        let fname = "{get_das_root()}/tests/stbimage/_test_output_overflow.apng"
+        let fname = temp_output(".apng")
         // Big-ish frame so deflate takes noticeable time vs. enqueue speed.
         let W = 512; let H = 512
         var writer = stbi_apng_begin(fname, W, H, 4)
@@ -225,8 +230,8 @@ def test_apng_drop_accounting(t : T?) {
 [test]
 def test_apng_double_writers(t : T?) {
     t |> run("APNG: two parallel writers — no shared state") <| @(tt : T?) {
-        let path1 = "{get_das_root()}/tests/stbimage/_test_output_p1.apng"
-        let path2 = "{get_das_root()}/tests/stbimage/_test_output_p2.apng"
+        let path1 = temp_output(".apng")
+        let path2 = temp_output(".apng")
         var w1 = stbi_apng_begin(path1, 32, 32, 4)
         var w2 = stbi_apng_begin(path2, 64, 64, 4)
         tt |> success(w1 != null && w2 != null, "both writers opened")
@@ -270,7 +275,7 @@ def test_apng_double_writers(t : T?) {
 [test]
 def test_apng_dropped_zero_when_keeping_up(t : T?) {
     t |> run("APNG: drop counter stays at 0 for small, slow stream") <| @(tt : T?) {
-        let fname = "{get_das_root()}/tests/stbimage/_test_output_slow.apng"
+        let fname = temp_output(".apng")
         let W = 16; let H = 16
         var writer = stbi_apng_begin(fname, W, H, 4)
         if (writer == null) {

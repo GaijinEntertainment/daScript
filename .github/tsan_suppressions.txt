@@ -10,24 +10,10 @@
 # hloop_process_events read — upstream idiom, worst case is one extra loop iteration.
 race:hloop_stop
 
-# Deliberate unsynchronized liveness peek: das_writer_is_connected polls hio_is_opened
-# from the tick thread; a momentarily stale answer is the API's documented contract.
-race:hio_is_opened
-
 # Cross-thread WebSocket send: das_wss_send / das_wsc_send call hio_write from das threads;
 # libhv mutex-guards the write queue but hio_write4 reads io state outside it (#3428).
 race:hio_write4
-
-# libhv's lazy default logger calls localtime while its date-header timer calls gmtime: one static buffer.
-race:logger_create
-
-# WebSocket client open/close callback bookkeeping inside hv::WebSocketClient (#3428).
-race:hv::WebSocketClient::close
-
-# Keep-alive handler reuse vs dasHV deferred (HTTP_STATUS_UNFINISHED) responses: the loop
-# thread may parse the next pipelined message while the tick thread still fills the
-# previous response object (#3428).
-race:HttpHandler::onMessageComplete
+race:hio_is_opened
 
 # libdbus's own global locks, taken in one order by dbus_bus_get_private (the Linux tray's
 # create) and the reverse by dbus_connection_close / unref (its destroy), both on the main
