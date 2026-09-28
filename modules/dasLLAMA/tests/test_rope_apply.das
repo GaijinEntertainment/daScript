@@ -332,6 +332,93 @@ def private tab_part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscal
     delete ff
 }
 
+//! partial rotary WITH per-pair factors (the YaRN fold on a qwen35-shaped head): the direct part leaf and
+//! its table twin against the fp64 reference over rot/2 factors
+def private part_ff_gate(t : T?; pos, hs, rot, nh : int64; theta, mscale : float) {
+    let n = hs * nh
+    var v : array<float>
+    fill_vec(v, n)
+    var ff : array<float>
+    ff |> resize(rot / 2l)
+    for (j in range64(rot / 2l)) {
+        ff[j] = 1.0 + 0.5 * float(j % 5l)
+    }
+    var want : array<float>
+    ref_neox(v, want, pos, hs, rot, n, theta, 1.0, mscale, ff, true)
+    var direct : array<float>
+    copy_vec(v, direct, n)
+    rope_scaled_neox_part(unsafe(addr(direct[0])), pos, hs, rot, n, theta, 1.0, true, ff_ptr(ff), mscale)
+    cmp_bar(t, direct, want, n, ROPE_BAR, "rope_scaled_neox_part with factors hs={int(hs)} rot={int(rot)} pos={int(pos)}")
+    var ct : array<float>
+    var st : array<float>
+    build_rope_tabs(ct, st, theta, 1.0, mscale, ff, true, pos, 1l, rot)
+    var got : array<float>
+    copy_vec(v, got, n)
+    unsafe {
+        rope_scaled_neox_tab_part(addr(got[0]), hs, rot, n, addr<float const?>(ct[0]), addr<float const?>(st[0]))
+    }
+    cmp_bar(t, got, want, n, ROPE_BAR, "rope_scaled_neox_tab_part with factors hs={int(hs)} rot={int(rot)} pos={int(pos)}")
+    cmp_bar(t, got, direct, n, TWIN_BAR, "the factored table twin of the direct part form hs={int(hs)} rot={int(rot)}")
+    delete v
+    delete ff
+    delete want
+    delete direct
+    delete ct
+    delete st
+    delete got
+}
+
+[test]
+def test_rope_apply_part_factors(t : T?) {
+    for (pos in [1l, 37l, 4096l]) {
+        t |> run("partial rotary takes per-pair factors at pos {pos}: 64 of 256 (qwen35), 20 of 40") @(t : T?) {
+            part_ff_gate(t, pos, 256l, 64l, 2l, 10000000.0, 1.139)
+            part_ff_gate(t, pos, 40l, 20l, 3l, 10000.0, 1.0)
+        }
+    }
+}
+
+[test]
+def test_yarn_rope_freqs_band(tst : T?) {
+    tst |> run("yarn_rope_freqs: full frequency under the band, the factor above it, a monotone ramp between") @(t : T?) {
+        // qwen35's rotated span, YaRN factor 4 over 32768 positions at theta 1e7
+        let rot = 64l
+        let factor = 4.0
+        var ff <- yarn_rope_freqs(rot, 10000000.0, factor, 32.0, 1.0, 32768l)
+        t |> equal(long_length(ff), rot / 2l, "one divisor a pair")
+        t |> success(abs(ff[0] - 1.0) < 1.0e-6, "the highest-frequency pair rotates at full frequency (divisor {ff[0]})")
+        t |> success(abs(ff[rot / 2l - 1l] - factor) < 1.0e-5, "the lowest-frequency pair interpolates by the factor (divisor {ff[rot / 2l - 1l]})")
+        var ramped = 0
+        var monotone = true
+        for (j in range64(1l, rot / 2l)) {
+            monotone &&= ff[j] >= ff[j - 1l] - 1.0e-6
+            if (ff[j] > 1.0 + 1.0e-6 && ff[j] < factor - 1.0e-6) {
+                ramped++
+            }
+        }
+        t |> success(monotone, "the divisors never decrease along the pairs")
+        t |> success(ramped > 0, "the band ramps between the two regimes ({ramped} pairs)")
+        // the whole-head spelling at the same geometry is the rot=64 one over its first 32 pairs - the band is a function of the rotated span alone
+        var full <- yarn_rope_freqs(64l, 10000000.0, factor, 32.0, 1.0, 32768l)
+        t |> equal(count_mismatch_f(ff, full), 0l, "the band depends on the rotated span, not the head")
+        delete ff
+        delete full
+    }
+}
+
+def private count_mismatch_f(a, b : array<float>) : int64 {
+    if (long_length(a) != long_length(b)) {
+        return -1l
+    }
+    var n = 0l
+    for (x, y in a, b) {
+        if (x != y) {
+            n++
+        }
+    }
+    return n
+}
+
 [test]
 def test_rope_apply_part(t : T?) {
     for (pos in [0l, 1l, 37l, 512l]) {

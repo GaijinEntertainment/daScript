@@ -96,6 +96,15 @@ struct CommonArgs {
     @clarg_doc = "Context-length cap in tokens (default: the model's trained context_length)"
     ctx : int
 
+    @clarg_doc = "RoPE scaling override: yarn | linear | none (default: the model file's own keys). Qwen enables YaRN as a setting: --rope-scaling yarn --rope-scale 4"
+    rope_scaling : string
+
+    @clarg_doc = "RoPE scaling factor for the override (default: the file's; yarn needs one)"
+    rope_scale : float
+
+    @clarg_doc = "YaRN: the original training context the factor extends (default: the file's)"
+    yarn_orig_ctx : int
+
     @clarg_short = "t"
     @clarg_doc = "Worker-lane cap for the matmul dispatch (default 16; -1 = all cores)"
     threads : int
@@ -590,6 +599,9 @@ struct CliConfig {
     gpu_dense : bool
     gpu_vram_mb : int
     ctx : int
+    rope_scaling : string
+    rope_scale : float
+    yarn_orig_ctx : int
     threads : int
     threads_set : bool
     models_dir : string
@@ -631,6 +643,15 @@ def private apply_roster(root : JsonValue?; var cfg : CliConfig) {
     if (cfg.ctx <= 0) {
         cfg.ctx = int(pick?["ctx"] ?? 0l)
     }
+    if (empty(cfg.rope_scaling)) {
+        cfg.rope_scaling = pick?["rope_scaling"] ?? ""
+    }
+    if (cfg.rope_scale <= 0.0) {
+        cfg.rope_scale = float(pick?["rope_scale"] ?? 0.0lf)
+    }
+    if (cfg.yarn_orig_ctx <= 0) {
+        cfg.yarn_orig_ctx = int(pick?["yarn_orig_ctx"] ?? 0l)
+    }
 }
 
 //! Parse a config file's text into the keys the CLI understands; unknown keys are ignored.
@@ -660,6 +681,9 @@ def parse_cli_config(body : string; var cfg : CliConfig) : bool {
     cfg.gpu_dn = root?["gpu_dn"] ?? false
     cfg.gpu_attn_set = key_exists(root, "gpu_attn")
     cfg.gpu_attn = root?["gpu_attn"] ?? false
+    cfg.rope_scaling = root?["rope_scaling"] ?? ""
+    cfg.rope_scale = float(root?["rope_scale"] ?? 0.0lf)
+    cfg.yarn_orig_ctx = int(root?["yarn_orig_ctx"] ?? 0l)
     cfg.gpu_dense = root?["gpu_dense"] ?? false
     cfg.gpu_vram_mb = int(root?["gpu_vram_mb"] ?? 0l)
     cfg.ctx = int(root?["ctx"] ?? 0l)
@@ -709,6 +733,15 @@ def fill_common(var c : CommonArgs; cfg : CliConfig) {
     }
     if (c.ctx <= 0) {
         c.ctx = cfg.ctx
+    }
+    if (empty(c.rope_scaling)) {
+        c.rope_scaling = cfg.rope_scaling
+    }
+    if (c.rope_scale <= 0.0) {
+        c.rope_scale = cfg.rope_scale
+    }
+    if (c.yarn_orig_ctx <= 0) {
+        c.yarn_orig_ctx = cfg.yarn_orig_ctx
     }
     if (c.threads == 0 && cfg.threads_set) {
         c.threads = cfg.threads

@@ -557,6 +557,23 @@ def test_image_mechanics(t : T?) {
         remove(path)
         remove(fake)
     }
+    t |> run("lanes: the rope-scaling override is a lane suffix and an identity element") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let prev = rope_scaling_override()
+        let plain_lane = image_lane_name()
+        let plain_id = image_identity()
+        set_rope_scaling_override(RopeScalingOverride(kind = "yarn", scale = 4.0, orig_ctx = 32768l))
+        t |> equal(image_lane_name(), "{plain_lane}-yarn4", "the planar lane takes the yarn suffix")
+        t |> equal(image_lane_name(METAL_IMAGE_TAG), "metal-yarn4", "so does the blob lane")
+        t |> success(find(image_identity(), " rope yarn4/32768") >= 0, "the identity spells the factor and the original context ({image_identity()})")
+        t |> equal(dlim_identity_tag(image_identity("img-lane")), "img-lane", "the element rides inside the last fixed field - the tag still parses")
+        set_rope_scaling_override(RopeScalingOverride(kind = "none"))
+        t |> equal(image_lane_name(), "{plain_lane}-norope", "dropping a file's scaling is its own lane")
+        set_rope_scaling_override(prev)
+        t |> equal(image_identity(), plain_id, "the override off leaves the identity as it was")
+    }
 }
 
 // ===== real carriers: gguf load vs mapped image load =====

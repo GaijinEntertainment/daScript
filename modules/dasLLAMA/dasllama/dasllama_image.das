@@ -113,6 +113,10 @@ def image_lane_name(tag : string = ""; quant : string = "q8") : string {
     } else {
         lane = tag
     }
+    let rope = rope_override_lane()
+    if (!empty(rope)) {
+        lane = "{lane}-{rope}"
+    }
     if (quant != "q8") {
         lane = "{lane}-{quant}"
     }

@@ -521,6 +521,25 @@ def test_config_edges(t : T?) {
         t |> success(parse_cli_config("[[models]]\npath = \"a.gguf\"\nkv_dtype = \"q8_0\"\n", cfg), "parses")
         t |> equal(cfg.kv_dtype, "q8_0")
     }
+    t |> run("the rope-scaling keys ride the flat config, the roster, and the fill onto the plan") @(t : T?) {
+        var cfg = CliConfig()
+        t |> success(parse_cli_config("rope_scaling = \"yarn\"\nrope_scale = 4\nyarn_orig_ctx = 32768\n", cfg), "flat keys parse")
+        t |> equal(cfg.rope_scaling, "yarn")
+        t |> success(cfg.rope_scale == 4.0, "an integer factor reads as the float ({cfg.rope_scale})")
+        t |> equal(cfg.yarn_orig_ctx, 32768)
+        var c := parse_cli(["complete", "hi"]).common
+        fill_common(c, cfg)
+        t |> equal(c.rope_scaling, "yarn")
+        t |> success(c.rope_scale == 4.0, "the factor lands on the plan")
+        t |> equal(c.yarn_orig_ctx, 32768)
+        var rc = CliConfig()
+        t |> success(parse_cli_config("[[models]]\npath = \"a.gguf\"\nrope_scaling = \"linear\"\nrope_scale = 2.5\n", rc), "roster keys parse")
+        t |> equal(rc.rope_scaling, "linear")
+        t |> success(rc.rope_scale == 2.5, "the roster's factor ({rc.rope_scale})")
+        var flag := parse_cli(["complete", "hi", "--rope-scaling", "none"]).common
+        fill_common(flag, cfg)
+        t |> equal(flag.rope_scaling, "none", "an explicit flag beats the config")
+    }
     t |> run("fill_common lands all six keys on an empty plan") @(t : T?) {
         var cfg = CliConfig()
         t |> success(parse_cli_config("model = \"a.gguf\"\nquant = \"q4\"\nkv_dtype = \"f32\"\nmetal = \"auto\"\nctx = 512\nthreads = 3\n", cfg), "parses")

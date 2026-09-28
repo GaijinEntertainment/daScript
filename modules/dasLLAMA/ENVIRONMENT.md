@@ -22,6 +22,11 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_CPU_PREFILL` | flag | off | Allow the CPU prefill path even when a GPU prefill override is registered. |
 | `DASLLAMA_PIN_PREFILL` | text | unset | Pin prefill to one registered override by name (e.g. metal, vulkan); anything else declines before upload. |
 | `DASLLAMA_MTP_HEAD` | path | unset | Split NextN/MTP head GGUF to attach to the trunk being loaded (the split mtp-<model>.gguf form: its blk.<n_layers>.* tensors become the draft block; its copies of the trunk's tables are ignored). Default: the mtp-<trunk basename> sibling beside the trunk when present. The head rides the split-shard walk, so one prepared image carries trunk and head. |
+| `DASLLAMA_ROPE_SCALING` | text | unset | RoPE scaling override for the load: yarn | linear | none; unset keeps the file's rope.scaling keys. yarn folds the NTK-by-parts frequency ramp and the 1 + 0.1 ln(s) magnitude into the rope tables (llama.cpp --rope-scaling yarn) - the Qwen files ship no scaling keys and enable YaRN as a setting. The override is baked into the prepared image, under its own lane. |
+| `DASLLAMA_ROPE_SCALE` | number | 0 | The RoPE scaling factor s (the context multiplier) for the override; 0 = the file's rope.scaling.factor, and yarn needs one. |
+| `DASLLAMA_YARN_ORIG_CTX` | number | 0 | YaRN: the original training context the factor extends; 0 = the file's original_context_length, else its context_length (llama.cpp --yarn-orig-ctx). |
+| `DASLLAMA_YARN_BETA_FAST` | number | 0 | YaRN: the low correction dim beta_fast; 0 = the file's, else 32. |
+| `DASLLAMA_YARN_BETA_SLOW` | number | 0 | YaRN: the high correction dim beta_slow; 0 = the file's, else 1. |
 | `DASLLAMA_PIN_BACKEND` | text | unset | Pin the matmul backend by name, bypassing the measured auto-selection. |
 | `DASLLAMA_IQ3S_SERVE` | text | auto | How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut on a CPU-only load, grid where a GPU tier targets the load (its grid gather is cheap). |
 | `DASLLAMA_PIN_BATCH_BACKEND` | text | unset | Pin the batched (prefill) matmul backend independently of the decode one. |

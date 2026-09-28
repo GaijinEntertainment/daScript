@@ -1873,17 +1873,10 @@
     gather-only PLE table) as the second if the advisory alone does not carry 100 GB, each against
     the cold reading.
 
-176. **YaRN as a runtime setting, and on partial rotary.** The loader folds a file's YaRN metadata
-    into the per-pair `rope_freqs` divisor and the `1 + 0.1*ln(s)` mscale (gpt-oss, the Mistral 3
-    family ride it) but refuses partial rotary + YaRN and `yarn_log_multiplier != 0`, and the Qwen
-    files carry no `rope.scaling.*` keys at all - Qwen enables YaRN as a setting (factor 4 over the
-    original context, only when the context needs it), llama.cpp users through `--rope-scaling yarn
-    --rope-scale 4 --yarn-orig-ctx N`. Done = an override knob (env + CLI + server option) feeding
-    the same fold; the partial-rotary arm (the correction band over `rope_dim`, `rope_freqs` at
-    `rope_dim / 2`, the `_part` leaves passed the factors, the "partial => no factors" guarantee
-    retired, the GPU decode's partial-rope table indexing checked at the pair stride); a
-    partial+factors arm in `test_rope_apply`; parity on Flash-Next past 262K positions against
-    llama.cpp under the same flags. The `yarn_log_multiplier` arm waits for a DeepSeek-class carrier.
+176. **The `yarn_log_multiplier` YaRN arm.** The loader refuses a file whose
+    `rope.scaling.yarn_log_multiplier` is not 0 (the DeepSeek-2 lineage replaces the 0.1 in the
+    `1 + 0.1 ln(s)` magnitude with it, and the cancel-and-reapply the reference does around the
+    stored `attn_factor` is unwritten). Done = the arm, on a DeepSeek-class carrier that ships the key.
 
 177. **The CPU verify writes every row's n-gram ring slot, and the ring is exactly the conv
     window.** `ple_apply_row` lands row p's conv input at slot `(pos + p) % rows` before its own conv

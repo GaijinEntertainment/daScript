@@ -3692,14 +3692,43 @@ let private CONFIG_KEY_KINDS <- {
     "tts" => "s", "tts_lane" => "s", "tts_voices_dir" => "s",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
-    "mtp" => "b", "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "models" => "a",
+    "mtp" => "b", "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i",
+    "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "models" => "a",
     "exchange_url" => "s", "exchange_accept" => "s", "exchange_submit" => "s"
 }
 
 let private MODEL_KEY_KINDS <- {
     "name" => "s", "path" => "s", "backend" => "s", "ctx" => "i", "quant" => "s",
     "kv_dtype" => "s", "streams" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i",
-    "mtp" => "b", "default" => "b", "image_mmproj" => "s"
+    "mtp" => "b", "default" => "b", "image_mmproj" => "s",
+    "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i"
+}
+
+//! A posted value coerced to its schema kind - a fresh node, or null when the kind does not fit:
+//! "s"tring, "i"nteger (a whole float too), "f"loat (an integer too), "b"ool
+def private json_of_kind(kind : string; v : JsonValue?) : JsonValue? {
+    if (v == null) {
+        return null
+    }
+    if (kind == "s" && (v.value is _string)) {
+        return JV(v.value as _string)
+    }
+    if (kind == "i" && (v.value is _longint)) {
+        return JV(v.value as _longint)
+    }
+    if (kind == "i" && (v.value is _number) && (v.value as _number) == floor(v.value as _number)) {
+        return JV(int64(v.value as _number))
+    }
+    if (kind == "b" && (v.value is _bool)) {
+        return JV(v.value as _bool)
+    }
+    if (kind == "f" && (v.value is _number)) {
+        return JV(v.value as _number)
+    }
+    if (kind == "f" && (v.value is _longint)) {
+        return JV(double(v.value as _longint))
+    }
+    return null
 }
 
 // Validate + sanitize a POST /config "models" array: objects only, per-key kinds, a non-empty
@@ -3725,18 +3754,12 @@ def private validate_models_array(v : JsonValue?; var verr : string&) : JsonValu
                 verr = "unknown models key '{mk}'"
                 break
             }
-            if (kind == "s" && mv != null && (mv.value is _string)) {
-                ent |> insert(mk, JV(mv.value as _string))
-            } elif (kind == "i" && mv != null && (mv.value is _longint)) {
-                ent |> insert(mk, JV(mv.value as _longint))
-            } elif (kind == "i" && mv != null && (mv.value is _number) && (mv.value as _number) == floor(mv.value as _number)) {
-                ent |> insert(mk, JV(int64(mv.value as _number)))
-            } elif (kind == "b" && mv != null && (mv.value is _bool)) {
-                ent |> insert(mk, JV(mv.value as _bool))
-            } else {
+            var jv = json_of_kind(kind, mv)
+            if (jv == null) {
                 verr = "models key '{mk}' must be a {kind_name(kind)}"
                 break
             }
+            ent |> insert(mk, jv)
         }
         if (!empty(verr)) {
             var junk = JV(ent)
@@ -3853,6 +3876,9 @@ def private kind_name(kind : string) : string {
     if (kind == "s") {
         return "string"
     }
+    if (kind == "f") {
+        return "number"
+    }
     return kind == "i" ? "whole number" : "bool"
 }
 
@@ -3938,18 +3964,12 @@ def private handle_config_save(var req : HttpRequest?; var resp : HttpResponse?)
             out_tab |> insert(k, sanitized)
             continue
         }
-        if (kind == "s" && (v.value is _string)) {
-            out_tab |> insert(k, JV(v.value as _string))
-        } elif (kind == "i" && (v.value is _longint)) {
-            out_tab |> insert(k, JV(v.value as _longint))
-        } elif (kind == "i" && (v.value is _number) && (v.value as _number) == floor(v.value as _number)) {
-            out_tab |> insert(k, JV(int64(v.value as _number)))
-        } elif (kind == "b" && (v.value is _bool)) {
-            out_tab |> insert(k, JV(v.value as _bool))
-        } else {
+        var jv = json_of_kind(kind, v)
+        if (jv == null) {
             verr = "config key '{k}' must be a {kind_name(kind)}"
             break
         }
+        out_tab |> insert(k, jv)
     }
     if (!empty(verr)) {
         var junk = JV(out_tab)

@@ -122,6 +122,104 @@ def test_deltanet_chunked_prefill(t : T?) {
     }
 }
 
+//! llama.cpp's greedy continuation of the prompt on Qwen3.5-0.8B-Q8_0 (-ngl 0, --temp 0) - the harness control;
+//! under YaRN the greedy text is a near-tie discriminator on a model this small (llama.cpp itself parts at
+//! the second token between --yarn-orig-ctx 32768 and 262144), so the fold is gated on its numbers instead
+let private YARN_PROMPT = "Once upon a time, there was a"
+let private YARN_PLAIN_HEAD = " very special kind of animal called a \"puppy\"."
+
+def private greedy_text(tr : Model; steps : int) : string {
+    var out = ""
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var s = make_run_state(tr.config)
+        var prompt <- encode_(tr, YARN_PROMPT, true, false)
+        var ids <- generate(tr, s, prompt, length(prompt) + steps)
+        out = decode_(tr, ids)
+        delete ids
+        delete prompt
+        delete s
+    }
+    return out
+}
+
+//! the logits of one decode step after the prompt's prefill, under the table or the direct rope path
+def private step_logits(tr : Model; tabled : bool) : array<float> {
+    var out : array<float>
+    let prev = get_rope_table_mode()
+    set_rope_table_mode(tabled)
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var s = make_run_state(tr.config)
+        var prompt <- encode_(tr, YARN_PROMPT, true, false)
+        let n = long_length(prompt)
+        forward_prefill(tr, s, prompt, n, 0l)
+        forward(tr, s, argmax_of(s.logits), n)
+        out <- [for (i in range64(tr.config.vocab_size)); s.logits[i]]
+        delete prompt
+        delete s
+    }
+    set_rope_table_mode(prev)
+    return <- out
+}
+
+[test]
+def test_deltanet_yarn_override(t : T?) {
+    t |> run("the YaRN override on the partial-rotary 0.8B: the fold lands in the rope row, both rope paths take it, the plain load stays llama.cpp's") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+        if (!model_available(t, path)) return
+        let prev = rope_scaling_override()
+        set_rope_scaling_override(RopeScalingOverride())
+        var plain <- load_model_(path, QuantMode.q8)   // the engine entry with the tokenizer; load_gguf leaves it out
+        plain.config.seq_len = min(plain.config.seq_len, 2048l)
+        t |> success(empty(plain.rope_freqs), "the file carries no rope scaling of its own")
+        let plain_text = greedy_text(plain, 20)
+        t |> success(find(plain_text, YARN_PLAIN_HEAD) >= 0, "the plain load continues as llama.cpp does: {plain_text}")
+        var plain_step <- step_logits(plain, true)
+        delete plain
+        set_rope_scaling_override(RopeScalingOverride(kind = "yarn", scale = 4.0, orig_ctx = 32768l))
+        var yarn <- load_model_(path, QuantMode.q8)
+        yarn.config.seq_len = min(yarn.config.seq_len, 2048l)
+        let c = yarn.config
+        let rot = c.rope_dim
+        let mscale = 1.0 + 0.1 * log(4.0)
+        t |> equal(long_length(yarn.rope_freqs), rot / 2l, "the YaRN divisors run over the rotated span")
+        t |> success(abs(c.rope_mscale - mscale) < 1.0e-6, "the magnitude correction lands in rope_mscale ({c.rope_mscale})")
+        // the row the decode drivers read, against the fold spelled out: cos(pos * theta^(-2j/rot) / ff_j) * mscale
+        var ct : array<float>
+        var st : array<float>
+        let pos = 777l
+        build_decode_rope_row(yarn, pos, ct, st)
+        var worst = 0.0
+        for (j in range64(rot / 2l)) {
+            let a = double(pos) * (1.0lf / pow(double(c.rope_freq_base), double(2l * j) / double(rot))) / double(yarn.rope_freqs[j])
+            worst = max(worst, abs(ct[j] - float(cos(a) * double(mscale))))
+            worst = max(worst, abs(st[j] - float(sin(a) * double(mscale))))
+        }
+        t |> success(worst < 2.0e-3, "the decode rope row folds the divisors and the magnitude (maxdiff {worst})")
+        var yarn_tab <- step_logits(yarn, true)
+        var yarn_direct <- step_logits(yarn, false)
+        let bar = DN_LOGIT_BAR_REL * logits_maxabs(yarn_tab)
+        let paths_diff = logits_maxdiff(yarn_tab, yarn_direct)
+        t |> success(paths_diff <= bar, "the table and the direct rope paths of the attention agree under the fold (maxdiff {paths_diff}, bar {bar})")
+        let fold_diff = logits_maxdiff(yarn_tab, plain_step)
+        let noise = 10.0 * max(paths_diff, 1.0e-3)   //! a fold that did nothing leaves the two loads apart by the paths' own rounding alone
+        t |> success(fold_diff > noise, "the fold moves the step's logits past the paths' own noise (maxdiff {fold_diff} vs {noise})")
+        to_log(LOG_INFO, "yarn x4 over 32768: {greedy_text(yarn, 20)}\n")
+        delete yarn_tab
+        delete yarn_direct
+        delete plain_step
+        delete ct
+        delete st
+        delete yarn
+        set_rope_scaling_override(prev)
+    }
+}
+
 // Model-free: the deltanet session-state sizing at scale — 27B geometry puts the S state at
 // 48 recurrent layers x 48 v-heads x 128x128 = 144 MB in ONE grow, past the 64 MB
 // max_unreserved_size guard; a widened-conv twin drives the conv history past it the same way.
