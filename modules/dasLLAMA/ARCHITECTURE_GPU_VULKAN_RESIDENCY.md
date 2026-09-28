@@ -3,8 +3,9 @@
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
 document carries the residency plan that sizes a whole model before a byte uploads, the marks
 swap that lets one GPU slot serve many models, and the token command's logits landing on the
-transfer queue. The NextN draft head the driver homes beside the trunk, its draft command and
-the prompt warm the window chain gives its slab, are in `ARCHITECTURE_GPU_VULKAN_MTP.md`. The N-row token command a batched step's rows go through, and the residual
+transfer queue. The NextN draft head the driver homes beside the trunk, its draft command, the
+prompt warm the window chain gives its slab and the rollback a rejected verify takes on the
+device, are in `ARCHITECTURE_GPU_VULKAN_MTP.md`. The N-row token command a batched step's rows go through, and the residual
 step's two forms it holds bit for bit, are in `ARCHITECTURE_GPU_VULKAN_NROW.md`. The prefill
 chain and byte stores that run once a model is resident are in `ARCHITECTURE_GPU_VULKAN.md`, and
 the cooperative-matrix GEMM tiles under them are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the per-op

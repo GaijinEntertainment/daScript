@@ -472,6 +472,16 @@ def register_mtp_verify_override(name : string; fn : MtpVerifyOverrideFn) {
     g_mtp_verify_overrides[name] = fn
 }
 
+//! The MTP rollback seat, a served verify's reject on the backend that served it: the session's recurrent state, cached rows and
+//! head rows back to the state after verify row `a` (the rows the round committed), `dn_pos` at `pos + a + 1`. The round takes
+//! no snapshot before a verify this seat follows, so false is an engine bug it panics on. Consulted where the verify seat served
+typedef MtpRollbackOverrideFn = function<(t : Model; var s : Session; pos, a : int64) : bool>
+var private g_mtp_rollback_overrides : table<string; MtpRollbackOverrideFn>
+
+def register_mtp_rollback_override(name : string; fn : MtpRollbackOverrideFn) {
+    g_mtp_rollback_overrides[name] = fn
+}
+
 //! whether the MTP seats registered under a decode override's name serve model `t`: the override that owns `t`'s
 //! round - an override with no owner registered never takes a round, and a model its owner refuses runs the CPU round
 typedef MtpSeatOwnerFn = function<(t : Model) : bool>
@@ -499,6 +509,13 @@ def private mtp_verify_seated(t : Model) : bool => mtp_seats_own(t) && key_exist
 //! the verify seat took the round's `n` rows `toks` at `pos` (the caller asked `mtp_verify_seated` first)
 def private mtp_verify_served(t : Model; var s : Session; toks : array<int64>; n, pos : int64) : bool
     => invoke(g_mtp_verify_overrides[g_decode_override_name], t, s, toks, n, pos)   // nolint:PERF026 — the caller's mtp_verify_seated holds key_exists, so the index cannot insert
+
+//! the active decode override owns `t`'s round and registered a rollback seat: a verify its seat serves needs no snapshot
+def private mtp_rollback_seated(t : Model) : bool => mtp_seats_own(t) && key_exists(g_mtp_rollback_overrides, g_decode_override_name)
+
+//! the rollback seat put the session back to the state after verify row `a` (the caller asked `mtp_rollback_seated` first)
+def private mtp_rollback_served(t : Model; var s : Session; pos, a : int64) : bool
+    => invoke(g_mtp_rollback_overrides[g_decode_override_name], t, s, pos, a)   // nolint:PERF026 — the caller's mtp_rollback_seated holds key_exists, so the index cannot insert
 
 //! The accept walk's sampler seam (the decode-override shape: the engine never requires the sampler):
 //! draws one token from row `off` of `rows` through the session's spec_params, consuming the row.
@@ -4591,10 +4608,33 @@ def private mtp_verify_seat_carry(t : Model; var s : Session) : bool {
     return true
 }
 
-//! the round's two verify rows `s.mtp_vbatch` [tok, d] at `pos`: the verify seat where it is `seated` and serves, else the CPU
-//! two-row prefill and its classifier
-def private mtp_verify_two(t : Model; var s : Session; seated : bool; pos : int64) {
-    return if (seated && mtp_verify_served(t, s, s.mtp_vbatch, 2l, pos))
+//! the recurrent state's snapshot under its profiler section
+def private mtp_snapshot_timed(var s : Session) {
+    let ts_snap = prof_ticks()
+    mtp_state_snapshot(s)
+    prof_add("mtp.snapshot", ts_snap)
+}
+
+//! the round's two verify rows `s.mtp_vbatch` [tok, d] at `pos`: the verify seat where it is `seated` and serves (true), else
+//! the CPU two-row prefill and its classifier over the recurrent state's snapshot, taken after the seat's decision (a declined
+//! seat leaves the session untouched) and before a served verify only where no rollback seat takes its reject
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
+def private mtp_verify_two(t : Model; var s : Session; seated : bool; pos : int64) : bool {
+    var snapped = t.config.recr_mask == 0ul   //! a model with no recurrent layer leaves nothing to restore
+    if (seated) {
+        if (!snapped && !mtp_rollback_seated(t)) {
+            mtp_snapshot_timed(s)
+            snapped = true
+        }
+        let ts_seat = prof_ticks()
+        let served = mtp_verify_served(t, s, s.mtp_vbatch, 2l, pos)
+        prof_add("mtp.verify", ts_seat)
+        return true if (served)
+    }
+    if (!snapped) {
+        mtp_snapshot_timed(s)
+    }
+    let ts_verify = prof_ticks()
     let batch_cls = mtp_cls_batch_ok(t)
     forward_prefill(t, s, s.mtp_vbatch, 2l, pos, batch_cls)
     if (g_prefill_logits_done) {   //! a driver that landed the window's logits left the host x_b rows the verify's classifier reads unwritten
@@ -4605,6 +4645,40 @@ def private mtp_verify_two(t : Model; var s : Session; seated : bool; pos : int6
     } else {
         mtp_verify_row0(t, s)
     }
+    prof_add("mtp.verify", ts_verify)
+    return false
+}
+
+[cold_path]   // the round's fail-closed exit: the verify seat served, and the rollback seat behind it declined
+def private mtp_rollback_declined_panic {
+    panic("dasLLAMA: the `{g_decode_override_name}` rollback seat declined a reject after its verify seat served the round - no snapshot holds the recurrent state; engine bug")
+}
+
+//! the round's reject: verify row 0 is the committed token's step, so its logits and post-norm hidden stand as `s.logits` and
+//! the carry, and only the recurrent state the verify advanced past it comes back - on the device through the rollback seat
+//! where the verify seat served, through the snapshot's restore and the replayed step on every other rail
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
+def private mtp_reject(t : Model; var s : Session; tok, pos : int64; served : bool) {
+    let c = t.config
+    var rolled = c.recr_mask == 0ul
+    if (!rolled && served && mtp_rollback_seated(t)) {
+        let ts_roll = prof_ticks()
+        rolled = mtp_rollback_served(t, s, pos, 0l)
+        prof_add("mtp.rollback", ts_roll)
+        if (!rolled) {
+            mtp_rollback_declined_panic()
+        }
+    }
+    if (rolled) {
+        copy_floats(s.mtp_logits, 0l, s.logits, 0l, c.vocab_size)
+        copy_floats(s.mtp_h0, 0l, s.mtp_h, 0l, c.dim)   //! the carry re-seeds from row 0's hidden: the verify's tail stashed the last row's, the draft's
+        s.mtp_h_pos1 = pos + 1l
+        return
+    }
+    let ts_replay = prof_ticks()
+    mtp_state_restore(s)
+    forward(t, s, tok, pos)
+    prof_add("mtp.replay", ts_replay)
 }
 
 //! the depth-1 speculative step over every stream at once: a registered batch override verifies every
@@ -4652,14 +4726,9 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     // batched verify: trunk over [tok@pos, d@pos+1] — weights stream once for both rows; the
     // warm inside this prefill writes the head's row pos = (h_pos, d), which doubles as the
     // accept-path backfill (a reject leaves it stale; the next draft at that row rewrites it)
-    let ts_snap = prof_ticks()
-    mtp_state_snapshot(s)
-    prof_add("mtp.snapshot", ts_snap)
-    let ts_verify = prof_ticks()
     s.mtp_vbatch[0] = tok
     s.mtp_vbatch[1] = d
-    mtp_verify_two(t, s, seated, pos)
-    prof_add("mtp.verify", ts_verify)
+    let served = mtp_verify_two(t, s, seated, pos)
     let ts_walk = prof_ticks()
     var hit = false
     if (mtp_walk_samples(s)) {
@@ -4677,22 +4746,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         s.n_past = pos + 2l
         return true
     }
-    // Reject — but the verify already produced what a plain step would: row 0's logits and KV are
-    // correct, so re-forwarding discards real work. The re-forward is only needed to roll back
-    // recurrent state the verify advanced past the draft; an arch without any skips it.
-    if (c.recr_mask == 0ul) {
-        copy_floats(s.mtp_logits, 0l, s.logits, 0l, c.vocab_size)
-        // forward_prefill's tail stashed the LAST row's h — the draft's, now discarded — so re-seed
-        // the draft head from row 0's normed hidden the verify's own classifier computed
-        copy_floats(s.mtp_h0, 0l, s.mtp_h, 0l, c.dim)
-        s.mtp_h_pos1 = pos + 1l
-        s.n_past = pos + 1l
-        return false
-    }
-    let ts_replay = prof_ticks()
-    mtp_state_restore(s)
-    forward(t, s, tok, pos)
-    prof_add("mtp.replay", ts_replay)
+    mtp_reject(t, s, tok, pos, served)
     s.n_past = pos + 1l
     return false
 }

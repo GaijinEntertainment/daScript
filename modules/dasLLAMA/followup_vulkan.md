@@ -1974,19 +1974,18 @@ module) is independent and can land any time - it is pure structure.
     unwritten); the resident overrides land the
     post-norm hidden carry (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), so with
     `set_mtp_spec` or the server's `--mtp` the round's cold gate passes and the CPU round runs
-    around the device draft and verify. A reject stays the CPU round's: its snapshot sends every
-    recurrent slot home before the verify (about 20 MB down on the 0.8B) and its restore uploads the
-    state again for the replayed step. A verify the seat declines runs
-    the CPU two-row prefill: a hybrid's passes to the CPU rails as `continuation`, and a model with
-    no recurrent layer (GLM-4.5-Air) has it served by the window chain, which leaves the host `x_b`
-    the CPU verify's classifier reads unwritten, so the round panics there by name. `test_mtp.das`'s
-    sessions carry f32 K/V, so they reach the driver only under `DASLLAMA_VK_KV32=1`. The work, in
-    Metal's shape (`ARCHITECTURE_GPU_MTP.md`) on the resident driver: the reject on the device - a
-    device copy of the region's recurrent slots and rings in the verify command, copied back on a
-    reject, then the deltanet shadow region and its replay of rows `0..a` for the hybrids every Qwen
-    MTP carrier is; the round seat at
-    depth k (the verify's per-row planes already hold the box knob's depth plus one, eight rows at
-    most); then the joint verify across streams and the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
+    around the device draft and verify, and a reject of a verify the seat served rolls the region
+    back on the device from the copies the verify command took - no snapshot, no replayed step
+    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`, the rollback seat). A verify the
+    seat declines runs the CPU two-row prefill over the snapshot the round then takes: a hybrid's
+    passes to the CPU rails as `continuation`, and a model with no recurrent layer (GLM-4.5-Air)
+    has it served by the window chain, which leaves the host `x_b` the CPU verify's classifier
+    reads unwritten, so the round panics there by name. `test_mtp.das`'s sessions carry f32 K/V,
+    so they reach the driver only under `DASLLAMA_VK_KV32=1`. The work, in Metal's shape
+    (`ARCHITECTURE_GPU_MTP.md`) on the resident driver: the round seat at depth k (the verify's
+    per-row planes and the rollback scratch already hold the box knob's depth plus one, eight
+    rows at most, and the scratch's rows serve a reject to any `a < k`); then the joint verify
+    across streams and the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
     Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at
     depth 3 on the M5 Max), gemma-4-26B with the assistant drafter as the second round kind; the
     invariance cells of `tests/test_mtp.das` and the scheduler arm are the parity, `lcpp_bench

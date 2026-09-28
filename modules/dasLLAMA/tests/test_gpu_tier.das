@@ -195,6 +195,14 @@ def private d_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; v
 
 def private d_verify_rows : int64 => 4l
 
+var private g_rollback_a = -1l
+
+//! the rollback double: the committed row it was asked for
+def private d_rollback(a : int64) : bool {
+    g_rollback_a = a
+    return true
+}
+
 var private g_head_warm_ask = false
 var private g_head_sync_row0 = -1l
 var private g_head_sync_n = -1l
@@ -437,6 +445,19 @@ def test_rdec_verify_seat(t : T?) {
         delete logits
         delete hid
         delete picks
+    }
+}
+
+[test]
+def test_rdec_rollback_seat(t : T?) {
+    t |> run("the verify's rollback seat installs apart: unset it declines and reaches no double, installed it forwards the committed row") @(t : T?) {
+        t |> success(!rdec_rollback_installed(), "no rollback seat before its install")
+        t |> success(!rdec_rollback(0l), "an unset rollback declines")
+        t |> equal(g_rollback_a, -1l, "the unset seat reaches no double")
+        install_rdec_rollback(@@d_rollback)
+        t |> success(rdec_rollback_installed(), "the rollback install must flip its witness")
+        t |> success(rdec_rollback(3l), "the double's answer forwards")
+        t |> equal(g_rollback_a, 3l, "the committed row forwards")
     }
 }
 

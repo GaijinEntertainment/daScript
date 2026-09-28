@@ -47,9 +47,15 @@ what it costs today and what the fix would change.
   depth 1 (nb 1 -> 2) and 16,212,504 at depth 7 (nb 8), both at 16 splits. The plan's scratch
   term counts the same rows. Owed from the pod: `lcpp_bench --mtp-ab` on the 0.8B-MTP under
   `DASLLAMA_GPU=1` with `--prof` and `JOBQUE_PROFILING=1` - the `mtp.verify` section against a
-  one-row step's wall and against the CPU verify's on the same box, and `mtp.snapshot` /
-  `mtp.replay`, the recurrent state's round trip the reject still pays (about 20 MB down and up on
-  the 0.8B), which a device rollback retires; and the on/off rate with the drafts' acceptance.
+  one-row step's wall and against the CPU verify's on the same box; the reject's `mtp.rollback`
+  section against the `mtp.snapshot` + `mtp.replay` the CPU restore paid (the recurrent state's
+  round trip, about 20 MB down and up on the 0.8B, retired: the verify command copies each
+  recurrent layer's slot state and ring pair after every row but its last into a rollback scratch
+  of `depth x n_rec x (nvh x ds x ds + 2 x cd x (dconv - 1)) x 4` bytes, and the reject copies one
+  row back - on Qwen3.5-0.8B-MTP (18 recurrent layers, 16 heads of 128, cd 6144, dconv 4)
+  21,528,576 bytes at depth 1 and 150,700,032 at depth 7, counted in the plan's scratch term,
+  `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`); and the on/off rate with the drafts'
+  acceptance - the pod measures.
 
 - **OPEN (2026-09-27) - the Vulkan resident driver's NextN draft head: its plane and slot bytes,
   and the device draft against the CPU draft.** Where the driver takes a model's head

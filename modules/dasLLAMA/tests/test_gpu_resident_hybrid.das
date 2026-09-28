@@ -578,9 +578,42 @@ def test_gpu_resident_hybrid_mtp_verify(t : T?) {
     }
 }
 
+//! the session's deltanet state and conv history as the host holds them once the device's copies come home
+struct private DnHost {
+    state : array<float>
+    conv : array<float>
+}
+
+def private dn_host(var s : Session) : DnHost {
+    dn_flush_all(s)
+    var state <- [for (x in s.dn_state); x]
+    var conv <- [for (x in s.dn_conv_state); x]
+    return <- DnHost(state <- state, conv <- conv)
+}
+
+//! a fresh session stepped a row at a time: its deltanet state after `toks`, and the logits of one more step of `next`
+struct private StateRun {
+    dn : DnHost
+    next_logits : array<float>
+}
+
+def private state_after_steps(tr : Model; prompt, toks : array<int64>; next : int64) : StateRun {
+    var s <- create_session(tr, mirror_kv_dtype())
+    prefill_warm(tr, s, prompt)
+    let n = long_length(prompt)
+    for (st in range64(long_length(toks))) {
+        forward(tr, s, toks[st], n + st)
+    }
+    var dn <- dn_host(s)
+    forward(tr, s, next, n + long_length(toks))
+    var next_logits <- [for (x in s.logits); x]
+    delete s
+    return <- StateRun(dn <- dn, next_logits <- next_logits)
+}
+
 [test]
 def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
-    t |> run("Qwen3.5-0.8B-MTP: a rejected device verify rolls back - the restore and the replayed step read the verify's row 0 bit for bit, the region's rows at the session's position, the next round on the device again") @(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: a rejected device verify rolls the region back on the device - no snapshot and no replayed step; the live deltanet slots and the next step bit for bit a one-row session's, the rows, head rows, dn_pos and carry at the token's row, the next round on the device again") @(t : T?) {
         if (!mtp_carry_ready(t)) return
         var tr <- load_mtp_carrier(t, 1l)
         with_job_que() {
@@ -592,33 +625,57 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             let pos = DRAFT_PROMPT
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
-            set_mtp_force_reject_every(1l)   //! every draft rejected: the recurrent round restores its state and replays the token
+            set_mtp_force_reject_every(1l)   //! every draft rejected: the rollback seat takes the reject
             let verifies0 = moe_gpu_resident_verifies()
+            let rollbacks0 = moe_gpu_resident_rollbacks()
             var acc = 0l
             let hit = mtp_spec_eval(tr, s, DRAFT_TOKEN, acc)
             set_mtp_force_reject_every(0l)
             t |> success(!hit, "the forced reject rejected the draft")
             t |> equal(moe_gpu_resident_verifies(), verifies0 + 1l, "the rejected round's verify ran on the device")
+            t |> equal(moe_gpu_resident_rollbacks(), rollbacks0 + 1l, "the reject rolled back on the device")
+            t |> equal(long_length(s.mtp_snap_conv), 0l, "the round took no snapshot: its buffers were never sized")
             t |> equal(s.n_past, pos + 1l, "the reject committed the token alone")
-            t |> equal(moe_gpu_resident_rows(s), pos + 1l, "the replay cut the region's rows back to the token's")
-            t |> equal(s.mtp_h_pos1, pos + 1l, "the replay's carry sits at the token's row")
+            t |> equal(moe_gpu_resident_rows(s), pos + 1l, "the rollback cut the region's rows to the token's")
+            t |> equal(moe_gpu_resident_head_rows(s), pos, "the region's head rows end below the next draft's row")
+            t |> equal(s.dn_pos, pos + 1l, "the recurrent state's position sits at the token's row")
+            t |> equal(s.mtp_h_pos1, pos + 1l, "the carry sits at the token's row")
+            let d = s.mtp_vbatch[1]
             var vlog0 <- row_of(s.mtp_logits_b, 0l, c.vocab_size)
             var vhid0 <- row_of(s.mtp_hrows, 0l, c.dim)
-            var vlog1 <- row_of(s.mtp_logits_b, 1l, c.vocab_size)
-            var replay_log <- [for (x in s.logits); x]
-            var replay_h <- [for (x in s.mtp_h); x]
-            verify_row_is_step(t, tr, 0l, vlog0, vhid0, replay_log, replay_h, vlog1)
+            var kept_log <- [for (x in s.logits); x]
+            var kept_h <- [for (x in s.mtp_h); x]
+            t |> equal(apart(kept_log, vlog0), 0l, "the reject kept verify row 0's logits as the session's")
+            t |> equal(apart(kept_h, vhid0), 0l, "the reject re-seeded the carry from verify row 0's hidden")
+            let next = argmax_of(kept_log)
+            var rolled <- dn_host(s)   //! the live slots after the rollback, read back to the host
+            forward(tr, s, next, pos + 1l)
+            var next_log <- [for (x in s.logits); x]
             mtp_spec_eval(tr, s, argmax_of(s.logits), acc)
             set_mtp_spec(spec0)
             t |> equal(moe_gpu_resident_verifies(), verifies0 + 2l, "the round after the reject verified on the device again")
             t |> equal(moe_gpu_resident_rows(s), s.n_past, "the region's rows end at the session's position after the next round")
             served_every_call(t)
-            delete vlog0
-            delete vhid0
-            delete vlog1
-            delete replay_log
-            delete replay_h
             delete s
+            var one <- state_after_steps(tr, prompt, [DRAFT_TOKEN], next)
+            var two <- state_after_steps(tr, prompt, [DRAFT_TOKEN, d], next)   //! the control: the verify's two rows stepped - the state the rollback undid
+            let sa = apart(rolled.state, one.dn.state)
+            let ca = apart(rolled.conv, one.dn.conv)
+            let la = apart(next_log, one.next_logits)
+            to_log(LOG_INFO, "rollback: state {sa} apart, conv history {ca} apart, next step's logits {la} apart (maxdiff {logits_maxdiff(next_log, one.next_logits)}); argmax rolled {argmax_of(next_log)} '{decode_(tr, [argmax_of(next_log)])}', one-row session {argmax_of(one.next_logits)} '{decode_(tr, [argmax_of(one.next_logits)])}'; the two-row control {apart(two.dn.state, one.dn.state)} state elements apart\n")
+            t |> equal(sa, 0l, "the rolled-back deltanet state is the one-row session's bit for bit ({sa} elements apart)")
+            t |> equal(ca, 0l, "the rolled-back conv history is the one-row session's bit for bit ({ca} elements apart)")
+            t |> equal(la, 0l, "the next plain step's logits are the one-row session's next step bit for bit ({la} elements apart)")
+            t |> success(apart(two.dn.state, one.dn.state) > 0l, "control: the state after the verify's two rows misses the one-row session's")
+            t |> success(apart(next_log, two.next_logits) > 0l, "control: the next step misses the two-row session's next step")
+            delete two
+            delete one
+            delete rolled
+            delete next_log
+            delete kept_h
+            delete kept_log
+            delete vhid0
+            delete vlog0
             delete prompt
         }
         delete tr

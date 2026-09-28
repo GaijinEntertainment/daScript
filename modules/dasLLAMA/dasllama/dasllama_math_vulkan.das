@@ -382,6 +382,7 @@ def dasllama_math_vulkan_register() {
     install_rdec_carry(@@vk_rdec_land_carry)
     install_rdec_draft(@@vk_rdec_set_head, @@vk_rdec_draft)
     install_rdec_verify(@@vk_rdec_verify, @@vk_rdec_verify_rows)
+    install_rdec_rollback(@@vk_rdec_rollback)
     install_rdec_head_warm(@@vk_rdec_head_warm_ask, @@vk_rdec_head_warm_rows, @@vk_rdec_head_sync_rows, @@vk_rdec_head_read_rows)
     install_moe_gpu_resident_dn(@@vk_rdec_set_dn_layer, @@vk_rdec_upload_dn_ba, @@vk_rdec_dn_own, @@vk_rdec_prefill_dn_own)
     install_moe_gpu_resident_moe(@@vk_rdec_moe_ok, @@vk_rdec_prepare_moe, @@vk_rdec_set_moe_layer, @@vk_rdec_set_moe_experts)

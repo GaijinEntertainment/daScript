@@ -727,7 +727,9 @@ synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call sti
 (the extras load; spec off continues the plain file's fixture), the self-speculative greedy decode
 token-for-token against plain decode on the counting and prose fixtures - and on the counting
 fixture again with the file loaded at `QuantMode.q4_0`, the requant tier the round serves - the
-poisoned-verify rollback, the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
+poisoned-verify rollback over the CPU restore and beside it a forced-reject round through the
+engine's seam (on the resident driver the device rollback, its counter the witness; on the CPU
+rail the restore and the replayed step), the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
 non-recurrent MTP model, so the only reach of the depth-1 step's shortcut reject (row 0's logits
 and hidden stand, no re-forward): its code fixture runs plain, then again with
 `set_mtp_force_reject_every(3)` rejecting every third draft, both token-for-token against plain
@@ -876,9 +878,13 @@ argmax both sides read logged, the other row's step as the control; every row's 
 argmax of its landed logits, the region's rows at the session's position (two past the prompt on an
 accept, one on a reject), and the head's K row at the prompt's end rewritten on the host by the
 re-warm's readback. `test_gpu_resident_hybrid_mtp_verify_reject` forces the reject
-(`set_mtp_force_reject_every(1)`): the restore and the replayed step read the verify's row 0 bit for
-bit (logits and hidden), the region's rows and the carry's watermark back at the token's row, and
-the next round verifies on the device again with the region's rows at the session's position.
+(`set_mtp_force_reject_every(1)`): the reject rolls back on the device (the rollback counter up by
+one, the snapshot buffers never sized), the session keeps verify row 0's logits and hidden bit for
+bit, the region's rows, its head rows, `dn_pos` and the carry's watermark sit at the token's row,
+the next round verifies on the device again with the region's rows at the session's position, and
+then the rolled-back deltanet state and conv history (read back to the host) and the next plain
+step's logits are bit for bit a fresh session's after one row-at-a-time step of the same token,
+with the fresh session stepped through both verify rows as the control that misses.
 The head's prompt warm on the window chain: `test_gpu_resident_hybrid_mtp_xb_poison` fills a
 session's host residual rows with NaN before the same 40-token resident prefill and holds the
 device draft at the prompt's last row bit for bit the clean prefill's (logits, hidden and pick;

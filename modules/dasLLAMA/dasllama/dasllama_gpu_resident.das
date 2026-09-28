@@ -614,7 +614,26 @@ def private rdec_scratch_bytes(t : Model) : int64 {
     let nb = max(max(g_rdec_regions_want, 1l), rdec_verify_rows_want(t))   //! the per-row planes hold a row a region, or the verify's rows: the logits and the attention pieces scale with it
     let pieces = hs > 0l ? (qd / hs) * RDEC_ATTN_SPLIT_CAP * (hs + 2l) * 4l : 0l
     return RDEC_PF_ROWS * (16l * c.dim + 2l * wide + 10l * qd + 12l * kvd
-        + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe
+        + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe + rdec_rollback_bytes(t)
+}
+
+//! the verify's rollback scratch on a hybrid whose head the driver takes: a row per verify row the round can reject past (the
+//! depth), each row every recurrent layer's state slot and ring pair
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
+def private rdec_rollback_bytes(t : Model) : int64 {
+    let c = t.config
+    let rows = rdec_verify_rows_want(t) - 1l
+    if (c.recr_mask == 0ul || rows <= 0l || !rdec_rollback_installed()) {
+        return 0l
+    }
+    let dng = rdec_dn_geom(t)
+    var nrec = 0l
+    for (l in range64(c.n_layers)) {
+        if (layer_is_recurrent(c, l)) {
+            nrec++
+        }
+    }
+    return rows * nrec * (dng.nvh * dng.ds * dng.ds + 2l * dng.cd * (dng.dconv - 1l)) * 4l
 }
 
 //! The auto arm's headroom where no OS answers: the WDDM share on Windows (the demotion collapse
@@ -2134,6 +2153,37 @@ def private vulkan_resident_verify_go(t : Model; var s : Session; toks : array<i
     return true
 }
 
+var private g_rdec_rollbacks = 0l
+
+//! How many rejected rounds the resident driver rolled back on the device in this process (a cell's served witness)
+def moe_gpu_resident_rollbacks() : int64 => g_rdec_rollbacks
+
+//! the resident speculative rollback (`register_mtp_rollback_override("vulkan", ...)`): a served verify's reject - the region's
+//! recurrent slots back to the state after verify row `a`, the region's rows, its head rows and `dn_pos` cut to the committed
+//! rows; false only where the driver holds no copy for the region, an engine bug the round panics on by name
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]   // per rejected round
+def private vulkan_resident_rollback(t : Model; var s : Session; pos, a : int64) : bool {
+    if (!g_rdec_active || !rdec_rollback_installed()) {
+        return false
+    }
+    let r = s.rdec_region
+    if (!rdec_owns(s, r)) {
+        return false
+    }
+    rdec_select_region(r)
+    let c = t.config
+    if (c.recr_mask != 0ul) {
+        if (!rdec_rollback(a)) {
+            return false
+        }
+        s.dn_pos = pos + a + 1l
+    }
+    g_rdec_regions[r].cnt = pos + a + 1l
+    rdec_head_rows_stale(s, pos + a)
+    g_rdec_rollbacks++
+    return true
+}
+
 // the resident whole-stack decode override (registered as "vulkan") — the mirror builds as positions arrive
 [hot_path]   // per token
 def private vulkan_resident_decode(t : Model; var s : Session; token, pos : int64) : bool {
@@ -2567,6 +2617,7 @@ def resident_driver_register() {
     register_mtp_seat_owner("vulkan", @@vulkan_mtp_owns)
     register_mtp_draft_override("vulkan", @@vulkan_resident_draft)
     register_mtp_verify_override("vulkan", @@vulkan_resident_verify)
+    register_mtp_rollback_override("vulkan", @@vulkan_resident_rollback)
     register_ple_gpu_gate(@@vulkan_ple_gate)
     register_ple_gpu_decode_gate(@@vulkan_ple_gate)   //! the token command gathers the row on device too
     register_prefill_override_split_span("vulkan")

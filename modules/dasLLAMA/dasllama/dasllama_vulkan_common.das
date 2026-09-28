@@ -2352,6 +2352,7 @@ struct RLayer {
     s_dnstep : VkDescriptorSet
     m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
     dn : array<DnStep>
+    roll_off : int64                //! this layer's byte offset in a rollback scratch row (`RDec.roll_dev`): its slot state, then its ring pair
     // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
     pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
     pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
@@ -2491,10 +2492,16 @@ struct RDec {
     pf_cat, pf_catq, pf_cats, pf_catf : uint64   //! ... the head rows' [enorm ; hnorm] image and its eh_proj feed (Q8_0 blocks, or halves on the f16 feed)
     draft_cmd : array<VkCommandBuffer>   //! ... one recorded draft command per region: the head's mirror base rides its push, as the token command's does
     draft_recorded : array<bool>
-    v_cmd : array<VkCommandBuffer>   //! the same-slab verify commands by row count (index 0 unused), region-free as the N-row command's, and their unsplit twins
+    v_cmd : array<VkCommandBuffer>   //! the same-slab verify commands by row count (index 0 unused; `rd_v_idx`), region-free as the N-row command's on an attention model, a set a region on a hybrid (the rollback copies bake the region's slot), and their unsplit twins
     v_cmd_unsplit : array<VkCommandBuffer>
     v_recorded : array<bool>
     v_rail : NRail = NRail.unasked   //! the verify's form on the armed model: the head, the N-row rail and the head planes' N-column leaves, decided once
+    verify_rows : int64           //! the rows one stream's verify steps at once: the round's depth plus one, within `nb` (0 = the head off or the verify uninstalled)
+    roll_dev : uint64             //! the verify's rollback scratch: a row per verify row the round can reject past (`roll_rows` = `verify_rows` - 1), each row every recurrent layer's slot state and ring pair in layer order (`RLayer.roll_off`); 0 = none
+    roll_rows : int64
+    roll_row_bytes : int64
+    roll_region : int64 = -1l     //! ... the region whose slots the last verify copied (-1 = none to roll back), and that verify's rows
+    roll_vrows : int64
     pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
     s_pick_part, s_pick_fin : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback

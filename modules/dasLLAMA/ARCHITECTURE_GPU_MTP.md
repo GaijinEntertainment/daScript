@@ -36,7 +36,9 @@ rewrites - and only the watermark keeps them from being read. The CPU depth-1 st
 (`mtp_spec_eval`) takes a rejected draft on a model with no recurrent layer without a re-forward:
 the verify's row 0 already holds the committed token's logits and post-norm hidden, so they stand
 and the draft head is re-seeded from them; a recurrent model restores the pre-verify state and
-re-forwards the committed token. `set_mtp_force_reject_every(n)` rejects every n-th draft of that
+re-forwards the committed token, unless the verify seat that served the round registered a
+rollback seat, which puts the state back on the device and leaves row 0 standing the same way
+(`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`). `set_mtp_force_reject_every(n)` rejects every n-th draft of that
 step's greedy walk whatever the verify said - the seam a test reaches the reject arm through on a
 fixture that accepts every draft.
 

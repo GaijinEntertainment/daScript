@@ -531,6 +531,24 @@ def public rdec_verify_rows() : int64 => invoke(g_rdec_verify_rows)
 def public rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool
     => invoke(g_rdec_verify, x, cossin, hemb, hcos, h0, pos, n, kp, vp, logits, picks, hid)
 
+//! the same-slab verify's reject in the selected region: every recurrent slot and ring pair back to the copy the verify command
+//! took after its row `a` - the last row the round committed - so the round takes no host snapshot and replays no step; false
+//! where the driver holds no such copy (a region the last verify did not step, a row past its copies)
+typedef RdecRollbackFn = function<(a : int64) : bool>
+[unused_argument(a)]
+def private rdec_unset_rollback(a : int64) : bool => false
+var g_rdec_rollback = @@rdec_unset_rollback
+var g_rdec_rollback_installed = false
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
+def public install_rdec_rollback(rollback : RdecRollbackFn) {
+    g_rdec_rollback = rollback
+    g_rdec_rollback_installed = true
+}
+
+def public rdec_rollback_installed() : bool => g_rdec_rollback_installed
+def public rdec_rollback(a : int64) : bool => invoke(g_rdec_rollback, a)
+
 //! the NextN head's prompt warm on the window chain: `ask` names whether the next chain warms the head's slab over the prompt rows
 //! it serves, `rows` answers how many head rows the last chain wrote (0 = none); the K/V row seams move the head's rows
 //! [row0, row0 + nrows) of the selected region - `sync` up from the host's `kp` / `vp` (the cache from row 0), `read` back down
@@ -2211,6 +2229,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_verify_rows == null) {
         g_rdec_verify_rows = @@rdec_no_verify_rows
+    }
+    if (g_rdec_rollback == null) {
+        g_rdec_rollback = @@rdec_unset_rollback
     }
     if (g_rdec_head_warm_ask == null) {
         g_rdec_head_warm_ask = @@rdec_unset_head_warm_ask

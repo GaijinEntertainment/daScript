@@ -122,6 +122,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     let rows_want = max(regions, head ? verify_rows : 0l)   //! a row per region the N-row command steps at once, or the verify's rows of one region
     r.nb = min(rows_want, RD_NB_MAX)
     let nb = r.nb
+    r.verify_rows = min(nb, head ? verify_rows : 0l)
     let wide = max(max(max(qd, hidden), dim), head ? 2l * dim : 0l)   //! the head's eh_proj reads a [enorm ; hnorm] row twice dim wide through the quant planes
     r.log_xfer = g_gpu.xfer_fam >= 0
     r.carry = carry
@@ -229,10 +230,11 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.draft_cmd |> resize(head ? regions : 0l)
     r.draft_recorded |> resize(head ? regions : 0l)
     if (head) {
-        r.v_recorded |> resize(nb + 1l)
-        r.v_cmd |> reserve(nb + 1l)
-        r.v_cmd_unsplit |> reserve(nb + 1l)
-        for (_i in range64(nb + 1l)) {
+        let vsets = (hybrid ? regions : 1l) * (nb + 1l)   //! a hybrid's verify commands bake the region's slot (the rollback copies), so a set a region
+        r.v_recorded |> resize(vsets)
+        r.v_cmd |> reserve(vsets)
+        r.v_cmd_unsplit |> reserve(vsets)
+        for (_i in range64(vsets)) {
             r.v_cmd |> push(alloc_cmd())
             r.v_cmd_unsplit |> push(r.unsplit_on ? alloc_cmd() : VkCommandBuffer())
         }
@@ -1154,8 +1156,30 @@ def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64;
         fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, cat_bytes),
         fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
     g_rd.head_on = true
+    if (g_rd.hybrid) {
+        rd_roll_alloc()
+    }
     rd_invalidate_token()
     return true
+}
+
+//! the verify's rollback scratch on a hybrid, sized once every recurrent layer is set: `verify_rows - 1` rows (the rows a round
+//! can reject past), each row every recurrent layer's slot state and ring pair at the layer's `roll_off`
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
+def private rd_roll_alloc {
+    var off = 0l
+    for (l in range64(long_length(g_rd.layers))) {
+        var L & = unsafe(g_rd.layers[l])
+        continue if (!L.recurrent)
+        L.roll_off = off
+        off += L.dn[0].slot_state_bytes + 2l * L.dn[0].ring_image_bytes
+    }
+    g_rd.roll_row_bytes = off
+    g_rd.roll_rows = max(g_rd.verify_rows - 1l, 0l)
+    g_rd.roll_region = -1l
+    if (off > 0l && g_rd.roll_rows > 0l) {
+        g_rd.roll_dev = make_device_buf(off * g_rd.roll_rows)
+    }
 }
 
 // Record the whole-token cmd ONCE per set_layer/set_cls epoch: constant metas + scalars fill here;
@@ -1604,6 +1628,9 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
         for (i in range64(nrows)) {
             pcd.row0 = uint(i)
             enc_dn_step_cls(raw, h, L.s_dnstep, pcd, nvh)
+            if (i + 1l < nrows && g_rd.roll_dev != 0ul) {
+                rd_encode_roll_copy(raw, h, L, i)
+            }
         }
     } else {
         enc_dn_step_cls(raw, h, L.s_dnstep, pcd, nvh * nrows)
@@ -1615,6 +1642,17 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
     gemv_enc(L.fout, raw, h, L.s_dnout, pco, dim)
     rd_ts(raw, "d:out")
+}
+
+//! the verify's rollback copy after row `i`'s step: this layer's slot state and ring pair (the selected region's, baked into the
+//! command) into scratch row `i`, a transfer read of what the step wrote under the rail, the next row's step ordered after it
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
+def private rd_encode_roll_copy(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; i : int64) {
+    let st & = unsafe(L.dn[g_rd.region])
+    let dst = i * g_rd.roll_row_bytes + L.roll_off
+    vhz_dep(raw, h, VHZ_DNST | VHZ_DNSM, 0u, true)
+    cmd_copy_range(raw, st.state_dev, st.state_byte_off, g_rd.roll_dev, dst, st.slot_state_bytes)
+    cmd_copy_range(raw, st.smalls_dev, st.hist_off * 4l, g_rd.roll_dev, dst + st.slot_state_bytes, 2l * st.ring_image_bytes)
 }
 
 //! the token command's fuse gates; a gated, partial-rope or v-normed model rides the fused qk-norm+rope pair whatever the fuse lever says - the split pair lacks those arms
@@ -2524,6 +2562,7 @@ def private rd_v_decline(why : string) : bool {
 def private rd_ensure_v_rail : bool {
     if (!g_rd.head_on || !g_rd.carry) return rd_v_decline("the NextN head is off the device (the load log names why)")
     if (vk_rdec_token_n_rows() < 2l) return rd_v_decline("the N-row token command declined on this model (its line above)")
+    if (g_rd.verify_rows < 2l) return rd_v_decline("the driver was prepared for {g_rd.verify_rows} verify rows (the tier's verify seat was not installed at the load)")
     let nb = g_rd.nb
     let L & = unsafe(g_rd.head)
     let leaves = (gemv_cls_has_n(g_rd.eh_fmt) && gemv_cls_has_n(L.fq) && gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv))
@@ -2531,16 +2570,20 @@ def private rd_ensure_v_rail : bool {
     return leaves || rd_v_decline("a head plane's format (eh_proj {g_rd.eh_fmt}, q {L.fq}, k {L.fk}, v {L.fv}) has no N-column GEMV leaf on this device")
 }
 
-//! The rows of one stream the same-slab verify steps at once on the armed model (`install_rdec_verify`'s `rows`): the per-row
-//! planes' `nb`, or 0 where the verify has no form on it (`rd_ensure_v_rail`)
+//! The rows of one stream the same-slab verify steps at once on the armed model (`install_rdec_verify`'s `rows`): the round's
+//! depth plus one as the driver was prepared (`RDec.verify_rows`, within the per-row planes' `nb`), or 0 where the verify has no
+//! form on it (`rd_ensure_v_rail`)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def vk_rdec_verify_rows : int64 {
     if (g_rd == null || !g_rd.ready) return 0l
     if (g_rd.v_rail == NRail.unasked) {
         g_rd.v_rail = rd_ensure_v_rail() ? NRail.built : NRail.declined
     }
-    return g_rd.v_rail == NRail.built ? g_rd.nb : 0l
+    return g_rd.v_rail == NRail.built ? g_rd.verify_rows : 0l
 }
+
+//! the verify command's index for `n` rows: the row count alone on an attention model, the selected region's set on a hybrid
+def private rd_v_idx(n : int64) : int64 => (g_rd.hybrid ? g_rd.region : 0l) * (g_rd.nb + 1l) + n
 
 //! The verify command's head re-warm after the trunk's picks (`ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm`): head row i is
 //! [enorm(embed tok_i) ; hnorm(h_i)], h_0 the uploaded pre-draft carry and h_i the trunk's row i - 1 out of xb, through eh_proj and the
@@ -2574,17 +2617,18 @@ def private rd_encode_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows : 
     rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), nrows, uint(nrows), 0, true)
 }
 
-//! the verify commands at `n` rows, split and unsplit, over the N-row command's sets
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   // once per row count and set epoch
+//! the verify commands at `n` rows, split and unsplit, over the N-row command's sets (a hybrid's for the selected region)
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   // once per row count, region and set epoch
 def private rd_record_verify(n : int64) {
     rd_fill_gemv_regions_all()
     rd_fill_head_regions()
     rd_ensure_n_sets()
-    rd_encode_token(g_rd.v_cmd[n], n, rd_split_pieces(), true)
+    let vi = rd_v_idx(n)
+    rd_encode_token(g_rd.v_cmd[vi], n, rd_split_pieces(), true)
     if (g_rd.unsplit_on) {
-        rd_encode_token(g_rd.v_cmd_unsplit[n], n, 1l, true)
+        rd_encode_token(g_rd.v_cmd_unsplit[vi], n, 1l, true)
     }
-    g_rd.v_recorded[n] = true
+    g_rd.v_recorded[vi] = true
 }
 
 //! The same-slab verify (`RdecVerifyFn`) in the selected region: row i is the stream's token at `pos + i` over the region's rows
@@ -2601,7 +2645,8 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var
     let rowb = L.kvd * g_rd.kv_esz
     verify(pos >= 1l && long_length(logits) >= n * g_rd.vocab && long_length(picks) >= n && long_length(hid) >= n * dim,
         "vk_rdec_verify: a verify below row 1 (the head's first row is pos - 1), or a landing short of its rows")
-    if (!g_rd.v_recorded[n]) {
+    let vi = rd_v_idx(n)
+    if (!g_rd.v_recorded[vi]) {
         rd_record_verify(n)
     }
     let unsplit = g_rd.unsplit_on && pos + n - 1l < RD_UNSPLIT_POS   //! the N-row command's form rule, the furthest row deciding
@@ -2629,7 +2674,7 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var
             hm[i].mirbase = uint(r * g_rd.mir_elems)
             hm[i].dnslot = uint(r)
         }
-        var cmd = unsplit ? g_rd.v_cmd_unsplit[n] : g_rd.v_cmd[n]
+        var cmd = unsplit ? g_rd.v_cmd_unsplit[vi] : g_rd.v_cmd[vi]
         rd_submit_land(cmd, n, false)
         rd_wait_land()
         memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * n)
@@ -2646,8 +2691,38 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var
         for (_i in range64(n)) {
             rd_dn_advance_parity(r)
         }
+        g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l   //! the scratch holds this region's rows 0 .. n - 2 until the next verify or rollback
+        g_rd.roll_vrows = n
     }
     read_kv_rows_of(L, pos - 1l, n, unsafe(kp + (pos - 1l) * rowb), unsafe(vp + (pos - 1l) * rowb))
+    return true
+}
+
+//! The verify's reject (`RdecRollbackFn`) in the selected region: scratch row `a` - every recurrent layer's slot state and ring
+//! pair as the last verify left them after its row `a` - copied over the live slots in one command, and the region's ring parity
+//! put back to that row's; false where the region is not the last verify's or `a` reaches past its copies
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]   // per rejected round, reached through the tier's registered seat
+def vk_rdec_rollback(a : int64) : bool {
+    if (g_rd == null || !g_rd.ready || !g_rd.hybrid || g_rd.roll_dev == 0ul) {
+        return false
+    }
+    let r = g_rd.region
+    if (r != g_rd.roll_region || a < 0l || a >= g_rd.roll_rows || a + 1l >= g_rd.roll_vrows) {
+        return false
+    }
+    let src = a * g_rd.roll_row_bytes
+    batch_cmd_one_shot() $(raw : VkCommandBuffer) {
+        for (L in g_rd.layers) {
+            continue if (!L.recurrent)
+            let st & = unsafe(L.dn[r])
+            cmd_copy_range(raw, g_rd.roll_dev, src + L.roll_off, st.state_dev, st.state_byte_off, st.slot_state_bytes)
+            cmd_copy_range(raw, g_rd.roll_dev, src + L.roll_off + st.slot_state_bytes, st.smalls_dev, st.hist_off * 4l, 2l * st.ring_image_bytes)
+        }
+    }
+    for (_i in range64(g_rd.roll_vrows - a - 1l)) {   //! the verify flipped the parity once a row; the rows past `a` flip back
+        rd_dn_advance_parity(r)
+    }
+    g_rd.roll_region = -1l
     return true
 }
 

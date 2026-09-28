@@ -11,6 +11,7 @@ def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // CPU-correctness test — prefills on the CPU by design
 }
 require dasllama/dasllama_math   // parallel_argmax (engine-level, not re-exported by the facade)
+require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_rollbacks: the device rollback's witness under DASLLAMA_GPU=1
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
@@ -133,6 +134,50 @@ def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<in
     return <- got
 }
 
+//! a forced-reject round's outcome: the tokens decoded after it (first = the prefill argmax), the plain-decode slice they must
+//! equal, and whether the round accepted
+struct private RejectRound {
+    got : array<int64>
+    want : array<int64>
+    hit : bool
+}
+
+// The reject through the engine's own seam - mtp_spec_eval with every draft rejected - then n_check plain steps: on the CPU
+// rail the snapshot's restore and the replayed step, on the resident driver the device rollback; either way the stream must
+// equal plain decode. Free of T? like reject_rollback_ids.
+def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
+    var out : RejectRound
+    with_job_que() {
+        setup_dasllama_jobque()
+        let np = long_length(MTP_PROMPT)
+        var s1 = make_run_state(tr.config)
+        let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))
+        delete s1
+        out.want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]
+        let spec0 = get_mtp_spec()
+        set_mtp_spec(true)   //! the prompt's head warm and the round both key off it, as generate_mtp_greedy arms it
+        var s = make_run_state(tr.config)
+        forward_prefill(tr, s, MTP_PROMPT, np, 0l)
+        s.n_past = np
+        let tok = parallel_argmax(s.logits, tr.config.vocab_size)
+        out.got |> push(tok)
+        set_mtp_force_reject_every(1l)
+        var acc = 0l
+        out.hit = mtp_spec_eval(tr, s, tok, acc)
+        set_mtp_force_reject_every(0l)
+        set_mtp_spec(spec0)
+        var pos = np + 1l
+        for (_i in range64(n_check)) {
+            let next = parallel_argmax(s.logits, tr.config.vocab_size)
+            out.got |> push(next)
+            forward(tr, s, next, pos)
+            pos++
+        }
+        delete s
+    }
+    return <- out
+}
+
 // Run the plain-vs-spec invariance pair on a loaded model and assert token-for-token equality
 // plus sane accept telemetry. `tag` distinguishes the arms in the report.
 def private invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; tag : string) {
@@ -212,7 +257,7 @@ def test_mtp_q4_0(t : T?) {
 
 [test]
 def test_mtp_reject_rollback(t : T?) {
-    t |> run("MTP rollback: poisoned 2-row verify + restore replays plain decode exactly") @(t : T?) {
+    t |> run("MTP rollback: poisoned 2-row verify + restore replays plain decode exactly, and a forced-reject round through the engine's seam does too") @(t : T?) {
         if (!jit_enabled()) {
             t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
             return
@@ -221,17 +266,24 @@ def test_mtp_reject_rollback(t : T?) {
         if (!model_available(t, path)) return
         var tr <- load_gguf(path, QuantMode.q8)
         tr.config.seq_len = 2048l
-        // manual reject flow, exactly as generate_mtp_greedy's reject arm runs it: the draft is
-        // a fixed garbage token, so the verify batch advances the deltanet state past a WRONG
-        // row; restore + one plain forward must leave the state bit-identical to never having
-        // seen the poisoned batch — every subsequent plain-decode token must match a reference
-        // run. (Truth vs draft isn't even compared — an unconditional reject is the hardest
-        // case, and the KV row the poisoned batch wrote at np+1 gets overwritten by the next
-        // decode, by construction.)
+        // manual reject flow over the CPU restore: the draft is a fixed garbage token, so the verify
+        // batch advances the deltanet state past a WRONG row; restore + one plain forward must leave
+        // the state bit-identical to never having seen the poisoned batch — every subsequent
+        // plain-decode token must match a reference run. (Truth vs draft isn't even compared — an
+        // unconditional reject is the hardest case, and the KV row the poisoned batch wrote at np+1
+        // gets overwritten by the next decode, by construction.) Then the same reject through the
+        // round itself, which takes the rollback seat where the verify seat served - on the resident
+        // driver the device rollback, witnessed by its counter.
         with_pinned_kernels() {
             var want : array<int64>
             let got <- reject_rollback_ids(tr, 6l, want)
             t |> success(ids_equal(got, want), "post-rollback decode token-for-token vs plain")
+            let rollbacks0 = moe_gpu_resident_rollbacks()
+            let round <- reject_round_ids(tr, 6l)
+            t |> success(!round.hit, "the forced reject rejected the round's draft")
+            t |> success(ids_equal(round.got, round.want), "forced-reject round: post-reject decode token-for-token vs plain")
+            t |> success(!moe_gpu_resident_active() || moe_gpu_resident_rollbacks() == rollbacks0 + 1l,
+                         "on the resident driver the round's reject rolled back on the device ({moe_gpu_resident_rollbacks() - rollbacks0} rollbacks counted)")
         }
         delete tr
     }

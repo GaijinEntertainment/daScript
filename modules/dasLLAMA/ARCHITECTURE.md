@@ -87,7 +87,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   runs - the residency plan, and the GPU-slot marks swap that lets one slot serve many models -
   and the token command's logits landing.
 - `ARCHITECTURE_GPU_VULKAN_MTP.md` - the NextN draft head the resident driver homes beside the
-  trunk: the draft command that steps it and the prompt warm the window chain gives its slab.
+  trunk: the draft command that steps it, the prompt warm the window chain gives its slab, and
+  the rollback a rejected device verify takes from the verify command's own copies.
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - the N-row token command a batched step's rows go through,
   its same-slab form the speculative verify steps one stream's rows through, and the residual
   step's two forms it holds bit for bit.

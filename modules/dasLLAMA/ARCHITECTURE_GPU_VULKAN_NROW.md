@@ -155,10 +155,12 @@ at or below its own position, so row i reads the rows the same command stored be
 one above. The per-row planes hold the rows: where the driver homes a NextN head it sizes them at
 the larger of the region count and the verify's rows - the round's depth plus one, read at load
 (`get_mtp_depth`) - `RD_NB_MAX` capping both, so a verify of more rows passes to the CPU (`verify_rows`). The
-command records once per row count and attention form (`RDec.v_cmd`, `v_cmd_unsplit`), the rows'
-form the furthest row's, over the N-row command's sets; `vk_rdec_verify_rows` answers the rows, 0
-where the head, the N-row command or an N-column leaf of the head's planes is off the device, each
-reason logged once.
+command records once per row count and attention form (`RDec.v_cmd`, `v_cmd_unsplit`) - and, on
+a hybrid, per region, since the rollback copies it carries bake the region's slot
+(`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`) - the rows' form the furthest row's,
+over the N-row command's sets; `vk_rdec_verify_rows` answers the depth plus one the driver was
+prepared for (`RDec.verify_rows`), 0 where the head, the N-row command or an N-column leaf of the
+head's planes is off the device, each reason logged once.
 
 **The recurrent heads step the rows one at a time.** The N-row command's fused step runs every row
 at once, each against its own slot; the rows of one slot would all read the pre-step state. So the
@@ -188,10 +190,11 @@ the seat (`vulkan_resident_verify`, `register_mtp_verify_override`) lands them i
 the region's rows at `pos + n`, the recurrent state n rows on, and reads the pre-draft carry the
 round saved in `mtp_xb_save` before its draft. Every check that can decline runs before the
 session's state comes up, so a decline leaves the session to the CPU verify untouched. A reject
-stays the CPU round's: its snapshot sends the device state home before the verify, its restore drops
-the device slots, and the replayed step at `pos` rewrites row `pos` and cuts the region's rows back
-to `pos + 1`, the rows past them dead. The trunk's K/V rows stay on the device, as a one-row step's
-do. The command records no GPU stamps; the round's profiler sections (`mtp.verify`) price it.
+takes the rollback seat, not a snapshot: the command copied each recurrent layer's slot after
+every row but its last, and the seat puts row `a`'s copy back and cuts the region's rows to
+`pos + a + 1`, the rows past them dead (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`).
+The trunk's K/V rows stay on the device, as a one-row step's do. The command records no GPU
+stamps; the round's profiler sections (`mtp.verify`, `mtp.rollback`) price it.
 
 ### The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
 
