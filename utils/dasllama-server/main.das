@@ -146,6 +146,15 @@ struct ServerArgs {
     @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) host-cached, off at several streams or on a device-resident (--gpu vulkan) slot; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
     mtp : bool
 
+    @clarg_doc = "RoPE scaling override for the load: yarn | linear | none (default: the model file's own rope.scaling keys; none drops them, a file's per-pair factor tensors stay). The Qwen families publish the YaRN recipe and enable it as a setting, for long conversations only: --rope-scaling yarn --rope-scale 4; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (model.gguf.metal-yarn4.dlim). Per-model in a [[models]] roster: rope_scaling"
+    rope_scaling : string
+
+    @clarg_doc = "RoPE scaling factor for the override (default: the file's; yarn needs one)"
+    rope_scale : float
+
+    @clarg_doc = "YaRN: the original training context the factor extends (default: the file's)"
+    yarn_orig_ctx : int
+
     @clarg_doc = "Path to a llama.cpp llama-bench binary: the control page's benchmark button then runs the A/B child (our bench, then llama-bench on the same GGUF) instead of the in-process rows; source-tree daslang only"
     lcpp_bin : string
 
@@ -176,6 +185,9 @@ struct ModelEntry {
     page_rows : int = -1    // 0 = flat is meaningful, -1 = inherit
     prefix : int = -2       // -1 = unbounded is meaningful, -2 = inherit
     mtp : int = -1          // -1 inherit | 0 off | 1 on
+    rope_scaling : string = ""   // "" inherits the flat key; yarn | linear | none
+    rope_scale : float = 0.0     // 0 inherits
+    yarn_orig_ctx : int = 0      // 0 inherits
     image_mmproj : string   // vision mmproj (gemma4uv); empty = this model takes text only
     is_default : bool = false
 }
@@ -244,7 +256,7 @@ var private g_cfg_authoritative = false
 let CONFIG_KEYS = fixed_array("model", "port", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
     "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "asr_workers", "tts", "tts_lane", "tts_voices_dir",
     "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "page_rows",
-    "prefix", "flat", "mtp", "lcpp_bin", "models_dir", "models")
+    "prefix", "flat", "mtp", "rope_scaling", "rope_scale", "yarn_orig_ctx", "lcpp_bin", "models_dir", "models")
 
 def private from_cli(key : string) : bool
     => (g_cfg_sources?[key] ?? "") == "cli"
@@ -273,6 +285,13 @@ def private cfg_from_toml(root : JsonValue?; key : string; var field : int&; aut
 def private cfg_from_toml(root : JsonValue?; key : string; var field : bool&; auth : bool) {
     if (toml_has(root, key) && (auth || !from_cli(key))) {
         field = root?[key] ?? false
+        g_cfg_sources[key] = "toml"
+    }
+}
+
+def private cfg_from_toml(root : JsonValue?; key : string; var field : float&; auth : bool) {
+    if (toml_has(root, key) && (auth || !from_cli(key))) {
+        field = float(root?[key] ?? 0.0lf)
         g_cfg_sources[key] = "toml"
     }
 }
@@ -373,6 +392,15 @@ def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 �
     if (cli_has_flag("--mtp")) {
         g_cfg_sources["mtp"] = "cli"
     }
+    if (!empty(cfg.rope_scaling)) {
+        g_cfg_sources["rope_scaling"] = "cli"
+    }
+    if (cfg.rope_scale > 0.0) {
+        g_cfg_sources["rope_scale"] = "cli"
+    }
+    if (cfg.yarn_orig_ctx > 0) {
+        g_cfg_sources["yarn_orig_ctx"] = "cli"
+    }
     if (!empty(cfg.lcpp_bin)) {
         g_cfg_sources["lcpp_bin"] = "cli"
     }
@@ -428,6 +456,9 @@ def apply_config(var cfg : ServerArgs) : bool {
     cfg_from_toml(root, "prefix", cfg.prefix, auth)
     cfg_from_toml(root, "flat", cfg.flat, auth)
     cfg_from_toml(root, "mtp", cfg.mtp, auth)
+    cfg_from_toml(root, "rope_scaling", cfg.rope_scaling, auth)
+    cfg_from_toml(root, "rope_scale", cfg.rope_scale, auth)
+    cfg_from_toml(root, "yarn_orig_ctx", cfg.yarn_orig_ctx, auth)
     cfg_from_toml(root, "lcpp_bin", cfg.lcpp_bin, auth)
     cfg_from_toml(root, "models_dir", cfg.models_dir, auth)
     if (toml_has(root, "models")) {
@@ -495,6 +526,8 @@ def private apply_models_roster(root : JsonValue?) {
             streams = int(e?["streams"] ?? -1l), chunk = int(e?["chunk"] ?? -1l),
             page_rows = int(e?["page_rows"] ?? -1l), prefix = int(e?["prefix"] ?? -2l),
             mtp = has_mtp ? ((e?["mtp"] ?? false) ? 1 : 0) : -1,
+            rope_scaling = e?["rope_scaling"] ?? "", rope_scale = float(e?["rope_scale"] ?? 0.0lf),
+            yarn_orig_ctx = int(e?["yarn_orig_ctx"] ?? 0l),
             image_mmproj = e?["image_mmproj"] ?? "",
             is_default = e?["default"] ?? false)
         if (ent.backend != "auto" && ent.backend != "cpu" && ent.backend != "gpu") {
@@ -565,6 +598,15 @@ def private roster_entry_json(ent : ModelEntry) : JsonValue? {
     if (ent.mtp >= 0) {
         etab["mtp"] = JV(ent.mtp != 0)
     }
+    if (!empty(ent.rope_scaling)) {
+        etab["rope_scaling"] = JV(ent.rope_scaling)
+    }
+    if (ent.rope_scale > 0.0) {
+        etab["rope_scale"] = JV(double(ent.rope_scale))
+    }
+    if (ent.yarn_orig_ctx > 0) {
+        etab["yarn_orig_ctx"] = JV(int64(ent.yarn_orig_ctx))
+    }
     return JV(etab)
 }
 
@@ -619,6 +661,9 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         prefix = cfg.prefix,
         flat = cfg.flat,
         mtp = cfg_sourced("mtp") ? cfg.mtp : mtp_default_resolved(cfg.streams > 0 ? cfg.streams : 4, gpu),
+        rope_scaling = cfg.rope_scaling,
+        rope_scale = double(cfg.rope_scale),
+        yarn_orig_ctx = cfg.yarn_orig_ctx,
         lcpp_bin = cfg.lcpp_bin,
         models_dir = cfg.models_dir))
     var sources <- { for (k in CONFIG_KEYS); k => JV(g_cfg_sources?[k] ?? "default") }
@@ -906,6 +951,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         // A serving process prefers degrading (warn + nearest working mode) over dying on an
         // unsupported model/quant combo; API-facing tools keep the strict fail-loud default.
         set_resilient_load(true)
+        let env_rope = rope_scaling_override()   //! the env-seeded override every slot starts from; the flat keys, then the entry's, replace fields on top
         for (i in range(length(g_models))) {
             var ent & = unsafe(g_models[i])
             if (empty(ent.name)) {
@@ -917,6 +963,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                 gpu_residency_ask(ent.streams > 0 ? int64(ent.streams) : streams, ectx)
             }
             print("loading {ent.path} ...\n")
+            set_rope_scaling_override(env_rope)
+            apply_rope_scaling(g_cfg.rope_scaling, g_cfg.rope_scale, int64(g_cfg.yarn_orig_ctx))
+            apply_rope_scaling(ent.rope_scaling, ent.rope_scale, int64(ent.yarn_orig_ctx))
             var m <- load_model(ent.path, pick_quant(!empty(ent.quant) ? ent.quant : g_cfg.quant))
             if (ectx > 0l) {
                 m.config.seq_len = min(m.config.seq_len, ectx)

@@ -50,6 +50,8 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.iq2xs), 13)
         t |> equal(int(KqFmt.iq2xxs), 14)
         t |> equal(int(KqFmt.mx4), 15)
+        t |> equal(int(KqFmt.iq4nl32), 16)
+        t |> equal(int(KqFmt.iq3s4), 17)
     }
 }
 
@@ -85,6 +87,16 @@ def test_kqfmt_predicates(t : T?) {
         t |> equal(kq_qsb(KqFmt.mx4), 16l)   // 16 nibble bytes a block
         t |> equal(kq_ssb(KqFmt.mx4), 1l)    // one E8M0 byte a block
         t |> equal(kq_elems(KqFmt.mx4), 32l)
+        t |> success(!kq_sb(KqFmt.iq4nl32) && kq_block32(KqFmt.iq4nl32) && kq_block32(int(KqFmt.iq4nl32)), "iq4nl32 is a per-32 format on both predicates")
+        t |> equal(kq_qsb(KqFmt.iq4nl32), 16l)   // per 32-BLOCK: the 16 nibble bytes
+        t |> equal(kq_ssb(KqFmt.iq4nl32), 2l)    // per 32-BLOCK: f16 d
+        t |> equal(kq_elems(KqFmt.iq4nl32), 32l)
+        t |> equal(kq_ggml_type(KqFmt.iq4nl32), GGML_TYPE_IQ4_NL)   // iq4nl's disk blocks, q51's plane form
+        t |> success(kq_sb(KqFmt.iq3s4) && kq_sb(int(KqFmt.iq3s4)), "iq3s4 is a superblock format on both predicates")
+        t |> equal(kq_qsb(KqFmt.iq3s4), IQ4XS_QSB)   // the k4 nibble tiling: 128 codebook-index bytes
+        t |> equal(kq_ssb(KqFmt.iq3s4), IQ3S_SSB)    // iq3s's own scale row: f16 d + 8 x (1 + 2s)
+        t |> equal(kq_elems(KqFmt.iq3s4), 256l)
+        t |> equal(kq_ggml_type(KqFmt.iq3s4), GGML_TYPE_IQ3_S)   // IQ3_S disk blocks, the iq4xs plane shape
     }
 }
 
@@ -155,6 +167,18 @@ def test_kqfmt_strides(t : T?) {
             t |> success(int(IQ4NL_LUT[i]) < int(IQ4NL_LUT[i + 1]), "the codebook is monotonic")
         }
     }
+    t |> run("the iq3s4 codebook is the signed odd magnitudes of the IQ3_S grid") @(t : T?) {
+        t |> equal(int(IQ3S4_LUT[0]), -15)
+        t |> equal(int(IQ3S4_LUT[7]), -1)
+        t |> equal(int(IQ3S4_LUT[8]), 1)
+        t |> equal(int(IQ3S4_LUT[15]), 15)
+        for (i in range(16)) {
+            t |> equal(iq3s4_index(int(IQ3S4_LUT[i])), i, "the index inverts the codebook")
+        }
+        for (i in range(15)) {
+            t |> equal(int(IQ3S4_LUT[i + 1]) - int(IQ3S4_LUT[i]), 2, "the codebook steps by 2")
+        }
+    }
 }
 
 [test]
@@ -184,9 +208,10 @@ def test_kqfmt_id_bridge(t : T?) {
         t |> equal(kq_schema_id(KqFmt.iq2s), 23)
         t |> equal(kq_schema_id(KqFmt.iq2xs), 24)
         t |> equal(kq_schema_id(KqFmt.iq2xxs), 25)
+        t |> equal(kq_schema_id(KqFmt.iq3s4), 35)
     }
     t |> run("gemm_schema's int-id forms delegate to the same truth") @(t : T?) {
-        for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+        for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4]) {
             t |> equal(kq_qsb(kq_schema_id(f)), kq_qsb(f))
             t |> equal(kq_ssb(kq_schema_id(f)), kq_ssb(f))
         }
@@ -209,6 +234,7 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_elems(KqFmt.iq2s), 256l)
         t |> equal(kq_elems(KqFmt.iq2xs), 256l)
         t |> equal(kq_elems(KqFmt.iq2xxs), 256l)
+        t |> equal(kq_elems(KqFmt.iq3s4), 256l)
         t |> equal(kq_elems(KqFmt.q8), 32l)
         t |> equal(kq_elems(KqFmt.q51), 32l)
     }
@@ -267,6 +293,8 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_stream_code(KqFmt.iq2xs), 24)
         t |> equal(kq_stream_code(KqFmt.iq2xxs), 25)
         t |> equal(kq_stream_code(KqFmt.mx4), 39)
+        t |> equal(kq_stream_code(KqFmt.iq4nl32), 46)
+        t |> equal(kq_stream_code(KqFmt.iq3s4), 35)
     }
 }
 
@@ -310,6 +338,13 @@ def test_kq_fmt_row_demotion(t : T?) {
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 768l), KqFmt.q40)
         // the 256-superblock disk formats never see a non-multiple row (the file cannot hold one)
         t |> equal(kq_fmt_row_ok(KqFmt.iq2xxs, 768l), KqFmt.iq2xxs)
+    }
+    t |> run("an IQ4_NL expert stack off the superblock lattice takes the per-32 planes; a dense one still demotes") <| @(t : T?) {
+        t |> equal(kq_fmt_expert_ok(KqFmt.iq4nl, 640l), KqFmt.iq4nl32)   // Qwen3.8-Flash-Next's down stacks: 20 blocks of 32
+        t |> equal(kq_fmt_expert_ok(KqFmt.iq4nl, 768l), KqFmt.iq4nl)     // a superblock multiple keeps the lattice form
+        t |> equal(kq_fmt_expert_ok(KqFmt.iq4nl, 650l), KqFmt.q8)        // off the 32 lattice too: the q8 rail
+        t |> equal(kq_fmt_expert_ok(KqFmt.q40, 640l), KqFmt.q8)          // the rule is iq4nl's alone
+        t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 640l), KqFmt.q8)           // the dense rails carry no iq4nl32 form
     }
 }
 

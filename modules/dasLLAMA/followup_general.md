@@ -1819,6 +1819,88 @@
     candidate-list sampler's `PERF_LEDGER.md` entry reads its rates off `dasllama-cli`'s stats
     line. Done = `--temp/--top-k/--top-p` on the tg row, a `tg128@sampled` cell beside `tg128`,
     and the ledger entry re-minted from it.
+
+171. **The iq4nl32 rail's Vulkan device run.** The per-32 IQ4_NL plane pair
+    (`iq4nl32q`/`iq4nl32s`) serves Qwen3.8-Flash-Next's 640-wide `ffn_down_exps` stacks on the
+    CPU (the portable kernels and the `iq4nl32q8_*_gen` family), on Metal and through the Vulkan
+    classes (`Iq4nl32Cm2T`'s three stamps, `Iq4nl32Gemv`), but the Vulkan tile cells
+    (`test_vkd_iq4nl32_cm2_batch`) have run on no coopmat device - this Mac's MoltenVK serves the
+    GEMV cell alone. Done = the cm2 and KHR arms green on the 5060 Ti and the Flash-Next decode
+    rows re-measured on the Vulkan tier.
+
+172. **The n-gram hash table as a mapped view.** Qwen3.8-Flash-Next's `per_layer_token_embd` is
+    28.8 GB of gather-only rows the load copies into `Model.ngram_tab`; every other read of a
+    model file leaves the mapping when the load ends. Done = the table stays a borrowed view over
+    a mapping the Model owns (the `.dlim` plane borrow is the precedent: `image_map` plus the
+    finalizer's release), so a cold start pays no copy and the pages the OS evicts come back
+    from the file. The image-mapped table is where the gather's cost shows: on the M5 Max the
+    CPU gather of a 512-row window reads 51 ms with the pages warm (the `ple_gather` bucket, 11%
+    of a 447 ms Metal pp512 window, the only host bucket) and seconds with them cold - the two
+    pp512 runs after the image mint read 518 +/- 121 and 666 +/- 290 tok/s against 1293 +/- 31 warm,
+    the 16 random 90-byte rows a token touches each faulting a 16 KB page from disk. The lever
+    beyond the view is the gather on the device (the table as a Metal plane, the rows read where
+    the key/value GEMMs consume them) or the table pinned resident where the box has the room.
+
+173. **The CPU decode of Qwen3.8-Flash-Next is compute-bound in the IQ3_S expert GEMVs.** On the
+    M5 Max at 18 threads the token reads 57 ms (17.5 tok/s in the profile window, 19.0 +/- 0.2 on
+    the tg128 row; llama.cpp 19.9 +/- 0.4). The forward buckets per token: the gate/up expert
+    GEMVs (`mm_moe`, IQ3_S) 22 ms for 14 MB of planes - 0.6 GB/s, a decode cost, not a
+    bandwidth one; the attention block 18 ms (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9); the
+    hyper-connection mixes 5.4 ms; the down expert GEMVs (`mm_moe_dn`, iq4nl32 on the gen family)
+    3.9 ms; the head 2.7 ms. The IQ3_S rail gathers each superblock's grid rows into a byte panel
+    before its dots (`emit_iq3s_gather`), and that gather is the token's largest cost. The lever
+    landed as the `iq3s4` served form (`ARCHITECTURE_ENGINE_FORMATS.md#served-form`, the
+    `DASLLAMA_IQ3S_SERVE` knob): on the same binary and box, warm passes, grid 134.1 +/- 2.0 pp512 /
+    18.98 +/- 0.13 tg128 against lut 140.6 +/- 0.7 / 26.9 +/- 0.5 (llama.cpp 107.8 / 19.9); the decode
+    profile 59.5 -> 40.3 ms a token, `mm_moe` 25.1 -> 6.7 ms, every other bucket unchanged (the
+    attention block 20 ms, the hc mixes 6, `mm_moe_dn` 3.5-5, the head 2.9); the planar image
+    98.1 -> 105.5 GB. Still open: the grid form's emitter path - a dword read of the qs column in
+    the row-group form (`ARCHITECTURE_CPU_KERNELS.md#grid-decode-forms` says it did not pay on the panel
+    form's box; unmeasured on the M5) buys at most 1.3-1.5x on a bucket the codebook form beats 3.7x,
+    so it is a GPU-rail question (the GPUs keep the grid) more than a CPU one; the attention block
+    (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9 ms) is the CPU token's largest bucket now, and the
+    Flash-Next CPU tg128 board row is not re-minted yet.
+
+175. **A cold image costs its first tokens, not its map.** The Flash-Next planar image maps in 81 ms
+    on a purged page cache and 65 ms warm; the decode profile's 128-token window (`decode_prof -n 128
+    -t 18`, the lut image with the head) reads 99.8 ms a token cold against 39.5 warm, and the whole
+    gap sits in the routed expert stacks - `mm_moe` 5.75 s against 0.85 s, `mm_moe_dn` 2.91 s
+    against 0.45 s - while the attention block, the mixers and the head read the same in both
+    windows, since every token touches their planes and the first fault warms them. Ten of 512
+    experts a token fault their pages in one by one over the window. The mint pass itself is 57 s
+    (planes write 44 s at 2.1 GB/s). `prefetch_map` (madvise WILLNEED / PrefetchVirtualMemory) on
+    the image map is SYNCHRONOUS on macOS: behind a purge it reads the 103 GB in 15.0 s at the map
+    and the window then runs warm (40.2 ms a token), so the cold process wall stays 41 s either way,
+    and a WARM map pays 2.5 s for the page walk in place of 65 ms - so it rides its own knob,
+    `DASLLAMA_PREFETCH_IMAGE`, off by default. Open = whether the server arms it (a process that runs
+    for hours pays 2.5 s once), and a pool-side sequential touch of the routed experts' stacks alone
+    (not the gather-only PLE table, not the planes the first token warms) as the arm that moves the
+    total: the window's random 4 KiB faults read a fraction of the image slower than a sequential
+    pass reads the stacks.
+
+176. **The `yarn_log_multiplier` YaRN arm.** The loader refuses a file whose
+    `rope.scaling.yarn_log_multiplier` is not 0 (the DeepSeek-2 lineage replaces the 0.1 in the
+    `1 + 0.1 ln(s)` magnitude with it, and the cancel-and-reapply the reference does around the
+    stored `attn_factor` is unwritten). Done = the arm, on a DeepSeek-class carrier that ships the key.
+
+177. **The CPU verify writes every row's n-gram ring slot, and the ring is exactly the conv
+    window.** `ple_apply_row` lands row p's conv input at slot `(pos + p) % rows` before its own conv
+    reads, in row order, so within one batch no row reads a later row's slot; but slot `pos + p`
+    aliases position `pos + p - rows`, the oldest tap of the conv at `pos + p - 1`. At depth 1 the
+    rejected row's slot is one no later conv reads; at depth 2 and past, a rejected row `p >= a + 2`
+    clobbers a slot the conv at the next real token (`pos + a + 1`) still reads, and
+    `mtp_state_snapshot` saves the window (`ple_prev`) but not the ring rows. The Metal verify takes
+    the prefill's panel form and commits the accepted rows alone (`commit_ple_rows`). Done = the CPU
+    round snapshots the k ring rows its verify overwrites and restores them on a reject (k x hc_dim
+    floats, `mtp_snap_ple` beside the window), or takes the panel form; a depth-2 forced-reject
+    leg on the Flash-Next counting fixture in `test_mtp.das` (the depth-1 leg cannot see it).
+
+178. **A CPU verify of two rows costs two decode steps on Flash-Next.** `ffn_moe_prefill` takes the
+    per-position GEMV route under `ATTN_NARROW_NPOS`, which took the verify from 77 to 67 ms, and the
+    rest of the 2x is the dense sites' q8q8 tile padding two rows to a four-token tile - the
+    speculative round on the CPU rail is slower than plain decode on this model (CPU tg128 with MTP
+    is a loss at 75% accept). Done = a two-token tile or a GEMV-pair route for the narrow verify's
+    dense sites, measured as the CPU `--mtp-ab` row.
 168. **`harness/tune_kernels.das`'s validation re-times CPU benches after the backend pin.**
    `run_validation` re-runs the changed CPU benches after `dot_q8q8_laneq4x4` has pinned one
    matmul backend for the rest of the process, so a re-timed bench runs against the pinned
@@ -1843,21 +1925,25 @@
    clip is replaced by a traceable one or built by the test. Done = both clips come from the rig
    or the repository and the cells' expectations are re-pinned on them.
 
-171. **A Vulkan-served model's first load writes its planes twice - the planar image and then a
-   flavor image that carries the planar planes again beside the device-layout twin.**
-   `vulkan_bake_flavor` (`dasllama/dasllama_image.das`) saves through `build_image`'s whole
-   field walk with a hook that refuses nothing, so the flavor holds every planar plane (the q8
-   blobs and scales, the fp32 token table an untied classifier keeps) plus `vkblob`: on
-   Qwen3.8-27B-Q4_K_M the planar image is 24.1 GB and the flavor 43.0 GB for 18.1 GB of device
-   planes, 67 GB and about forty minutes on a network volume (the gather 24 of them). The P3 trim
-   (`trim_model_planes`) would drop the CPU families the resident driver never reads, but it
-   declines a model with a NextN head, and the flavor save never consults `image_save_enabled`
-   (`DASLLAMA_IMAGE_SAVE=0` skips the planar file only). Done = the flavor carries the device
-   twin, the plan and what the CPU still reads (the trim past the NextN decline, the untied fp32
-   table packed), the flavor save honours `image_save_enabled`, and a first load under an armed
-   backend bakes the flavor from the in-memory image instead of persisting the planar file first.
+179. **A Vulkan-served model's first load writes its planes twice - the CPU lane's image
+   (`<file>.cpu-<class>.dlim`, the planar flavor) and then the `vulkan` lane's image, which
+   carries the planar planes again beside the device-layout twin.** The lane naming
+   (`ARCHITECTURE_IMAGE.md#image-lane-name`) keeps the two files apart and out of each other's
+   GC; it does not change what each holds. `vulkan_bake_flavor` (`dasllama/dasllama_image.das`)
+   saves through `build_image`'s whole field walk with a hook that refuses nothing, so the
+   vulkan lane's image holds every planar plane (the q8 blobs and scales, the fp32 token table an
+   untied classifier keeps) plus `vkblob`: on Qwen3.8-27B-Q4_K_M the CPU lane's image is
+   24.1 GB and the vulkan lane's 43.0 GB for 18.1 GB of device planes, 67 GB and about forty
+   minutes on a network volume (the gather 24 of them). The P3 trim (`trim_model_planes`) would
+   drop the CPU families the resident driver never reads, but it declines a model with a NextN
+   head (the `-mtp` lane), and the flavor save never consults `image_save_enabled`
+   (`DASLLAMA_IMAGE_SAVE=0` skips the CPU lane's file only). Done = the vulkan lane's image
+   carries the device twin, the plan and what the CPU still reads (the trim past the NextN
+   decline, the untied fp32 table packed), the flavor save honours `image_save_enabled`, and a
+   first load under an armed backend bakes the vulkan lane's image from the in-memory image
+   instead of persisting the CPU lane's file first.
 
-172. **An uncaught panic on a job context ends the process with exit code 0 and its message on
+180. **An uncaught panic on a job context ends the process with exit code 0 and its message on
    stderr only.** On Linux `DAS_ENABLE_EXCEPTIONS` is off, so `Context::throw_fatal_error`
    (`src/simulate/simulate_exceptions.cpp`) on a context with no `throwBuf` - every jobque clone,
    the lanes the resident gather and upload run on - prints "unhandled exception" through

@@ -328,7 +328,7 @@ everywhere and reports a by-value out-parameter whose write nobody can read.
 
 **Minimize `unsafe`:** most `unsafe(reinterpret<T?>)` in macro code exists to strip `const` from raw-pointer field access - fix the root cause by making the function parameter `var`, so field access returns non-const pointers. Reserve `unsafe` for genuinely unsafe operations (pointer arithmetic, `reinterpret` across unrelated types).
 
-**`print` is for user-facing scripts only.** In `tests/`, `daslib/`, `utils/` use `to_log(LOG_INFO|LOG_WARNING|LOG_ERROR)` - same stdout, but level-tagged and filterable. Canonical example: `utils/detect-dupe/main.das`.
+**`print` is for user-facing scripts only.** In `tests/`, `daslib/`, `utils/` use `to_log(LOG_INFO|LOG_WARNING|LOG_ERROR)` - level-tagged and filtered by `DAS_LOG_LEVEL` (default `warning`, so `LOG_INFO` lines print only under `DAS_LOG_LEVEL=info`). Canonical example: `utils/detect-dupe/main.das`.
 
 **Complexity/length lint (STYLE037/STYLE038): new code meets both limits from the start.** On a hit in existing code, the suppress-vs-split resolution policy is `skills/style_lint.md` - never force a split on an honest shape.
 

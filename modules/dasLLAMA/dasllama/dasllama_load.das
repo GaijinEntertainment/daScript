@@ -40,6 +40,7 @@ struct private LayoutSizes {
     bf16_n : int64    // halfword count of the native-BF16 region (0 unless ple_model_bf16)
     @safe_when_uninitialized kq_n : int64[KQ_FMT_COUNT]   // element count per lattice plane pair, by int(KqFmt) (0 unless kquant_native)
     q51_n : int64
+    iq4nl32_n : int64
     pleq8_n : int64   // the dedicated q8 plane holding ONLY the PLE table (fp32/q4 serving)
 }
 
@@ -49,6 +50,7 @@ struct private KqCursors {
     wo : int64   // qblob / wblob / q4blob (the classic parallel-offset region)
     @safe_when_uninitialized kq : int64[KQ_FMT_COUNT]   // the lattice planes, by int(KqFmt)
     q51 : int64
+    iq4nl32 : int64
 }
 
 def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
@@ -60,6 +62,11 @@ def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
     if (f == KqFmt.q51) {
         let o = cur.q51
         cur.q51 += n
+        return o
+    }
+    if (f == KqFmt.iq4nl32) {
+        let o = cur.iq4nl32
+        cur.iq4nl32 += n
         return o
     }
     let o = cur.wo
@@ -364,16 +371,78 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
             cur.wo += c.vocab_size * dim
         }
     }
+    if (c.hyper_conn) {   // qwen4exp mixers: two sites per layer (attn, ffn) + the head; norms and inject f32, down/up q8
+        let hcd = hc_dim(c)
+        let lr = c.hc_low_rank
+        let sites = layers * 2l
+        t.hc_norm_off = fo
+        fo += sites * hcd
+        t.hc_inject_off = fo
+        fo += sites * hcd * c.hc_count
+        t.hc_head_norm_off = fo
+        fo += hcd
+        t.hc_down_offs |> clear(); t.hc_down_offs |> reserve(sites)
+        for (_si in range64(sites)) { t.hc_down_offs |> push(cur.wo); cur.wo += hcd * lr }
+        t.hc_up_offs |> clear(); t.hc_up_offs |> reserve(sites)
+        for (_si in range64(sites)) { t.hc_up_offs |> push(cur.wo); cur.wo += lr * hcd }
+        t.hc_head_down_off = cur.wo
+        cur.wo += hcd * lr
+        t.hc_head_up_off = cur.wo
+        cur.wo += lr * hcd
+    }
+    if (has_ple_ngram(c)) {   // qwen4exp n-gram side input: three grouped norms + the conv taps f32, key/value q8 (the table is its own byte array)
+        let hcd = hc_dim(c)
+        let ind = ple_in_dim(c)
+        t.ple_nkey_off = fo
+        fo += hcd
+        t.ple_nquery_off = fo
+        fo += hcd
+        t.ple_nconv_off = fo
+        fo += hcd
+        t.ple_conv_off = fo
+        fo += hcd * c.ple_conv_kernel
+        t.ple_key_off = cur.wo
+        cur.wo += ind * hcd
+        t.ple_val_off = cur.wo
+        cur.wo += ind * dim
+    }
+    if (c.indexer_n_head > 0l) {   // qwen4exp QSA indexer: f32 projections + norms on the attention layers (-1 on recurrent ones)
+        let hs = c.indexer_head_size
+        let qw = c.indexer_n_head * hs
+        t.idx_q_offs |> clear(); t.idx_q_offs |> reserve(layers)
+        t.idx_k_offs |> clear(); t.idx_k_offs |> reserve(layers)
+        t.idx_qn_offs |> clear(); t.idx_qn_offs |> reserve(layers)
+        t.idx_kn_offs |> clear(); t.idx_kn_offs |> reserve(layers)
+        for (l in range64(layers)) {
+            if (layer_is_recurrent(c, l)) {
+                t.idx_q_offs |> push(-1l); t.idx_k_offs |> push(-1l); t.idx_qn_offs |> push(-1l); t.idx_kn_offs |> push(-1l)
+                continue
+            }
+            t.idx_q_offs |> push(fo); fo += dim * qw
+            t.idx_k_offs |> push(fo); fo += dim * hs
+            t.idx_qn_offs |> push(fo); fo += hs
+            t.idx_kn_offs |> push(fo); fo += hs
+        }
+    }
     if (c.n_layer_nextn > 0l) {   // MTP/NextN extras (the block's standard tensors rode the walks above)
         t.mtp_ehproj_off = kq_take(cur, t.mtp_ehproj_fmt, 2l * dim * dim)
         t.mtp_enorm_off = fo
         fo += dim
         t.mtp_hnorm_off = fo
-        fo += dim
+        fo += c.hyper_conn ? hc_dim(c) : dim   // hnorm spans the carry: the wide residual under hyper-connections
         t.mtp_headnorm_off = fo   // loaded only when the tensor exists; reads fall back to rms_final_off
         fo += dim
+        if (c.hyper_conn) {   // the draft head's own head mixer: norm f32, down/up q8
+            let hcd = hc_dim(c)
+            t.mtp_hc_head_norm_off = fo
+            fo += hcd
+            t.mtp_hc_head_down_off = cur.wo
+            cur.wo += hcd * c.hc_low_rank
+            t.mtp_hc_head_up_off = cur.wo
+            cur.wo += c.hc_low_rank * hcd
+        }
     }
-    return LayoutSizes(fblob_n = fo, wblob_n = cur.wo, mx_n = mx, bf16_n = bf16, kq_n = cur.kq, q51_n = cur.q51, pleq8_n = pleq8)
+    return LayoutSizes(fblob_n = fo, wblob_n = cur.wo, mx_n = mx, bf16_n = bf16, kq_n = cur.kq, q51_n = cur.q51, iq4nl32_n = cur.iq4nl32, pleq8_n = pleq8)
 }
 
 
@@ -650,17 +719,19 @@ def private stream_no_repack(fmt : int; qp, sp : void?; n, d : int64) {
 var private g_stream_collect_q8 = @@stream_no_collect
 var private g_stream_collect_kq = @@stream_no_collect
 var private g_stream_collect_q51 = @@stream_no_collect
+var private g_stream_collect_iq4nl32 = @@stream_no_collect
 var private g_stream_repack = @@stream_no_repack
 var private g_blob_eligible : BlobEligibleFn
 
-//! dasllama_layout registers the streaming-fill collaborators at [init]: the three region
+//! dasllama_layout registers the streaming-fill collaborators at [init]: the four region
 //! collectors (the repack walkers' build halves), the single-region repack dispatcher, and the
 //! metal-blob pair the streamed build consults to mint the blob flavor straight off the gguf.
-def register_stream_layout(cq8, ckq, cq51 : StreamCollectFn; rr : StreamRepackFn;
+def register_stream_layout(cq8, ckq, cq51, ciq4nl32 : StreamCollectFn; rr : StreamRepackFn;
                            be : BlobEligibleFn; bsp : BlobScalePlaneFn) {
     g_stream_collect_q8 = cq8
     g_stream_collect_kq = ckq
     g_stream_collect_q51 = cq51
+    g_stream_collect_iq4nl32 = ciq4nl32
     g_stream_repack = rr
     g_blob_eligible = be
     g_blob_scale_plane = bsp
@@ -722,10 +793,16 @@ def stream_collect_regions(t : Model; var regs : array<StreamReg>) {
     if (active_q51_layout_mr() > 1l) {
         invoke(g_stream_collect_q51, t, regs)
     }
+    if (active_iq4nl32_layout_mr() > 1l) {
+        invoke(g_stream_collect_iq4nl32, t, regs)
+    }
     if (t.kquant_native && kernel_backend_has_kq()) {
         invoke(g_stream_collect_kq, t, regs)
     }
 }
+
+//! the per-32 formats with a plane pair of their own beside the lattice table
+def kq_b32_planes(fmt : KqFmt) : bool => fmt == KqFmt.q51 || fmt == KqFmt.iq4nl32
 
 // the streamed destination field of a job (Model plane field name), "" = not streamed
 def stream_field_of(t : Model; fmt : KqFmt) : string {
@@ -733,6 +810,8 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
         return kq_plane_name(fmt, "q")
     } elif (fmt == KqFmt.q51) {
         return "q51q"
+    } elif (fmt == KqFmt.iq4nl32) {
+        return "iq4nl32q"
     } elif (t.quant == QuantMode.q8) {
         // the blob flavor carries q8 as gguf-native 34B blocks in ONE plane, never the split pair
         return t.metal_blob ? "mblob" : "qblob"
@@ -742,7 +821,7 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
 
 // (q plane bytes, scale plane bytes, region fmt id) for one streamed job — pure taxonomy reads
 def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : int64; rfmt : int> {
-    if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
+    if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
         let e = kq_elems(j.fmt)
         return (qb = (j.n / e) * kq_qsb(j.fmt), sb = (j.n / e) * kq_ssb(j.fmt), rfmt = kq_stream_code(j.fmt))
     }
@@ -754,7 +833,7 @@ def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : in
 
 // a job's byte offset within its plane (woff is elems; kq/q51 planes stride per superblock/block)
 def private stream_job_qoff(t : Model; j : FillJob) : int64 {
-    if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
+    if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
         return (j.woff / kq_elems(j.fmt)) * kq_qsb(j.fmt)
     }
     if (t.metal_blob) {
@@ -828,7 +907,7 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
         let t0 = g_conv_prof ? ref_time_ticks() : 0l
         var kind = ""
         var served = ConvServed.q8
-        if (kq_sb(j.fmt) || j.fmt == KqFmt.q51) {
+        if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
             temp_s |> grow_resize(int(sh.sb))
             kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, temp_q, temp_s, 0l, j.n, j.src_off, scratch)
             served = ConvServed.kq
@@ -846,6 +925,8 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
                 memcpy(addr<void?>(t.kq[int(j.fmt)].s[(j.woff / 256l) * kq_ssb(j.fmt)]), addr<void?>(temp_s[0]), sh.sb)
             } elif (j.fmt == KqFmt.q51) {
                 memcpy(addr<void?>(t.q51s[(j.woff / 32l) * Q51_SB]), addr<void?>(temp_s[0]), sh.sb)
+            } elif (j.fmt == KqFmt.iq4nl32) {
+                memcpy(addr<void?>(t.iq4nl32s[(j.woff / 32l) * IQ4NL32_SB]), addr<void?>(temp_s[0]), sh.sb)
             } elif (sh.sb == 0l && j.n > 0l && !t.metal_blob) {
                 memcpy(addr<void?>(t.qscales[j.woff / 32l]), addr<void?>(temp_sf[0]), (j.n / 32l) * 4l)
             }
@@ -863,6 +944,9 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
                 } elif (r.fmt == 2) {
                     invoke(g_stream_repack, 2, addr<void?>(temp_q[((r.off - j.woff) / 32l) * Q51_QPB]),
                         addr<void?>(t.q51s[(r.off / 32l) * Q51_SPB]), r.n, r.d)
+                } elif (r.fmt == IQ4NL32_STREAM_TAG) {
+                    invoke(g_stream_repack, IQ4NL32_STREAM_TAG, addr<void?>(temp_q[((r.off - j.woff) / 32l) * IQ4NL32_QB]),
+                        addr<void?>(t.iq4nl32s[(r.off / 32l) * IQ4NL32_SB]), r.n, r.d)
                 } else {
                     var rf = KqFmt.q8
                     if (kq_fmt_of_stream_code(r.fmt, rf) && kq_sb(rf)) {
@@ -1151,6 +1235,8 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.kq[int(fmt)].q, t.kq[int(fmt)].s, woff, n, src_off, scratch)
     } elif (fmt == KqFmt.q51) {
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.q51q, t.q51s, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.iq4nl32) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq4nl32q, t.iq4nl32s, woff, n, src_off, scratch)
     } elif (t.quant == QuantMode.q8) {
         kind = transcode_q8_tensor(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off, scratch)
     } elif (t.quant == QuantMode.q4_0) {
@@ -1263,12 +1349,15 @@ def private log_load_report(t : Model) {
     to_log(LOG_INFO, "dasLLAMA noisy: GPU tier installed {moe_gpu_tier_installed()} | want auto {gpu_want_auto()}, moe layers {gpu_want_moe_layers()}, stream {gpu_want_moe_stream()}\n")
     to_log(LOG_INFO, "dasLLAMA noisy: format tags - q8 {tally_fmt(t, KqFmt.q8)}, k4 {tally_fmt(t, KqFmt.k4)}, k5 {tally_fmt(t, KqFmt.k5)}, k6 {tally_fmt(t, KqFmt.k6)}, q40 {tally_fmt(t, KqFmt.q40)}, q51 {tally_fmt(t, KqFmt.q51)}, iq4xs {tally_fmt(t, KqFmt.iq4xs)}, k3 {tally_fmt(t, KqFmt.k3)}, iq3s {tally_fmt(t, KqFmt.iq3s)}, iq3xxs {tally_fmt(t, KqFmt.iq3xxs)}, iq4nl {tally_fmt(t, KqFmt.iq4nl)}, k2 {tally_fmt(t, KqFmt.k2)}, iq2s {tally_fmt(t, KqFmt.iq2s)}, iq2xs {tally_fmt(t, KqFmt.iq2xs)}, iq2xxs {tally_fmt(t, KqFmt.iq2xxs)}\n")
     let planes <- [for (f in type<KqFmt>); "{f} {float(long_length(t.kq[int(f)].q) + long_length(t.kq[int(f)].s)) / mb}"; where kq_sb(f)]
-    to_log(LOG_INFO, "dasLLAMA noisy: plane MB - q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), {join(planes, ", ")}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
+    to_log(LOG_INFO, "dasLLAMA noisy: plane MB - q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), {join(planes, ", ")}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, iq4nl32 {float(long_length(t.iq4nl32q) + long_length(t.iq4nl32s)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
 }
 
 // GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path)
 def private kq_fmt_of(gt : int) : KqFmt {
     let native = gguf_kq_fmt_of_type(gt)
+    if (native == KqFmt.iq3s && iq3s_serve_lut()) {
+        return KqFmt.iq3s4
+    }
     if (native != KqFmt.q8) {
         return native
     }
@@ -1305,12 +1394,14 @@ def private kq_tag(m : GGUFMeta; name : string; rows : int64) : KqFmt {
 //! The expert-stack twin of kq_tag (q51 serves natively off per-32 planes there).
 def private kq_tag_expert(m : GGUFMeta; name : string; rows : int64) : KqFmt {
     let disk_fmt = kq_fmt_of(gguf_tensor_type(m, name))
-    let why = disk_fmt == KqFmt.q51 ? "a {rows}-wide row is no multiple of 32" : "a {rows}-wide row is no multiple of 256"
+    let why = disk_fmt == KqFmt.q51 || disk_fmt == KqFmt.iq4nl ? "a {rows}-wide row is no multiple of 32" : "a {rows}-wide row is no multiple of 256"
     return note_demotion(name, disk_fmt, kq_fmt_expert_ok(disk_fmt, rows), why)
 }
 
+//! A tag that is not the disk format is a demotion to the q8 rail (logged, counted) - unless it
+//! is the disk format's own per-32 plane form (iq4nl -> iq4nl32), which serves the bytes exactly.
 def private note_demotion(name : string; disk_fmt, tag_fmt : KqFmt; why : string) : KqFmt {
-    if (tag_fmt != disk_fmt) {
+    if (tag_fmt != disk_fmt && tag_fmt == KqFmt.q8) {
         g_load_demotions++
         to_log(LOG_WARNING, "dasLLAMA load: {name} ({disk_fmt} on disk) serves through the q8 rail - {why}\n")
     }
@@ -1744,6 +1835,66 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 panic("dasLLAMA: deltanet conv_dim {dn_conv_dim(t.config)} must be a multiple of 4")
             }
         }
+        // qwen4exp: the hyper-connection geometry, the n-gram PLE hash constants (Model arrays - a
+        // Config travels by value) and the QSA indexer geometry
+        if (t.config.hyper_conn) {
+            t.config.hc_count = gguf_int(m, bytes, "{arch}.hyper_connection.count")
+            t.config.hc_low_rank = gguf_int(m, bytes, "{arch}.hyper_connection.low_rank")
+            if (t.config.hc_count < 2l || t.config.hc_low_rank <= 0l || t.config.hc_low_rank % 32l != 0l) {
+                panic("dasLLAMA: unsupported hyper-connection geometry (count {t.config.hc_count}, low_rank {t.config.hc_low_rank} - the low rank rides the q8 GEMV, a multiple of 32)")
+            }
+            if (gguf_has(m, "{arch}.attention.indexer.head_count")) {
+                t.config.indexer_n_head = gguf_int(m, bytes, "{arch}.attention.indexer.head_count")
+                t.config.indexer_head_size = gguf_int(m, bytes, "{arch}.attention.indexer.key_length")
+                t.config.indexer_top_k = gguf_int(m, bytes, "{arch}.attention.indexer.top_k")
+                if (t.config.indexer_n_head <= 0l || t.config.indexer_head_size <= 0l || t.config.indexer_top_k <= 0l) {
+                    panic("dasLLAMA: bad QSA indexer geometry (heads {t.config.indexer_n_head}, key {t.config.indexer_head_size}, top_k {t.config.indexer_top_k})")
+                }
+                if (gguf_is_array(m, "{arch}.attention.compress_ratios")) {
+                    t.qsa_ratio <- gguf_int_array(m, bytes, "{arch}.attention.compress_ratios")
+                    if (long_length(t.qsa_ratio) < layers) {
+                        panic("dasLLAMA: {arch}.attention.compress_ratios has {long_length(t.qsa_ratio)} entries, expected {layers}")
+                    }
+                }
+            }
+        }
+        if (t.config.ple_ngram && gguf_is_array(m, "{arch}.ple.layers")) {
+            let pl <- gguf_int_array(m, bytes, "{arch}.ple.layers")
+            if (length(pl) != 1) {
+                panic("dasLLAMA: {arch}.ple.layers lists {length(pl)} layers - one PLE layer is supported")
+            }
+            t.config.ple_layer = pl[0]
+            if (t.config.ple_layer < 0l || t.config.ple_layer >= layers || !layer_is_recurrent(t.config, t.config.ple_layer)) {
+                panic("dasLLAMA: PLE layer {t.config.ple_layer} is not a recurrent layer of the {layers}-layer trunk")
+            }
+            t.config.ple_ngram_size = gguf_int(m, bytes, "{arch}.ple.ngram_size")
+            t.config.ple_heads_per_ngram = gguf_int(m, bytes, "{arch}.ple.heads_per_ngram")
+            t.config.ple_conv_kernel = gguf_int(m, bytes, "{arch}.ple.conv_kernel")
+            t.config.ple_eos_token = gguf_int(m, bytes, "{arch}.ple.eos_token_id")
+            t.config.ple_image_token = gguf_has(m, "{arch}.ple.image_token_id") ? gguf_int(m, bytes, "{arch}.ple.image_token_id") : 0l
+            t.config.ple_head_dim = gguf_int(m, bytes, "{arch}.embedding_length_per_layer_input")
+            if (t.config.ple_ngram_size < 2l || t.config.ple_ngram_size > 8l || t.config.ple_heads_per_ngram <= 0l
+                    || t.config.ple_conv_kernel <= 0l || t.config.ple_head_dim <= 0l || t.config.ple_head_dim % 32l != 0l
+                    || ple_in_dim(t.config) % 32l != 0l) {
+                panic("dasLLAMA: unsupported PLE n-gram geometry (ngram {t.config.ple_ngram_size}, heads/ngram {t.config.ple_heads_per_ngram}, head dim {t.config.ple_head_dim}, conv {t.config.ple_conv_kernel})")
+            }
+            let nheads = ple_n_heads(t.config)
+            let mult <- gguf_int_array(m, bytes, "{arch}.ple.layer_multipliers")
+            t.ple_head_off <- gguf_int_array(m, bytes, "{arch}.ple.head_offsets")
+            t.ple_head_vocab <- gguf_int_array(m, bytes, "{arch}.ple.head_vocab_sizes")
+            if (long_length(mult) < t.config.ple_ngram_size || long_length(t.ple_head_off) < nheads || long_length(t.ple_head_vocab) < nheads) {
+                panic("dasLLAMA: the PLE hash constants are shorter than the n-gram size / head count ({long_length(mult)} multipliers, {long_length(t.ple_head_off)} offsets, {long_length(t.ple_head_vocab)} vocab sizes)")
+            }
+            t.ple_mult |> resize(length(mult))
+            for (i, v in count(), mult) {
+                t.ple_mult[i] = uint64(v)
+            }
+            for (h in range64(nheads)) {
+                if (t.ple_head_vocab[h] <= 0l || t.ple_head_off[h] < 0l) {
+                    panic("dasLLAMA: PLE head {h} has an empty row range")
+                }
+            }
+        }
         // MTP/NextN consistency (arch-agnostic — qwen35 hybrids AND glm4moe carry draft blocks):
         // the metadata and the tensor directory must agree, and an MTP-only sidecar (trunk
         // stripped) is not loadable standalone
@@ -1751,7 +1902,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             if (gguf_find_tensor(m, "blk.{layers}.nextn.eh_proj.weight") < 0) {
                 panic("dasLLAMA: nextn_predict_layers = {t.config.n_layer_nextn} but blk.{layers}.nextn.eh_proj.weight is missing")
             }
-            if (gguf_find_tensor(m, "blk.0.attn_norm.weight") < 0) {
+            if (gguf_find_tensor(m, t.config.hyper_conn ? "blk.0.hc_attn_norm.weight" : "blk.0.attn_norm.weight") < 0) {
                 panic("dasLLAMA: MTP-only sidecar GGUF (no trunk tensors) is not supported - use the full -MTP file")
             }
             // glm4moe's MTP shares the trunk's embedding and classifier with the draft head, and the
@@ -1866,8 +2017,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
         }
         // gemma-4 E-series: per-layer embeddings (PLE) — a per-(token, layer) side input mixed into
-        // each layer's output. n_embd_per_layer = 0 on the dense 12B/31B (feature off).
-        if (gguf_has(m, "{arch}.embedding_length_per_layer_input")) {
+        // each layer's output. n_embd_per_layer = 0 on the dense 12B/31B (feature off). qwen4exp
+        // carries the same key for its n-gram table's row width - a different rail (ple_head_dim)
+        if (!t.config.ple_ngram && gguf_has(m, "{arch}.embedding_length_per_layer_input")) {
             t.config.n_embd_per_layer = gguf_int(m, bytes, "{arch}.embedding_length_per_layer_input")
         }
         // gemma4 is MoE only when the file carries experts (12B/31B dense, 26B-A4B MoE)
@@ -1973,11 +2125,23 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // RoPE base frequency (θ): default 10000, but Llama-3 uses 500000
         t.config.rope_freq_base = gguf_has(m, "{arch}.rope.freq_base") ? gguf_f32(m, bytes, "{arch}.rope.freq_base") : 10000.0
-        // linear RoPE position scaling (Gemma3-4B: factor 8 on global layers); YaRN / LongRoPE
-        // variants keep their own handling (rope_freqs factors + attn_factor below)
-        if (gguf_has(m, "{arch}.rope.scaling.type") && gguf_str(m, bytes, "{arch}.rope.scaling.type") == "linear"
-                && gguf_has(m, "{arch}.rope.scaling.factor")) {
-            t.config.rope_freq_scale = 1.0 / gguf_f32(m, bytes, "{arch}.rope.scaling.factor")
+        // the file's rope.scaling keys, or the serving override in their place
+        let rope_ov = rope_scaling_override()
+        let sc_key = "{arch}.rope.scaling.type"
+        let rope_type = !empty(rope_ov.kind) ? rope_ov.kind : (gguf_has(m, sc_key) ? gguf_str(m, bytes, sc_key) : "")
+        let rope_src = empty(rope_ov.kind) ? "the file's {sc_key}" : "the DASLLAMA_ROPE_SCALING override"
+        if (rope_type != "" && rope_type != "none" && rope_type != "linear" && rope_type != "yarn") {
+            panic("dasLLAMA: rope scaling '{rope_type}' is not none | linear | yarn ({rope_src})")
+        }
+        // the Qwen families publish the recipe (factor 4 over the trained context); nobody validates it elsewhere
+        if (!empty(rope_ov.kind) && rope_ov.kind != "none" && !(arch |> starts_with("qwen"))) {
+            to_log(LOG_WARNING, "dasLLAMA: rope scaling {rope_type} overrides a {arch} file - no vendor publishes a YaRN recipe for this family (the Qwen cards do), so expect degraded output\n")
+        }
+        let fac_key = "{arch}.rope.scaling.factor"
+        let rope_factor = rope_ov.scale > 0.0 ? rope_ov.scale : (gguf_has(m, fac_key) ? gguf_f32(m, bytes, fac_key) : 0.0)
+        // linear RoPE position scaling (Gemma3-4B: factor 8 on global layers); YaRN folds below
+        if (rope_type == "linear" && rope_factor > 0.0) {
+            t.config.rope_freq_scale = 1.0 / rope_factor
         }
         // sliding layers' θ: metadata override when present, else configure's value; the 0 sentinel
         // (arch didn't set it) resolves to the global θ so per-layer selection is uniform
@@ -2009,15 +2173,15 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // Phi3 LongRoPE magnitude factor (attn_factor) scales the rope output; absent (=1.0) elsewhere
         let mskey = "{arch}.rope.scaling.attn_factor"
         t.config.rope_mscale = gguf_has(m, mskey) ? gguf_f32(m, bytes, mskey) : 1.0
-        // YaRN (gpt-oss: factor 32 over a 4096 original context). Folds into the existing per-pair
-        // machinery: synthesize rope_freqs[j] = 1/eff_j (factors DIVIDE θ), keep rope_freq_scale = 1,
-        // fold the magnitude correction 1 + 0.1·ln(factor) into rope_mscale.
-        if (gguf_has(m, "{arch}.rope.scaling.type") && gguf_str(m, bytes, "{arch}.rope.scaling.type") == "yarn") {
+        // YaRN (gpt-oss: factor 32 over a 4096 original context; the Qwen files as the override). Folds into
+        // the per-pair machinery: rope_freqs[j] = 1/eff_j over the rotated span (factors DIVIDE θ), rope_freq_scale
+        // stays 1, the magnitude correction 1 + 0.1·ln(factor) lands in rope_mscale
+        if (rope_type == "yarn") {
             if (!empty(t.rope_freqs)) {
                 panic("dasLLAMA: YaRN combined with per-pair rope factors is not supported")
             }
-            if (t.config.rope_dim > 0l && t.config.rope_dim != t.config.head_size) {
-                panic("dasLLAMA: partial rotary combined with YaRN is not supported")
+            if (rope_factor <= 0.0) {
+                panic("dasLLAMA: YaRN needs a scaling factor - the file carries no rope.scaling.factor; set DASLLAMA_ROPE_SCALE (llama.cpp --rope-scale)")
             }
             // yarn_log_multiplier replaces the 0.1 in the mscale correction (DeepSeek-2 lineage);
             // mistral3 files carry it as 0, where the cancel-and-reapply dance nets out to
@@ -2026,30 +2190,20 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             if (gguf_has(m, lmkey) && gguf_f32(m, bytes, lmkey) != 0.0) {
                 panic("dasLLAMA: {arch} YaRN yarn_log_multiplier != 0 is not supported")
             }
-            let yfactor = gguf_f32(m, bytes, "{arch}.rope.scaling.factor")
-            let yorig = (gguf_has(m, "{arch}.rope.scaling.original_context_length")
-                ? gguf_int(m, bytes, "{arch}.rope.scaling.original_context_length") : seq_len)
-            let fscale = 1.0 / yfactor
-            // NTK-by-parts correction band (beta_fast/slow from metadata,
-            // defaults 32/1): pairs below `lo` rotate at full frequency (extrapolate),
-            // above `hi` fully interpolate (mistral3: beta_fast 4 widens the band vs gpt-oss's 32)
+            let okey = "{arch}.rope.scaling.original_context_length"
+            let yorig = rope_ov.orig_ctx > 0l ? rope_ov.orig_ctx : (gguf_has(m, okey) ? gguf_int(m, bytes, okey) : seq_len)
+            // NTK-by-parts correction band (beta_fast/slow from the override, the metadata, or 32/1)
             let bfkey = "{arch}.rope.scaling.yarn_beta_fast"
             let bskey = "{arch}.rope.scaling.yarn_beta_slow"
-            let beta_fast = gguf_has(m, bfkey) ? gguf_f32(m, bytes, bfkey) : 32.0
-            let beta_slow = gguf_has(m, bskey) ? gguf_f32(m, bytes, bskey) : 1.0
-            if (beta_fast <= 0.0 || beta_slow <= 0.0) {   // divisors inside log() below — fail closed on a malformed file
+            let beta_fast = rope_ov.beta_fast > 0.0 ? rope_ov.beta_fast : (gguf_has(m, bfkey) ? gguf_f32(m, bytes, bfkey) : 32.0)
+            let beta_slow = rope_ov.beta_slow > 0.0 ? rope_ov.beta_slow : (gguf_has(m, bskey) ? gguf_f32(m, bytes, bskey) : 1.0)
+            if (beta_fast <= 0.0 || beta_slow <= 0.0) {   // divisors inside log() — fail closed on a malformed file
                 panic("dasLLAMA: YaRN beta_fast/beta_slow must be > 0 (got {beta_fast}/{beta_slow})")
             }
-            let hs = t.config.head_size
-            let denom = 2.0 * log(t.config.rope_freq_base)
-            let lo = max(0.0, floor(float(hs) * log(float(yorig) / (beta_fast * 2.0 * PI)) / denom))
-            let hi = min(float(hs - 1l), ceil(float(hs) * log(float(yorig) / (beta_slow * 2.0 * PI)) / denom))
-            t.rope_freqs |> resize(hs / 2l)
-            for (j in range64(hs / 2l)) {
-                let ramp = 1.0 - clamp((float(j) - lo) / max(0.001, hi - lo), 0.0, 1.0)  // ramp in pair units - j is already the pair index (i0 = 2j halved), matching lo/hi
-                t.rope_freqs[j] = 1.0 / (fscale + ramp * (1.0 - fscale))
-            }
-            t.config.rope_mscale *= 1.0 + 0.1 * log(1.0 / fscale)
+            let rot = t.config.rope_dim > 0l ? t.config.rope_dim : t.config.head_size
+            t.rope_freqs <- yarn_rope_freqs(rot, t.config.rope_freq_base, rope_factor, beta_fast, beta_slow, yorig)
+            t.config.rope_mscale *= 1.0 + 0.1 * log(rope_factor)
+            to_log(LOG_INFO, "dasLLAMA: rope scaling yarn x{rope_factor} over {yorig} positions, beta {beta_fast}/{beta_slow}, {rot} rotated dims ({rope_src})\n")
         }
         // a separate output.weight means the classifier is not tied to the embeddings
         t.config.shared_weights = gguf_find_tensor(m, "output.weight") < 0
@@ -2162,6 +2316,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 }
             }
             g_stream_plane_total["q51q"] = (sz.q51_n / 32l) * Q51_QB
+            g_stream_plane_total["iq4nl32q"] = (sz.iq4nl32_n / 32l) * IQ4NL32_QB
             let wb = mode == QuantMode.q8 ? sz.wblob_n : 0l
             g_stream_plane_total[t.metal_blob ? "mblob" : "qblob"] = (t.metal_blob
                 ? (wb / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB) : wb)
@@ -2182,6 +2337,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             t.q51s |> reserve((sz.q51_n / 32l) * Q51_SB)
             t.q51s |> resize((sz.q51_n / 32l) * Q51_SB)
+        }
+        if (sz.iq4nl32_n > 0l) {
+            if (!stream_q) {
+                t.iq4nl32q |> reserve((sz.iq4nl32_n / 32l) * IQ4NL32_QB)
+                t.iq4nl32q |> resize((sz.iq4nl32_n / 32l) * IQ4NL32_QB)
+            }
+            t.iq4nl32s |> reserve((sz.iq4nl32_n / 32l) * IQ4NL32_SB)
+            t.iq4nl32s |> resize((sz.iq4nl32_n / 32l) * IQ4NL32_SB)
         }
         if (mode == QuantMode.q8) {
             if (!stream_q) {
@@ -2219,8 +2382,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // attention layer whose norms/weights load through the standard arms
         let layers_ld = layers + t.config.n_layer_nextn
         for (l in range64(layers_ld)) {
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_norm.weight", t.fblob, t.rms_att_off + l * dim, dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{l}.{ffn_norm_name}.weight", t.fblob, t.rms_ffn_off + l * dim, dim)
+            if (!t.config.hyper_conn) {   // the hyper-connection mixers carry the norms - no per-layer norm tensors exist
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.attn_norm.weight", t.fblob, t.rms_att_off + l * dim, dim)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.{ffn_norm_name}.weight", t.fblob, t.rms_ffn_off + l * dim, dim)
+            }
             if (t.config.pre_post_norm) {  // Gemma2: post-attn + post-FFN norms (already +1-baked in the GGUF)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.post_attention_norm.weight", t.fblob, t.rms_post_att_off + l * dim, dim)
                 gguf_read_tensor_f32(m, bytes, "blk.{l}.post_ffw_norm.weight", t.fblob, t.rms_post_ffn_off + l * dim, dim)
@@ -2289,7 +2454,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 t.fblob[t.rms_ones_off + i] = 1.0
             }
         }
-        gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.fblob, t.rms_final_off, dim)
+        if (!t.config.hyper_conn) {   // the head mixer stands where output_norm would
+            gguf_read_tensor_f32(m, bytes, "output_norm.weight", t.fblob, t.rms_final_off, dim)
+        }
         if (has_ple(t.config)) {  // gemma-4 E-series PLE globals: model-proj (native bf16 when on disk) + proj-norm
             let ple = t.config.n_embd_per_layer
             if (t.ple_model_bf16) {
@@ -2428,7 +2595,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (t.config.n_layer_nextn > 0l) {   // MTP/NextN extras (block index n_layers = `layers`)
             load_big(m, bytes, "blk.{layers}.nextn.eh_proj.weight", t, t.mtp_ehproj_off, 2l * dim * dim, scratch, 0l, t.mtp_ehproj_fmt)
             gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.enorm.weight", t.fblob, t.mtp_enorm_off, dim)
-            gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.hnorm.weight", t.fblob, t.mtp_hnorm_off, dim)
+            gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.hnorm.weight", t.fblob, t.mtp_hnorm_off, t.config.hyper_conn ? hc_dim(t.config) : dim)
+            if (t.config.hyper_conn) {   // the draft head collapses its wide residual through its own head mixer
+                let hcd = hc_dim(t.config)
+                let lr = t.config.hc_low_rank
+                gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.hc_head_norm.weight", t.fblob, t.mtp_hc_head_norm_off, hcd)
+                load_big(m, bytes, "blk.{layers}.nextn.hc_head_down.weight", t, t.mtp_hc_head_down_off, hcd * lr, scratch)
+                load_big(m, bytes, "blk.{layers}.nextn.hc_head_up.weight", t, t.mtp_hc_head_up_off, lr * hcd, scratch)
+            }
             if (gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_norm.weight") >= 0) {
                 gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.shared_head_norm.weight", t.fblob, t.mtp_headnorm_off, dim)
             } else {
@@ -2436,6 +2610,71 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             // nextn.embed_tokens / nextn.shared_head_head are the trunk's own tables under the
             // head's prefix (shape-vetted at config parse) — deliberately never loaded
+        }
+        if (t.config.hyper_conn) {   // qwen4exp mixers: per (layer, site) norm + inject f32, down/up q8; the head mixer
+            let hcd = hc_dim(t.config)
+            let nh = t.config.hc_count
+            let lr = t.config.hc_low_rank
+            for (l in range64(layers_ld)) {
+                for (site in range64(2l)) {
+                    let nm = site == 0l ? "attn" : "ffn"
+                    let si = l * 2l + site
+                    gguf_read_tensor_f32(m, bytes, "blk.{l}.hc_{nm}_norm.weight", t.fblob, t.hc_norm_off + si * hcd, hcd)
+                    gguf_read_tensor_f32(m, bytes, "blk.{l}.hc_{nm}_inject.weight", t.fblob, t.hc_inject_off + si * hcd * nh, hcd * nh)
+                    load_big(m, bytes, "blk.{l}.hc_{nm}_down.weight", t, t.hc_down_offs[si], hcd * lr, scratch)
+                    load_big(m, bytes, "blk.{l}.hc_{nm}_up.weight", t, t.hc_up_offs[si], lr * hcd, scratch)
+                }
+            }
+            gguf_read_tensor_f32(m, bytes, "output_hc_norm.weight", t.fblob, t.hc_head_norm_off, hcd)
+            load_big(m, bytes, "output_hc_down.weight", t, t.hc_head_down_off, hcd * lr, scratch)
+            load_big(m, bytes, "output_hc_up.weight", t, t.hc_head_up_off, lr * hcd, scratch)
+        }
+        if (has_ple_ngram(t.config)) {   // qwen4exp n-gram side input: the layer's norms, taps and projections + the raw hash table
+            let hcd = hc_dim(t.config)
+            let ind = ple_in_dim(t.config)
+            let l = t.config.ple_layer
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_key.weight", t.fblob, t.ple_nkey_off, hcd)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_query.weight", t.fblob, t.ple_nquery_off, hcd)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_conv.weight", t.fblob, t.ple_nconv_off, hcd)
+            gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_conv1d.weight", t.fblob, t.ple_conv_off, hcd * t.config.ple_conv_kernel)
+            load_big(m, bytes, "blk.{l}.ple_key.weight", t, t.ple_key_off, ind * hcd, scratch)
+            load_big(m, bytes, "blk.{l}.ple_value.weight", t, t.ple_val_off, ind * dim, scratch)
+            let ti = gguf_find_tensor(m, "per_layer_token_embd.weight")
+            if (ti < 0) {
+                panic("dasLLAMA: per_layer_token_embd.weight (the PLE n-gram hash table) is missing")
+            }
+            let hd = t.config.ple_head_dim
+            if (length(m.tensors[ti].dims) != 2 || m.tensors[ti].dims[0] != hd) {
+                panic("dasLLAMA: per_layer_token_embd.weight is not [{hd} x rows]")
+            }
+            t.ngram_type = m.tensors[ti].ggml_type
+            if (t.ngram_type != GGML_TYPE_IQ4_NL && t.ngram_type != GGML_TYPE_Q8_0 && t.ngram_type != GGML_TYPE_F16
+                    && t.ngram_type != GGML_TYPE_BF16 && t.ngram_type != GGML_TYPE_F32) {
+                panic("dasLLAMA: per_layer_token_embd.weight type {t.ngram_type} has no row decoder (IQ4_NL / Q8_0 / F16 / BF16 / F32)")
+            }
+            t.ngram_rows = m.tensors[ti].dims[1]
+            t.ngram_row_bytes = ggml_type_bytes(t.ngram_type, hd)
+            for (h in range64(ple_n_heads(t.config))) {
+                if (t.ple_head_off[h] + t.ple_head_vocab[h] > t.ngram_rows) {
+                    panic("dasLLAMA: PLE head {h} rows [{t.ple_head_off[h]}, +{t.ple_head_vocab[h]}) exceed the table's {t.ngram_rows} rows")
+                }
+            }
+            let ts_tab = ref_time_ticks()
+            let nbytes = gguf_read_tensor_raw(m, bytes, "per_layer_token_embd.weight", t.ngram_tab)
+            to_log(LOG_INFO, "dasLLAMA: PLE n-gram table {t.ngram_rows} rows x {hd}, {nbytes >> 20l} MB raw: {get_time_usec(ts_tab) / 1000} ms\n")
+        }
+        if (t.config.indexer_n_head > 0l) {   // qwen4exp QSA indexer: f32 (BF16 on disk widens exactly)
+            let hs = t.config.indexer_head_size
+            let qw = t.config.indexer_n_head * hs
+            for (l in range64(layers_ld)) {
+                if (t.idx_q_offs[l] < 0l) {
+                    continue
+                }
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.indexer.q_proj.weight", t.fblob, t.idx_q_offs[l], dim * qw)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.indexer.k_proj.weight", t.fblob, t.idx_k_offs[l], dim * hs)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.indexer.q_norm.weight", t.fblob, t.idx_qn_offs[l], hs)
+                gguf_read_tensor_f32(m, bytes, "blk.{l}.indexer.k_norm.weight", t.fblob, t.idx_kn_offs[l], hs)
+            }
         }
         if (has_ple(t.config)) {  // the per-layer token-embedding table [vocab x (ple*layers)], gathered per token, never repacked
             let pn = vocab * t.config.n_embd_per_layer * layers
@@ -2510,6 +2749,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 }
                 if (active_q51_layout_mr() > 1l) {
                     layout_repack_q51(t)
+                }
+                if (active_iq4nl32_layout_mr() > 1l) {
+                    layout_repack_iq4nl32(t)
                 }
                 if (t.kquant_native && kernel_backend_has_kq()) {
                     layout_repack_kq(t)
@@ -2607,6 +2849,9 @@ def private restore_load_fn_defaults {
     }
     if (g_stream_collect_q51 == null) {
         g_stream_collect_q51 = @@stream_no_collect
+    }
+    if (g_stream_collect_iq4nl32 == null) {
+        g_stream_collect_iq4nl32 = @@stream_no_collect
     }
     if (g_stream_repack == null) {
         g_stream_repack = @@stream_no_repack

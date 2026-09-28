@@ -31,6 +31,21 @@ def fake_sha(asset):
     return hashlib.sha256(asset.encode()).hexdigest()
 
 
+def git_bash():
+    """The bash the release workflows' `shell: bash` runs - Git's on Windows, where a bare
+    `bash` from Python resolves to System32's WSL launcher first."""
+    if os.name != "nt":
+        return shutil.which("bash")
+    git = shutil.which("git")
+    root = os.path.dirname(git) if git else ""
+    while root and os.path.dirname(root) != root:
+        candidate = os.path.join(root, "bin", "bash.exe")
+        if os.path.isfile(candidate):
+            return candidate
+        root = os.path.dirname(root)
+    return None
+
+
 class RenderManifestsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -105,6 +120,7 @@ class RenderManifestsTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             rm.render_package("daslang", "v0.6.5", self.sha, self.out)
 
+    @unittest.skipUnless(git_bash(), "no bash to run checksum_assets.sh")
     def test_checksum_script_writes_what_the_render_reads(self):
         here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "packaging")
         for a in ASSETS["dasllama"]:
@@ -112,7 +128,7 @@ class RenderManifestsTest(unittest.TestCase):
                 f.write(a)
         with open(os.path.join(self.sha, "stale.sha256"), "w") as f:
             f.write("left alone\n")
-        subprocess.run(["bash", os.path.join(here, "checksum_assets.sh"), self.sha], check=True, capture_output=True)
+        subprocess.run([git_bash(), os.path.join(here, "checksum_assets.sh"), self.sha], check=True, capture_output=True)
         self.assertFalse(os.path.exists(os.path.join(self.sha, "stale.sha256.sha256")), "a .sha256 is never summed")
         rm.render_package("dasllama", "v0.6.5", self.sha, self.out)
         bucket = json.loads(self.read("scoop-daslang/bucket/dasllama.json"))

@@ -158,8 +158,9 @@ def private list_images(cfg : ConvertArgs) : int {
         var inv <- dlim_inventory_(cfg.model)
         for (im in inv) {
             let idnote = empty(im.identity) ? "" : "  {im.identity}"
+            let lane = empty(im.lane) ? "legacy name" : "lane {im.lane}"
             to_log(LOG_INFO, "dasllama-convert: {im.file}\n")
-            to_log(LOG_INFO, "dasllama-convert:   {im.bytes >> 20l} MB  v{im.version}  {im.verdict}{idnote}\n")
+            to_log(LOG_INFO, "dasllama-convert:   {lane}  {im.bytes >> 20l} MB  v{im.version}  {im.verdict}{idnote}\n")
         }
         to_log(LOG_INFO, "dasllama-convert: {length(inv)} image(s)\n")
         delete inv
@@ -168,7 +169,8 @@ def private list_images(cfg : ConvertArgs) : int {
     if (!cfg.apply) {
         var inv <- dlim_inventory_(cfg.model)
         for (im in inv) {
-            if (im.verdict != "CURRENT" && !(cfg.keep_other && im.verdict == "OTHER")) {
+            let kept_lane = im.verdict == "FOREIGN" || (im.verdict == "OTHER" && (!empty(im.lane) || cfg.keep_other))
+            if (im.verdict != "CURRENT" && !kept_lane) {
                 to_log(LOG_INFO, "dasllama-convert: would remove {im.file} ({im.bytes >> 20l} MB, {im.verdict})\n")
             }
         }

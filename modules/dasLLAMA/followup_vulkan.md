@@ -1944,6 +1944,16 @@ module) is independent and can land any time - it is pure structure.
     the ncol cell dispatches the one-column class before the N class, so a grid N leaf that skipped
     `stage_grid` would read the grid the previous dispatch left in workgroup memory (a poisoning
     dispatch between them, or the N class first, pins the call).
+93. **MoltenVK reds in the model-free suite.** On a Mac with the dasVulkan module built, MoltenVK
+    is a live Vulkan device and three model-free files red on it - `test_vulkan_dec_tail` and
+    `test_vulkan_tier` on the class-rail asserts ("the class rails must engage on a live device":
+    a decode span, FFN tail and add+rms class fails its SPIR-V to MSL conversion), and
+    `test_vulkan_tower_kernels` on `[mvk-error] SPIR-V to MSL conversion error: Currently no block
+    to insert opcode`. The sdot4 GEMV cells and the cm2 gates (skipped, no coopmat) read right.
+    Done = the tier declines a device whose pipeline build fails (`device` decline, the cells
+    skip on it as they do on a missing device) or the offending opcode is spelled the way
+    MoltenVK's converter accepts, and the three files read green under MoltenVK.
+
 115. **Nineteen TTS kernels are one algorithm under two class shells.** `TtsSrcCumsumT`, `TtsStftT`,
     `TtsIstft`, `TtsSrcSinesT`, `TtsSrcLowT`, `TtsAdainT`, `TtsConcat`, `TtsPkAttn`, `TtsPkGemvT`,
     `TtsPoolDw`, `TtsIm2colT`, `TtsElemT`, `TtsAddScale`, `TtsPkRowScale`, `TtsRowGather`,

@@ -155,7 +155,9 @@ meanings and defaults (the table under *Run from the source tree*): `--config` /
 same auto pick: Metal on a Mac, Vulkan on a card, CPU otherwise; `--gpu vulkan` serves a model
 that fits the card whole from the device, the conversation's cache with it), `--metal`, the Vulkan
 detail knobs `--gpu-layers`, `--gpu-stream`, `--gpu-dn`, `--gpu-attn`, `--gpu-dense`,
-`--gpu-vram-mb`, `--ctx`, `--threads` / `-t`, `--models-dir`, `--tune`, and two of its own:
+`--gpu-vram-mb`, `--ctx`, the RoPE scaling override `--rope-scaling yarn | linear | none` with
+`--rope-scale` and `--yarn-orig-ctx` (the model file's own keys by default; Qwen: `--rope-scaling
+yarn --rope-scale 4`), `--threads` / `-t`, `--models-dir`, `--tune`, and two of its own:
 `--verbose` echoes the engine's log records to stderr as they land, and `--help` (`-?` or
 `--show-help` from the source tree: the daslang host takes `--help` for itself) lists a command's
 flags with the groups it takes. `complete`, `chat` and `talk` take the sampler - `--temp`,
@@ -224,6 +226,9 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--prefix` | - | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
 | `--flat` | - | - | Flat preallocated KV sessions - disables paged serving and the prefix cache |
 | `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (`streams = 1`) host-cached and leaves it off otherwise: at one stream the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x - `modules/dasLLAMA/followup_metal.md` row 26), at several streams the plain batched step is faster (`modules/dasLLAMA/PERF_LEDGER.md`, the batched arcs), and a device-resident slot (`--gpu vulkan`) keeps plain decode, since an armed round keeps every stream's cache on the host. `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
+| `--rope-scaling` | - | *file* | RoPE scaling override for the load: `yarn` \| `linear` \| `none`; unset keeps the model file's own `rope.scaling.*` keys, `none` drops them (a file's per-pair factor tensors, Llama-3.1's `rope_freqs`, stay, as llama.cpp keeps them). `yarn` folds the NTK-by-parts frequency ramp and the `1 + 0.1 ln(s)` magnitude into the rope tables the way llama.cpp's `--rope-scaling yarn` does. The Qwen families publish the recipe (Qwen2.5-Instruct 7B and up, Qwen3, Qwen3-Next / 3.5 / 3.8: factor 4 over the trained context) and ship no scaling keys because static YaRN costs a little on short texts - arm it when a conversation needs the length; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (`model.gguf.metal-yarn4.dlim`), so the first load with it mints once. Per-model in a `[[models]]` roster: `rope_scaling = "yarn"` |
+| `--rope-scale` | - | *file* | The scaling factor `s` (the context multiplier) for the override; unset reads the file's `rope.scaling.factor`, and `yarn` needs one (config key `rope_scale`) |
+| `--yarn-orig-ctx` | - | *file* | YaRN: the original training context the factor extends; unset reads the file's `original_context_length`, else its `context_length` (config key `yarn_orig_ctx`; llama.cpp's `--yarn-orig-ctx`) |
 | `--lcpp-bin` | - | - | Path to a llama.cpp `llama-bench` binary: the control page's benchmark button then runs the A/B child (our bench, then llama-bench on the same GGUF) instead of the in-process rows; source-tree daslang only (config key `lcpp_bin`) |
 | `--models-dir` | - | `~/.dasllama/models` | Where the model catalog downloads land (`DASLLAMA_MODELS_DIR` overrides both this and the config key) |
 | `--tune` | - | - | Re-tune this box's dasLLAMA kernels, then relaunch (the JIT run; a fat build carries no tuner and ignores it) |
@@ -245,6 +250,8 @@ streams = 4
 threads = 16       # matmul dispatch lane cap; -1 = all cores
 team_dispatch = "hybrid" # LLM team dispatch + independent inline ASR/TTS worker threads
 asr_workers = 2    # two independent transcription requests; each worker owns an ASR model
+rope_scaling = "yarn"    # Qwen past its trained context: YaRN, factor 4 over that context
+rope_scale = 4
 ```
 
 ## Setup mode and the model catalog
@@ -304,7 +311,8 @@ switch: host weights stay mmap'd, each slot keeps its own KV pool + prefix cache
 GPU state lives in VRAM at a time (the tier drops + re-arms on switch; `backend = "cpu"` slots
 never evict the GPU owner, so gpu<->cpu alternation is free). Blank keys inherit the flat defaults;
 `backend` is `auto | cpu | gpu` (auto = the engine's decline ladder), and per-entry `ctx`, `quant`,
-`kv_dtype`, `streams`, `chunk`, `page_rows`, `prefix`, `mtp` override per model:
+`kv_dtype`, `streams`, `chunk`, `page_rows`, `prefix`, `mtp`, `rope_scaling`, `rope_scale`,
+`yarn_orig_ctx` override per model:
 
 ```toml
 [[models]]

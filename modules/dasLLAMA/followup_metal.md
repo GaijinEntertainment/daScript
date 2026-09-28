@@ -760,6 +760,41 @@ waits on a rows form of the rope-and-store (`MetalRopeStoreBKvT` with a row tabl
 candidate) and one K/V home for both loops (the codec's per-chunk rows buffers against the frames'
 per-voice slot).
 
+## 31. The hyper-connection model has no board row and no stocked parity cell
+
+Qwen3.8-Flash-Next (qwen4exp) serves on the Metal prefill and single-row decode drivers, and the
+counting fixture holds token for token through a probe; no cell in `tests/` pins it, because the
+file is the large tier (94 GB, a 116 GB planar image) and a cell holding the planar model beside its
+blob twin does not fit the 128 GB box. The work: a parity cell of the `harness/parity.das --ngl 99`
+form on the blob-only load (one model, the spec's pinned ids as the oracle - `test_parity_pregate`'s
+shape) under `DASLLAMA_PARITY_FULL=1`, and the sweep's rows (sec.7): pp512 and tg128 against
+llama.cpp on the M5 Max at or above 0.9, the box crowns applied.
+
+## 33. A prefill mints a recurrent mirror under the cap and evicts a live session's
+
+`dn_mirror_prepare` mints a session's `DnMirror` at its first served step under `g_dn_mirrors_max`
+(`DN_MIRRORS_MAX`, 4), evicting the least-recent mirror when the table is full; only the batch step
+grows the cap (`dn_mirror_room(nrows)`) and it grows it after the rows' prefills already ran. A
+fifth session's prefill therefore evicts a live session's mirror, and that session's next decode
+declines `dn_state` - its CPU state stopped at the prefill, so the CPU-prefix resync cannot
+rebuild it - and on a blob-only load the CPU fallback has no planar weights to run, so the step
+panics. The batch probe and `dff_pair` size the room before their prefills; the server's admission
+does not. The work: grow the room at admission (the server's stream count plus the reference
+rows), or let the mint evict only a mirror whose session is retired and decline the mint
+otherwise, and a cell that admits `DN_MIRRORS_MAX + 1` sessions through prefill and steps the
+first one.
+
+## 32. Flash-Next's verify row 0 reads 0.89 logits off the plain step at one prose position
+
+`mtp-ff-3.8fn` prose-a: over 48 forced-feed steps the verify's row 0 and the plain GPU step agree to
+7e-4 everywhere but one step, which reads 0.89 with the argmax unmoved (prose-b 7e-4 throughout,
+counting token-exact at depth 1, 2 and 4). The fixture holds the plain-MoE bar (2.0) on the reading
+that the rows and single GEMV forms round the router's logits apart and a near-tie flips an expert -
+the same reading the q30 batch-rail fixture rests on - but nothing has shown the flipped expert. The
+work: dump the router logits and the selected experts at that step in both forms (`harness/mtp_ruler.das`
+is the rig's shape), name the layer and the margin; a difference that is not a routing flip is a
+rows-form defect and the bar goes back to 0.5.
+
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 
 `lcpp_bench --mtp-ab` (single stream, Metal, tg-real128 `-p 0 -n 128`, greedy, depth 1, M5 Max,

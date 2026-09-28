@@ -84,7 +84,7 @@ def kq_ssb(fmt : int) : int64 => kq_ssb(kq_fmt_of_id(fmt, "kq_ssb"))
 //! True for the kq ids whose tile reads the packed quant plane directly; the others (k5/k6 and
 //! the grid formats) read a byte-expanded panel unpacked once per (group, token-block).
 def kq_reads_packed_planes(fmt : int64) : bool {
-    return fmt == 4l || fmt == 40l || fmt == 44l || fmt == 3l || fmt == 45l || fmt == 2l
+    return fmt == 4l || fmt == 40l || fmt == 44l || fmt == 3l || fmt == 45l || fmt == 2l || fmt == 35l
 }
 
 //! eight +-1 bytes for sign byte `sb`, lane k negative when bit k is set

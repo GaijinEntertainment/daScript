@@ -199,6 +199,7 @@ modules/dasLLAMA/
     dasllama_arch_qwen2.das   #   Qwen2 arch  (per-arch: config setter + [init] registration)
     dasllama_arch_qwen3.das   #   Qwen3 arch (QK-norm)
     dasllama_arch_qwen35.das  #   Qwen3.5/3.6 + Qwen3-Next hybrid arches (Gated-DeltaNet + gated attention; qwen35 / qwen35moe / qwen3next)
+    dasllama_arch_qwen4exp.das #  Qwen3.8-Flash-Next (the Qwen4 preview): the qwen35moe hybrid inside hyper-connections + the n-gram PLE side input
     dasllama_arch_phi3.das    #   Phi-3 arch
     dasllama_arch_gemma2.das  #   Gemma-2 arch
     dasllama_arch_gemma3.das  #   Gemma-3 arch (SWA pattern + dual rope θ)

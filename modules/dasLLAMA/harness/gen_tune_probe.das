@@ -448,7 +448,7 @@ def kq_qsb(fmt : int64) : int64 => dasllama_gemm_schema::kq_qsb(int(fmt))
 def kq_ssb(fmt : int64) : int64 => dasllama_gemm_schema::kq_ssb(int(fmt))
 
 // the family's sidecar entry = its [tune] function name (the K-quants by bit width - k3 included - q40/iq4xs by tag)
-def kq_tile_entry(fmt : int64) : string => fmt == 40l ? "q40q8_tile_gen" : (fmt == 44l ? "iq4xsq8_tile_gen" : (fmt == 33l ? "iq3sq8_tile_gen" : (fmt == 34l ? "iq3xxsq8_tile_gen" : (fmt == 45l ? "iq4nlq8_tile_gen" : (fmt == 23l ? "iq2sq8_tile_gen" : (fmt == 24l ? "iq2xsq8_tile_gen" : (fmt == 25l ? "iq2xxsq8_tile_gen" : "k{fmt}q8_tile_gen")))))))
+def kq_tile_entry(fmt : int64) : string => fmt == 40l ? "q40q8_tile_gen" : (fmt == 44l ? "iq4xsq8_tile_gen" : (fmt == 33l ? "iq3sq8_tile_gen" : (fmt == 35l ? "iq3s4q8_tile_gen" : (fmt == 34l ? "iq3xxsq8_tile_gen" : (fmt == 45l ? "iq4nlq8_tile_gen" : (fmt == 23l ? "iq2sq8_tile_gen" : (fmt == 24l ? "iq2xsq8_tile_gen" : (fmt == 25l ? "iq2xxsq8_tile_gen" : "k{fmt}q8_tile_gen"))))))))
 
 //! the gemv companion's own manifest entry: the tile's name with the tier swapped
 def kq_gemv_entry(fmt : int64) : string => replace(kq_tile_entry(fmt), "_tile_gen", "_gemv_gen")
@@ -531,7 +531,7 @@ def pack_kq_disk_block(fmt : int64; var blkb : array<uint8>; base : int) {   // 
         let dbits = f32_to_f16(0.002 + 0.0001 * float(base % 13))
         blkb[108] = uint8(dbits & 0xFF)
         blkb[109] = uint8(dbits >> 8u)
-    } elif (fmt == 33l) {
+    } elif (fmt == 33l || fmt == 35l) {
         // 110B IQ3_S disk block: f16 d, 64 grid-index qs, 8 qh, 32 signs, 4 packed 4-bit scales — every byte pattern is legal
         let dbits = f32_to_f16(0.002 + 0.0001 * float(base % 13))
         blkb[0] = uint8(dbits & 0xFF)
@@ -635,7 +635,7 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {   // nolint:
     fx.kq |> resize(d * fx.nsb * qsb)
     fx.ks |> resize(d * fx.nsb * ssb)
     var blkb : array<uint8>
-    blkb |> resize(fmt == 2l ? 84l : (fmt == 23l ? 82l : (fmt == 24l ? 74l : (fmt == 25l ? 66l : (fmt == 4l || fmt == 40l || fmt == 45l ? 144l : (fmt == 5l ? 176l : (fmt == 44l ? 136l : (fmt == 3l || fmt == 33l ? 110l : (fmt == 34l ? 98l : 210l)))))))))
+    blkb |> resize(fmt == 2l ? 84l : (fmt == 23l ? 82l : (fmt == 24l ? 74l : (fmt == 25l ? 66l : (fmt == 4l || fmt == 40l || fmt == 45l ? 144l : (fmt == 5l ? 176l : (fmt == 44l ? 136l : (fmt == 3l || fmt == 33l || fmt == 35l ? 110l : (fmt == 34l ? 98l : 210l)))))))))
     let kf = kq_fmt_of_id(int(fmt), "build_kq_fixture")
     for (r in range64(d)) {
         for (s in range64(fx.nsb)) {
@@ -683,6 +683,9 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {   // nolint:
                                 : (fmt == 33l
                                     ? iq3s_grp_row_dot(kqg, ksg, r, 4l,
                                         addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n)
+                                    : (fmt == 35l
+                                    ? iq3s4_grp_row_dot(kqg, ksg, r, 4l,
+                                        addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n)
                                     : (fmt == 34l
                                         ? iq3xxs_grp_row_dot(kqg, ksg, r, 4l,
                                             addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n)
@@ -702,7 +705,7 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {   // nolint:
                                                 ? k2_grp_row_dot(kqg, ksg, r, 4l,
                                                     addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n)
                                                 : kq_grp_row_dot(fmt, kqg, ksg, r, 4l,
-                                        addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n)))))))))))
+                                        addr(fx.xq[0]) + tk * n, addr(fx.xs[0]) + tk * (n / 256l), addr(fx.xbs[0]) + tk * (n / 16l), n))))))))))))
                 }
             }
         }
@@ -732,6 +735,9 @@ def kq_tile_variants(fmt : int64) : array<tuple<string; KqTileFn>> {
     }
     if (fmt == 33l) {
         return <- iq3sq8_tile_gen_variants()
+    }
+    if (fmt == 35l) {
+        return <- iq3s4q8_tile_gen_variants()
     }
     if (fmt == 34l) {
         return <- iq3xxsq8_tile_gen_variants()
@@ -788,6 +794,12 @@ def kq_gemv_variants_by_suffix(fmt : int64) : table<string; KqRowsFn> {   // nol
         delete gvs
     } elif (fmt == 33l) {
         var gvs <- iq3sq8_gemv_gen_variants()
+        for (v in gvs) {
+            tab[v._0] = v._1
+        }
+        delete gvs
+    } elif (fmt == 35l) {
+        var gvs <- iq3s4q8_gemv_gen_variants()
         for (v in gvs) {
             tab[v._0] = v._1
         }
@@ -874,6 +886,12 @@ def kq_layout_mrs(fmt : int64) : table<string; int> {   // nolint:STYLE037,STYLE
         delete lvs
     } elif (fmt == 33l) {
         var lvs <- iq3sq8_layout_gen_variants()
+        for (v in lvs) {
+            mrs[v._0] = invoke(v._1)
+        }
+        delete lvs
+    } elif (fmt == 35l) {
+        var lvs <- iq3s4q8_layout_gen_variants()
         for (v in lvs) {
             mrs[v._0] = invoke(v._1)
         }
@@ -1075,25 +1093,31 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn;
     return ok
 }
 
-// one kq family's test pass: every variant of the format's OWN grid against the scalar oracle
-// ===== the q51 GEMV family (self-anchored, sdot-only grid) =====
+// ===== the per-32 GEMV families (q51, iq4nl32: self-anchored grids off the kq lattice) =====
 
-struct Q51Fixture {
+struct B32Fixture {
+    fmt : KqFmt
     n, d : int64
     nb : int64
-    qq : array<uint8>       // disk-order 20B/block quant plane
-    qs : array<uint8>       // disk-order 4B/block f16 (d, m) scale plane
+    qb, sb : int64          // the format's quant / scale bytes a block (kq_desc's strides)
+    qq : array<uint8>       // disk-order quant plane
+    qs : array<uint8>       // disk-order f16 scale plane (q51: d, m; iq4nl32: d)
     xq : array<int8>
     xs : array<float>
-    xbs : array<int>        // per-32 activation sums (the q51 gemv contract)
+    xbs : array<int>        // per-32 activation sums (the per-32 gemv contract; the q51 fold reads them)
     yref : array<float>
 }
 
-def build_q51_fixture(n, d : int64) : Q51Fixture {
-    var fx = Q51Fixture(n = n, d = d, nb = n / 32l)
-    fx.qq |> resize(d * fx.nb * 20l)
-    fx.qs |> resize(d * fx.nb * 4l)
-    // valid small f16 scale bit patterns (d, m) cycled per block; quant/qh bytes an LCG walk
+//! the format's scalar disk-order dot - the oracle every per-32 variant is held to
+def b32_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    return fmt == KqFmt.q51 ? dot_q51q8_scalar(wq, ws, xq, xs, n) : dot_iq4nl32q8_scalar(wq, ws, xq, xs, n)
+}
+
+def build_b32_fixture(fmt : KqFmt; n, d : int64) : B32Fixture {
+    var fx = B32Fixture(fmt = fmt, n = n, d = d, nb = n / 32l, qb = kq_qsb(fmt), sb = kq_ssb(fmt))
+    fx.qq |> resize(d * fx.nb * fx.qb)
+    fx.qs |> resize(d * fx.nb * fx.sb)
+    // valid small f16 scale bit patterns (d, then m where the row holds one) cycled per block; quant bytes an LCG walk
     let f16s = fixed_array(0x2E66, 0x3266, 0xB18F, 0x2C00, 0x3000, 0xB266, 0x2A8F, 0x3400)
     var seed = 0x12345
     for (i in range64(length(fx.qq))) {
@@ -1102,13 +1126,15 @@ def build_q51_fixture(n, d : int64) : Q51Fixture {
     }
     for (r in range64(d)) {
         for (bi in range64(fx.nb)) {
-            let sb = (r * fx.nb + bi) * 4l
+            let sb = (r * fx.nb + bi) * fx.sb
             let dv = f16s[int(r * 3l + bi) % 8]
-            let mv = f16s[int(r * 5l + bi * 7l + 3l) % 8]
             fx.qs[sb] = uint8(dv & 255)
             fx.qs[sb + 1l] = uint8(dv >> 8)
-            fx.qs[sb + 2l] = uint8(mv & 255)
-            fx.qs[sb + 3l] = uint8(mv >> 8)
+            if (fx.sb >= 4l) {
+                let mv = f16s[int(r * 5l + bi * 7l + 3l) % 8]
+                fx.qs[sb + 2l] = uint8(mv & 255)
+                fx.qs[sb + 3l] = uint8(mv >> 8)
+            }
         }
     }
     var xrow : array<float>
@@ -1131,20 +1157,20 @@ def build_q51_fixture(n, d : int64) : Q51Fixture {
     fx.yref |> resize(d)
     unsafe {
         for (r in range64(d)) {
-            fx.yref[r] = dot_q51q8_scalar(addr(fx.qq[0]) + r * fx.nb * 20l, addr(fx.qs[0]) + r * fx.nb * 4l,
-                                          addr(fx.xq[0]), addr(fx.xs[0]), n)
+            fx.yref[r] = b32_scalar_dot(fmt, addr(fx.qq[0]) + r * fx.nb * fx.qb, addr(fx.qs[0]) + r * fx.nb * fx.sb,
+                                        addr(fx.xq[0]), addr(fx.xs[0]), n)
         }
     }
     return <- fx
 }
 
-def run_q51_gemv(gemv; fx : Q51Fixture; qq : array<uint8>; qs : array<uint8>; mr : int64; var y : array<float>) {
+def run_b32_gemv(gemv; fx : B32Fixture; qq : array<uint8>; qs : array<uint8>; mr : int64; var y : array<float>) {
     unsafe {
         invoke(gemv, addr(y[0]), addr(qq[0]), addr(qs[0]), addr(fx.xq[0]), addr(fx.xs[0]), addr(fx.xbs[0]), fx.n, 0l, (fx.d / mr) * mr)
     }
 }
 
-def close_to_q51_ref(fx : Q51Fixture; y : array<float>; mr : int64; var maxdiff : float&) : bool {
+def close_to_b32_ref(fx : B32Fixture; y : array<float>; mr : int64; var maxdiff : float&) : bool {
     var mag = 0.0
     let rows = int((fx.d / mr) * mr)
     for (i in range(rows)) {
@@ -1163,9 +1189,9 @@ def close_to_q51_ref(fx : Q51Fixture; y : array<float>; mr : int64; var maxdiff 
 // per-variant plane interleave off the layout companion registry — declined perms report the
 // reference resolve (the lockstep rail). Trusting the SUFFIX instead repacks planes to a grp
 // the declined-to-reference kernel then walks at the companion mr — the zen2 maxdiff-120 trap.
-def private q51_layout_mrs() : table<string; int> {
+def private b32_layout_mrs(fmt : KqFmt) : table<string; int> {
     var mrs : table<string; int>
-    var lvs <- q51q8_layout_gen_variants()
+    var lvs <- fmt == KqFmt.q51 ? q51q8_layout_gen_variants() : iq4nl32q8_layout_gen_variants()
     for (v in lvs) {
         mrs[v._0] = invoke(v._1)
     }
@@ -1173,13 +1199,19 @@ def private q51_layout_mrs() : table<string; int> {
     return <- mrs
 }
 
-// The q51 family tune pass: gate every variant against the scalar disk oracle on repacked
+//! the per-32 family's manifest key - the TILE stamp (the gemv and layout companions follow it)
+def b32_tile_entry(fmt : KqFmt) : string => fmt == KqFmt.q51 ? "q51q8_tile_gen" : "iq4nl32q8_tile_gen"
+
+// A per-32 family's tune pass: gate every variant against the scalar disk oracle on repacked
 // planes, iso-bench the streamed decode shape, return the best suffix ("" = a gate failed).
-def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
-    var sfx <- build_q51_fixture(704l, 32768l)   // streamed: the 26B expert-down K at DRAM scale
-    var hfx <- build_q51_fixture(704l, 2816l)    // hot: one expert's down stack
-    var tvs <- q51q8_gemv_gen_variants()
-    var mrs <- q51_layout_mrs()
+def b32_tune_family(fmt : KqFmt; var rows_out : table<string; JsonValue?>) : string {
+    let entry = b32_tile_entry(fmt)
+    let n = fmt == KqFmt.q51 ? 704l : 640l   //! the expert width each rail exists for: the 26B-A4B's q51 down, Flash-Next's iq4nl32 down
+    var sfx <- build_b32_fixture(fmt, n, 32768l)   // streamed: the expert-down K at DRAM scale
+    var hfx <- build_b32_fixture(fmt, n, 2816l)    // hot: one expert's down stack
+    var tvs <- fmt == KqFmt.q51 ? q51q8_gemv_gen_variants() : iq4nl32q8_gemv_gen_variants()
+    var mrs <- b32_layout_mrs(fmt)
+    let mr0 = fmt == KqFmt.q51 ? q51q8_layout_gen() : iq4nl32q8_layout_gen()
     var best = ""
     var bestDt = 2147483647
     var y : array<float>
@@ -1187,24 +1219,24 @@ def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
     var yh : array<float>
     yh |> resize(hfx.d)
     for (v in tvs) {
-        let mr = int64(mrs?[v._0] ?? q51q8_layout_gen())
+        let mr = int64(mrs?[v._0] ?? mr0)
         var sq := sfx.qq
         var ss := sfx.qs
         var hq := hfx.qq
         var hs := hfx.qs
         unsafe {
-            repack_kq_grp(KqFmt.q51, addr(sq[0]), addr(ss[0]), sfx.n, sfx.d, mr)
-            repack_kq_grp(KqFmt.q51, addr(hq[0]), addr(hs[0]), hfx.n, hfx.d, mr)
+            repack_kq_grp(fmt, addr(sq[0]), addr(ss[0]), sfx.n, sfx.d, mr)
+            repack_kq_grp(fmt, addr(hq[0]), addr(hs[0]), hfx.n, hfx.d, mr)
         }
         var maxdiff = 0.0
-        run_q51_gemv(v._1, sfx, sq, ss, mr, y)
-        var ok = close_to_q51_ref(sfx, y, mr, maxdiff)
-        run_q51_gemv(v._1, hfx, hq, hs, mr, yh)
-        ok = close_to_q51_ref(hfx, yh, mr, maxdiff) && ok
+        run_b32_gemv(v._1, sfx, sq, ss, mr, y)
+        var ok = close_to_b32_ref(sfx, y, mr, maxdiff)
+        run_b32_gemv(v._1, hfx, hq, hs, mr, yh)
+        ok = close_to_b32_ref(hfx, yh, mr, maxdiff) && ok
         if (!ok) {
             // best = "" rejects the family; the shared cleanup past the loop frees everything
             // (deleting tvs HERE, mid-iteration, is the locked-array trap)
-            print("q51 {v._0} (mr={mr}): MISMATCH (maxdiff {maxdiff}) - aborting tune\n")
+            print("{fmt} {v._0} (mr={mr}): MISMATCH (maxdiff {maxdiff}) - aborting tune\n")
             delete sq; delete ss; delete hq; delete hs
             best = ""
             break
@@ -1212,12 +1244,12 @@ def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
         var dt = 2147483647
         for (_rep in range(3)) {
             let t0 = ref_time_ticks()
-            run_q51_gemv(v._1, sfx, sq, ss, mr, y)
+            run_b32_gemv(v._1, sfx, sq, ss, mr, y)
             dt = min(dt, get_time_usec(t0))
         }
-        let gb = double(sfx.d * sfx.nb * 24l) / double(max(dt, 1)) / 1000.0lf
+        let gb = double(sfx.d * sfx.nb * (sfx.qb + sfx.sb)) / double(max(dt, 1)) / 1000.0lf
         rows_out[v._0] = JV((streamed_us = double(dt)))
-        tune_detail("q51 {v._0} (mr={mr}): ok (maxdiff {maxdiff}), streamed {dt} us ({gb:0.1f} GB/s)\n")
+        tune_detail("{fmt} {v._0} (mr={mr}): ok (maxdiff {maxdiff}), streamed {dt} us ({gb:0.1f} GB/s)\n")
         if (dt < bestDt) {
             bestDt = dt
             best = v._0
@@ -1226,12 +1258,12 @@ def q51_tune_family(var rows_out : table<string; JsonValue?>) : string {
     }
     // the sticky seat, by the recorded times: the incumbent keeps the crown inside the margin
     if (!empty(best)) {
-        let inc = gen_incumbent("q51q8_tile_gen")
+        let inc = gen_incumbent(entry)
         if (!empty(inc) && inc != best && key_exists(rows_out, inc)) {
             var irow = rows_out[inc]
             let it : double = irow?["streamed_us"] ?? -1.0lf
             if (it > 0.0lf && double(bestDt) * gen_margin() > it) {
-                tune_detail("q51q8_tile_gen: {best} does not beat the incumbent {inc} by x{gen_margin():0.3f} - the seat stays\n")
+                tune_detail("{entry}: {best} does not beat the incumbent {inc} by x{gen_margin():0.3f} - the seat stays\n")
                 best = inc
             }
         }
@@ -1510,6 +1542,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     var kfxs44 <- [ <- build_kq_fixture(44l, 256l, 32l, 8l), <- build_kq_fixture(44l, 768l, 32l, 8l), <- build_kq_fixture(44l, 2048l, 32l, 8l)]
     var kfxs3 <- [ <- build_kq_fixture(3l, 256l, 32l, 8l), <- build_kq_fixture(3l, 768l, 32l, 8l), <- build_kq_fixture(3l, 2048l, 32l, 8l)]
     var kfxs33 <- [ <- build_kq_fixture(33l, 256l, 32l, 8l), <- build_kq_fixture(33l, 768l, 32l, 8l), <- build_kq_fixture(33l, 2048l, 32l, 8l)]
+    var kfxs35 <- [ <- build_kq_fixture(35l, 256l, 32l, 8l), <- build_kq_fixture(35l, 768l, 32l, 8l), <- build_kq_fixture(35l, 2048l, 32l, 8l)]
     var kfxs34 <- [ <- build_kq_fixture(34l, 256l, 32l, 8l), <- build_kq_fixture(34l, 768l, 32l, 8l), <- build_kq_fixture(34l, 2048l, 32l, 8l)]
     var kfxs45 <- [ <- build_kq_fixture(45l, 256l, 32l, 8l), <- build_kq_fixture(45l, 768l, 32l, 8l), <- build_kq_fixture(45l, 2048l, 32l, 8l)]
     var kfxs2 <- [ <- build_kq_fixture(2l, 256l, 32l, 8l), <- build_kq_fixture(2l, 768l, 32l, 8l), <- build_kq_fixture(2l, 2048l, 32l, 8l)]
@@ -1643,6 +1676,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     allok = kq_test_family(44l, kfxs44) && allok
     allok = kq_test_family(3l, kfxs3) && allok
     allok = kq_test_family(33l, kfxs33) && allok
+    allok = kq_test_family(35l, kfxs35) && allok
     allok = kq_test_family(34l, kfxs34) && allok
     allok = kq_test_family(45l, kfxs45) && allok
     allok = kq_test_family(2l, kfxs2) && allok
@@ -1667,6 +1701,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     delete kfxs44
     delete kfxs3
     delete kfxs33
+    delete kfxs35
     delete kfxs34
     delete kfxs45
     delete kfxs2
@@ -2128,18 +2163,19 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     // the --tune-only re-mint filter: only matching families race (q8q8 brings its e2e
     // confirm along); a skipped family writes no entry, so its previous seat survives the
     // upsert - a one-family re-mint after landing a format is seconds, not the full walk
-    var kqSel <- [for (fmt in fixed_array(4l, 5l, 6l, 40l, 44l, 3l, 33l, 34l, 45l, 2l, 23l, 24l, 25l)); fmt; where tune_family_selected(kq_tile_entry(fmt))]
+    var kqSel <- [for (fmt in fixed_array(4l, 5l, 6l, 40l, 44l, 3l, 33l, 34l, 45l, 2l, 23l, 24l, 25l, 35l)); fmt; where tune_family_selected(kq_tile_entry(fmt))]
     let wantQ8 = tune_family_selected("q8q8_tile_gen")
-    let wantQ51 = tune_family_selected("q51q8_tile_gen")
-    let planTotal = (wantQ8 ? 2 : 0) + length(kqSel) + (wantQ51 ? 1 : 0)
+    var b32Sel <- [for (f in fixed_array(KqFmt.q51, KqFmt.iq4nl32)); f; where tune_family_selected(b32_tile_entry(f))]
+    let planTotal = (wantQ8 ? 2 : 0) + length(kqSel) + length(b32Sel)
     if (planTotal == 0) {
         print("tune-only '{tune_only_filter()}': no generator family matches - half skipped, sidecar untouched\n")
         delete kqSel
+        delete b32Sel
         g_tune_only_no_match = true
         return true
     }
     if (!empty(tune_only_filter())) {
-        tune_detail("tune-only '{tune_only_filter()}': racing {planTotal - (wantQ8 ? 1 : 0)} of 15 generator families\n")
+        tune_detail("tune-only '{tune_only_filter()}': racing {planTotal - (wantQ8 ? 1 : 0)} of 17 generator families\n")
     }
     // refuse before burning minutes measuring noise; every winner below queues into `pending`
     // and nothing reaches the sidecar until the end-of-run gate passes
@@ -2194,21 +2230,23 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         print("aborting mid-run - no sidecar written\n")
         return false
     }
-    if (wantQ51) {
-        interrupt_gate("q51q8_tile_gen")
-        let q51_t0 = ref_time_ticks()
+    for (bf in b32Sel) {
+        let entry = b32_tile_entry(bf)
+        interrupt_gate(entry)
+        let b32_t0 = ref_time_ticks()
         // the manifest key must match the [tune] fn (the TILE) or the stamp misses its own crown;
         // the race still benches the gemv shape
-        tune_progress_kernel_begin("q51q8_tile_gen", ROUNDS)
+        tune_progress_kernel_begin(entry, ROUNDS)
         var qrows : table<string; JsonValue?>
-        let qw = q51_tune_family(qrows)
-        tune_detail("TUNE_GEN_TIME q51_family {get_time_usec(q51_t0) / 1000} ms\n")
-        tune_progress_kernel_end("q51q8_tile_gen", qw, empty(qw) ? "rejected" : "beats")
+        let qw = b32_tune_family(bf, qrows)
+        tune_detail("TUNE_GEN_TIME {bf}_family {get_time_usec(b32_t0) / 1000} ms\n")
+        tune_progress_kernel_end(entry, qw, empty(qw) ? "rejected" : "beats")
         // same gate-failure fallback as the kq loop: complete the scope on the reference body
-        pending["q51q8_tile_gen"] = empty(qw) ? "reference" : qw
-        g_rows["q51q8_tile_gen"] = JV(qrows)
-        print("q51q8_tile_gen winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
+        pending[entry] = empty(qw) ? "reference" : qw
+        g_rows[entry] = JV(qrows)
+        print("{entry} winner: {empty(qw) ? "reference (gate-failure fallback)" : qw}\n")
     }
+    delete b32Sel
     var ok = true
     if (wantQ8) {
         interrupt_gate("confirm_e2e_prefill")

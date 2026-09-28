@@ -22,7 +22,8 @@ require daslib/strings_boost
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
 //! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs/iq4nl/k2/iq2s/iq2xs/iq2xxs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
 //! planes; mx4 = the native MXFP4 expert planes (`Model.mxq` / `mxs` under `experts_mx4` - the GPU tiers' stack tag, never a
-//! per-tensor tag the loader writes). New members append — the int value is the device stack tag and the image plane id.
+//! per-tensor tag the loader writes); iq4nl32 = native IQ4_NL per-32 planes (the expert stacks whose rows are no superblock
+//! multiple - iq4nl's disk blocks with q51's plane form). New members append — the int value is the device stack tag and the image plane id.
 enum KqFmt : uint8 {
     q8
     k4
@@ -40,6 +41,8 @@ enum KqFmt : uint8 {
     iq2xs
     iq2xxs
     mx4
+    iq4nl32
+    iq3s4
 }
 
 //! One empty tag type per KqFmt member - the overload key of every per-format function family
@@ -61,6 +64,8 @@ struct KqTag_iq2s {}
 struct KqTag_iq2xs {}
 struct KqTag_iq2xxs {}
 struct KqTag_mx4 {}
+struct KqTag_iq4nl32 {}
+struct KqTag_iq3s4 {}
 
 [call_macro(name = "kq_fmt_stamp")]
 class KqFmtStamp : AstCallMacro {
@@ -147,7 +152,7 @@ def kq_cm2e_aliases_m(fmt_name : string) : bool => word_in(KQ_CM2E_ALIASES_M, fm
 
 //! the stem of a format's batch-tile stamp functions: `ensure_<stem>_<tail>` and its set/enc twins
 def kq_tile_stem(fmt_name : string) : string {
-    return fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" ? "{fmt_name}_batch" : "kq_batch_{fmt_name}"
+    return fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" ? "{fmt_name}_batch" : "kq_batch_{fmt_name}"
 }
 
 //! `tile_<verb>_<tail>` -> the format's `<verb>_<stem>_<tail>`; a `cm2e_cls` tail on an aliasing format takes `cm2m_cls`
@@ -332,6 +337,12 @@ def kq_desc(f : KqFmt) : KqDesc {
     if (f == KqFmt.mx4) {
         return KqDesc(fmt = f, qsb = MX4_QB, ssb = MX4_SB, elems = KQ_B32_ELEMS, disk_bytes = 17l, ggml_type = GGML_TYPE_MXFP4, schema_id = -1, stream_code = MX4_STREAM_TAG)
     }
+    if (f == KqFmt.iq4nl32) {
+        return KqDesc(fmt = f, qsb = IQ4NL32_QB, ssb = IQ4NL32_SB, elems = KQ_B32_ELEMS, disk_bytes = 18l, ggml_type = GGML_TYPE_IQ4_NL, schema_id = -1, stream_code = IQ4NL32_STREAM_TAG)
+    }
+    if (f == KqFmt.iq3s4) {
+        return KqDesc(fmt = f, qsb = IQ4XS_QSB, ssb = IQ3S_SSB, elems = KQ_SB_ELEMS, disk_bytes = 110l, ggml_type = GGML_TYPE_IQ3_S, schema_id = 35, stream_code = 35)
+    }
     return KqDesc(fmt = KqFmt.q8, qsb = 0l, ssb = 0l, elems = KQ_B32_ELEMS, disk_bytes = 34l, ggml_type = GGML_TYPE_Q8_0, schema_id = -1, stream_code = 0)
 }
 
@@ -378,7 +389,7 @@ def kq_blocks_for(n, rows : int64; fmt : int) : int64 {
 }
 
 //! the KqFmt slot count of a per-format table (int(KqFmt) indexes it; members append, so the last is the bound)
-let KQ_FMT_COUNT = int(KqFmt.mx4) + 1
+let KQ_FMT_COUNT = int(KqFmt.iq3s4) + 1
 
 //! the format an `int(KqFmt)` slot names - the per-format slot the GPU drivers and the image's plane tables index by; the caller holds the slot inside the enum's range
 def kq_fmt_of_slot(slot : int) : KqFmt => unsafe(reinterpret<KqFmt>(uint8(slot)))
@@ -438,6 +449,8 @@ let Q51_QB = 20l    // q5_1 quant plane PER 32-BLOCK: 16 nibble bytes (k/k+16 pa
 let Q51_SB = 4l     // q5_1 scale plane PER 32-BLOCK: f16 d + f16 m
 let MX4_QB = 16l    // MXFP4 quant plane PER 32-BLOCK: 16 nibble bytes (element j low, j + 16 high), the disk order
 let MX4_SB = 1l     // MXFP4 scale plane PER 32-BLOCK: one E8M0 byte
+let IQ4NL32_QB = 16l   // IQ4_NL quant plane PER 32-BLOCK: 16 nibble bytes (element j low, j + 16 high), the disk order
+let IQ4NL32_SB = 2l    // IQ4_NL scale plane PER 32-BLOCK: f16 d
 let IQ4XS_QSB = 128l   // IQ4_XS quant plane: 128 nibble bytes, the disk k/k+16 pairing (q40 tiling)
 let IQ4XS_SSB = 20l    // IQ4_XS scale plane: f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad — the k4 decoded-row shape
 let K3_QSB = 96l    // Q3_K quant plane: 64 qs bytes (four 2-bit lanes each) + 32 hmask bytes, verbatim disk order
@@ -464,6 +477,17 @@ def iq4nl_lut() : int8[16] => fixed_array<int8>(-127, -104, -83, -65, -49, -35, 
 //! The codebook's main-context copy (tests, oracles, the emitter's constant bake): a kernel that
 //! can run on a forked worker reads a module global as zeros - kernels take `iq4nl_lut()`.
 let IQ4NL_LUT = iq4nl_lut()
+
+//! The iq3s4 nibble codebook: the sixteen signed odd values an IQ3_S weight takes (grid magnitude
+//! 1..15 under its sign bit), lut[q] = 2q - 15 - so an IQ3_S superblock is served as an
+//! iq4xs-shaped plane (4-bit index, the iq3s scale row) and decoded by the LUT kernels, exactly.
+def iq3s4_lut() : int8[16] => fixed_array<int8>(-15, -13, -11, -9, -7, -5, -3, -1, 1, 3, 5, 7, 9, 11, 13, 15)
+
+//! iq3s4_lut's main-context copy (tests, oracles, the emitter's constant bake).
+let IQ3S4_LUT = iq3s4_lut()
+
+//! The iq3s4 index of one signed odd IQ3_S weight value.
+def iq3s4_index(v : int) : int => (v + 15) / 2
 
 //! The 6-bit sub-scale/min pair j of a 12-byte packed Q4_K/Q5_K scale block at sp - the one
 //! decode the dots, repacks, dequants and the Q5_K encoder share.
@@ -1188,6 +1212,9 @@ let K2_STREAM_TAG = 20
 
 //! mx4's stream tag is the GGML type id (`GGML_TYPE_MXFP4`); no loader path streams an mx4 plane, so the row exists only to keep `kq_stream_code` total
 let MX4_STREAM_TAG = 39
+
+//! iq4nl32's stream tag: a code no kernel id claims (iq4nl's 45 is the superblock rail's)
+let IQ4NL32_STREAM_TAG = 46
 
 def kq_stream_code(f : KqFmt) : int => kq_desc(f).stream_code
 

@@ -89,6 +89,7 @@ def private arm_rig(c : CommonArgs; cfg : CliConfig; sampler : SamplerArgs; defa
         note("gpu backend auto-detected: {gpu} (pass --gpu off | metal | vulkan to pin)")
     }
     let armed = apply_gpu_backend(knobs, gpu, TOOL)
+    apply_rope_scaling(c.rope_scaling, c.rope_scale, int64(c.yarn_orig_ctx))
     let ctx = int64(max(c.ctx, 0))
     if (armed) {
         set_gpu_resident_regions(1l)   // one conversation at a time: one device-home region

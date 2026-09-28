@@ -11,8 +11,11 @@
 dasllama-convert turns a GGUF model file into a prepared ``.dlim`` image
 offline, so the first real load maps the image instead of converting.
 The image is box- and knob-specific: the default output name carries the
-identity hash and is exactly what the normal dasLLAMA load path looks
-for.
+image's lane (``model.gguf.metal.dlim``, ``model.gguf.cpu-arm-i8mm.dlim``,
+``model.gguf.vulkan.dlim``, a ``-mtp`` suffix when a split head rides the
+load) and is exactly what the normal dasLLAMA load path looks for; the
+image header carries the full bake identity, so a stale lane re-bakes in
+place and the lanes coexist on one disk.
 
 Quick start
 ===========

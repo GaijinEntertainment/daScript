@@ -28,6 +28,7 @@ require dasllama/dasllama_arch_gemma4  // side-effect require: fires the arch's 
 require dasllama/dasllama_arch_qwen2moe  // side-effect require: fires the arch's [init] registration
 require dasllama/dasllama_arch_qwen3moe  // side-effect require: fires the arch's [init] registration
 require dasllama/dasllama_arch_qwen35  // side-effect require: fires the arch's [init] registration
+require dasllama/dasllama_arch_qwen4exp  // side-effect require: fires the arch's [init] registration
 require dasllama/dasllama_arch_gptoss  // side-effect require: fires the arch's [init] registration
 require dasllama/dasllama_arch_mistral3  // side-effect require: fires the arch's [init] registration
 require dasllama/dasllama_arch_glm4moe  // side-effect require: fires the arch's [init] registration

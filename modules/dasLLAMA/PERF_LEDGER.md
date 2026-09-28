@@ -11,6 +11,22 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-28) - the Metal batch rail's hyper-connection arm (Qwen3.8-Flash-Next tg128@4):
+  the batched step opens the rows' wide residual, runs the mixers through the shared layer body,
+  gathers each row's n-gram heads on its own session and writes each row's conv ring in place.**
+  M5 Max, `lcpp_bench --ngl 99 --npl 4 --npl-plen 512 -n 128 -r 5 --for-debug-purposes` under the
+  box's scratch manifest: tg128 56.86 +/- 0.05 tok/s, tg128@4 119.58 +/- 2.51 summed (2.10x; reps
+  124.0 / 118.5 / 117.9 / 118.9 / 118.6 - the first rep of every run reads 3-5% high, a 3-rep read
+  lands at cv 3-9%, five reps hold cv 2%). The step is device-bound: `--prof` reads the batched step
+  at setup 0.08 / encode 1.5 / wait 31.7 ms (gpu 30.7) against the single step's 1.0 / 1.4 / 19.8
+  (gpu 18.9), so four rows cost 1.63x one row's GPU time and the host is 5% of the wall. The MoE
+  siblings on this box read the same shape (Qwen3-30B-A3B 165 -> 314, 1.9x; Qwen3.6-35B-A3B 128 ->
+  269, 2.1x): four rows' top-10 of 512 experts barely overlap, so the expert traffic scales with the
+  rows and only the dense and attention passes amortize. Prediction on record before the run:
+  140-180 summed (2.5-3.2x) - missed on the expert-traffic term. Parity: the batch probe holds
+  B=2 and B=4 to 5e-4 logits against the single step over 16 steps (0 argmax flips), and
+  `mtp-dff-3.8fn` pins it in the suite.
+
 - **OPEN (2026-09-27) - the Vulkan resident driver's NextN prompt warm: the head's slab warmed on
   the window chain, and what it costs a prompt.** Where the driver homes a NextN head and the
   round is on (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`) every window of a
@@ -108,6 +124,36 @@ what it costs today and what the fix would change.
   token. Owed from the pod: tg128 of `Qwen3.5-0.8B-MTP-Q8_0.gguf` against `Qwen3.5-0.8B-Q8_0.gguf`
   (the same trunk, no carry) under `DASLLAMA_GPU=1`, with the `DASLLAMA_GPU_PROF=1` token profile
   of each, so the step's delta is read rather than estimated.
+
+- **LANDED (2026-09-27) - the Metal speculative round on the hyper-connection model
+  (Qwen3.8-Flash-Next + its split shared head): the verify's rows carry the wide residual into the
+  draft head, the n-gram side input takes the panel form with the accepted rows committed after the
+  walk, and every row form picks the deltanet z activation through `enc_dn_zgate`.** M5 Max,
+  `lcpp_bench --ngl 99 --mtp-ab -r 3 --for-debug-purposes` under the box's scratch manifest, tg-real128
+  over eight prompts, greedy, depth 1: off 55.32 +/- 0.49 tok/s, on 59.97 +/- 0.96 (1.08x), 1323 of 1716
+  drafts accepted (77.1%; per prompt 55.6% to 98.4%, x0.94 to x1.23 - the round loses at 56%
+  accept and wins from ~68%). The counting probe is token-exact at depth 1, 2 and 4 (100% accept,
+  spec 2x plain wall) and the prose probe at depth 1 (77%, 0 flips). The same shape as the 9B's
+  round (`followup_metal.md` row 26): an accept rate this high buys 1.77 tokens a round and the
+  round returns a tenth of it, so the verify's two rows cost most of a plain step here too - the
+  stage split (`harness/mtp_ruler.das`) is the next lever. The CPU round on this model is a loss
+  (`followup_general.md` row 178).
+
+- **LANDED (2026-09-27) - IQ3_S served as a 16-entry codebook plane on the CPU rail (`iq3s4`,
+  `ARCHITECTURE_ENGINE_FORMATS.md#served-form`, `DASLLAMA_IQ3S_SERVE=auto|grid|lut`): every IQ3_S weight
+  is a signed odd 1..15 times its block scale, so grid entry, qh bit and sign fold at transcode into
+  one nibble over `-15, -13, .., 15`, decoded by the iq4xs LUT kernels - one `tbl` per 16 nibbles
+  in place of a 2 KB grid gather, one load per 4 weights.** Qwen3.8-Flash-Next UD-IQ4_XS (gate/up
+  experts IQ3_S) on the M5 Max, 18 threads, `lcpp_bench --for-debug-purposes -p 512 -n 128 -r 3`
+  under the box's scratch manifest, one binary, warm passes (the pass after a mint is void: cv 7%):
+  grid pp512 134.1 +/- 2.0 / tg128 18.98 +/- 0.13, lut 140.6 +/- 0.7 / 26.9 +/- 0.5, llama.cpp at 2b129ccfa
+  107.8 +/- 3.5 / 19.9 +/- 0.4. `decode_prof -n 128 -t 18` under `JOBQUE_PROFILING=1`: 59.5 -> 40.3 ms a
+  token; `mm_moe` 25.1 -> 6.7 ms, the attention block 19.5 / 20.0, the hc mixes 5.8 / 6.0,
+  `mm_moe_dn` 5.0 / 3.5, the head 2.9 / 2.9. Predictions on record before the run: `mm_moe` ~7 ms,
+  the token ~42 ms, tg128 ~25 - all three held. Cost: the planar image 98.1 -> 105.5 GB (+23% on
+  the IQ3_S planes, the scale rows unchanged); the dequant is bit-identical to the grid form's
+  (`test_kquant`). The GPU tiers keep the grid form - their gather is a device read. Provenance:
+  the four bench logs and two profile logs of the 2026-09-27 session, `followup_general.md` 170.
 
 - **LANDED (2026-09-27) - the Vulkan TTS dedup pass: the Pocket row GEMV (`TtsPkGemvT`) folds
   its own subgroup reduction onto the shared `WgReduceBase`, and the pass's bench rows against

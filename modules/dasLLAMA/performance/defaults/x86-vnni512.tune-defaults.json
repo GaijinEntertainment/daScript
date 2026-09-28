@@ -1,6 +1,8 @@
 {
 	"kernels" : {
 		"iq4xsq8_gemv_gen" : "dot_vpdpbusd_width512_mr16",
+		"iq3s4q8_gemv_gen" : "dot_vpdpbusd_width512_mr16",
+		"iq3s4q8_tile_gen" : "dot_vpdpbusd_width512_mr16",
 		"q40q8_gemv_gen" : "dot_vpdpbusd_width512_mr16",
 		"add_inplace" : "vec8_u2",
 		"iq2xsq8_gemv_gen" : "dot_vpdpbusd_width512_mr16_grid_vbmi",
@@ -8,6 +10,7 @@
 		"iq2sq8_gemv_gen" : "dot_vpdpbusd_width512_mr16_grid_vbmi",
 		"rope_scaled_neox_tab" : "plain",
 		"q51q8_tile_gen" : "dot_vpdpbusd_width256_mr8",
+		"iq4nl32q8_tile_gen" : "dot_vpdpbusd_width256_mr8",
 		"softmax" : "vec8_u2",
 		"mul_inplace" : "vec8_u2",
 		"quantize_q8_0_bs_into_ptr" : "u2",
@@ -49,6 +52,7 @@
 		"quantize_q8_0_into_ptr" : "plain",
 		"gemm_f32_uk_4x16" : "u2",
 		"dot_q51e" : "vec16",
+		"dot_iq4nl32e" : "vec16",
 		"dot_f16" : "vec16",
 		"cvt_f16_to_f32" : "vec8_u2",
 		"dot" : "vec8_u2",

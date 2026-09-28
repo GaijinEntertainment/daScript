@@ -196,9 +196,10 @@ families runs only under a filter naming every one of them.** Kitten and kokoro 
 of one architecture; an untagged block runs under every `--family` filter.
 
 **A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
-stack against a per-session sequential forward - onto a carrier above `LARGE_TIER_BYTES`
-(`_model_tier.das`) is a defect.** The batched code paths get their parity on small models,
-through pins.
+stack against a per-session sequential forward whose sequential side runs on the CPU - onto a
+carrier above `LARGE_TIER_BYTES` (`_model_tier.das`) is a defect.** The batched code paths get
+their parity on small models, through pins; a cell whose two sides both run on the device
+streams nothing beside the device's bytes, and the tier does not bind it.
 
 **A cell never sets an environment-read knob - one the running config reads once, at context
 init - in a process that has already read it; it sets the knob in the environment of the child

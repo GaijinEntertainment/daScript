@@ -3569,6 +3569,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_swiglu_oai = compile_stamp(MetalSwigluOai_metal_swiglu_oai_msl, ok)
     g_pso_moe_gemv_mx4 = compile_stamp(metal_moe_gemv_mx4_msl, ok)
     g_pso_moe_gemv_q51 = compile_stamp(metal_moe_gemv_q51_msl, ok)
+    g_pso_moe_gemv_iq4nl32 = compile_stamp(metal_moe_gemv_iq4nl32_msl, ok)
     g_pso_dn_conv = compile_stamp(metal_dn_conv_msl, ok)
     g_pso_dn_hist = compile_stamp(metal_dn_conv_hist_msl, ok)
     g_pso_dn_l2 = compile_stamp(metal_dn_l2norm_msl, ok)
@@ -3619,7 +3620,15 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_st2_axpy = compile_stamp(metal_st2_axpy_msl, ok)
     g_pso_st2_add = compile_stamp(MetalSt2Add_metal_ew2_msl, ok)
     g_pso_st2_reflect1 = compile_stamp(metal_st2_reflect1_msl, ok)
-    g_pso_dn_gate = compile_stamp(metal_dn_gate_msl, ok)
+    g_pso_dn_gate = compile_stamp(MetalDnGate_metal_dn_gate_msl, ok)
+    g_pso_dn_gate_sig = compile_stamp(MetalDnGateSig_metal_dn_gate_msl, ok)
+    g_pso_hc_norm = compile_stamp(metal_hc_norm_msl, ok)
+    g_pso_hc_lo = compile_stamp(MetalHcLo_metal_ew1_msl, ok)
+    g_pso_hc_init = compile_stamp(metal_hc_init_msl, ok)
+    g_pso_hc_mix = compile_stamp(metal_hc_mix_msl, ok)
+    g_pso_hc_combine = compile_stamp(metal_hc_combine_msl, ok)
+    g_pso_ple_gate = compile_stamp(metal_ple_gate_msl, ok)
+    g_pso_ple_conv = compile_stamp(metal_ple_conv_msl, ok)
     g_pso_dn_deint = compile_stamp(metal_dn_deint_msl, ok)
     g_pso_sigmul = compile_stamp(MetalSigmul_metal_ew2_msl, ok)
     g_pso_axpy_sig = compile_stamp(metal_axpy_sig_msl, ok)
@@ -4162,6 +4171,9 @@ def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, 
     } elif (fmt == KqFmt.q51) {
         let qp = q51_planes_of(g_dev, t, stack_off)
         enc_moe_gemv_q51_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, by, yoff, ka, bsel, rows, k, nst)
+    } elif (fmt == KqFmt.iq4nl32) {
+        let qp = iq4nl32_planes_of(g_dev, t, stack_off)
+        enc_moe_gemv_iq4nl32_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, by, yoff, ka, bsel, rows, k, nst)
     } else {
         let bq = kq_quants_of(g_dev, t, fmt, stack_off)
         let bs = kq_scales_of(g_dev, t, fmt, stack_off)
@@ -4294,8 +4306,14 @@ def enc_rows_tiles(nrows, n, ys : int64; tile : block<(four : bool; live : int64
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad")]
 def enc_gemv_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; boff : uint64;
                   bx, by, bn, bd, bys : MetalBuffer?; n, d, ys : int64; yoff : uint64 = 0ul) {
-    enc_rows_tiles(nrows, n, ys) $(four; _live; xo, yo) {
-        enc_gemv_b(enc, four, bw, boff, bx, by, bn, bd, bys, d, yoff + yo, xo)
+    var base = 0l
+    while (base < nrows) {   // the tile ladder repeats every twelve rows, each pass offset by its first row
+        let xb = uint64(base * n * 4l)
+        let yb = uint64(base * ys * 4l)
+        enc_rows_tiles(min(nrows - base, 12l), n, ys) $(four; _live; xo, yo) {
+            enc_gemv_b(enc, four, bw, boff, bx, by, bn, bd, bys, d, yoff + yb + yo, xb + xo)
+        }
+        base += 12l
     }
 }
 
@@ -4499,8 +4517,9 @@ def metal_kernels_release {
     release_handles(g_pso_moe_router, g_pso_moe_select, g_pso_moe_select_512, g_pso_moe_gemv_q8, g_pso_moe_kq_k4, g_pso_moe_kq_k3)
     release_handles(g_pso_moe_kq_iq3s, g_pso_moe_kq_iq3xxs, g_pso_moe_kq_iq2s, g_pso_moe_kq_iq2xs, g_pso_moe_kq_iq2xxs, g_pso_moe_kq_iq4xs)
     release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm, g_pso_moe_wscale)
-    release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_dn_conv, g_pso_dn_hist, g_pso_dn_l2)
+    release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_moe_gemv_iq4nl32, g_pso_dn_conv, g_pso_dn_hist, g_pso_dn_l2)
     release_handles(g_pso_dn_scan, g_pso_dn_gate, g_pso_dn_deint, g_pso_sigmul, g_pso_axpy_sig, g_mx4_vtab)
+    release_handles(g_pso_dn_gate_sig, g_pso_hc_norm, g_pso_hc_lo, g_pso_hc_init, g_pso_hc_mix, g_pso_hc_combine, g_pso_ple_gate, g_pso_ple_conv)
     release_handles(g_pso_st2_attn)
     release_handles(g_pso_pk_rows, g_pso_pk_rows_elu, g_pso_pk_row_scale, g_pso_pk_attn)
     release_handles(g_pso_pk_add_ln, g_pso_pk_gemv_f32, g_pso_pk_gemv_f32_ln_silu, g_pso_pk_gemv_f32_gate, g_pso_pk_gemv_f32_add_silu)
@@ -6563,6 +6582,68 @@ class MetalMoeGemvQ51 {
                 hx += (qh & 4u) != 0u ? xv.z : 0.0
                 hx += (qh & 8u) != 0u ? xv.w : 0.0
                 sumf[r] += float(wsh[blk * 2u]) * (qx + 16.0 * hx) + float(wsh[blk * 2u + 1u]) * sx
+            }
+            ib += 4u
+        }
+        for [unroll_full] (r in range(2)) {
+            let sr = simd_sum(sumf[r])
+            if (lane == 0u && first_row + uint(r) < ddim) {
+                y[y0 + first_row + uint(r)] = sr
+            }
+        }
+    }
+}
+
+// Expert-indexed IQ4_NL per-32 GEMV — the q51 shape over 16B/2B planes (a block = 4 uints of nibbles
+// in the k/k+16 split-half pairing; the scale = one f16 d). value = d*LUT[q], the codebook staged
+// in threadgroup floats as the kq iq4 GEMVs do (f32 activations).
+[metal_dispatch(name = "enc_moe_gemv_iq4nl32_c", pso = "g_pso_moe_gemv_iq4nl32", tgmem = "metal_moe_gemv_iq4nl32_msl_tgmem", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
+class MetalMoeGemvIq4nl32 {
+    @ssbo @binding = 0 @role = "weight" @off = "qoff" wqu : array<uint>    // nibble plane, uint view (block at 4*blk)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" wsh : array<float16> // d plane (block blk's d at blk)
+    @ssbo @binding = 2 @role = "read" xf : array<float4>   // activations, float4 view (xoff always % 4)
+    @ssbo @binding = 3 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
+    @uniform @binding = 4 ka : MoeGemvArgs
+    @ssbo @binding = 6 @role = "read" sel : array<uint>    // [streams x 2k] selection rows (idx section read)
+    @workgroup lut : float[64]   // kvalues_iq4nl as floats, one slot per thread of the 64-wide group
+
+    [metal_kernel(name="metal_moe_gemv_iq4nl32_msl")]
+    def metal_moe_gemv_iq4nl32 {
+        let ndim = ka.ndim
+        let ddim = ka.ddim
+        let eblk = ka.eplane
+        let xs = ka.xs
+        let ss = ka.ss
+        let bxs = ka.bxs
+        let bys = ka.bys
+        let lid = gl_LocalInvocationID.x
+        lut[lid] = iq4_lut(lid & 15u)
+        barrier()
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u    // 4-way block stride
+        let it = lane % 8u    // 8 threads per block, one float4 (4 elems) each
+        let nb = ndim / 32u
+        let slot = gl_WorkGroupID.y
+        let st = gl_WorkGroupID.z
+        let eb = sel[st * ss + slot] * eblk
+        let xoff = st * bxs + slot * xs
+        let y0 = st * bys + slot * ddim
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        // this thread's 4 elems: half = it/4 selects the nibble half, ku = it%4 the quant uint
+        let nsh = (it / 4u) * 4u
+        let ku = it % 4u
+        var sumf : float[2]
+        var ib = ix
+        while (ib < nb) {
+            let xv = xf[(xoff + ib * 32u) / 4u + it]
+            for [unroll_full] (r in range(2)) {
+                let blk = eb + (first_row + uint(r)) * nb + ib
+                let u = wqu[blk * 4u + ku]
+                var qx = lut[(u >> nsh) & 15u] * xv.x
+                qx += lut[(u >> (8u + nsh)) & 15u] * xv.y
+                qx += lut[(u >> (16u + nsh)) & 15u] * xv.z
+                qx += lut[(u >> (24u + nsh)) & 15u] * xv.w
+                sumf[r] += float(wsh[blk]) * qx
             }
             ib += 4u
         }
@@ -10005,14 +10086,23 @@ class MetalDnScan {
 
 // Gated out-norm (dn_token_core's tail): per (v-head, position) RMSNorm over ds with the
 // SHARED ssm_norm row, then ⊙ SiLU(z) — in place on o, one simdgroup per (head, position).
-[metal_dispatch(name = "enc_dn_gate", pso = "g_pso_dn_gate", tg = 256, grid = "nvh/8, npos", params = "nvh : int64, npos : int64")]
-class MetalDnGate {
+[ |> template_struct_instance]
+class template MetalDnGateT {
     @ssbo @binding = 0 o : array<float>     // [npos x di] delta-rule output, gated in place
     @ssbo @binding = 1 z : array<float>     // [npos x di] raw gate projections
     @ssbo @binding = 2 @role = "weight" wn : array<float>    // [ds] shared norm weight (fblob row)
     @uniform @binding = 3 ka : DnArgs
+    @template_constant SIG : bool = false   //!< the z gate: silu(z) (qwen35), σ(z) (qwen4exp)
 
-    [metal_kernel(name="metal_dn_gate_msl")]
+    def zgate(zz : float) : float {
+        static_if (SIG) {
+            return 1.0 / (1.0 + exp(-zz))
+        } else {
+            return zz / (1.0 + exp(-zz))
+        }
+    }
+
+    [metal_kernel]
     def metal_dn_gate {
         let ds = ka.ds
         let di = ka.di
@@ -10034,9 +10124,18 @@ class MetalDnGate {
         let inv = rsqrt(ss / float(ds) + eps)
         for [unroll_full] (c in range(4)) {
             let zz = z[base + uint(c)]
-            o[base + uint(c)] = (wn[lane * 4u + uint(c)] * (v[c] * inv)) * silu_f32(zz)
+            o[base + uint(c)] = (wn[lane * 4u + uint(c)] * (v[c] * inv)) * zgate(zz)
         }
     }
+}
+
+[metal_dispatch(name = "enc_dn_gate", pso = "g_pso_dn_gate", tg = 256, grid = "nvh/8, npos", params = "nvh : int64, npos : int64")]
+class MetalDnGate : MetalDnGateT {
+}
+
+[metal_dispatch(name = "enc_dn_gate_sig", pso = "g_pso_dn_gate_sig", tg = 256, grid = "nvh/8, npos", params = "nvh : int64, npos : int64")]
+class MetalDnGateSig : MetalDnGateT {
+    override SIG = true
 }
 
 // Deinterleave the 2x-wide gated-attention Q projection (head h's q at 2h·hs, its gate at
@@ -10082,6 +10181,257 @@ class MetalAxpySig {
             return
         }
         y[gid] += x[gid] / (1.0 + exp(-g[gid / dim]))
+    }
+}
+
+// ===== hyper-connections (qwen4exp): the wide residual's mixer and scatter =====
+
+// The mixer's pre-norm: one threadgroup per stream row - stream (row % hc) of a wide row
+// RMS-normalizes over dim and scales by its own gamma row (the converter folded (1 + w) into w);
+// rows = hc for the single row, npos x hc for a window of wide rows.
+[metal_dispatch(name = "enc_hc_norm", pso = "g_pso_hc_norm", tgmem = "metal_hc_norm_msl_tgmem", tg = 1024, grid = "rows", params = "rows : int64")]
+class MetalHcNorm : MetalTgReduceBase {
+    @ssbo @binding = 0 @role = "read" x : array<float>       // [rows x dim] the wide residual rows
+    @ssbo @binding = 1 @role = "weight" w : array<float>     // [hc x dim] per-stream gammas
+    @ssbo @binding = 2 @role = "write" y : array<float>      // [rows x dim] the normed streams
+    @uniform @binding = 3 dim : uint
+    @uniform @binding = 4 eps : float
+    @uniform @binding = 5 hc : uint
+
+    [metal_kernel(name="metal_hc_norm_msl")]
+    def metal_hc_norm {
+        let row = gl_WorkGroupID.x
+        let lid = gl_LocalInvocationID.x
+        let wb = (row % hc) * dim
+        var ss = 0.0
+        var k = lid
+        while (k < dim) {
+            let vv = x[row * dim + k]
+            ss += vv * vv
+            k += gl_WorkGroupSize.x
+        }
+        let inv = tg_rms_inv(ss, dim, eps)
+        k = lid
+        while (k < dim) {
+            y[row * dim + k] = w[wb + k] * (x[row * dim + k] * inv)
+            k += gl_WorkGroupSize.x
+        }
+    }
+}
+
+// the wide residual of nrows rows: every stream of row p starts as row p of x
+[metal_dispatch(name = "enc_hc_init", pso = "g_pso_hc_init", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalHcInit {
+    @ssbo @binding = 0 @role = "read" x : array<float>       // [nrows x dim]
+    @ssbo @binding = 1 @role = "write" res : array<float>    // [nrows x hc x dim]
+    @uniform @binding = 2 ndim : uint
+    @uniform @binding = 3 hc : uint
+    @uniform @binding = 4 total : uint   // nrows x hc x dim
+
+    [metal_kernel(name="metal_hc_init_msl")]
+    def metal_hc_init {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= total) {
+            return
+        }
+        let width = hc * ndim
+        let p = gid / width
+        res[gid] = x[p * ndim + (gid - p * width) % ndim]
+    }
+}
+
+// the mixer's gate input: lo = silu(lo / hc) in place, on the low-rank row
+[metal_dispatch(name = "enc_hc_lo", pso = "g_pso_hc_lo", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalHcLo : MetalEw1T {
+    @uniform @binding = 2 hc : uint
+
+    def override map(a : float) : float => (a / float(hc)) / (1.0 + exp(-(a / float(hc))))
+}
+
+// the mixer's collapse over nrows wide rows: y[p][i] = the stream mean of xn[p][c][i] * σ(gate[p][c][i]) - the block's input rows
+[metal_dispatch(name = "enc_hc_mix", pso = "g_pso_hc_mix", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalHcMix {
+    @ssbo @binding = 0 @role = "read" xn : array<float>      // [nrows x hc x dim] the normed streams
+    @ssbo @binding = 1 @role = "read" gate : array<float>    // [nrows x hc x dim] the up projection
+    @ssbo @binding = 2 @role = "write" y : array<float>      // [nrows x dim] the block input
+    @uniform @binding = 3 ndim : uint
+    @uniform @binding = 4 hc : uint
+    @uniform @binding = 5 nrows : uint
+
+    [metal_kernel(name="metal_hc_mix_msl")]
+    def metal_hc_mix {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= nrows * ndim) {
+            return
+        }
+        let p = gid / ndim
+        let i = gid - p * ndim
+        var acc = 0.0
+        var c = 0u
+        while (c < hc) {
+            let k = (p * hc + c) * ndim + i
+            acc += xn[k] / (1.0 + exp(-gate[k]))
+            c++
+        }
+        y[gid] = acc / float(hc)
+    }
+}
+
+// the scatter over nrows wide rows: stream c of row p += the block output row p x 2 σ(inject[p][c] / hc) -
+// a zero logit is a plain residual add
+[metal_dispatch(name = "enc_hc_combine", pso = "g_pso_hc_combine", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalHcCombine {
+    @ssbo @binding = 0 @role = "readwrite" res : array<float>   // [nrows x hc x dim] the wide residual
+    @ssbo @binding = 1 @role = "read" o : array<float>          // [nrows x dim] the block output
+    @ssbo @binding = 2 @role = "read" inj : array<float>        // [nrows x hc] the scatter logits
+    @uniform @binding = 3 ndim : uint
+    @uniform @binding = 4 hc : uint
+    @uniform @binding = 5 nrows : uint
+
+    [metal_kernel(name="metal_hc_combine_msl")]
+    def metal_hc_combine {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= nrows * hc * ndim) {
+            return
+        }
+        let pc = gid / ndim
+        let p = pc / hc
+        let w = 2.0 / (1.0 + exp(-inj[pc] / float(hc)))
+        res[gid] += o[p * ndim + (gid - pc * ndim)] * w
+    }
+}
+
+// ===== the n-gram PLE side input (qwen4exp) =====
+
+struct PleGateArgs {
+    dim : uint
+    hc : uint
+    eps : float
+    pos0 : uint     // the position of row 0
+    rows : uint     // ring rows
+    direct : uint   // 1: the conv input lands at row p of a window panel; 0: at ring slot (pos0 + p) % rows
+}
+
+struct PleConvArgs {
+    dim : uint
+    hc : uint
+    kern : uint     // conv taps
+    dil : uint      // tap spacing in positions (the n-gram size)
+    rows : uint     // ring rows
+    pos0 : uint     // the position of row 0
+    nrows : uint
+    direct : uint   // 1: a tap at or past pos0 reads the window panel row (src - pos0), older taps the ring; 0: every tap reads the ring
+}
+
+// One (row, stream) per threadgroup of the side input: the normed key . normed query dot over dim gives
+// the gate (signed sqrt, then σ); the value row scaled by it is the stream's gated row, and its
+// grouped norm is the conv input row - into the history ring at the position's slot, or row p of a window panel.
+[metal_dispatch(name = "enc_ple_gate", pso = "g_pso_ple_gate", tgmem = "metal_ple_gate_msl_tgmem", tg = 1024, grid = "wgs", params = "wgs : int64")]
+class MetalPleGate : MetalTgReduceBase {
+    @ssbo @binding = 0 @role = "read" @off = "rb" res : array<float>       // [nrows x hc x dim] the wide residual (the query); the offsets pick one stream's rows out of a joint verify
+    @ssbo @binding = 1 @role = "read" @off = "kb" key : array<float>       // [nrows x hc x dim] the key projection
+    @ssbo @binding = 2 @role = "read" @off = "vb" val : array<float>       // [nrows x dim] the value projection
+    @ssbo @binding = 3 @role = "weight" wk : array<float>      // [hc x dim] key norm gammas
+    @ssbo @binding = 4 @role = "weight" wq : array<float>      // [hc x dim] query norm gammas
+    @ssbo @binding = 5 @role = "weight" wc : array<float>      // [hc x dim] conv-input norm gammas
+    @ssbo @binding = 6 @role = "write" @off = "gb" gated : array<float>    // [nrows x hc x dim] value x gate, per stream
+    @ssbo @binding = 7 @role = "write" @off = "coff" cin : array<float>   // the conv input rows: the ring (rows x hc x dim) or the window panel
+    @uniform @binding = 8 ka : PleGateArgs
+
+    [metal_kernel(name="metal_ple_gate_msl")]
+    def metal_ple_gate {
+        let wg = gl_WorkGroupID.x
+        let c = wg % ka.hc
+        let p = wg / ka.hc
+        let lid = gl_LocalInvocationID.x
+        let dim = ka.dim
+        let eps = ka.eps
+        let b = (p * ka.hc + c) * dim
+        let vb = p * dim
+        let wb = c * dim
+        var sk = 0.0
+        var sq = 0.0
+        var k = lid
+        while (k < dim) {
+            let kv = key[b + k]
+            let qv = res[b + k]
+            sk += kv * kv
+            sq += qv * qv
+            k += gl_WorkGroupSize.x
+        }
+        let invk = tg_rms_inv(sk, dim, eps)
+        barrier()
+        let invq = tg_rms_inv(sq, dim, eps)
+        barrier()
+        var d = 0.0
+        k = lid
+        while (k < dim) {
+            d += (wk[wb + k] * (key[b + k] * invk)) * (wq[wb + k] * (res[b + k] * invq))
+            k += gl_WorkGroupSize.x
+        }
+        let s = tg_sum(d) / sqrt(float(dim))
+        barrier()
+        let mag = sqrt(max(abs(s), 1.0e-6))
+        let sg = s > 0.0 ? mag : (s < 0.0 ? -mag : 0.0)
+        let g = 1.0 / (1.0 + exp(-sg))
+        var sg2 = 0.0
+        k = lid
+        while (k < dim) {
+            let gv = val[vb + k] * g
+            gated[b + k] = gv
+            sg2 += gv * gv
+            k += gl_WorkGroupSize.x
+        }
+        let invg = tg_rms_inv(sg2, dim, eps)
+        let slot = ka.direct != 0u ? p : (ka.pos0 + p) % ka.rows
+        let rb = (slot * ka.hc + c) * dim
+        k = lid
+        while (k < dim) {
+            cin[rb + k] = wc[wb + k] * ((val[vb + k] * g) * invg)
+            k += gl_WorkGroupSize.x
+        }
+    }
+}
+
+// The dilated depthwise causal conv over the normed conv-input rows (tap k of row p reads position
+// pos0 + p - (kern - 1 - k) x dil: the window panel from pos0 on, the ring before it) and the side
+// input's residual add: res += gated + silu(conv). A position before the sequence reads zero.
+[metal_dispatch(name = "enc_ple_conv", pso = "g_pso_ple_conv", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalPleConv {
+    @ssbo @binding = 0 @role = "readwrite" @off = "rb" res : array<float>   // [nrows x hc x dim] the wide residual; the offsets pick one stream's rows out of a joint verify
+    @ssbo @binding = 1 @role = "read" @off = "gb" gated : array<float>      // [nrows x hc x dim]
+    @ssbo @binding = 2 @role = "read" @off = "coff" cin : array<float>    // the window panel (nrows x hc x dim); direct = 0 leaves it unread
+    @ssbo @binding = 3 @role = "read" @off = "roff" ring : array<float>   // the history ring (rows x hc x dim)
+    @ssbo @binding = 4 @role = "weight" w : array<float>        // [(hc x dim) x kern] taps, contiguous per channel
+    @uniform @binding = 5 ka : PleConvArgs
+
+    [metal_kernel(name="metal_ple_conv_msl")]
+    def metal_ple_conv {
+        let gid = gl_GlobalInvocationID.x
+        let width = ka.hc * ka.dim
+        if (gid >= ka.nrows * width) {
+            return
+        }
+        let p = gid / width
+        let chn = gid - p * width
+        let pos = int(ka.pos0) + int(p)
+        let kern = ka.kern
+        var acc = 0.0
+        var k = 0u
+        while (k < kern) {
+            let src = pos - int((kern - 1u - k) * ka.dil)
+            if (src >= 0) {
+                var v = 0.0
+                if (ka.direct != 0u && src >= int(ka.pos0)) {
+                    v = cin[uint(src - int(ka.pos0)) * width + chn]
+                } else {
+                    v = ring[uint(src % int(ka.rows)) * width + chn]
+                }
+                acc += w[chn * kern + k] * v
+            }
+            k++
+        }
+        res[gid] += gated[gid] + acc / (1.0 + exp(-acc))
     }
 }
 

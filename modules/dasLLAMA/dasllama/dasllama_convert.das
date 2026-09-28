@@ -627,6 +627,8 @@ def dequant_kq_plane_sb(fmt : KqFmt; kq : array<uint8> | #; ks : array<uint8> | 
             dequant_k6_plane_superblock(kq, sb * K6_QSB, ks, sb * K6_SSB, dst, doff)
         } elif (fmt == KqFmt.iq4xs) {
             dequant_iq4xs_plane_superblock(kq, sb * IQ4XS_QSB, ks, sb * IQ4XS_SSB, dst, doff)
+        } elif (fmt == KqFmt.iq3s4) {
+            dequant_iq3s4_plane_superblock(kq, sb * IQ4XS_QSB, ks, sb * IQ3S_SSB, dst, doff)
         } elif (fmt == KqFmt.k3) {
             dequant_k3_plane_superblock(kq, sb * K3_QSB, ks, sb * K3_SSB, dst, doff)
         } elif (fmt == KqFmt.iq3s) {
@@ -752,6 +754,41 @@ def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : Kq
     }
 }
 
+//! Transcode one IQ3_S superblock (110 bytes at `src`) into the iq3s4 planes: every weight is a signed
+//! odd 1..15 times d * (1 + 2s), so grid entry, qh ninth bit and sign fold into ONE iq3s4_lut index
+//! laid in the k4 nibble tiling (byte j of block b: element j low, j + 16 high); the scale row is iq3s's.
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq3s4) {
+    unsafe {
+        d_header(ks, src)
+        nib_strips(ks + 4l, src + 106l, 8l)
+        zero_bytes(ks + 12l, 8l)
+        let grid = iq3s_grid()
+        var v : int[32]
+        for (b in range64(8l)) {
+            let qh = int(src[2l + 64l + b])
+            for (l in range64(4l)) {
+                let sgn = int(src[2l + 72l + b * 4l + l])
+                let g1 = grid[int(src[2l + b * 8l + 2l * l]) | ((qh << int(8l - 2l * l)) & 256)]
+                let g2 = grid[int(src[2l + b * 8l + 2l * l + 1l]) | ((qh << int(7l - 2l * l)) & 256)]
+                for (j in range64(4l)) {
+                    let w1 = int((g1 >> uint(8l * j)) & 0xFFu)
+                    let w2 = int((g2 >> uint(8l * j)) & 0xFFu)
+                    v[l * 8l + j] = ((sgn >> int(j)) & 1) != 0 ? -w1 : w1
+                    v[l * 8l + 4l + j] = ((sgn >> int(4l + j)) & 1) != 0 ? -w2 : w2
+                }
+            }
+            for (j in range64(16l)) {
+                kq[b * 16l + j] = uint8(iq3s4_index(v[j]) | (iq3s4_index(v[j + 16l]) << 4))
+            }
+        }
+    }
+}
+
+//! Reference dequant of one iq3s4-plane superblock: iq4xs's walk over the iq3s4 codebook.
+def dequant_iq3s4_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_lut_plane_superblock_at(kq, kqo, ks, kso + 4l, kso, dst, doff, iq3s4_lut())
+}
+
 //! The signed sub-scale of an iq4xs plane row: byte 4 + blk of the 20B row, read as int8.
 def iq4xs_sc(ks : array<uint8> | #; kso, blk : int64) : int => rd_i8(ks, kso + 4l + blk)
 
@@ -766,8 +803,13 @@ def dequant_iq4xs_plane_superblock(kq : array<uint8> | #; kqo : int64; ks : arra
 //! 8-byte signed sub-scale strip at kso — metal-blob models keep iq4xss in the k6 split form
 //! ([nsb x 16B strips][nsb x f16 d]); the CPU row is the same math at kso + 4 / kso.
 def dequant_iq4xs_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso, dso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_lut_plane_superblock_at(kq, kqo, ks, kso, dso, dst, doff, iq4nl_lut())
+}
+
+//! The LUT-plane superblock dequant the iq4xs and iq3s4 forms share: w = (d * sc_blk) * lut[q] over
+//! the k4 nibble tiling, the signed int8 sub-scale strip at kso, the f16 d at dso.
+def private dequant_lut_plane_superblock_at(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso, dso : int64; var dst : array<float> | #; doff : int64; lut : int8[16]) {
     let d = f16_to_f32(rd_u16(ks, dso))
-    let lut = iq4nl_lut()
     for (blk in range64(8l)) {
         let dl = d * float(rd_i8(ks, kso + blk))
         for (l in range64(16l)) {
@@ -1074,6 +1116,25 @@ def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : Kq
         bcopy(ks, src, 4l)
         bcopy(kq, src + 8l, 16l)
         bcopy(kq + 16l, src + 4l, 4l)
+    }
+}
+
+//! Transcode one IQ4_NL disk block (18 bytes at `src`: d f16, 16 nibble bytes) into the iq4nl32
+//! planes — verbatim splits, exact: the 2 scale bytes to ks, the 16 nibble bytes to kq.
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_iq4nl32) {
+    bcopy(ks, src, 2l)
+    bcopy(kq, unsafe(src + 2l), 16l)
+}
+
+//! Reference dequant of one iq4nl32-plane 32-block: w = d * lut[q], elem k off the low nibble of
+//! byte k and elem k + 16 off its high nibble (`dequantize_row_iq4_nl`'s order).
+def dequant_iq4nl32_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, kso))
+    let lut = iq4nl_lut()
+    for (k in range64(16l)) {
+        let b = int(kq[kqo + k])
+        dst[doff + k] = d * float(lut[b & 15])
+        dst[doff + k + 16l] = d * float(lut[b >> 4])
     }
 }
 

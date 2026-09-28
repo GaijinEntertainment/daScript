@@ -2123,6 +2123,8 @@ const FIELDS = [
     { k: "chunk", t: "int" },
     { k: "page_rows", t: "int" }, { k: "prefix", t: "int" },
     { k: "flat", t: "bool" }, { k: "mtp", t: "bool" },
+    { k: "rope_scaling", t: "sel", o: ["yarn", "linear", "none"] },
+    { k: "rope_scale", t: "float" }, { k: "yarn_orig_ctx", t: "int" },
     { k: "gpu", t: "sel", o: ["auto", "off", "metal", "metal-required", "vulkan"] },
     { k: "gpu_layers", t: "int" }, { k: "gpu_stream", t: "int" },
     { k: "gpu_vram_mb", t: "int" },
@@ -2208,8 +2210,9 @@ function buildField(f, cfg, src) {
         input.checked = !!cfg[f.k];
     } else {
         input = document.createElement("input");
-        input.type = f.t === "int" ? "number" : "text";
+        input.type = (f.t === "int" || f.t === "float") ? "number" : "text";
         if (f.t === "int") input.step = "1";
+        if (f.t === "float") input.step = "any";
         // sentinel-is-meaning keys read better as their meaning than as a bare 0
         if (f.k === "ctx") {
             input.value = cfg.ctx > 0 ? String(cfg.ctx) : "";
@@ -2315,7 +2318,8 @@ function renderGpu(status) {
 // so the TOML stays name+path per model unless something is genuinely overridden.
 const QUANT_OPTS = ["", "q8", "fp32", "q4", "q8_0", "q4_0", "q4_k", "q5_k", "q6_k", "mxfp4", "f16", "bf16"];
 const KV_OPTS = ["", "f16", "f32", "q8_0", "tq4"];
-let roster = [];         // {name, path, backend, ctx, quant, kv_dtype, streams, chunk, page_rows, prefix, mtp, image_mmproj, def, adv}
+let roster = [];         // {name, path, backend, ctx, quant, kv_dtype, streams, chunk, page_rows, prefix, mtp, rope_scaling, rope_scale, yarn_orig_ctx, image_mmproj, def, adv}
+const ROPE_OPTS = ["", "yarn", "linear", "none"];
 let gpuStatus = null;    // /config status.gpu — decline reason for the effective badge hover
 
 const routeName = r => r.name || String(r.path).split(/[/\\]/).pop();
@@ -2335,6 +2339,9 @@ function rosterFromSurface(surface) {
         page_rows: e.page_rows >= 0 ? String(e.page_rows) : "",
         prefix: (e.prefix !== undefined && e.prefix !== -2) ? String(e.prefix) : "",
         mtp: (e.mtp === 1 || e.mtp === true) ? "on" : ((e.mtp === 0 || e.mtp === false) ? "off" : ""),
+        rope_scaling: e.rope_scaling || "",
+        rope_scale: e.rope_scale > 0 ? String(e.rope_scale) : "",
+        yarn_orig_ctx: e.yarn_orig_ctx > 0 ? String(e.yarn_orig_ctx) : "",
         image_mmproj: e.image_mmproj || "",
         def: !!e.default,
         adv: false,
@@ -2439,6 +2446,9 @@ function renderRoster() {
                 wrap("page_rows", rosterInput(i, "page_rows", r.page_rows, "number")),
                 wrap("prefix", rosterInput(i, "prefix", r.prefix, "number")),
                 wrap("mtp", rosterSelect(i, "mtp", r.mtp, ["", "off", "on"])),
+                wrap("rope_scaling", rosterSelect(i, "rope_scaling", r.rope_scaling, ROPE_OPTS)),
+                wrap("rope_scale", rosterInput(i, "rope_scale", r.rope_scale, "number")),
+                wrap("yarn_orig_ctx", rosterInput(i, "yarn_orig_ctx", r.yarn_orig_ctx, "number")),
                 wrap("image_mmproj", rosterInput(i, "image_mmproj", r.image_mmproj, "text")));
             for (const inp of grid.querySelectorAll("input")) inp.placeholder = "inherit";
             td.append(grid);
@@ -2487,7 +2497,8 @@ $("roster-body").addEventListener("click", e => {
 });
 $("b-addmodel").addEventListener("click", () => {
     roster.push({ name: "", path: "", backend: "auto", ctx: "", quant: "", kv_dtype: "",
-                  streams: "", chunk: "", page_rows: "", prefix: "", mtp: "", image_mmproj: "",
+                  streams: "", chunk: "", page_rows: "", prefix: "", mtp: "",
+                  rope_scaling: "", rope_scale: "", yarn_orig_ctx: "", image_mmproj: "",
                   def: roster.length === 0, adv: false });
     renderRoster();
 });
@@ -2505,6 +2516,9 @@ function gatherModels() {
         if (r.page_rows !== "") e.page_rows = Math.trunc(+r.page_rows);
         if (r.prefix !== "") e.prefix = Math.trunc(+r.prefix);
         if (r.mtp) e.mtp = r.mtp === "on";
+        if (r.rope_scaling) e.rope_scaling = r.rope_scaling;
+        if (r.rope_scale !== "" && Number(r.rope_scale) > 0) e.rope_scale = Number(r.rope_scale);
+        if (r.yarn_orig_ctx !== "" && Math.trunc(+r.yarn_orig_ctx) > 0) e.yarn_orig_ctx = Math.trunc(+r.yarn_orig_ctx);
         if (r.image_mmproj) e.image_mmproj = r.image_mmproj;
         if (r.def) e.default = true;
         return e;
@@ -2549,6 +2563,7 @@ function gatherConfig() {
         if (!el || !fieldEnabled(f.k)) continue;   // unchecked = OMITTED — the engine default stays live
         if (f.t === "bool") out[f.k] = el.checked;
         else if (f.t === "int" || f.t === "isel") out[f.k] = Math.trunc(Number(el.value) || 0);
+        else if (f.t === "float") out[f.k] = Number(el.value) || 0;
         else out[f.k] = el.value;
     }
     out.models = gatherModels();
@@ -3478,6 +3493,7 @@ async function serveLive(e, btn) {
 async function serveDownloaded(e) {
     roster = [{ name: "", path: e.path, backend: "auto", ctx: "", quant: "", kv_dtype: "",
                 streams: "", chunk: "", page_rows: "", prefix: "", mtp: "",
+                rope_scaling: "", rope_scale: "", yarn_orig_ctx: "",
                 image_mmproj: e.vision_present ? e.vision_path : "",
                 def: true, adv: false }];
     renderRoster();

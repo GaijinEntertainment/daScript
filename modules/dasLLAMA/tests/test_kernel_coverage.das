@@ -74,9 +74,14 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the q5_1 MoE tensor twins, ALL stamps: no stocked carrier holds a Q5_1 expert plane
     // (the zoo's MoE carriers are Q8_0 / Q5_K_M / Q4_K_M / mxfp4; Q5_1 appears only when
     // expert_ffn % 256 != 0 forces the converter off K-quants). Their coverage is the
-    // bit-exact twin + tall-pair gate in test_metal_prefill_kernels.das (moe_mulmm_q51_gate)
+    // bit-exact twin + tall-pair gate in test_metal_prefill_kernels.das (moe_mulmm_b32_gate)
     "MetalMoeMulMmQ51T", "MetalMoeMulMmQ51TH",
     "MetalMoeMulMmQ51TH128", "MetalMoeMulMmQ51THR",
+    // the iq4nl32 MoE tensor twins, ALL stamps: the per-32 IQ4_NL expert planes ride only a
+    // carrier whose expert rows are off the 256 lattice (Qwen3.8-Flash-Next's 640-wide down
+    // stacks, far above the zoo's tier). Their coverage is the same gate's iq4nl32 arm
+    "MetalMoeMulMmIq4nl32T", "MetalMoeMulMmIq4nl32TH",
+    "MetalMoeMulMmIq4nl32TH128", "MetalMoeMulMmIq4nl32THR",
     // the dense tall in-kernel-dequant kq stamps: they engage only when a site's f16 panel
     // would reach TALLKQ_MIN_PANEL (96 MiB) - the zoo's small carriers top out far below it,
     // and the iq3 pair additionally wants a plane in a format the zoo does not stock.
@@ -174,7 +179,13 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // lattice takes it, and every stocked StyleTTS2 and Pocket transposed conv sits on the lattice,
     // so the gathering CONV stamp serves. Its coverage is st2_im2col_gate(transposed = true) in
     // test_metal_prefill_kernels.das
-    "metal_st2_im2col_tr"
+    "metal_st2_im2col_tr",
+    // the hyper-connection mixer, its scatter, the n-gram side input and the σ(z) deltanet gate
+    // (qwen4exp): the one carrier is Qwen3.8-Flash-Next (94 GB, the large tier), which no census
+    // row loads. Their coverage is the hc_*/ple_* gates in test_metal_misc_kernels.das and the
+    // sigmoid leg of dn_chain_gate in test_metal_prefill_kernels.das
+    "MetalHcNorm", "MetalHcLo", "MetalHcInit", "MetalHcMix", "MetalHcCombine", "MetalPleGate", "MetalPleConv",
+    "MetalDnGateSig"
 ]
 
 def private counting_prompt(start, last : int) : string {
@@ -815,9 +826,13 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the mx4 expert rail (gpt-oss's native-MXFP4 routed stacks: a carrier above the zoo's tier) - its s and e stamps and
     // its decode GEMV; their coverage is test_vkd_mx4_cm2_batch and test_vkd_mx4_gemv
     "mx4_batch_cm2s_cls_spv", "mx4_batch_cm2e_cls_spv", "mx4_gemv_cls_spv",
+    // the iq4nl32 expert rail (the 32-block IQ4_NL down planes off the 256 lattice - Qwen3.8-Flash-Next, above the zoo's tier) -
+    // its s and e stamps and its decode GEMV; their coverage is test_vkd_iq4nl32_cm2_batch and test_vkd_iq4nl32_gemv
+    "iq4nl32_batch_cm2s_cls_spv", "iq4nl32_batch_cm2e_cls_spv", "iq4nl32_gemv_cls_spv",
     // the per-32 expert rails' KHR arms (the expert schedule on a KHR-mode card: the 26B-A4B Q4_K_M's q51 down stacks, gpt-oss's
-    // mx4 stacks - carriers above the zoo's tier); their coverage is the KHR arm of test_vkd_q51_cm2_batch and test_vkd_mx4_cm2_batch
-    "q51_batch_khr_cls_spv", "mx4_batch_khr_cls_spv",
+    // mx4 stacks, Flash-Next's iq4nl32 stacks - carriers above the zoo's tier); their coverage is the KHR arm of
+    // test_vkd_q51_cm2_batch, test_vkd_mx4_cm2_batch and test_vkd_iq4nl32_cm2_batch
+    "q51_batch_khr_cls_spv", "mx4_batch_khr_cls_spv", "iq4nl32_batch_khr_cls_spv",
     // the mx4 experts' fused gate+up+act+requant GEMV (gpt-oss's token command, above the zoo's tier); its coverage is
     // test_vkd_mx4_gemv_gu in test_vulkan_kernels.das
     "mx4_gemv_gu_cls_spv",

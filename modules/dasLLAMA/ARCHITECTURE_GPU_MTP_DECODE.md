@@ -77,8 +77,10 @@ scratch.** `acquire_step` takes `mp = ceil(nrows / 4) * 4` (a single-row step st
 `bx`, `bxb`, `bqkv`, `bh12`, `blog` and the deltanet rows to `mp` rows; the rope tables stay at the
 live `nrows`. The fixed-B GEMV forms write a full tile - `enc_gemv_rows` dispatches the B2 form at
 one or two rows, the B4 form at three or four, two B4 tiles at five to eight and three at nine to
-twelve, each tile past the first offsetting x by its first row's count of n floats and y by the
-same rows of the site's y stride - so the spare rows of the last tile compute garbage that must
+twelve, and the same ladder again for every twelve rows past that (the draft head's per-stream
+eh_proj rows of a hyper-connection model run nrows x hc of them), each tile past the first
+offsetting x by its first row's count of n floats and y by the same rows of the site's y stride -
+so the spare rows of the last tile compute garbage that must
 land inside an allocation this step owns and nobody reads. A row buffer sized to the live count puts that garbage on whatever the pool put next to it.
 
 The attention partials follow the same ownership rule along the position axis, and so does the
@@ -190,6 +192,37 @@ over one slab) and `BatchLayerEnc` (the batch step's B rows). `SINGLE` is the te
 f16 mirror, the fused pre-norm and PLE. What differs between row shapes is how a weight site
 dispatches and which kernel family serves a phase, never the phase order, so the order cannot drift
 between them.
+
+**A hyper-connection model (qwen4exp) keeps the phase order and changes the seams.** The step
+opens by copying the poked embed row into the `hc` streams of the wide residual (`StepRes.bhc`)
+instead of norming it; each layer's chain then opens with the attention site's mixer
+(`hc_mix_site`: the grouped norm over the streams, the scatter logits off the normed streams, the
+q8 down and up GEMVs around `silu(lo / hc)`, the sigmoid-gated stream mean into `bxb`), the block
+output in `bxb2` (wo, or the recurrent layer's ssm_out) scatters into the streams under those
+logits (`hc_combine_step`), the ffn site's mixer makes the next block input and the FFN's output
+scatters under the ffn site's logits; the head mixer with no scatter stands where the final norm
+would (`encode_cls_tail`). The n-gram side input runs before layer `ple_layer`'s attention mixer
+(`ple_side_step`): the key and value GEMVs read the heads the arch's CPU pre-stack hook gathered
+and poked (`StepRes.bple_emb`), the per-stream gate writes the gated rows and the ring's slot, the
+dilated conv adds its row. The conv history ring sits once in the session's `DnMirror` past every
+region (`dn_mirror_prepare`'s `ple_off`), synced from the CPU prefix with the state and conv
+planes; the ring is exactly the conv window, so slot `pos` aliases the oldest tap of `pos - 1`. The
+single row writes its slot before its conv reads (the aliased tap belongs to a conv already run);
+the verify's rows take the prefill's panel form (`direct = 1`: the gate lands every row's conv input
+in `StepRes.bple_cin`, the conv reads the panel for positions at or past row 0 and the ring for
+older ones), and only the accepted rows land in the ring after the walk (`commit_ple_rows`), so a
+rejected row never clobbers a slot a later conv reads and the shadow flip retires no ring.
+`finish_step` copies the wide residual back to `Session.hc_res`. `decode_shape_decline` admits
+`hyper_conn` under `allow_hc` on the single decode, the mint-time gate, the verify and the batch
+driver's distinct-session step (`batch_step_build` opens the rows' wide residual, runs the mixers
+through the shared layer body, gathers each row's n-gram heads through the arch's pre-stack hook
+on that row's session - its window advances there - and writes each row's ring in place, one row
+a session, at `g_b_ple_bases`; the head mixer stands in the rows' classifier tail and the wide
+row is the row's NextN carry); the same-slab verify keeps `graph`, since its rows are one session.
+The prefill serves the same seams over the window's rows
+(`ARCHITECTURE_GPU_PREFILL.md#prefill-hc-window`). The
+deltanet gate's sigma(z) form is the `MetalDnGateSig` stamp of `MetalDnGateT`, picked on
+`Config.dn_z_sigmoid` by every row form through `enc_dn_zgate`.
 
 The row shapes share their adapters. `VerifyLayerEnc` and `BatchLayerEnc` bind one generic per
 slot - `rms_rows`, `add_rows`, `add_rms_rows`, `moe_args_rows` and `total_rows` - each written

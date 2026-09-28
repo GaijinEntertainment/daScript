@@ -28,11 +28,14 @@ struct public DlimCpuConfig {
     q8_kgroup : int64
     kq_mr : array<int64>   //!< the lattice planes' repack interleaves, by int(KqFmt) (0 off the lattice)
     q51_mr : int64
+    iq4nl32_mr : int64
     wscale_f16 : bool
     kquant_native : bool
     kq_q40_native : bool
     kq_q50_native : bool
     kq_q51_native : bool
+    iq3s_lut : bool   //! the IQ3_S weights serve as iq3s4 planes (DASLLAMA_IQ3S_SERVE resolved at the load)
+    rope_override : string   //! the rope-scaling override baked into the rope tables ("" = the file's keys; rope_override_spelling)
 }
 
 //! The vulkan flavor's plan inputs, RESOLVED — `coopmat_mode` is the running mode (not the raw
@@ -141,6 +144,10 @@ def private kq_mr_identity(c : DlimCpuConfig) : string {
     return join(parts, "/")
 }
 
+//! the pipe-separated fields `dlim_identity` writes BEFORE the tag - the tag parsers skip exactly this many;
+//! a conditional element (the rope override) rides INSIDE the last field, so an unset one leaves every identity as it was
+let public DLIM_IDENTITY_FIELDS = 9
+
 //! The identity string an image file/header is keyed by — a pure formatter of the struct.
 //! `image_version` / `pack_version` come from the caller (dasllama_image owns the schema
 //! version, dasllama_layout the pack-code version; 0 = the pre-versioned pack spelling).
@@ -149,8 +156,9 @@ def public dlim_identity(c : DlimConfiguration; image_version : int; tag : strin
     return ("v{image_version}{pk}|{c.quant}|{c.cpu.backend}|{c.cpu.wscale_f16 ? "s16" : "s32"}"
         + "|q8 mr{c.cpu.q8_mr} b{c.cpu.q8_wbias} g{c.cpu.q8_kgroup}"
         + "|kq {kq_mr_identity(c.cpu)}"
-        + "|q51 mr{c.cpu.q51_mr}"
-        + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q50_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}"
+        + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr}"
+        + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q50_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}{c.cpu.iq3s_lut ? 1 : 0}"
+        + (c.cpu.rope_override != "" ? " rope {c.cpu.rope_override}" : "")
         + (tag != "" ? "|{tag}" : ""))
 }
 

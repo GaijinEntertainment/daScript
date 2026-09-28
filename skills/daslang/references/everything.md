@@ -3206,8 +3206,8 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 ### Operations: prepared images and dispatch
 
-- `dlim_clean` - Garbage-collect `STALE` and `OTHER` images beside `gguf_path` (`FOREIGN`, another flavor's, are always left alone): `apply = false` only reports, `true` removes; `keep_other` spares `OTHER`.
-- `dlim_inventory` - List the prepared images (`.dlim`) minted beside `gguf_path` — per image: file, bytes, image version, identity, and a verdict (`CURRENT` loads; `STALE vN` is an older image version; `OTHER` a different bake configuration or box; `FOREIGN` a different flavor).
+- `dlim_clean` - Garbage-collect `STALE` images beside `gguf_path` and hash-named legacy images of another identity; a lane-named `OTHER` and every `FOREIGN` image stay (their own loads re-bake them in place).
+- `dlim_inventory` - List the prepared images (`.dlim`) minted beside `gguf_path` — per image: file, lane (the file name's `metal` / `cpu-<class>` / `vulkan` / family segment, "" for a hash-named legacy image), bytes, version, identity, verdict (`CURRENT` loads; `STALE vN` an older version; `OTHER` another bake config or box; `FOREIGN` another flavor).
 - `get_dispatch_worker_limit` - The dispatch worker cap in force (0 = no limit) — `set_dispatch_worker_limit`'s read half.
 - `get_jobque_spin_gpu_us` - The GPU-served spin window — `set_jobque_spin_gpu_us`'s read half.
 - `get_jobque_spin_in_force` - The spin window the pool runs right now: the GPU window while the whole-model driver serves the loaded model, the CPU window otherwise.
