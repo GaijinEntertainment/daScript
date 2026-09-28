@@ -11,6 +11,7 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require strings
 require daslib/strings_boost
+require daslib/rtti   // this_context().last_exception: a panic's text read back
 require daslib/enum_trait   // the format-set drift guard walks the whole KqFmt enum
 
 [unused_argument(rows)]
@@ -493,6 +494,7 @@ struct private SeatDispatch {
 
 //! the three seat-taking entries once each under the fake override `name` (its owner answering `owns`) on a Model shell;
 //! the session carries a parked token, so the CPU round's opening refuses it before any forward and counts as a CPU call
+[cold_path]
 def private seat_dispatch(name : string; owns : bool) : SeatDispatch {
     for (nm in [PROBE_OWNED, PROBE_UNOWNED]) {
         register_decode_override(nm, @@probe_decode)
@@ -550,6 +552,7 @@ def test_mtp_seat_owner(t : T?) {
 }
 
 //! the CPU round's opening on a session carrying an unconsumed landed pick, under the unowned probe override
+[cold_path]
 def private round_refuses_pick() : bool {
     register_decode_override(PROBE_UNOWNED, @@probe_decode)
     let prev = active_decode_override()
@@ -593,5 +596,186 @@ def test_land_pick(t : T?) {
         t |> equal(s.pick_tok, 5l, "the refused landing left the first pick standing")
         delete s
         t |> success(round_refuses_pick(), "the CPU round's opening refuses a session whose landed pick nobody sampled")
+    }
+}
+
+//! `body` run with any panic's text caught: "" where none fired
+def private panic_text_of(body : block<void>) : string {
+    var why = ""
+    try {
+        invoke(body)
+    } recover {
+        why = this_context().last_exception |> rtrim
+    }
+    return why
+}
+
+let private ROUND_SEATS = "mtp_round_probe"   //! a fake decode override claiming every model, with a draft, a verify and a rollback seat
+let private ROUND_SEATS_NO_ROLLBACK = "mtp_round_probe_no_rollback"   //! ... and one with the draft and verify seats alone
+let private ROUND_DIM = 4l
+let private ROUND_CONV = 6l   //! the shell's conv history floats: what a snapshot must size its buffer to
+let private ROUND_STATE = 8l
+let private ROUND_TOKEN = 3l
+var private g_round_pick = 5l   //! the fake draft's token
+var private g_round_truth = 5l   //! the fake verify's row-0 pick: the draft accepts, any other token rejects
+var private g_round_rollback_ok = true
+var private g_round_draft_calls = 0l
+var private g_round_verify_calls = 0l
+var private g_round_rollback_calls = 0l
+
+[unused_argument(t)]
+def private round_owner(t : Model) : bool => true
+
+[unused_argument(t, s, token, pos, pick_only)]
+def private round_draft(t : Model; var s : Session; token, pos : int64; pick_only : bool) : int64 {
+    g_round_draft_calls++
+    return g_round_pick
+}
+
+//! the fake verify: serves, every row's pick landed (row 0's `g_round_truth`), row 0's hidden a constant row, the carry's
+//! watermark past its rows as the real seat leaves it
+[unused_argument(toks, pick_only)]
+def private round_verify(t : Model; var s : Session; toks : array<int64>; n, pos : int64; pick_only : bool) : bool {
+    g_round_verify_calls++
+    s.mtp_h_pos1 = pos + n
+    s.mtp_picks |> resize(n)
+    s.mtp_picks[0] = g_round_truth
+    for (i in range64(1l, n)) {
+        s.mtp_picks[i] = 9l + i
+    }
+    s.mtp_h0 |> resize(t.config.dim)
+    for (i in range64(t.config.dim)) {
+        s.mtp_h0[i] = 0.25
+    }
+    return true
+}
+
+[unused_argument(t, s, pos, a)]
+def private round_rollback(t : Model; var s : Session; pos, a : int64) : bool {
+    g_round_rollback_calls++
+    return g_round_rollback_ok
+}
+
+//! a NextN shell a round can open on: one head, a small width, room for the round's two rows; `recurrent` sets layer 0 recurrent
+def private round_shell(recurrent : bool) : Model {
+    var m = Model()
+    m.config.n_layer_nextn = 1l
+    m.config.n_layers = 1l
+    m.config.dim = ROUND_DIM
+    m.config.seq_len = 64l
+    m.config.recr_mask = recurrent ? 1ul : 0ul
+    return <- m
+}
+
+//! a session at position 1 with the carry's watermark there, the carry and the verify batch sized, and a recurrent state
+//! sized so a snapshot has something to copy
+def private round_session() : Session {
+    var s <- Session(n_past = 1l, mtp_h_pos1 = 1l)
+    s.mtp_h |> resize(ROUND_DIM)
+    s.mtp_vbatch |> resize(2l)
+    s.dn_conv_state |> reserve(ROUND_CONV)
+    s.dn_conv_state |> resize(ROUND_CONV)
+    s.dn_state |> reserve(ROUND_STATE)
+    s.dn_state |> resize(ROUND_STATE)
+    return <- s
+}
+
+//! the fake seats registered under both names, the counters zeroed, the round's outcome dialed: the draft `pick`, the verify's
+//! row-0 `truth`, the rollback seat's answer
+def private round_seats_arm(pick, truth : int64; rollback_ok : bool) {
+    for (nm in [ROUND_SEATS, ROUND_SEATS_NO_ROLLBACK]) {
+        register_decode_override(nm, @@probe_decode)
+        register_mtp_seat_owner(nm, @@round_owner)
+        register_mtp_draft_override(nm, @@round_draft)
+        register_mtp_verify_override(nm, @@round_verify)
+    }
+    register_mtp_rollback_override(ROUND_SEATS, @@round_rollback)
+    g_round_pick = pick
+    g_round_truth = truth
+    g_round_rollback_ok = rollback_ok
+    g_round_draft_calls = 0l
+    g_round_verify_calls = 0l
+    g_round_rollback_calls = 0l
+}
+
+//! one round of `ROUND_TOKEN` on `s` under the fake override `name`: the panic's text, "" where none fired
+[cold_path]
+def private round_under(name : string; var s : Session; m : Model; var hit : bool&) : string {
+    let prev = active_decode_override()
+    select_decode_override(name)
+    let why = panic_text_of() $ {
+        var acc = 0l
+        hit = mtp_spec_eval(m, s, ROUND_TOKEN, acc)
+    }
+    select_decode_override(prev)
+    return why
+}
+
+[test]
+def test_mtp_round_panics(t : T?) {
+    t |> run("the round's fail-closed exits on a Model shell: a pick ask beside a sampled walk panics before any draft; a rollback seat declining after its verify seat served panics naming the override") @(t : T?) {
+        round_seats_arm(5l, 7l, false)
+        var m <- round_shell(true)
+        var s <- round_session()
+        var sp = SamplingParams(temp = 0.7)
+        s.spec_params = unsafe(addr(sp))
+        s.pick_asked = true
+        var hit = false
+        let asked = round_under(ROUND_SEATS, s, m, hit)
+        to_log(LOG_INFO, "pick ask beside a sampled walk: {empty(asked) ? "no panic" : asked}\n")
+        t |> success(says(asked, "asked for a pick") && says(asked, "sample"), "a pick ask beside a sampled walk panics, naming both: '{asked}'")
+        t |> equal(g_round_draft_calls, 0l, "the panic fired before the draft")
+        s.spec_params = null
+        s.pick_asked = false
+        let declined = round_under(ROUND_SEATS, s, m, hit)
+        to_log(LOG_INFO, "rollback seat declining after a served verify: {empty(declined) ? "no panic" : declined}\n")
+        t |> success(says(declined, "rollback seat declined a reject after its verify seat served") && says(declined, ROUND_SEATS), "the reject panics naming the override whose rollback seat declined: '{declined}'")
+        t |> equal(g_round_verify_calls, 1l, "the verify seat served the round")
+        t |> equal(g_round_rollback_calls, 1l, "the rollback seat was asked once and declined")
+        delete s
+        delete m
+    }
+}
+
+[test]
+def test_mtp_verify_snapshot(t : T?) {
+    t |> run("mtp_verify_two's snapshot on a Model shell: a recurrent model with a verify seat that serves and no rollback seat takes the CPU snapshot before the seat, a non-recurrent one skips it, and a rollback seat that serves takes none - the reject rolling back through it and re-seeding the carry from row 0") @(t : T?) {
+        round_seats_arm(5l, 5l, true)
+        var m <- round_shell(true)
+        var s <- round_session()
+        var hit = false
+        let why = round_under(ROUND_SEATS_NO_ROLLBACK, s, m, hit)
+        t |> success(empty(why), "the round completed ({why})")
+        t |> success(hit, "the fake verify's row-0 pick is the draft: the round accepted")
+        t |> equal(s.n_past, 3l, "an accept commits the token and the draft")
+        t |> equal(long_length(s.mtp_snap_conv), ROUND_CONV, "recurrent, no rollback seat: the CPU snapshot ran before the seat - its conv buffer sized to the history")
+        t |> equal(long_length(s.mtp_snap_state), ROUND_STATE, "... and its state buffer to the state")
+        t |> equal(g_round_verify_calls, 1l, "the verify seat served")
+        delete s
+        delete m
+        var plain <- round_shell(false)
+        var ps <- round_session()
+        let why_plain = round_under(ROUND_SEATS_NO_ROLLBACK, ps, plain, hit)
+        t |> success(empty(why_plain) && hit, "the non-recurrent round completed and accepted ({why_plain})")
+        t |> equal(long_length(ps.mtp_snap_conv), 0l, "non-recurrent: no snapshot - nothing to restore")
+        round_seats_arm(5l, 7l, true)
+        let why_reject = round_under(ROUND_SEATS_NO_ROLLBACK, ps, plain, hit)
+        t |> success(empty(why_reject) && !hit, "the non-recurrent reject completed ({why_reject})")
+        t |> equal(g_round_rollback_calls, 0l, "a non-recurrent reject never reaches a rollback seat")
+        t |> equal(ps.n_past, 4l, "the reject commits the token alone: one row past the accepted round's position")
+        delete ps
+        delete plain
+        round_seats_arm(5l, 7l, true)
+        var rm <- round_shell(true)
+        var rs <- round_session()
+        let why_rolled = round_under(ROUND_SEATS, rs, rm, hit)
+        t |> success(empty(why_rolled) && !hit, "the recurrent reject through a serving rollback seat completed ({why_rolled})")
+        t |> equal(g_round_rollback_calls, 1l, "the rollback seat served the reject")
+        t |> equal(long_length(rs.mtp_snap_conv), 0l, "a rollback seat behind the verify seat: no snapshot was taken")
+        t |> equal(rs.n_past, 2l, "the reject commits the token alone")
+        t |> equal(rs.mtp_h_pos1, 2l, "the carry's watermark sits at the token's row")
+        t |> equal(rs.mtp_h[0], 0.25, "the carry re-seeds from the verify's row-0 hidden")
+        delete rs
+        delete rm
     }
 }

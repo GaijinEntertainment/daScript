@@ -4,7 +4,8 @@
 docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_ATTN.md`,
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
 `ARCHITECTURE_GPU_VULKAN_MOE.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`,
-`ARCHITECTURE_GPU_VULKAN_NROW.md`, `ARCHITECTURE_GPU.md`. Planned work: `followup_vulkan.md`.
+`ARCHITECTURE_GPU_VULKAN_NROW.md`, `ARCHITECTURE_GPU_VULKAN_MTP.md`, `ARCHITECTURE_GPU.md`.
+Planned work: `followup_vulkan.md`.
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - or that caches a descriptor set or a host address (a
@@ -159,8 +160,9 @@ beats its `=0` row; or `override DECV4 = false` and `override DECVEC = false` to
 the format back on the scalar callback.** With `DECV4 = true` the class never reads `DECVEC`, so
 `override DECVEC = false` alone leaves the hand-written twin running.
 
-**A GPU timestamp the resident decode's token command records goes through `rd_ts` with the name
-its interval is reported under - never a bare `pfq_ts` - in `dasllama/dasllama_vulkan_decode.das`;
+**A GPU timestamp recorded by a command whose stamps `rdq_sample` reads - the resident decode's
+token command, and every recorded form beside it - goes through `rd_ts` with the name its
+interval is reported under - never a bare `pfq_ts` - in `dasllama/dasllama_vulkan_decode.das`;
 the command's first stamp is the anchor and takes the empty name.** The profiler (`rdq_sample`)
 sums intervals by the recorder's own names, so a bare stamp records more stamps than the recorder
 has names and the token's roles are not summed; a name's prefix (`a:` `d:` `m:` `p:` `t:`) picks
@@ -218,9 +220,9 @@ no error.
 byte literal.** A literal stops matching when `TokMeta` gains a field, and every row past the first
 then reads its fields outside the binding, with no error.
 
-**A diff that adds a recorded form - a recorder that builds the resident token command into its
-own command buffer (`dasllama/dasllama_vulkan_decode.das`) - gives that form its own stamp-name
-list and stamp count.** The profiler sums intervals by the recorder's own names.
+**A diff that adds a recorded form - a recorder that builds a command whose stamps `rdq_sample`
+reads into its own command buffer (`dasllama/dasllama_vulkan_decode.das`) - gives that form its
+own stamp-name list and stamp count.** The profiler sums intervals by the recorder's own names.
 
 **A diff that adds or changes a recorder that installs its own stamp names in
 `g_rdq_stamp_names` (`dasllama/dasllama_vulkan_decode.das`) puts the one-row command's list back
@@ -253,9 +255,4 @@ command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path 
 availability outside `vk_rdec_prepare` can turn a form on after the recording pass ran, and
 `rd_form_at` then picks a form whose command buffer nothing recorded.
 
-**A diff that adds a decline to the resident verify seat - a `return false` in
-`vulkan_resident_verify_gated` or `vulkan_resident_verify_go` (`dasllama/dasllama_gpu_resident.das`) -
-places it above the call that moves the session's recurrent state to the device
-(`rdec_dn_own_all`, in `vulkan_resident_verify_go`); a decline below that call is a defect - move the
-check above it.** A decline after the state moved hands the CPU verify a session whose state the
-device holds.
+**Weakening `REVIEW.das`'s `check_verify_decline_before_state_move` is a defect.**

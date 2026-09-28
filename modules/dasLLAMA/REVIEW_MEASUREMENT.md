@@ -6,9 +6,9 @@ docs: `ARCHITECTURE_MEASUREMENT.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
 work: `followup_metal.md` for the Metal tier, `followup_vulkan.md` for the Vulkan tier,
 `followup_general.md` for everything else.
 
-A figure rule below binds a figure this change writes or changes - in the repo outside `site*/`
-(repo root), in a commit message, or in its PR body. It does not bind a figure a changed line
-carries unchanged.
+Every rule below that governs a figure binds a figure this change writes or changes - in the
+repo outside `site*/` (repo root), in a commit message, or in its PR body. It does not bind a
+figure a changed line carries unchanged.
 
 The words these rules share:
 
@@ -129,8 +129,8 @@ re-mints a board row (`performance/records/<box>.json`) that exercises it, in th
 names that row in the PR body.** The board is the module's committed record of what serving
 costs; a kernel win that never lands there is invisible to the next regression check.
 
-**A rate or wall of any served-turn leg written down as a measurement rather than as a
-prediction is a defect unless it cites the committed board row it came from, or names harness,
+**A rate, a wall, or a ratio of two, of any served-turn leg written down as a measurement rather
+than as a prediction is a defect unless it cites the committed board row it came from, or names harness,
 flags, environment overrides, box, the exe or script that ran it, and - for a figure aggregated
 over more than one timed run or input - the number of runs or inputs and the spread of the
 per-run figures: the standard deviation, or the min and max.**

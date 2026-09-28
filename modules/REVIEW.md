@@ -2,11 +2,11 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
 
-**A diff that changes GPU kernel code - a function carrying `[metal_kernel]`,
-`[spirv_kernel]` or a `_shader` annotation from `dasSpirv`, `dasVulkan` or `dasMetal`, every
-`def` it reaches, the class and base classes such a method belongs to with their member
-declarations, and the structs their `@push_constant` members name - applies
-`REVIEW_SHADER_EMITTERS.md` (beside this file) together with its own folder's checklist.**
+**A diff that changes GPU kernel code applies `REVIEW_SHADER_EMITTERS.md` (beside this file)
+together with its own folder's checklist.** GPU kernel code is four pieces: a function carrying
+`[metal_kernel]`, `[spirv_kernel]` or a `_shader` annotation from `dasSpirv`, `dasVulkan` or
+`dasMetal`; every `def` it reaches; the class and base classes such a method belongs to, with
+their member declarations; and the structs their `@push_constant` members name.
 
 **A diff that changes a `.das` under this folder listed in its module's `*_AOT_FILES` in
 `modules/<M>/CMakeLists.txt`, or named in an `AOT_*_MODULE_FILES` variable of

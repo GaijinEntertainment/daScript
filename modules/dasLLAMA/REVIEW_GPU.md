@@ -1,8 +1,9 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned
-work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`, `ARCHITECTURE_GPU_MTP.md`,
+`ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work: `followup_metal.md` for Metal,
+`followup_vulkan.md` for Vulkan.
 
 A restated property of a kernel class is one a timing arm or a test-side dispatcher writes out
 rather than reads: a binding number, the kargs (kernel-argument struct) or push-constant layout,
@@ -149,7 +150,8 @@ Vulkan driver's lives in that driver's own file.**
 **A function that decides whether a GPU seat or driver declines a call, wherever the diff puts
 it, counts each decline only through a `DeclineCounter` (`dasllama/dasllama_metal_common.das`) or
 `VkDeclineCounter` (`dasllama/dasllama_vulkan_common.das`) and the `note_decline` / `note` call
-its common file declares on it.**
+its common file declares on it; the resident driver's counter is the tier's pass counter,
+`note_gpu_cpu_pass` over an `RdecPass` value (`dasllama/dasllama_gpu_tier.das`).**
 
 **Never give a `*_decline_caps` predicate a parameter beyond the model, the row count, and
 whether the call carries a uniform attention span - however that parameter is derived; window
@@ -160,8 +162,10 @@ readiness, whether this window's rope tables are staged, is asked by `prefill_de
 `set_*_hook(s)` slot in `dasllama/dasllama_gpu_tier.das`), a hook a GPU driver registers in a
 model family's registry, or a prefill builder a tower driver borrows names it - a seat by its
 `install_*` / `set_*` name, a registered hook by the seat's register function, a builder by its
-name - in the same change, in the row of `ARCHITECTURE_GPU.md#gpu-backends`'s role table for
-the file that fills, registers or borrows it.**
+name - in the same change, in `ARCHITECTURE_GPU.md#gpu-backends`'s entry for the file that
+fills, registers or borrows it: a tier seat in the `dasllama_gpu_tier.das` entry, a registered
+hook or a borrowed builder in the role table's row for the driver that registers or borrows
+it.**
 
 **A diff that adds or removes a registered override only one GPU backend files
 (`register_*("metal", ...)` or `register_*("vulkan", ...)`, a family hook a tower driver registers
@@ -169,8 +173,9 @@ aside); a `dasllama/dasllama_gpu_tier.das` seat Metal fills; a function one back
 no counterpart under the other backend's prefix - the same name after the prefix, the same role -
 called by code outside that backend's files; a `[metal_dispatch]` or `[vk_dispatch]` argument or
 field annotation the other lens lacks; or a decode or prefill behavior only one backend's drivers
-provide - lands its own entry in `ARCHITECTURE_GPU.md#gpu-backends`'s closed asymmetry list in the
-same change, even when the list already carries one of the same class.** One backend serving the
+provide - lands its own entry in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, the closed
+asymmetry list, in the same change, even when the list already carries one of the same class.**
+One backend serving the
 same path faster or slower is not such a change.
 
 **A change that can alter what a GPU decode or prefill call on a session computes or selects

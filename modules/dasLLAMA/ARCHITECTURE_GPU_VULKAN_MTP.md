@@ -2,8 +2,10 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; a section is cited by its anchor. This
 document carries the NextN draft head the resident driver homes beside the trunk - the draft
-command that steps it, the prompt warm the window chain gives its slab, and the rollback a
-rejected device verify takes from the copies the verify command made. The residency plan,
+command that steps it, the prompt warm the window chain gives its slab, the rollback a
+rejected device verify takes from the copies the verify command made, the verify window a
+declined verify seat runs the CPU verify in, and the speculative knob's per-step gate on the
+carry. The residency plan,
 the marks swap and the logits landing the head rides are in
 `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; the same-slab verify that re-warms the head's rows a
 round at a time is in `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`; the Metal round
@@ -56,7 +58,7 @@ norms and requant (`draft_cat`), the eh_proj GEMV (`draft_eh`), the head's atten
 feed requant (`draft_attnorm`), the head layer's roles under the trunk's names (`q`, `kv`,
 `qknrope`, `attn`, `wo`, `ar1`, `rq_f`, the FFN's), the head norm and classifier feed
 (`draft_norm`), the classifier (`draft_cls`) and the picks (`draft_pick`); its samples go to the
-draft's own ledger (`g_rdq_d`), printed every 32 drafts as `vk_rdec gpu avg/draft over N: ...`
+draft's own ledger (`g_rdq_draft_ledger`), printed every 32 drafts as `vk_rdec gpu avg/draft over N: ...`
 (the idle at its end is the gap since the verify sampled before it) and `vk_rdec host wall/draft
 over N: ...` - the memcpys piece holds the hydrate's upload where one ran, the wait the
 transfer-queue landing, the landing copy the pick's read (and the logits' copy where they land).
@@ -90,8 +92,12 @@ stretch under it - and counts the region's head rows to `start_pos + npos - 1`
 (`rdec_prefill_head_rows`), so the next draft hydrates nothing and the host copy the CPU round
 reads stays the device's. A chain that cannot warm - the head off the device, a scaled embed, a
 feed plane the chain does not carry - says so once and leaves the head's prompt rows as the host
-holds them: the round drafts off stale history until its verifies' re-warm rewrites the rows,
-acceptance dips, and nothing reads a host row nobody wrote. The warm's cost is eh_proj and the
+holds them: the round drafts off stale history until its verifies' re-warm rewrites the rows and
+acceptance dips, and the first draft uploads the host rows below its row as the host holds them.
+Whether the warm ran or not, the override's readback (`rdec_prefill_head_rows`) hydrates the
+device-only rows below `start_pos` first (`rdec_head_hydrate`, before the sync), so a
+continuation whose seam did not run - a rewind, a foreign handoff - raises the host's count only
+over rows the host holds current, never over a stale copy of a row the device wrote. The warm's cost is eh_proj and the
 head's k and v projections over the prompt plus the last layer's FFN over the whole window
 (`PERF_LEDGER.md`'s entry, which the pod measures).
 
@@ -134,13 +140,52 @@ trunk's K/V rows and the head's rows above the cut are dead by the watermark on 
 the host copy alike (`rdec_head_rows_cut`): the verify wrote head rows `pos - 1 .. pos + n - 2` on
 the device, rows `pos + a` and up hold the rejected drafts' inputs, and the next draft at row
 `pos + a` rewrites its row on whichever side drafts, so nothing reads a row above the next
-draft's. The snapshot's place in the round
+draft's. On a model with no recurrent layer the round skips the rollback seat (`mtp_reject`:
+`rolled` holds from `recr_mask == 0`) - no slot to copy back, so nothing cuts the region's rows
+or its head rows, and the same watermark rule covers them: the next draft at row `pos + a`
+rewrites its row, and the rows above it are dead. The snapshot's place in the round
 follows the seat's decision: a declined seat leaves the session untouched, so the CPU verify
 snapshots right before its own prefill (`mtp_verify_two`), and a served verify snapshots only
 where the owner registered no rollback seat; a rollback seat that declines after its verify seat
-served is an engine bug the round panics on by name, since no snapshot holds the state. The CPU
+served is an engine bug the round panics on by name, since no snapshot holds the state. Every
+decline of the verify seat sits above `rdec_dn_own_all`, the call that moves the session's
+recurrent state to the device: a decline below it would hand the CPU verify a session whose
+state the device holds. `REVIEW.das`'s `check_verify_decline_before_state_move` walks
+`vulkan_resident_verify_gated` and `vulkan_resident_verify_go` and fails a `return false` after
+that call; it licenses no names. The CPU
 depth-1 round asks two rows, so one scratch row serves it; a round of depth k would reject to any
 `a < k` through the same copies. `test_gpu_resident_hybrid_mtp_verify_reject` holds the
 rolled-back slots and the next step bit for bit to a one-row session's, `test_mtp.das`'s
 forced-reject round holds the stream to plain decode on both rails, and the profiler's
 `mtp.rollback` section prices the reject where `mtp.snapshot` and `mtp.replay` did.
+
+### A declined verify seat runs the CPU verify inside a window the resident prefill declines {#resident-verify-window}
+
+**A speculative round whose verify seat declines runs the CPU verify's two-row `forward_prefill`
+inside a verify window, and the resident prefill declines that window by name before any state
+moves.** The CPU verify (`mtp_verify_two`) raises `mtp_verify_window_active` around its two-row
+prefill; the resident prefill override reads it before it binds a region or touches a slot and
+passes the call as `RdecPass.verify_window`, so the CPU rails take the two rows: the head runs on
+the CPU over the host rows the seat's decline hydrated, the trunk's rows the region holds stay
+on the device, and the round reads only rows the side that ran them wrote. Without the window
+a model with no recurrent layer - a routed-head carrier in GLM-4.5-Air's shape, whose head the
+driver declines - would have its two rows served by the window chain, which leaves the host
+`x_b` rows the CPU verify's classifier reads unwritten; the fail-closed guard for that case stays
+(`mtp_verify_served_panic`: a prefill driver that landed the logits inside the window), and the
+decline is what keeps it unreachable. A hybrid's window passes the same way, the seat's decline
+having hydrated its state; the resident verify seat and this window are the two ways a round's
+verify rows run, and a round never mixes them.
+
+### The speculative knob gates the carry per step, never the plan {#resident-spec-knob-gate}
+
+**The carry landing, the stored classifier feed and the hidden-row copy consult the speculative
+knob (`get_mtp_spec()`) on every step, so a NextN model with speculation off pays no carry and
+keeps the last layer's fusions.** The token command's last layer stores its classifier feed
+(`storex` on the residual step's requant stamp, `rd_next_feed`) only while the knob is on, and
+that store is what turns the fused residual-plus-requant forms off at that site (`rd_rows_fuse`,
+and `comb_rq` on a MoE last layer); with the knob off the last layer takes the fused forms a
+headless model takes, no `xb_dev -> hid_host` copy runs and no carry is stashed. What the knob
+never moves is the plan: the head planes, the head's K/V slot, the verify rows and the rollback
+scratch are provisioned at the arm whether the knob is on or off, so a knob flip
+(`set_mtp_spec`, the server's `--mtp`) never re-plans the residency - a NextN model with
+speculation off carries the head's bytes and runs the step a headless model runs.

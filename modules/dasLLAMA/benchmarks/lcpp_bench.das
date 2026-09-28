@@ -54,6 +54,9 @@ require dasllama/dasllama_env
 // `-o json` emits public bench records (schema: METHODOLOGY.md "The record") on stdout — progress goes to
 // stderr then, like llama-bench itself. `--ngl` != 0 is the whole graph on Metal
 // (MetalMode.required — a CPU fallback fails the run, never silently mismeasures).
+// ATTRIBUTION SWEEP: --mtp-ab times its off and on arms (the plain step against the speculative round) without
+// comparing their outputs - the arms attribute the round's draft, verify and acceptance cost, not an adoption; the
+// round's output invariance is tests/test_mtp.das's.
 
 enum private OutFmt {
     txt
@@ -1133,6 +1136,12 @@ def private corpus_ids(t : Model; tk : Tokenizer; tx : string; chat : bool) : ar
     return <- ids
 }
 
+//! the reasons that fired, in the words a status page prints, for a refusal line
+def private cpu_pass_words() : string {
+    var inscope passes <- gpu_cpu_passes()
+    return join([for (p in passes); "{p.words} x{p.count}"], "; ")
+}
+
 def private argmax_logit(s : Session; vocab : int64) : int64 {
     var best = 0l
     var bv = s.logits[0]
@@ -1704,9 +1713,12 @@ def main() : int {
                 pp_ac |> resize(length(toks))
                 var sp = SamplingParams(temp = cfg.mtp_temp)
                 let ask = sampler_is_argmax(sp)
-                for (_rep in range(reps)) {
+                var refused = ""   // one rep with no figure, or one served off the row's backend stamp, drops the whole row
+                let vk_stamp = !gpu && moe_gpu_tier_installed()   // the row records the armed Vulkan tier as its backend: a call the driver passed to the CPU rails ran off it
+                for (rep in range(reps)) {
                     var total_us = 0l
                     var rep_gen = 0l
+                    let passes0 = cpu_pass_total()
                     for (pi in range(length(toks))) {
                         var rs <- make_run_state(c, KVDtype.f16, KVDtype.f16)
                         let pl = long_length(toks[pi])
@@ -1748,7 +1760,27 @@ def main() : int {
                         pp_ac[pi] += rs.mtp_accepted
                         delete rs
                     }
+                    if (rep_gen <= 0l || total_us <= 0l) {
+                        refused = "rep {rep} produced no figure ({rep_gen} tokens in {total_us} us)"
+                        break
+                    }
+                    let passed = cpu_pass_total() - passes0
+                    if (vk_stamp && passed > 0l) {
+                        let words = cpu_pass_words()
+                        refused = "rep {rep} ran off the row's vulkan backend: the resident driver passed {passed} call(s) to the CPU rails ({words})"
+                        break
+                    }
                     tps |> push(double(rep_gen) * 1.0e6lf / double(total_us))
+                }
+                if (!empty(refused)) {
+                    say(fmt, "REFUSED tg-real{ngen}{dtag} - {refused}\n")
+                    g_refused_rows++
+                    delete tps
+                    delete pp_us
+                    delete pp_gen
+                    delete pp_dr
+                    delete pp_ac
+                    continue
                 }
                 if (mtp_on && sp.temp > 0.0 && parked == 0l) {
                     panic("lcpp_bench: --mtp-temp {sp.temp} is set but the accept walk never parked a draw - the lever did not engage")

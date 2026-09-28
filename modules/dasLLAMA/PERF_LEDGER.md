@@ -78,16 +78,42 @@ what it costs today and what the fix would change.
   2 x vocab x 4-byte logits plane, its host copy, the four row copies and both host argmaxes gone
   from the round), the re-warm runs no q GEMV and the store pass over the k heads alone
   (`warm_q` gone from the ledger, `warm_qknrope` smaller), and no head row is read back (the `kv
-  readback` piece gone from `host wall/verify`); and the on/off rate with the drafts' acceptance -
-  the pod measures. Measured on the RTX PRO 4500 (`-n 96`, microseconds a round): the two-row
-  verify's `dn_seq` reads 421 against the one-row `step` 243 and the rollback copies (`roll`) 74 -
-  a recurrent layer's row costs its dispatch latency (16 workgroups, one a head), not the state's
-  reload. A form that looped the rows inside one dispatch a layer with the scratch stored in-kernel
-  and the final ring pair written by a last-arriving workgroup was bit for bit the chained steps and
-  read `dn_seq` 721: the loop serializes the rows a workgroup already ran back to back, and the
-  epilogue's barrier and staged copy add to every layer - the per-row dispatch stays. What moves
-  `dn_seq` is more workgroups a head (the ds x ds state split across workgroups), a step-kernel
-  change the one-row decode shares.
+  readback` piece gone from `host wall/verify`). The on/off rate with the drafts' acceptance, as
+  measured: `benchmarks/lcpp_bench.das --mtp-ab -n 64 -r 2` (`-r 4` on the 0.8B) as the `-jit`
+  script (debug-jit) under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16`,
+  `DAS_TUNE_POLICY` unset (the box profile), the resident driver at cm2 coopmat mode, on the
+  RTX PRO 4500 pod, tok/s off / on, the off arm the plain tg64: Qwen3.5-0.8B-MTP-Q8_0 444.7
+  +/- 9.5 / 574.9 +/- 14.3 (x1.29, acceptance 81.9%); Qwen3.5-4B-MTP-Q8_0 138.0 / 202.5 (x1.47,
+  82.6%); Qwen3.5-9B-MTP UD-Q5_K_XL 103.8 / 149.3 (x1.44, 82.7%); Qwen3.8-27B-Q4_K_M with its
+  Q8_0 head, the image rail off, 37.1 / 54.3 (x1.46, 69.9%) - direction-grade, the on and off
+  arms in one process per row. The stamped ledgers at 66b143122 on the 0.8B under the same
+  command with `DASLLAMA_GPU_PROF=1`, microseconds: the verify's host wall 2917 (GPU 2870), the
+  draft's 491 (GPU 449), against a one-row step's 2571 (GPU 2357). Measured on the RTX PRO 4500
+  pod - `benchmarks/lcpp_bench.das --model Qwen3.5-0.8B-MTP-Q8_0.gguf --mtp-ab -n 96 -r 1
+  --for-debug-purposes` as the `-jit` script (debug-jit) under `DASLLAMA_GPU=1
+  DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16 DAS_LOG_LEVEL=info DASLLAMA_GPU_PROF=1`,
+  `DAS_TUNE_POLICY` unset (the box profile), the resident driver at cm2 coopmat mode,
+  microseconds a round from the `DASLLAMA_GPU_PROF=1` ledger: the two-row verify's `dn_seq`
+  reads 421 against the one-row `step` 243 and the rollback copies (`roll`) 74 - a recurrent
+  layer's row costs its dispatch latency (16 workgroups, one a head), not the state's reload. A
+  form that looped the rows inside one dispatch a layer with the scratch stored in-kernel and the
+  final ring pair written by a last-arriving workgroup was bit for bit the chained steps and read
+  `dn_seq` 721 under the same command and environment at its own commit (direction-grade, two
+  commits): the loop serializes the rows a workgroup already ran back to back, and the epilogue's
+  barrier and staged copy add to every layer - the per-row dispatch stays. What moves `dn_seq` is
+  more workgroups a head (the ds x ds state split across workgroups), a step-kernel change the
+  one-row decode shares.
+
+- **LANDED (2026-09-28) - the head K-row bar of `tests/test_gpu_resident_hybrid.das`
+  (`HEAD_K_BAR_REL = 0.08`, twice the deltanet bar): the prompt warm's K rows against the CPU
+  warm's.** The cell `test_gpu_resident_hybrid_mtp_head_warm`, through `tests/run.das` under
+  `-jit`, `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16`, `DAS_TUNE_POLICY` unset
+  (the box profile), the resident driver at cm2 coopmat mode, on the RTX PRO 4500 pod, on
+  Qwen3.5-0.8B-MTP-Q8_0 over the 40-token prompt: the widest miss reads 0.05 of the CPU row's max
+  under both codecs - f16 mirrors 0.357 at row 38 on a 0.577 bar, f32 mirrors
+  (`DASLLAMA_VK_KV32=1`) 0.278 at row 2 - and the one-down control lands 7.3 to 7.6 bars away.
+  The bar is twice the deltanet bar because the row is the f16-stored projection of a hidden row
+  already held within the deltanet bar; the control is tightened to two bars from it.
 
 - **OPEN (2026-09-27) - the Vulkan resident driver's NextN draft head: its plane and slot bytes,
   and the device draft against the CPU draft.** Where the driver takes a model's head
@@ -121,7 +147,9 @@ what it costs today and what the fix would change.
   Qwen3.5-0.8B-MTP (dim 1024) 4,096 bytes a row, 32,768 at eight. Each step moves
   dim x 4 bytes a row over the logits' path (4 KB a token on the 0.8B), and the last layer's
   residual step leaves the q8 down GEMV's epilogue for the row-storing stamp, one dispatch more a
-  token. Owed from the pod: tg128 of `Qwen3.5-0.8B-MTP-Q8_0.gguf` against `Qwen3.5-0.8B-Q8_0.gguf`
+  token - while the speculative knob is on; with it off the step pays none of this and keeps the
+  fused forms (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate`). Owed from the pod:
+  tg128 of `Qwen3.5-0.8B-MTP-Q8_0.gguf` with `set_mtp_spec` on against `Qwen3.5-0.8B-Q8_0.gguf`
   (the same trunk, no carry) under `DASLLAMA_GPU=1`, with the `DASLLAMA_GPU_PROF=1` token profile
   of each, so the step's delta is read rather than estimated.
 

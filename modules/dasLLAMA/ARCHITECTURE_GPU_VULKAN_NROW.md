@@ -194,7 +194,10 @@ on the transfer queue (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-que
 logits with them unless the round asked for the picks alone - the caller's pick ask
 (`Session.pick_asked`, `RdecVerifyFn`'s `pick_only`): the picks-only twin then carries the landing,
 the logits plane never leaves the device, and a guard step (`rd_guard_rows`: any of the rows on the
-one-row command's cadence) lands the logits anyway so the over-commit check reads row 0. The seat
+one-row command's cadence) lands the logits anyway so the over-commit check reads row 0; the tier's
+`landed_logits` witness (`install_rdec_verify`'s third seat, `rdec_verify_landed_logits`) answers whether the
+last served verify landed them, so the finite check runs on every landed row and never on a plane
+that stayed on the device. The seat
 (`vulkan_resident_verify`, `register_mtp_verify_override`) lands the picks in `mtp_picks`, the hidden
 rows in `mtp_hrows`, the logits - where they land - in `mtp_logits_b`, `mtp_logits` (row 0) and
 `logits` (the last row), `mtp_h` the last row's at `pos + n`, the region's rows at `pos + n`, the
@@ -220,10 +223,10 @@ the sequential recurrent rows a stamp a row's step (`dn_seq`) and a stamp a roll
 (`roll`, the two summing over the rows and layers), the classifier over n columns (`cls`, the
 epilogue and the picks as the token command names them), and the head re-warm under `warm_*`:
 the cat rows' copies, norms and requant (`warm_cat`), the eh_proj GEMV (`warm_eh`), the head's
-attention norm and feed requant (`warm_norm`), and its k and v projections, norm and rope
+attention norm and feed requant (`warm_attnorm`), and its k and v projections, norm and rope
 store under the trunk's role names prefixed `warm_` (`warm_kv`, `warm_qknrope`, or `warm_qkn` and
 `warm_rope` on the split pair; a merged q/k/v plane stamps `warm_qkv`). The samples go to the
-verify's own ledger (`g_rdq_v`), so the round's alternating draft and verify commands never
+verify's own ledger (`g_rdq_verify_ledger`), so the round's alternating draft and verify commands never
 restart the token ledger's averages, and every 32 verifies the driver prints `vk_rdec gpu
 avg/verify over N: ...` in the token line's shape (`vk_rdec dn avg/verify` beside it on a hybrid,
 the idle since the command sampled before - the draft's - at its end) and `vk_rdec host

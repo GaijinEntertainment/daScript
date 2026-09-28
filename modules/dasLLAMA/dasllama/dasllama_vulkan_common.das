@@ -1200,7 +1200,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             rides = "the SM count the dense tile pick, split-k and the decode attention's partials plane read ({sm} here) - past four pieces the token command records a wide twin at eight; without it the l tile serves every dense GEMM, nothing splits k and the attention stays at four pieces"),
         VkExtEntry(name = "timelineSemaphore (Vulkan 1.2)", present = timeline_semaphore_supported(phys),
             knob = "DASLLAMA_VK_XFERQ", off = !g_env_vulkan.vk_xferq,
-            rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident token command's logits behind a compute-timeline wait; without it the copies ride the compute queue and the token command copies its own logits under its fence"),
+            rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident commands' rows behind a compute-timeline wait - the token command's logits and picks, the NextN draft's and the same-slab verify's, and the carry row every one of them lands beside; without it the copies ride the compute queue and each command copies its own landing under its fence"),
         VkExtEntry(name = "computeFullSubgroups (subgroupSizeControl, Vulkan 1.3)", present = compute_full_subgroups_supported(phys),
             knob = "DASLLAMA_VK_FULLSG", off = !g_env_vulkan.vk_fullsg,
             rides = "full subgroups on the one-dimensional workgroups, an A/B arm off by default"),
@@ -2472,29 +2472,30 @@ struct RDec {
     xlog_pick_recorded : array<bool>
     pick_dev : uint64             //! the rows' argmax ids (`ClsArgmaxPart` then `ClsArgmaxFin`, after the epilogue), and their host landing
     pick_host : HostBuf
-    carry : bool                  //! the final site stores the rows' post-final-norm hidden in xb_dev, and every step lands it into hid_host beside the logits (a NextN-headed model)
-    hid_host : HostBuf            //! ... the landed rows: the token command's, or the window chain's last row at row 0
+    carry : bool                  //! the driver was prepared with the carry: the final site can store the rows' post-final-norm hidden in xb_dev and land it into hid_host beside the logits (a NextN-headed model)
+    carry_live : bool             //! the carry as this step wants it - `carry` and the speculative round on; a flip re-records the commands whose last site stores or lands the row (`rd_carry_sync`)
+    hid_host : HostBuf            //! the landed carry rows: the token command's, or the window chain's last row at row 0
     head_norm_base : int64        //! the NextN draft head's norm block in the norms plane (`rdec_head_norm_base`); 0 = prepared without the head
-    head_on : bool                //! ... the head is set (`vk_rdec_set_head`): the draft command serves
-    head : RLayer = RLayer()      //! ... its layer (index n_layers), kept out of `layers` and the token command's trunk walk
-    eh_blk : int64                //! ... its eh_proj plane's arena block and format
-    eh_fmt : int
-    m_eh : HostBuf
-    s_eh, s_cat_ar, s_cat_rq : VkDescriptorSet   //! ... the eh_proj GEMV, the embed and carry norms, the concatenated row's requant
-    cat_in_dev, cat_dev : uint64  //! ... the [embed ; carry] rows as the host uploads them, a row pair a head row (`nb` pairs), and their [enorm ; hnorm] image the eh_proj GEMV reads
-    cat_host : HostBuf
-    head_tok : HostBuf            //! ... the head rows' own TokMeta block and rope rows: the verify's head rows sit a position below its trunk rows
+    head_on : bool                //! the head is set (`vk_rdec_set_head`): the draft command serves
+    head : RLayer = RLayer()      //! the head's layer (index n_layers), kept out of `layers` and the token command's trunk walk
+    head_eh_blk : int64           //! the head's eh_proj plane's arena block and format
+    head_eh_fmt : int
+    head_m_eh : HostBuf
+    head_s_eh, head_s_cat_ar, head_s_cat_rq : VkDescriptorSet   //! the head's eh_proj GEMV, the embed and carry norms, the concatenated row's requant
+    head_cat_in_dev, head_cat_dev : uint64   //! the head's [embed ; carry] rows as the host uploads them, a row pair a head row (`nb` pairs), and their [enorm ; hnorm] image the eh_proj GEMV reads
+    head_cat_host : HostBuf
+    head_tok : HostBuf            //! the head rows' own TokMeta block and rope rows: the verify's head rows sit a position below its trunk rows
     head_cos_dev : uint64
     head_cos_host : HostBuf
-    s_hx_ar : VkDescriptorSet     //! ... the verify's head attention norm of the eh_proj rows into cat (`s_cat_rq` quantizes them): xb keeps the trunk rows the landing reads
-    pf_head_ask : bool            //! ... the next window chain warms the head's slab over the prompt rows it serves (`vk_rdec_head_warm_ask`)
-    pf_head_rows : int64          //! ... the head rows the last chain wrote
-    pf_head_ready : bool          //! ... the chain's head planes and sets are built (`pf_head_setup`)
-    pf_head_declined : bool       //! ... or the device declined them, said once
-    pf_wemb, pf_hsrc, pf_hcos : uint64   //! ... the window's unscaled embed rows; the trunk's post-norm rows a row down, the previous window's last at row 0; the head rows' rope rows
-    pf_cat, pf_catq, pf_cats, pf_catf : uint64   //! ... the head rows' [enorm ; hnorm] image and its eh_proj feed (Q8_0 blocks, or halves on the f16 feed)
-    draft_cmd : array<VkCommandBuffer>   //! ... one recorded draft command per region: the head's mirror base rides its push, as the token command's does
-    draft_recorded : array<bool>
+    head_s_hx_ar : VkDescriptorSet   //! the verify's head attention norm of the eh_proj rows into cat (`head_s_cat_rq` quantizes them): xb keeps the trunk rows the landing reads
+    pf_head_ask : bool            //! the next window chain warms the head's slab over the prompt rows it serves (`vk_rdec_head_warm_ask`)
+    pf_head_rows : int64          //! the head rows the last chain wrote
+    pf_head_ready : bool          //! the chain's head planes and sets are built (`pf_head_setup`)
+    pf_head_declined : bool       //! or the device declined them, said once
+    head_pf_wemb, head_pf_hsrc, head_pf_hcos : uint64   //! the chain's head planes: the window's unscaled embed rows; the trunk's post-norm rows a row down, the previous window's last at row 0; the head rows' rope rows
+    head_pf_cat, head_pf_catq, head_pf_cats, head_pf_catf : uint64   //! the chain's head rows' [enorm ; hnorm] image and its eh_proj feed (Q8_0 blocks, or halves on the f16 feed)
+    head_draft_cmd : array<VkCommandBuffer>   //! one recorded draft command per region: the head's mirror base rides its push, as the token command's does
+    head_draft_recorded : array<bool>
     v_cmd : array<VkCommandBuffer>   //! the same-slab verify commands by row count (index 0 unused; `rd_v_idx`), region-free as the N-row command's on an attention model, a set a region on a hybrid (the rollback copies bake the region's slot), and their unsplit twins
     v_cmd_unsplit : array<VkCommandBuffer>
     v_recorded : array<bool>
@@ -2665,7 +2666,7 @@ def rd_invalidate_token {
     for (rec in g_rd.tok_n_recorded) {
         rec = false
     }
-    for (rec in g_rd.draft_recorded) {
+    for (rec in g_rd.head_draft_recorded) {
         rec = false
     }
     for (rec in g_rd.v_recorded) {
@@ -2776,8 +2777,11 @@ struct RdqLedger {
     total : double                       //! the commands' device spans, first stamp to last, summed
     count : int64                        //! the commands sampled
     idle_us : double                     //! the device's idle between the command sampled before it (any form's) and this form's, summed
-    wall_us : double                     //! the host wall of the same commands
-    host_us : double[4]                  //! ... split into its pieces: the memcpys and meta, the submit, the wait, the landing copy
+    wall_us : double                     //! the host wall of the same commands, and its pieces:
+    memcpy_us : double                   //! the memcpys and meta
+    submit_us : double                   //! the submit
+    wait_us : double                     //! the wait
+    land_us : double                     //! the landing copy
 }
 
 // decode per-role accumulation across tokens (stamps overwrite each submit); printed every 32
@@ -2792,9 +2796,9 @@ var g_rdq_form_n = false   //! the last sampled submit was an N-row step: a swit
 var g_rdq_verify : array<RdqStamps>   //! the same-slab verify commands' by row count (index 0 unused), and their unsplit twins'
 var g_rdq_verify_unsplit : array<RdqStamps>
 var g_rdq_draft : RdqStamps           //! the draft command's
-var g_rdq : RdqLedger      //! the token command's ledger: the one-row forms and the N-row command, a switch between them restarting it
-var g_rdq_v : RdqLedger    //! the verify command's - its own, so the round's alternating commands never restart the token ledger
-var g_rdq_d : RdqLedger    //! the draft command's
+var g_rdq_token_ledger : RdqLedger    //! the token command's ledger: the one-row forms and the N-row command, a switch between them restarting it
+var g_rdq_verify_ledger : RdqLedger   //! the verify command's - its own, so the round's alternating commands never restart the token ledger
+var g_rdq_draft_ledger : RdqLedger    //! the draft command's
 var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP): the recorded names and the pool saturate together, so the sampler reads this instead
 
 //! the token command changed attention forms mid-run: say so and restart the ledger's averages (the recorded stamp names
@@ -2802,7 +2806,7 @@ var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP)
 [cold_path]
 def rdq_form_switch(form : RdForm; pos : int64) {
     to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {form} form from position {pos} - the averages restart\n")
-    rdq_reset_averages(g_rdq)
+    rdq_reset_averages(g_rdq_token_ledger)
 }
 
 def rdq_reset_averages(var led : RdqLedger) {
@@ -2810,9 +2814,10 @@ def rdq_reset_averages(var led : RdqLedger) {
     led.total = 0.0lf
     led.idle_us = 0.0lf
     led.wall_us = 0.0lf
-    for (i in range(4)) {
-        led.host_us[i] = 0.0lf
-    }
+    led.memcpy_us = 0.0lf
+    led.submit_us = 0.0lf
+    led.wait_us = 0.0lf
+    led.land_us = 0.0lf
     led.us_by_name |> clear()
     led.print_order |> clear()
 }
@@ -2825,9 +2830,9 @@ def private rdq_clear_stamps(var st : RdqStamps) {
 
 //! the decode profiler's accumulators back to zero: a model drop or a new resident model - averages never span models
 def rdq_reset {
-    rdq_reset_averages(g_rdq)
-    rdq_reset_averages(g_rdq_v)
-    rdq_reset_averages(g_rdq_d)
+    rdq_reset_averages(g_rdq_token_ledger)
+    rdq_reset_averages(g_rdq_verify_ledger)
+    rdq_reset_averages(g_rdq_draft_ledger)
     g_rdq_n = 0u
     g_rdq_overflow = false
     g_rdq_stamp_names |> clear()

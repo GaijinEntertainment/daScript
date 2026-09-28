@@ -1934,7 +1934,12 @@
    vulkan lane's image holds every planar plane (the q8 blobs and scales, the fp32 token table an
    untied classifier keeps) plus `vkblob`: on Qwen3.8-27B-Q4_K_M the CPU lane's image is
    24.1 GB and the vulkan lane's 43.0 GB for 18.1 GB of device planes, 67 GB and about forty
-   minutes on a network volume (the gather 24 of them). The P3 trim (`trim_model_planes`) would
+   minutes (the gather 24 of them) - the first load with the image rail on of
+   `benchmarks/lcpp_bench.das --model Qwen3.8-27B-Q4_K_M.gguf --mtp-ab -n 16 -r 1
+   --for-debug-purposes` as the `-jit` script under `DASLLAMA_GPU=1
+   DASLLAMA_MTP_HEAD=/workspace/models/mtp-Qwen3.8-27B-Q8_0.gguf` on the RTX PRO 4500 pod, the
+   models on its MooseFS `/workspace` volume, the two sizes read off that volume after the load,
+   the minutes its wall. The P3 trim (`trim_model_planes`) would
    drop the CPU families the resident driver never reads, but it declines a model with a NextN
    head (the `-mtp` lane), and the flavor save never consults `image_save_enabled`
    (`DASLLAMA_IMAGE_SAVE=0` skips the CPU lane's file only). Done = the vulkan lane's image
@@ -1948,7 +1953,11 @@
    (`src/simulate/simulate_exceptions.cpp`) on a context with no `throwBuf` - every jobque clone,
    the lanes the resident gather and upload run on - prints "unhandled exception" through
    `to_err` and calls `exit(0)`. A bench whose stdout is captured reads as a clean run that
-   printed no rows; two of three 27B first loads on the pod ended this way. Done = an uncaught
+   printed no rows: two of three runs of the row 179 command (`benchmarks/lcpp_bench.das --model
+   Qwen3.8-27B-Q4_K_M.gguf --mtp-ab -n 16 -r 1 --for-debug-purposes` as the `-jit` script under
+   `DASLLAMA_GPU=1 DASLLAMA_MTP_HEAD=/workspace/models/mtp-Qwen3.8-27B-Q8_0.gguf`, a first load
+   with the image rail on, on the RTX PRO 4500 pod off its MooseFS `/workspace` volume) ended
+   this way. Done = an uncaught
    panic exits non-zero everywhere (`exit(1)` at the two sites), and the team-chunk invocation
    (`src/builtin/module_builtin_jobque.cpp`, `team_parallel_for_invoke`) runs under
    `runWithCatch` and reports `JOB EXCEPTION` as the fifo path does.

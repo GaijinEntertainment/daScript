@@ -39,7 +39,8 @@ read it.
 **A diff that changes an existing stamp's generated source - through the class's own body, the
 template or base shell it stamps, or a helper its body splices - carries in the PR body, for each
 affected stamp, its generated source diffed against the pre-change tree (the `*_msl` global, or a
-disassembly diff of the `.spv` files `DASLLAMA_VK_SPV_DUMP=<dir>` writes).**
+disassembly diff of the `.spv` files `DASLLAMA_VK_SPV_DUMP=<dir>` writes); every deriving stamp
+of a changed shell, and every stamp of a changed template, owes a diff, an empty one allowed.**
 
 **Each generated-source diff a PR body carries for a changed stamp takes only one of these forms:
 an empty diff; a difference confined to whitespace, scoping braces, parentheses or identifier names,

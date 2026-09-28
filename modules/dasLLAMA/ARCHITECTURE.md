@@ -32,8 +32,9 @@ any sibling companion that sends a reader to it.
   (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`), the one RoPE fill over a position source
   (`ARCHITECTURE_ENGINE_FORMATS.md#rope-one-fill`), and the Model's per-format plane table, its
   only `dim` field (`ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim`).
-- `ARCHITECTURE_GPU.md` - the GPU backend role table and the backend asymmetries
-  (`ARCHITECTURE_GPU.md#gpu-backends`).
+- `ARCHITECTURE_GPU.md` - the GPU backend role table (`ARCHITECTURE_GPU.md#gpu-backends`).
+- `ARCHITECTURE_GPU_ASYMMETRIES.md` - the closed list of the allowed asymmetries between the
+  two GPU backends (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
 - `ARCHITECTURE_MEDIA.md` - the encoder-tower, audio, ASR and vision charters.
 - `ARCHITECTURE_TTS.md` - the text-to-speech charters - the front end, the block home, the
   shared assembly, the families and the facade.
@@ -87,8 +88,10 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   runs - the residency plan, and the GPU-slot marks swap that lets one slot serve many models -
   and the token command's logits landing.
 - `ARCHITECTURE_GPU_VULKAN_MTP.md` - the NextN draft head the resident driver homes beside the
-  trunk: the draft command that steps it, the prompt warm the window chain gives its slab, and
-  the rollback a rejected device verify takes from the verify command's own copies.
+  trunk: the draft command that steps it, the prompt warm the window chain gives its slab, the
+  rollback a rejected device verify takes from the verify command's own copies, the verify
+  window a declined verify seat runs the CPU verify in, and the speculative knob's per-step
+  gate on the carry.
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - the N-row token command a batched step's rows go through,
   its same-slab form the speculative verify steps one stream's rows through, and the residual
   step's two forms it holds bit for bit.

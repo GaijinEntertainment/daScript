@@ -333,6 +333,9 @@ def public set_gpu_resident_route(on : bool) {
     g_gpu_resident_route = on
 }
 
+//! The in-process lever's own value (`set_gpu_resident_route`), apart from the knob: a fixture restores what it found.
+def public gpu_resident_route_lever() : bool => g_gpu_resident_route
+
 //! The whole-model driver is wanted on this load: the knob and the in-process lever both on.
 def public gpu_want_resident : bool => g_env_gpu.gpu_resident && g_gpu_resident_route
 
@@ -513,20 +516,25 @@ typedef RdecVerifyFn = function<(x : array<float>; cossin : array<float>; hemb :
 [unused_argument(x, cossin, hemb, hcos, h0, pos, n, pick_only, logits, picks, hid)]
 def private rdec_unset_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool => false
 def private rdec_no_verify_rows : int64 => 0l
+def public rdec_no_verify_landed_logits : bool => false   //! public: a default argument resolves at the caller's site
 var g_rdec_verify = @@rdec_unset_verify
 var g_rdec_verify_rows = @@rdec_no_verify_rows
+var g_rdec_verify_landed_logits = @@rdec_no_verify_landed_logits
 var g_rdec_verify_installed = false
 
-//! Install the same-slab verify beside the draft seat: `rows` answers how many rows of one stream it steps at once (0 = none)
+//! Install the same-slab verify beside the draft seat: `rows` answers how many rows of one stream it steps at once (0 = none);
+//! `landed_logits` whether the last served verify landed the rows' logits - under a pick ask a guard step lands them anyway
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
-def public install_rdec_verify(verify : RdecVerifyFn; rows : function<() : int64>) {
+def public install_rdec_verify(verify : RdecVerifyFn; rows : function<() : int64>; landed_logits : function<() : bool> = @@rdec_no_verify_landed_logits) {
     g_rdec_verify = verify
     g_rdec_verify_rows = rows
+    g_rdec_verify_landed_logits = landed_logits
     g_rdec_verify_installed = true
 }
 
 def public rdec_verify_installed() : bool => g_rdec_verify_installed
 def public rdec_verify_rows() : int64 => invoke(g_rdec_verify_rows)
+def public rdec_verify_landed_logits() : bool => invoke(g_rdec_verify_landed_logits)
 def public rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool
     => invoke(g_rdec_verify, x, cossin, hemb, hcos, h0, pos, n, pick_only, logits, picks, hid)
 
@@ -2228,6 +2236,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_verify_rows == null) {
         g_rdec_verify_rows = @@rdec_no_verify_rows
+    }
+    if (g_rdec_verify_landed_logits == null) {
+        g_rdec_verify_landed_logits = @@rdec_no_verify_landed_logits
     }
     if (g_rdec_rollback == null) {
         g_rdec_rollback = @@rdec_unset_rollback

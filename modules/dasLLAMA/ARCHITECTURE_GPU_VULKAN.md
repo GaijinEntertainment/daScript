@@ -13,7 +13,8 @@ the coopmat mode ladder, the class-pipeline build seat, the MoE expert chain on 
 the KHR arm's hand-staged kq tile - are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, and the decode GEMV
 family's lane split by row length is `ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes`. What a
 model has to fit on the card before any of this runs - the residency plan, and the marks swap
-that lets one GPU slot serve many models - and the NextN draft head the driver homes are in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, and the
+that lets one GPU slot serve many models - is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the NextN
+draft head the driver homes is `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`, and the
 N-row token command a batched step's rows go through is in `ARCHITECTURE_GPU_VULKAN_NROW.md`.
 The decode-era mechanisms of the per-op tier are in `ARCHITECTURE_GPU_VULKAN_DECODE.md`. The GPU
 backend role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.

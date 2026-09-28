@@ -4316,6 +4316,7 @@ def private load_batch_knobs() {
     g_b_pre = g_env_metal.batch_pre
 }
 
+[hot_path]   // per speculative round, reached through the engine's registered seat owner
 def private metal_mtp_owns(t : Model) : bool => t.metal_blob
 
 [init]

@@ -15,6 +15,10 @@ strings any of them look up - applies `REVIEW_TOKENIZER.md` (beside this file) t
 under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this folder applies
 `REVIEW_DOCS.md` (beside this file) too.**
 
+**A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, wherever the
+gate sits, or adds a name to a check's licensed set, applies `REVIEW_GATES.md` (beside this
+file) too.**
+
 **A diff that lands the work a `followup_*.md` row names deletes the row - or, when the row lists
 several items, only the landed item - and repoints every checked-in citation naming the landed
 item to where the landed fact now lives (the architecture doc or the code) or drops it, dated
@@ -115,9 +119,9 @@ of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
 named constant, or a `require` in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
 what-lands-where rules.
 
-**A diff that adds or changes a def in a file `REVIEW.das`'s `FACADE_FILES` lists, or makes
-another file's defs reach a consumer through `require dasllama/dasllama`, or adds an
-`[EnvConfig]` area struct, applies `REVIEW_FACADE.md` too.**
+**A diff that adds or changes a def in a file `REVIEW.das`'s `FACADE_FILES` lists, or adds a
+`public` require, or makes an existing require `public`, on a chain from
+`dasllama/dasllama.das`, or adds an `[EnvConfig]` area struct, applies `REVIEW_FACADE.md` too.**
 
 **A diff that turns a weight-format id - a `KqFmt` member, a GGUF type number, or the int a
 generated kernel takes as its format parameter - into plane strides, or reads a per-block or
@@ -137,8 +141,10 @@ declaration initializer alone arrives null and dies at the first invoke while ev
 stays green.
 
 **A function in `dasllama/dasllama_common.das` that performs work through a hook another module
-registers panics on the unset hook, with a message naming the module to require.** A function
-that returns quietly hides which registration a program root forgot.
+registers, and has no CPU form of that work, panics on the unset hook, with a message naming the
+module to require; a seat whose unset form is the CPU route - a hook with a CPU fallback -
+declines to that route instead.** A function with no fallback that returns quietly hides which
+registration a program root forgot.
 
 **A function in `dasllama/dasllama_common.das` that reports whether a hook another module
 registers is installed returns false when the hook is unset - never a panic.**
@@ -157,10 +163,12 @@ else that changed between the runs, so they cannot pick a candidate.
 **A diff that adds an allocation whose size grows with a scaling count states that size in bytes
 in a `PERF_LEDGER.md` row: at the largest shape the code path accepts, or, where the path accepts
 any value of the count, as a formula in the count with its value at two shapes that differ in
-it - a shape being one setting of the scaling counts.** A scaling count is a count the model file
-sets, how many tokens one step computes at once, how many rows one media encode feeds (an image's
-patches, a clip's frames), or how many regions one buffer is split into (the K/V cache's device
-copy, one region per request served at once; an MoE dispatch's expert regions).
+it - a shape being one setting of the scaling counts.** An allocation is one buffer, or one
+sub-range of an arena a plan sizes; a new term in an existing allocation's size is a new
+allocation under this rule, never a change under the next. A scaling count is a count the model
+file sets, how many tokens one step computes at once, how many rows one media encode feeds (an
+image's patches, a clip's frames), or how many regions one buffer is split into (the K/V cache's
+device copy, one region per request served at once; an MoE dispatch's expert regions).
 
 **A diff after which an existing allocation's size starts or stops growing with a scaling count
 (a model-file count, tokens per step, rows per media encode, or regions per buffer) ships the
@@ -237,24 +245,6 @@ the consumer.
 `options _dasllama_internal` re-exports an engine module with `require ... public` only where
 that entry names the re-export; any other re-export is a defect - the file's own requirers reach
 the symbol through `dasllama/dasllama.das` instead.**
-
-**An edit to a `REVIEW.das` under this folder that drops a check while code it guards remains in
-the tree and no lint takes the check over, rewrites a finding text so it no longer names what
-failed, or leaves a check passing code its finding text still names as a defect is a defect - fix
-the flagged code instead.** Narrowing what a check walks (a file or folder it stops reading), or
-re-stamping a pinned hash, count or list the finding text does not tell the author to re-stamp,
-leaves flagged code passing.
-
-**A diff adds a name to a check's licensed set - the names that check does not flag - only when
-the check's finding text names the property the licensed names share and the check's line in the
-`ARCHITECTURE_*.md` section that finding text cites names that property; otherwise it fixes the
-flagged code.**
-
-**A new check in any `REVIEW.das` under this folder, or a check whose licensed set gains a name,
-names in its finding text the `ARCHITECTURE_*.md#<anchor>` section carrying the charter of the
-feature the check guards - never `ARCHITECTURE.md` - and ships its line in that section, in the
-same change.** The line names the check and the names it licenses; when the check licenses no
-names, the line says so.
 
 **Checked-in text - docs, comments, or string data, any language - that describes a mechanism of
 the reference build (any third-party engine, library or runtime whose figure a sentence compares

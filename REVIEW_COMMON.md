@@ -30,16 +30,17 @@ without the change?" - is `skills/tdd_audit.md`.
 **A diff that changes a function carrying `[arch(at="<doc>.md#<anchor>")]`, or C++ under a
 `// <doc>.md#<anchor>` pointer - beyond comments - audits the anchor's other citing functions
 and the cited section: read the section, check it still describes the code and each citer
-still conforms, verdict per function.** The citers of one anchor share one mechanism; MCP
-`arch_sites` lists them, both spellings.
+still conforms, and records a verdict per function in the PR description.** The citers of one
+anchor share one mechanism; MCP `arch_sites` lists them, both spellings.
 
 **A diff that adds, removes, or retargets an `[arch(at=...)]` citation or a
 `// <doc>.md#<anchor>` pointer audits the cited section against the code - both sections on a
-retarget.** The citation claims the section describes this function; verify it does.
+retarget - and records the verdict in the PR description.** The citation claims the section
+describes this function; verify it does.
 
-**A diff that changes an anchored section audits every function citing that anchor.** One
-audit pass over an anchor's section text and citer set discharges every audit duty the diff
-triggers on that anchor - the duties never cascade.
+**A diff that changes an anchored section audits every function citing that anchor, verdict per
+function in the PR description.** One audit pass over an anchor's section text and citer set
+discharges every audit duty the diff triggers on that anchor - the duties never cascade.
 
 **A diff that moves a fact out of a function's comment into an `ARCHITECTURE*.md` lands three
 things in the same change: the statement, a `{#anchor}` on the heading of the section it joins,
@@ -48,8 +49,9 @@ pointer on a C or C++ one - and the comment goes.** The citation is
 what keeps the section true: a section nothing cites is never re-checked when the code changes.
 
 **A rule that a test, a lint, or the folder's `REVIEW.das` enforces is deleted.** Automation
-replaces the rule; the checklist keeps at most "weakening that check is a defect." A rule
-that COULD be automated is a lint or `REVIEW.das` candidate - say so in the review round.
+replaces the rule; the checklist keeps at most "weakening that check is a defect." A gate that
+enforces part of a rule leaves only the uncovered part as prose. A rule that COULD be automated
+is a lint or `REVIEW.das` candidate - say so in the review round.
 
 **A `REVIEW.das` runs standalone and reports in one shape** - `daslang <folder>/REVIEW.das`
 from the repo root prints one `path: finding` line per finding (`path:line: finding` when a
@@ -109,11 +111,15 @@ root - the rule must say which.
 
 **Cite files by name; cite an architecture doc the checklist's opening names by anchor
 (`<doc>.md#<anchor>`), and never require the cited section to be read before the rule can be
-applied.** No file cites a checklist rule by number, position, or nickname. A file outside the
-rule documents - source, commit message, doc - quotes the rule's words; a rule document routes to
-the checklist instead, and never quotes or restates its rule. A criterion whose home is an
-architecture doc the opening does not name is restated in place and cited nowhere. A quote states the reason the code is shaped this
-way and survives any rewording; a position points at whatever sits there today.
+applied.**
+
+**No file cites a checklist rule by number, position, or nickname.** A file outside the rule
+documents - source, commit message, doc - quotes the rule's words; a rule document routes to the
+checklist instead, and never quotes or restates its rule. A quote states the reason the code is
+shaped this way and survives any rewording; a position points at whatever sits there today.
+
+**A criterion whose home is an architecture doc the checklist's opening does not name is
+restated in place and cited nowhere.**
 
 **Name the API a rule is about; never name an example of it.** A rule governing specific
 functions or files must name them or it cannot be checked - that name is the criterion. An

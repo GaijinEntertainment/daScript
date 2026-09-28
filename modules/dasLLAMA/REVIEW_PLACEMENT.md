@@ -28,8 +28,8 @@ change that charter row in the same change.**
 that backend's file; a concern the row names without a backend licenses both.**
 
 **A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
-adding a family, format or arm the parenthetical does not name lands it in the file whose
-concern is named, and adds it to that parenthetical in the same change.**
+adding a member of the kind the parenthetical lists that the parenthetical does not name lands
+it in the file whose concern is named, and adds it to that parenthetical in the same change.**
 
 **Never add a charter line for a file outside `dasllama/` - that file answers to its own
 folder's checklist.**

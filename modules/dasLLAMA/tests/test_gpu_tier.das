@@ -418,6 +418,8 @@ def test_rdec_draft_seat(t : T?) {
         t |> success(rdec_draft_installed(), "the reinstall flips the witness")
         t |> equal(rdec_draft(rows, rows, rows, 11l, 0l, null, null, false, logits), 7l, "the seat the unset answered serves again")
         t |> equal(g_draft_row, 11l)
+        unset_rdec_draft()   // back to the declining form the cell found: a later cell in this process reads the seat as it was
+        t |> success(!rdec_draft_installed(), "the seat is back at its uninstalled state for the rest of the process")
         delete logits
     }
     t |> run("the norms plane: the head's block past the trunk's q/k rows and its own q/k slot, never on the final norm's row") @(t : T?) {

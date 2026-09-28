@@ -169,7 +169,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         }
         q8_batch_cls_enc(v, raw, h, g_rd.pf_cls_gemm[key], pc, groups)
     }
-    if (ts) {   //! the head warm's GEMMs stamp nothing: the profile's role table counts the layers' stamps and the tail's
+    if (ts) {   // the head warm's GEMMs stamp nothing: the profile's role table counts the layers' stamps and the tail's
         pfq_ts(raw)
     }
 }
@@ -725,7 +725,7 @@ def private pf_setup {
             g_rd.pf_splitk_bytes = skb
         }
     }
-    let nsets = int(g_rd.n_layers * PF_ROLES + 2l + (g_rd.head_norm_base > 0l ? PF_ROLES : 0l))   //! + prologue, final quantize of the last row, the NextN head's block
+    let nsets = int(g_rd.n_layers * PF_ROLES + 2l + (g_rd.head_norm_base > 0l ? PF_ROLES : 0l))   // + prologue, final quantize of the last row, the NextN head's block
     g_rd.pf_sets |> resize(nsets)
     g_rd.pf_arq_sets |> resize(g_rd.n_layers * 2l)
     g_rd.pf_meta |> resize(nsets)
@@ -981,38 +981,38 @@ def private pf_head_decline(why : string) : bool {
     return false
 }
 
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   // once per residency
+//! the chain's head planes and sets, built once per residency behind the caller's `pf_head_ready` / `pf_head_declined` latches
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
 def private pf_head_setup : bool {
-    return true if (g_rd.pf_head_ready)
-    return false if (g_rd.pf_head_declined)
     let np = g_rd.pf_np
     let dim = g_rd.dim
     let hb = pf_head_block()
     if (long_length(g_rd.pf_sets) < int64(hb) + PF_ROLES) return pf_head_decline("the head's set block was not sized (the driver prepared without the head)")
     let q6 = pf_head_qkv6()
-    let e6 = pf_f16_feed(g_rd.eh_fmt)
+    let e6 = pf_f16_feed(g_rd.head_eh_fmt)
     if (q6 && g_rd.pf_xf == 0ul) return pf_head_decline("the head's q/k/v planes take the f16 feed and the chain carries no f16 feed plane")
-    if (!e6 && kq_sb(g_rd.eh_fmt) && !ensure_cls_q8k_rq()) return pf_head_decline("the eh_proj plane's Q8_K feed has no requant class")
-    g_rd.pf_wemb = make_device_buf(np * dim * 4l)
-    g_rd.pf_hsrc = make_device_buf(np * dim * 4l)
-    g_rd.pf_hcos = make_device_buf(np * g_rd.cos_elems * 4l)
+    if (!e6 && kq_sb(g_rd.head_eh_fmt) && !ensure_cls_q8k_rq()) return pf_head_decline("the eh_proj plane's Q8_K feed has no requant class")
     let catb = np * 2l * dim * 4l
-    g_rd.pf_cat = make_device_buf(catb)
+    if (!vk_range_ok(catb)) return pf_head_decline("the head rows' cat plane ({catb} bytes over the {np}-row window, the widest of the head's planes) passes the device's storage range {vk_max_storage_range()}")
+    g_rd.head_pf_wemb = make_device_buf(np * dim * 4l)
+    g_rd.head_pf_hsrc = make_device_buf(np * dim * 4l)
+    g_rd.head_pf_hcos = make_device_buf(np * g_rd.cos_elems * 4l)
+    g_rd.head_pf_cat = make_device_buf(catb)
     if (e6) {
-        g_rd.pf_catf = make_device_buf(np * 2l * dim * 2l)
+        g_rd.head_pf_catf = make_device_buf(np * 2l * dim * 2l)
     } else {
-        g_rd.pf_catq = make_device_buf(np * 2l * dim)
-        g_rd.pf_cats = make_device_buf(np * (2l * dim / 32l) * 4l)
+        g_rd.head_pf_catq = make_device_buf(np * 2l * dim)
+        g_rd.head_pf_cats = make_device_buf(np * (2l * dim / 32l) * 4l)
     }
     let normbytes = g_rd.norms_bytes
     let xb = np * dim * 4l
-    g_rd.pf_sets[hb + 6] = set_cls_ar(fixed_array(g_rd.pf_wemb, g_rd.pf_wemb, g_rd.norms_dev, g_rd.pf_xb2),
+    g_rd.pf_sets[hb + 6] = set_cls_ar(fixed_array(g_rd.head_pf_wemb, g_rd.head_pf_wemb, g_rd.norms_dev, g_rd.pf_xb2),
         fixed_array(xb, xb, normbytes, xb), fixed_array(VHZ_UP, VHZ_UP, 0u, VHZ_XB2))
-    g_rd.pf_sets[hb + 7] = set_cls_ar(fixed_array(g_rd.pf_hsrc, g_rd.pf_hsrc, g_rd.norms_dev, g_rd.pf_ffnout),
+    g_rd.pf_sets[hb + 7] = set_cls_ar(fixed_array(g_rd.head_pf_hsrc, g_rd.head_pf_hsrc, g_rd.norms_dev, g_rd.pf_ffnout),
         fixed_array(xb, xb, normbytes, xb), fixed_array(VHZ_GATE, VHZ_GATE, 0u, VHZ_FFO))
     g_rd.pf_sets[hb + 8] = (e6
-        ? set_f16cvt_cls(fixed_array(g_rd.pf_cat, g_rd.pf_catf), fixed_array(catb, np * 2l * dim * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
-        : set_rq_cls(fixed_array(g_rd.pf_cat, g_rd.pf_catq, g_rd.pf_cats), fixed_array(catb, np * 2l * dim, np * (2l * dim / 32l) * 4l),
+        ? set_f16cvt_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catf), fixed_array(catb, np * 2l * dim * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
+        : set_rq_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catq, g_rd.head_pf_cats), fixed_array(catb, np * 2l * dim, np * (2l * dim / 32l) * 4l),
             fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
     g_rd.pf_sets[hb + 0] = (q6
         ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf), fixed_array(xb, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
@@ -1021,7 +1021,7 @@ def private pf_head_setup : bool {
     let qrow = g_rd.q_gated ? 2l * g_rd.qd : g_rd.qd
     let kvd = g_rd.kv_dim
     let mirbytes = rd_mir_bytes()
-    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_hcos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
+    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.head_pf_hcos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
     let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : normbytes)
     let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u)
     g_rd.pf_sets[hb + 4] = (g_rd.kv16 ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits) : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
@@ -1041,32 +1041,32 @@ def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : 
     let carry = w0 > 0l ? 1l : 0l
     let nh = wlen - 1l + carry
     return if (nh <= 0l)
-    let r0 = 1l - carry   //! head row j reads the window's row j + 1 - carry of the shifted planes
+    let r0 = 1l - carry   // head row j reads the window's row j + 1 - carry of the shifted planes
     var L & = unsafe(g_rd.head)
     let hb = pf_head_block()
     let hbn = uint(g_rd.head_norm_base)
     vhz_dep(raw, h, VHZ_XB, VHZ_GATE, true)
-    cmd_copy_range(raw, g_rd.pf_xb, 0l, g_rd.pf_hsrc, rowb, (wlen - 1l) * rowb)
+    cmd_copy_range(raw, g_rd.pf_xb, 0l, g_rd.head_pf_hsrc, rowb, (wlen - 1l) * rowb)
     var pch = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(r0))
     enc_cls_ar(raw, h, g_rd.pf_sets[hb + 7], pch, nh)
     vhz_dep(raw, h, VHZ_XB, VHZ_GATE, true)
-    cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * rowb, g_rd.pf_hsrc, 0l, rowb)
+    cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * rowb, g_rd.head_pf_hsrc, 0l, rowb)
     var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(r0))
     enc_cls_ar(raw, h, g_rd.pf_sets[hb + 6], pce, nh)
     vhz_dep(raw, h, VHZ_XB2 | VHZ_FFO, VHZ_ATT, true)
-    cmd_copy_rows(raw, g_rd.pf_xb2, r0 * rowb, rowb, g_rd.pf_cat, 0l, 2l * rowb, rowb, nh)
-    cmd_copy_rows(raw, g_rd.pf_ffnout, r0 * rowb, rowb, g_rd.pf_cat, rowb, 2l * rowb, rowb, nh)
-    let e6 = pf_f16_feed(g_rd.eh_fmt)
+    cmd_copy_rows(raw, g_rd.pf_xb2, r0 * rowb, rowb, g_rd.head_pf_cat, 0l, 2l * rowb, rowb, nh)
+    cmd_copy_rows(raw, g_rd.pf_ffnout, r0 * rowb, rowb, g_rd.head_pf_cat, rowb, 2l * rowb, rowb, nh)
+    let e6 = pf_f16_feed(g_rd.head_eh_fmt)
     if (e6) {
         var pcc = ActArgs(nelem = uint(nh * 2l * dim), nblk = 0u)
         enc_f16cvt_cls(raw, h, g_rd.pf_sets[hb + 8], pcc, (nh * 2l * dim / 4l + 255l) / 256l)
     } else {
-        rq_enc(raw, h, g_rd.pf_sets[hb + 8], kq_sb(g_rd.eh_fmt), 0l, nh * 2l * dim)
+        rq_enc(raw, h, g_rd.pf_sets[hb + 8], kq_sb(g_rd.head_eh_fmt), 0l, nh * 2l * dim)
     }
-    let pe = arena_planes(g_rd.eh_fmt, g_rd.eh_blk)
-    pf_gemm_enc(raw, h, hb + 0, g_rd.eh_fmt, pe.wq, pe.ws, e6 ? g_rd.pf_catf : g_rd.pf_catq, e6 ? g_rd.dummy : g_rd.pf_cats, g_rd.pf_x,
+    let pe = arena_planes(g_rd.head_eh_fmt, g_rd.head_eh_blk)
+    pf_gemm_enc(raw, h, hb + 0, g_rd.head_eh_fmt, pe.wq, pe.ws, e6 ? g_rd.head_pf_catf : g_rd.head_pf_catq, e6 ? g_rd.dummy : g_rd.head_pf_cats, g_rd.pf_x,
         pe.wqb, pe.wsb, e6 ? np * 2l * dim * 2l : np * 2l * dim, e6 ? 256l : np * (2l * dim / 32l) * 4l, np * dim * 4l, VHZ_AQ, VHZ_X,
-        2l * dim, dim, g_rd.eh_blk, nh, e6, 0l, 0l, false)
+        2l * dim, dim, g_rd.head_eh_blk, nh, e6, 0l, 0l, false)
     var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, g_rd.pf_sets[pf_prologue_block()], pca, nh)
     let q6 = pf_head_qkv6()
@@ -1123,14 +1123,14 @@ def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : 
 }
 
 //! the ask stands until the next ask
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   // per prefill call, reached through the tier's registered seat
 def vk_rdec_head_warm_ask(on : bool) {
     if (g_rd != null) {
         g_rd.pf_head_ask = on
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   // per prefill call, reached through the tier's registered seat
 def vk_rdec_head_warm_rows : int64 => g_rd != null ? g_rd.pf_head_rows : 0l
 
 //! Resident-driver prefill: `npos` embedded rows (x_batch, [npos x dim]) + per-position rope rows
@@ -1268,6 +1268,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let ple_tbl = use_ids && ple_raw   //! the side rows gather on device from the token table
     assert(g_rd.ple == 0l || ple_tbl || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
     pf_setup()
+    rd_carry_sync()
     if (pos0 == 0l && g_rd.hybrid) {
         vk_rdec_dn_flush_owners()
     }
@@ -1277,7 +1278,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let cos_elems = g_rd.cos_elems
     let fa128s = !(cm2_fa_on() && vk_fa_on() && g_rd.kv16) && g_gpu.has_coopmat && vk_fa_on()   //! the h128 coopmat twin serves a 128-head layer where the cm2 tiles do not
     g_rd.pf_head_rows = 0l
-    let warm = g_rd.pf_head_ask && g_rd.head_on && g_rd.carry && pf_head_setup()
+    let warm = g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && (g_rd.pf_head_ready || (!g_rd.pf_head_declined && pf_head_setup()))
     unsafe {
         var w0 = 0l
         var last_wlen = 0l
@@ -1295,7 +1296,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let hcarry = w0 > 0l ? 1l : 0l
                 let nhead = wlen - 1l + hcarry
                 if (nhead > 0l) {
-                    upload_region_at(g_rd.pf_hcos, 0l, addr<uint8 const?>(cos_batch[int((w0 - hcarry) * cos_elems)]), nhead * cos_elems * 4l)
+                    upload_region_at(g_rd.head_pf_hcos, 0l, addr<uint8 const?>(cos_batch[int((w0 - hcarry) * cos_elems)]), nhead * cos_elems * 4l)
                 }
             }
             if (use_ids) {
@@ -1361,7 +1362,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             }
             if (warm) {
                 vhz_dep(raw, h, VHZ_X, VHZ_UP, true)
-                cmd_copy_range(raw, g_rd.pf_x, 0l, g_rd.pf_wemb, 0l, wlen * dim * 4l)
+                cmd_copy_range(raw, g_rd.pf_x, 0l, g_rd.head_pf_wemb, 0l, wlen * dim * 4l)
             }
             var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
             enc_cls_ar(raw, h, g_rd.pf_sets[bp + 0], pc_pro, wlen)   // prologue norm
@@ -1629,7 +1630,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pfq_ts(raw)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
-                if (g_rd.carry) {
+                if (g_rd.carry_live) {
                     vhz_dep(raw, h, VHZ_XB, 0u, true)
                     cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * dim * 4l, g_rd.hid_host.buf, 0l, dim * 4l)
                 }

@@ -13,6 +13,8 @@ def private allow_cpu_prefill_intent() {
 }
 require daslib/jobque_boost
 require daslib/fio
+require daslib/rtti   // this_context().last_exception: a panic's text read back
+require strings   // find / rtrim over a panic's text
 require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the hybrid
@@ -42,9 +44,13 @@ require _resident_feed
 // same-slab verify rows bit for bit against one-row steps of the same tokens, accepted and rejected,
 // and the head's prompt warm on the window chain: the host residual rows poisoned before a resident
 // prefill leave the draft bit for bit, the head's warmed K rows against the CPU warm's within twice
-// the deltanet bar, and six speculative rounds against the CPU round from one prompt.
+// the deltanet bar over one window and over two, and six speculative rounds against the CPU round from
+// one prompt. The gates around the round: speculation off lands no carry, a NaN carry panics the draft
+// by row, the pass arms (codec, unhomed, gap, rewind) hand the round to the CPU rails by name, and a
+// head kept off the device passes the verify as verify_rows with the resident prefill declining the CPU
+// verify's window as verify_window.
 // Every model cell skips interpreted, without its model file, or without the armed tier; the
-// K-quant cells skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`) too.
+// K-quant cells and the codec pass arm skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`) too.
 
 let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit| - the deltanet bar test_deltanet.das holds too
 //! the K-quant bar on the f16 feed and mirror: CPU-vs-device rounding sits flat at 0.39-0.57 of a ~12.5 max logit at every step (the Q8 file 0.19-0.36), with no growth and the one-step-off control well past it
@@ -212,8 +218,12 @@ struct private Carry {
 
 def private carry_of(s : Session) : Carry => <- Carry(h <- [for (x in s.mtp_h); x], pos1 = s.mtp_h_pos1)
 
-//! `prompt` then `toks` through a fresh session a row at a time, the carry kept after the prefill and after each step
-def private carries_alone(tr : Model; prompt, toks : array<int64>) : array<Carry> {
+//! `prompt` then `toks` through a fresh session a row at a time under the speculative gate `spec`, the carry kept after the
+//! prefill and after each step; the gate goes back where it stood
+[cold_path]
+def private carries_alone(tr : Model; prompt, toks : array<int64>; spec : bool = true) : array<Carry> {
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(spec)
     var s <- create_session(tr, mirror_kv_dtype())
     let n = long_length(prompt)
     var out : array<Carry>
@@ -225,27 +235,33 @@ def private carries_alone(tr : Model; prompt, toks : array<int64>) : array<Carry
         out |> emplace <| carry_of(s)
     }
     delete s
+    set_mtp_spec(spec0)
     return <- out
 }
 
-//! every resident carry's watermark at its row's position plus one and its hidden within the deltanet bar of the CPU chain's,
-//! with the CPU chain's previous carry (one step off) past the bar
+def private hidden_rows(cs : array<Carry>) : array<array<float>> {
+    var out : array<array<float>>
+    out |> reserve(long_length(cs))
+    for (c in cs) {
+        out |> emplace <| clone_to_move(c.h)
+    }
+    return <- out
+}
+
+//! every resident carry's watermark at its row's position plus one (the CPU chain's too), one hidden row a side, and the hidden
+//! within the deltanet bar of the CPU chain's with the CPU chain's previous carry as the one-step-off control
 def private carries_within(t : T?; what : string; nprompt : int64; gpu, cpu : array<Carry>) {
     for (st in range64(long_length(cpu))) {
         let tag = what + (st == 0l ? " prefill ({nprompt} tokens)" : " step {st - 1l}")
         t |> equal(gpu[st].pos1, nprompt + st, "{tag}: the resident carry's watermark is its row's position plus one")
         t |> equal(cpu[st].pos1, nprompt + st, "{tag}: the CPU chain's watermark")
         t |> equal(long_length(gpu[st].h), long_length(cpu[st].h), "{tag}: one hidden row a side")
-        let bar = DN_LOGIT_BAR_REL * logits_maxabs(cpu[st].h)
-        let diff = logits_maxdiff(gpu[st].h, cpu[st].h)
-        to_log(LOG_INFO, "{tag}: carry maxdiff {diff} (bar {bar})\n")
-        t |> success(diff <= bar, "{tag}: the resident carry within {bar} of the CPU chain's post-norm hidden (maxdiff {diff})")
-        if (st > 0l) {
-            let off = logits_maxdiff(gpu[st].h, cpu[st - 1l].h)
-            to_log(LOG_INFO, "{tag}: one-step-off control maxdiff {off} (bar {bar})\n")
-            t |> success(off > bar, "{tag} control: the bar discriminates the carry one step off (maxdiff {off} vs bar {bar})")
-        }
     }
+    var g <- hidden_rows(gpu)
+    var c <- hidden_rows(cpu)
+    rows_within_control(t, "{what} carry", g, c, DN_LOGIT_BAR_REL, -1l, 1.0, $(st) => (st == 0l ? "prefill ({nprompt} tokens)" : "step {st - 1l}"))
+    delete g
+    delete c
 }
 
 def private mtp_carry_ready(t : T?) : bool {
@@ -262,13 +278,21 @@ def private mtp_carry_ready(t : T?) : bool {
 }
 
 //! the -MTP- file at `regions` mirror regions on the resident route, the driver armed on it, the host sessions' context capped;
-//! both levers go back where they stood
-def private load_mtp_carrier(t : T?; regions : int64) : Model {
-    let regions0 = gpu_resident_regions_()
-    let route0 = gpu_want_resident()
+//! under `head_off` the draft seat is unset for the load, so the plan keeps the NextN head off the device (the seat put back after);
+//! every lever goes back where it stood
+def private load_mtp_carrier(t : T?; regions : int64; head_off : bool = false) : Model {
+    let regions0 = gpu_resident_regions_want()
+    let route0 = gpu_resident_route_lever()
     set_gpu_resident_regions_(regions)
     set_gpu_resident_route(true)
+    var seat : RdecDraftFn
+    if (head_off) {
+        seat = unset_rdec_draft()
+    }
     var tr <- load_model_(path_join(models_dir(), MTP_CARRY_FILE), QuantMode.q8)
+    if (head_off) {
+        reinstall_rdec_draft(seat)
+    }
     set_gpu_resident_route(route0)
     set_gpu_resident_regions_(regions0)
     tr.config.seq_len = min(tr.config.seq_len, CARRY_RIG_CTX)
@@ -277,10 +301,16 @@ def private load_mtp_carrier(t : T?; regions : int64) : Model {
     return <- tr
 }
 
-def private served_every_call(t : T?) {
-    var passes <- gpu_cpu_passes_()
-    t |> equal(length(passes), 0, "the device served every call: {passes}")
-    delete passes
+//! the prefill's logits, then each fed step's, through a fresh session under the speculative gate `spec` (put back after)
+[cold_path]
+def private feed_under_spec(tr : Model; prompt, toks : array<int64>; spec : bool) : array<array<float>> {
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(spec)
+    var s <- create_session(tr, mirror_kv_dtype())
+    var out <- feed_logits(tr, s, prompt, toks)
+    delete s
+    set_mtp_spec(spec0)
+    return <- out
 }
 
 [test]
@@ -296,7 +326,7 @@ def test_gpu_resident_hybrid_mtp_carry(t : T?) {
             var gpu <- carries_alone(tr, prompt, toks)
             t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
             served_every_call(t)
-            moe_gpu_drop_model()   //! every later step is the CPU chain
+            moe_gpu_drop_model()
             var cpu <- carries_alone(tr, prompt, toks)
             carries_within(t, "one row:", long_length(prompt), gpu, cpu)
             delete gpu
@@ -319,9 +349,11 @@ def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
             var pb <- [for (i in range64(57l)); 3000l + (i * 91l) % 6000l]
             var fa <- [for (i in range64(CARRY_STEPS)); 2000l + (i * 53l) % 4000l]
             var fb <- [for (i in range64(CARRY_STEPS)); 2500l + (i * 71l) % 4500l]
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(true)
             var sa <- create_session(tr, mirror_kv_dtype())
             var sb <- create_session(tr, mirror_kv_dtype())
-            eval(tr, sa, pa)   //! `eval` advances `n_past`, the position a batched step reads
+            eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
             eval(tr, sb, pb)
             var ga : array<Carry>
             var gb : array<Carry>
@@ -339,14 +371,15 @@ def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
             }
             t |> equal(rdec_nrow_steps() - steps0, CARRY_STEPS, "every batched step went through the N-row command")
             served_every_call(t)
-            sess |> clear()   //! drop the borrowed handles: delete of array<T?> cascades to the pointees
+            set_mtp_spec(spec0)
+            sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
             unsafe {
                 delete ws
                 delete sess
             }
             delete sa
             delete sb
-            moe_gpu_drop_model()   //! every later step is the CPU chain
+            moe_gpu_drop_model()
             var ca <- carries_alone(tr, pa, fa)
             var cb <- carries_alone(tr, pb, fb)
             carries_within(t, "batched row A:", long_length(pa), ga, ca)
@@ -364,8 +397,42 @@ def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
     }
 }
 
+[test]
+def test_gpu_resident_hybrid_mtp_carry_gate(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: with speculation off the NextN-headed hybrid lands no carry - the watermark stays 0 after the resident prefill and every step - and its logits sit within the deltanet bar of the spec-on run's at every row, the one-step-off control past it") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(40l)); 1000l + (i * 37l) % 5000l]
+            var toks <- [for (i in range64(CARRY_STEPS)); 2000l + (i * 53l) % 4000l]
+            let served0 = moe_gpu_resident_prefills()
+            var off <- carries_alone(tr, prompt, toks, false)
+            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt with speculation off")
+            for (st in range64(long_length(off))) {
+                let what = st == 0l ? "prefill" : "step {st - 1l}"
+                t |> equal(off[st].pos1, 0l, "{what}: speculation off, the resident driver lands no carry - the watermark stays 0")
+            }
+            var on <- carries_alone(tr, prompt, toks, true)
+            t |> equal(on[CARRY_STEPS].pos1, long_length(prompt) + CARRY_STEPS, "speculation on, the same driver lands the carry: the watermark at the last step's row plus one")
+            var off_logits <- feed_under_spec(tr, prompt, toks, false)
+            var on_logits <- feed_under_spec(tr, prompt, toks, true)
+            served_every_call(t)
+            feed_steps_within(t, tr, "carry gate: ", long_length(prompt), off_logits, on_logits, toks, DN_LOGIT_BAR_REL, "spec-off", "the spec-on run")
+            delete off_logits
+            delete on_logits
+            delete off
+            delete on
+            delete prompt
+            delete toks
+        }
+        delete tr
+    }
+}
+
 let private DRAFT_PROMPT = 40l
 let private DRAFT_TOKEN = 2000l
+let private ROUNDS = 6l   //! the speculative rounds the device-vs-CPU cells run, one fed token each
 
 //! a draft's two outputs: the logits and the head's own hidden `forward_mtp` leaves in the session
 struct private Draft {
@@ -374,6 +441,7 @@ struct private Draft {
 }
 
 //! `forward_mtp` of `tok` at head row `row` from the carry `h0`, through whichever seat the process has installed
+[cold_path]
 def private draft_from(tr : Model; var s : Session; tok, row : int64; h0 : array<float>) : Draft {
     copy_floats(h0, 0l, s.mtp_h, 0l, long_length(h0))
     forward_mtp(tr, s, tok, row)
@@ -389,14 +457,26 @@ def private prefill_warm(tr : Model; var s : Session; prompt : array<int64>) {
     s.n_past = long_length(prompt)
 }
 
-//! the device draft's `what` within the deltanet bar of the CPU draft's, the CPU draft one row back past it
-def private draft_within(t : T?; what : string; gpu, cpu, off : array<float>) {
-    let bar = DN_LOGIT_BAR_REL * logits_maxabs(cpu)
-    let diff = logits_maxdiff(gpu, cpu)
-    let offd = logits_maxdiff(gpu, off)
-    to_log(LOG_INFO, "draft {what}: maxdiff {diff}, one-step-off control {offd} (bar {bar})\n")
-    t |> success(diff <= bar, "the resident draft's {what} within {bar} of the CPU forward_mtp's (maxdiff {diff})")
-    t |> success(offd > bar, "control: the bar discriminates the CPU draft one row back ({what} maxdiff {offd} vs bar {bar})")
+//! one device row `gpu` within the deltanet bar of the CPU row `cpu`, the CPU row `off` - one step or one row away - as the control past it
+def private row_within(t : T?; what : string; gpu, cpu, off : array<float>) {
+    var g <- [ <- clone_to_move(gpu)]
+    var c <- [ <- clone_to_move(cpu), <- clone_to_move(off)]
+    rows_within_control(t, what, g, c, DN_LOGIT_BAR_REL, 1l, 1.0, $(_r) => "(the CPU row one away as the control)")
+    delete g
+    delete c
+}
+
+def private says(s : string; part : string) : bool => find(s, part) >= 0
+
+//! `body` run with any panic's text caught: "" where none fired
+def private panic_text_of(body : block<void>) : string {
+    var why = ""
+    try {
+        invoke(body)
+    } recover {
+        why = this_context().last_exception |> rtrim
+    }
+    return why
 }
 
 [test]
@@ -411,7 +491,7 @@ def test_gpu_resident_hybrid_mtp_draft(t : T?) {
             prefill_warm(tr, s, prompt)
             t |> equal(s.mtp_h_pos1, DRAFT_PROMPT, "the resident prefill landed the carry at the prompt's end")
             var h0 <- [for (x in s.mtp_h); x]
-            let row = DRAFT_PROMPT - 1l   //! the head's row pos - 1: the round's draft at position pos
+            let row = DRAFT_PROMPT - 1l   // the head's row pos - 1: the round's draft at position pos
             let drafts0 = moe_gpu_resident_drafts()
             var gpu <- draft_from(tr, s, DRAFT_TOKEN, row, h0)
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the resident head drafted")
@@ -426,10 +506,10 @@ def test_gpu_resident_hybrid_mtp_draft(t : T?) {
             let ag = argmax_of(gpu.logits)
             let ac = argmax_of(cpu.logits)
             to_log(LOG_INFO, "draft (row {row}, token {DRAFT_TOKEN}): argmax cpu {ac} '{decode_(tr, [ac])}' ({cpu.logits[ac]}), resident {ag} '{decode_(tr, [ag])}' ({gpu.logits[ag]}), device pick {pick}\n")
-            draft_within(t, "logits", gpu.logits, cpu.logits, one_row_back.logits)
-            draft_within(t, "hidden", gpu.h, cpu.h, one_row_back.h)
+            row_within(t, "draft logits", gpu.logits, cpu.logits, one_row_back.logits)
+            row_within(t, "draft hidden", gpu.h, cpu.h, one_row_back.h)
             t |> equal(pick, ag, "the device pick is the argmax of the logits it landed")
-            t |> equal(pick, ac, "the draft token equals the CPU draft's")
+            pick_agrees(t, tr, "draft (row {row}, token {DRAFT_TOKEN})", pick, cpu.logits, DN_LOGIT_BAR_REL)
             delete gpu
             delete cpu
             delete one_row_back
@@ -493,14 +573,12 @@ def test_gpu_resident_hybrid_mtp_draft_upload(t : T?) {
             declined_draft(tr, s, DRAFT_TOKEN, pos + 2l)
             t |> equal(moe_gpu_resident_head_host_rows(s), pos + 3l, "the pass brought the device's row down and the CPU wrote the next: the host holds every row through it")
             var landed_row <- head_k_row_bytes(tr, s, pos + 1l)
-            t |> success(apart(landed_row, stale_row) > 0l, "the device's K row {pos + 1l} came down on the pass: the host row moved")
+            t |> success(mismatch_exact(landed_row, stale_row) > 0, "the device's K row {pos + 1l} came down on the pass: the host row moved")
             let seat = unset_rdec_draft()
             var cpu <- draft_from(tr, s, DRAFT_TOKEN, pos + 1l, h0)
             reinstall_rdec_draft(seat)
             served_every_call(t)
-            let ac = argmax_of(cpu.logits)
-            to_log(LOG_INFO, "draft over uploaded rows (row {pos + 1l}, token {DRAFT_TOKEN}): device pick {pick} '{decode_(tr, [pick])}', the CPU draft's argmax {ac} '{decode_(tr, [ac])}'\n")
-            t |> equal(pick, ac, "the device draft over the uploaded rows picks the token the CPU draft over the host's rows picks")
+            pick_agrees(t, tr, "draft over uploaded rows (row {pos + 1l}, token {DRAFT_TOKEN})", pick, cpu.logits, DN_LOGIT_BAR_REL)
             delete cpu
             delete gpu
             delete landed_row
@@ -513,19 +591,6 @@ def test_gpu_resident_hybrid_mtp_draft_upload(t : T?) {
     }
 }
 
-def private row_of(a : array<float>; row, n : int64) : array<float> => <- [for (i in range64(n)); a[row * n + i]]
-
-//! the elements two rows hold apart, bit for bit (a NaN differs from everything)
-def private apart(a, b : array<auto(TT)>) : int64 {
-    var bad = 0l
-    for (x, y in a, b) {
-        if (x != y) {
-            bad++
-        }
-    }
-    return bad
-}
-
 def private head_k_row_bytes(tr : Model; var s : Session; row : int64) : array<uint8> {
     let c = tr.config
     let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, c.n_layers))
@@ -536,14 +601,14 @@ def private head_k_row_bytes(tr : Model; var s : Session; row : int64) : array<u
 //! a verify row against the one-row step of the same token, bit for bit: its logits and its post-norm hidden, the argmax both
 //! sides read logged, and the step one row off (the other row's) as the control the compare can fail
 def private verify_row_is_step(t : T?; tr : Model; row : int64; vlog, vhid : array<float>; step_log, step_h, off_log : array<float>) {
-    let la = apart(vlog, step_log)
-    let ha = apart(vhid, step_h)
+    let la = mismatch_exact(vlog, step_log)
+    let ha = mismatch_exact(vhid, step_h)
     let ag = argmax_of(vlog)
     let ac = argmax_of(step_log)
     to_log(LOG_INFO, "verify row {row}: logits {la} apart (maxdiff {logits_maxdiff(vlog, step_log)}), hidden {ha} apart (maxdiff {logits_maxdiff(vhid, step_h)}); argmax verify {ag} '{decode_(tr, [ag])}', step {ac} '{decode_(tr, [ac])}'\n")
-    t |> equal(la, 0l, "verify row {row}'s logits are the one-row step's bit for bit ({la} elements apart)")
-    t |> equal(ha, 0l, "verify row {row}'s post-norm hidden is the one-row step's bit for bit ({ha} elements apart)")
-    t |> success(apart(vlog, off_log) > 0l, "control: verify row {row} misses the other row's step logits")
+    t |> equal(la, 0, "verify row {row}'s logits are the one-row step's bit for bit ({la} elements apart)")
+    t |> equal(ha, 0, "verify row {row}'s post-norm hidden is the one-row step's bit for bit ({ha} elements apart)")
+    t |> success(mismatch_exact(vlog, off_log) > 0, "control: verify row {row} misses the other row's step logits")
 }
 
 let private VERIFY_ROWS = 2l   //! the CPU round's depth-1 verify: the committed token and its draft
@@ -555,6 +620,7 @@ struct private StepRows {
 }
 
 //! `prompt` then `toks` through a fresh session a row at a time on the resident driver
+[cold_path]
 def private steps_alone(tr : Model; prompt, toks : array<int64>) : StepRows {
     var s <- create_session(tr, mirror_kv_dtype())
     prefill_warm(tr, s, prompt)
@@ -571,43 +637,80 @@ def private steps_alone(tr : Model; prompt, toks : array<int64>) : StepRows {
     return <- out
 }
 
-//! a draft the seat declines (unset for the call): the CPU head at row `row` reads the head's host rows below it, so the
-//! device's rows come down first - the pass a cell reads the device's head rows through; the carry is put back after
-def private declined_draft(tr : Model; var s : Session; tok, row : int64) {
+//! a draft of `tok` at head row `row` from the session's carry through whichever seat serves, its logits answered; the carry
+//! and its watermark are put back, so the round that follows drafts from the same state
+[cold_path]
+def private draft_ahead(tr : Model; var s : Session; tok, row : int64) : array<float> {
     var h0 <- [for (x in s.mtp_h); x]
     let pos1 = s.mtp_h_pos1
-    let seat = unset_rdec_draft()
     forward_mtp(tr, s, tok, row)
-    reinstall_rdec_draft(seat)
+    var out <- [for (x in s.logits); x]
     copy_floats(h0, 0l, s.mtp_h, 0l, long_length(h0))
     s.mtp_h_pos1 = pos1
     delete h0
+    return <- out
 }
 
-//! one round's record under a pick ask beside one under the logits landing: the draft, the accept, the position and the
-//! token the caller's sample_ takes next
-struct private AskedRound {
+//! a draft the seat declines (unset for the call): the CPU head at row `row` reads the head's host rows below it, so the
+//! device's rows come down first - the pass a cell reads the device's head rows through; the carry is put back after
+[cold_path]
+def private declined_draft(tr : Model; var s : Session; tok, row : int64) {
+    let seat = unset_rdec_draft()
+    var logits <- draft_ahead(tr, s, tok, row)
+    reinstall_rdec_draft(seat)
+    delete logits
+}
+
+//! one speculative round's record: the draft the round verified, whether it accepted it, the position it left, the token the
+//! caller's sample_ took after it (-1 where none was taken), and the CPU draft's logits where the reference kept them
+struct private RoundRec {
     draft : int64
     hit : bool
     n_past : int64
     next : int64
+    draft_logits : array<float>
 }
 
-//! `ROUNDS` rounds on `s` from `tok`, the next token taken through sample_ each round (a landed pick, or the logits row's
-//! argmax); `ask` sets the pick ask before every round
-def private asked_rounds(tr : Model; var s : Session; tok0 : int64; ask : bool) : array<AskedRound> {
-    var out : array<AskedRound>
-    out |> reserve(ROUNDS)
-    var tok = tok0
-    for (_r in range64(ROUNDS)) {
+//! one speculative round of `s` a token of `toks`: `ask` sets the caller's pick ask before every round; under `chain` the
+//! token after the first is the one sample_ took after the previous round (a landed pick, or the logits row's argmax);
+//! `draft_ref` keeps each round's draft logits - the head drafted once ahead of the round from the same carry - for the
+//! tie-aware compare; the speculative gate goes back where it stood
+[cold_path]
+def private spec_rounds(tr : Model; var s : Session; toks : array<int64>; ask : bool = false; chain : bool = false; draft_ref : bool = false) : array<RoundRec> {
+    var out : array<RoundRec>
+    out |> reserve(long_length(toks))
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(true)
+    var tok = toks[0]
+    for (fed in toks) {
+        if (!chain) {
+            tok = fed
+        }
+        var rec : RoundRec
+        if (draft_ref) {
+            rec.draft_logits <- draft_ahead(tr, s, tok, s.n_past - 1l)
+        }
         s.pick_asked = ask
         var acc = 0l
-        let hit = mtp_spec_eval(tr, s, tok, acc)
+        rec.hit = mtp_spec_eval(tr, s, tok, acc)
         s.pick_asked = false
-        let next = sample_(s, SamplingParams())
-        out |> push(AskedRound(draft = s.mtp_vbatch[1], hit = hit, n_past = s.n_past, next = next))
-        tok = next
+        rec.draft = s.mtp_vbatch[1]
+        rec.n_past = s.n_past
+        rec.next = chain ? sample_(s, SamplingParams()) : -1l
+        tok = rec.next
+        out |> emplace(rec)
     }
+    set_mtp_spec(spec0)
+    return <- out
+}
+
+//! `toks` through rounds on `s` with the draft seat unset: the CPU head drafts over the host's rows, which the declined seat
+//! hydrates from the device first, and the device verifies
+[cold_path]
+def private declined_draft_rounds(tr : Model; var s : Session; toks : array<int64>) : array<RoundRec> {
+    let seat = unset_rdec_draft()
+    var out <- spec_rounds(tr, s, toks)
+    reinstall_rdec_draft(seat)
     return <- out
 }
 
@@ -638,7 +741,7 @@ def test_gpu_resident_hybrid_mtp_verify(t : T?) {
             t |> equal(moe_gpu_resident_head_host_rows(s), pos + 1l, "the pass brought the device's rows down and the CPU wrote row {pos}: the host holds every row through it")
             t |> equal(moe_gpu_resident_head_rows(s), pos, "the device's copy stops below the CPU's row")
             var draft_row <- head_k_row_bytes(tr, s, pos - 1l)
-            t |> success(apart(head_row0, draft_row) > 0l, "the draft's K row {pos - 1l} came down on the pass: the host row moved")
+            t |> success(mismatch_exact(head_row0, draft_row) > 0, "the draft's K row {pos - 1l} came down on the pass: the host row moved")
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
             let verifies0 = moe_gpu_resident_verifies()
@@ -652,10 +755,10 @@ def test_gpu_resident_hybrid_mtp_verify(t : T?) {
             t |> equal(long_length(s.mtp_logits_b), VERIFY_ROWS * c.vocab_size, "every verify row's logits landed: no pick was asked")
             t |> equal(long_length(s.mtp_hrows), VERIFY_ROWS * c.dim, "every verify row's hidden landed")
             t |> success(!s.pick_ready, "no pick was asked, so none was published")
-            var vlog0 <- row_of(s.mtp_logits_b, 0l, c.vocab_size)
-            var vlog1 <- row_of(s.mtp_logits_b, 1l, c.vocab_size)
-            var vhid0 <- row_of(s.mtp_hrows, 0l, c.dim)
-            var vhid1 <- row_of(s.mtp_hrows, 1l, c.dim)
+            var vlog0 <- copy_span(s.mtp_logits_b, 0l, c.vocab_size)
+            var vlog1 <- copy_span(s.mtp_logits_b, c.vocab_size, c.vocab_size)
+            var vhid0 <- copy_span(s.mtp_hrows, 0l, c.dim)
+            var vhid1 <- copy_span(s.mtp_hrows, c.dim, c.dim)
             t |> equal(moe_gpu_resident_verify_pick(0l), argmax_of(vlog0), "row 0's device pick is the argmax of the logits it landed")
             t |> equal(moe_gpu_resident_verify_pick(1l), argmax_of(vlog1), "row 1's device pick is the argmax of the logits it landed")
             t |> equal(s.n_past, pos + (hit ? VERIFY_ROWS : 1l), "the round committed the draft on an accept, the token alone on a reject")
@@ -664,7 +767,7 @@ def test_gpu_resident_hybrid_mtp_verify(t : T?) {
             declined_draft(tr, s, DRAFT_TOKEN, s.n_past - 1l)
             t |> equal(moe_gpu_resident_head_host_rows(s), s.n_past, "the pass brought the round's rows down through the CPU draft's")
             var warm_row <- head_k_row_bytes(tr, s, pos - 1l)
-            t |> equal(apart(warm_row, draft_row), 0l, "the re-warm's K row {pos - 1l} - the store-only pass over the k heads - is the draft command's row bit for bit: the same [enorm(token) ; hnorm(carry)] input ({apart(warm_row, draft_row)} bytes apart)")
+            t |> equal(mismatch_exact(warm_row, draft_row), 0, "the re-warm's K row {pos - 1l} - the store-only pass over the k heads - is the draft command's row bit for bit: the same [enorm(token) ; hnorm(carry)] input ({mismatch_exact(warm_row, draft_row)} bytes apart)")
             delete s
             var toks <- [DRAFT_TOKEN, d]
             var steps <- steps_alone(tr, prompt, toks)
@@ -702,20 +805,22 @@ def test_gpu_resident_hybrid_mtp_verify_asked(t : T?) {
             set_mtp_spec(true)
             let verifies0 = moe_gpu_resident_verifies()
             let drafts0 = moe_gpu_resident_drafts()
-            var asked <- asked_rounds(tr, sa, DRAFT_TOKEN, true)
-            var landed <- asked_rounds(tr, sb, DRAFT_TOKEN, false)
+            var chain <- [for (_r in range64(ROUNDS)); DRAFT_TOKEN]   // the first token alone is fed: the rounds chain through sample_
+            var asked <- spec_rounds(tr, sa, chain, true, true)
+            var landed <- spec_rounds(tr, sb, chain, false, true)
             set_mtp_spec(spec0)
             t |> equal(moe_gpu_resident_verifies(), verifies0 + 2l * ROUNDS, "every round of both sessions verified on the device")
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 2l * ROUNDS, "every round of both sessions drafted on the device")
             served_every_call(t)
             for (r in range64(ROUNDS)) {
-                to_log(LOG_INFO, "asked round {r}: draft {asked[r].draft} '{decode_(tr, [asked[r].draft])}' hit {asked[r].hit} at {asked[r].n_past} next {asked[r].next} '{decode_(tr, [asked[r].next])}'; landed round: draft {landed[r].draft} hit {landed[r].hit} at {landed[r].n_past} next {landed[r].next}\n")
+                to_log(LOG_INFO, "asked round {r}: draft {asked[r].draft} '{decode_(tr, [asked[r].draft])}' hit {asked[r].hit} at {asked[r].n_past} next {asked[r].next} '{decode_(tr, [asked[r].next])}'; landed round: draft {landed[r].draft} '{decode_(tr, [landed[r].draft])}' hit {landed[r].hit} at {landed[r].n_past} next {landed[r].next} '{decode_(tr, [landed[r].next])}'\n")
                 t |> equal(asked[r].draft, landed[r].draft, "round {r}: the pick-asked round drafts the token the logits-landing round drafts")
                 t |> equal(asked[r].hit, landed[r].hit, "round {r}: both rounds accepted or both rejected")
                 t |> equal(asked[r].n_past, landed[r].n_past, "round {r}: both rounds left the session at one position")
                 t |> equal(asked[r].next, landed[r].next, "round {r}: the pick the asked round published is the argmax of the logits the other round landed")
             }
-            t |> success(apart(sa.logits, sb.logits) > 0l, "the asked session's logits row is not the round's: the rounds landed picks alone (its row misses the landing session's)")
+            t |> success(mismatch_exact(sa.logits, sb.logits) > 0, "the asked session's logits row is not the round's: the rounds landed picks alone (its row misses the landing session's)")
+            delete chain
             delete asked
             delete landed
             delete sa
@@ -745,6 +850,7 @@ struct private StateRun {
     next_logits : array<float>
 }
 
+[cold_path]
 def private state_after_steps(tr : Model; prompt, toks : array<int64>; next : int64) : StateRun {
     var s <- create_session(tr, mirror_kv_dtype())
     prefill_warm(tr, s, prompt)
@@ -773,12 +879,13 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             let pos = DRAFT_PROMPT
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
+            let reject0 = get_mtp_force_reject_every()
             set_mtp_force_reject_every(1l)
             let verifies0 = moe_gpu_resident_verifies()
             let rollbacks0 = moe_gpu_resident_rollbacks()
             var acc = 0l
             let hit = mtp_spec_eval(tr, s, DRAFT_TOKEN, acc)
-            set_mtp_force_reject_every(0l)
+            set_mtp_force_reject_every(reject0)
             t |> success(!hit, "the forced reject rejected the draft")
             t |> equal(moe_gpu_resident_verifies(), verifies0 + 1l, "the rejected round's verify ran on the device")
             t |> equal(moe_gpu_resident_rollbacks(), rollbacks0 + 1l, "the reject rolled back on the device")
@@ -789,16 +896,16 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             t |> equal(s.dn_pos, pos + 1l, "the recurrent state's position sits at the token's row")
             t |> equal(s.mtp_h_pos1, pos + 1l, "the carry sits at the token's row")
             let d = s.mtp_vbatch[1]
-            var vlog0 <- row_of(s.mtp_logits_b, 0l, c.vocab_size)
-            var vhid0 <- row_of(s.mtp_hrows, 0l, c.dim)
+            var vlog0 <- copy_span(s.mtp_logits_b, 0l, c.vocab_size)
+            var vhid0 <- copy_span(s.mtp_hrows, 0l, c.dim)
             var kept_log <- [for (x in s.logits); x]
             var kept_h <- [for (x in s.mtp_h); x]
-            t |> equal(apart(kept_log, vlog0), 0l, "the reject kept verify row 0's logits as the session's")
-            t |> equal(apart(kept_h, vhid0), 0l, "the reject re-seeded the carry from verify row 0's hidden")
+            t |> equal(mismatch_exact(kept_log, vlog0), 0, "the reject kept verify row 0's logits as the session's")
+            t |> equal(mismatch_exact(kept_h, vhid0), 0, "the reject re-seeded the carry from verify row 0's hidden")
             let next = argmax_of(kept_log)
             var rolled <- dn_host(s)
             forward(tr, s, next, pos + 1l)
-            s.n_past = pos + 2l   //! a plain step moves no position; the round reads its position from here, and a stale one steps the recurrent state back
+            s.n_past = pos + 2l   // a plain step moves no position; the round reads its position from here, and a stale one steps the recurrent state back
             var next_log <- [for (x in s.logits); x]
             mtp_spec_eval(tr, s, argmax_of(s.logits), acc)
             set_mtp_spec(spec0)
@@ -808,15 +915,15 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             delete s
             var one <- state_after_steps(tr, prompt, [DRAFT_TOKEN], next)
             var two <- state_after_steps(tr, prompt, [DRAFT_TOKEN, d], next)
-            let sa = apart(rolled.state, one.dn.state)
-            let ca = apart(rolled.conv, one.dn.conv)
-            let la = apart(next_log, one.next_logits)
-            to_log(LOG_INFO, "rollback: state {sa} apart, conv history {ca} apart, next step's logits {la} apart (maxdiff {logits_maxdiff(next_log, one.next_logits)}); argmax rolled {argmax_of(next_log)} '{decode_(tr, [argmax_of(next_log)])}', one-row session {argmax_of(one.next_logits)} '{decode_(tr, [argmax_of(one.next_logits)])}'; the two-row control {apart(two.dn.state, one.dn.state)} state elements apart\n")
-            t |> equal(sa, 0l, "the rolled-back deltanet state is the one-row session's bit for bit ({sa} elements apart)")
-            t |> equal(ca, 0l, "the rolled-back conv history is the one-row session's bit for bit ({ca} elements apart)")
-            t |> equal(la, 0l, "the next plain step's logits are the one-row session's next step bit for bit ({la} elements apart)")
-            t |> success(apart(two.dn.state, one.dn.state) > 0l, "control: the state after the verify's two rows misses the one-row session's")
-            t |> success(apart(next_log, two.next_logits) > 0l, "control: the next step misses the two-row session's next step")
+            let state_off = mismatch_exact(rolled.state, one.dn.state)
+            let conv_off = mismatch_exact(rolled.conv, one.dn.conv)
+            let logits_off = mismatch_exact(next_log, one.next_logits)
+            to_log(LOG_INFO, "rollback: state {state_off} apart, conv history {conv_off} apart, next step's logits {logits_off} apart (maxdiff {logits_maxdiff(next_log, one.next_logits)}); argmax rolled {argmax_of(next_log)} '{decode_(tr, [argmax_of(next_log)])}', one-row session {argmax_of(one.next_logits)} '{decode_(tr, [argmax_of(one.next_logits)])}'; the two-row control {mismatch_exact(two.dn.state, one.dn.state)} state elements apart\n")
+            t |> equal(state_off, 0, "the rolled-back deltanet state is the one-row session's bit for bit ({state_off} elements apart)")
+            t |> equal(conv_off, 0, "the rolled-back conv history is the one-row session's bit for bit ({conv_off} elements apart)")
+            t |> equal(logits_off, 0, "the next plain step's logits are the one-row session's next step bit for bit ({logits_off} elements apart)")
+            t |> success(mismatch_exact(two.dn.state, one.dn.state) > 0, "control: the state after the verify's two rows misses the one-row session's")
+            t |> success(mismatch_exact(next_log, two.next_logits) > 0, "control: the next step misses the two-row session's next step")
             delete two
             delete one
             delete rolled
@@ -846,23 +953,24 @@ def test_gpu_resident_hybrid_mtp_verify_reject_asked(t : T?) {
             var before <- [for (x in s.logits); x]
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
+            let reject0 = get_mtp_force_reject_every()
             set_mtp_force_reject_every(1l)
             let rollbacks0 = moe_gpu_resident_rollbacks()
             s.pick_asked = true
             var acc = 0l
             let hit = mtp_spec_eval(tr, s, DRAFT_TOKEN, acc)
             s.pick_asked = false
-            set_mtp_force_reject_every(0l)
+            set_mtp_force_reject_every(reject0)
             set_mtp_spec(spec0)
             t |> success(!hit, "the forced reject rejected the draft")
             t |> equal(moe_gpu_resident_rollbacks(), rollbacks0 + 1l, "the reject rolled back on the device")
             served_every_call(t)
             t |> success(s.pick_ready, "the reject published a pick for the caller's sample_")
             t |> equal(s.pick_tok, moe_gpu_resident_verify_pick(0l), "the published pick is verify row 0's device pick")
-            t |> equal(apart(s.logits, before), 0l, "the pick-asked round landed no logits: the session's row is the prefill's still")
-            var vhid0 <- row_of(s.mtp_hrows, 0l, c.dim)
+            t |> equal(mismatch_exact(s.logits, before), 0, "the pick-asked round landed no logits: the session's row is the prefill's still")
+            var vhid0 <- copy_span(s.mtp_hrows, 0l, c.dim)
             var kept_h <- [for (x in s.mtp_h); x]
-            t |> equal(apart(kept_h, vhid0), 0l, "the reject re-seeded the carry from verify row 0's hidden, which lands under the pick ask")
+            t |> equal(mismatch_exact(kept_h, vhid0), 0, "the reject re-seeded the carry from verify row 0's hidden, which lands under the pick ask")
             t |> equal(s.mtp_h_pos1, pos + 1l, "the carry sits at the token's row")
             let next = sample_(s, SamplingParams())
             t |> equal(next, s.pick_tok, "sample_ returns the published pick")
@@ -883,7 +991,6 @@ def test_gpu_resident_hybrid_mtp_verify_reject_asked(t : T?) {
 }
 
 let private NAN_BITS = 0x7FC00000u
-let private ROUNDS = 6l   //! the speculative rounds the device-vs-CPU cell runs, one fed token each
 
 //! the NextN head's K row `row` of the session's cache as floats, whichever codec the session carries
 def private head_k_row_f32(tr : Model; var s : Session; row : int64) : array<float> {
@@ -939,43 +1046,10 @@ def private poison_residual_rows(var s : Session; n : int64) {
     }
 }
 
-def private all_finite(a : array<float>) : bool {
-    for (x in a) {
-        if (!(x == x) || x > 3.4e38 || x < -3.4e38) {   // nolint:LINT007 — the NaN test: a NaN is the one float that is not equal to itself
-            return false
-        }
-    }
-    return true
-}
-
-//! the head's rows [0, n) on `gpu` against `cpu` within `HEAD_K_BAR_REL` of each CPU row's max; the CPU row one down misses every device row by `HEAD_K_CONTROL_BARS` bars, the tightest such miss logged beside the widest
-def private head_rows_within(t : T?; what : string; gpu, cpu : array<array<float>>; n : int64) {
-    var worst = 0.0
-    var worst_row = -1l
-    var worst_bar = 0.0
-    var tight_off = 0.0
-    var tight_bar = 0.0
-    var tight_row = -1l
-    for (r in range64(n)) {
-        let bar = HEAD_K_BAR_REL * logits_maxabs(cpu[r])
-        let diff = logits_maxdiff(gpu[r], cpu[r])
-        if (diff > worst) {
-            worst = diff
-            worst_row = r
-            worst_bar = bar
-        }
-        t |> success(diff <= bar, "{what}: the device's head K row {r} is within {bar} of the CPU warm's row (maxdiff {diff})")
-        if (r + 1l < n) {
-            let off = logits_maxdiff(gpu[r], cpu[r + 1l])
-            if (tight_row < 0l || off * tight_bar < tight_off * bar) {
-                tight_off = off
-                tight_bar = bar
-                tight_row = r
-            }
-            t |> success(off >= HEAD_K_CONTROL_BARS * bar, "{what} control: the CPU row one down misses device row {r} by {HEAD_K_CONTROL_BARS} bars (maxdiff {off}, bar {bar})")
-        }
-    }
-    to_log(LOG_INFO, "{what}: {n} head rows, the widest miss {worst} at row {worst_row} (bar {worst_bar}); the tightest one-down control {tight_off} at row {tight_row} (bar {tight_bar}, {tight_bar > 0.0 ? tight_off / tight_bar : 0.0} bars)\n")
+//! the head's K rows on `gpu` against the CPU warm's within `HEAD_K_BAR_REL` of each CPU row's max, the CPU row one down as the
+//! control missing every device row by `HEAD_K_CONTROL_BARS` bars
+def private head_rows_within(t : T?; what : string; gpu, cpu : array<array<float>>) {
+    rows_within_control(t, what, gpu, cpu, HEAD_K_BAR_REL, 1l, HEAD_K_CONTROL_BARS, $(r) => "head K row {r}")
 }
 
 [test]
@@ -997,19 +1071,20 @@ def test_gpu_resident_hybrid_mtp_xb_poison(t : T?) {
             var s <- create_session(tr, mirror_kv_dtype())
             poison_residual_rows(s, DRAFT_PROMPT * tr.config.dim)
             prefill_warm(tr, s, prompt)
-            t |> equal(apart(s.mtp_h, h0), 0l, "the poisoned prefill lands the clean prefill's carry bit for bit")
+            t |> equal(mismatch_exact(s.mtp_h, h0), 0, "the poisoned prefill lands the clean prefill's carry bit for bit")
             let drafts0 = moe_gpu_resident_drafts()
             var got <- draft_from(tr, s, DRAFT_TOKEN, row, h0)
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the resident head drafted")
             served_every_call(t)
             let ag = argmax_of(got.logits)
-            to_log(LOG_INFO, "poisoned x_b draft: argmax {ag} '{decode_(tr, [ag])}' ({got.logits[ag]}), the clean prefill's {argmax_of(want.logits)} ({want.logits[argmax_of(want.logits)]})\n")
+            let aw = argmax_of(want.logits)
+            to_log(LOG_INFO, "poisoned x_b draft: argmax {ag} '{decode_(tr, [ag])}' ({got.logits[ag]}), the clean prefill's {aw} '{decode_(tr, [aw])}' ({want.logits[aw]}); logits maxdiff {logits_maxdiff(got.logits, want.logits)}, hidden maxdiff {logits_maxdiff(got.h, want.h)}\n")
             t |> success(all_finite(got.logits), "every landed logit is finite")
-            t |> equal(apart(got.logits, want.logits), 0l, "the poisoned prefill's draft logits are the clean prefill's bit for bit ({apart(got.logits, want.logits)} elements apart)")
-            t |> equal(apart(got.h, want.h), 0l, "the poisoned prefill's draft hidden is the clean prefill's bit for bit")
+            t |> equal(mismatch_exact(got.logits, want.logits), 0, "the poisoned prefill's draft logits are the clean prefill's bit for bit ({mismatch_exact(got.logits, want.logits)} elements apart)")
+            t |> equal(mismatch_exact(got.h, want.h), 0, "the poisoned prefill's draft hidden is the clean prefill's bit for bit")
             t |> equal(moe_gpu_resident_draft_pick(), pick_clean, "the device pick is the clean prefill's")
             var one_row_back <- draft_from(tr, s, prompt[row], row - 1l, h0)
-            t |> success(apart(one_row_back.logits, want.logits) > 0l, "control: the draft one row back misses the clean draft's logits")
+            t |> success(mismatch_exact(one_row_back.logits, want.logits) > 0, "control: the draft one row back misses the clean draft's logits")
             delete one_row_back
             delete got
             delete want
@@ -1021,71 +1096,51 @@ def test_gpu_resident_hybrid_mtp_xb_poison(t : T?) {
     }
 }
 
+//! the head's K rows [0, nprompt - 1) the window chain warmed over an `nprompt`-token prompt, read back to the host, against the
+//! CPU warm's rows on the same prompt (the model dropped): within the head-row bar, the CPU row one down as the control
+def private head_warm_rows_cell(t : T?; nprompt : int64) {
+    if (!mtp_carry_ready(t)) return
+    var tr <- load_mtp_carrier(t, 1l)
+    with_job_que() {
+        setup_dasllama_jobque_()
+        var prompt <- [for (i in range64(nprompt)); 1000l + (i * 37l) % 5000l]
+        let n = nprompt - 1l
+        var s <- create_session(tr, mirror_kv_dtype())
+        let served0 = moe_gpu_resident_prefills()
+        prefill_warm(tr, s, prompt)
+        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {nprompt}-token prompt")
+        t |> equal(moe_gpu_resident_head_rows(s), n, "the region holds {n} head rows after the prompt warm: one per prompt row but the last, whose next token is not known yet")
+        served_every_call(t)
+        var gpu <- head_k_rows_f32(tr, s, n)
+        delete s
+        moe_gpu_drop_model()
+        var c <- create_session(tr, mirror_kv_dtype())
+        prefill_warm(tr, c, prompt)
+        var cpu <- head_k_rows_f32(tr, c, n)
+        t |> equal(long_length(gpu), n, "{n} device head rows read back")
+        head_rows_within(t, "head warm ({nprompt} tokens)", gpu, cpu)
+        delete c
+        delete gpu
+        delete cpu
+        delete prompt
+    }
+    delete tr
+}
+
 [test]
 def test_gpu_resident_hybrid_mtp_head_warm(t : T?) {
-    t |> run("Qwen3.5-0.8B-MTP: the head's K rows the window chain warmed, read back to the host, against the CPU warm's rows on the same prompt within the deltanet bar, the row one down past it") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_job_que() {
-            setup_dasllama_jobque_()
-            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
-            let n = DRAFT_PROMPT - 1l
-            var s <- create_session(tr, mirror_kv_dtype())
-            let served0 = moe_gpu_resident_prefills()
-            prefill_warm(tr, s, prompt)
-            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
-            t |> equal(moe_gpu_resident_head_rows(s), n, "the region holds {n} head rows after the prompt warm: one per prompt row but the last, whose next token is not known yet")
-            served_every_call(t)
-            var gpu <- head_k_rows_f32(tr, s, n)
-            delete s
-            moe_gpu_drop_model()   //! the CPU warm from here
-            var c <- create_session(tr, mirror_kv_dtype())
-            prefill_warm(tr, c, prompt)
-            var cpu <- head_k_rows_f32(tr, c, n)
-            head_rows_within(t, "head warm", gpu, cpu, n)
-            delete c
-            delete gpu
-            delete cpu
-            delete prompt
-        }
-        delete tr
+    t |> run("Qwen3.5-0.8B-MTP: the head's K rows the window chain warmed, read back to the host, against the CPU warm's rows on the same prompt within twice the deltanet bar, the row one down past it") @(t : T?) {
+        head_warm_rows_cell(t, DRAFT_PROMPT)
     }
-}
-
-//! one speculative round's record: the draft the round verified, whether it accepted it, and the position it left
-struct private RoundRec {
-    draft : int64
-    hit : bool
-    n_past : int64
-}
-
-//! `ROUNDS` speculative rounds on `s` from the prompt's end, one fed token each
-def private spec_rounds(tr : Model; var s : Session; toks : array<int64>) : array<RoundRec> {
-    var out : array<RoundRec>
-    out |> reserve(long_length(toks))
-    let spec0 = get_mtp_spec()
-    set_mtp_spec(true)
-    for (tok in toks) {
-        var acc = 0l
-        let hit = mtp_spec_eval(tr, s, tok, acc)
-        out |> push(RoundRec(draft = s.mtp_vbatch[1], hit = hit, n_past = s.n_past))
+    t |> run("Qwen3.5-0.8B-MTP: the same over two windows - the second window's carry row is its row 0, the head's rope a row behind the trunk's - every head K row of a prompt one window plus 88 rows long against the CPU warm's") @(t : T?) {
+        window_pin(t)
+        head_warm_rows_cell(t, PF_WINDOW_ROWS + 88l)
     }
-    set_mtp_spec(spec0)
-    return <- out
-}
-
-//! `toks` through `ROUNDS`-style rounds on `s` with the draft seat unset: the CPU head drafts over the host's rows, which the
-//! declined seat hydrates from the device first, and the device verifies
-def private declined_draft_rounds(tr : Model; var s : Session; toks : array<int64>) : array<RoundRec> {
-    let seat = unset_rdec_draft()
-    var out <- spec_rounds(tr, s, toks)
-    reinstall_rdec_draft(seat)
-    return <- out
 }
 
 [test]
 def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
-    t |> run("Qwen3.5-0.8B-MTP: six speculative rounds on the resident driver against the CPU round from the same prompt - every round's draft, accept and position equal; then two rounds whose draft the seat declines - the CPU head over the head's rows hydrated from the device - against the CPU round, the hydrated rows within the deltanet bar, the CPU round on poisoned head rows as the control") @(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: six speculative rounds on the resident driver against the CPU round from the same prompt - every round's draft the CPU round's or a near-tie of it, accept and position equal while the drafts agree; then two rounds whose draft the seat declines - the CPU head over the head's rows hydrated from the device - against the CPU round, the hydrated rows within twice the deltanet bar, the CPU round on poisoned head rows as the control") @(t : T?) {
         if (!mtp_carry_ready(t)) return
         var tr <- load_mtp_carrier(t, 1l)
         with_job_que() {
@@ -1104,41 +1159,52 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             let nrows = s.n_past - 1l
             t |> equal(moe_gpu_resident_head_rows(s), nrows, "the region holds {nrows} head rows after six rounds, the session's position {s.n_past} less one: head row i needs the token at i + 1, the last committed token sits at {s.n_past - 1l}, so rows 0 .. {s.n_past - 2l} exist - a reject cuts the count to pos + a, an accept counts pos + 1, both the position less one")
             t |> success(moe_gpu_resident_head_host_rows(s) < nrows, "the rounds' head rows stayed on the device: the host's copy stops short of them ({moe_gpu_resident_head_host_rows(s)} of {nrows} rows)")
-            var g7 <- declined_draft_rounds(tr, s, [toks[ROUNDS]])
+            var round7 <- declined_draft_rounds(tr, s, [toks[ROUNDS]])
             t |> equal(moe_gpu_resident_drafts(), drafts0 + ROUNDS, "the seventh round's draft ran on the CPU head: the unset seat left the counter")
             t |> equal(moe_gpu_resident_verifies(), verifies0 + ROUNDS + 1l, "... and its verify on the device")
             var hydrated_rows <- head_k_rows_f32(tr, s, nrows)
-            var g8 <- declined_draft_rounds(tr, s, [toks[ROUNDS + 1l]])
+            var round8 <- declined_draft_rounds(tr, s, [toks[ROUNDS + 1l]])
             served_every_call(t)
             delete s
-            moe_gpu_drop_model()   //! the CPU round from here
+            moe_gpu_drop_model()
             var c <- create_session(tr, mirror_kv_dtype())
             prefill_warm(tr, c, prompt)
-            var cpu <- spec_rounds(tr, c, fed)
+            var cpu <- spec_rounds(tr, c, fed, false, false, true)
+            var agreed = true   // once a near-tie flips a draft the two sessions part, and the rounds after it are no longer the same round
             for (r in range64(ROUNDS)) {
                 to_log(LOG_INFO, "round {r}: device draft {gpu[r].draft} '{decode_(tr, [gpu[r].draft])}' hit {gpu[r].hit} at {gpu[r].n_past}, CPU draft {cpu[r].draft} '{decode_(tr, [cpu[r].draft])}' hit {cpu[r].hit} at {cpu[r].n_past}\n")
-                t |> equal(gpu[r].draft, cpu[r].draft, "round {r}: the device draft is the CPU round's")
-                t |> equal(gpu[r].hit, cpu[r].hit, "round {r}: both rounds accepted or both rejected")
-                t |> equal(gpu[r].n_past, cpu[r].n_past, "round {r}: both rounds left the session at one position")
+                if (!agreed) {
+                    to_log(LOG_INFO, "round {r}: an earlier near-tie parted the sessions - the accept and position are not compared\n")
+                    continue
+                }
+                agreed = pick_agrees(t, tr, "round {r} draft", gpu[r].draft, cpu[r].draft_logits, DN_LOGIT_BAR_REL)
+                if (agreed) {
+                    t |> equal(gpu[r].hit, cpu[r].hit, "round {r}: both rounds accepted or both rejected")
+                    t |> equal(gpu[r].n_past, cpu[r].n_past, "round {r}: both rounds left the session at one position")
+                }
             }
-            t |> equal(c.n_past - 1l, nrows, "the CPU rounds left the session where the device rounds did")
+            if (agreed) {
+                t |> equal(c.n_past - 1l, nrows, "the CPU rounds left the session where the device rounds did")
+            }
             var crows <- head_k_rows_f32(tr, c, nrows)
-            head_rows_within(t, "six rounds, hydrated", hydrated_rows, crows, nrows)
-            var c7 <- spec_rounds(tr, c, [toks[ROUNDS]])
-            to_log(LOG_INFO, "round 6 (declined draft): CPU head over hydrated rows drafts {g7[0].draft} '{decode_(tr, [g7[0].draft])}' hit {g7[0].hit} at {g7[0].n_past}, the CPU round {c7[0].draft} '{decode_(tr, [c7[0].draft])}' hit {c7[0].hit} at {c7[0].n_past}\n")
-            t |> equal(g7[0].draft, c7[0].draft, "round 6: the CPU head over the hydrated rows drafts what the CPU round drafts")
-            t |> equal(g7[0].hit, c7[0].hit, "round 6: both rounds accepted or both rejected")
-            t |> equal(g7[0].n_past, c7[0].n_past, "round 6: both rounds left the session at one position")
+            t |> equal(long_length(hydrated_rows), nrows, "{nrows} hydrated head rows read back")
+            head_rows_within(t, "six rounds, hydrated", hydrated_rows, crows)
+            var c7 <- spec_rounds(tr, c, [toks[ROUNDS]], false, false, true)
+            to_log(LOG_INFO, "round 6 (declined draft): CPU head over hydrated rows drafts {round7[0].draft} '{decode_(tr, [round7[0].draft])}' hit {round7[0].hit} at {round7[0].n_past}, the CPU round {c7[0].draft} '{decode_(tr, [c7[0].draft])}' hit {c7[0].hit} at {c7[0].n_past}\n")
+            if (agreed && pick_agrees(t, tr, "round 6 draft (the CPU head over the hydrated rows)", round7[0].draft, c7[0].draft_logits, DN_LOGIT_BAR_REL)) {
+                t |> equal(round7[0].hit, c7[0].hit, "round 6: both rounds accepted or both rejected")
+                t |> equal(round7[0].n_past, c7[0].n_past, "round 6: both rounds left the session at one position")
+            }
             poison_head_rows(tr, c, c.n_past - 1l)
             var c8 <- spec_rounds(tr, c, [toks[ROUNDS + 1l]])
             var pl <- [for (x in c.mtp_logits); x]
-            to_log(LOG_INFO, "control round: the draft over hydrated rows {g8[0].draft}, the CPU draft over poisoned head rows {c8[0].draft} (its verify row 0 finite {all_finite(pl)})\n")
-            t |> success(g8[0].draft != c8[0].draft || !all_finite(pl), "control: the CPU round over poisoned head rows drafts another token or lands non-finite rows")
+            to_log(LOG_INFO, "control round: the draft over hydrated rows {round8[0].draft} '{decode_(tr, [round8[0].draft])}', the CPU draft over poisoned head rows {c8[0].draft} '{decode_(tr, [c8[0].draft])}' (its verify row 0 finite {all_finite(pl)})\n")
+            t |> success(round8[0].draft != c8[0].draft || !all_finite(pl), "control: the CPU round over poisoned head rows drafts another token or lands non-finite rows")
             delete pl
             delete c8
             delete c7
-            delete g8
-            delete g7
+            delete round8
+            delete round7
             delete crows
             delete hydrated_rows
             delete cpu
@@ -1146,6 +1212,195 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             delete c
             delete fed
             delete toks
+            delete prompt
+        }
+        delete tr
+    }
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_nonfinite(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: a NaN carry through the resident head lands non-finite logits, and the draft panics naming the row instead of landing a pick") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var s <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, s, prompt)
+            let row = DRAFT_PROMPT - 1l
+            let nan = unsafe(reinterpret<float>(NAN_BITS))
+            for (i in range64(long_length(s.mtp_h))) {
+                s.mtp_h[i] = nan
+            }
+            let drafts0 = moe_gpu_resident_drafts()
+            let why = panic_text_of() $ {
+                forward_mtp(tr, s, DRAFT_TOKEN, row)
+            }
+            to_log(LOG_INFO, "NaN carry draft at row {row}: {empty(why) ? "no panic" : why}\n")
+            t |> success(says(why, "landed non-finite logits") && says(why, "resident draft") && says(why, "row {row}"), "the draft panics on the non-finite row it landed, naming the row: '{why}'")
+            t |> equal(moe_gpu_resident_drafts(), drafts0, "no draft was counted: the panic fired before the pick landed")
+            delete s
+            delete prompt
+        }
+        delete tr
+    }
+}
+
+//! a session prefilled on the device with the speculative warm on, its position and the pass counters of `reason` and the
+//! device counters read before a round; the round of `tok` then runs with the speculative gate on
+struct private PassArm {
+    reason : string
+    passes0 : int64
+    drafts0 : int64
+    verifies0 : int64
+}
+
+def private pass_arm_begin(reason : string) : PassArm
+    => PassArm(reason = reason, passes0 = pass_count(reason), drafts0 = moe_gpu_resident_drafts(), verifies0 = moe_gpu_resident_verifies())
+
+//! one speculative round of `tok` on `s`, any panic's text answered (the round's outcome logged decoded)
+[cold_path]
+def private pass_arm_round(tr : Model; var s : Session; tok : int64) : string {
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(true)
+    var hit = false
+    let why = panic_text_of() $ {
+        var acc = 0l
+        hit = mtp_spec_eval(tr, s, tok, acc)
+    }
+    set_mtp_spec(spec0)
+    let d = s.mtp_vbatch[1]
+    to_log(LOG_INFO, "round of {tok} '{decode_(tr, [tok])}': draft {d} '{decode_(tr, [d])}' hit {hit} at {s.n_past}; {empty(why) ? "no panic" : why}\n")
+    return why
+}
+
+//! the arm's witnesses: no panic, `arm.reason` passed at least `min_passes` calls, the device draft counter moved by `drafts`, the verify counter unmoved
+def private pass_arm_holds(t : T?; arm : PassArm; why : string; min_passes, drafts : int64) {
+    t |> success(empty(why), "{arm.reason}: the round completed without a panic ({why})")
+    let n = pass_count(arm.reason) - arm.passes0
+    t |> success(n >= min_passes, "{arm.reason}: at least {min_passes} call(s) passed to the CPU rails as {arm.reason} ({n} counted)")
+    t |> equal(moe_gpu_resident_drafts() - arm.drafts0, drafts, "{arm.reason}: {drafts} device draft(s) - the draft seat {drafts > 0l ? "has no such arm and served" : "passed too"}")
+    t |> equal(moe_gpu_resident_verifies() - arm.verifies0, 0l, "{arm.reason}: no device verify ran")
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_pass_arms(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: an f32 session under the f16 mirror - the prefill, the draft and the verify each pass to the CPU rails as codec, the round completing on the CPU") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        if (mirror_kv_dtype() != KVDtype.f16) {
+            t |> skip("the codec arm shapes an f32 session under the f16 mirror; under DASLLAMA_VK_KV32=1 the mirror is f32")
+            return
+        }
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var s <- create_session(tr, KVDtype.f32)
+            let arm = pass_arm_begin("codec")
+            prefill_warm(tr, s, prompt)
+            let why = pass_arm_round(tr, s, DRAFT_TOKEN)
+            pass_arm_holds(t, arm, why, 3l, 0l)
+            delete s
+            delete prompt
+        }
+        delete tr
+    }
+    t |> run("Qwen3.5-0.8B-MTP: a session the device never homed - its carry copied from a homed one - drafts and verifies on the CPU rails as unhomed") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var homed <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, homed, prompt)
+            var s <- create_session(tr, mirror_kv_dtype())
+            copy_floats(homed.mtp_h, 0l, s.mtp_h, 0l, long_length(homed.mtp_h))
+            s.mtp_h_pos1 = DRAFT_PROMPT
+            s.n_past = DRAFT_PROMPT
+            let arm = pass_arm_begin("unhomed")
+            let why = pass_arm_round(tr, s, DRAFT_TOKEN)
+            pass_arm_holds(t, arm, why, 2l, 0l)
+            delete s
+            delete homed
+            delete prompt
+        }
+        delete tr
+    }
+    t |> run("Qwen3.5-0.8B-MTP: a round five rows past the region's rows - the draft, which has no gap arm, serves on the device; the verify passes as gap") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var s <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, s, prompt)
+            t |> equal(moe_gpu_resident_rows(s), DRAFT_PROMPT, "the region's rows end at the prompt")
+            s.n_past = DRAFT_PROMPT + 5l
+            s.mtp_h_pos1 = DRAFT_PROMPT + 5l
+            let arm = pass_arm_begin("gap")
+            let why = pass_arm_round(tr, s, DRAFT_TOKEN)
+            pass_arm_holds(t, arm, why, 1l, 1l)
+            delete s
+            delete prompt
+        }
+        delete tr
+    }
+    t |> run("Qwen3.5-0.8B-MTP: a round off the recurrent state's position - the draft serves on the device; the verify passes as rewind") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var s <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, s, prompt)
+            t |> equal(s.dn_pos, DRAFT_PROMPT, "the recurrent state sits at the prompt's end")
+            s.dn_pos = DRAFT_PROMPT - 1l
+            let arm = pass_arm_begin("rewind")
+            let why = pass_arm_round(tr, s, DRAFT_TOKEN)
+            pass_arm_holds(t, arm, why, 1l, 1l)
+            delete s
+            delete prompt
+        }
+        delete tr
+    }
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_head_off(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: with the NextN head kept off the device (the draft seat unset for the load) the plan carries no verify rows, so a round's verify passes as verify_rows and the CPU verify's two-row window passes the resident prefill as verify_window - no panic, the verify counter unmoved, the driver still armed - and the CPU verify's row 0 sits within the deltanet bar of the CPU chain's step of the same token, the prefill's logits as the control") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l, true)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            t |> equal(rdec_verify_rows(), 0l, "the plan carries no verify rows: the head is off the device")
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            let pos = DRAFT_PROMPT
+            var s <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, s, prompt)
+            t |> equal(moe_gpu_resident_head_rows(s), 0l, "the chain warmed no head row: the head is off the device")
+            let rows_arm = pass_arm_begin("verify_rows")
+            let win0 = pass_count("verify_window")
+            let why = pass_arm_round(tr, s, DRAFT_TOKEN)
+            pass_arm_holds(t, rows_arm, why, 1l, 0l)
+            t |> success(pass_count("verify_window") - win0 >= 1l, "the resident prefill declined the CPU verify's window as verify_window ({pass_count("verify_window") - win0} counted)")
+            t |> success(moe_gpu_resident_active(), "the driver stays armed on the model after the CPU verify")
+            var truth <- [for (x in s.mtp_logits); x]
+            delete s
+            moe_gpu_drop_model()
+            var c <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, c, prompt)
+            var pf <- [for (x in c.logits); x]
+            forward(tr, c, DRAFT_TOKEN, pos)
+            var step <- [for (x in c.logits); x]
+            let at = argmax_of(truth)
+            let ac = argmax_of(step)
+            to_log(LOG_INFO, "head off: the CPU verify's row 0 argmax {at} '{decode_(tr, [at])}' ({truth[at]}), the CPU chain's step {ac} '{decode_(tr, [ac])}' ({step[ac]}); maxdiff {logits_maxdiff(truth, step)}\n")
+            row_within(t, "head off: the CPU verify's row 0 over the rows the decline brought down", truth, step, pf)
+            delete step
+            delete pf
+            delete c
+            delete truth
             delete prompt
         }
         delete tr

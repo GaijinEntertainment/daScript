@@ -3,8 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md`.
 
-**Removing `REVIEW.das`'s check that no two git-tracked `.das` files declare the same `shared`
-module name is a defect.**
+**Removing or weakening `REVIEW.das`'s check that no two git-tracked `.das` files declare the
+same `shared` module name is a defect.**
 
 **A diff that lets two git-tracked `.das` files declare the same `shared` module name adds
 `TOLERATED_SHARED_TWINS` rows naming every file that may declare it, and states in those rows why

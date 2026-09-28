@@ -117,9 +117,6 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
 4. **Real batched decode** - the resident mirror is single-sequence; batch rows round-trip
    their KV per step (`rdec_sync_kv` in, `rdec_read_kv` out). Metal has a true batched driver
    (P4). Options: multi-sequence mirror slabs, or per-row device KV like Metal's `KVMirror`.
-5. **MTP / speculative decode** - Metal-only today (`metal_mtp_spec_eval`, same-slab verify).
-   Register the vulkan `mtp_spec`/`mtp_seam` overrides once batch (4) exists - the verify step
-   is a B=2 batch.
 6. **mx4 / q51 device kernels** - absent on Vulkan (CPU+Metal only). Needed before gpt-oss
    (mx4 experts) or gemma-4-26B (q51 stacks) can go resident on PC.
 7. **Tune-race parity** - Metal races tensor-op twins per box (`metal_tensor_race*`); Vulkan
@@ -1679,8 +1676,10 @@ module) is independent and can land any time - it is pure structure.
     two setters are `mtp_walk_sampled` and `rdec_land_pick`, and `mtp_round_begin` panics on
     either latch left set. The work: one `pre_drawn` / `pre_tok` pair, both setters writing it,
     the six `test_mtp_sampled_walk.das` assertions reading the one name - after saying in one
-    line that a speculative round and a device pick are never live on one session in one step
-    (the scheduler's speculative arm never asks a pick).
+    line that the two latches are never both set on one session: the sampled walk parks a draw
+    and rides no pick ask, a round under the scheduler's per-tick pick ask publishes the committed
+    row's pick through `land_pick` and parks no draw, and `mtp_round_begin` panics on either
+    latch left set.
 87. **The mistral3 family has no batched evidence.** Mistral-Small-3.1-24B-Instruct-2503 Q4_K_M
     (`performance/model_specs.das`, 14 GB) serves through the N-row command like the other dense
     K-quant carriers, but no box of ours stocks it beside its models, so no regions file pins its
@@ -1991,15 +1990,17 @@ module) is independent and can land any time - it is pure structure.
     around the device draft and verify, and a reject of a verify the seat served rolls the region
     back on the device from the copies the verify command took - no snapshot, no replayed step
     (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`, the rollback seat). A verify the
-    seat declines runs the CPU two-row prefill over the snapshot the round then takes: a hybrid's
-    passes to the CPU rails as `continuation`, and a model with no recurrent layer (GLM-4.5-Air)
-    has it served by the window chain, which leaves the host `x_b` the CPU verify's classifier
-    reads unwritten, so the round panics there by name. `test_mtp.das`'s sessions carry f32 K/V,
-    so they reach the driver only under `DASLLAMA_VK_KV32=1`. The work, in Metal's shape
-    (`ARCHITECTURE_GPU_MTP.md`) on the resident driver: the round seat at depth k (the verify's
-    per-row planes and the rollback scratch already hold the box knob's depth plus one, eight
-    rows at most, and the scratch's rows serve a reject to any `a < k`); then the joint verify
-    across streams and the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
+    seat declines runs the CPU two-row prefill over the snapshot the round then takes, inside the
+    verify window the resident prefill declines by name
+    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window`): a hybrid's passes to the CPU rails,
+    and a routed-head carrier (GLM-4.5-Air's shape - no recurrent layer, a head the driver
+    declines) is served by the CPU verify under the window with its trunk resident.
+    `test_mtp.das`'s sessions carry f32 K/V, so they reach the driver only under
+    `DASLLAMA_VK_KV32=1`. What is still owed, in Metal's shape (`ARCHITECTURE_GPU_MTP.md`) on the
+    resident driver: the Vulkan round seat (`register_mtp_round_override("vulkan", ...)`) - a
+    round at depth k > 1 (the verify's per-row planes and the rollback scratch already hold the
+    box knob's depth plus one, eight rows at most, and the scratch's rows serve a reject to any
+    `a < k`) and the joint verify across streams - then the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
     Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at
     depth 3 on the M5 Max), gemma-4-26B with the assistant drafter as the second round kind; the
     invariance cells of `tests/test_mtp.das` and the scheduler arm are the parity, `lcpp_bench

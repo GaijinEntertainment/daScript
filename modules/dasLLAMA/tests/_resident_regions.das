@@ -20,6 +20,7 @@ require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_r
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
+require _resident_feed   // served_every_call: the shared served witness
 
 // The resident driver's mirror regions (a small carrier under DASLLAMA_GPU=1): two
 // sessions hold their K/V on the device at once, one region each. The instrument is the driver
@@ -100,12 +101,13 @@ def private hold_within(t : T?; got, want, control : array<float>; what : string
 }
 
 def private load_regions(t : T?; file : string; regions : int64) : Model {
+    let regions0 = gpu_resident_regions_want()
+    let route0 = gpu_resident_route_lever()   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
     set_gpu_resident_regions_(regions)
-    let route0 = gpu_want_resident()   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
     set_gpu_resident_route(true)
     var tr <- load_model_(path_join(models_dir(), file), QuantMode.q8)
     set_gpu_resident_route(route0)
-    set_gpu_resident_regions_(1l)
+    set_gpu_resident_regions_(regions0)
     tr.config.seq_len = min(tr.config.seq_len, REGIONS_RIG_CTX)
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed at {regions} regions (the load log names any decline)")
     return <- tr
@@ -146,9 +148,7 @@ def private interleaved_single_steps_body(t : T?; tr : Model; pa, pb : array<int
         forward(tr, sb, fb[st], long_length(pb) + st)
         hold_equal(t, sb.logits, rb[st + 1l], "session B step {st}")
     }
-    var passes <- gpu_cpu_passes_()
-    t |> equal(length(passes), 0, "the device served every call: {passes}")
-    delete passes
+    served_every_call(t)
     delete sa
     delete sb
     delete ra
@@ -251,9 +251,7 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
             continue_at(t, tr, 57l, 40l)     // a short tail inside the first window
             continue_at(t, tr, WINDOW_ROWS + 88l, WINDOW_ROWS)   // the cut on the window boundary
             continue_at(t, tr, WINDOW_ROWS + 388l, 300l)   // the tail runs a whole window from an unaligned start, then a remainder
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call: {passes}")
-            delete passes
+            served_every_call(t)
         }
         delete tr
     }
@@ -282,9 +280,7 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
             forward(tr, steps, turn2[19], 40l + STEPS + 19l)
             hold_within(t, chat.logits, steps.logits, before, "the second turn through the window chain against the same tokens stepped one by one")
             delete before
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call: {passes}")
-            delete passes
+            served_every_call(t)
             delete chat
             delete steps
             delete turn1
@@ -354,9 +350,7 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     }
     t |> equal(sa.rdec_gen, gen_a, "row A kept its claim through every step: its history never came up from the host again")
     t |> equal(sb.rdec_gen, gen_b, "row B kept its claim through every step")
-    var passes <- gpu_cpu_passes_()
-    t |> equal(length(passes), 0, "the device served every call: {passes}")
-    delete passes
+    served_every_call(t)
     static_if (typeinfo builtin_module_exists(vulkan)) {   //! the rows stepped through the N-row command, not a row at a time: a declined command passes the bars above the same
         let nrows = vk_rdec_token_n_rows()
         t |> success(nrows >= 2l, "the N-row token command serves the two rows at once ({nrows} rows)")
@@ -490,9 +484,7 @@ def cell_regions_batched_first(t : T?; file : string) {
                 got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
                 got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
             }
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call: {passes}")
-            delete passes
+            served_every_call(t)
             var ra <- logits_alone(tr, pa, fa)
             var rb <- logits_alone(tr, pb, fb)
             for (st in range64(STEPS)) {
@@ -678,9 +670,7 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
             eval(tr, b, tail)
             t |> success(!gpu_device_kv_adopt(third, claim2, 40l), "a claim dies when another session takes its region")
             gpu_device_kv_park(third)
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call: {passes}")
-            delete passes
+            served_every_call(t)
             delete a
             delete b
             delete third
@@ -795,9 +785,7 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
             // the scheduler's own chunk is 64 tokens: eleven calls, were the device window not the floor
             t |> equal(calls, gpu_device_prefill_continues(tr) ? 2l : 1l, "{long_length(long_prompt)} tokens reach the device in window-sized chunks, or whole where the model's prefill cannot continue ({calls} calls)")
             t |> equal(length(toks_of(events, 1l)), 2, "and the stream ran its two tokens")
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call: {passes}")
-            delete passes
+            served_every_call(t)
             set_device_kv(sch, false)
             delete events
             delete long_prompt
@@ -1082,9 +1070,7 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
             }
             let stepped = rdec_nrow_steps() - steps0
             t |> equal(STEPS - 1l, stepped, "the two-row step and every three-row step went through the N-row command")
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call: {passes}")
-            delete passes
+            served_every_call(t)
             var ra <- logits_alone(tr, pa, fa)
             var rb <- logits_alone(tr, pb, fb)
             var fc_short <- [for (i in range64(STEPS - 2l)); fc[i]]

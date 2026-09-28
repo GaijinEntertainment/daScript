@@ -89,10 +89,13 @@ device is a defect.** That line is the Vulkan driver naming a call it handed bac
 `resident override passed a call` updates, in the same change, the rules of this list that read
 that text.**
 
-**A diff that cites as parity evidence a driver-against-itself compare is a defect; such a
-compare is evidence for a `PERF_LEDGER.md` row only.**
+**A driver-against-itself compare cited as GPU-vs-CPU parity evidence is a defect** - it is
+evidence for a `PERF_LEDGER.md` row; an equivalence cell, two GPU-served arms held to each other
+as a claim about the driver alone, sits outside this checklist.
 
-**A diff that adds a bar a parity run holds a serving call's output to, or changes a bar's constant
-or the statistic the constant multiplies, adds a `PERF_LEDGER.md` row in the same change naming
-the bar's constant and value, the reading it comes from and the box that read it.** A parity run is
-`harness/parity.das`, `benchmarks/lcpp_bench.das --parity` or a `tests/run.das` cell.
+**A diff that holds a serving call's output to a bar in a parity run where that output was not
+held to that bar before - a new bar, or an existing bar on an output it did not cover - or
+changes a bar's constant or the statistic the constant multiplies, adds a `PERF_LEDGER.md` row
+in the same change naming the bar's constant and value, the reading it comes from and the box
+that read it.** A parity run is `harness/parity.das`, `benchmarks/lcpp_bench.das --parity` or a
+`tests/run.das` cell.

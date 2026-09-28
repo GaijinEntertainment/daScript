@@ -8,13 +8,15 @@ work: `../followup_metal.md` for Metal, `../followup_vulkan.md` for Vulkan,
 An instrument is a file that times a run itself and reports a wall-clock time or rate as its
 result, printed or returned to a caller that prints it; a file that reads a child process's clock
 is not one, and a serving path's profiler-gated report (a run whose result is the served output,
-the numbers a side report) is not one. A race times two candidates for one computation in one
-process, either of which the run could adopt; an arm is one candidate's timed run; a compared arm
-is one whose output the run reads back and measures against another arm's output or a CPU
-reference; the baseline arm is the arm running the implementation already in use. A served turn
-is one whole request the engine serves - a prefill-plus-decode run, or a transcription or
-synthesis end to end; a board cell is a timed cell whose rows land in `../performance/records/`
-or `../PERF_LEDGER.md`. A result row is a row carrying a time, a rate, or a per-kernel occupancy
+the numbers a side report) is not one. A race times two implementations of one computation in
+one process, either of which the run could adopt - two settings of one lever are not two
+implementations; an arm is one implementation's timed run; a compared arm is one whose output
+the run reads back and measures against another arm's output or a CPU reference; the baseline
+arm is the arm running the implementation already in use. A served turn is one whole request
+the engine serves - a prefill-plus-decode run, or a transcription or synthesis end to end; a
+board cell is a timed cell whose rows land in `../performance/records/<box>.json` or
+`../PERF_LEDGER.md` - a ruler record under `../performance/records/mtp/` is not a board row. A
+result row is a row carrying a time, a rate, or a per-kernel occupancy
 count. An A/B arm is one of two timed runs an instrument makes in ONE process that differ only in
 one flag or environment switch - the lever - set to a different value in each; off/on or graded.
 
@@ -84,11 +86,11 @@ the withdrawal land in the file the affected rows live in - `../performance/reco
 or `../PERF_LEDGER.md`.
 
 **A diff that changes a GPU kernel emitter under this folder - a `[vk_dispatch]` or
-`[metal_kernel]` body or a `*_msl` source global - and ships no before/after rows for a board
-cell or instrument that times the changed kernel names, in the PR body, the compare showing the
-emitted kernel code byte-identical before and after: the `*_msl` source text, the AIR it builds
-into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes** (the engine's own emitters answer to
-`../REVIEW_GPU.md`).
+`[metal_kernel]` body or a `*_msl` source global - either ships before/after rows for a board
+cell or instrument that times the changed kernel, or names in the PR body the compare showing
+the emitted kernel code byte-identical before and after: the `*_msl` source text, the AIR it
+builds into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes** (the engine's own emitters
+answer to `../REVIEW_GPU.md`).
 
 **A diff that adds a result-row mode - to a new or an existing instrument - or changes how such
 a mode reports or exits, makes every result-row mode of that instrument exit non-zero on a run
@@ -106,8 +108,11 @@ lever that silently no-ops prints a 1.00x row nobody can tell from a real tie.
 report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the
 lever helps, so a per-prompt loss hides inside a winning mean.
 
-**A diff that adds or changes a row measured over reps reports one number over ALL of them. A rep
-refuses when it produced no figure, or when it ran on a backend other than the row's backend
-stamp - the backend name the row records as having served the row. One refusing rep drops the
-whole row, and the row reports the refusal and its reason and no number.** A partial row reads
-like a measured one and is a different quantity.
+**A diff that adds or changes a row measured over reps reports one number over ALL of them.**
+
+**A rep of a row measured over reps refuses when it produced no figure, or when it ran on a
+backend other than the row's backend stamp - the backend name the row records as having served
+the row.**
+
+**One refusing rep drops the whole row: the row reports the refusal and its reason and no
+number.** A partial row reads like a measured one and is a different quantity.

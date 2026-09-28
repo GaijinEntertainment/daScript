@@ -740,8 +740,17 @@ synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call sti
 token-for-token against plain decode on the counting and prose fixtures - and on the counting
 fixture again with the file loaded at `QuantMode.q4_0`, the requant tier the round serves - the
 poisoned-verify rollback over the CPU restore and beside it a forced-reject round through the
-engine's seam (on the resident driver the device rollback, its counter the witness; on the CPU
-rail the restore and the replayed step), the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
+engine's seam (both sides decoded in the log; the device rollback counter moves exactly when the
+device verify counter did - once where the resident driver served the verify, not at all where an
+f32 session under an f16 mirror passed both as codec; on the CPU rail the restore and the replayed
+step), `test_mtp_prefill_seam` - the continuation prefill's seam row on the 0.8B under a fake seam
+seat: the head's K row before the window poisoned, a seat that serves leaves it (the seat asked
+once for the window's first token at its start), a declined seat on the planar model lets the CPU
+seam rewrite it (the control), and a declined seat on the model flagged a blob, a fake prefill
+driver claiming the window, leaves it and warns - `test_mtp_verify_window` - the CPU round's
+fail-closed exit: a fake prefill driver that serves the speculative verify window makes the round
+panic naming the driver, the verify-window flag (`mtp_verify_window_active`) read up inside the
+window and down for the prompt's own prefill and after the round - the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
 non-recurrent MTP model, so the only reach of the depth-1 step's shortcut reject (row 0's logits
 and hidden stand, no re-forward): its code fixture runs plain, then again with
 `set_mtp_force_reject_every(3)` rejecting every third draft, both token-for-token against plain
@@ -789,12 +798,20 @@ deltanet cell needs Qwen3.5-0.8B-Q8_0 and `DASLLAMA_GPU=1` on a box whose tier s
 deltanet decode step, and skips otherwise. `test_scheduler_device_mode_switch` holds the device
 mode's two CPU-decidable contracts: only an idle scheduler switches its session kind, and
 `submit` refuses a media request in device mode while it takes the same request with the mode off.
+`test_scheduler_mtp_resident_picks` runs a greedy speculative stream through the scheduler under
+the resident driver on Qwen3.5-0.8B-MTP (skips without it, without the armed tier, or under
+`DASLLAMA_VK_KV32=1`, whose f32 mirror passes the f16 sessions as codec): every tick asks a pick
+(the scheduler's ask, the device verify landing picks alone) and `sample_` consumes each - the
+stream token for token the plain scheduler's on the same rail, and the device verify counter up
+by the drafted rounds; a pick left unconsumed would refuse the next round's opening.
 `test_gpu_tier.das` - model-free: the tier's seat forwarders on doubles - among them the NextN
 draft seat (`test_rdec_draft_seat`: the row, the hydrate start and the pick ask forwarded, the
 double's pick answered and the logits left alone under the ask, the unset seat declining until the
-reinstall) and the same-slab verify seat (`test_rdec_verify_seat`: the rows, the position, the
-pick ask and every landing forwarded, the picks and hidden rows landed under the ask and the
-logits left alone).
+reinstall, and the seat unset again at the cell's end so the process reads it as it found it; its
+second subtest the norms plane's head block - past the trunk's q/k rows and its own q/k slot, never
+on the final norm's row) and the same-slab verify seat (`test_rdec_verify_seat`: the rows, the
+position, the pick ask and every landing forwarded, the picks and hidden rows landed under the ask
+and the logits left alone).
 `test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
 from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
@@ -829,11 +846,19 @@ and `mtp_spec_eval_batch` steps each stream alone; with the owner claiming it, a
 the seats. `test_land_pick` holds the pick a round or a driver lands in a logits row's place
 (`land_pick`): the next `sample_` returns it once and reads the logits row again after, a second
 landing before that `sample_` refuses and leaves the first standing, and the CPU round's opening
-refuses a session whose landed pick nobody sampled.
+refuses a session whose landed pick nobody sampled. `test_mtp_round_panics` holds the round's
+fail-closed exits on a NextN Model shell under fake seats: a pick ask beside a sampled walk panics
+naming both before any draft, and a rollback seat that declines after its verify seat served panics
+naming the override (the verify asked once, the rollback once). `test_mtp_verify_snapshot` holds
+`mtp_verify_two`'s snapshot on the same shell: a recurrent model with a serving verify seat and no
+rollback seat takes the CPU snapshot before the seat (its conv and state buffers sized to the
+shell's history), a non-recurrent one skips it and its reject never reaches a rollback seat, and a
+rollback seat that serves takes none - the reject rolling back through it, committing the token
+alone and re-seeding the carry from row 0's hidden at the token's row.
 
 `test_gpu_resident_hybrid.das` - stocked suite, `-jit` only; the whole-model resident driver on a
 deltanet hybrid under `DASLLAMA_GPU=1`. Each fixture is a row in `../performance/model_specs.das`:
-the Q8 carrier, the K-quant twin, the mixed twin.
+the Q8 carrier, the K-quant twin, the mixed twin, and the NextN-headed MTP twin.
 
 The Q8 carrier is `Qwen3.5-0.8B-Q8_0.gguf`. The resident window chain prefills it - the recurrent
 layers through conv + chunked scan on device state, the gated partial-rope attention over the
@@ -875,19 +900,27 @@ planes prefill on the KHR kq tile (mode 3), and the 6% bar holds there too.
 applies there.
 
 The NextN-headed twin is `Qwen3.5-0.8B-MTP-Q8_0.gguf`, the file whose head makes the driver land
-the speculative carry. `test_gpu_resident_hybrid_mtp_carry` holds the carry - `mtp_h`, the
-post-final-norm hidden, and `mtp_h_pos1`, its row's position plus one - after the resident prefill
-and after each of four resident steps against the CPU chain's: the watermark exact, the hidden
-within the 4% deltanet bar, and the one-step-off control past it.
+the speculative carry; every MTP cell loads it through `load_mtp_carrier`, which pins the resident
+route and the region count for the load and puts both levers back through their getters.
+`test_gpu_resident_hybrid_mtp_carry` holds the carry - `mtp_h`, the post-final-norm hidden, and
+`mtp_h_pos1`, its row's position plus one - with speculation on, after the resident prefill and
+after each of four resident steps against the CPU chain's: the watermark exact, the hidden within
+the 4% deltanet bar, and the one-step-off control past it (`rows_within_control` in
+`_resident_feed.das`, the widest miss and the tightest control logged).
 `test_gpu_resident_hybrid_mtp_carry_batched` holds the same for two sessions in two regions, both
 batched through the N-row command at every step (the step counter witnesses it), each row's carry
-against its session alone on the CPU chain. `test_gpu_resident_hybrid_mtp_draft` holds the NextN
+against its session alone on the CPU chain. `test_gpu_resident_hybrid_mtp_carry_gate` runs the
+same prefill and steps with speculation off: the resident driver lands no carry (the watermark 0
+after the prefill and every step) while the same driver with it on lands one, and the spec-off
+logits sit within the deltanet bar of the spec-on run's at every row with the one-step-off control
+past it. `test_gpu_resident_hybrid_mtp_draft` holds the NextN
 draft the driver's head serves: after a 40-token resident prefill with the speculative warm on (so
 the head's host rows the draft hydrates hold history), one draft at the prompt's last row through
 the seat against the CPU `forward_mtp` on the same token, carry and row - the seat unset on the tier
 for the CPU side (`unset_rdec_draft`, put back after) - the logits and the head's hidden within the
 4% deltanet bar, the CPU draft one row back (of the token the prompt holds there) past it, the
-device pick the argmax of the logits it landed and equal to the CPU draft's, the head's drafts
+device pick the argmax of the logits it landed and, tie-aware (`pick_agrees`: the CPU argmax, or a
+pick whose CPU logit sits within the bar of the argmax's), the CPU draft's, the head's drafts
 counter up by the one device draft alone, and every call served; its second cell runs two
 speculative rounds, the first with the seat unset and the second with it back, the round's draft
 count and the head's counter saying which side drafted each (both rounds verify through the device
@@ -895,8 +928,8 @@ seat). `test_gpu_resident_hybrid_mtp_draft_upload` writes two head rows on the h
 unset seat (the device's row count stays below them, the host's reaches past), drafts on the device
 two rows past the device's (the host's two go up with the draft: the device's count reaches past
 the drafted row, the host's stops below it), brings the drafted row down on the next pass (the
-host's count past it, the host K row moved) and holds the device pick equal to the CPU draft's over
-the same rows.
+host's count past it, the host K row moved) and holds the device pick tie-aware against the CPU
+draft's logits over the same rows.
 `test_gpu_resident_hybrid_mtp_verify` holds the round's same-slab verify: after the same 40-token
 prefill (the host holding the warm's rows below the prompt's last), one device draft at the
 prompt's last row (the device's rows reaching past it, the host's stopping below it), a pass
@@ -930,20 +963,42 @@ session's host residual rows with NaN before the same 40-token resident prefill 
 device draft at the prompt's last row bit for bit the clean prefill's (logits, hidden and pick;
 the carry bit for bit too, every logit finite, the region's head rows at the prompt's end less one),
 the draft one row back as the control; `test_gpu_resident_hybrid_mtp_head_warm` reads the head's
-warmed K rows [0, 39) back from the host cache after the resident prefill and holds each within the
+warmed K rows back from the host cache after the resident prefill and holds each within the
 8% head-row bar (of the CPU row's max: twice the deltanet bar, since the row is the f16-stored
 projection of a hidden row already within the deltanet bar) of the CPU warm's row on the same prompt
 after the model drop, the CPU row one down missing by two bars as the control, the widest miss and
-the tightest control logged; `test_gpu_resident_hybrid_mtp_rounds` runs six speculative rounds on
+the tightest control logged - over the 40-token prompt (rows [0, 39)) and, its second subtest, over
+a prompt one window plus 88 rows long (rows [0, 599): the second window's carry row is its row 0 and
+the head's rope sits a row behind the trunk's; a continuation's first window is unreachable on the
+hybrid, whose resident prefill passes every continuation); `test_gpu_resident_hybrid_mtp_rounds`
+runs six speculative rounds on
 the device (their draft and verify counters, every call served) and six on the CPU from the same
-prompt and fed tokens, every round's draft token, accept and position equal and logged decoded, the
+prompt and fed tokens, every round's draft token tie-aware against the CPU round's draft logits
+(the head drafted once ahead of each CPU round from the same carry, the carry put back) and, while
+the drafts agree, the accept and position equal, all logged decoded - a near-tie that flips a draft
+parts the sessions, and the rounds after it are logged, not compared - the
 region's head rows at the session's position less one with the host's count short of them (the
 rounds' rows stay on the device), then a seventh round whose draft the unset seat declines - the
 CPU head over the head rows the pass hydrates from the device, the verify on the device - against
-the seventh CPU round (draft, accept and position equal), the hydrated host rows within the
+the seventh CPU round (the draft tie-aware, accept and position equal), the hydrated host rows within the
 head-row bar with the two-bar one-down control, and an eighth declined-draft round against a CPU
 round over the head's host rows poisoned with NaN as the control (another draft, or non-finite
-rows).
+rows). The gates around the round: `test_gpu_resident_hybrid_mtp_nonfinite` fills the carry with
+NaN before a device draft and holds that the draft panics naming the row it landed non-finite logits
+on, the drafts counter unmoved; `test_gpu_resident_hybrid_mtp_pass_arms` shapes a session for each
+of the draft and verify seats' pass arms and holds the round completing on the CPU rails with the
+reason counted (`pass_count` over `gpu_cpu_passes_`) and the device verify counter unmoved - an f32
+session under the f16 mirror (codec: the prefill, the draft and the verify; skips under
+`DASLLAMA_VK_KV32=1`), a session the device never homed with a homed session's carry (unhomed),
+a round five rows past the region's rows (gap - the draft, which has no gap arm, serves) and a
+round off the recurrent state's position (rewind - the draft serves); the cap and paged arms are
+not shaped (a prompt past the region's cap, a pooled session); `test_gpu_resident_hybrid_mtp_head_off`
+loads the twin with the draft seat unset so the plan keeps the head off the device (the seat put
+back after the load, `rdec_verify_rows` reading 0, the chain warming no head row) and runs one
+round: the verify passes as verify_rows, the CPU verify's two-row window passes the resident prefill
+as verify_window (`mtp_verify_window_active`), no panic, the driver still armed, and the CPU
+verify's row 0 within the deltanet bar of the CPU chain's step of the same token over the rows the
+decline brought down, the prompt's logits as the control.
 
 One cell is model-free: `test_kernel_census_by_name` holds that the census accessor panics on a
 kernel name nothing seeded, so a misspelt key cannot read as a zero count.

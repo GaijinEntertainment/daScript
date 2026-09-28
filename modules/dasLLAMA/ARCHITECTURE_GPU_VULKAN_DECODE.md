@@ -8,8 +8,9 @@ and byte stores these build on are in `ARCHITECTURE_GPU_VULKAN.md`; the routed b
 layer takes in either era - the prefill window's and the token command's - is in
 `ARCHITECTURE_GPU_VULKAN_MOE.md`; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq
 tile and the decode GEMV family's lane split are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the
-residency plan and the marks swap under them, the token command's logits landing on the
-transfer queue and the NextN draft head are in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, and the N-row token command is
+residency plan and the marks swap under them and the token command's logits landing on the
+transfer queue are in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the NextN draft head is
+`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`, and the N-row token command is
 `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`.
 
 ### The per-op tier's decode attention block {#decode-attention-block}

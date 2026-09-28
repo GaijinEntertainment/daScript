@@ -109,14 +109,16 @@ for a simdgroup matrix op, vote, ballot or reduction, the partner lanes a shuffl
 call the widest set among the ops it reaches. A lane that exits early, or reaches the op a
 different number of times, leaves the set unable to complete it.
 
-**An encoder that dispatches a kernel form (a kernel class or a template instance) indexing any
-fixed-capacity array or buffer by a host-chosen count - a loop with no bounds or tail guard, a
-walk bounded by a stamped constant, a `@workgroup` stage sized by a literal - never lets an
-address pass the allocation: it sizes a device buffer to the walk's last address, and a
-threadgroup stage's literal capacity is held by a check in the dispatching code that declines a
-larger shape before the dispatch is recorded.** A `requires =` contract on the class is that
-guarantee for the dimension it names; an unchecked claim that an extent divides evenly is not. A
-padded chunk's walk can run past the live extent, and one read of stale bytes in a shared tile
+**An encoder that dispatches a kernel form (a kernel class or a template instance) indexing a
+device buffer by a host-chosen count or base offset - a loop with no bounds or tail guard, a
+walk bounded by a stamped constant - sizes that buffer to the walk's last address, so no
+address passes the allocation.** A `requires =` contract on the class is that guarantee for the
+dimension it names; an unchecked claim that an extent divides evenly is not. A padded chunk's
+walk can run past the live extent.
+
+**An encoder that dispatches a kernel form whose `@workgroup` stage is sized by a literal, and
+indexed by a host-chosen count or base offset, declines a shape larger than that literal in the
+dispatching code before the dispatch is recorded.** One read of stale bytes in a shared tile
 corrupts real rows.
 
 **Never let a pad row that feeds the reduction of a live output row - a pad along the reduction

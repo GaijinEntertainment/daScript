@@ -15,11 +15,14 @@ the outermost function the runtime re-enters once per serving step.
 the runtime re-enters once per serving step is, or is reached by, an annotated region entry:
 `[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts, or `[cold_path]` on the
 guarded, rarely-taken function that is the path's only entry.** Interior means every caller is
-itself re-entered that way, so a function reached only through a registered function value is an
-entry (`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
+itself re-entered that way (`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
+
+**A function a serving step reaches only through a registered function value - a hook seat, an
+override registry's entry - is a region entry, and carries an entry's annotation.** No caller
+in the call graph re-enters it, so nothing above it can carry the annotation for it.
 
 **A `[cold_path]` on a function a serving step runs with no guard that skips it on most steps
-is a defect - split the rarely-taken part (a rebuild, a first-use allocation, a log) into its
+of a run that reaches it is a defect - split the rarely-taken part (a rebuild, a first-use allocation, a log) into its
 own `[cold_path]` function behind the guard that keeps it rare, and leave the function every
 serving step reaches unmarked.** The annotation is a promise about how often the function runs,
 and the allocation lint stops walking at it.
