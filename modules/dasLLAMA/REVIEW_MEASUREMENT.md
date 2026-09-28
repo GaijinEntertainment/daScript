@@ -129,6 +129,12 @@ re-mints a board row (`performance/records/<box>.json`) that exercises it, in th
 names that row in the PR body.** The board is the module's committed record of what serving
 costs; a kernel win that never lands there is invisible to the next regression check.
 
+**A diff that changes what a board cell's timed body loads, runs, or counts ships before/after
+rows for each affected cell and corpus, or withdraws the affected rows and names the withdrawal
+and its reason in the PR body; the new rows or the withdrawal land in the file the affected rows
+live in - `performance/records/<box>.json` or `PERF_LEDGER.md`.** A change inside the timed body
+that alters nothing it loads, runs, or counts changes nothing the cell times.
+
 **A rate or wall of any served-turn leg, or a ratio of two such rates or walls, written down as
 a measurement rather than as a prediction is a defect unless it cites the committed board row it
 came from, or names harness, flags, environment overrides, box, the exe or script that ran it,

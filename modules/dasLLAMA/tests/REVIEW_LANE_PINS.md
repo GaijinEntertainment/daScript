@@ -31,9 +31,9 @@ setter's getter returned before the cell set it.**
 **A diff that adds or edits a cell setting a driver setter that has no getter adds that getter
 in `../dasllama/`, in the same change.**
 
-**A cell asserting the unpinned default lane compares against the predicates the family's
-`*_serves_q8` accessor reads for its unpinned default (whatever its body calls), never against a
-hardcoded lane.** The default lane differs per box.
+**A cell asserting the unpinned default lane of a family that has a `*_serves_q8` accessor
+compares against the predicates that accessor reads for its unpinned default (whatever its body
+calls), never against a hardcoded lane.** The default lane differs per box.
 
 **An image-suite cell whose subject IS the lane knob loads through the `.dlim`-baking loader,
 never around it.** The pin is part of what the image identity records.

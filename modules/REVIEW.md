@@ -22,14 +22,16 @@ unloaded, and the linking module's imports are resolved before any of its code r
 load fails on the missing sibling.
 
 **A diff that makes a `dasClangBind`-generated binding depend on another in-tree module declares
-that dependency in the module's `bind_*.das` - `require_modules` when the binding uses the other
-module's types, `require_load_modules` when only the shared library links against the other's -
-never by hand in the generated file.** The binder emits `initDependencies` from those two lists,
-and `require_modules` puts the other module's types into this module's type library, so both
-modules binding the same C++ types resolve to one copy.
+that dependency in the `bind_*.das` that generates the module's bindings - under
+`modules/<M>/bind/` or `modules/dasClangBind/bind/` - `require_modules` when the binding uses the
+other module's types, `require_load_modules` when only the shared library links against the
+other's - never by hand in the generated file.** The binder emits `initDependencies` from those
+two lists, and `require_modules` puts the other module's types into this module's type library,
+so both modules binding the same C++ types resolve to one copy.
 
-**A diff that hand-binds a function in a module's own C++ - a function the module's
-`bind_*.das` binder would otherwise generate - makes that binder's `skip_function` override
-return true for the function, and deletes the function's generated registration from the
-module's `src/`, in the same change.** Otherwise the generated registration sits beside the
+**A diff that hand-binds a function in a module's own C++ - a function the `bind_*.das` that
+generates the module's bindings (under `modules/<M>/bind/` or `modules/dasClangBind/bind/`) would
+otherwise generate - makes that binder's `skip_function` override return true for the function,
+and deletes the function's generated registration from the module's `src/`, in the same
+change.** Otherwise the generated registration sits beside the
 hand-bound one and the module registers the name twice.

@@ -18,8 +18,9 @@ of one kernel instance (one class, one set of template constants) that a model's
 records. The main loop is a loop whose trip count grows with the work one thread does, per
 element or per row.
 
-**A host-fixed main-loop branch whose deciding value is a per-call extent is never stamped: peel
-it (the full chunks run under the stamped chunk bound, then one tail pass carries the guard), or,
+**A host-fixed main-loop branch whose deciding value is a per-call extent is never stamped (baked
+into the kernel as a `@template_constant` or literal): peel it (the full chunks run under the
+stamped chunk bound, then one tail pass carries the guard), or,
 outside an `[unroll]` loop, replace it with an index clamp that runs the guarded work on an index
 inside the extent and never stores that iteration's result.**
 
@@ -86,11 +87,12 @@ per simdgroup, one `@workgroup` value that one lane writes and every lane reads 
 class deriving `MetalTgReduceBase` calls its fold methods over its own `partial[]`; any other
 class calls `tg_sum_all` / `tg_max_all` over its own `@workgroup` array.**
 
-**A diff that adds or changes a hand-written fold of one plain float sum or max (no compensation
-term, no index carried alongside) over every lane of a Vulkan kernel's workgroup - a subgroup
-shuffle loop, a lane-0 loop over a `@workgroup` array, one `@workgroup` value that one lane writes
-and every lane reads - is a defect: derive `WgReduceBase` and call its `wg_sum`, `wg_max` or
-`wg_rms_inv` instead.** A fold into more than one result - separate sums over parts of the
+**A diff that adds or changes, in the body of a dispatched kernel class (one a `[vk_dispatch]`
+declares), a hand-written fold of one plain float sum or max (no compensation term, no index
+carried alongside) over every lane of a Vulkan kernel's workgroup - a subgroup shuffle loop, a
+lane-0 loop over a `@workgroup` array, one `@workgroup` value that one lane writes and every lane
+reads - is a defect: derive `WgReduceBase` and call its `wg_sum`, `wg_max` or `wg_rms_inv`
+instead.** A fold into more than one result - separate sums over parts of the
 workgroup - is not one value; `ARCHITECTURE_GPU.md#gpu-backends` names the bodies that fold that
 way.
 
@@ -112,8 +114,7 @@ different number of times, leaves the set unable to complete it.
 **An encoder that dispatches a kernel form (a kernel class or a template instance) indexing a
 device buffer by a host-chosen count or base offset, in a walk with no bounds or tail guard or a
 walk bounded by a stamped constant, sizes that buffer to the walk's last address, so no address
-passes the allocation.** A stamped constant is a constant baked into the kernel (a
-`@template_constant` or a literal). A dimension the class's `requires =` contract names needs no
+passes the allocation.** A dimension the class's `requires =` contract names needs no
 padded buffer, because the builder rejects the misaligned shape; an unchecked claim that an
 extent divides evenly does not. A walk that rounds the extent up to whole chunks reads past the
 live extent, and one read of stale bytes in a shared tile corrupts real rows.

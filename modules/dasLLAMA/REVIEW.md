@@ -154,6 +154,11 @@ registers is installed returns false when the hook is unset - never a panic.**
 
 **Weakening `REVIEW.das`'s `check_verify_decline_before_state_move` is a defect.**
 
+**Weakening `REVIEW.das`'s device-creation check is a defect - a device- or queue-creating call
+spelling missing from `DEVICE_CREATION_CALLS` weakens it.**
+
+**Weakening `check_ple_gather_sites` in `REVIEW.das` is a defect.**
+
 **A diff that sets a constant in `dasllama/` to the value a timing of candidate values chose, or
 that adds or changes a predicate there that picks among kernel variants computing the same result
 because one measured faster (not because it is the smallest variant that fits the dispatch), takes

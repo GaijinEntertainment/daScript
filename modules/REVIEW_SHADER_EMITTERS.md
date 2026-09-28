@@ -3,12 +3,12 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
 
-**Never put anything that cannot compile on the CPU into a kernel body or into a function a
-kernel calls - keep both in ordinary das.** A kernel built from ordinary values is compared
-against its own CPU run; a marker struct - one that stands on the CPU for a value whose storage
-exists only on the device (a tile, a tensor, a layout or view over one, a sampler, an image) and
-has no storage of its own - and the builtins over it compile on the CPU, and their CPU bodies
-compute nothing.
+**Kernel arithmetic stays in ordinary das, so the kernel is compared against its own CPU run. A
+marker struct and the builtins over it appear only as the operand plumbing the coopmat and
+`tmm2d` load rules require.** A marker struct is one that stands on the CPU for a value whose
+storage exists only on the device (a tile, a tensor, a layout or view over one, a sampler, an
+image) and has no storage of its own; the builtins over it compile on the CPU, and their CPU
+bodies compute nothing.
 
 **A diff that adds or changes an emitter builtin whose operands are all ordinary CPU values - a
 declaration in `daslib/shader_lingua_franca.das`, `dasSpirv/spirv/spirv_builtins.das` or

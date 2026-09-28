@@ -57,12 +57,10 @@ is a lint or `REVIEW.das` candidate - say so in the review round.
 root, print one `path: finding` line per finding (`path:line: finding` when a line is known),
 and exit nonzero when any fired, is a defect.** Support library: `dastest/review_gate`.
 
-**Every review round runs the folder's `REVIEW.das` before it reads the diff, and a red gate
-stops the round until the gate is green.**
+**A diff that leaves its folder's `REVIEW.das` red is a defect.**
 
-**Weakening the review-md orphan scan (`utils/internal/review-md/scan.das`) - the check that
-every `REVIEW.das` has a sibling `REVIEW.md` - is a defect**; a `REVIEW.das` gets its checklist
-in the same change.
+**A diff that adds a `REVIEW.das` adds its sibling `REVIEW.md` in the same change; weakening a
+check that enforces this is a defect.**
 
 **A rule is absolute; sanctioned violations live in the architecture doc.** No "except",
 "exempt", "carve-out", or "the one sanctioned" - move the boundary inside the trigger, fix
@@ -143,5 +141,5 @@ obligation is a rule, and it lives in the flat list above.
 **A diff that adds a rule restating one already in the checklist is a defect - extend the
 existing rule instead.**
 
-**A rule the diff adds or lengthens that is longer than every other rule in the file is split,
-or its extra prose moved to the architecture doc.**
+**A diff that makes a rule longer than the longest rule the file had before the diff splits it,
+or moves its extra prose to the architecture doc.**

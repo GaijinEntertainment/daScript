@@ -41,7 +41,8 @@ harmonic-source kernels match the CPU chain under both resample laws - is a defe
 **Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
 models stocked (the stocked files of the areas the change reaches; a core module with no
 `MODULE_AREAS` row reaches every area), plus every test here the change reaches - never the whole
-directory, never the whole `stocked` suite.** A change reaches a test when it alters anything the
+directory, never the whole `stocked` suite where `--changed` reaches fewer than every area.** A
+change reaches a test when it alters anything the
 test's result depends on - the test file, a shared helper, engine code it exercises, an in-tree
 fixture or corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
@@ -55,7 +56,7 @@ stocked, through a `run.das` suite listing the cell's file - with `--arm` naming
 `run.das` accepts `--arm` for that suite - and names the box in the PR body.** A run without
 `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
-**The `--changed` or `stocked` run a PR cites carries no `--exclude`** - an excluding run is the
+**The `--changed` run a PR cites carries no `--exclude`** - an excluding run is the
 iteration form between PRs; a PR that ships on it never ran the coverage it dropped.
 
 **A test file in this folder whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in
@@ -186,7 +187,7 @@ is a defect.** A stocked artifact is anything the test reads out of `models_dir(
 repo's build does not produce - model files, mmprojs, front-end packs, image fixtures, oracle
 dumps. Any one of these names the producer: a row in `../performance/model_specs.das`; a row's
 `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
-script beside `../performance/model_specs.das`; for an oracle dump, the mint script stocked
+script in `../harness/`; for an oracle dump, the mint script stocked
 beside the dumps under `models_dir()`, named by the test that loads the dump.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header - the
@@ -219,9 +220,11 @@ kernel-unit cell, ships in the same change, in each such cell holding the assert
 lands outside that bound.** A bound nothing has exceeded where it is applied is not known to
 discriminate there.
 
-**A control for a measured-figure assert in a cell that is not a kernel-unit cell changes an input
-the computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled -
-and re-runs the compare; a value added to the output after the fact is not one.**
+**A control for an assert whose pass means two sides agree or a figure is good enough - a
+difference, a rate, an error or a count within a nonzero tolerance or past a floor or ceiling -
+in a cell that is not a kernel-unit cell changes an input the computation reads - a zeroed weight
+region, a poisoned input element, a mechanism disabled - and re-runs the compare; a value added
+to the output after the fact is not one.**
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

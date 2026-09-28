@@ -61,9 +61,10 @@ its text with it - never a second wording of that reason.**
 
 **A diff that adds or changes a function under `dasllama/` outside the tier's arm probe
 `vulkan_moe_gpu_arm` that calls `vk_moe_init()` makes it test `gpu_want_arms_tier()` first, and
-decline without calling it when the want is off; a serving hook that keeps a decline counter
-counts that decline under its no-device reason.** `vk_moe_init` reads no knob, so a caller that
-skips the test serves on a box whose `DASLLAMA_GPU` says no.
+decline without calling it when the want is off; a serving hook - a hook slot the CPU chain calls
+to hand work to the GPU - that keeps a `VkDeclineCounter` counts that decline under its decline
+enum's `device` member, the reason `VK_DECLINE_WORDS_DEVICE` words.** `vk_moe_init` reads no
+knob, so a caller that skips the test serves on a box whose `DASLLAMA_GPU` says no.
 
 **A diff that changes what a device limit or extension decides for the tier - which path
 serves, how much it arms, whether it declines - adds that limit or extension to `vk_ext_roster`
@@ -246,10 +247,10 @@ a select nor a test on a field the divisor is computed from guards it.
 
 **A diff that adds or changes a path under `dasllama/` that re-records the one-row token
 command's split form - the chain recorded with the attention at `RD_SPLIT_PIECES` key pieces - or
-replaces a descriptor set it dispatches, makes it clear that region's wide-twin recorded flag
-(`RDec.tok_wide_recorded`) in the same path.** The wide twin (the same chain at
-`RD_SPLIT_WIDE_PIECES` pieces) dispatches the same sets, so a twin left marked recorded runs sets
-the new record replaced.
+replaces a descriptor set it dispatches, makes it clear `RDec.tok_wide_recorded` for the region
+whose split form it re-recorded or whose set it replaced, in the same path.** The wide twin (the
+same chain at `RD_SPLIT_WIDE_PIECES` pieces) dispatches the same sets, so a twin left marked
+recorded runs sets the new record replaced.
 
 **A twin's availability flag (`RDec.unsplit_on`, `RDec.wide_on`) is written where the twin's
 command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path that writes

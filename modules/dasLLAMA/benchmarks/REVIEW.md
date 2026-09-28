@@ -77,14 +77,12 @@ re-derives.
 also prints both of those times on that report line.** A plain elapsed-time row - one clock pair,
 no attribution across stages - is not a difference.
 
-**A diff that changes what a board cell times ships before/after rows for each affected cell
-and corpus - or withdraws the affected rows and names the withdrawal and its reason in the PR
-body.** What a cell times changes when a change inside its timed body, to its input corpus, or
-to the pinned reference build (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else
-deciding which reference binary or environment the run measures) moves the measured quantity; a
-change that alters nothing the timed body loads, runs, or counts does not. The new rows or
-the withdrawal land in the file the affected rows live in - `../performance/records/<box>.json`
-or `../PERF_LEDGER.md`.
+**A diff that changes a board cell's input corpus, or the pinned reference build
+(`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else deciding which reference binary or
+environment the run measures), so that the measured quantity moves, ships before/after rows for
+each affected cell and corpus - or withdraws the affected rows and names the withdrawal and its
+reason in the PR body.** The new rows or the withdrawal land in the file the affected rows live
+in - `../performance/records/<box>.json` or `../PERF_LEDGER.md`.
 
 **A diff that changes a GPU kernel emitter under this folder - a `[vk_dispatch]` or
 `[metal_kernel]` body or a `*_msl` source global - either ships before/after rows for a board

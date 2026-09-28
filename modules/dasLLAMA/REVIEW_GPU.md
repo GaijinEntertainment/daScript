@@ -57,9 +57,10 @@ or kargs field carries) or the size a buffer the kernel reads is allocated at, w
 puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.** A kernel read's range
 depends on both, and a host-only change reaches no kernel file.
 
-**A diff that names GPU-vs-CPU parity evidence - a run, a log, a claim - or changes the text of
-a Vulkan serving log line a parity rule reads - the resident driver's arm line, the per-op tier's
-`GPU MoE tier:` report, the override's pass-back line - applies `REVIEW_GPU_PARITY.md` too.**
+**A diff that names GPU-vs-CPU parity evidence or driver-against-itself evidence - a run, a log,
+a claim - or changes the text of a Vulkan serving log line a parity rule reads - the resident
+driver's arm line, the per-op tier's `GPU MoE tier:` report, the override's pass-back line -
+applies `REVIEW_GPU_PARITY.md` too.**
 
 **A diff that files GPU planned work - work that would change a kernel, a GPU driver, or a
 dispatch - in `followup_general.md` is a defect** - it goes to `followup_metal.md` or
@@ -132,10 +133,6 @@ streams, so an address key reuses stale content silently.
 on a host address, an offset or a handle alone - also compare a counter bumped on each
 reallocation, or drop every cached entry built over the old buffer at the reallocation.** An
 address, offset or handle names whatever occupies it now.
-
-**Weakening `REVIEW.das`'s device-creation check is a defect - a new name in
-`DEVICE_CREATION_FILES` or `DEVICE_CREATION_FUNCTIONS`, or a device- or queue-creating call
-spelling absent from `DEVICE_CREATION_CALLS`, weakens it.**
 
 **Never compile or release a Metal PSO (pipeline state object) from an engine file
 (`dasllama/`) other than the one that owns its kernel class** - it goes through that file's
@@ -289,5 +286,3 @@ an unserved format, so an unlisted format decodes under whatever the pick's defa
 `metal_ple_pre_gpu_gate` admit that format only where the table's base and row stride are whole
 superblocks of the format's own block size.** A base off the format's own block grid is gathered
 under a layout that is not its own.
-
-**Weakening `check_ple_gather_sites` in `REVIEW.das` is a defect.**
