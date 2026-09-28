@@ -777,6 +777,12 @@ deltanet cell needs Qwen3.5-0.8B-Q8_0 and `DASLLAMA_GPU=1` on a box whose tier s
 deltanet decode step, and skips otherwise. `test_scheduler_device_mode_switch` holds the device
 mode's two CPU-decidable contracts: only an idle scheduler switches its session kind, and
 `submit` refuses a media request in device mode while it takes the same request with the mode off.
+`test_gpu_tier.das` - model-free: the tier's seat forwarders on doubles - among them the NextN
+draft seat (`test_rdec_draft_seat`: the row, the hydrate start and the pick ask forwarded, the
+double's pick answered and the logits left alone under the ask, the unset seat declining until the
+reinstall) and the same-slab verify seat (`test_rdec_verify_seat`: the rows, the position, the
+pick ask and every landing forwarded, the picks and hidden rows landed under the ask and the
+logits left alone).
 `test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
 from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
@@ -808,7 +814,10 @@ speculative round's seat ownership on a Model shell under two fake decode overri
 owner refusing the model, and with seats registered under no owner, `mtp_spec_eval` and
 `mtp_spec_round` open the CPU round (its opening refuses the session's parked token, the witness)
 and `mtp_spec_eval_batch` steps each stream alone; with the owner claiming it, all three reach
-the seats.
+the seats. `test_land_pick` holds the pick a round or a driver lands in a logits row's place
+(`land_pick`): the next `sample_` returns it once and reads the logits row again after, a second
+landing before that `sample_` refuses and leaves the first standing, and the CPU round's opening
+refuses a session whose landed pick nobody sampled.
 
 `test_gpu_resident_hybrid.das` - stocked suite, `-jit` only; the whole-model resident driver on a
 deltanet hybrid under `DASLLAMA_GPU=1`. Each fixture is a row in `../performance/model_specs.das`:
@@ -870,14 +879,29 @@ device pick the argmax of the logits it landed and equal to the CPU draft's, the
 counter up by the one device draft alone, and every call served; its second cell runs two
 speculative rounds, the first with the seat unset and the second with it back, the round's draft
 count and the head's counter saying which side drafted each (both rounds verify through the device
-seat). `test_gpu_resident_hybrid_mtp_verify` holds the round's same-slab verify: after the same
-40-token prefill, one round with the draft and the verify on the device (their counters, every call
-served), its two verify rows - the token and the draft - against two one-row resident steps of the
-same tokens on a fresh session: each row's logits and post-norm hidden bit for bit the step's, the
-argmax both sides read logged, the other row's step as the control; every row's device pick the
-argmax of its landed logits, the region's rows at the session's position (two past the prompt on an
-accept, one on a reject), and the head's K row at the prompt's end rewritten on the host by the
-re-warm's readback. `test_gpu_resident_hybrid_mtp_verify_reject` forces the reject
+seat). `test_gpu_resident_hybrid_mtp_draft_upload` writes two head rows on the host through the
+unset seat (the device's row count stays below them, the host's reaches past), drafts on the device
+two rows past the device's (the host's two go up with the draft: the device's count reaches past
+the drafted row, the host's stops below it), brings the drafted row down on the next pass (the
+host's count past it, the host K row moved) and holds the device pick equal to the CPU draft's over
+the same rows.
+`test_gpu_resident_hybrid_mtp_verify` holds the round's same-slab verify: after the same 40-token
+prefill (the host holding the warm's rows below the prompt's last), one device draft at the
+prompt's last row (the device's rows reaching past it, the host's stopping below it), a pass
+through the unset seat that brings the draft's K row down (the host row moved), then one round
+with the draft and the verify on the device (their counters, every call served, no pick asked so
+every row's logits land and no pick is published), its two verify rows - the token and the draft -
+against two one-row resident steps of the same tokens on a fresh session: each row's logits and
+post-norm hidden bit for bit the step's, the argmax both sides read logged, the other row's step
+as the control; every row's device pick the argmax of its landed logits, the region's rows at the
+session's position (two past the prompt on an accept, one on a reject), the head's rows staying on
+the device (the host's count below the draft's row again) until the next pass brings them down,
+and the re-warm's K row at the prompt's last row bit for bit the draft command's.
+`test_gpu_resident_hybrid_mtp_verify_asked` runs six rounds under the caller's pick ask on one
+session and six with the logits landing on another from the same prompt - every round's draft,
+accept, position and the token `sample_` takes next (the published pick, or the landed row's
+argmax) equal, the asked session's logits row not the round's.
+`test_gpu_resident_hybrid_mtp_verify_reject` forces the reject
 (`set_mtp_force_reject_every(1)`): the reject rolls back on the device (the rollback counter up by
 one, the snapshot buffers never sized), the session keeps verify row 0's logits and hidden bit for
 bit, the region's rows, its head rows, `dn_pos` and the carry's watermark sit at the token's row,
@@ -885,6 +909,10 @@ the next round verifies on the device again with the region's rows at the sessio
 then the rolled-back deltanet state and conv history (read back to the host) and the next plain
 step's logits are bit for bit a fresh session's after one row-at-a-time step of the same token,
 with the fresh session stepped through both verify rows as the control that misses.
+`test_gpu_resident_hybrid_mtp_verify_reject_asked` forces the reject under the caller's pick ask:
+no logits land (the session's row stays the prefill's), verify row 0's device pick is published for
+`sample_` (returned once and consumed), the carry re-seeds from row 0's hidden at the token's row,
+and the pick equals the one-row step's argmax over the same token on a fresh session.
 The head's prompt warm on the window chain: `test_gpu_resident_hybrid_mtp_xb_poison` fills a
 session's host residual rows with NaN before the same 40-token resident prefill and holds the
 device draft at the prompt's last row bit for bit the clean prefill's (logits, hidden and pick;
@@ -897,9 +925,13 @@ after the model drop, the CPU row one down missing by two bars as the control, t
 the tightest control logged; `test_gpu_resident_hybrid_mtp_rounds` runs six speculative rounds on
 the device (their draft and verify counters, every call served) and six on the CPU from the same
 prompt and fed tokens, every round's draft token, accept and position equal and logged decoded, the
-region's head rows at the session's position less one, the head's host rows within the head-row bar
-with the two-bar one-down control, and a seventh CPU round over the head's host rows poisoned with
-NaN as the control (another draft, or non-finite rows).
+region's head rows at the session's position less one with the host's count short of them (the
+rounds' rows stay on the device), then a seventh round whose draft the unset seat declines - the
+CPU head over the head rows the pass hydrates from the device, the verify on the device - against
+the seventh CPU round (draft, accept and position equal), the hydrated host rows within the
+head-row bar with the two-bar one-down control, and an eighth declined-draft round against a CPU
+round over the head's host rows poisoned with NaN as the control (another draft, or non-finite
+rows).
 
 One cell is model-free: `test_kernel_census_by_name` holds that the census accessor panics on a
 kernel name nothing seeded, so a misspelt key cannot read as a zero count.

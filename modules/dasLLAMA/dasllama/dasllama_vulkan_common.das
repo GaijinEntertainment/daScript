@@ -2774,7 +2774,7 @@ struct RdqLedger {
     count : int64                        //! the commands sampled
     idle_us : double                     //! the device's idle between the command sampled before it (any form's) and this form's, summed
     wall_us : double                     //! the host wall of the same commands
-    host_us : double[5]                  //! ... split into its pieces: the memcpys and meta, the submit, the wait, the landing copy, the K/V rows' readback
+    host_us : double[4]                  //! ... split into its pieces: the memcpys and meta, the submit, the wait, the landing copy
 }
 
 // decode per-role accumulation across tokens (stamps overwrite each submit); printed every 32
@@ -2807,7 +2807,7 @@ def rdq_reset_averages(var led : RdqLedger) {
     led.total = 0.0lf
     led.idle_us = 0.0lf
     led.wall_us = 0.0lf
-    for (i in range(5)) {
+    for (i in range(4)) {
         led.host_us[i] = 0.0lf
     }
     led.us_by_name |> clear()

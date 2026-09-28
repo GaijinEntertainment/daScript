@@ -294,6 +294,6 @@ decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both pat
   (`resident_layer_decline`) and the per-op rails serve it. Metal has no seat to install: its
   whole-forward driver carries the recurrent branch inside its layer encoder.
 - **The device argmax pick is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`): a
-  bare-argmax stream's token id lands in place of its logits row; Metal lands every row's logits.
+  bare-argmax stream's token id lands in place of its logits row, its speculative round's rows too; Metal lands every row's logits.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.

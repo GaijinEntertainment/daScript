@@ -57,8 +57,13 @@ what it costs today and what the fix would change.
   `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`); the verify command's own
   `DASLLAMA_GPU_PROF=1` ledger (`vk_rdec gpu avg/verify` with its `dn avg/verify` line and
   `vk_rdec host wall/verify`, `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`) against the
-  one-row `vk_rdec gpu avg/token` line of the same run's off arm, role by role; and the on/off
-  rate with the drafts' acceptance - the pod measures.
+  one-row `vk_rdec gpu avg/token` line of the same run's off arm, role by role - under the greedy
+  `--mtp-ab` arms' pick ask the verify lands the picks and two hidden rows alone (the
+  2 x vocab x 4-byte logits plane, its host copy, the four row copies and both host argmaxes gone
+  from the round), the re-warm runs no q GEMV and the store pass over the k heads alone
+  (`warm_q` gone from the ledger, `warm_qknrope` smaller), and no head row is read back (the `kv
+  readback` piece gone from `host wall/verify`); and the on/off rate with the drafts' acceptance -
+  the pod measures.
 
 - **OPEN (2026-09-27) - the Vulkan resident driver's NextN draft head: its plane and slot bytes,
   and the device draft against the CPU draft.** Where the driver takes a model's head
@@ -76,11 +81,14 @@ what it costs today and what the fix would change.
   and `NextN draft head in the arena` load lines (the bytes read, not computed); the draft's wall
   against the CPU `forward_mtp` - `lcpp_bench --mtp-ab` under `DASLLAMA_GPU=1` with `--prof` and
   `JOBQUE_PROFILING=1`, the `mtp.draft` section against the CPU draft's on the same box - including
-  the hydrate's upload and the head row's readback, submits of their own beside the draft's; the
+  the hydrate's upload where one runs, a submit of its own beside the draft's (the drafted row
+  stays on the device, so no readback follows the command, and the greedy round takes the pick the
+  seat answers, the vocab x 4-byte logits row neither landing nor re-read by a host argmax); the
   draft command's own `DASLLAMA_GPU_PROF=1` ledger (`vk_rdec gpu avg/draft` and `vk_rdec host
   wall/draft`, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), the classifier's share of it
   against the one-row `cls` role; and the acceptance the
-  device draft reads off the head's slab the window chain warmed (the entry above).
+  device draft reads off the head's slab the window chain warmed (the entry above) - the pod
+  measures.
 
 - **OPEN (2026-09-27) - the Vulkan resident driver's speculative carry: its landing plane and its
   step cost on a NextN-headed model.** The landing plane (`RDec.hid_host`, host-visible, allocated

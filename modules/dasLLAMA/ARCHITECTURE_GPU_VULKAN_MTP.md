@@ -25,26 +25,39 @@ sits outside `RDec.layers`, so no trunk walk sees it. The draft command, one per
 uploaded embed row and carry `h` into one `[enorm ; hnorm]` row, runs eh_proj into x, the layer
 through the token command's attention and FFN encoders on its slot at row `pos - 1` (the head's
 own `TokMeta` block and rope rows), the head norm into the carry's row, the classifier and the
-pick; the logits, the pick and that row land (`mtp_h`, `mtp_h_pos1` 0) and the row's K/V comes
-back to the host. The region tracks the rows its slot holds as the host does
+pick; the pick and that row land (`mtp_h`, `mtp_h_pos1` 0), and the seat answers the pick as the
+draft's token (`MtpDraftOverrideFn`), so the round's greedy walk (`mtp_draft`, `pick_only`)
+compares ids the host never re-derives and the logits stay on the device - the picks-only
+transfer twin (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`); `forward_mtp`'s
+callers and a sampled walk land the logits too, and the landing's finite check reads them there.
+The head's rows the device writes stay on the device: the region counts the rows its slot holds
 (`RdecRegion.head_cnt`: a claim zeroes it, every prefill call lowers it to `start_pos - 1` and the
-chain's prompt warm raises it to the prompt's end, a declined draft lowers it to its row, a verify
-raises it past its rows where the held rows reach them), and a draft uploads the host rows past it
-first. The host's rows are the round's copy: the CPU seam and a CPU draft write them, and every
-row the device writes - a draft's, the verify's re-warm rows, the prompt warm's - comes back to
-them, so the CPU round's reject path and a draft the seat declines read what the device holds. The
-"vulkan" owner (`register_mtp_seat_owner`: the driver armed on a NextN model) registers the draft
-and verify seats (`register_mtp_draft_override`, `register_mtp_verify_override`); the round stays
-the CPU's. Under `DASLLAMA_GPU_PROF=1` the draft command stamps its dispatches into a list of its
-own (`g_rdq_draft`): the upload, the cat rows' norms and requant (`draft_cat`), the eh_proj GEMV
-(`draft_eh`), the head's attention norm and feed requant (`draft_attnorm`), the head layer's
-roles under the trunk's names (`q`, `kv`, `qknrope`, `attn`, `wo`, `ar1`, `rq_f`, the FFN's), the
-head norm and classifier feed (`draft_norm`), the classifier (`draft_cls`) and the picks
-(`draft_pick`); its samples go to the draft's own ledger (`g_rdq_d`), printed every 32 drafts as
-`vk_rdec gpu avg/draft over N: ...` (the idle at its end is the gap since the verify sampled
-before it) and `vk_rdec host wall/draft over N: ...` - the memcpys piece holds the hydrate's
-upload where one ran, the wait the transfer-queue landing, and the head row's readback its own
-piece.
+chain's prompt warm raises it to the prompt's end, a draft raises it past its row - the host's rows
+past the held ones go up with the draft - and a verify past its rows, the draft before it holding
+the rows below the re-warm's (the seat panics by name where it does not), a host write lowers it to
+the written row) beside the rows the host cache holds as the session's (`RdecRegion.head_host`:
+the prompt warm's readback raises it with `head_cnt`, a device write lowers it to the written row,
+a host write raises it past the rows written), so every row written so far is current on the side
+with the higher count (`rdec_head_device_wrote`, `rdec_head_host_writes`;
+`test_gpu_resident_hybrid_mtp_draft_upload` holds a draft's upload counted and hydrated back).
+The device's rows come down on a pass
+(`rdec_head_hydrate`: the rows below the row the CPU reads next that the device holds and the host
+does not, through the head warm seat's `read`) - a draft or a verify the seat declines, the
+continuation's seam, which the driver's seam seat (`register_mtp_seam_override("vulkan", ...)`)
+hydrates for and leaves to the CPU seam, a steal and a drop (`rdec_hydrate_host`) - so no served
+round reads a head row back, and the CPU round's reject path and a draft the seat declines read
+what the device holds. The "vulkan" owner (`register_mtp_seat_owner`: the driver armed on a NextN
+model) registers the seam, draft and verify seats (`register_mtp_seam_override`,
+`register_mtp_draft_override`, `register_mtp_verify_override`); the round stays the CPU's. Under `DASLLAMA_GPU_PROF=1` the draft
+command stamps its dispatches into a list of its own (`g_rdq_draft`): the upload, the cat rows'
+norms and requant (`draft_cat`), the eh_proj GEMV (`draft_eh`), the head's attention norm and
+feed requant (`draft_attnorm`), the head layer's roles under the trunk's names (`q`, `kv`,
+`qknrope`, `attn`, `wo`, `ar1`, `rq_f`, the FFN's), the head norm and classifier feed
+(`draft_norm`), the classifier (`draft_cls`) and the picks (`draft_pick`); its samples go to the
+draft's own ledger (`g_rdq_d`), printed every 32 drafts as `vk_rdec gpu avg/draft over N: ...`
+(the idle at its end is the gap since the verify sampled before it) and `vk_rdec host wall/draft
+over N: ...` - the memcpys piece holds the hydrate's upload where one ran, the wait the
+transfer-queue landing, the landing copy the pick's read (and the logits' copy where they land).
 
 ### The window chain warms the head's slab over the prompt {#resident-head-prompt-warm}
 
@@ -110,13 +123,16 @@ flipped it once a row); the resident seat (`vulkan_resident_rollback`) cuts the 
 the session's `dn_pos` to `pos + a + 1`, and its head rows to `pos + a` - row `pos + a` holds the
 rejected draft's input. The slots stay the session's, valid
 and dirty, so no state crosses the bus; the CPU restore (`mtp_state_restore`) is what releases
-them, and it never runs here. The round (`mtp_reject`) takes verify row `a`'s landed logits and
-post-norm hidden as `s.logits` and the carry at `pos + a + 1` - the seat landed every row's
-(`mtp_logits_b`, `mtp_hrows`) - and `n_past` moves by `a + 1`. The trunk's K/V rows and the
-head's rows above the cut are dead by the watermark on the device and in the host copy alike:
-the verify read head rows `pos - 1 .. pos + n - 2` back to the host, rows `pos + a` and up hold
-the rejected drafts' inputs, and the next draft at row `pos + a` rewrites its row on whichever
-side drafts, so nothing reads a row above the next draft's. The snapshot's place in the round
+them, and it never runs here. The round (`mtp_reject`) takes verify row `a`'s landed post-norm
+hidden as the carry at `pos + a + 1` and its landed logits as `s.logits` - or, under the caller's
+pick ask (`Session.pick_asked`), where the seat landed the rows' picks and no logits, publishes
+row `a`'s pick for the caller's `sample_` (`land_pick`) - the seat landed every row's (`mtp_picks`,
+`mtp_hrows`, and `mtp_logits_b` where the logits land) - and `n_past` moves by `a + 1`. The
+trunk's K/V rows and the head's rows above the cut are dead by the watermark on the device and in
+the host copy alike (`rdec_head_rows_cut`): the verify wrote head rows `pos - 1 .. pos + n - 2` on
+the device, rows `pos + a` and up hold the rejected drafts' inputs, and the next draft at row
+`pos + a` rewrites its row on whichever side drafts, so nothing reads a row above the next
+draft's. The snapshot's place in the round
 follows the seat's decision: a declined seat leaves the session untouched, so the CPU verify
 snapshots right before its own prefill (`mtp_verify_two`), and a served verify snapshots only
 where the owner registered no rollback seat; a rollback seat that declines after its verify seat

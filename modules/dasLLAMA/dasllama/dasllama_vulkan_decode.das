@@ -1479,9 +1479,9 @@ def private rd_enc_da_attn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer;
 }
 
 //! the attention head over `nrows` rows: the projections as GEMVs into the projection plane's rows, the rope and store at each row's
-//! own position and region, the attention over each row's history; `ncols` the GEMV leaves' columns and `nrow_bx` the N-row bisect
-//! bits (the one-row reading at one row); `kv_only` stops at the store, the verify's head re-warm, whose stamps take `pfx`
-[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
+//! own position and region, the attention over each row's history; `ncols` the GEMV leaves' columns and `nrow_bx` the N-row bisect bits
+//! (the one-row reading at one row); `kv_only` stops at the store and skips q (no q GEMV where q has its own plane, the norm and rope over the k-head groups alone): the verify's head re-warm, its stamps under `pfx`
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; nlfin, nsplit, nrows : int64; ncols : uint; nrow_bx : int;
                                 kv_only : bool = false; pfx : string = "a:") {
     let dim = g_rd.dim
@@ -1498,7 +1498,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         var pcqkv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = uint(nreg), ybase = 0u, ncols = ncols, ystride = kvrow)
         gemv_enc(L.fq, raw, h, L.s_qkv, pcqkv, nreg * kvd)
         rd_ts(raw, "{pfx}qkv")
-    } else {
+    } elif (!kv_only) {
         var pcq = GemvArgs(n = uint(dim), d = uint(qrows), nreg = 1u, ybase = 0u, ncols = ncols, ystride = q_plane_row)
         gemv_enc(L.fq, raw, h, L.s_q, pcq, qrows)
         rd_ts(raw, "{pfx}q")
@@ -1528,31 +1528,33 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
     let mirbase = uint(one ? rd_mir_base(L) : L.mir_base)   //! the one-row command's region rides its push; an N-row step's rows carry theirs in TokMeta
     let nkh = L.kv_shared ? 0l : kvd / hs   //! the k-head groups also store the mirror row: none on a shared-KV layer
+    let nqh = kv_only ? 0l : g_rd.n_heads   //! the q-head groups a dispatch walks first: none for a store-only pass, whose groups are all k heads
     if (fuse_qkr && (nrow_bx & NROW_BX_ROPE) == 0) {
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(L.rot / 2l),
-            neox = g_rd.neox ? 1u : 0u, nh = uint(g_rd.n_heads), layerbase = mirbase,
+            neox = g_rd.neox ? 1u : 0u, nh = uint(nqh), layerbase = mirbase,
             qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
             eps = g_rd.eps, qstride = qstride, boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
             vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u,
-            rowwg = uint(g_rd.n_heads + nkh), kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems))
+            rowwg = uint(nqh + nkh), kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems))
         if (g_rd.kv16) {
-            enc_qkn_rope_f16_cls(raw, h, L.s_qkn_rope, pcf, (g_rd.n_heads + nkh) * nrows)
+            enc_qkn_rope_f16_cls(raw, h, L.s_qkn_rope, pcf, (nqh + nkh) * nrows)
         } else {
-            enc_qkn_rope_cls(raw, h, L.s_qkn_rope, pcf, (g_rd.n_heads + nkh) * nrows)
+            enc_qkn_rope_cls(raw, h, L.s_qkn_rope, pcf, (nqh + nkh) * nrows)
         }
         rd_ts(raw, "{pfx}qknrope")
     } elif ((nrow_bx & NROW_BX_ROPE) == 0) {
         if (g_rd.qk_norm) {
-            var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(nkh),
+            var pcn = QkRmsArgs(hs = uint(hs), nh = uint(nqh), nkvh = uint(nkh),
                 qstride = kvrow, kstride = kvrow, kbase = uint(qd),
                 qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
                 eps = g_rd.eps, qhs = uint(hs))
-            enc_qk_rms_cls(raw, h, L.s_qkn, pcn, (g_rd.n_heads + nkh) * nrows)
+            enc_qk_rms_cls(raw, h, L.s_qkn, pcn, (nqh + nkh) * nrows)
             rd_ts(raw, "{pfx}qkn")
         }
-        let npairs = qd / 2l + (L.kv_shared ? 0l : kvd / 2l)   //! the k pairs also store the mirror row: none on a shared-KV layer
+        let qpairs = kv_only ? 0l : qd / 2l   //! the q pairs come first; a store-only pass ropes the k pairs alone
+        let npairs = qpairs + (L.kv_shared ? 0l : kvd / 2l)   //! the k pairs also store the mirror row: none on a shared-KV layer
         var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
-            neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(npairs),
+            neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qpairs), npairs = uint(npairs),
             layerbase = mirbase, boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
             rows = nr, kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems))
         let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
@@ -2086,9 +2088,8 @@ var private g_rdq_prev_last = 0ul   //! the last stamp of the command sampled be
 [cold_path]   // DASLLAMA_GPU_PROF reporting leg
 def private rdq_host_report(led : RdqLedger; what : string; rows : int64) {
     let n = double(led.count + 1l)
-    let more = led.host_us[4] > 0.0lf ? " + kv readback {int(led.host_us[4] / n)}" : ""
     let of = rows > 1l ? " of {rows} rows" : ""
-    to_log(LOG_INFO, "vk_rdec host wall/{what} over {led.count + 1l}{of}: {int(led.wall_us / n)} us (memcpys {int(led.host_us[0] / n)} + submit {int(led.host_us[1] / n)} + wait {int(led.host_us[2] / n)} + landing copy {int(led.host_us[3] / n)}{more})\n")
+    to_log(LOG_INFO, "vk_rdec host wall/{what} over {led.count + 1l}{of}: {int(led.wall_us / n)} us (memcpys {int(led.host_us[0] / n)} + submit {int(led.host_us[1] / n)} + wait {int(led.host_us[2] / n)} + landing copy {int(led.host_us[3] / n)})\n")
 }
 
 //! one sampled command of a form into its ledger, under the form's stamp list; the report every 32, as `vk_rdec gpu avg/{what}`
@@ -2163,6 +2164,14 @@ def vk_rdec_note_weight_bytes(bytes : int64) {
 
 //! whether the step at `served` tokens so far reads its logits row for the guard: the first four tokens and every 256th
 def private rd_guard_step(served : int64) : bool => served < 4l || ((served + 1l) & 255l) == 0l
+
+//! ... and whether a command serving `n` tokens at once from `served` lands on a guard step: the verify's rows keep the cadence
+def private rd_guard_rows(served, n : int64) : bool {
+    for (i in range64(n)) {
+        return true if (rd_guard_step(served + i))
+    }
+    return false
+}
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private rd_logits_guard(logits : float const?; n : int64) {
@@ -2559,11 +2568,11 @@ def private rd_record_draft {
     g_rd.draft_recorded[g_rd.region] = true
 }
 
-//! The NextN draft (`RdecDraftFn`) in the selected region: the host's head rows [hyd0, row) up to the head's slot, the recorded
-//! draft command at row `row`, the logits and the pick landed with the head's hidden, row `row`'s K/V read back to the host;
-//! under DASLLAMA_GPU_PROF=1 the command's stamps and its host wall (the hydrate in the memcpys piece) go to the draft's ledger
+//! The NextN draft (`RdecDraftFn`) in the selected region: the host's head rows [hyd0, row) up to the head's slot, the recorded draft
+//! command at row `row`, the pick landed with the head's hidden - and the logits, unless `pick_only` keeps them on the device (the picks-only
+//! transfer twin); row `row`'s K/V stays on the device. Under DASLLAMA_GPU_PROF=1 the command's stamps and its host wall (the hydrate in the memcpys piece) go to the draft's ledger
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   // per speculative round, reached through the tier's registered seat
-def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>) : int64 {
+def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>) : int64 {
     if (g_rd == null || !g_rd.ready || !g_rd.head_on || !g_rd.carry) {
         return -1l
     }
@@ -2595,26 +2604,20 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
         var cmd = g_rd.draft_cmd[g_rd.region]
         if (prof) {   //! the profiled form splits the wall into its pieces, as the one-row submit does
             let t1 = ref_time_ticks()
-            rd_submit_land(cmd, 1l, false)
+            rd_submit_land(cmd, 1l, pick_only)
             let t2 = ref_time_ticks()
             rd_wait_land()
             let t3 = ref_time_ticks()
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
-            pick = rd_landed_pick(0l)
+            pick = rd_land_draft(pick_only, logits)
             let t4 = ref_time_ticks()
-            read_kv_rows_of(L, row, 1l, kp + row * rowb, vp + row * rowb)
-            let t5 = ref_time_ticks()
             g_rdq_d.host_us[0] += double(get_time_usec(ts0)) - double(get_time_usec(t1))
             g_rdq_d.host_us[1] += double(get_time_usec(t1)) - double(get_time_usec(t2))
             g_rdq_d.host_us[2] += double(get_time_usec(t2)) - double(get_time_usec(t3))
             g_rdq_d.host_us[3] += double(get_time_usec(t3)) - double(get_time_usec(t4))
-            g_rdq_d.host_us[4] += double(get_time_usec(t4)) - double(get_time_usec(t5))
         } else {
-            rd_submit_land(cmd, 1l, false)
+            rd_submit_land(cmd, 1l, pick_only)
             rd_wait_land()
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
-            pick = rd_landed_pick(0l)
-            read_kv_rows_of(L, row, 1l, kp + row * rowb, vp + row * rowb)
+            pick = rd_land_draft(pick_only, logits)
         }
     }
     if (prof) {
@@ -2627,6 +2630,12 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
         }
     }
     return pick
+}
+
+//! the draft's landing: the one-row landing, and the pick whichever form it took
+def private rd_land_draft(pick_only : bool; var logits : array<float>) : int64 {
+    let picked = rd_land_one(pick_only, logits)
+    return picked >= 0l ? picked : rd_landed_pick(0l)
 }
 
 //! the verify has no same-slab form on this model for `why`, said once: the decision is made once per armed model
@@ -2724,18 +2733,16 @@ def private rd_record_verify(n : int64) {
     g_rd.v_recorded[vi] = true
 }
 
-//! The same-slab verify (`RdecVerifyFn`) in the selected region: row i is the stream's token at `pos + i` over the region's rows
-//! below it, the recurrent heads stepping the region's slot a row at a time; the head re-warm in the same command; the rows'
-//! logits, picks and hidden landed, the region's ring parity advanced a row at a time, the head's rows read back (`g_rdq_v` under the profiler)
+//! The same-slab verify (`RdecVerifyFn`) in the selected region: row i is the stream's token at `pos + i` over the region's rows below
+//! it, the recurrent heads stepping the region's slot a row at a time, the head re-warm in the same command; the rows' picks and hidden
+//! landed, their logits too unless `pick_only` (the picks-only transfer twin; a guard step lands them for the over-commit check), the ring parity advanced a row at a time, the head's rows staying on the device (`g_rdq_v` under the profiler)
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   // per speculative round, reached through the tier's registered seat
-def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool {
+def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool {
     if (n < 2l || n > vk_rdec_verify_rows()) {
         return false
     }
     let dim = g_rd.dim
     let r = g_rd.region
-    let L & = unsafe(g_rd.head)
-    let rowb = L.kvd * g_rd.kv_esz
     verify(pos >= 1l && long_length(logits) >= n * g_rd.vocab && long_length(picks) >= n && long_length(hid) >= n * dim,
         "vk_rdec_verify: a verify below row 1 (the head's first row is pos - 1), or a landing short of its rows")
     let vi = rd_v_idx(n)
@@ -2744,6 +2751,8 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var
     }
     let unsplit = g_rd.unsplit_on && pos + n - 1l < RD_UNSPLIT_POS   //! the N-row command's form rule, the furthest row deciding
     let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
+    let guard = rd_guard_rows(g_rd.tokens_served, n)
+    let picks_only = pick_only && !guard
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
     var t1 = ts0
@@ -2775,15 +2784,17 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var
         var cmd = unsplit ? g_rd.v_cmd_unsplit[vi] : g_rd.v_cmd[vi]
         if (prof) {   //! the profiled form splits the wall into its pieces, as the one-row submit does
             t1 = ref_time_ticks()
-            rd_submit_land(cmd, n, false)
+            rd_submit_land(cmd, n, picks_only)
             t2 = ref_time_ticks()
             rd_wait_land()
             t3 = ref_time_ticks()
         } else {
-            rd_submit_land(cmd, n, false)
+            rd_submit_land(cmd, n, picks_only)
             rd_wait_land()
         }
-        memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * n)
+        if (!picks_only) {
+            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * n)
+        }
         memcpy(addr<void?>(hid[0]), g_rd.hid_host.mapped, dim * 4l * n)
     }
     for (i in range64(n)) {
@@ -2791,6 +2802,9 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var
     }
     let t4 = prof ? ref_time_ticks() : ts0
     g_rd.tokens_served += n
+    if (guard) {
+        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
+    }
     if (unsplit) {
         g_rd.unsplit_served += n
     }
@@ -2801,14 +2815,11 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var
         g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l   //! the scratch holds this region's rows 0 .. n - 2 until the next verify or rollback
         g_rd.roll_vrows = n
     }
-    read_kv_rows_of(L, pos - 1l, n, unsafe(kp + (pos - 1l) * rowb), unsafe(vp + (pos - 1l) * rowb))
-    if (prof) {   //! the same pieces the one-row submit reports, the wait being the transfer-queue landing, plus the head rows' readback
-        let t5 = ref_time_ticks()
+    if (prof) {   //! the same pieces the one-row submit reports, the wait being the transfer-queue landing
         g_rdq_v.host_us[0] += double(get_time_usec(ts0)) - double(get_time_usec(t1))
         g_rdq_v.host_us[1] += double(get_time_usec(t1)) - double(get_time_usec(t2))
         g_rdq_v.host_us[2] += double(get_time_usec(t2)) - double(get_time_usec(t3))
         g_rdq_v.host_us[3] += double(get_time_usec(t3)) - double(get_time_usec(t4))
-        g_rdq_v.host_us[4] += double(get_time_usec(t4)) - double(get_time_usec(t5))
         g_rdq_v.wall_us += double(get_time_usec(ts0))
         if (g_rdq_v.count % 32l == 31l) {
             rdq_host_report(g_rdq_v, "verify", n)

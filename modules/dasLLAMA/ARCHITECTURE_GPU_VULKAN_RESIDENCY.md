@@ -248,8 +248,14 @@ picks back (`rdec_unland_picks`), since the CPU rails redo every row's logits. T
 a step for every stream whose parameters are a bare argmax (`sampler_is_argmax`: temperature at or
 under zero, penalties off - the served default) and clears the ask after the step's sample; a
 temperature or a penalty lands the logits as before, and so does every caller that never sets
-`Session.pick_asked` (the tests read the rows). A stream's first token samples off its prefill's
-logits inline, so a request of n tokens lands n - 1 picks. On the pod the host side of a four-row
+`Session.pick_asked` (the tests read the rows). The speculative round's commands land the same
+way: its draft lands the pick alone wherever the walk compares ids, its verify the rows' picks
+alone under the ask, and the round then publishes the committed row's pick through the same
+`Session.pick_ready` / `pick_tok` pair (`land_pick`, which the driver's `rdec_land_pick` counts
+through; `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`); `benchmarks/lcpp_bench.das`'s
+`--mtp-ab` arms ask the same way under a greedy temperature, so the A/B measures the served shape.
+A stream's first token samples off its
+prefill's logits inline, so a request of n tokens lands n - 1 picks. On the pod the host side of a four-row
 step held the logits copy (252-266 us of 4 MB on the E-series) and four pool argmaxes; the pick
 leaves a 16-byte landing, and its planes take 4 x (2 x 64 + 1) bytes a row of the plan. The figures in this section and the next are
 the pod's (RTX PRO 4500, `-jit`, cm2): the `DASLLAMA_GPU_PROF=1` token profile of

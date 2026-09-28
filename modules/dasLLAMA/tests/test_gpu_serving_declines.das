@@ -4,6 +4,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_common
+require dasllama/dasllama_sampling   // sample_: the consumer of a landed pick
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
@@ -545,5 +546,52 @@ def test_mtp_seat_owner(t : T?) {
         t |> equal(owned.seat, 3l, "an owner claiming the model hands every entry to its seat")
         t |> equal(owned.cpu, 0l, "no entry opened the CPU round")
         t |> equal(owned.batch, 7l, "the batch tick answers the seat's count")
+    }
+}
+
+//! the CPU round's opening on a session carrying an unconsumed landed pick, under the unowned probe override
+def private round_refuses_pick() : bool {
+    register_decode_override(PROBE_UNOWNED, @@probe_decode)
+    let prev = active_decode_override()
+    select_decode_override(PROBE_UNOWNED)
+    var m = Model()
+    var s : Session
+    land_pick(s, 3l)
+    var refused = false
+    try {
+        var acc = 0l
+        mtp_spec_eval(m, s, 1l, acc)
+    } recover {
+        refused = true
+    }
+    select_decode_override(prev)
+    delete s
+    delete m
+    return refused
+}
+
+[test]
+def test_land_pick(t : T?) {
+    t |> run("a landed pick is the next sample_'s answer in place of a logits row, consumed once; a second landing before that, and a round opened on it, refuse") @(t : T?) {
+        var s : Session
+        s.logits |> resize(4)
+        s.logits[2] = 9.0
+        t |> equal(sample_(s, SamplingParams()), 2l, "with no pick landed the bare argmax reads the logits row")
+        land_pick(s, 3l)
+        t |> success(s.pick_ready, "the landing arms the pick")
+        t |> equal(sample_(s, SamplingParams()), 3l, "the next sample_ returns the pick, whatever the logits row holds")
+        t |> success(!s.pick_ready, "... and consumes it")
+        t |> equal(sample_(s, SamplingParams()), 2l, "the sample_ after it reads the logits row again")
+        land_pick(s, 5l)
+        var refused = false
+        try {
+            land_pick(s, 6l)
+        } recover {
+            refused = true
+        }
+        t |> success(refused, "a second landing before a sample_ is refused: the first pick would be lost")
+        t |> equal(s.pick_tok, 5l, "the refused landing left the first pick standing")
+        delete s
+        t |> success(round_refuses_pick(), "the CPU round's opening refuses a session whose landed pick nobody sampled")
     }
 }

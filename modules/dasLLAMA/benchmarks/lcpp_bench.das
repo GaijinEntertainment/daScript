@@ -1133,8 +1133,8 @@ def private corpus_ids(t : Model; tk : Tokenizer; tx : string; chat : bool) : ar
     return <- ids
 }
 
-// Greedy pick over the last logits — the tg-real row's sampler. Runs INSIDE the timed window, but
-// both A/B arms pay it identically so it cancels for judging.
+// Greedy pick over the last logits — the parity fixtures' sampler (the tg-real row samples through
+// sample_, so a landed pick serves it).
 def private argmax_logit(s : Session; vocab : int64) : int64 {
     var best = 0l
     var bv = s.logits[0]
@@ -1689,7 +1689,7 @@ def main() : int {
             }
             if (real_row) {
                 // REAL greedy continuation: fresh session per prompt (no KV/recurrent bleed),
-                // prefill untimed as llama-bench excludes the prompt, argmax inside the timed loop
+                // prefill untimed as llama-bench excludes the prompt, the sample inside the timed loop
                 // (both arms pay it, so it cancels). NOT comparable to the synthetic tg row.
                 let mtp_on = cfg.mtp_ab && arm != 0
                 var drafted = 0l
@@ -1705,6 +1705,7 @@ def main() : int {
                 pp_dr |> resize(length(toks))
                 pp_ac |> resize(length(toks))
                 var sp = SamplingParams(temp = cfg.mtp_temp)
+                let ask = sampler_is_argmax(sp)   //! the served shape: a bare-argmax stream asks each step and each round for its pick alone, as the scheduler does
                 for (_rep in range(reps)) {
                     var total_us = 0l
                     var rep_gen = 0l
@@ -1716,24 +1717,25 @@ def main() : int {
                             set_seed_(rs, 4242)
                             rs.spec_params = unsafe(addr(sp))
                         }
+                        rs.pick_asked = ask
                         let t0 = ref_time_ticks()
                         var p_gen = ngen
                         if (mtp_on) {
                             rs.n_past = pl   // forward_prefill leaves n_past alone; the round drives it
-                            var tok = sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size)
+                            var tok = sample_(rs, sp)
                             var gen = 0l
                             while (gen < ngen) {
                                 gen += 1l + mtp_spec_round(t, rs, tok)   // tok + the accepted drafts; only the advance is timed
                                 if (rs.mtp_pre_drawn) {
                                     parked++
                                 }
-                                tok = sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size)
+                                tok = sample_(rs, sp)
                             }
                             p_gen = gen   // a trailing accept may overshoot by 1 — count what ran
                         } else {
                             var pos = pl
                             for (_g in range64(ngen)) {
-                                forward(t, rs, sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size), pos)
+                                forward(t, rs, sample_(rs, sp), pos)
                                 pos++
                             }
                         }
@@ -1804,18 +1806,19 @@ def main() : int {
                         set_seed_(ps, 4242)
                         ps.spec_params = unsafe(addr(sp))
                     }
+                    ps.pick_asked = ask
                     if (mtp_on) {
                         ps.n_past = pl0
-                        var ptok = sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size)
+                        var ptok = sample_(ps, sp)
                         var pgen = 0l
                         while (pgen < ngen) {
                             pgen += 1l + mtp_spec_round(t, ps, ptok)
-                            ptok = sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size)
+                            ptok = sample_(ps, sp)
                         }
                     } else {
                         var ppos = pl0
                         for (_g in range64(ngen)) {
-                            forward(t, ps, sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size), ppos)
+                            forward(t, ps, sample_(ps, sp), ppos)
                             ppos++
                         }
                     }

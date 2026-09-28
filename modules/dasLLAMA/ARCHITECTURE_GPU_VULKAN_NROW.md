@@ -176,24 +176,40 @@ reads the one-row command's logits bit for bit wherever the N-row command does.
 (`ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm`). After the picks, head row i takes
 `[enorm(embed tok_i) ; hnorm(h_i)]` - `h_0` the pre-draft carry the host uploads, `h_i` the trunk's
 post-norm row `i - 1`, copied out of `xb` into the cat plane on the device - through eh_proj with the
-rows as columns, the head's attention norm and requant, and its q/k/v projections, rope and store:
-its K/V rows `pos - 1` .. `pos + n - 2` and nothing past them, since no verify reads the head's
-attention output. The head's rows sit a position below the trunk's, so the head reads a `TokMeta`
-block and rope rows of its own (`RDec.head_tok`, `head_cos_dev`), which its draft command reads too;
-its attention norm lands in the cat plane, so `xb` keeps the trunk rows the landing copies. The
-head's K/V rows come back to the host after the command, as a draft's row does.
+rows as columns, the head's attention norm and requant, and its k and v projections, norm, rope and
+store: its K/V rows `pos - 1` .. `pos + n - 2` and nothing past them, since no verify reads the
+head's attention output. The store-only pass (`rd_encode_attn_head`'s `kv_only`) runs no q GEMV
+where q has its own plane (a merged q/k/v plane keeps its one dispatch) and dispatches the fused
+norm + rope + store, or the split norm and rope pair, over the k-head groups alone (`nh` 0, the
+k pairs from pair 0), so the rows it stores are the draft command's k-head workgroups' bit for bit
+on the same input - `test_gpu_resident_hybrid_mtp_verify` holds the re-warm's row `pos - 1` to the
+draft's. The head's rows sit a position below the trunk's, so the head reads a `TokMeta` block and
+rope rows of its own (`RDec.head_tok`, `head_cos_dev`), which its draft command reads too; its
+attention norm lands in the cat plane, so `xb` keeps the trunk rows the landing copies. The
+head's K/V rows stay on the device after the command, as a draft's row does, and come down on a
+pass (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`).
 
-**The seat leaves the session as the CPU verify does.** Every row's logits, pick and post-norm
-hidden leave on the transfer queue (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`);
-the seat (`vulkan_resident_verify`, `register_mtp_verify_override`) lands them in `mtp_logits_b`,
-`mtp_logits` (row 0), `logits` (the last row) and `mtp_hrows`, `mtp_h` the last row's at `pos + n`,
-the region's rows at `pos + n`, the recurrent state n rows on, and reads the pre-draft carry the
-round saved in `mtp_xb_save` before its draft. Every check that can decline runs before the
-session's state comes up, so a decline leaves the session to the CPU verify untouched. A reject
-takes the rollback seat, not a snapshot: the command copied each recurrent layer's slot after
-every row but its last, and the seat puts row `a`'s copy back and cuts the region's rows to
-`pos + a + 1`, the rows past them dead (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`).
-The trunk's K/V rows stay on the device, as a one-row step's do.
+**The seat leaves the session as the CPU verify does.** Every row's pick and post-norm hidden leave
+on the transfer queue (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), and the rows'
+logits with them unless the round asked for the picks alone - the caller's pick ask
+(`Session.pick_asked`, `RdecVerifyFn`'s `pick_only`): the picks-only twin then carries the landing,
+the logits plane never leaves the device, and a guard step (`rd_guard_rows`: any of the rows on the
+one-row command's cadence) lands the logits anyway so the over-commit check reads row 0. The seat
+(`vulkan_resident_verify`, `register_mtp_verify_override`) lands the picks in `mtp_picks`, the hidden
+rows in `mtp_hrows`, the logits - where they land - in `mtp_logits_b`, `mtp_logits` (row 0) and
+`logits` (the last row), `mtp_h` the last row's at `pos + n`, the region's rows at `pos + n`, the
+recurrent state n rows on, and reads the pre-draft carry the round saved in `mtp_xb_save` before
+its draft. The round's greedy walk reads row 0's pick against the draft wherever the seat served,
+and under the pick ask publishes the committed row's pick (`land_pick`: row 1's on an accept, row
+0's on a reject) for the caller's `sample_`, as the plain step's landing does; a caller that never
+asks reads `s.logits` as before, and the sampled walk keeps the logits (a pick ask beside a sampled
+walk is an engine bug the round panics on by name). Every check that can decline runs before the
+session's state comes up, so a decline leaves the session to the CPU verify untouched, the head's
+device rows brought down first. A reject takes the rollback seat, not a snapshot: the command
+copied each recurrent layer's slot after every row but its last, and the seat puts row `a`'s copy
+back and cuts the region's rows to `pos + a + 1`, the rows past them dead
+(`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`). The trunk's K/V rows stay on the
+device, as a one-row step's do.
 
 **The verify command stamps its dispatches under its own ledger.** Under `DASLLAMA_GPU_PROF=1`
 the command records a timestamp a dispatch role as the token command does, into a stamp list of
@@ -204,17 +220,17 @@ the sequential recurrent rows a stamp a row's step (`dn_seq`) and a stamp a roll
 (`roll`, the two summing over the rows and layers), the classifier over n columns (`cls`, the
 epilogue and the picks as the token command names them), and the head re-warm under `warm_*`:
 the cat rows' copies, norms and requant (`warm_cat`), the eh_proj GEMV (`warm_eh`), the head's
-attention norm and feed requant (`warm_norm`), and its q, k and v projections, norm and rope
-store under the trunk's role names prefixed `warm_` (`warm_q`, `warm_kv`, `warm_qknrope`, or
-`warm_qkn` and `warm_rope` on the split pair). The samples go to the verify's own ledger
-(`g_rdq_v`), so the round's alternating draft and verify commands never restart the token
-ledger's averages, and every 32 verifies the driver prints `vk_rdec gpu avg/verify over N: ...`
-in the token line's shape (`vk_rdec dn avg/verify` beside it on a hybrid, the idle since the
-command sampled before - the draft's - at its end) and `vk_rdec host wall/verify over N of n
-rows: ...` - the memcpys and meta, the submit, the wait (the transfer-queue landing of the n
-logits rows, picks and hidden rows is inside it), the landing copy, and the head rows' readback
-(its own transient submit and wait). The round's profiler sections (`mtp.verify`,
-`mtp.rollback`) price the seat's whole wall from the engine's side, the draft's `mtp.draft`.
+attention norm and feed requant (`warm_norm`), and its k and v projections, norm and rope
+store under the trunk's role names prefixed `warm_` (`warm_kv`, `warm_qknrope`, or `warm_qkn` and
+`warm_rope` on the split pair; a merged q/k/v plane stamps `warm_qkv`). The samples go to the
+verify's own ledger (`g_rdq_v`), so the round's alternating draft and verify commands never
+restart the token ledger's averages, and every 32 verifies the driver prints `vk_rdec gpu
+avg/verify over N: ...` in the token line's shape (`vk_rdec dn avg/verify` beside it on a hybrid,
+the idle since the command sampled before - the draft's - at its end) and `vk_rdec host
+wall/verify over N of n rows: ...` - the memcpys and meta, the submit, the wait (the
+transfer-queue landing of the picks and hidden rows, and of the n logits rows where they land, is
+inside it) and the landing copy. The round's profiler sections (`mtp.verify`, `mtp.rollback`)
+price the seat's whole wall from the engine's side, the draft's `mtp.draft`.
 
 ### The residual step's two forms spell the sandwich add as one fma {#residual-step-fma}
 

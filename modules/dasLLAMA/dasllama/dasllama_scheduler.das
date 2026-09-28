@@ -490,6 +490,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             // is already evaled, so a "length" finish makes donate_stream's pending-eval redundant -
             // harmless, and unreachable: every MTP-capable arch is a deltanet hybrid, which the prefix cache refuses.
             sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
+            sch.streams[i].session.pick_asked = sampler_is_argmax(sch.streams[i].params)   //! a bare argmax's round lands the committed row's pick alone, as its plain step does
             sch.batch_rows |> push(unsafe(addr(sch.streams[i].session)))
             sch.batch_toks |> push(sch.streams[i].cur_tok)
             sch.batch_idx |> push(i)
@@ -518,6 +519,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                 }
             }
             sch.streams[i].session.spec_params = null   // the pointer aims into `streams`, which admission and reaping move
+            sch.streams[i].session.pick_asked = false   //! the ask is a tick's
         }
         let after = mtp_totals(sch)
         sch.mtp_drafted += after.drafted - before.drafted

@@ -1967,11 +1967,15 @@ module) is independent and can land any time - it is pure structure.
     (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), under the Vulkan owner
     (`register_mtp_seat_owner`, "the resident driver is armed on t"), serves the round's
     two-row verify as same-slab rows of the N-row command with the head's re-warm in the same
-    command (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), and warms the head's slab over
-    a prompt it serves as the window chain's extra layer, the rows read back to the host
-    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`; the CPU warm stands down behind a
-    driver that landed the logits, so it never reads the host `x_b` rows such a driver leaves
-    unwritten); the resident overrides land the
+    command - the k-head store alone, no q GEMV - landing the rows' picks and hidden and, under a
+    bare-argmax caller's pick ask, no logits, the committed row's pick published for `sample_`
+    as a plain step's is (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), the draft's pick
+    answered from the device and the round's head rows staying on the device until a pass
+    hydrates them (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), and warms the head's
+    slab over a prompt it serves as the window chain's extra layer, the prompt's rows read back
+    to the host (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`; the CPU warm stands
+    down behind a driver that landed the logits, so it never reads the host `x_b` rows such a
+    driver leaves unwritten); the resident overrides land the
     post-norm hidden carry (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), so with
     `set_mtp_spec` or the server's `--mtp` the round's cold gate passes and the CPU round runs
     around the device draft and verify, and a reject of a verify the seat served rolls the region
