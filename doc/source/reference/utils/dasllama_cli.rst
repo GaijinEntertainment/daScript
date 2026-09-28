@@ -121,7 +121,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - ``--ctx``
      - Context-length cap in tokens (default: the model's trained ``context_length``)
    * - ``--rope-scaling``
-     - RoPE scaling override: ``yarn`` | ``linear`` | ``none`` (default: the model file's own ``rope.scaling`` keys; ``none`` drops them, a file's per-pair factor tensors stay). Qwen enables YaRN as a setting: ``--rope-scaling yarn --rope-scale 4``. The override is baked into the prepared image under its own lane
+     - RoPE scaling override: ``yarn`` | ``linear`` | ``none`` (default: the model file's own ``rope.scaling`` keys; ``none`` drops them, a file's per-pair factor tensors stay). The Qwen families publish the YaRN recipe and enable it as a setting, for long conversations only: ``--rope-scaling yarn --rope-scale 4``; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane
    * - ``--rope-scale``
      - RoPE scaling factor for the override (default: the file's ``rope.scaling.factor``; ``yarn`` needs one)
    * - ``--yarn-orig-ctx``

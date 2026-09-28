@@ -146,7 +146,7 @@ struct ServerArgs {
     @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) host-cached, off at several streams or on a device-resident (--gpu vulkan) slot; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
     mtp : bool
 
-    @clarg_doc = "RoPE scaling override for the load: yarn | linear | none (default: the model file's own rope.scaling keys; none drops them, a file's per-pair factor tensors stay). Qwen enables YaRN as a setting: --rope-scaling yarn --rope-scale 4. The override is baked into the prepared image under its own lane (model.gguf.metal-yarn4.dlim). Per-model in a [[models]] roster: rope_scaling"
+    @clarg_doc = "RoPE scaling override for the load: yarn | linear | none (default: the model file's own rope.scaling keys; none drops them, a file's per-pair factor tensors stay). The Qwen families publish the YaRN recipe and enable it as a setting, for long conversations only: --rope-scaling yarn --rope-scale 4; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (model.gguf.metal-yarn4.dlim). Per-model in a [[models]] roster: rope_scaling"
     rope_scaling : string
 
     @clarg_doc = "RoPE scaling factor for the override (default: the file's; yarn needs one)"

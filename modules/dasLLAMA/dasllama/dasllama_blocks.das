@@ -950,9 +950,11 @@ def attention_std_decode(t : Model; var s : Session; l : int64; pos : int64) { /
         let use_ff = !(c.rope_ff_global_only && is_sliding)
         if (rot != head_size) {
             unsafe {
-                rope_scaled_neox_part(addr(s.q[0]), pos, head_size, rot, qd, theta, fscale, false, null, c.rope_mscale)
+                let has_ff = use_ff && !empty(t.rope_freqs)   // the YaRN divisors over the rotated span, as the table path folds them
+                let ffp = has_ff ? addr < float const? >(t.rope_freqs[0]) : null
+                rope_scaled_neox_part(addr(s.q[0]), pos, head_size, rot, qd, theta, fscale, has_ff, ffp, c.rope_mscale)
                 if (!kv_shared) {
-                    rope_scaled_neox_part(addr(s.k[0]), pos, head_size, rot, kv_dim, theta, fscale, false, null, c.rope_mscale)
+                    rope_scaled_neox_part(addr(s.k[0]), pos, head_size, rot, kv_dim, theta, fscale, has_ff, ffp, c.rope_mscale)
                 }
             }
         } else {

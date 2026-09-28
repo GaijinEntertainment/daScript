@@ -304,7 +304,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--rope-scaling``
      -
      - *file*
-     - RoPE scaling override for the load: ``yarn`` | ``linear`` | ``none``; unset keeps the model file's own ``rope.scaling`` keys, ``none`` drops them (a file's per-pair factor tensors stay, as llama.cpp keeps them). ``yarn`` folds the NTK-by-parts frequency ramp and the ``1 + 0.1 ln(s)`` magnitude into the rope tables the way llama.cpp's ``--rope-scaling yarn`` does; the Qwen files ship no scaling keys and enable YaRN as a setting. The override is baked into the prepared image under its own lane (``model.gguf.metal-yarn4.dlim``), so the first load with it mints once. Per-model in a ``[[models]]`` roster: ``rope_scaling`` (config key ``rope_scaling``)
+     - RoPE scaling override for the load: ``yarn`` | ``linear`` | ``none``; unset keeps the model file's own ``rope.scaling`` keys, ``none`` drops them (a file's per-pair factor tensors stay, as llama.cpp keeps them). ``yarn`` folds the NTK-by-parts frequency ramp and the ``1 + 0.1 ln(s)`` magnitude into the rope tables the way llama.cpp's ``--rope-scaling yarn`` does. The Qwen families publish the recipe (Qwen2.5-Instruct 7B and up, Qwen3, Qwen3-Next / 3.5 / 3.8: factor 4 over the trained context) and ship no scaling keys because static YaRN costs a little on short texts - arm it when a conversation needs the length; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (``model.gguf.metal-yarn4.dlim``), so the first load with it mints once. Per-model in a ``[[models]]`` roster: ``rope_scaling`` (config key ``rope_scaling``)
    * - ``--rope-scale``
      -
      - *file*

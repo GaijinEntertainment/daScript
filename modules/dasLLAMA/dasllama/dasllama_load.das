@@ -2133,6 +2133,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (rope_type != "" && rope_type != "none" && rope_type != "linear" && rope_type != "yarn") {
             panic("dasLLAMA: rope scaling '{rope_type}' is not none | linear | yarn ({rope_src})")
         }
+        // the Qwen families publish the recipe (factor 4 over the trained context); nobody validates it elsewhere
+        if (!empty(rope_ov.kind) && rope_ov.kind != "none" && !(arch |> starts_with("qwen"))) {
+            to_log(LOG_WARNING, "dasLLAMA: rope scaling {rope_type} overrides a {arch} file - no vendor publishes a YaRN recipe for this family (the Qwen cards do), so expect degraded output\n")
+        }
         let fac_key = "{arch}.rope.scaling.factor"
         let rope_factor = rope_ov.scale > 0.0 ? rope_ov.scale : (gguf_has(m, fac_key) ? gguf_f32(m, bytes, fac_key) : 0.0)
         // linear RoPE position scaling (Gemma3-4B: factor 8 on global layers); YaRN folds below
