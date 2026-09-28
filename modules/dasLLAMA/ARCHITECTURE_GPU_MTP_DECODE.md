@@ -213,9 +213,14 @@ in `StepRes.bple_cin`, the conv reads the panel for positions at or past row 0 a
 older ones), and only the accepted rows land in the ring after the walk (`commit_ple_rows`), so a
 rejected row never clobbers a slot a later conv reads and the shadow flip retires no ring.
 `finish_step` copies the wide residual back to `Session.hc_res`. `decode_shape_decline` admits
-`hyper_conn` under `allow_hc` on the single decode, the mint-time gate and the verify; the batch
-gate does not, so a batched step on such a model declines `graph`; the prefill serves the same
-seams over the window's rows (`ARCHITECTURE_GPU_PREFILL.md#prefill-hc-window`). The
+`hyper_conn` under `allow_hc` on the single decode, the mint-time gate, the verify and the batch
+driver's distinct-session step (`batch_step_build` opens the rows' wide residual, runs the mixers
+through the shared layer body, gathers each row's n-gram heads through the arch's pre-stack hook
+on that row's session - its window advances there - and writes each row's ring in place, one row
+a session, at `g_b_ple_bases`; the head mixer stands in the rows' classifier tail and the wide
+row is the row's NextN carry); the same-slab verify keeps `graph`, since its rows are one session.
+The prefill serves the same seams over the window's rows
+(`ARCHITECTURE_GPU_PREFILL.md#prefill-hc-window`). The
 deltanet gate's sigma(z) form is the `MetalDnGateSig` stamp of `MetalDnGateT`, picked on
 `Config.dn_z_sigmoid` by every row form through `enc_dn_zgate`.
 

@@ -301,6 +301,7 @@ struct private StepRes {
     bple_val : MetalBuffer?    // [dim] the value projection
     bple_gated : MetalBuffer?  // [hc x dim] value x gate per stream
     bple_cin : MetalBuffer?    // [nrows x hc x dim] the verify rows' conv-input panel: read by every row's conv before the accepted rows land in the ring
+    batch_rows : bool          // the batch driver's step: every row is its own session, so its side input writes its own ring in place
     ple_ring_base : uint64     // the ring's byte offset inside bdn_state (the live region)
     u_ple_in : MetalBuffer?
     bytes_ple_in : uint64
@@ -986,6 +987,17 @@ def private ple_side_step(r : StepRes; t : Model; enc : MetalComputeEncoder?) {
                 var cka = PleConvArgs(dim = uint(c.dim), hc = uint(c.hc_count), kern = uint(c.ple_conv_kernel),
                     dil = uint(c.ple_ngram_size), rows = uint(rows), pos0 = uint(r.chain_pos), nrows = 1u, direct = 0u)
                 enc_ple_conv(enc, r.bhc, 0ul, r.bple_gated, 0ul, r.bdn_state, r.ple_ring_base, r.bdn_state, r.ple_ring_base, bwt, cka, hcd)
+            } elif (r.batch_rows) {   // one row a session: each writes its own mirror's ring in place, as the single row does
+                for (i in range64(nr)) {
+                    let rb = uint64(i) * r.bytes_hcd
+                    let vb = uint64(i) * uint64(c.dim * 4l)
+                    let pos_i = g_b_rte[i * 4l + 3l] - 1u   // the route table's cnt is the row's position + 1
+                    var gka = PleGateArgs(dim = uint(c.dim), hc = uint(c.hc_count), eps = c.norm_eps, pos0 = pos_i, rows = uint(rows), direct = 0u)
+                    enc_ple_gate(enc, r.bhc, rb, r.bple_key, rb, r.bple_val, vb, bwk, bwq, bwc, r.bple_gated, rb, g_b_dn_bufs[i], g_b_ple_bases[i], gka, c.hc_count)
+                    var cka = PleConvArgs(dim = uint(c.dim), hc = uint(c.hc_count), kern = uint(c.ple_conv_kernel),
+                        dil = uint(c.ple_ngram_size), rows = uint(rows), pos0 = pos_i, nrows = 1u, direct = 0u)
+                    enc_ple_conv(enc, r.bhc, rb, r.bple_gated, rb, g_b_dn_bufs[i], g_b_ple_bases[i], g_b_dn_bufs[i], g_b_ple_bases[i], bwt, cka, hcd)
+                }
             } else {
                 for (g in g_v_groups) {   // the panel form: slot p aliases row p-1's oldest tap, so no row lands in the ring before every conv read (commit_ple_rows)
                     let rb = uint64(g.row0) * r.bytes_hcd
@@ -3101,6 +3113,7 @@ var private @scratch g_b_caps : array<int64>
 var private @scratch g_b_dn_bufs : array<MetalBuffer?>
 var private @scratch g_b_dn_sbases : array<uint64>
 var private @scratch g_b_dn_cbases : array<uint64>
+var private @scratch g_b_ple_bases : array<uint64>   //! each row's n-gram conv ring inside its session's mirror (qwen4exp)
 
 // the model half is decode_shape_decline; per batch: uniform f16/f32 KV, every row within the
 // attention depth cap with a real uid, per-row rope rows built, and dim within the add+rms row
@@ -3128,7 +3141,7 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
         }
     }
     // the deltanet hybrids ride the recurrent rows form where the single row does (decode_shape_decline's graph clause); a MoE's shared expert rides the rows form
-    let shape = decode_shape_decline(t, BATCH_NEEDS_OK, true, true, true)   //! MoE, the E-series' shared-KV layers (Q-only rows) and its two FFN widths all have batch forms
+    let shape = decode_shape_decline(t, BATCH_NEEDS_OK, true, true, true, allow_hc = !batch_same_slab())   //! MoE, the E-series' shared-KV layers (Q-only rows), its two FFN widths and the hyper-connection rows (one session a row) all have batch forms
     if (shape != MetalDecodeDecline.none) {
         return shape
     }
@@ -3404,12 +3417,14 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
     g_b_dn_bufs |> clear()
     g_b_dn_sbases |> clear()
     g_b_dn_cbases |> clear()
+    g_b_ple_bases |> clear()
     if (dn) {
         finish_pending_step()
         dn_mirror_room(nrows)
         g_b_dn_bufs |> reserve(nrows)
         g_b_dn_sbases |> reserve(nrows)
         g_b_dn_cbases |> reserve(nrows)
+        g_b_ple_bases |> reserve(nrows)
         for (i in range64(nrows)) {
             var sp = sessions[i]
             var dm = dn_mirror_prepare(*sp, ws.positions[i], dn_mirror_regions(t))
@@ -3421,6 +3436,7 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
             g_b_dn_bufs |> push(dm.buf)
             g_b_dn_sbases |> push(dm.state_off)
             g_b_dn_cbases |> push(dm.conv_off)
+            g_b_ple_bases |> push(dm.ple_off)
         }
     }
     let ts_all = ref_time_ticks()
@@ -3801,6 +3817,33 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var bdn_gate = c.q_gated ? pool_acquire(g_pool, g_dev, bytes_qg) : null
     var u_dn_qd2 = c.q_gated ? uniform_u32(uint(2l * qd)) : null
     var u_total_qd = c.q_gated ? uniform_u32(uint(nrows * qd)) : null
+    // the hyper-connection rows (qwen4exp): the wide residual and the mixer scratch at mp rows, the n-gram side input's rows
+    let hc = c.hyper_conn
+    let png = has_ple_ngram(c)
+    let hcd = hc ? hc_dim(c) : 0l
+    let bytes_hcd = uint64(hcd * 4l)
+    let bytes_lr = uint64(c.hc_low_rank * 4l)
+    let bytes_hc = uint64(c.hc_count * 4l)
+    let rows_hc = uint64(mp)
+    var bhc = hc ? pool_acquire(g_pool, g_dev, rows_hc * bytes_hcd) : null
+    var bhc_xn = hc ? pool_acquire(g_pool, g_dev, rows_hc * bytes_hcd) : null
+    var bhc_gate = hc ? pool_acquire(g_pool, g_dev, rows_hc * bytes_hcd) : null
+    var bhc_lo = hc ? pool_acquire(g_pool, g_dev, rows_hc * bytes_lr) : null
+    var bhc_inj_a = hc ? pool_acquire(g_pool, g_dev, rows_hc * bytes_hc) : null
+    var bhc_inj_f = hc ? pool_acquire(g_pool, g_dev, rows_hc * bytes_hc) : null
+    var u_hcd = hc ? uniform_u32(uint(hcd)) : null
+    var u_hc = hc ? uniform_u32(uint(c.hc_count)) : null
+    var u_lr = hc ? uniform_u32(uint(c.hc_low_rank)) : null
+    var u_hc_rows = hc ? uniform_u32(uint(nrows)) : null
+    var u_lr_tot = hc ? uniform_u32(uint(nrows * c.hc_low_rank)) : null
+    var u_hcd_tot = hc ? uniform_u32(uint(nrows * hcd)) : null
+    let ind = png ? ple_in_dim(c) : 0l
+    let bytes_ple_in = uint64(ind * 4l)
+    var bple_emb = png ? pool_acquire_untracked(g_upool, g_dev, uint64(nrows) * bytes_ple_in) : null
+    var bple_key = png ? pool_acquire(g_pool, g_dev, rows_hc * bytes_hcd) : null
+    var bple_gated = png ? pool_acquire(g_pool, g_dev, rows_hc * bytes_hcd) : null
+    var bple_val = png ? pool_acquire(g_pool, g_dev, bytes_x) : null
+    var u_ple_in = png ? uniform_u32(uint(ind)) : null
     let bytes_log = uint64(mp * c.vocab_size * 4l)
     var bxf = gpu_logits ? pool_acquire(g_pool, g_dev, bytes_x) : null
     var blog = gpu_logits ? pool_acquire(g_pool, g_dev, bytes_log) : null
@@ -3902,6 +3945,15 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         memcpy(metal_buffer_contents(brt), addr < void? >(g_b_rte[0]), bytes_rt)
     }
     if (!pre) {
+        if (png) {   // each row's n-gram heads: the arch's pre-stack hook gathers them against that session's window and advances it
+            for (i in range64(nrows)) {
+                var sp = sessions[i]
+                invoke(t.blocks.pre_stack_decode, t, *sp, ws.row_tokens[i], ws.positions[i])
+                unsafe {
+                    memcpy(reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(bple_emb)) + uint64(i) * bytes_ple_in), addr < void? >(sp.ple_emb[0]), bytes_ple_in)
+                }
+            }
+        }
         batch_step_poke(L, ws)
     }
     g_us_bsetup += int64(get_time_usec(ts_all))
@@ -3927,15 +3979,23 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
             L.upooled |> push((buf = u_esc, size = 4ul))
         }
     }
-    // layer-0 attention norm (the per-layer trailing add+rms feeds the NEXT layer's)
+    // layer-0 attention norm (the per-layer trailing add+rms feeds the NEXT layer's); a hyper-connection model opens the rows' wide residual instead
     if (g_skip != "ew") {
-        var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
-        enc_rms_b(enc, bx, 0ul, bw_att0, bxb, u_dim, u_eps, nrows)
+        if (hc) {
+            enc_hc_init(enc, bx, bhc, u_dim, u_hc, u_hcd_tot, nrows * hcd)
+        } else {
+            var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
+            enc_rms_b(enc, bx, 0ul, bw_att0, bxb, u_dim, u_eps, nrows)
+        }
     }
     var r = StepRes(valid = true, pos = maxcnt - 1l, chain_pos = maxcnt - nrows, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
         chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, nchmax = nchmax, hid0 = hidden,
         u_hidden2 = u_hidden2, u_total_h2 = u_total_h2,
         ple = plef, bple = bple, u_ple = u_ple, u_ple_tot = u_ple_tot, bytes_ple = bytes_ple,
+        hc = hc, png = png, batch_rows = true, bytes_hcd = bytes_hcd, bytes_lr = bytes_lr, bytes_hc = bytes_hc, bytes_ple_in = bytes_ple_in,
+        bhc = bhc, bhc_xn = bhc_xn, bhc_gate = bhc_gate, bhc_lo = bhc_lo, bhc_inj_a = bhc_inj_a, bhc_inj_f = bhc_inj_f,
+        u_hcd = u_hcd, u_hc = u_hc, u_lr = u_lr, u_hc_rows = u_hc_rows, u_lr_tot = u_lr_tot, u_hcd_tot = u_hcd_tot,
+        bple_emb = bple_emb, bple_key = bple_key, bple_gated = bple_gated, bple_val = bple_val, u_ple_in = u_ple_in,
         dn = dn, bdn_qkv = bdn_qkv, bdn_cv = bdn_cv, bdn_z = bdn_z, bdn_o = bdn_o, bdn_b = bdn_b, bdn_g = bdn_g,
         u_cd = u_cd, u_nvh = u_nvh, u_di = u_di,
         bdn_qg = bdn_qg, bdn_gate = bdn_gate, u_dn_qd2 = u_dn_qd2, u_total_qd = u_total_qd,
@@ -3982,9 +4042,13 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     }
     var nc_all = false
     if (gpu_logits) {
-        // batched final rmsnorm + classifier — the caller's CPU classifier step is skipped
-        var bwfin = upload_region(unsafe(addr < void? >(t.fblob[t.rms_final_off])), uint64(dim * 4l))
-        enc_rms_b(enc, bx, 0ul, bwfin, bxf, u_dim, u_eps, nrows)
+        // batched final rmsnorm + classifier — the caller's CPU classifier step is skipped; the hyper-connection head mixer stands where the norm would
+        if (hc) {
+            hc_mix_rows(r, t, enc, r.bhc, t.hc_head_norm_off, t.hc_head_down_off, t.hc_head_up_off, -1l, bxf, null)
+        } else {
+            var bwfin = upload_region(unsafe(addr < void? >(t.fblob[t.rms_final_off])), uint64(dim * 4l))
+            enc_rms_b(enc, bx, 0ul, bwfin, bxf, u_dim, u_eps, nrows)
+        }
         enc_batch_site(enc, t, bt, cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size, bxf, blog, u_dim, u_vocab, u_vocab, 0l, mv_kdim, 0l, cls64)
         if (u_flcap != null) {
             // final-logit soft cap (gemma2): cap*tanh over the live rows' contiguous logits
@@ -4140,6 +4204,27 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
             L.dn_pos |> push(ws.positions[i] + poff)
         }
     }
+    if (hc) {
+        L.pooled |> push((buf = bhc, size = rows_hc * bytes_hcd))   // nolint:STYLE012
+        L.pooled |> push((buf = bhc_xn, size = rows_hc * bytes_hcd))
+        L.pooled |> push((buf = bhc_gate, size = rows_hc * bytes_hcd))
+        L.pooled |> push((buf = bhc_lo, size = rows_hc * bytes_lr))
+        L.pooled |> push((buf = bhc_inj_a, size = rows_hc * bytes_hc))
+        L.pooled |> push((buf = bhc_inj_f, size = rows_hc * bytes_hc))
+        L.upooled |> push((buf = u_hcd, size = 4ul))   // nolint:STYLE012
+        L.upooled |> push((buf = u_hc, size = 4ul))
+        L.upooled |> push((buf = u_lr, size = 4ul))
+        L.upooled |> push((buf = u_hc_rows, size = 4ul))
+        L.upooled |> push((buf = u_lr_tot, size = 4ul))
+        L.upooled |> push((buf = u_hcd_tot, size = 4ul))
+    }
+    if (png) {
+        L.upooled |> push((buf = bple_emb, size = uint64(nrows) * bytes_ple_in))
+        L.pooled |> push((buf = bple_key, size = rows_hc * bytes_hcd))   // nolint:STYLE012
+        L.pooled |> push((buf = bple_gated, size = rows_hc * bytes_hcd))
+        L.pooled |> push((buf = bple_val, size = bytes_x))
+        L.upooled |> push((buf = u_ple_in, size = 4ul))
+    }
     if (c.q_gated) {
         L.pooled |> push((buf = bdn_qg, size = 2ul * bytes_qg))   // nolint:STYLE012
         L.pooled |> push((buf = bdn_gate, size = bytes_qg))
@@ -4150,8 +4235,8 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     L.sameslab = same
     //! a plain step on a NextN-headed (or carry-armed) model lands each row's post-norm hidden into its session's `mtp_h`, so the stream's next speculative round starts warm - the same-slab verify lands the rows into `mtp_hrows` instead
     let carry = same || c.n_layer_nextn > 0l || g_mtp_carry_hidden
-    L.bxf = carry && gpu_logits ? (g_mtp_carry_pre && c.n_layer_nextn <= 0l ? bx : bxf) : null
-    L.bxf_bytes = L.bxf != null ? nrows * dim * 4l : 0l
+    L.bxf = carry && gpu_logits ? (hc ? bhc : (g_mtp_carry_pre && c.n_layer_nextn <= 0l ? bx : bxf)) : null   //! a hyper-connection model's carry is the wide residual row before the head mixer
+    L.bxf_bytes = L.bxf != null ? nrows * (hc ? hcd : dim) * 4l : 0l
     L.xb = null   // the CPU-classifier tail's x_b writeback is the forward's to arm (sync-only; the pre rail needs GPU logits)
     L.sessions |> clear()
     L.sessions |> reserve(nrows)

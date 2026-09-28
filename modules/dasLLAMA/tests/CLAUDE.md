@@ -97,7 +97,10 @@ trunk + its split Q8_0 head; 3.8fn = Qwen3.8-Flash-Next UD-IQ4_XS + its split `s
 large tier, the SERVED-ONLY form - planar and blob together do not fit the box, so every arm runs
 GPU against GPU on the twin alone, mapped under the rig's identity with no pins and no mint of its
 own, and its ff arms hold the plain-MoE bar (2.0: the rows and single GEMV forms round the router's
-logits apart and a near-tie flips an expert - prose-a reads 0.89 with zero argmax flips); the 4b and
+logits apart and a near-tie flips an expert - prose-a reads 0.89 with zero argmax flips); its
+`mtp-dff-3.8fn` arm runs the batch rail's distinct-session step against the single step on the twin,
+so the cell's "cpu-ref" row is the GPU single step; `dff_pair` sizes the recurrent-mirror cache to
+every twin plus the reference row before the prefills mint their mirrors); the 4b and
 9b blocks carry the `qwen35` family tag; every other fixture
 loads its served twin through `load_model_cached`, so the file mints a `.dlim` per carrier - the
 ledgered exception to the loader rule, since the metal MTP rail is what the image flavor serves;

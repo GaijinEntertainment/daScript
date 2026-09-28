@@ -79,15 +79,20 @@ let PROSE_B = "In the spring of that year the river rose higher than anyone in t
 // both sessions of a pair prefilled on the GPU twin through the metal prefill override (the
 // planar CPU prefill of a 27B costs minutes per session; the metal prefill stashes mtp_h and
 // warms the draft slab like the CPU one does)
-def private gpu_prefill_pair(trg : Model; var sa, sb : Session; prompt : array<int64>) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+//! the Metal prefill forced under the short prompts' length - the only prefill a blob-only model has
+def private gpu_prefill(trg : Model; var s : Session; prompt : array<int64>) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         select_prefill_override("metal")
         set_metal_prefill_min_npos(1l)
-        eval_(trg, sa, prompt)
-        eval_(trg, sb, prompt)
+        eval_(trg, s, prompt)
         select_prefill_override("")
         set_metal_prefill_min_npos(64l)
     }
+}
+
+def private gpu_prefill_pair(trg : Model; var sa, sb : Session; prompt : array<int64>) {
+    gpu_prefill(trg, sa, prompt)
+    gpu_prefill(trg, sb, prompt)
 }
 
 struct FfStats {
@@ -433,6 +438,7 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
             var sb : array<Session>
             sa |> reserve(nb)
             sb |> reserve(nb)
+            dn_mirror_room(2l * nb + 1l)   // a recurrent carrier: every twin and the reference row keep a live mirror, and a prefill mints one - the room comes before them
             for (i in range64(nb)) {
                 sa |> emplace <| make_run_state(c, KVDtype.f16, KVDtype.f16)
                 sb |> emplace <| make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -450,9 +456,14 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
                 cur |> push(greedy_top(sa[i].logits, vocab))
             }
             var one <- [0l]
-            // CPU reference for row 0's first step: which GPU side the truth sits with
+            // the reference for row 0's first step: which GPU side the truth sits with - the CPU on a planar
+            // twin, the GPU single step on a served-only one (a blob model has no CPU prefill)
             var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
-            eval_(tr, sc, prompts[0])
+            if (tr.metal_blob) {
+                gpu_prefill(tr, sc, prompts[0])
+            } else {
+                eval_(tr, sc, prompts[0])
+            }
             one[0] = cur[0]
             eval_(tr, sc, one)
             for (step in range64(nsteps)) {
@@ -767,6 +778,9 @@ def private run_fixture_served(t : T?; file, head, tag : string; tol : float) { 
         var prose_a <- encode(trg, PROSE_A, true, false)
         var prose_b <- encode(trg, PROSE_B, true, false)
         var count <- encode(trg, counting_prompt(1, 40), true, false)
+        if (arm_on(t, "mtp-dff-{tag}")) {   // the batch rail on the twin alone: its reference row is the GPU single step
+            dff_cell(t, trg, trg, tag, prose_a, prose_b, tol, false, true)
+        }
         run_arms(t, trg, trg, tag, prose_a, prose_b, count, tol)
         metal_decode_shutdown()
         metal_prefill_shutdown()
