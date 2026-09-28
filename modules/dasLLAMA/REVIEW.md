@@ -15,9 +15,9 @@ strings any of them look up - applies `REVIEW_TOKENIZER.md` (beside this file) t
 under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this folder applies
 `REVIEW_DOCS.md` (beside this file) too.**
 
-**A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, wherever the
-gate sits, or adds a name to a check's licensed set, applies `REVIEW_GATES.md` (beside this
-file) too.**
+**A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, or adds a name
+to a check's licensed set - the names a check does not flag - applies `REVIEW_GATES.md` (beside
+this file) too.**
 
 **A diff that lands the work a `followup_*.md` row names deletes the row - or, when the row lists
 several items, only the landed item - and repoints every checked-in citation naming the landed
@@ -119,9 +119,10 @@ of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
 named constant, or a `require` in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
 what-lands-where rules.
 
-**A diff that adds or changes a def in a file `REVIEW.das`'s `FACADE_FILES` lists, or adds a
-`public` require, or makes an existing require `public`, on a chain from
-`dasllama/dasllama.das`, or adds an `[EnvConfig]` area struct, applies `REVIEW_FACADE.md` too.**
+**A diff that adds or changes a def in a file `REVIEW.das`'s `FACADE_FILES` lists, or adds
+`public` to a require, new or existing, in `dasllama/dasllama.das` or in a file it reaches
+through `public` requires alone, or adds an `[EnvConfig]` area struct, applies
+`REVIEW_FACADE.md` too.**
 
 **A diff that turns a weight-format id - a `KqFmt` member, a GGUF type number, or the int a
 generated kernel takes as its format parameter - into plane strides, or reads a per-block or
@@ -141,16 +142,17 @@ declaration initializer alone arrives null and dies at the first invoke while ev
 stays green.
 
 **A function in `dasllama/dasllama_common.das` that performs work through a hook another module
-registers, and has no CPU form of that work, panics on the unset hook, with a message naming the
-module to require; a seat whose unset form is the CPU route - a hook with a CPU fallback -
-declines to that route instead.** A function with no fallback that returns quietly hides which
-registration a program root forgot.
+registers runs its own CPU code for that work when the hook is unset; when it has no CPU code
+for that work, it panics with a message naming the module to require.** A function with no
+fallback that returns quietly hides which registration a program root forgot.
 
 **A function in `dasllama/dasllama_common.das` that reports whether a hook another module
 registers is installed returns false when the hook is unset - never a panic.**
 
 **Weakening the token-exact RoPE fixtures - the tests that pin the angle tables
 `dasllama/dasllama_rope.das` builds - is a defect.**
+
+**Weakening `REVIEW.das`'s `check_verify_decline_before_state_move` is a defect.**
 
 **A diff that sets a constant in `dasllama/` to the value a timing of candidate values chose, or
 that adds or changes a predicate there that picks among kernel variants computing the same result
@@ -160,20 +162,20 @@ puts that race's rows, each naming its candidate, in the PR body or the change's
 `PERF_LEDGER.md` row.** Timings taken in two processes or at two commits also differ by everything
 else that changed between the runs, so they cannot pick a candidate.
 
-**A diff that adds an allocation whose size grows with a scaling count states that size in bytes
-in a `PERF_LEDGER.md` row: at the largest shape the code path accepts, or, where the path accepts
-any value of the count, as a formula in the count with its value at two shapes that differ in
-it - a shape being one setting of the scaling counts.** An allocation is one buffer, or one
-sub-range of an arena a plan sizes; a new term in an existing allocation's size is a new
-allocation under this rule, never a change under the next. A scaling count is a count the model
-file sets, how many tokens one step computes at once, how many rows one media encode feeds (an
-image's patches, a clip's frames), or how many regions one buffer is split into (the K/V cache's
-device copy, one region per request served at once; an MoE dispatch's expert regions).
+**A diff that adds an allocation, or adds a term to an existing allocation's size, that grows
+with a scaling count states that size in bytes in a `PERF_LEDGER.md` row: at the largest shape
+the code path accepts, or, where the path accepts any value of the count, as a formula in the
+count with its value at two shapes that differ in it - a shape being one setting of the scaling
+counts.** An allocation is one buffer, or one sub-range of a buffer shared by several uses. A
+scaling count is a count the model file sets, how many tokens one step computes at once, how many
+rows one media encode feeds (an image's patches, a clip's frames), or how many regions one buffer
+is split into (the K/V cache's device copy, one region per request served at once; an MoE
+dispatch's expert regions).
 
 **A diff after which an existing allocation's size starts or stops growing with a scaling count
-(a model-file count, tokens per step, rows per media encode, or regions per buffer) ships the
-measured pair - peak footprint and wall-clock - in `PERF_LEDGER.md`, with the decision it
-settles.**
+(a model-file count, tokens per step, rows per media encode, or regions per buffer) without
+gaining a term ships the measured pair - peak footprint and wall-clock - in `PERF_LEDGER.md`,
+with the decision it settles.**
 
 **A new call that runs a matrix multiply over f32 weight rows - `matmul_batch`, `mm_blob_b`,
 `mm_fblob_b`, per-head `gemm_f32` / `gemm_f32_jo`, or an f32 GPU mm - outside a

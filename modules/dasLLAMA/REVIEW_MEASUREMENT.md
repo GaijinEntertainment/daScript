@@ -46,11 +46,11 @@ The words these rules share:
 - A third-party row is a figure from a run of a third-party program serving the same model on the
   same input size.
 
-**The naming a figure rule asks for attaches to a figure only by a sentence, a table heading or
-a provenance line that unambiguously covers it, or by a citation of a passage or board row whose
-provenance covers it.** A provenance line is a paragraph whose whole content is provenance - the
-harness, flags, box and exe; it covers the rows it names or, when it names none, the paragraphs
-after it up to the next heading or the next provenance line.
+**The naming that a rule governing a figure asks for attaches to a figure only by a sentence, a
+table heading or a provenance line that unambiguously covers it, or by a citation of a passage
+or board row whose provenance covers it.** A provenance line is a paragraph whose whole content
+is provenance - the harness, flags, box and exe; it covers the rows it names or, when it names
+none, the paragraphs after it up to the next heading or the next provenance line.
 
 **A tag (`external`, `direction-grade`, `out-of-process`, `debug-jit`) covers only the figures of
 the sentence it sits in - of the parenthesis, when it sits inside one - or, on a provenance line,
@@ -129,11 +129,11 @@ re-mints a board row (`performance/records/<box>.json`) that exercises it, in th
 names that row in the PR body.** The board is the module's committed record of what serving
 costs; a kernel win that never lands there is invisible to the next regression check.
 
-**A rate, a wall, or a ratio of two, of any served-turn leg written down as a measurement rather
-than as a prediction is a defect unless it cites the committed board row it came from, or names harness,
-flags, environment overrides, box, the exe or script that ran it, and - for a figure aggregated
-over more than one timed run or input - the number of runs or inputs and the spread of the
-per-run figures: the standard deviation, or the min and max.**
+**A rate or wall of any served-turn leg, or a ratio of two such rates or walls, written down as
+a measurement rather than as a prediction is a defect unless it cites the committed board row it
+came from, or names harness, flags, environment overrides, box, the exe or script that ran it,
+and - for a figure aggregated over more than one timed run or input - the number of runs or
+inputs and the spread of the per-run figures: the standard deviation, or the min and max.**
 
 **A diff that records a measured number a `harness/` instrument prints - a time, a rate, or a
 figure computed from one - or changes what such a number measures, ships that number's alternate

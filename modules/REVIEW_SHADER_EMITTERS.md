@@ -71,14 +71,14 @@ declaration by name.** A declaration in that module is available to both emitter
 `[metal_kernel(float_a_ok=true)]` is the license (`dasMetal/metal/msl_emit.das`) - is a defect.**
 A float operand keeps the op off its native fast path.
 
-**A global-rooted-array read in a kernel keeps its index inside the region the buffer's sizing
-site allocates for that dispatch - the dispatch's own bound is not that region - or inside
-slack, an allocation past the region's end that the kernel's module-root `ARCHITECTURE*.md`
-names.** A global-rooted-array read is a module global, a `@workgroup` array or a `self.<member>`
-resource read in a kernel body or a `def` it calls. The rule fires on a diff that adds such a
-read, moves one to a new index, past a condition that kept it out, or into a compiled
-`[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]` variant it was not in (a removed gate or
-a widened gate constant), or changes the bound a dispatch hands that kernel or the size the
-read's buffer is allocated at. A read is kept out by a guard on it, a clamp into the region, a
-guard on the store of a block the read loads whole, or a `static_if` or `@template_gate` that
-compiles it out of a variant.
+**A diff that adds a global-rooted-array read, moves one to a new index, past a condition that
+stopped it from running at an index outside the region, or into a compiled variant it was not
+in, or changes the bound a dispatch hands its kernel or the size its buffer is allocated at,
+keeps the read's index inside the region the code that allocates the buffer sizes for that
+dispatch - the dispatch's own bound is not that region - or inside slack, an allocation past the
+region's end that the kernel's module-root `ARCHITECTURE*.md` names.** A global-rooted-array read
+is a module global, a `@workgroup` array or a `self.<member>` resource read in a kernel body or a
+`def` it calls; a compiled variant is a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]`
+variant, and a removed gate or a widened gate constant moves a read into one. A guard on the
+read, a clamp into the region, a guard on the store of a block the read loads whole, or a
+`static_if` or `@template_gate` that compiles the read out of a variant satisfies the rule.

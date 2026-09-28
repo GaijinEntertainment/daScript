@@ -110,16 +110,18 @@ call the widest set among the ops it reaches. A lane that exits early, or reache
 different number of times, leaves the set unable to complete it.
 
 **An encoder that dispatches a kernel form (a kernel class or a template instance) indexing a
-device buffer by a host-chosen count or base offset - a loop with no bounds or tail guard, a
-walk bounded by a stamped constant - sizes that buffer to the walk's last address, so no
-address passes the allocation.** A `requires =` contract on the class is that guarantee for the
-dimension it names; an unchecked claim that an extent divides evenly is not. A padded chunk's
-walk can run past the live extent.
+device buffer by a host-chosen count or base offset, in a walk with no bounds or tail guard or a
+walk bounded by a stamped constant, sizes that buffer to the walk's last address, so no address
+passes the allocation.** A stamped constant is a constant baked into the kernel (a
+`@template_constant` or a literal). A dimension the class's `requires =` contract names needs no
+padded buffer, because the builder rejects the misaligned shape; an unchecked claim that an
+extent divides evenly does not. A walk that rounds the extent up to whole chunks reads past the
+live extent, and one read of stale bytes in a shared tile corrupts real rows.
 
 **An encoder that dispatches a kernel form whose `@workgroup` stage is sized by a literal, and
 indexed by a host-chosen count or base offset, declines a shape larger than that literal in the
-dispatching code before the dispatch is recorded.** One read of stale bytes in a shared tile
-corrupts real rows.
+dispatching code before the dispatch is recorded.** Workgroup memory has no bounds check, so an
+index past the literal reads or writes another stage's bytes.
 
 **Never let a pad row that feeds the reduction of a live output row - a pad along the reduction
 axis - reach a `matmul2d` or a staged cooperative tile as an operand; stage it as zero, or bound

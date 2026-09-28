@@ -9,23 +9,26 @@ function reaches another when it calls it, or calls a function that reaches it. 
 is one unit of served work the runtime re-enters a path for: a token, a prefill quantum (one
 batch of prompt tokens the prefill path processes in a single pass), one encoded media input (an
 image, a video frame, an audio chunk), or one synthesized speech chunk or frame. A region entry is
-the outermost function the runtime re-enters once per serving step.
+the outermost function the runtime re-enters once per serving step. An interior function is one
+whose every caller the runtime re-enters once per serving step
+(`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
 
 **Every kernel dispatch (the host function that records it), loop or call path a diff adds that
 the runtime re-enters once per serving step is, or is reached by, an annotated region entry:
 `[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts, or `[cold_path]` on the
-guarded, rarely-taken function that is the path's only entry.** Interior means every caller is
-itself re-entered that way (`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
+guarded, rarely-taken function that is the path's only entry.**
 
-**A function a serving step reaches only through a registered function value - a hook seat, an
-override registry's entry - is a region entry, and carries an entry's annotation.** No caller
-in the call graph re-enters it, so nothing above it can carry the annotation for it.
+**A function a serving step reaches only through a registered function value - a function value
+stored in a table or variable that the runtime calls through - is a region entry, and carries
+`[hot_path]`, a `[no_alloc]` / `[no_env]` / `[no_io]` contract, or `[cold_path]`.** No caller in
+the call graph re-enters it, so nothing above it can carry the annotation for it.
 
-**A `[cold_path]` on a function a serving step runs with no guard that skips it on most steps
-of a run that reaches it is a defect - split the rarely-taken part (a rebuild, a first-use allocation, a log) into its
-own `[cold_path]` function behind the guard that keeps it rare, and leave the function every
-serving step reaches unmarked.** The annotation is a promise about how often the function runs,
-and the allocation lint stops walking at it.
+**A `[cold_path]` function that a serving step calls with no guard around the call - a guard
+that skips the call on most steps of every generation that calls it at least once - is a
+defect: split the rarely-taken part (a rebuild, a first-use allocation, a log) into its own
+`[cold_path]` function behind the guard that keeps it rare, and leave the function every serving
+step reaches unmarked.** The annotation is a promise about how often the function runs, and the
+allocation lint stops walking at it.
 
 **A diff that renames a function carrying `[hot_path]`, `[cold_path]` or a `[no_alloc]` /
 `[no_env]` / `[no_io]` contract, or inserts a def textually above it in the file, keeps that

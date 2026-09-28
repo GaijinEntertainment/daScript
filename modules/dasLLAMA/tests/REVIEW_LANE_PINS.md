@@ -1,15 +1,15 @@
 # dasLLAMA tests - Lane Pins Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../ARCHITECTURE_RUNTIME.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
-`../followup_metal.md`.
+docs: `../ARCHITECTURE_RUNTIME.md`, `../ARCHITECTURE_MEDIA.md`. Planned work:
+`../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
 asserts belong to every cell that calls it. A lane setter is a call whose value a family's
 loader reads to pick its lane, or a facade call that makes that call. A driver setter is any
-other `../dasllama/` call, whatever its name, that writes process-global state a later load,
-route choice or kernel dispatch in the same process reads. A setter's getter is a `../dasllama/`
-call that returns exactly the value the setter last wrote.
+other `../dasllama/` call that writes process-global state a later load, route choice or kernel
+dispatch reads. A driver setter's getter is a `../dasllama/` call that returns exactly the value
+the driver setter last wrote.
 
 **A cell, or the `[init]` of the file where the cell is defined, sets every driver setter whose
 value the cell's claim depends on, even when that value is its DEFAULT.**

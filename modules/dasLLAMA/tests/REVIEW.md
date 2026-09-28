@@ -89,8 +89,8 @@ sweeps, or a tolerance it holds - corrects or adds, in the same change, the `CLA
 every test file running the cell, counts and skip clauses included.** A file's entry is the
 clause that describes the file, named with or without its `.das` suffix; a `{a,b}` shorthand or
 a suite roster needs no update. An entry may describe a class of cells in one clause - the cells
-of one helper, one arm family - when that clause's counts and skip clauses hold for every cell in
-the class.
+of one helper, the arms of one name pattern (`mtp-ff-<tag>`) - when that clause's counts and skip
+clauses hold for every cell in the class.
 
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm filter
@@ -168,12 +168,15 @@ kernel it itself dispatches or calls, is asserted in that cell by an assert on t
 a resize, or a counter showing the path ran is not evidence the number was reached; a device's
 geometry (subgroup width, SM count) is no coverage claim.
 
-**An exact token or id compare whose two sides run different lanes, backends, batch shapes or
-kernel forms, over a prompt whose continuation can tie, is a defect - it takes the forced-feed
-logits-tolerance form, the same fixed tokens fed to both sides and the logits compared within a
-bar; an exact compare whose two sides run one code path states in the cell what makes them one
-(the shared entry point, or an assert pinning the lane).** A counting cell - one whose prompt
-forces a continuation that cannot tie, so greedy tokens are fixed - stays exact on any two sides.
+**An exact token or id compare over a prompt whose continuation can tie, whose two sides run
+different lanes, backends, batch shapes or kernel forms, is a defect - it takes the forced-feed
+logits-tolerance form: the same fixed tokens fed to both sides, the logits compared within a
+bar. A counting cell, whose prompt forces a continuation that cannot tie, stays exact on any two
+sides.**
+
+**An exact token or id compare over a prompt whose continuation can tie, whose two sides run one
+code path, states in the cell what makes them one - the shared entry point, or an assert pinning
+the lane.**
 
 **A diff that adds an ASR family ships a token-for-token oracle cell for it - a transcript
 compared against a reference leg, an external dump or a CPU control.**
@@ -209,12 +212,12 @@ it spawns.** A set after that process starts is invisible to a config already re
 **A cell whose claim depends on an environment-read knob its own process has already read names
 that knob's value in the text a red prints - the cell label or the assert.**
 
-**A diff that adds or loosens an assert that must hold, holding a figure the run measures - the
-difference between two computed sides, a rate, an error, or a count the run decides - within a
-nonzero tolerance, or past a floor or ceiling, in a cell that is not a kernel-unit cell, ships in
-the same change, in each such cell holding the assert, a control that lands outside that bound.**
-An assert that must miss - a control - and a witness that a value moved are not such asserts. A
-bound nothing has exceeded where it is applied is not known to discriminate there.
+**A diff that adds or loosens an assert whose pass means two sides agree or a figure is good
+enough - the difference between two computed sides, a rate, an error, or a count the run
+decides, within a nonzero tolerance or past a floor or ceiling - in a cell that is not a
+kernel-unit cell, ships in the same change, in each such cell holding the assert, a control that
+lands outside that bound.** A bound nothing has exceeded where it is applied is not known to
+discriminate there.
 
 **A control for a measured-figure assert in a cell that is not a kernel-unit cell changes an input
 the computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled -

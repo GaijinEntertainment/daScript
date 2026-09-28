@@ -160,10 +160,10 @@ beats its `=0` row; or `override DECV4 = false` and `override DECVEC = false` to
 the format back on the scalar callback.** With `DECV4 = true` the class never reads `DECVEC`, so
 `override DECVEC = false` alone leaves the hand-written twin running.
 
-**A GPU timestamp recorded by a command whose stamps `rdq_sample` reads - the resident decode's
-token command, and every recorded form beside it - goes through `rd_ts` with the name its
-interval is reported under - never a bare `pfq_ts` - in `dasllama/dasllama_vulkan_decode.das`;
-the command's first stamp is the anchor and takes the empty name.** The profiler (`rdq_sample`)
+**A GPU timestamp in `dasllama/dasllama_vulkan_decode.das` recorded by a command whose stamps
+`rdq_sample` reads goes through `rd_ts` with the name its interval is reported under - never a
+bare `pfq_ts`; the command's first stamp is the anchor and takes the empty name.** The profiler
+(`rdq_sample`)
 sums intervals by the recorder's own names, so a bare stamp records more stamps than the recorder
 has names and the token's roles are not summed; a name's prefix (`a:` `d:` `m:` `p:` `t:`) picks
 its table, and a name shared by two stamps sums them on purpose.
@@ -220,9 +220,10 @@ no error.
 byte literal.** A literal stops matching when `TokMeta` gains a field, and every row past the first
 then reads its fields outside the binding, with no error.
 
-**A diff that adds a recorded form - a recorder that builds a command whose stamps `rdq_sample`
-reads into its own command buffer (`dasllama/dasllama_vulkan_decode.das`) - gives that form its
-own stamp-name list and stamp count.** The profiler sums intervals by the recorder's own names.
+**A diff that adds a recorded form - a recorder that builds, into its own command buffer, a
+command whose stamps `rdq_sample` reads (`dasllama/dasllama_vulkan_decode.das`) - gives that
+form its own stamp-name list and stamp count.** The profiler sums intervals by the recorder's
+own names.
 
 **A diff that adds or changes a recorder that installs its own stamp names in
 `g_rdq_stamp_names` (`dasllama/dasllama_vulkan_decode.das`) puts the one-row command's list back
@@ -254,5 +255,3 @@ the new record replaced.
 command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path that writes
 availability outside `vk_rdec_prepare` can turn a form on after the recording pass ran, and
 `rd_form_at` then picks a form whose command buffer nothing recorded.
-
-**Weakening `REVIEW.das`'s `check_verify_decline_before_state_move` is a defect.**

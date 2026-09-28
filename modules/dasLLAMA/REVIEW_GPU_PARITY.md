@@ -13,7 +13,7 @@ message or the PR description. A hook seat is a stage slot the CPU chain calls a
 fills. A tower driver is a driver serving a family's encoder or synthesis stages through hook
 seats. A serving call is a decode, a prefill, a tower or a hook seat. A bar is the largest
 difference a continuous compare accepts - a constant, or a constant times a statistic of the
-reference.
+reference. A parity run is a run or cell whose compare is offered as parity evidence.
 
 **A diff that cites as parity evidence a compare whose GPU side is a `[vk_dispatch]` or
 `[metal_dispatch]` class the cell dispatches itself applies the `tests/` subfolder's
@@ -89,13 +89,10 @@ device is a defect.** That line is the Vulkan driver naming a call it handed bac
 `resident override passed a call` updates, in the same change, the rules of this list that read
 that text.**
 
-**A driver-against-itself compare cited as GPU-vs-CPU parity evidence is a defect** - it is
-evidence for a `PERF_LEDGER.md` row; an equivalence cell, two GPU-served arms held to each other
-as a claim about the driver alone, sits outside this checklist.
+**A diff that cites a driver-against-itself compare as parity evidence is a defect - such a
+compare is evidence for a `PERF_LEDGER.md` row.**
 
-**A diff that holds a serving call's output to a bar in a parity run where that output was not
-held to that bar before - a new bar, or an existing bar on an output it did not cover - or
+**A diff that holds a serving call's output to a bar for the first time in a parity run, or
 changes a bar's constant or the statistic the constant multiplies, adds a `PERF_LEDGER.md` row
 in the same change naming the bar's constant and value, the reading it comes from and the box
-that read it.** A parity run is `harness/parity.das`, `benchmarks/lcpp_bench.das --parity` or a
-`tests/run.das` cell.
+that read it.**

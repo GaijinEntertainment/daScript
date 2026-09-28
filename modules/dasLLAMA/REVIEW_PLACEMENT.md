@@ -27,9 +27,9 @@ change that charter row in the same change.**
 ("on Vulkan ...", "Metal's ...", "on a build without das_metal" - the Vulkan file) licenses only
 that backend's file; a concern the row names without a backend licenses both.**
 
-**A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
-adding a member of the kind the parenthetical lists that the parenthetical does not name lands
-it in the file whose concern is named, and adds it to that parenthetical in the same change.**
+**A diff adding a new item of the sort a charter line's parenthetical lists (a model family, a
+weight format, a dispatch arm) lands it in that charter line's file, whether or not the
+parenthetical names it, and adds it to the parenthetical in the same change.**
 
 **Never add a charter line for a file outside `dasllama/` - that file answers to its own
 folder's checklist.**

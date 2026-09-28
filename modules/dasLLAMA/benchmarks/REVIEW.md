@@ -9,16 +9,17 @@ An instrument is a file that times a run itself and reports a wall-clock time or
 result, printed or returned to a caller that prints it; a file that reads a child process's clock
 is not one, and a serving path's profiler-gated report (a run whose result is the served output,
 the numbers a side report) is not one. A race times two implementations of one computation in
-one process, either of which the run could adopt - two settings of one lever are not two
-implementations; an arm is one implementation's timed run; a compared arm is one whose output
-the run reads back and measures against another arm's output or a CPU reference; the baseline
-arm is the arm running the implementation already in use. A served turn is one whole request
-the engine serves - a prefill-plus-decode run, or a transcription or synthesis end to end; a
-board cell is a timed cell whose rows land in `../performance/records/<box>.json` or
-`../PERF_LEDGER.md` - a ruler record under `../performance/records/mtp/` is not a board row. A
-result row is a row carrying a time, a rate, or a per-kernel occupancy
+one process, either of which the run could adopt - two values of one flag or environment switch
+are not two implementations; an arm is one implementation's timed run; a compared arm is one
+whose output the run reads back and measures against another arm's output or a CPU reference;
+the baseline arm is the arm running the implementation already in use. A served turn is one
+whole request the engine serves - a prefill-plus-decode run, or a transcription or synthesis end
+to end; a board cell is a timed cell whose rows land in `../performance/records/<box>.json` or
+`../PERF_LEDGER.md`. A result row is a row carrying a time, a rate, or a per-kernel occupancy
 count. An A/B arm is one of two timed runs an instrument makes in ONE process that differ only in
 one flag or environment switch - the lever - set to a different value in each; off/on or graded.
+A refusing rep is a rep that produced no figure, or ran on a backend other than its row's backend
+stamp - the backend name the row records as having served it.
 
 **Code that dispatches a GPU kernel to measure it rather than to serve a call, wherever the diff
 puts it, applies `../REVIEW_GPU_RACE.md` too.**
@@ -110,9 +111,6 @@ lever helps, so a per-prompt loss hides inside a winning mean.
 
 **A diff that adds or changes a row measured over reps reports one number over ALL of them.**
 
-**A rep of a row measured over reps refuses when it produced no figure, or when it ran on a
-backend other than the row's backend stamp - the backend name the row records as having served
-the row.**
-
-**One refusing rep drops the whole row: the row reports the refusal and its reason and no
-number.** A partial row reads like a measured one and is a different quantity.
+**A diff that adds or changes a row measured over reps drops the whole row when any rep refuses:
+the row reports the refusal and its reason and no number.** A partial row reads like a measured
+one and is a different quantity.
