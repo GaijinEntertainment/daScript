@@ -99,7 +99,7 @@ def pf_split_pick(fmt : int; d, rows, n, row0, sib_tiles : int64) : tuple<tc : i
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : int;
                         wq, ws, ab, sb, yb : uint64; wqn, wsn, an, sn, yn : int64;
-                        abit, ybit : uint; n, d, blk, rows : int64; f16feed : bool; sib_tiles : int64 = 0l; row0 : int64 = 0l) {
+                        abit, ybit : uint; n, d, blk, rows : int64; f16feed : bool; sib_tiles : int64 = 0l; row0 : int64 = 0l; ts : bool = true) {
     // the tile pick and the split pick — computed once, fed to fill AND enc
     var nsplit = 1l
     var ksplit = 0l
@@ -166,7 +166,9 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         }
         q8_batch_cls_enc(v, raw, h, g_rd.pf_cls_gemm[key], pc, groups)
     }
-    pfq_ts(raw)
+    if (ts) {   //! the head warm's GEMMs stamp nothing: the profile's role table counts the layers' stamps and the tail's
+        pfq_ts(raw)
+    }
 }
 
 //! the small f16 GEMM route serves: the shape admits it and the split-k scratch holds a whole window's partial planes at the widest row it takes (the router's, the beta/alpha pair's)
@@ -720,7 +722,7 @@ def private pf_setup {
             g_rd.pf_splitk_bytes = skb
         }
     }
-    let nsets = int(g_rd.n_layers * PF_ROLES + 2l)   // + prologue, final quantize of the last row
+    let nsets = int(g_rd.n_layers * PF_ROLES + 2l + (g_rd.head_norm_base > 0l ? PF_ROLES : 0l))   // + prologue, final quantize of the last row, the NextN head's block
     g_rd.pf_sets |> resize(nsets)
     g_rd.pf_arq_sets |> resize(g_rd.n_layers * 2l)
     g_rd.pf_meta |> resize(nsets)
@@ -962,6 +964,178 @@ def private pf_setup {
     g_rd.pf_ready = true
 }
 
+//! the NextN head's set block in `pf_sets`: past the layers' blocks and the tail's two
+def private pf_head_block : int => int(g_rd.n_layers * PF_ROLES + 2l)
+
+//! the head's q, k and v planes take the f16 feed (the trunk's `pf_qkv6` over the head's layer)
+def private pf_head_qkv6 : bool => pf_f16_feed(g_rd.head.fq) && pf_f16_feed(g_rd.head.fk) && pf_f16_feed(g_rd.head.fv)
+
+//! the head warm has no form on this device for `why`, said once: the chain leaves the head's prompt rows as the host holds them
+[cold_path]
+def private pf_head_decline(why : string) : bool {
+    g_rd.pf_head_declined = true
+    to_log(LOG_WARNING, "dasLLAMA vulkan resident: the NextN head's prompt warm has no form on this device - {why}; the head's prompt rows stay as the host holds them\n")
+    return false
+}
+
+//! The head warm's planes and sets, built once per residency: the embed rows and the trunk's shifted post-norm rows with their norm
+//! sets, the [enorm ; hnorm] image with its feed, the head's own feed, rope and q/k norm sets over the trunk's projection planes
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   // once per residency
+def private pf_head_setup : bool {
+    return true if (g_rd.pf_head_ready)
+    return false if (g_rd.pf_head_declined)
+    let np = g_rd.pf_np
+    let dim = g_rd.dim
+    let hb = pf_head_block()
+    if (long_length(g_rd.pf_sets) < int64(hb) + PF_ROLES) return pf_head_decline("the head's set block was not sized (the driver prepared without the head)")
+    let q6 = pf_head_qkv6()
+    let e6 = pf_f16_feed(g_rd.eh_fmt)
+    if (q6 && g_rd.pf_xf == 0ul) return pf_head_decline("the head's q/k/v planes take the f16 feed and the chain carries no f16 feed plane")
+    if (!e6 && kq_sb(g_rd.eh_fmt) && !ensure_cls_q8k_rq()) return pf_head_decline("the eh_proj plane's Q8_K feed has no requant class")
+    g_rd.pf_wemb = make_device_buf(np * dim * 4l)
+    g_rd.pf_hsrc = make_device_buf(np * dim * 4l)
+    g_rd.pf_hcos = make_device_buf(np * g_rd.cos_elems * 4l)
+    let catb = np * 2l * dim * 4l
+    g_rd.pf_cat = make_device_buf(catb)
+    if (e6) {
+        g_rd.pf_catf = make_device_buf(np * 2l * dim * 2l)
+    } else {
+        g_rd.pf_catq = make_device_buf(np * 2l * dim)
+        g_rd.pf_cats = make_device_buf(np * (2l * dim / 32l) * 4l)
+    }
+    let normbytes = g_rd.norms_bytes
+    let xb = np * dim * 4l
+    g_rd.pf_sets[hb + 6] = set_cls_ar(fixed_array(g_rd.pf_wemb, g_rd.pf_wemb, g_rd.norms_dev, g_rd.pf_xb2),
+        fixed_array(xb, xb, normbytes, xb), fixed_array(VHZ_UP, VHZ_UP, 0u, VHZ_XB2))
+    g_rd.pf_sets[hb + 7] = set_cls_ar(fixed_array(g_rd.pf_hsrc, g_rd.pf_hsrc, g_rd.norms_dev, g_rd.pf_ffnout),
+        fixed_array(xb, xb, normbytes, xb), fixed_array(VHZ_GATE, VHZ_GATE, 0u, VHZ_FFO))
+    g_rd.pf_sets[hb + 8] = (e6
+        ? set_f16cvt_cls(fixed_array(g_rd.pf_cat, g_rd.pf_catf), fixed_array(catb, np * 2l * dim * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
+        : set_rq_cls(fixed_array(g_rd.pf_cat, g_rd.pf_catq, g_rd.pf_cats), fixed_array(catb, np * 2l * dim, np * (2l * dim / 32l) * 4l),
+            fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
+    g_rd.pf_sets[hb + 0] = (q6
+        ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf), fixed_array(xb, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
+        : set_rq_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs), fixed_array(xb, np * dim, np * (dim / 32l) * 4l),
+            fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
+    let qrow = g_rd.q_gated ? 2l * g_rd.qd : g_rd.qd
+    let kvd = g_rd.kv_dim
+    let mirbytes = rd_mir_bytes()
+    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_hcos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
+    let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : normbytes)
+    let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u)
+    g_rd.pf_sets[hb + 4] = (g_rd.kv16 ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits) : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
+    if (g_rd.qk_norm) {
+        g_rd.pf_sets[hb + 15] = set_qk_rms_cls(fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.norms_dev),
+            fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, normbytes), fixed_array(VHZ_Q, VHZ_KVK, 0u))
+    }
+    g_rd.pf_head_ready = true
+    return true
+}
+
+//! The head's slab over this window's rows, after the trunk's last layer normed every row: head row j sits at position
+//! `pos0 + w0 - carry + j` and takes [enorm(the embed at position + 1) ; hnorm(the trunk's post-norm row at position)], the previous
+//! window's last row riding `pf_hsrc` row 0 under `carry`, through eh_proj and the head's projections into its slot
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
+def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : int64) {
+    let dim = g_rd.dim
+    let np = g_rd.pf_np
+    let rowb = dim * 4l
+    let carry = w0 > 0l ? 1l : 0l
+    let nh = wlen - 1l + carry
+    return if (nh <= 0l)
+    let r0 = 1l - carry   //! head row j reads the window's row j + 1 - carry of the shifted planes
+    var L & = unsafe(g_rd.head)
+    let hb = pf_head_block()
+    let hbn = uint(g_rd.head_norm_base)
+    vhz_dep(raw, h, VHZ_XB, VHZ_GATE, true)
+    cmd_copy_range(raw, g_rd.pf_xb, 0l, g_rd.pf_hsrc, rowb, (wlen - 1l) * rowb)
+    var pch = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(r0))
+    enc_cls_ar(raw, h, g_rd.pf_sets[hb + 7], pch, nh)
+    vhz_dep(raw, h, VHZ_XB, VHZ_GATE, true)
+    cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * rowb, g_rd.pf_hsrc, 0l, rowb)   //! the next window's carry row
+    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(r0))
+    enc_cls_ar(raw, h, g_rd.pf_sets[hb + 6], pce, nh)
+    vhz_dep(raw, h, VHZ_XB2 | VHZ_FFO, VHZ_ATT, true)
+    cmd_copy_rows(raw, g_rd.pf_xb2, r0 * rowb, rowb, g_rd.pf_cat, 0l, 2l * rowb, rowb, nh)
+    cmd_copy_rows(raw, g_rd.pf_ffnout, r0 * rowb, rowb, g_rd.pf_cat, rowb, 2l * rowb, rowb, nh)
+    let e6 = pf_f16_feed(g_rd.eh_fmt)
+    if (e6) {
+        var pcc = ActArgs(nelem = uint(nh * 2l * dim), nblk = 0u)
+        enc_f16cvt_cls(raw, h, g_rd.pf_sets[hb + 8], pcc, (nh * 2l * dim / 4l + 255l) / 256l)
+    } else {
+        rq_enc(raw, h, g_rd.pf_sets[hb + 8], kq_sb(g_rd.eh_fmt), 0l, nh * 2l * dim)
+    }
+    let pe = arena_planes(g_rd.eh_fmt, g_rd.eh_blk)
+    pf_gemm_enc(raw, h, hb + 0, g_rd.eh_fmt, pe.wq, pe.ws, e6 ? g_rd.pf_catf : g_rd.pf_catq, e6 ? g_rd.dummy : g_rd.pf_cats, g_rd.pf_x,
+        pe.wqb, pe.wsb, e6 ? np * 2l * dim * 2l : np * 2l * dim, e6 ? 256l : np * (2l * dim / 32l) * 4l, np * dim * 4l, VHZ_AQ, VHZ_X,
+        2l * dim, dim, g_rd.eh_blk, nh, e6, 0l, 0l, false)
+    var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
+    enc_cls_ar(raw, h, g_rd.pf_sets[int(g_rd.n_layers * PF_ROLES)], pca, nh)   //! the prologue set: x normed into xb
+    let q6 = pf_head_qkv6()
+    if (q6) {
+        var pc0 = ActArgs(nelem = uint(nh * dim), nblk = 0u)
+        enc_f16cvt_cls(raw, h, g_rd.pf_sets[hb + 0], pc0, (nh * dim / 4l + 255l) / 256l)
+    } else {
+        rq_enc(raw, h, g_rd.pf_sets[hb + 0], kq_sb(L.fq), 0l, nh * dim)
+    }
+    let kvd = L.kvd
+    let xqb = q6 ? g_rd.pf_xf : g_rd.pf_xq
+    let xsb = q6 ? g_rd.dummy : g_rd.pf_xs
+    let xqn = q6 ? np * dim * 2l : np * dim
+    let xsn = q6 ? 256l : np * (dim / 32l) * 4l
+    let pk = arena_planes(L.fk, L.bk)
+    let tkv = cm2_tiles(kvd, nh)
+    pf_gemm_enc(raw, h, hb + 2, L.fk, pk.wq, pk.ws, xqb, xsb, g_rd.pf_kv, pk.wqb, pk.wsb, xqn, xsn, np * 2l * kvd * 4l, VHZ_XQ, VHZ_KVK,
+        dim, kvd, L.bk, nh, q6, tkv, 0l, false)
+    if (!L.vfk) {
+        let pv = arena_planes(L.fv, L.bv)
+        pf_gemm_enc(raw, h, hb + 3, L.fv, pv.wq, pv.ws, xqb, xsb, g_rd.pf_v, pv.wqb, pv.wsb, xqn, xsn, np * kvd * 4l, VHZ_XQ, VHZ_VST,
+            dim, kvd, L.bv, nh, q6, tkv, 0l, false)
+        vhz_dep(raw, h, VHZ_VST, VHZ_KVV, true)
+        cmd_copy_range(raw, g_rd.pf_v, 0l, g_rd.pf_kv, nh * kvd * 4l, nh * kvd * 4l)
+    }
+    let voff = uint(nh * kvd)
+    let hs = L.hs
+    let qd = int(L.qd)
+    let qhs = int(g_rd.q_gated ? 2l * hs : hs)
+    if (g_rd.qk_norm) {
+        let nkvh = kvd / hs
+        let vgroups = L.vnorm && !L.vfk ? nkvh : 0l
+        let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
+        let qkw = rd_norm_final() + dim   // nolint:LINT021 — the head's q/k slot sits at index n_layers; the row offset multiplies run 64-bit before the push-field narrow
+        var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(nkvh), qstride = uint(g_rd.q_gated ? 2 * qd : qd), kstride = uint(kvd), kbase = 0u,
+            qwoff = uint(qkw + g_rd.n_layers * 2l * hsmax), kwoff = uint(qkw + (g_rd.n_layers * 2l + 1l) * hsmax),
+            eps = g_rd.eps, qhs = uint(qhs), vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u, vbase = voff)
+        enc_qk_rms_cls(raw, h, g_rd.pf_sets[hb + 15], pcn, nh * (g_rd.n_heads + nkvh + vgroups))
+    }
+    let pairs = qd / 2 + int(kvd / 2l)
+    var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(L.rot / 2l),
+        neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2), ppp = uint(pairs),
+        layerbase = uint(rd_mir_base(L)), npos = uint(nh), pos0 = uint(pos0 + w0 - carry),
+        voff = voff, kstride = uint(kvd), qhs = uint(qhs),
+        boff = uint(L.boff), hasb = g_rd.has_bias ? 1u : 0u,
+        cstride = uint(g_rd.cos_elems), cbase = uint(L.cbase))
+    let ropewg = (nh * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
+    if (g_rd.kv16) {
+        enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
+    } else {
+        enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
+    }
+    g_rd.pf_head_rows += nh
+}
+
+//! the next window chain warms the NextN head's slab over the prompt rows it serves (`RdecHeadWarmAskFn`); the ask stands until the next
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
+def vk_rdec_head_warm_ask(on : bool) {
+    if (g_rd != null) {
+        g_rd.pf_head_ask = on
+    }
+}
+
+//! the head rows the last window chain wrote (`RdecHeadWarmRowsFn`): the prompt's rows less one where it warmed, 0 where it did not
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
+def vk_rdec_head_warm_rows : int64 => g_rd != null ? g_rd.pf_head_rows : 0l
+
 //! Resident-driver prefill: `npos` embedded rows (x_batch, [npos x dim]) + per-position rope rows
 //! (cos_batch, [npos x hs]) -> the last row's logits, filling the selected mirror region at positions [pos0, pos0 + npos).
 [hot_path]   // the per-window resident prefill — encode + one submit per window
@@ -1105,6 +1279,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
     let cos_elems = g_rd.cos_elems
     let fa128s = !(cm2_fa_on() && vk_fa_on() && g_rd.kv16) && g_gpu.has_coopmat && vk_fa_on()   //! the h128 coopmat twin serves a 128-head layer where the cm2 tiles do not
+    g_rd.pf_head_rows = 0l
+    let warm = g_rd.pf_head_ask && g_rd.head_on && g_rd.carry && pf_head_setup()
     unsafe {
         var w0 = 0l
         var last_wlen = 0l
@@ -1118,6 +1294,13 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             }
             assert(wlen >= taps || w0 == 0l, "vk prefill: a later window shorter than the conv taps")
             let last = w0 + wlen >= npos
+            if (warm) {   //! the head rows' rope rows: a position below the window's from the second window on
+                let hcarry = w0 > 0l ? 1l : 0l
+                let nhead = wlen - 1l + hcarry
+                if (nhead > 0l) {
+                    upload_region_at(g_rd.pf_hcos, 0l, addr<uint8 const?>(cos_batch[int((w0 - hcarry) * cos_elems)]), nhead * cos_elems * 4l)
+                }
+            }
             if (use_ids) {
                 g_pf_ids_stage |> resize(wlen)
                 for (i in range64(wlen)) {
@@ -1178,6 +1361,10 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 f16_gemm_enc(ple_khr, raw, h, g_rd.pf_ple_gemm_set, pcg, wlen, all)
                 var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
                 enc_cls_ar(raw, h, g_rd.pf_ple_ar_set, pca, wlen * g_rd.n_layers)
+            }
+            if (warm) {   //! the head's embed rows: the window's own, kept before layer 0 overwrites the residual
+                vhz_dep(raw, h, VHZ_X, VHZ_UP, true)
+                cmd_copy_range(raw, g_rd.pf_x, 0l, g_rd.pf_wemb, 0l, wlen * dim * 4l)
             }
             var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
             enc_cls_ar(raw, h, g_rd.pf_sets[bp + 0], pc_pro, wlen)   // prologue norm
@@ -1375,7 +1562,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                let ffn_row0 = pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
+                let ffn_row0 = warm ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)   //! the head warm reads every row's post-norm hidden
                 let ffn_rows = wlen - ffn_row0
                 if (has_dense_triple(g_rd.layers[l])) {
                     let p1 = arena_planes(g_rd.layers[l].f1, g_rd.layers[l].b1)
@@ -1449,6 +1636,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     vhz_dep(raw, h, VHZ_XB, 0u, true)
                     cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * dim * 4l, g_rd.hid_host.buf, 0l, dim * 4l)
                 }
+            }
+            if (warm) {
+                pf_head_warm(raw, h, w0, wlen, pos0)
             }
             if (vk_prof()) {
                 to_log(LOG_INFO, "vk_rdpf hz: {h.disp} nodes, {h.barriers} barriers\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg

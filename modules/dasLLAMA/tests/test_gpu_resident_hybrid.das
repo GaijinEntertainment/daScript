@@ -16,6 +16,7 @@ require daslib/fio
 require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the hybrid
+require dasllama/dasllama_kv_codec   // kv_row_to_f32: the head's K rows as floats, whichever codec the session carries
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill   // pf_f16_feed: the feed admission the driver acts on
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
@@ -38,7 +39,10 @@ require _resident_feed
 // hidden as `mtp_h`, its watermark as `mtp_h_pos1` - one row at a time and through the N-row command,
 // and the NextN draft through the head the driver homes against the CPU `forward_mtp` on one token,
 // carry and row, then the round's drafts with the draft seat unset and put back, and the round's
-// same-slab verify rows bit for bit against one-row steps of the same tokens, accepted and rejected.
+// same-slab verify rows bit for bit against one-row steps of the same tokens, accepted and rejected,
+// and the head's prompt warm on the window chain: the host residual rows poisoned before a resident
+// prefill leave the draft bit for bit, the head's warmed K rows against the CPU warm's within the
+// deltanet bar, and six speculative rounds against the CPU round from one prompt.
 // Every model cell skips interpreted, without its model file, or without the armed tier; the
 // K-quant cells skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`) too.
 
@@ -615,6 +619,248 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             delete replay_log
             delete replay_h
             delete s
+            delete prompt
+        }
+        delete tr
+    }
+}
+
+let private NAN_BITS = 0x7FC00000u
+let private ROUNDS = 6l   //! the speculative rounds the device-vs-CPU cell runs, one fed token each
+
+//! the NextN head's K row `row` of the session's cache as floats, whichever codec the session carries
+def private head_k_row_f32(tr : Model; var s : Session; row : int64) : array<float> {
+    let c = tr.config
+    let kvd = layer_kv_dim(c, c.n_layers)
+    let kp = kv_layer_kbase(s, c.n_layers, c.seq_len)
+    var out : array<float>
+    out |> resize(kvd)
+    unsafe {
+        if (s.kv_dtype_k == KVDtype.f32) {
+            kv_row_to_f32(addr(out[0]), reinterpret<float const?>(kp), row * kvd, kvd)
+        } else {
+            kv_row_to_f32(addr(out[0]), reinterpret<uint16 const?>(kp), row * kvd, kvd)
+        }
+    }
+    return <- out
+}
+
+//! the head's K rows [0, n) as floats
+def private head_k_rows_f32(tr : Model; var s : Session; n : int64) : array<array<float>> {
+    var out : array<array<float>>
+    out |> reserve(n)
+    for (r in range64(n)) {
+        out |> emplace <| head_k_row_f32(tr, s, r)
+    }
+    return <- out
+}
+
+//! every byte of the head's host K and V rows [0, n) set, so any row the CPU head reads is NaN
+def private poison_head_rows(tr : Model; var s : Session; n : int64) {
+    let c = tr.config
+    let kvd = layer_kv_dim(c, c.n_layers)
+    let kb = kv_row_bytes(s.kv_dtype_k, kvd) * n
+    let vb = kv_row_bytes(s.kv_dtype_v, kvd) * n
+    var kp = kv_layer_kbase(s, c.n_layers, c.seq_len)
+    var vp = kv_layer_vbase(s, c.n_layers, c.seq_len)
+    unsafe {
+        for (i in range64(kb)) {
+            kp[i] = uint8(0xFF)
+        }
+        for (i in range64(vb)) {
+            vp[i] = uint8(0xFF)
+        }
+    }
+}
+
+//! the session's residual rows sized for `n` positions and every float NaN before the prefill sizes them (the size holds, the fill stays)
+def private poison_residual_rows(var s : Session; n : int64) {
+    let nan = unsafe(reinterpret<float>(NAN_BITS))
+    s.x_b |> reserve(n)
+    s.x_b |> resize(n)
+    for (i in range64(n)) {
+        s.x_b[i] = nan
+    }
+}
+
+def private all_finite(a : array<float>) : bool {
+    for (x in a) {
+        if (!(x == x) || x > 3.4e38 || x < -3.4e38) {   // nolint:LINT007 — the NaN test: a NaN is the one float that is not equal to itself
+            return false
+        }
+    }
+    return true
+}
+
+//! the head's rows [0, n) on `gpu` against `cpu` within the deltanet bar of each CPU row's max, the CPU row one down as the control past it
+def private head_rows_within(t : T?; what : string; gpu, cpu : array<array<float>>; n : int64) {
+    var worst = 0.0
+    var worst_row = -1l
+    var worst_bar = 0.0
+    for (r in range64(n)) {
+        let bar = DN_LOGIT_BAR_REL * logits_maxabs(cpu[r])
+        let diff = logits_maxdiff(gpu[r], cpu[r])
+        if (diff > worst) {
+            worst = diff
+            worst_row = r
+            worst_bar = bar
+        }
+        t |> success(diff <= bar, "{what}: the head's K row {r} on the device within {bar} of the CPU warm's (maxdiff {diff})")
+        if (r + 1l < n) {
+            let off = logits_maxdiff(gpu[r], cpu[r + 1l])
+            t |> success(off > bar, "{what} control: the bar discriminates the CPU row one down (row {r} maxdiff {off} vs bar {bar})")
+        }
+    }
+    to_log(LOG_INFO, "{what}: {n} head rows, the widest miss {worst} at row {worst_row} (bar {worst_bar})\n")
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_xb_poison(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: the host residual rows poisoned with NaN before a resident prefill leave the device draft bit for bit the clean prefill's - the head's prompt rows warm on the device, off no host row") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            let row = DRAFT_PROMPT - 1l
+            var clean <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, clean, prompt)
+            t |> equal(moe_gpu_resident_head_rows(clean), DRAFT_PROMPT - 1l, "the chain warmed the head's rows to the prompt's end")
+            var h0 <- [for (x in clean.mtp_h); x]
+            var want <- draft_from(tr, clean, DRAFT_TOKEN, row, h0)
+            let pick_clean = moe_gpu_resident_draft_pick()
+            delete clean
+            var s <- create_session(tr, mirror_kv_dtype())
+            poison_residual_rows(s, DRAFT_PROMPT * tr.config.dim)
+            prefill_warm(tr, s, prompt)
+            t |> equal(apart(s.mtp_h, h0), 0l, "the poisoned prefill lands the clean prefill's carry bit for bit")
+            let drafts0 = moe_gpu_resident_drafts()
+            var got <- draft_from(tr, s, DRAFT_TOKEN, row, h0)
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the resident head drafted")
+            served_every_call(t)
+            let ag = argmax_of(got.logits)
+            to_log(LOG_INFO, "poisoned x_b draft: argmax {ag} '{decode_(tr, [ag])}' ({got.logits[ag]}), the clean prefill's {argmax_of(want.logits)} ({want.logits[argmax_of(want.logits)]})\n")
+            t |> success(all_finite(got.logits), "every landed logit is finite")
+            t |> equal(apart(got.logits, want.logits), 0l, "the poisoned prefill's draft logits are the clean prefill's bit for bit ({apart(got.logits, want.logits)} elements apart)")
+            t |> equal(apart(got.h, want.h), 0l, "the poisoned prefill's draft hidden is the clean prefill's bit for bit")
+            t |> equal(moe_gpu_resident_draft_pick(), pick_clean, "the device pick is the clean prefill's")
+            var off <- draft_from(tr, s, prompt[row], row - 1l, h0)   //! the control: the draft one row back differs
+            t |> success(apart(off.logits, want.logits) > 0l, "control: the draft one row back misses the clean draft's logits")
+            delete off
+            delete got
+            delete want
+            delete h0
+            delete s
+            delete prompt
+        }
+        delete tr
+    }
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_head_warm(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: the head's K rows the window chain warmed, read back to the host, against the CPU warm's rows on the same prompt within the deltanet bar, the row one down past it") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            let n = DRAFT_PROMPT - 1l   //! the head's rows below the prompt's last: the draft writes that one
+            var s <- create_session(tr, mirror_kv_dtype())
+            let served0 = moe_gpu_resident_prefills()
+            prefill_warm(tr, s, prompt)
+            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
+            t |> equal(moe_gpu_resident_head_rows(s), n, "the region's head rows end a row below the prompt's end")
+            served_every_call(t)
+            var gpu <- head_k_rows_f32(tr, s, n)
+            delete s
+            moe_gpu_drop_model()   //! the CPU warm from here
+            var c <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, c, prompt)
+            var cpu <- head_k_rows_f32(tr, c, n)
+            head_rows_within(t, "head warm", gpu, cpu, n)
+            delete c
+            delete gpu
+            delete cpu
+            delete prompt
+        }
+        delete tr
+    }
+}
+
+//! one speculative round's record: the draft the round verified, whether it accepted it, and the position it left
+struct private RoundRec {
+    draft : int64
+    hit : bool
+    n_past : int64
+}
+
+//! `ROUNDS` speculative rounds on `s` from the prompt's end, one fed token each
+def private spec_rounds(tr : Model; var s : Session; toks : array<int64>) : array<RoundRec> {
+    var out : array<RoundRec>
+    out |> reserve(long_length(toks))
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(true)
+    for (tok in toks) {
+        var acc = 0l
+        let hit = mtp_spec_eval(tr, s, tok, acc)
+        out |> push(RoundRec(draft = s.mtp_vbatch[1], hit = hit, n_past = s.n_past))
+    }
+    set_mtp_spec(spec0)
+    return <- out
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: six speculative rounds on the resident driver against the CPU round from the same prompt - every round's draft, accept and position equal, the head's host rows within the deltanet bar, the CPU round on poisoned head rows as the control") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var toks <- [for (i in range64(ROUNDS + 1l)); 2000l + (i * 53l) % 4000l]
+            var fed <- [for (i in range64(ROUNDS)); toks[i]]
+            var s <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, s, prompt)
+            let drafts0 = moe_gpu_resident_drafts()
+            let verifies0 = moe_gpu_resident_verifies()
+            var gpu <- spec_rounds(tr, s, fed)
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + ROUNDS, "every round drafted on the device")
+            t |> equal(moe_gpu_resident_verifies(), verifies0 + ROUNDS, "every round verified on the device")
+            served_every_call(t)
+            let nrows = s.n_past - 1l
+            t |> equal(moe_gpu_resident_head_rows(s), nrows, "the region's head rows end a row below the session's position")
+            var grows <- head_k_rows_f32(tr, s, nrows)
+            var glast <- spec_rounds(tr, s, [toks[ROUNDS]])   //! the seventh round: the control's twin
+            delete s
+            moe_gpu_drop_model()   //! the CPU round from here
+            var c <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, c, prompt)
+            var cpu <- spec_rounds(tr, c, fed)
+            for (r in range64(ROUNDS)) {
+                to_log(LOG_INFO, "round {r}: device draft {gpu[r].draft} '{decode_(tr, [gpu[r].draft])}' hit {gpu[r].hit} at {gpu[r].n_past}, CPU draft {cpu[r].draft} '{decode_(tr, [cpu[r].draft])}' hit {cpu[r].hit} at {cpu[r].n_past}\n")
+                t |> equal(gpu[r].draft, cpu[r].draft, "round {r}: the device draft is the CPU round's")
+                t |> equal(gpu[r].hit, cpu[r].hit, "round {r}: both rounds accepted or both rejected")
+                t |> equal(gpu[r].n_past, cpu[r].n_past, "round {r}: both rounds left the session at one position")
+            }
+            t |> equal(c.n_past - 1l, nrows, "the CPU rounds left the session where the device rounds did")
+            var crows <- head_k_rows_f32(tr, c, nrows)
+            head_rows_within(t, "six rounds", grows, crows, nrows)
+            poison_head_rows(tr, c, nrows)   //! the control: the CPU head over NaN rows cannot draft what the device did
+            var clast <- spec_rounds(tr, c, [toks[ROUNDS]])
+            var pl <- [for (x in c.mtp_logits); x]
+            to_log(LOG_INFO, "control round: device draft {glast[0].draft}, the CPU draft over poisoned head rows {clast[0].draft} (its verify row 0 finite {all_finite(pl)})\n")
+            t |> success(glast[0].draft != clast[0].draft || !all_finite(pl), "control: the CPU round over poisoned head rows drafts another token or lands non-finite rows")
+            delete pl
+            delete clast
+            delete glast
+            delete crows
+            delete grows
+            delete cpu
+            delete gpu
+            delete c
+            delete fed
+            delete toks
             delete prompt
         }
         delete tr

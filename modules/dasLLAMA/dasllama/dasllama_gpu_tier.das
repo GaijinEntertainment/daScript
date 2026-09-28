@@ -142,11 +142,11 @@ let public RDEC_HEAD_OUT = 4l
 
 //! the norms plane's first head row: past the layers' rows, the final norm and the q/k rows, whose slot a layer the head's
 //! q/k rows extend at index n_layers (`qk_hs` = 0 on a model without q/k norms)
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def public rdec_head_norm_base(n_layers, dim, qk_hs : int64) : int64 => (n_layers * RDEC_NORM_ROWS + 1l) * dim + (n_layers + 1l) * 2l * qk_hs
 
 //! the norms plane's floats before the eps/ascale pair: the layers' rows, the final norm and the q/k rows, then under `head` the head's q/k slot and block
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def public rdec_norms_len(n_layers, dim, qk_hs : int64; head : bool) : int64
     => head ? rdec_head_norm_base(n_layers, dim, qk_hs) + RDEC_HEAD_NORM_ROWS * dim : (n_layers * RDEC_NORM_ROWS + 1l) * dim + n_layers * 2l * qk_hs
 
@@ -479,7 +479,7 @@ var g_rdec_set_head = @@rdec_unset_set_head
 var g_rdec_draft = @@rdec_unset_draft
 var g_rdec_draft_installed = false
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def public install_rdec_draft(set_head : RdecSetHeadFn; draft : RdecDraftFn) {
     g_rdec_set_head = set_head
     g_rdec_draft = draft
@@ -530,6 +530,40 @@ def public rdec_verify_installed() : bool => g_rdec_verify_installed
 def public rdec_verify_rows() : int64 => invoke(g_rdec_verify_rows)
 def public rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool
     => invoke(g_rdec_verify, x, cossin, hemb, hcos, h0, pos, n, kp, vp, logits, picks, hid)
+
+//! the NextN head's prompt warm on the window chain: `ask` names whether the next chain warms the head's slab over the prompt rows
+//! it serves, `rows` answers how many head rows the last chain wrote (0 = none); the K/V row seams move the head's rows
+//! [row0, row0 + nrows) of the selected region - `sync` up from the host's `kp` / `vp` (the cache from row 0), `read` back down
+typedef RdecHeadWarmAskFn = function<(on : bool) : void>
+typedef RdecHeadWarmRowsFn = function<() : int64>
+typedef RdecHeadKvRowsFn = function<(row0 : int64; nrows : int64; var kp : uint8?; var vp : uint8?) : void>
+[unused_argument(on)]
+def private rdec_unset_head_warm_ask(on : bool) {}
+def private rdec_unset_head_warm_rows : int64 => 0l
+[unused_argument(row0, nrows, kp, vp)]
+def private rdec_unset_head_kv_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
+    panic("dasLLAMA: the NextN head's K/V row seam hit without an installed GPU driver")
+}
+var g_rdec_head_warm_ask = @@rdec_unset_head_warm_ask
+var g_rdec_head_warm_rows = @@rdec_unset_head_warm_rows
+var g_rdec_head_sync_rows = @@rdec_unset_head_kv_rows
+var g_rdec_head_read_rows = @@rdec_unset_head_kv_rows
+var g_rdec_head_warm_installed = false
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
+def public install_rdec_head_warm(ask : RdecHeadWarmAskFn; rows : RdecHeadWarmRowsFn; sync : RdecHeadKvRowsFn; read : RdecHeadKvRowsFn) {
+    g_rdec_head_warm_ask = ask
+    g_rdec_head_warm_rows = rows
+    g_rdec_head_sync_rows = sync
+    g_rdec_head_read_rows = read
+    g_rdec_head_warm_installed = true
+}
+
+def public rdec_head_warm_installed() : bool => g_rdec_head_warm_installed
+def public rdec_head_warm_ask(on : bool) { invoke(g_rdec_head_warm_ask, on) }
+def public rdec_head_warm_rows() : int64 => invoke(g_rdec_head_warm_rows)
+def public rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_head_sync_rows, row0, nrows, kp, vp) }
+def public rdec_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_head_read_rows, row0, nrows, kp, vp) }
 
 //! the per-layer-embedding seats (gemma-4 E-series): `set_ple` sizes the side-input rows at the model's ple width
 //! (after prepare, before the layers); `set_ple_layer` wires one layer's gate [dim x ple] and proj [ple x dim] planes
@@ -2177,6 +2211,18 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_verify_rows == null) {
         g_rdec_verify_rows = @@rdec_no_verify_rows
+    }
+    if (g_rdec_head_warm_ask == null) {
+        g_rdec_head_warm_ask = @@rdec_unset_head_warm_ask
+    }
+    if (g_rdec_head_warm_rows == null) {
+        g_rdec_head_warm_rows = @@rdec_unset_head_warm_rows
+    }
+    if (g_rdec_head_sync_rows == null) {
+        g_rdec_head_sync_rows = @@rdec_unset_head_kv_rows
+    }
+    if (g_rdec_head_read_rows == null) {
+        g_rdec_head_read_rows = @@rdec_unset_head_kv_rows
     }
     if (g_moe_gpu_ffn_xf == null) {
         g_moe_gpu_ffn_xf = @@moe_gpu_unset_ffn_xf

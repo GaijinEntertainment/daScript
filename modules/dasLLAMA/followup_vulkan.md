@@ -1964,18 +1964,19 @@ module) is independent and can land any time - it is pure structure.
     (`register_mtp_spec_override`, `_spec_batch_`, `_round_`, `_seam_` in `dasllama_common.das`)
     are filled by the Metal decode driver and the Metal gemma drafter alone. The resident driver
     homes the NextN draft head and serves the round's draft through its own seat
-    (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head`), under the Vulkan owner
-    (`register_mtp_seat_owner`, "the resident driver is armed on t"), and serves the round's
+    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), under the Vulkan owner
+    (`register_mtp_seat_owner`, "the resident driver is armed on t"), serves the round's
     two-row verify as same-slab rows of the N-row command with the head's re-warm in the same
-    command (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`); the resident overrides land the
+    command (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), and warms the head's slab over
+    a prompt it serves as the window chain's extra layer, the rows read back to the host
+    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`; the CPU warm stands down behind a
+    driver that landed the logits, so it never reads the host `x_b` rows such a driver leaves
+    unwritten); the resident overrides land the
     post-norm hidden carry (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), so with
     `set_mtp_spec` or the server's `--mtp` the round's cold gate passes and the CPU round runs
     around the device draft and verify. A reject stays the CPU round's: its snapshot sends every
     recurrent slot home before the verify (about 20 MB down on the 0.8B) and its restore uploads the
-    state again for the replayed step. The CPU prompt warm of the draft head reads the host `x_b`,
-    which the resident prefill never fills, so the head's slab - hydrated from those host rows
-    before a draft - carries history computed off the wrong rows until the verifies' re-warm
-    overwrites it, and acceptance sits where that warm leaves it. A verify the seat declines runs
+    state again for the replayed step. A verify the seat declines runs
     the CPU two-row prefill: a hybrid's passes to the CPU rails as `continuation`, and a model with
     no recurrent layer (GLM-4.5-Air) has it served by the window chain, which leaves the host `x_b`
     the CPU verify's classifier reads unwritten, so the round panics there by name. `test_mtp.das`'s
@@ -1983,7 +1984,7 @@ module) is independent and can land any time - it is pure structure.
     Metal's shape (`ARCHITECTURE_GPU_MTP.md`) on the resident driver: the reject on the device - a
     device copy of the region's recurrent slots and rings in the verify command, copied back on a
     reject, then the deltanet shadow region and its replay of rows `0..a` for the hybrids every Qwen
-    MTP carrier is; the head's prompt warm as the window chain's extra layer; the round seat at
+    MTP carrier is; the round seat at
     depth k (the verify's per-row planes already hold the box knob's depth plus one, eight rows at
     most); then the joint verify across streams and the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
     Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at

@@ -11,6 +11,26 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **OPEN (2026-09-27) - the Vulkan resident driver's NextN prompt warm: the head's slab warmed on
+  the window chain, and what it costs a prompt.** Where the driver homes a NextN head and the
+  round is on (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`) every window of a
+  resident prefill encodes one more layer's worth of rows after the trunk: the last layer's FFN
+  over the whole window instead of its last thirty-two rows, eh_proj [2dim -> dim] and the head's
+  k and v projections [dim -> kvd] over the window's rows, two norms, a feed requant, the head's
+  q/k norm and the rope store - on Qwen3.5-0.8B-MTP the eh_proj plane's 2,228,224 bytes and the k
+  and v planes' 557,056 each read once a window, the last layer's three FFN planes (3,899,392 each)
+  over 512 rows in place of 32. The chain's planes grow by the head's staging - the embed rows, the
+  shifted post-norm rows and the [enorm ; hnorm] image with its feed: `PF_WINDOW x (4 dim + 8 dim
+  + 2 dim + dim / 4) bytes` under a Q8_0 feed, `PF_WINDOW x (16 dim) bytes` under the f16 feed, plus
+  `PF_WINDOW x cos_elems x 4` for the rope rows - 512 x 14,592 = 7,471,104 bytes at dim 1024 on the
+  Q8_0 feed, 512 x 16,384 = 8,388,608 on the f16 feed, and 131,072 of rope rows at a 64-wide plane;
+  the head rows' readback moves `(npos - 1) x kvd x 2 sides x 2` bytes a prompt (1 MB a 512-row
+  prompt on the 0.8B's f16 rows). Owed from the pod: pp512 of `Qwen3.5-0.8B-MTP-Q8_0.gguf` under
+  `DASLLAMA_GPU=1` with `set_mtp_spec` on against off (`lcpp_bench --mtp-ab -p 512` with the
+  `DASLLAMA_GPU_PROF=1` window profile: the `vk_rdpf` submit wall per window with the warm against
+  without), and the round's acceptance on the SpecBench chat corpus against the CPU round's on the
+  same box - the reading the warm exists for.
+
 - **OPEN (2026-09-27) - the Vulkan resident driver's same-slab speculative verify: its row
   buffers and its round against the CPU verify.** Where the driver homes a NextN head
   (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`) the per-row planes hold
@@ -33,7 +53,7 @@ what it costs today and what the fix would change.
 
 - **OPEN (2026-09-27) - the Vulkan resident driver's NextN draft head: its plane and slot bytes,
   and the device draft against the CPU draft.** Where the driver takes a model's head
-  (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head`) the plan grows by the head's eight
+  (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`) the plan grows by the head's eight
   planes and one K/V slot a region; a headless model plans what it did. The planes are
   (2 dim x dim + dim x qrows + 2 dim x kvd + qd x dim + 3 dim x hid) weights at their formats' block
   bytes - Qwen3.5-0.8B-MTP-Q8_0 (dim 1024, the gated q's 4096 rows, kvd 512, qd 2048, hid 3584,
@@ -48,7 +68,7 @@ what it costs today and what the fix would change.
   against the CPU `forward_mtp` - `lcpp_bench --mtp-ab` under `DASLLAMA_GPU=1` with `--prof` and
   `JOBQUE_PROFILING=1`, the `mtp.draft` section against the CPU draft's on the same box - including
   the hydrate's upload and the head row's readback, submits of their own beside the draft's; and the acceptance the
-  device draft reads while the head's slab is hydrated off the CPU prompt warm.
+  device draft reads off the head's slab the window chain warmed (the entry above).
 
 - **OPEN (2026-09-27) - the Vulkan resident driver's speculative carry: its landing plane and its
   step cost on a NextN-headed model.** The landing plane (`RDec.hid_host`, host-visible, allocated

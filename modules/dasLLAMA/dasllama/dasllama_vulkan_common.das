@@ -2483,6 +2483,12 @@ struct RDec {
     head_cos_dev : uint64
     head_cos_host : HostBuf
     s_hx_ar : VkDescriptorSet     //! ... the verify's head attention norm of the eh_proj rows into cat (`s_cat_rq` quantizes them): xb keeps the trunk rows the landing reads
+    pf_head_ask : bool            //! ... the next window chain warms the head's slab over the prompt rows it serves (`vk_rdec_head_warm_ask`)
+    pf_head_rows : int64          //! ... the head rows the last chain wrote
+    pf_head_ready : bool          //! ... the chain's head planes and sets are built (`pf_head_setup`)
+    pf_head_declined : bool       //! ... or the device declined them, said once
+    pf_wemb, pf_hsrc, pf_hcos : uint64   //! ... the window's unscaled embed rows; the trunk's post-norm rows a row down, the previous window's last at row 0; the head rows' rope rows
+    pf_cat, pf_catq, pf_cats, pf_catf : uint64   //! ... the head rows' [enorm ; hnorm] image and its eh_proj feed (Q8_0 blocks, or halves on the f16 feed)
     draft_cmd : array<VkCommandBuffer>   //! ... one recorded draft command per region: the head's mirror base rides its push, as the token command's does
     draft_recorded : array<bool>
     v_cmd : array<VkCommandBuffer>   //! the same-slab verify commands by row count (index 0 unused), region-free as the N-row command's, and their unsplit twins
@@ -3818,6 +3824,20 @@ def cmd_copy_range(raw : VkCommandBuffer; src : uint64; src_off : int64; dst : u
     var region = VkBufferCopy(srcOffset = uint64(src_off), dstOffset = uint64(dst_off), size = uint64(bytes))
     unsafe {
         vkCmdCopyBuffer(raw, reinterpret<VkBuffer>(src), reinterpret<VkBuffer>(dst), 1u, addr(region))
+    }
+}
+
+var @scratch g_copy_rows_regions : array<VkBufferCopy>
+
+//! `rows` copies of `bytes` in ONE copy command: row i from `src_off + i * src_stride` to `dst_off + i * dst_stride`
+def cmd_copy_rows(raw : VkCommandBuffer; src : uint64; src_off, src_stride : int64; dst : uint64; dst_off, dst_stride : int64; bytes, rows : int64) {
+    return if (rows <= 0l)
+    g_copy_rows_regions |> resize(rows)
+    for (i in range64(rows)) {
+        g_copy_rows_regions[i] = VkBufferCopy(srcOffset = uint64(src_off + i * src_stride), dstOffset = uint64(dst_off + i * dst_stride), size = uint64(bytes))
+    }
+    unsafe {
+        vkCmdCopyBuffer(raw, reinterpret<VkBuffer>(src), reinterpret<VkBuffer>(dst), uint(rows), addr(g_copy_rows_regions[0]))
     }
 }
 

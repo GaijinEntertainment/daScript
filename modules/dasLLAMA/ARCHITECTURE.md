@@ -85,7 +85,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   GEMV family's lane split by row length.
 - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - what a model has to fit on the card before the driver
   runs - the residency plan, and the GPU-slot marks swap that lets one slot serve many models -
-  the token command's logits landing, and the NextN draft head the driver homes beside the trunk.
+  and the token command's logits landing.
+- `ARCHITECTURE_GPU_VULKAN_MTP.md` - the NextN draft head the resident driver homes beside the
+  trunk: the draft command that steps it and the prompt warm the window chain gives its slab.
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - the N-row token command a batched step's rows go through,
   its same-slab form the speculative verify steps one stream's rows through, and the residual
   step's two forms it holds bit for bit.

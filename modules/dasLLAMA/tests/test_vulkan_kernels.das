@@ -1134,14 +1134,16 @@ def private first_max_rows(y : array<float>; vocab, rows : int64) : array<uint> 
 
 [test]
 def test_vkd_cls_argmax(t0 : T?) {
-    t0 |> run("cls_argmax: every row's pick is the first maximum's id through the two passes, at a 262144 and a 1000 vocab, ties and an all-equal row included") <| @(t : T?) {
+    t0 |> run("cls_argmax: every row's pick is the first maximum's id through the two passes, at a 262144 and a 1000 vocab, ties, an all-equal row, a row with NaN and -inf lanes and an all-NaN row included") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_cls_argmax_part() || !ensure_cls_argmax_fin()) {
                 t |> skip("no Vulkan device")
                 return
             }
+            let nan = unsafe(reinterpret<float>(0x7FC00000u))
+            let ninf = unsafe(reinterpret<float>(0xFF800000u))
             for (vocab in fixed_array(262144l, 1000l)) {
-                let rows = 4l
+                let rows = 6l
                 var y : array<float>
                 y |> resize(vocab * rows)
                 for (i in range64(vocab * rows)) {
@@ -1155,6 +1157,14 @@ def test_vkd_cls_argmax(t0 : T?) {
                 for (i in range64(vocab)) {   //! row 0 pinned whole (every id suppressed): the first id wins, as the host's walk reads
                     y[i] = -1.0e30
                 }
+                //! row 4: NaN lanes below and above the maximum and a -inf lane, the widest finite lane at 123 must win; row 5: every lane NaN
+                y[4l * vocab + 5l] = nan
+                y[4l * vocab + 123l] = hi
+                y[4l * vocab + 700l] = nan
+                y[4l * vocab + 701l] = ninf
+                for (i in range64(vocab)) {
+                    y[5l * vocab + i] = nan
+                }
                 var got <- cls_argmax_run(y, vocab, rows)
                 var want <- first_max_rows(y, vocab, rows)
                 var bad = 0
@@ -1163,9 +1173,11 @@ def test_vkd_cls_argmax(t0 : T?) {
                         bad++
                     }
                 }
-                t |> success(bad == 0, "vocab {vocab}: every row's device pick is the host's first maximum ({bad} of {rows} rows off; row 1 {got[1]} of {want[1]}, row 2 {got[2]} of {want[2]})")
+                t |> success(bad == 0, "vocab {vocab}: every row's device pick is the host's first maximum ({bad} of {rows} rows off; row 1 {got[1]} of {want[1]}, row 2 {got[2]} of {want[2]}, row 4 {got[4]} of {want[4]}, row 5 {got[5]} of {want[5]})")
                 t |> equal(int64(want[1]), 37l, "vocab {vocab}: the tie lands on the lower id")
                 t |> equal(int64(got[0]), 0l, "vocab {vocab}: the all-equal row lands id 0")
+                t |> equal(int64(got[4]), 123l, "vocab {vocab}: the row with NaN and -inf lanes lands its widest finite lane")
+                t |> equal(int64(got[5]), 0l, "vocab {vocab}: the all-NaN row lands id 0, never the empty-slice sentinel 0xFFFFFFFF ({got[5]})")
                 want[3] = want[3] == 0u ? 1u : 0u   //! the poison: a wrong id on one row must red the compare
                 var badp = 0
                 for (r in range64(rows)) {

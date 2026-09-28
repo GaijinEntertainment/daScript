@@ -365,7 +365,8 @@ def ple_pre_prefill_pad_gated(t : Model; var s : Session; npos, start_pos : int6
     ple_pre_prefill_pad(t, s, npos)
 }
 
-// set by an override that ALSO produced the last position's logits; reset before every invocation
+// set by an override that ALSO produced the last position's logits; reset before every invocation. Such an override never wrote the
+// host x_b rows, so the CPU draft-head warm stands down behind it
 var private g_prefill_logits_done = false
 
 //! A whole-prefill override that computed s.logits for the LAST position itself (final norm +
@@ -5351,8 +5352,8 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     forward_prefill_body(t, s, npos, start_pos, skip_logits)
     // spec on: maintain the draft head's KV alongside the trunk's — CPU rail only (on a blob
     // model the GPU spec loop owns the draft slab; these hooks would CPU-touch blob planes)
-    if (g_mtp_spec && c.n_layer_nextn > 0l && !t.metal_blob) {
-        mtp_prefill_warm(t, s, tokens, npos, start_pos)   //! never where the prefill driver owns the draft head's slab (it warms the slab itself): this warm reads host x_b rows and writes host K/V rows only
+    if (g_mtp_spec && c.n_layer_nextn > 0l && !t.metal_blob && !g_prefill_logits_done) {
+        mtp_prefill_warm(t, s, tokens, npos, start_pos)   //! never after a prefill driver landed the logits itself: it never wrote the host x_b rows this warm reads, and it warms the head's slab on its own device
     }
 }
 

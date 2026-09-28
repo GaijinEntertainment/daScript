@@ -1119,7 +1119,7 @@ def rd_enc_cls_epi(raw : VkCommandBuffer; var h : VkHaz; nrows : int64 = 1l) {
 
 //! The NextN draft head's arm (`RdecSetHeadFn`), after the classifier on a driver prepared with the head: its layer's sets
 //! over the one-row planes, the eh_proj GEMV over the concatenated row, the embed and carry norms; false where a class declines
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return true
@@ -2421,7 +2421,7 @@ def private rd_head_fuse_qkr : bool
 
 //! the draft command into the selected region's buffer: the [embed ; carry] rows under the embed and carry norms, the eh_proj
 //! GEMV into x, the head's layer over its own mirror slot, the head norm's row stored in xb, the classifier and the pick
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]   // once per region and set epoch
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   // once per region and set epoch
 def private rd_record_draft {
     let dim = g_rd.dim
     let l = g_rd.n_layers
@@ -2474,7 +2474,7 @@ def private rd_record_draft {
 
 //! The NextN draft (`RdecDraftFn`) in the selected region: the host's head rows [hyd0, row) up to the head's slot, the recorded
 //! draft command at row `row`, the logits and the pick landed with the head's hidden, row `row`'s K/V read back to the host
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]   // per speculative round, reached through the tier's registered seat
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   // per speculative round, reached through the tier's registered seat
 def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>) : int64 {
     if (g_rd == null || !g_rd.ready || !g_rd.head_on || !g_rd.carry) {
         return -1l
@@ -2802,6 +2802,31 @@ def vk_rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) {
 def private read_kv_rows(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     assert(g_rd != null, "read_kv_rows before prepare")
     read_kv_rows_of(g_rd.layers[l], row0, nrows, kp, vp)
+}
+
+//! The NextN head's K/V rows [row0, row0 + nrows) of the selected region up from the host's `kp` / `vp` (`RdecHeadKvRowsFn`, the
+//! cache from row 0): the rows the host wrote and the device never saw, before the region's head rows are counted past them
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   // per prefill, reached through the tier's registered seat
+def vk_rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
+    assert(g_rd != null && g_rd.head_on, "vk_rdec_head_sync_rows on a driver without the head")
+    return if (nrows <= 0l)
+    let L & = unsafe(g_rd.head)
+    let rowb = L.kvd * g_rd.kv_esz
+    let base = rd_mir_base(L) * g_rd.kv_esz + row0 * rowb
+    unsafe {
+        upload_region_at(g_rd.k_mirror, base, kp + row0 * rowb, nrows * rowb)
+        upload_region_at(g_rd.v_mirror, base, vp + row0 * rowb, nrows * rowb)
+    }
+}
+
+//! ... and the same range back down into `kp` / `vp`: the rows the chain warmed, so the host copy the CPU round reads stays the device's
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   // per prefill, reached through the tier's registered seat
+def vk_rdec_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
+    assert(g_rd != null && g_rd.head_on, "vk_rdec_head_read_rows on a driver without the head")
+    return if (nrows <= 0l)
+    let L & = unsafe(g_rd.head)
+    let rowb = L.kvd * g_rd.kv_esz
+    read_kv_rows_of(L, row0, nrows, unsafe(kp + row0 * rowb), unsafe(vp + row0 * rowb))
 }
 
 //! ... over the mirror slot of `L`: a trunk layer, or the NextN head

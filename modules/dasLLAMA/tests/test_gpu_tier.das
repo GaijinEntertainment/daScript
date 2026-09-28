@@ -195,6 +195,33 @@ def private d_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; v
 
 def private d_verify_rows : int64 => 4l
 
+var private g_head_warm_ask = false
+var private g_head_sync_row0 = -1l
+var private g_head_sync_n = -1l
+var private g_head_read_row0 = -1l
+var private g_head_read_n = -1l
+
+//! the head warm doubles: the ask kept, a distinctive row count, the sync and read ranges recorded with a byte written through
+def private d_head_warm_ask(on : bool) {
+    g_head_warm_ask = on
+}
+
+def private d_head_warm_rows : int64 => 39l
+
+[unused_argument(vp)]
+def private d_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
+    g_head_sync_row0 = row0
+    g_head_sync_n = nrows
+    unsafe(kp[0]) = uint8(7)
+}
+
+[unused_argument(kp)]
+def private d_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
+    g_head_read_row0 = row0
+    g_head_read_n = nrows
+    unsafe(vp[0]) = uint8(9)
+}
+
 def private arm_on() : bool => true
 
 def private arm_off() : bool => false
@@ -410,6 +437,37 @@ def test_rdec_verify_seat(t : T?) {
         delete logits
         delete hid
         delete picks
+    }
+}
+
+[test]
+def test_rdec_head_warm_seat(t : T?) {
+    t |> run("the head's prompt-warm seat installs apart: unset it keeps no ask and answers no rows, installed it forwards the ask, the row count and both K/V row ranges") @(t : T?) {
+        var kb : array<uint8>
+        var vb : array<uint8>
+        kb |> resize(4)
+        vb |> resize(4)
+        t |> success(!rdec_head_warm_installed(), "no head warm seat before its install")
+        rdec_head_warm_ask(true)
+        t |> equal(rdec_head_warm_rows(), 0l, "an unset warm wrote no rows")
+        t |> success(!g_head_warm_ask, "the unset ask reaches no double")
+        install_rdec_head_warm(@@d_head_warm_ask, @@d_head_warm_rows, @@d_head_sync_rows, @@d_head_read_rows)
+        t |> success(rdec_head_warm_installed(), "the install must flip its witness")
+        rdec_head_warm_ask(true)
+        t |> success(g_head_warm_ask, "the ask forwards")
+        t |> equal(rdec_head_warm_rows(), 39l, "the rows answer forwards")
+        unsafe {
+            rdec_head_sync_rows(3l, 5l, addr(kb[0]), addr(vb[0]))
+            rdec_head_read_rows(8l, 2l, addr(kb[0]), addr(vb[0]))
+        }
+        t |> equal(g_head_sync_row0, 3l)
+        t |> equal(g_head_sync_n, 5l)
+        t |> equal(g_head_read_row0, 8l)
+        t |> equal(g_head_read_n, 2l)
+        t |> equal(int(kb[0]), 7, "the sync double writes through the K rows the forwarder handed it")
+        t |> equal(int(vb[0]), 9, "the read double writes through the V rows the forwarder handed it")
+        delete kb
+        delete vb
     }
 }
 

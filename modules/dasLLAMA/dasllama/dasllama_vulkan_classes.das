@@ -1102,6 +1102,10 @@ class ClsArgmaxBase {
     @workgroup wm : float[32]   //! a subgroup's max: 256 threads make eight at the tier's subgroup floor of 32, thirty-two at a subgroup of 8
     @workgroup wi : uint[32]
 
+    //! a lane's value under the fold: NaN and -inf read as the lowest float, so a poisoned row still lands its widest finite lane
+    //! (id 0 where it has none); the compares are ordered, so the NaN test is the negated equality
+    def lane_val(v : float) : float => !(v == v) || v < -3.4e38 ? -3.4e38 : v   // nolint:LINT007 — the NaN test: a NaN is the one float that is not equal to itself, on the device (an ordered compare) and on the CPU oracle alike
+
     def fold(m : float; mi : uint) : uint {
         let sm = subgroupMax(m)
         let si = subgroupMin(m == sm ? mi : 0xFFFFFFFFu)
@@ -1126,7 +1130,8 @@ class ClsArgmaxBase {
 
 //! the classifier tail's pick, the first pass: a workgroup a (row, chunk) over its slice of the row's logits, the slice's
 //! first maximum and its id into the partial planes (`part[row * CLS_ARGMAX_CHUNKS + chunk]`); a thread's first element seeds its
-//! candidate, so a row of equal or non-finite values still lands an id, and an empty slice lands none (`0xFFFFFFFF`)
+//! candidate and every lane reads through `lane_val`, so a row of equal or non-finite values still lands an id, and an empty slice
+//! lands none (`0xFFFFFFFF`)
 [vk_dispatch(name = "cls_argmax_part", grid = "wgs", params = "wgs : int64")]
 class ClsArgmaxPart : ClsArgmaxBase {
     @ssbo @binding = 0 y : array<float>        // the logits rows
@@ -1147,7 +1152,7 @@ class ClsArgmaxPart : ClsArgmaxBase {
         var mi = 0xFFFFFFFFu
         var i = c0 + tid
         while (i < c1) {
-            let v = y[base + i]
+            let v = lane_val(y[base + i])
             if (mi == 0xFFFFFFFFu || v > m) {
                 m = v
                 mi = i
@@ -1156,7 +1161,7 @@ class ClsArgmaxPart : ClsArgmaxBase {
         }
         let bi = fold(m, mi)
         if (tid == 0u) {
-            part_max[wg] = bi == 0xFFFFFFFFu ? -3.4e38 : y[base + bi]
+            part_max[wg] = bi == 0xFFFFFFFFu ? -3.4e38 : lane_val(y[base + bi])
             part_id[wg] = bi
         }
     }

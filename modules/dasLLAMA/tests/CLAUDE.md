@@ -652,8 +652,9 @@ kernel run a column at a time, bit for bit, each stamp full and short of its wid
 gelu), `test_vkd_cls_epi_rows` (the classifier epilogue over four logits rows in one dispatch
 against the one-row dispatch a row at a time, bit for bit, and the CPU softcap with every
 suppressed id pinned on every row), `test_vkd_cls_argmax` (the classifier tail's device pick over
-four rows at two vocab widths against the host's `parallel_argmax`, a tie landing on the lower id,
-an all-equal row landing id 0, a poisoned row reddening the compare; the served witness is the
+six rows at two vocab widths against the host's `parallel_argmax`, a tie landing on the lower id,
+an all-equal row landing id 0, a row with NaN and -inf lanes landing its widest finite lane, an
+all-NaN row landing id 0 and never the empty-slice sentinel, a poisoned row reddening the compare; the served witness is the
 regions files' device-mode scheduler cell, which counts the picks the driver landed alone against
 the rows it stepped, the sampled fourth request's rows landing logits beside them),
 `test_vkd_q8_gemv_ar` (the q8 GEMV whose last workgroup runs the residual step's requant, with
@@ -878,6 +879,19 @@ re-warm's readback. `test_gpu_resident_hybrid_mtp_verify_reject` forces the reje
 (`set_mtp_force_reject_every(1)`): the restore and the replayed step read the verify's row 0 bit for
 bit (logits and hidden), the region's rows and the carry's watermark back at the token's row, and
 the next round verifies on the device again with the region's rows at the session's position.
+The head's prompt warm on the window chain: `test_gpu_resident_hybrid_mtp_xb_poison` fills a
+session's host residual rows with NaN before the same 40-token resident prefill and holds the
+device draft at the prompt's last row bit for bit the clean prefill's (logits, hidden and pick;
+the carry bit for bit too, every logit finite, the region's head rows at the prompt's end less one),
+the draft one row back as the control; `test_gpu_resident_hybrid_mtp_head_warm` reads the head's
+warmed K rows [0, 39) back from the host cache after the resident prefill and holds each within the
+4% deltanet bar (of the CPU row's max) of the CPU warm's row on the same prompt after the model
+drop, the CPU row one down as the control past it, the widest miss logged;
+`test_gpu_resident_hybrid_mtp_rounds` runs six speculative rounds on the device (their draft and
+verify counters, every call served) and six on the CPU from the same prompt and fed tokens, every
+round's draft token, accept and position equal and logged decoded, the head's host rows within the
+bar with the one-down control, and a seventh CPU round over the head's host rows poisoned with NaN
+as the control (another draft, or non-finite rows).
 
 One cell is model-free: `test_kernel_census_by_name` holds that the census accessor panics on a
 kernel name nothing seeded, so a misspelt key cannot read as a zero count.
