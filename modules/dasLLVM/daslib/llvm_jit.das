@@ -7134,7 +7134,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprConstString
     def override visitExprConstString(expr : ExprConstString?) : ExpressionPtr {
-        setE(expr, get_string_constant_ptr(g_builder, string(expr.value)))
+        setE(expr, get_string_constant_ptr(g_builder, expr.value))
         return expr
     }
 

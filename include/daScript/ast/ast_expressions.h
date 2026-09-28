@@ -915,6 +915,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( ExpressionPtr expr ) const override;
         const string & getValue() const { return text; }
+        bool isBlob() const { return text.find('\0') != string::npos; }
         virtual bool rtti_isStringConstant() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;

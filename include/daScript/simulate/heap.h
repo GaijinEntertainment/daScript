@@ -383,8 +383,10 @@ namespace das {
         }
         virtual void reset () override;
         char * intern ( const char * str, uint64_t length ) const;
+        uint32_t blobLength ( const char * str ) const;
     protected:
         das_string_set internMap;
+        das_hash_map<const char *, uint32_t> blobLengths;
     };
 
     class DAS_API PersistentStringAllocator final : public StringHeapAllocator {

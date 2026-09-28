@@ -20,6 +20,7 @@ namespace das {
                 case '\n':  result.append("\\n");   break;
                 case '\r':  result.append("\\r");   break;
                 case '\t':  result.append("\\t");   break;
+                case 0:     if (das_escape) result.append("\\x00"); else result.append("\\u0000");  break;
                 case '{':   if (das_escape) result.append("\\{"); else result.append("{");  break;
                 case '}':   if (das_escape) result.append("\\}"); else result.append("}");  break;
                 default:
