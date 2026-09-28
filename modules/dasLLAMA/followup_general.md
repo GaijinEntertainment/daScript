@@ -1961,3 +1961,12 @@
    panic exits non-zero everywhere (`exit(1)` at the two sites), and the team-chunk invocation
    (`src/builtin/module_builtin_jobque.cpp`, `team_parallel_for_invoke`) runs under
    `runWithCatch` and reports `JOB EXCEPTION` as the fifo path does.
+181. **`test_vision_chat.das`'s deepstack cell is SIGKILLed on the pod under its 62 GB cgroup cap.**
+   `test_vision_chat_deepstack` (Qwen3-VL 4B, the 300-row mrope image quantum declined to the CPU
+   prefill loop - "the `vulkan` override does not rope from per-row tables") dies with "Killed"
+   (exit 137) in every stocked run on the RTX PRO 4500 pod since 09-24, on master's code, while
+   the container's `memory.max` reads 62 GB against the box's 251 GB (`memory.events` counts 18
+   kills); the file's earlier cells pass, so a `--changed` run on the pod reads one red it did not
+   cause. Open: the cell's peak resident size on that path (a 4B model and a 300-row quantum have
+   no business near 62 GB - the CPU loop's per-row allocation is the suspect) and, once it is known,
+   either the allocation or a documented pod cap the runner's REPORT names.
