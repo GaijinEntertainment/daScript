@@ -446,7 +446,8 @@ namespace das
                                 char buf[8];
                                 if (!encodeUtf8Char(charCode, buf) && error)
                                     *error = true;
-                                result += buf;
+                                if ( charCode == 0 ) result += char(0);
+                                else result += buf;
                             }
                         }
                         break;
