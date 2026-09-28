@@ -1924,3 +1924,22 @@
    cells stand against it until the rig fetches jfk (it is whisper.cpp's sample) and the gemma4a
    clip is replaced by a traceable one or built by the test. Done = both clips come from the rig
    or the repository and the cells' expectations are re-pinned on them.
+
+179. **The `sme_row_share` seat is hand-set; the tuner snapshots it, it does not race it.** The
+   matrix-unit row slice (`ARCHITECTURE_CPU_KERNELS.md#kq-row-slice`) takes its share from the
+   sidecar's `runtime` section, and `tune_kernels` writes that section as a snapshot of the live
+   knobs, so a box gets a share only by hand or by an `arm-sme` class profile carrying one. The
+   right share is a per-box number (one BNNS thread beside busy sdot lanes keeps about two thirds
+   of its lone rate on the M5 Max, and the M4 Pro has fewer lanes beside it). Done = a runtime
+   seat in the mint that races the share over {0, 20, 30, 40} on the kq batch fixture through
+   the real dispatcher, crowns the best, and hands the crown to the existing confirm; plus the
+   `arm-sme` class of row 118a, whose shipped profile carries the M5 mint's share and whose
+   `FEAT_SME` gate keeps M1-M3 at 0.
+180. **The row slice serves only the dense kq batch slot.** The q8 batch walk
+   (`q8q8_batch_kernel_s16_gen`) and the fused MoE walk (`kq_batch_groupn_gen`) keep one
+   dispatch, so a Q8_0 dense model and every MoE prefill run without the matrix unit. The q8
+   slot is the same shape (a per-row f16 panel off the grp<mr> q8 planes, `dot_q8q8_f16s`
+   scales); the MoE walk's per-expert token counts are small enough that a slice per region
+   would sit under the 32-token gate on most experts, so it wants a slice over the largest
+   regions only. Done = the q8 slot sliced through the same server with its own row dequant,
+   measured on E4B q8; the MoE form measured before it is built.

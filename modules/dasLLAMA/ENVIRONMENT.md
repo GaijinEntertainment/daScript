@@ -182,6 +182,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_ACCEL_STRIPS` | number | d/256, max 8 | Strip count for the f32 sgemm lane; 0 keeps the shape-derived default. |
 | `DASLLAMA_ACCEL_MIN_MMAC` | number | backend default | Minimum MMAC count below which Accelerate declines and the daslang kernel runs. |
 | `DASLLAMA_ACCEL_MIN_NTOK` | number | 32 | Minimum token count for the Accelerate float-batch override, floor 1. |
+| `DASLLAMA_SME_ROW_SHARE` | number | sidecar sme_row_share, else 0 | Percent of a dense K-quant batch GEMM's rows the BNNS f16 matrix-unit slice takes beside the vector lanes (0 = off, cap 90); overrides the sidecar's sme_row_share. |
 
 ## Harness - tuner and probes
 

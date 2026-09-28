@@ -1704,6 +1704,11 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
         }
     }
     apply_i64_knob(rt, "batch_lane_cap") $(v) { set_batch_lane_cap(int(min(v, 2147483647l))) }
+    apply_i64_knob(rt, "sme_row_share") $(v) {
+        if (is_none(g_env_accel.sme_row_share)) {   // DASLLAMA_SME_ROW_SHARE is the A/B override over the mint
+            set_sme_row_share(int(min(v, 90l)))
+        }
+    }
     apply_i64_knob(rt, "batch_grid_2d") $(v) { set_batch_grid_2d(int(min(v, 2l))) }
     apply_i64_knob(rt, "dispatch_worker_limit") $(v) { set_dispatch_worker_limit_(int(min(v, 2147483647l))) }
     apply_i64_knob(rt, "gemv_wave_fill") $(v) { set_gemv_wave_fill(v != 0l) }

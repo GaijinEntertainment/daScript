@@ -75,6 +75,27 @@ The tier kernels run from lambdas the job dispatch lifts out of the function tha
 
 Every format's repack is made of the same two moves over a row of units - a 256-weight superblock, or a 32-block - of `ubytes`: the quant-plane interleave, which stacks mr rows per group and lands column c of unit u in row r at `[g][u][c][r][colw]`, and the scale-plane interleave, which is field-major, `[g][u][field][i][r][width]`, the fields in destination order with their source offsets. Tail rows (`d % mr`) stay disk-order and the row-major dots serve them.
 
+### The matrix-unit row slice runs beside the vector lanes {#kq-row-slice}
+
+A dense repacked K-quant batch GEMM can hand a share of its row groups to one matrix-unit job
+(BNNS on Apple: SME on M4 and later, AMX before) while the sdot lanes take the rest. The slice
+is the tail of the groups, so the lanes keep the same group walk over `[0, ngv)`; chunk 0 of the
+team dispatch is the slice - the publishing caller claims it first, a fast-tier worker that beats
+it serves it too, and a slow-tier claimer runs those rows on the vector tile, since its NEON
+would serve the call at a fraction of the rate - and the vector chunks fill the lanes beside it,
+sized by `matmul_chunks_beside_slice`, which reserves the slice's lane. The slice's operands build before
+the dispatch: every lane dequantizes panel rows off the grp<mr> planes to f16, and the q8_K
+activations widen to f16 once, so the matrix unit multiplies the same rounded activation the
+lanes do and the panel costs about a tenth of one lane's tile time. The slice is a share and never
+the whole matrix because an Apple chip exposes about one such unit (one BNNS thread computes
+like six sdot cores and strips barely scale), and it shrinks under load (about two thirds of
+its lone rate beside busy lanes), so the right share is a per-box number: the sidecar's
+`sme_row_share` runtime knob, `DASLLAMA_SME_ROW_SHARE` over it for an A/B, 0 on every box
+without a mint. A refusal from the server - no BNNS, or a run before its prepare - keeps every
+group on the vector tile, and the lanes' rows are bit-for-bit the unsliced batch at any share.
+The slice takes only the dense kq batch slot: the fused MoE walk and the q8 batch keep their
+single dispatch.
+
 ### A hot leaf is instantiated in its caller's JIT partition {#jit-partition-inlining}
 
 The split-module JIT inlines within one partition only, so a leaf a hot loop calls is written to instantiate in the caller's: a generic over its operand (`iq_grid_octet`), or a plain function stamped beside the codecs it drives (`kq_transcode_units`). A call into another module's function inside a `[tune]` loop body blocks the loop's vectorization outright - `dot_bf16` spells its bf16 widen as the shift for that reason. The same rule runs the other way for the leaves themselves - the inliner's decisions over a leaf follow its call-site count, which is why the run-time-format `dot_kq` stamp lives in the test fixture `tests/_kq_dot.das` and not beside the sixteen tag overloads in `dasllama_math_default.das`.

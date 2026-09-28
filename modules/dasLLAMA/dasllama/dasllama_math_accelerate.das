@@ -9,6 +9,8 @@ require dasllama/dasllama_math
 require dasllama/dasllama_convert  // cvt_f32_to_f16 — the BNNS f16 batch prep
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require dasllama/dasllama_par
+require dasllama/dasllama_math_default  // dequant_kq_row_grp - the slice's panel rows off the grp<mr> planes
+require dasllama/dasllama_gemm_schema  // kq_qsb/kq_ssb - the fmt-id kq plane strides
 require das_accelerate
 require daslib/f16_cvt
 require math
@@ -66,6 +68,7 @@ struct private BnnsF16Plane {
 }
 
 var private g_accel_f16 = false
+var private g_accel_bnns_ok = false   //! the 1x1x1 BNNS probe passed at arming - the kq slice's gate
 var private g_accel_engaged = 0l   //! float-batch calls the tier served since the last reset - a run's engagement witness
 
 //! calls the tier served since `dasllama_accelerate_reset_engaged`: a driver that armed the tier and
@@ -292,15 +295,111 @@ def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float con
     return true
 }
 
+// ===== the K-quant row slice: the matrix unit beside the vector lanes =====
+
+var private @scratch g_slice_panel : array<uint16>   // f16 weight rows of the slice, (row1 - row0) x n
+var private @scratch g_slice_hx : array<uint16>      // f16 activations, ntok x n
+var private @scratch g_slice_rowf : array<float>     // per-slot f32 row staging, slot bound x n
+var private g_slice_rows = 0l                        //! rows the last prepare built - run's operand witness
+
+//! kq_slice_prepare server: the slice's f16 panel off the grp<mr> planes and the f16 activations.
+[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-row-slice")]
+def private accel_kq_slice_prepare(fmt : int; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; n, ntok, mr, row0, row1 : int64) : bool {
+    if (!g_accel_bnns_ok) {
+        return false
+    }
+    let t0 = ref_time_ticks()
+    let rows = row1 - row0
+    let nsb = n / 256l
+    let qsb = kq_qsb(fmt)
+    let ssb = kq_ssb(fmt)
+    g_slice_panel |> overwrite_resize((rows + 32l) * n)   // + a tile: BNNS reads a partial 32-row tile past the last row
+    g_slice_hx |> overwrite_resize((ntok + 32l) * n)
+    g_slice_rowf |> overwrite_resize(int64(get_dispatch_slot_bound()) * n)
+    g_slice_rows = rows
+    unsafe {
+        var hw = addr(g_slice_panel[0])
+        var hx = addr(g_slice_hx[0])
+        var stage = addr(g_slice_rowf[0])
+        maybe_parallel_for_indexed(0, int(rows), int(min(rows, 64l))) $(slot, rb, re) {
+            unsafe {
+                var rp = stage + int64(slot) * n
+                for (ri in range(rb, re)) {
+                    let r = row0 + int64(ri)
+                    let g = r / mr
+                    dequant_kq_row_grp(int64(fmt), kqp + g * mr * nsb * qsb, ksp + g * mr * nsb * ssb, r % mr, mr, n, rp)
+                    cvt_f32_to_f16_sat(hw + int64(ri) * n, rp, n)
+                }
+            }
+        }
+        // q8_K activations, one scale per 256: the same rounding the sdot lanes multiply by
+        maybe_parallel_for_indexed(0, int(ntok), int(min(ntok, 8l))) $(slot, tb, te) {
+            unsafe {
+                var xp = stage + int64(slot) * n
+                for (t in range(tb, te)) {
+                    let xrow = xqp + int64(t) * n
+                    let srow = xsp + int64(t) * nsb
+                    for (sbi in range64(nsb)) {
+                        let s = srow[sbi]
+                        for (i in range64(sbi * 256l, sbi * 256l + 256l)) {
+                            xp[i] = float(xrow[i]) * s
+                        }
+                    }
+                    cvt_f32_to_f16_sat(hx + int64(t) * n, xp, n)
+                }
+            }
+        }
+    }
+    g_slice_prep_us += int64(get_time_usec(t0))
+    return true
+}
+
+//! kq_slice_run server: y rows [row0, row1) = the prepared panel against the prepared activations.
+[hot_path]
+def private accel_kq_slice_run(var yp : float?; n, d, ntok, row0, row1 : int64) : bool {
+    if (row1 - row0 != g_slice_rows) {
+        return false
+    }
+    if (g_slice_engaged == 0l) {
+        announce_slice_engaged(row0, row1, d, ntok)
+    }
+    g_slice_engaged++
+    let t0 = ref_time_ticks()
+    unsafe {
+        let rc = accel_bnns_hgemm_nt(int(ntok), int(row1 - row0), int(n), addr(g_slice_hx[0]), int(n), addr(g_slice_panel[0]), int(n), yp + row0, int(d))
+        g_slice_run_us += int64(get_time_usec(t0))
+        return rc == 0
+    }
+}
+
+[cold_path]   // once per process, on the first slice: the witness line, not the slice's hot path
+def private announce_slice_engaged(row0, row1, d, ntok : int64) {
+    to_log(LOG_INFO, "dasLLAMA: kq row slice engaged - rows [{row0}, {row1}) of {d} at ntok {ntok}, share {get_sme_row_share()}%\n")
+}
+
+var private g_slice_engaged = 0l   //! slice GEMMs served since arming - a run's witness that the share took effect
+var private g_slice_prep_us = 0l   //! wall time the prepares took (every lane, before the split)
+var private g_slice_run_us = 0l    //! wall time the slice jobs took on the matrix unit
+
+//! slice GEMMs the matrix unit served since arming: a driver that set a share and reads 0 measured the lanes alone
+def dasllama_accelerate_slice_engaged() : int64 => g_slice_engaged
+
+//! the slice's time split since arming, for a driver's witness line
+def dasllama_accelerate_slice_stats() : string => "{g_slice_engaged} slice(s), prepare {g_slice_prep_us / 1000l} ms, run {g_slice_run_us / 1000l} ms"
+
 //! Arm the accelerate float-batch tier (DASLLAMA_ACCEL=1 arms it at init; tests/hosts call this
-//! directly). min_ntok gates the donor to batch shapes — 1 extends it to decode GEMV.
+//! directly). min_ntok gates the donor to batch shapes — 1 extends it to decode GEMV. The K-quant
+//! row slice arms with it; its share is the `sme_row_share` knob (0 keeps every row on the lanes).
 def dasllama_accelerate_enable(min_ntok : int64) {
     set_float_batch_override(@@accel_fp_batch, @@accel_bf16_batch, min_ntok)
-    to_log(LOG_INFO, "dasLLAMA: accelerate float-batch tier armed (min ntok {min_ntok})\n")
+    g_accel_bnns_ok = accel_bnns_probe()
+    set_kq_slice_server(@@accel_kq_slice_prepare, @@accel_kq_slice_run)
+    to_log(LOG_INFO, "dasLLAMA: accelerate float-batch tier armed (min ntok {min_ntok}, kq slice share {get_sme_row_share()}%)\n")
 }
 
 def dasllama_accelerate_disable() {
     clear_float_batch_override()
+    clear_kq_slice_server()
 }
 
 // floor guard for the loaded knobs: a SET value below the floor is worth a word (garbage text
@@ -317,6 +416,10 @@ def private floor_or(name : string; v : Option<int64>; def_v : int64; min_v : in
 
 [init]
 def private dasllama_math_accelerate_init() {
+    // the share is a knob, not an arming: a host that enables the tier itself (the bench's --accel) still reads it
+    if (!is_none(g_env_accel.sme_row_share)) {
+        set_sme_row_share(int(floor_or("DASLLAMA_SME_ROW_SHARE", g_env_accel.sme_row_share, 0l, 0l)))
+    }
     if (!g_env_accel.accel) {
         return
     }

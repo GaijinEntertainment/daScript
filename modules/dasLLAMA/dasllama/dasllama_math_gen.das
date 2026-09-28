@@ -2358,6 +2358,29 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
     delete scratch
 }
 
+// the sliced dispatch: chunk 0 is the slice over groups [ngv, ng) - the publishing caller claims it first, a
+// fast-tier worker that beats it serves it too, a slow-tier claimer runs those rows on the vector tile instead
+def private kq_batch_sliced_gen(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok, mr, TB, ngv, ng : int64) {
+    let chunks = matmul_chunks_beside_slice(int(ngv * mr), get_q8_batch_chunks_per_job(), n * ngv * mr * ntok)
+    let jobs = get_dispatch_lanes() > 1 ? chunks + 1 : 1
+    let workers = is_job_que_available() ? get_total_hw_jobs() : 0   // the caller is the slot past them
+    let fastWorkers = get_total_perf_cores() - 1                      // worker slot s sits on affinity slot s + 1; slot 0 is the caller's
+    maybe_parallel_for_indexed(0, chunks + 1, jobs) $(slot, cb, ce) {
+        for (ci in range(cb, ce)) {
+            if (ci == 0) {
+                let fast = slot >= workers || slot < fastWorkers
+                if (!(fast && kq_slice_run(myp, n, d, ntok, ngv * mr, ng * mr))) {
+                    kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, n, d, mr, TB, int(ngv), int(ng), 0l, ntok)
+                }
+            } else {
+                let ub = int(int64(ci - 1) * ngv / int64(chunks))
+                let ue = int(int64(ci) * ngv / int64(chunks))
+                kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, n, d, mr, TB, ub, ue, 0l, ntok)
+            }
+        }
+    }
+}
+
 // kq_batch slot: batched K-quant GEMM over the repacked planes — group chunks parallel, the
 // cell walk above per chunk, row tails (d % mr) disk-order per token via the portable dots
 def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) {
@@ -2365,9 +2388,19 @@ def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
     let ng = d / mr
     var myp = yp
     let TB = effective_token_block(g_q8_token_block, n)
-    // GEMM shaper, not GEMV: a batch row-unit is ntok dots, so the GEMV wave-cancel formula doesn't apply.
-    maybe_parallel_for(0, int(ng), matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok)) $(ub, ue) {
-        kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, n, d, mr, TB, ub, ue, 0l, ntok)
+    // the matrix-unit slice takes the tail groups [ngv, ng); a prepare refusal keeps them all on the vector tile
+    var ngv = ng
+    let ngs = kq_slice_groups(ng, mr, ntok)
+    if (ngs > 0l && kq_slice_prepare(fmt, kqp, ksp, xqp, xsp, n, ntok, mr, (ng - ngs) * mr, ng * mr)) {
+        ngv = ng - ngs
+    }
+    if (ngv < ng) {
+        kq_batch_sliced_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, n, d, ntok, mr, TB, ngv, ng)
+    } else {
+        // GEMM shaper, not GEMV: a batch row-unit is ntok dots, so the GEMV wave-cancel formula doesn't apply.
+        maybe_parallel_for(0, int(ng), matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok)) $(ub, ue) {
+            kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, n, d, mr, TB, ub, ue, 0l, ntok)
+        }
     }
     let kf = kq_fmt_of_id(fmt, "kq_batch_kernel_gen")
     kq_fmt_stamp(kf) $(F) {

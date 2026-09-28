@@ -1378,6 +1378,9 @@ var private g_refused_rows = 0   //! rows the run asked for that reported nothin
 def private accel_pp_witness(fmt : OutFmt; row : string) {
     static_if (typeinfo builtin_module_exists(das_accelerate)) {
         say(fmt, "accel: the float-batch tier served {dasllama_accelerate_engaged()} call(s) over {row}\n")
+        if (dasllama_accelerate_slice_engaged() > 0l) {
+            say(fmt, "accel: kq row slice {dasllama_accelerate_slice_stats()} over {row}\n")
+        }
     }
 }
 

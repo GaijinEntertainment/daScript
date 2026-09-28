@@ -174,9 +174,11 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   `tbl16` composers only, plus the registration of the idot4 stamps as "arm64-sdot". Its `[init]`
   never fires off-arch (`ARCHITECTURE_INVARIANTS.md#inherited-invariants`, three-layer safety model), so an
   intrinsic here needs a correct scalar fallback body, not a guard at the call site.
-- **`dasllama_math_accelerate.das`** - the Accelerate/BNNS float tier (AMX on M1-M3, SME on M4+),
-  for genuinely-float planes only. BLAS-for-quant is ruled out structurally
-  (`ARCHITECTURE_INVARIANTS.md#inherited-invariants`).
+- **`dasllama_math_accelerate.das`** - the Accelerate/BNNS float tier (AMX on M1-M3, SME on M4+)
+  for genuinely-float planes, and the matrix-unit row slice of a dense K-quant batch GEMM
+  (`ARCHITECTURE_CPU_KERNELS.md#kq-row-slice`). BLAS as the whole quant matmul is ruled out
+  structurally (`ARCHITECTURE_INVARIANTS.md#inherited-invariants`); the slice takes a share of the
+  rows beside the vector lanes, never the matrix.
 - **`dasllama_math_gen.das`** / **`dasllama_gemm_gen.das`** / **`dasllama_gemm_schema.das`** /
   **`dasllama_gemm_register.das`** - the generated GEMM tier: the runtime registration, the tile
   generator, the layout/perm schema shared by generator and runtime, and the `[tune]` family

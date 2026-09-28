@@ -3347,3 +3347,26 @@ other overrides alike.
   `DAS_TUNE_POLICY` unset; the box is the pod on its cm2 arm unless the sentence names the 5060 Ti
   (Boris's box, RTX 5060 Ti 16 GB, driver 616.56, cm2 arm). A distance is the cell's own logged
   rel_l2 over one run of the cell; the cells log the reading on green and assert the 1.5x bar.
+
+### From the matrix-unit row slice probe (2026-09-28)
+
+- **One BNNS f16 thread on the M5 Max is worth six sdot cores alone and about two and a half
+  beside a busy pool - the row slice (`ARCHITECTURE_CPU_KERNELS.md#kq-row-slice`) is a wash on
+  this box.** Probe, 8192x2048 f16 x f16 -> f32 at M=512: one BNNS thread 1838 GFLOPS, twelve
+  strips 2257 (the chip exposes about one reachable unit; cblas_sgemm f32 1835, no higher than
+  the M1 Max's), one sdot k4 lane 307 GFLOPS (crowned mr8, streaming fixture shape), ten sdot
+  lanes 1547 GMAC/s beside a BNNS thread holding 1150-1350 GFLOPS. In the model (Qwen3-4B
+  Q4_K_M, pp512, 18-lane pool, `--accel`, `DASLLAMA_ALLOW_UNTUNED=1`, 3 reps): share 0 420-434
+  tok/s; share 10 434 +/- 21 (2112 ms of slice run over 720 slices, ~700 GFLOPS beside 17
+  busy lanes); share 15 414-416; share 20 405; share 30 333. The slice's prepare (every lane
+  dequantizing its rows, the activations widened once) costs ~100 ms over the same 720 slices -
+  not the bill. The bill is the unit's rate under load: ~2.5 lanes' worth, minus the lane the
+  slice reserves, so the ceiling on an 18-lane box is a few percent and the sweep never cleared
+  the noise. Ships at share 0 (the vector path bit-unchanged); a box with fewer lanes beside
+  the unit (an M4 Pro's 14) is where the share could pay, and the mint decides
+  (`followup_general.md` row 179). A fifo dispatch of the vector chunks beside a caller-run
+  slice (tried on the way) does NOT overlap under the engine's team mode: the wall grew by the
+  slice's whole run (5353 vs 4302 ms over the same calls), so the team form with the slice as
+  chunk 0 is the shape. BNNS also reads a partial 32-row tile past its f16 operand: a slice of
+  816 or 408 rows crashed inside `BNNSFilterApplyTwoInput` until the row count rounded to 32 and
+  the panel gained a tile of slack.

@@ -428,6 +428,62 @@ var g_batch_lane_cap = 0
 def public set_batch_lane_cap(v : int) { g_batch_lane_cap = max(v, 0) }
 def public get_batch_lane_cap() : int { return g_batch_lane_cap }
 
+// ===== the matrix-unit row slice (one SME/AMX job beside the vector lanes) =====
+
+//! Percent of a dense repacked-K-quant batch GEMM's rows the matrix-unit slice takes off the
+//! tail (0 = off). Sidecar `sme_row_share`; acts only while a slice server is installed.
+var g_sme_row_share = 0
+def public set_sme_row_share(v : int) { g_sme_row_share = clamp(v, 0, 90) }
+def public get_sme_row_share() : int { return g_sme_row_share }
+
+//! Slice server: `prepare` builds the operands for rows [row0, row1) of the fmt's grp<mr> planes
+//! (parallel inside, before the split dispatch); `run` computes those y rows (token-major,
+//! stride d) on the matrix unit. false from either = refused, the vector tile takes the rows.
+typedef KqSlicePrepareFn = function<(fmt : int; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; n : int64; ntok : int64; mr : int64; row0 : int64; row1 : int64) : bool>
+typedef KqSliceRunFn = function<(var yp : float?; n : int64; d : int64; ntok : int64; row0 : int64; row1 : int64) : bool>
+
+[unused_argument(fmt, kqp, ksp, xqp, xsp, n, ntok, mr, row0, row1)]
+def private kq_slice_prepare_unset(fmt : int; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; n, ntok, mr, row0, row1 : int64) : bool => false
+
+[unused_argument(yp, n, d, ntok, row0, row1)]
+def private kq_slice_run_unset(var yp : float?; n, d, ntok, row0, row1 : int64) : bool => false
+
+var private g_kq_slice_prepare : KqSlicePrepareFn = @@kq_slice_prepare_unset
+var private g_kq_slice_run : KqSliceRunFn = @@kq_slice_run_unset
+var private g_kq_slice_armed = false
+
+def set_kq_slice_server(prepare : KqSlicePrepareFn; run : KqSliceRunFn) {
+    g_kq_slice_prepare = prepare
+    g_kq_slice_run = run
+    g_kq_slice_armed = true
+}
+
+def clear_kq_slice_server() {
+    g_kq_slice_prepare = @@kq_slice_prepare_unset
+    g_kq_slice_run = @@kq_slice_run_unset
+    g_kq_slice_armed = false
+}
+
+def kq_slice_server_armed() : bool => g_kq_slice_armed
+
+//! Row groups (of mr rows) the slice takes off a GEMM of ng groups: the share, in whole
+//! 32-row units (the matrix unit tiles its operand by 32 rows and reads a partial tile past the
+//! panel), floored so a slice never runs under 256 rows or under the batch gate (32 tokens).
+def kq_slice_groups(ng, mr, ntok : int64) : int64 {
+    if (!g_kq_slice_armed || g_sme_row_share <= 0 || ntok < 32l) {
+        return 0l
+    }
+    let unit = max(32l / mr, 1l)
+    let ngs = (ng * int64(g_sme_row_share) / 100l) / unit * unit
+    return ngs * mr >= 256l ? ngs : 0l
+}
+
+def kq_slice_prepare(fmt : int; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; n, ntok, mr, row0, row1 : int64) : bool => (
+    invoke(g_kq_slice_prepare, fmt, kqp, ksp, xqp, xsp, n, ntok, mr, row0, row1))
+
+def kq_slice_run(var yp : float?; n, d, ntok, row0, row1 : int64) : bool => (
+    invoke(g_kq_slice_run, yp, n, d, ntok, row0, row1))
+
 var g_phase_decode_workers = -1   //! the decode-phase worker limit; -1 = per-phase parking off (homogeneous box)
 def public set_phase_decode_workers(v : int) {
     if (v == 0) {
@@ -479,8 +535,15 @@ def public lanes_for_work(work : int64; lane_cap : int) : int {
 //! Work-aware chunk count for a batch (GEMM) row split: L = lanes_for_work(work, batch cap);
 //! 1 => inline; else chunks rounded DOWN to a whole number of L-waves so no ragged final wave
 //! makes the join wait on stragglers. `rows` is the split range's total row count; `work` = MAC count.
-def public matmul_chunks(rows : int; oversplit : int; work : int64) : int {
-    let L = lanes_for_work(work, g_batch_lane_cap)
+def public matmul_chunks(rows : int; oversplit : int; work : int64) : int => (
+    matmul_chunks_on_lanes(rows, oversplit, lanes_for_work(work, g_batch_lane_cap)))
+
+//! The same shaper for the vector rows of a sliced GEMM: one admitted lane is the slice job's
+//! for the whole dispatch, so the vector chunks fill the lanes beside it.
+def public matmul_chunks_beside_slice(rows : int; oversplit : int; work : int64) : int => (
+    matmul_chunks_on_lanes(rows, oversplit, lanes_for_work(work, g_batch_lane_cap) - 1))
+
+def private matmul_chunks_on_lanes(rows : int; oversplit : int; L : int) : int {
     if (L <= 1) {
         return 1
     }
@@ -489,9 +552,7 @@ def public matmul_chunks(rows : int; oversplit : int; work : int64) : int {
         return want
     }
     let cap = clamp(rows / g_matmul_min_chunk_rows, 1, want)   // grain-limited ceiling (<= want = L × oversplit)
-    // the grain may only limit OVERSPLIT — never cut chunks below the admitted lanes (underfilling
-    // L idles lanes for the whole dispatch, always worse than sub-grain chunks; rows < L is the
-    // only natural floor)
+    // the grain limits only OVERSPLIT: underfilling L idles lanes for the whole dispatch, worse than sub-grain chunks
     if (cap < L) {
         let chunks = clamp(rows, 1, L)
         assert_wave_aligned(chunks, L)
@@ -746,6 +807,12 @@ def private restore_float_override_defaults {
     }
     if (g_mm_bf16_batch_override == null) {
         g_mm_bf16_batch_override = @@bf16_batch_override_unset
+    }
+    if (g_kq_slice_prepare == null) {
+        g_kq_slice_prepare = @@kq_slice_prepare_unset
+    }
+    if (g_kq_slice_run == null) {
+        g_kq_slice_run = @@kq_slice_run_unset
     }
 }
 

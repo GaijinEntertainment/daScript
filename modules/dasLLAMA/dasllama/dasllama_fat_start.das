@@ -33,6 +33,7 @@ def public dasllama_runtime_snapshot(metal_crowns : string) : JsonValue? {
         matmul_min_chunk_rows_gemv = get_matmul_min_chunk_rows_gemv(),
         target_chunk_work = get_target_chunk_work(), gemv_lane_cap = get_gemv_lane_cap(),
         batch_lane_cap = get_batch_lane_cap(), batch_grid_2d = get_batch_grid_2d(),
+        sme_row_share = get_sme_row_share(),
         dispatch_worker_limit = get_dispatch_worker_limit_(),
         team_rank_gate = get_team_rank_gate(),   // -1 = unset (apply skips negatives; env/que default rules)
         attn_par_threshold = get_attn_par_threshold(),

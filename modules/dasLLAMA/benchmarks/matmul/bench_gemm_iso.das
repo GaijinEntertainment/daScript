@@ -69,6 +69,7 @@ def private shapes_for(tag : string) : array<tuple<string; int64; int64>> {
 def private reps_for(n, d : int64) : int => clamp(int(100000000000l / (n * d * NTOK)), 3, 200)
 
 def fillf(var a : array<float>; cnt : int64) {
+    a |> reserve(cnt)   //! the cls planes pass max_unreserved_size: reserve before every resize here
     a |> resize(cnt)
     for (i in range64(cnt)) {
         a[i] = float(i % 13l) * 0.1 - 0.6
@@ -99,7 +100,9 @@ def bench_one(name : string; n, d : int64; reps : int; laneq : bool) {
     // copy quants out of the tensor so we can repack in place without touching qt8
     var q : array<int8>
     var scales : array<float>
+    q |> reserve(n * d)
     q |> resize(n * d)
+    scales |> reserve(d * nb)
     scales |> resize(d * nb)
     for (i in range64(n * d)) { q[i] = qt8.q[i] }
     for (i in range64(d * nb)) { scales[i] = qt8.scales[i] }
@@ -114,13 +117,16 @@ def bench_one(name : string; n, d : int64; reps : int; laneq : bool) {
     quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
     var xqb : array<int8>
     var xsb : array<float>
+    xqb |> reserve(NTOK * n)
     xqb |> resize(NTOK * n)
+    xsb |> reserve(NTOK * nb)
     xsb |> resize(NTOK * nb)
     for (tk in range64(NTOK)) {
         for (i in range64(n)) { xqb[tk * n + i] = xq[i] }
         for (i in range64(nb)) { xsb[tk * nb + i] = xs[i] }
     }
     var y : array<float>
+    y |> reserve(NTOK * d)
     y |> resize(NTOK * d)
 
     if (laneq) {

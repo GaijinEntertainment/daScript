@@ -481,6 +481,10 @@ struct public AccelerateEnv {
     @clarg_default_doc = "32"
     @clarg_doc = "Minimum token count for the Accelerate float-batch override, floor 1."
     accel_min_ntok : Option<int64>
+
+    @clarg_default_doc = "sidecar sme_row_share, else 0"
+    @clarg_doc = "Percent of a dense K-quant batch GEMM's rows the BNNS f16 matrix-unit slice takes beside the vector lanes (0 = off, cap 90); overrides the sidecar's sme_row_share."
+    sme_row_share : Option<int64>
 }
 
 // ===== Harness — tuner and probes =====

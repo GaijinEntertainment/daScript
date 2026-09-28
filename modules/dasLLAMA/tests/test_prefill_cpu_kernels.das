@@ -16,6 +16,7 @@ require _q4k_disk
 require daslib/f16_cvt
 require math
 require _compares   // mismatch_exact: the plane bytes' compare
+require ?das_accelerate dasllama/dasllama_math_accelerate   // the matrix-unit row slice server (Apple-only)
 
 var g_taint = 0.0
 
@@ -234,6 +235,115 @@ def private kq_batch_gate(t : T?; fmt : int; n, d, ntok : int64) {
     delete s1
     delete b1
     delete y
+}
+
+// static_if shims: the slice server lives in the Apple-only accelerate driver; off-Apple the
+// arm feints and these bodies still typecheck
+def private t_slice_arm(share : int) : bool {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        dasllama_accelerate_enable(32l)
+        set_sme_row_share(share)
+        return kq_slice_server_armed()
+    } else {
+        return false
+    }
+}
+
+def private t_slice_disarm() {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        set_sme_row_share(0)
+        dasllama_accelerate_disable()
+    }
+}
+
+//! The matrix-unit row slice beside the vector lanes: the rows the lanes keep stay bit-for-bit
+//! the unsliced batch, the slice's rows land within the f16 envelope of the disk dots, and
+//! share 0 is the unsliced batch again.
+def private kq_slice_gate(t : T?; fmt : int; n, d, ntok : int64; share : int) {
+    let nsb = n / 256l
+    var kq : array<uint8>
+    var ks : array<uint8>
+    build_kq_region(fmt, kq, ks, d, n, 0x2B7E1516u)
+    var src : array<float>
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    build_acts(src, xq, xs, xbs, ntok, n)
+    var want : array<float>
+    want |> resize(ntok * d)
+    var scale = 0.0
+    for (p in range64(ntok)) {
+        for (r in range64(d)) {
+            want[p * d + r] = kq_row_dot(fmt, kq, ks, r, nsb, xq, xs, xbs, p * n, p * nsb, p * (n / 16l), n)
+            scale = max(scale, abs(want[p * d + r]))
+        }
+    }
+    let prev = active_kernel_backend()
+    pin_kernel_backend(gen_backend_name())
+    if (kernel_backend_has_kq() && kernel_backend_has_kq_batch() && t_slice_arm(share)) {
+        repack_kq_weight(fmt, kq, ks, 0l, n, d)
+        let mr = kq_layout_of(fmt)
+        let ngs = kq_slice_groups(d / mr, mr, ntok)
+        t |> success(ngs > 0l, "{fmt_tag(fmt)} a {share}% share of d={int(d)} rows at ntok={int(ntok)} admits a slice (got {int(ngs)} groups)")
+        let row0 = (d / mr - ngs) * mr
+        var ysplit : array<float>
+        ysplit |> resize(ntok * d)
+        matmul_kq_batch(fmt, ysplit, kq, ks, 0l, xq, xs, xbs, n, d, ntok)
+        set_sme_row_share(0)
+        var ybase : array<float>
+        ybase |> resize(ntok * d)
+        matmul_kq_batch(fmt, ybase, kq, ks, 0l, xq, xs, xbs, n, d, ntok)
+        var lane_diff = 0l
+        var slice_err = 0.0
+        for (p in range64(ntok)) {
+            for (r in range64(d)) {
+                if (r < row0) {
+                    lane_diff += ysplit[p * d + r] != ybase[p * d + r] ? 1l : 0l
+                } else {
+                    slice_err = max(slice_err, abs(ysplit[p * d + r] - want[p * d + r]))
+                }
+            }
+        }
+        t |> equal(lane_diff, 0l, "{fmt_tag(fmt)} the lanes' rows [0, {int(row0)}) are bit-for-bit the unsliced batch")
+        t |> success(slice_err <= 2.0e-2 * scale, "{fmt_tag(fmt)} the slice's rows [{int(row0)}, {int(d)}) sit within the f16 envelope of the disk dots (max err {slice_err} vs scale {scale})")
+        var yoff : array<float>
+        yoff |> resize(ntok * d)
+        matmul_kq_batch(fmt, yoff, kq, ks, 0l, xq, xs, xbs, n, d, ntok)
+        cmp_exact(t, yoff, ybase, ntok * d, "{fmt_tag(fmt)} share 0 is the unsliced batch")
+        delete ysplit
+        delete ybase
+        delete yoff
+    } else {
+        t |> skip("{fmt_tag(fmt)}: no kq batch slot on this tier or no accelerate slice server on this platform")
+    }
+    t_slice_disarm()
+    clear_kernel_backend_pin()
+    select_kernel_backend(prev)
+    delete kq
+    delete ks
+    delete src
+    delete xq
+    delete xs
+    delete xbs
+    delete want
+}
+
+[test]
+def test_kq_slice(t : T?) {
+    for (fmt in [4, 6, 40]) {
+        t |> run("{fmt_tag(fmt)} the matrix-unit row slice at 40% of d=1024 (n=512 ntok=40)") @(t : T?) {
+            kq_slice_gate(t, fmt, 512l, 1024l, 40l, 40)
+        }
+    }
+    t |> run("k4 a share under the 256-row floor admits no slice (d=256 at 40%)") @(t : T?) {
+        if (t_slice_arm(40)) {
+            t |> equal(kq_slice_groups(256l / kq_layout_of(4), kq_layout_of(4), 40l), 0l)
+            t |> equal(kq_slice_groups(4096l / kq_layout_of(4), kq_layout_of(4), 8l), 0l, "under the 32-token batch gate no slice either")
+        } else {
+            t |> skip("no accelerate slice server on this platform")
+        }
+        t_slice_disarm()
+    }
 }
 
 [test]

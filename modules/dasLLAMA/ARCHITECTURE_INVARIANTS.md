@@ -86,8 +86,11 @@ of these is a bug, not a style choice.
   int8), so any quantized operand must expand 4x into f32 scratch - and the weight matmul is bound on
   bytes streamed, so quantized-native `sdot`/VNNI wins regardless of FLOPs.
   `dasllama_math_accelerate.das` ships an Accelerate float-batch override plus a BNNS-f16 lane
-  for bf16 planes (`DASLLAMA_ACCEL` / `DASLLAMA_ACCEL_F16`). BLAS-for-quant stays ruled out;
-  Accelerate/BNNS on genuinely-float planes is live and measured.
+  for bf16 planes (`DASLLAMA_ACCEL` / `DASLLAMA_ACCEL_F16`). BLAS as the quant matmul stays
+  ruled out; Accelerate/BNNS on genuinely-float planes is live and measured. The one quant
+  shape the matrix unit serves is a prefill ROW SLICE (`ARCHITECTURE_CPU_KERNELS.md#kq-row-slice`):
+  at 512 tokens the GEMM is compute-bound and the slice's f16 panel is built once per call by
+  every lane, so the 4x expansion is L2 traffic the tokens amortize, not the weight stream.
 
 **From `turboquant_research.md`:**
 
