@@ -155,22 +155,25 @@ at or below its own position, so row i reads the rows the same command stored be
 one above. The per-row planes hold the rows: where the driver homes a NextN head it sizes them at
 the larger of the region count and the verify's rows - the round's depth plus one, read at load
 (`get_mtp_depth`) - `RD_NB_MAX` capping both, so a verify of more rows passes to the CPU (`verify_rows`). The
-command records once per row count and attention form (`RDec.v_cmd`, `v_cmd_unsplit`) - and, on
-a hybrid, per region, since the rollback copies it carries bake the region's slot
-(`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`) - the rows' form the furthest row's,
-over the N-row command's sets; `vk_rdec_verify_rows` answers the depth plus one the driver was
-prepared for (`RDec.verify_rows`), 0 where the head, the N-row command or an N-column leaf of the
-head's planes is off the device, each reason logged once.
+command records once per row count and attention form (`RDec.v_cmd`, `v_cmd_unsplit`) - on a
+hybrid as on an attention model, since every row's slot rides its `TokMeta` and the rollback
+scratch's offsets the push (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`) - the rows'
+form the furthest row's, over the N-row command's sets; `vk_rdec_verify_rows` answers the depth
+plus one the driver was prepared for (`RDec.verify_rows`), 0 where the head, the N-row command or
+an N-column leaf of the head's planes is off the device, each reason logged once.
 
-**The recurrent heads step the rows one at a time.** The N-row command's fused step runs every row
-at once, each against its own slot; the rows of one slot would all read the pre-step state. So the
-verify's GEMVs still take the rows as the columns of one dispatch, and the fused step (`dn_step_cls`)
-runs a dispatch a row with the row in the push (`DnStepArgs.row0`): the hazard rail orders each
-dispatch after the one before through the state's write, and row i's `TokMeta` carries the ring
-parity the row before it left (the region's word xor i), so it reads the image row i - 1 wrote. The
-driver flips the region's word once a row after the submit. A row's step is the one-row dispatch's
-arithmetic on the state the row before it left (`test_vkd_dn_step_rows_sameslot`), so a verify row
-reads the one-row command's logits bit for bit wherever the N-row command does.
+**The recurrent heads step the rows one at a time, inside one dispatch.** The N-row command's fused
+step runs every row at once, each against its own slot; the rows of one slot would all read the
+pre-step state. So the verify's GEMVs still take the rows as the columns of one dispatch, and the
+fused step (`dn_step_cls`) runs one dispatch a layer of a workgroup a head that loops the rows in
+order (`DnStepArgs.rows`): the head's state slice stays in registers between rows, each row's conv
+reads the image the dispatch started on and the projection rows before it, the final ring pair is
+written once at the end, and the scratch the reject rolls back to is written from the same
+registers (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`). Row 0's `TokMeta` carries the
+region's ring parity, and the driver flips the region's word once a row after the submit, so the
+word names the image the dispatch left the newest history in. A row's step is the one-row
+dispatch's arithmetic on the state the row before it left (`test_vkd_dn_step_rows_sameslot`), so a
+verify row reads the one-row command's logits bit for bit wherever the N-row command does.
 
 **The draft head re-warms in the same command, in Metal's shape**
 (`ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm`). After the picks, head row i takes
@@ -216,8 +219,8 @@ the command records a timestamp a dispatch role as the token command does, into 
 its own per row count and attention form (`g_rdq_verify`, `g_rdq_verify_unsplit`; the split
 form's list is borrowed for the record and put back): the trunk's roles under the one-row
 command's names - a GEMV over the rows as columns bills to the role it bills at one row - with
-the sequential recurrent rows a stamp a row's step (`dn_seq`) and a stamp a rollback copy
-(`roll`, the two summing over the rows and layers), the classifier over n columns (`cls`, the
+a recurrent layer's rows stepped in one dispatch a stamp of its own (`dn_seq`, summing over the
+layers; the rollback scratch is written inside it), the classifier over n columns (`cls`, the
 epilogue and the picks as the token command names them), and the head re-warm under `warm_*`:
 the cat rows' copies, norms and requant (`warm_cat`), the eh_proj GEMV (`warm_eh`), the head's
 attention norm and feed requant (`warm_norm`), and its k and v projections, norm and rope

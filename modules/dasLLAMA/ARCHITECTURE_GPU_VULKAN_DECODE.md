@@ -214,7 +214,8 @@ head - the conv preamble over the head's channels, the q and k norms and the raw
 adds, then the delta rule with each of the 256 threads owning one state column's row part, 64
 rows at ds 128, held in registers from the k.S / q.S pass through the update so the state
 streams once each way with a row's loads coalesced across the columns, the out-norm's sum by a
-subgroup add, and the o row) and the out GEMV. Both heads leave the block output
+subgroup add, and the o row; the same workgroup loops a stream's rows for the speculative verify,
+`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`) and the out GEMV. Both heads leave the block output
 in `xb2`, so the residual add, the FFN and the next layer's norm never know which head ran. The
 deltanet qkv and z planes ride their file formats - the loader tags a dense hybrid's planes
 natively where this driver will be attempted or no GPU rail wants them (Metal off, the file not

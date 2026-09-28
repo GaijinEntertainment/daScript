@@ -701,9 +701,9 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
             tm.parity = 1u
             tm.dnslot = 0u
         }
-        var s = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd),
-            fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES, of_bytes),
-            fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
+        var s = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd, smd),
+            fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES, of_bytes, sm_bytes),
+            fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u, 0u))
         for (oform in range(2)) {
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
@@ -712,7 +712,7 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
             var pc = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
                 beta_off = uint(beta_off), g_off = uint(g_off), taps_off = uint(taps_off), wnorm_off = uint(wnorm_off),
                 a_off = uint(a_off), dt_off = uint(dt_off), hist_off = uint(hist_off), eps = 1e-6, qscale = 1.0 / sqrt(float(ds)),
-                out_f32 = uint(oform))
+                out_f32 = uint(oform), rows = 1u)
             for (_k in range(DISPATCHES)) {
                 enc_dn_step_cls(raw, hz, s, pc, int64(nvh))
             }

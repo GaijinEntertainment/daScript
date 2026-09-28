@@ -8305,10 +8305,15 @@ struct DnRowsOut {
     oscales : array<float>
     oquants : array<uint>
     of32 : array<float>
+    roll : array<float>   //! the sequential form's rollback scratch: a row a stepped row but the last (the slot's state, then the ring pair), the staging image and arrival word past the rows; empty on the parallel form
 }
 
-//! `dn_step_cls` over `nrows` rows on buffers of its own - one dispatch, or under `seq` a dispatch a row in order (the rows' first
-//! row in the push, the same-slab verify's form) - two calls share no device plane
+//! a scratch row's floats: the slot's state, then the ring pair
+def private dn_roll_stride(st_n, ring : int) : int => st_n + 2 * ring
+
+//! `dn_step_cls` over `nrows` rows on buffers of its own - one dispatch of a workgroup a (row, head), or under `seq` one dispatch
+//! of a workgroup a head that steps the rows in order and writes the rollback scratch (the same-slab verify's form) - two calls
+//! share no device plane
 def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, nslots, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv : int;
                              offs : int[8]; eps, qscale : float; out_f32 : bool; seq : bool = false) : DnRowsOut {
     var r : DnRowsOut
@@ -8318,11 +8323,17 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
     let sc_bytes = int64(nrows * nblk) * 4l
     let q_bytes = int64(nrows * nblk) * 32l
     let of_bytes = int64(nrows * nvh * ds) * 4l
+    let ring = cd * (dconv - 1)
+    let roll_stride = dn_roll_stride(st_n, ring)
+    let roll_fin = (nrows - 1) * roll_stride
+    let roll_n = seq ? roll_fin + ring + 1 : 0
+    let roll_bytes = int64(roll_n) * 4l
     r.state |> resize(nslots * st_n)
     r.smalls |> resize(sm_n)
     r.oscales |> resize(nrows * nblk)
     r.oquants |> resize(nrows * nblk * 8)
     r.of32 |> resize(nrows * nvh * ds)
+    r.roll |> resize(roll_n)
     static_if (typeinfo builtin_module_exists(vulkan)) {   //! the device half: a fully typed function is inferred in a build without the module too
         let projd = make_device_buf(proj_bytes)
         let std = make_device_buf(st_bytes)
@@ -8330,27 +8341,31 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
         let scd = make_device_buf(sc_bytes)
         let qd = make_device_buf(q_bytes)
         let ofd = make_device_buf(of_bytes)
-        var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes + of_bytes, true, [cached = true])
-        let ring = cd * (dconv - 1)
+        let rolld = seq ? make_device_buf(roll_bytes) : smd   //! the parallel form binds the smalls in the scratch's slot, as the driver does where no scratch exists
+        var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes + of_bytes + roll_bytes, true, [cached = true])
         unsafe {
             upload_region_at(projd, 0l, addr<uint8 const?>(proj[0]), proj_bytes)
             upload_region_at(std, 0l, addr<uint8 const?>(st[0]), st_bytes)
             upload_region_at(smd, 0l, addr<uint8 const?>(sm[0]), sm_bytes)
-            for (i in range(seq ? 1 : nrows)) {   //! the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal (sequential rows write the image a row before reads, so the first row's alone)
+            for (i in range(seq ? 1 : nrows)) {   //! the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal (the sequential form's other image is the one its first row reads, so the first row's alone)
                 nan_sentinel_upload(smd, int64(ring) * 4l, int64(offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4l)
             }
             nan_sentinel_upload(scd, sc_bytes)
             nan_sentinel_upload(qd, q_bytes)
             nan_sentinel_upload(ofd, of_bytes)
+            if (seq) {   //! the scratch under the sentinel too, its arrival word at rest
+                nan_sentinel_upload(rolld, roll_bytes)
+                upload_zeros(rolld, int64(roll_fin + ring) * 4l, 4l)
+            }
             var tokb = make_host_buf(TOK_META_BYTES * int64(nrows), true)
             var tm = reinterpret<TokMeta?>(tokb.mapped)
             for (i in range(nrows)) {
                 tm[i].parity = uint(pars[i])
                 tm[i].dnslot = uint(slots[i])
             }
-            var sc = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd),
-                fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES * int64(nrows), of_bytes),
-                fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
+            var sc = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd, rolld),
+                fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES * int64(nrows), of_bytes, seq ? roll_bytes : sm_bytes),
+                fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u, 64u))
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -8358,24 +8373,31 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
             var pc = DnStepArgs(cd = uint(cd), kd = uint(nkh * ds), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
                 beta_off = uint(offs[0]), g_off = uint(offs[1]), a_off = uint(offs[2]), dt_off = uint(offs[3]),
                 taps_off = uint(offs[4]), wnorm_off = uint(offs[5]), hist_off = uint(offs[6]),
-                eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, beta_row_stride = uint(offs[7]))
+                eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, beta_row_stride = uint(offs[7]),
+                rows = seq ? uint(nrows) : 1u, roll_base = 0u, roll_stride = uint(roll_stride), roll_fin = uint(roll_fin))
+            enc_dn_step_cls(raw, h, sc, pc, int64(seq ? nvh : nvh * nrows))
+            let at_sc = st_bytes + sm_bytes
+            let at_q = at_sc + sc_bytes
+            let at_of = at_q + q_bytes
+            let at_roll = at_of + of_bytes
             if (seq) {
-                for (i in range(nrows)) {
-                    pc.row0 = uint(i)
-                    enc_dn_step_cls(raw, h, sc, pc, int64(nvh))
-                }
+                vkd_run_copy(raw, h, fixed_array(std, smd, scd, qd, ofd, rolld), host,
+                    fixed_array(0l, st_bytes, at_sc, at_q, at_of, at_roll),
+                    fixed_array(st_bytes, sm_bytes, sc_bytes, q_bytes, of_bytes, roll_bytes), 1u | 2u | 4u | 8u | 32u | 64u)
             } else {
-                enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
+                vkd_run_copy(raw, h, fixed_array(std, smd, scd, qd, ofd), host,
+                    fixed_array(0l, st_bytes, at_sc, at_q, at_of),
+                    fixed_array(st_bytes, sm_bytes, sc_bytes, q_bytes, of_bytes), 1u | 2u | 4u | 8u | 32u)
             }
-            vkd_run_copy(raw, h, fixed_array(std, smd, scd, qd, ofd), host,
-                fixed_array(0l, st_bytes, st_bytes + sm_bytes, st_bytes + sm_bytes + sc_bytes, st_bytes + sm_bytes + sc_bytes + q_bytes),
-                fixed_array(st_bytes, sm_bytes, sc_bytes, q_bytes, of_bytes), 1u | 2u | 4u | 8u | 32u)
             let base = intptr(host.mapped)
             memcpy(addr<void?>(r.state[0]), host.mapped, st_bytes)
             memcpy(addr<void?>(r.smalls[0]), reinterpret<void?>(base + uint64(st_bytes)), sm_bytes)
-            memcpy(addr<void?>(r.oscales[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes)), sc_bytes)
-            memcpy(addr<void?>(r.oquants[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes)), q_bytes)
-            memcpy(addr<void?>(r.of32[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes + q_bytes)), of_bytes)
+            memcpy(addr<void?>(r.oscales[0]), reinterpret<void?>(base + uint64(at_sc)), sc_bytes)
+            memcpy(addr<void?>(r.oquants[0]), reinterpret<void?>(base + uint64(at_q)), q_bytes)
+            memcpy(addr<void?>(r.of32[0]), reinterpret<void?>(base + uint64(at_of)), of_bytes)
+            if (seq) {
+                memcpy(addr<void?>(r.roll[0]), reinterpret<void?>(base + uint64(at_roll)), roll_bytes)
+            }
         }
     }
     return <- r
@@ -8495,12 +8517,11 @@ def private dn_row_smalls(sm : array<float>; r, beta_off, g_off, bstride, nvh : 
     return <- sm1
 }
 
-//! the same-slab verify's form: three rows of one stream in one slot, a dispatch a row with the row in the push, against the
-//! one-row dispatch run a row at a time on the state and ring the row before it left - every row's o row, then the slot's state
-//! and both ring images after the last row, bit for bit
-[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
-def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
-    let nrows = 3
+//! the same-slab verify's form: `nrows` rows of one stream in one slot through one dispatch that loops them, against the one-row
+//! dispatch run a row at a time on the state and ring the row before it left - every row's o row, the slot's state and both ring
+//! images after the last row, and every rollback scratch row the state and ring pair after its row, bit for bit
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
+def private dn_step_sameslot_arm(t : T?; ds, nrows : int; out_f32 : bool) {
     let nkh = 2
     let nvh = 4
     let kd = nkh * ds
@@ -8544,10 +8565,11 @@ def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
     for (i in range(nvh)) {
         smh[a_off + i] = -0.4 - float(i) * 0.1   //! a stays negative (decay)
     }
-    var pars <- [1, 0, 1]   //! the ring parity flips a row: each row reads the image the row before it wrote
-    var slots <- [0, 0, 0]
+    var pars <- [for (i in range(nrows)); 1 - i % 2]   //! the ring parity flips a row: each row reads the image the row before it wrote
+    var slots <- [for (_i in range(nrows)); 0]
+    let roll_stride = dn_roll_stride(st_n, ring)
     var got <- dn_step_rows_run(projh, sth, smh, pars, slots, nrows, 1, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32, true)
-    let tag = "dn_step_fused, {nrows} rows of one slot a dispatch a row, ds {ds}, o as {out_f32 ? "f32" : "q8"}"
+    let tag = "dn_step_fused, {nrows} rows of one slot in one dispatch, ds {ds}, o as {out_f32 ? "f32" : "q8"}"
     t |> success(n_differing(got.state, sth, 0, 0, st_n) > 0, "{tag}: the slot's state moved off its input")
     t |> success(n_differing(got.smalls, smh, hist_off + ring, hist_off + ring, ring) > 0, "{tag}: the second row's ring image moved off its input")
     var st_r := sth
@@ -8575,6 +8597,17 @@ def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
             t |> success(ctrl > 0, "{tag} control: row 1 from the untouched state misses the sequential row 1 ({ctrl} elements apart)")
             delete sm0
             delete cold
+        }
+        if (r + 1 < nrows) {   //! the rollback's claim: scratch row r holds the slot's state and ring pair as the rows through r leave them
+            let rb = r * roll_stride
+            let rst = n_differing(got.roll, want.state, rb, 0, st_n)
+            let rring = n_differing(got.roll, want.smalls, rb + st_n, hist_off, 2 * ring)
+            to_log(LOG_INFO, "{tag}: scratch row {r} state {rst} (first {first_differing(got.roll, want.state, rb, 0, st_n)}) and rings {rring} (first {first_differing(got.roll, want.smalls, rb + st_n, hist_off, 2 * ring)}) elements off\n")
+            t |> success(rst == 0 && rring == 0, "{tag}: scratch row {r} holds the state {rst} and the ring pair {rring} elements off the chained one-row dispatches after row {r}")
+        }
+        if (r >= 1) {   //! the control: the scratch row before this one, held against this row's state, must miss - the rows differ
+            let wrong = n_differing(got.roll, want.state, (r - 1) * roll_stride, 0, st_n)
+            t |> success(wrong > 0, "{tag} control: scratch row {r - 1} misses the state after row {r} ({wrong} elements apart)")
         }
         if (r == nrows - 1) {
             let st_diffs = n_differing(got.state, want.state, 0, 0, st_n)
@@ -8604,7 +8637,7 @@ def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
 
 [test]
 def test_vkd_dn_step_rows_sameslot(t0 : T?) {
-    t0 |> run("dn_step_fused over three rows of one slot a dispatch a row == the one-row dispatch a row at a time, chained") <| @(t : T?) {
+    t0 |> run("dn_step_fused over two and three rows of one slot in one dispatch == the one-row dispatch a row at a time, chained, its rollback scratch rows the chain's states") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
                 t |> skip("no Vulkan device")
@@ -8616,8 +8649,10 @@ def test_vkd_dn_step_rows_sameslot(t0 : T?) {
             }
             verify(ensure_dn_step_cls(), "the dn step class rail must engage on a device over the shared cap")
             for (ds in fixed_array(64, 128)) {
-                dn_step_sameslot_arm(t, ds, false)
-                dn_step_sameslot_arm(t, ds, true)
+                for (nrows in fixed_array(2, 3)) {
+                    dn_step_sameslot_arm(t, ds, nrows, false)
+                    dn_step_sameslot_arm(t, ds, nrows, true)
+                }
             }
         } else {
             t |> skip("dasVulkan not present")

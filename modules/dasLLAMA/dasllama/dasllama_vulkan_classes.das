@@ -2357,7 +2357,10 @@ struct DnStepArgs {
     qscale : float
     out_f32 : uint
     beta_row_stride : uint
-    row0 : uint   //! the dispatch's first row: the same-slab verify steps one stream's rows one dispatch a row in one slot, each reading the state the row before it wrote
+    rows : uint          //! the rows a workgroup steps in order in one slot (the same-slab verify's stream); 1 on the parallel forms, whose rows sit in their own slots
+    roll_base : uint     //! the rollback scratch as floats: this layer's index in scratch row 0, the row stride, and its staging image (`cd x taps` floats, the arrival word past them)
+    roll_stride : uint
+    roll_fin : uint
 }
 
 [vk_dispatch(name = "dn_step_cls", grid = "wgs", params = "wgs : int64")]
@@ -2369,7 +2372,10 @@ class DnStepFused : WgReduceBase {
     @ssbo @binding = 4 outq : array<uint>      // ... and quant words
     @ssbo @binding = 5 tok : array<TokMeta>    // the shared per-token block (element 0)
     @ssbo @binding = 6 outf : array<float>     // the head's o row as f32
+    @ssbo @binding = 7 @coherent roll : array<float>   //! the rollback scratch (`RDec.roll_dev`): the slot state and ring pair after each row but the last, the last row's staged image; untouched at one row, so any buffer fills the slot there
+    @ssbo @binding = 7 @role = "alias" @coherent rollu : array<uint>   //! ... as words: the arrival counter past the staging image, zero between dispatches
     @push_constant pa : DnStepArgs
+    @workgroup arrived : uint[1]
     @workgroup dq : float[128]
     @workgroup dk : float[128]
     @workgroup dv : float[128]
@@ -2381,98 +2387,22 @@ class DnStepFused : WgReduceBase {
     @workgroup sg_qk : float[16]      //! per-subgroup partials of the raw q.k
     @workgroup ds8 : float[8]
 
-    [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+    def hist_at(rrb, pstride, rowf, ch, idx : uint) : float => idx < pa.dconv - 1u ? smalls[rrb + ch * (pa.dconv - 1u) + idx] : proj[(rowf + idx - (pa.dconv - 1u)) * pstride + ch]   //! the channel `idx` taps back in the dispatch's history: under the taps the image every row reads, past them the rows this dispatch stepped
+
+    [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
     def run {   // nolint:STYLE037,STYLE038 — the fused chain: conv, norms, the delta rule, out-norm and the o row in one dispatch
         let ds = pa.ds
         let nvh = max(1u, (pa.cd - 2u * pa.kd) / ds)   //! the head count the geometry pins: cd = 2 kd + nvh ds
-        let row = pa.row0 + gl_WorkGroupID.x / nvh
+        let rowf = gl_WorkGroupID.x / nvh
         let h = gl_WorkGroupID.x % nvh
         let taps = pa.dconv - 1u
-        let par = tok[row].parity
-        let slot = tok[row].dnslot
-        let prow = row * (pa.cd + nvh * ds)
+        let par0 = tok[rowf].parity
+        let slot = tok[rowf].dnslot
+        let pstride = pa.cd + nvh * ds
         let ringb = pa.hist_off + slot * 2u * pa.cd * taps
-        let rrb = ringb + par * pa.cd * taps
-        let wrb = ringb + (1u - par) * pa.cd * taps
+        let rrb = ringb + par0 * pa.cd * taps   //! the image every row reads; the rows past the first take their newer taps from `proj`, and no workgroup writes this image before the epilogue
         let tid = gl_LocalInvocationID.x
         let kh = h % pa.nkh
-        var e = tid
-        while (e < 3u * ds) {
-            let sl = e / ds
-            let j = e % ds
-            let ch = (sl == 0u ? kh * ds : (sl == 1u ? pa.kd + kh * ds : 2u * pa.kd + h * ds)) + j
-            let fresh = proj[prow + ch]
-            var acc = fresh * smalls[pa.taps_off + ch * pa.dconv + taps]
-            var k = 0u
-            while (k < taps) {
-                acc += smalls[rrb + ch * taps + k] * smalls[pa.taps_off + ch * pa.dconv + k]
-                k++
-            }
-            if (sl == 2u || h < pa.nkh) {   // this head owns the channel's ring advance
-                k = 0u
-                while (k + 1u < taps) {
-                    smalls[wrb + ch * taps + k] = smalls[rrb + ch * taps + k + 1u]
-                    k++
-                }
-                smalls[wrb + ch * taps + taps - 1u] = fresh
-            }
-            let sv = silu_f32(acc)
-            if (sl == 0u) {
-                dq[j] = sv
-            } elif (sl == 1u) {
-                dk[j] = sv
-            } else {
-                dv[j] = sv
-            }
-            e += 256u
-        }
-        barrier()
-        //! the q and k squared sums and the raw q.k by subgroup adds: the first half of the threads hold q, the second k
-        var pn = 0.0
-        var pq = 0.0
-        if (tid < ds) {
-            pn = dq[tid] * dq[tid]
-            pq = dq[tid] * dk[tid]
-        } elif (tid >= 128u && tid < 128u + ds) {
-            pn = dk[tid - 128u] * dk[tid - 128u]
-        }
-        let sn = subgroupAdd(pn)
-        let spq = subgroupAdd(pq)
-        if (gl_SubgroupInvocationID == 0u) {
-            sg_sumsq[gl_SubgroupID] = sn
-            sg_qk[gl_SubgroupID] = spq
-        }
-        barrier()
-        if (tid == 0u) {   //! q.k is summed raw; the q and k scales apply here
-            var sumq = 0.0
-            var sumk = 0.0
-            var qkr = 0.0
-            let half = gl_NumSubgroups / 2u
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                if (sgi < half) {
-                    sumq += sg_sumsq[sgi]
-                    qkr += sg_qk[sgi]
-                } else {
-                    sumk += sg_sumsq[sgi]
-                }
-                sgi++
-            }
-            let sq = (1.0 / max(sqrt(sumq), pa.eps)) * pa.qscale
-            let sk = 1.0 / max(sqrt(sumk), pa.eps)
-            ds8[0u] = sq
-            ds8[1u] = sk
-            let graw = smalls[pa.g_off + row * nvh + h] + smalls[pa.dt_off + h]
-            ds8[2u] = exp(smalls[pa.a_off + h] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
-            ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + row * pa.beta_row_stride + h]))
-            ds8[4u] = qkr * sq * sk
-        }
-        barrier()
-        let sq = ds8[0u]
-        let sk = ds8[1u]
-        let eg = ds8[2u]
-        let bt = ds8[3u]
-        let qk = ds8[4u]
         let rows_per_part = min(ds, 64u)
         let nparts = ds / rows_per_part
         let active = tid < ds * nparts
@@ -2480,85 +2410,224 @@ class DnStepFused : WgReduceBase {
         let r0 = (tid / ds) * rows_per_part
         let sbase = slot * nvh * ds * ds + h * ds * ds
         var sreg : float[64]
-        var ksp = 0.0
-        var qsp = 0.0
-        if (active) {
-            //! the loads first, straight-line (a short part re-reads its last row), so all 64 issue before a sum waits on one
-            for [unroll] (j in range(64)) {
-                sreg[j] = state[sbase + (r0 + min(uint(j), rows_per_part - 1u)) * ds + c]
-            }
-            for [unroll] (j in range(64)) {
-                if (uint(j) < rows_per_part) {
-                    ksp += dk[r0 + uint(j)] * sreg[j]
-                    qsp += dq[r0 + uint(j)] * sreg[j]
+        var r = 0u
+        while (r < pa.rows) {
+            let row = rowf + r
+            let prow = row * pstride
+            let last = r + 1u == pa.rows
+            let pimg = (par0 + r + 1u) & 1u   //! the image holding the history after this row; the other holds the row before's
+            var e = tid
+            while (e < 3u * ds) {
+                let sl = e / ds
+                let j = e % ds
+                let ch = (sl == 0u ? kh * ds : (sl == 1u ? pa.kd + kh * ds : 2u * pa.kd + h * ds)) + j
+                let fresh = proj[prow + ch]
+                var acc = fresh * smalls[pa.taps_off + ch * pa.dconv + taps]
+                var k = 0u
+                while (k < taps) {
+                    let hv = hist_at(rrb, pstride, rowf, ch, r + k)
+                    acc += hv * smalls[pa.taps_off + ch * pa.dconv + k]
+                    k++
                 }
-            }
-        }
-        if (active) {
-            partk[tid] = ksp
-            partq[tid] = qsp
-        }
-        barrier()
-        if (tid < ds) {
-            var ks = 0.0
-            var qs = 0.0
-            var p = 0u
-            while (p < nparts) {
-                ks += partk[p * ds + tid]
-                qs += partq[p * ds + tid]
-                p++
-            }
-            let vn = bt * (dv[tid] - eg * (sk * ks))
-            dvn[tid] = vn
-            dout[tid] = eg * (sq * qs) + qk * vn
-        }
-        barrier()
-        if (active) {
-            let vnc = dvn[c]
-            for [unroll] (j in range(64)) {
-                if (uint(j) < rows_per_part) {
-                    state[sbase + (r0 + uint(j)) * ds + c] = sreg[j] * eg + (sk * dk[r0 + uint(j)]) * vnc
+                if (sl == 2u || h < pa.nkh) {   // this head owns the channel's ring advance
+                    let cb = ch * taps
+                    k = 0u
+                    while (k < taps) {
+                        if (last) {   //! the final pair: the image every row read is staged for the epilogue, the other written in place
+                            if (pimg != par0) {
+                                smalls[ringb + pimg * pa.cd * taps + cb + k] = hist_at(rrb, pstride, rowf, ch, r + 1u + k)
+                            } else {
+                                roll[pa.roll_fin + cb + k] = hist_at(rrb, pstride, rowf, ch, r + 1u + k)
+                            }
+                            if (pa.rows > 1u) {
+                                if (pimg == par0) {
+                                    smalls[ringb + (1u - pimg) * pa.cd * taps + cb + k] = hist_at(rrb, pstride, rowf, ch, r + k)
+                                } else {
+                                    roll[pa.roll_fin + cb + k] = hist_at(rrb, pstride, rowf, ch, r + k)
+                                }
+                            }
+                        } else {   //! scratch row r: the pair as the rows through r leave it
+                            let rb = pa.roll_base + r * pa.roll_stride + nvh * ds * ds
+                            roll[rb + pimg * pa.cd * taps + cb + k] = hist_at(rrb, pstride, rowf, ch, r + 1u + k)
+                            roll[rb + (1u - pimg) * pa.cd * taps + cb + k] = hist_at(rrb, pstride, rowf, ch, r + k)
+                        }
+                        k++
+                    }
                 }
-            }
-        }
-        var po = 0.0
-        if (tid < ds) {
-            po = dout[tid] * dout[tid]
-        }
-        let oinv = wg_rms_inv(po, ds, pa.eps, 0u)
-        e = tid
-        while (e < ds) {
-            let zv = proj[prow + pa.cd + h * ds + e]
-            let xn = dout[e] * oinv * smalls[pa.wnorm_off + e]
-            dout[e] = xn * silu_f32(zv)
-            e += 256u
-        }
-        barrier()
-        let orow = (row * nvh + h) * ds
-        if (pa.out_f32 != 0u) {
-            e = tid
-            while (e < ds) {
-                outf[orow + e] = dout[e]
+                let sv = silu_f32(acc)
+                if (sl == 0u) {
+                    dq[j] = sv
+                } elif (sl == 1u) {
+                    dk[j] = sv
+                } else {
+                    dv[j] = sv
+                }
                 e += 256u
             }
-        } elif (tid < ds / 32u) {   // the head's Q8_0 blocks (ds % 32 asserted host-side)
-            let gb = orow / 32u + tid
-            let jb = tid * 32u
-            var amax = 0.0
-            for (i in range(32)) {
-                amax = max(amax, abs(dout[jb + uint(i)]))
+            barrier()
+            //! the q and k squared sums and the raw q.k by subgroup adds: the first half of the threads hold q, the second k
+            var pn = 0.0
+            var pq = 0.0
+            if (tid < ds) {
+                pn = dq[tid] * dq[tid]
+                pq = dq[tid] * dk[tid]
+            } elif (tid >= 128u && tid < 128u + ds) {
+                pn = dk[tid - 128u] * dk[tid - 128u]
             }
-            let d = amax / 127.0
-            let id = d != 0.0 ? 1.0 / d : 0.0
-            outs[gb] = d
-            for (wi in range(8)) {
-                let wj = jb + uint(wi) * 4u
-                var word = 0u
-                for (j in range(4)) {
-                    let q = int(round(dout[wj + uint(j)] * id))
-                    word = word | ((uint(q) & 0xFF) << (uint(j) * 8u))
+            let sn = subgroupAdd(pn)
+            let spq = subgroupAdd(pq)
+            if (gl_SubgroupInvocationID == 0u) {
+                sg_sumsq[gl_SubgroupID] = sn
+                sg_qk[gl_SubgroupID] = spq
+            }
+            barrier()
+            if (tid == 0u) {   //! q.k is summed raw; the q and k scales apply here
+                var sumq = 0.0
+                var sumk = 0.0
+                var qkr = 0.0
+                let half = gl_NumSubgroups / 2u
+                var sgi = 0u
+                while (sgi < gl_NumSubgroups) {
+                    if (sgi < half) {
+                        sumq += sg_sumsq[sgi]
+                        qkr += sg_qk[sgi]
+                    } else {
+                        sumk += sg_sumsq[sgi]
+                    }
+                    sgi++
                 }
-                outq[gb * 8u + uint(wi)] = word
+                let sq = (1.0 / max(sqrt(sumq), pa.eps)) * pa.qscale
+                let sk = 1.0 / max(sqrt(sumk), pa.eps)
+                ds8[0u] = sq
+                ds8[1u] = sk
+                let graw = smalls[pa.g_off + row * nvh + h] + smalls[pa.dt_off + h]
+                ds8[2u] = exp(smalls[pa.a_off + h] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
+                ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + row * pa.beta_row_stride + h]))
+                ds8[4u] = qkr * sq * sk
+            }
+            barrier()
+            let sq = ds8[0u]
+            let sk = ds8[1u]
+            let eg = ds8[2u]
+            let bt = ds8[3u]
+            let qk = ds8[4u]
+            var ksp = 0.0
+            var qsp = 0.0
+            if (active) {
+                //! the loads first, straight-line (a short part re-reads its last row), so all 64 issue before a sum waits on one; the rows after the first read the registers the row before left
+                if (r == 0u) {
+                    for [unroll] (j in range(64)) {
+                        sreg[j] = state[sbase + (r0 + min(uint(j), rows_per_part - 1u)) * ds + c]
+                    }
+                }
+                for [unroll] (j in range(64)) {
+                    if (uint(j) < rows_per_part) {
+                        ksp += dk[r0 + uint(j)] * sreg[j]
+                        qsp += dq[r0 + uint(j)] * sreg[j]
+                    }
+                }
+            }
+            if (active) {
+                partk[tid] = ksp
+                partq[tid] = qsp
+            }
+            barrier()
+            if (tid < ds) {
+                var ks = 0.0
+                var qs = 0.0
+                var p = 0u
+                while (p < nparts) {
+                    ks += partk[p * ds + tid]
+                    qs += partq[p * ds + tid]
+                    p++
+                }
+                let vn = bt * (dv[tid] - eg * (sk * ks))
+                dvn[tid] = vn
+                dout[tid] = eg * (sq * qs) + qk * vn
+            }
+            barrier()
+            if (active) {
+                let vnc = dvn[c]
+                for [unroll] (j in range(64)) {
+                    if (uint(j) < rows_per_part) {
+                        sreg[j] = sreg[j] * eg + (sk * dk[r0 + uint(j)]) * vnc
+                    }
+                }
+                if (last) {
+                    for [unroll] (j in range(64)) {
+                        if (uint(j) < rows_per_part) {
+                            state[sbase + (r0 + uint(j)) * ds + c] = sreg[j]
+                        }
+                    }
+                } else {   //! scratch row r's state: the slot as the rows through r leave it
+                    let ssb = pa.roll_base + r * pa.roll_stride + h * ds * ds
+                    for [unroll] (j in range(64)) {
+                        if (uint(j) < rows_per_part) {
+                            roll[ssb + (r0 + uint(j)) * ds + c] = sreg[j]
+                        }
+                    }
+                }
+            }
+            var po = 0.0
+            if (tid < ds) {
+                po = dout[tid] * dout[tid]
+            }
+            let oinv = wg_rms_inv(po, ds, pa.eps, 0u)
+            e = tid
+            while (e < ds) {
+                let zv = proj[prow + pa.cd + h * ds + e]
+                let xn = dout[e] * oinv * smalls[pa.wnorm_off + e]
+                dout[e] = xn * silu_f32(zv)
+                e += 256u
+            }
+            barrier()
+            let orow = (row * nvh + h) * ds
+            if (pa.out_f32 != 0u) {
+                e = tid
+                while (e < ds) {
+                    outf[orow + e] = dout[e]
+                    e += 256u
+                }
+            } elif (tid < ds / 32u) {   // the head's Q8_0 blocks (ds % 32 asserted host-side)
+                let gb = orow / 32u + tid
+                let jb = tid * 32u
+                var amax = 0.0
+                for (i in range(32)) {
+                    amax = max(amax, abs(dout[jb + uint(i)]))
+                }
+                let d = amax / 127.0
+                let id = d != 0.0 ? 1.0 / d : 0.0
+                outs[gb] = d
+                for (wi in range(8)) {
+                    let wj = jb + uint(wi) * 4u
+                    var word = 0u
+                    for (j in range(4)) {
+                        let q = int(round(dout[wj + uint(j)] * id))
+                        word = word | ((uint(q) & 0xFF) << (uint(j) * 8u))
+                    }
+                    outq[gb * 8u + uint(wi)] = word
+                }
+            }
+            r++
+        }
+        if (pa.rows > 1u) {   //! the image every row read is rewritten last: the workgroup arriving last copies the staged image over it, after every workgroup's reads
+            let cw = pa.roll_fin + pa.cd * taps
+            memoryBarrierBuffer()
+            barrier()
+            if (tid == 0u) {
+                arrived[0] = atomicAdd(rollu[cw], 1u)
+            }
+            barrier()
+            if (arrived[0] + 1u == gl_NumWorkGroups.x) {
+                memoryBarrierBuffer()
+                var i = tid
+                while (i < pa.cd * taps) {
+                    smalls[rrb + i] = roll[pa.roll_fin + i]
+                    i += 256u
+                }
+                if (tid == 0u) {
+                    rollu[cw] = 0u
+                }
             }
         }
     }
