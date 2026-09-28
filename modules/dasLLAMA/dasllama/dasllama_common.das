@@ -451,6 +451,16 @@ def register_mtp_round_override(name : string; fn : MtpRoundOverrideFn) {
     g_mtp_round_overrides[name] = fn
 }
 
+//! The MTP draft seat (`forward_mtp`'s GPU twin, the drafting form): the head's row `pos` from (embed(token), s.mtp_h) -
+//! `s.logits` the draft's, `s.mtp_h` the head's own hidden at `mtp_h_pos1` 0, the host K/V row `pos` of the head written;
+//! false declines to the CPU draft. Consulted where the active decode override owns the model (`mtp_seats_own`)
+typedef MtpDraftOverrideFn = function<(t : Model; var s : Session; token, pos : int64) : bool>
+var private g_mtp_draft_overrides : table<string; MtpDraftOverrideFn>
+
+def register_mtp_draft_override(name : string; fn : MtpDraftOverrideFn) {
+    g_mtp_draft_overrides[name] = fn
+}
+
 //! whether the MTP seats registered under a decode override's name serve model `t`: the override that owns `t`'s
 //! round - an override with no owner registered never takes a round, and a model its owner refuses runs the CPU round
 typedef MtpSeatOwnerFn = function<(t : Model) : bool>
@@ -464,6 +474,12 @@ def register_mtp_seat_owner(name : string; fn : MtpSeatOwnerFn) {
 def mtp_seats_own(t : Model) : bool {
     return (!empty(g_decode_override_name) && key_exists(g_mtp_seat_owners, g_decode_override_name)
         && invoke(g_mtp_seat_owners[g_decode_override_name], t))   // nolint:PERF026 — key_exists guards the index, so it cannot insert
+}
+
+//! the active decode override's draft seat took `forward_mtp`'s draft of `token` at row `pos`
+def private mtp_draft_served(t : Model; var s : Session; token, pos : int64) : bool {
+    return (mtp_seats_own(t) && key_exists(g_mtp_draft_overrides, g_decode_override_name)
+        && invoke(g_mtp_draft_overrides[g_decode_override_name], t, s, token, pos))   // nolint:PERF026 — key_exists guards the index, so it cannot insert
 }
 
 //! The accept walk's sampler seam (the decode-override shape: the engine never requires the sampler):
@@ -4351,6 +4367,7 @@ def forward_mtp(t : Model; var s : Session; token, pos : int64; want_logits : bo
     let dim = c.dim
     assert(c.n_layer_nextn > 0l)
     kv_ensure(s, pos + 1l)
+    return if (want_logits && mtp_draft_served(t, s, token, pos))
     // eh_proj input: [enorm(embed(token)) ; hnorm(h)] — embedding first in the concat
     embed_row(t, token, unsafe(addr(s.x[0])))
     rms_at(s.xb, t, t.mtp_enorm_off, s.x, dim)

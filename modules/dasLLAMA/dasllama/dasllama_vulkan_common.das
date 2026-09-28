@@ -2470,6 +2470,17 @@ struct RDec {
     pick_host : HostBuf
     carry : bool                  //! the final site stores the rows' post-final-norm hidden in xb_dev, and every step lands it into hid_host beside the logits (a NextN-headed model)
     hid_host : HostBuf            //! ... the landed rows: the token command's, or the window chain's last row at row 0
+    head_norm_base : int64        //! the NextN draft head's norm block in the norms plane (`rdec_head_norm_base`); 0 = prepared without the head
+    head_on : bool                //! ... the head is set (`vk_rdec_set_head`): the draft command serves
+    head : RLayer = RLayer()      //! ... its layer (index n_layers), kept out of `layers` and the token command's trunk walk
+    eh_blk : int64                //! ... its eh_proj plane's arena block and format
+    eh_fmt : int
+    m_eh : HostBuf
+    s_eh, s_cat_ar, s_cat_rq : VkDescriptorSet   //! ... the eh_proj GEMV, the embed and carry norms, the concatenated row's requant
+    cat_in_dev, cat_dev : uint64  //! ... the draft's [embed ; carry] rows as the host uploads them, and their [enorm ; hnorm] image the eh_proj GEMV reads
+    cat_host : HostBuf
+    draft_cmd : array<VkCommandBuffer>   //! ... one recorded draft command per region: the head's mirror base rides its push, as the token command's does
+    draft_recorded : array<bool>
     pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
     s_pick_part, s_pick_fin : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
@@ -2619,7 +2630,7 @@ def rd_unmake_sets {
     g_rd.comb_sets_made = false
 }
 
-//! every region's token command re-records: the sets or planes it references were replaced
+//! every region's token and draft commands re-record: the sets or planes they reference were replaced
 def rd_invalidate_token {
     for (rec in g_rd.tok_recorded) {
         rec = false
@@ -2628,6 +2639,9 @@ def rd_invalidate_token {
         rec = false
     }
     for (rec in g_rd.tok_n_recorded) {
+        rec = false
+    }
+    for (rec in g_rd.draft_recorded) {
         rec = false
     }
 }

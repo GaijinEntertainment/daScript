@@ -11,6 +11,24 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **OPEN (2026-09-27) - the Vulkan resident driver's NextN draft head: its plane and slot bytes,
+  and the device draft against the CPU draft.** Where the driver takes a model's head
+  (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head`) the plan grows by the head's eight
+  planes and one K/V slot a region; a headless model plans what it did. The planes are
+  (2 dim x dim + dim x qrows + 2 dim x kvd + qd x dim + 3 dim x hid) weights at their formats' block
+  bytes - Qwen3.5-0.8B-MTP-Q8_0 (dim 1024, the gated q's 4096 rows, kvd 512, qd 2048, hid 3584,
+  every head plane Q8_0 at 34 bytes a 32-weight block): eh_proj 2,228,224 bytes, q 4,456,448, k and
+  v 557,056 each, o 2,228,224, gate, up and down 3,899,392 each, 21,725,184 in all. The slot is
+  regions x seq_cap x kvd x 2 sides x 2 bytes (f16), regions x seq_cap x 2,048 bytes on the 0.8B:
+  8,388,608 at one region of 4096 positions, 67,108,864 at four regions of 8192. The norms plane
+  gains (5 dim + 2 head_size) x 4 bytes (22,528 on the 0.8B) and the draft's staging 3 x 2 dim x 4
+  (24,576 at dim 1024, 122,880 at dim 5120). Owed from the pod: the 0.8B-MTP's `resident image`
+  and `NextN draft head in the arena` load lines (the bytes read, not computed); the draft's wall
+  against the CPU `forward_mtp` - `lcpp_bench --mtp-ab` under `DASLLAMA_GPU=1` with `--prof` and
+  `JOBQUE_PROFILING=1`, the `mtp.draft` section against the CPU draft's on the same box - including
+  the hydrate's upload and the head row's readback, submits of their own beside the draft's; and the acceptance the
+  device draft reads while the head's slab is hydrated off the CPU prompt warm.
+
 - **OPEN (2026-09-27) - the Vulkan resident driver's speculative carry: its landing plane and its
   step cost on a NextN-headed model.** The landing plane (`RDec.hid_host`, host-visible, allocated
   only where the driver is prepared with `carry`) is dim x 4 x nb bytes, nb = min(regions, 8):

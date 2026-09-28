@@ -430,6 +430,71 @@ def private rdec_dn_geom(t : Model) : RdecDnGeom {
     return RdecDnGeom()
 }
 
+//! the NextN head's planes in placement order - eh_proj, q, k, v, o, gate, up, down - each a row length, a row count, a format and its offset
+def private resident_head_planes(t : Model) : array<tuple<n : int64; rows : int64; f : KqFmt; off : int64>> {
+    let c = t.config
+    let l = c.n_layers
+    let dim = c.dim
+    let lf = resident_layer_fmts(t, l)
+    let qd = layer_qd(c, l)
+    let kvd = layer_kv_dim(c, l)
+    let hid = layer_hidden(t, l)
+    return <- [(n = 2l * dim, rows = dim, f = t.mtp_ehproj_fmt, off = t.mtp_ehproj_off),
+        (n = dim, rows = c.q_gated ? 2l * qd : qd, f = lf.fq, off = t.wq_offs[l]),
+        (n = dim, rows = kvd, f = lf.fk, off = t.wk_offs[l]),
+        (n = dim, rows = kvd, f = lf.fv, off = t.wv_offs[l]),
+        (n = qd, rows = dim, f = lf.fo, off = t.wo_offs[l]),
+        (n = dim, rows = hid, f = lf.f1, off = t.w1_offs[l]),
+        (n = dim, rows = hid, f = lf.f3, off = t.w3_offs[l]),
+        (n = hid, rows = dim, f = lf.f2, off = t.w2_offs[l])]
+}
+
+//! Why the NextN draft head stays off the resident driver - "" when the driver takes it: the draft seat and the carry landing
+//! installed, one head of the trunk's attention shape with its own K/V and a dense FFN, planes the resident GEMVs serve, and
+//! none of the features the draft command has no step for
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]
+def private resident_head_decline(t : Model) : string {
+    let c = t.config
+    let l = c.n_layers
+    if (c.n_layer_nextn != 1l) return "{c.n_layer_nextn} NextN heads (the draft command serves one)"
+    if (!rdec_draft_installed()) return "the tier installed no draft seat"
+    if (!rdec_carry_installed()) return "the tier installed no carry landing (the draft's hidden rides it)"
+    if (t.mtp_ehproj_off < 0l) return "no eh_proj plane"
+    if (!dense_plane_ok(t, t.mtp_ehproj_fmt) || !kq_rows_ok(2l * c.dim, t.mtp_ehproj_fmt)) return "the eh_proj plane's format {t.mtp_ehproj_fmt} has no resident GEMV at width {2l * c.dim}"
+    if (layer_is_moe(t, l)) return "its FFN is routed"
+    let why = resident_layer_decline(t, l)
+    if (!empty(why)) return why
+    if (t.kv_src[l] != l || resident_v_from_k(c, l)) return "it reads another layer's K/V or takes V off its k row"
+    var feats = ""
+    name_list_add(feats, c.attn_qkv_bias, "the q/k/v projection bias")
+    name_list_add(feats, c.attn_out_bias, "the attention output bias")
+    name_list_add(feats, c.pre_post_norm, "the post-attention and post-FFN norms")
+    name_list_add(feats, has_ple(c), "per-layer embeddings")
+    name_list_add(feats, c.attn_sinks, "attention sinks")
+    name_list_add(feats, c.layer_out_scale, "a per-layer output scale")
+    name_list_add(feats, c.v_norm, "the v-norm")
+    if (!empty(feats)) return "the draft command has no step for: {feats}"
+    let lf = resident_layer_fmts(t, l)
+    for (f in [lf.fq, lf.fk, lf.fv, lf.fo, lf.f1, lf.f3, lf.f2]) {
+        if (!dense_plane_ok(t, f)) return "a plane in format {f} the resident GEMVs do not serve"
+    }
+    let cq = rdec_quant_class(lf.fq)
+    if (cq != rdec_quant_class(lf.fk) || cq != rdec_quant_class(lf.fv) || rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) return "its planes mix activation-quant forms"
+    var hs = 0l
+    var kvd = 0l
+    for (i in range64(l)) {
+        continue if (layer_is_recurrent(c, i))
+        hs = max(hs, layer_head_size(c, i))
+        kvd = max(kvd, layer_kv_dim(c, i))
+    }
+    if (layer_head_size(c, l) != hs || layer_kv_dim(c, l) > kvd) return "its head size {layer_head_size(c, l)} or kv width {layer_kv_dim(c, l)} is off the trunk's {hs} / {kvd}"
+    if (layer_hidden(t, l) > resident_hidden(t)) return "its FFN width {layer_hidden(t, l)} is past the trunk's {resident_hidden(t)}"
+    return ""
+}
+
+//! the resident driver takes the model's NextN draft head (`resident_head_decline`)
+def private resident_head_on(t : Model) : bool => t.config.n_layer_nextn > 0l && empty(resident_head_decline(t))
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool) : array<tuple<n : int64; rows : int64; f : KqFmt>> {
     let c = t.config
@@ -488,6 +553,12 @@ def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool) : array
     planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
     if (ple_tbl) {
         planes |> push((n = c.n_layers * c.n_embd_per_layer, rows = c.vocab_size, f = KqFmt.q8))
+    }
+    if (resident_head_on(t)) {
+        var inscope head <- resident_head_planes(t)
+        for (pl in head) {
+            planes |> push((n = pl.n, rows = pl.rows, f = pl.f))
+        }
     }
     return <- planes
 }
@@ -581,12 +652,14 @@ def resident_binding_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
     return (bcap > 0l && side_row_bytes > 0l) ? bcap / side_row_bytes : 0l
 }
 
-//! one position's K and V mirror bytes over the layers that hold rows of their own (a shared-KV layer reads its donor's)
+//! one position's K and V mirror bytes over the layers that hold rows of their own (a shared-KV layer reads its donor's), and the
+//! NextN head's slot where the driver takes the head
 def private resident_kv_row_bytes(t : Model; kdt, vdt : KVDtype) : tuple<krow : int64; vrow : int64> {
     let c = t.config
     var krow = 0l
     var vrow = 0l
-    for (l in range64(c.n_layers)) {
+    let head = resident_head_on(t)
+    for (l in range64(c.n_layers + (head ? 1l : 0l))) {
         continue if (t.kv_src[l] != l)
         krow += kv_row_bytes(kdt, layer_kv_dim(c, l))
         vrow += kv_row_bytes(vdt, layer_kv_dim(c, l))
@@ -670,6 +743,7 @@ struct RdecRegion {
     gen : int64     //!< the owning claim's generation; a session whose `rdec_gen` differs owns none of these rows (0 = never claimed)
     used : int64    //!< the tick of its last bind: a session with no region takes the least recently used one
     pinned : bool   //!< a live device-home session owns the rows, which exist nowhere else: no other session takes this region
+    head_cnt : int64   //!< the NextN head's K/V rows the device holds as the owner's host cache does: a draft brings the rows past it up first
 }
 
 var private g_rdec_regions : array<RdecRegion>
@@ -712,6 +786,7 @@ def private rdec_owns(s : Session; r : int64) : bool
 
 def private rdec_claim(var s : Session; r, cnt : int64) {
     g_rdec_regions[r].cnt = cnt
+    g_rdec_regions[r].head_cnt = 0l
     g_rdec_regions[r].gen = ++g_rdec_gen_seq
     g_rdec_regions[r].pinned = s.device_kv
     s.rdec_gen = g_rdec_gen_seq
@@ -1126,6 +1201,13 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             mir_elems += seq_cap * layer_kv_dim(c, l)
         }
     }
+    let head_why = c.n_layer_nextn > 0l ? resident_head_decline(t) : ""
+    let head = c.n_layer_nextn > 0l && empty(head_why)
+    if (!empty(head_why)) {
+        to_log(LOG_WARNING, "dasLLAMA: resident driver - the NextN draft head stays off the device ({head_why}); the CPU draft serves\n")
+    }
+    let head_kv_elems = head ? seq_cap * layer_kv_dim(c, c.n_layers) : 0l   //! the head's own slot, past the trunk's in every region
+    mir_elems += head_kv_elems
     let cos_elems = resident_cos_elems(c)
     let dng = rdec_dn_geom(t)
     // tally arena blocks per format
@@ -1165,7 +1247,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let rot = resident_rot(c)
     if (!rdec_prepare(c.n_layers, n_attn, dim, qd, kvd, hs, c.n_heads, resident_hidden(t), c.vocab_size, seq_cap, neox,
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
-                      rkdt == KVDtype.f16, c.q_gated, rot, dng, mir_elems, cos_elems, g_rdec_regions_want, rdec_carry_on(c))) {
+                      rkdt == KVDtype.f16, c.q_gated, rot, dng, mir_elems, cos_elems, g_rdec_regions_want, rdec_carry_on(c), head)) {
         return rdec_decline("the device prepare declined (a kernel class or the mirror range - the tier's line above)")
     }
     rdec_note_weight_bytes(plan.weight_bytes)
@@ -1346,6 +1428,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let bcls = resident_place(t, cls_fmt, t.wcls_off, dim, c.vocab_size, mr, kg, wb)
     if (bcls < 0l) return rdec_decline("classifier placement failed")
     rdec_set_cls(bcls, int(cls_fmt), c.final_logit_softcap, t.suppress)
+    if (head) {
+        resident_place_head(t, mir_base, head_kv_elems * g_rdec_regions_want * (rkdt == KVDtype.f16 ? 2l : 4l) * 2l, mr, kg, wb)
+    }
     //! a per-layer-embedding model keeps the CPU embed unless its token table sits on the device too: the pre-step wants both gathers in one place
     let emb_q8_want = (g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && (!has_ple(c) || (ple_tbl_placed && rdec_ple_proj_on()))
         && c.shared_weights && t.cls_q8 && cls_fmt == KqFmt.q8)
@@ -1370,9 +1455,10 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
     }
     g_rdec_emb_gpu = emb_q8_placed || emb_f32_placed
-    //! past the layers' RDEC_NORM_ROWS rows: rms_final, then qk_norm's per-head [rms_q, rms_k] x L at the widest class's stride
+    //! past the layers' RDEC_NORM_ROWS rows: rms_final, then qk_norm's per-head [rms_q, rms_k] x L at the widest class's stride,
+    //! then where the head rides its q/k slot and its RDEC_HEAD_NORM_ROWS block (`rdec_norms_len`)
     var norms : array<float>
-    let norms_len = c.n_layers * RDEC_NORM_ROWS * dim + dim + (c.qk_norm ? c.n_layers * 2l * hs : 0l)
+    let norms_len = rdec_norms_len(c.n_layers, dim, c.qk_norm ? hs : 0l, head)
     norms |> reserve(norms_len)
     norms |> resize(norms_len)
     for (l in range64(c.n_layers)) {
@@ -1412,7 +1498,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     if (c.qk_norm) {
         let qkw = c.n_layers * RDEC_NORM_ROWS * dim + dim
-        for (l in range64(c.n_layers)) {
+        for (l in range64(c.n_layers + (head ? 1l : 0l))) {
             continue if (layer_is_recurrent(c, l))   // no q/k norm rows on a recurrent layer; its slots stay zero
             for (i in range64(layer_head_size(c, l))) {
                 norms[qkw + l * 2l * hs + i] = t.fblob[t.rms_q_offs[l] + i]
@@ -1421,6 +1507,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 }
             }
         }
+    }
+    if (head) {
+        resident_head_norm_rows(t, rdec_head_norm_base(c.n_layers, dim, c.qk_norm ? hs : 0l), norms)
     }
     rdec_upload_norms(norms, c.attn_out_bias)
     delete norms
@@ -1439,6 +1528,48 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let regions = g_rdec_regions_want > 1l ? " x {g_rdec_regions_want} regions (set_gpu_resident_regions in process: each region takes a share of the mirror's context)" : ""
     to_log(LOG_INFO, "dasLLAMA: resident driver armed ({c.n_layers} layers, dim {dim}, ctx {seq_cap}{regions}, kv {kvname}, device prefill + decode)\n")
     return true
+}
+
+//! The NextN head's planes placed after the classifier and handed to the draft seat, its slot at `mir_base` past the trunk's;
+//! a placement or a class the device declines leaves the head off by a logged reason and the CPU draft serves
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]
+def private resident_place_head(t : Model; mir_base, slot_bytes, mr, kg, wb : int64) {
+    let c = t.config
+    let l = c.n_layers
+    var inscope planes <- resident_head_planes(t)
+    var inscope blks : array<int64>
+    blks |> reserve(long_length(planes))
+    var plane_bytes = 0l
+    for (pl in planes) {
+        let blk = resident_place(t, pl.f, pl.off, pl.n, pl.rows, mr, kg, wb)
+        if (blk < 0l) {
+            to_log(LOG_WARNING, "dasLLAMA: resident driver - the NextN draft head stays off the device (an arena placement failed on its {pl.f} plane {pl.n} x {pl.rows}); the CPU draft serves\n")
+            return
+        }
+        blks |> push(blk)
+        plane_bytes += moe_gpu_plane_bytes(pl.n, pl.rows, int(pl.f))
+    }
+    let lf = resident_layer_fmts(t, l)
+    if (!rdec_set_head(blks[0], int(planes[0].f), blks[1], blks[2], blks[3], blks[4], blks[5], blks[6], blks[7],
+            int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), resident_layer_geom(t, l, mir_base))) {
+        to_log(LOG_WARNING, "dasLLAMA: resident driver - the NextN draft head stays off the device (the device declined its classes, the tier's line above); the CPU draft serves\n")
+        return
+    }
+    to_log(LOG_INFO, "dasLLAMA: resident driver - the NextN draft head in the arena ({plane_bytes >> 10l} KB of planes, a {slot_bytes >> 10l} KB K/V slot over every region): the draft runs on the device\n")
+}
+
+//! the head's norm rows into its block of the norms plane from `hb`: the attention and FFN norms of layer n_layers, the embed and
+//! carry norms, the head norm - the final norm's row where the file ships none, as `forward_mtp` reads
+def private resident_head_norm_rows(t : Model; hb : int64; var norms : array<float>) {
+    let c = t.config
+    let dim = c.dim
+    let l = c.n_layers
+    let head_out = t.mtp_headnorm_off >= 0l ? t.mtp_headnorm_off : t.rms_final_off
+    copy_floats(t.fblob, t.rms_att_off + l * dim, norms, hb + RDEC_HEAD_ATT * dim, dim)
+    copy_floats(t.fblob, t.rms_ffn_off + l * dim, norms, hb + RDEC_HEAD_FFN * dim, dim)
+    copy_floats(t.fblob, t.mtp_enorm_off, norms, hb + RDEC_HEAD_ENORM * dim, dim)
+    copy_floats(t.fblob, t.mtp_hnorm_off, norms, hb + RDEC_HEAD_HNORM * dim, dim)
+    copy_floats(t.fblob, head_out, norms, hb + RDEC_HEAD_OUT * dim, dim)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
@@ -1607,6 +1738,7 @@ enum private RdecPass {
     pinned_off
     rewind
     busy
+    unhomed
 }
 
 var private g_rdec_pass_said : table<int>
@@ -1656,6 +1788,7 @@ def private rdec_pass_words(kind : RdecPass) : string {
     if (kind == RdecPass.span) return "the prompt carried an image or audio span"
     if (kind == RdecPass.rewind) return "the stream stepped back in a conversation the GPU only steps forward"
     if (kind == RdecPass.busy) return "every GPU cache slot was held by a live stream"
+    if (kind == RdecPass.unhomed) return "the stream's cache never reached the GPU"
     if (kind == RdecPass.pinned_off) return "a prompt was read on the CPU: the server keeps host-cached streams off the GPU's prompt path"
     return "{kind}"
 }
@@ -1681,6 +1814,8 @@ def private rdec_pass_text(kind : RdecPass; a, b : int64) : string {
         why = "position {a} is not the deltanet state's next position {b} (the recurrent state is forward-only)"
     } elif (kind == RdecPass.busy) {
         why = "all {a} mirror regions hold a live device-home session"
+    } elif (kind == RdecPass.unhomed) {
+        why = "the session holds no mirror region (its history never came to the device), so the NextN head has no slot to draft in"
     } else {
         why = "the resident prefill is pinned off (a multi-stream scheduler owns the sessions)"
     }
@@ -1736,6 +1871,79 @@ def private rdec_stash_carry(c : Config; var s : Session; row, pos1 : int64) {
     return if (!rdec_carry_on(c) || s.device_kv)
     rdec_land_carry(row, s.mtp_h)
     s.mtp_h_pos1 = pos1
+}
+
+var private g_rdec_drafts = 0l
+var private g_rdec_draft_pick = -1l
+
+//! How many NextN drafts the resident driver's head served in this process (a cell's served witness)
+def moe_gpu_resident_drafts() : int64 => g_rdec_drafts
+
+//! The last device draft's pick, the argmax of the logits it landed (-1 before the first)
+def moe_gpu_resident_draft_pick() : int64 => g_rdec_draft_pick
+
+//! the speculative seats' owner on the resident driver: armed on a NextN-headed model; a seat it registers no twin for runs the CPU round
+def private vulkan_mtp_owns(t : Model) : bool => g_rdec_active && t.config.n_layer_nextn > 0l
+
+//! the head's K/V rows the device holds as the host does end at `row` in the region `s` owns: the host rewrote the rows from there
+def private rdec_head_rows_stale(s : Session; row : int64) {
+    if (rdec_owns(s, s.rdec_region)) {
+        g_rdec_regions[s.rdec_region].head_cnt = clamp(row, 0l, g_rdec_regions[s.rdec_region].head_cnt)
+    }
+}
+
+//! the resident NextN draft (`register_mtp_draft_override("vulkan", ...)`): a declined draft leaves the head's rows from `row`
+//! stale on the device, since the CPU draft writes them on the host
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]   // per speculative round
+def private vulkan_resident_draft(t : Model; var s : Session; token, row : int64) : bool {
+    let done = vulkan_resident_draft_go(t, s, token, row)
+    if (!done) {
+        rdec_head_rows_stale(s, row)
+    }
+    return done
+}
+
+def private vulkan_resident_draft_go(t : Model; var s : Session; token, row : int64) : bool {
+    if (!g_rdec_active || !rdec_draft_installed()) {
+        return false
+    }
+    if (s.device_kv) {
+        panic("dasLLAMA resident draft: a device-home session keeps no host K/V rows for the NextN head - the speculative round serves host-cached sessions")
+    }
+    if (s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt) {
+        rdec_pass_once(RdecPass.codec, int64(int(s.kv_dtype_k)), int64(int(s.kv_dtype_v)))
+        return false
+    }
+    if (s.kv_pool != null) {
+        rdec_pass_once(RdecPass.paged, 0l, 0l)
+        return false
+    }
+    if (row + 1l > g_rdec_cap) {
+        rdec_pass_once(RdecPass.cap, row, g_rdec_cap)
+        return false
+    }
+    let r = s.rdec_region
+    if (!rdec_owns(s, r)) {
+        rdec_pass_once(s.rdec_gen != 0l ? RdecPass.superseded : RdecPass.unhomed, 0l, 0l)
+        return false
+    }
+    g_rdec_regions[r].used = ++g_rdec_tick
+    rdec_select_region(r)
+    let c = t.config
+    let l = c.n_layers
+    g_rdec_x |> resize(c.dim)
+    embed_row(t, token, unsafe(addr(g_rdec_x[0])))   //! unscaled, as `forward_mtp` embeds
+    g_rdec_cossin |> resize(g_rdec_cos_elems)
+    rdec_rope_rows(t, row, g_rdec_cossin, 0l)
+    let pick = rdec_draft(g_rdec_x, s.mtp_h, g_rdec_cossin, row, min(g_rdec_regions[r].head_cnt, row),
+        kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), s.logits)
+    return false if (pick < 0l)
+    rdec_land_carry(0l, s.mtp_h)
+    s.mtp_h_pos1 = 0l   //! the head's own hidden, not a trunk row: the prefill seam must not consume it
+    g_rdec_regions[r].head_cnt = row + 1l
+    g_rdec_draft_pick = pick
+    g_rdec_drafts++
+    return true
 }
 
 // the resident whole-stack decode override (registered as "vulkan") — the mirror builds as positions arrive
@@ -1827,6 +2035,7 @@ def private vulkan_ple_gate(t : Model; s : Session; npos, start_pos : int64) : b
 // the "vulkan" whole-prefill override — host KV hydrates back on demand, so the CPU rails always take over from a valid authority
 [hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill call
 def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos : int64) : bool {
+    rdec_head_rows_stale(s, start_pos - 1l)   //! the prefill's seam and warm rewrite the head's host rows from start_pos - 1, whoever serves the trunk
     let seq0 = g_rdec_pass_seq
     let done = vulkan_resident_prefill_go(t, s, npos, start_pos)
     rdec_device_home_guard(s, done, "prefill", seq0)
@@ -2165,6 +2374,8 @@ def resident_driver_register() {
     register_decode_override("vulkan", @@vulkan_resident_decode)
     register_batch_decode_override("vulkan", @@vulkan_resident_batch_decode)
     register_prefill_override("vulkan", @@vulkan_resident_prefill)
+    register_mtp_seat_owner("vulkan", @@vulkan_mtp_owns)
+    register_mtp_draft_override("vulkan", @@vulkan_resident_draft)
     register_ple_gpu_gate(@@vulkan_ple_gate)
     register_ple_gpu_decode_gate(@@vulkan_ple_gate)   //! the token command gathers the row on device too
     register_prefill_override_split_span("vulkan")
@@ -2327,6 +2538,7 @@ def moe_gpu_drop_model_() {
     moe_gpu_dn_invalidate()
     rdec_set_active(false)
     reset_gpu_cpu_passes()
+    g_rdec_draft_pick = -1l
     g_rdec_regions |> clear()
     g_rdec_cap = 0l
     g_rdec_emb_gpu = false

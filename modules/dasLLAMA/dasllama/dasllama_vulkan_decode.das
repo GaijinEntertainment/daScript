@@ -49,7 +49,7 @@ def da_nsplit(n_heads, sm_count : int64) : int64 {
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64;
                     neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom;
-                    mir_elems, cos_elems, regions : int64; carry : bool) : bool {
+                    mir_elems, cos_elems, regions : int64; carry, head : bool) : bool {
     if (!vk_moe_init()) {
         return false
     }
@@ -121,13 +121,19 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     g_rdq_prev_last = 0ul
     r.nb = min(regions, RD_NB_MAX)   //! the per-row planes hold a row per region the N-row command can step at once
     let nb = r.nb
-    let wide = max(max(qd, hidden), dim)
+    let wide = max(max(max(qd, hidden), dim), head ? 2l * dim : 0l)   //! the head's eh_proj reads a [enorm ; hnorm] row twice dim wide through the quant planes
     r.log_xfer = g_gpu.xfer_fam >= 0
     r.carry = carry
     r.x_dev = make_device_buf(dim * 4l * nb)
     r.xb_dev = make_device_buf(dim * 4l * nb, carry && r.log_xfer)   //! the carry's rows leave on the transfer queue as the logits do
     if (carry) {
         r.hid_host = make_host_buf(dim * 4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
+    }
+    if (head) {
+        r.head_norm_base = rdec_head_norm_base(n_layers, dim, qk_norm ? head_size : 0l)
+        r.cat_in_dev = make_device_buf(2l * dim * 4l)
+        r.cat_dev = make_device_buf(2l * dim * 4l)
+        r.cat_host = make_host_buf(2l * dim * 4l, false, [cached = true])
     }
     r.xq_dev = make_device_buf(wide * nb)              // int8 quants, 1 byte/elem
     r.xs_dev = make_device_buf((wide / 32l) * 4l * nb)
@@ -171,10 +177,10 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         r.dn_parity |> resize(regions)
         ensure_dnd_state()   // the staging buffers the state uploads and flushes ride
     }
-    // norms layout: [rms_att[l], rms_ffn[l]] x L + rms_final (dim each), then under qk_norm the
-    // per-head rows [rms_q[l], rms_k[l]] x L (head_size each) appended past the fixed layout,
-    // then the eps/ascale pair the fused ar+requant reads (its binding 4 is the scale output)
-    r.ar_scal_off = n_layers * RD_NORM_ROWS * dim + dim + (qk_norm ? n_layers * 2l * head_size : 0l)
+    // norms layout: [rms_att[l], rms_ffn[l]] x L + rms_final, the per-head [rms_q[l], rms_k[l]] x L under qk_norm, the
+    // NextN head's q/k slot and norm block where it rides (`rdec_norms_len`), then the eps/ascale pair the fused ar+requant
+    // reads (its binding 4 is the scale output)
+    r.ar_scal_off = rdec_norms_len(n_layers, dim, qk_norm ? head_size : 0l, head)
     r.norms_bytes = (r.ar_scal_off + 2l) * 4l
     r.norms_dev = make_device_buf(r.norms_bytes)
     // cos layout: this token's cos[half]+sin[half] per rope class, one class's row after the other
@@ -216,6 +222,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.cmd_unsplit |> resize(regions)
     r.tok_wide_recorded |> resize(regions)
     r.cmd_wide |> resize(regions)
+    r.draft_cmd |> resize(head ? regions : 0l)
+    r.draft_recorded |> resize(head ? regions : 0l)
     for (ri in range64(regions)) {
         r.cmd |> push(alloc_cmd())
         if (r.unsplit_on) {
@@ -223,6 +231,9 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         }
         if (r.wide_on) {
             r.cmd_wide[ri] = alloc_cmd()
+        }
+        if (head) {
+            r.draft_cmd[ri] = alloc_cmd()
         }
     }
     return true
@@ -1092,6 +1103,44 @@ def rd_enc_cls_epi(raw : VkCommandBuffer; var h : VkHaz; nrows : int64 = 1l) {
     enc_cls_epi(raw, h, g_rd.cls_epi_set, pce, (g_rd.vocab * nrows + 255l) / 256l)
 }
 
+//! The NextN draft head's arm (`RdecSetHeadFn`), after the classifier on a driver prepared with the head: its layer's sets
+//! over the one-row planes, the eh_proj GEMV over the concatenated row, the embed and carry norms; false where a class declines
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]
+def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool {
+    if (g_gpu != null && g_gpu.dry) {
+        return true
+    }
+    assert(g_rd != null && g_rd.ready && g_rd.head_norm_base > 0l, "vk_rdec_set_head on a driver prepared without the head, or before set_cls")
+    if (!(gemv_cls_ensure(feh) && ensure_cls_ar() && ensure_cls_dn_rq() && (!kq_sb(feh) || ensure_cls_q8k_rq()))) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the NextN head's eh_proj format {feh} found no GEMV or requant class on this device - the CPU draft serves\n")
+        return false
+    }
+    let dim = g_rd.dim
+    let nb = g_rd.nb
+    var L & = unsafe(g_rd.head)
+    rd_layer_geom(L, g)
+    rd_attn_sets(L, g_rd.n_attn, bq, bk, bv, bo, fq, fk, fv, fo, f1, f3, f2)
+    rd_ffn_sets(L, b1, b3, b2, f1, f3, f2)
+    L.made = true
+    g_rd.eh_blk = beh
+    g_rd.eh_fmt = feh
+    g_rd.m_eh = rd_meta()
+    let cat_bytes = 2l * dim * 4l
+    g_rd.s_cat_ar = set_cls_ar(fixed_array(g_rd.cat_in_dev, g_rd.cat_in_dev, g_rd.norms_dev, g_rd.cat_dev),
+        fixed_array(cat_bytes, cat_bytes, g_rd.norms_bytes, cat_bytes),
+        fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
+    let xq_bytes = 2l * dim * nb   //! the quant planes over every row, sized at twice dim a row under the head (`vk_rdec_prepare`'s `wide`)
+    let xs_bytes = (2l * dim / 32l) * 4l * nb
+    g_rd.s_cat_rq = set_rq_cls(fixed_array(g_rd.cat_dev, g_rd.xq_dev, g_rd.xs_dev),
+        fixed_array(cat_bytes, xq_bytes, xs_bytes),
+        fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+    g_rd.s_eh = arena_gemv_set(feh, arena_planes(feh, beh), g_rd.m_eh.buf, META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, xq_bytes, xs_bytes, VHZ_XQ,
+        g_rd.x_dev, dim * 4l * nb, VHZ_X)
+    g_rd.head_on = true
+    rd_invalidate_token()
+    return true
+}
+
 // Record the whole-token cmd ONCE per set_layer/set_cls epoch: constant metas + scalars fill here;
 // per-token state is only x/cos (in-cmd copies) and the rope/attn position words (host-visible)
 [cold_path]   // once per epoch (set replacement re-records); the rerecord A/B leg is opt-in
@@ -1148,40 +1197,44 @@ def private rd_record_wide_twin {
 //! every GEMV's (rel_wblock, xblock) region table, filled for the planes each layer holds
 def private rd_fill_gemv_regions_all {
     for (l in range64(g_rd.n_layers)) {
-        var L & = unsafe(g_rd.layers[l])
-        if (L.recurrent) {
-            fill_gemv_regions(L.m_dnqkv, L.bqkv)
-            fill_gemv_regions(L.m_dnz, L.bz)
-            fill_gemv_regions(L.m_dnout, L.bout)
-            if (!g_rd.dn_ba_f32) {
-                fill_gemv_regions(L.m_dnbeta, L.bbeta)
-                fill_gemv_regions(L.m_dnalpha, L.balpha)
-            }
-        } elif (L.qkv_merged) {
-            fill_gemv_regions_qkv(L.m_q, L.bq, L.bk, L.bv, L.qd / L.kvd, L.kvd * (g_rd.dim / kq_unit(L.fq)), !L.vfk)
-            fill_gemv_regions(L.m_wo, L.bo)
+        rd_fill_layer_regions(g_rd.layers[l])
+    }
+}
+
+//! one layer's GEMV region tables, for the planes it holds
+def private rd_fill_layer_regions(L : RLayer) {
+    if (L.recurrent) {
+        fill_gemv_regions(L.m_dnqkv, L.bqkv)
+        fill_gemv_regions(L.m_dnz, L.bz)
+        fill_gemv_regions(L.m_dnout, L.bout)
+        if (!g_rd.dn_ba_f32) {
+            fill_gemv_regions(L.m_dnbeta, L.bbeta)
+            fill_gemv_regions(L.m_dnalpha, L.balpha)
+        }
+    } elif (L.qkv_merged) {
+        fill_gemv_regions_qkv(L.m_q, L.bq, L.bk, L.bv, L.qd / L.kvd, L.kvd * (g_rd.dim / kq_unit(L.fq)), !L.vfk)
+        fill_gemv_regions(L.m_wo, L.bo)
+    } else {
+        fill_gemv_regions(L.m_q, L.bq)
+        if (L.kv_shared) {   //! no k/v planes of its own
+        } elif (L.kv_merged) {
+            fill_gemv_regions2(L.m_k, L.bk, L.bv)   // k, v regions land at qd, qd+kvd (push ybase)
         } else {
-            fill_gemv_regions(L.m_q, L.bq)
-            if (L.kv_shared) {   //! no k/v planes of its own
-            } elif (L.kv_merged) {
-                fill_gemv_regions2(L.m_k, L.bk, L.bv)   // k, v regions land at qd, qd+kvd (push ybase)
-            } else {
-                fill_gemv_regions(L.m_k, L.bk)
-                if (!L.vfk) {
-                    fill_gemv_regions(L.m_v, L.bv)
-                }
+            fill_gemv_regions(L.m_k, L.bk)
+            if (!L.vfk) {
+                fill_gemv_regions(L.m_v, L.bv)
             }
-            fill_gemv_regions(L.m_wo, L.bo)
         }
-        if (has_dense_triple(L)) {
-            fill_gemv_regions(L.m_gate, L.b1)
-            fill_gemv_regions(L.m_up, L.b3)
-            fill_gemv_regions(L.m_down, L.b2)
-        }
-        if (L.ple) {
-            fill_gemv_regions(L.m_pg, L.bpg)
-            fill_gemv_regions(L.m_pp, L.bpp)
-        }
+        fill_gemv_regions(L.m_wo, L.bo)
+    }
+    if (has_dense_triple(L)) {
+        fill_gemv_regions(L.m_gate, L.b1)
+        fill_gemv_regions(L.m_up, L.b3)
+        fill_gemv_regions(L.m_down, L.b2)
+    }
+    if (L.ple) {
+        fill_gemv_regions(L.m_pg, L.bpg)
+        fill_gemv_regions(L.m_pp, L.bpp)
     }
 }
 
@@ -2320,6 +2373,100 @@ def vk_rdec_land_carry(row : int64; var dst : array<float>) {
     }
 }
 
+//! the draft command into the selected region's buffer: the [embed ; carry] rows under the embed and carry norms, the eh_proj
+//! GEMV into x, the head's layer over its own mirror slot, the head norm's row stored in xb, the classifier and the pick
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]   // once per region and set epoch
+def private rd_record_draft {
+    let dim = g_rd.dim
+    let l = g_rd.n_layers
+    let hb = g_rd.head_norm_base
+    var L & = unsafe(g_rd.head)
+    rd_fill_layer_regions(L)
+    fill_gemv_regions(g_rd.m_eh, g_rd.eh_blk)
+    let fuse_qkr = rd_fuse_gates().fuse_qkr || (g_rd.qk_norm && (L.rot != L.hs || L.vfk || L.vnorm))   //! the head's own shape may need the fused pair the trunk's gate did not ask for
+    var raw = g_rd.draft_cmd[g_rd.region]
+    let rf : VkCommandBufferResetFlags
+    vk_check(vkResetCommandBuffer(raw, rf), null)
+    let begin = VkCommandBufferBeginInfo()
+    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h : VkHaz
+    vhz_dep(raw, h, 0u, VHZ_X, true)
+    cmd_copy_whole(raw, g_rd.cat_host.buf, g_rd.cat_in_dev, 2l * dim * 4l)
+    vhz_dep(raw, h, 0u, VHZ_COS, true)
+    cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l)
+    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(hb + RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0)
+    enc_cls_ar(raw, h, g_rd.s_cat_ar, pce, 1l)
+    var pch = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(hb + RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 1u)
+    enc_cls_ar(raw, h, g_rd.s_cat_ar, pch, 1l)
+    rq_enc(raw, h, g_rd.s_cat_rq, g_rd.eh_fmt, 2l * dim)
+    var pceh = GemvArgs(n = uint(2l * dim), d = uint(dim), nreg = 1u, ybase = 0u, ncols = 1u, ystride = uint(dim))
+    gemv_enc(g_rd.eh_fmt, raw, h, g_rd.s_eh, pceh, dim)
+    var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(hb + RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
+    enc_cls_ar(raw, h, g_rd.s_prologue, pca, 1l)
+    rq_enc(raw, h, L.s_quant_xb, L.fq, dim)
+    rd_encode_attn_head(raw, h, L, l, fuse_qkr, rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), 1l, 1u, 0)
+    var pcf = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(hb + RDEC_HEAD_FFN * dim), eps = g_rd.eps, ascale = 1.0)
+    enc_cls_ar(raw, h, L.s_addr_ffn, pcf, 1l)
+    rq_enc(raw, h, L.s_quant_xb2, L.f1, dim)
+    let nxt = hb + RDEC_HEAD_OUT * dim
+    rd_encode_ffn(raw, h, L, l, nxt, 1l, 1u, 0)
+    var pco = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
+    enc_cls_ar(raw, h, L.s_addr_next, pco, 1l)   //! xb holds the head norm's row: the draft's hidden, landed as the carry
+    rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim)
+    var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = 1u, ystride = uint(g_rd.vocab))
+    gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
+    var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))
+    enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
+    enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, 1l)
+    if (!g_rd.log_xfer) {   //! the transfer queue carries the landing (`rd_xlog`); without one the command copies it itself
+        vhz_dep(raw, h, VHZ_LOG | VHZ_XB, 0u, true)
+        cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
+        cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l)
+        cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hid_host.buf, dim * 4l)
+    }
+    vk_check(vkEndCommandBuffer(raw), null)
+    g_rd.draft_recorded[g_rd.region] = true
+}
+
+//! The NextN draft (`RdecDraftFn`) in the selected region: the host's head rows [hyd0, row) up to the head's slot, the recorded
+//! draft command at row `row`, the logits and the pick landed with the head's hidden, row `row`'s K/V read back to the host
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-draft-head")]   // per speculative round, reached through the tier's registered seat
+def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>) : int64 {
+    if (g_rd == null || !g_rd.ready || !g_rd.head_on || !g_rd.carry) {
+        return -1l
+    }
+    let L & = unsafe(g_rd.head)
+    let dim = g_rd.dim
+    let rowb = L.kvd * g_rd.kv_esz
+    assert(hyd0 >= 0l && row >= 0l, "vk_rdec_draft: a negative head row")
+    unsafe {
+        if (hyd0 < row) {
+            let base = rd_mir_base(L) * g_rd.kv_esz
+            upload_region_at(g_rd.k_mirror, base + hyd0 * rowb, kp + hyd0 * rowb, (row - hyd0) * rowb)
+            upload_region_at(g_rd.v_mirror, base + hyd0 * rowb, vp + hyd0 * rowb, (row - hyd0) * rowb)
+        }
+        if (!g_rd.draft_recorded[g_rd.region]) {
+            rd_record_draft()
+        }
+        memcpy(g_rd.cat_host.mapped, addr<void?>(x[0]), dim * 4l)
+        memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.cat_host.mapped) + dim * 4l), addr<void?>(h[0]), dim * 4l)
+        memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
+        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
+        tm.pos = uint(row)
+        tm.cnt = uint(row + 1l)
+        tm.parity = g_rd.hybrid ? uint(g_rd.dn_parity[g_rd.region]) : 0u
+        tm.mirbase = 0u   //! the head's region rides the draft command's push
+        tm.dnslot = uint(g_rd.region)
+        var cmd = g_rd.draft_cmd[g_rd.region]
+        rd_submit_land(cmd, 1l, false)
+        rd_wait_land()
+        memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
+    }
+    let pick = rd_landed_pick(0l)
+    read_kv_rows_of(L, row, 1l, unsafe(kp + row * rowb), unsafe(vp + row * rowb))
+    return pick
+}
+
 //! the N-row landing: each row's logits at its pointer, or - where the pointer is null - its pick into `picks` (-1 on a landed row)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_land_rows_n(lrows : array<float?>; var picks : array<int64>; nrows : int64) {
@@ -2470,7 +2617,11 @@ def vk_rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) {
 //! the readback both rails are: layer `l`'s mirror rows [row0, row0 + nrows) into kp / vp from their first row, KV_READBACK_ROWS rows a submit
 def private read_kv_rows(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     assert(g_rd != null, "read_kv_rows before prepare")
-    let L & = unsafe(g_rd.layers[l])
+    read_kv_rows_of(g_rd.layers[l], row0, nrows, kp, vp)
+}
+
+//! ... over the mirror slot of `L`: a trunk layer, or the NextN head
+def private read_kv_rows_of(L : RLayer; row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     if (L.mir_idx < 0l) {
         return
     }

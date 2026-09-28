@@ -2,8 +2,8 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
 document carries the residency plan that sizes a whole model before a byte uploads, the marks
-swap that lets one GPU slot serve many models, and the token command's logits landing on the
-transfer queue. The N-row token command a batched step's rows go through, and the residual
+swap that lets one GPU slot serve many models, the token command's logits landing on the
+transfer queue, and the NextN draft head the driver homes beside the trunk. The N-row token command a batched step's rows go through, and the residual
 step's two forms it holds bit for bit, are in `ARCHITECTURE_GPU_VULKAN_NROW.md`. The prefill
 chain and byte stores that run once a model is resident are in `ARCHITECTURE_GPU_VULKAN.md`, and
 the cooperative-matrix GEMM tiles under them are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the per-op
@@ -277,3 +277,22 @@ computes over the rows the mirror holds: an image turn's media rows attend the h
 prefilled, and a decode past the region's rows reads them beside the CPU-served ones. A
 device-home session has no host cache to fill, so its pass panics with the reason. The pass
 still answers false, and the CPU rails serve the call.
+
+### The NextN draft head is one more layer the driver homes {#resident-draft-head}
+
+**A NextN-headed model's draft head rides the arena as layer `n_layers`, and a recorded draft command steps it.**
+Where the tier installed the draft seat (`install_rdec_draft`) and the carry landing, and the head has the trunk's
+attention shape, a dense FFN and planes the resident GEMVs serve (`resident_head_decline` logs any other head at load,
+whose draft stays the CPU's), the plan counts eight planes - eh_proj [2dim -> dim] in its own format, the q/k/v/o quad,
+the FFN triple - and one more K/V slot a region past the trunk's; a headless model plans what it always did. The norms
+plane takes the head's q/k rows at index `n_layers` of the q/k block and five rows past it - the attention, FFN, embed,
+carry and head norms, the final norm's row where the file ships no head norm (`rdec_norms_len`) - since layer
+`n_layers`' own rows would index the final norm's. The layer sits outside `RDec.layers`, so no trunk walk sees it. The
+draft command, one per region, norms the uploaded embed row and carry `h` into one `[enorm ; hnorm]` row, runs eh_proj
+into x, the layer through the token command's attention and FFN encoders on its slot at row `pos - 1`, the head norm
+into the carry's row, the classifier and the pick; the logits, the pick and that row land (`mtp_h`, `mtp_h_pos1` 0) and
+the row's K/V comes back to the host. The host's head rows stay the authority - the CPU prompt warm, the seam and a CPU
+draft write them - so a region tracks the rows its slot holds as the host does (`RdecRegion.head_cnt`: a claim zeroes
+it, every prefill call lowers it to `start_pos - 1`, a declined draft to its row) and a draft uploads the rows past it
+first. The "vulkan" owner (`register_mtp_seat_owner`: the driver armed on a NextN model) registers the draft seat alone
+(`register_mtp_draft_override`), so the verify stays the CPU round's.

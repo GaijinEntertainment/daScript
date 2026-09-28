@@ -84,7 +84,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   seat, the MoE expert chain on those tiles, the KHR arm's hand-staged kq tile - and the decode
   GEMV family's lane split by row length.
 - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - what a model has to fit on the card before the driver
-  runs - the residency plan, and the GPU-slot marks swap that lets one slot serve many models.
+  runs - the residency plan, and the GPU-slot marks swap that lets one slot serve many models -
+  the token command's logits landing, and the NextN draft head the driver homes beside the trunk.
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - the N-row token command a batched step's rows go through,
   and the residual step's two forms it holds bit for bit.
 - `ARCHITECTURE_GPU_VULKAN_DECODE.md` - the per-op tier's decode era - the decode attention block

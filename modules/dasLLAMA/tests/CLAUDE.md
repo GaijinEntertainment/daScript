@@ -852,7 +852,16 @@ and after each of four resident steps against the CPU chain's: the watermark exa
 within the 4% deltanet bar, and the one-step-off control past it.
 `test_gpu_resident_hybrid_mtp_carry_batched` holds the same for two sessions in two regions, both
 batched through the N-row command at every step (the step counter witnesses it), each row's carry
-against its session alone on the CPU chain.
+against its session alone on the CPU chain. `test_gpu_resident_hybrid_mtp_draft` holds the NextN
+draft the driver's head serves: after a 40-token resident prefill with the speculative warm on (so
+the head's host rows the draft hydrates hold history), one draft at the prompt's last row through
+the seat against the CPU `forward_mtp` on the same token, carry and row - the seat unset on the tier
+for the CPU side (`unset_rdec_draft`, put back after) - the logits and the head's hidden within the
+4% deltanet bar, the CPU draft one row back (of the token the prompt holds there) past it, the
+device pick the argmax of the logits it landed and equal to the CPU draft's, the head's drafts
+counter up by the one device draft alone, and every call served; its second cell runs two
+speculative rounds, the first with the seat unset and the second with it back, the round's draft
+count and the head's counter saying which side drafted each.
 
 One cell is model-free: `test_kernel_census_by_name` holds that the census accessor panics on a
 kernel name nothing seeded, so a misspelt key cannot read as a zero count.

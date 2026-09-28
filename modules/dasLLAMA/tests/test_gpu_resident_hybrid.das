@@ -35,7 +35,9 @@ require _resident_feed
 // two, whose recurrent layers take a K-quant x feed and a Q8_0 o feed - the routing witness below
 // holds that the x feed rode the coopmat tiles. The NextN-headed twin (the -MTP- file) holds the
 // speculative carry the driver lands - the prefill's last row and every step's post-final-norm
-// hidden as `mtp_h`, its watermark as `mtp_h_pos1` - one row at a time and through the N-row command.
+// hidden as `mtp_h`, its watermark as `mtp_h_pos1` - one row at a time and through the N-row command,
+// and the NextN draft through the head the driver homes against the CPU `forward_mtp` on one token,
+// carry and row, then the round's drafts with the draft seat unset and put back.
 // Every model cell skips interpreted, without its model file, or without the armed tier; the
 // K-quant cells skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`) too.
 
@@ -348,6 +350,109 @@ def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
             delete pb
             delete fa
             delete fb
+        }
+        delete tr
+    }
+}
+
+let private DRAFT_PROMPT = 40l
+let private DRAFT_TOKEN = 2000l
+
+//! a draft's two outputs: the logits and the head's own hidden `forward_mtp` leaves in the session
+struct private Draft {
+    logits : array<float>
+    h : array<float>
+}
+
+//! `forward_mtp` of `tok` at head row `row` from the carry `h0`, through whichever seat the process has installed
+def private draft_from(tr : Model; var s : Session; tok, row : int64; h0 : array<float>) : Draft {
+    copy_floats(h0, 0l, s.mtp_h, 0l, long_length(h0))
+    forward_mtp(tr, s, tok, row)
+    return <- Draft(logits <- [for (x in s.logits); x], h <- [for (x in s.mtp_h); x])
+}
+
+//! `n` prompt tokens through the resident prefill with the speculative warm on, so the head's host rows the draft hydrates hold history
+def private prefill_warm(tr : Model; var s : Session; prompt : array<int64>) {
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(true)
+    forward_prefill(tr, s, prompt, long_length(prompt), 0l)
+    set_mtp_spec(spec0)
+    s.n_past = long_length(prompt)
+}
+
+//! the device draft's `what` within the deltanet bar of the CPU draft's, the CPU draft one row back past it
+def private draft_within(t : T?; what : string; gpu, cpu, off : array<float>) {
+    let bar = DN_LOGIT_BAR_REL * logits_maxabs(cpu)
+    let diff = logits_maxdiff(gpu, cpu)
+    let offd = logits_maxdiff(gpu, off)
+    to_log(LOG_INFO, "draft {what}: maxdiff {diff}, one-step-off control {offd} (bar {bar})\n")
+    t |> success(diff <= bar, "the resident draft's {what} within {bar} of the CPU forward_mtp's (maxdiff {diff})")
+    t |> success(offd > bar, "control: the bar discriminates the CPU draft one row back ({what} maxdiff {offd} vs bar {bar})")
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_draft(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: one NextN draft through the resident head against the CPU forward_mtp on the same token, carry and row") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var s <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, s, prompt)
+            t |> equal(s.mtp_h_pos1, DRAFT_PROMPT, "the resident prefill landed the carry at the prompt's end")
+            var h0 <- [for (x in s.mtp_h); x]
+            let row = DRAFT_PROMPT - 1l   //! the head's row pos - 1: the round's draft at position pos
+            let drafts0 = moe_gpu_resident_drafts()
+            var gpu <- draft_from(tr, s, DRAFT_TOKEN, row, h0)
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the resident head drafted")
+            t |> equal(s.mtp_h_pos1, 0l, "the draft's hidden is the head's own: its watermark stays 0")
+            let pick = moe_gpu_resident_draft_pick()
+            let seat = unset_rdec_draft()
+            var cpu <- draft_from(tr, s, DRAFT_TOKEN, row, h0)
+            var off <- draft_from(tr, s, prompt[row], row - 1l, h0)   //! the draft at pos - 2, of the token the prompt holds at pos - 1
+            reinstall_rdec_draft(seat)
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the unset seat left both CPU drafts to forward_mtp")
+            served_every_call(t)
+            let ag = argmax_of(gpu.logits)
+            let ac = argmax_of(cpu.logits)
+            to_log(LOG_INFO, "draft (row {row}, token {DRAFT_TOKEN}): argmax cpu {ac} '{decode_(tr, [ac])}' ({cpu.logits[ac]}), resident {ag} '{decode_(tr, [ag])}' ({gpu.logits[ag]}), device pick {pick}\n")
+            draft_within(t, "logits", gpu.logits, cpu.logits, off.logits)
+            draft_within(t, "hidden", gpu.h, cpu.h, off.h)
+            t |> equal(pick, ag, "the device pick is the argmax of the logits it landed")
+            t |> equal(pick, ac, "the draft token equals the CPU draft's")
+            delete gpu
+            delete cpu
+            delete off
+            delete h0
+            delete s
+            delete prompt
+        }
+        delete tr
+    }
+    t |> run("Qwen3.5-0.8B-MTP: the speculative round drafts on the CPU with the draft seat unset, and on the device with it back") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var tr <- load_mtp_carrier(t, 1l)
+        with_job_que() {
+            setup_dasllama_jobque_()
+            var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var s <- create_session(tr, mirror_kv_dtype())
+            prefill_warm(tr, s, prompt)
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(true)
+            let drafts0 = moe_gpu_resident_drafts()
+            let seat = unset_rdec_draft()
+            var acc = 0l
+            mtp_spec_eval(tr, s, DRAFT_TOKEN, acc)
+            reinstall_rdec_draft(seat)
+            t |> equal(s.mtp_drafted, 1l, "the first round drafted")
+            t |> equal(moe_gpu_resident_drafts(), drafts0, "the first round's draft ran on the CPU: the unset seat left the head's counter")
+            mtp_spec_eval(tr, s, argmax_of(s.logits), acc)
+            set_mtp_spec(spec0)
+            t |> equal(s.mtp_drafted, 2l, "the second round drafted")
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the second round's draft ran on the device: the seat back took it")
+            delete s
+            delete prompt
         }
         delete tr
     }

@@ -28,6 +28,7 @@ var private g_prepared_gated = false
 var private g_prepared_rot = -1l
 var private g_prepared_dn_cd = -1l
 var private g_prepared_carry = false
+var private g_prepared_head = false
 var private g_dn_layer_l = -1l
 var private g_dn_layer_ba_off = -1l
 var private g_dn_ba_rows = -1l
@@ -44,7 +45,7 @@ def private d_reserve(fmt : int; cap_blocks : int64) : bool {
 def private d_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => 7l
 
 [unused_argument(n_layers, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, mir_elems, cos_elems, regions)]
-def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64; carry : bool) : bool {
+def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_elems, cos_elems, regions : int64; carry, head : bool) : bool {
     g_prepared = true
     g_prepared_kv16 = kv16
     g_prepared_n_attn = n_attn
@@ -52,6 +53,7 @@ def private d_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hid
     g_prepared_rot = rot
     g_prepared_dn_cd = dn.cd
     g_prepared_carry = carry
+    g_prepared_head = head
     return true
 }
 
@@ -154,6 +156,25 @@ def private d_land_carry(row : int64; var dst : array<float>) {
     dst[0] = float(row)
 }
 
+var private g_head_feh = -1
+var private g_draft_row = -1l
+var private g_draft_hyd0 = -1l
+
+[unused_argument(beh, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
+def private d_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool {
+    g_head_feh = feh
+    return true
+}
+
+//! the draft double: the row and the hydrate start it was asked for, a sentinel logit, a distinctive pick
+[unused_argument(x, h, cossin, kp, vp)]
+def private d_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; var logits : array<float>) : int64 {
+    g_draft_row = row
+    g_draft_hyd0 = hyd0
+    logits[0] = 44.0
+    return 7l
+}
+
 def private arm_on() : bool => true
 
 def private arm_off() : bool => false
@@ -182,9 +203,9 @@ def test_gpu_tier_contract(t : T?) {
         var ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 512l, 2l, 5), 7l)
         t |> success(rdec_prepare(2l, 1l, 64l, 64l, 64l, 8l, 8l, 128l, 100l, 32l, true, 1e-5, 1.0, false, true, true, 4l,
-            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true), 0l, 0l, 1l, true))
+            RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true), 0l, 0l, 1l, true, true))
         t |> success(g_prepared, "prepare double must have run")
-        t |> success(g_prepared_carry, "the carry flag must forward to the double")
+        t |> success(g_prepared_carry && g_prepared_head, "the carry and NextN head flags must forward to the double")
         t |> success(g_prepared_kv16, "kv16 must forward to the double")
         t |> equal(g_prepared_n_attn, 1l)
         t |> success(g_prepared_gated, "the gated-q flag must forward to the double")
@@ -303,6 +324,44 @@ def test_rdec_carry_seat(t : T?) {
         t |> equal(g_carry_row, 3l)
         t |> equal(dst[0], 3.0, "the double writes through the destination the forwarder handed it")
         delete dst
+    }
+}
+
+[test]
+def test_rdec_draft_seat(t : T?) {
+    t |> run("the NextN draft seat installs apart, forwards, and unsets to a declining form the caller puts back") @(t : T?) {
+        let rows : array<float>
+        var logits : array<float>
+        logits |> resize(4)
+        t |> success(!rdec_draft_installed(), "no draft seat before its install")
+        t |> equal(rdec_draft(rows, rows, rows, 3l, 1l, null, null, logits), -1l, "an unset draft seat declines - the CPU draft serves")
+        install_rdec_draft(@@d_set_head, @@d_draft)
+        t |> success(rdec_draft_installed(), "the draft install must flip its witness")
+        t |> success(rdec_set_head(1l, 5, 2l, 3l, 4l, 5l, 6l, 7l, 8l, 0, 0, 0, 0, 0, 0, 0, RdecLayerGeom()), "the head double's answer forwards")
+        t |> equal(g_head_feh, 5)
+        t |> equal(rdec_draft(rows, rows, rows, 9l, 4l, null, null, logits), 7l, "the double's pick forwards")
+        t |> equal(g_draft_row, 9l)
+        t |> equal(g_draft_hyd0, 4l)
+        t |> equal(logits[0], 44.0, "the double writes through the logits the forwarder handed it")
+        let seat = unset_rdec_draft()
+        t |> success(!rdec_draft_installed(), "the unset flips the witness back")
+        g_draft_row = -1l
+        t |> equal(rdec_draft(rows, rows, rows, 9l, 4l, null, null, logits), -1l, "the unset seat declines")
+        t |> equal(g_draft_row, -1l, "the unset seat never reaches the installed double")
+        reinstall_rdec_draft(seat)
+        t |> success(rdec_draft_installed(), "the reinstall flips the witness")
+        t |> equal(rdec_draft(rows, rows, rows, 11l, 0l, null, null, logits), 7l, "the seat the unset answered serves again")
+        t |> equal(g_draft_row, 11l)
+        delete logits
+    }
+    t |> run("the norms plane: the head's block past the trunk's q/k rows and its own q/k slot, never on the final norm's row") @(t : T?) {
+        let trunk = (24l * RDEC_NORM_ROWS + 1l) * 1024l
+        t |> equal(rdec_norms_len(24l, 1024l, 256l, false), trunk + 24l * 2l * 256l, "no head: the layers' rows, the final norm, a q/k slot a layer")
+        t |> equal(rdec_norms_len(24l, 1024l, 0l, false), trunk, "no head, no q/k norms")
+        t |> equal(rdec_head_norm_base(24l, 1024l, 256l), trunk + 25l * 2l * 256l, "the head's q/k rows take the slot at index n_layers")
+        t |> equal(rdec_norms_len(24l, 1024l, 256l, true), rdec_head_norm_base(24l, 1024l, 256l) + RDEC_HEAD_NORM_ROWS * 1024l)
+        t |> equal(rdec_head_norm_base(24l, 1024l, 0l), trunk, "without q/k norms the block follows the final norm")
+        t |> success(rdec_head_norm_base(24l, 1024l, 0l) > 24l * RDEC_NORM_ROWS * 1024l, "the block never lands on the final norm's row, where layer n_layers' own rows would index")
     }
 }
 
