@@ -1102,8 +1102,6 @@ class ClsArgmaxBase {
     @workgroup wm : float[32]   //! a subgroup's max: 256 threads make eight at the tier's subgroup floor of 32, thirty-two at a subgroup of 8
     @workgroup wi : uint[32]
 
-    //! a lane's value under the fold: NaN and -inf read as the lowest float, so a poisoned row still lands its widest finite lane
-    //! (id 0 where it has none); the compares are ordered, so the NaN test is the negated equality
     def lane_val(v : float) : float => !(v == v) || v < -3.4e38 ? -3.4e38 : v   // nolint:LINT007 — the NaN test: a NaN is the one float that is not equal to itself, on the device (an ordered compare) and on the CPU oracle alike
 
     def fold(m : float; mi : uint) : uint {

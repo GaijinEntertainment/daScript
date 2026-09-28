@@ -1133,8 +1133,6 @@ def private corpus_ids(t : Model; tk : Tokenizer; tx : string; chat : bool) : ar
     return <- ids
 }
 
-// Greedy pick over the last logits — the parity fixtures' sampler (the tg-real row samples through
-// sample_, so a landed pick serves it).
 def private argmax_logit(s : Session; vocab : int64) : int64 {
     var best = 0l
     var bv = s.logits[0]
@@ -1705,7 +1703,7 @@ def main() : int {
                 pp_dr |> resize(length(toks))
                 pp_ac |> resize(length(toks))
                 var sp = SamplingParams(temp = cfg.mtp_temp)
-                let ask = sampler_is_argmax(sp)   //! the served shape: a bare-argmax stream asks each step and each round for its pick alone, as the scheduler does
+                let ask = sampler_is_argmax(sp)
                 for (_rep in range(reps)) {
                     var total_us = 0l
                     var rep_gen = 0l

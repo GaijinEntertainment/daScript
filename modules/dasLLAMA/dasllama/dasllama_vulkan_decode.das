@@ -46,7 +46,7 @@ def da_nsplit(n_heads, sm_count : int64) : int64 {
 //! Resident-driver prepare: allocate all per-token + session buffers for a model's geometry. One
 //! resident model at a time (the arbiter guarantees it). Call before set_layer / token.
 //! `kv16` picks the mirror codec (f16 default upstream) — sessions of the same codec byte-copy.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64;
                     neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom;
                     mir_elems, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool {
@@ -118,11 +118,11 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.rot = rot
     rdq_reset()
     g_rdq_prev_last = 0ul   //! the device clock's last sampled stamp is this file's: a new model starts with none
-    let rows_want = max(regions, head ? verify_rows : 0l)   //! a row per region the N-row command steps at once, or the verify's rows of one region
+    let rows_want = max(regions, head ? verify_rows : 0l)
     r.nb = min(rows_want, RD_NB_MAX)
     let nb = r.nb
     r.verify_rows = min(nb, head ? verify_rows : 0l)
-    let wide = max(max(max(qd, hidden), dim), head ? 2l * dim : 0l)   //! the head's eh_proj reads a [enorm ; hnorm] row twice dim wide through the quant planes
+    let wide = max(max(max(qd, hidden), dim), head ? 2l * dim : 0l)
     r.log_xfer = g_gpu.xfer_fam >= 0
     r.carry = carry
     r.x_dev = make_device_buf(dim * 4l * nb)
@@ -181,9 +181,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         r.dn_parity |> resize(regions)
         ensure_dnd_state()   // the staging buffers the state uploads and flushes ride
     }
-    // norms layout: [rms_att[l], rms_ffn[l]] x L + rms_final, the per-head [rms_q[l], rms_k[l]] x L under qk_norm, the
-    // NextN head's q/k slot and norm block where it rides (`rdec_norms_len`), then the eps/ascale pair the fused ar+requant
-    // reads (its binding 4 is the scale output)
+    //! the eps/ascale pair sits past `rdec_norms_len`'s floats; the fused ar+requant reads it (its binding 4 is the scale output)
     r.ar_scal_off = rdec_norms_len(n_layers, dim, qk_norm ? head_size : 0l, head)
     r.norms_bytes = (r.ar_scal_off + 2l) * 4l
     r.norms_dev = make_device_buf(r.norms_bytes)
@@ -229,7 +227,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.draft_cmd |> resize(head ? regions : 0l)
     r.draft_recorded |> resize(head ? regions : 0l)
     if (head) {
-        let vsets = (hybrid ? regions : 1l) * (nb + 1l)   //! a hybrid's verify commands bake the region's slot (the rollback copies), so a set a region
+        let vsets = (hybrid ? regions : 1l) * (nb + 1l)
         r.v_recorded |> resize(vsets)
         r.v_cmd |> reserve(vsets)
         r.v_cmd_unsplit |> reserve(vsets)
@@ -1118,8 +1116,6 @@ def rd_enc_cls_epi(raw : VkCommandBuffer; var h : VkHaz; nrows : int64 = 1l) {
     enc_cls_epi(raw, h, g_rd.cls_epi_set, pce, (g_rd.vocab * nrows + 255l) / 256l)
 }
 
-//! The NextN draft head's arm (`RdecSetHeadFn`), after the classifier on a driver prepared with the head: its layer's sets
-//! over the one-row planes, the eh_proj GEMV over the concatenated row, the embed and carry norms; false where a class declines
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool {
     if (g_gpu != null && g_gpu.dry) {
@@ -1144,7 +1140,7 @@ def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64;
     g_rd.s_cat_ar = set_cls_ar(fixed_array(g_rd.cat_in_dev, g_rd.cat_in_dev, g_rd.norms_dev, g_rd.cat_dev),
         fixed_array(cat_bytes, cat_bytes, g_rd.norms_bytes, cat_bytes),
         fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
-    let xq_bytes = 2l * dim * nb   //! the quant planes over every row, sized at twice dim a row under the head (`vk_rdec_prepare`'s `wide`)
+    let xq_bytes = 2l * dim * nb
     let xs_bytes = (2l * dim / 32l) * 4l * nb
     g_rd.s_cat_rq = set_rq_cls(fixed_array(g_rd.cat_dev, g_rd.xq_dev, g_rd.xs_dev),
         fixed_array(cat_bytes, xq_bytes, xs_bytes),
@@ -1162,8 +1158,6 @@ def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64;
     return true
 }
 
-//! the verify's rollback scratch on a hybrid, sized once every recurrent layer is set: `verify_rows - 1` rows (the rows a round
-//! can reject past), each row every recurrent layer's slot state and ring pair at the layer's `roll_off`
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
 def private rd_roll_alloc {
     var off = 0l
@@ -1223,7 +1217,7 @@ def private rd_record_wide_twin {
     rd_take_stamps(split, g_rdq_n)
     rd_encode_token(g_rd.cmd_wide[g_rd.region], 1l, rd_wide_pieces())
     rd_take_stamps(g_rdq_wide, g_pfq_n)
-    rd_put_stamps(split)
+    rd_put_back_stamps(split)
     g_rd.tok_wide_recorded[g_rd.region] = true
 }
 
@@ -1236,8 +1230,7 @@ def private rd_take_stamps(var st : RdqStamps; n : uint) {
     st.overflow = g_rdq_overflow
 }
 
-//! ... and the split form's list put back as the working set, before a twin recorder returns
-def private rd_put_stamps(var st : RdqStamps) {
+def private rd_put_back_stamps(var st : RdqStamps) {
     delete g_rdq_stamp_names
     g_rdq_stamp_names <- st.names
     g_rdq_n = st.n
@@ -1251,7 +1244,6 @@ def private rd_fill_gemv_regions_all {
     }
 }
 
-//! one layer's GEMV region tables, for the planes it holds
 def private rd_fill_layer_regions(L : RLayer) {
     if (L.recurrent) {
         fill_gemv_regions(L.m_dnqkv, L.bqkv)
@@ -1478,9 +1470,7 @@ def private rd_enc_da_attn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer;
     }
 }
 
-//! the attention head over `nrows` rows: the projections as GEMVs into the projection plane's rows, the rope and store at each row's
-//! own position and region, the attention over each row's history; `ncols` the GEMV leaves' columns and `nrow_bx` the N-row bisect bits
-//! (the one-row reading at one row); `kv_only` stops at the store and skips q (no q GEMV where q has its own plane, the norm and rope over the k-head groups alone): the verify's head re-warm, its stamps under `pfx`
+//! `ncols` the GEMV leaves' columns and `nrow_bx` the N-row bisect bits (the one-row values at one row); `kv_only` the verify's head re-warm, its stamps under `pfx`
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; nlfin, nsplit, nrows : int64; ncols : uint; nrow_bx : int;
                                 kv_only : bool = false; pfx : string = "a:") {
@@ -1528,7 +1518,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
     let mirbase = uint(one ? rd_mir_base(L) : L.mir_base)   //! the one-row command's region rides its push; an N-row step's rows carry theirs in TokMeta
     let nkh = L.kv_shared ? 0l : kvd / hs   //! the k-head groups also store the mirror row: none on a shared-KV layer
-    let nqh = kv_only ? 0l : g_rd.n_heads   //! the q-head groups a dispatch walks first: none for a store-only pass, whose groups are all k heads
+    let nqh = kv_only ? 0l : g_rd.n_heads
     if (fuse_qkr && (nrow_bx & NROW_BX_ROPE) == 0) {
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(L.rot / 2l),
             neox = g_rd.neox ? 1u : 0u, nh = uint(nqh), layerbase = mirbase,
@@ -1551,7 +1541,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
             enc_qk_rms_cls(raw, h, L.s_qkn, pcn, (nqh + nkh) * nrows)
             rd_ts(raw, "{pfx}qkn")
         }
-        let qpairs = kv_only ? 0l : qd / 2l   //! the q pairs come first; a store-only pass ropes the k pairs alone
+        let qpairs = kv_only ? 0l : qd / 2l
         let npairs = qpairs + (L.kv_shared ? 0l : kvd / 2l)   //! the k pairs also store the mirror row: none on a shared-KV layer
         var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
             neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qpairs), npairs = uint(npairs),
@@ -1596,8 +1586,6 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
 //! the epilogue GEMV's workgroups: eight rows a 256-thread workgroup (four times the family's 64-thread rows)
 def private rd_ar_wgs(rows : int64) : int64 => (rows + 4l * g_gpu.rows_per_wg - 1l) / (4l * g_gpu.rows_per_wg)
 
-//! the recurrent head over `nrows` rows: the GEMVs over every row at once, the fused step per row in its row's slot - one dispatch
-//! over every row where the rows sit in their own slots, or under `seq` (one stream's rows in one slot) a dispatch a row, in order
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64; ncols : uint; seq : bool) {
     let dim = g_rd.dim
@@ -1632,7 +1620,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
         taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
         dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
         eps = g_rd.eps, qscale = 1.0 / sqrt(float(g_rd.dn_ds)), out_f32 = kq_sb(L.fout) ? 1u : 0u, beta_row_stride = bstride)
-    if (seq) {   //! a stamp a row's step and a stamp a rollback copy: the roles sum over the rows
+    if (seq) {
         for (i in range64(nrows)) {
             pcd.row0 = uint(i)
             enc_dn_step_cls(raw, h, L.s_dnstep, pcd, nvh)
@@ -1654,8 +1642,6 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     rd_ts(raw, "d:out")
 }
 
-//! the verify's rollback copy after row `i`'s step: this layer's slot state and ring pair (the selected region's, baked into the
-//! command) into scratch row `i`, a transfer read of what the step wrote under the rail, the next row's step ordered after it
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
 def private rd_encode_roll_copy(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; i : int64) {
     let st & = unsafe(L.dn[g_rd.region])
@@ -1686,7 +1672,6 @@ def private rd_ts(raw : VkCommandBuffer; name : string) {
     }
 }
 
-//! a recorded form's stamps begin: the pool re-armed, the working list emptied, the anchor stamp (the recorded-once command re-stamps every submit)
 def private rd_stamps_begin(raw : VkCommandBuffer) {
     pfq_begin(raw)
     g_rdq_stamp_names |> clear()
@@ -1694,9 +1679,8 @@ def private rd_stamps_begin(raw : VkCommandBuffer) {
     rd_ts(raw, "")
 }
 
-//! the armed model's layer census, the ledger report's parenthetical
 [cold_path]   // DASLLAMA_GPU_PROF reporting leg
-def private rd_shape_words : string {
+def private rd_layer_census_words : string {
     var ndn = 0l
     var nmoe = 0l
     for (L in g_rd.layers) {
@@ -1881,9 +1865,7 @@ def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
         dbias_on = g_rd.exps_bias ? 1u : 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
 }
 
-//! a token command over `nrows` rows at `nsplit` key pieces: the one-row command, the N-row command, or under `verify` the
-//! same-slab verify - one stream's rows in one region, the recurrent heads stepping row by row, the head re-warm after the picks;
-//! every form stamps its dispatches into the recorder's working list, which the caller moves into the form's own slot
+//! every form stamps its dispatches into the recorder's working list; the caller moves it into the form's own slot
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
 def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64; verify : bool = false) {
     let dim = g_rd.dim
@@ -2084,7 +2066,6 @@ def private rdq_has_group(led : RdqLedger; pfx : string) : bool {
 
 var private g_rdq_prev_last = 0ul   //! the last stamp of the command sampled before, whatever its form, on the device clock
 
-//! the host wall of a form's sampled commands, split into its pieces (`RdqLedger.host_us`), every 32
 [cold_path]   // DASLLAMA_GPU_PROF reporting leg
 def private rdq_host_report(led : RdqLedger; what : string; rows : int64) {
     let n = double(led.count + 1l)
@@ -2092,7 +2073,6 @@ def private rdq_host_report(led : RdqLedger; what : string; rows : int64) {
     to_log(LOG_INFO, "vk_rdec host wall/{what} over {led.count + 1l}{of}: {int(led.wall_us / n)} us (memcpys {int(led.host_us[0] / n)} + submit {int(led.host_us[1] / n)} + wait {int(led.host_us[2] / n)} + landing copy {int(led.host_us[3] / n)})\n")
 }
 
-//! one sampled command of a form into its ledger, under the form's stamp list; the report every 32, as `vk_rdec gpu avg/{what}`
 [cold_path]   // DASLLAMA_GPU_PROF reporting leg
 def private rdq_sample(var led : RdqLedger; what, shape : string; st : RdqStamps) {
     let want = length(st.names)
@@ -2110,7 +2090,7 @@ def private rdq_sample(var led : RdqLedger; what, shape : string; st : RdqStamps
             var tp = reinterpret<uint64?>(g_pfq_buf.mapped)
             led.total += double(tp[n - 1u] - tp[0u]) * double(g_pfq_period) / 1000.0lf
         }
-        if (led.count == 0l) {   // the first command: the eight longest stamp gaps, by stamp index, name the dispatches worth a look
+        if (led.count == 0l) {
             var top <- [for (i in range(1, int(n))); (us = pfq_us(uint(i)), at = uint(i))]
             top |> sort() $(a, b) => a.us > b.us
             let line = build_string() $(w) {
@@ -2165,7 +2145,6 @@ def vk_rdec_note_weight_bytes(bytes : int64) {
 //! whether the step at `served` tokens so far reads its logits row for the guard: the first four tokens and every 256th
 def private rd_guard_step(served : int64) : bool => served < 4l || ((served + 1l) & 255l) == 0l
 
-//! ... and whether a command serving `n` tokens at once from `served` lands on a guard step: the verify's rows keep the cadence
 def private rd_guard_rows(served, n : int64) : bool {
     for (i in range64(n)) {
         return true if (rd_guard_step(served + i))
@@ -2191,7 +2170,7 @@ def private rd_warmup_check(wall_us : int64) {
 }
 
 //! the logits' trip to host memory on the transfer queue: the copy command for `nrows` rows (the rows' picks behind them), or
-//! under `picks_only` the picks alone, each recorded on first use; the carry's rows ride both
+//! under `picks_only` the picks alone, each recorded on first use
 def private rd_xlog(nrows : int64; picks_only : bool) : VkCommandBuffer {
     var raw = picks_only ? g_rd.xlog_pick_cmd[nrows] : g_rd.xlog_cmd[nrows]
     let recorded = picks_only ? g_rd.xlog_pick_recorded[nrows] : g_rd.xlog_recorded[nrows]
@@ -2324,9 +2303,9 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
         g_rdq_form_n = false
         g_rdq_attn_form = form
         if (form == RdForm.unsplit && g_rdq_unsplit.n > 2u) {
-            rdq_sample(g_rdq, "token", rd_shape_words(), g_rdq_unsplit)
+            rdq_sample(g_rdq, "token", rd_layer_census_words(), g_rdq_unsplit)
         } elif (form == RdForm.wide && g_rdq_wide.n > 2u) {
-            rdq_sample(g_rdq, "token", rd_shape_words(), g_rdq_wide)
+            rdq_sample(g_rdq, "token", rd_layer_census_words(), g_rdq_wide)
         } elif (form == RdForm.split && g_rdq_n > 2u) {
             rdq_sample_split(g_rdq)
         }
@@ -2334,13 +2313,12 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     return picked
 }
 
-//! the split form's sample: its list is the recorder's working set, borrowed for the read and put back
 [cold_path]   // DASLLAMA_GPU_PROF reporting leg
 def private rdq_sample_split(var led : RdqLedger) {
     var split : RdqStamps
     rd_take_stamps(split, g_rdq_n)
-    rdq_sample(led, "token", rd_shape_words(), split)
-    rd_put_stamps(split)
+    rdq_sample(led, "token", rd_layer_census_words(), split)
+    rd_put_back_stamps(split)
 }
 
 // ===== the N-row token command: a batched decode step's rows through one weight pass =====
@@ -2452,7 +2430,7 @@ def private rd_record_n_form(raw : VkCommandBuffer; nrows, nsplit : int64; form 
     } else {
         rd_take_stamps(g_rdq_nrow_unsplit, g_pfq_n)
     }
-    rd_put_stamps(one)
+    rd_put_back_stamps(one)
 }
 
 
@@ -2477,8 +2455,7 @@ def private rd_land_one(pick_only : bool; var logits : array<float>) : int64 {
     return -1l
 }
 
-//! the carry's landing (`RdecLandCarryFn`): row `row` of the post-final-norm rows the last token step landed, or the prefill's last row at row 0
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]   // per token, reached through the tier's registered seat
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]   //! per token, reached through the tier's registered seat
 def vk_rdec_land_carry(row : int64; var dst : array<float>) {
     assert(g_rd != null && g_rd.carry, "vk_rdec_land_carry on a driver prepared without the carry")
     assert(row >= 0l && row < g_rd.nb && long_length(dst) >= g_rd.dim, "vk_rdec_land_carry: the row is past the landed rows, or the destination is short of a row")
@@ -2488,20 +2465,15 @@ def vk_rdec_land_carry(row : int64; var dst : array<float>) {
     }
 }
 
-//! the NextN head's GEMV region tables: its layer's planes and the eh_proj plane
 def private rd_fill_head_regions {
     rd_fill_layer_regions(g_rd.head)
     fill_gemv_regions(g_rd.m_eh, g_rd.eh_blk)
 }
 
-//! the head's q/k norm form: the trunk's, or the fused pair where the head's own shape needs it and the trunk's gate did not ask for it
 def private rd_head_fuse_qkr : bool
     => rd_fuse_gates().fuse_qkr || (g_rd.qk_norm && (g_rd.head.rot != g_rd.head.hs || g_rd.head.vfk || g_rd.head.vnorm))
 
-//! the draft command into the selected region's buffer: the [embed ; carry] rows under the embed and carry norms, the eh_proj
-//! GEMV into x, the head's layer over its own mirror slot, the head norm's row stored in xb, the classifier and the pick; its
-//! stamps under the draft's own names, the head layer's under the trunk's, into the draft's own list (`g_rdq_draft`)
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   // once per region and set epoch
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   //! once per region and set epoch
 def private rd_record_draft {
     let dim = g_rd.dim
     let l = g_rd.n_layers
@@ -2544,7 +2516,7 @@ def private rd_record_draft {
     let nxt = hb + RDEC_HEAD_OUT * dim
     rd_encode_ffn(raw, h, L, l, nxt, 1l, 1u, 0)
     var pco = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
-    enc_cls_ar(raw, h, L.s_addr_next, pco, 1l)   //! xb holds the head norm's row: the draft's hidden, landed as the carry
+    enc_cls_ar(raw, h, L.s_addr_next, pco, 1l)
     rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim)
     rd_ts(raw, "t:draft_norm")
     var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = 1u, ystride = uint(g_rd.vocab))
@@ -2554,7 +2526,7 @@ def private rd_record_draft {
     enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
     enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, 1l)
     rd_ts(raw, "t:draft_pick")
-    if (!g_rd.log_xfer) {   //! the transfer queue carries the landing (`rd_xlog`); without one the command copies it itself
+    if (!g_rd.log_xfer) {
         vhz_dep(raw, h, VHZ_LOG | VHZ_XB, 0u, true)
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
         cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l)
@@ -2564,14 +2536,11 @@ def private rd_record_draft {
     pfq_end(raw)
     vk_check(vkEndCommandBuffer(raw), null)
     rd_take_stamps(g_rdq_draft, g_pfq_n)
-    rd_put_stamps(one)
+    rd_put_back_stamps(one)
     g_rd.draft_recorded[g_rd.region] = true
 }
 
-//! The NextN draft (`RdecDraftFn`) in the selected region: the host's head rows [hyd0, row) up to the head's slot, the recorded draft
-//! command at row `row`, the pick landed with the head's hidden - and the logits, unless `pick_only` keeps them on the device (the picks-only
-//! transfer twin); row `row`'s K/V stays on the device. Under DASLLAMA_GPU_PROF=1 the command's stamps and its host wall (the hydrate in the memcpys piece) go to the draft's ledger
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   // per speculative round, reached through the tier's registered seat
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   //! per speculative round, reached through the tier's registered seat
 def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>) : int64 {
     if (g_rd == null || !g_rd.ready || !g_rd.head_on || !g_rd.carry) {
         return -1l
@@ -2602,7 +2571,7 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
         tm.mirbase = 0u   //! the head's region rides the draft command's push
         tm.dnslot = uint(g_rd.region)
         var cmd = g_rd.draft_cmd[g_rd.region]
-        if (prof) {   //! the profiled form splits the wall into its pieces, as the one-row submit does
+        if (prof) {
             let t1 = ref_time_ticks()
             rd_submit_land(cmd, 1l, pick_only)
             let t2 = ref_time_ticks()
@@ -2632,22 +2601,18 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
     return pick
 }
 
-//! the draft's landing: the one-row landing, and the pick whichever form it took
 def private rd_land_draft(pick_only : bool; var logits : array<float>) : int64 {
     let picked = rd_land_one(pick_only, logits)
     return picked >= 0l ? picked : rd_landed_pick(0l)
 }
 
-//! the verify has no same-slab form on this model for `why`, said once: the decision is made once per armed model
 [cold_path]
 def private rd_v_decline(why : string) : bool {
     to_log(LOG_WARNING, "dasLLAMA vulkan resident: the speculative verify has no same-slab form - {why}; the CPU verify serves\n")
     return false
 }
 
-//! the verify's form on the armed model, decided once: the NextN head and the carry on the driver, the N-row command's rail, and
-//! the N-column leaves of the head's planes its re-warm dispatches (eh_proj, q, k, v) built on this device
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   // once per armed model, behind the rail's latch
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   //! once per armed model, behind the rail's latch
 def private rd_ensure_v_rail : bool {
     if (!g_rd.head_on || !g_rd.carry) return rd_v_decline("the NextN head is off the device (the load log names why)")
     if (vk_rdec_token_n_rows() < 2l) return rd_v_decline("the N-row token command declined on this model (its line above)")
@@ -2659,9 +2624,6 @@ def private rd_ensure_v_rail : bool {
     return leaves || rd_v_decline("a head plane's format (eh_proj {g_rd.eh_fmt}, q {L.fq}, k {L.fk}, v {L.fv}) has no N-column GEMV leaf on this device")
 }
 
-//! The rows of one stream the same-slab verify steps at once on the armed model (`install_rdec_verify`'s `rows`): the round's
-//! depth plus one as the driver was prepared (`RDec.verify_rows`, within the per-row planes' `nb`), or 0 where the verify has no
-//! form on it (`rd_ensure_v_rail`)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def vk_rdec_verify_rows : int64 {
     if (g_rd == null || !g_rd.ready) return 0l
@@ -2671,12 +2633,8 @@ def vk_rdec_verify_rows : int64 {
     return g_rd.v_rail == NRail.built ? g_rd.verify_rows : 0l
 }
 
-//! the verify command's index for `n` rows: the row count alone on an attention model, the selected region's set on a hybrid
 def private rd_v_idx(n : int64) : int64 => (g_rd.hybrid ? g_rd.region : 0l) * (g_rd.nb + 1l) + n
 
-//! The verify command's head re-warm after the trunk's picks (`ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm`): head row i is
-//! [enorm(embed tok_i) ; hnorm(h_i)], h_0 the uploaded pre-draft carry and h_i the trunk's row i - 1 out of xb, through eh_proj and the
-//! head's projections to its K/V store; xb, the logits and the picks the landing reads stay as the trunk left them
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private rd_encode_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows : int64) {
     let dim = g_rd.dim
@@ -2709,9 +2667,7 @@ def private rd_encode_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows : 
     rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), nrows, uint(nrows), 0, true, "t:warm_")
 }
 
-//! the verify commands at `n` rows, split and unsplit, over the N-row command's sets (a hybrid's for the selected region); their
-//! stamp lists by row count (the sequential recurrent rows stamp a row), the split form's list borrowed and put back
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   // once per row count, region and set epoch
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   //! once per row count, region and set epoch
 def private rd_record_verify(n : int64) {
     rd_fill_gemv_regions_all()
     rd_fill_head_regions()
@@ -2729,14 +2685,11 @@ def private rd_record_verify(n : int64) {
         rd_encode_token(g_rd.v_cmd_unsplit[vi], n, 1l, true)
         rd_take_stamps(g_rdq_verify_unsplit[n], g_pfq_n)
     }
-    rd_put_stamps(one)
+    rd_put_back_stamps(one)
     g_rd.v_recorded[vi] = true
 }
 
-//! The same-slab verify (`RdecVerifyFn`) in the selected region: row i is the stream's token at `pos + i` over the region's rows below
-//! it, the recurrent heads stepping the region's slot a row at a time, the head re-warm in the same command; the rows' picks and hidden
-//! landed, their logits too unless `pick_only` (the picks-only transfer twin; a guard step lands them for the over-commit check), the ring parity advanced a row at a time, the head's rows staying on the device (`g_rdq_v` under the profiler)
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   // per speculative round, reached through the tier's registered seat
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   //! per speculative round, reached through the tier's registered seat
 def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool {
     if (n < 2l || n > vk_rdec_verify_rows()) {
         return false
@@ -2749,7 +2702,7 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pic
     if (!g_rd.v_recorded[vi]) {
         rd_record_verify(n)
     }
-    let unsplit = g_rd.unsplit_on && pos + n - 1l < RD_UNSPLIT_POS   //! the N-row command's form rule, the furthest row deciding
+    let unsplit = g_rd.unsplit_on && pos + n - 1l < RD_UNSPLIT_POS
     let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
     let guard = rd_guard_rows(g_rd.tokens_served, n)
     let picks_only = pick_only && !guard
@@ -2772,7 +2725,7 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pic
         for (i in range64(n)) {
             tm[i].pos = uint(pos + i)
             tm[i].cnt = uint(pos + i + 1l)
-            tm[i].parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u   //! a row reads the ring image the row before it wrote
+            tm[i].parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u
             tm[i].mirbase = uint(r * g_rd.mir_elems)
             tm[i].dnslot = uint(r)
             hm[i].pos = uint(pos - 1l + i)
@@ -2782,7 +2735,7 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pic
             hm[i].dnslot = uint(r)
         }
         var cmd = unsplit ? g_rd.v_cmd_unsplit[vi] : g_rd.v_cmd[vi]
-        if (prof) {   //! the profiled form splits the wall into its pieces, as the one-row submit does
+        if (prof) {
             t1 = ref_time_ticks()
             rd_submit_land(cmd, n, picks_only)
             t2 = ref_time_ticks()
@@ -2812,10 +2765,10 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pic
         for (_i in range64(n)) {
             rd_dn_advance_parity(r)
         }
-        g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l   //! the scratch holds this region's rows 0 .. n - 2 until the next verify or rollback
+        g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l
         g_rd.roll_vrows = n
     }
-    if (prof) {   //! the same pieces the one-row submit reports, the wait being the transfer-queue landing
+    if (prof) {
         g_rdq_v.host_us[0] += double(get_time_usec(ts0)) - double(get_time_usec(t1))
         g_rdq_v.host_us[1] += double(get_time_usec(t1)) - double(get_time_usec(t2))
         g_rdq_v.host_us[2] += double(get_time_usec(t2)) - double(get_time_usec(t3))
@@ -2825,18 +2778,15 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pic
             rdq_host_report(g_rdq_v, "verify", n)
         }
         if (unsplit && g_rdq_verify_unsplit[n].n > 2u) {
-            rdq_sample(g_rdq_v, "verify", rd_shape_words(), g_rdq_verify_unsplit[n])
+            rdq_sample(g_rdq_v, "verify", rd_layer_census_words(), g_rdq_verify_unsplit[n])
         } elif (!unsplit && g_rdq_verify[n].n > 2u) {
-            rdq_sample(g_rdq_v, "verify", rd_shape_words(), g_rdq_verify[n])
+            rdq_sample(g_rdq_v, "verify", rd_layer_census_words(), g_rdq_verify[n])
         }
     }
     return true
 }
 
-//! The verify's reject (`RdecRollbackFn`) in the selected region: scratch row `a` - every recurrent layer's slot state and ring
-//! pair as the last verify left them after its row `a` - copied over the live slots in one command, and the region's ring parity
-//! put back to that row's; false where the region is not the last verify's or `a` reaches past its copies
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]   // per rejected round, reached through the tier's registered seat
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]   //! per rejected round, reached through the tier's registered seat
 def vk_rdec_rollback(a : int64) : bool {
     if (g_rd == null || !g_rd.ready || !g_rd.hybrid || g_rd.roll_dev == 0ul) {
         return false
@@ -2854,7 +2804,7 @@ def vk_rdec_rollback(a : int64) : bool {
             cmd_copy_range(raw, g_rd.roll_dev, src + L.roll_off + st.slot_state_bytes, st.smalls_dev, st.hist_off * 4l, 2l * st.ring_image_bytes)
         }
     }
-    for (_i in range64(g_rd.roll_vrows - a - 1l)) {   //! the verify flipped the parity once a row; the rows past `a` flip back
+    for (_i in range64(g_rd.roll_vrows - a - 1l)) {
         rd_dn_advance_parity(r)
     }
     g_rd.roll_region = -1l
@@ -2968,9 +2918,9 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
         g_rdq_form_n = true
         g_rdq_attn_form = form
         if (unsplit && g_rdq_nrow_unsplit.n > 2u) {
-            rdq_sample(g_rdq, "token", rd_shape_words(), g_rdq_nrow_unsplit)
+            rdq_sample(g_rdq, "token", rd_layer_census_words(), g_rdq_nrow_unsplit)
         } elif (!unsplit && g_rdq_nrow.n > 2u) {
-            rdq_sample(g_rdq, "token", rd_shape_words(), g_rdq_nrow)
+            rdq_sample(g_rdq, "token", rd_layer_census_words(), g_rdq_nrow)
         }
     }
 }
@@ -3012,9 +2962,7 @@ def private read_kv_rows(l, row0, nrows : int64; var kp : uint8?; var vp : uint8
     read_kv_rows_of(g_rd.layers[l], row0, nrows, kp, vp)
 }
 
-//! The NextN head's K/V rows [row0, row0 + nrows) of the selected region up from the host's `kp` / `vp` (`RdecHeadKvRowsFn`, the
-//! cache from row 0): the rows the host wrote and the device never saw, before the region's head rows are counted past them
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   // per prefill, reached through the tier's registered seat
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per prefill, reached through the tier's registered seat
 def vk_rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     assert(g_rd != null && g_rd.head_on, "vk_rdec_head_sync_rows on a driver without the head")
     return if (nrows <= 0l)
@@ -3027,8 +2975,7 @@ def vk_rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?
     }
 }
 
-//! ... and the same range back down into `kp` / `vp`: the rows the chain warmed, so the host copy the CPU round reads stays the device's
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   // per prefill, reached through the tier's registered seat
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per prefill, reached through the tier's registered seat
 def vk_rdec_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     assert(g_rd != null && g_rd.head_on, "vk_rdec_head_read_rows on a driver without the head")
     return if (nrows <= 0l)
@@ -3037,7 +2984,7 @@ def vk_rdec_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?
     read_kv_rows_of(L, row0, nrows, unsafe(kp + row0 * rowb), unsafe(vp + row0 * rowb))
 }
 
-//! ... over the mirror slot of `L`: a trunk layer, or the NextN head
+//! `L` is a trunk layer or the NextN head (`RDec.head`)
 def private read_kv_rows_of(L : RLayer; row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     if (L.mir_idx < 0l) {
         return

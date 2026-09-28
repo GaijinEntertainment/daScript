@@ -11,7 +11,7 @@ def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // CPU-correctness test — prefills on the CPU by design
 }
 require dasllama/dasllama_math   // parallel_argmax (engine-level, not re-exported by the facade)
-require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_rollbacks: the device rollback's witness under DASLLAMA_GPU=1
+require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gguf   // set_mtp_head_path - the split-head fixture names its head explicitly
 require daslib/jobque_boost
 require daslib/fio
@@ -143,9 +143,7 @@ struct private RejectRound {
     hit : bool
 }
 
-// The reject through the engine's own seam - mtp_spec_eval with every draft rejected - then n_check plain steps: on the CPU
-// rail the snapshot's restore and the replayed step, on the resident driver the device rollback; either way the stream must
-// equal plain decode. Free of T? like reject_rollback_ids.
+//! mtp_spec_eval with every draft rejected, then n_check plain steps that must equal plain decode on either rail; free of T? like reject_rollback_ids
 def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
     var out : RejectRound
     with_job_que() {
@@ -272,9 +270,7 @@ def test_mtp_reject_rollback(t : T?) {
         // the state bit-identical to never having seen the poisoned batch — every subsequent
         // plain-decode token must match a reference run. (Truth vs draft isn't even compared — an
         // unconditional reject is the hardest case, and the KV row the poisoned batch wrote at np+1
-        // gets overwritten by the next decode, by construction.) Then the same reject through the
-        // round itself, which takes the rollback seat where the verify seat served - on the resident
-        // driver the device rollback, witnessed by its counter.
+        // gets overwritten by the next decode, by construction.)
         with_pinned_kernels() {
             var want : array<int64>
             let got <- reject_rollback_ids(tr, 6l, want)

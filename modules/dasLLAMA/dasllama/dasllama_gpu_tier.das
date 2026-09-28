@@ -140,8 +140,7 @@ let public RDEC_HEAD_ENORM = 2l
 let public RDEC_HEAD_HNORM = 3l
 let public RDEC_HEAD_OUT = 4l
 
-//! the norms plane's first head row: past the layers' rows, the final norm and the q/k rows, whose slot a layer the head's
-//! q/k rows extend at index n_layers (`qk_hs` = 0 on a model without q/k norms)
+//! `qk_hs` = 0 on a model without q/k norms
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def public rdec_head_norm_base(n_layers, dim, qk_hs : int64) : int64 => (n_layers * RDEC_NORM_ROWS + 1l) * dim + (n_layers + 1l) * 2l * qk_hs
 

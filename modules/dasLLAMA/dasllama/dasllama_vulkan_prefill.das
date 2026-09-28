@@ -725,7 +725,7 @@ def private pf_setup {
             g_rd.pf_splitk_bytes = skb
         }
     }
-    let nsets = int(g_rd.n_layers * PF_ROLES + 2l + (g_rd.head_norm_base > 0l ? PF_ROLES : 0l))   // + prologue, final quantize of the last row, the NextN head's block
+    let nsets = int(g_rd.n_layers * PF_ROLES + 2l + (g_rd.head_norm_base > 0l ? PF_ROLES : 0l))   //! + prologue, final quantize of the last row, the NextN head's block
     g_rd.pf_sets |> resize(nsets)
     g_rd.pf_arq_sets |> resize(g_rd.n_layers * 2l)
     g_rd.pf_meta |> resize(nsets)
@@ -955,7 +955,7 @@ def private pf_setup {
                 fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
         }
     }
-    let bp = int(g_rd.n_layers * PF_ROLES)
+    let bp = pf_prologue_block()
     // prologue: xb = rms_att[0](x), add off (the aa slot binds x itself — add_on 0 never reads it)
     g_rd.pf_sets[bp + 0] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_x, g_rd.norms_dev, g_rd.pf_xb),
         fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
@@ -967,13 +967,13 @@ def private pf_setup {
     g_rd.pf_ready = true
 }
 
-//! the NextN head's set block in `pf_sets`: past the layers' blocks and the tail's two
-def private pf_head_block : int => int(g_rd.n_layers * PF_ROLES + 2l)
+def private pf_prologue_block : int => int(g_rd.n_layers * PF_ROLES)
 
-//! the head's q, k and v planes take the f16 feed (the trunk's `pf_qkv6` over the head's layer)
+//! past the prologue set and the last row's final quantize
+def private pf_head_block : int => pf_prologue_block() + 2
+
 def private pf_head_qkv6 : bool => pf_f16_feed(g_rd.head.fq) && pf_f16_feed(g_rd.head.fk) && pf_f16_feed(g_rd.head.fv)
 
-//! the head warm has no form on this device for `why`, said once: the chain leaves the head's prompt rows as the host holds them
 [cold_path]
 def private pf_head_decline(why : string) : bool {
     g_rd.pf_head_declined = true
@@ -981,8 +981,6 @@ def private pf_head_decline(why : string) : bool {
     return false
 }
 
-//! The head warm's planes and sets, built once per residency: the embed rows and the trunk's shifted post-norm rows with their norm
-//! sets, the [enorm ; hnorm] image with its feed, the head's own feed, rope and q/k norm sets over the trunk's projection planes
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   // once per residency
 def private pf_head_setup : bool {
     return true if (g_rd.pf_head_ready)
@@ -1035,9 +1033,6 @@ def private pf_head_setup : bool {
     return true
 }
 
-//! The head's slab over this window's rows, after the trunk's last layer normed every row: head row j sits at position
-//! `pos0 + w0 - carry + j` and takes [enorm(the embed at position + 1) ; hnorm(the trunk's post-norm row at position)], the previous
-//! window's last row riding `pf_hsrc` row 0 under `carry`, through eh_proj and the head's projections into its slot
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
 def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : int64) {
     let dim = g_rd.dim
@@ -1055,7 +1050,7 @@ def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : 
     var pch = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(r0))
     enc_cls_ar(raw, h, g_rd.pf_sets[hb + 7], pch, nh)
     vhz_dep(raw, h, VHZ_XB, VHZ_GATE, true)
-    cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * rowb, g_rd.pf_hsrc, 0l, rowb)   //! the next window's carry row
+    cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * rowb, g_rd.pf_hsrc, 0l, rowb)
     var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(r0))
     enc_cls_ar(raw, h, g_rd.pf_sets[hb + 6], pce, nh)
     vhz_dep(raw, h, VHZ_XB2 | VHZ_FFO, VHZ_ATT, true)
@@ -1073,7 +1068,7 @@ def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : 
         pe.wqb, pe.wsb, e6 ? np * 2l * dim * 2l : np * 2l * dim, e6 ? 256l : np * (2l * dim / 32l) * 4l, np * dim * 4l, VHZ_AQ, VHZ_X,
         2l * dim, dim, g_rd.eh_blk, nh, e6, 0l, 0l, false)
     var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
-    enc_cls_ar(raw, h, g_rd.pf_sets[int(g_rd.n_layers * PF_ROLES)], pca, nh)   //! the prologue set: x normed into xb
+    enc_cls_ar(raw, h, g_rd.pf_sets[pf_prologue_block()], pca, nh)
     let q6 = pf_head_qkv6()
     if (q6) {
         var pc0 = ActArgs(nelem = uint(nh * dim), nblk = 0u)
@@ -1127,7 +1122,7 @@ def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : 
     g_rd.pf_head_rows += nh
 }
 
-//! the next window chain warms the NextN head's slab over the prompt rows it serves (`RdecHeadWarmAskFn`); the ask stands until the next
+//! the ask stands until the next ask
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
 def vk_rdec_head_warm_ask(on : bool) {
     if (g_rd != null) {
@@ -1135,7 +1130,6 @@ def vk_rdec_head_warm_ask(on : bool) {
     }
 }
 
-//! the head rows the last window chain wrote (`RdecHeadWarmRowsFn`): the prompt's rows less one where it warmed, 0 where it did not
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
 def vk_rdec_head_warm_rows : int64 => g_rd != null ? g_rd.pf_head_rows : 0l
 
@@ -1267,7 +1261,7 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool
     return true
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
 def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; emb_scale : float;
                    cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk prefill before prepare/set_cls")
@@ -1297,7 +1291,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             }
             assert(wlen >= taps || w0 == 0l, "vk prefill: a later window shorter than the conv taps")
             let last = w0 + wlen >= npos
-            if (warm) {   //! the head rows' rope rows: a position below the window's from the second window on
+            if (warm) {
                 let hcarry = w0 > 0l ? 1l : 0l
                 let nhead = wlen - 1l + hcarry
                 if (nhead > 0l) {
@@ -1325,7 +1319,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             if (pos0 + w0 == 0l && g_rd.hybrid) {
                 g_rd.dn_parity[g_rd.region] = 0
             }
-            let bp = int(g_rd.n_layers * PF_ROLES)
+            let bp = pf_prologue_block()
             let t_prep = get_time_usec(tp0)
             // record
             var raw = g_rd.pf_cmd
@@ -1365,7 +1359,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
                 enc_cls_ar(raw, h, g_rd.pf_ple_ar_set, pca, wlen * g_rd.n_layers)
             }
-            if (warm) {   //! the head's embed rows: the window's own, kept before layer 0 overwrites the residual
+            if (warm) {
                 vhz_dep(raw, h, VHZ_X, VHZ_UP, true)
                 cmd_copy_range(raw, g_rd.pf_x, 0l, g_rd.pf_wemb, 0l, wlen * dim * 4l)
             }
@@ -1565,7 +1559,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                let ffn_row0 = warm ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)   //! the head warm reads every row's post-norm hidden
+                let ffn_row0 = warm ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
                 let ffn_rows = wlen - ffn_row0
                 if (has_dense_triple(g_rd.layers[l])) {
                     let p1 = arena_planes(g_rd.layers[l].f1, g_rd.layers[l].b1)
@@ -1635,7 +1629,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pfq_ts(raw)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
-                if (g_rd.carry) {   //! the last row's normed hidden, the classifier's own feed row, lands at the carry's row 0
+                if (g_rd.carry) {
                     vhz_dep(raw, h, VHZ_XB, 0u, true)
                     cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * dim * 4l, g_rd.hid_host.buf, 0l, dim * 4l)
                 }

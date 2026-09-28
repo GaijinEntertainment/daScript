@@ -21,7 +21,9 @@ and one more K/V slot a region past the trunk's; a headless model plans what it 
 norms plane takes the head's q/k rows at index `n_layers` of the q/k block and five rows past it -
 the attention, FFN, embed, carry and head norms, the final norm's row where the file ships no head
 norm (`rdec_norms_len`) - since layer `n_layers`' own rows would index the final norm's. The layer
-sits outside `RDec.layers`, so no trunk walk sees it. The draft command, one per region, norms the
+sits outside `RDec.layers`, so no trunk walk sees it. Where the head rides, the per-row quant
+planes (`xq_dev`, `xs_dev`) hold twice `dim` a row: eh_proj reads the `[enorm ; hnorm]` row through
+them (`vk_rdec_prepare`'s `wide`, `vk_rdec_set_head`'s `xq_bytes`). The draft command, one per region, norms the
 uploaded embed row and carry `h` into one `[enorm ; hnorm]` row, runs eh_proj into x, the layer
 through the token command's attention and FFN encoders on its slot at row `pos - 1` (the head's
 own `TokMeta` block and rope rows), the head norm into the carry's row, the classifier and the

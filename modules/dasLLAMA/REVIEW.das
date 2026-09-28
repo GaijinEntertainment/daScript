@@ -1377,6 +1377,43 @@ def private check_no_hand_pipelines {
     delete files
 }
 
+let private RESIDENT_FILE = "modules/dasLLAMA/dasllama/dasllama_gpu_resident.das"
+
+//! the resident verify seat in call order: the gated entry, then the body it calls (REVIEW_GPU_VULKAN.md's verify-decline rule)
+let private VERIFY_SEAT_BODIES <- ["vulkan_resident_verify_gated", "vulkan_resident_verify_go"]
+
+def private check_verify_decline_before_state_move {
+    var inscope fns <- function_bodies(RESIDENT_FILE) $(header) {
+        for (name in VERIFY_SEAT_BODIES) {
+            return true if (header |> starts_with("def private {name}("))
+        }
+        return false
+    }
+    var moved = false
+    for (name in VERIFY_SEAT_BODIES) {
+        var seen = false
+        for (f in fns) {
+            continue if (!(f.body |> starts_with("def private {name}(")))
+            seen = true
+            var line_no = f.line - 1
+            for (line in split(f.body, "\n")) {
+                line_no++
+                if (find(line, "rdec_dn_own_all(") >= 0) {
+                    moved = true
+                } elif (moved && find(line, "return false") >= 0) {
+                    gate_finding(RESIDENT_FILE, line_no, "the resident verify seat declines after rdec_dn_own_all moved the session's recurrent state to the device - the CPU verify then reads a session whose state the device holds; move the check above the call")
+                }
+            }
+        }
+        if (!seen) {
+            gate_finding(RESIDENT_FILE, "no `def private {name}(` - the verify-decline rule has no seat body to walk; keep the spelling or move this check with it")
+        }
+    }
+    if (!moved) {
+        gate_finding(RESIDENT_FILE, "no `rdec_dn_own_all(` call inside the resident verify seat - the verify-decline rule has no state move to order against; keep the spelling or move this check with it")
+    }
+}
+
 // A `[test]` file that requires the engine lives in tests/ - unless it requires a file of its
 // own folder by bare same-dir name (a bench self-check beside its subject), which tests/REVIEW.md's
 // out-of-folder ledger owns instead.
@@ -1695,6 +1732,7 @@ def main() : int {
     check_kq_gemv_grid_literals()
     check_vk_extension_roster()
     check_no_hand_pipelines()
+    check_verify_decline_before_state_move()
     check_test_file_placement()
     check_unicode_tables_stamp()
     check_device_creation_sites()

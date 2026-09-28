@@ -16,7 +16,7 @@ require daslib/fio
 require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the hybrid
-require dasllama/dasllama_kv_codec   // kv_row_to_f32: the head's K rows as floats, whichever codec the session carries
+require dasllama/dasllama_kv_codec
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill   // pf_f16_feed: the feed admission the driver acts on
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
@@ -51,7 +51,7 @@ let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit| - the deltane
 let private DN_LOGIT_BAR_REL_KQ_F16_FEED = 0.06
 //! the K-quant bar on the quant feed (no coopmat tile serves the planes, the prefill's activations ride Q8_K): the mixed twin's two-window cell under `DASLLAMA_COOPMAT=sdot4` on the RTX 5060 Ti reads 0.084 of an 11.6 max logit at one step, argmax unchanged, the rest under 0.05
 let private DN_LOGIT_BAR_REL_KQ_QUANT_FEED = 0.10
-//! the head's K row is the f16-stored projection of a trunk hidden row that already sits within DN_LOGIT_BAR_REL of the CPU chain's, so the row's own rounding stacks on the trunk's: twice the deltanet bar (the pod reads 0.05 of the row's max at the widest, under either mirror codec)
+//! the head's K row is the f16-stored projection of a trunk hidden row that already sits within DN_LOGIT_BAR_REL of the CPU chain's, so the row's own rounding stacks on the trunk's: twice the deltanet bar
 let private HEAD_K_BAR_REL = 0.08
 //! the CPU row one down misses a device row by at least this many bars, or the bar is too wide to tell the row from its neighbour
 let private HEAD_K_CONTROL_BARS = 2.0
@@ -321,7 +321,7 @@ def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
             var fb <- [for (i in range64(CARRY_STEPS)); 2500l + (i * 71l) % 4500l]
             var sa <- create_session(tr, mirror_kv_dtype())
             var sb <- create_session(tr, mirror_kv_dtype())
-            eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
+            eval(tr, sa, pa)   //! `eval` advances `n_past`, the position a batched step reads
             eval(tr, sb, pb)
             var ga : array<Carry>
             var gb : array<Carry>
@@ -339,7 +339,7 @@ def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
             }
             t |> equal(rdec_nrow_steps() - steps0, CARRY_STEPS, "every batched step went through the N-row command")
             served_every_call(t)
-            sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
+            sess |> clear()   //! drop the borrowed handles: delete of array<T?> cascades to the pointees
             unsafe {
                 delete ws
                 delete sess
@@ -419,20 +419,20 @@ def test_gpu_resident_hybrid_mtp_draft(t : T?) {
             let pick = moe_gpu_resident_draft_pick()
             let seat = unset_rdec_draft()
             var cpu <- draft_from(tr, s, DRAFT_TOKEN, row, h0)
-            var off <- draft_from(tr, s, prompt[row], row - 1l, h0)   //! the draft at pos - 2, of the token the prompt holds at pos - 1
+            var one_row_back <- draft_from(tr, s, prompt[row], row - 1l, h0)
             reinstall_rdec_draft(seat)
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the unset seat left both CPU drafts to forward_mtp")
             served_every_call(t)
             let ag = argmax_of(gpu.logits)
             let ac = argmax_of(cpu.logits)
             to_log(LOG_INFO, "draft (row {row}, token {DRAFT_TOKEN}): argmax cpu {ac} '{decode_(tr, [ac])}' ({cpu.logits[ac]}), resident {ag} '{decode_(tr, [ag])}' ({gpu.logits[ag]}), device pick {pick}\n")
-            draft_within(t, "logits", gpu.logits, cpu.logits, off.logits)
-            draft_within(t, "hidden", gpu.h, cpu.h, off.h)
+            draft_within(t, "logits", gpu.logits, cpu.logits, one_row_back.logits)
+            draft_within(t, "hidden", gpu.h, cpu.h, one_row_back.h)
             t |> equal(pick, ag, "the device pick is the argmax of the logits it landed")
             t |> equal(pick, ac, "the draft token equals the CPU draft's")
             delete gpu
             delete cpu
-            delete off
+            delete one_row_back
             delete h0
             delete s
             delete prompt
@@ -479,23 +479,23 @@ def test_gpu_resident_hybrid_mtp_draft_upload(t : T?) {
             prefill_warm(tr, s, prompt)
             let pos = DRAFT_PROMPT
             var h0 <- [for (x in s.mtp_h); x]
-            declined_draft(tr, s, DRAFT_TOKEN, pos - 1l)   //! the CPU rewrites the prompt's last head row on the host ...
-            declined_draft(tr, s, DRAFT_TOKEN, pos)        //! ... and writes the one past it: two host rows the device does not hold
+            declined_draft(tr, s, DRAFT_TOKEN, pos - 1l)
+            declined_draft(tr, s, DRAFT_TOKEN, pos)
             t |> equal(moe_gpu_resident_head_rows(s), pos - 1l, "the device's rows stop below the CPU's two")
             t |> equal(moe_gpu_resident_head_host_rows(s), pos + 1l, "the host holds every row through the CPU's second")
-            var stale_row <- head_k_row(tr, s, pos + 1l)
+            var stale_row <- head_k_row_bytes(tr, s, pos + 1l)
             let drafts0 = moe_gpu_resident_drafts()
-            var gpu <- draft_from(tr, s, DRAFT_TOKEN, pos + 1l, h0)   //! the device draft two rows past the device's: the host's two come up first
+            var gpu <- draft_from(tr, s, DRAFT_TOKEN, pos + 1l, h0)
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the device drafted row {pos + 1l}")
             let pick = moe_gpu_resident_draft_pick()
             t |> equal(moe_gpu_resident_head_rows(s), pos + 2l, "the device holds every row through the draft's: the two it uploaded and its own")
             t |> equal(moe_gpu_resident_head_host_rows(s), pos + 1l, "the host's copy stops below the draft's row")
-            declined_draft(tr, s, DRAFT_TOKEN, pos + 2l)   //! the pass: the device's row pos + 1 comes down before the CPU reads it
+            declined_draft(tr, s, DRAFT_TOKEN, pos + 2l)
             t |> equal(moe_gpu_resident_head_host_rows(s), pos + 3l, "the pass brought the device's row down and the CPU wrote the next: the host holds every row through it")
-            var landed_row <- head_k_row(tr, s, pos + 1l)
+            var landed_row <- head_k_row_bytes(tr, s, pos + 1l)
             t |> success(apart(landed_row, stale_row) > 0l, "the device's K row {pos + 1l} came down on the pass: the host row moved")
             let seat = unset_rdec_draft()
-            var cpu <- draft_from(tr, s, DRAFT_TOKEN, pos + 1l, h0)   //! the CPU draft over the host's rows, the hydrated one among them
+            var cpu <- draft_from(tr, s, DRAFT_TOKEN, pos + 1l, h0)
             reinstall_rdec_draft(seat)
             served_every_call(t)
             let ac = argmax_of(cpu.logits)
@@ -513,7 +513,6 @@ def test_gpu_resident_hybrid_mtp_draft_upload(t : T?) {
     }
 }
 
-//! row `row` (`n` wide) of the rows `a`
 def private row_of(a : array<float>; row, n : int64) : array<float> => <- [for (i in range64(n)); a[row * n + i]]
 
 //! the elements two rows hold apart, bit for bit (a NaN differs from everything)
@@ -527,8 +526,7 @@ def private apart(a, b : array<auto(TT)>) : int64 {
     return bad
 }
 
-//! the host bytes of the NextN head's K row `row`
-def private head_k_row(tr : Model; var s : Session; row : int64) : array<uint8> {
+def private head_k_row_bytes(tr : Model; var s : Session; row : int64) : array<uint8> {
     let c = tr.config
     let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, c.n_layers))
     let kp = kv_layer_kbase(s, c.n_layers, c.seq_len)
@@ -626,20 +624,20 @@ def test_gpu_resident_hybrid_mtp_verify(t : T?) {
             prefill_warm(tr, s, prompt)
             let pos = DRAFT_PROMPT
             t |> equal(moe_gpu_resident_head_host_rows(s), pos - 1l, "the prompt warm's rows came down with the chain: the host holds the head's rows below the prompt's last")
-            var head_row0 <- head_k_row(tr, s, pos - 1l)
+            var head_row0 <- head_k_row_bytes(tr, s, pos - 1l)
             var h0 <- [for (x in s.mtp_h); x]
             let drafts0 = moe_gpu_resident_drafts()
-            forward_mtp(tr, s, DRAFT_TOKEN, pos - 1l)   //! the device draft the round will repeat: its head row pos - 1, on the device alone
+            forward_mtp(tr, s, DRAFT_TOKEN, pos - 1l)
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the device drafted row {pos - 1l}")
             t |> equal(moe_gpu_resident_head_rows(s), pos, "the device holds the head's rows through the draft's")
             t |> equal(moe_gpu_resident_head_host_rows(s), pos - 1l, "the host's copy stops below the draft's row: nothing came down")
             copy_floats(h0, 0l, s.mtp_h, 0l, c.dim)
             s.mtp_h_pos1 = pos
-            declined_draft(tr, s, DRAFT_TOKEN, pos)   //! the pass: the CPU head at row pos reads the rows below, so row pos - 1 comes down
+            declined_draft(tr, s, DRAFT_TOKEN, pos)
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the unset seat left the draft to the CPU head")
             t |> equal(moe_gpu_resident_head_host_rows(s), pos + 1l, "the pass brought the device's rows down and the CPU wrote row {pos}: the host holds every row through it")
             t |> equal(moe_gpu_resident_head_rows(s), pos, "the device's copy stops below the CPU's row")
-            var draft_row <- head_k_row(tr, s, pos - 1l)
+            var draft_row <- head_k_row_bytes(tr, s, pos - 1l)
             t |> success(apart(head_row0, draft_row) > 0l, "the draft's K row {pos - 1l} came down on the pass: the host row moved")
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
@@ -663,9 +661,9 @@ def test_gpu_resident_hybrid_mtp_verify(t : T?) {
             t |> equal(s.n_past, pos + (hit ? VERIFY_ROWS : 1l), "the round committed the draft on an accept, the token alone on a reject")
             t |> equal(moe_gpu_resident_rows(s), s.n_past, "the region's rows end at the session's position ({hit ? "an accept keeps both verify rows" : "the reject's replay rewrote row pos"})")
             t |> equal(moe_gpu_resident_head_host_rows(s), pos - 1l, "the round's head rows stayed on the device: the host's copy stops below the draft's row again")
-            declined_draft(tr, s, DRAFT_TOKEN, s.n_past - 1l)   //! the pass after the round: the re-warm's row pos - 1 comes down
+            declined_draft(tr, s, DRAFT_TOKEN, s.n_past - 1l)
             t |> equal(moe_gpu_resident_head_host_rows(s), s.n_past, "the pass brought the round's rows down through the CPU draft's")
-            var warm_row <- head_k_row(tr, s, pos - 1l)
+            var warm_row <- head_k_row_bytes(tr, s, pos - 1l)
             t |> equal(apart(warm_row, draft_row), 0l, "the re-warm's K row {pos - 1l} - the store-only pass over the k heads - is the draft command's row bit for bit: the same [enorm(token) ; hnorm(carry)] input ({apart(warm_row, draft_row)} bytes apart)")
             delete s
             var toks <- [DRAFT_TOKEN, d]
@@ -775,7 +773,7 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             let pos = DRAFT_PROMPT
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
-            set_mtp_force_reject_every(1l)   //! every draft rejected: the rollback seat takes the reject
+            set_mtp_force_reject_every(1l)
             let verifies0 = moe_gpu_resident_verifies()
             let rollbacks0 = moe_gpu_resident_rollbacks()
             var acc = 0l
@@ -798,7 +796,7 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             t |> equal(apart(kept_log, vlog0), 0l, "the reject kept verify row 0's logits as the session's")
             t |> equal(apart(kept_h, vhid0), 0l, "the reject re-seeded the carry from verify row 0's hidden")
             let next = argmax_of(kept_log)
-            var rolled <- dn_host(s)   //! the live slots after the rollback, read back to the host
+            var rolled <- dn_host(s)
             forward(tr, s, next, pos + 1l)
             s.n_past = pos + 2l   //! a plain step moves no position; the round reads its position from here, and a stale one steps the recurrent state back
             var next_log <- [for (x in s.logits); x]
@@ -809,7 +807,7 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             served_every_call(t)
             delete s
             var one <- state_after_steps(tr, prompt, [DRAFT_TOKEN], next)
-            var two <- state_after_steps(tr, prompt, [DRAFT_TOKEN, d], next)   //! the control: the verify's two rows stepped - the state the rollback undid
+            var two <- state_after_steps(tr, prompt, [DRAFT_TOKEN, d], next)
             let sa = apart(rolled.state, one.dn.state)
             let ca = apart(rolled.conv, one.dn.conv)
             let la = apart(next_log, one.next_logits)
@@ -904,7 +902,6 @@ def private head_k_row_f32(tr : Model; var s : Session; row : int64) : array<flo
     return <- out
 }
 
-//! the head's K rows [0, n) as floats
 def private head_k_rows_f32(tr : Model; var s : Session; n : int64) : array<array<float>> {
     var out : array<array<float>>
     out |> reserve(n)
@@ -1011,9 +1008,9 @@ def test_gpu_resident_hybrid_mtp_xb_poison(t : T?) {
             t |> equal(apart(got.logits, want.logits), 0l, "the poisoned prefill's draft logits are the clean prefill's bit for bit ({apart(got.logits, want.logits)} elements apart)")
             t |> equal(apart(got.h, want.h), 0l, "the poisoned prefill's draft hidden is the clean prefill's bit for bit")
             t |> equal(moe_gpu_resident_draft_pick(), pick_clean, "the device pick is the clean prefill's")
-            var off <- draft_from(tr, s, prompt[row], row - 1l, h0)   //! the control: the draft one row back differs
-            t |> success(apart(off.logits, want.logits) > 0l, "control: the draft one row back misses the clean draft's logits")
-            delete off
+            var one_row_back <- draft_from(tr, s, prompt[row], row - 1l, h0)
+            t |> success(apart(one_row_back.logits, want.logits) > 0l, "control: the draft one row back misses the clean draft's logits")
+            delete one_row_back
             delete got
             delete want
             delete h0
@@ -1032,7 +1029,7 @@ def test_gpu_resident_hybrid_mtp_head_warm(t : T?) {
         with_job_que() {
             setup_dasllama_jobque_()
             var prompt <- [for (i in range64(DRAFT_PROMPT)); 1000l + (i * 37l) % 5000l]
-            let n = DRAFT_PROMPT - 1l   //! the head's rows below the prompt's last: the draft writes that one
+            let n = DRAFT_PROMPT - 1l
             var s <- create_session(tr, mirror_kv_dtype())
             let served0 = moe_gpu_resident_prefills()
             prefill_warm(tr, s, prompt)
@@ -1107,11 +1104,11 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             let nrows = s.n_past - 1l
             t |> equal(moe_gpu_resident_head_rows(s), nrows, "the region holds {nrows} head rows after six rounds, the session's position {s.n_past} less one: head row i needs the token at i + 1, the last committed token sits at {s.n_past - 1l}, so rows 0 .. {s.n_past - 2l} exist - a reject cuts the count to pos + a, an accept counts pos + 1, both the position less one")
             t |> success(moe_gpu_resident_head_host_rows(s) < nrows, "the rounds' head rows stayed on the device: the host's copy stops short of them ({moe_gpu_resident_head_host_rows(s)} of {nrows} rows)")
-            var g7 <- declined_draft_rounds(tr, s, [toks[ROUNDS]])   //! the seventh round: the CPU head over the rows the pass hydrates
+            var g7 <- declined_draft_rounds(tr, s, [toks[ROUNDS]])
             t |> equal(moe_gpu_resident_drafts(), drafts0 + ROUNDS, "the seventh round's draft ran on the CPU head: the unset seat left the counter")
             t |> equal(moe_gpu_resident_verifies(), verifies0 + ROUNDS + 1l, "... and its verify on the device")
-            var grows <- head_k_rows_f32(tr, s, nrows)   //! the rows below the seventh draft's row, hydrated on its pass
-            var g8 <- declined_draft_rounds(tr, s, [toks[ROUNDS + 1l]])   //! the eighth: the control's twin
+            var hydrated_rows <- head_k_rows_f32(tr, s, nrows)
+            var g8 <- declined_draft_rounds(tr, s, [toks[ROUNDS + 1l]])
             served_every_call(t)
             delete s
             moe_gpu_drop_model()   //! the CPU round from here
@@ -1126,13 +1123,13 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             }
             t |> equal(c.n_past - 1l, nrows, "the CPU rounds left the session where the device rounds did")
             var crows <- head_k_rows_f32(tr, c, nrows)
-            head_rows_within(t, "six rounds, hydrated", grows, crows, nrows)
+            head_rows_within(t, "six rounds, hydrated", hydrated_rows, crows, nrows)
             var c7 <- spec_rounds(tr, c, [toks[ROUNDS]])
             to_log(LOG_INFO, "round 6 (declined draft): CPU head over hydrated rows drafts {g7[0].draft} '{decode_(tr, [g7[0].draft])}' hit {g7[0].hit} at {g7[0].n_past}, the CPU round {c7[0].draft} '{decode_(tr, [c7[0].draft])}' hit {c7[0].hit} at {c7[0].n_past}\n")
             t |> equal(g7[0].draft, c7[0].draft, "round 6: the CPU head over the hydrated rows drafts what the CPU round drafts")
             t |> equal(g7[0].hit, c7[0].hit, "round 6: both rounds accepted or both rejected")
             t |> equal(g7[0].n_past, c7[0].n_past, "round 6: both rounds left the session at one position")
-            poison_head_rows(tr, c, c.n_past - 1l)   //! the control: the CPU head over NaN rows cannot draft what the hydrated rows did
+            poison_head_rows(tr, c, c.n_past - 1l)
             var c8 <- spec_rounds(tr, c, [toks[ROUNDS + 1l]])
             var pl <- [for (x in c.mtp_logits); x]
             to_log(LOG_INFO, "control round: the draft over hydrated rows {g8[0].draft}, the CPU draft over poisoned head rows {c8[0].draft} (its verify row 0 finite {all_finite(pl)})\n")
@@ -1143,7 +1140,7 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             delete g8
             delete g7
             delete crows
-            delete grows
+            delete hydrated_rows
             delete cpu
             delete gpu
             delete c

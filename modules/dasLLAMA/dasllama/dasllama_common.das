@@ -391,8 +391,7 @@ def ple_pre_prefill_pad_gated(t : Model; var s : Session; npos, start_pos : int6
     ple_pre_prefill_pad(t, s, npos)
 }
 
-// set by an override that ALSO produced the last position's logits; reset before every invocation. Such an override never wrote the
-// host x_b rows, so the CPU draft-head warm stands down behind it
+// set by an override that ALSO produced the last position's logits; reset before every invocation
 var private g_prefill_logits_done = false
 
 //! A whole-prefill override that computed s.logits for the LAST position itself (final norm +
@@ -445,9 +444,7 @@ def register_decode_override(name : string; fn : DecodeOverrideFn) {
     g_decode_overrides[name] = fn
 }
 
-// The MTP spec-step override: a backend's complete mtp_spec_eval twin, cold gates included. Keyed
-// by the DECODE override name and consulted where the active one owns the model (`mtp_seats_own`);
-// otherwise the CPU spec rail runs.
+//! The MTP spec-step seat: a backend's whole mtp_spec_eval twin, cold gates included, keyed by the decode override's name and consulted where it owns the model (`mtp_seats_own`)
 typedef MtpSpecOverrideFn = function<(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool>
 var private g_mtp_spec_overrides : table<string; MtpSpecOverrideFn>
 
@@ -465,9 +462,7 @@ def register_mtp_spec_batch_override(name : string; fn : MtpSpecBatchOverrideFn)
     g_mtp_spec_batch_overrides[name] = fn
 }
 
-// The MTP seam-row override (forward_mtp(..., false)'s GPU twin): the draft head's row pos-1 BEFORE a
-// continuation window's trunk body, whose tail overwrites mtp_h. A declined seam on a model with
-// CPU planes falls to the CPU seam.
+//! The MTP seam-row seat (forward_mtp(..., false)'s GPU twin): the head's row pos-1 before a continuation window's trunk body overwrites mtp_h; a declined seam on a model with CPU planes falls to the CPU seam
 typedef MtpSeamOverrideFn = function<(t : Model; var s : Session; token, pos : int64) : bool>
 var private g_mtp_seam_overrides : table<string; MtpSeamOverrideFn>
 
@@ -529,14 +524,12 @@ def private mtp_draft_seat(t : Model; var s : Session; token, pos : int64; pick_
     return invoke(g_mtp_draft_overrides[g_decode_override_name], t, s, token, pos, pick_only)   // nolint:PERF026 — key_exists guards the index, so it cannot insert
 }
 
-//! the active decode override owns `t`'s round and registered a verify seat: the round saves the pre-draft carry for it
 def private mtp_verify_seated(t : Model) : bool => mtp_seats_own(t) && key_exists(g_mtp_verify_overrides, g_decode_override_name)
 
 //! the verify seat took the round's `n` rows `toks` at `pos` (the caller asked `mtp_verify_seated` first)
 def private mtp_verify_served(t : Model; var s : Session; toks : array<int64>; n, pos : int64; pick_only : bool) : bool
     => invoke(g_mtp_verify_overrides[g_decode_override_name], t, s, toks, n, pos, pick_only)
 
-//! the active decode override owns `t`'s round and registered a rollback seat: a verify its seat serves needs no snapshot
 def private mtp_rollback_seated(t : Model) : bool => mtp_seats_own(t) && key_exists(g_mtp_rollback_overrides, g_decode_override_name)
 
 //! the rollback seat put the session back to the state after verify row `a` (the caller asked `mtp_rollback_seated` first)
@@ -580,9 +573,6 @@ def mtp_walk_samples(s : Session) : bool {
     return true
 }
 
-//! A pick landed into the session in place of a logits row - a device driver's argmax, or the token a speculative round
-//! commits under the caller's pick ask (`Session.pick_asked`): the next sample_ returns it. A pick still unconsumed is an
-//! engine bug, since the caller samples through sample_ after every step
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
 def land_pick(var s : Session; pick : int64) {
     verify(!s.pick_ready, "dasLLAMA: a session's landed pick was never sampled before its next step - engine bug")
@@ -4868,8 +4858,6 @@ def forward_mtp(t : Model; var s : Session; token, pos : int64; want_logits : bo
     forward_mtp_cpu(t, s, token, pos, want_logits)
 }
 
-//! the round's draft of `token` at head row `pos`: the seat's token where it serves - the id alone under `pick_only`, the
-//! greedy walk's form, since the walk compares ids and nothing reads the draft's logits - else the CPU draft's argmax
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def private mtp_draft(t : Model; var s : Session; token, pos : int64; pick_only : bool) : int64 {
     kv_ensure(s, pos + 1l)
@@ -4879,7 +4867,6 @@ def private mtp_draft(t : Model; var s : Session; token, pos : int64; pick_only 
     return parallel_argmax(s.logits, t.config.vocab_size)
 }
 
-//! the CPU draft head: `forward_mtp`'s body once no seat took the row
 def private forward_mtp_cpu(t : Model; var s : Session; token, pos : int64; want_logits : bool) {
     let c = t.config
     let dim = c.dim
@@ -4910,7 +4897,6 @@ def private forward_mtp_cpu(t : Model; var s : Session; token, pos : int64; want
     // the draft block IS one trunk-shaped attention layer at index n_layers — reuse the arch blocks
     t.blocks.attn_decode(t, s, c.n_layers, pos)
     t.blocks.ffn_decode(t, s, c.n_layers)
-    // warm/backfill calls need only the KV row written: the head norm + classifier (vocab x dim) run only when drafting
     return if (!want_logits)
     if (c.hyper_conn) {
         // the head's own h_nextn is its wide residual BEFORE the head mixer - the chain's next input
@@ -5125,14 +5111,12 @@ def private mtp_prefill_warm(t : Model; var s : Session; tokens : array<int64>; 
     // SEAM row start_pos-1 is written by forward_prefill BEFORE the trunk body, so it can't be done here
 }
 
-[cold_path]   // the CPU round's fail-closed exit: a prefill driver served its verify window
+[cold_path]   //! the CPU round's fail-closed exit: a prefill driver served its verify window
 def private mtp_verify_served_panic {
     panic("dasLLAMA: the `{g_prefill_override_name}` prefill driver served a speculative verify window; the CPU round cannot read its rows - run without --mtp or on the CPU rails")
 }
 
-//! whether the verify seat will take the round: where it will, the pre-draft carry its head re-warm reads is saved in `s.mtp_xb_save`
-//! before the draft overwrites `s.mtp_h` with the head's own hidden
-def private mtp_verify_seat_carry(t : Model; var s : Session) : bool {
+def private mtp_verify_seated_save_carry(t : Model; var s : Session) : bool {
     return false if (!mtp_verify_seated(t))
     let hd = mtp_h_dim(t.config)
     s.mtp_xb_save |> overwrite_resize(hd)
@@ -5140,16 +5124,13 @@ def private mtp_verify_seat_carry(t : Model; var s : Session) : bool {
     return true
 }
 
-//! the recurrent state's snapshot under its profiler section
 def private mtp_snapshot_timed(var s : Session) {
     let ts_snap = prof_ticks()
     mtp_state_snapshot(s)
     prof_add("mtp.snapshot", ts_snap)
 }
 
-//! the round's two verify rows `s.mtp_vbatch` [tok, d] at `pos`: the verify seat where it is `seated` and serves (true; the rows' picks
-//! alone under `pick_only`, the caller's pick ask), else the CPU two-row prefill and its classifier over the recurrent state's snapshot,
-//! taken after the seat's decision (a declined seat leaves the session untouched) and before a served verify only where no rollback seat takes its reject
+//! true where the verify seat served the round's two rows; false where the CPU two-row verify ran
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
 def private mtp_verify_two(t : Model; var s : Session; seated : bool; pos : int64; pick_only : bool) : bool {
     var snapped = t.config.recr_mask == 0ul   //! a model with no recurrent layer leaves nothing to restore
@@ -5169,7 +5150,7 @@ def private mtp_verify_two(t : Model; var s : Session; seated : bool; pos : int6
     let ts_verify = prof_ticks()
     let batch_cls = mtp_cls_batch_ok(t)
     forward_prefill(t, s, s.mtp_vbatch, 2l, pos, batch_cls)
-    if (g_prefill_logits_done) {   //! a driver that landed the window's logits left the host x_b rows the verify's classifier reads unwritten
+    if (g_prefill_logits_done) {
         mtp_verify_served_panic()
     }
     if (batch_cls) {
@@ -5181,16 +5162,13 @@ def private mtp_verify_two(t : Model; var s : Session; seated : bool; pos : int6
     return false
 }
 
-[cold_path]   // the round's fail-closed exit: the verify seat served, and the rollback seat behind it declined
+[cold_path]   //! the round's fail-closed exit: the verify seat served, and the rollback seat behind it declined
 def private mtp_rollback_declined_panic {
     panic("dasLLAMA: the `{g_decode_override_name}` rollback seat declined a reject after its verify seat served the round - no snapshot holds the recurrent state; engine bug")
 }
 
-//! the round's reject: verify row 0 is the committed token's step, so its post-norm hidden stands as the carry and its logits as
-//! `s.logits` - its pick published for the caller's sample_ where the seat served a pick ask (`picked`) - and only the recurrent state
-//! the verify advanced past it comes back: through the rollback seat where the verify seat served, the snapshot's restore and the replayed step on every other rail
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
-def private mtp_reject(t : Model; var s : Session; tok, pos : int64; served, picked : bool) {
+def private mtp_reject(t : Model; var s : Session; tok, pos : int64; served, landed_picks_only : bool) {
     let c = t.config
     var rolled = c.recr_mask == 0ul
     if (!rolled && served && mtp_rollback_seated(t)) {
@@ -5202,7 +5180,7 @@ def private mtp_reject(t : Model; var s : Session; tok, pos : int64; served, pic
         }
     }
     if (rolled) {
-        if (picked) {
+        if (landed_picks_only) {
             land_pick(s, s.mtp_picks[0])
         } else {
             copy_floats(s.mtp_logits, 0l, s.logits, 0l, c.vocab_size)
@@ -5233,7 +5211,7 @@ def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<
     return 0l
 }
 
-[cold_path]   // the round's fail-closed exit: a pick ask beside a sampled walk
+[cold_path]   //! the round's fail-closed exit: a pick ask beside a sampled walk
 def private mtp_pick_ask_sampled_panic {
     panic("dasLLAMA: the speculative round was asked for a pick (Session.pick_asked) by a caller whose spec_params sample - a pick ask is a bare argmax's alone; engine bug")
 }
@@ -5244,7 +5222,6 @@ def private mtp_pick_ask_sampled_panic {
 def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {
     let c = t.config
     if (mtp_seats_own(t) && key_exists(g_mtp_spec_overrides, g_decode_override_name)) {
-        // the active override's GPU twin owns the step, its own cold gates included
         return invoke(g_mtp_spec_overrides[g_decode_override_name], t, s, tok, accepted)
     }
     let pos = s.n_past
@@ -5262,7 +5239,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     if (asked && sampled) {
         mtp_pick_ask_sampled_panic()
     }
-    let seated = mtp_verify_seat_carry(t, s)
+    let seated = mtp_verify_seated_save_carry(t, s)
     // draft x_{pos+1} from (h_{pos-1}, tok) at row pos-1 (rewrites that row's draft KV in place)
     let ts_draft = prof_ticks()
     let d = mtp_draft(t, s, tok, pos - 1l, !sampled)
@@ -5274,7 +5251,7 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     s.mtp_vbatch[0] = tok
     s.mtp_vbatch[1] = d
     let served = mtp_verify_two(t, s, seated, pos, asked)
-    let picked = served && asked   //! the seat landed the rows' picks and no logits: the walk and the commit read the picks
+    let landed_picks_only = served && asked
     let ts_walk = prof_ticks()
     var hit = false
     if (sampled) {
@@ -5291,12 +5268,12 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
         s.mtp_accepted++
         accepted = d
         s.n_past = pos + 2l
-        if (picked) {
+        if (landed_picks_only) {
             land_pick(s, s.mtp_picks[1])
         }
         return true
     }
-    mtp_reject(t, s, tok, pos, served, picked)
+    mtp_reject(t, s, tok, pos, served, landed_picks_only)
     s.n_past = pos + 1l
     return false
 }
@@ -5963,7 +5940,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     // spec on: maintain the draft head's KV alongside the trunk's — CPU rail only (on a blob
     // model the GPU spec loop owns the draft slab; these hooks would CPU-touch blob planes)
     if (g_mtp_spec && c.n_layer_nextn > 0l && !t.metal_blob && !g_prefill_logits_done) {
-        mtp_prefill_warm(t, s, tokens, npos, start_pos)   //! never after a prefill driver landed the logits itself: it never wrote the host x_b rows this warm reads, and it warms the head's slab on its own device
+        mtp_prefill_warm(t, s, tokens, npos, start_pos)
     }
 }
 

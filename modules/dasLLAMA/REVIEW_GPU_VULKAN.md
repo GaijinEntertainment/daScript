@@ -252,3 +252,10 @@ the new record replaced.
 command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path that writes
 availability outside `vk_rdec_prepare` can turn a form on after the recording pass ran, and
 `rd_form_at` then picks a form whose command buffer nothing recorded.
+
+**A diff that adds a decline to the resident verify seat - a `return false` in
+`vulkan_resident_verify_gated` or `vulkan_resident_verify_go` (`dasllama/dasllama_gpu_resident.das`) -
+places it above the call that moves the session's recurrent state to the device
+(`rdec_dn_own_all`, in `vulkan_resident_verify_go`); a decline below that call is a defect - move the
+check above it.** A decline after the state moved hands the CPU verify a session whose state the
+device holds.

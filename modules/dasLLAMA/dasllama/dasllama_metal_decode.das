@@ -4316,7 +4316,6 @@ def private load_batch_knobs() {
     g_b_pre = g_env_metal.batch_pre
 }
 
-//! the Metal round's seats serve a blob model alone: a planar model under the metal overrides runs the CPU round
 def private metal_mtp_owns(t : Model) : bool => t.metal_blob
 
 [init]

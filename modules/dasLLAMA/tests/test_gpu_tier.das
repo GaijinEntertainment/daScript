@@ -152,7 +152,6 @@ def private d_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bo
 
 var private g_carry_row = -1l
 
-//! the carry landing's double: the row it was asked for, written into the destination's first element
 def private d_land_carry(row : int64; var dst : array<float>) {
     g_carry_row = row
     dst[0] = float(row)
@@ -205,7 +204,6 @@ def private d_verify_rows : int64 => 4l
 
 var private g_rollback_a = -1l
 
-//! the rollback double: the committed row it was asked for
 def private d_rollback(a : int64) : bool {
     g_rollback_a = a
     return true

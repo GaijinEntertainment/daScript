@@ -8629,9 +8629,6 @@ def private dn_row_smalls(sm : array<float>; r, beta_off, g_off, bstride, nvh : 
     return <- sm1
 }
 
-//! the same-slab verify's form: three rows of one stream in one slot, a dispatch a row with the row in the push, against the
-//! one-row dispatch run a row at a time on the state and ring the row before it left - every row's o row, then the slot's state
-//! and both ring images after the last row, bit for bit
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
     let nrows = 3
@@ -8702,7 +8699,7 @@ def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
             : first_differing(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8))
         to_log(LOG_INFO, "{tag}: row {r}'s o row {o_diffs} elements off, the first at {o_first}\n")
         t |> success(o_diffs == 0, "{tag}: row {r}'s o row {o_diffs} of {orow} elements off the one-row dispatch on the state row {r - 1} left (the first at {o_first})")
-        if (r == 1) {   //! the control: the one-row dispatch of row 1 on the untouched state must miss the sequential row 1 - the rows stepped in order, never from one pre-state
+        if (r == 1) {
             var sm0 <- dn_row_smalls(smh, r, beta_off, g_off, bstride, nvh)
             var cold <- dn_step_rows_run(proj1, sth, sm0, pars1, slots1, 1, 1, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
             let ctrl = out_f32 ? n_differing(got.of32, cold.of32, r * nvh * ds, 0, nvh * ds) : n_differing(got.oquants, cold.oquants, r * nblk * 8, 0, nblk * 8)
