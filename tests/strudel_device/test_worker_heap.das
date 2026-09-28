@@ -29,6 +29,7 @@ let MIN_DROPS = 6                                 // an idle 64-core box reads ~
 let FLOOR_DRIFT_LIMIT = 4ul * 1024ul * 1024ul     // twice the worker's collect window; uncollected grows ~10 MB a stretch
 let WALL_CAP_MS = 90000u                          // a worker that never advances is its own failure
 
+[unsafe_heap_collect]
 def worker_setup() {
     strudel_set_cps(2.0lf)
     strudel_add_track(s("<bd [hh hh] sd [hh hh]> <bd [hh cp?0.5] sd [hh hh]>"), 0.5)
@@ -75,9 +76,9 @@ def sample_stretch(until : double; var prev : uint64&; var wall_ms : uint&) : St
     return st
 }
 
-[test]
+[test, unsafe_heap_collect]
 def test_worker_heap_stays_flat(t : T?) {
-    t |> run("the playback worker collects its own heap: past warm-up the published heap drops between ticks and its floor holds") @(t : T?) {
+    t |> run("the playback worker collects its own heap: past warm-up the published heap drops between ticks and its floor holds") @ [unsafe_heap_collect] (t : T?) {
         sound_set_null_device(true)
         with_audio_system() {
             strudel_init(@@worker_setup)

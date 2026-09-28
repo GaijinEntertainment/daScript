@@ -558,6 +558,7 @@ def private prepareProgramForEmission(var program : ProgramPtr; context : Contex
             visit(fn, adapter_no_aot)
         }
     }
+    report_unproven_collect_carriers(program, true)
     checkAllUsedFunctionsCanAot(program)
     var foreign <- foreignUsedFunctions(program, false)
 

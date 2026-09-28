@@ -2012,6 +2012,11 @@ def test_cmd_release_program(t : T?) {
         tt |> success(fexist(bundle_exe_path(out_dir, "withtool")), "the main exe ships")
         tt |> success(fexist(path_join(artifacts, companion_rel)), "the companion exe sits beside it as {companion_rel}")
         tt |> success(!fexist(path_join(artifacts, "side-tool.o")), "the companion's object file is dropped")
+        for (stem in ["withtool", "side-tool"]) {
+            for (suffix in [".map", ".lib", ".exp"]) {
+                tt |> success(!fexist(path_join(artifacts, "{stem}{suffix}")), "no linker residue {stem}{suffix} rides beside the exe: nothing at run time reads it")
+            }
+        }
         let manifest = fread(path_join(artifacts, ".daspkg_release.manifest"))
         tt |> success(find(manifest, companion_rel) >= 0, "the manifest records the companion, so a re-release cleans it:\n{manifest}")
         if (stb_built) {

@@ -1,0 +1,1 @@
+Declares that a heap collection reached through this function or lambda is safe even though the compile-time proof cannot show it - for example a thread body the host starts on an empty stack. The JIT, AOT and standalone back-ends then compile it without checking its frame or how it is entered. Its callers are still checked. Metadata only; it costs nothing at runtime.

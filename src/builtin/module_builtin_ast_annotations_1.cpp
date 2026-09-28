@@ -62,6 +62,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(canWrite)>("canWrite","canWrite");
             addProperty<DAS_BIND_MANAGED_PROP(isAotAlias)>("isAotAlias","isAotAlias");
             addProperty<bool (TypeDecl::*)() const, &ManagedType::isShareable>("isShareable", "isShareable");
+            addProperty<int32_t (TypeDecl::*)() const, &ManagedType::gcFlags>("gcFlags", "gcFlags");
             addProperty<DAS_BIND_MANAGED_PROP(isIndex)>("isIndex","isIndex");
             addProperty<DAS_BIND_MANAGED_PROP(isBool)>("isBool","isBool");
             addProperty<DAS_BIND_MANAGED_PROP(isInteger)>("isInteger","isInteger");

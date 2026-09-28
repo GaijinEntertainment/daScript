@@ -752,6 +752,20 @@ struct public JitPlan {
     disabled : array<FunctionPtr>
 }
 
+def public report_collect_errors(var plan : JitPlan) : bool {
+    //! Logs every function the JIT would compile that reaches a heap collection without proof; true when the program must not be jitted.
+    if (plan.gen_exe || plan.gen_lib) return false
+    var failed = false
+    for (fun in plan.candidates) {
+        let why = collect_carrier_violation(fun)
+        if (!empty(why)) {
+            to_log(LOG_ERROR, "LLVM JIT: {describe(fun.at)}: function '{fun.name}' can reach heap_collect, and {why}; mark it [no_jit] to keep it interpreted\n")
+            failed = true
+        }
+    }
+    return failed
+}
+
 def private jit_selects(fun : FunctionPtr; rqj : bool; aot_host : bool; jit_all : bool; var ctx : Context?) : bool {
     if (rqj) return true
     if (!aot_host) return jit_all

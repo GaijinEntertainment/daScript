@@ -17,9 +17,11 @@ require cli_args        // the CLI's [CommandLineArgs] structs
 // with no arm here is itself a finding. Every path-shaped route registration appears in the
 // README and rst endpoint tables, and no surface documents or consumes a route the server
 // does not register. Every long flag main.das and cli_args.das parse has its mention in the
-// README and in the program's rst page.
+// README and in the program's rst page. Every license the SDK installs at its doc root for the
+// runtime, the shipped modules and the engine ships in the bundle's licenses/ under the same name.
 
 let FIXTURES_DIR = "utils/dasllama-server/tests/fixtures"
+let PACKAGE_DAS = "utils/dasllama-server/.das_package"
 let SERVER_DAS = "utils/dasllama-server/openai_server.das"
 let MAIN_DAS = "utils/dasllama-server/main.das"
 let CLI_ARGS_DAS = "utils/dasllama-server/cli_args.das"
@@ -298,6 +300,152 @@ def private is_riff_wave(d : array<uint8>) : bool {
     return find(d, "RIFF") == 0 && find(d, "WAVE") == 8
 }
 
+// the programs the bundle bakes: the server, the CLI and the benchmark companion
+var BUNDLE_ENTRY_FILES <- [
+    "utils/dasllama-server/main.das",
+    "utils/dasllama-server/cli.das",
+    "modules/dasLLAMA/benchmarks/lcpp_bench.das"
+]
+
+// `das_metal`, `dasMetal` and `metal` name one folder
+def private module_folder_key(name : string) : string {
+    let k = to_lower(replace(name, "_", ""))
+    return k |> starts_with("das") ? slice(k, 3) : k
+}
+
+def private module_folders() : table<string; string> {
+    var out : table<string; string>
+    dir("modules") $(name) {
+        return if (name |> starts_with("."))
+        let st = stat("modules/{name}")
+        return if (!st.is_valid || !st.is_dir)
+        out[module_folder_key(name)] = "modules/{name}"
+    }
+    return <- out
+}
+
+//! The CMake files whose doc-root notices the bundle answers for: the core, plus every module
+//! folder a `require` of a baked program reaches - transitively through the `.das` files the
+//! requires name. A C++ module ships as a shared module beside the exe, a daslang-only one is
+//! compiled into it; either way its notices' terms ride along. Every platform's branch counts:
+//! the set is the union over the guarded requires, so a notice a platform's bundle does not need
+//! still ships there.
+def private bundle_license_owners() : array<string> {
+    var inscope folders <- module_folders()
+    var owners : table<string>
+    owners |> insert("CMakeLists.txt")
+    var seen : table<string>
+    var queue := BUNDLE_ENTRY_FILES
+    while (!empty(queue)) {
+        let f = queue[length(queue) - 1]
+        queue |> pop()
+        continue if (key_exists(seen, f) || !fexist(f))
+        seen |> insert(f)
+        let fdir = dir_name(f)
+        for (r in das_requires(f)) {
+            continue if (r |> starts_with("[") || r |> starts_with("daslib/") || r |> starts_with("dastest/"))
+            if (r |> ends_with(".das")) {
+                queue |> push(path_join(fdir, r))
+                continue
+            }
+            let slash = find(r, "/")
+            let head = slash < 0 ? r : slice(r, 0, slash)
+            let folder = folders?[module_folder_key(head)] ?? ""
+            if (empty(folder)) {
+                queue |> push(path_join(fdir, "{r}.das")) if (slash < 0)
+                continue
+            }
+            owners |> insert("{folder}/CMakeLists.txt")
+            queue |> push("{folder}/{r}.das")
+        }
+    }
+    var out <- [for (k in keys(owners)); k]
+    sort(out)
+    return <- out
+}
+
+def private is_notice_file(name : string) : bool {
+    return find(name, "LICENSE") >= 0 || find(name, "COPYING") >= 0 || find(name, "NOTICES") >= 0
+}
+
+//! The `install(FILES <src>... DESTINATION $\{DAS_INSTALL_DOCDIR\} [RENAME <name>])` rows of one
+//! CMake file as (source relative to the repo root, name at the doc root). A source under
+//! examples/ rides with the examples, which the bundle does not carry.
+def private doc_root_licenses(owner : string) : array<tuple<source : string; name : string>> {
+    var out : array<tuple<source : string; name : string>>
+    let module_dir = owner == "CMakeLists.txt" ? "" : dir_name(owner)
+    for (blk in cmake_command_blocks(fread(owner), "install")) {
+        var inscope args <- cmake_args(blk)
+        continue if (length(args) < 3 || args[0] != "FILES")
+        var dest = ""
+        var rename = ""
+        var sources : array<string>
+        var i = 1
+        while (i < length(args)) {
+            let a = args[i]
+            if (a == "DESTINATION" && i + 1 < length(args)) {
+                dest = args[i + 1]
+                i += 2
+            } elif (a == "RENAME" && i + 1 < length(args)) {
+                rename = args[i + 1]
+                i += 2
+            } else {
+                sources |> push(a)   // a bare all-caps name is a file here, not a keyword: the notice filter below sorts them
+                i++
+            }
+        }
+        continue if (dest != "$\{DAS_INSTALL_DOCDIR\}")
+        for (src in sources) {
+            var rel = ""
+            if (src |> starts_with("$\{PROJECT_SOURCE_DIR\}/")) {
+                rel = slice(src, length("$\{PROJECT_SOURCE_DIR\}/"))
+            } elif (src |> starts_with("$\{DAS_") && !empty(module_dir)) {
+                let close_at = find(src, "\}/")
+                rel = close_at < 0 ? "" : "{module_dir}/{slice(src, close_at + 2)}"
+            } elif (!(src |> starts_with("$"))) {
+                rel = empty(module_dir) ? src : "{module_dir}/{src}"
+            }
+            if (empty(rel)) {
+                gate_finding(owner, "doc-root install source `{src}` names a variable this gate cannot resolve - teach doc_root_licenses in REVIEW.das the spelling, so the bundle's license list stays checkable")
+                continue
+            }
+            let name = empty(rename) ? base_name(rel) : rename
+            continue if (!is_notice_file(name) || rel |> starts_with("examples/"))
+            out |> push((source = rel, name = name))
+        }
+    }
+    return <- out
+}
+
+//! Every doc-root notice for what the bundle carries has its `release_include_from("<source>",
+//! "licenses/<name>")` row in the package, and every such row is backed by an install rule.
+def check_bundle_licenses() {
+    var live_rows : table<string>   // the package's uncommented licenses/ rows
+    for (raw in split(fread(PACKAGE_DAS), "\n")) {
+        let line = strip(raw)
+        continue if (!(line |> starts_with("release_include_from(")) || find(line, "\"licenses/") < 0)
+        let close_at = find(line, ")")
+        continue if (close_at < 0)
+        live_rows |> insert(slice(line, 0, close_at + 1))
+    }
+    var expected : table<string>
+    for (owner in bundle_license_owners()) {
+        continue if (!fexist(owner))
+        for (lic in doc_root_licenses(owner)) {
+            let row = "release_include_from(\"{lic.source}\", \"licenses/{lic.name}\")"
+            expected |> insert(row)
+            if (!key_exists(live_rows, row)) {
+                gate_finding(PACKAGE_DAS, "the bundle carries no licenses/{lic.name}, which {owner} installs at the SDK doc root - add {row}")
+            }
+        }
+    }
+    for (row in keys(live_rows)) {
+        if (!key_exists(expected, row)) {
+            gate_finding(PACKAGE_DAS, "{row} ships a notice no doc-root install rule of the runtime or a module the baked programs require backs - drop the row")
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("utils/dasllama-server/REVIEW.das")) {
@@ -340,6 +488,7 @@ def main() : int {
     check_routes_in_surfaces()
     check_flags_in_surfaces()
     check_test_ports()
+    check_bundle_licenses()
     return gate_verdict("dasllama-server")
 }
 

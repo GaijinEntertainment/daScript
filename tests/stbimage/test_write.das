@@ -8,6 +8,11 @@ require daslib/safe_addr
 require daslib/fio
 require dastest/testing_boost public
 
+def private temp_output(ext : string) : string {
+    var error : string
+    return create_temp_file("stbimage_test", ext, error)
+}
+
 def make_rgba_pixels(var pixels : uint8[16]) {
     for (i in range(16)) {
         pixels[i] = uint8(i * 16)
@@ -27,7 +32,7 @@ def test_write_png_roundtrip(t : T?) {
     t |> run("write PNG to file and read back") <| @(tt : T?) {
         var pixels : uint8[16]
         make_rgba_pixels(pixels)
-        let fname = "{get_das_root()}/tests/stbimage/_test_output.png"
+        let fname = temp_output(".png")
         let ok = stbi_write_png(fname, 2, 2, 4, safe_addr(pixels[0]), 8)
         tt |> success(ok != 0, "write_png succeeded")
         // read back
@@ -46,7 +51,7 @@ def test_write_bmp_roundtrip(t : T?) {
     t |> run("write BMP to file and read back") <| @(tt : T?) {
         var pixels : uint8[12]
         make_rgb_pixels(pixels)
-        let fname = "{get_das_root()}/tests/stbimage/_test_output.bmp"
+        let fname = temp_output(".bmp")
         let ok = stbi_write_bmp(fname, 2, 2, 3, safe_addr(pixels[0]))
         tt |> success(ok != 0, "write_bmp succeeded")
         var x, y, comp : int
@@ -64,7 +69,7 @@ def test_write_tga_roundtrip(t : T?) {
     t |> run("write TGA to file and read back") <| @(tt : T?) {
         var pixels : uint8[16]
         make_rgba_pixels(pixels)
-        let fname = "{get_das_root()}/tests/stbimage/_test_output.tga"
+        let fname = temp_output(".tga")
         let ok = stbi_write_tga(fname, 2, 2, 4, safe_addr(pixels[0]))
         tt |> success(ok != 0, "write_tga succeeded")
         var x, y, comp : int
@@ -82,7 +87,7 @@ def test_write_jpg_roundtrip(t : T?) {
     t |> run("write JPG to file and read back") <| @(tt : T?) {
         var pixels : uint8[12]
         make_rgb_pixels(pixels)
-        let fname = "{get_das_root()}/tests/stbimage/_test_output.jpg"
+        let fname = temp_output(".jpg")
         let ok = stbi_write_jpg(fname, 2, 2, 3, safe_addr(pixels[0]), 90)
         tt |> success(ok != 0, "write_jpg succeeded")
         var x, y, comp : int

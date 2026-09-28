@@ -746,6 +746,7 @@ def public strudel_tick_offline() {  // nolint:STYLE038 - same tick pipeline as 
 
 // --- Threaded mode ---
 
+[unsafe_heap_collect]
 def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noop_cmd) {  // nolint:STYLE037,STYLE038 - blocking tick loop + command dispatch, state is loop-carried
     //! Blocking multi-track tick loop for threaded playback.
     //! Runs on the strudel thread (spawned by strudel_init); dispatches incoming user commands via cmd_fn until shutdown.

@@ -766,3 +766,8 @@ bool require_dynamic_modules(FileAccessPtr file_access,
 }
 
 }
+
+extern "C" DAS_CC_API void das_require_dynamic_modules () {
+    das::TextPrinter tout;
+    das::require_dynamic_modules(get_file_access(nullptr), das::getDasRoot(), "", das::vector<das::string>(), tout);
+}

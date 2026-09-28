@@ -390,7 +390,9 @@ Full watchdog reference - config keys, discovery rules, the log: `utils/watchdog
 `daspkg release --root utils/dasllama-server --out <dir>` bakes the server into a standalone
 bundle: the exe, the shared modules and runtime libraries it needs, `watchdog` beside it,
 `dasllama-bench` (the `release_program` companion - lcpp_bench baked under the same class,
-sharing the bundle's libraries), `watchdog.json`, `control.html` and `tray.ico`. Plain `release` tunes the kernels on the build
+sharing the bundle's libraries), `watchdog.json`, `control.html`, `tray.ico`, and `licenses/` -
+the daslang license and every third-party notice the SDK installs for the runtime, the shipped
+modules and the engine's ported works, under the SDK's names. Plain `release` tunes the kernels on the build
 box and ships that box's sidecar - the bundle for a machine you own. `release --fat x86-avx2`
 (`arm-neon` on arm64) is what the public download is built from: no mint, no sidecar, one
 clone of every kernel per shipped class profile, the runtime section minted at the first start

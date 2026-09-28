@@ -69,6 +69,10 @@ struct DastestArgs {
     @clarg_doc = "Path to a file listing one test path per line; restricts the collected set to those paths"
     test_list : string
 
+    @clarg_name = "test-only"
+    @clarg_doc = "Restrict the collected set to this test path (repeatable)"
+    test_only : array<string>
+
     @clarg_doc = "Run top-level tests matching this name prefix"
     test_names : array<string>
 

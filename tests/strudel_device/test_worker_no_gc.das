@@ -13,6 +13,7 @@ require daslib/fio
 // heap: the probe collect at the worker's start throws, the arm logs one warning and keeps the
 // heap for the run, and the bed still plays and shuts down clean. Null backend, headless.
 
+[unsafe_heap_collect]
 def worker_setup() {
     strudel_set_cps(2.0lf)
     strudel_add_track(s("<bd [hh hh] sd [hh hh]>"), 0.5)
@@ -20,9 +21,9 @@ def worker_setup() {
     strudel_play()
 }
 
-[test]
+[test, unsafe_heap_collect]
 def test_worker_without_gc_keeps_playing(t : T?) {
-    t |> run("a worker whose program cannot collect plays on with its heap uncollected") @(t : T?) {
+    t |> run("a worker whose program cannot collect plays on with its heap uncollected") @ [unsafe_heap_collect] (t : T?) {
         sound_set_null_device(true)
         with_audio_system() {
             strudel_init(@@worker_setup)

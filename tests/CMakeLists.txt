@@ -82,20 +82,43 @@ if(NOT DAS_TOOLS_DISABLED)
             "dastest global suite watchdog, seconds, for run_tests_jit")
         set(DAS_TEST_JIT_TIMEOUT_ISOLATED 3600 CACHE STRING
             "dastest global suite watchdog, seconds, for run_tests_jit_isolated")
-        # Primary JIT sweep runs isolated-PARALLEL (2x-hw-thread worker
-        # subprocesses, 4 files per batch): ~3x FASTER wall-clock than the sequential
-        # sweep with an identical pass/fail set, and cold-cache parallel beats
-        # warm sequential — which is what made the CI "Prewarm JIT cache" step
-        # redundant. Safe because each test program owns its dll-cache path
-        # (.jitted_scripts/<namespace>/<contenthash>) and each file runs in
-        # exactly one batch. The _isolated retry stays batch-1 (one process per
-        # test — max crash isolation, and a batch crash re-dispatches per-file).
-        add_das_target(run_tests_jit
-            COMMAND ${_DAS_SAN_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_JIT_COMMON} --isolated-mode --batch 4 --timeout ${DAS_TEST_JIT_TIMEOUT}
-            DEPENDS ${_DAS_TEST_HOSTS}
-            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-            COMMENT "Running tests (JIT, isolated-parallel)"
-        )
+        # One ninja edge per 16 test files, so ninja -j is the only parallelism. jit.exe fills the
+        # dll cache first; it fails on files needing modules it lacks, so its exit code is ignored.
+        file(GLOB_RECURSE _jit_files CONFIGURE_DEPENDS ${_DAS_JIT_TEST_DIR}/*.das)
+        list(FILTER _jit_files EXCLUDE REGEX "/_")
+        set(_jit_chunks)
+        set(_aot_chunks)
+        list(TRANSFORM LLVM_AOT_TEST_FILES PREPEND ${PROJECT_SOURCE_DIR}/ OUTPUT_VARIABLE _aot_files)
+        DAS_CHUNKS(_jit_batches 16 ${_jit_files})
+        foreach(_n ${_jit_batches})
+            set(_chunk ${_jit_batches_${_n}})
+            list(TRANSFORM _chunk PREPEND "--test-only;" OUTPUT_VARIABLE _only)
+            add_custom_command(OUTPUT jit_chunk_${_n}
+                COMMAND $<TARGET_FILE_DIR:daslang>/jit.exe ${_chunk} ${_DAS_JIT_FLAGS} || ${CMAKE_COMMAND} -E true
+                COMMAND ${_DAS_SAN_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_JIT_COMMON} ${_only} --timeout ${DAS_TEST_JIT_TIMEOUT}
+                DEPENDS daslang jit_exe ${_DAS_TEST_HOSTS}
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+            set_source_files_properties(jit_chunk_${_n} PROPERTIES SYMBOLIC TRUE)
+            list(APPEND _jit_chunks jit_chunk_${_n})
+            # the same chunk for LLVM-AOT, cut to the files test_llvm_aot carries objects for
+            set(_other ${_chunk})
+            list(REMOVE_ITEM _other ${_aot_files})
+            set(_aot ${_chunk})
+            list(REMOVE_ITEM _aot ${_other})
+            if(TARGET test_llvm_aot AND _aot)
+                list(TRANSFORM _aot PREPEND "--test-only;" OUTPUT_VARIABLE _only)
+                add_custom_command(OUTPUT llvm_aot_chunk_${_n}
+                    COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_llvm_aot> -use-aot ${_DAS_DASTEST} -- --use-aot --color --failures-only --timeout 1800 ${_only} --test ${_DAS_JIT_TEST_DIR}
+                    DEPENDS test_llvm_aot
+                    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+                set_source_files_properties(llvm_aot_chunk_${_n} PROPERTIES SYMBOLIC TRUE)
+                list(APPEND _aot_chunks llvm_aot_chunk_${_n})
+            endif()
+        endforeach()
+        add_custom_target(run_tests_jit DEPENDS ${_jit_chunks} COMMENT "Running tests (JIT, chunked)")
+        if(TARGET test_llvm_aot)
+            add_custom_target(run_tests_llvm_aot DEPENDS ${_aot_chunks} COMMENT "Running tests (LLVM-AOT, chunked)")
+        endif()
         add_das_target(run_tests_jit_isolated
             COMMAND ${_DAS_SAN_ENV} $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_JIT_COMMON} --isolated-mode --timeout ${DAS_TEST_JIT_TIMEOUT_ISOLATED}
             DEPENDS ${_DAS_TEST_HOSTS}
@@ -126,24 +149,6 @@ if(TARGET test_aot_subset)
         DEPENDS test_aot_subset
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT, tests/language subset)"
-    )
-endif()
-
-# LLVM-AOT (LLVM-backend .o) mirror of run_tests_aot: test bodies bound from the
-# statically-linked self-registering objects and run jitted. Opt-in, not in CI.
-if(TARGET test_llvm_aot)
-    # under tsan the whole corpus outruns the 1800 s suite watchdog, and its process-spawning
-    # tests miss their own deadlines; the sweep keeps tests/language, as the JIT sweep does
-    if(DAS_USE_SANITIZER STREQUAL "tsan")
-        set(_DAS_LLVM_AOT_TEST_DIR ${PROJECT_SOURCE_DIR}/tests/language)
-    else()
-        set(_DAS_LLVM_AOT_TEST_DIR ${PROJECT_SOURCE_DIR}/tests/)
-    endif()
-    add_das_target(run_tests_llvm_aot
-        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_llvm_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --isolated-mode --batch 4 --timeout 1800 --test-list ${LLVM_AOT_TEST_LIST} --test ${_DAS_LLVM_AOT_TEST_DIR}
-        DEPENDS test_llvm_aot
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        COMMENT "Running tests (LLVM-AOT)"
     )
 endif()
 

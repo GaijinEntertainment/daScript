@@ -155,7 +155,9 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
         DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
     )
 
-	install(FILES ${miniaudio_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME MINIAUDIO.LICENSE)
+	# the in-tree copy of the fetched miniaudio's LICENSE: a release bundle ships it from the
+	# source tree, where the fetched copy sits under a build directory of the builder's choosing
+	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasAudio/LICENSE.MINIAUDIO DESTINATION ${DAS_INSTALL_DOCDIR} RENAME MINIAUDIO.LICENSE)
 	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasAudio/LICENSE.OPENMPT DESTINATION ${DAS_INSTALL_DOCDIR} RENAME OPENMPT.LICENSE)
 	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasAudio/cipic-hrtf/CIPIC.LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME CIPIC.LICENSE)
 

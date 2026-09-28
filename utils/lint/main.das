@@ -828,6 +828,7 @@ def read_paths_from(path : string; var out : array<string>) : bool {
 // whole-tree run that grows to gigabytes. Collect every N files (needs `options gc`).
 let COLLECT_EVERY = 100
 
+[unsafe_heap_collect]
 def maybe_collect(var since_collect : int&) {
     since_collect ++
     if (since_collect >= COLLECT_EVERY) {
@@ -842,6 +843,7 @@ def maybe_collect(var since_collect : int&) {
 // Worker entry: lint every file in `paths`, emit one JSON-wrapped
 // LintResult per file between `##lint##\n` markers. Caller (driver)
 // parses the stream and aggregates.
+[unsafe_heap_collect]
 def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
                disabled_codes, enabled_codes : table<string>) {
     var since_collect = 0
@@ -1153,7 +1155,7 @@ def print_lint_help(rc : int) : int {
     return rc
 }
 
-[export]
+[export, unsafe_heap_collect]
 def main() : int {
     var r <- parse_args(type<Config>)
     if (r |> is_err) {
