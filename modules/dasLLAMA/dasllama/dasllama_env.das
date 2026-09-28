@@ -96,8 +96,11 @@ struct public EngineEnv {
     @clarg_doc = "Permit a big gguf load without -jit; the transforms run interpreted, so expect minutes per GB."
     allow_interp_load : bool = false
 
-    @clarg_doc = "Advisory readahead on the mappings a load opens - the gguf source (the cold-conversion fix) and the prepared image (a purged page cache costs the routed expert stacks 2.5x over the first 128 tokens); =0 restores on-demand faulting."
+    @clarg_doc = "Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting."
     prefetch : bool = true
+
+    @clarg_doc = "Readahead of the prepared image at its map (madvise WILLNEED, synchronous on macOS): a purged page cache then reads the whole image at the SSD's rate before the first token - 103 GB in 15 s on the M5 - instead of paying 2.5x on the routed expert stacks over the first 128 tokens, and a WARM map pays ~2.5 s for the page walk in place of 65 ms. A serving process that runs for hours wants it; a bench, a test or a short session does not."
+    prefetch_image : bool = false
 }
 
 // Tri-state on purpose: the tier's effective defaults are computed from set_gpu_tier_want state

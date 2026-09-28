@@ -1868,11 +1868,15 @@
     against 0.45 s - while the attention block, the mixers and the head read the same in both
     windows, since every token touches their planes and the first fault warms them. Ten of 512
     experts a token fault their pages in one by one over the window. The mint pass itself is 57 s
-    (planes write 44 s at 2.1 GB/s). `prefetch_map` (madvise WILLNEED / PrefetchVirtualMemory,
-    `DASLLAMA_PREFETCH`) is armed on the image map as on the gguf source. Done = the armed image
-    map measured against the 99.8 ms reading behind another `sudo purge`, and, if the advisory alone
-    does not carry 100 GB, a pool-side sequential touch of the routed experts' stacks (not the
-    gather-only PLE table) as the second arm.
+    (planes write 44 s at 2.1 GB/s). `prefetch_map` (madvise WILLNEED / PrefetchVirtualMemory) on
+    the image map is SYNCHRONOUS on macOS: behind a purge it reads the 103 GB in 15.0 s at the map
+    and the window then runs warm (40.2 ms a token), so the cold process wall stays 41 s either way,
+    and a WARM map pays 2.5 s for the page walk in place of 65 ms - so it rides its own knob,
+    `DASLLAMA_PREFETCH_IMAGE`, off by default. Open = whether the server arms it (a process that runs
+    for hours pays 2.5 s once), and a pool-side sequential touch of the routed experts' stacks alone
+    (not the gather-only PLE table, not the planes the first token warms) as the arm that moves the
+    total: the window's random 4 KiB faults read a fraction of the image slower than a sequential
+    pass reads the stacks.
 
 176. **The `yarn_log_multiplier` YaRN arm.** The loader refuses a file whose
     `rope.scaling.yarn_log_multiplier` is not 0 (the DeepSeek-2 lineage replaces the 0.1 in the
