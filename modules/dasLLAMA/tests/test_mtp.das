@@ -443,6 +443,7 @@ def test_mtp_verify_window(t : T?) {
         if (!model_available(t, path)) return
         var tr <- load_gguf(path, QuantMode.q8)
         tr.config.seq_len = 2048l
+        moe_gpu_drop_model()   // the CPU round is the cell's subject: an armed driver whose mirror matches the session's codec would serve the verify itself, and no window opens
         let why = verify_window_panic(tr)
         to_log(LOG_INFO, "served verify window: {empty(why) ? "no panic" : why}\n")
         t |> success(says(why, "served a speculative verify window") && says(why, PROBE_PREFILL), "the CPU round panics naming the prefill driver that served its verify window: '{why}'")

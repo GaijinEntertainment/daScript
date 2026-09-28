@@ -747,10 +747,13 @@ step), `test_mtp_prefill_seam` - the continuation prefill's seam row on the 0.8B
 seat: the head's K row before the window poisoned, a seat that serves leaves it (the seat asked
 once for the window's first token at its start), a declined seat on the planar model lets the CPU
 seam rewrite it (the control), and a declined seat on the model flagged a blob, a fake prefill
-driver claiming the window, leaves it and warns - `test_mtp_verify_window` - the CPU round's
-fail-closed exit: a fake prefill driver that serves the speculative verify window makes the round
-panic naming the driver, the session's verify window (`mtp_verify_window_active(s)`) read up inside
-the window and down for the prompt's own prefill and on the session after the round - the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
+driver claiming the window, leaves it and warns (the blob arm claims the prompt's embed rows through
+an embed probe, since the CPU embed of a planar model flagged a blob would read the blob plane) -
+`test_mtp_verify_window` - the CPU round's fail-closed exit, the model's device state dropped first
+(`moe_gpu_drop_model`: an armed driver whose mirror matches the session's codec serves the verify
+itself and opens no window): a fake prefill driver that serves the speculative verify window makes
+the round panic naming the driver, the session's verify window (`mtp_verify_window_active(s)`) read
+up inside the window and down for the prompt's own prefill and on the session after the round - the 64-trunk-layer Qwen3.6-27B-MTP carrier, and the GLM-4.5-Air arm - the one
 non-recurrent MTP model, so the only reach of the depth-1 step's shortcut reject (row 0's logits
 and hidden stand, no re-forward): its code fixture runs plain, then again with
 `set_mtp_force_reject_every(3)` rejecting every third draft, both token-for-token against plain
