@@ -779,6 +779,17 @@ accepted rows committed after the walk, the wide carry into the draft head) are 
 `BatchLayerEnc` needs: bind them there and open the `hc` arm of the batch gate. The batch rail's
 deltanet gate already takes the family's z activation through `enc_dn_zgate`.
 
+## 30. Flash-Next's verify row 0 reads 0.89 logits off the plain step at one prose position
+
+`mtp-ff-3.8fn` prose-a: over 48 forced-feed steps the verify's row 0 and the plain GPU step agree to
+7e-4 everywhere but one step, which reads 0.89 with the argmax unmoved (prose-b 7e-4 throughout,
+counting token-exact at depth 1, 2 and 4). The fixture holds the plain-MoE bar (2.0) on the reading
+that the rows and single GEMV forms round the router's logits apart and a near-tie flips an expert -
+the same reading the q30 batch-rail fixture rests on - but nothing has shown the flipped expert. The
+work: dump the router logits and the selected experts at that step in both forms (`harness/mtp_ruler.das`
+is the rig's shape), name the layer and the margin; a difference that is not a routing flip is a
+rows-form defect and the bar goes back to 0.5.
+
 ## 26. The 9B's speculative round returns half the 4B's gain at the same accept rate
 
 `lcpp_bench --mtp-ab` (single stream, Metal, tg-real128 `-p 0 -n 128`, greedy, depth 1, M5 Max,
