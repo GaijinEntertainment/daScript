@@ -891,13 +891,15 @@ device draft at the prompt's last row bit for bit the clean prefill's (logits, h
 the carry bit for bit too, every logit finite, the region's head rows at the prompt's end less one),
 the draft one row back as the control; `test_gpu_resident_hybrid_mtp_head_warm` reads the head's
 warmed K rows [0, 39) back from the host cache after the resident prefill and holds each within the
-4% deltanet bar (of the CPU row's max) of the CPU warm's row on the same prompt after the model
-drop, the CPU row one down as the control past it, the widest miss logged;
-`test_gpu_resident_hybrid_mtp_rounds` runs six speculative rounds on the device (their draft and
-verify counters, every call served) and six on the CPU from the same prompt and fed tokens, every
-round's draft token, accept and position equal and logged decoded, the head's host rows within the
-bar with the one-down control, and a seventh CPU round over the head's host rows poisoned with NaN
-as the control (another draft, or non-finite rows).
+8% head-row bar (of the CPU row's max: twice the deltanet bar, since the row is the f16-stored
+projection of a hidden row already within the deltanet bar) of the CPU warm's row on the same prompt
+after the model drop, the CPU row one down missing by two bars as the control, the widest miss and
+the tightest control logged; `test_gpu_resident_hybrid_mtp_rounds` runs six speculative rounds on
+the device (their draft and verify counters, every call served) and six on the CPU from the same
+prompt and fed tokens, every round's draft token, accept and position equal and logged decoded, the
+region's head rows at the session's position less one, the head's host rows within the head-row bar
+with the two-bar one-down control, and a seventh CPU round over the head's host rows poisoned with
+NaN as the control (another draft, or non-finite rows).
 
 One cell is model-free: `test_kernel_census_by_name` holds that the census accessor panics on a
 kernel name nothing seeded, so a misspelt key cannot read as a zero count.

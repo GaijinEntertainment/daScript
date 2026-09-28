@@ -2372,7 +2372,6 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         }
     }
     rdec_stash_carry(c, s, 0l, start_pos + npos)
-    rdec_prefill_head_rows(t, s, r, npos, start_pos)
     if (g_env_gpu.gpu_prof) {
         to_log(LOG_INFO, "dasLLAMA: resident prefill host: {npos} rows, rope rows {us_rope} us, ple gather {us_gather} us, the driver's run {get_time_usec(ts_run) - us_gather} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
     }
@@ -2390,6 +2389,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     } else {
         g_rdec_regions[r].cnt = start_pos + npos
     }
+    rdec_prefill_head_rows(t, s, r, npos, start_pos)   //! after the claim: a fresh prompt's claim zeroes the head rows it would otherwise count
     s.rdec_host_current = false
     g_rdec_prefills++
     prefill_override_logits_done()

@@ -97,8 +97,9 @@ engine's `register_mtp_rollback_override("vulkan", ...)`) copies scratch row `a`
 live slots in a one-shot submission after the verify's landing - the verify completed at its
 wait, so no rail runs between the two, and the next command orders behind the submission as
 every state upload does - and flips the region's ring parity back to row `a`'s (the verify
-flipped it once a row); the resident seat (`vulkan_resident_rollback`) cuts the region's rows,
-its head rows and the session's `dn_pos` to `pos + a + 1`. The slots stay the session's, valid
+flipped it once a row); the resident seat (`vulkan_resident_rollback`) cuts the region's rows and
+the session's `dn_pos` to `pos + a + 1`, and its head rows to `pos + a` - row `pos + a` holds the
+rejected draft's input. The slots stay the session's, valid
 and dirty, so no state crosses the bus; the CPU restore (`mtp_state_restore`) is what releases
 them, and it never runs here. The round (`mtp_reject`) takes verify row `a`'s landed logits and
 post-norm hidden as `s.logits` and the carry at `pos + a + 1` - the seat landed every row's

@@ -41,8 +41,8 @@ require _resident_feed
 // carry and row, then the round's drafts with the draft seat unset and put back, and the round's
 // same-slab verify rows bit for bit against one-row steps of the same tokens, accepted and rejected,
 // and the head's prompt warm on the window chain: the host residual rows poisoned before a resident
-// prefill leave the draft bit for bit, the head's warmed K rows against the CPU warm's within the
-// deltanet bar, and six speculative rounds against the CPU round from one prompt.
+// prefill leave the draft bit for bit, the head's warmed K rows against the CPU warm's within twice
+// the deltanet bar, and six speculative rounds against the CPU round from one prompt.
 // Every model cell skips interpreted, without its model file, or without the armed tier; the
 // K-quant cells skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`) too.
 
@@ -51,6 +51,10 @@ let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit| - the deltane
 let private DN_LOGIT_BAR_REL_KQ_F16_FEED = 0.06
 //! the K-quant bar on the quant feed (no coopmat tile serves the planes, the prefill's activations ride Q8_K): the mixed twin's two-window cell under `DASLLAMA_COOPMAT=sdot4` on the RTX 5060 Ti reads 0.084 of an 11.6 max logit at one step, argmax unchanged, the rest under 0.05
 let private DN_LOGIT_BAR_REL_KQ_QUANT_FEED = 0.10
+//! the head's K row is the f16-stored projection of a trunk hidden row that already sits within DN_LOGIT_BAR_REL of the CPU chain's, so the row's own rounding stacks on the trunk's: twice the deltanet bar (the pod reads 0.05 of the row's max at the widest, under either mirror codec)
+let private HEAD_K_BAR_REL = 0.08
+//! the CPU row one down misses a device row by at least this many bars, or the bar is too wide to tell the row from its neighbour
+let private HEAD_K_CONTROL_BARS = 2.0
 let private PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
 let private RQ_NO_CENSUS = -1l        //! the census count with no vulkan module: the routing witness stands down
 
@@ -637,7 +641,7 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             t |> equal(long_length(s.mtp_snap_conv), 0l, "the round took no snapshot: its buffers were never sized")
             t |> equal(s.n_past, pos + 1l, "the reject committed the token alone")
             t |> equal(moe_gpu_resident_rows(s), pos + 1l, "the rollback cut the region's rows to the token's")
-            t |> equal(moe_gpu_resident_head_rows(s), pos, "the region's head rows end below the next draft's row")
+            t |> equal(moe_gpu_resident_head_rows(s), pos, "the region holds {pos} head rows after the reject: row {pos} held the rejected draft's input, and the next draft rewrites it")
             t |> equal(s.dn_pos, pos + 1l, "the recurrent state's position sits at the token's row")
             t |> equal(s.mtp_h_pos1, pos + 1l, "the carry sits at the token's row")
             let d = s.mtp_vbatch[1]
@@ -650,6 +654,7 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             let next = argmax_of(kept_log)
             var rolled <- dn_host(s)   //! the live slots after the rollback, read back to the host
             forward(tr, s, next, pos + 1l)
+            s.n_past = pos + 2l   //! a plain step moves no position; the round reads its position from here, and a stale one steps the recurrent state back
             var next_log <- [for (x in s.logits); x]
             mtp_spec_eval(tr, s, argmax_of(s.logits), acc)
             set_mtp_spec(spec0)
@@ -749,26 +754,34 @@ def private all_finite(a : array<float>) : bool {
     return true
 }
 
-//! the head's rows [0, n) on `gpu` against `cpu` within the deltanet bar of each CPU row's max, the CPU row one down as the control past it
+//! the head's rows [0, n) on `gpu` against `cpu` within `HEAD_K_BAR_REL` of each CPU row's max; the CPU row one down misses every device row by `HEAD_K_CONTROL_BARS` bars, the tightest such miss logged beside the widest
 def private head_rows_within(t : T?; what : string; gpu, cpu : array<array<float>>; n : int64) {
     var worst = 0.0
     var worst_row = -1l
     var worst_bar = 0.0
+    var tight_off = 0.0
+    var tight_bar = 0.0
+    var tight_row = -1l
     for (r in range64(n)) {
-        let bar = DN_LOGIT_BAR_REL * logits_maxabs(cpu[r])
+        let bar = HEAD_K_BAR_REL * logits_maxabs(cpu[r])
         let diff = logits_maxdiff(gpu[r], cpu[r])
         if (diff > worst) {
             worst = diff
             worst_row = r
             worst_bar = bar
         }
-        t |> success(diff <= bar, "{what}: the head's K row {r} on the device within {bar} of the CPU warm's (maxdiff {diff})")
+        t |> success(diff <= bar, "{what}: the device's head K row {r} is within {bar} of the CPU warm's row (maxdiff {diff})")
         if (r + 1l < n) {
             let off = logits_maxdiff(gpu[r], cpu[r + 1l])
-            t |> success(off > bar, "{what} control: the bar discriminates the CPU row one down (row {r} maxdiff {off} vs bar {bar})")
+            if (tight_row < 0l || off * tight_bar < tight_off * bar) {
+                tight_off = off
+                tight_bar = bar
+                tight_row = r
+            }
+            t |> success(off >= HEAD_K_CONTROL_BARS * bar, "{what} control: the CPU row one down misses device row {r} by {HEAD_K_CONTROL_BARS} bars (maxdiff {off}, bar {bar})")
         }
     }
-    to_log(LOG_INFO, "{what}: {n} head rows, the widest miss {worst} at row {worst_row} (bar {worst_bar})\n")
+    to_log(LOG_INFO, "{what}: {n} head rows, the widest miss {worst} at row {worst_row} (bar {worst_bar}); the tightest one-down control {tight_off} at row {tight_row} (bar {tight_bar}, {tight_bar > 0.0 ? tight_off / tight_bar : 0.0} bars)\n")
 }
 
 [test]
@@ -782,7 +795,7 @@ def test_gpu_resident_hybrid_mtp_xb_poison(t : T?) {
             let row = DRAFT_PROMPT - 1l
             var clean <- create_session(tr, mirror_kv_dtype())
             prefill_warm(tr, clean, prompt)
-            t |> equal(moe_gpu_resident_head_rows(clean), DRAFT_PROMPT - 1l, "the chain warmed the head's rows to the prompt's end")
+            t |> equal(moe_gpu_resident_head_rows(clean), DRAFT_PROMPT - 1l, "the region holds {DRAFT_PROMPT - 1l} head rows after the prompt warm: one per prompt row but the last, whose next token is not known yet")
             var h0 <- [for (x in clean.mtp_h); x]
             var want <- draft_from(tr, clean, DRAFT_TOKEN, row, h0)
             let pick_clean = moe_gpu_resident_draft_pick()
@@ -827,7 +840,7 @@ def test_gpu_resident_hybrid_mtp_head_warm(t : T?) {
             let served0 = moe_gpu_resident_prefills()
             prefill_warm(tr, s, prompt)
             t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
-            t |> equal(moe_gpu_resident_head_rows(s), n, "the region's head rows end a row below the prompt's end")
+            t |> equal(moe_gpu_resident_head_rows(s), n, "the region holds {n} head rows after the prompt warm: one per prompt row but the last, whose next token is not known yet")
             served_every_call(t)
             var gpu <- head_k_rows_f32(tr, s, n)
             delete s
@@ -886,7 +899,7 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             t |> equal(moe_gpu_resident_verifies(), verifies0 + ROUNDS, "every round verified on the device")
             served_every_call(t)
             let nrows = s.n_past - 1l
-            t |> equal(moe_gpu_resident_head_rows(s), nrows, "the region's head rows end a row below the session's position")
+            t |> equal(moe_gpu_resident_head_rows(s), nrows, "the region holds {nrows} head rows after six rounds, the session's position {s.n_past} less one: head row i needs the token at i + 1, the last committed token sits at {s.n_past - 1l}, so rows 0 .. {s.n_past - 2l} exist - a reject cuts the count to pos + a, an accept counts pos + 1, both the position less one")
             var grows <- head_k_rows_f32(tr, s, nrows)
             var glast <- spec_rounds(tr, s, [toks[ROUNDS]])   //! the seventh round: the control's twin
             delete s
