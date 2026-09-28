@@ -1965,15 +1965,16 @@ module) is independent and can land any time - it is pure structure.
     are filled by the Metal decode driver and the Metal gemma drafter alone; no Vulkan file names
     MTP or NextN. An `-MTP-` GGUF loads on a Vulkan box as a plain model - the resident driver
     serves its trunk and the NextN block is dead weight, its planes never uploaded. The seats
-    dispatch on the active decode override's registrations, and the resident overrides land the
+    serve only a model their decode override's owner claims (`register_mtp_seat_owner`; the
+    Vulkan owner lands with the round seat, "the resident driver is armed on t"), and the resident overrides land the
     post-norm hidden carry (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), so with
     `set_mtp_spec` or the server's `--mtp` the round's cold gate passes and the round runs the CPU
     rail under the resident trunk: the draft through the host copy of the NextN block, and a
     hybrid's two-row verify passing to the CPU rails as `continuation`, after which the session's
     decode passes as `gap`; the CPU prompt warm of the draft head reads the host `x_b`, which the
     resident prefill never fills. A model with no recurrent layer (GLM-4.5-Air) has its two-row
-    verify served by the window chain, and the verify's batched classifier then reads that same
-    unfilled `x_b`, so its tokens are wrong until the verify lands its own rows. `test_mtp.das`'s sessions carry f32 K/V, so they reach the
+    verify served by the window chain, which leaves the host `x_b` the verify's classifier reads
+    unwritten, so the CPU round panics there by name until the verify lands its own rows. `test_mtp.das`'s sessions carry f32 K/V, so they reach the
     driver only under `DASLLAMA_VK_KV32=1`. The work, in Metal's shape (`ARCHITECTURE_GPU_MTP.md`)
     on the resident driver: the draft head in the arena with a one-row step through it at layer
     index `n_layers` on its own slab; the verify as k+1 consecutive rows of one stream (the window

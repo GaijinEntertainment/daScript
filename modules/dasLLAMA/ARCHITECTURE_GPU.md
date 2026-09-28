@@ -246,6 +246,7 @@ decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both pat
 - **The joint speculative tick is Metal-only.** `register_mtp_spec_batch_override("metal", ...)`
   has one registrant, `metal_mtp_spec_eval_batch`: the scheduler's tick hands every speculative
   stream to it and one same-slab verify carries all their rows (`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`); on Vulkan and the CPU the tick steps each stream through its own round.
+- **The speculative seats' owner is Metal-only.** `register_mtp_seat_owner("metal", ...)` claims a model's round for the Metal seats only on a blob model (`mtp_seats_own`), so a planar model under the metal overrides runs the CPU round; Vulkan registers no seat and no owner.
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes - Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants, and
   NonWritable derived per binding from the access classification - `ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens` carries the rule, its refusal and its reading; Metal lowers a read role to `device const`

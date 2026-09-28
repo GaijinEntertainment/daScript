@@ -20,7 +20,8 @@ def private test_upload_sinks(rows : array<float>) : bool => true
 
 // The whole-model driver's decline reasons, decided from a Config or a synthetic Model shell
 // (no weights on disk): every feature and layer shape the driver has no arm for is named in
-// the text a user reads, and a shape it serves yields no text at all.
+// the text a user reads, and a shape it serves yields no text at all. The speculative round's seat
+// ownership rides the same shells: a decode override's seats take a round only on a model its owner claims.
 
 def private shell(n_layers : int64; recr_mask : uint64) : Model {
     var m = Model()
@@ -450,5 +451,99 @@ def test_routed_slots_fit(t : T?) {
         } else {
             t |> skip("dasVulkan not present")
         }
+    }
+}
+
+let private PROBE_OWNED = "mtp_seat_probe"   //! a fake decode override whose seats carry an owner the probe answers
+let private PROBE_UNOWNED = "mtp_seat_probe_unowned"   //! ... and one whose seats carry none
+var private g_probe_owns = false
+var private g_probe_seat_calls = 0l
+
+[unused_argument(t, s, token, pos)]
+def private probe_decode(t : Model; var s : Session; token, pos : int64) : bool => false
+
+[unused_argument(t)]
+def private probe_owner(t : Model) : bool => g_probe_owns
+
+[unused_argument(t, s, tok, accepted)]
+def private probe_spec(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {
+    g_probe_seat_calls++
+    return false
+}
+
+[unused_argument(t, s, tok, k)]
+def private probe_round(t : Model; var s : Session; tok : int64; k : int64) : int64 {
+    g_probe_seat_calls++
+    return 0l
+}
+
+[unused_argument(t, sessions, toks, accepted)]
+def private probe_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
+    g_probe_seat_calls++
+    return 7l
+}
+
+//! how many of `mtp_spec_eval`, `mtp_spec_round` and `mtp_spec_eval_batch` reached a seat, how many opened the CPU round, and the batch tick's answer
+struct private SeatDispatch {
+    seat : int64
+    cpu : int64
+    batch : int64
+}
+
+//! the three seat-taking entries once each under the fake override `name` (its owner answering `owns`) on a Model shell;
+//! the session carries a parked token, so the CPU round's opening refuses it before any forward and counts as a CPU call
+def private seat_dispatch(name : string; owns : bool) : SeatDispatch {
+    for (nm in [PROBE_OWNED, PROBE_UNOWNED]) {
+        register_decode_override(nm, @@probe_decode)
+        register_mtp_spec_override(nm, @@probe_spec)
+        register_mtp_round_override(nm, @@probe_round)
+        register_mtp_spec_batch_override(nm, @@probe_batch)
+    }
+    register_mtp_seat_owner(PROBE_OWNED, @@probe_owner)
+    g_probe_owns = owns
+    g_probe_seat_calls = 0l
+    let prev = active_decode_override()
+    select_decode_override(name)
+    var m = Model()
+    var s : Session
+    s.mtp_pre_drawn = true
+    var out : SeatDispatch
+    try {
+        var acc = 0l
+        mtp_spec_eval(m, s, 1l, acc)
+    } recover {
+        out.cpu++
+    }
+    try {
+        mtp_spec_round(m, s, 1l)
+    } recover {
+        out.cpu++
+    }
+    var sessions : array<Session?>
+    let toks : array<int64>
+    var accepted : array<int64>
+    out.batch = mtp_spec_eval_batch(m, sessions, toks, accepted)
+    select_decode_override(prev)
+    out.seat = g_probe_seat_calls
+    delete s
+    delete m
+    delete accepted
+    return out
+}
+
+[test]
+def test_mtp_seat_owner(t : T?) {
+    t |> run("the speculative seats serve only a model the active decode override's owner claims; otherwise the CPU round runs") @(t : T?) {
+        let refused = seat_dispatch(PROBE_OWNED, false)
+        t |> equal(refused.seat, 0l, "an owner refusing the model reaches no seat")
+        t |> equal(refused.cpu, 2l, "mtp_spec_eval and mtp_spec_round open the CPU round")
+        t |> equal(refused.batch, 0l, "the batch tick steps each stream alone")
+        let unowned = seat_dispatch(PROBE_UNOWNED, true)
+        t |> equal(unowned.seat, 0l, "seats registered with no owner never take a round")
+        t |> equal(unowned.cpu, 2l, "... and the CPU round runs")
+        let owned = seat_dispatch(PROBE_OWNED, true)
+        t |> equal(owned.seat, 3l, "an owner claiming the model hands every entry to its seat")
+        t |> equal(owned.cpu, 0l, "no entry opened the CPU round")
+        t |> equal(owned.batch, 7l, "the batch tick answers the seat's count")
     }
 }

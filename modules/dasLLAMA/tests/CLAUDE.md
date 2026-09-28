@@ -795,7 +795,12 @@ on both the decode and the batch needs mask, and the same width on a dense twin 
 both. `test_plan_room` is the GPU plan's room arithmetic - the tier cap less headroom, capped by
 the OS's room where the OS answers. `test_resident_region_ctx` is a mirror region's share of its
 side's one binding: the whole of it at one region, a quarter at four, the session's own context
-where that is shorter, and one region for a count under one.
+where that is shorter, and one region for a count under one. `test_mtp_seat_owner` holds the
+speculative round's seat ownership on a Model shell under two fake decode overrides: with the
+owner refusing the model, and with seats registered under no owner, `mtp_spec_eval` and
+`mtp_spec_round` open the CPU round (its opening refuses the session's parked token, the witness)
+and `mtp_spec_eval_batch` steps each stream alone; with the owner claiming it, all three reach
+the seats.
 
 `test_gpu_resident_hybrid.das` - stocked suite, `-jit` only; the whole-model resident driver on a
 deltanet hybrid under `DASLLAMA_GPU=1`. Each fixture is a row in `../performance/model_specs.das`:

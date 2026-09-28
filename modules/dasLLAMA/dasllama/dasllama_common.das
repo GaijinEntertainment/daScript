@@ -419,8 +419,8 @@ def register_decode_override(name : string; fn : DecodeOverrideFn) {
 }
 
 // The MTP spec-step override: a backend's complete mtp_spec_eval twin, cold gates included. Keyed
-// by the DECODE override name and consulted whenever the active one registered it; a decode
-// override with no seat keeps the CPU spec rail.
+// by the DECODE override name and consulted where the active one owns the model (`mtp_seats_own`);
+// otherwise the CPU spec rail runs.
 typedef MtpSpecOverrideFn = function<(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool>
 var private g_mtp_spec_overrides : table<string; MtpSpecOverrideFn>
 
@@ -449,6 +449,21 @@ var private g_mtp_round_overrides : table<string; MtpRoundOverrideFn>
 
 def register_mtp_round_override(name : string; fn : MtpRoundOverrideFn) {
     g_mtp_round_overrides[name] = fn
+}
+
+//! whether the MTP seats registered under a decode override's name serve model `t`: the override that owns `t`'s
+//! round - an override with no owner registered never takes a round, and a model its owner refuses runs the CPU round
+typedef MtpSeatOwnerFn = function<(t : Model) : bool>
+var private g_mtp_seat_owners : table<string; MtpSeatOwnerFn>
+
+def register_mtp_seat_owner(name : string; fn : MtpSeatOwnerFn) {
+    g_mtp_seat_owners[name] = fn
+}
+
+//! the active decode override owns `t`'s speculative round: its seats, where it registered them, serve the round
+def mtp_seats_own(t : Model) : bool {
+    return (!empty(g_decode_override_name) && key_exists(g_mtp_seat_owners, g_decode_override_name)
+        && invoke(g_mtp_seat_owners[g_decode_override_name], t))   // nolint:PERF026 — key_exists guards the index, so it cannot insert
 }
 
 //! The accept walk's sampler seam (the decode-override shape: the engine never requires the sampler):
@@ -521,9 +536,9 @@ def mtp_walk_sampled(var s : Session; k, vocab : int64) : int64 {
 
 //! One speculative round at the configured depth (get_mtp_depth): commits `tok`, returns the
 //! accepted draft count a with the accepted drafts in s.mtp_vbatch[1..a]. The active decode
-//! override's round seat serves any depth; without one the rail is the depth-1 mtp_spec_eval.
+//! override's round seat serves any depth where it owns `t` (`mtp_seats_own`); else the rail is the depth-1 mtp_spec_eval.
 def mtp_spec_round(t : Model; var s : Session; tok : int64) : int64 {
-    if (!empty(g_decode_override_name) && key_exists(g_mtp_round_overrides, g_decode_override_name)) {
+    if (mtp_seats_own(t) && key_exists(g_mtp_round_overrides, g_decode_override_name)) {
         return invoke(g_mtp_round_overrides[g_decode_override_name], t, s, tok, get_mtp_depth())
     }
     var acc = 0l
@@ -4527,11 +4542,16 @@ def private mtp_prefill_warm(t : Model; var s : Session; tokens : array<int64>; 
     // SEAM row start_pos-1 is written by forward_prefill BEFORE the trunk body, so it can't be done here
 }
 
+[cold_path]   // the CPU round's fail-closed exit: a prefill driver served its verify window
+def private mtp_verify_served_panic {
+    panic("dasLLAMA: the `{g_prefill_override_name}` prefill driver served a speculative verify window; the CPU round cannot read its rows - run without --mtp or on the CPU rails")
+}
+
 //! the depth-1 speculative step over every stream at once: a registered batch override verifies every
 //! stream's rows in one pass; without one each stream steps alone through `mtp_spec_eval`. `accepted[i]`
 //! is stream i's accepted draft or -1; returns how many streams' rows a joint verify carried (0 = none)
 def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
-    if (!empty(g_decode_override_name) && key_exists(g_mtp_spec_batch_overrides, g_decode_override_name)) {
+    if (mtp_seats_own(t) && key_exists(g_mtp_spec_batch_overrides, g_decode_override_name)) {
         return invoke(g_mtp_spec_batch_overrides[g_decode_override_name], t, sessions, toks, accepted)
     }
     let n = long_length(sessions)
@@ -4548,7 +4568,7 @@ def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<
 //! `s.logits` holds the second position's; else one position, plain-eval semantics. Requires [[set_mtp_spec]] ON.
 def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&) : bool {
     let c = t.config
-    if (!empty(g_decode_override_name) && key_exists(g_mtp_spec_overrides, g_decode_override_name)) {
+    if (mtp_seats_own(t) && key_exists(g_mtp_spec_overrides, g_decode_override_name)) {
         // the active override's GPU twin owns the step, its own cold gates included
         return invoke(g_mtp_spec_overrides[g_decode_override_name], t, s, tok, accepted)
     }
@@ -4579,6 +4599,9 @@ def mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : int64&
     s.mtp_vbatch[1] = d
     let batch_cls = mtp_cls_batch_ok(t)
     forward_prefill(t, s, s.mtp_vbatch, 2l, pos, batch_cls)
+    if (g_prefill_logits_done) {   //! a driver that landed the window's logits left the host x_b rows the verify's classifier reads unwritten
+        mtp_verify_served_panic()
+    }
     if (batch_cls) {
         mtp_verify_logits(t, s, 2l)   // both rows from one classifier stream
     } else {
@@ -5264,7 +5287,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     // spec on: the draft head's SEAM row (start_pos-1) must be written BEFORE the body — the body's
     // own tail overwrites mtp_h with THIS window's last hidden. Cold/foreign handoff just skips it.
     if (g_mtp_spec && c.n_layer_nextn > 0l && start_pos > 0l && s.mtp_h_pos1 == start_pos) {
-        let seat = !empty(g_decode_override_name) && key_exists(g_mtp_seam_overrides, g_decode_override_name)
+        let seat = mtp_seats_own(t) && key_exists(g_mtp_seam_overrides, g_decode_override_name)
         let served = seat && invoke(g_mtp_seam_overrides[g_decode_override_name], t, s, tokens[0], start_pos)   // nolint:PERF026 — `seat` holds key_exists, so the index cannot insert
         if (!served && !t.metal_blob) {
             forward_mtp(t, s, tokens[0], start_pos - 1l, false)
