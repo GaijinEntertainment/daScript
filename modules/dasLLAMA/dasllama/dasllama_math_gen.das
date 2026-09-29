@@ -2825,7 +2825,7 @@ def private q8q8_bias_sums(xqp : int8 const?; n, ntok, wbias : int64) : int cons
 def private bf16_panel_bytes(n, ngr : int64) : int64 => ngr * 16l * n * 2l
 
 //! the panel a superblock format's walk decodes into: the bf16 panel under a bf16 tile form, the byte panel where the tile reads unpacked quants, none where it reads the packed planes
-def private kq_walk_panel_bytes(fmt : int; n, mr : int64) : int64 {
+def kq_walk_panel_bytes(fmt : int; n, mr : int64) : int64 {
     let form = int64(kq_tileform_of(fmt))
     return bf16_panel_bytes(n, form) if (form > 0l)
     return kq_reads_packed_planes(int64(fmt)) ? 0l : mr * (n / 256l) * 256l

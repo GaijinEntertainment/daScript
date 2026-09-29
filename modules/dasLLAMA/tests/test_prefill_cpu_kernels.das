@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_gen
+require dasllama/dasllama_par   // set_single_thread_: a thread's walk on its calling thread
 require dasllama/dasllama_convert
 require dasllama/dasllama_kv_codec
 require dasllama/dasllama_repack
@@ -422,6 +423,133 @@ def private xbf16_two_contexts(t : T?; n : int64; rounds : int) {
     delete xs
     delete xbs
     delete want
+}
+
+def private walk_seed(lane : int) : uint => 0x51ED270Bu + uint(lane) * 0x9E3779B9u
+
+def private walk_inputs(fmt : int; n, d, ntok : int64; seed : uint; var kq : array<uint8>; var ks : array<uint8>;
+                        var src : array<float>; var xq : array<int8>; var xs : array<float>; var xbs : array<int>) {
+    build_kq_region(fmt, kq, ks, d, n, seed)
+    build_acts(src, xq, xs, xbs, ntok, n)
+    repack_kq_weight(fmt, kq, ks, 0l, n, d)
+}
+
+// Two contexts run the batch walk at once, each over its own planes: the walk's panels are a
+// context's own scratch, so neither walk reads a panel the other built. The contexts are two
+// threads', each walking on its calling thread (one dispatch slot, the same slot in both); a
+// thread builds the inputs the main thread built for its lane, waits for the other to start,
+// then walks `rounds` times and counts the elements off the main thread's walk.
+def private walk_thread(lane : int; fmt : int; n, d, ntok : int64; rounds : int; wp : float const?;
+                        var sp : int?; var dp : int?; var bp : int64?; var wg : JobStatus?) {
+    new_thread() @() {
+        set_single_thread_(true)
+        pin_kernel_backend(gen_backend_name())
+        var kq : array<uint8>
+        var ks : array<uint8>
+        var src : array<float>
+        var xq : array<int8>
+        var xs : array<float>
+        var xbs : array<int>
+        walk_inputs(fmt, n, d, ntok, walk_seed(lane), kq, ks, src, xq, xs, xbs)
+        var y : array<float>
+        y |> resize(ntok * d)
+        unsafe {
+            sp[lane] = 1
+            let t0 = ref_time_ticks()
+            while (sp[1 - lane] == 0 && get_time_usec(t0) < 2000000) {
+                sleep(1u)
+            }
+            for (_r in range(rounds)) {
+                nan_fill(y)
+                matmul_kq_batch(fmt, y, kq, ks, 0l, xq, xs, xbs, n, d, ntok)
+                for (i in range64(ntok * d)) {
+                    if (y[i] != wp[int64(lane) * ntok * d + i]) {
+                        bp[lane]++
+                    }
+                }
+                dp[lane]++
+            }
+        }
+        delete kq
+        delete ks
+        delete src
+        delete xq
+        delete xs
+        delete xbs
+        delete y
+        wg |> notify_and_release
+    }
+}
+
+def private walk_two_contexts(t : T?; fmt : int; n, d, ntok : int64; rounds : int) {
+    let prev = active_kernel_backend()
+    pin_kernel_backend(gen_backend_name())
+    if (!kernel_backend_has_kq() || !kernel_backend_has_kq_batch()) {
+        clear_kernel_backend_pin()
+        select_kernel_backend(prev)
+        t |> skip("{gen_backend_name()} carries no kq batch kernel on this box")
+        return
+    }
+    var want : array<float>
+    want |> resize(2l * ntok * d)
+    for (lane in range(2)) {
+        var kq : array<uint8>
+        var ks : array<uint8>
+        var src : array<float>
+        var xq : array<int8>
+        var xs : array<float>
+        var xbs : array<int>
+        walk_inputs(fmt, n, d, ntok, walk_seed(lane), kq, ks, src, xq, xs, xbs)
+        var y : array<float>
+        y |> resize(ntok * d)
+        nan_fill(y)
+        matmul_kq_batch(fmt, y, kq, ks, 0l, xq, xs, xbs, n, d, ntok)
+        for (i in range64(ntok * d)) {
+            want[int64(lane) * ntok * d + i] = y[i]
+        }
+        delete kq
+        delete ks
+        delete src
+        delete xq
+        delete xs
+        delete xbs
+        delete y
+    }
+    clear_kernel_backend_pin()
+    select_kernel_backend(prev)
+    var lanesDiffer = 0
+    var finite = 0
+    for (i in range64(ntok * d)) {
+        lanesDiffer += want[i] != want[ntok * d + i] ? 1 : 0
+        finite += is_finite(want[i]) ? 1 : 0
+    }
+    var started : int[2]
+    var done : int[2]
+    var bad : int64[2]
+    with_job_que() {
+        with_wait_group(2) $(wg) {
+            unsafe {
+                for (lane in range(2)) {
+                    walk_thread(lane, fmt, n, d, ntok, rounds, addr<float const?>(want[0]), addr(started[0]), addr(done[0]), addr(bad[0]), wg)
+                }
+            }
+        }
+    }
+    to_log(LOG_INFO, "{fmt_tag(fmt)} batch walk in two threads (n={int(n)} d={int(d)} ntok={int(ntok)}, {rounds} rounds each, a panel of {int(kq_walk_panel_bytes(fmt, n, kq_layout_of(fmt)))} bytes): {bad[0]} and {bad[1]} elements off\n")
+    t |> success(kq_walk_panel_bytes(fmt, n, kq_layout_of(fmt)) > 0l, "{fmt_tag(fmt)} walks through a panel on this stamp")
+    t |> equal(finite, int(ntok * d), "the main thread's walk wrote every element")
+    t |> equal(done[0] + done[1], 2 * rounds, "both threads ran every round")
+    t |> success(lanesDiffer > 0, "the two threads' outputs differ ({lanesDiffer} of {int(ntok * d)} elements), so a shared panel would show")
+    t |> equal(bad[0], 0l, "thread 0 read its own panels in every round")
+    t |> equal(bad[1], 0l, "thread 1 read its own panels in every round")
+    delete want
+}
+
+[test]
+def test_walk_panels(t : T?) {
+    t |> run("two threads walking at once each read their own panels") @(t : T?) {
+        walk_two_contexts(t, 6, 512l, 48l, 67l, 200)
+    }
 }
 
 def private bf16_block_gate(t : T?) {
