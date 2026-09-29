@@ -20,8 +20,9 @@ dropped length check.
 
 **A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists,
 changes which `run.das` suites list one, or adds a cell or an assert whose expected value must be
-kept in step with something maintained outside the cell, or that a checked-in table names as its
-evidence, applies that checklist too.**
+kept in step with something maintained outside the cell - a document, a table, a roster, a knob
+list; not a value the cell's own claim defines, an engine constant it asserts included - or that
+a checked-in table names as its evidence, applies that checklist too.**
 
 **A cell that calls a `set_*` / `pin_*` function in `../dasllama/` whose value a later load, route
 choice or kernel dispatch in the same process reads, passes a loader parameter that takes a
@@ -49,8 +50,9 @@ change reaches a test when it alters anything the
 test's result depends on - the test file, a shared helper, engine code it exercises, an in-tree
 fixture or corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
-**A PR whose change reaches a cell that skips without a device or without a module the build may
-omit runs that cell on a box that has it, and names that box in the PR body.** A reached cell that
+**A PR whose change reaches a cell that skips on a capability the box may lack - a device, a
+module the build may omit, a kernel the box's CPU tier does not carry - runs that cell on a box
+that has it, and names that box in the PR body.** A reached cell that
 skipped was not run.
 
 **A PR that adds or changes a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
@@ -163,8 +165,9 @@ env registry.
 round-trip is a defect.**
 
 **A test that compares generated tokens, ids, or logits without logging both sides in the most
-readable form its fixture carries is a defect: with a tokenizer, the decoded text for a token or
-id compare (`log_gen_texts` in `_model_tier.das`, or one line per side) and each side's argmax
+readable form its fixture carries is a defect: with a tokenizer, each side's decoded text for a
+token or id compare, one log record a side with its newlines escaped (`log_gen_texts` in
+`_model_tier.das` writes that form), and each side's argmax
 decoded piece plus the measured max difference for a logits compare; with a raw-id fixture and no
 tokenizer, the ids, one line per side.** A failure, or a pass that looks wrong, must be readable
 in the log, not only as an id or float difference.
@@ -175,15 +178,16 @@ kernel it itself dispatches or calls, is asserted in that cell by an assert on t
 a resize, or a counter showing the path ran is not evidence the number was reached; a device's
 geometry (subgroup width, SM count) is no coverage claim.
 
-**An exact token or id compare over a prompt whose continuation can tie, whose two sides run
-different lanes, backends, batch shapes or kernel forms, is a defect - it takes the forced-feed
-logits-tolerance form: the same fixed tokens fed to both sides, the logits compared within a
-bar. A counting cell, whose prompt forces a continuation that cannot tie, stays exact on any two
-sides.**
+**An exact token or id compare over a prompt whose continuation can tie, whose two sides can
+round differently - different lanes, backends, batch shapes or kernel forms - is a defect - it
+takes the forced-feed logits-tolerance form: the same fixed tokens fed to both sides, the logits
+compared within a bar. A counting cell, whose prompt forces a continuation that cannot tie, stays
+exact on any two sides.**
 
-**An exact token or id compare over a prompt whose continuation can tie, whose two sides run one
-code path, states in the cell what makes them one - the shared entry point, or an assert pinning
-the lane.**
+**An exact token or id compare over a prompt whose continuation can tie, whose two sides cannot
+round differently - one code path, or the same kernels over another storage layout (a flat K/V
+cache against a paged one) - states in the cell what makes them so: the shared entry point, an
+assert pinning the lane, or the layout the two sides differ in.**
 
 **A diff that adds an ASR family ships a token-for-token oracle cell for it - a transcript
 compared against a reference leg, an external dump or a CPU control.**
@@ -221,8 +225,8 @@ that knob's value in the text a red prints - the cell label or the assert.**
 
 **A diff that adds or loosens an assert whose pass means two sides agree or a figure is good
 enough - the difference between two computed sides, a rate, an error, or a count the run
-decides, within a nonzero tolerance or past a floor or ceiling - in a cell that is not a
-kernel-unit cell, ships in the same change, in each such cell holding the assert, a control that
+decides (a counter held as the proof a route ran included), within a nonzero tolerance or past a
+floor or ceiling - in a cell that is not a kernel-unit cell, ships in the same change, in each such cell holding the assert, a control that
 lands outside that bound.** A bound nothing has exceeded where it is applied is not known to
 discriminate there.
 

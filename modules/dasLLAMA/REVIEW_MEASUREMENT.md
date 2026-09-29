@@ -14,7 +14,8 @@ The words these rules share:
 
 - A figure is any number a run produced - a rate, a wall, a count, a byte size, or a ratio or
   percentage of two such numbers, produced by the runs its sides came from - or an error or
-  agreement reading (a cosine, a max-abs error) a test's tolerance is set from, or that a change
+  agreement reading (a cosine, a max-abs error) a test's tolerance or an instrument's compare bar
+  is set from, or that a change
   cites as evidence that a tolerance set for another cell, model or tier holds for the one it adds
   or alters.
 - A served-turn leg is prefill, decode, a batched decode row, or a whole served request end to
@@ -35,8 +36,9 @@ The words these rules share:
   written as such a row). An `--oracle` re-measure never writes the store and is not one; nor is
   a reading a `harness/` instrument produces, whether or not it writes a record.
 - The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`, not as the
-  released exe; a `-jit` reading is a wall or rate, or a ratio of two, that an instrument - the
-  `-jit` script included - printed while running under `-jit`.
+  released exe; a `-jit` reading is a wall or rate that an instrument - the `-jit` script
+  included - printed while running under `-jit`, or a ratio of two such prints, whoever computed
+  it.
 - A rig leg is a child cell `performance/gen_bench_records.das` spawns whose record row has
   `engine` `das`, named by that row's `(backend, flavor)` pair whatever its `workload`.
 - A box can mint a spawned cell when a rig leg drives the path the owed row measures, the box
@@ -121,8 +123,8 @@ instrument's print - or the profile output that shows the change is faster
 ledger), with the flags that run took.**
 
 **A diff that changes `dasllama/dasllama_metal_kernels.das` (the kernel library
-`metal_decode_init` compiles), `performance/profile_common.das`, or a `dasllama/` module
-`benchmarks/lcpp_bench.das` requires directly copies into the PR body the `sanity:` lines and the
+`metal_decode_init` compiles), `performance/profile_common.das`, or a `dasllama/` module the
+fat exe of `benchmarks/lcpp_bench.das` compiles copies into the PR body the `sanity:` lines and the
 `tune gate:` line of an `lcpp_bench` run of the fat exe built from the diff's tree, or says that
 run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DAS_TUNE_MODE=fat`,
 `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
@@ -132,17 +134,21 @@ re-mints a board row (`performance/records/<box>.json`) that exercises it, in th
 names that row in the PR body.** The board is the module's committed record of what serving
 costs; a kernel win that never lands there is invisible to the next regression check.
 
-**A diff that changes what a board cell's timed body loads, runs, or counts ships before/after
-rows for each affected cell and corpus, or withdraws the affected rows and names the withdrawal
-and its reason in the PR body; the new rows or the withdrawal land in the file the affected rows
-live in - `performance/records/<box>.json` or `PERF_LEDGER.md`.** A change inside the timed body
-that alters nothing it loads, runs, or counts changes nothing the cell times.
+**A diff that changes what a board cell's timed body loads, runs, or counts - the model or
+corpus it reads, the stages or backend it takes, the tokens or rows it divides the wall by -
+ships before/after rows for each affected cell and corpus, or withdraws the affected rows and
+names the withdrawal and its reason in the PR body; the new rows or the withdrawal land in the
+file the affected rows live in - `performance/records/<box>.json` or `PERF_LEDGER.md`.** A
+kernel that computes the same result faster or from another buffer changes none of the three;
+the rule on a path made faster holds it.
 
 **A rate or wall of any served-turn leg, or a ratio of two such rates or walls, written down as
 a measurement rather than as a prediction is a defect unless it cites the committed board row it
-came from, or names harness, flags, environment overrides, box, the exe or script that ran it,
-and - for a figure aggregated over more than one timed run or input - the number of runs or
-inputs and the spread of the per-run figures: the standard deviation, or the min and max.**
+came from, or names harness, flags, environment overrides, box, and the exe or script that ran
+it.**
+
+**A figure aggregated over more than one timed run or input states the number of runs or inputs
+and the spread of the per-run figures: the standard deviation, or the min and max.**
 
 **A diff that records a measured number a `harness/` instrument prints - a time, a rate, or a
 figure computed from one - or changes what such a number measures, ships that number's alternate

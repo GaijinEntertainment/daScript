@@ -61,7 +61,8 @@ an input the cell keeps is not one of these.
 
 **A diff that adds a cell or an assert whose expected value must be kept in step with something
 maintained outside the cell - a document, a checked-in table, a committed artifact's form, a
-roster, a knob list; not a value the cell's own claim defines - or that a checked-in table names as
+roster, a knob list; not a value the cell's own claim defines, an engine constant it asserts
+included - or that a checked-in table names as
 its evidence, adds the cell carrying it to the pinned set in the same change** - as a named cell;
 or, when the new cell leaves every cell of its file pinned, by replacing the file's named cells
 with one file entry naming what it pins; or, when the file already has a file entry, by adding

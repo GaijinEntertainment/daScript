@@ -14,9 +14,9 @@ whose every caller the runtime re-enters once per serving step
 (`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
 
 **Every kernel dispatch (the host function that records it), loop or call path a diff adds that
-the runtime re-enters once per serving step is, or is reached by, an annotated region entry:
-`[hot_path]`, any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts, or `[cold_path]` on the
-guarded, rarely-taken function that is the path's only entry.**
+the runtime re-enters once per serving step is, or is reached by, a region entry that carries
+`[hot_path]` or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts - or sits behind a
+`[cold_path]` function, guarded and rarely taken, that is the path's only entry.**
 
 **A function a serving step reaches only through a registered function value - a function value
 stored in a table or variable that the runtime calls through - is a region entry, and carries
@@ -49,5 +49,5 @@ reached only from a load, stage, bake, or convert path - it is no region entry; 
 other such non-`[test]` function reaches it, and no annotation otherwise.**
 
 **A diff that adds or changes a non-`[test]` function under this module's `tests/`, `harness/`,
-`benchmarks/` or `performance/` that reaches a `[cold_path]` function there removes that
-function's `[cold_path]` in the same change.**
+`benchmarks/` or `performance/` that reaches a `[cold_path]` function under those folders
+removes that function's `[cold_path]` in the same change.**

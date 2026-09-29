@@ -6,7 +6,9 @@ docs: `../ARCHITECTURE_GPU.md` for a `[vk_dispatch]` or `[metal_dispatch]` kerne
 work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's asserts
-belong to every cell that calls it. A kernel run is a dispatch or a CPU kernel call. A kernel-unit
+belong to every cell that calls it. A CPU kernel is a function that writes an output buffer from
+operand buffers; one that answers a size, a block or a layout is not. A kernel run is a dispatch
+or a CPU kernel call. A kernel-unit
 cell is a cell in which a `[metal_dispatch]` or `[vk_dispatch]` class is dispatched, or a CPU
 kernel in `../dasllama/dasllama_math*.das` is called, by a statement in test code - the cell
 itself, or a helper in its own file or in a `_*.das` test-helper module; a kernel run that only
