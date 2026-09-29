@@ -231,6 +231,7 @@ namespace das {
         Type getRangeBaseType() const;
         TypeDecl * findAlias ( const string & name, bool allowAuto = false, bool * constUnderDim = nullptr );
         bool computeAliasCache();     // eager full walk, populates aliasCacheValid/aliasCacheHasAlias on every visited node; returns true if subtree contains any alias
+        static uint32_t aliasCacheFlags();
         int findArgumentIndex(const string & name) const;
         int tupleFieldIndex( const string & name ) const;
         int variantFieldIndex( const string & name ) const;
@@ -304,6 +305,16 @@ namespace das {
         string              alias;
         LineInfo            at;
         Module *            module = nullptr;
+    };
+
+    // src/ast/ARCHITECTURE_GC.md#type-remap
+    DAS_API void gc_collect_type ( TypeDeclPtr & slot, gc_root * target, gc_root * from );
+
+    struct DAS_API TypeDeclRemapHash  { size_t operator () ( const TypeDecl * t ) const noexcept; };
+    struct DAS_API TypeDeclRemapEqual { bool operator () ( const TypeDecl * a, const TypeDecl * b ) const noexcept; };
+
+    struct TypeDeclRemap {
+        das_hash_set<TypeDecl *, TypeDeclRemapHash, TypeDeclRemapEqual> nodes;
     };
 
     struct MatchingOptionError {

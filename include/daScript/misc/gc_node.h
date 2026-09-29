@@ -34,6 +34,7 @@
 namespace das {
 
     struct gc_root;
+    struct TypeDeclRemap;
 
     // gc_node — base class for GC-managed AST nodes.
     // Each node lives on exactly one gc_root's doubly-linked list.
@@ -91,6 +92,7 @@ namespace das {
         gc_node *   gc_last = nullptr;
         uint64_t    gc_count = 0;
         bool        gc_collecting = false;      // delete guard — set during gc_sweep
+        TypeDeclRemap * typeRemap = nullptr;
 
         gc_root() = default;
         gc_root ( const gc_root & ) = delete;
