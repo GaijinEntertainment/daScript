@@ -3293,12 +3293,14 @@ def kv_phys_row(s : Session; pos : int64) : int64 {
 }
 
 //! Layer l's base byte pointer in the key cache — THE flat/paged storage branch. Flat: the session
-//! slab at its byte prefix; paged: the pool's owning blob for l. Hoist AFTER kv_ensure: pool
-//! growth resizes blobs, which would dangle this pointer.
+//! slab at its byte prefix; paged: the pool's owning blob for l, null where l's rows are zero bytes wide (a recurrent layer owns no K/V).
+//! Hoist AFTER kv_ensure: pool growth resizes blobs, which would dangle this pointer.
 def kv_layer_kbase(var s : Session; l, seq_len : int64) : uint8? {
     unsafe {
         if (s.kv_pool != null) {
-            return addr(s.kv_pool.kblobs[s.kv_pool.blob_of[l]][0])
+            let b = s.kv_pool.blob_of[l]
+            return null if (s.kv_pool.krow_bytes[b] == 0l)
+            return addr(s.kv_pool.kblobs[b][0])
         }
         return addr(s.key_cache[0]) + kv_base_k(s, l, seq_len)
     }
@@ -3308,7 +3310,9 @@ def kv_layer_kbase(var s : Session; l, seq_len : int64) : uint8? {
 def kv_layer_vbase(var s : Session; l, seq_len : int64) : uint8? {
     unsafe {
         if (s.kv_pool != null) {
-            return addr(s.kv_pool.vblobs[s.kv_pool.blob_of[l]][0])
+            let b = s.kv_pool.blob_of[l]
+            return null if (s.kv_pool.vrow_bytes[b] == 0l)
+            return addr(s.kv_pool.vblobs[b][0])
         }
         return addr(s.value_cache[0]) + kv_base_v(s, l, seq_len)
     }

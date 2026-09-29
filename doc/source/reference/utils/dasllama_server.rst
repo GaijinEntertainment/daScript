@@ -815,9 +815,10 @@ in :ref:`the dasLLAMA knob reference <dasllama_env>`)::
   ``test_setup_mode.das`` --- model-free: the sidecar exchange client against a
   fake exchange, the catalog-table invariants, a slotless setup-mode boot.
 - ``test_slot_served.das``, ``test_model_override.das``,
-  ``test_worker_dispatch.das`` --- model-free: every ``served`` /
-  ``served_note`` arm, the ``--model``-over-roster override, the media worker's
-  dispatch under the job queue.
+  ``test_worker_dispatch.das``, ``test_server_flags.das`` --- model-free: every
+  ``served`` / ``served_note`` arm, the ``--model``-over-roster override, the
+  media worker's dispatch under the job queue, the flag-presence test behind
+  the config surface's provenance.
 - ``tests/`` --- the control page itself under Playwright (Node + chromium),
   against JSON/SSE fixtures captured from a real server; ``npm ci && npx
   playwright test`` in that directory.
