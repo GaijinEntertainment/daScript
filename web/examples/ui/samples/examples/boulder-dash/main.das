@@ -232,6 +232,7 @@ def strudel_music_cmd(cmd : string) {
     }
 }
 
+[unsafe_heap_collect]   //! the strudel thread's entry: no daslang frame sits below it, as with strudel_play, which it calls
 def strudel_music_main() {
     strudel_set_bpm(110.0lf)
     strudel_play(@@strudel_music_cmd)
@@ -890,10 +891,15 @@ def init() {
     }
     // a full reload or a reset leaves the @live cave at its default, cells and all: generate as on a cold start
     if (!is_reload() || empty(g_cave.cells)) {
-        var next <- generate_cave(world_seed, cave_index)
-        adopt_cave(g_cave, next)
-        g_cave.god = god_mode
+        generate_current_cave()
     }
+}
+
+[never_inline]   //! inlined, its cave local would land in init's frame, and init reaches a collect
+def generate_current_cave() {
+    var next <- generate_cave(world_seed, cave_index)
+    adopt_cave(g_cave, next)
+    g_cave.god = god_mode
 }
 
 def declare_touch_pad() {
@@ -1128,7 +1134,7 @@ def cmd_slow_motion(input : JsonValue?) : JsonValue? {
 // eval_main_loop drives the block once per frame: a blocking while-loop
 // natively, emscripten_set_main_loop (rAF) on the web -- one main for both.
 // live_end_frame only swaps buffers, so the loop body owns the GC boundary.
-[export]
+[export, unsafe_heap_collect]   //! native code drives the loop's block, hiding its collect from the collect-carrier proof; main keeps no collectable local across it
 def main() {
     parse_args()
     init()

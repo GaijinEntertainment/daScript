@@ -531,6 +531,7 @@ def music_cmd(cmd : string) {
     }
 }
 
+[unsafe_heap_collect]   //! the strudel thread's entry: no daslang frame sits below it, as with strudel_play, which it calls
 def music_main {
     build_tracks()
     strudel_play(@@music_cmd)
@@ -767,8 +768,8 @@ def shutdown() {
     harness_shutdown()
 }
 
-[export]
-def main {
+[never_inline]   //! inlined, its args array would sit in main's frame across the loop's collect
+def parse_max_frames() : int {
     var max_frames = 0
     let args <- get_command_line_arguments()
     for (i in range(length(args) - 1)) {
@@ -776,6 +777,12 @@ def main {
             max_frames = to_int(args[i + 1])
         }
     }
+    return max_frames
+}
+
+[export]
+def main {
+    let max_frames = parse_max_frames()
     init()
     var frame = 0
     while (!exit_requested()) {

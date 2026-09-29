@@ -47,7 +47,7 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
 
 ## 3. Mechanisms
 
-### 3.1 One source, two builds
+### 3.1 One source, two builds {#one-source-two-builds}
 
 A browser example's `main.das` runs its frame loop through `eval_main_loop`, a blocking loop on
 the desktop and `requestAnimationFrame` in the browser. The `.das_package` disables the GPU tiers
@@ -58,6 +58,13 @@ worth a rule rather than an app bug. A page the browser restores from its back-f
 (Back to another page, then Forward) comes back with the program's workers and the audio output
 frozen mid-frame and out of step, and the first sound is whatever the output ring held; the
 shell reloads such a page (`pageshow` with `persisted`), so it starts from the gate again.
+
+The loop's block calls `harness_maybe_collect_gc` once per frame, and native code - not a
+daslang frame - drives the block. The collect-carrier proof, which a standalone or wasm build
+runs, cannot see that caller, so each browser example's `main` carries `[unsafe_heap_collect]`.
+The claim holds because `main` keeps no collectable local across the loop: the program's state
+lives in globals that `init()` sets up, and the only local `main` declares, the read-out flag, is
+declared after the loop.
 
 ### 3.2 The speech thread and its stream {#speech-thread-stream}
 

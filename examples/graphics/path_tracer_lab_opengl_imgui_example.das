@@ -505,8 +505,8 @@ def shutdown() {
     harness_shutdown()
 }
 
-[export]
-def main {
+[never_inline]   //! inlined, its args array would sit in main's frame across the loop's collect
+def parse_max_frames() : int {
     var max_frames = 0
     let args <- get_command_line_arguments()
     for (i in range(length(args) - 1)) {
@@ -514,6 +514,12 @@ def main {
             max_frames = to_int(args[i + 1])
         }
     }
+    return max_frames
+}
+
+[export]
+def main {
+    let max_frames = parse_max_frames()
     init()
     var frame = 0
     while (!exit_requested()) {

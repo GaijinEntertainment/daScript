@@ -309,6 +309,7 @@ def start_win_music() {
     strudel_command("note:arp:<[e6 b5 g5 e5 b4 g4 e4 b3]> <[g6 d6 b5 g5 d5 b4 g4 d4]> <[a6 e6 c6 a5 e5 c5 a4 e4]> <[b6 fs6 d6 b5 fs5 d5 b4 fs4]>:triangle:0.12")
 }
 
+[unsafe_heap_collect]   //! the strudel thread's entry: no daslang frame sits below it, as with strudel_play, which it calls
 def strudel_music_main() {
     start_play_music()
     strudel_play(@@music_cmd)
