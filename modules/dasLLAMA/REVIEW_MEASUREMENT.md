@@ -98,6 +98,11 @@ that spells that run - no placeholder in its exe, model or command line - names 
 **A diff never rests an adoption decision about what the engine serves on a figure from
 another project - it rests on a measurement a cell or instrument of this repository took.**
 
+**A figure that picks a value, a formula or a kernel the diff ships comes from a script or exe
+checked in at the diff's tip, named with its command line; a figure from a script that is not
+checked in picks nothing, and the text that carries it says the script is not checked in.** A
+script nobody can run from the tree is a figure nobody can take again.
+
 **A diff never edits the figures or conclusion of a dated `PERF_LEDGER.md` entry - one whose
 bold head, or the heading it sits under, carries a date - and never adds figures to one; a new
 dated entry carries the new figures, and where they disagree it names the old entry and the

@@ -3044,7 +3044,8 @@ def bf16_token_block() : int64 {
     return (max(g_q8_token_block, bf16_token_block_floor()) / ts) * ts
 }
 
-def private kq_token_block(fmt : int; n : int64) : int64 => kq_tileform_of(fmt) > 0 ? bf16_token_block() : effective_token_block(g_q8_token_block, n)
+//! the token block a superblock format's batch walk runs at row length `n`
+def kq_token_block(fmt : int; n : int64) : int64 => kq_tileform_of(fmt) > 0 ? bf16_token_block() : effective_token_block(g_q8_token_block, n)
 
 // kq_batch slot: batched K-quant GEMM over the repacked planes — group chunks parallel, the
 // cell walk above per chunk, row tails (d % mr) disk-order per token via the portable dots
