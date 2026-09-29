@@ -8,11 +8,11 @@ work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's asserts
 belong to every cell that calls it. A CPU kernel is a function that writes an output buffer from
 operand buffers; one that answers a size, a block or a layout is not. A kernel run is a dispatch
-or a CPU kernel call. A kernel-unit
-cell is a cell in which a `[metal_dispatch]` or `[vk_dispatch]` class is dispatched, or a CPU
-kernel in `../dasllama/dasllama_math*.das` is called, by a statement in test code - the cell
-itself, or a helper in its own file or in a `_*.das` test-helper module; a kernel run that only
-happens inside a function in `../dasllama/` does not make a cell a kernel-unit cell. A gate is
+or a CPU kernel call. A kernel-unit cell is a cell in which a `[metal_dispatch]` or
+`[vk_dispatch]` class is dispatched, or a CPU kernel in `../dasllama/dasllama_math*.das` is
+called, by a statement in test code - the cell itself, or a helper in its own file or in a
+`_*.das` test-helper module; a kernel run that only happens inside a function in `../dasllama/`
+does not make a cell a kernel-unit cell. A gate is
 any call site that supplies a kernel's dispatch count or fills its kargs (kernel-argument)
 struct itself, other than a serving call in `../dasllama/` the kernel exists for - a cell, a
 probe, a harness. A stamp is a `[vk_dispatch]` or `[metal_dispatch]` class that

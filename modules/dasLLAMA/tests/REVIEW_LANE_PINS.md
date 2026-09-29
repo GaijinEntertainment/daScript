@@ -23,14 +23,14 @@ declining the other lane, instead of pinning, measures whichever lane the box's 
 `reset_<name>_q8` for a lane `set_<name>_q8` pins, and whisper's `set_asr_fp32(false)` and
 `set_asr_tower_fp32(false)`.**
 
-**A cell that sets a lane setter or a driver setter in the context it returns to - directly,
-through a helper it calls, or through a loader parameter that takes the lane - returns with each
-lane it pinned unset through the lane setter's paired unset call, and each driver setter it set
-back at the value that setter's getter returned before the cell set it.** A set made in a
-`new_thread` context ends with that context.
+**A cell that sets a lane setter or a driver setter in its own context - directly, through a
+helper it calls, or through a loader parameter that takes the lane - returns with each lane it
+pinned unset through the lane setter's paired unset call, and each driver setter it set back at
+the value that setter's getter returned before the cell set it.** A set made inside a
+`new_thread` block ends with that thread's context and owes no restore.
 
-**A diff that adds or edits a cell setting a driver setter that has no getter adds that getter
-in `../dasllama/`, in the same change.**
+**A diff that adds or edits a cell setting a driver setter whose getter lacks a call adds the
+calls it lacks in `../dasllama/`, in the same change.**
 
 **A cell asserting the unpinned default lane of a family that has a `*_serves_q8` accessor
 compares against the predicates that accessor reads for its unpinned default (whatever its body

@@ -7,8 +7,12 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
 asserts belong to every cell that calls it. A test file is a `.das` that dastest runs: one
 carrying at least one `[test]` function, or one whose `cant_`, `failed_` or `invalid_` prefix
-makes its compile the assertion. A test file's header is its top comment block. A kernel-unit
-cell is a cell in which a `[metal_dispatch]` or `[vk_dispatch]` class is dispatched, or a CPU
+makes its compile the assertion. A test file's header is its top comment block. A CPU kernel is
+a function that writes an output buffer from operand buffers; one that answers a size, a block or
+a layout is not. A bound assert is an assert whose pass means two sides agree or a figure is good
+enough - a difference between two computed sides, a rate, an error, or a count the run decides,
+within a nonzero tolerance or past a floor or ceiling; a counter asserted to show a route ran is
+such a count. A kernel-unit cell is a cell in which a `[metal_dispatch]` or `[vk_dispatch]` class is dispatched, or a CPU
 kernel in `../dasllama/dasllama_math*.das` is called, by a statement in test code - the cell
 itself, or a helper in its own file or in a `_*.das` test-helper module; a kernel run that only
 happens inside a function in `../dasllama/` does not make a cell a kernel-unit cell. To loosen
@@ -20,9 +24,9 @@ dropped length check.
 
 **A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists,
 changes which `run.das` suites list one, or adds a cell or an assert whose expected value must be
-kept in step with something maintained outside the cell - a document, a table, a roster, a knob
-list; not a value the cell's own claim defines, an engine constant it asserts included - or that
-a checked-in table names as its evidence, applies that checklist too.**
+kept in step with something maintained outside the cell, or that a checked-in table names as its
+evidence, applies that checklist too.** A constant declared in `../dasllama/` that the cell
+asserts as its own claim is not something maintained outside the cell.
 
 **A cell that calls a `set_*` / `pin_*` function in `../dasllama/` whose value a later load, route
 choice or kernel dispatch in the same process reads, passes a loader parameter that takes a
@@ -50,10 +54,10 @@ change reaches a test when it alters anything the
 test's result depends on - the test file, a shared helper, engine code it exercises, an in-tree
 fixture or corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
-**A PR whose change reaches a cell that skips on a capability the box may lack - a device, a
-module the build may omit, a kernel the box's CPU tier does not carry - runs that cell on a box
-that has it, and names that box in the PR body.** A reached cell that
-skipped was not run.
+**A PR whose change reaches a cell that skips on a hardware or build capability the box may
+lack - a device, a module the build may omit, a kernel the instruction sets of the box's CPU do
+not carry - runs that cell on a box that has it, and names that box in the PR body.** A reached
+cell that skipped was not run.
 
 **A PR that adds or changes a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
 `_model_tier.das`) also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
@@ -167,27 +171,23 @@ round-trip is a defect.**
 **A test that compares generated tokens, ids, or logits without logging both sides in the most
 readable form its fixture carries is a defect: with a tokenizer, each side's decoded text for a
 token or id compare, one log record a side with its newlines escaped (`log_gen_texts` in
-`_model_tier.das` writes that form), and each side's argmax
-decoded piece plus the measured max difference for a logits compare; with a raw-id fixture and no
-tokenizer, the ids, one line per side.** A failure, or a pass that looks wrong, must be readable
+`_model_tier.das` writes that form), and each side's argmax decoded piece plus the measured max
+difference for a logits compare; with a raw-id fixture and no tokenizer, the ids, one log record
+a side.** A failure, or a pass that looks wrong, must be readable
 in the log, not only as an id or float difference.
 
 **A size, depth, or row count that a cell's name, a comment inside the cell, or an assert's text
 claims about what the cell exercises, and that the cell does not pass as a literal argument to a
 kernel it itself dispatches or calls, is asserted in that cell by an assert on the count.** A cap,
-a resize, or a counter showing the path ran is not evidence the number was reached; a device's
+a resize, or a counter asserted to show a route ran is not evidence the number was reached; a device's
 geometry (subgroup width, SM count) is no coverage claim.
 
-**An exact token or id compare over a prompt whose continuation can tie, whose two sides can
-round differently - different lanes, backends, batch shapes or kernel forms - is a defect - it
-takes the forced-feed logits-tolerance form: the same fixed tokens fed to both sides, the logits
-compared within a bar. A counting cell, whose prompt forces a continuation that cannot tie, stays
-exact on any two sides.**
-
-**An exact token or id compare over a prompt whose continuation can tie, whose two sides cannot
-round differently - one code path, or the same kernels over another storage layout (a flat K/V
-cache against a paged one) - states in the cell what makes them so: the shared entry point, an
-assert pinning the lane, or the layout the two sides differ in.**
+**An exact token or id compare over a prompt whose continuation can tie either states in the
+cell what makes its two sides round alike - the shared entry point, an assert pinning the lane,
+or a lane pin plus the storage layout that alone differs (a flat K/V cache against a paged one) -
+or takes the forced-feed logits-tolerance form: the same fixed tokens fed to both sides, the
+logits compared within a bar. A counting cell, whose prompt forces a continuation that cannot
+tie, stays exact on any two sides.**
 
 **A diff that adds an ASR family ships a token-for-token oracle cell for it - a transcript
 compared against a reference leg, an external dump or a CPU control.**
@@ -223,18 +223,13 @@ it spawns.** A set after that process starts is invisible to a config already re
 **A cell whose claim depends on an environment-read knob its own process has already read names
 that knob's value in the text a red prints - the cell label or the assert.**
 
-**A diff that adds or loosens an assert whose pass means two sides agree or a figure is good
-enough - the difference between two computed sides, a rate, an error, or a count the run
-decides (a counter held as the proof a route ran included), within a nonzero tolerance or past a
-floor or ceiling - in a cell that is not a kernel-unit cell, ships in the same change, in each such cell holding the assert, a control that
-lands outside that bound.** A bound nothing has exceeded where it is applied is not known to
-discriminate there.
+**A diff that adds or loosens a bound assert in a cell that is not a kernel-unit cell ships in
+the same change, in each such cell holding the assert, a control that lands outside that
+bound.** A bound nothing has exceeded where it is applied is not known to discriminate there.
 
-**A control for an assert whose pass means two sides agree or a figure is good enough - a
-difference, a rate, an error or a count within a nonzero tolerance or past a floor or ceiling -
-in a cell that is not a kernel-unit cell changes an input the computation reads - a zeroed weight
-region, a poisoned input element, a mechanism disabled - and re-runs the compare; a value added
-to the output after the fact is not one.**
+**A control for a bound assert in a cell that is not a kernel-unit cell changes an input the
+computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled - and
+re-runs the compare; a value added to the output after the fact is not one.**
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's
