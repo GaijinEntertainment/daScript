@@ -1,6 +1,7 @@
 options gen2
 require dastest/testing_boost public
 require daslib/fio
+require _spawn_common
 require daslib/strings_boost
 require strings
 require math
@@ -107,7 +108,10 @@ def private jit_dump(t : T?; debug_info : bool) : string {
         args |> push("--jit-debug")
     }
     var out = ""
-    let rc = run_and_capture(args, out, 300.0)
+    var rc = 0
+    with_child_log_info() {
+        rc = run_and_capture(args, out, 300.0)
+    }
     t |> equal(0, rc, "the fixture runs under -jit: {out_tail(out)}")
     t |> success(find(out, "DEBUG_INFO_ROOT ") >= 0, "the fixture printed its witness: {out_tail(out)}")
     return out

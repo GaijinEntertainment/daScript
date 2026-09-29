@@ -54,4 +54,4 @@ Read live at the point of use (`env_value_of`), not loaded at context init.
 | `OS` | text | unset | The other half of the Windows tune box identity. |
 | `ASAN_OPTIONS` | text | unset | The asan runtime's options; the sanitizer tests add exitcode for the children they start, so a stop reads off the exit code. |
 | `UBSAN_OPTIONS` | text | unset | The ubsan runtime's options; the sanitizer tests add exitcode for the children they start, as for ASAN_OPTIONS. |
-| `DAS_LOG_LEVEL` | text | warning | The runtime's log floor; the sanitizer tests set info for their children, so the IR dump and the announce print. |
+| `DAS_LOG_LEVEL` | text | warning | The runtime's log floor; the tests that read a child's IR dump or its LLVM JIT lines set info for the child, so those print. |

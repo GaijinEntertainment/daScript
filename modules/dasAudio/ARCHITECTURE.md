@@ -128,3 +128,14 @@ strudel_get_diagnostics exposes consumer counts alongside generated frames and
 refill timing. Threaded playback publishes a separate 64-byte SeqBox snapshot;
 readers never inspect worker-owned arrays. Main-thread playback reads the ordinary
 stream status. The counters observe buffering without changing queue policy.
+
+## The biquad ticks carry `[never_fast_math]` {#biquad-never-fast-math}
+
+`formant_biquad_tick` (`strudel/strudel_synth.das`) and `sf2_biquad_tick`
+(`strudel/strudel_sf2_voice.das`) feed every output back into the saved state `z1` and `z2`
+through `b1`, and at a low cutoff or a narrow band `|b1|` is close to 2, so an error in that
+state roughly doubles every sample. Under `options fast_math` the optimizer may keep `z1` in two
+registers that round apart: the formant filter reaches NaN inside 130 samples on an AVX-512
+target, while an AVX2 target stays exact, so a clean run on one machine proves nothing. The
+annotation keeps the tick's arithmetic exact on every LLVM tier, inlined or not
+(`modules/dasLLVM/ARCHITECTURE_FAST_MATH.md`, repo root).

@@ -246,7 +246,7 @@ namespace das
         InlineFunctionAnnotation() : MarkFunctionAnnotation("inline") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string & err) override {
             if ( func->neverInline ) {
-                err = "[inline] conflicts with [never_inline]";
+                err = "[inline] conflicts with [never_inline] or [never_fast_math]";
                 return false;
             }
             func->mustInline = true;
@@ -274,6 +274,18 @@ namespace das
         virtual bool apply(ExprBlock *, ModuleGroup &, AnnotationArgumentList &, string &) override {
             return true;
         }
+    };
+
+    struct NeverFastMathFunctionAnnotation : MarkFunctionAnnotation {
+        NeverFastMathFunctionAnnotation() : MarkFunctionAnnotation("never_fast_math") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string & err) override {
+            if ( func->mustInline ) {
+                err = "[never_fast_math] conflicts with [inline] - a splice moves the arithmetic into a caller the LLVM tiers stamp";
+                return false;
+            }
+            func->neverInline = true;
+            return true;
+        };
     };
 
     struct RequestNoDiscardFunctionAnnotation : MarkFunctionAnnotation {
@@ -2362,6 +2374,7 @@ namespace das
         addAnnotation(new RequestNoJitFunctionAnnotation());
         addAnnotation(new InlineFunctionAnnotation());
         addAnnotation(new NeverInlineFunctionAnnotation());
+        addAnnotation(new NeverFastMathFunctionAnnotation());
         addAnnotation(new RequestNoDiscardFunctionAnnotation());
         addAnnotation(new TempStringResultFunctionAnnotation());
         addAnnotation(new DeprecatedFunctionAnnotation());

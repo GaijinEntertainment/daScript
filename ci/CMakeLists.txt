@@ -90,7 +90,7 @@ set(DAS_EXTENDED_MODULES
     run_tests_dasweb_buildd run_tests_dasweb_playground run_sequence_smoke run_example_main
     run_tests_dasllama_server run_tests_serdeser run_tests_static)
 if(TARGET run_tests_llvm_jit_backend)
-    list(APPEND DAS_EXTENDED_MODULES run_tests_llvm_jit_backend)
+    list(APPEND DAS_EXTENDED_MODULES run_tests_llvm_jit_backend run_tests_llvm_exe)
 endif()
 if(APPLE)
     list(APPEND DAS_EXTENDED_MODULES run_tests_llvm_vector_math)
