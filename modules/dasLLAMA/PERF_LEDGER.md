@@ -3582,9 +3582,10 @@ before its process starts. Each pair compares across processes and is `direction
   9.05.
 - **What the walk scratch holds.** The panels, one allocation a calling context: stride x slots
   + 64 bytes, the stride a panel rounded up to a cache line plus a line, the slots
-  `get_dispatch_slot_bound()` - 16 on this box. A bf16 panel is form x 16 x n x 2 bytes, 524,288
-  at form 2 and n 8192 (the 1B's FFN down) and 622,592 at n 9728 (the 4B's), so the scratch is
-  8,389,696 and 9,962,560 bytes; a byte panel is mr x n bytes, 4,096 at mr 8 and n 512. The q8
+  `get_dispatch_slot_bound()` - 8 under this box's default job queue. A bf16 panel is form x 16
+  x n x 2 bytes, 524,288 at form 2 and n 8192 (the 1B's FFN down) and 622,592 at n 9728 (the
+  4B's), so the scratch at 8 slots is 4,194,880 and 4,981,312 bytes; a byte panel is mr x n
+  bytes, 4,096 at mr 8 and n 512. The q8
   walk's bias sums, where the stamped plane carries a bias: 4 x ntok x n / 32 bytes, 524,288 and
   622,592 at ntok 512. Each figure is its formula's value at the named shape
   (`walk_panels`, `q8q8_bias_sums`, `kq_walk_panel_bytes` in `dasllama/dasllama_math_gen.das`).
