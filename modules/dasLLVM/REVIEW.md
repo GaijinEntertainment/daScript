@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
 `ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_DEBUG_INFO.md`,
-`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_EXE.md`, `ARCHITECTURE_LIB.md`. Planned work: `LEDGER.md`.
+`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_EXE.md`, `ARCHITECTURE_LIB.md`,
+`ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_VECTOR_MATH.md`. Planned work: `LEDGER.md`.
 
 **A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
 to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
@@ -79,7 +80,7 @@ there.
 
 - **A diff that adds an environment or config input to a JIT cache key folds it inside
   `jit_env_salt` (`daslib/llvm_jit_plan.das`), never directly into either JIT key - the DLL
-  key or the split-obj key (`ARCHITECTURE.md` sec.2)** - salt feeds both keys, and a config
+  key or the split-obj key (`ARCHITECTURE_CODEGEN_IDENTITY.md` sec.2)** - salt feeds both keys, and a config
   folded into one but not the other links stale objects. Inputs that vary per function set
   (AOT hashes) fold into the key directly, not through the salt.
 
@@ -178,7 +179,7 @@ there.
 
 - **A diff that adds or changes a `build_vector_*` emitter (`daslib/llvm_jit_intrin.das`) emits
   each Horner step unfused, through `vmath_poly_step`, and calls `vmath_fma` only for the steps
-  vecmath itself writes fused** (`ARCHITECTURE.md#vector-poly-fusion`). One fused step in a
+  vecmath itself writes fused** (`ARCHITECTURE_VECTOR_MATH.md#vector-poly-fusion`). One fused step in a
   sign-alternating chain moves the last few bits of the result, and the interpreter and AOT
   answers do not move with it.
 

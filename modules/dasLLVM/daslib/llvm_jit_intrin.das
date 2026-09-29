@@ -1209,7 +1209,7 @@ def private vmath_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMO
 }
 
 // ===== the inline-polynomial rail =====
-[arch(at = "../ARCHITECTURE.md#vector-poly-rail")]
+[arch(at = "../ARCHITECTURE_VECTOR_MATH.md#vector-poly-rail")]
 def private vmath_aarch64_poly_gate(opType : TypeDeclPtr) : bool {
     return g_target_is_aarch64 && vmath_vector_float(opType)
 }
@@ -1223,7 +1223,7 @@ def private vmath_fma_decl(opType : TypeDeclPtr; lt : LLVMOpaqueType?) : LLVMOpa
     return fid != 0u ? LLVMGetIntrinsicDeclaration(g_mod, fid, [ lt]) : null
 }
 
-[arch(at = "../ARCHITECTURE.md#vector-poly-fusion")]
+[arch(at = "../ARCHITECTURE_VECTOR_MATH.md#vector-poly-fusion")]
 def private vmath_poly_step(bld : LLVMOpaqueBuilder?; a, b, c : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     return LLVMBuildFAdd(bld, LLVMBuildFMul(bld, a, b, ""), c, "")
 }
@@ -1447,7 +1447,7 @@ def intrinsic_math_exp2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : arra
     return intrinsic_math_any_float_op1("exp2", ctx.builder, expr, arguments)
 }
 
-[arch(at = "../ARCHITECTURE.md#vector-log2-estimate")]
+[arch(at = "../ARCHITECTURE_VECTOR_MATH.md#vector-log2-estimate")]
 def private build_vector_log2(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let bld = ctx.builder
     let dim = opType.vectorDim
@@ -1516,7 +1516,7 @@ def intrinsic_math_pow_est(var ctx : JitCtx; expr : ExprCallFunc?; arguments : a
 // Near zero the exp forms of sinh and tanh cancel catastrophically, so |x| < 0.25 takes the odd
 // Taylor series instead; cosh is well conditioned everywhere and needs no such arm. tanh clamps
 // to +-9 first: exp(18) cannot overflow, and (t-1)/(t+1) there already rounds to exactly +-1.
-[arch(at = "../ARCHITECTURE.md#vector-hyperbolic-divergence")]
+[arch(at = "../ARCHITECTURE_VECTOR_MATH.md#vector-hyperbolic-divergence")]
 def private build_vector_hyper(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqueValue?; op_name : string) : LLVMOpaqueValue? {
     let bld = ctx.builder
     let lt = type_to_llvm_type(opType)
