@@ -3581,17 +3581,17 @@ before its process starts. Each pair compares across processes and is `direction
   1.69, 1905.51 +- 14.95, 1900.51 +- 3.15 against 1919.13 +- 6.08, 1916.96 +- 4.10, 1911.24 +-
   9.05.
 - **The race that picked the block: 512 leads every block the L2 clamp would hand the walk.** Not
-  a rate of `lcpp_bench`: a script over `matmul_kq_batch` that is not checked in, `-jit` under
-  `-no-module-cache`, `DAS_TUNE_POLICY` unset, no tune manifest, k4 on the `x64-gen` backend at
-  form 2 and ntok 512, `bf16_token_block_floor` at 1 and no clamp so each candidate is the block
-  the walk runs, the candidates interleaved in one process, 11 rounds after 2 dropped,
-  `DAS_JOBQUE_THREADS` 16 and 8; median ms (cv %). The clamp's 4 MB cuts the block to 431 tokens
-  at K 9728 - 416 in whole tiles - and to 256 at K 16384. K 9728 x 2560 rows, a block of 256 /
-  384 / 512: 4.552 (0.6) / 4.540 (0.7) / 4.134 (0.5) at 16 lanes (416 read 4.540 at 4.8%,
-  void), and with 416 between them 5.583 (0.9) / 5.662 (0.8) / 5.614 (0.6) / 5.288 (0.6) at 8.
-  K 16384 x 4096 rows, 256 / 512: 24.313 (0.3) / 23.490 (1.1) at 16 lanes, 18.425 (0.5) /
-  16.332 (0.8) at 8. K 16384 x 2048 rows, 256 / 512: 12.342 (0.3) / 11.916 (0.1) at 16 lanes,
-  9.512 (1.6) / 8.706 (1.6) at 8.
+  a rate of `lcpp_bench`: `DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=<lanes> bin/daslang -jit
+  -no-module-cache modules/dasLLAMA/harness/token_block_race.das` (the `x86-amx` class profile
+  stamps the kernels, no sidecar; `DAS_TUNE_POLICY` unset), k4 on the `x64-gen` backend at tile
+  form 2 and ntok 512, the candidates interleaved in one process, 11 rounds after 2 dropped, the
+  second of two passes a lane count; best ms (cv %), every arm's sampled output equal to the 512
+  arm's and the 512 arm's within the bf16 envelope of the disk-order dots. The clamp's 4 MB cuts
+  the block to 431 tokens at K 9728 - 416 in whole tiles - and to 256 at K 16384. K 9728 x 2560
+  rows, a block of 256 / 384 / 416 / 512: 4.839 (0.2) / 4.804 (1.5) / 4.828 (0.4) / 4.478 (0.5)
+  at 16 lanes, 5.323 (1.4) / 5.359 (1.1) / 5.299 (0.8) / 5.139 (0.5) at 8. K 16384 x 4096 rows,
+  256 / 384 / 512: 25.561 (0.1) / 25.630 (0.2) / 24.667 (0.1) at 16 lanes, 17.977 (0.8) /
+  18.950 (0.3) / 17.190 (0.2) at 8.
 - **What the walk scratch holds.** The panels, one allocation a calling context: stride x slots
   + 64 bytes, the stride a panel rounded up to a cache line plus a line, the slots
   `get_dispatch_slot_bound()` - 8 under this box's default job queue. A bf16 panel is form x 16

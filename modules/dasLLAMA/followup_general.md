@@ -1982,15 +1982,16 @@
 190. **The bf16 walk's token block is one number for every shape and every lane count.**
    `bf16_token_block` answers 512 in whole tiles, and a kernel race splits on the weight's
    output width and on the lanes a core carries. The race [debug-jit]: Granite Rapids
-   `c8i.4xlarge` (8 cores), a script over `matmul_kq_batch` that is not checked in, `-jit`
-   under `-no-module-cache`, `DAS_TUNE_POLICY` unset, no tune manifest, k4 on the `x64-gen`
-   backend at form 2 and ntok 512, `bf16_token_block_floor` at 1 and no clamp, the candidates
-   interleaved, 11 rounds after 2 dropped, a process a pass, `DAS_JOBQUE_THREADS` 16 and 8;
-   median ms (cv %) at a block of 128 / 256 / 512, cells past 3% void. K 8192 x 2048 rows: 4.066
-   (0.3) / 3.535 (1.2) / 3.254 (0.4) at 16 lanes, 4.653 (1.8) / 4.045 (1.1) / 3.853 (0.8) at 8.
-   K 2560 x 9728 rows: 4.829 (0.9) / 4.199 (1.2) / 4.416 (1.9) at 16 lanes, 4.523 (1.3) / 3.656
-   (1.7) / 5.506 (2.2) at 8. Done = the block a tuner knob raced per lanes-per-core regime,
-   confirmed end to end on the 1B and 4B carriers.
+   `c8i.4xlarge` (8 cores), `DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=<lanes> bin/daslang -jit
+   -no-module-cache modules/dasLLAMA/harness/token_block_race.das` (the `x86-amx` class profile,
+   `DAS_TUNE_POLICY` unset), k4 on the `x64-gen` backend at tile form 2 and ntok 512, the second
+   of two passes a lane count; best ms (cv %) at a block of 128 / 256 / 384 / 512. K 8192 x 2048
+   rows: 4.169 (0.3) / 3.648 (0.4) / 3.673 (0.4) / 3.415 (0.4) at 16 lanes, 4.525 (2.6) / 4.028
+   (1.8) / 4.016 (1.3) / 3.782 (2.6) at 8. K 2560 x 9728 rows: 4.774 (1.0) / 4.107 (0.9) / 4.513
+   (1.5) / 4.269 (2.8) at 16 lanes, 4.498 (1.0) / 3.562 (2.9) / 4.165 (1.0) / 5.148 (2.1) at 8.
+   K 2048 x 8192 rows: 3.489 (1.0) / 2.822 (1.6) / 2.871 (1.1) / 3.079 (1.4) at 16 lanes, 3.114
+   (2.7) / 2.547 (2.6) / 2.592 (1.9) / 2.830 (2.0) at 8. Done = the block a tuner knob raced per
+   lanes-per-core regime, confirmed end to end on the 1B and 4B carriers.
 191. **The generated tier branches on format ids as literals.** The emitter reads `te.kq == 33`
    and the runtime ladders `fmt == 4` (`kq_layout_of`), and the bf16 panel code follows them
    (`panel_is_grid`, `panel_scales`, `panel_quads`, `panel_ioff`, the panel stubs' ids, the
