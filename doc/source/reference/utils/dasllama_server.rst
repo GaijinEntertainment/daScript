@@ -300,7 +300,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--mtp``
      -
      - *auto*
-     - MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (``streams = 1``) host-cached and leaves it off otherwise: at one stream the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x), at several streams the plain batched step is faster, and a device-resident slot (``--gpu vulkan``) keeps plain decode, since an armed round keeps every stream's cache on the host. ``true`` / ``false`` set it outright. It needs a model with an in-file NextN head (the ``-MTP-`` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. ``/v1/stats`` reports ``mtp_drafted`` / ``mtp_accepted``
+     - MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (``streams = 1``) on a GPU --- Metal, or the whole model resident on a Vulkan device --- and leaves it off otherwise: at one stream on Metal the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x), on a Vulkan device more, on the CPU the round's second verify row costs a second decode step and the round is slower than plain decode, and at several streams the plain batched step is faster. An armed round keeps every stream's cache on the host, so a drafting Vulkan slot (``--gpu vulkan``) serves host-cached sessions in place of device-home ones. ``true`` / ``false`` set it outright. It needs a model with an in-file NextN head (the ``-MTP-`` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. ``/v1/stats`` reports ``mtp_drafted`` / ``mtp_accepted``
    * - ``--rope-scaling``
      -
      - *file*
@@ -808,8 +808,9 @@ in :ref:`the dasLLAMA knob reference <dasllama_env>`)::
 - ``test_openai_server_audio.das`` and ``test_openai_server_think.das`` --- the
   native-audio content parts and the thinking control.
 - ``test_openai_server_mtp.das`` --- the self-speculation default: a
-  NextN-headed slot drafts at one stream and decodes plain at four, an explicit
-  ``mtp`` wins either way, a head-less model serves plain; needs
+  NextN-headed slot drafts at one stream on Metal and decodes plain at four or
+  on the CPU, an explicit ``mtp`` wins either way, a head-less model serves
+  plain; the Metal cells skip on a box with no Metal backend; needs
   ``Qwen3.5-0.8B-MTP-Q8_0.gguf`` and the TinyLlama file.
 - ``test_exchange_client.das``, ``test_model_catalog.das``,
   ``test_setup_mode.das`` --- model-free: the sidecar exchange client against a

@@ -143,7 +143,7 @@ struct ServerArgs {
     @clarg_doc = "Flat preallocated KV sessions — disables paged serving and the prefix cache"
     flat : bool
 
-    @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) host-cached, off at several streams or on a device-resident (--gpu vulkan) slot; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
+    @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) on a GPU - Metal, or the whole model resident on a Vulkan device - and off at several streams or on the CPU; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
     mtp : bool
 
     @clarg_doc = "RoPE scaling override for the load: yarn | linear | none (default: the model file's own rope.scaling keys; none drops them, a file's per-pair factor tensors stay). The Qwen families publish the YaRN recipe and enable it as a setting, for long conversations only: --rope-scaling yarn --rope-scale 4; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (model.gguf.metal-yarn4.dlim). Per-model in a [[models]] roster: rope_scaling"
@@ -570,14 +570,22 @@ def private cfg_sourced(key : string) : bool
 
 //! The scheduler's tri-state `mtp` off the config surface: a key the TOML or `--mtp` set pins
 //! 0 / 1; unset is -1 and each slot decides (self-speculation on when it runs one stream
-//! host-cached). Non-private: test_openai_server_mtp.das gates it.
+//! on a GPU). Non-private: test_openai_server_mtp.das gates it.
 def mtp_setting(sourced : bool; on : bool) : int
     => sourced ? (on ? 1 : 0) : -1
 
 //! What the unset default resolves to for the server-wide slot shape - the GET /config surface
 //! reports resolved values, and unset no longer means off.
 def mtp_default_resolved(streams : int; gpu : string) : bool
-    => streams == 1 && gpu != "vulkan"
+    => streams == 1 && (gpu == "metal" || gpu == "metal-required" || gpu == "vulkan")
+
+//! The backend word the MTP default reads: the legacy `--metal` path (gpu "") serves on Metal
+//! when its mode is not off. Non-private: test_openai_server_mtp.das gates it.
+def mtp_backend_word(gpu : string; metal : string) : string {
+    return gpu if (!empty(gpu))
+    let m = to_lower(metal)
+    return (m == "auto" || m == "when_available" || m == "required") ? "metal" : ""
+}
 
 //! One roster entry as the control page's editor reads and writes it; `mtp` rides as the bool the
 //! editor validates, an inherited (-1) knob as absence.
@@ -655,7 +663,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         page_rows = cfg.page_rows > 0 ? cfg.page_rows : 64,
         prefix = cfg.prefix,
         flat = cfg.flat,
-        mtp = cfg_sourced("mtp") ? cfg.mtp : mtp_default_resolved(cfg.streams > 0 ? cfg.streams : 4, gpu),
+        mtp = cfg_sourced("mtp") ? cfg.mtp : mtp_default_resolved(cfg.streams > 0 ? cfg.streams : 4, mtp_backend_word(gpu, cfg.metal)),
         rope_scaling = cfg.rope_scaling,
         rope_scale = double(cfg.rope_scale),
         yarn_orig_ctx = cfg.yarn_orig_ctx,

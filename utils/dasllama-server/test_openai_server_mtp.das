@@ -14,24 +14,30 @@ require daslib/json_boost                               // read_json
 require daslib/fio                                      // path_join / sleep
 require math                                            // min
 
-// The self-speculation default: unset, a slot runs MTP when it serves ONE stream and plain
-// decode when it serves several; an explicit setting wins; a model with no NextN head serves
-// plain either way. Read off /v1/stats's mtp_drafted counter after one greedy chat per boot.
-// Model-gated + JIT-only like the sibling tests; needs Qwen3.5-0.8B-MTP-Q8_0.gguf (the NextN
-// head) and tinyllama-1.1b-chat-v1.0.Q8_0.gguf (no head).
+// The self-speculation default: unset, a slot runs MTP when it serves ONE stream on Metal and
+// plain decode on the CPU or when it serves several; an explicit setting wins; a model with no
+// NextN head serves plain either way. Read off /v1/stats's mtp_drafted counter after one greedy
+// chat per boot. Model-gated + JIT-only like the sibling tests; needs
+// Qwen3.5-0.8B-MTP-Q8_0.gguf (the NextN head) and tinyllama-1.1b-chat-v1.0.Q8_0.gguf (no head).
+//! the Metal cells skip on a box with no Metal backend
 
-let TEST_PORT = 18150   // 18150-18154: the five cells' boots; 18097-18147 belong to the sibling suites (test_openai_server*.das, test_setup_mode.das)
+let TEST_PORT = 18150   // 18150-18156: the seven cells' boots; 18097-18147 belong to the sibling suites (test_openai_server*.das, test_setup_mode.das)
 let TEST_CTX = 1024l
 
 let MTP_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
 let PLAIN_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
 
 // Start the server on a dedicated thread with `streams` scheduler slots and the mtp knob
-// `mtp` (-1 unset, 0, 1), wait until it answers /v1/models, run the block, shut it down.
-def private with_mtp_server(t : T?; model_path : string; port : int; streams : int64; mtp : int; blk : block<(base_url : string) : void>) {
+// `mtp` (-1 unset, 0, 1), on Metal or on the CPU, wait until it answers /v1/models, run the
+// block, shut it down.
+def private with_mtp_server(t : T?; model_path : string; port : int; streams : int64; mtp : int; metal : bool; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
-            allow_cpu_prefill()   // deliberate CPU serving: deterministic across boxes, no blob twin needed
+            if (metal) {
+                set_metal_mode(MetalMode.when_available)   // before the load: the slot maps the Metal flavor
+            } else {
+                allow_cpu_prefill()   // deliberate CPU serving: deterministic across boxes, no blob twin needed
+            }
             var m <- load_model(model_path, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, TEST_CTX)
             set_model(m, "test-llm-mtp")
@@ -81,27 +87,48 @@ def private drafted_after_chat(t : T?; base_url : string) : int64 {
 }
 
 [test]
-def test_mtp_default_single_stream(t : T?) {
+def test_mtp_default_on_metal(t : T?) {
     if (model_missing(t, MTP_PATH)) {
         return
     }
-    t |> run("unset, one stream: the NextN-headed slot drafts") @(t : T?) {
-        with_mtp_server(t, MTP_PATH, TEST_PORT, 1l, -1) $(base_url) {
+    if (!kernel_backend_available("metal")) {
+        t |> skip("no Metal backend on this box")
+        return
+    }
+    t |> run("unset, one stream on Metal: the NextN-headed slot drafts") @(t : T?) {
+        with_mtp_server(t, MTP_PATH, TEST_PORT, 1l, -1, true) $(base_url) {
             t |> success(drafted_after_chat(t, base_url) > 0l, "mtp_drafted rose after one chat")
         }
     }
-    t |> run("unset, four streams: the same slot decodes plain") @(t : T?) {
-        with_mtp_server(t, MTP_PATH, TEST_PORT + 1, 4l, -1) $(base_url) {
+    t |> run("unset, four streams on Metal: the same slot decodes plain") @(t : T?) {
+        with_mtp_server(t, MTP_PATH, TEST_PORT + 1, 4l, -1, true) $(base_url) {
             t |> equal(0l, drafted_after_chat(t, base_url), "no draft at several streams")
         }
     }
-    t |> run("explicit off, one stream: the setting wins over the default") @(t : T?) {
-        with_mtp_server(t, MTP_PATH, TEST_PORT + 2, 1l, 0) $(base_url) {
+    t |> run("explicit off, one stream on Metal: the setting wins over the default") @(t : T?) {
+        with_mtp_server(t, MTP_PATH, TEST_PORT + 2, 1l, 0, true) $(base_url) {
             t |> equal(0l, drafted_after_chat(t, base_url), "mtp = false keeps plain decode")
         }
     }
-    t |> run("explicit on, four streams: the setting wins over the default") @(t : T?) {
-        with_mtp_server(t, MTP_PATH, TEST_PORT + 3, 4l, 1) $(base_url) {
+}
+
+[test]
+def test_mtp_default_on_cpu(t : T?) {
+    if (model_missing(t, MTP_PATH)) {
+        return
+    }
+    t |> run("unset, one stream on the CPU: the NextN-headed slot decodes plain") @(t : T?) {
+        with_mtp_server(t, MTP_PATH, TEST_PORT + 3, 1l, -1, false) $(base_url) {
+            t |> equal(0l, drafted_after_chat(t, base_url), "no draft on the CPU")
+        }
+    }
+    t |> run("explicit on, one stream on the CPU: the setting wins over the default") @(t : T?) {
+        with_mtp_server(t, MTP_PATH, TEST_PORT + 4, 1l, 1, false) $(base_url) {
+            t |> success(drafted_after_chat(t, base_url) > 0l, "mtp = true drafts on the CPU")
+        }
+    }
+    t |> run("explicit on, four streams on the CPU: the setting wins over the default") @(t : T?) {
+        with_mtp_server(t, MTP_PATH, TEST_PORT + 5, 4l, 1, false) $(base_url) {
             t |> success(drafted_after_chat(t, base_url) > 0l, "mtp = true drafts at four streams")
         }
     }
@@ -112,8 +139,9 @@ def test_mtp_default_no_head(t : T?) {
     if (model_missing(t, PLAIN_PATH)) {
         return
     }
+    let metal = kernel_backend_available("metal")   // the backend the default would arm on
     t |> run("unset, one stream, no NextN head: the default is ignored and the chat serves") @(t : T?) {
-        with_mtp_server(t, PLAIN_PATH, TEST_PORT + 4, 1l, -1) $(base_url) {
+        with_mtp_server(t, PLAIN_PATH, TEST_PORT + 6, 1l, -1, metal) $(base_url) {
             t |> equal(0l, drafted_after_chat(t, base_url), "a head-less model drafts nothing and answers")
         }
     }
@@ -128,10 +156,29 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> equal(mtp_setting(false, false), -1, "unset: the slot decides")
         t |> equal(mtp_setting(false, true), -1, "an unsourced true is still unset")
     }
-    t |> run("the unset default resolves on for one host-cached stream, off at several streams or on a Vulkan-resident server") @(t : T?) {
-        t |> success(mtp_default_resolved(1, ""), "one stream, no device")
-        t |> success(mtp_default_resolved(1, "metal"), "one stream on Metal - the rows stay host-cached there")
-        t |> success(!mtp_default_resolved(4, ""), "four streams")
-        t |> success(!mtp_default_resolved(1, "vulkan"), "a Vulkan-resident slot keeps its device home")
+    t |> run("the unset default resolves on for one stream on a GPU, off on the CPU or at several streams") @(t : T?) {
+        t |> success(mtp_default_resolved(1, "metal"), "one stream on Metal")
+        t |> success(mtp_default_resolved(1, "metal-required"), "one stream on required Metal")
+        t |> success(mtp_default_resolved(1, "vulkan"), "one stream on a Vulkan device")
+        t |> success(!mtp_default_resolved(1, ""), "one stream, no device")
+        t |> success(!mtp_default_resolved(1, "off"), "one stream on the CPU")
+        t |> success(!mtp_default_resolved(4, "metal"), "four streams on Metal")
+        t |> success(!mtp_default_resolved(4, "vulkan"), "four streams on a Vulkan device")
+    }
+    t |> run("a slot arms on one stream whose decode runs on a GPU") @(t : T?) {
+        t |> success(mtp_auto_arms(1l, true, "cpu"), "the Metal flavor - its tier word reads cpu")
+        t |> success(mtp_auto_arms(1l, false, "gpu:resident"), "the whole model resident on a Vulkan device")
+        t |> success(!mtp_auto_arms(1l, false, "gpu:rails"), "a model the device serves in part")
+        t |> success(!mtp_auto_arms(1l, false, "cpu"), "the CPU")
+        t |> success(!mtp_auto_arms(4l, true, "cpu"), "four streams on Metal")
+        t |> success(!mtp_auto_arms(4l, false, "gpu:resident"), "four streams on a Vulkan device")
+    }
+    t |> run("the backend word: the --gpu pick when there is one, else the legacy --metal mode") @(t : T?) {
+        t |> equal(mtp_backend_word("vulkan", "auto"), "vulkan", "a --gpu pick wins over --metal")
+        t |> equal(mtp_backend_word("off", "required"), "off", "gpu = off keeps Metal out")
+        t |> equal(mtp_backend_word("", "auto"), "metal", "legacy --metal auto")
+        t |> equal(mtp_backend_word("", "Required"), "metal", "legacy --metal required, any case")
+        t |> equal(mtp_backend_word("", "off"), "", "legacy --metal off")
+        t |> equal(mtp_backend_word("", ""), "", "nothing set")
     }
 }

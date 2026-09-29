@@ -2150,16 +2150,11 @@ def private q8q8_batch_cell_gen(var myp : float?; wp : int8 const?; sp : float c
     }
 }
 
-def template q8q8_batch_cell_bf16_template(var myp : float ?; wp : int8 const ?; sp : float const ?; xqp : int8 const ?; xsp : float const ?; xbp : uint8 const ?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, tend, ngr : int64) : void {
+def template q8q8_batch_cell_bf16_template(var myp : float ?; wp : int8 const ?; sp : float const ?; xqp : int8 const ?; xsp : float const ?; xbp : uint8 const ?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, tend, ngr : int64; var pp : uint16 ?) : void {
     let ts = int64(q8q8_tokstep_gen())
-    var @exact_size panel : array<uint16>
-    panel |> reserve(ngr * 16l * n + 32l)
-    panel |> resize(ngr * 16l * n + 32l)
     q8q8_family_live()
     q8q8_amx_cfg_gen()
     unsafe {
-        var pp = addr(panel[0])
-        pp = bf16_align64(pp)
         var tb = tb0
         while (tb < tend) {
             let tbe = min(tb + TB, tend)
@@ -2186,11 +2181,10 @@ def template q8q8_batch_cell_bf16_template(var myp : float ?; wp : int8 const ?;
             tb += TB
         }
     }
-    delete panel
 }
 
 [from_template(src = "q8q8_batch_cell_bf16_template", Q8PANEL = "q8q8_panel_gen", Q8TILE = "q8q8_tile_gen", Q8GEMV = "q8q8_gemv_gen")]
-def private q8q8_batch_cell_bf16(var myp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; xbp : uint8 const?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, tend, ngr : int64) {}
+def private q8q8_batch_cell_bf16(var myp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; xbp : uint8 const?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, tend, ngr : int64; var pp : uint16?) {}
 
 // One (unit range x token range) cell of the amx-shaped walk (slice K I2 — the ts!=4 twin of
 // q8q8_batch_cell_gen). Interior token cells are whole-macro; a ragged tail rides ONE overlapped
@@ -2229,6 +2223,7 @@ def private q8q8_batch_amx_cell_gen(var myp : float?; wp : int8 const?; sp : flo
 // The interleaved batch GEMM. Token-blocked: TB tokens outer, groups inner, so the TB×n
 // activation slice stays L2-resident (effective_token_block clamps TB to the per-box L2 budget —
 // above ~L2/n it spills and prefill cliffs). Strides come off the layout/tokstep companions.
+[hot_path]
 def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
     let mr = int64(q8q8_layout_gen())
@@ -2237,34 +2232,21 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
     let ng = d / mr
     var myp = yp
     let TB = effective_token_block(g_q8_token_block, n)
-    var bs : array<int>
-    if (wbias != 0l) {
-        bs |> resize(ntok * nb)
-        unsafe {
-            var bsp = addr(bs[0])
-            for (t in range64(ntok)) {
-                let xrow = xqp + t * n
-                for (bi in range64(nb)) {
-                    var s = 0
-                    let xb = bi * 32l
-                    for (j in range64(32l)) {
-                        s += int(xrow[xb + j])
-                    }
-                    bsp[t * nb + bi] = -128 * s
-                }
-            }
-        }
-    }
-    let xbsp : int const? = wbias != 0l ? unsafe(addr(bs[0])) : null
+    let xbsp = q8q8_bias_sums(xqp, n, ntok, wbias)
     let ts = int64(q8q8_tokstep_gen())   // tokens per tile call (4; 16/32 on amx stamps)
     let form = int64(q8q8_tileform_gen())
     if (form > 0l) {
         let xbp = xbf16_build(xqp, xsp, n, ntok, 32l)
-        let TBb = bf16_token_block(n)
+        let TBb = bf16_token_block()
         let nu = int((ng + form - 1l) / form)
         let chunks = min(matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok), nu)
-        maybe_parallel_for(0, nu, chunks) $(ub, ue) {
-            q8q8_batch_cell_bf16(myp, wp, sp, xqp, xsp, xbp, n, d, nb, mr, TBb, int(min(int64(ub) * form, ng)), int(min(int64(ue) * form, ng)), 0l, ntok, form)
+        var panels = walk_panels(bf16_panel_bytes(n, form))
+        var pbase = panels.base
+        let pstride = panels.stride
+        maybe_parallel_for_indexed(0, nu, chunks) $(slot, ub, ue) {
+            unsafe {
+                q8q8_batch_cell_bf16(myp, wp, sp, xqp, xsp, xbp, n, d, nb, mr, TBb, int(min(int64(ub) * form, ng)), int(min(int64(ue) * form, ng)), 0l, ntok, form, reinterpret<uint16?>(pbase + int64(slot) * pstride))
+            }
         }
     } elif (ts != 4l) {
         // amx-shaped walk (slice I): one tile call covers ts tokens x gs row-groups; a ragged tail rides one overlapped macro (idempotent) or falls back to the vector rows-core.
@@ -2334,7 +2316,6 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
             }
         }
     }
-    delete bs
 }
 
 // mm slot: the hand laneq dispatch shape with the group walk handed to the generated rows core —
@@ -2804,6 +2785,51 @@ def private bf16_bits(f : float) : uint16 {
 def bf16_align64(var p : uint16?) : uint16? => unsafe(p + ((32l - (int64(intptr(p) >> 1ul) & 31l)) & 31l))
 
 var private @scratch @exact_size g_kq_xbf16 : array<uint16>
+var private @scratch @exact_size g_walk_panel : array<uint8>
+var private @scratch @exact_size g_walk_bsum : array<int>
+
+//! the batch walk's panels in the calling context's scratch - one of `bytes` per dispatch slot, each on a cache line with a line to spare; slot s starts at `base + s * stride`
+def private walk_panels(bytes : int64) : tuple<base : uint8?; stride : int64> {
+    let stride = ((bytes + 63l) & ~63l) + 64l
+    g_walk_panel |> overwrite_resize(stride * int64(get_dispatch_slot_bound()) + 64l)
+    unsafe {
+        var p = addr(g_walk_panel[0])
+        p += int64((64ul - (intptr(p) & 63ul)) & 63ul)
+        return (base = p, stride = stride)
+    }
+}
+
+//! the q8 walk's bias sums in the calling context's scratch: -128 times each 32-block's activation sum, `n / 32` a token; null where the stamped plane carries no bias
+def private q8q8_bias_sums(xqp : int8 const?; n, ntok, wbias : int64) : int const? {
+    return null if (wbias == 0l)
+    let nb = n / 32l
+    g_walk_bsum |> overwrite_resize(ntok * nb)
+    unsafe {
+        var bsp = addr(g_walk_bsum[0])
+        for (t in range64(ntok)) {
+            let xrow = xqp + t * n
+            for (bi in range64(nb)) {
+                var s = 0
+                let xb = bi * 32l
+                for (j in range64(32l)) {
+                    s += int(xrow[xb + j])
+                }
+                bsp[t * nb + bi] = -128 * s
+            }
+        }
+        return bsp
+    }
+}
+
+//! one bf16 panel of `ngr` row groups, in bytes
+def private bf16_panel_bytes(n, ngr : int64) : int64 => ngr * 16l * n * 2l
+
+//! the panel a superblock format's walk decodes into: the bf16 panel under a bf16 tile form, the byte panel where the tile reads unpacked quants, none where it reads the packed planes
+def private kq_walk_panel_bytes(fmt : int; n, mr : int64) : int64 {
+    let form = int64(kq_tileform_of(fmt))
+    return bf16_panel_bytes(n, form) if (form > 0l)
+    return kq_reads_packed_planes(int64(fmt)) ? 0l : mr * (n / 256l) * 256l
+}
 
 def xbf16_build(xqp : int8 const?; xsp : float const?; n, ntok, bsz : int64) : uint8 const? {
     let nblk = n / bsz
@@ -2910,6 +2936,8 @@ def kq_panel_bf16(fmt : int; kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n,
     }
 }
 
+//! the panel's reference body, the row dequant scattered into the pair layout: no walk runs it - a bf16 stamp emits its panel, and under any other stamp the tile form is 0 and the walk builds none
+[cold_path]
 def kq_panel_rows_bf16(fmt : int; kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) {
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
@@ -2931,21 +2959,16 @@ def kq_panel_rows_bf16(fmt : int; kqg : uint8 const?; ksg : uint8 const?; mr, ns
     delete rowf
 }
 
-def private kq_batch_cell_bf16(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; xbp : uint8 const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64; ngr : int64) {
+def private kq_batch_cell_bf16(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; xbp : uint8 const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64; ngr : int64; var pp : uint16?) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let nb16 = n / 16l
     let ts = amx_bf16_tile_tokens()
-    var @exact_size panel : array<uint16>
-    panel |> reserve(ngr * 16l * n + 32l)
-    panel |> resize(ngr * 16l * n + 32l)
     let kf = kq_fmt_of_id(fmt, "kq_batch_cell_bf16")
     kq_fmt_stamp(kf) $(F) {
         kq_amx_arm(F)
         unsafe {
-            var pp = addr(panel[0])
-            pp = bf16_align64(pp)
             var tb = tb0
             while (tb < tend) {
                 let tbe = min(tb + TB, tend)
@@ -2973,13 +2996,13 @@ def private kq_batch_cell_bf16(fmt : int; var myp : float?; kqp : uint8 const?; 
             }
         }
     }
-    delete panel
 }
 
-def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; xbp : uint8 const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64) {
+//! one (group range x token range) cell of the superblock walk; `scp` is this dispatch slot's panel (`kq_walk_panel_bytes`)
+def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; xbp : uint8 const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64; var scp : uint8?) {
     let form = kq_tileform_of(fmt)
     if (form > 0) {
-        kq_batch_cell_bf16(fmt, myp, kqp, ksp, xqp, xsp, xbsp, xbp, n, d, mr, TB, ub, ue, tb0, tend, int64(form))
+        kq_batch_cell_bf16(fmt, myp, kqp, ksp, xqp, xsp, xbsp, xbp, n, d, mr, TB, ub, ue, tb0, tend, int64(form), unsafe(reinterpret<uint16?>(scp)))
         return
     }
     let nsb = n / 256l
@@ -2987,18 +3010,9 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
     let ssb = kq_ssb(fmt)
     let nb16 = n / 16l
     let packed = kq_reads_packed_planes(int64(fmt))
-    var scratch : array<uint8>
-    if (!packed) {
-        scratch |> reserve(mr * nsb * 256l + 64l)
-        scratch |> resize(mr * nsb * 256l + 64l)   // + a cache line: the panel starts 64-aligned, the tile's 32/64-byte loads never straddle one
-    }
     let kf = kq_fmt_of_id(fmt, "kq_batch_cell_gen")
     kq_fmt_stamp(kf) $(F) {
         unsafe {
-            var scp = !packed ? addr(scratch[0]) : reinterpret<uint8?>(null)
-            if (!packed) {
-                scp += int64((64ul - (intptr(scp) & 63ul)) & 63ul)
-            }
             var tb = tb0
             while (tb < tend) {
                 let tbe = min(tb + TB, tend)
@@ -3025,15 +3039,19 @@ def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; k
             }
         }
     }
-    delete scratch
 }
 
-def private bf16_token_block(n : int64) : int64 => effective_token_block(max(g_q8_token_block, bf16_token_block_floor()), n)
+//! the bf16 walk's token block: the knob or the floor, whichever is larger, in whole tiles and under no L2 clamp - the walk builds a row group's panel once per block, so a block the clamp cuts pays a second panel and a token tail
+def bf16_token_block() : int64 {
+    let ts = amx_bf16_tile_tokens()
+    return (max(g_q8_token_block, bf16_token_block_floor()) / ts) * ts
+}
 
-def private kq_token_block(fmt : int; n : int64) : int64 => kq_tileform_of(fmt) > 0 ? bf16_token_block(n) : effective_token_block(g_q8_token_block, n)
+def private kq_token_block(fmt : int; n : int64) : int64 => kq_tileform_of(fmt) > 0 ? bf16_token_block() : effective_token_block(g_q8_token_block, n)
 
 // kq_batch slot: batched K-quant GEMM over the repacked planes — group chunks parallel, the
 // cell walk above per chunk, row tails (d % mr) disk-order per token via the portable dots
+[hot_path]
 def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) {
     let mr = kq_layout_of(fmt)
     let ng = d / mr
@@ -3043,14 +3061,21 @@ def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
     // GEMM shaper, not GEMV: a batch row-unit is ntok dots, so the GEMV wave-cancel formula doesn't apply.
     let chunks = matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok)
     let form = int64(kq_tileform_of(fmt))
+    var panels = walk_panels(kq_walk_panel_bytes(fmt, n, mr))
+    var pbase = panels.base
+    let pstride = panels.stride
     if (form > 0l) {
         let nu = int((ng + form - 1l) / form)
-        maybe_parallel_for(0, nu, min(chunks, nu)) $(ub, ue) {
-            kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, xbp, n, d, mr, TB, int(min(int64(ub) * form, ng)), int(min(int64(ue) * form, ng)), 0l, ntok)
+        maybe_parallel_for_indexed(0, nu, min(chunks, nu)) $(slot, ub, ue) {
+            unsafe {
+                kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, xbp, n, d, mr, TB, int(min(int64(ub) * form, ng)), int(min(int64(ue) * form, ng)), 0l, ntok, pbase + int64(slot) * pstride)
+            }
         }
     } else {
-        maybe_parallel_for(0, int(ng), chunks) $(ub, ue) {
-            kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, xbp, n, d, mr, TB, ub, ue, 0l, ntok)
+        maybe_parallel_for_indexed(0, int(ng), chunks) $(slot, ub, ue) {
+            unsafe {
+                kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, xbp, n, d, mr, TB, ub, ue, 0l, ntok, pbase + int64(slot) * pstride)
+            }
         }
     }
     let kf = kq_fmt_of_id(fmt, "kq_batch_kernel_gen")
@@ -3066,6 +3091,7 @@ def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
 // kq_batch_groupn slot: fused MoE prefill form — ONE dispatch runs every touched expert's
 // batched GEMM through the SAME batch cell walk the per-expert tile uses, so it is bit-exact
 // vs a per-region loop of kq_batch_kernel_gen.
+[hot_path]
 def private kq_batch_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
@@ -3081,7 +3107,10 @@ def private kq_batch_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
         }
     }
     let xbp = kq_tileform_of(fmt) > 0 ? xbf16_build(xqp, xsp, n, ntokAll, 256l) : unsafe(reinterpret<uint8 const?>(null))
-    maybe_parallel_for(0, int(nregions * ng), matmul_chunks_gemv(int(nregions * ng * mr), get_q8_batch_chunks_per_job(), n * d * nregions)) $(gb, ge) {
+    var panels = walk_panels(kq_walk_panel_bytes(fmt, n, mr))
+    var pbase = panels.base
+    let pstride = panels.stride
+    maybe_parallel_for_indexed(0, int(nregions * ng), matmul_chunks_gemv(int(nregions * ng * mr), get_q8_batch_chunks_per_job(), n * d * nregions)) $(slot, gb, ge) {
         unsafe {
             var gg = int64(gb)
             while (gg < int64(ge)) {
@@ -3091,7 +3120,7 @@ def private kq_batch_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
                 let sb = offs[r * 3l] / 256l
                 let row0 = offs[r * 3l + 1l]
                 let cnt = offs[r * 3l + 2l]
-                kq_batch_cell_gen(fmt, myp, kqp + sb * qsb, ksp + sb * ssb, xqp, xsp, xbsp, xbp, n, d, mr, TB, int(gLocal), int(gEnd), row0, row0 + cnt)
+                kq_batch_cell_gen(fmt, myp, kqp + sb * qsb, ksp + sb * ssb, xqp, xsp, xbsp, xbp, n, d, mr, TB, int(gLocal), int(gEnd), row0, row0 + cnt, pbase + int64(slot) * pstride)
                 gg = r * ng + gEnd
             }
         }
@@ -3343,8 +3372,9 @@ def private q8q8_batch_amx_cell_s16_gen(var myp : float?; wp : int8 const?; sp :
 }
 
 [from_template(src = "q8q8_batch_cell_bf16_template", Q8PANEL = "q8q8_panel_s16_gen", Q8TILE = "q8q8_tile_s16_gen", Q8GEMV = "q8q8_gemv_s16_gen")]
-def private q8q8_batch_cell_bf16_s16(var myp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; xbp : uint8 const?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, tend, ngr : int64) {}
+def private q8q8_batch_cell_bf16_s16(var myp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; xbp : uint8 const?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, tend, ngr : int64; var pp : uint16?) {}
 
+[hot_path]
 def private q8q8_batch_kernel_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let nb = n / 32l
     let mr = int64(q8q8_layout_gen())
@@ -3352,34 +3382,21 @@ def private q8q8_batch_kernel_s16_gen(var yp : float?; wp : int8 const?; sp : ui
     let ng = d / mr
     var myp = yp
     let TB = effective_token_block(g_q8_token_block, n)
-    var bs : array<int>
-    if (wbias != 0l) {
-        bs |> resize(ntok * nb)
-        unsafe {
-            var bsp = addr(bs[0])
-            for (t in range64(ntok)) {
-                let xrow = xqp + t * n
-                for (bi in range64(nb)) {
-                    var s = 0
-                    let xb = bi * 32l
-                    for (j in range64(32l)) {
-                        s += int(xrow[xb + j])
-                    }
-                    bsp[t * nb + bi] = -128 * s
-                }
-            }
-        }
-    }
-    let xbsp : int const? = wbias != 0l ? unsafe(addr(bs[0])) : null
+    let xbsp = q8q8_bias_sums(xqp, n, ntok, wbias)
     let ts = int64(q8q8_tokstep_gen())   // tokens per tile call (4; 16/32 on amx stamps)
     let form = int64(q8q8_tileform_gen())
     if (form > 0l) {
         let xbp = xbf16_build(xqp, xsp, n, ntok, 32l)
-        let TBb = bf16_token_block(n)
+        let TBb = bf16_token_block()
         let nu = int((ng + form - 1l) / form)
         let chunks = min(matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok), nu)
-        maybe_parallel_for(0, nu, chunks) $(ub, ue) {
-            q8q8_batch_cell_bf16_s16(myp, wp, sp, xqp, xsp, xbp, n, d, nb, mr, TBb, int(min(int64(ub) * form, ng)), int(min(int64(ue) * form, ng)), 0l, ntok, form)
+        var panels = walk_panels(bf16_panel_bytes(n, form))
+        var pbase = panels.base
+        let pstride = panels.stride
+        maybe_parallel_for_indexed(0, nu, chunks) $(slot, ub, ue) {
+            unsafe {
+                q8q8_batch_cell_bf16_s16(myp, wp, sp, xqp, xsp, xbp, n, d, nb, mr, TBb, int(min(int64(ub) * form, ng)), int(min(int64(ue) * form, ng)), 0l, ntok, form, reinterpret<uint16?>(pbase + int64(slot) * pstride))
+            }
         }
     } elif (ts != 4l) {
         let gs = ts / 16l                // row-groups per call — amx macros are square in tile units
@@ -3445,7 +3462,6 @@ def private q8q8_batch_kernel_s16_gen(var yp : float?; wp : int8 const?; sp : ui
             }
         }
     }
-    delete bs
 }
 
 [init]

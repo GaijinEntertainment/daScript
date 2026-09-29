@@ -424,6 +424,31 @@ def private xbf16_two_contexts(t : T?; n : int64; rounds : int) {
     delete want
 }
 
+def private bf16_block_gate(t : T?) {
+    let knob = get_q8_token_block()
+    let budget = get_q8_l2_budget()
+    let ts = amx_bf16_tile_tokens()
+    let cases = [(1l, 512l), (128l, 512l), (500l, 512l), (512l, 512l), (1000l, 992l), (1024l, 1024l)]
+    for (c in cases) {
+        set_q8_token_block(c._0)
+        t |> equal(bf16_token_block(), c._1, "the knob at {int(c._0)} reads a block of {int(c._1)}")
+        t |> equal(bf16_token_block() % ts, 0l, "the block at knob {int(c._0)} is a whole number of {int(ts)}-token tiles")
+    }
+    set_q8_token_block(512l)
+    set_q8_l2_budget(4096l * 512l)
+    t |> equal(effective_token_block(512l, 9728l), 215l, "the L2 budget cuts the int8 walk's block at n=9728")
+    t |> equal(bf16_token_block(), 512l, "the same budget leaves the bf16 walk's block whole")
+    set_q8_l2_budget(budget)
+    set_q8_token_block(knob)
+}
+
+[test]
+def test_bf16_token_block(t : T?) {
+    t |> run("the bf16 walk's block is the knob or the floor in whole tiles, under no L2 clamp") @(t : T?) {
+        bf16_block_gate(t)
+    }
+}
+
 [test]
 def test_xbf16_build(t : T?) {
     t |> run("the bf16 activation plane is q times its scale, rounded to nearest, on a cache line") @(t : T?) {

@@ -123,7 +123,12 @@ dispatch chunk after the witness's XTILEDATA grant. The tile operands are line-a
 the walk owns them (the panel and the bf16 activation plane): Intel splits a tile row that
 straddles a cache line. The activation plane is a module global of the context that calls the
 batch kernel - one per inference thread; the kernel builds it before it dispatches, and no lane
-builds one, since a fork-pool lane owns no globals.
+builds one, since a fork-pool lane owns no globals. The panels are that context's walk scratch
+(`walk_panels`): one panel per dispatch slot (`get_dispatch_slot_bound()`), each on its own
+cache lines with a line to spare, sized before the dispatch; the indexed dispatch
+(`maybe_parallel_for_indexed`) hands a chunk its slot's panel, so a chunk allocates nothing and
+two chunks never share one. The byte panel of a format whose tile reads unpacked quants rides
+the same scratch, and the q8 walk's bias sums a scratch of their own (`q8q8_bias_sums`).
 
 ### A hot leaf is instantiated in its caller's JIT partition {#jit-partition-inlining}
 
