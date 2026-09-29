@@ -1,8 +1,8 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`,
-`ARCHITECTURE_MEASUREMENT.md` (routed checklists own the other companions). Planned work:
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md` (routed
+checklists own the other companions). Planned work:
 `followup_general.md` (rig and instrument rows included), `followup_vulkan.md` (engine work on
 the Vulkan tier), `followup_metal.md` (engine work on the Metal tier, or CPU engine work
 measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup ledgers).
@@ -47,8 +47,10 @@ or performance-rig function that reaches a region entry (the outermost function 
 serving step), wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file)
 together with this list.**
 
-**A diff that adds an allocation or changes what an allocation's size grows with, adds or
-changes a module global, or adds or changes code a job, a forked context or a team lane runs,
+**A diff that adds an allocation, changes an allocation's size formula, or adds, changes or
+drops a `resize` or an `@exact_size` on a buffer; that adds or changes a module global, a call
+to a function-typed one, or the `[init]` that sets one; or that adds or changes code a job runs
+in a forked context or code reachable from a `team_parallel_*` or `maybe_parallel_for*` body,
 wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to

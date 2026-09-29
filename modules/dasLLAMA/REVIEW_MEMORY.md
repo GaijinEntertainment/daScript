@@ -1,7 +1,8 @@
 # dasLLAMA Memory and Lane Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_RUNTIME.md`. Planned work: `followup_general.md`.
+docs: `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_INVARIANTS.md`. Planned work: `followup_general.md`,
+`PERF_LEDGER.md`.
 
 **A function-typed module global that a job (a forked context) invokes or a serialized exe calls
 is set by an `[init]` that re-establishes it when it reads null - never by a declaration
@@ -28,13 +29,13 @@ the load on the first big model, not at the call site.
 with a scaling count states that size in bytes in a `PERF_LEDGER.md` row: at the largest shape
 the code path accepts, or, where the path accepts any value of the count, as a formula in the
 count with its value at two shapes that differ in it - a shape being one setting of the scaling
-counts.** An allocation is one buffer, or one sub-range of a buffer shared by several uses. A
-scaling count is a count the model file sets, how many tokens one step computes at once, how many
+counts.** An allocation is one buffer, or one sub-range of a buffer shared by several uses; a
+buffer that replaces buffers the diff removes counts as added. A scaling count is a count the model file sets, how many tokens one step computes at once, how many
 rows one media encode feeds (an image's patches, a clip's frames), or how many regions one buffer
 is split into (the K/V cache's device copy, one region per request served at once; an MoE
 dispatch's expert regions).
 
-**A diff after which an existing allocation's size starts or stops growing with a scaling count
-(a model-file count, tokens per step, rows per media encode, or regions per buffer) without
-gaining a term ships the measured pair - peak footprint and wall-clock - in `PERF_LEDGER.md`,
-with the decision it settles.**
+**A diff after which an allocation that exists before and after it starts or stops growing with
+a scaling count (a model-file count, tokens per step, rows per media encode, or regions per
+buffer) without gaining a term ships peak footprint and wall-clock, each measured before and
+after the diff at the same shape, in `PERF_LEDGER.md`, with the decision it settles.**
