@@ -5524,10 +5524,14 @@ struct private SchedDefaults {
     page_rows : int64
     prefix_groups : int64
     kv_dtype : KVDtype
-    mtp : int   //! -1 auto (on when the slot runs one stream and is not device-capable) | 0 off | 1 on
+    mtp : int   //! -1 auto (`mtp_auto_arms`) | 0 off | 1 on
 }
 
 var private g_sched_defaults = SchedDefaults()
+
+//! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, and on a slot the device serves in part, the verify round's second row costs a second decode step, more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
+def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string) : bool
+    => streams == 1l && (on_metal || backend_effective == "gpu:resident")
 
 def private init_one_scheduler(var s : ModelSlot) {
     let s_streams = s.opts.streams >= 0l ? s.opts.streams : g_sched_defaults.max_streams
@@ -5542,8 +5546,7 @@ def private init_one_scheduler(var s : ModelSlot) {
     }
     let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : g_sched_defaults.kv_dtype
     let want = s.opts.mtp >= 0 ? s.opts.mtp : g_sched_defaults.mtp
-    //! auto arms a one-stream slot that is not device-capable: an armed round keeps every stream host-cached (`slot_wants_device_kv`), so a Vulkan-resident slot would trade its device home for the draft
-    var spec = want > 0 || (want < 0 && s_streams == 1l && !s.gpu_capable)
+    var spec = want > 0 || (want < 0 && mtp_auto_arms(s_streams, slot_flavor(s) == "metal", s.backend_effective))
     if (spec && s.model.config.n_layer_nextn <= 0l) {
         if (want > 0) {
             to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")
@@ -5565,7 +5568,7 @@ def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows
     }
 }
 
-//! `mtp`: -1 lets each slot decide (self-speculation on when it runs one stream host-cached; a device-capable slot keeps plain decode), 0 / 1 set it
+//! `mtp`: -1 lets each slot decide (self-speculation on when it runs one stream on a GPU, `mtp_auto_arms`), 0 / 1 set it
 def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 64l;
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                 team_dispatch : bool = true; asr_team_dispatch : bool = false; mtp : int = -1) : bool {

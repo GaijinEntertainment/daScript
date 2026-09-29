@@ -5,7 +5,9 @@ usage and installation live in `README.md`, the debugger rail and its roadmap in
 Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU classes),
 `ARCHITECTURE_DEBUG_INFO.md` (the `--jit-debug` DWARF rail - sec.12), `ARCHITECTURE_JIT_ENTRY.md`
 (the entry module, the emitter-free cache hit, the candidate-set key), `ARCHITECTURE_EXE.md` (the
-standalone exe's link decision and startup - sec.10) and `ARCHITECTURE_FAST_MATH.md` (`[never_fast_math]`).
+standalone exe's link decision and startup - sec.10), `ARCHITECTURE_FAST_MATH.md`
+(`[never_fast_math]`), `ARCHITECTURE_CODEGEN_IDENTITY.md` (the DLL cache key and the split obj
+cache - sec.2) and `ARCHITECTURE_VECTOR_MATH.md` (the inline-polynomial vector math rail - sec.8).
 
 ## 1. The jit backend pipeline
 
@@ -89,42 +91,8 @@ element the builder did not fold to a constant of the element type sends the who
 
 ## 2. Codegen identity - the DLL cache
 
-Jit DLLs are content-addressed: `jit_dll_basename` (`llvm_jit_plan.das`) folds the candidate
-set's per-function AOT hashes (`ARCHITECTURE_JIT_ENTRY.md` sec.2), `LLVM_JIT_CODEGEN_VERSION`, the
-opt/size levels, prologue and debug-info flags, and the target triple - same inputs, same
-filename, cache hit. AST-level changes therefore self-invalidate through the function hashes;
-**emitter-level changes do not** - a change that alters generated machine code for identical
-inputs (IR generation, target-machine setup, `[llvm_code]` generators, the jit ABI) is invisible
-to the key and silently serves stale code from cache unless `LLVM_JIT_CODEGEN_VERSION` is bumped. Stamped `[llvm_code]` *arguments* are not
-emitter-level: they fold into both cache keys per function (the hint folds), so a change that
-merely re-selects which perm gets stamped - the `[tune]` machinery - self-invalidates with no
-bump. "The jit call ABI" is the contract between the
-generated code and the engine: the generated function signatures and name scheme
-(`create_uid_nodes` / `get_dll_fn_name`), the prologue shape (`jit_emit_prologue`), the
-`LlvmJitFlags`/`LlvmJitMode` inputs to the emitter, and the extern-resolution surface the install
-phase binds (`ResolveExternVisitor`, `generate_llvm_code`, `instrument_jit`). A pinned `jit_output_path`
-bypasses the content-addressed name entirely; its probe compares function hashes only, which is why
-the summary line asserts the opt-level tag only when the tier is actually known.
-
-### 2.1 The split obj cache - positional invalidation
-
-Under `--jit-split-modules`, each per-module partition object is content-addressed too
-(`--jit-obj-cache`, on by default under split): its key is the running fold of every module
-hash up to and including its own - symbol names, per-function AOT hashes, and the JIT-only
-hint folds - combined with `jit_env_salt`, the ONE helper both the DLL key and the partition
-keys fold their config/environment inputs through (a component folded into one key but not
-the other would let a config change link stale objects). The chained prefix makes
-invalidation **positional**: module order is topological, so a change in module j re-keys
-every partition from j on, while everything before j links its cached `.o` - the probe is
-bare file existence, before any per-partition LLVM state is created, so a hit skips
-declaration, irgen, and the optimize/emit pool outright. Three consequences for consumers:
-**require order is the cache layout** - a module you edit often belongs as late in the
-require chain as its dependencies allow (registration-only requires, like the dasLLAMA GPU
-tiers, belong at the END of an umbrella, not in a root module everything depends on); a
-rename-without-body change still re-keys, because the module hash folds symbol names, not
-just function hashes; and **the cache holds exactly one generation** - the GC keep-set is
-the current link set, so reverting an edit is an eviction, not a hit: the run after a revert
-re-emits from the reverted module on, same as the edit did.
+Moved to `ARCHITECTURE_CODEGEN_IDENTITY.md`: sec.2 (the content-addressed DLL key and the jit call
+ABI) and sec.2.1 (the split obj cache's positional invalidation).
 
 ## 3. Overrides and their announces
 
@@ -205,74 +173,10 @@ the context (heap damage surfacing in `LLVMContextDispose` at teardown). The in-
 requested at build time (`LLVMBuildInBoundsGEP2`), which folds to an in-bounds `ConstantExpr`
 correctly; the `llvm_boost` wrapper's `inbounds` default rides that builder.
 
-## 8. The inline-polynomial rail {#vector-poly-rail}
+## 8. The inline-polynomial rail
 
-`math::exp`, `sin`, `cos`, `tan`, `exp2`, `log2`, `log`, `pow` and the three hyperbolics on a
-float VECTOR type are emitted as inline IR by the `build_vector_*` emitters in
-`llvm_jit_intrin.das`. The default lowering is `@llvm.<op>.vNf32`, which scalarizes to N libm
-calls on any target without a vector libm - all of ours. Each emitter replaces that call with
-the SAME polynomial the interpreter and AOT already run (vecmath, `include/vecmath/`), written
-as generic vector IR (`fmuladd`, `trunc`, `roundeven`, `fptosi.sat`, integer masks and selects)
-that the backend lowers to one vector instruction apiece - so the three rails agree instead of
-merely being close (sec.8.3 is the one family that cannot). sin and cos mirror `v_sincos`
-(quadrant = round(x*2/pi), the two-constant Cody-Waite reduction, a degree-3-in-x^2 pair); tan
-mirrors `v_tan` (4/pi octants, three reduction constants, its own minimax); exp2, log2, log and
-pow mirror `v_exp2`, `v_log2_est_p5`, `v_log` and `v_pow`. Two gates: log2 and log take the
-rail on every target (`vmath_vector_float`) - masks and Horner steps with no guard branch; on
-x64 `log2(float4)` runs in 2.4 ns per vector against 15-20 ns for four scalarized `log2f` calls
-(`log` 2.8 against 17-19) - and pow always did, riding that log2 plus exp2's clamp; the rest
-is aarch64-only (`vmath_aarch64_poly_gate`) by measurement, since the range guards of `exp2`,
-`sin`, `cos` and `tan` cost more on x64 than the scalar calls they replace. Scalar float and double keep the libm intrinsic on every target: libm is correctly
-rounded and one scalar call carries no scalarization penalty. exp keeps its ggml polynomial
-(3.9e-6 relative off the interpreter); routing it through the exp2 emitter would make it exact.
-
-### 8.1 Fusion is part of the polynomial {#vector-poly-fusion}
-
-A Horner step vecmath writes as `v_add(v_mul(..))` is emitted unfused - `vmath_poly_step`, an
-fmul then an fadd - and only the chains vecmath writes as `v_madd` / `v_nmsub` go through
-`vmath_fma`. The exp2 and log2 chains alternate sign heavily enough that one contracted step
-moves the result by several ulp, so emitting `@llvm.fmuladd` for them costs bit-exact agreement
-with the interpreter and AOT: measured over 200k lanes, unfused is identical and fused is up to
-1.9e-6 apart. Where vecmath does fuse, fusion is load-bearing rather than optional - the sincos
-Cody-Waite reduction rounds `x - qf*KC1` into noise at |x| ~ 1e5 without it.
-
-The interpreter side of that bit-exactness is a precondition the emitters cannot enforce: it holds
-while the host compiler does not contract vecmath's POLY macros itself. clang's default `-ffp-contract=on`
-contracts only inside one source expression, so the inlined `v_add(v_mul(..))` pair stays two instructions;
-GCC's default `fast` contracts across statements and would fuse them. CMake pins neither flag, so on a
-GCC-built interpreter it is the vecmath rail that moves, not the emitted one.
-
-NaN carries lane for lane on this rail, and that has to be built in: a clamp or a float-to-int
-conversion written with ordered compares replaces a NaN lane with a number, and no accuracy bound
-can see the substitution because a bound only reads lanes that produced a number. So `tanh` selects
-its operand back over its `[-9,9]` clamp through `fcmp uno`, and the sincos quadrant and the tan
-octant convert through `llvm.fptosi.sat` rather than `fptosi`, whose result for NaN and for
-out-of-range input is poison. `exp` is the one member of the rail that still diverges on NaN: the
-JIT answers NaN for `exp(NaN)` where the interpreter answers inf.
-
-### 8.2 log2 is an estimate, and its specials are not IEEE {#vector-log2-estimate}
-
-`build_vector_log2` mirrors vecmath's `v_log2_est_p5`: the exponent field gives the integer part,
-the mantissa is forced into [1,2) and fed to a degree-5 minimax, and the `p*(m-1)` shape is what
-makes log2(1) exactly 0. It is an ESTIMATE (3.7e-5 relative at worst, just below x == 1 where that
-combine cancels) the interpreter and AOT have always used, so the JIT matching it is the point: the
-tiers agreeing is the property that wins, and a better log2 goes into vecmath for every tier, never
-into one rail. `math::log` is it scaled by ln2 and `math::pow` is `exp2(log2_est(x) * y)`, so both
-inherit the error, pow amplified by |y|. The estimate reads the exponent through a mask and never
-produces -inf or NaN: log2(0) is -127 and log2(-x) == log2(|x|); `pow_est(-2, 3)` is +8 for the
-same reason, and `pow` puts the sign back for an odd integer exponent (`v_pow_signed`, the
-emitter's XOR) to answer libm's -8 - all on every tier and target, since the three take the rail
-everywhere; a caller that needs IEEE's -inf and NaN has the scalar `log2`.
-`tests/llvm_vector_math.das` pins the bounds and the special values.
-
-### 8.3 The hyperbolics have no interpreter twin {#vector-hyperbolic-divergence}
-
-vecmath carries no vector sinh/cosh/tanh, so `SimPolicy` binds `vsinh`/`vcosh`/`vtanh`
-(`aot_builtin_math.h`), which call libm once per lane. `build_vector_hyper` builds all three on
-`build_vector_expf` instead, so on this one family the JIT diverges from interp and AOT by the
-exp polynomial's error rather than agreeing with them - the opposite trade from every other
-emitter on the rail, taken because the consumer (GELU over float4 rows) otherwise pays four
-libm calls per vector. `tests/llvm_vector_math.das` asserts the size of that divergence.
+Moved to `ARCHITECTURE_VECTOR_MATH.md`: sec.8 (the rail) and sec.8.1-8.3 (fusion, the log2 estimate,
+the hyperbolics' divergence).
 
 ## 9. The idot family's target lowerings
 

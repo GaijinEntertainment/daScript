@@ -630,7 +630,7 @@ def private nan_lane_cell_sincos(t : T?; what : string; xs : array<float4>; want
 // accuracy bound above, because a bound only looks at lanes that produced a number. NaN in, NaN out
 // is asserted on both rails instead, and it holds on every target: off the polynomial rail the JIT
 // takes libm, which propagates NaN too. exp is the one member of the rail that cannot be here -
-// the interpreter answers inf for exp(NaN) while the JIT answers NaN (ARCHITECTURE.md sec.8.1).
+// the interpreter answers inf for exp(NaN) while the JIT answers NaN (ARCHITECTURE_VECTOR_MATH.md sec.8.1).
 [test]
 def test_vector_nan_lanes(t : T?) {
     g_offset = 0.0

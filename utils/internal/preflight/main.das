@@ -1421,7 +1421,7 @@ def gate_tests_jit(ctx : PreflightCtx) : GateResult {
         [ctx.daslang, "dastest/dastest.das", "-jit", "--", "--jit-opt-level=3", "--failures-only", "--timing-outliers", "10",
             "--max-file-time", "{ctx.jit_max_file_time}", "--isolated-mode",
             "--isolated-mode-threads", "{ctx.jit_jobs}", "--batch", "4",
-            "--timeout", "1800", "--test", "tests"],
+            "--test-timeout", "300", "--timeout", "1800", "--test", "tests"],
         "JIT suite failures")
 }
 

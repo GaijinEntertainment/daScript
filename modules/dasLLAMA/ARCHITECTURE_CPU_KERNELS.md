@@ -93,8 +93,9 @@ K length is free. The tile covers 32 tokens (two A tiles) by one or two row grou
 superblock families carry no tokstep companion (`amx_bf16_tile_tokens()`); the q8 family keeps
 its own, which the int8 tile also answers. The walk hands sub-32 token tails and a group tail
 short of the tile to the gemv rows core, which rides busd512 like every amx companion. The
-panel amortizes over the token block, so the walk floors its block at 512 tokens under the
-per-box L2 clamp whatever `q8_token_block` says, and it chunks its groups in whole tile units
+panel amortizes over the token block, so the walk reads its block off `q8_token_block` floored
+at 512 tokens and rounded down to whole tiles (`bf16_token_block`), under no L2 clamp - a block
+the clamp cuts pays a second panel and a token tail - and it chunks its groups in whole tile units
 over the whole token range: a chunk of one group misses a two-group tile outright, and a token
 slice per cell rebuilds every panel per slice. The q8 family carries the leg on both scale
 planes - a Q8_0 GGUF keeps its binary16 weight scales, so a real q8 model prefills on the
@@ -123,7 +124,12 @@ dispatch chunk after the witness's XTILEDATA grant. The tile operands are line-a
 the walk owns them (the panel and the bf16 activation plane): Intel splits a tile row that
 straddles a cache line. The activation plane is a module global of the context that calls the
 batch kernel - one per inference thread; the kernel builds it before it dispatches, and no lane
-builds one, since a fork-pool lane owns no globals.
+builds one, since a fork-pool lane owns no globals. The panels are that context's walk scratch
+(`walk_panels`): one panel per dispatch slot (`get_dispatch_slot_bound()`), each on its own
+cache lines with a line to spare, sized before the dispatch; the indexed dispatch
+(`maybe_parallel_for_indexed`) hands a chunk its slot's panel, so a chunk allocates nothing and
+two chunks never share one. The byte panel of a format whose tile reads unpacked quants rides
+the same scratch, and the q8 walk's bias sums a scratch of their own (`q8q8_bias_sums`).
 
 ### A hot leaf is instantiated in its caller's JIT partition {#jit-partition-inlining}
 

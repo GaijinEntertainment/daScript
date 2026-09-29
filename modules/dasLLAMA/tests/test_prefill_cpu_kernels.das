@@ -1,4 +1,4 @@
-//! The prefill and KV CPU kernels no suite gated before - the batched K-quant GEMMs and the per-position GEMV route a tier without those slots runs instead, the q8_0 cache dequant seam, the batch activation requants, and repack_kq_weight's round trip: every cell asserts on whatever tier is active, and the native batched arms ride a restored kq-backend pin; and the bf16 tile's activation plane.
+//! The prefill and KV CPU kernels no suite gated before - the batched K-quant GEMMs and the per-position GEMV route a tier without those slots runs instead, the q8_0 cache dequant seam, the batch activation requants, and repack_kq_weight's round trip: every cell but the two walk-panel cells asserts on whatever tier is active, and the native batched arms ride a restored kq-backend pin; the bf16 tile's activation plane; the batch walk's panels in two threads and across the job queue, which skip where the generated backend carries no kq batch kernel; and the bf16 walk's token block.
 options gen2
 options stack = 524288
 options _dasllama_internal = true
@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_gen
+require dasllama/dasllama_par   // set_single_thread_: a thread's walk on its calling thread
 require dasllama/dasllama_convert
 require dasllama/dasllama_kv_codec
 require dasllama/dasllama_repack
@@ -422,6 +423,264 @@ def private xbf16_two_contexts(t : T?; n : int64; rounds : int) {
     delete xs
     delete xbs
     delete want
+}
+
+def private walk_seed(lane : int) : uint => 0x51ED270Bu + uint(lane) * 0x9E3779B9u
+
+def private walk_inputs(fmt : int; n, d, ntok : int64; seed : uint; var kq : array<uint8>; var ks : array<uint8>;
+                        var src : array<float>; var xq : array<int8>; var xs : array<float>; var xbs : array<int>) {
+    build_kq_region(fmt, kq, ks, d, n, seed)
+    build_acts(src, xq, xs, xbs, ntok, n)
+    repack_kq_weight(fmt, kq, ks, 0l, n, d)
+}
+
+// Two contexts run the batch walk at once, each over its own planes: the walk's panels are a
+// context's own scratch, so neither walk reads a panel the other built. The contexts are two
+// threads', each walking on its calling thread (one dispatch slot, the same slot in both); a
+// thread builds the inputs the main thread built for its lane, waits for the other to start,
+// then walks `rounds` times and counts the elements off the main thread's walk.
+def private walk_thread(lane : int; fmt : int; n, d, ntok : int64; rounds : int; wp : float const?;
+                        var sp : int?; var dp : int?; var bp : int64?; var fp : int64?; var wg : JobStatus?) {
+    new_thread() @() {
+        set_single_thread_(true)
+        pin_kernel_backend(gen_backend_name())
+        var kq : array<uint8>
+        var ks : array<uint8>
+        var src : array<float>
+        var xq : array<int8>
+        var xs : array<float>
+        var xbs : array<int>
+        walk_inputs(fmt, n, d, ntok, walk_seed(lane), kq, ks, src, xq, xs, xbs)
+        var y : array<float>
+        y |> resize(ntok * d)
+        unsafe {
+            sp[lane] = 1
+            let t0 = ref_time_ticks()
+            while (sp[1 - lane] == 0 && get_time_usec(t0) < 2000000) {
+                sleep(1u)
+            }
+            for (r in range(rounds)) {
+                nan_fill(y)
+                matmul_kq_batch(fmt, y, kq, ks, 0l, xq, xs, xbs, n, d, ntok)
+                for (i in range64(ntok * d)) {
+                    if (y[i] != wp[int64(lane) * ntok * d + i]) {
+                        if (bp[lane] == 0l) {
+                            fp[lane] = int64(r) * ntok * d + i
+                        }
+                        bp[lane]++
+                    }
+                }
+                dp[lane]++
+            }
+        }
+        delete kq
+        delete ks
+        delete src
+        delete xq
+        delete xs
+        delete xbs
+        delete y
+        wg |> notify_and_release
+    }
+}
+
+//! the backend and its pin as a cell found them
+def private backend_seat() : tuple<active : string; pin : string>
+    => (active = active_kernel_backend(), pin = kernel_backend_pin())
+
+def private restore_backend(seat : tuple<active : string; pin : string>) {
+    clear_kernel_backend_pin()
+    if (!empty(seat.pin)) {
+        pin_kernel_backend(seat.pin)
+    }
+    select_kernel_backend(seat.active)
+}
+
+//! where a walk's first element off its reference sits: the round, the token and the row
+def private first_off(at, ntok, d : int64) : string
+    => at < 0l ? "none" : "round {int(at / (ntok * d))} token {int((at % (ntok * d)) / d)} row {int(at % d)}"
+
+def private walk_two_contexts(t : T?; fmt : int; n, d, ntok : int64; rounds : int) {
+    let seat = backend_seat()
+    pin_kernel_backend(gen_backend_name())
+    if (!kernel_backend_has_kq() || !kernel_backend_has_kq_batch()) {
+        restore_backend(seat)
+        t |> skip("{gen_backend_name()} carries no kq batch kernel on this box")
+        return
+    }
+    var want : array<float>
+    want |> resize(2l * ntok * d)
+    for (lane in range(2)) {
+        var kq : array<uint8>
+        var ks : array<uint8>
+        var src : array<float>
+        var xq : array<int8>
+        var xs : array<float>
+        var xbs : array<int>
+        walk_inputs(fmt, n, d, ntok, walk_seed(lane), kq, ks, src, xq, xs, xbs)
+        var y : array<float>
+        y |> resize(ntok * d)
+        nan_fill(y)
+        matmul_kq_batch(fmt, y, kq, ks, 0l, xq, xs, xbs, n, d, ntok)
+        for (i in range64(ntok * d)) {
+            want[int64(lane) * ntok * d + i] = y[i]
+        }
+        delete kq
+        delete ks
+        delete src
+        delete xq
+        delete xs
+        delete xbs
+        delete y
+    }
+    restore_backend(seat)
+    var lanesDiffer = 0
+    var finite = 0
+    for (i in range64(ntok * d)) {
+        lanesDiffer += want[i] != want[ntok * d + i] ? 1 : 0
+        finite += is_finite(want[i]) ? 1 : 0
+    }
+    var started : int[2]
+    var done : int[2]
+    var bad : int64[2]
+    var first = fixed_array(-1l, -1l)
+    with_job_que() {
+        with_wait_group(2) $(wg) {
+            unsafe {
+                for (lane in range(2)) {
+                    walk_thread(lane, fmt, n, d, ntok, rounds, addr<float const?>(want[0]), addr(started[0]), addr(done[0]), addr(bad[0]), addr(first[0]), wg)
+                }
+            }
+        }
+    }
+    to_log(LOG_INFO, "{fmt_tag(fmt)} batch walk in two threads (n={int(n)} d={int(d)} ntok={int(ntok)}, {rounds} rounds each, a panel of {int(kq_walk_panel_bytes(fmt, n, kq_layout_of(fmt)))} bytes): {bad[0]} and {bad[1]} elements off, the first at {first_off(first[0], ntok, d)} and {first_off(first[1], ntok, d)}\n")
+    t |> equal(finite, int(ntok * d), "the main thread's walk wrote every element")
+    t |> equal(done[0] + done[1], 2 * rounds, "both threads ran every round")
+    t |> success(lanesDiffer > 0, "the two threads' outputs differ ({lanesDiffer} of {int(ntok * d)} elements), so a shared panel would show")
+    t |> equal(bad[0], 0l, "thread 0 read its own panels in every round")
+    t |> equal(bad[1], 0l, "thread 1 read its own panels in every round")
+    delete want
+}
+
+// One context walks across the job queue: every dispatch slot decodes into its own panel, so
+// the dispatched walk reads what the same walk reads on its calling thread alone.
+def private slots_gate(t : T?; tag : string; ntok, d : int64; rounds : int; walk : block<(var y : array<float>) : void>) {
+    var want : array<float>
+    want |> resize(ntok * d)
+    var y : array<float>
+    y |> resize(ntok * d)
+    let single = get_single_thread_()
+    var bad = 0l
+    var first = -1l
+    var dispatched = 0l
+    var slots = 0
+    with_job_que() {
+        setup_dasllama_jobque_()
+        slots = get_dispatch_slot_bound()
+        set_single_thread_(true)
+        nan_fill(want)
+        invoke(walk, want)
+        set_single_thread_(false)
+        let before = get_disp_count()
+        for (r in range(rounds)) {
+            nan_fill(y)
+            invoke(walk, y)
+            for (i in range64(ntok * d)) {
+                if (y[i] != want[i]) {
+                    if (bad == 0l) {
+                        first = int64(r) * ntok * d + i
+                    }
+                    bad++
+                }
+            }
+        }
+        dispatched = get_disp_count() - before
+    }
+    set_single_thread_(single)
+    var finite = 0
+    for (v in want) {
+        finite += is_finite(v) ? 1 : 0
+    }
+    to_log(LOG_INFO, "{tag} across the job queue (d={int(d)} ntok={int(ntok)}, {rounds} rounds, {int(dispatched)} dispatches, {slots} slots): {bad} elements off the calling thread's walk, the first at {first_off(first, ntok, d)}\n")
+    t |> equal(finite, int(ntok * d), "{tag}: the calling thread's walk wrote every element")
+    t |> equal(bad, 0l, "{tag}: every slot read its own panel in every round")
+    if (slots < 2) {
+        t |> skip("one dispatch slot on this box: the walk ran inline, no two panels in use at once")
+    } else {
+        t |> success(dispatched >= int64(rounds), "{tag}: every round dispatched its walk ({int(dispatched)} dispatches in {rounds} rounds)")
+    }
+    delete want
+    delete y
+}
+
+def private walk_slots(t : T?; fmt : int; n, d, ntok : int64; rounds : int) {
+    let seat = backend_seat()
+    pin_kernel_backend(gen_backend_name())
+    if (!kernel_backend_has_kq() || !kernel_backend_has_kq_batch()) {
+        restore_backend(seat)
+        t |> skip("{gen_backend_name()} carries no kq batch kernel on this box")
+        return
+    }
+    var kq : array<uint8>
+    var ks : array<uint8>
+    var src : array<float>
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    walk_inputs(fmt, n, d, ntok, walk_seed(0), kq, ks, src, xq, xs, xbs)
+    slots_gate(t, "{fmt_tag(fmt)} batch walk (n={int(n)})", ntok, d, rounds) $(var y : array<float>) {
+        matmul_kq_batch(fmt, y, kq, ks, 0l, xq, xs, xbs, n, d, ntok)
+    }
+    if (kernel_backend_has_kq_batch_groupn()) {
+        let head = ntok / 3l
+        let offs = [0l, 0l, head, 0l, head, ntok - head]   // two token runs over the one weight region
+        slots_gate(t, "{fmt_tag(fmt)} region walk (n={int(n)}, runs {int(head)} and {int(ntok - head)})", ntok, d, rounds) $(var y : array<float>) {
+            matmul_kq_batch_groupn(fmt, y, kq, ks, offs, 2l, xq, xs, xbs, n, d)
+        }
+    }
+    restore_backend(seat)
+    delete kq
+    delete ks
+    delete src
+    delete xq
+    delete xs
+    delete xbs
+}
+
+[test]
+def test_walk_panels(t : T?) {
+    let k6 = kq_schema_id(KqFmt.k6)
+    t |> run("two threads walking at once each read their own panels") @(t : T?) {
+        walk_two_contexts(t, k6, 512l, 48l, 67l, 200)
+    }
+    t |> run("a walk dispatched across the job queue reads its calling thread's walk") @(t : T?) {
+        walk_slots(t, k6, 512l, 128l, 67l, 200)
+    }
+}
+
+def private bf16_block_gate(t : T?) {
+    let knob = get_q8_token_block()
+    let budget = get_q8_l2_budget()
+    let ts = amx_bf16_tile_tokens()
+    let cases = [(1l, 512l), (128l, 512l), (500l, 512l), (512l, 512l), (1000l, 992l), (1024l, 1024l)]
+    for (c in cases) {
+        set_q8_token_block(c._0)
+        t |> equal(bf16_token_block(), c._1, "the knob at {int(c._0)} reads a block of {int(c._1)}")
+        t |> equal(bf16_token_block() % ts, 0l, "the block at knob {int(c._0)} is a whole number of {int(ts)}-token tiles")
+    }
+    set_q8_token_block(512l)
+    set_q8_l2_budget(4096l * 512l)
+    t |> equal(effective_token_block(512l, 9728l), 215l, "the L2 budget cuts the int8 walk's block at n=9728")
+    t |> equal(bf16_token_block(), 512l, "the same budget leaves the bf16 walk's block whole")
+    set_q8_l2_budget(budget)
+    set_q8_token_block(knob)
+}
+
+[test]
+def test_bf16_token_block(t : T?) {
+    t |> run("the bf16 walk's block is the knob or the floor in whole tiles, under no L2 clamp") @(t : T?) {
+        bf16_block_gate(t)
+    }
 }
 
 [test]

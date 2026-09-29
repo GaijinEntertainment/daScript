@@ -7,7 +7,7 @@ leaves when it lands or is refuted.
 ## Entries
 
 - **The split obj cache shares nothing between programs.** A partition's key is the running
-  chain over every module before it (`ARCHITECTURE.md` sec.2.1) and its object sits in the
+  chain over every module before it (`ARCHITECTURE_CODEGEN_IDENTITY.md` sec.2.1) and its object sits in the
   program's own `.jitted_scripts/<namespace>/`, so two programs over one engine share no
   object: two dasLLAMA unit tests (`tests/test_batch_grid.das` and `tests/test_box_profile.das`,
   each a `-jit` child of `modules/dasLLAMA/tests/run.das -- --suite model-free`, the `.o` names

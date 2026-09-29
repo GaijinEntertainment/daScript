@@ -999,8 +999,17 @@ def matmul_q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #;
 var g_q8_token_block = 128l
 def public set_q8_token_block(tb : int64) { g_q8_token_block = max(tb, 1l) }
 def public get_q8_token_block() : int64 { return g_q8_token_block }
+let BF16_TOKEN_BLOCK_FLOOR = 512l
+var g_bf16_token_block_floor = BF16_TOKEN_BLOCK_FLOOR
 //! the least token block a bf16 tile walk reads, where its pp512 stops gaining on Granite Rapids (PERF_LEDGER.md, the AMX bf16 tile arc)
-def public bf16_token_block_floor() : int64 => 512l
+def public bf16_token_block_floor() : int64 => g_bf16_token_block_floor
+//! An instrument racing blocks under the floor moves it, and the move announces.
+def public set_bf16_token_block_floor(tb : int64) {
+    g_bf16_token_block_floor = max(tb, 1l)
+    if (g_bf16_token_block_floor != BF16_TOKEN_BLOCK_FLOOR) {
+        to_log(LOG_INFO, "dasLLAMA: the bf16 token block floor is {g_bf16_token_block_floor}, not {BF16_TOKEN_BLOCK_FLOOR} - a bf16 tile walk reads q8_token_block down to it\n")
+    }
+}
 
 // ===== Token-block L2 budget (shared, ISA-agnostic) =====
 // A token-blocked Q8·Q8 GEMM keeps TB×n L2-resident; past L2 the slice spills and prefill falls
@@ -2024,6 +2033,8 @@ def pin_kernel_backend(name : string) {
 def clear_kernel_backend_pin() {
     g_backend_pin = ""
 }
+//! The pinned backend's name, "" when none is pinned.
+def kernel_backend_pin() : string => g_backend_pin
 
 //! Pin the BATCH-shaped kernel slots (prefill GEMM + mx4 batch) to backend `name`, keeping the
 //! active backend's GEMV slots — the hybrid for boxes where decode/prefill prefer different backends.

@@ -1,8 +1,8 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`,
-`ARCHITECTURE_MEASUREMENT.md` (routed checklists own the other companions). Planned work:
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md` (routed
+checklists own the other companions). Planned work:
 `followup_general.md` (rig and instrument rows included), `followup_vulkan.md` (engine work on
 the Vulkan tier), `followup_metal.md` (engine work on the Metal tier, or CPU engine work
 measured on macOS), `PERF_LEDGER.md` (performance; the rest goes to the followup ledgers).
@@ -46,6 +46,12 @@ speech chunk or frame - adds, moves, renames or removes a `[hot_path]`, `[cold_p
 or performance-rig function that reaches a region entry (the outermost function re-entered each
 serving step), wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file)
 together with this list.**
+
+**A diff that adds an allocation, changes an allocation's size formula, or adds, changes or
+drops a `resize` or an `@exact_size` on a buffer; that adds or changes a module global, a call
+to a function-typed one, or the `[init]` that sets one; or that adds or changes code a job runs
+in a forked context or code reachable from a `team_parallel_*` or `maybe_parallel_for*` body,
+wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
 
 **A change to what enters `performance/records/`, or to a provenance manifest, answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
@@ -135,12 +141,6 @@ Every recorded row, tune sidecar and exchange entry carries the release, so a bu
 **A change that invalidates only images never bumps `DASLLAMA_RELEASE` - it applies
 `REVIEW_IMAGE.md`.**
 
-**A function-typed module global that a job (a forked context) invokes or a serialized exe calls
-is set by an `[init]` that re-establishes it when it reads null - never by a declaration
-initializer alone.** A serialized exe and a forked context restore globals as data, so a
-declaration initializer alone arrives null and dies at the first invoke while every `-jit` gate
-stays green.
-
 **A function in `dasllama/dasllama_common.das` that performs work through a hook another module
 registers runs its own CPU code for that work when the hook is unset; when it has no CPU code
 for that work, it panics with a message naming the module to require.** A function with no
@@ -166,21 +166,6 @@ the winner from a race that timed every candidate interleaved in one process wit
 puts that race's rows, each naming its candidate, in the PR body or the change's dated
 `PERF_LEDGER.md` row.** Timings taken in two processes or at two commits also differ by everything
 else that changed between the runs, so they cannot pick a candidate.
-
-**A diff that adds an allocation, or adds a term to an existing allocation's size, that grows
-with a scaling count states that size in bytes in a `PERF_LEDGER.md` row: at the largest shape
-the code path accepts, or, where the path accepts any value of the count, as a formula in the
-count with its value at two shapes that differ in it - a shape being one setting of the scaling
-counts.** An allocation is one buffer, or one sub-range of a buffer shared by several uses. A
-scaling count is a count the model file sets, how many tokens one step computes at once, how many
-rows one media encode feeds (an image's patches, a clip's frames), or how many regions one buffer
-is split into (the K/V cache's device copy, one region per request served at once; an MoE
-dispatch's expert regions).
-
-**A diff after which an existing allocation's size starts or stops growing with a scaling count
-(a model-file count, tokens per step, rows per media encode, or regions per buffer) without
-gaining a term ships the measured pair - peak footprint and wall-clock - in `PERF_LEDGER.md`,
-with the decision it settles.**
 
 **A new call that runs a matrix multiply over f32 weight rows - `matmul_batch`, `mm_blob_b`,
 `mm_fblob_b`, per-head `gemm_f32` / `gemm_f32_jo`, or an f32 GPU mm - outside a
@@ -283,18 +268,3 @@ caller returns silently changes the lane of the next model the process loads.
 there in the same change.** The `features` fingerprint saved with every sidecar is this box's
 pass/fail over that list, so a name outside it is never recorded and a box adopting a shipped
 profile re-runs the tuning the profile was meant to save.
-
-**A value that a team-lane kernel reads - anything reachable from a `team_parallel_for` /
-`team_parallel_for_indexed` / `team_parallel_stages` body (`daslib/jobque_boost.das`, repo
-root) or from a `maybe_parallel_for*` body (`dasllama/dasllama_par.das`), which can dispatch onto
-those same lanes - is a `def` returning it, never a module global with a declaration initializer
-(`let` or `var`), and nothing reachable from such a body writes or resizes a module global.** A
-pooled lane's globals are not its own: a read comes back zero, a resize trips on a stale array.
-
-**A buffer in `dasllama/` whose element count grows with a count the model file sets is declared
-`@exact_size` (`@scratch @exact_size` on a `@scratch` carrier), and every `resize` of it follows
-a `reserve(n)` or `ensure_capacity(n)` whose `n` is the resized count - a sizing helper of
-`dasllama/dasllama_math.das` (`reserve_resize`, `grow_resize`, `ensure_length`,
-`overwrite_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the pair spelled
-out - however small the count looks.** A bare grow past the heap's unreserved-size cap panics
-the load on the first big model, not at the call site.

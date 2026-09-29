@@ -1962,19 +1962,12 @@
    `ffn_down` at Q4_1 (GGUF type 3), and the loader stops at `type 3 not supported`; the reference
    build's Q4_0 carriers routinely mix one. Done = Q4_1 decoded to the q51-style per-32 (d, m) plane, or the
    loader names the tensor and the format it wants re-quantized to.
-187. **The batch walks allocate their panel per dispatch chunk, under no region-entry
-   annotation.** The four kernel-table batch functions (`q8q8_batch_kernel_neon_laneq_gen`,
-   `q8q8_batch_kernel_s16_gen`, `kq_batch_kernel_gen`, `kq_batch_groupn_gen`) are reached only
-   through the backend table and carry no `[hot_path]` / `[no_alloc]`, so the allocation lint
-   never walks them; under them every chunk of a prefill batch allocates its panel - the byte
-   panel of the k5/k6 and grid formats (`kq_batch_cell_gen`'s `scratch`) and the bf16 panel of
-   the three bf16 cells. A panel shared by the lanes and resized inside the dispatch raced
-   (`can't resize locked array`). Done = one `@scratch @exact_size` panel per walk, sized for
-   `get_dispatch_slot_bound()` slots before the dispatch, each cell taking its slot's slice, and
-   the four entries annotated.
-188. **The bf16 walk is written twice, and the harness's format ladders six times.** The folds
-   left unapplied: one walk helper over blocks (panel, tile, gemv tail) for the q8 and superblock
-   cells and the harness's `run_tile_bf16` / `run_kq_tile_bf16`, the tile-unit chunking folded in;
+188. **The bf16 panel scatter is written three times, and the harness's format ladders six.** The
+   folds left unapplied: the int8 walk inside `kq_batch_cell_gen` onto `bf16_walk` (the same
+   control flow at one group and the tile's four tokens - it needs its own before/after pair);
+   `q8q8_bias_sums` onto `b32g_fill_bsums` under a scale argument; the two q8 batch kernels
+   (`q8q8_batch_kernel_neon_laneq_gen`, `q8q8_batch_kernel_s16_gen`) as one generic over the
+   scale plane;
    `q8q8_panel_gen` and its s16 twin over one row scatter shared with `kq_panel_rows_bf16`;
    `q8_panel_gen_impl` as a unit kind of `panel_gen_impl`; `panel_quads`' unpack arms shared with
    `emit_block_kqv2`'s; one `kq_family_registries(fmt)` ladder behind the harness's six; one
@@ -1986,10 +1979,19 @@
    Sapphire Rapids - the same `x86-amx` class - is unmeasured. Done = the confirm races one
    superblock carrier (`DASLLAMA_CONFIRM_MODEL`'s K-quant twin), or a Sapphire Rapids carrier row
    in the ledger.
-190. **The bf16 walk's token block is one floor for every shape.** The one-process race on
-   Granite Rapids splits by K length: at n=2048 a block of 256 beats 512 by 10%, at n=8192 512
-   beats 256 by 8% (`PERF_LEDGER.md`, the AMX bf16 tile arc); end to end 512 holds. Done = the
-   block chosen per weight shape, raced end to end on the 1B and 4B carriers.
+190. **The bf16 walk's token block is one number for every shape and every lane count.**
+   `bf16_token_block` answers 512 in whole tiles, and a kernel race splits on the weight's
+   output width and on the lanes a core carries. The race [debug-jit]: Granite Rapids
+   `c8i.4xlarge` (8 cores), `DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=<lanes> bin/daslang -jit
+   -no-module-cache modules/dasLLAMA/harness/token_block_race.das` (the `x86-amx` class profile,
+   `DAS_TUNE_POLICY` unset), k4 on the `x64-gen` backend at tile form 2 and ntok 512, the second
+   of two passes a lane count; best ms (cv %) at a block of 128 / 256 / 384 / 512. K 8192 x 2048
+   rows: 4.169 (0.3) / 3.648 (0.4) / 3.673 (0.4) / 3.415 (0.4) at 16 lanes, 4.525 (2.6) / 4.028
+   (1.8) / 4.016 (1.3) / 3.782 (2.6) at 8. K 2560 x 9728 rows: 4.774 (1.0) / 4.107 (0.9) / 4.513
+   (1.5) / 4.269 (2.8) at 16 lanes, 4.498 (1.0) / 3.562 (2.9) / 4.165 (1.0) / 5.148 (2.1) at 8.
+   K 2048 x 8192 rows: 3.489 (1.0) / 2.822 (1.6) / 2.871 (1.1) / 3.079 (1.4) at 16 lanes, 3.114
+   (2.7) / 2.547 (2.6) / 2.592 (1.9) / 2.830 (2.0) at 8. Done = the block a tuner knob raced per
+   lanes-per-core regime, confirmed end to end on the 1B and 4B carriers.
 191. **The generated tier branches on format ids as literals.** The emitter reads `te.kq == 33`
    and the runtime ladders `fmt == 4` (`kq_layout_of`), and the bf16 panel code follows them
    (`panel_is_grid`, `panel_scales`, `panel_quads`, `panel_ioff`, the panel stubs' ids, the
@@ -2012,3 +2014,30 @@
    start; `performance/REVIEW.das` checks the provenance and not the kernel set. Done = the gate
    compares each profile's kernel names with the scope's `[tune]` / `[tuned]` census and reds a
    missing or an unknown name.
+195. **Sixteen loops that ask to vectorize do not, on arm64, and nothing names them.** A cold
+   `-jit` compile of `utils/dasllama-server/cli.das` (repo root) on an Apple M5 Max,
+   `DAS_TUNE_POLICY` unset, prints sixteen `loop not vectorized` warnings, each beside a remark
+   with its reason - fourteen `instruction return type cannot be vectorized`, two `call
+   instruction cannot be vectorized` - and each at `<unknown>`, so the loop and its module are
+   unread. Done = each loop named (the emitter attaches a location to a loop it hints), then
+   vectorized or its hint dropped.
+196. **Test and harness fixtures are written more than once.** The K-quant planes with their
+   Q8_K activations: `build_planes` (`harness/token_block_race.das`), `build_pool` and the
+   activation block under it (`harness/moe_kq_probe.das`), `build_kq_fixture`
+   (`harness/gen_tune_probe.das`), `build_kq_region` and `build_acts`
+   (`tests/test_prefill_cpu_kernels.das`). The bf16 envelope, 1e-2 of the image's largest
+   magnitude: `BF16_ENVELOPE` (`harness/token_block_race.das`), `BF16_ENVELOPE_REL` with
+   `bf16_envelope` (`harness/gen_tune_probe.das`), `cmp_bf16`
+   (`tests/test_prefill_cpu_kernels.das`), `held_bf16` (`tests/test_q8q8_family.das`). The
+   two-thread race: `walk_thread` with `walk_two_contexts` beside `plane_thread` with
+   `xbf16_two_contexts` (`tests/test_prefill_cpu_kernels.das`), one start barrier, round loop and
+   assert set under two round bodies. The server rig: `with_mtp_server`
+   (`utils/dasllama-server/test_openai_server_mtp.das`, repo root) spells the Metal mode as a
+   `bool` where `with_llama_server` takes a `MetalMode`, and the ready poll is written in every
+   `with_*_server` rig of that folder. Elapsed seconds off `get_time_usec`:
+   `tests/fio/popen_timeout_tree.das`, `seconds_since` (`utils/internal/preflight/main.das`),
+   `now_seconds` (`utils/watchdog/watchdog.das`), all repo root. Done = one fixture module the
+   tests and the harness both require for the planes and the envelope, one two-thread helper
+   taking the round's body, the rigs' boot and ready poll in `_server_rig.das`, and an elapsed
+   seconds builtin beside `get_time_usec` - each with the suites that read it green, or the fold
+   refused by name.

@@ -225,7 +225,7 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--page-rows` | - | `64` | KV page size in positions for paged serving |
 | `--prefix` | - | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
 | `--flat` | - | - | Flat preallocated KV sessions - disables paged serving and the prefix cache |
-| `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (`streams = 1`) host-cached and leaves it off otherwise: at one stream the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x - `modules/dasLLAMA/followup_metal.md` row 26), at several streams the plain batched step is faster (`modules/dasLLAMA/PERF_LEDGER.md`, the batched arcs), and a device-resident slot (`--gpu vulkan`) keeps plain decode, since an armed round keeps every stream's cache on the host. `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
+| `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (`streams = 1`) on a GPU - Metal, or the whole model resident on a Vulkan device - and leaves it off otherwise: at one stream on Metal the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x - `modules/dasLLAMA/followup_metal.md` row 26), on a Vulkan device more (`modules/dasLLAMA/PERF_LEDGER.md`, the resident driver's NextN entries), on the CPU the round's second verify row costs a second decode step and the round is slower than plain decode (`modules/dasLLAMA/PERF_LEDGER.md`, the CPU self-speculation entry), and at several streams the plain batched step is faster (`modules/dasLLAMA/PERF_LEDGER.md`, the batched arcs). An armed round keeps every stream's cache on the host, so a drafting Vulkan slot serves host-cached sessions in place of device-home ones. `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
 | `--rope-scaling` | - | *file* | RoPE scaling override for the load: `yarn` \| `linear` \| `none`; unset keeps the model file's own `rope.scaling.*` keys, `none` drops them (a file's per-pair factor tensors, Llama-3.1's `rope_freqs`, stay, as llama.cpp keeps them). `yarn` folds the NTK-by-parts frequency ramp and the `1 + 0.1 ln(s)` magnitude into the rope tables the way llama.cpp's `--rope-scaling yarn` does. The Qwen families publish the recipe (Qwen2.5-Instruct 7B and up, Qwen3, Qwen3-Next / 3.5 / 3.8: factor 4 over the trained context) and ship no scaling keys because static YaRN costs a little on short texts - arm it when a conversation needs the length; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (`model.gguf.metal-yarn4.dlim`), so the first load with it mints once. Per-model in a `[[models]]` roster: `rope_scaling = "yarn"` |
 | `--rope-scale` | - | *file* | The scaling factor `s` (the context multiplier) for the override; unset reads the file's `rope.scaling.factor`, and `yarn` needs one (config key `rope_scale`) |
 | `--yarn-orig-ctx` | - | *file* | YaRN: the original training context the factor extends; unset reads the file's `original_context_length`, else its `context_length` (config key `yarn_orig_ctx`; llama.cpp's `--yarn-orig-ctx`) |
@@ -683,8 +683,9 @@ absent; set `DASLLAMA_MODELS_DIR`):
   `pocket-tts-en-q8.gguf`, and a `--no-think --hide-thinking` image turn whose leading thought
   block stays off the screen). Runs on the stocked box at release time.
 - `test_openai_server_mtp.das` - the self-speculation default: a NextN-headed slot drafts at one
-  stream and decodes plain at four, an explicit `mtp` wins either way, and a head-less model
-  serves plain under the default; read off `/v1/stats`'s `mtp_drafted`. Needs
+  stream on Metal and decodes plain at four or on the CPU, an explicit `mtp` wins either way, and
+  a head-less model serves plain under the default; read off `/v1/stats`'s `mtp_drafted`. The
+  Metal cells skip on a box with no Metal backend. Needs
   `Qwen3.5-0.8B-MTP-Q8_0.gguf` and `tinyllama-1.1b-chat-v1.0.Q8_0.gguf`.
 - `test_exchange_client.das` - the exception: model-free and runs everywhere. The sidecar
   exchange client against a fake exchange on 127.0.0.1:18131 (lookup/pick, the fetch-and-apply
@@ -696,7 +697,9 @@ absent; set `DASLLAMA_MODELS_DIR`):
   fails closed.
 - `test_server_flags.das` - model-free: the flag-presence test behind the config surface's
   provenance - a flag the process was given reads present, bare or as `flag=value`, and an
-  absent one or a prefix of a given one reads absent.
+  absent one or a prefix of a given one reads absent; and the self-speculation default's rule
+  as the slot reads it (`mtp_auto_arms`, the Vulkan arm included) and as the config surface
+  resolves it, with the Metal mode a `--gpu` pick and a `--metal` spelling resolve to.
 - `tests/` - the control page itself, under real Playwright (Node + chromium): badge states,
   models panel, streams/history, chat wire + SSE rendering, the speech studio, config editor,
   exchange section, the confirm-gated controls. Model-free - the page runs against JSON/SSE fixtures captured

@@ -2051,3 +2051,19 @@ module) is independent and can land any time - it is pure structure.
     (`resident_would_serve` with `planes_trimmed` set before the converter's save), the refusal text
     naming what still holds, and `dasllama-convert --trim` proven on a q8, a K-quant and a
     third-format model.
+120. **The served one-stream round on a Vulkan device is unmeasured.** `dasllama-server` arms the
+    speculative round by default on a one-stream slot whose whole model is resident
+    (`mtp_auto_arms`, `utils/dasllama-server/openai_server.das`), and an armed slot serves
+    host-cached sessions where a plain one serves device-home ones (`slot_wants_device_kv`); the
+    rates that rule rests on are `benchmarks/lcpp_bench.das --mtp-ab` rows (`PERF_LEDGER.md`, the
+    resident driver's NextN entries), which time no served slot. Done = the server's in-process
+    bench (`/bench`) on a one-stream Vulkan slot, the round armed against the round off with
+    device-home sessions, on the 0.8B-MTP and one larger NextN carrier, in `PERF_LEDGER.md`.
+121. **A roster slot keeps the self-speculation answer of its load.** `init_one_scheduler`
+    (`utils/dasllama-server/openai_server.das`) reads `backend_effective` once, when the slot's
+    scheduler is built, and the GPU owner moves between roster slots afterwards
+    (`bind_gpu_slot`): a slot that armed the round as the owner goes on drafting on the CPU
+    after it hands the device over, where the round is slower than plain decode
+    (`PERF_LEDGER.md`, the CPU self-speculation entry), and a slot loaded off the device never
+    arms after it takes it. Done = the unset default re-read at every owner switch, with a cell
+    that switches the owner between two NextN slots and reads `mtp_drafted` on each.
