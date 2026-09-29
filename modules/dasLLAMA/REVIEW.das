@@ -644,8 +644,8 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 43
-let private IMAGE_LAYOUT_STAMP_HASH = 0xdb87cd9598000987ul
+let private IMAGE_LAYOUT_STAMP_VERSION = 44
+let private IMAGE_LAYOUT_STAMP_HASH = 0x4e64f128eb806584ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -655,7 +655,8 @@ let private IMAGE_LAYOUT_STAMP_HASH = 0xdb87cd9598000987ul
 var private LAYOUT_HELPERS <- {
     "pad_to_page", "plane_end", "image_total_bytes",
     "w_append", "w_zeros", "w_header", "store_u32", "store_u64", "kq_plane_name",
-    "blob_push", "weight_slot", "conv1d_weight_row"
+    "blob_push", "weight_slot", "conv1d_weight_row",
+    "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append"
 }
 
 // The constants those helpers place bytes by, and the bands the two streaming writers stage

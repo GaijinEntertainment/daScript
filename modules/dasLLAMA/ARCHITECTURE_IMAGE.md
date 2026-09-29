@@ -1,6 +1,7 @@
 # dasLLAMA Architecture - the prepared-image rail
 
-Companion to `ARCHITECTURE.md`; a section is cited by its anchor.
+Companion to `ARCHITECTURE.md`; a section is cited by its anchor. The vulkan lane's mint off the gguf is
+`ARCHITECTURE_IMAGE_VULKAN.md`.
 
 ### There is ONE way to load a model {#there-is-one-way-to-load-a}
 
@@ -122,7 +123,8 @@ exact. The walk advances the writer by exactly the bytes it accepted, so the sec
 never drift from the file. An append past the chunk is therefore a disagreement between the sizing
 pass and the walk - a bug, not a disk condition - and the chunk rail panics rather than limping on.
 The one decline it survives is failing to get the chunk at all: that happens before the walk
-starts, so the carrier is still whole and its caller keeps serving it.
+starts, so the carrier is still whole and its caller keeps serving it. The one plane the sizing
+pass bounds instead of knowing is the vulkan lane's twin (`ARCHITECTURE_IMAGE_VULKAN.md`).
 
 ### Identity names the backend, so the backend is selected first {#image-identity-backend-order}
 

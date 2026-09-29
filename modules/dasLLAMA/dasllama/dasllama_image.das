@@ -26,6 +26,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_config
 require math
 require dasllama/dasllama_load
+require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero stand-in is sized by
 
 // The prepared-model image (spec: fmap-model-image plan, locked 2026-07-16): the post-load
 // Model dumped once — planes POST-repack, page-aligned — then mapped back with zero O(model)
@@ -39,7 +40,7 @@ require dasllama/dasllama_load
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 43   // the meta carries the draft head's hyper-connection head-mixer offsets
+let IMAGE_VERSION = 44   // the vulkan lane's device twin precedes the planar sections
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -956,30 +957,34 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
     if (w.ok) {
         w_zeros(w, uint64(IMAGE_PAGE))   // page 0: header placeholder — stored once the walk knows it
         let ts_planes = ref_time_ticks()
+        // a failed write ends the walk: nothing after it is written, and nothing is consumed - the model stays whole for the fallback
         apply(t) $(name : string; var field) {
+            if (!w.ok) {
+                return
+            }
             static_if (typeinfo is_array(field)) {
                 static_if (!typeinfo is_string(field[0])) {   // string arrays ride the meta blob
-                    if (!invoke(plane, name, w, sections)) {
+                    if (!invoke(plane, name, w, sections) && w.ok) {
                         write_plane(w, sections, name, field)
                     }
                     // lock_count != 0 is a BORROWED view over some other image — never ours to free
-                    if (consume && lock_count(field) == 0) {
+                    if (w.ok && consume && lock_count(field) == 0) {
                         delete field
                     }
                 }
             } static_elif (typeinfo is_dim(field)) {
                 for (el, i in field, count()) {
                     let fmt = unsafe(reinterpret<KqFmt>(uint8(i)))
-                    if (!kq_sb(fmt)) {
+                    if (!kq_sb(fmt) || !w.ok) {
                         continue
                     }
                     apply(el) $(iname : string; var ifield) {
                         static_if (typeinfo is_array(ifield)) {
                             let pname = kq_plane_name(fmt, iname)
-                            if (!invoke(plane, pname, w, sections)) {
+                            if (!invoke(plane, pname, w, sections) && w.ok) {
                                 write_plane(w, sections, pname, ifield)
                             }
-                            if (consume && lock_count(ifield) == 0) {
+                            if (w.ok && consume && lock_count(ifield) == 0) {
                                 delete ifield
                             }
                         }
@@ -989,10 +994,10 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                 // a staging plane-group: the hook gets the same first refusal here as at the top level
                 apply(field) $(iname : string; var ifield) {
                     static_if (typeinfo is_array(ifield)) {
-                        if (!invoke(plane, "{name}.{iname}", w, sections)) {
+                        if (!invoke(plane, "{name}.{iname}", w, sections) && w.ok) {
                             write_plane(w, sections, "{name}.{iname}", ifield)
                         }
-                        if (consume) {
+                        if (w.ok && consume) {
                             delete ifield
                         }
                     }
@@ -1001,8 +1006,10 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                 apply(field) $(iname : string; var ifield) {
                     static_if (typeinfo is_array(ifield)) {
                         static_if (!typeinfo is_string(ifield[0])) {
-                            write_plane(w, sections, "{name}.{iname}", ifield)
-                            if (consume && lock_count(ifield) == 0) {
+                            if (w.ok) {
+                                write_plane(w, sections, "{name}.{iname}", ifield)
+                            }
+                            if (w.ok && consume && lock_count(ifield) == 0) {
                                 delete ifield
                             }
                         }
@@ -1142,14 +1149,20 @@ def save_model_image(var t : Model; path : string; tag : string = ""; quant : st
     return save_image(t, path, tag, quant)
 }
 
-// streamed planes size as empty, so their bytes plus a page each are added here; over-reserve is free (dwrite_close truncates)
-def private stream_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
-    var extra = 0ul
+//! the planes a streaming save sizes as empty and fills from the gguf mapping - the quant halves the loader streams
+def private streamed_q_planes() : array<string> {
     var names <- [for (f in type<KqFmt>); kq_plane_name(f, "q"); where kq_sb(f)]
     names |> push("qblob")
     names |> push("mblob")
     names |> push("q51q")
-    for (fname in names) {
+    names |> push("iq4nl32q")
+    return <- names
+}
+
+// streamed planes size as empty, so their bytes plus a page each are added here; over-reserve is free (dwrite_close truncates)
+def private stream_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
+    var extra = 0ul
+    for (fname in streamed_q_planes()) {
         let sb = stream_plane_bytes(t, jobs, fname)
         if (sb > 0l) {
             extra += uint64(sb) + uint64(IMAGE_PAGE)
@@ -1159,6 +1172,223 @@ def private stream_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
         extra += uint64(long_length(t.qscales) * 2l) + uint64(IMAGE_PAGE)
     }
     return extra
+}
+
+var private g_vk_mint_walk_writer : ImgWriter?           //! the writer the walk's entries stream into, for the length of one vkblob plane
+var private g_vk_mint_meta : GGUFMeta const?
+var private g_vk_mint_bytes : uint8 const?
+var private g_vk_mint_nbytes = 0l
+var private g_vk_mint_streamed_model : Model const?      //! the streamed model: its offsets and flags shape every job's view
+var private g_vk_mint_jobs : array<FillJob>
+var private g_vk_mint_regs : array<StreamReg>
+var private g_vk_mint_job_view = Model()           //! the last span's view - an entry's pieces (a token table's rows) share one transcode
+var private g_vk_mint_view_run : array<int>        //! the jobs the view spans, ascending; empty = no view
+var private g_vk_mint_view_rebase = 0l
+var private g_vk_mint_walked = false
+var private g_vk_mint_declined = false             //! the walk declined this load's mint: the planar build serves from memory, no lane is written
+var private g_vk_mint_decline_reason = ""          //! the first reason the gather hook could not feed the walk, read after it
+
+def private vk_mint_release() {
+    delete g_vk_mint_job_view
+    g_vk_mint_view_run |> clear()
+    delete g_vk_mint_jobs
+    delete g_vk_mint_regs
+    g_vk_mint_walk_writer = null
+    g_vk_mint_meta = null
+    g_vk_mint_bytes = null
+    g_vk_mint_streamed_model = null
+}
+
+//! the mint's state before a cold load's saves: no walk ran, nothing declined
+def private vk_mint_reset() {
+    vk_mint_release()
+    g_vk_mint_walked = false
+    g_vk_mint_declined = false
+}
+
+//! whether this save mints through the walk: the tag is the armed tier's bake tag, and no earlier save of this load declined
+def private vk_mint_arm_walk(tag : string) : bool {
+    g_vk_mint_walked = false
+    return !empty(tag) && !g_vk_mint_declined && tag == moe_gpu_bake_tag()
+}
+
+def private vk_mint_sink(p : void?; nbytes : uint64) {
+    if (!g_vk_mint_walk_writer.ok) {
+        panic("dasLLAMA image: the vulkan lane's device twin overran the image's reserve mid-walk - the sizing is wrong, see the error above")
+    }
+    w_append(*g_vk_mint_walk_writer, p, nbytes)
+}
+
+def private same_run(a, b : array<int>) : bool
+    => length(a) == length(b) && !empty(a) && a[0] == b[0] && a[length(a) - 1] == b[length(b) - 1]
+
+//! the view over the run of streamed jobs holding `n` elements of `f`'s plane at `woff`, kept while the next entry sits in the
+//! same run; false = no such run
+def private vk_mint_view_at(f : KqFmt; woff, n : int64) : bool {
+    var run <- stream_job_span(*g_vk_mint_streamed_model, g_vk_mint_jobs, f, woff, n)
+    if (empty(run)) {
+        return false
+    }
+    if (!same_run(run, g_vk_mint_view_run)) {
+        delete g_vk_mint_job_view
+        g_vk_mint_job_view = Model()
+        g_vk_mint_view_rebase = stream_job_view(*g_vk_mint_meta, unsafe(temp_array(g_vk_mint_bytes, g_vk_mint_nbytes, type<uint8>)),
+            *g_vk_mint_streamed_model, g_vk_mint_jobs, run, g_vk_mint_regs, g_vk_mint_job_view)
+        delete g_vk_mint_view_run
+        g_vk_mint_view_run <- run
+    }
+    delete run
+    return true
+}
+
+[arch(at = "../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def private vk_mint_gather_hook(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64;
+                                var wq : array<uint8>; var ws : array<uint8>) : bool {
+    let f = kq_fmt_of_slot(fmt)
+    if (!vk_mint_view_at(f, woff, n * rows)) {
+        if (empty(g_vk_mint_jobs)) {
+            return false   // no streaming plan: the planes are whole in RAM, and the layout gather reads them
+        }
+        // an entry shape the mint does not know: the walk runs to its end over a zero stand-in and the mint declines after it
+        if (empty(g_vk_mint_decline_reason)) {
+            g_vk_mint_decline_reason = "the mint cannot gather {f} at element {woff} ({n}x{rows}) off the gguf - no run of streamed jobs holds it, an entry shape the mint does not know"
+        }
+        vk_mint_zero_view(f, woff, n * rows)
+    }
+    layout_gather_dispatch(g_vk_mint_job_view, f, woff - g_vk_mint_view_rebase, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
+    return true
+}
+
+//! a view of zeroed planes standing in for `n` elements of `f`'s plane at `woff`, so a walk the mint cannot feed still runs to its end
+def private vk_mint_zero_view(f : KqFmt; woff, n : int64) {
+    delete g_vk_mint_job_view
+    g_vk_mint_job_view = Model()
+    g_vk_mint_view_run |> clear()
+    g_vk_mint_view_rebase = woff
+    g_vk_mint_job_view.quant = g_vk_mint_streamed_model.quant
+    if (kq_sb(f) || kq_b32_planes(f) || f == KqFmt.mx4) {
+        let units = n / kq_elems(f) + 1l
+        if (kq_sb(f)) {
+            g_vk_mint_job_view.kq[int(f)].q |> resize(units * kq_qsb(f))
+            g_vk_mint_job_view.kq[int(f)].s |> resize(units * kq_ssb(f))
+        } elif (f == KqFmt.q51) {
+            g_vk_mint_job_view.q51q |> resize(units * kq_qsb(f))
+            g_vk_mint_job_view.q51s |> resize(units * kq_ssb(f))
+        } elif (f == KqFmt.iq4nl32) {
+            g_vk_mint_job_view.iq4nl32q |> resize(units * kq_qsb(f))
+            g_vk_mint_job_view.iq4nl32s |> resize(units * kq_ssb(f))
+        } else {
+            g_vk_mint_job_view.mxq |> resize(units * kq_qsb(f))
+            g_vk_mint_job_view.mxs |> resize(units * kq_ssb(f))
+        }
+    } else {
+        g_vk_mint_job_view.qblob |> resize(n)
+        g_vk_mint_job_view.qscales |> resize(n / Q8_BLOCK_ELEMS + 1l)
+    }
+}
+
+//! the bound a streamed vulkan lane reserves for its twin, its plan and the packed emb region, since the walk sizes the twin
+//! only as it runs: the quant planes' bytes, both halves - a device scale row is its disk row's f16 half or narrower, so the
+//! twin never outgrows its planar source - an eighth over for the entry pads, and a window for the plan
+[arch(at = "../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def private vk_mint_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
+    var planar = 0l
+    if (empty(jobs)) {   // no streaming plan: the quant halves are whole in RAM
+        planar += long_length(t.qblob) + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.mxq)
+        for (p in t.kq) {
+            planar += long_length(p.q)
+        }
+    } else {
+        for (fname in streamed_q_planes()) {
+            planar += max(stream_plane_bytes(t, jobs, fname), 0l)
+        }
+    }
+    planar += long_length(t.qscales) * 4l + long_length(t.qscales16) * 2l + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.mxs)
+    for (p in t.kq) {
+        planar += long_length(p.s)
+    }
+    let emb = t.planes_trimmed ? trim_emb_bytes(t) : 0l
+    return uint64(planar + planar / 8l + emb) + 64ul * 1024ul * 1024ul
+}
+
+def private vk_mint_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; name : string; var w : ImgWriter;
+                          var sections : array<ImgSection>; jobs : array<FillJob>; regs : array<StreamReg>) : bool {
+    if (!g_vk_mint_walked) {   // at the first plane's turn, before any planar family: the plan decides what the families' turns write
+        g_vk_mint_walked = true
+        vk_mint_walk(m, bytes, t, w, sections, jobs, regs)
+    }
+    return name == "vkblob" || (t.planes_trimmed && trim_plane_dropped(name))   // written at the walk; dropped: no section, the field maps back empty
+}
+
+//! why the trimmed lane cannot be minted off this walk, "" where it can: the plan must sit whole in the driver's arena and the
+//! emb region must pack off its jobs, or off the planes the load left whole
+def private vk_mint_trim_decline(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; jobs : array<FillJob>) : string {
+    if (!(moe_gpu_resident_active() && vk_plan_arena_only(t))) {
+        return "the trimmed lane needs the whole-model driver, and the walk armed the per-op rails"
+    }
+    if (!(t.emb_q8 || cls_kq(t))) {
+        return ""   // an fp32 token table rides fblob, kept: nothing to pack
+    }
+    let r = trim_emb_region(t)
+    if (empty(jobs)) {
+        return trim_pack_emb(t, t, 0l) ? "" : "the emb region would not pack"
+    }
+    if (!vk_mint_view_at(r.f, r.off, r.n)) {
+        return "no run of streamed jobs holds the emb region"
+    }
+    return trim_pack_emb(g_vk_mint_job_view, t, g_vk_mint_view_rebase) ? "" : "the emb region would not pack"
+}
+
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def private vk_mint_walk(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; var w : ImgWriter;
+                         var sections : array<ImgSection>; jobs : array<FillJob>; regs : array<StreamReg>) {
+    w_zeros(w, pad_to_page(w.cur) - w.cur)
+    let at = w.cur
+    let ts = ref_time_ticks()
+    unsafe {
+        g_vk_mint_walk_writer = addr(w)
+        g_vk_mint_meta = addr(m)
+        g_vk_mint_bytes = addr(bytes[0])
+        g_vk_mint_nbytes = long_length(bytes)
+        g_vk_mint_streamed_model = addr(t)
+    }
+    g_vk_mint_jobs := jobs
+    g_vk_mint_regs := regs
+    g_vk_mint_view_run |> clear()
+    g_vk_mint_decline_reason = ""
+    vulkan_mint_begin(@@vk_mint_gather_hook, @@vk_mint_sink)
+    moe_gpu_upload_resident(t)
+    vulkan_mint_end()
+    let took = vulkan_bake_take(t)
+    var declined = g_vk_mint_decline_reason
+    if (!empty(declined)) {
+        // the gather hook's answer stands: the walk ran to its end over a zero stand-in
+    } elif (!took) {
+        if (t.planes_trimmed) {
+            declined = "the GPU walk placed nothing, and a trimmed lane has nothing to serve from"
+        } else {
+            to_log(LOG_INFO, "dasLLAMA image:   the armed tier placed nothing - the vulkan lane carries no device twin\n")
+        }
+    } elif (t.planes_trimmed) {
+        declined = vk_mint_trim_decline(m, bytes, t, jobs)
+    }
+    vk_mint_release()
+    if (!empty(declined)) {
+        to_log(LOG_ERROR, "dasLLAMA image: the vulkan mint declined - {declined}; this save is abandoned and the planar build serves from memory (DASLLAMA_TRIM=0 / set_vulkan_trim(false) mints a persistent lane with the planar families)\n")
+        delete t.vkplan   // the plan's bytes went to the abandoned writer: a planar build must carry neither
+        delete t.vkblob
+        delete t.embq
+        delete t.embs
+        g_vk_mint_declined = true
+        w.ok = false
+        return
+    }
+    if (took) {
+        let ms = int64(get_time_usec(ts)) / 1000l
+        let mb = int64(w.cur - at) >> 20l
+        to_log(LOG_INFO, "dasLLAMA image:   plane vkblob {mb} MB minted off the gguf in {ms} ms ({length(t.vkplan)} entries{t.planes_trimmed ? ", the planar families dropped under DASLLAMA_TRIM / set_vulkan_trim" : ""})\n")
+        sections |> push(ImgSection(name = "vkblob", off = at, bytes = w.cur - at))
+    }
 }
 
 //! save_image's STREAMING form (Model-only): planes with recorded FillJobs are transcoded from the
@@ -1171,8 +1401,14 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
     //! the baked dev-W panels: tables fill BEFORE the build (they serialize as regular planes),
     //! the panel plane itself streams from the gguf mapping at its field's turn below
     let devw_bytes = t.metal_blob ? devw_bake_tables(t, jobs) : 0l
-    let ok = save_image_to_file(t, path, stream_extra_bytes(t, jobs) + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul), tag, quant, layout_fingerprint(t)) $(name : string;
-                                                                                                                                                                               var w : ImgWriter; var sections : array<ImgSection>) {
+    let vk_mint = vk_mint_arm_walk(tag)
+    let vk_extra = vk_mint ? vk_mint_extra_bytes(t, jobs) : 0ul
+    let planar_extra = vk_mint && t.planes_trimmed ? 0ul : stream_extra_bytes(t, jobs)   // a trimmed lane writes no streamed family
+    let ok = save_image_to_file(t, path, planar_extra + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul) + vk_extra, tag, quant, layout_fingerprint(t)) $(name : string;
+                                                                                                                                                                           var w : ImgWriter; var sections : array<ImgSection>) {
+        if (vk_mint && vk_mint_plane(m, bytes, t, name, w, sections, jobs, regs)) {
+            return true
+        }
         if (name == "devwf16" && devw_bytes > 0l) {
             w_zeros(w, pad_to_page(w.cur) - w.cur)
             let at = w.cur
@@ -1454,6 +1690,9 @@ def private chunk_rail(var t; var out; save_to : string; extra : uint64; tag : s
             return false
         }
         image_chunk_free(w.chunk_base)
+        if (g_vk_mint_declined) {
+            return false   // the mint declined at the first plane's turn, before any plane was consumed: the model is whole
+        }
         panic("dasLLAMA: the image build failed after it began consuming the model - see the error above")
     }
     to_log(LOG_INFO, "dasLLAMA image: built in memory in {get_time_usec(ts) / 1000} ms ({int64(w.cur) >> 20l} MB)\n")
@@ -1486,8 +1725,14 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
     //! sink parity: one image identity has one plane set - the in-memory mint bakes devwf16
     //! exactly like the file mint above, or the two sinks serve different images
     let devw_bytes = t.metal_blob ? devw_bake_tables(t, jobs) : 0l
-    let ok = chunk_rail(t, out, save_to, stream_extra_bytes(t, jobs) + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul), tag, quant) $(name : string;
-                                                                                                                                                        var w : ImgWriter; var sections : array<ImgSection>) {
+    let vk_mint = vk_mint_arm_walk(tag)
+    let vk_extra = vk_mint ? vk_mint_extra_bytes(t, jobs) : 0ul
+    let planar_extra = vk_mint && t.planes_trimmed ? 0ul : stream_extra_bytes(t, jobs)   // a trimmed lane writes no streamed family
+    let ok = chunk_rail(t, out, save_to, planar_extra + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul) + vk_extra, tag, quant) $(name : string;
+                                                                                                                                                    var w : ImgWriter; var sections : array<ImgSection>) {
+        if (vk_mint && vk_mint_plane(m, bytes, t, name, w, sections, jobs, regs)) {
+            return true
+        }
         if (name == "devwf16" && devw_bytes > 0l) {
             w_zeros(w, pad_to_page(w.cur) - w.cur)
             let at = w.cur
@@ -1530,6 +1775,15 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
 def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string) {
     if (vk_tag == "" || !vulkan_bake_take(t)) {
         return
+    }
+    if (!image_save_enabled()) {
+        to_log(LOG_INFO, "dasLLAMA: DASLLAMA_IMAGE_SAVE=0 - the vulkan lane this run collected is not written\n")
+        delete t.vkblob
+        delete t.vkplan
+        return
+    }
+    if (vulkan_trim()) {
+        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this arm bakes the lane from RAM with the planar families kept - the lane's identity still folds the trim\n")
     }
     let ts = ref_time_ticks()
     let img_v = image_path_for(path, vk_tag)
@@ -1656,7 +1910,7 @@ def private cache_via_image_(var m; var out; img : string; tag : string; quant :
     return true
 }
 
-[arch(at = "../ARCHITECTURE_IMAGE.md#image-interp-load")]
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-interp-load"), arch(at = "../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
 def private guard_interp_gguf_load(path : string) {
     if (jit_enabled() || is_standalone_exe() || aot_kernels_linked()) {
         return
@@ -1747,12 +2001,22 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         if (vk_tag != "") {
             let img_v = image_path_for(path, vk_tag)
             vulkan_bake_slice_begin()
-            if (load_model_image(img_v, t, vk_tag)) {
-                vulkan_bake_slice_end(t)
-                to_log(LOG_INFO, "dasLLAMA: prepared vulkan image mapped in {get_time_usec(ts_img) / 1000} ms - {img_v}\n")
-                return <- t
+            if (load_image(img_v, t, vk_tag)) {
+                if (t.planes_trimmed && !resident_would_serve(t)) {
+                    to_log(LOG_ERROR, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and the whole-model driver would not take it under this run's knobs (DASLLAMA_GPU_CTX_MAX, DASLLAMA_VK_KV32 and DASLLAMA_GPU_RESIDENT / set_gpu_resident_route sit outside the lane's identity) - the lane is deleted and minted again\n")
+                    vulkan_bake_disarm()
+                    delete t
+                    remove(img_v)
+                } else {
+                    ple_check_table(t, "prepared image '{img_v}'")
+                    moe_gpu_upload_resident(t)
+                    vulkan_bake_slice_end(t)
+                    to_log(LOG_INFO, "dasLLAMA: prepared vulkan image mapped in {get_time_usec(ts_img) / 1000} ms - {img_v}\n")
+                    return <- t
+                }
+            } else {
+                vulkan_bake_disarm()
             }
-            vulkan_bake_disarm()
             if (g_image_frozen) {
                 panic("dasLLAMA: no prepared vulkan image for '{path}' ({image_path_for(path, vk_tag)}) and artifacts are frozen - pre-mint it")
             }
@@ -1780,9 +2044,9 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         }
         guard_interp_gguf_load(path)
         {
-            let s_tag = want_metal ? METAL_IMAGE_TAG : ""
-            let s_quant = want_metal ? "q8" : qs
-            let s_img = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : img
+            let s_tag = want_metal ? METAL_IMAGE_TAG : vk_tag
+            let s_quant = (want_metal || vk_tag != "") ? "q8" : qs
+            let s_img = want_metal ? image_path_for(path, METAL_IMAGE_TAG) : (vk_tag != "" ? image_path_for(path, vk_tag) : img)
             var mt = Model()
             var jobs : array<FillJob>
             var streamed = Model()
@@ -1790,10 +2054,17 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             var saved = false
             let ts_s = ref_time_ticks()
             let save = image_save_enabled()
+            vk_mint_reset()
             let ran = load_gguf_streaming(path, mode, mt, jobs, want_metal) $(gm : GGUFMeta; gbytes : array<uint8>) {
                 // a metal run that got the planar answer must not write a planar image under the metal identity
                 if (want_metal && !mt.metal_blob) {
                     return false
+                }
+                if (vk_tag != "" && vulkan_trim()) {
+                    mt.planes_trimmed = resident_would_serve(mt)
+                    if (!mt.planes_trimmed) {
+                        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and the whole-model driver would not take '{path}' whole - the lane keeps its planar families\n")
+                    }
                 }
                 if (save) {
                     saved = save_model_image_streaming(mt, gm, gbytes, jobs, s_img, s_tag, s_quant)
@@ -1801,10 +2072,20 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                         to_log(LOG_WARNING, "dasLLAMA: the image save for '{path}' declined - serving the streamed build from memory\n")
                     }
                 }
+                if (!saved && g_vk_mint_declined) {
+                    mt.planes_trimmed = false   // the declined mint's build serves planar
+                }
                 served = saved || image_from_model_streaming(mt, streamed, gm, gbytes, jobs, "", s_tag, s_quant)
+                if (!served && g_vk_mint_declined) {   // the in-memory mint declined before consuming a plane: build again without it
+                    mt.planes_trimmed = false
+                    served = image_from_model_streaming(mt, streamed, gm, gbytes, jobs, "", s_tag, s_quant)
+                }
                 return served
             }
             delete jobs
+            if (vk_tag != "") {
+                moe_gpu_drop_model_()   // the walk armed the device off `mt`, which goes next
+            }
             delete mt   // the streamed planes never became model planes; the rest goes now
             if (saved) {
                 to_log(LOG_INFO, "dasLLAMA: prepared image streamed in {get_time_usec(ts_s) / 1000} ms - {s_img}\n")
@@ -1814,12 +2095,19 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 dlim_gc_stale(path, s_tag, s_quant)
             }
             if (served) {
-                // the MoE gather over the PREPARED planes is also what collects the vulkan bake, so the flavor costs no reload
-                moe_gpu_upload_resident(streamed)
-                vulkan_bake_flavor(streamed, path, vk_tag)
+                if (vk_tag != "" && !empty(streamed.vkplan)) {
+                    vulkan_bake_slice_begin()
+                    moe_gpu_upload_resident(streamed)
+                    vulkan_bake_slice_end(streamed)
+                } else {
+                    moe_gpu_upload_resident(streamed)
+                }
                 return <- streamed
             }
             delete streamed
+            if (vk_tag != "") {
+                vulkan_bake_begin()
+            }
             if (ran) {
                 to_log(LOG_WARNING, "dasLLAMA: the streamed cold build declined for '{path}' - taking the eager rail\n")
             }

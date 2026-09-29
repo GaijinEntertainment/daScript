@@ -384,7 +384,7 @@ struct public VulkanEnv {
     @clarg_doc = "Stream mirrors import the mapped .dlim (VK_EXT_external_memory_host) instead of pinned copies; =0 restores the copy path."
     vk_import : bool = true
 
-    @clarg_doc = "Serve from P3-trimmed vulkan images (big CPU weight families dropped; folded into the flavor identity)."
+    @clarg_doc = "Mint the TRIMMED vulkan lane: the device twin plus the packed emb region the CPU embed reads, the planar weight families dropped. A model the whole-model driver would not take whole keeps its families, and the load says so; a call the driver passes to the CPU rails panics by name. Folded into the lane's identity, so a flip re-bakes the lane; `set_vulkan_trim` is the in-process lever."
     trim : bool = false
 
     @clarg_doc = "Tag every device allocation priority 1.0 (VK_EXT_memory_priority). Off by default: on the NVIDIA WDDM driver the tag makes the tagged weights the pageable set, and a resident model then decodes at PCIe speed once anything is demoted."

@@ -29,6 +29,7 @@ require ?das_metal dasllama/dasllama_metal_prefill  // metal_prefill_shutdown �
 require ?das_metal dasllama/dasllama_metal_asr_dec  // set_metal_wdec/metal_wdec_stats — the cross-KV gate + the tower cell's pin
 require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown — same
 require dasllama/dasllama_gemm_schema // Q8_BLOCK_ELEMS/Q8_QPB/Q8_SPB — the dev-W bake key arithmetic
+require dasllama/dasllama_gpu_tier    // moe_gpu_bake_tag — the lane a cold load under an armed tier mints
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
 require daslib/jobque_boost
 require daslib/archive
@@ -644,7 +645,7 @@ def private config_diff_field(a, b : Config) : string {
 }
 
 def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
-    let img = image_path_for(path)
+    let img = image_path_for(path, moe_gpu_bake_tag())   // each lane is its mode's: an armed tier's cold load mints the vulkan lane
     remove(img)   // cold start: the first facade load must build + save
     // the truth is the OFF-RAIL gguf read: cold and warm are both image-backed now, so a
     // cold-vs-warm compare alone would only prove the file matches the chunk it came from
@@ -727,11 +728,11 @@ def test_model_image_roundtrip(t : T?) {
         text_image_roundtrip(t, path, 24)
         var m <- load_model(path, QuantMode.q8)
         t |> success(m.emb_q8 && !m.cls_q8 && m.tok_emb_off < 0l, "the mapped image serves the untied q8 table with no fp32 copy")
-        // the whole image is smaller than the f32 table alone (27 MB against 37 MB on stories15M): an
+        // the whole image less its device twin is smaller than the f32 table alone (27 MB against 37 MB on stories15M): an
         // image that still carried the table could not be, whatever else it packs
-        let img_bytes = int64(stat(image_path_for(path)).size)
+        let img_bytes = int64(stat(image_path_for(path, moe_gpu_bake_tag())).size) - long_length(m.vkblob)
         let table_f32 = m.config.vocab_size * m.config.dim * 4l
-        t |> success(img_bytes < table_f32, "the image ({img_bytes >> 20l} MB) is smaller than the f32 table it no longer carries ({table_f32 >> 20l} MB)")
+        t |> success(img_bytes < table_f32, "the image ({img_bytes >> 20l} MB past its twin) is smaller than the f32 table it no longer carries ({table_f32 >> 20l} MB)")
         delete m
     }
 }

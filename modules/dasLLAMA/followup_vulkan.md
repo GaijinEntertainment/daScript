@@ -2017,6 +2017,37 @@ module) is independent and can land any time - it is pure structure.
     control's rows passed in; (c) the hybrid file's feed collectors (`feed_under_spec` and the
     per-cell copies of a session's logits and carry rows) - one collector over a step list; (d) the
     reject cells' helpers (the rolled-back state read-back, the fresh-session control) shared with
-    `test_mtp.das`'s `reject_round_ids`. A kernel fold's identity gate is `harness/vk_spv_diff.das`
+    `test_mtp.das`'s `reject_round_ids`. The vulkan-lane mint arc's audit added its sibling sets to the
+    same pass: (e) the two streaming saves' plane hooks (`save_model_image_streaming`,
+    `image_from_model_streaming` - the mint, devwf16 and streamed-plane arms twice, on the sink and
+    the log wording alone); (f) the two aligned plan appends (`vk_mint_sink_append`, `vk_bake_append`
+    - the RAM blob as one more `VkMintSinkFn`); (g) the trim's dropped-family set spelled twice
+    (`trim_plane_dropped` by section name, `trim_model_planes` by field delete - one table walked by
+    both once a field walks by name); (h) the plan's decline chain (`resident_would_serve` beside
+    `resident_upload`'s gates - one pure `resident_decline_reason`); (i) the tests' cached-load
+    block (`load_cached_q8` in `test_vulkan_mint.das` and `test_model_image_vulkan.das`). A kernel
+    fold's identity gate is `harness/vk_spv_diff.das`
     over `DASLLAMA_VK_SPV_DUMP` at the base and the tip; a test fold's is the file's cell count and
     skip count unchanged on the pod under both mirrors.
+118. **Two vulkan-lane arms still bake from RAM with the planar families kept.** The streaming mint
+    (`ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`) serves the cold load; a planar image already
+    mapped (a CPU-mode load's lane found under an armed tier) and the eager rail (a gguf that would
+    not open for streaming, a chunk that would not allocate) still bake the lane through
+    `vulkan_bake_flavor` off the mapping or the loaded planes - one file, but the families ride it,
+    the eager rail writes the CPU lane beside it and serves that, and under `DASLLAMA_TRIM` the
+    lane's identity says trimmed while its meta says not (the image serves, with the extra planes;
+    the arm warns). The untrimmed lane is the default, so the mint's lane carries the planar families
+    unless the lever is on, and an fp32 token table rides `fblob` whole under the trim (nothing packs
+    it). `vulkan_bake_begin` on those arms collects the twin into RAM even under
+    `DASLLAMA_IMAGE_SAVE=0`, where `vulkan_bake_flavor` deletes it unsaved. Done = both arms re-read
+    the gguf through the streaming mint, the collect skipped where nothing saves, and the trimmed
+    lane means the same thing on every arm.
+119. **The converter's trim and the runtime's trim admit different models under one identity bit.**
+    `dasllama-convert -f vulkan --trim` (`trim_model_planes`) refuses a NextN head, while the cold
+    load's trimmed mint (`resident_would_serve`) admits one the driver's draft seat serves - the
+    0.8B-MTP trims at runtime and is refused offline - and both write the lane under the same
+    trim-folded tag; the converter's streamed `-f vulkan` rail still refuses with a text that
+    predates the mint ("collects whole planes"). Done = one admission predicate on both rails
+    (`resident_would_serve` with `planes_trimmed` set before the converter's save), the refusal text
+    naming what still holds, and `dasllama-convert --trim` proven on a q8, a K-quant and a
+    third-format model.

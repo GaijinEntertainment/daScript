@@ -10,6 +10,11 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 **This list is closed; a new asymmetry lands with its entry here:**
 
 - **The whisper-class block-hook pin is Vulkan-only** (`set_vulkan_audio_blocks`: the block hooks pinned off while the conv stem still serves, the stem-flush and lifetime cells' seat; the Metal tower serves stem and blocks as one chain, nothing to pin apart).
+- **The streaming lane mint and the trimmed lane are Vulkan-only** (`vulkan_mint_begin` / `vulkan_mint_end`, the lever
+  `set_vulkan_trim` / `vulkan_trim` with its `restore_vulkan_trim` form): the Vulkan lane carries a device twin the GPU
+  walk collects, so its mint streams the walk's entries into the save and a trim can drop the planar families the arena
+  holds whole; the Metal flavor bakes device-form blobs the CPU planes convert into, with no walk to collect from and no
+  family to drop.
 - **The `dasllama_gpu_tier` cooperation SPI is Vulkan-only**: every hook seat the tier exposes (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the
   Vulkan family alone, and the tier's entry in `ARCHITECTURE_GPU.md#gpu-backends` enumerates the seats; a new seat lands in that
   entry, not as a new entry here. The one seat outside that rule is the entry below.

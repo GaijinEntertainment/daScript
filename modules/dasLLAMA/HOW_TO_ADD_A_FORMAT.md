@@ -158,8 +158,13 @@ slot (`dasllama_load.das`); `collect_<fmt>_regions`, `repack_<fmt>_stacks`,
 `moe_gpu_gather_stack_<fmt>` - one-line wrappers over the `_b32` generics
 (`collect_b32_regions`, `moe_gpu_gather_stack_b32`) - the `stream_repack_one` arm, the
 `register_model_layout` hook slots and `metal_blob_off_ok` (`dasllama_layout.das`); the
-`resident_place` / `moe_gpu_gather_upload` arms and the plane deletes
-(`dasllama_gpu_resident.das`); `DlimCpuConfig.<fmt>_mr` in the identity string
+`layout_gather_dispatch` arm beside the layout hook forwarders - the one gather every GPU placement
+and the vulkan lane's mint take (`dasllama_common.das`); the plane
+deletes in `trim_model_planes` and the format's plane names in `trim_plane_dropped`
+(`dasllama_gpu_resident.das`); the per-format plane branches of `stream_job_view` and the
+scale landing of `stream_job_transcode` (`dasllama_load.das`); the quant-plane names in
+`streamed_q_planes` and the scale planes summed in `vk_mint_extra_bytes`
+(`dasllama_image.das`); `DlimCpuConfig.<fmt>_mr` in the identity string
 (`dasllama_config.das`); `IMAGE_VERSION`; and the `ImgTableProbe` pair + slot cell in
 `tests/test_model_image.das`. The expert tag rule is `kq_fmt_expert_ok` (`dasllama_common.das`),
 and `note_demotion` counts a q8 fall alone, so the load report reads no demotion for a stack the

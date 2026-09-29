@@ -15,7 +15,6 @@ require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
-require dasllama/dasllama_env
 require dasllama/dasllama_config
 require dasllama/dasllama_kqformat
 
@@ -47,7 +46,7 @@ def private vk_dlim_wants_fill(var v : DlimVulkanConfig) {
     v.dense = gpu_want_dense()
     v.dense_attn = gpu_want_dense_attn()
     v.dense_shexp = gpu_want_dense_shexp()
-    v.trim = g_env_vulkan.trim
+    v.trim = vulkan_trim()
     v.split = gpu_want_moe_split()
     v.dn_native = gpu_want_dn_native()
 }
@@ -318,8 +317,9 @@ def private vk_caps_fill(phys : VkPhysicalDevice; var v : DlimVulkanConfig) {
 // so "auto" hid device-derived byte differences and a moving heap budget).
 def private vk_dlim_source(var v : DlimVulkanConfig) : bool {
     if (g_vk_dry_want) {
-        // an offline bake IS its config — echo it, never probe (there may be no device at all)
+        // an offline bake IS its config — echo it, never probe (there may be no device at all); the trim is the load's lever on every tier
         v = g_vk_dry_cfg
+        v.trim = vulkan_trim()
         return true
     }
     if (!vulkan_moe_gpu_arm()) {

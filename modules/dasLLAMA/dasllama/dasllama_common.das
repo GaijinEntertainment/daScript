@@ -698,6 +698,26 @@ def register_model_layout(rq8, rkq, rmx4, rq51, riq4nl32 : ModelRepackFn; gs : G
     g_layout_hooks_set = true
 }
 
+//! the per-format layout gather over `src`'s planes - the model's, or a job view whose offset 0 is the job's `woff`
+def layout_gather_dispatch(src : Model; f : KqFmt; woff, n, rows, slice_rows, mr, kgroup, wbias : int64;
+                           var wq : array<uint8>; var ws : array<uint8>) {
+    let srows = slice_rows > 0l ? slice_rows : rows
+    if (f == KqFmt.q8) {
+        layout_gather_stack(src, woff, n, rows, srows, mr, kgroup, wbias, wq, ws)
+    } elif (f == KqFmt.q51) {
+        let qmr = active_q51_layout_mr()   // the q51 expert stacks sit in the active backend's grp<mr> layout (repack_q51_stacks), disk order at mr 1
+        layout_gather_stack_q51(src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
+    } elif (f == KqFmt.iq4nl32) {
+        let qmr = active_iq4nl32_layout_mr()   // the iq4nl32 expert stacks sit in the active backend's grp<mr> layout, disk order at mr 1
+        layout_gather_stack_iq4nl32(src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
+    } elif (f == KqFmt.mx4) {
+        // the mx4 stacks ride the Q8 layout's grp<mr> interleave when the CPU repacked them (repack_mx4_stacks under the q8q8 perm), disk order otherwise
+        layout_gather_stack_mx4(src, woff, n, rows, srows, src.mx4_repacked, active_q8_layout_mr(), wq, ws)
+    } else {
+        layout_gather_stack_kq(src, f, woff, n, rows, srows, src.kq_repacked, kq_active_mr(src, f), wq, ws)
+    }
+}
+
 def private layout_hooks_check {
     if (!g_layout_hooks_set) {
         panic("dasLLAMA: layout hooks unset - the program must require dasllama/dasllama_layout")
@@ -4883,6 +4903,7 @@ def private mtp_draft(t : Model; var s : Session; token, pos : int64; pick_only 
 
 [no_alloc, no_env, no_io]
 def private forward_mtp_cpu(t : Model; var s : Session; token, pos : int64; want_logits : bool) {
+    blob_only_panic(t, "NextN draft step")
     let c = t.config
     let dim = c.dim
     // eh_proj input: [enorm(embed(token)) ; hnorm(h)] — embedding first in the concat

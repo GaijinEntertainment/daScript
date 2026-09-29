@@ -873,10 +873,83 @@ def private stream_zero_fill(gap : int64; var zeros : array<uint8>;
     }
 }
 
+//! the per-job temps one streamed fill reuses across its jobs: the q half in `q` (the kq and per-32 formats) or `q8` (the q8
+//! family, int8), the scale half in `s` or `sf` (f32 scales), the blob flavor's 34B blocks in `m` with its halfword scales
+struct StreamTemps {
+    q : array<uint8>
+    q8 : array<int8>
+    s : array<uint8>
+    sf : array<float>
+    m : array<uint8>
+    s16 : array<uint16>
+    scratch : array<float>
+}
+
+//! `j` transcoded: the q half into `tmp` at offset 0, the scale half into `dst`'s plane at `j.woff - rebase` (`rebase`: the element
+//! `dst`'s planes start at), the job's repack regions applied to both; the q8 family's f32 scales take the caller's halfword pass
+//! over the whole plane; `account` books the job in the conversion profile - the fill does, a view of a booked job does not
+def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst : Model; j : FillJob; regs : array<StreamReg>;
+                                 rebase : int64; var tmp : StreamTemps; account : bool) {
+    let sh = stream_job_shape(dst, j)
+    tmp.q |> grow_resize(int(sh.qb))
+    let t0 = g_conv_prof ? ref_time_ticks() : 0l
+    var kind = ""
+    var served = ConvServed.q8
+    if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
+        tmp.s |> grow_resize(int(sh.sb))
+        kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, tmp.q, tmp.s, 0l, j.n, j.src_off, tmp.scratch)
+        served = ConvServed.kq
+    } else {
+        tmp.q8 |> grow_resize(int(j.n))
+        tmp.sf |> grow_resize(int(j.n / Q8_BLOCK_ELEMS))
+        kind = transcode_q8_tensor(m, bytes, j.name, tmp.q8, tmp.sf, 0l, 0l, j.n, j.src_off, tmp.scratch)
+    }
+    if (account) {
+        conv_note(kind, t0, j.n)
+        conv_account(m, j.name, kind, served, j.fmt, j.n)
+    }
+    let soff = j.woff - rebase
+    unsafe {
+        if (kq_sb(j.fmt)) {
+            memcpy(addr<void?>(dst.kq[int(j.fmt)].s[(soff / kq_elems(j.fmt)) * kq_ssb(j.fmt)]), addr<void?>(tmp.s[0]), sh.sb)
+        } elif (j.fmt == KqFmt.q51) {
+            memcpy(addr<void?>(dst.q51s[(soff / KQ_B32_ELEMS) * Q51_SB]), addr<void?>(tmp.s[0]), sh.sb)
+        } elif (j.fmt == KqFmt.iq4nl32) {
+            memcpy(addr<void?>(dst.iq4nl32s[(soff / KQ_B32_ELEMS) * IQ4NL32_SB]), addr<void?>(tmp.s[0]), sh.sb)
+        } elif (sh.sb == 0l && j.n > 0l && !dst.metal_blob) {
+            memcpy(addr<void?>(dst.qscales[soff / Q8_BLOCK_ELEMS]), addr<void?>(tmp.sf[0]), (j.n / Q8_BLOCK_ELEMS) * 4l)
+        }
+    }
+    unsafe {
+        for (r in regs) {
+            if (r.fmt != sh.rfmt || r.off < j.woff || r.off >= j.woff + j.n) {
+                continue
+            }
+            let roff = r.off - rebase
+            if (r.fmt == Q8_STREAM_TAG) {
+                invoke(g_stream_repack, Q8_STREAM_TAG, addr<void?>(tmp.q8[r.off - j.woff]),
+                    addr<void?>(dst.qscales[roff / Q8_BLOCK_ELEMS]), r.n, r.d)
+            } elif (r.fmt == kq_stream_code(KqFmt.q51)) {
+                invoke(g_stream_repack, r.fmt, addr<void?>(tmp.q[((r.off - j.woff) / KQ_B32_ELEMS) * Q51_QPB]),
+                    addr<void?>(dst.q51s[(roff / KQ_B32_ELEMS) * Q51_SPB]), r.n, r.d)
+            } elif (r.fmt == IQ4NL32_STREAM_TAG) {
+                invoke(g_stream_repack, IQ4NL32_STREAM_TAG, addr<void?>(tmp.q[((r.off - j.woff) / KQ_B32_ELEMS) * IQ4NL32_QB]),
+                    addr<void?>(dst.iq4nl32s[(roff / KQ_B32_ELEMS) * IQ4NL32_SB]), r.n, r.d)
+            } else {
+                var rf = KqFmt.q8
+                if (kq_fmt_of_stream_code(r.fmt, rf) && kq_sb(rf)) {
+                    invoke(g_stream_repack, r.fmt, addr<void?>(tmp.q[((r.off - j.woff) / kq_elems(rf)) * kq_qsb(rf)]),
+                        addr<void?>(dst.kq[int(rf)].s[(roff / kq_elems(rf)) * kq_ssb(rf)]), r.n, r.d)
+                }
+            }
+        }
+    }
+}
+
 //! Execute every recorded job targeting `field`: transcode into a job-sized temp (load_big's
 //! own arms at temp offset 0), land scales in the RAM plane, apply the job's repack regions
 //! (temp-biased q, in-place s), hand the temp to `append`; qblob's tail runs the wscale epilogue.
-def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; field : string;   // nolint:STYLE038 — the per-job transcode, land, repack and append steps share one temp buffer and the append block
+def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; field : string;
                       jobs : array<FillJob>; regs : array<StreamReg>;
                       append : block<(p : void?; nbytes : uint64) : void>) : bool {
     // jobs for this field, ascending woff — plane order IS ascending source order
@@ -890,80 +963,22 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
         return true
     }
     mine |> sort() $(a, b : FillJob) => a.woff < b.woff
-    var temp_q : array<uint8>
-    var temp_q8 : array<int8>   // the q8 family's quant temp (qblob is int8)
-    var temp_s : array<uint8>
-    var temp_sf : array<float>
-    var temp_m : array<uint8>   // the blob flavor's interleaved 34B blocks
-    var temp_s16 : array<uint16>
-    var scratch : array<float>
+    var tmp : StreamTemps
     var zeros : array<uint8>
     var cursor = 0l   // plane bytes appended so far — layout holes between jobs zero-fill
     for (j in mine) {
         let sh = stream_job_shape(t, j)
         stream_zero_fill(stream_job_qoff(t, j) - cursor, zeros, append)
         cursor = stream_job_qoff(t, j) + sh.qb
-        temp_q |> grow_resize(int(sh.qb))
-        let t0 = g_conv_prof ? ref_time_ticks() : 0l
-        var kind = ""
-        var served = ConvServed.q8
-        if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
-            temp_s |> grow_resize(int(sh.sb))
-            kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, temp_q, temp_s, 0l, j.n, j.src_off, scratch)
-            served = ConvServed.kq
-        } else {
-            // q8 family: scales are FLOATS; the epilogue converts the whole plane at the end
-            temp_q8 |> grow_resize(int(j.n))
-            temp_sf |> grow_resize(int(j.n / 32l))
-            kind = transcode_q8_tensor(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off, scratch)
-        }
-        conv_note(kind, t0, j.n)
-        conv_account(m, j.name, kind, served, j.fmt, j.n)
-        // land the scale half at its real offset (RAM-resident plane)
-        unsafe {
-            if (kq_sb(j.fmt)) {
-                memcpy(addr<void?>(t.kq[int(j.fmt)].s[(j.woff / 256l) * kq_ssb(j.fmt)]), addr<void?>(temp_s[0]), sh.sb)
-            } elif (j.fmt == KqFmt.q51) {
-                memcpy(addr<void?>(t.q51s[(j.woff / 32l) * Q51_SB]), addr<void?>(temp_s[0]), sh.sb)
-            } elif (j.fmt == KqFmt.iq4nl32) {
-                memcpy(addr<void?>(t.iq4nl32s[(j.woff / 32l) * IQ4NL32_SB]), addr<void?>(temp_s[0]), sh.sb)
-            } elif (sh.sb == 0l && j.n > 0l && !t.metal_blob) {
-                memcpy(addr<void?>(t.qscales[j.woff / 32l]), addr<void?>(temp_sf[0]), (j.n / 32l) * 4l)
-            }
-        }
-        // per-job repack: this job's regions applied on the temp (q half, pointer biased to
-        // woff 0) and the real scale plane (in place) — the same backend fns, same regions
-        unsafe {
-            for (r in regs) {
-                if (r.fmt != sh.rfmt || r.off < j.woff || r.off >= j.woff + j.n) {
-                    continue
-                }
-                if (r.fmt == 0) {
-                    invoke(g_stream_repack, 0, addr<void?>(temp_q8[r.off - j.woff]),
-                        addr<void?>(t.qscales[r.off / 32l]), r.n, r.d)
-                } elif (r.fmt == 2) {
-                    invoke(g_stream_repack, 2, addr<void?>(temp_q[((r.off - j.woff) / 32l) * Q51_QPB]),
-                        addr<void?>(t.q51s[(r.off / 32l) * Q51_SPB]), r.n, r.d)
-                } elif (r.fmt == IQ4NL32_STREAM_TAG) {
-                    invoke(g_stream_repack, IQ4NL32_STREAM_TAG, addr<void?>(temp_q[((r.off - j.woff) / 32l) * IQ4NL32_QB]),
-                        addr<void?>(t.iq4nl32s[(r.off / 32l) * IQ4NL32_SB]), r.n, r.d)
-                } else {
-                    var rf = KqFmt.q8
-                    if (kq_fmt_of_stream_code(r.fmt, rf) && kq_sb(rf)) {
-                        invoke(g_stream_repack, r.fmt, addr<void?>(temp_q[((r.off - j.woff) / 256l) * kq_qsb(rf)]),
-                            addr<void?>(t.kq[int(rf)].s[(r.off / 256l) * kq_ssb(rf)]), r.n, r.d)
-                    }
-                }
-            }
-        }
+        stream_job_transcode(m, bytes, t, j, regs, 0l, tmp, true)
         unsafe {
             if (sh.rfmt != 0) {
-                invoke(append, addr<void?>(temp_q[0]), uint64(sh.qb))
+                invoke(append, addr<void?>(tmp.q[0]), uint64(sh.qb))
             } elif (t.metal_blob) {
-                blob_pack_job(temp_q8, temp_sf, j.n / Q8_BLOCK_ELEMS, temp_m, temp_s16)
-                invoke(append, addr<void?>(temp_m[0]), uint64(sh.qb))
+                blob_pack_job(tmp.q8, tmp.sf, j.n / Q8_BLOCK_ELEMS, tmp.m, tmp.s16)
+                invoke(append, addr<void?>(tmp.m[0]), uint64(sh.qb))
             } else {
-                invoke(append, addr<void?>(temp_q8[0]), uint64(sh.qb))
+                invoke(append, addr<void?>(tmp.q8[0]), uint64(sh.qb))
             }
         }
     }
@@ -975,15 +990,98 @@ def fill_stream_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; fie
         wscale_convert_f16(t)
     }
     delete mine
-    delete temp_q
-    delete temp_q8
-    delete temp_s
-    delete temp_sf
-    delete temp_m
-    delete temp_s16
-    delete scratch
+    delete tmp
     delete zeros
     return true
+}
+
+//! The ascending run of jobs on `fmt`'s plane that together hold elements [woff, woff + n) - one job, or the adjacent jobs an
+//! entry spans (a MoE stack loaded one expert at a time); empty = no such run, which with no jobs at all means the planes are
+//! whole in RAM
+def stream_job_span(t : Model; jobs : array<FillJob>; fmt : KqFmt; woff, n : int64) : array<int> {
+    let field = stream_field_of(t, fmt)
+    var run : array<int>
+    if (empty(field)) {
+        return <- run
+    }
+    for (j, i in jobs, count()) {
+        if (stream_field_of(t, j.fmt) == field && j.woff < woff + n && woff < j.woff + j.n) {
+            run |> push(i)
+        }
+    }
+    run |> sort() $(a, b : int) => jobs[a].woff < jobs[b].woff
+    var end = empty(run) ? woff + 1l : jobs[run[0]].woff + jobs[run[0]].n
+    var covered = !empty(run) && jobs[run[0]].woff <= woff
+    for (k in range(1, length(run))) {
+        covered = covered && jobs[run[k]].woff == end
+        end += jobs[run[k]].n
+    }
+    if (!covered || end < woff + n) {
+        run |> clear()
+    }
+    return <- run
+}
+
+//! The jobs of `run` (ascending, adjacent - `stream_job_span`'s answer) transcoded into `sv`, a view of `t`'s planes whose offset 0
+//! is the first job's `woff` (returned): the q half in the plane `stream_field_of` names, the scale half beside it as the gathers
+//! read it, every job's repack regions applied, the frozen K-quant interleave copied - a gather over `sv` at `woff - rebase` reads `t` at `woff`
+[arch(at = "../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def stream_job_view(m : GGUFMeta; bytes : array<uint8> | #; t : Model; jobs : array<FillJob>; run : array<int>;
+                    regs : array<StreamReg>; var sv : Model) : int64 {
+    sv.quant = t.quant
+    sv.metal_blob = false
+    sv.wscale_f16 = t.wscale_f16
+    sv.kq_repacked = t.kq_repacked
+    sv.mx4_repacked = t.mx4_repacked
+    sv.kquant_native = t.kquant_native
+    for (p, i in t.kq, count()) {
+        sv.kq[i].mr = p.mr
+    }
+    let f = jobs[run[0]].fmt
+    let rebase = jobs[run[0]].woff
+    var total = 0l
+    for (i in run) {
+        total += jobs[i].n
+    }
+    let strided = kq_sb(f) || kq_b32_planes(f)
+    let qb = strided ? (total / kq_elems(f)) * kq_qsb(f) : total
+    let sb = strided ? (total / kq_elems(f)) * kq_ssb(f) : total / Q8_BLOCK_ELEMS
+    if (kq_sb(f)) {
+        sv.kq[int(f)].q |> grow_resize(qb)
+        sv.kq[int(f)].s |> grow_resize(sb)
+    } elif (f == KqFmt.q51) {
+        sv.q51q |> grow_resize(qb)
+        sv.q51s |> grow_resize(sb)
+    } elif (f == KqFmt.iq4nl32) {
+        sv.iq4nl32q |> grow_resize(qb)
+        sv.iq4nl32s |> grow_resize(sb)
+    } else {
+        sv.qblob |> grow_resize(qb)
+        sv.qscales |> grow_resize(sb)
+    }
+    var tmp : StreamTemps
+    for (i in run) {
+        let j = jobs[i]
+        stream_job_transcode(m, bytes, sv, j, regs, rebase, tmp, false)
+        let sh = stream_job_shape(sv, j)
+        let qoff = strided ? ((j.woff - rebase) / kq_elems(f)) * kq_qsb(f) : j.woff - rebase
+        unsafe {
+            if (kq_sb(f)) {
+                memcpy(addr<void?>(sv.kq[int(f)].q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
+            } elif (f == KqFmt.q51) {
+                memcpy(addr<void?>(sv.q51q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
+            } elif (f == KqFmt.iq4nl32) {
+                memcpy(addr<void?>(sv.iq4nl32q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
+            } else {
+                memcpy(addr<void?>(sv.qblob[qoff]), addr<void?>(tmp.q8[0]), sh.qb)
+            }
+        }
+    }
+    if (!strided && sv.wscale_f16) {
+        wscale_convert_f16(sv)
+    }
+    delete tmp
+    return rebase
 }
 
 //! a k3/k6 source row carries its strip first and the d last; every other split format the d first and the strip at 4

@@ -17,6 +17,7 @@ require dasllama/dasllama_kqformat
 require dasllama/dasllama_math
 require dasllama/dasllama_rope        // build_rope_row_packed — the one source for every resident rope row
 require dasllama/dasllama_gguf        // kq_disk_bytes - the file bytes a device plane is measured against
+require dasllama/dasllama_gemm_schema   // the q8 block geometry the trim's emb pack writes
 require daslib/f16_cvt   // f32_to_f16 — the trim pass re-packs the emb scale plane
 require daslib/enum_trait
 require dasllama/dasllama_par
@@ -80,6 +81,7 @@ def vulkan_bake_role(r : VkBakeRole) {
 def vulkan_bake_begin {
     g_vk_bake = VkBakeMode.collect
     g_vk_bake_role = VkBakeRole.none
+    g_vk_mint_on = false
     g_vk_bake_blob |> clear()
     g_vk_bake_plan |> clear()
 }
@@ -87,19 +89,69 @@ def vulkan_bake_begin {
 //! Move the collected planes into the model and disarm; false = nothing collected (no GPU walk ran).
 def vulkan_bake_take(var t : Model) : bool {
     g_vk_bake = VkBakeMode.off
+    g_vk_mint_on = false
     if (empty(g_vk_bake_plan)) {
         delete g_vk_bake_blob
         return false
     }
+    delete t.vkblob
+    delete t.vkplan
     t.vkblob <- g_vk_bake_blob
     t.vkplan <- g_vk_bake_plan
     return true
+}
+
+//! the mint's gather: `fmt`, the entry's element window and its gather geometry, answered from a source other than the
+//! model's planes (the gguf mapping, one job at a time); false = the source has no such entry, the model's planes serve
+typedef VkMintGatherFn = function<(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>) : bool>
+//! the mint's sink: where a collected entry's bytes go instead of the RAM blob (the image writer)
+typedef VkMintSinkFn = function<(p : void?; nbytes : uint64) : void>
+
+var private g_vk_mint_on = false
+var private g_vk_mint_gather : VkMintGatherFn
+var private g_vk_mint_sink : VkMintSinkFn
+var private g_vk_mint_sink_off = 0l   //! bytes the sink took, the alignment pads included: the plan's offsets are relative to the sink's start
+var private g_vk_mint_zeros : array<uint8>
+
+//! Arm the streaming mint for the next GPU walk: each entry gathers through `gather` and its bytes go to `sink`
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def vulkan_mint_begin(gather : VkMintGatherFn; sink : VkMintSinkFn) {
+    vulkan_bake_begin()
+    g_vk_mint_on = true
+    g_vk_mint_gather = gather
+    g_vk_mint_sink = sink
+    g_vk_mint_sink_off = 0l
+}
+
+def vulkan_mint_end {
+    g_vk_mint_on = false
+}
+
+//! the alignment every collected entry starts at in the twin - the slice walk's import windows
+let VK_ENTRY_ALIGN = 4096l
+
+def private vk_mint_sink_append(a : array<uint8>) : int64 {
+    let off = (g_vk_mint_sink_off + VK_ENTRY_ALIGN - 1l) / VK_ENTRY_ALIGN * VK_ENTRY_ALIGN
+    let pad = off - g_vk_mint_sink_off
+    if (pad > 0l) {
+        if (long_length(g_vk_mint_zeros) < VK_ENTRY_ALIGN) {
+            g_vk_mint_zeros |> resize(VK_ENTRY_ALIGN)
+        }
+        invoke(g_vk_mint_sink, unsafe(addr<void?>(g_vk_mint_zeros[0])), uint64(pad))
+    }
+    let abytes = long_length(a)
+    if (abytes > 0l) {
+        invoke(g_vk_mint_sink, unsafe(addr<void?>(a[0])), uint64(abytes))
+    }
+    g_vk_mint_sink_off = off + abytes
+    return off
 }
 
 //! Arm slicing for a mapped vulkan-flavor load: the walk reads t.vkblob instead of gathering.
 def vulkan_bake_slice_begin {
     g_vk_bake = VkBakeMode.slice
     g_vk_bake_role = VkBakeRole.none
+    g_vk_mint_on = false
     g_vk_bake_cursor = 0l
     g_vk_slice_windows |> clear()
 }
@@ -116,11 +168,12 @@ def vulkan_bake_slice_end(t : Model) {
 //! Disarm without verification (a flavor-load attempt that never ran the walk).
 def vulkan_bake_disarm {
     g_vk_bake = VkBakeMode.off
+    g_vk_mint_on = false
 }
 
 def private vk_bake_append(a : array<uint8>) : int64 {
-    // 4KB-aligned starts (import windows); long_ forms — the blob crosses the int32 array rail
-    let off = (long_length(g_vk_bake_blob) + 4095l) / 4096l * 4096l
+    // long_ forms — the blob crosses the int32 array rail
+    let off = (long_length(g_vk_bake_blob) + VK_ENTRY_ALIGN - 1l) / VK_ENTRY_ALIGN * VK_ENTRY_ALIGN
     let abytes = long_length(a)
     let need = off + abytes
     // growth capped at 2GB steps past 4GB — doubling a multi-GB blob wastes up to half its size
@@ -146,10 +199,18 @@ def private vk_bake_collect(fmt : int; woff, n, rows : int64; wq, ws : array<uin
     }
     var e = VkPlanEntry(fmt = fmt, role = int(g_vk_bake_role), woff = woff, n = n, rows = rows,
                         wq_bytes = long_length(wq), ws_bytes = long_length(ws))
-    e.wq_off = vk_bake_append(wq)
-    e.ws_off = vk_bake_append(ws)
+    if (g_vk_mint_on) {
+        e.wq_off = vk_mint_sink_append(wq)
+        e.ws_off = vk_mint_sink_append(ws)
+    } else {
+        e.wq_off = vk_bake_append(wq)
+        e.ws_off = vk_bake_append(ws)
+    }
     g_vk_bake_plan |> push(e)
 }
+
+def private vk_mint_gather(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>) : bool
+    => g_vk_mint_on && invoke(g_vk_mint_gather, fmt, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
 
 def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
                           var wq : array<uint8>; var ws : array<uint8>) : bool {
@@ -179,6 +240,9 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
         return false
     }
     g_vk_bake_cursor++
+    if (e.wq_off + e.wq_bytes > long_length(t.vkblob) || e.ws_off + e.ws_bytes > long_length(t.vkblob)) {
+        panic("dasLLAMA vulkan image: baked gather {g_vk_bake_cursor - 1l} reaches past the device twin ({e.wq_off}+{e.wq_bytes} / {e.ws_off}+{e.ws_bytes} of {long_length(t.vkblob)} bytes) - the lane is corrupt, delete it to re-mint")
+    }
     // record the mapped window (P2: the stream-mirror path imports it instead of copying)
     unsafe {
         g_vk_slice_windows |> insert(e.woff * 8l + int64(fmt), SliceWindow(
@@ -203,114 +267,102 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
     return true
 }
 
-def private moe_gpu_gather_stack(t : Model; woff : int64; n, rows, slice_rows : int64; mr, kgroup, wbias : int64;
-                                 var wq : array<uint8>; var ws : array<uint8>) {
-    if (vk_bake_slice(t, 0, woff, n, rows, wq, ws)) {
+def private moe_gpu_gather(t : Model; f : KqFmt; woff : int64; n, rows, slice_rows : int64; mr, kgroup, wbias : int64;
+                           var wq : array<uint8>; var ws : array<uint8>) {
+    if (vk_bake_slice(t, int(f), woff, n, rows, wq, ws) || vk_mint_gather(int(f), woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)) {
         return
     }
-    if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
+    if (t.planes_trimmed && !g_vk_mint_on) {   // the mint's own fallthrough reads planes the load left whole; a served trimmed image has none
+        panic("dasLLAMA: planes_trimmed vulkan lane - a live gather is impossible (the whole-model driver declined this run, or the baked plan diverged; the decline line above): the lane's identity folds DASLLAMA_TRIM but not DASLLAMA_GPU_CTX_MAX / DASLLAMA_VK_KV32 / DASLLAMA_GPU_RESIDENT - match the mint's knobs, delete the lane to re-mint, or DASLLAMA_TRIM=0")
     }
-    layout_gather_stack(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
+    layout_gather_dispatch(t, f, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
 }
 
-def private moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
-                                    repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
-    if (vk_bake_slice(t, int(fmt), woff, n, rows, wq, ws)) {
-        return
+//! every entry of the baked plan sits in the whole-model driver's arena: the trimmed lane's admission
+def vk_plan_arena_only(t : Model) : bool {
+    var arena = !empty(t.vkplan)
+    for (e in t.vkplan) {
+        arena = arena && e.role == int(VkBakeRole.arena)
     }
-    if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
-    }
-    layout_gather_stack_kq(t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
-}
-
-def private moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64;
-                                     var wq : array<uint8>; var ws : array<uint8>) {
-    if (vk_bake_slice(t, int(KqFmt.q51), woff, n, rows, wq, ws)) {
-        return
-    }
-    if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
-    }
-    let qmr = active_q51_layout_mr()   //! the q51 expert stacks sit in the active backend's grp<mr> layout (repack_q51_stacks), disk order at mr 1
-    layout_gather_stack_q51(t, woff, n, rows, slice_rows, qmr > 1l, qmr, wq, ws)
-}
-
-def private moe_gpu_gather_stack_iq4nl32(t : Model; woff : int64; n, rows, slice_rows : int64;
-                                         var wq : array<uint8>; var ws : array<uint8>) {
-    if (vk_bake_slice(t, int(KqFmt.iq4nl32), woff, n, rows, wq, ws)) {
-        return
-    }
-    if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
-    }
-    let qmr = active_iq4nl32_layout_mr()   //! the iq4nl32 expert stacks sit in the active backend's grp<mr> layout, disk order at mr 1
-    layout_gather_stack_iq4nl32(t, woff, n, rows, slice_rows, qmr > 1l, qmr, wq, ws)
-}
-
-def private moe_gpu_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int64;
-                                     var wq : array<uint8>; var ws : array<uint8>) {
-    if (vk_bake_slice(t, int(KqFmt.mx4), woff, n, rows, wq, ws)) {
-        return
-    }
-    if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed image - live gather impossible (baked plan diverged, or a re-gather was requested); rebake without --trim or match the image's config")
-    }
-    //! the mx4 stacks ride the Q8 layout's grp<mr> interleave when the CPU repacked them (repack_mx4_stacks under the q8q8 perm), disk order otherwise
-    layout_gather_stack_mx4(t, woff, n, rows, slice_rows, t.mx4_repacked, active_q8_layout_mr(), wq, ws)
+    return arena
 }
 
 //! an expert stack's device format tag: the native-MXFP4 planes carry no per-tensor tag (the loader keeps `experts_mx4`), so the tag is mx4 for every routed stack of such a model
 def private rdec_efmt(t : Model; tags : array<KqFmt>; l : int64) : KqFmt => t.experts_mx4 ? KqFmt.mx4 : fmt_at(tags, l)
 
-//! P3 trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
+//! The emb/cls region packed into `t.embq` / `t.embs` off `src`'s planes, whose offset 0 is `t`'s element `rebase` (0 when
+//! `src` is `t` itself, a job's `woff` for the job view the streaming mint feeds it): q8 as mblob-style 34B interleaved
+//! blocks (dequant_embq_row's layout), a kq classifier as its plane pair verbatim; fp32 embeddings ride fblob, kept
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def trim_pack_emb(src : Model; var t : Model; rebase : int64) : bool {
+    let r = trim_emb_region(t)
+    let off0 = r.off - rebase
+    if (t.emb_q8) {
+        let nb = r.n / Q8_BLOCK_ELEMS
+        let blk = Q8_QPB + Q8_SPB
+        t.embq |> reserve_resize(nb * blk)   // vocab-scaled: ~600 MB at a 248k-vocab 27B, one grow
+        unsafe {
+            for (b in range64(nb)) {
+                let off = off0 + b * Q8_BLOCK_ELEMS
+                var bp = addr(t.embq[b * blk])
+                let sc = src.wscale_f16 ? uint(src.qscales16[off / Q8_BLOCK_ELEMS]) : f32_to_f16(src.qscales[off / Q8_BLOCK_ELEMS])
+                bp[0] = uint8(sc & 0xFFu)
+                bp[1] = uint8((sc >> 8u) & 0xFFu)
+                memcpy(addr<void?>(t.embq[b * blk + Q8_SPB]), addr<void?>(src.qblob[off]), Q8_QPB)
+            }
+        }
+    } elif (cls_kq(t)) {
+        let f = r.f
+        if (!kq_sb(f)) {
+            to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{f}' has no kq plane pair - declining\n")
+            return false
+        }
+        let nsb = r.n / kq_elems(f)
+        let sb0 = off0 / kq_elems(f)
+        let qsb = kq_qsb(f)
+        let ssb = kq_ssb(f)
+        t.embq |> reserve_resize(nsb * qsb)
+        t.embs |> reserve_resize(nsb * ssb)
+        unsafe {
+            memcpy(addr<void?>(t.embq[0]), addr<void?>(src.kq[int(f)].q[sb0 * qsb]), nsb * qsb)
+            memcpy(addr<void?>(t.embs[0]), addr<void?>(src.kq[int(f)].s[sb0 * ssb]), nsb * ssb)
+        }
+    }
+    return true
+}
+
+//! the element offset and length of the emb/cls region `trim_pack_emb` reads, and its format
+def trim_emb_region(t : Model) : tuple<off : int64; n : int64; f : KqFmt> {
+    let n = t.config.vocab_size * t.config.dim
+    return t.emb_q8 ? (off = t.emb_q8_off, n = n, f = KqFmt.q8) : (off = t.wcls_off, n = n, f = t.emb_fmt)
+}
+
+//! the bytes the packed emb region takes in a trimmed lane; 0 where an fp32 table rides fblob and nothing packs
+def trim_emb_bytes(t : Model) : int64 {
+    let r = trim_emb_region(t)
+    if (t.emb_q8) {
+        return (r.n / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB)
+    }
+    if (cls_kq(t) && kq_sb(r.f)) {
+        return (r.n / kq_elems(r.f)) * (kq_qsb(r.f) + kq_ssb(r.f))
+    }
+    return 0l
+}
+
+//! The trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
 //! trimmed, and FREE the big CPU weight families — the save then writes them as empty planes.
 //! Arena-only plans qualify (pure resident-driver dense); false = declined, nothing changed.
 def trim_model_planes(var t : Model) : bool {
     if (empty(t.vkplan) || t.config.n_layer_nextn > 0l) {
         return false
     }
-    for (e in t.vkplan) {
-        if (e.role != int(VkBakeRole.arena)) {
-            to_log(LOG_WARNING, "dasLLAMA trim: baked plan carries non-arena role {e.role} - only pure resident-driver dense models trim; declining\n")
-            return false
-        }
+    if (!vk_plan_arena_only(t)) {
+        to_log(LOG_WARNING, "dasLLAMA trim: the baked plan carries a non-arena role - only pure resident-driver dense models trim; declining\n")
+        return false
     }
-    let dim = t.config.dim
-    let vocab = t.config.vocab_size
-    if (t.emb_q8) {
-        // mblob-style 34B interleaved blocks over the emb region (dequant_embq_row's layout)
-        let nb = vocab * dim / 32l
-        t.embq |> reserve_resize(nb * 34l)   // vocab-scaled: ~600 MB at a 248k-vocab 27B, one grow
-        unsafe {
-            for (b in range64(nb)) {
-                let off = t.emb_q8_off + b * 32l
-                var bp = addr(t.embq[b * 34l])
-                let sc = t.wscale_f16 ? uint(t.qscales16[off / 32l]) : f32_to_f16(t.qscales[off / 32l])
-                bp[0] = uint8(sc & 0xFFu)
-                bp[1] = uint8((sc >> 8u) & 0xFFu)
-                memcpy(addr<void?>(t.embq[b * 34l + 2l]), addr<void?>(t.qblob[off]), 32l)
-            }
-        }
-    } elif (cls_kq(t)) {
-        // the region's plane pair verbatim (repack layout preserved), rebased to superblock 0
-        let nsb = vocab * (dim / 256l)
-        let sb0 = t.wcls_off / 256l
-        let f = t.emb_fmt
-        if (!kq_sb(f)) {
-            to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{f}' has no kq plane pair - declining\n")
-            return false
-        }
-        let qsb = kq_qsb(f)
-        let ssb = kq_ssb(f)
-        t.embq |> reserve_resize(nsb * qsb)
-        t.embs |> reserve_resize(nsb * ssb)
-        unsafe {
-            memcpy(addr<void?>(t.embq[0]), addr<void?>(t.kq[int(f)].q[sb0 * qsb]), nsb * qsb)
-            memcpy(addr<void?>(t.embs[0]), addr<void?>(t.kq[int(f)].s[sb0 * ssb]), nsb * ssb)
-        }
-    }   // fp32 embeddings ride fblob, which the trim keeps
+    if (!trim_pack_emb(t, t, 0l)) {
+        return false
+    }
     t.planes_trimmed = true
     delete t.qblob
     delete t.qscales
@@ -354,18 +406,7 @@ def private dense_shexp_uploadable(t : Model; l : int64) : bool {
 def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, slice_rows : int64;
                                   mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>;
                                   stream : bool = false) : bool {
-    if (f == KqFmt.q8) {
-        moe_gpu_gather_stack(t, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
-    } elif (f == KqFmt.q51) {
-        moe_gpu_gather_stack_q51(t, woff, n, rows, slice_rows, wq, ws)
-    } elif (f == KqFmt.iq4nl32) {
-        moe_gpu_gather_stack_iq4nl32(t, woff, n, rows, slice_rows, wq, ws)
-    } elif (f == KqFmt.mx4) {
-        moe_gpu_gather_stack_mx4(t, woff, n, rows, slice_rows, wq, ws)
-    } else {
-        let kmr = kq_active_mr(t, f)
-        moe_gpu_gather_stack_kq(t, f, woff, n, rows, slice_rows, t.kq_repacked, kmr, wq, ws)
-    }
+    moe_gpu_gather(t, f, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
     let ok = moe_gpu_upload_stack(wq, ws, woff, n, rows, int(f), stream)
     if (ok) {
         vk_bake_collect(int(f), woff, n, rows, wq, ws)
@@ -754,6 +795,67 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype) : ResidentPlan
     return p
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def resident_mirror_dtype() : KVDtype => g_env_vulkan.vk_kv32 != 0l ? KVDtype.f32 : KVDtype.f16
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def private resident_pinned_seq_cap(t : Model; announce : bool) : int64 {
+    var seq_cap = t.config.seq_len
+    let ctx_max = g_rdec_ctx_max > 0l ? g_rdec_ctx_max : g_env_gpu.gpu_ctx_max
+    if (ctx_max > 0l && ctx_max < seq_cap) {
+        seq_cap = max(ctx_max, rdec_min_ctx())
+        if (announce) {
+            to_log(LOG_INFO, "dasLLAMA: resident driver - KV mirror capped at {seq_cap} positions (DASLLAMA_GPU_CTX_MAX, or set_gpu_ctx_max in process; 0 lifts the cap)\n")
+        }
+    }
+    return seq_cap
+}
+
+//! the plan the walk uploads against; `seq_cap` comes back as the context the plan settled on; `announce` prints the
+//! pinned cap once per walk - a prediction of the plan asks quietly
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def resident_plan_pick(t : Model; rkdt : KVDtype; var seq_cap : int64&; announce : bool = true) : ResidentPlan {
+    seq_cap = resident_pinned_seq_cap(t, announce)
+    let bctx = resident_binding_ctx(t, rkdt, moe_gpu_binding_cap(g_rdec_regions_want))
+    seq_cap = resident_region_ctx(seq_cap, bctx, g_rdec_regions_want)
+    var plan = resident_plan(t, seq_cap, rkdt, rkdt)
+    if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
+        let fit_ctx = (max(plan.usable_bytes - plan.weight_bytes - plan.scratch_bytes, 0l) / 8l * 7l) / (plan.kv_bytes / seq_cap)
+        if (fit_ctx >= rdec_min_ctx()) {
+            seq_cap = fit_ctx
+            plan = resident_plan(t, seq_cap, rkdt, rkdt)
+        }
+    }
+    return plan
+}
+
+//! Whether the whole-model driver takes `t`, as far as the plan tells before a byte uploads; a later device refusal (a kernel class, an arena reserve) is the walk's to report
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def resident_would_serve(t : Model) : bool {
+    let c = t.config
+    return false if (!(moe_gpu_resident_installed() && gpu_resident_requested() && gpu_want_resident())
+        || t.quant != QuantMode.q8 || c.n_expert > 0l || c.hyper_conn || has_ple(c) || !empty(resident_unserved_features(c)))
+    for (l in range64(c.n_layers)) {
+        return false if (!empty(resident_layer_decline(t, l)))
+    }
+    return false if (c.n_layer_nextn > 0l && !empty(resident_head_decline(t)))
+    var seq_cap = 0l
+    return resident_plan_pick(t, resident_mirror_dtype(), seq_cap, false).fits
+}
+
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def trim_plane_dropped(name : string) : bool {
+    return true if (name == "qblob" || name == "qscales" || name == "qscales16" || name == "wblob" || name == "bf16blob"
+        || name == "q51q" || name == "q51s" || name == "iq4nl32q" || name == "iq4nl32s" || name == "mxq" || name == "mxs"
+        || name == "q4blob" || name == "q4scales")
+    for (f in type<KqFmt>) {
+        if (kq_sb(f) && (name == kq_plane_name(f, "q") || name == kq_plane_name(f, "s"))) {
+            return true
+        }
+    }
+    return false
+}
+
 // ===== the resident whole-stack decode driver (dense models that fully fit) =====
 
 var private g_rdec_active = false       // this loaded model runs the resident decode driver
@@ -882,25 +984,13 @@ def resident_arm_floor(env_floor, pin : int64) : int64 {
 }
 
 // gather one prepared plane into device-layout bytes and place it in its format's arena; returns
-// the arena block index. Same gather the per-op tier uses (moe_gpu_gather_stack / _kq), then place
+// the arena block index. The same gather the per-op tier's upload takes (moe_gpu_gather), then place
 // instead of upload_stack.
 def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
                            mr, kgroup, wbias : int64; slice_rows : int64 = -1l) : int64 {
     var wq : array<uint8>
     var ws : array<uint8>
-    let srows = slice_rows > 0l ? slice_rows : rows
-    if (f == KqFmt.q8) {
-        moe_gpu_gather_stack(t, woff, n, rows, srows, mr, kgroup, wbias, wq, ws)
-    } elif (f == KqFmt.q51) {
-        moe_gpu_gather_stack_q51(t, woff, n, rows, srows, wq, ws)
-    } elif (f == KqFmt.iq4nl32) {
-        moe_gpu_gather_stack_iq4nl32(t, woff, n, rows, srows, wq, ws)
-    } elif (f == KqFmt.mx4) {
-        moe_gpu_gather_stack_mx4(t, woff, n, rows, srows, wq, ws)
-    } else {
-        let kmr = kq_active_mr(t, f)
-        moe_gpu_gather_stack_kq(t, f, woff, n, rows, srows, t.kq_repacked, kmr, wq, ws)
-    }
+    moe_gpu_gather(t, f, woff, n, rows, slice_rows > 0l ? slice_rows : rows, mr, kgroup, wbias, wq, ws)
     let blk = rdec_place(wq, ws, n, rows, int(f))
     if (blk >= 0l) {
         vk_bake_collect(int(f), woff, n, rows, wq, ws)
@@ -2955,30 +3045,13 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     // subsumes every rail below; a decline falls through
     let resident_try = (moe_gpu_resident_installed() && gpu_resident_requested() && gpu_want_resident()
         && (t.config.n_expert == 0l || rdec_moe_installed()))
-    // the mirror codec: f16 rows by default (native fa feed, ~2x plannable ctx);
-    // DASLLAMA_VK_KV32=1 arms f32 mirrors instead (A/B; then only f32 sessions serve)
-    let rkdt = g_env_vulkan.vk_kv32 != 0l ? KVDtype.f32 : KVDtype.f16
-    var seq_cap = t.config.seq_len
-    let ctx_max = g_rdec_ctx_max > 0l ? g_rdec_ctx_max : g_env_gpu.gpu_ctx_max
-    if (ctx_max > 0l && ctx_max < seq_cap) {   // a mirror sized to a 131072-token model max is 8 GB on a 4B: the rigs pin 32768
-        seq_cap = max(ctx_max, rdec_min_ctx())
-        to_log(LOG_INFO, "dasLLAMA: resident driver - KV mirror capped at {seq_cap} positions (DASLLAMA_GPU_CTX_MAX, or set_gpu_ctx_max in process; 0 lifts the cap)\n")
-    }
+    let rkdt = resident_mirror_dtype()
+    var seq_cap = 0l
     var plan : ResidentPlan
     if (resident_try) {
-        let bctx = resident_binding_ctx(t, rkdt, moe_gpu_binding_cap(g_rdec_regions_want))
-        seq_cap = resident_region_ctx(seq_cap, bctx, g_rdec_regions_want)
-        plan = resident_plan(t, seq_cap, rkdt, rkdt)
-        if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
-            // weights are fixed, the KV mirror is not: retry at the context that fits (the plan's
-            // own remedy), as long as it stays a usable window. The driver guards decode past the cap.
-            //! seven eighths of the room: a mirror sized to the last byte fails on a heap the previous model fragmented
-            let fit_ctx = (max(plan.usable_bytes - plan.weight_bytes - plan.scratch_bytes, 0l) / 8l * 7l) / (plan.kv_bytes / seq_cap)
-            if (fit_ctx >= rdec_min_ctx()) {
-                seq_cap = fit_ctx
-                plan = resident_plan(t, seq_cap, rkdt, rkdt)
-            }
-        }
+        plan = resident_plan_pick(t, rkdt, seq_cap)
+    } else {
+        seq_cap = resident_pinned_seq_cap(t, true)
     }
     let resident_fits = resident_try && plan.fits
     // size the tier's streamed-slot reserve from THIS model's largest expert layer — a fixed
