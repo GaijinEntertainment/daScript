@@ -685,8 +685,7 @@ absent; set `DASLLAMA_MODELS_DIR`):
 - `test_openai_server_mtp.das` - the self-speculation default: a NextN-headed slot drafts at one
   stream on Metal and decodes plain at four or on the CPU, an explicit `mtp` wins either way, and
   a head-less model serves plain under the default; read off `/v1/stats`'s `mtp_drafted`. The
-  Metal cells skip on a box with no Metal backend; the rule's Vulkan arm is held model-free
-  (`mtp_auto_arms`). Needs
+  Metal cells skip on a box with no Metal backend. Needs
   `Qwen3.5-0.8B-MTP-Q8_0.gguf` and `tinyllama-1.1b-chat-v1.0.Q8_0.gguf`.
 - `test_exchange_client.das` - the exception: model-free and runs everywhere. The sidecar
   exchange client against a fake exchange on 127.0.0.1:18131 (lookup/pick, the fetch-and-apply
@@ -698,7 +697,9 @@ absent; set `DASLLAMA_MODELS_DIR`):
   fails closed.
 - `test_server_flags.das` - model-free: the flag-presence test behind the config surface's
   provenance - a flag the process was given reads present, bare or as `flag=value`, and an
-  absent one or a prefix of a given one reads absent.
+  absent one or a prefix of a given one reads absent; and the self-speculation default's rule
+  as the slot reads it (`mtp_auto_arms`, the Vulkan arm included) and as the config surface
+  resolves it, with the Metal mode a `--gpu` pick and a `--metal` spelling resolve to.
 - `tests/` - the control page itself, under real Playwright (Node + chromium): badge states,
   models panel, streams/history, chat wire + SSE rendering, the speech studio, config editor,
   exchange section, the confirm-gated controls. Model-free - the page runs against JSON/SSE fixtures captured

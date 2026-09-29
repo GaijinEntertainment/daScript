@@ -6,7 +6,6 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require openai_server                                   // the server under test (sibling — bare require, hyphenated dir)
-require main                                            // mtp_setting / mtp_default_resolved - the config surface's tri-state seam
 require _server_rig                                     // models_dir / model_missing - the suites' one model root and gate
 require dasllama/dasllama                               // load_model / QuantMode
 require daslib/jobque_boost                             // with_job_status (server-thread lifecycle)
@@ -147,44 +146,3 @@ def test_mtp_default_no_head(t : T?) {
     }
 }
 
-// model-free: the config surface's tri-state seam and the resolved value GET /config reports
-[test]
-def test_mtp_setting_tri_state(t : T?) {
-    t |> run("a key the TOML or --mtp set pins 0 / 1; unset is -1 and each slot decides") @(t : T?) {
-        t |> equal(mtp_setting(true, true), 1, "mtp = true")
-        t |> equal(mtp_setting(true, false), 0, "mtp = false")
-        t |> equal(mtp_setting(false, false), -1, "unset: the slot decides")
-        t |> equal(mtp_setting(false, true), -1, "an unsourced true is still unset")
-    }
-    t |> run("the unset default resolves on for one stream on a GPU, off on the CPU or at several streams") @(t : T?) {
-        t |> success(mtp_default_resolved(1, "metal", ""), "one stream on Metal")
-        t |> success(mtp_default_resolved(1, "metal-required", ""), "one stream on required Metal")
-        t |> success(mtp_default_resolved(1, "vulkan", ""), "one stream on a Vulkan device")
-        t |> success(mtp_default_resolved(1, "", "auto"), "one stream on the legacy --metal auto")
-        t |> success(!mtp_default_resolved(1, "", ""), "one stream, no device")
-        t |> success(!mtp_default_resolved(1, "off", "required"), "one stream on the CPU, whatever --metal says")
-        t |> success(!mtp_default_resolved(4, "metal", ""), "four streams on Metal")
-        t |> success(!mtp_default_resolved(4, "vulkan", ""), "four streams on a Vulkan device")
-    }
-    t |> run("a slot arms on one stream whose decode runs on a GPU") @(t : T?) {
-        t |> success(mtp_auto_arms(1l, true, "cpu"), "the Metal flavor - its tier word reads cpu")
-        t |> success(mtp_auto_arms(1l, false, "gpu:resident"), "the whole model resident on a Vulkan device")
-        t |> success(!mtp_auto_arms(1l, false, "gpu:rails"), "a model the device serves in part")
-        t |> success(!mtp_auto_arms(1l, false, "cpu"), "the CPU")
-        t |> success(!mtp_auto_arms(4l, true, "cpu"), "four streams on Metal")
-        t |> success(!mtp_auto_arms(4l, false, "gpu:resident"), "four streams on a Vulkan device")
-    }
-    t |> run("the Metal mode: the --gpu pick when there is one, else the legacy --metal mode") @(t : T?) {
-        t |> success(resolved_metal_mode(MetalMode.when_available, "vulkan") == MetalMode.off, "a --gpu pick wins over --metal")
-        t |> success(resolved_metal_mode(MetalMode.required, "off") == MetalMode.off, "gpu = off keeps Metal out")
-        t |> success(resolved_metal_mode(MetalMode.off, "metal") == MetalMode.when_available, "gpu = metal")
-        t |> success(resolved_metal_mode(MetalMode.off, "metal-required") == MetalMode.required, "gpu = metal-required")
-        t |> success(resolved_metal_mode(MetalMode.required, "") == MetalMode.required, "no --gpu pick: the legacy mode stands")
-    }
-    t |> run("a --metal spelling names its mode in any case, and an unknown one names none") @(t : T?) {
-        t |> success(metal_mode_of("Required").mode == MetalMode.required && metal_mode_of("Required").known)
-        t |> success(metal_mode_of("auto").mode == MetalMode.when_available && metal_mode_of("when_available").known)
-        t |> success(metal_mode_of("").mode == MetalMode.off && metal_mode_of("").known && metal_mode_of("off").known)
-        t |> success(metal_mode_of("fast").mode == MetalMode.off && !metal_mode_of("fast").known)
-    }
-}
