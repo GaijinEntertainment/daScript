@@ -253,6 +253,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vad.das",
                     "modules/dasLLAMA/tests/test_vision_chat.das",
                     "modules/dasLLAMA/tests/test_vision_embedder.das",
+                    "modules/dasLLAMA/tests/test_vulkan_mint.das",
                     "modules/dasLLAMA/tests/test_whisper.das" ]
     } elif (name == "all") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
@@ -315,7 +316,7 @@ def area_tests(area : string) : array<string> {
                     "test_sampling.das",
                     "test_scheduler.das", "test_silu.das", "test_softmax.das", "test_storyteller_restart.das", "test_storywish.das", "test_think_split.das", "test_tokenizer.das",
                     "test_tool_formats.das", "test_unicode.das", "test_vulkan_dec_tail.das", "test_vulkan_kernels.das",
-                    "test_vulkan_moe_cm2.das", "test_vulkan_tier.das" ]
+                    "test_vulkan_mint.das", "test_vulkan_moe_cm2.das", "test_vulkan_tier.das" ]
     }
     var none : array<string>
     return <- none

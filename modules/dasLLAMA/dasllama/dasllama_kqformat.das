@@ -1208,6 +1208,7 @@ def kq_elems(f : KqFmt) : int64 => kq_desc(f).elems
 //! The loader's stream/repack region tag for a format (stream_repack_one / push_repack codes).
 //! k2's stream-region code: kernel id 2 IS q51's stream tag, so k2 streams under 20 and the
 //! repack dispatchers translate it back to kernel id 2.
+let Q8_STREAM_TAG = 0   //! the q8 family's stream / repack region tag - the one format with no `kq_desc` row
 let K2_STREAM_TAG = 20
 
 //! mx4's stream tag is the GGML type id (`GGML_TYPE_MXFP4`); no loader path streams an mx4 plane, so the row exists only to keep `kq_stream_code` total

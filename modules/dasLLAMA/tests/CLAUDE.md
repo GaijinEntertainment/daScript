@@ -242,7 +242,27 @@ the q8 cell (read-time transcode - qblob/qscales/compact-blob element-exact vs a
 The `image-vulkan` suite (test_model_image_vulkan, arm `vulkan`) covers the OFFLINE vulkan
 bake: the runner arms DASLLAMA_GPU + a small VRAM budget so the probed config carries a
 vulkan section, the DRY tier collects a role-stamped plan with no device calls (safe on
-GPU-less boxes), and the flavor image round-trips the plan verbatim.
+GPU-less boxes), the flavor image round-trips the plan verbatim, and a cold cached load under
+the armed tier mints the vulkan lane ALONE. `test_vulkan_inline_bake`, on the same dry tier, holds
+a cold cached load: it mints the vulkan lane and no planar file, the served image carries the plan
+and the device twin, and with the trim off the lane keeps the planar families. The minted plan and
+device bytes equal the eager dry bake's (the bake over the prepared RAM planes) entry for entry and
+byte for byte, and one poisoned reference byte is the control that must miss. Then, with
+`set_vulkan_trim` on, the trimmed lane is flagged trimmed, has a different bake tag
+(`moe_gpu_bake_tag()`) from the untrimmed lane's, has no q8 planar plane, packs the embedding
+table for the CPU embed (`embq`), and is the smaller file. The cell pins the resident route on and
+the trim off for its loads, because the trimmed lane's admission reads the route lever; it puts
+the route back through `set_gpu_resident_route` and the trim through `restore_vulkan_trim`. Its
+live-tier counterpart is `test_vulkan_mint.das` (stocked suite, `-jit`, family `qwen35`). It
+skips when interpreted, with the image rail off, without the model, without a live armed tier,
+and when the whole-model driver declines the model on the first load. On Qwen3.5-0.8B-MTP the
+cold load mints the vulkan lane and no planar lane; the trimmed lane, loaded cold, generates the
+same `MINT_STEPS` greedy tokens as the untrimmed lane and reads the same CPU embed row bit for
+bit; mapped back warm, it generates the same tokens again. Each generation's token count is
+asserted, both streams are decoded in the log, and the whole-model driver is asserted on both
+trimmed loads. On Qwen3.5-0.8B-Q4_K_M the loader keeps the K-quant planes in their file format
+(`kq_repacked`), the cold load mints the vulkan lane alone with its plan, and the warm map
+generates the same tokens and the same CPU embed row.
 
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
@@ -1251,8 +1271,19 @@ two declarations.
 configured panics naming `setup_dasllama_jobque()` (a bare queue decodes ~200x slower - the
 fork-context clone per job, a wake per job, workers parking at once), `DASLLAMA_ALLOW_BARE_JOBQUE=1`
 downgrades it to a warning, a configured queue is silent; the bare arms spawn
-`_jobque_tripwire_root.das`. Every `with_job_que()` block a test opens around the engine calls
-`setup_dasllama_jobque_()` first, or the tripwire reds it.
+`_jobque_tripwire_root.das`. `test_team_job_panic_exits_nonzero` spawns `_team_panic_root.das`,
+whose chunk panics on a worker: the child exits non-zero, its output carries `JOB EXCEPTION` and
+the panic's text, and the program does not run past the dispatch. The child runs with four
+settings: `DAS_TUNE_POLICY=fallback` (the root requires the engine's tuned kernels, and the
+default policy would mint and re-exec the child at startup, which never ends under a pipe),
+`DAS_JOBQUE_AFFINITY=0` (the child inherits the parent's affinity mask, and a worker pinned
+outside it never runs the chunk), `DAS_JOBQUE_THREADS=2`, and `DASLLAMA_SINGLE_THREAD=0` (an
+inherited single-thread pin runs the chunk inline, with no job exception to report). The
+in-process case - a `try/recover` around a fifo `parallel_for`, a team, an indexed and a stage
+dispatch whose chunks panic, an ordinary round after them still completing, and no clone leaked
+(the process-wide live-object count at shutdown) - is `tests/jobque/test_jobque_team.das` and
+`tests/jobque/test_jobque_stages.das` at the repo root. The tripwire reds any `with_job_que()`
+block a test opens around the engine without calling `setup_dasllama_jobque_()` first.
 `test_audio.das` - stocked suite; model-free cells: the audio front-end units (gelu-erf, hann
 window, mel filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle
 gates (ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles - CPU-claim cells, tower
@@ -1986,7 +2017,7 @@ model blocks tagged with a listed family run - `family_on(t, name)` in
 carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`, `matrix` and
 `coverage`, plus the image `smol`, `untied`, `metal` and `metal-untied` arms and the `image-vulkan` `vulkan` arm),
 `qwen2`, `qwen3`, `phi3`,
-`gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe` (the support-matrix family cells), `gemma`,
+`gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe` (the support-matrix family cells; `qwen35` also tags every block loading a Qwen3.5 carrier - the `mtp` 4b/9b blocks, `test_vulkan_mint.das`), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
 `gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows), `kitten` (the image suite's
 kitten arm), `kokoro`, `pocket` (the coverage census TTS rows),

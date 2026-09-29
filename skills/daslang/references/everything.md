@@ -4447,7 +4447,7 @@ The STRINGS module implements string formatting, conversion, searching, and modi
 ### String modifications
 
 - `chop` - Returns a substring of `str` beginning at index `start` with the specified `length`.
-- `escape` - Returns a new string with special characters replaced by their printable escape sequences (e.g.
+- `escape` - Returns a new string with the special characters of the das_string replaced by their printable escape sequences; unlike the string overload it reads every byte, so a null byte comes out as \\u0000.
 - `ltrim` - Returns a new string with leading whitespace characters removed from `str`.
 - `repeat` - Returns a new string formed by concatenating `str` repeated `count` times.
 - `replace` - Returns a new string with all occurrences of substring `toSearch` in `str` replaced by the substring `replace`.
@@ -4503,7 +4503,7 @@ The STRINGS module implements string formatting, conversion, searching, and modi
 
 - `modify_data` - Maps the raw bytes of string `str` into a temporary uint8 array, passes it to `block` for in-place reading and writing, and returns the modified string.
 - `peek_data` - Maps the raw bytes of string `str` into a temporary read-only uint8 array and passes it to `block` for inspection.
-- `to_bytes` - Returns a new uint8 byte array holding a copy of the bytes of string `str`, with no terminator appended.
+- `to_bytes` - Returns a new uint8 byte array holding a copy of every byte of the das_string `str`, null bytes included, with no terminator appended.
 
 ### Low level memory allocation
 

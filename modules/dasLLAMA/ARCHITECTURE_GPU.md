@@ -169,7 +169,8 @@ that a question answered for one backend has an obvious address in the other. Th
   Metal integrates as a whole-forward driver through common's override registries (the ASR-decoder driver is the one
   exception: whisper is not a `Model`, so its hooks are family registries in `dasllama_whisper`, same decline contract).
 - **`dasllama_gpu_resident.das`** - the WHOLE-MODEL residency rail: bake the device layout offline into the flavor
-  image, upload a model's stacks to the tier, and drive decode/prefill entirely on device. It is device-AGNOSTIC - it
+  image, upload a model's stacks to the tier, drive decode/prefill entirely on device, and decide the trimmed lane -
+  its admission (`resident_would_serve`) and the emb region the CPU keeps (`trim_pack_emb`). It is device-AGNOSTIC - it
   holds no device call and requires no GPU module, reaching the hardware only through the `dasllama_gpu_tier` SPI and
   entering the engine only through common's override registries. `"vulkan"` is the tier string it registers under, not
   a dependency, which is why it compiles on every box. It requires common back for `Model`/`Session`, so like the

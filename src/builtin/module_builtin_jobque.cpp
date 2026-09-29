@@ -768,27 +768,96 @@ namespace das {
         return ti;
     }
 
-    // A panic inside a job body used to unwind straight out of the worker's thread function into
-    // std::terminate -> abort, which is a fast-fail: no unhandled-exception filter runs, so the
-    // message and location were lost and the process died with no diagnostic at all. Catch it on
-    // the worker, report it the way the host reports a main-thread panic, then let it terminate as
-    // before -- a panic stays fatal, it just stops being silent.
-    __forceinline void invoke_job_lambda ( Context * forkContext, LineInfoArg * lineinfo, Lambda & flambda ) {
+    // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-team-panic
+    enum { JOB_PANIC_MSG_BYTES = 2048 };
+    struct JobPanic {
+        mutex   guard;
+        bool    failed = false;
+        string  what, where;
+    };
+    static JobPanic g_jobPanic;
+
+    static void recordJobPanic ( Context * cc ) {
+        lock_guard<mutex> lock(g_jobPanic.guard);
+        if ( !g_jobPanic.failed ) {
+            g_jobPanic.failed = true;
+            auto msg = cc->getException();
+            g_jobPanic.what = msg ? msg : "unknown";
+            while ( !g_jobPanic.what.empty() && (g_jobPanic.what.back()=='\n' || g_jobPanic.what.back()=='\r') ) g_jobPanic.what.pop_back();
+            g_jobPanic.where = cc->exceptionAt.describe();
+        }
+        cc->clearException();
+    }
+
+    static bool takeJobPanic ( char * msg ) {
+        lock_guard<mutex> lock(g_jobPanic.guard);
+        if ( !g_jobPanic.failed ) return false;
+        snprintf(msg, JOB_PANIC_MSG_BYTES, "JOB EXCEPTION: %s at %s", g_jobPanic.what.c_str(), g_jobPanic.where.c_str());
+        g_jobPanic.failed = false;
+        g_jobPanic.what.clear();
+        g_jobPanic.where.clear();
+        return true;
+    }
+
+    // the caller's re-raise of a recorded fifo panic; called where the caller's frame holds nothing a longjmp would skip
+    static void raiseJobPanic ( Context * context, LineInfoArg * at ) {
+        char msg[JOB_PANIC_MSG_BYTES];
+        if ( takeJobPanic(msg) ) context->throw_error_at(at, "%s", msg);
+    }
+
+    // the wait groups a job's lambda captured (the JobStatus pointer fields of its capture block) and has not yet
+    // released: a panicked job's epilogue never runs, so its notify is delivered for it, or the join waiting on the
+    // group never returns
+    struct JobCaptures {
+        vector<JobStatus *> statuses;
+    };
+    static thread_local JobCaptures * g_jobCaptures = nullptr;
+
+    static void collectCapturedStatuses ( TypeInfo * header, char * capture, vector<JobStatus *> & out ) {
+        if ( !header || header->type != Type::tStructure || !header->structType ) return;
+        StructInfo * si = header->structType;
+        for ( uint32_t i = 0; i != si->count; ++i ) {
+            VarInfo * f = si->fields[i];
+            if ( !f || f->type != Type::tPointer || !f->firstType || f->firstType->type != Type::tHandle ) continue;
+            auto ann = f->firstType->getAnnotation();
+            if ( !ann || ann->name != "JobStatus" ) continue;
+            auto status = *(JobStatus **)(capture + f->offset);
+            if ( status ) out.push_back(status);
+        }
+    }
+
+    static void untrackJobCapture ( JobStatus * status ) {
+        if ( !g_jobCaptures ) return;
+        auto & v = g_jobCaptures->statuses;
+        for ( size_t i = 0; i != v.size(); ++i ) {
+            if ( v[i] == status ) { v.erase(v.begin() + i); return; }
+        }
+    }
+
+    __forceinline void invoke_job_lambda ( Context * forkContext, LineInfoArg * lineinfo, Lambda & flambda, bool detached, JobCaptures * caps ) {
         GcRootLambda root(flambda, forkContext);
+        auto outerCaptures = g_jobCaptures;
+        g_jobCaptures = caps;
         bool ok = forkContext->runWithCatch([&]() {
             das_invoke_lambda<void>::invoke(forkContext, lineinfo, flambda);
         });
+        g_jobCaptures = outerCaptures;
         if ( !ok ) {
-            // A panic stays fatal — it just stops being silent. DAS_FATAL_ERROR logs with a flush,
-            // prints the stack, and exits, instead of unwinding into terminate/abort where the
-            // message is lost. Whether one bad job should instead fail only that job is a policy
-            // question, deliberately not answered here.
-            auto what = forkContext->getException();
-            DAS_FATAL_ERROR("JOB EXCEPTION: %s at %s\n",
-                what ? what : "unknown",
-                forkContext->exceptionAt.describe().c_str());
+            if ( detached ) {
+                // a detached thread has no join point to report at: it reports here and the process dies here
+                auto what = forkContext->getException();
+                DAS_FATAL_ERROR("JOB EXCEPTION: %s at %s\n",
+                    what ? what : "unknown",
+                    forkContext->exceptionAt.describe().c_str());
+            }
+            recordJobPanic(forkContext);
+            if ( caps ) {
+                for ( auto status : caps->statuses ) status->NotifyAndRelease(lineinfo);
+                caps->statuses.clear();
+            }
         }
     }
+
 
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in a 'with_job_que' block, or call create_job_que() first");
@@ -801,13 +870,15 @@ namespace das {
             *((TypeInfo **)ptr) = captureBlockHeaderType(fn, forkContext);   // the header a collect walks the capture by
             ptr += 16;
             das_invoke_function<void>::invoke(forkContext, lineinfo, fn, ptr, lambda.capture);
+            JobCaptures caps;
+            collectCapturedStatuses(*((TypeInfo **)(ptr - 16)), ptr, caps.statuses);
             das_delete<Lambda>::clear(context, lambda);
             auto bound = daScriptEnvironment::getBound();
             Context * parent = context;
-            Job jobFn = [=]() mutable {
+            Job jobFn = [=, caps = das::move(caps)]() mutable {
                 daScriptEnvironment::setBound(bound);
                 Lambda flambda(ptr);
-                invoke_job_lambda(forkContext, lineinfo, flambda);
+                invoke_job_lambda(forkContext, lineinfo, flambda, false, &caps);
                 das_delete<Lambda>::clear(forkContext, flambda);
                 parent->releaseForkContext(forkContext);
             };
@@ -824,12 +895,14 @@ namespace das {
         *((TypeInfo **)ptr) = captureBlockHeaderType(fn, forkContext.get());   // the header a collect walks the capture by
         ptr += 16;
         das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
+        JobCaptures caps;
+        collectCapturedStatuses(*((TypeInfo **)(ptr - 16)), ptr, caps.statuses);
         das_delete<Lambda>::clear(context, lambda);
         auto bound = daScriptEnvironment::getBound();
-        Job jobFn = [=]() mutable {
+        Job jobFn = [=, caps = das::move(caps)]() mutable {
             daScriptEnvironment::setBound(bound);
             Lambda flambda(ptr);
-            invoke_job_lambda(forkContext.get(), lineinfo, flambda);
+            invoke_job_lambda(forkContext.get(), lineinfo, flambda, false, &caps);
             das_delete<Lambda>::clear(forkContext.get(), flambda);
         };
         if ( g_batchForkJobs ) g_pendingForkJobs.emplace_back(das::move(jobFn));
@@ -981,6 +1054,33 @@ namespace das {
         SetCurrentThreadAffinityCpu(cpu, hard);
     }
 
+    // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-team-panic
+    struct TeamPanic {
+        enum { MSG_BYTES = JOB_PANIC_MSG_BYTES };
+        mutex   guard;
+        bool    failed = false;
+        string  what, where;
+        template <typename TT>
+        void run ( Context * cc, TT && body ) {
+            if ( cc->runWithCatch(std::forward<TT>(body)) ) return;
+            lock_guard<mutex> lock(guard);
+            if ( !failed ) {
+                failed = true;
+                auto msg = cc->getException();
+                what = msg ? msg : "unknown";
+                while ( !what.empty() && (what.back()=='\n' || what.back()=='\r') ) what.pop_back();
+                where = cc->exceptionAt.describe();
+            }
+            cc->clearException();
+        }
+        bool report ( char * msg ) const {
+            if ( !failed ) return false;
+            snprintf(msg, MSG_BYTES, "JOB EXCEPTION: %s at %s", what.c_str(), where.c_str());
+            return true;
+        }
+    };
+
+    // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-team-panic
     void team_parallel_for_invoke ( int32_t rangeBegin, int32_t rangeEnd, int32_t numChunks, Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in a 'with_job_que' block, or call create_job_que() first");
         int total = rangeEnd - rangeBegin;
@@ -997,50 +1097,63 @@ namespace das {
         }
         int chunkSz = total / actualChunks;
         int rem = total % actualChunks;
-        // one lambda clone per WORKER (the fifo path clones per chunk); the caller runs the original
-        vector<Context *> forkCtx(nW);
-        vector<char *> clonePtr(nW);
-        vector<shared_ptr<Context>> ownedCtx;   // non-pooled path: keep clones alive till the join
-        bool pooled = context->keepForkContexts.load(std::memory_order_relaxed);
-        if ( !pooled ) ownedCtx.resize(nW);
-        for ( int w = 0; w != nW; ++w ) {
-            Context * fc;
-            if ( pooled ) {
-                fc = context->acquireForkContext(uint32_t(ContextCategory::job_clone));
-            } else {
-                ownedCtx[w].reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
-                ownedCtx[w]->sharedPtrContext = true;
-                fc = ownedCtx[w].get();
+        char panicMsg[TeamPanic::MSG_BYTES];
+        bool panicked = false;
+        {
+            // one lambda clone per WORKER (the fifo path clones per chunk); the caller runs the original
+            vector<Context *> forkCtx(nW);
+            vector<char *> clonePtr(nW);
+            vector<shared_ptr<Context>> ownedCtx;   // non-pooled path: keep clones alive till the join
+            bool pooled = context->keepForkContexts.load(std::memory_order_relaxed);
+            if ( !pooled ) ownedCtx.resize(nW);
+            for ( int w = 0; w != nW; ++w ) {
+                Context * fc;
+                if ( pooled ) {
+                    fc = context->acquireForkContext(uint32_t(ContextCategory::job_clone));
+                } else {
+                    ownedCtx[w].reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
+                    ownedCtx[w]->sharedPtrContext = true;
+                    fc = ownedCtx[w].get();
+                }
+                auto ptr = fc->allocate(lambdaSize + 16, lineinfo);
+                fc->heap->mark_comment(ptr, "new [[ ]] in team_parallel_for");
+                memset(ptr, 0, lambdaSize + 16);
+                ptr += 16;
+                das_invoke_function<void>::invoke(fc, lineinfo, fn, ptr, lambda.capture);
+                forkCtx[w] = fc;
+                clonePtr[w] = ptr;
             }
-            auto ptr = fc->allocate(lambdaSize + 16, lineinfo);
-            fc->heap->mark_comment(ptr, "new [[ ]] in team_parallel_for");
-            memset(ptr, 0, lambdaSize + 16);
-            ptr += 16;
-            das_invoke_function<void>::invoke(fc, lineinfo, fn, ptr, lambda.capture);
-            forkCtx[w] = fc;
-            clonePtr[w] = ptr;
-        }
-        auto bound = daScriptEnvironment::getBound();
-        JobChunk work = [&](int chunkIdx, int slot) {
-            int rb = rangeBegin + chunkIdx * chunkSz + (chunkIdx < rem ? chunkIdx : rem);
-            int re = rb + chunkSz + (chunkIdx < rem ? 1 : 0);
-            if ( slot == nW ) {
-                das_invoke_lambda<void>::invoke(context, lineinfo, lambda, rb, re);
-            } else {
-                daScriptEnvironment::setBound(bound);
-                Lambda flambda(clonePtr[slot]);
-                das_invoke_lambda<void>::invoke(forkCtx[slot], lineinfo, flambda, rb, re);
+            auto bound = daScriptEnvironment::getBound();
+            TeamPanic panic;
+            JobChunk work = [&](int chunkIdx, int slot) {
+                int rb = rangeBegin + chunkIdx * chunkSz + (chunkIdx < rem ? chunkIdx : rem);
+                int re = rb + chunkSz + (chunkIdx < rem ? 1 : 0);
+                Context * cc = slot == nW ? context : forkCtx[slot];
+                panic.run(cc, [&]() {
+                    if ( slot == nW ) {
+                        das_invoke_lambda<void>::invoke(context, lineinfo, lambda, rb, re);
+                    } else {
+                        daScriptEnvironment::setBound(bound);
+                        Lambda flambda(clonePtr[slot]);
+                        das_invoke_lambda<void>::invoke(forkCtx[slot], lineinfo, flambda, rb, re);
+                    }
+                });
+            };
+            g_jobQue->teamParallelFor(actualChunks, work);
+            for ( int w = 0; w != nW; ++w ) {
+                Lambda flambda(clonePtr[w]);
+                das_delete<Lambda>::clear(forkCtx[w], flambda);
+                if ( pooled ) context->releaseForkContext(forkCtx[w]);
             }
-        };
-        g_jobQue->teamParallelFor(actualChunks, work);
-        for ( int w = 0; w != nW; ++w ) {
-            Lambda flambda(clonePtr[w]);
-            das_delete<Lambda>::clear(forkCtx[w], flambda);
-            if ( pooled ) context->releaseForkContext(forkCtx[w]);
+            das_delete<Lambda>::clear(context, lambda);
+            panicked = panic.report(panicMsg);
         }
-        das_delete<Lambda>::clear(context, lambda);
+        if ( panicked ) {
+            context->throw_error_at(lineinfo, "%s", panicMsg);
+        }
     }
 
+    // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-team-panic
     void team_parallel_for_indexed_invoke ( int32_t rangeBegin, int32_t rangeEnd, int32_t numChunks, Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         // team_parallel_for_invoke with the worker slot exposed: the lambda is invoked as
         // (slot, job_begin, job_end). JobQue::teamParallelFor already hands each chunk its
@@ -1062,50 +1175,63 @@ namespace das {
         }
         int chunkSz = total / actualChunks;
         int rem = total % actualChunks;
-        // one lambda clone per WORKER (the fifo path clones per chunk); the caller runs the original
-        vector<Context *> forkCtx(nW);
-        vector<char *> clonePtr(nW);
-        vector<shared_ptr<Context>> ownedCtx;   // non-pooled path: keep clones alive till the join
-        bool pooled = context->keepForkContexts.load(std::memory_order_relaxed);
-        if ( !pooled ) ownedCtx.resize(nW);
-        for ( int w = 0; w != nW; ++w ) {
-            Context * fc;
-            if ( pooled ) {
-                fc = context->acquireForkContext(uint32_t(ContextCategory::job_clone));
-            } else {
-                ownedCtx[w].reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
-                ownedCtx[w]->sharedPtrContext = true;
-                fc = ownedCtx[w].get();
+        char panicMsg[TeamPanic::MSG_BYTES];
+        bool panicked = false;
+        {
+            // one lambda clone per WORKER (the fifo path clones per chunk); the caller runs the original
+            vector<Context *> forkCtx(nW);
+            vector<char *> clonePtr(nW);
+            vector<shared_ptr<Context>> ownedCtx;   // non-pooled path: keep clones alive till the join
+            bool pooled = context->keepForkContexts.load(std::memory_order_relaxed);
+            if ( !pooled ) ownedCtx.resize(nW);
+            for ( int w = 0; w != nW; ++w ) {
+                Context * fc;
+                if ( pooled ) {
+                    fc = context->acquireForkContext(uint32_t(ContextCategory::job_clone));
+                } else {
+                    ownedCtx[w].reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
+                    ownedCtx[w]->sharedPtrContext = true;
+                    fc = ownedCtx[w].get();
+                }
+                auto ptr = fc->allocate(lambdaSize + 16, lineinfo);
+                fc->heap->mark_comment(ptr, "new [[ ]] in team_parallel_for_indexed");
+                memset(ptr, 0, lambdaSize + 16);
+                ptr += 16;
+                das_invoke_function<void>::invoke(fc, lineinfo, fn, ptr, lambda.capture);
+                forkCtx[w] = fc;
+                clonePtr[w] = ptr;
             }
-            auto ptr = fc->allocate(lambdaSize + 16, lineinfo);
-            fc->heap->mark_comment(ptr, "new [[ ]] in team_parallel_for_indexed");
-            memset(ptr, 0, lambdaSize + 16);
-            ptr += 16;
-            das_invoke_function<void>::invoke(fc, lineinfo, fn, ptr, lambda.capture);
-            forkCtx[w] = fc;
-            clonePtr[w] = ptr;
-        }
-        auto bound = daScriptEnvironment::getBound();
-        JobChunk work = [&](int chunkIdx, int slot) {
-            int rb = rangeBegin + chunkIdx * chunkSz + (chunkIdx < rem ? chunkIdx : rem);
-            int re = rb + chunkSz + (chunkIdx < rem ? 1 : 0);
-            if ( slot == nW ) {
-                das_invoke_lambda<void>::invoke(context, lineinfo, lambda, slot, rb, re);
-            } else {
-                daScriptEnvironment::setBound(bound);
-                Lambda flambda(clonePtr[slot]);
-                das_invoke_lambda<void>::invoke(forkCtx[slot], lineinfo, flambda, slot, rb, re);
+            auto bound = daScriptEnvironment::getBound();
+            TeamPanic panic;
+            JobChunk work = [&](int chunkIdx, int slot) {
+                int rb = rangeBegin + chunkIdx * chunkSz + (chunkIdx < rem ? chunkIdx : rem);
+                int re = rb + chunkSz + (chunkIdx < rem ? 1 : 0);
+                Context * cc = slot == nW ? context : forkCtx[slot];
+                panic.run(cc, [&]() {
+                    if ( slot == nW ) {
+                        das_invoke_lambda<void>::invoke(context, lineinfo, lambda, slot, rb, re);
+                    } else {
+                        daScriptEnvironment::setBound(bound);
+                        Lambda flambda(clonePtr[slot]);
+                        das_invoke_lambda<void>::invoke(forkCtx[slot], lineinfo, flambda, slot, rb, re);
+                    }
+                });
+            };
+            g_jobQue->teamParallelFor(actualChunks, work);
+            for ( int w = 0; w != nW; ++w ) {
+                Lambda flambda(clonePtr[w]);
+                das_delete<Lambda>::clear(forkCtx[w], flambda);
+                if ( pooled ) context->releaseForkContext(forkCtx[w]);
             }
-        };
-        g_jobQue->teamParallelFor(actualChunks, work);
-        for ( int w = 0; w != nW; ++w ) {
-            Lambda flambda(clonePtr[w]);
-            das_delete<Lambda>::clear(forkCtx[w], flambda);
-            if ( pooled ) context->releaseForkContext(forkCtx[w]);
+            das_delete<Lambda>::clear(context, lambda);
+            panicked = panic.report(panicMsg);
         }
-        das_delete<Lambda>::clear(context, lambda);
+        if ( panicked ) {
+            context->throw_error_at(lineinfo, "%s", panicMsg);
+        }
     }
 
+    // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-team-panic
     void team_parallel_stages_invoke ( const TArray<int3> & stages, Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         // Multi-stage team dispatch (see JobQue::teamParallelForStages): one rendezvous, one join,
         // internal barriers between stages. Each stage s of the array is int3(range_begin,
@@ -1139,59 +1265,71 @@ namespace das {
             das_delete<Lambda>::clear(context, lambda);
             return;
         }
-        // one lambda clone per WORKER, shared across all stages
-        vector<Context *> forkCtx(nW);
-        vector<char *> clonePtr(nW);
-        vector<shared_ptr<Context>> ownedCtx;   // non-pooled path: keep clones alive till the join
-        bool pooled = context->keepForkContexts.load(std::memory_order_relaxed);
-        if ( !pooled ) ownedCtx.resize(nW);
-        for ( int w = 0; w != nW; ++w ) {
-            Context * fc;
-            if ( pooled ) {
-                fc = context->acquireForkContext(uint32_t(ContextCategory::job_clone));
-            } else {
-                ownedCtx[w].reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
-                ownedCtx[w]->sharedPtrContext = true;
-                fc = ownedCtx[w].get();
-            }
-            auto ptr = fc->allocate(lambdaSize + 16, lineinfo);
-            fc->heap->mark_comment(ptr, "new [[ ]] in team_parallel_stages");
-            memset(ptr, 0, lambdaSize + 16);
-            ptr += 16;
-            das_invoke_function<void>::invoke(fc, lineinfo, fn, ptr, lambda.capture);
-            forkCtx[w] = fc;
-            clonePtr[w] = ptr;
-        }
-        auto bound = daScriptEnvironment::getBound();
-        JobChunk works[JobQue::MAX_TEAM_STAGES];
-        JobQue::TeamStage teamStages[JobQue::MAX_TEAM_STAGES];
-        for ( int s = 0; s != numStages; ++s ) {
-            int rangeBegin = stageDef[s].x;
-            int total = stageDef[s].y - stageDef[s].x;
-            int nCh = actualChunks[s];
-            int chunkSz = nCh > 0 ? total / nCh : 0;
-            int rem = nCh > 0 ? total % nCh : 0;
-            works[s] = [&, s, rangeBegin, chunkSz, rem](int chunkIdx, int slot) {
-                int rb = rangeBegin + chunkIdx * chunkSz + (chunkIdx < rem ? chunkIdx : rem);
-                int re = rb + chunkSz + (chunkIdx < rem ? 1 : 0);
-                if ( slot == nW ) {
-                    das_invoke_lambda<void>::invoke(context, lineinfo, lambda, s, rb, re);
+        char panicMsg[TeamPanic::MSG_BYTES];
+        bool panicked = false;
+        {
+            // one lambda clone per WORKER, shared across all stages
+            vector<Context *> forkCtx(nW);
+            vector<char *> clonePtr(nW);
+            vector<shared_ptr<Context>> ownedCtx;   // non-pooled path: keep clones alive till the join
+            bool pooled = context->keepForkContexts.load(std::memory_order_relaxed);
+            if ( !pooled ) ownedCtx.resize(nW);
+            for ( int w = 0; w != nW; ++w ) {
+                Context * fc;
+                if ( pooled ) {
+                    fc = context->acquireForkContext(uint32_t(ContextCategory::job_clone));
                 } else {
-                    daScriptEnvironment::setBound(bound);
-                    Lambda flambda(clonePtr[slot]);
-                    das_invoke_lambda<void>::invoke(forkCtx[slot], lineinfo, flambda, s, rb, re);
+                    ownedCtx[w].reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
+                    ownedCtx[w]->sharedPtrContext = true;
+                    fc = ownedCtx[w].get();
                 }
-            };
-            teamStages[s].work = &works[s];
-            teamStages[s].numChunks = nCh;
+                auto ptr = fc->allocate(lambdaSize + 16, lineinfo);
+                fc->heap->mark_comment(ptr, "new [[ ]] in team_parallel_stages");
+                memset(ptr, 0, lambdaSize + 16);
+                ptr += 16;
+                das_invoke_function<void>::invoke(fc, lineinfo, fn, ptr, lambda.capture);
+                forkCtx[w] = fc;
+                clonePtr[w] = ptr;
+            }
+            auto bound = daScriptEnvironment::getBound();
+            TeamPanic panic;
+            JobChunk works[JobQue::MAX_TEAM_STAGES];
+            JobQue::TeamStage teamStages[JobQue::MAX_TEAM_STAGES];
+            for ( int s = 0; s != numStages; ++s ) {
+                int rangeBegin = stageDef[s].x;
+                int total = stageDef[s].y - stageDef[s].x;
+                int nCh = actualChunks[s];
+                int chunkSz = nCh > 0 ? total / nCh : 0;
+                int rem = nCh > 0 ? total % nCh : 0;
+                works[s] = [&, s, rangeBegin, chunkSz, rem](int chunkIdx, int slot) {
+                    int rb = rangeBegin + chunkIdx * chunkSz + (chunkIdx < rem ? chunkIdx : rem);
+                    int re = rb + chunkSz + (chunkIdx < rem ? 1 : 0);
+                    Context * cc = slot == nW ? context : forkCtx[slot];
+                    panic.run(cc, [&]() {
+                        if ( slot == nW ) {
+                            das_invoke_lambda<void>::invoke(context, lineinfo, lambda, s, rb, re);
+                        } else {
+                            daScriptEnvironment::setBound(bound);
+                            Lambda flambda(clonePtr[slot]);
+                            das_invoke_lambda<void>::invoke(forkCtx[slot], lineinfo, flambda, s, rb, re);
+                        }
+                    });
+                };
+                teamStages[s].work = &works[s];
+                teamStages[s].numChunks = nCh;
+            }
+            g_jobQue->teamParallelForStages(teamStages, numStages);
+            for ( int w = 0; w != nW; ++w ) {
+                Lambda flambda(clonePtr[w]);
+                das_delete<Lambda>::clear(forkCtx[w], flambda);
+                if ( pooled ) context->releaseForkContext(forkCtx[w]);
+            }
+            das_delete<Lambda>::clear(context, lambda);
+            panicked = panic.report(panicMsg);
         }
-        g_jobQue->teamParallelForStages(teamStages, numStages);
-        for ( int w = 0; w != nW; ++w ) {
-            Lambda flambda(clonePtr[w]);
-            das_delete<Lambda>::clear(forkCtx[w], flambda);
-            if ( pooled ) context->releaseForkContext(forkCtx[w]);
+        if ( panicked ) {
+            context->throw_error_at(lineinfo, "%s", panicMsg);
         }
-        das_delete<Lambda>::clear(context, lambda);
     }
 
     static atomic<int32_t> g_jobQueAvailable{0};
@@ -1230,10 +1368,7 @@ namespace das {
         thread([=]() mutable {
             daScriptEnvironment::setBound(bound);
             Lambda flambda(ptr);
-            // Same hole as new_job_invoke: the thread is detached, so an escaping panic unwinds into
-            // std::terminate -> abort with the message lost. A detached thread has no join point to
-            // report at, so it reports here and dies here.
-            invoke_job_lambda(forkContext.get(), lineinfo, flambda);
+            invoke_job_lambda(forkContext.get(), lineinfo, flambda, true, nullptr);
             das_delete<Lambda>::clear(forkContext.get(), flambda);
             shutdownThreadLocalDebugAgent();
             forkContext.reset();
@@ -1310,6 +1445,7 @@ namespace das {
             lock_guard<mutex> guard(g_jobQueMutex);
             if ( g_jobQue.use_count()==1 ) g_jobQue.reset();
         }
+        raiseJobPanic(context, lineInfo);   // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-team-panic
         if ( !drained ) {
             context->throw_error_at(lineInfo,
                 "with_job_que: jobs did not complete within %d ms; queue torn down with work outstanding",
@@ -1362,16 +1498,21 @@ namespace das {
 
     void jobStatusReleaseRef ( JobStatus * & status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "jobStatusReleaseRef: status is null");
+        untrackJobCapture(status);
         status->releaseRef(at);
         status = nullptr;
     }
 
+    // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-team-panic
     void withJobStatus ( int32_t total, const TBlock<void,JobStatus *> & block, Context * context, LineInfoArg * lineInfo ) {
-        JobStatus status(total);
-        AddReleaseGuard<JobStatus> guard(&status, context, lineInfo);
-        vec4f args[1];
-        args[0] = cast<JobStatus *>::from(&status);
-        context->invoke(block,args,nullptr,lineInfo);
+        {
+            JobStatus status(total);
+            AddReleaseGuard<JobStatus> guard(&status, context, lineInfo);
+            vec4f args[1];
+            args[0] = cast<JobStatus *>::from(&status);
+            context->invoke(block,args,nullptr,lineInfo);
+        }
+        raiseJobPanic(context, lineInfo);
     }
 
     JobStatus * jobStatusCreate( Context *, LineInfoArg * at ) {
@@ -1444,6 +1585,7 @@ namespace das {
 
     void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "notifyAndReleaseJob: status is null");
+        untrackJobCapture(status);
         if ( !status->NotifyAndRelease(at) ) context->throw_error_at(at, "notifyAndReleaseJob: nothing to notify");
         status = nullptr;
     }

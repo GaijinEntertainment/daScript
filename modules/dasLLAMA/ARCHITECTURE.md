@@ -51,6 +51,8 @@ re-transcoding `$LCPP/src/unicode-data.cpp`).
 
 Each companion's sections are anchored by topic; a citation spells `<doc>.md#<anchor>`.
 
+- `ARCHITECTURE_IMAGE_VULKAN.md` - the vulkan lane's mint: the GPU walk inside the streaming save, the job-span view, the
+  trimmed lane, the walk's decline
 - `ARCHITECTURE_IMAGE.md` - the prepared-image rail, the baked dev-W f16 plane, the lattice-only
   per-format plane table both halves of the rail skip around, the baked tower twin-W plane, the
   layout stamp `REVIEW.das` keeps over the byte-placing code, the meta-field tripwire every

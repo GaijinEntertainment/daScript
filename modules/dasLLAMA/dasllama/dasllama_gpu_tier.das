@@ -333,6 +333,28 @@ def public set_gpu_resident_route(on : bool) {
     g_gpu_resident_route = on
 }
 
+var private g_vulkan_trim_set = false
+var private g_vulkan_trim = false
+
+//! the trimmed vulkan lane in process (`DASLLAMA_TRIM`'s twin): the next vulkan-armed cold load mints its lane without the
+//! planar families, and the lane's identity folds the answer, so a flip re-bakes the lane
+def public set_vulkan_trim(on : bool) {
+    g_vulkan_trim_set = true
+    g_vulkan_trim = on
+}
+
+//! whether a vulkan-armed cold load mints the trimmed lane: the in-process lever where one was set, else the knob
+def public vulkan_trim() : bool => g_vulkan_trim_set ? g_vulkan_trim : g_env_vulkan.trim
+
+//! whether an in-process lever shadows `DASLLAMA_TRIM`: a fixture reads it beside `vulkan_trim()` and puts both back through `restore_vulkan_trim`
+def public vulkan_trim_lever_set() : bool => g_vulkan_trim_set
+
+//! the trim lever put back as a fixture found it: no lever where none was set, else the value it read
+def public restore_vulkan_trim(was_set : bool; on : bool) {
+    g_vulkan_trim_set = was_set
+    g_vulkan_trim = on
+}
+
 //! The in-process lever's own value (`set_gpu_resident_route`), apart from the knob: a fixture restores what it found.
 def public gpu_resident_route_lever() : bool => g_gpu_resident_route
 

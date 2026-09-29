@@ -213,5 +213,24 @@ def test_jobque_stages(t : T?) {
             set_jobque_team_mode(false)
             set_jobque_worker_spin(0)
         }
+        t |> run("a stage chunk's panic is the caller's - recoverable, the chain serves on") @(t : T?) {
+            // the caller's own slot panics too: an unwrapped caller slot longjmps past the chain's dispatch lock
+            set_jobque_team_mode(true)
+            for (_r in range(3)) {
+                var caught = false
+                try {
+                    team_parallel_stages([int3(0, 64, 16), int3(0, 64, 16)]) <| @(stage : int; job_begin : int; job_end : int) {
+                        if (stage == 1 && job_begin >= 0) {
+                            panic("STAGES_PANIC_PROBE {job_begin}")
+                        }
+                    }
+                } recover {
+                    caught = true
+                }
+                t |> success(caught, "the stage panic reached the caller as a recoverable exception")
+            }
+            stages_pipeline_round(t, 4, 4, 64, 2)
+            set_jobque_team_mode(false)
+        }
     }
 }

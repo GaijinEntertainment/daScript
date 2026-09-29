@@ -21,6 +21,7 @@ require math   // the tower-parity statistics
 require dasllama/dasllama_gguf   // gguf_shard_paths — split models tier on their TOTAL size
 require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes through the model
 require dasllama/dasllama_env
+require dasllama/dasllama_gpu_resident   // resident_mirror_dtype — the mirror codec the box arms
 require _compares public
 
 // Models larger than this are large-tier. 6 GiB cleanly splits the ~5GB-and-under carriers
@@ -29,7 +30,7 @@ let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul
 
 //! The KV codec a session takes to be served by the armed mirror: f16, or f32 where DASLLAMA_VK_KV32
 //! arms f32 mirrors - a session on the other codec rides the CPU rails.
-def mirror_kv_dtype() : KVDtype => g_env_vulkan.vk_kv32 != 0l ? KVDtype.f32 : KVDtype.f16
+def mirror_kv_dtype() : KVDtype => resident_mirror_dtype()
 
 let SUPPRESSED_LOGIT = -1.0e30   //! a pinned id's logit on both arms
 

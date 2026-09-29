@@ -3474,3 +3474,35 @@ other overrides alike.
   `DAS_TUNE_POLICY` unset; the box is the pod on its cm2 arm unless the sentence names the 5060 Ti
   (Boris's box, RTX 5060 Ti 16 GB, driver 616.56, cm2 arm). A distance is the cell's own logged
   rel_l2 over one run of the cell; the cells log the reading on green and assert the 1.5x bar.
+
+### From the vulkan-lane mint arc (2026-09-29)
+
+The instrument: Boris's box (RTX 5060 Ti 16 GB, driver 616.56, cm2 arm, the Zen2 CPU),
+`bin/Release/daslang.exe -jit -module-cache .jitted_scripts/module_cache/dastest.dascache
+dastest/dastest.das -- --test modules/dasLLAMA/tests/test_vulkan_mint.das --test-names
+test_vulkan_mint_lanes` from the repo root under `DASLLAMA_GPU=1 DAS_LOG_LEVEL=info
+DAS_JOBQUE_THREADS=8 DASLLAMA_MODELS_DIR=D:/Work/llama.cpp/models`, `DASLLAMA_COOPMAT` and
+`DAS_TUNE_POLICY` unset [debug-jit - the cell's own log lines, one run]. A save wall is the
+`prepared image streamed in N ms` line (the whole streaming save: the walk's uploads, the twin
+streamed to the writer, every planar family transcoded off the gguf mapping), a twin's size and
+mint time the `plane vkblob N MB minted off the gguf in N ms` line, the warm wall the `prepared
+vulkan image mapped in N ms` line. The peak footprint is the dastest process's peak working set
+(`PeakWorkingSet64`, sampled every 500 ms from a wrapper) over the whole file - three loads of the
+MTP carrier, two of its K-quant twin, and the cells' generations - so it bounds the cold mint from
+above and is not the mint's own peak.
+
+- **Qwen3.5-0.8B-MTP-Q8_0, the vulkan lane minted off the gguf inside the streaming save:** the
+  untrimmed lane's twin **782 MB, 195 entries, minted in 4319 ms**, the whole save **6364 ms**; the
+  trimmed lane's twin the same 782 MB in 4284 ms, its save **5446 ms** (no planar family written);
+  the trimmed lane mapped back warm in **2508 ms**. Peak working set of the file's process
+  **6558 MB**.
+- **The reserve the sizing pass hands the writer for the twin** (`vk_mint_extra_bytes`): the quant
+  planes' bytes, both halves, plus an eighth for the entry pads, plus the packed emb region where
+  the lane is trimmed, plus 64 MB; the twin never outgrows its planar source (a device scale row is
+  the disk row's f16 half or narrower), so the surplus is the pads and the window. The file sink
+  truncates it at close; the in-memory sink holds it for the model's lifetime, which is the
+  `DASLLAMA_IMAGE_SAVE=0` cost of the lane.
+- **The lane files** (read in the arc's first run on this box, the same design before the review
+  batch; the batch moved the twin's section, not a plane's bytes - `test_vulkan_inline_bake` holds
+  the minted twin to the eager bake's byte for byte): one file of **1.92 GB** (1.10 GB trimmed)
+  where the planar image and its twin summed 3.03 GB.

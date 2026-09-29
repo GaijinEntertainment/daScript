@@ -297,4 +297,4 @@ owner, and `~Context` waits for zero before it frees the pool.
 `native_thread_stack_size`, `native_allocator_stats`, and `native_allocator_extent`
 report Emscripten native stack size, allocator use, and heap extent. On other targets
 they return zero as an unavailable measurement. Consumers check the platform before
-displaying those values.
+displaying those values. The job queue's team panics are `ARCHITECTURE_JOBQUE.md`.
