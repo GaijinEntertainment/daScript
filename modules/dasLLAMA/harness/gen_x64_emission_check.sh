@@ -15,14 +15,16 @@ TOOLS=${LLVM_TOOLS:-/opt/homebrew/opt/llvm/bin}
 LLC=${LLC:-$TOOLS/llc}
 OBJDUMP=${LLVM_OBJDUMP:-$TOOLS/llvm-objdump}
 OUT=${1:-/tmp/gen_x64_emission}
-FEATURES=avx2,avxvnni,avx512f,avx512bw,avx512vl,avx512vnni,avxvnniint8,amx-tile,amx-int8
+FEATURES=avx2,avxvnni,avx512f,avx512bw,avx512vl,avx512vnni,avxvnniint8,avx512vbmi,avx512bf16,amx-tile,amx-int8,amx-bf16
 mkdir -p "$OUT"
 
 echo "== cross compile-only dump (DAS_JIT_X64_FORCE_FEATURES=$FEATURES) =="
-DAS_TUNE_MODE=test DAS_JIT_X64_FORCE_FEATURES=$FEATURES \
-    "$ROOT/bin/daslang" -jit "$ROOT/modules/dasLLAMA/harness/gen_x64_emission_probe.das" \
+# info logging carries the IR lines; the module cache would serve a normal-mode compile of the grid
+DAS_LOG_LEVEL=info DAS_TUNE_MODE=test DAS_JIT_X64_FORCE_FEATURES=$FEATURES \
+    "$ROOT/bin/daslang" -no-module-cache -jit "$ROOT/modules/dasLLAMA/harness/gen_x64_emission_probe.das" \
     -- --jit-compile-only --jit-dump --jit-target=x86_64-unknown-linux-gnu > "$OUT/dump.txt" 2>&1
-grep -q "compile-only — module built" "$OUT/dump.txt" || { echo "FAIL: compile-only did not complete"; exit 1; }
+grep -q "compile-only - module built" "$OUT/dump.txt" || { echo "FAIL: compile-only did not complete"; exit 1; }
+grep -q "keeps the tune grid" "$OUT/dump.txt" || { echo "FAIL: the cross compile-only dump did not announce the kept tune grid"; exit 1; }
 
 awk '/^\[I\] LLVM JIT: ; ModuleID/ { sub(/^\[I\] LLVM JIT: /, ""); on=1 } on && /^\[[IEW]\] / { exit } on { print }' \
     "$OUT/dump.txt" > "$OUT/module.ll"
@@ -72,22 +74,18 @@ gate "bssd256 tile no-abs" "${T}dot_vpdpbssd_width256_mr8_kstep2 " vpabsb 0
 # tile, vpdpbusd zmm (mr16 = one zmm row-vector per dword group; select-based sign, no VPSIGNB)
 gate "busd512 tile" "${T}dot_vpdpbusd_width512_mr16_kstep2 " vpdpbusd 96
 gate "busd512 tile no-psign" "${T}dot_vpdpbusd_width512_mr16_kstep2 " vpsignb 0
-# tile, maddubs zmm
-gate "maddubs512 tile pair1" "${T}dot_maddubs_width512_mr16_kstep2 " vpmaddubsw 96
-gate "maddubs512 tile pair2" "${T}dot_maddubs_width512_mr16_kstep2 " vpmaddwd 96
 # bias128 tiles (slice H): plain u8·s8 dots off the biased plane — the whole sign trick
 # (VPABSB + VPSIGNB at 256 / VPMOVB2M + masked VPSUBB at 512) must vanish; the −128·Σx
-# correction is the acc init (a broadcast load, not an ALU op)
-B=${T}dot_vpdpbusd_width256_mr8_kstep2_bias128
+# correction is the acc init (a broadcast load, not an ALU op). The grid carries the biased
+# rows with gkstep2 only (the plain-gkstep twins and the maddubs zmm row were pruned).
+B=${T}dot_vpdpbusd_width256_mr8_kstep2_gkstep2_bias128
 gate "busd256-b128 tile" "$B " vpdpbusd 96
 gate "busd256-b128 tile no-sign" "$B " vpsignb 0
 gate "busd256-b128 tile no-abs" "$B " vpabsb 0
-B=${T}dot_vpdpbusd_width512_mr16_kstep2_bias128
+B=${T}dot_vpdpbusd_width512_mr16_kstep2_gkstep2_bias128
 gate "busd512-b128 tile" "$B " vpdpbusd 96
 gate "busd512-b128 tile no-mask" "$B " vpmovb2m 0
 gate "busd512-b128 tile no-sub" "$B " vpsubb 0
-# gemv gkstep2 (3 block instances x 8 kg x 1 token = 24 dots)
-gate "busd256 gemv gk2" "q8q8_gemv_gen__dot_vpdpbusd_width256_mr8_kstep2_gkstep2 " vpdpbusd 24
 # bias128 gemv: 24 dots + one inline-bsum dot per block instance (3) = 27; no sign ops
 G=q8q8_gemv_gen__dot_vpdpbusd_width256_mr8_kstep2_gkstep2_bias128
 gate "busd256-b128 gemv gk2" "$G " vpdpbusd 27
@@ -219,6 +217,90 @@ z=$(awk -v pat="q8q8_tile_gen__dot_vpdpbusd_width512_mr16_kstep2 " '
     /^[0-9a-f]+ </ { infn = index($0, pat) > 0; next }
     infn && /%zmm/ { n++ } END { print n + 0 }' "$OUT/disasm.txt")
 if [[ $z -gt 0 ]]; then echo "OK   busd512 tile runs on zmm ($z zmm refs)"; else echo "FAIL busd512 tile: no zmm refs"; fails=$((fails+1)); fi
+
+# the bf16 TMUL tile (the kq families' amx_bf16 leg): raw tmm ops, C in the tiles across the
+# k loop — 2 A + nrsplit B tileloadd, 2·nrsplit tdpbf16ps in the loop body, 2·nrsplit tilezero
+# before it and tilestored straight into y after it; no int32 spill, no fold cvt, no config traffic
+K=k4q8_tile_gen__dot_amx_bf16_width512_mr16_kstep1_nrsplit2
+gate "bf16 2x2 tile dots" "$K " tdpbf16ps 4
+gate "bf16 2x2 tile loads" "$K " tileloadd 4
+gate "bf16 2x2 tile zero" "$K " tilezero 4
+gate "bf16 2x2 tile store" "$K " tilestored 4
+gate "bf16 2x2 tile no-fold" "$K " vcvtdq2ps 0
+gate "bf16 2x2 tile no-cfg" "$K " ldtilecfg 0
+gate "bf16 2x2 tile no-int8" "$K " tdpbssd 0
+K=k4q8_tile_gen__dot_amx_bf16_width512_mr16_kstep1_nrsplit1
+gate "bf16 2x1 tile dots" "$K " tdpbf16ps 2
+gate "bf16 2x1 tile loads" "$K " tileloadd 3
+gate "bf16 2x1 tile store" "$K " tilestored 2
+# the bf16 cfg companion loads the full palette once; the witness is the XTILEDATA grant
+C='k4q8_amx_cfg_gen__dot_amx_bf16_width512_mr16_kstep1_nrsplit2>'
+gate "bf16 cfg companion" "$C" ldtilecfg 1
+W='k4q8_witness_gen__dot_amx_bf16_width512_mr16_kstep1_nrsplit2>'
+gate "bf16 witness enable" "$W" callq 1
+# the emitted panels: the bf16 convert is the one instruction no daslang loop reaches; a
+# per-superblock body converts 8 blocks x 8 quads x 2 pair-rows x 2 halves = 256 vectors of 16,
+# whatever the format's code planes (high-bit planes, LUT lookups and grid gathers add no convert)
+for f in k4 k5 k6 q40 iq4xs iq3s4 k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs; do
+    P="${f}q8_panel_gen__dot_amx_bf16_width512_mr16_kstep1_nrsplit2 "
+    gate "$f panel bf16 convert" "$P" vcvtneps2bf16 256
+    gate "$f panel no-tile" "$P" tdpbf16ps 0
+done
+# the LUT formats look their codebook up per nibble vector: 8 blocks x 4 dwords x 2 nibbles VPSHUFB
+for f in iq4xs iq3s4 iq4nl; do
+    P="${f}q8_panel_gen__dot_amx_bf16_width512_mr16_kstep1_nrsplit2 "
+    gate "$f panel codebook" "$P" vpshufb 64
+done
+# off a bf16 perm the panel companion is a bare return
+P='k4q8_panel_gen__dot_vpdpbusd_width512_mr16 '
+gate "k4 panel off-perm empty" "$P" vcvtneps2bf16 0
+# the q8 family's bf16 leg on both scale forms: the same tile, a per-32-block panel body (8
+# quads x 2 pair-rows x 2 halves = 32 converts a block), the f16-scale panel widening its scales
+for f in q8q8_tile_gen q8q8_tile_s16_gen; do
+    K="${f}__dot_amx_bf16_width512_mr16_kstep1_nrsplit2 "
+    gate "$f bf16 tile dots" "$K" tdpbf16ps 4
+    gate "$f bf16 tile no-int8" "$K" tdpbssd 0
+done
+P='q8q8_panel_gen__dot_amx_bf16_width512_mr16_kstep1_nrsplit2 '
+gate "q8 panel bf16 convert" "$P" vcvtneps2bf16 32
+gate "q8 panel no-tile" "$P" tdpbf16ps 0
+P='q8q8_panel_s16_gen__dot_amx_bf16_width512_mr16_kstep1_nrsplit2 '
+gate "q8 s16 panel bf16 convert" "$P" vcvtneps2bf16 32
+gate "q8 s16 panel f16 scales" "$P" vcvtph2ps 1
+gate "q8 s16 panel no-tile" "$P" tdpbf16ps 0
+
+# off Linux the tile perms decline (the XTILEDATA grant is arch_prctl): the same features under a
+# Windows triple emit the vector grid and no tile op
+echo "== cross compile-only dump, x86_64-pc-windows-msvc =="
+DAS_LOG_LEVEL=info DAS_TUNE_MODE=test DAS_JIT_X64_FORCE_FEATURES=$FEATURES \
+    "$ROOT/bin/daslang" -no-module-cache -jit "$ROOT/modules/dasLLAMA/harness/gen_x64_emission_probe.das" \
+    -- --jit-compile-only --jit-dump --jit-target=x86_64-pc-windows-msvc > "$OUT/dump_win.txt" 2>&1
+grep -q "compile-only - module built" "$OUT/dump_win.txt" || { echo "FAIL: the windows compile-only did not complete"; exit 1; }
+irgate() { # irgate <desc> <file> <pattern> <zero|some>
+    local got=$(grep -c "$3" "$2")
+    if [[ ( "$4" == zero && "$got" == 0 ) || ( "$4" == some && "$got" != 0 ) ]]; then
+        echo "OK   $1: $3 x $got"
+    else
+        echo "FAIL $1: $3 x $got, want $4"
+        fails=$((fails+1))
+    fi
+}
+irgate "windows no bf16 tile" "$OUT/dump_win.txt" tdpbf16ps zero
+irgate "windows no int8 tile" "$OUT/dump_win.txt" tdpbssd zero
+irgate "windows vector grid live" "$OUT/dump_win.txt" vpdpbusd some
+
+# the panel's bf16 convert is an AVX512_BF16 instruction: with the feature the object calls no
+# soft-float convert, and without it the bf16 perms decline where the int8 tile stays
+"$TOOLS/llvm-nm" -u "$OUT/module.o" > "$OUT/undefined.txt"
+irgate "bf16 convert is an instruction" "$OUT/undefined.txt" __truncsfbf2 zero
+echo "== cross compile-only dump, no avx512bf16 =="
+DAS_LOG_LEVEL=info DAS_TUNE_MODE=test DAS_JIT_X64_FORCE_FEATURES=${FEATURES/avx512bf16,/} \
+    "$ROOT/bin/daslang" -no-module-cache -jit "$ROOT/modules/dasLLAMA/harness/gen_x64_emission_probe.das" \
+    -- --jit-compile-only --jit-dump --jit-target=x86_64-unknown-linux-gnu > "$OUT/dump_nobf16.txt" 2>&1
+grep -q "compile-only - module built" "$OUT/dump_nobf16.txt" || { echo "FAIL: the no-avx512bf16 compile-only did not complete"; exit 1; }
+irgate "no avx512bf16: no bf16 tile" "$OUT/dump_nobf16.txt" tdpbf16ps zero
+irgate "no avx512bf16: no bf16 convert" "$OUT/dump_nobf16.txt" "to <16 x bfloat>" zero
+irgate "no avx512bf16: int8 tile stays" "$OUT/dump_nobf16.txt" tdpbssd some
 
 if [[ $fails -eq 0 ]]; then
     echo "GEN X64 EMISSION OK"

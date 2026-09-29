@@ -30,7 +30,7 @@ let public JIT_CPU_CLASSES = [
     JitCpuClass(name = "x86-vnni512", arch = "x86_64", cpu = "x86-64",
         features = "avx2;f16c;fma;sse4.2;avx512f;avx512bw;avx512vl;avx512vnni;avx512vbmi"),
     JitCpuClass(name = "x86-amx", arch = "x86_64", cpu = "x86-64",
-        features = "avx2;f16c;fma;sse4.2;avxvnni;avx512f;avx512bw;avx512vl;avx512vnni;avx512vbmi;amx-tile;amx-int8"),
+        features = "avx2;f16c;fma;sse4.2;avxvnni;avx512f;avx512bw;avx512vl;avx512vnni;avx512vbmi;avx512bf16;amx-tile;amx-int8;amx-bf16"),
     JitCpuClass(name = "arm-neon", arch = "arm64", cpu = "generic", features = "neon;dotprod;fullfp16;lse"),
     JitCpuClass(name = "arm-i8mm", arch = "arm64", cpu = "generic", features = "neon;dotprod;i8mm;bf16;fullfp16;lse")
 ]

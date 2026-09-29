@@ -46,8 +46,9 @@ kernel matrix and the tune grids select on: `avx2`, `f16c`, `vnni256` (256-bit V
 VEX AVX-VNNI or EVEX AVX512-VNNI+VL), `avx512bw` (zmm byte ops - BW, not merely F), `avx512vnni`
 (zmm VPDPBUSD; implies bw, the sign trick around it is BW), `avx512vbmi` (VPERMI2B / VPERMB /
 VPMULTISHIFTQB - the grid formats' symbol lattice), `vnniint8` (VEX VPDPBSSD, native s8 x s8),
-and `amx` (both amx-tile and amx-int8; the per-process XTILEDATA grant is a separate runtime step
-the family's own witness performs). `init_jit_target_flags` decides each from cpuid truth OR'd with
+`amx` (both amx-tile and amx-int8; the per-process XTILEDATA grant is a separate runtime step
+the family's own witness performs) and `amx_bf16` (amx-tile, amx-bf16 and avx512bf16 -
+TDPBF16PS and the panel's VCVTNEPS2BF16, the bf16 tile family; `amx-fp16` is probed for the Granite Rapids fp16 tiles but gates nothing yet). `init_jit_target_flags` decides each from cpuid truth OR'd with
 the `DAS_JIT_X64_FORCE_FEATURES` emission-only override; a cross triple or a generic target
 (`host_features = false`) drops to forced-only truth - cpuid is not consulted, the force env is
 the only tier source there.
@@ -88,7 +89,9 @@ in LLVM's target-feature names. The classes are the rows of `JIT_CPU_CLASSES`
 feature set, and the cpu is the arch's bare baseline (`x86-64`, `generic`) on every row: an LLVM
 cpu level such as `x86-64-v3` implies features the row does not name (bmi2, lzcnt, movbe; `v4`
 adds avx512cd/dq), the backend would emit them, and the membership test below would admit a box
-without them. The set alone is what the backend enables and what cpuid is asked for.
+without them. The set alone is what the backend enables and what cpuid is asked for. `x86-amx`
+carries `amx-bf16` and `avx512bf16` beside `amx-tile` and `amx-int8` because every AMX part,
+from Sapphire Rapids on, has all four, so the extra features do not narrow the class.
 The set is the fingerprint the class's shipped profile records (`skills/tune.md`, the shipped
 defaults profiles), so a profile and the class it is keyed by state the same silicon. A box is
 in a class when it carries every feature of the set; `tune_cpu_class()` names the highest class

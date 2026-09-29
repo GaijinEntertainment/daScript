@@ -4,6 +4,7 @@ options indenting = 4
 module llvm_jit_cli shared private
 
 require daslib/clargs
+require daslib/ast_boost
 
 //! Shared JIT command-line option schema.
 //!
@@ -105,4 +106,9 @@ struct public JitCliOptions {
     @clarg_name = "jit-register-all-modules"
     @clarg_doc = "JIT (-exe only): register all builtin native modules (math, fio, dasbind, ...) at exe startup, so a standalone compiler-driver exe can recompile arbitrary daslang at runtime"
     register_all_modules : Option<bool>
+}
+
+//! `--jit-compile-only` over `options jit_compile_only`
+def public jit_compile_only(cli : JitCliOptions; prog : Program?) : bool {
+    return cli.compile_only |> unwrap_or((prog._options |> find_arg("jit_compile_only")) ?as tBool ?? false)
 }

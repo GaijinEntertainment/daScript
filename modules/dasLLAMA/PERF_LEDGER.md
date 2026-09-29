@@ -3506,3 +3506,58 @@ above and is not the mint's own peak.
   batch; the batch moved the twin's section, not a plane's bytes - `test_vulkan_inline_bake` holds
   the minted twin to the eager bake's byte for byte): one file of **1.92 GB** (1.10 GB trimmed)
   where the planar image and its twin summed 3.03 GB.
+
+### From the AMX bf16 tile arc (2026-09-29, Granite Rapids `c8i.4xlarge` `i-02a87cabc8fcd2e4c`, 16 lanes)
+
+The race and the carriers are from one box and one mint: `daspkg release --root
+modules/dasLLAMA/benchmarks` with `DASLLAMA_CONFIRM_MODEL` on the 1B Q8_0 and no other
+environment override (noise probes cv 0.08 / 0.03 / 0.06 / 0.12 %, validation drift 1.89 %, 66
+kernels), the profile it exported in force. The token-block readings are from an earlier mint
+of the same day on the same box, the same winners on every family. The reference build is
+`HOW_TO_GET_SIDECAR.md` section 3's (`6c84c7d5d`, `clean-cpu`).
+
+- **The bf16 tile runs every family at the matrix unit's rate: 7.4-8.7 ms a tile, where the
+  best vector seat takes 20-48.** The mint's race (`harness/gen_tune_probe.das`,
+  `DAS_TUNE_MODE=tune`, `-jit`), one lane, one process, the arms interleaved, best of 8 rounds
+  (an arm screened out after 2), the 2048x8192x256 streaming fixture; the sidecar's `race`
+  rows, tile ms, the `amx_bf16` two-group arm against the best other arm (busd512 mr16; the
+  grid formats' `grid_vbmi`; q8's bias128): k4 7.44 vs 34.50, k5 7.98 vs 23.20, k6 7.42 vs
+  32.44, q40 7.43 vs 24.40, iq4xs 7.49 vs 36.72, iq4nl 7.46 vs 36.95, iq3s4 7.46 vs 37.53, k3
+  7.38 vs 47.91, iq3s 8.72 vs 36.80, iq3xxs 8.50 vs 36.32, k2 7.44 vs 45.29, iq2s 8.46 vs
+  39.58, iq2xs 8.18 vs 39.06, iq2xxs 8.16 vs 35.63, q8 7.43 vs 20.18. The mint crowns the bf16
+  arm on all fifteen families, and the q8 crown passed the end-to-end confirm. The int8 tile
+  (`amx_int8`) stores and folds its sum at every 32-weight block - the traffic the bf16 leg has
+  none of.
+- **End to end the minted exe holds 1.27-1.41x the reference build on the mainstream carriers,
+  5.9x and 21.5x on the two low-bit ones, tg ahead on all seven.** The released `lcpp_bench`
+  that mint built, `dasllama-bench.exe -m <gguf> -p 512 -n 16 -r 3 -t 16 --ref <llama-bench>
+  --ref-flavor clean-cpu --ref-no-affinity`; the rig runs the reference in its own process, so
+  each pair below is `direction-grade`. pp512 / tg16 tok/s, ours (the spread over 3 reps) vs the
+  reference: Llama-3.2-1B Q8_0 1971.7 +- 9.7 / 82.4 +- 0.3 vs 1394.7 / 78.3; Q4_K_M 1943.8 +-
+  9.4 / 108.0 +- 0.5 vs 1453.1 / 87.1; IQ4_XS 1954.0 +- 3.9 / 116.5 +- 0.8 vs 1501.1 / 85.1;
+  Q3_K_L 1932.1 +- 3.9 / 103.4 +- 0.4 vs 329.5 / 80.6; IQ3_M 1952.0 +- 10.4 / 115.1 +- 2.4 vs
+  90.6 / 53.4; Qwen3-4B Q4_K_M 491.1 +- 0.6 / 34.0 +- 0.1 vs 385.5 / 27.8; Qwen3-4B Q8_0 483.4
+  +- 1.4 / 25.0 +- 0.06 vs 374.5 / 22.3. The grid carrier (IQ3_M) sits level with the k4 one:
+  the gather-fed panel is not the bill.
+- **The fat exe takes the same leg.** `daspkg release --fat x86-avx2 --root
+  utils/dasllama-server` - the x86-avx2 baseline with the class clones beside it - picks the
+  `x86-amx` clone on this box: `dasllama-bench.exe -m <gguf> -p 512 -n 16 -r 3 -t 16` on the
+  Llama-3.2-1B Q4_K_M reads 1915.1 +- 6.9 pp512 and 107.7 +- 0.6 tg16 tok/s.
+- **The walk's token block: 512 holds end to end; per kernel the best block splits by K
+  length.** The kernel race, one process, one script, the candidates interleaved, 9 rounds
+  after 2 dropped, the job queue at its default width, `matmul_kq_batch` on k4 through the
+  `x64-gen` backend with the walk's floor set to 1 for the race, median ms (cv %): at n=2048 d=2048 ntok=2048 a block of
+  128 3.635 (1.5), 256 3.187 (2.7), 512 3.532 (1.5), 1024 3.965 (0.7), 2048 3.877 (0.3); at
+  n=8192 d=2048 ntok=2048 128 18.515 (0.5), 256 17.005 (0.5), 512 15.658 (0.4) - 512 is that
+  shape's L2 clamp. End to end (`lcpp_bench.das` as the `-jit` script, `--for-debug-purposes`,
+  `DAS_TUNE_MANIFEST` on the mint's sidecar with `runtime.q8_token_block` set, the floor at 1,
+  `-p 512 -n 16 -r 3 -t 16`; one process a reading, two alternated passes, `direction-grade`),
+  pp512 tok/s at 128 / 256 / 512: Llama-3.2-1B Q4_K_M 1724.8 +- 2.3 and 1730.2 +- 6.6 / 1921.3
+  +- 2.7 and 1944.4 +- 2.4 / 1963.3 +- 4.2 and 1968.4 +- 4.0; Q8_0 1732.2 +- 1.7 and 1724.7 +-
+  6.8 / 1949.3 +- 4.0 and 1930.4 +- 3.9 / 1970.2 +- 9.6 and 1979.4 +- 4.7. The per-shape block
+  is `followup_general.md` row 190.
+- **What the bf16 leg allocates.** The bf16 activation plane, once per batch call:
+  2 x (ntok x n + 32) bytes - 8,388,672 at ntok 512, n 8192 (the 1B's FFN down), 9,961,536 at
+  n 9728 (the 4B's). The panel, one per dispatch chunk: 2 x (form x 16 x n + 32) bytes - 524,352
+  and 622,656 a lane at form 2, 8,389,632 and 9,962,496 over 16 lanes. The row-dequant panel's
+  row buffer, off the emitted panels only: 4 x n bytes, 32,768 and 38,912.

@@ -60,6 +60,7 @@ let DOT_VPDPBUSD = 2
 let DOT_VPDPBSSD = 3
 let DOT_SMMLA = 4
 let DOT_AMX = 5
+let DOT_AMX_BF16 = 6
 
 def private dot_kind(prim : string) : int {
     if (prim == "maddubs") return DOT_MADDUBS
@@ -67,15 +68,18 @@ def private dot_kind(prim : string) : int {
     if (prim == "vpdpbssd") return DOT_VPDPBSSD
     if (prim == "smmla") return DOT_SMMLA
     if (prim == "amx_int8") return DOT_AMX
+    if (prim == "amx_bf16") return DOT_AMX_BF16
     return DOT_SDOT
 }
+
+def private is_amx_kind(k : int) : bool => k == DOT_AMX || k == DOT_AMX_BF16
 
 // Under an amx stamp the VECTOR companions (gemv/mx4) ride the busd lattice over the same
 // grp16/kg4 plane: plain sign-trick for unbiased rows, the BIASED busd lattice for bias=128
 // rows. Everything downstream then treats the perm exactly like the matching vpdpbusd row.
 def private companion_perm(p : TilePerm) : TilePerm {
     var cp = p
-    if (cp.dotPrim == "amx_int8") { cp.dotPrim = "vpdpbusd" }
+    if (cp.dotPrim == "amx_int8" || cp.dotPrim == "amx_bf16") { cp.dotPrim = "vpdpbusd" }
     return cp
 }
 
@@ -135,6 +139,31 @@ def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
 // fall back together on every rail, or repack and kernel desync (the two-function-stamp
 // contract). Rails: knob validity, schema, per-ISA leg, geometry, vreg budget, dot availability.
 def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint:STYLE037,STYLE038 — the flat decline ladder IS the perm contract; splitting hides which leg refused
+    if (p.dotPrim == "amx_bf16") {
+        if ((p.kstep != 1)
+            || (p.nrsplit != 1 && p.nrsplit != 2)
+            || (p.gkstep != 1 && p.gkstep != 2 && p.gkstep != 4)
+            || (p.mr != 16) || (p.width != 512)
+            || (p.bias != 0) || (p.pipe != 0) || (p.latch != 0)
+            || (p.grid != "") || (p.pf != 0)
+            || (!g_target_is_x64) || (!g_target_x64_amx_bf16)
+            || (!g_target_x64_avx512vnni)
+            || (!g_target_os_linux)) return true
+        let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
+        if (rt.interleave != p.mr || !rt.f32_scales) return true
+        let mod = LLVMGetGlobalParent(gc.impl)
+        var noTypes : array<LLVMOpaqueType?>
+        for (nm in fixed_array("llvm.x86.tileloadd64", "llvm.x86.tdpbf16ps", "llvm.x86.tilestored64",
+                               "llvm.x86.tilezero", "llvm.x86.ldtilecfg",
+                               "llvm.x86.avx512.vpdpbusd.512", "llvm.x86.avx512.pshuf.b.512")) {
+            let id = LLVMLookupIntrinsicID(nm)
+            if (LLVMGetIntrinsicDeclaration(mod, id, noTypes) == null) return true
+        }
+        var v64i8 = LLVMVectorType(gc.jit.types.t_int8, 64u)
+        let absId = LLVMLookupIntrinsicID("llvm.abs")
+        var absTypes <- [v64i8]
+        return LLVMGetIntrinsicDeclaration(mod, absId, absTypes) == null
+    }
     if (p.dotPrim == "amx_int8") {
         // the TMUL leg: 2×2 TDPBSSD macro over the grp16/kg4 plane; kstep pinned 1 (Q8's per-block scale boundary); Linux-only (arch_prctl enable)
         if ((p.kstep != 1)
@@ -2625,10 +2654,11 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
 // (LLVM's codegen-prep materializes tmm allocation/ldtilecfg). A latch perm swaps in the
 // RAW immediate-tmm intrinsics instead — fixed register plan, no backend config ops.
 def private setup_amx_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm) : bool {
-    let raw = p.latch != 0
+    let bf16 = dot_kind(p.dotPrim) == DOT_AMX_BF16
+    let raw = p.latch != 0 || bf16
     te.builder = gc.jit.builder
     te.types = gc.jit.types
-    te.dotKind = DOT_AMX
+    te.dotKind = bf16 ? DOT_AMX_BF16 : DOT_AMX
     te.interleave = 16
     te.rv = 16
     te.rawTiles = raw
@@ -2642,7 +2672,7 @@ def private setup_amx_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm
     var ptrTy = te.types->LLVMVoidPtrType()
     if (raw) {
         te.tload_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.x86.tileloadd64"), noTypes)
-        te.tdp_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID(p.bias != 0 ? "llvm.x86.tdpbsud" : "llvm.x86.tdpbssd"), noTypes)
+        te.tdp_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID(bf16 ? "llvm.x86.tdpbf16ps" : (p.bias != 0 ? "llvm.x86.tdpbsud" : "llvm.x86.tdpbssd")), noTypes)
         te.tstore_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.x86.tilestored64"), noTypes)
         te.tzero_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.x86.tilezero"), noTypes)
         if (te.tload_decl == null || te.tdp_decl == null || te.tstore_decl == null || te.tzero_decl == null) {
@@ -3043,6 +3073,7 @@ def private tile_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
     if (dot_kind(p.dotPrim) == DOT_AMX) {
         return p.pipe != 0 ? emit_amx_tile_pipelined(gc, p, f16s) : emit_amx_tile(gc, p, f16s)
     }
+    if (dot_kind(p.dotPrim) == DOT_AMX_BF16) return emit_amx_bf16_tile(gc, p)
 
     var te = TileEmit(sgF16 = f16s)
     if (!setup_tile_emit(te, gc, p, false)) return false
@@ -3144,8 +3175,22 @@ def private tokstep_gen(var gc : LlvmCodeCtx) : bool {
     if (perm_declines(gc, p)) return false
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     LLVMPositionBuilderAtEnd(gc.jit.builder, entry)
-    let ts = dot_kind(p.dotPrim) == DOT_AMX ? 16 * p.nrsplit : 4
+    let dk = dot_kind(p.dotPrim)
+    let ts = dk == DOT_AMX_BF16 ? 32 : (dk == DOT_AMX ? 16 * p.nrsplit : 4)
     LLVMBuildRet(gc.jit.builder, gc.jit.types->ConstI32(uint64(ts)))
+    return true
+}
+
+// The tile-form companion: `() : int` — the operand form the stamped tile reads: 0 = the quant
+// planes and Q8_K activations; N > 0 = the bf16 TMUL leg over a dequantized bf16 panel of N
+// row groups and bf16 activations. The batch wrapper builds the panel and widens the activations off it.
+def private tileform_gen(var gc : LlvmCodeCtx) : bool {
+    if (!is_layout_signature(gc.fn)) return false
+    let p = parse_perm(gc)
+    if (perm_declines(gc, p)) return false
+    var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
+    LLVMPositionBuilderAtEnd(gc.jit.builder, entry)
+    LLVMBuildRet(gc.jit.builder, gc.jit.types->ConstI32(uint64(dot_kind(p.dotPrim) == DOT_AMX_BF16 ? p.nrsplit : 0)))
     return true
 }
 
@@ -3163,7 +3208,7 @@ def private witness_gen(var gc : LlvmCodeCtx) : bool {
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     let b = gc.jit.builder
     LLVMPositionBuilderAtEnd(b, entry)
-    if (dot_kind(p.dotPrim) == DOT_AMX) {
+    if (is_amx_kind(dot_kind(p.dotPrim))) {
         // TMUL executes only after the per-process XTILEDATA grant, so the arch_prctl syscall IS the witness
         let mod = LLVMGetGlobalParent(gc.impl)
         var scTy : LLVMOpaqueType?
@@ -3187,9 +3232,9 @@ def private is_cfg_signature(fn : Function const?) : bool {
     return empty(fn.arguments) && fn.result.baseType == Type.tVoid
 }
 
-// The tile-config companion: `() : void`. For latch=1 it LDTILECFGs the static 8-tile
-// palette (amx_tmm's plan) — those stamps carry no per-call config/TILERELEASE, so the
-// batch wrapper calls this once per dispatch chunk. Every other perm is a bare `ret void`.
+// The tile-config companion: `() : void`. A raw-tmm stamp - an int8 latch=1 perm, every bf16
+// perm - carries no per-call config/TILERELEASE, so the batch wrapper calls this once per
+// dispatch chunk to LDTILECFG the stamp's static palette. Every other perm is a bare `ret void`.
 def private cfg_gen(var gc : LlvmCodeCtx) : bool {
     if (!is_cfg_signature(gc.fn)) return false
     let p = parse_perm(gc)
@@ -3197,23 +3242,26 @@ def private cfg_gen(var gc : LlvmCodeCtx) : bool {
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     let b = gc.jit.builder
     LLVMPositionBuilderAtEnd(b, entry)
-    if (dot_kind(p.dotPrim) == DOT_AMX && p.latch != 0) {
+    let dk = dot_kind(p.dotPrim)
+    if ((dk == DOT_AMX && p.latch != 0) || dk == DOT_AMX_BF16) {
         let mod = LLVMGetGlobalParent(gc.impl)
-        var glob = LLVMGetNamedGlobal(mod, "dasllama.amx.tilecfg")
+        let allTiles16x64 = dk == DOT_AMX_BF16
+        let gname = allTiles16x64 ? "dasllama.amx.tilecfg.bf16" : "dasllama.amx.tilecfg"
+        var glob = LLVMGetNamedGlobal(mod, gname)
         if (glob == null) {
             // the 64-byte LDTILECFG image: palette 1, colsb u16 at [16+2i], rows u8 at [48+i]
             var cfgb : int[64]
             cfgb[0] = 1
             for (i in range(8)) {
-                cfgb[16 + 2 * i] = i == 4 || i == 5 ? 32 : 64
-                cfgb[48 + i] = i >= 6 ? 8 : 16
+                cfgb[16 + 2 * i] = !allTiles16x64 && (i == 4 || i == 5) ? 32 : 64
+                cfgb[48 + i] = !allTiles16x64 && i >= 6 ? 8 : 16
             }
             var elems : array<LLVMOpaqueValue?>
             elems |> reserve(64)
             for (i in range(64)) {
                 elems |> push(LLVMConstInt(gc.jit.types.t_int8, uint64(cfgb[i]), 0))
             }
-            glob = LLVMAddGlobal(mod, LLVMArrayType(gc.jit.types.t_int8, 64u), "dasllama.amx.tilecfg")
+            glob = LLVMAddGlobal(mod, LLVMArrayType(gc.jit.types.t_int8, 64u), gname)
             LLVMSetInitializer(glob, LLVMConstArray(gc.jit.types.t_int8, array_data_ptr(elems), 64u))
             LLVMSetGlobalConstant(glob, 1)
             LLVMSetLinkage(glob, LLVMLinkage.LLVMPrivateLinkage)
@@ -3572,6 +3620,536 @@ def private b32_gemv_gen_impl(var gc : LlvmCodeCtx; iq4nl32 : bool) : bool {
     return true
 }
 
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile")]
+def private emit_amx_bf16_tile(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint:STYLE038 — the tile body is one register-coupled loop; its phases share tile registers
+    var te : TileEmit
+    if (!setup_amx_emit(te, gc, p)) return false
+    let b = gc.jit.builder
+    let nt = p.nrsplit
+
+    var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
+    var head = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "head")
+    var body = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "body")
+    var after = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "after")
+
+    LLVMPositionBuilderAtEnd(b, entry)
+    var yp = LLVMGetParam(gc.impl, 0u)
+    var panel = LLVMGetParam(gc.impl, 1u)
+    var xa = LLVMGetParam(gc.impl, 3u)
+    var n = LLVMGetParam(gc.impl, 6u)
+    var d = LLVMGetParam(gc.impl, 7u)
+    var g = LLVMGetParam(gc.impl, 8u)
+    var t0 = LLVMGetParam(gc.impl, 9u)
+    var nks = LLVMBuildSDiv(b, n, te.types->ConstI64(32ul), "nks")
+    var xRowBytes = LLVMBuildMul(b, n, te.types->ConstI64(2ul), "n2")
+    var groupPanelBytes = LLVMBuildMul(b, n, te.types->ConstI64(32ul), "n32")
+    var yRowBytes = LLVMBuildMul(b, d, te.types->ConstI64(4ul), "d4")
+    var pbase : LLVMOpaqueValue? [2]
+    for (r in range(nt)) {
+        pbase[r] = r == 0 ? panel : LLVMBuildGEP2(b, te.types.t_int8, panel, groupPanelBytes, "panel{r}")
+    }
+    var xbase : LLVMOpaqueValue? [2]
+    for (ts in range(2)) {
+        var trow = ts == 0 ? t0 : LLVMBuildAdd(b, t0, te.types->ConstI64(16ul), "")
+        xbase[ts] = LLVMBuildGEP2(b, te.types.t_int8, xa, LLVMBuildMul(b, trow, xRowBytes, ""), "xbase{ts}")
+    }
+    for (ts in range(2)) {
+        for (r in range(nt)) {
+            var zargs <- [amx_tmm(te, ts * nt + r)]
+            LLVMBuildCall2(b, te.tzero_ty, te.tzero_decl, zargs, "")
+        }
+    }
+    LLVMBuildBr(b, head)
+
+    LLVMPositionBuilderAtEnd(b, head)
+    var ksPhi = LLVMBuildPhi(b, te.types.t_int64, "ks")
+    var entryVals <- [LLVMConstNull(te.types.t_int64)]
+    var entryBlocks <- [entry]
+    LLVMAddIncoming(ksPhi, entryVals, entryBlocks)
+    var more = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, ksPhi, nks, "more")
+    LLVMBuildCondBr(b, more, body, after)
+
+    LLVMPositionBuilderAtEnd(b, body)
+    var poff = LLVMBuildMul(b, ksPhi, te.types->ConstI64(1024ul), "poff")
+    var xoff = LLVMBuildMul(b, ksPhi, te.types->ConstI64(64ul), "xoff")
+    for (ts in range(2)) {
+        var xp2 = LLVMBuildGEP2(b, te.types.t_int8, xbase[ts], xoff, "xa{ts}")
+        amx_load_a(te, ts, xp2, xRowBytes, "")
+    }
+    for (r in range(nt)) {
+        var pp2 = LLVMBuildGEP2(b, te.types.t_int8, pbase[r], poff, "pb{r}")
+        amx_load_b(te, r, pp2, "")
+    }
+    for (ts in range(2)) {
+        for (r in range(nt)) {
+            var dargs <- [amx_tmm(te, ts * nt + r), amx_tmm(te, 4 + ts), amx_tmm(te, 6 + r)]
+            LLVMBuildCall2(b, te.tdp_ty, te.tdp_decl, dargs, "")
+        }
+    }
+    var ksNext = LLVMBuildAdd(b, ksPhi, te.types->ConstI64(1ul), "ksnext")
+    LLVMBuildBr(b, head)
+    var bodyVals <- [ksNext]
+    var bodyBlocks <- [body]
+    LLVMAddIncoming(ksPhi, bodyVals, bodyBlocks)
+
+    LLVMPositionBuilderAtEnd(b, after)
+    var col = LLVMBuildMul(b, g, te.types->ConstI64(16ul), "col")
+    for (ts in range(2)) {
+        var trow = ts == 0 ? t0 : LLVMBuildAdd(b, t0, te.types->ConstI64(16ul), "")
+        var yrow = LLVMBuildGEP2(b, te.types.t_float, yp, LLVMBuildAdd(b, LLVMBuildMul(b, trow, d, ""), col, ""), "yrow{ts}")
+        for (r in range(nt)) {
+            var ycol = r == 0 ? yrow : LLVMBuildGEP2(b, te.types.t_float, yrow, te.types->ConstI64(uint64(r * 16)), "")
+            var sargs <- [amx_tmm(te, ts * nt + r), ycol, yRowBytes]
+            LLVMBuildCall2(b, te.tstore_ty, te.tstore_decl, sargs, "")
+        }
+    }
+    LLVMBuildRetVoid(b)
+    return true
+}
+
+def private is_panel_signature(fn : Function const?) : bool {
+    return length(fn.arguments) == 7 && fn.result.baseType == Type.tVoid
+}
+
+def private panel_pair_splat(builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; var v : LLVMOpaqueValue?; half : int; name : string) : LLVMOpaqueValue? {
+    var mask : array<int>
+    mask |> reserve(16)
+    for (r in range(8)) {
+        mask |> push(half * 8 + r)
+        mask |> push(half * 8 + r)
+    }
+    return LLVMBuildShuffleVector(builder, types, v, v, mask, name)
+}
+
+def private panel_emit_vec(te : TileEmit; var q8, k5FifthBit, s, o, p : LLVMOpaqueValue?; signed : bool; ioff : int; var v16bf, v16i16 : LLVMOpaqueType?; name : string) {
+    let b = te.builder
+    var qi = signed ? LLVMBuildSExt(b, q8, te.vni32, "") : LLVMBuildZExt(b, q8, te.vni32, "")
+    if (k5FifthBit != null) {
+        qi = LLVMBuildOr(b, qi, k5FifthBit, "")
+    }
+    if (ioff != 0) {
+        qi = LLVMBuildSub(b, qi, splat_i32n(te, ioff), "")
+    }
+    var q = LLVMBuildSIToFP(b, qi, te.vnf32, name)
+    var v = LLVMBuildFMul(b, q, s, "")
+    if (o != null) {
+        v = LLVMBuildFSub(b, v, o, name)
+    }
+    var h = LLVMBuildBitCast(b, LLVMBuildFPTrunc(b, v, v16bf, ""), v16i16, name)
+    LLVMBuildStoreAligned(b, h, p, 2u)
+}
+
+def private panel_gep8(te : TileEmit; var base : LLVMOpaqueValue?; off : int) : LLVMOpaqueValue? => LLVMBuildGEP2(te.builder, te.types.t_int8, base, te.types->ConstI64(uint64(off)), "")
+
+def private panel_unit(var te : TileEmit; var base : LLVMOpaqueValue?; off : int; name : string) : LLVMOpaqueValue? => load_vec(te, te.vwi8, base, te.types->ConstI64(uint64(off)), name)
+
+def private splat_i16x32(te : TileEmit; v : int) : LLVMOpaqueValue? {
+    var e : array<LLVMOpaqueValue?>
+    e |> reserve(32)
+    for (_i in range(32)) {
+        e |> push(LLVMConstInt(te.types.t_int16, uint64(v), 0))
+    }
+    return LLVMConstVector(array_data_ptr(e), 32u)
+}
+
+def private panel_f16_row(var te : TileEmit; var base : LLVMOpaqueValue?; off : int; name : string) : LLVMOpaqueValue? => load_f16_vec_at(te, base, te.types->ConstI64(uint64(off)), name)
+
+def private panel_i8_row(te : TileEmit; var p : LLVMOpaqueValue?; signed : bool; name : string) : LLVMOpaqueValue? {
+    let b = te.builder
+    var v16i8 = LLVMVectorType(te.types.t_int8, 16u)
+    var raw = LLVMBuildLoad2Aligned(b, v16i8, p, 1u, "")
+    var wide = signed ? LLVMBuildSExt(b, raw, te.vni32, "") : LLVMBuildZExt(b, raw, te.vni32, "")
+    return LLVMBuildSIToFP(b, wide, te.vnf32, name)
+}
+
+def private panel_is_grid(fmt : int) : bool => fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24 || fmt == 25
+def private panel_is_lut(fmt : int) : bool => fmt == 44 || fmt == 45 || fmt == 35
+def private panel_is_nibble(fmt : int) : bool => fmt == 4 || fmt == 5 || fmt == 6 || fmt == 40 || panel_is_lut(fmt)
+def private panel_supported(fmt : int) : bool => panel_is_nibble(fmt) || panel_is_grid(fmt) || fmt == 3 || fmt == 2
+
+//! the integer offset a format's code carries (w = s * (q - ioff)); the k4/k5 and k2 mins are a separate o term
+def private panel_ioff(fmt : int) : int => fmt == 6 ? 32 : (fmt == 40 ? 8 : (fmt == 3 ? 4 : 0))
+
+//! s[h], o[h]: block `blk`'s per-row scale and min for 16-weight half h; o[h] null = no min term
+def private panel_scales(var te : TileEmit; fmt : int; var sb : LLVMOpaqueValue?; blk : int; var s, o : LLVMOpaqueValue? [2]) {
+    let b = te.builder
+    if (fmt == 4 || fmt == 5) {
+        var dd = panel_f16_row(te, sb, 0, "dd")
+        var dm = panel_f16_row(te, sb, 32, "dm")
+        s[0] = LLVMBuildFMul(b, dd, panel_i8_row(te, panel_gep8(te, sb, 64 + blk * 16), false, "sc"), "s")
+        s[1] = s[0]
+        o[0] = LLVMBuildFMul(b, dm, panel_i8_row(te, panel_gep8(te, sb, 192 + blk * 16), false, "mn"), "o")
+        o[1] = o[0]
+    } elif (fmt == 6 || fmt == 3) {
+        var dd = panel_f16_row(te, sb, 256, "dd")
+        for (h in range(2)) {
+            s[h] = LLVMBuildFMul(b, dd, panel_i8_row(te, panel_gep8(te, sb, blk * 32 + h * 16), true, "sc"), "s{h}")
+            o[h] = null
+        }
+    } elif (fmt == 40 || fmt == 45) {
+        var dd = panel_f16_row(te, sb, blk * 32, "dd")
+        s[0] = dd
+        s[1] = dd
+        o[0] = null
+        o[1] = null
+    } elif (fmt == 2) {
+        var dd = panel_f16_row(te, sb, 256, "dd")
+        var dm = panel_f16_row(te, sb, 288, "dm")
+        var v16i8 = LLVMVectorType(te.types.t_int8, 16u)
+        for (h in range(2)) {
+            var sc = LLVMBuildZExt(b, LLVMBuildLoad2Aligned(b, v16i8, panel_gep8(te, sb, (2 * blk + h) * 16), 1u, ""), te.vni32, "")
+            s[h] = LLVMBuildFMul(b, dd, LLVMBuildSIToFP(b, LLVMBuildAnd(b, sc, splat_i32n(te, 15), ""), te.vnf32, ""), "s{h}")
+            o[h] = LLVMBuildFMul(b, dm, LLVMBuildSIToFP(b, LLVMBuildLShr(b, sc, splat_i32n(te, 4), ""), te.vnf32, ""), "o{h}")
+        }
+    } elif (fmt == 23 || fmt == 24) {
+        var dd = panel_f16_row(te, sb, 0, "dd")
+        for (h in range(2)) {
+            s[h] = LLVMBuildFMul(b, dd, panel_i8_row(te, panel_gep8(te, sb, 64 + (2 * blk + h) * 16), false, "sc"), "s{h}")
+            o[h] = null
+        }
+    } else {
+        var dd = panel_f16_row(te, sb, 0, "dd")
+        s[0] = LLVMBuildFMul(b, dd, panel_i8_row(te, panel_gep8(te, sb, 64 + blk * 16), fmt != 25, "sc"), "s")
+        s[1] = s[0]
+        o[0] = null
+        o[1] = null
+    }
+}
+
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile")]
+def private panel_quads(var te : TileEmit; fmt : int; var qb, wbP : LLVMOpaqueValue?; blk : int; var quads : LLVMOpaqueValue? [8]) {
+    let b = te.builder
+    if (panel_is_grid(fmt)) {
+        var col = kq_sign_bytes(te, wbP, blk, 0, "sg{blk}")
+        for (q in range(8)) {
+            var mag = panel_unit(te, te.gridPanel, (q < 4 ? 0 : 2048) + (blk * 4 + q % 4) * 64, "mag")
+            quads[q] = apply_sign_col(te, mag, col, q / 2, q % 2, "q{q}")
+        }
+        return
+    }
+    if (fmt == 3) {
+        var hunit = panel_unit(te, qb, 1024 + blk * 64, "hb")
+        for (l4 in range(8)) {
+            var unit = panel_unit(te, qb, (blk * 2 + l4 / 4) * 64, "unit")
+            var q2 = LLVMBuildAnd(b, l4 % 4 == 0 ? unit : LLVMBuildLShr(b, unit, splat_i8w(te, 2 * (l4 % 4)), ""), splat_i8w(te, 3), "")
+            var hb = LLVMBuildShl(b, LLVMBuildAnd(b, l4 == 0 ? hunit : LLVMBuildLShr(b, hunit, splat_i8w(te, l4), ""), splat_i8w(te, 1), ""), splat_i8w(te, 2), "")
+            quads[l4] = LLVMBuildOr(b, q2, hb, "q{l4}")
+        }
+        return
+    }
+    if (fmt == 2) {
+        for (h in range(2)) {
+            let g = 2 * blk + h
+            let base = (g / 8) * 8 + (g % 2) * 4
+            let sh = ((g % 8) / 2) * 2
+            for (c4 in range(4)) {
+                var unit = panel_unit(te, qb, (base + c4) * 64, "unit")
+                quads[h * 4 + c4] = LLVMBuildAnd(b, sh == 0 ? unit : LLVMBuildLShr(b, unit, splat_i8w(te, sh), ""), splat_i8w(te, 3), "q{h * 4 + c4}")
+            }
+        }
+        return
+    }
+    var h0 : LLVMOpaqueValue?
+    var h1 : LLVMOpaqueValue?
+    if (fmt == 6) {
+        h0 = panel_unit(te, qb, 2048 + blk * 128, "h0")
+        h1 = panel_unit(te, qb, 2048 + blk * 128 + 64, "h1")
+    }
+    var v32i16 = LLVMVectorType(te.types.t_int16, 32u)
+    for (j in range(4)) {
+        var unit = panel_unit(te, qb, (blk * 4 + j) * 64, "unit")
+        var lo = LLVMBuildAnd(b, unit, splat_i8w(te, 15), "lo")
+        var hi = LLVMBuildLShr(b, unit, splat_i8w(te, 4), "hi")
+        if (fmt == 6) {   // ((h >> 2j) & 3) << 4 per byte in 16-bit lanes: the 0x0303 / 0x3030 masks keep each byte to its own bits
+            var vsj = splat_i16x32(te, 2 * j)
+            var h0w = LLVMBuildAnd(b, LLVMBuildLShr(b, LLVMBuildBitCast(b, h0, v32i16, ""), vsj, ""), splat_i16x32(te, 771), "")
+            var h1w = LLVMBuildAnd(b, LLVMBuildLShr(b, LLVMBuildBitCast(b, h1, v32i16, ""), vsj, ""), splat_i16x32(te, 771), "")
+            var hb0 = LLVMBuildBitCast(b, LLVMBuildAnd(b, LLVMBuildShl(b, h0w, splat_i16x32(te, 4), ""), splat_i16x32(te, 12336), ""), te.vwi8, "hb0")
+            var hb1 = LLVMBuildBitCast(b, LLVMBuildAnd(b, LLVMBuildShl(b, h1w, splat_i16x32(te, 4), ""), splat_i16x32(te, 12336), ""), te.vwi8, "hb1")
+            lo = LLVMBuildOr(b, lo, hb0, "lo6")
+            hi = LLVMBuildOr(b, hi, hb1, "hi6")
+        }
+        if (panel_is_lut(fmt)) {
+            var loArgs <- [te.lut, lo]
+            var hiArgs <- [te.lut, hi]
+            lo = LLVMBuildCall2(b, te.shufb_ty, te.shufb_decl, loArgs, "lol")
+            hi = LLVMBuildCall2(b, te.shufb_ty, te.shufb_decl, hiArgs, "hil")
+        }
+        quads[j] = lo
+        quads[4 + j] = hi
+    }
+}
+
+def private panel_emit_block(var te : TileEmit; var quads : LLVMOpaqueValue? [8]; var s, o : LLVMOpaqueValue? [2]; var kb : LLVMOpaqueValue?; signed : bool; ioff : int; var v16bf : LLVMOpaqueType?; var k5qb : LLVMOpaqueValue?; blk : int) {
+    let b = te.builder
+    var sh : LLVMOpaqueValue? [4]
+    var oh : LLVMOpaqueValue? [4]
+    for (blockHalf in range(2)) {
+        for (rowHalf in range(2)) {
+            sh[blockHalf * 2 + rowHalf] = panel_pair_splat(b, te.types, s[blockHalf], rowHalf, "s{blockHalf}{rowHalf}")
+            oh[blockHalf * 2 + rowHalf] = o[blockHalf] != null ? panel_pair_splat(b, te.types, o[blockHalf], rowHalf, "o{blockHalf}{rowHalf}") : null
+        }
+    }
+    let loMask <- [for (i in range(16)); i]
+    let hiMask <- [for (i in range(16)); 16 + i]
+    for (q in range(8)) {
+        for (tp in range(2)) {
+            var selMask : array<int>
+            selMask |> reserve(32)
+            for (r in range(16)) {
+                selMask |> push(4 * r + 2 * tp)
+                selMask |> push(4 * r + 2 * tp + 1)
+            }
+            var sel = LLVMBuildShuffleVector(b, te.types, quads[q], quads[q], selMask, "sel")
+            var pp = LLVMBuildGEP2(b, te.types.t_int16, kb, te.types->ConstI64(uint64((2 * q + tp) * 32)), "pp")
+            for (rowHalf in range(2)) {
+                var v16 = LLVMBuildShuffleVector(b, te.types, sel, sel, rowHalf == 0 ? loMask : hiMask, "")
+                var k5FifthBit = k5qb != null ? panel_k5_extra(te, k5qb, blk, q, tp, rowHalf) : null
+                var p2 = rowHalf == 0 ? pp : LLVMBuildGEP2(b, te.types.t_int16, pp, te.types->ConstI64(16ul), "")
+                panel_emit_vec(te, v16, k5FifthBit, sh[(q / 4) * 2 + rowHalf], oh[(q / 4) * 2 + rowHalf], p2, signed, ioff, v16bf, te.vni16, "w")
+            }
+        }
+    }
+}
+
+def private panel_k5_extra(var te : TileEmit; var qb : LLVMOpaqueValue?; blk, q, tp, half : int) : LLVMOpaqueValue? {
+    let b = te.builder
+    var v16i8 = LLVMVectorType(te.types.t_int8, 16u)
+    var hb5 = LLVMBuildLoad2Aligned(b, v16i8, panel_gep8(te, qb, 2048 + (blk * 4 + q % 4) * 16), 1u, "hb5")
+    var rowMask : array<int>
+    rowMask |> reserve(16)
+    var sh : array<LLVMOpaqueValue?>
+    sh |> reserve(16)
+    for (r in range(8)) {
+        for (par in range(2)) {
+            rowMask |> push(half * 8 + r)
+            sh |> push(LLVMConstInt(te.types.t_int32, uint64((q < 4 ? 0 : 4) + 2 * tp + par), 0))
+        }
+    }
+    var hbi = LLVMBuildZExt(b, LLVMBuildShuffleVector(b, te.types, hb5, hb5, rowMask, ""), te.vni32, "")
+    return LLVMBuildShl(b, LLVMBuildAnd(b, LLVMBuildLShr(b, hbi, LLVMConstVector(array_data_ptr(sh), 16u), ""), splat_i32n(te, 1), ""), splat_i32n(te, 4), "x5")
+}
+
+def private panel_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool { // nolint:STYLE038 — the panel body is one group x superblock loop nest around the format arms
+    if (!is_panel_signature(gc.fn)) return false
+    let p = parse_perm(gc)
+    if (perm_declines(gc, p)) return false
+    var te = TileEmit(builder = gc.jit.builder, types = gc.jit.types, rv = 16)
+    let b = gc.jit.builder
+    var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
+    LLVMPositionBuilderAtEnd(b, entry)
+    if (dot_kind(p.dotPrim) != DOT_AMX_BF16 || p.mr != 16 || !panel_supported(fmt)) {
+        LLVMBuildRetVoid(b)
+        return true
+    }
+    te.vni32 = LLVMVectorType(te.types.t_int32, 16u)
+    te.vnf32 = LLVMVectorType(te.types.t_float, 16u)
+    te.vni16 = LLVMVectorType(te.types.t_int16, 16u)
+    te.vnf16 = LLVMVectorType(LLVMHalfTypeInContext(gc.jit.ctx), 16u)
+    te.vwi8 = LLVMVectorType(te.types.t_int8, 64u)
+    te.width = 512
+    te.interleave = 16
+    te.kq = fmt
+    te.dotKind = DOT_AMX_BF16
+    te.gfn = gc.impl
+    te.gctx = gc.jit.ctx
+    var v16bf = LLVMVectorType(LLVMBFloatTypeInContext(gc.jit.ctx), 16u)
+    let mod = LLVMGetGlobalParent(gc.impl)
+    if (panel_is_grid(fmt)) {
+        grid_emit_globals(te, fmt, mod)
+        te.gridPanel = LLVMBuildAlloca(b, LLVMArrayType(te.types.t_int8, 4096u), "grid.panel")
+        LLVMSetAlignment(te.gridPanel, 64u)
+    }
+    if (panel_is_lut(fmt)) {
+        var noTypes : array<LLVMOpaqueType?>
+        te.shufb_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.x86.avx512.pshuf.b.512"), noTypes)
+        if (te.shufb_decl == null) return false
+        var b2Types <- [te.vwi8, te.vwi8]
+        te.shufb_ty = LLVMFunctionType(te.vwi8, b2Types)
+        let lutv = fmt == 35 ? iq3s4_lut() : iq4nl_lut()
+        var lutElems : array<LLVMOpaqueValue?>
+        lutElems |> reserve(64)
+        for (_lane in range(4)) {
+            for (i in range(16)) {
+                lutElems |> push(LLVMConstInt(te.types.t_int8, uint64(int(lutv[i]) & 255), 0))
+            }
+        }
+        te.lut = LLVMConstVector(array_data_ptr(lutElems), 64u)
+    }
+    let signed = panel_is_grid(fmt) || panel_is_lut(fmt)
+    let ioff = panel_ioff(fmt)
+    let qsb = kq_qsb(fmt)
+    let ssb = kq_ssb(fmt)
+    var kqg = LLVMGetParam(gc.impl, 0u)
+    var ksg = LLVMGetParam(gc.impl, 1u)
+    var mr = LLVMGetParam(gc.impl, 2u)
+    var nsb = LLVMGetParam(gc.impl, 3u)
+    var n = LLVMGetParam(gc.impl, 4u)
+    var ngr = LLVMGetParam(gc.impl, 5u)
+    var dst = LLVMGetParam(gc.impl, 6u)
+    var gstride_q = LLVMBuildMul(b, LLVMBuildMul(b, mr, nsb, ""), te.types->ConstI64(uint64(qsb)), "gq")
+    var gstride_s = LLVMBuildMul(b, LLVMBuildMul(b, mr, nsb, ""), te.types->ConstI64(uint64(ssb)), "gs")
+    var gstride_p = LLVMBuildMul(b, n, te.types->ConstI64(16ul), "gp")
+    var ghead = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "ghead")
+    var gbody = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "gbody")
+    var shead = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "shead")
+    var sbody = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "sbody")
+    var gnext = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "gnext")
+    var gexit = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "gexit")
+    LLVMBuildBr(b, ghead)
+
+    LLVMPositionBuilderAtEnd(b, ghead)
+    var giPhi = LLVMBuildPhi(b, te.types.t_int64, "gi")
+    var gEntryVals <- [LLVMConstNull(te.types.t_int64)]
+    var gEntryBlocks <- [entry]
+    LLVMAddIncoming(giPhi, gEntryVals, gEntryBlocks)
+    LLVMBuildCondBr(b, LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, giPhi, ngr, ""), gbody, gexit)
+
+    LLVMPositionBuilderAtEnd(b, gbody)
+    var kqb = LLVMBuildGEP2(b, te.types.t_int8, kqg, LLVMBuildMul(b, giPhi, gstride_q, ""), "kqb")
+    var ksb = LLVMBuildGEP2(b, te.types.t_int8, ksg, LLVMBuildMul(b, giPhi, gstride_s, ""), "ksb")
+    var pg = LLVMBuildGEP2(b, te.types.t_int16, dst, LLVMBuildMul(b, giPhi, gstride_p, ""), "pg")
+    LLVMBuildBr(b, shead)
+
+    LLVMPositionBuilderAtEnd(b, shead)
+    var sbPhi = LLVMBuildPhi(b, te.types.t_int64, "sbi")
+    var sEntryVals <- [LLVMConstNull(te.types.t_int64)]
+    var sEntryBlocks <- [gbody]
+    LLVMAddIncoming(sbPhi, sEntryVals, sEntryBlocks)
+    LLVMBuildCondBr(b, LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, sbPhi, nsb, ""), sbody, gnext)
+
+    LLVMPositionBuilderAtEnd(b, sbody)
+    var qb = LLVMBuildGEP2(b, te.types.t_int8, kqb, LLVMBuildMul(b, sbPhi, te.types->ConstI64(uint64(qsb * 16l)), ""), "qb")
+    var sb = LLVMBuildGEP2(b, te.types.t_int8, ksb, LLVMBuildMul(b, sbPhi, te.types->ConstI64(uint64(ssb * 16l)), ""), "sb")
+    var kbase = LLVMBuildGEP2(b, te.types.t_int16, pg, LLVMBuildMul(b, sbPhi, te.types->ConstI64(4096ul), ""), "kbase")
+    var wbP : LLVMOpaqueValue?
+    if (panel_is_grid(fmt)) {   // the gather's loop leaves the builder in its own exit block: the back edge below reads the insert block
+        te.wg = kqb
+        wbP = LLVMBuildMul(b, sbPhi, te.types->ConstI64(16ul * uint64(kq_gather_stride(fmt))), "kq.wb")
+        emit_kq_gather(te, sbPhi)
+    }
+    for (blk in range(8)) {
+        var s : LLVMOpaqueValue? [2]
+        var o : LLVMOpaqueValue? [2]
+        panel_scales(te, fmt, sb, blk, s, o)
+        var quads : LLVMOpaqueValue? [8]
+        panel_quads(te, fmt, qb, wbP, blk, quads)
+        var kb = LLVMBuildGEP2(b, te.types.t_int16, kbase, te.types->ConstI64(uint64(blk * 512)), "kb")
+        panel_emit_block(te, quads, s, o, kb, signed, ioff, v16bf, fmt == 5 ? qb : null, blk)
+    }
+    var sbNext = LLVMBuildAdd(b, sbPhi, te.types->ConstI64(1ul), "")
+    var sTail = LLVMGetInsertBlock(b)
+    LLVMBuildBr(b, shead)
+    var sBodyVals <- [sbNext]
+    var sBodyBlocks <- [sTail]
+    LLVMAddIncoming(sbPhi, sBodyVals, sBodyBlocks)
+
+    LLVMPositionBuilderAtEnd(b, gnext)
+    var giNext = LLVMBuildAdd(b, giPhi, te.types->ConstI64(1ul), "")
+    LLVMBuildBr(b, ghead)
+    var gNextVals <- [giNext]
+    var gNextBlocks <- [gnext]
+    LLVMAddIncoming(giPhi, gNextVals, gNextBlocks)
+
+    LLVMPositionBuilderAtEnd(b, gexit)
+    LLVMBuildRetVoid(b)
+    return true
+}
+
+def private q8_panel_gen(var gc : LlvmCodeCtx) : bool => q8_panel_gen_impl(gc, false)
+def private q8_panel_s16_gen(var gc : LlvmCodeCtx) : bool => q8_panel_gen_impl(gc, true)
+
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile")]
+def private q8_panel_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool { // nolint:STYLE038 — one group x block loop nest around the shared block emitter
+    if (!is_panel_signature(gc.fn)) return false
+    let p = parse_perm(gc)
+    if (perm_declines(gc, p)) return false
+    var te = TileEmit(builder = gc.jit.builder, types = gc.jit.types, rv = 16)
+    let b = gc.jit.builder
+    var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
+    LLVMPositionBuilderAtEnd(b, entry)
+    if (dot_kind(p.dotPrim) != DOT_AMX_BF16 || p.mr != 16) {
+        LLVMBuildRetVoid(b)
+        return true
+    }
+    te.vni32 = LLVMVectorType(te.types.t_int32, 16u)
+    te.vnf32 = LLVMVectorType(te.types.t_float, 16u)
+    te.vni16 = LLVMVectorType(te.types.t_int16, 16u)
+    te.vnf16 = LLVMVectorType(LLVMHalfTypeInContext(gc.jit.ctx), 16u)
+    te.vwi8 = LLVMVectorType(te.types.t_int8, 64u)
+    var v16bf = LLVMVectorType(LLVMBFloatTypeInContext(gc.jit.ctx), 16u)
+    var wg = LLVMGetParam(gc.impl, 0u)
+    var sg = LLVMGetParam(gc.impl, 1u)
+    var mr = LLVMGetParam(gc.impl, 2u)
+    var nb = LLVMGetParam(gc.impl, 3u)
+    var n = LLVMGetParam(gc.impl, 4u)
+    var ngr = LLVMGetParam(gc.impl, 5u)
+    var dst = LLVMGetParam(gc.impl, 6u)
+    let sbytes = f16s ? 2 : 4
+    var gstride_w = LLVMBuildMul(b, mr, n, "gw")
+    var gstride_s = LLVMBuildMul(b, LLVMBuildMul(b, mr, nb, ""), te.types->ConstI64(uint64(sbytes)), "gs")
+    var gstride_p = LLVMBuildMul(b, n, te.types->ConstI64(16ul), "gp")
+    var ghead = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "ghead")
+    var gbody = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "gbody")
+    var bhead = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "bhead")
+    var bbody = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "bbody")
+    var gnext = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "gnext")
+    var gexit = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "gexit")
+    LLVMBuildBr(b, ghead)
+
+    LLVMPositionBuilderAtEnd(b, ghead)
+    var giPhi = LLVMBuildPhi(b, te.types.t_int64, "gi")
+    var gEntryVals <- [LLVMConstNull(te.types.t_int64)]
+    var gEntryBlocks <- [entry]
+    LLVMAddIncoming(giPhi, gEntryVals, gEntryBlocks)
+    LLVMBuildCondBr(b, LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, giPhi, ngr, ""), gbody, gexit)
+
+    LLVMPositionBuilderAtEnd(b, gbody)
+    var wgb = LLVMBuildGEP2(b, te.types.t_int8, wg, LLVMBuildMul(b, giPhi, gstride_w, ""), "wgb")
+    var sgb = LLVMBuildGEP2(b, te.types.t_int8, sg, LLVMBuildMul(b, giPhi, gstride_s, ""), "sgb")
+    var pg = LLVMBuildGEP2(b, te.types.t_int16, dst, LLVMBuildMul(b, giPhi, gstride_p, ""), "pg")
+    LLVMBuildBr(b, bhead)
+
+    LLVMPositionBuilderAtEnd(b, bhead)
+    var bPhi = LLVMBuildPhi(b, te.types.t_int64, "bi")
+    var bEntryVals <- [LLVMConstNull(te.types.t_int64)]
+    var bEntryBlocks <- [gbody]
+    LLVMAddIncoming(bPhi, bEntryVals, bEntryBlocks)
+    LLVMBuildCondBr(b, LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, bPhi, nb, ""), bbody, gnext)
+
+    LLVMPositionBuilderAtEnd(b, bbody)
+    var qb = LLVMBuildGEP2(b, te.types.t_int8, wgb, LLVMBuildMul(b, bPhi, te.types->ConstI64(512ul), ""), "qb")
+    var sb = LLVMBuildGEP2(b, te.types.t_int8, sgb, LLVMBuildMul(b, bPhi, te.types->ConstI64(uint64(16 * sbytes)), ""), "sb")
+    var kb = LLVMBuildGEP2(b, te.types.t_int16, pg, LLVMBuildMul(b, bPhi, te.types->ConstI64(512ul), ""), "kb")
+    var s : LLVMOpaqueValue? [2]
+    var o : LLVMOpaqueValue? [2]
+    s[0] = f16s ? panel_f16_row(te, sb, 0, "s") : LLVMBuildLoad2Aligned(b, te.vnf32, sb, 4u, "s")
+    s[1] = s[0]
+    o[0] = null
+    o[1] = null
+    var quads : LLVMOpaqueValue? [8]
+    for (q in range(8)) {
+        quads[q] = panel_unit(te, qb, q * 64, "q{q}")
+    }
+    panel_emit_block(te, quads, s, o, kb, true, 0, v16bf, null, 0)
+    var bNext = LLVMBuildAdd(b, bPhi, te.types->ConstI64(1ul), "")
+    LLVMBuildBr(b, bhead)
+    var bBodyVals <- [bNext]
+    var bBodyBlocks <- [bbody]
+    LLVMAddIncoming(bPhi, bBodyVals, bBodyBlocks)
+
+    LLVMPositionBuilderAtEnd(b, gnext)
+    var giNext = LLVMBuildAdd(b, giPhi, te.types->ConstI64(1ul), "")
+    LLVMBuildBr(b, ghead)
+    var gNextVals <- [giNext]
+    var gNextBlocks <- [gnext]
+    LLVMAddIncoming(giPhi, gNextVals, gNextBlocks)
+
+    LLVMPositionBuilderAtEnd(b, gexit)
+    LLVMBuildRetVoid(b)
+    return true
+}
+
 // The K-quant 4-token TILE (weight-stationary prefill): same 10-arg contract as the q8 tile;
 // emit_block_kqv2 unpacks each weight vector ONCE and dots it against every token, bit-exact
 // vs 4 per-token GEMVs. Declines via the SAME perm_declines — no new rails.
@@ -3579,6 +4157,9 @@ def private kq_tile_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     if (!is_tile_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
     if (perm_declines(gc, p0)) return false
+    if (dot_kind(p0.dotPrim) == DOT_AMX_BF16) {
+        return emit_amx_bf16_tile(gc, p0)
+    }
     let p = companion_perm(p0)
 
     var te = TileEmit(kq = fmt, kqBytes = fmt == 5 || fmt == 6)   // only the k5/k6 tiles get the byte-expanded panel
@@ -3777,4 +4358,38 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::iq2xxs_gemv", @@iq2xxs_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq2xxs_tile", @@iq2xxs_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_witness", @@witness_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::kq_amx_cfg", @@cfg_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::kq_witness", @@witness_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::kq_tileform", @@tileform_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k4_panel", @@k4_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k5_panel", @@k5_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k6_panel", @@k6_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q40_panel", @@q40_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq4xs_panel", @@iq4xs_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq3s4_panel", @@iq3s4_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k3_panel", @@k3_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq3s_panel", @@iq3s_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq3xxs_panel", @@iq3xxs_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq4nl_panel", @@iq4nl_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k2_panel", @@k2_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2s_panel", @@iq2s_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2xs_panel", @@iq2xs_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2xxs_panel", @@iq2xxs_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q8_panel", @@q8_panel_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q8_panel_s16", @@q8_panel_s16_gen)
 }
+
+def private k4_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 4)
+def private k5_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 5)
+def private k6_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 6)
+def private q40_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 40)
+def private iq4xs_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 44)
+def private iq3s4_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 35)
+def private k3_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 3)
+def private iq3s_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 33)
+def private iq3xxs_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 34)
+def private iq4nl_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 45)
+def private k2_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 2)
+def private iq2s_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 23)
+def private iq2xs_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 24)
+def private iq2xxs_panel_gen(var gc : LlvmCodeCtx) : bool => panel_gen_impl(gc, 25)

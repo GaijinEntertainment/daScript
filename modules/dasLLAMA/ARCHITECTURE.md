@@ -129,8 +129,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_CPU_KERNELS.md` - the sub-block-packed k3/k6 planes, the grid formats' panel and
   row-group decodes, the VBMI symbol lattice, the tier that selects on the target rather than the
   host, the score dot classic prefill shares with decode, the module-scope visibility a lifted
-  worker lambda needs of its kernel, the two interleaves a grp<mr> repack is made of, and the JIT
-  partition a hot leaf instantiates in.
+  worker lambda needs of its kernel, the two interleaves a grp<mr> repack is made of, the bf16
+  tile that keeps its sum in the matrix unit, and the JIT partition a hot leaf instantiates in.
 - `ARCHITECTURE_TTS.md` - the TTS block home's two layouts, tap stacking, the padded concat
   width, the served carrier on the image rail, the sine source's operation order, the heteronym
   context, the rig's scoring, and the two-tier phoneme pack.

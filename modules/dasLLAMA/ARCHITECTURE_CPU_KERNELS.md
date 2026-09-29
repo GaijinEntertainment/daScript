@@ -75,6 +75,56 @@ The tier kernels run from lambdas the job dispatch lifts out of the function tha
 
 Every format's repack is made of the same two moves over a row of units - a 256-weight superblock, or a 32-block - of `ubytes`: the quant-plane interleave, which stacks mr rows per group and lands column c of unit u in row r at `[g][u][c][r][colw]`, and the scale-plane interleave, which is field-major, `[g][u][field][i][r][width]`, the fields in destination order with their source offsets. Tail rows (`d % mr`) stay disk-order and the row-major dots serve them.
 
+### The bf16 tile keeps its sum in the matrix unit {#amx-bf16-tile}
+
+An int8 matrix tile (AMX TDPBSSD, and the reference build's own AMX path) accumulates in int32,
+and every quant format carries a scale every 32 weights, so the tile has to be stored and
+scale-folded at every block: that traffic is what made the int8 tile lose to the vector lattice
+on every box it was raced on. The `amx_bf16` perm of every superblock family and of the q8
+family has no fold.
+
+The batch wrapper dequantizes a row group's weights once per token block into a bf16 panel in
+the pair-interleaved B layout (`[group][k-step of 32][16 pair-rows][16 cols][2]`, every scale
+folded in) and widens the quantized activations to bf16 once per call (q times its block scale
+- the Q8_K superblock's, the Q8 block's - the same rounding the vector lanes multiply by); the
+tile then runs `TDPBF16PS` over all of K with C in the tiles and stores straight into y, so the
+K length is free. The tile covers 32 tokens (two A tiles) by one or two row groups (the perm's
+`nrsplit`, the tile-form companion's value). A tile form above 0 IS the 32-token tile, so the
+superblock families carry no tokstep companion (`amx_bf16_tile_tokens()`); the q8 family keeps
+its own, which the int8 tile also answers. The walk hands sub-32 token tails and a group tail
+short of the tile to the gemv rows core, which rides busd512 like every amx companion. The
+panel amortizes over the token block, so the walk floors its block at 512 tokens under the
+per-box L2 clamp whatever `q8_token_block` says, and it chunks its groups in whole tile units
+over the whole token range: a chunk of one group misses a two-group tile outright, and a token
+slice per cell rebuilds every panel per slice. The q8 family carries the leg on both scale
+planes - a Q8_0 GGUF keeps its binary16 weight scales, so a real q8 model prefills on the
+wscale_f16 twin, whose panel companion widens the f16 scales into the same panel.
+
+The panel is the tile's bill: written as a daslang loop it runs scalar and costs more than the
+matrix unit's whole multiply, so every panel is an emitted companion (`k4q8_panel_gen` and its
+siblings, one generator over eight 64-byte quads per block: the format's code planes decoded to
+a byte per weight - nibble split, the k5/k6/k3 high-bit planes, a `VPSHUFB` codebook for the
+LUT formats, the gemv's grid gather with the sign column applied for the five grid formats -
+then the per-row scale FMA and `vcvtneps2bf16`). That convert is an AVX512_BF16 instruction, a
+feature apart from `amx-bf16`: the perm requires both, the `x86-amx` class lists both, and a
+clone built without `avx512bf16` would call a soft-float routine for it. A quad is four consecutive weights of each of
+the group's 16 rows: quad `q` of a 32-weight block holds weights `4q..4q+3`, 4 bytes a row, 64
+bytes in all. The grp16 int8 plane's four-byte columns are already quads, so the q8 panel
+companion loads them as they lie and decodes nothing. A panel companion stamped from a perm
+that is not `amx_bf16` is an empty body - the tile form is 0 there and nothing calls it; its
+das body, which no stamp runs, is the row dequant scattered into the pair layout
+(`kq_panel_rows_bf16`).
+
+The numerics are a bf16 envelope of the vector route, the Metal f16-tile class, never
+bit-exact: the tuner gates every variant on that bar, and the q8 family's crown also passes the
+end-to-end confirm - a superblock family's crown is the race's alone. The tile ops are the raw
+immediate-tmm intrinsics: the cfg companion loads the full palette (eight 16x64 tiles) once per
+dispatch chunk after the witness's XTILEDATA grant. The tile operands are line-aligned where
+the walk owns them (the panel and the bf16 activation plane): Intel splits a tile row that
+straddles a cache line. The activation plane is a module global of the context that calls the
+batch kernel - one per inference thread; the kernel builds it before it dispatches, and no lane
+builds one, since a fork-pool lane owns no globals.
+
 ### A hot leaf is instantiated in its caller's JIT partition {#jit-partition-inlining}
 
 The split-module JIT inlines within one partition only, so a leaf a hot loop calls is written to instantiate in the caller's: a generic over its operand (`iq_grid_octet`), or a plain function stamped beside the codecs it drives (`kq_transcode_units`). A call into another module's function inside a `[tune]` loop body blocks the loop's vectorization outright - `dot_bf16` spells its bf16 widen as the shift for that reason. The same rule runs the other way for the leaves themselves - the inliner's decisions over a leaf follow its call-site count, which is why the run-time-format `dot_kq` stamp lives in the test fixture `tests/_kq_dot.das` and not beside the sixteen tag overloads in `dasllama_math_default.das`.

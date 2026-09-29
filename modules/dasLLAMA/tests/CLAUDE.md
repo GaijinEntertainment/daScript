@@ -1433,6 +1433,13 @@ main thread (its codebook read is fork-safe); and `test_q8_plane_row_f32` - rows
 `quantize_q8_0_into` and repacked at (mr, kgroup, wbias) = (4, 8, 128) and (16, 8, 0), with and
 without a row tail, read back through `q8_plane_row_f32` as q times the block's f32 scale bit for
 bit (control: the product with the scale rounded to f16 must miss on at least one element).
+The grp repack cells at mr=16 also hold the bf16 panel of every format, built into a NaN-filled
+buffer: `kq_panel_rows_bf16` puts each weight at its pair-layout slot within half a bf16 step of
+the disk row dequant, and where the format's stamp is a bf16 tile (`kq_tileform_of(fmt)` above 0
+- an x86 box with AMX bf16) the stamped panel (`kq_panel_bf16`) within a whole step (control on
+both: the slots against their pair neighbors' weights must miss). On that stamp the 4-token tile cells register a skip and
+return - the stamped tile reads a bf16 panel over 32 tokens, and `test_prefill_cpu_kernels.das`
+reaches it through the batch kernel.
 `test_softmax.das` - model-free: `softmax`, `parallel_argmax` (the FIRST maximum on ties, the
 empty row a no-op) and `hlse`.
 `test_deltanet.das` - stocked suite; model-free cells: the deltanet session-state sizing at 27B
@@ -1897,7 +1904,16 @@ backends through their own `repack_q8q8_weight`, never on row-major data - with
 `dot_q8q8_f16s`, the `_s16` rows and groupN kernels, the stamped s16 tile/GEMV twins and the
 `matmul_q8q8` / `_batch` / `_groupn` s16 overloads, against their f32 twins over f16-exact
 scales - bit-exact on the portable backend, within the fp64 bar on a generated one whose s16
-and f32 stamps fold differently. `matmul_q8q8_group3` (f32 and s16) runs against three
+and f32 stamps fold differently. Where the `x64-gen` stamp is a bf16 tile (`q8q8_tileform_gen()`
+above 0 - an x86 box with AMX bf16, nowhere else) the two batch compares, f32 and s16, hold
+the bf16 envelope instead (`held_bf16`: every element within 1e-2 of the image's largest
+magnitude - a NaN counts as outside - that magnitude added to one expected element landing
+outside it), since the tile rounds every weight and activation to bf16 before the dot; on that
+stamp the two stamped-tile cells assert their GEMV and then register a skip and return, the
+stamped tile reading a bf16 panel where the cell holds int8 planes. The f32 batch cell runs at
+d=64 and again at d=48 (on a grp16 bf16 stamp: a two-group tile and a one-group tail), its
+batch output NaN-filled before the run.
+`matmul_q8q8_group3` (f32 and s16) runs against three
 independent GEMVs on unequal regions 32/40/44 (the row tail); `matmul_q8` / `dot_q8` cover the fp32-activation rail;
 the mx4 cell drives `matmul_mx4q8_batch` and `matmul_mx4q8_batch_groupn` against ntok
 independent `matmul_mx4q8` GEMVs and the `dot_mx4q8_scalar` leaf, pinned portable and swept
@@ -1922,7 +1938,20 @@ q4_0 synthetic disk planes built in-file. `matmul_kq_batch` and
 `matmul_kq_batch_groupn` - the per-position and per-expert GEMV routes a tier with no kq batch
 slot runs, bit-matched against per-(token,row) and per-(region,token) disk dots, with no skip on
 any tier; where a kq-carrying backend can be pinned (restored on exit) the native batched
-kernels additionally ride bit-for-bit against `matmul_kq_active` and the rows-core GEMVs.
+kernels additionally ride bit-for-bit against `matmul_kq_active` and the rows-core GEMVs -
+or, where the format's stamp is a bf16 tile (`kq_tileform_of(fmt)` above 0, an x86 box with AMX
+bf16), the batch against the disk dots and against `matmul_kq_active` within the bf16 envelope
+(1e-2 of the image's largest magnitude, a NaN outside it, that magnitude added to one expected
+element landing outside it). The batch cells run at ntok 1/5/13, at n=1024 d=64 ntok=6, and at
+n=512 d=48 ntok=67 - on a grp16 bf16 stamp the shape that reaches the tile, its token tail and
+its group tail; the region walk runs 1/4/6 and 3/35/67 (n=512 d=48), the long runs under the
+envelope on a bf16 stamp and exact off it. Every batch output is NaN-filled before its run.
+`test_xbf16_build` holds the bf16 activation plane, built over a stale plane of other values:
+every element within half a bf16 step of q times its superblock scale (control: the truncated
+bf16 must miss), the plane on a 64-byte boundary; and two threads building at once, each over
+its own activation row for 400 rounds, each reading its own plane back (the two planes at
+distinct addresses, the two rows differing). The threads are `new_thread` contexts, the shape
+two concurrent inferences take - a team lane owns no globals and builds no plane.
 `cvt_q8kv_to_f32` / `kv_row_to_f32` (all four overloads, at a non-zero `kv_head_off` base)
 against `quantize_q8kv_row`'s stored blocks plus a half-step round-trip assert.
 `requant_rows_q8` vs `quantize_q8_0` per row and `requant_rows_q8k_bs` vs an in-test Q8_K

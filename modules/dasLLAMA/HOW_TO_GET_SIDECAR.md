@@ -22,7 +22,7 @@ CPU classes and the AWS instance that carries each (`us-west-2`; the CLI on the 
 |---|---|---|
 | `x86-avx2` | avx2, no VNNI | any zen2/zen3 box (the dev zen2) |
 | `x86-vnni512` | avx512vnni + avx512bw | `c7a.4xlarge` (EPYC zen4) |
-| `x86-amx` | amx-int8 + amx-tile (+ avx512vnni) | `c7i.4xlarge` (Sapphire Rapids), `c8i` (Granite Rapids) |
+| `x86-amx` | amx-int8 + amx-bf16 + amx-tile (+ avx512vnni, avx512bf16) | `c7i.4xlarge` (Sapphire Rapids), `c8i` (Granite Rapids) |
 | `arm-neon` / `arm-i8mm` | dotprod / i8mm | M1 / M2+, `c8g.2xlarge` (Graviton4) |
 
 Launch (Ubuntu 24.04, 16 vCPU, 60 GB gp3; the key pair `dasbox` and the group `dasbench-ssh` exist in
@@ -205,9 +205,8 @@ branch the box clones: `tune_cpu_class()` and the ladder in `tune_class_chain()`
 a `requires=` names in `TUNE_KNOWN_FEATURES` there (`amx-int8`, `amx-tile` were already listed). Until
 its profile ships, a box of the new class adopts the class below it (the chain) and races only the
 seats that class could not answer. Then the same mint and export produce `<class>.tune-defaults.json`,
-and that one IS committed - the Intel one differed from `x86-vnni512` in 15 of 49 winners, all
-`[tuned]` loop-hint kernels preferring `vec16`, while every generator tile kept the 512-bit VNNI seat
-(the AMX tiles raced and lost the q8q8 family).
+and that one IS committed - the Intel one crowns the `amx_bf16` tile on every superblock family
+and on q8q8, their gemv companions riding the 512-bit VNNI seat.
 
 Three things the boxes taught that the walk now carries:
 
@@ -246,4 +245,20 @@ aws ec2 terminate-instances --instance-ids <id>
   Wall clock from launch to terminate: about 90 minutes, of which the build is 12 and the mint 6.
 - 2026-09-01 `c8i.4xlarge` (Xeon 6975P-C Granite Rapids, class `x86-amx`), `i-0fb77cb72129e36a2`:
   sections 1-7; the TEST gate 65/65 ok with the AMX leg; the class was added on the branch before
-  launch; the minted `x86-amx.tune-defaults.json` is the shipped one.
+  launch; the minted `x86-amx.tune-defaults.json` was the shipped one until the bf16 tile.
+- 2026-09-29 `c8i.4xlarge` (the same silicon), `i-0a8d50f35ff754471`: the AMX bf16 tile's box.
+  Sections 1-3 as a user-data script (the clone on the arc's branch), then the TEST gate, the race,
+  the end-to-end A/B against a busd512-pinned twin of the sidecar at `q8_token_block` 128 through
+  2048, and the mint; the exported profile (the bf16 tile crowned k4/k5/k6/q40) was the shipped
+  one until the next box's.
+  Wall clock about three hours, of which the bootstrap is 15 minutes and each gate-race-e2e pass 20.
+- 2026-09-29 `c8i.4xlarge` (the same silicon), `i-02a87cabc8fcd2e4c`: every family's bf16 leg. The
+  AMI already carried a daScript tree and the reference build's, so the user-data clones were skipped and both
+  had to be checked out by hand - verify `git log -1` on the box before the first gate. The TEST gate
+  over all fifteen families, the race (bf16 beats on every superblock family and q8), the mint with
+  `DASLLAMA_CONFIRM_MODEL` on the 1B Q8_0 (without it the confirm pins the q8 fallback for want of a
+  q8 model), and the carrier sweep against the reference build (`PERF_LEDGER.md`, the AMX bf16
+  tile arc); the exported profile is the shipped one. A crown that wins the race and loses the
+  confirm is a walk defect, not a kernel verdict: the q8 leg lost end to end until its
+  wscale_f16 twin and the tile-unit chunking were in. Run the module's dastest files on the box
+  too - the tuner's TEST gate does not reach the cells that call a stamped tile directly.

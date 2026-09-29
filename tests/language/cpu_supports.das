@@ -34,6 +34,14 @@ def test_cpu_supports(t : T?) {
             if (cpu_supports("avx512vl")) {
                 t |> success(cpu_supports("avx512f"), "avx512vl implies avx512f")
             }
+            if (cpu_supports("avx512bf16")) {
+                t |> success(cpu_supports("avx512f"), "avx512bf16 implies avx512f")
+            }
+            for (ext in ["amx-int8", "amx-bf16", "amx-fp16"]) {
+                if (cpu_supports(ext)) {
+                    t |> success(cpu_supports("amx-tile"), "{ext} implies amx-tile")
+                }
+            }
         } elif (arch == "arm64") {
             // neon and fp-armv8 are mandatory in every arm64 profile, so these are ISA facts
             t |> success(cpu_supports("neon"), "neon is baseline on arm64")
@@ -47,6 +55,8 @@ def test_cpu_supports(t : T?) {
             }
             t |> success(!cpu_supports("avx2"), "x86 feature names report false off-x86")
             t |> success(!cpu_supports("sse4.2"), "x86 feature names report false off-x86")
+            t |> success(!cpu_supports("amx-bf16"), "x86 feature names report false off-x86")
+            t |> success(!cpu_supports("amx-fp16"), "x86 feature names report false off-x86")
         } else {
             t |> success(!cpu_supports("avx2"), "x86 feature names report false off-x86")
             t |> success(!cpu_supports("sse4.2"), "x86 feature names report false off-x86")

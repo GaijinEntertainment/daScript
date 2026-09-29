@@ -2321,12 +2321,15 @@ namespace das
         if ( strcmp(feature, "avx512vl")==0 )   return os_zmm && (r7[1] & (1u<<31)) != 0;
         if ( strcmp(feature, "avx512vnni")==0 ) return os_zmm && (r7[2] & (1<<11)) != 0;
         if ( strcmp(feature, "avx512vbmi")==0 ) return os_zmm && (r7[2] & (1<<1)) != 0;
+        if ( strcmp(feature, "avx512bf16")==0 ) return os_zmm && (r71[0] & (1<<5)) != 0;
         // AMX names use the LLVM hyphen spelling so cpuid names == target-feature names
         // (DAS_JIT_X64_FORCE_FEATURES / llc -mattr pass them through verbatim). XCR0 tile
         // bits are kernel-boot truth; the per-process XTILEDATA grant (Linux arch_prctl)
         // is a separate, runtime step — the dasLLAMA amx witness does it, not this query.
         if ( strcmp(feature, "amx-tile")==0 )   return os_amx && (r7[3] & (1<<24)) != 0;
         if ( strcmp(feature, "amx-int8")==0 )   return os_amx && (r7[3] & (1<<24)) != 0 && (r7[3] & (1<<25)) != 0;
+        if ( strcmp(feature, "amx-bf16")==0 )   return os_amx && (r7[3] & (1<<24)) != 0 && (r7[3] & (1<<22)) != 0;
+        if ( strcmp(feature, "amx-fp16")==0 )   return os_amx && (r7[3] & (1<<24)) != 0 && (r71[0] & (1<<21)) != 0;
 #endif
         return false;
     }

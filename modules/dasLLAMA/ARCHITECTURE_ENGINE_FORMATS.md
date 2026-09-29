@@ -181,6 +181,10 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   **`dasllama_gemm_register.das`** - the generated GEMM tier: the runtime registration, the tile
   generator, the layout/perm schema shared by generator and runtime, and the `[tune]` family
   registration. A hand-written tile that the generator could emit belongs in the generator.
+  The bf16 tile's operand builders - the activation widen (`xbf16_build`, its `bf16_bits`
+  narrow) and the row-dequant reference panel (`kq_panel_rows_bf16`) - sit in
+  `dasllama_math_gen.das` beside the walk that runs them once per batch call, in its JIT
+  partition (`ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining`).
 - **`dasllama_tune.das`** - the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`) and the
   perm-less clone `[from_template]` (a template body into an empty stub, placeholder calls
   renamed to the annotation's targets - the kernel shapes' stamp). Tuning
