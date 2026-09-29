@@ -3562,38 +3562,36 @@ of the same day on the same box, the same winners on every family. The reference
   and 622,656 a lane at form 2, 8,389,632 and 9,962,496 over 16 lanes. The row-dequant panel's
   row buffer, off the emitted panels only: 4 x n bytes, 32,768 and 38,912.
 
-### From the AMX bf16 walk follow-up (2026-09-29, Granite Rapids `c8i.4xlarge` `i-02a87cabc8fcd2e4c`, 8 cores, 16 lanes; the MTP pairs on the M5 Max)
+### From the AMX bf16 walk follow-up (2026-09-29, Granite Rapids `c8i.4xlarge` `i-02a87cabc8fcd2e4c`, 8 cores, 16 lanes)
 
-Every rate below is `benchmarks/lcpp_bench.das` as the `-jit` script with `--for-debug-purposes`,
-one process a reading, the arms alternated; an arm is a copy of
-`dasllama/dasllama_math_gen.das` put in place before its process starts, under
-`-no-module-cache`. Each pair compares across processes and is `direction-grade`.
+Every rate below is `benchmarks/lcpp_bench.das` as the `-jit` script with `--for-debug-purposes`
+under `-no-module-cache`, `DAS_TUNE_POLICY` unset, served on the `x64-gen` backend, one process
+a reading, the arms alternated; an arm is a copy of `dasllama/dasllama_math_gen.das` put in place
+before its process starts. Each pair compares across processes and is `direction-grade`.
 
-- **The bf16 walk's block in whole tiles under no L2 clamp: 1.065x pp512 on the 4B carriers, the
-  1B level.** The clamped arm is the walk of the AMX bf16 tile arc (the 512 floor under
-  `effective_token_block`, 431 tokens at K 9728); the other is `bf16_token_block` - 512, a
-  multiple of the 32-token tile. `DAS_TUNE_MANIFEST` on the mint's sidecar with
-  `runtime.q8_token_block` 512, `-p 512 -n 16 -r 3 -t 16`, three alternated passes, pp512 tok/s
+- **The bf16 walk's block in whole tiles under no L2 clamp: 1.065x the clamped arm's pp512 on
+  the 4B carriers, the 1B level.** The clamped arm is the walk of the AMX bf16 tile arc (the 512
+  floor under `effective_token_block`, 431 tokens at K 9728); the other is `bf16_token_block` -
+  512, a multiple of the 32-token tile. No environment override, the sidecar beside the script
+  in force (the box's mint), `-p 512 -n 16 -r 3 -t 16`, three alternated passes, pp512 tok/s
   (the spread over 3 reps), clamped then whole-tile: Qwen3-4B Q4_K_M 486.94 +- 1.19, 486.23 +-
   0.61, 488.05 +- 1.45 against 518.70 +- 1.37, 523.30 +- 0.51, 517.21 +- 0.42; Qwen3-4B Q8_0
   491.48 +- 0.46, 494.14 +- 1.13, 492.13 +- 1.60 against 524.42 +- 0.79, 522.26 +- 0.85 (the
   third pass, 511.75 +- 18.91, is past the 3% spread and void); Llama-3.2-1B Q4_K_M 1912.78 +-
   1.69, 1905.51 +- 14.95, 1900.51 +- 3.15 against 1919.13 +- 6.08, 1916.96 +- 4.10, 1911.24 +-
-  9.05. tg16 holds inside 0.5% on all three.
-- **Per kernel the best block follows the lanes a core carries.** One process a lane count, one
-  script over `matmul_kq_batch` on k4 through the `x64-gen` backend at form 2, ntok 512,
-  `bf16_token_block_floor` at 1 and no clamp, the candidates interleaved, 11 rounds after 2
-  dropped, `DAS_JOBQUE_THREADS` 16 and 8, no tune manifest; median ms (cv %) at a block of 128 /
-  256 / 512, the cells past 3% left out. At 16 lanes: K 2560 x 9728 rows 4.829 (0.9) / 4.199
-  (1.2) / 4.416 (1.9); K 8192 x 2048 rows 4.066 (0.3) / 3.535 (1.2) / 3.254 (0.4). At 8 lanes: K
-  2048 x 8192 rows 3.177 (2.2) / 2.700 (2.2) / 3.066 (2.9); K 2560 x 9728 rows 4.523 (1.3) /
-  3.656 (1.7) / 5.506 (2.2); K 4096 x 4096 rows 3.461 (2.0) / 3.709 (0.8) / 3.834 (1.8); K 8192
-  x 2048 rows 4.653 (1.8) / 4.045 (1.1) / 3.853 (0.8); K 9728 x 2560 rows 6.402 (1.2) / 5.582
-  (1.2) / 5.298 (0.8). The block as a tuner knob is `followup_general.md` row 190.
+  9.05.
+- **What the walk scratch holds.** The panels, one allocation a calling context: stride x slots
+  + 64 bytes, the stride a panel rounded up to a cache line plus a line, the slots
+  `get_dispatch_slot_bound()` - 16 on this box. A bf16 panel is form x 16 x n x 2 bytes, 524,288
+  at form 2 and n 8192 (the 1B's FFN down) and 622,592 at n 9728 (the 4B's), so the scratch is
+  8,389,696 and 9,962,560 bytes; a byte panel is mr x n bytes, 4,096 at mr 8 and n 512. The q8
+  walk's bias sums, where the stamped plane carries a bias: 4 x ntok x n / 32 bytes, 524,288 and
+  622,592 at ntok 512. Each figure is its formula's value at the named shape
+  (`walk_panels`, `q8q8_bias_sums`, `kq_walk_panel_bytes` in `dasllama/dasllama_math_gen.das`).
 - **The walk scratch costs no rate and saves no bytes.** The arms are the walk that allocates a
   panel per dispatch chunk (the file of master `640826d79`) and the walk on one scratch panel
-  per dispatch slot. `DASLLAMA_ALLOW_UNTUNED=1` (the `x86-amx` class profile stamps the kernels, no sidecar),
-  `-p 512 -n 16 -r 5 -t 16`, four passes a model in alternating order; pp512 tok/s (the spread
+  per dispatch slot. `DASLLAMA_ALLOW_UNTUNED=1` (the `x86-amx` class profile stamps the kernels,
+  no sidecar), `-p 512 -n 16 -r 5 -t 16`, four passes a model in alternating order; pp512 tok/s (the spread
   over 5 reps) and the process's peak resident set read by `/usr/bin/time -v` (`out-of-process`),
   per-chunk then scratch. Llama-3.2-1B Q4_K_M: 1806.67 +- 11.73, 1856.04 +- 4.35, 1832.40 +-
   9.71, 1804.75 +- 22.14 against 1865.93 +- 6.94, 1878.12 +- 16.26, 1834.13 +- 37.13 (one pass
@@ -3608,15 +3606,21 @@ one process a reading, the arms alternated; an arm is a copy of
   of the entry above, Llama-3.2-1B Q8_0, four passes in alternating order, pp512 tok/s, two walks
   then one: 1901.34 +- 28.39, 1924.55 +- 14.96, 1913.96 +- 9.64, 1845.53 +- 48.54 against
   1952.21 +- 6.37, 1859.75 +- 6.32, 1887.56 +- 22.77, 1900.56 +- 7.18.
-- **Self-speculation on the CPU loses on every carrier of the M5 Max; on Metal it gains.** Master
-  `640826d79`, `lcpp_bench.das -- -m <gguf> --ngl 0 --mtp-ab --chat-prompts --prompts
-  modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt --for-debug-purposes`
-  (`--ngl 99` for the Metal pair), `DASLLAMA_ALLOW_UNTUNED=1` (the `arm-i8mm` class profile
-  stamps the kernels, no sidecar), 18 lanes with decode on the 6 fast ones, depth 1; one process
-  a model, its off and on arms in that process, tg-real128 tok/s (the spread over 5 reps, 4
-  prompts), off then on, and the drafts accepted. CPU: Qwen3.5-0.8B-MTP Q8_0 189.56 +- 3.13 /
-  139.41 +- 3.71 (on is 0.74x off), 1005 of 1560; Qwen3.5-4B-MTP Q8_0 52.17 +- 1.15 / 45.65 +-
-  0.53 (0.87x), 1110 of 1455; Qwen3.5-9B-MTP Q8_0 29.66 +- 0.50 / 26.50 +- 0.49 (0.89x), 1100 of
-  1470; Ornith-1.5-35B-A3B Q4_K_M 58.75 +- 1.05 / 40.44 +- 0.74 (0.69x), 1095 of 1475. Metal:
-  Ornith-1.5-35B-A3B Q4_K_M 132.53 +- 1.69 / 143.37 +- 0.85 (on is 1.08x off), 1080 of 1470. The
-  server's default arms the round on a one-stream GPU slot and leaves it off on the CPU.
+
+### The CPU self-speculation entry (2026-09-29, Apple M5 Max, 18 lanes, decode on the 6 fast ones)
+
+Every pair below is one process of `benchmarks/lcpp_bench.das` as the `-jit` script, master
+`640826d79`: `lcpp_bench.das -- -m <gguf> --ngl 0 --mtp-ab --chat-prompts --prompts
+modules/dasLLAMA/benchmarks/data/specbench4_prompts.txt --for-debug-purposes` (`--ngl 99` for
+the Metal pair), `DAS_TUNE_POLICY` unset, `DASLLAMA_ALLOW_UNTUNED=1` (the `arm-i8mm` class
+profile stamps the kernels, no sidecar), depth 1, served on the `arm64-gen` backend (`portable`
+under Metal). The off and on arms run in that one process; tg-real128 tok/s (the spread over 5
+reps, 4 prompts), off then on, with the drafts accepted.
+
+- **Self-speculation on the CPU loses on every carrier; on Metal it gains.** CPU:
+  Qwen3.5-0.8B-MTP Q8_0 189.56 +- 3.13 / 139.41 +- 3.71 (on is 0.74x off), 1005 of 1560;
+  Qwen3.5-4B-MTP Q8_0 52.17 +- 1.15 / 45.65 +- 0.53 (0.88x), 1110 of 1455; Qwen3.5-9B-MTP Q8_0
+  29.66 +- 0.50 / 26.50 +- 0.49 (0.89x), 1100 of 1470; Ornith-1.5-35B-A3B Q4_K_M 58.75 +- 1.05 /
+  40.44 +- 0.74 (0.69x), 1095 of 1475. Metal: Ornith-1.5-35B-A3B Q4_K_M 132.53 +- 1.69 / 143.37
+  +- 0.85 (on is 1.08x off), 1080 of 1470. The server's default arms the round on a one-stream
+  GPU slot and leaves it off on the CPU.

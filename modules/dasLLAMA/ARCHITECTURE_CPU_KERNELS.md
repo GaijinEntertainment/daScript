@@ -93,8 +93,9 @@ K length is free. The tile covers 32 tokens (two A tiles) by one or two row grou
 superblock families carry no tokstep companion (`amx_bf16_tile_tokens()`); the q8 family keeps
 its own, which the int8 tile also answers. The walk hands sub-32 token tails and a group tail
 short of the tile to the gemv rows core, which rides busd512 like every amx companion. The
-panel amortizes over the token block, so the walk floors its block at 512 tokens under the
-per-box L2 clamp whatever `q8_token_block` says, and it chunks its groups in whole tile units
+panel amortizes over the token block, so the walk reads its block off `q8_token_block` floored
+at 512 tokens and rounded down to whole tiles (`bf16_token_block`), under no L2 clamp - a block
+the clamp cuts pays a second panel and a token tail - and it chunks its groups in whole tile units
 over the whole token range: a chunk of one group misses a two-group tile outright, and a token
 slice per cell rebuilds every panel per slice. The q8 family carries the leg on both scale
 planes - a Q8_0 GGUF keeps its binary16 weight scales, so a real q8 model prefills on the

@@ -1773,11 +1773,14 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     }
     apply_i64_knob(rt, "q8_token_block") $(v) {
         set_q8_token_block(v)
-        if (v < bf16_token_block_floor()) {
-            to_log(LOG_INFO, "dasLLAMA: box profile runtime: q8_token_block = {v} reads as {bf16_token_block_floor()} on a bf16 tile walk\n")
+        if (bf16_token_block() != v) {
+            to_log(LOG_INFO, "dasLLAMA: box profile runtime: q8_token_block = {v} reads as {bf16_token_block()} on a bf16 tile walk (the floor of {bf16_token_block_floor()}, in whole {amx_bf16_tile_tokens()}-token tiles)\n")
         }
     }
-    apply_i64_knob(rt, "q8_l2_budget") $(v) { set_q8_l2_budget(v) }
+    apply_i64_knob(rt, "q8_l2_budget") $(v) {
+        set_q8_l2_budget(v)
+        to_log(LOG_INFO, "dasLLAMA: box profile runtime: q8_l2_budget = {v} cuts the int8 walks' token block; a bf16 tile walk reads no budget\n")
+    }
     apply_i64_knob(rt, "target_chunk_work") $(v) { set_target_chunk_work(v) }
     apply_i64_knob(rt, "attn_par_threshold") $(v) { set_attn_par_threshold(v) }
     apply_i64_knob(rt, "requant_par_threshold") $(v) { set_requant_par_threshold(v) }

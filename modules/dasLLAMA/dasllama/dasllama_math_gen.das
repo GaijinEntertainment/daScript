@@ -2818,7 +2818,7 @@ def private walk_panels(bytes : int64) : tuple<base : uint8?; stride : int64> {
 //! the q8 walk's bias sums in the calling context's scratch: -128 times each 32-block's activation sum, `n / 32` a token; null where the stamped plane carries no bias
 def private q8q8_bias_sums(xqp : int8 const?; n, ntok, wbias : int64) : int const? {
     return null if (wbias == 0l)
-    let nb = n / 32l
+    let nb = n / Q8_BLOCK_ELEMS
     g_walk_bsum |> overwrite_resize(ntok * nb)
     unsafe {
         var bsp = addr(g_walk_bsum[0])
@@ -2826,8 +2826,8 @@ def private q8q8_bias_sums(xqp : int8 const?; n, ntok, wbias : int64) : int cons
             let xrow = xqp + t * n
             for (bi in range64(nb)) {
                 var s = 0
-                let xb = bi * 32l
-                for (j in range64(32l)) {
+                let xb = bi * Q8_BLOCK_ELEMS
+                for (j in range64(Q8_BLOCK_ELEMS)) {
                     s += int(xrow[xb + j])
                 }
                 bsp[t * nb + bi] = -128 * s
@@ -2844,7 +2844,7 @@ def private bf16_panel_bytes(n, ngr : int64) : int64 => ngr * 16l * n * 2l
 def kq_walk_panel_bytes(fmt : int; n, mr : int64) : int64 {
     let form = int64(kq_tileform_of(fmt))
     return bf16_panel_bytes(n, form) if (form > 0l)
-    return kq_reads_packed_planes(int64(fmt)) ? 0l : mr * (n / 256l) * 256l
+    return kq_reads_packed_planes(int64(fmt)) ? 0l : mr * (n / KQ_SB_ELEMS) * KQ_SB_ELEMS
 }
 
 def xbf16_build(xqp : int8 const?; xsp : float const?; n, ntok, bsz : int64) : uint8 const? {

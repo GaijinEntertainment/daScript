@@ -1963,7 +1963,11 @@
    build's Q4_0 carriers routinely mix one. Done = Q4_1 decoded to the q51-style per-32 (d, m) plane, or the
    loader names the tensor and the format it wants re-quantized to.
 188. **The bf16 panel scatter is written three times, and the harness's format ladders six.** The
-   folds left unapplied:
+   folds left unapplied: the int8 walk inside `kq_batch_cell_gen` onto `bf16_walk` (the same
+   control flow at one group and the tile's four tokens - it needs its own before/after pair);
+   `q8q8_bias_sums` onto `b32g_fill_bsums` under a scale argument; the two q8 batch kernels
+   (`q8q8_batch_kernel_neon_laneq_gen`, `q8q8_batch_kernel_s16_gen`) as one generic over the
+   scale plane; the two-thread race cells of `tests/test_prefill_cpu_kernels.das` over one helper;
    `q8q8_panel_gen` and its s16 twin over one row scatter shared with `kq_panel_rows_bf16`;
    `q8_panel_gen_impl` as a unit kind of `panel_gen_impl`; `panel_quads`' unpack arms shared with
    `emit_block_kqv2`'s; one `kq_family_registries(fmt)` ladder behind the harness's six; one
@@ -1975,13 +1979,18 @@
    Sapphire Rapids - the same `x86-amx` class - is unmeasured. Done = the confirm races one
    superblock carrier (`DASLLAMA_CONFIRM_MODEL`'s K-quant twin), or a Sapphire Rapids carrier row
    in the ledger.
-190. **The bf16 walk's token block is one number for every shape and every lane count.** The
-   one-process race on Granite Rapids (`PERF_LEDGER.md`, the AMX bf16 walk follow-up) splits on
-   the weight's output width and on the lanes a core carries: at 16 lanes on 8 cores 512 is the
-   best block on every weight of K 4096 and up, and 256 leads it by 5% on the widest output
-   (K 2560, 9728 rows); at 8 lanes - one a core - 256 leads 512 by 1.5x on that shape.
-   `bf16_token_block` answers 512 in whole tiles. Done = the block a tuner knob
-   raced per lanes-per-core regime, confirmed end to end on the 1B and 4B carriers.
+190. **The bf16 walk's token block is one number for every shape and every lane count.**
+   `bf16_token_block` answers 512 in whole tiles, and a kernel race splits on the weight's
+   output width and on the lanes a core carries. The race [debug-jit]: Granite Rapids
+   `c8i.4xlarge` (8 cores), a script over `matmul_kq_batch` that is not checked in, `-jit`
+   under `-no-module-cache`, `DAS_TUNE_POLICY` unset, no tune manifest, k4 on the `x64-gen`
+   backend at form 2 and ntok 512, `bf16_token_block_floor` at 1 and no clamp, the candidates
+   interleaved, 11 rounds after 2 dropped, a process a pass, `DAS_JOBQUE_THREADS` 16 and 8;
+   median ms (cv %) at a block of 128 / 256 / 512, cells past 3% void. K 8192 x 2048 rows: 4.066
+   (0.3) / 3.535 (1.2) / 3.254 (0.4) at 16 lanes, 4.653 (1.8) / 4.045 (1.1) / 3.853 (0.8) at 8.
+   K 2560 x 9728 rows: 4.829 (0.9) / 4.199 (1.2) / 4.416 (1.9) at 16 lanes, 4.523 (1.3) / 3.656
+   (1.7) / 5.506 (2.2) at 8. Done = the block a tuner knob raced per lanes-per-core regime,
+   confirmed end to end on the 1B and 4B carriers.
 191. **The generated tier branches on format ids as literals.** The emitter reads `te.kq == 33`
    and the runtime ladders `fmt == 4` (`kq_layout_of`), and the bf16 panel code follows them
    (`panel_is_grid`, `panel_scales`, `panel_quads`, `panel_ioff`, the panel stubs' ids, the
@@ -2005,8 +2014,9 @@
    compares each profile's kernel names with the scope's `[tune]` / `[tuned]` census and reds a
    missing or an unknown name.
 195. **Sixteen loops that ask to vectorize do not, on arm64, and nothing names them.** A cold
-   `-jit` compile of `utils/dasllama-server/cli.das` (repo root) on an Apple M5 Max prints
-   sixteen `loop not vectorized` warnings - fourteen on `instruction return type cannot be
-   vectorized`, two on `call instruction cannot be vectorized` - each at `<unknown>`, so the
-   loop and its module are unread. Done = each loop named (the emitter attaches a location to a
-   loop it hints), then vectorized or its hint dropped.
+   `-jit` compile of `utils/dasllama-server/cli.das` (repo root) on an Apple M5 Max,
+   `DAS_TUNE_POLICY` unset, prints sixteen `loop not vectorized` warnings, each beside a remark
+   with its reason - fourteen `instruction return type cannot be vectorized`, two `call
+   instruction cannot be vectorized` - and each at `<unknown>`, so the loop and its module are
+   unread. Done = each loop named (the emitter attaches a location to a loop it hints), then
+   vectorized or its hint dropped.

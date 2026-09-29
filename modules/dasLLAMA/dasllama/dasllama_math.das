@@ -2024,6 +2024,8 @@ def pin_kernel_backend(name : string) {
 def clear_kernel_backend_pin() {
     g_backend_pin = ""
 }
+//! The pinned backend's name, "" when none is pinned.
+def kernel_backend_pin() : string => g_backend_pin
 
 //! Pin the BATCH-shaped kernel slots (prefill GEMM + mx4 batch) to backend `name`, keeping the
 //! active backend's GEMV slots — the hybrid for boxes where decode/prefill prefer different backends.

@@ -1964,8 +1964,21 @@ against `quantize_q8kv_row`'s stored blocks plus a half-step round-trip assert.
 `requant_rows_q8` vs `quantize_q8_0` per row and `requant_rows_q8k_bs` vs an in-test Q8_K
 reference, on both `par` arms. `repack_kq_weight`'s round trip: the pure grp repack read back
 through `kq_grp_row_dot` on every tier, then the dispatch seam - byte-identical to that layout
-where the tier carries kq slots, the registered identity where it does not. Every compare ships
-an added-value poison control.
+where the tier carries kq slots, the registered identity where it does not. Every compare above
+ships an added-value poison control. `test_walk_panels` holds the batch walk's panel scratch on
+the generated backend, pinned for the cell and put back through `kernel_backend_pin`, and skips
+where that backend carries no kq batch kernel: two `new_thread` contexts walk k6 at once (n=512
+d=48 ntok=67, 200 rounds each), each over its own planes and on its calling thread, and read the
+main thread's walk of the same inputs bit for bit, the two outputs differing; then one context
+walks across the job queue (n=512 d=128, 200 rounds), the batch walk and the region walk over
+two token runs, each bit for bit the same walk on its calling thread alone, every round
+dispatched (the dispatch counter), the dispatched-walk assert skipped on a box of one dispatch
+slot. Both log their mismatch counts and the first element off by round, token and row; neither
+carries a poison - the control is the kernel with every slot on one panel, which reads over a
+million elements off. `test_bf16_token_block` holds the bf16 walk's block off the knob (1, 128
+and 500 read 512, 1000 reads 992, 1024 reads 1024, each a whole number of tiles) and under an L2
+budget that cuts the int8 walk's block to 215 at n=9728, where the bf16 block stays 512; it
+restores both knobs from their getters.
 `test_attn_span.das` - stocked suite; the non-causal image span (`eval_embd_` with `non_causal =
 true`): mask direction by perturbation (causal row 0 blind to the last row, span row 0 sees it;
 the same direction pair again on the q4_0 requant of the fixture - the embedding prefill on the
