@@ -254,7 +254,8 @@ struct private JitSplitPart {
     tag : string
 }
 
-def private publish_link_set(tmp_base, final_base : string) {
+[arch(at = "../ARCHITECTURE_JIT_ENTRY.md#artifact-publish")]
+def private publish_link_set(tmp_base, final_base : string; replace : bool) {
     let d = dir_name(tmp_base)
     let tmp_prefix = "{base_name(tmp_base)}."
     let final_name = base_name(final_base)
@@ -266,16 +267,20 @@ def private publish_link_set(tmp_base, final_base : string) {
     }
     for (fname in produced) {
         let suffix = slice(fname, length(tmp_prefix), length(fname))
-        publish_object("{d}/{fname}", "{d}/{final_name}.{suffix}")
+        publish_object("{d}/{fname}", "{d}/{final_name}.{suffix}", replace)
     }
 }
 
 var g_published_names : table<string>
 
-def private publish_object(tmp, final : string) {
+[arch(at = "../ARCHITECTURE_JIT_ENTRY.md#artifact-publish")]
+def private publish_object(tmp, final : string; replace : bool) {
     if (tmp == final || !stat(tmp).is_valid) return
+    var err : string
+    if (replace && stat(final).is_valid) {
+        remove(final, err)
+    }
     if (!rename(tmp, final)) {
-        var err : string
         remove(tmp, err)
         if (!stat(final).is_valid) {
             to_log(LOG_WARNING, "LLVM JIT: could not publish {tmp} as {final}\n")
@@ -516,7 +521,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             panic("LLVM JIT: split parallel optimize+emit failed")
         }
         for (p in g_split_parts) {
-            publish_object(p.obj, p.obj_final)
+            publish_object(p.obj, p.obj_final, !obj_cache)
         }
     }
     // phase C - the opt-in IR dump only (workers verified each module post-optimize, pre-emit; cached partitions have no live IR)
@@ -782,7 +787,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 panic("LLVM JIT: split link failed for {output_path} - cached partition objects dropped, the next run re-emits them")
             }
             if (!gen_exe) {
-                publish_link_set(link_base, output_path)
+                publish_link_set(link_base, output_path, empty(dll_hash_basename))
                 // partition objects are named by partition key, not the dll hash - the GC keep-set
                 // preserves exactly the current link set. The LTO probe's artifact set is one-off:
                 // skip its GC so a probe run cannot evict the normal cache generation.

@@ -87,3 +87,17 @@ an exe has no jit state to free, and the strict sweep refuses a `[no_jit]` funct
 A batch of programs in one process (dastest) exercises both: a program that fails inside the
 emitter must drain the codegen accumulators (`reset_codegen_accumulators`) on its way out, or the
 next program's fileinfo ctor asserts on names that belonged to the last one.
+
+## 6. An artifact is published by rename {#artifact-publish}
+
+Codegen writes each artifact under a temporary name and publishes it by renaming it to its final
+name: `publish_object` (`daslib/llvm_jit_run.das`) moves one file, `publish_link_set` every file
+the DLL link produced. The rename does not overwrite an existing file on Windows, so what an
+existing final holds decides the step. A content-addressed final - a DLL named by its key, a split
+partition object named by its partition key - holds the bytes this build made, so it stays: the
+temporary goes, and nothing is logged. A final named by position holds the previous build: the
+link set of a pinned `-output` (a plan with no DLL key), and, with the obj cache off, the split
+partition objects, named `<output>.p<N>_<tag>` by their place in the module order. Those publish
+with `replace`: the existing final is removed first. A final that survives the removal (a DLL
+another process holds) keeps the previous build, and the reopen that follows the link reports the
+mismatch.
