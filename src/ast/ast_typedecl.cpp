@@ -999,14 +999,83 @@ namespace das
 #endif
     }
 
+    uint32_t TypeDecl::aliasCacheFlags () {
+        static const uint32_t mask = [] {
+            TypeDecl probe;
+            probe.flags = 0;
+            probe.aliasCacheValid = true;
+            probe.aliasCacheHasAlias = true;
+            return probe.flags;
+        }();
+        return mask;
+    }
+
+    size_t TypeDeclRemapHash::operator () ( const TypeDecl * t ) const noexcept {
+        uint64_t h = 14695981039346656037ull;
+        auto mix = [&h]( uint64_t v ) { h = (h ^ v) * 1099511628211ull; };
+        mix(uint32_t(t->baseType));
+        mix(t->flags & ~TypeDecl::aliasCacheFlags());
+        mix(uint32_t(t->fixedDim));
+        mix(uintptr_t(t->structType) >> 4);
+        mix(uintptr_t(t->enumType) >> 4);
+        mix(uintptr_t(t->annotation) >> 4);
+        mix(uintptr_t(t->module) >> 4);
+        mix(uintptr_t(t->firstType) >> 4);
+        mix(uintptr_t(t->secondType) >> 4);
+        for ( auto a : t->argTypes ) mix(uintptr_t(a) >> 4);
+        if ( !t->alias.empty() ) mix(hash_block64((const uint8_t *) t->alias.data(), t->alias.size()));
+        for ( auto & n : t->argNames ) mix(hash_block64((const uint8_t *) n.data(), n.size()));
+        mix(uintptr_t(t->at.fileInfo) >> 4);
+        mix(t->at.line);
+        mix(t->at.column);
+        mix(t->at.last_line);
+        mix(t->at.last_column);
+        return size_t(h);
+    }
+
+    bool TypeDeclRemapEqual::operator () ( const TypeDecl * a, const TypeDecl * b ) const noexcept {
+        return a->baseType == b->baseType
+            && ((a->flags ^ b->flags) & ~TypeDecl::aliasCacheFlags()) == 0
+            && a->fixedDim == b->fixedDim
+            && a->structType == b->structType && a->enumType == b->enumType
+            && a->annotation == b->annotation && a->module == b->module
+            && a->firstType == b->firstType && a->secondType == b->secondType
+            && a->argTypes == b->argTypes && a->alias == b->alias && a->argNames == b->argNames
+            && a->at.fileInfo == b->at.fileInfo && a->at.line == b->at.line && a->at.column == b->at.column
+            && a->at.last_line == b->at.last_line && a->at.last_column == b->at.last_column;
+    }
+
+    void gc_collect_type ( TypeDeclPtr & slot, gc_root * target, gc_root * from ) {
+        if ( !slot ) return;
+        auto remap = target->typeRemap;
+        TypeDecl * t = slot;
+        if ( !remap || !from || t->gc_owner != from
+                || t->fixedDimExpr || !t->typeMacroExpr.empty() ) {
+            t->gc_collect(target, from);
+            return;
+        }
+        gc_collect_type(t->firstType, target, from);
+        gc_collect_type(t->secondType, target, from);
+        for ( auto & a : t->argTypes ) gc_collect_type(a, target, from);
+        auto it = remap->nodes.find(t);
+        if ( it != remap->nodes.end() ) {
+            slot = *it;
+            return;
+        }
+        t->gc_collect(target, from);
+    }
+
     void TypeDecl::gc_collect ( gc_root * target, gc_root * from ) {
         if ( gc_owner == target ) return;                           // already collected
         if ( from && gc_owner != from ) return;                     // not from our scope
         if ( !from && gc_owner == nullptr ) return;                 // detached
         gc_assign(target);
-        if ( firstType ) firstType->gc_collect(target, from);
-        if ( secondType ) secondType->gc_collect(target, from);
-        for ( auto t : argTypes ) if ( t ) t->gc_collect(target, from);
+        gc_collect_type(firstType, target, from);
+        gc_collect_type(secondType, target, from);
+        for ( auto & t : argTypes ) gc_collect_type(t, target, from);
+        if ( target->typeRemap && !fixedDimExpr && typeMacroExpr.empty() ) {
+            target->typeRemap->nodes.insert(this);
+        }
         if ( fixedDimExpr ) fixedDimExpr->gc_collect(target, from);
         for ( auto & de : typeMacroExpr ) if ( de ) de->gc_collect(target, from);
         // this??

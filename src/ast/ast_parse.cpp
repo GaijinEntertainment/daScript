@@ -1120,6 +1120,7 @@ namespace das {
     struct ModuleGcFinalize {
         Program *   prog = nullptr;
         TextWriter * logs = nullptr;
+        bool        remapTypes = false;
         explicit ModuleGcFinalize ( Program * p ) : prog(p) {}
         ~ModuleGcFinalize() {
             // thisModule is legitimately null while a deserialize is in flight: Program::serialize
@@ -1129,7 +1130,10 @@ namespace das {
                 auto m = prog->thisModule.get();
                 gc_root * oldRoot = m->module_gc_root.get();
                 auto fresh = make_unique<gc_root>();
+                TypeDeclRemap remap;
+                if ( remapTypes && !prog->failed() ) fresh->typeRemap = &remap;
                 m->gc_collect(oldRoot, fresh.get());   // live oldRoot -> fresh; garbage stays on oldRoot
+                fresh->typeRemap = nullptr;
                 if ( logs && gcStageReportEnabled() ) {
                     *logs << "=== gc survivors @ " << m->name << " : live="
                           << fresh->gc_count << " garbage=" << oldRoot->gc_count << " ===\n";
@@ -1182,10 +1186,11 @@ namespace das {
         ModuleGcFinalize            gcFinalize;
         ReuseCacheGuard             reuseCache;
         ModuleCompileTimes          times;
-        ModuleCompileScope ( const string & moduleName, const string & fileName, TextWriter & logs, const CodeOfPolicies & policies )
+        ModuleCompileScope ( const string & moduleName, const string & fileName, TextWriter & logs, const CodeOfPolicies & policies, bool isDep )
             : callbackGuard(moduleName, fileName), program(make_smart<Program>()),
               gcScope(program->thisModule->module_gc_root.get()), gcFinalize(program.get()) {
             gcFinalize.logs = &logs;
+            gcFinalize.remapTypes = isDep;
             program->library.renameModule(program->thisModule.get(), moduleName);
             program->inferPassesUsed = 0;  // reset once per module; inferTypesDirty accumulates across all inferTypes legs (incl. restartInfer)
             program->policies = policies;   // before the cache read: the reader compares the record's policies against this compile's
@@ -1273,7 +1278,7 @@ namespace das {
                               CodeOfPolicies policies,
                               bool inferAfterParse ) {
         verifyCodeOfPoliciesStamp(policies);
-        ModuleCompileScope scope(moduleName, fileName, logs, policies);
+        ModuleCompileScope scope(moduleName, fileName, logs, policies, isDep);
         auto & program = scope.program;
         auto & times = scope.times;
 
@@ -1381,6 +1386,7 @@ namespace das {
             program->isCompiling = false;
             return program;
         } else if ( !inferAfterParse ) {
+            scope.gcFinalize.remapTypes = false;
             unbindCompilingProgram();
             program->isCompiling = false;
             return program;
@@ -1629,7 +1635,7 @@ namespace das {
         verifyCodeOfPoliciesStamp(policies);
         CompileEnvScope envScope(daScriptEnvironment::getBound());
         const string fileName;
-        ModuleCompileScope scope(moduleName, fileName, logs, policies);
+        ModuleCompileScope scope(moduleName, fileName, logs, policies, isDep);
         auto & program = scope.program;
         program->thisModule->isModule = isDep;
         bindCompilingProgram(program, fileName, moduleName, access, logs, libGroup, isDep, policies);

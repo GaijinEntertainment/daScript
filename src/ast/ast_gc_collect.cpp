@@ -31,7 +31,7 @@ namespace das {
         if ( from && gc_owner != from ) return;
         if ( !from && gc_owner == nullptr ) return;
         gc_assign(target);
-        if ( type ) type->gc_collect(target, from);
+        gc_collect_type(type, target, from);
     }
 
     void Variable::gc_collect ( gc_root * target, gc_root * from ) {
@@ -39,7 +39,7 @@ namespace das {
         if ( from && gc_owner != from ) return;
         if ( !from && gc_owner == nullptr ) return;
         gc_assign(target);
-        if ( type ) type->gc_collect(target, from);
+        gc_collect_type(type, target, from);
         if ( init ) init->gc_collect(target, from);
         if ( source ) source->gc_collect(target, from);
         // note: loop_source is a weak pointer to ExprFor::sources[i], not owned
@@ -62,7 +62,7 @@ namespace das {
         if ( !from && gc_owner == nullptr ) return;
         gc_assign(target);
         for ( auto & field : fields ) {
-            if ( field.type ) field.type->gc_collect(target, from);
+            gc_collect_type(field.type, target, from);
             if ( field.init ) field.init->gc_collect(target, from);
         }
         aliases.foreach([&](auto td) {
@@ -77,7 +77,7 @@ namespace das {
         if ( from && gc_owner != from ) return;
         if ( !from && gc_owner == nullptr ) return;
         gc_assign(target);
-        if ( result ) result->gc_collect(target, from);
+        gc_collect_type(result, target, from);
         for ( auto & arg : arguments ) if ( arg ) arg->gc_collect(target, from);
         if ( body ) body->gc_collect(target, from);
         for ( auto & ann : annotations ) if ( ann ) ann->gc_collect(target, from);
@@ -159,7 +159,7 @@ namespace das {
 
     void ExprAddr::gc_collect ( gc_root * to, gc_root * from ) {
         Expression::gc_collect(to, from);
-        if ( funcType ) funcType->gc_collect(to, from);
+        gc_collect_type(funcType, to, from);
     }
 
     // ---- two subexprs ----
@@ -268,52 +268,52 @@ namespace das {
     void ExprReturn::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
         if ( subexpr ) subexpr->gc_collect(target, from);
-        if ( returnType ) returnType->gc_collect(target, from);
+        gc_collect_type(returnType, target, from);
     }
 
     void ExprConstPtr::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
-        if ( ptrType ) ptrType->gc_collect(target, from);
+        gc_collect_type(ptrType, target, from);
     }
 
     void ExprConstBitfield::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
-        if ( bitfieldType ) bitfieldType->gc_collect(target, from);
+        gc_collect_type(bitfieldType, target, from);
     }
 
     void ExprAssume::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
         if ( subexpr ) subexpr->gc_collect(target, from);
-        if ( assumeType ) assumeType->gc_collect(target, from);
+        gc_collect_type(assumeType, target, from);
     }
 
     void ExprTypeInfo::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
         if ( subexpr ) subexpr->gc_collect(target, from);
-        if ( typeexpr ) typeexpr->gc_collect(target, from);
+        if ( typeexpr ) typeexpr->gc_collect(target, from);   // src/ast/ARCHITECTURE_GC.md#type-remap
     }
 
     void ExprIs::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
         if ( subexpr ) subexpr->gc_collect(target, from);
-        if ( typeexpr ) typeexpr->gc_collect(target, from);
+        gc_collect_type(typeexpr, target, from);
     }
 
     void ExprAscend::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
         if ( subexpr ) subexpr->gc_collect(target, from);
-        if ( ascType ) ascType->gc_collect(target, from);
+        gc_collect_type(ascType, target, from);
     }
 
     void ExprCast::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
         if ( subexpr ) subexpr->gc_collect(target, from);
-        if ( castType ) castType->gc_collect(target, from);
+        gc_collect_type(castType, target, from);
     }
 
     void ExprTypeDecl::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
-        if ( typeexpr ) typeexpr->gc_collect(target, from);
+        gc_collect_type(typeexpr, target, from);
     }
 
     // ---- ExprLooksLikeCall and descendants ----
@@ -321,7 +321,7 @@ namespace das {
     void ExprLooksLikeCall::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
         for ( auto & arg : arguments ) if ( arg ) arg->gc_collect(target, from);
-        if ( aliasSubstitution ) aliasSubstitution->gc_collect(target, from);
+        gc_collect_type(aliasSubstitution, target, from);
     }
 
     // ExprCallMacro : ExprLooksLikeCall
@@ -383,7 +383,7 @@ namespace das {
     // ExprNew : ExprCallFunc (inherits arguments from ExprLooksLikeCall)
     void ExprNew::gc_collect ( gc_root * target, gc_root * from ) {
         ExprCallFunc::gc_collect(target, from);
-        if ( typeexpr ) typeexpr->gc_collect(target, from);
+        gc_collect_type(typeexpr, target, from);
     }
 
     // ExprCall : ExprCallFunc
@@ -444,7 +444,7 @@ namespace das {
     // ExprMakeGenerator : ExprLooksLikeCall
     void ExprMakeGenerator::gc_collect ( gc_root * target, gc_root * from ) {
         ExprLooksLikeCall::gc_collect(target, from);
-        if ( iterType ) iterType->gc_collect(target, from);
+        gc_collect_type(iterType, target, from);
     }
 
     // ---- ExprBlock (complex) ----
@@ -453,7 +453,7 @@ namespace das {
         Expression::gc_collect(target, from);
         for ( auto & e : list ) if ( e ) e->gc_collect(target, from);
         for ( auto & e : finalList ) if ( e ) e->gc_collect(target, from);
-        if ( returnType ) returnType->gc_collect(target, from);
+        gc_collect_type(returnType, target, from);
         for ( auto & arg : arguments ) if ( arg ) arg->gc_collect(target, from);
         for ( auto & ann : annotations ) if ( ann ) ann->gc_collect(target, from);
     }
@@ -522,7 +522,7 @@ namespace das {
 
     void ExprMakeLocal::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
-        if ( makeType ) makeType->gc_collect(target, from);
+        gc_collect_type(makeType, target, from);
     }
 
     // ExprMakeStruct : ExprMakeLocal
@@ -545,7 +545,7 @@ namespace das {
     // ExprMakeArray : ExprMakeLocal
     void ExprMakeArray::gc_collect ( gc_root * target, gc_root * from ) {
         ExprMakeLocal::gc_collect(target, from);
-        if ( recordType ) recordType->gc_collect(target, from);
+        gc_collect_type(recordType, target, from);
         for ( auto & e : values ) if ( e ) e->gc_collect(target, from);
     }
 
