@@ -65,20 +65,27 @@ def shutdown() {
     print("application shutdown after {g_ticks} tick(s)\n")
 }
 
-[export]
-def main() {
+//! own frame for parse_args's Result, whose error holds a string: main keeps no collectable local across its loop, and a standalone build proves that
+[never_inline]
+def read_args() : tuple<ok : bool; args : Args> {
     var parse_result <- parse_args(type<Args>)
     if (parse_result |> is_err) {
         print("command-line args: {parse_result |> unwrap_err}\n")
-        return
+        return (ok = false, args = Args())
     }
-    let args <- parse_result |> move_unwrap
+    return (ok = true, args = parse_result |> move_unwrap)
+}
+
+[export]
+def main() {
+    let cli = read_args()
+    return if (!cli.ok)
     init()
-    while (args.frames == 0 || g_ticks < args.frames) {
+    while (cli.args.frames == 0 || g_ticks < cli.args.frames) {
         update()
         maybe_collect_gc()
-        if (args.tick_ms > 0) {
-            sleep(uint(args.tick_ms))
+        if (cli.args.tick_ms > 0) {
+            sleep(uint(cli.args.tick_ms))
         }
     }
     shutdown()

@@ -392,7 +392,7 @@ def parse_args() {
 // eval_main_loop drives the block once per frame: a blocking while-loop
 // natively, emscripten_set_main_loop (rAF) on the web -- one main for both.
 // live_end_frame only swaps buffers, so the loop body owns the GC boundary.
-[export]
+[export, unsafe_heap_collect]   //! native code drives the loop's block, hiding its collect from the collect-carrier proof; main keeps no collectable local across it
 def main() {
     parse_args()
     init()

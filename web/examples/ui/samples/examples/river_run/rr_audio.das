@@ -498,6 +498,7 @@ def start_section_music(section : int) {
     }
 }
 
+[unsafe_heap_collect]   //! the strudel thread's entry: no daslang frame sits below it, as with strudel_play, which it calls
 def strudel_music_main() {
     start_menu_music()
     strudel_play(@@music_cmd)
@@ -545,15 +546,20 @@ def update_music_state() {
     }
 }
 
+[never_inline]   //! inlined, its sample copy would land in init_audio's frame, and init_audio reaches a collect
+def prime_engine_loop() {
+    var loop_copy <- clone(snd_engine_loop)
+    engine_sid = play_sound_loop_from_pcm(AUDIO_RATE, AUDIO_CHANNELS, loop_copy)
+    set_volume(engine_sid, 0.0)
+    set_pause(engine_sid, true)
+}
+
 def init_audio() {
     if (!audio_initialized) {
         asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
-        var loop_copy <- clone(snd_engine_loop)
-        engine_sid = play_sound_loop_from_pcm(AUDIO_RATE, AUDIO_CHANNELS, loop_copy)
-        set_volume(engine_sid, 0.0)
-        set_pause(engine_sid, true)
+        prime_engine_loop()
     }
     if (!audio_initialized) {
         return

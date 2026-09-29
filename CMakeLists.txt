@@ -619,10 +619,9 @@ ENDMACRO()
 
 ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/dasbind/dasbind_example.das")
 
-# The canonical application template (init/update/shutdown + main with the GC
-# boundary) — running it per-PR keeps the shape everyone copies compiling and
-# terminating. exe=FALSE: interpreted run is the point, not another AOT exe.
-ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/application/main.das" FALSE)
+# The template every program copies; its exe build runs the collect-carrier proof over it, per PR
+# (run_example_main is on the extended checks' modules lane).
+ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/application/main.das")
 
 # CPU path tracer — headless render smoke (no GPU/GUI). Compat gate for the OpenGL<->Vulkan shader
 # harmonization arc (modules/dasOpenGL/HARMONIZATION_PLAN.md section 8.1): the GL path tracers share

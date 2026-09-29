@@ -1174,9 +1174,7 @@ def done_for_smoke() : bool {
     return g_args.smoke && read_out()
 }
 
-// eval_main_loop drives the block once per frame: a blocking while-loop natively, the
-// browser's requestAnimationFrame on the web - one main for both
-[export]
+[export, unsafe_heap_collect, arch(at = "../ARCHITECTURE.md#one-source-two-builds")]
 def main() {
     init()
     eval_main_loop() {
