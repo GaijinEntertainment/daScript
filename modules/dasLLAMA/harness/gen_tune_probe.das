@@ -297,18 +297,13 @@ def run_tile_bf16(tile, cfg; panel : Q8PanelFn; fx : Fixture; q : array<int8>; s
         let xbp = reinterpret<int8 const?>(xbf16_build(xqp, xsp, fx.n, fx.ntok, 32l))
         var pp = addr(pbuf[0])
         pp = bf16_align64(pp)
-        var g = 0l
-        while (g < ng) {
-            let wgp = wp + g * mr * fx.n
-            let sgp = sp + g * mr * fx.nb
-            invoke(panel, wgp, sgp, mr, fx.nb, fx.n, form, pp)
-            var t0 = 0l
-            while (t0 < fx.ntok) {
-                invoke(tile, yp, reinterpret<int8 const?>(pp), sgp, xbp, xsp, null, fx.n, fx.d, g, t0)
-                t0 += 32l
-            }
-            g += form
-        }
+        bf16_walk(0l, ng, form, 0l, fx.ntok, fx.ntok, amx_bf16_tile_tokens(), $(g : int64) {
+            invoke(panel, wp + g * mr * fx.n, sp + g * mr * fx.nb, mr, fx.nb, fx.n, form, pp)
+        }, $(g, tk : int64) {
+            invoke(tile, yp, reinterpret<int8 const?>(pp), sp + g * mr * fx.nb, xbp, xsp, null, fx.n, fx.d, g, tk)
+        }, $(g, gn, tk : int64) {
+            panic("run_tile_bf16: the fixture leaves a tail at group {g} (+{gn}) token {tk}")
+        })
     }
 }
 
@@ -1093,7 +1088,6 @@ def run_kq_tile_bf16(tile; gemv; panel : KqPanelFn; fx : KqFixture; kq : array<u
     let ssb = kq_ssb(fx.fmt)
     var pbuf : array<uint16>
     pbuf |> resize(int(form * 16l * fx.n + 32l))
-    let tbs = (fx.ntok / amx_bf16_tile_tokens()) * amx_bf16_tile_tokens()
     unsafe {
         let kqp = addr(kq[0])
         let ksp = addr(ks[0])
@@ -1104,29 +1098,19 @@ def run_kq_tile_bf16(tile; gemv; panel : KqPanelFn; fx : KqFixture; kq : array<u
         let xbp = reinterpret<int8 const?>(xbf16_build(xqp, xsp, fx.n, fx.ntok, 256l))
         var pp = addr(pbuf[0])
         pp = bf16_align64(pp)
-        var g = 0l
-        while (g < ng) {
-            let gn = min(form, ng - g)
+        bf16_walk(0l, ng, form, 0l, fx.ntok, fx.ntok, amx_bf16_tile_tokens(), $(g : int64) {
             let kqg = kqp + g * mr * fx.nsb * qsb
             let ksg = ksp + g * mr * fx.nsb * ssb
-            var t0 = 0l
-            if (gn == form) {
-                if (panel != null) {
-                    invoke(panel, kqg, ksg, mr, fx.nsb, fx.n, form, pp)
-                } else {
-                    kq_panel_bf16(int(fx.fmt), kqg, ksg, mr, fx.nsb, fx.n, form, pp)
-                }
-                while (t0 < tbs) {
-                    invoke(tile, yp, reinterpret<uint8 const?>(pp), ksg, xbp, xsp, xbsp, fx.n, fx.d, g, t0)
-                    t0 += amx_bf16_tile_tokens()
-                }
+            if (panel != null) {
+                invoke(panel, kqg, ksg, mr, fx.nsb, fx.n, form, pp)
+            } else {
+                kq_panel_bf16(int(fx.fmt), kqg, ksg, mr, fx.nsb, fx.n, form, pp)
             }
-            while (t0 < fx.ntok) {
-                invoke(gemv, yp + t0 * fx.d, kqp, ksp, xqp + t0 * fx.n, xsp + t0 * fx.nsb, xbsp + t0 * (fx.n / 16l), fx.n, g * mr, (g + gn) * mr)
-                t0++
-            }
-            g += gn
-        }
+        }, $(g, tk : int64) {
+            invoke(tile, yp, reinterpret<uint8 const?>(pp), ksp + g * mr * fx.nsb * ssb, xbp, xsp, xbsp, fx.n, fx.d, g, tk)
+        }, $(g, gn, tk : int64) {
+            invoke(gemv, yp + tk * fx.d, kqp, ksp, xqp + tk * fx.n, xsp + tk * fx.nsb, xbsp + tk * (fx.n / 16l), fx.n, g * mr, (g + gn) * mr)
+        })
     }
 }
 

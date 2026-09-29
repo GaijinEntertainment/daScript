@@ -2150,36 +2150,52 @@ def private q8q8_batch_cell_gen(var myp : float?; wp : int8 const?; sp : float c
     }
 }
 
+//! One bf16 walk over row groups [ub, ue) and tokens [tb0, tend) in blocks of `tb` tokens: a whole tile unit of `ngr` groups builds its panel once a block (`panel`) and runs the tile `ts` tokens at a time (`tile`);
+//! a block's token tail and a group tail short of the unit go a token at a time to the rows core (`rows`, over `gn` groups).
+def bf16_walk(ub, ue, ngr, tb0, tend, tb, ts : int64; panel : block<(g : int64) : void>;
+              tile : block<(g, tk : int64) : void>; rows : block<(g, gn, tk : int64) : void>) {
+    var t0 = tb0
+    while (t0 < tend) {
+        let tbe = min(t0 + tb, tend)
+        let tbs = t0 + ((tbe - t0) / ts) * ts
+        var g = ub
+        while (g < ue) {
+            let gn = min(ngr, ue - g)
+            var tk = t0
+            if (tk < tbs && gn == ngr) {
+                invoke(panel, g)
+                while (tk < tbs) {
+                    invoke(tile, g, tk)
+                    tk += ts
+                }
+            }
+            while (tk < tbe) {
+                invoke(rows, g, gn, tk)
+                tk++
+            }
+            g += gn
+        }
+        t0 += tb
+    }
+}
+
+//! the tile units `ng` row groups make at `form` groups a unit, the last one short where `form` does not divide `ng`
+def bf16_units(ng, form : int64) : int => int((ng + form - 1l) / form)
+
+//! the first row group of tile unit `u`, `ng` for the unit past the last
+def bf16_unit_group(u : int; form, ng : int64) : int => int(min(int64(u) * form, ng))
+
 def template q8q8_batch_cell_bf16_template(var myp : float ?; wp : int8 const ?; sp : float const ?; xqp : int8 const ?; xsp : float const ?; xbp : uint8 const ?; n, d, nb, mr, TB : int64; ub, ue : int; tb0, tend, ngr : int64; var pp : uint16 ?) : void {
-    let ts = int64(q8q8_tokstep_gen())
     q8q8_family_live()
     q8q8_amx_cfg_gen()
     unsafe {
-        var tb = tb0
-        while (tb < tend) {
-            let tbe = min(tb + TB, tend)
-            let tbs = tb + ((tbe - tb) / ts) * ts
-            var g = int64(ub)
-            while (g < int64(ue)) {
-                let gn = min(ngr, int64(ue) - g)
-                let wgp = wp + g * mr * n
-                let sgp = sp + g * mr * nb
-                var tk = tb
-                if (tk < tbs && gn == ngr) {
-                    Q8PANEL(wgp, sgp, mr, nb, n, ngr, pp)
-                    while (tk < tbs) {
-                        Q8TILE(myp, reinterpret<int8 const?>(pp), sgp, reinterpret<int8 const?>(xbp), xsp, null, n, d, g, tk)
-                        tk += ts
-                    }
-                }
-                while (tk < tbe) {
-                    Q8GEMV(myp + tk * d, wp, sp, xqp + tk * n, xsp + tk * nb, n, g * mr, (g + gn) * mr)
-                    tk++
-                }
-                g += gn
-            }
-            tb += TB
-        }
+        bf16_walk(int64(ub), int64(ue), ngr, tb0, tend, TB, int64(q8q8_tokstep_gen()), $(g : int64) {
+            Q8PANEL(wp + g * mr * n, sp + g * mr * nb, mr, nb, n, ngr, pp)
+        }, $(g, tk : int64) {
+            Q8TILE(myp, reinterpret<int8 const?>(pp), sp + g * mr * nb, reinterpret<int8 const?>(xbp), xsp, null, n, d, g, tk)
+        }, $(g, gn, tk : int64) {
+            Q8GEMV(myp + tk * d, wp, sp, xqp + tk * n, xsp + tk * nb, n, g * mr, (g + gn) * mr)
+        })
     }
 }
 
@@ -2238,14 +2254,14 @@ def private q8q8_batch_kernel_neon_laneq_gen(var yp : float?; wp : int8 const?; 
     if (form > 0l) {
         let xbp = xbf16_build(xqp, xsp, n, ntok, 32l)
         let TBb = bf16_token_block()
-        let nu = int((ng + form - 1l) / form)
+        let nu = bf16_units(ng, form)
         let chunks = min(matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok), nu)
         var panels = walk_panels(bf16_panel_bytes(n, form))
         var pbase = panels.base
         let pstride = panels.stride
         maybe_parallel_for_indexed(0, nu, chunks) $(slot, ub, ue) {
             unsafe {
-                q8q8_batch_cell_bf16(myp, wp, sp, xqp, xsp, xbp, n, d, nb, mr, TBb, int(min(int64(ub) * form, ng)), int(min(int64(ue) * form, ng)), 0l, ntok, form, reinterpret<uint16?>(pbase + int64(slot) * pstride))
+                q8q8_batch_cell_bf16(myp, wp, sp, xqp, xsp, xbp, n, d, nb, mr, TBb, bf16_unit_group(ub, form, ng), bf16_unit_group(ue, form, ng), 0l, ntok, form, reinterpret<uint16?>(pbase + int64(slot) * pstride))
             }
         }
     } elif (ts != 4l) {
@@ -2964,36 +2980,17 @@ def private kq_batch_cell_bf16(fmt : int; var myp : float?; kqp : uint8 const?; 
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let nb16 = n / 16l
-    let ts = amx_bf16_tile_tokens()
     let kf = kq_fmt_of_id(fmt, "kq_batch_cell_bf16")
     kq_fmt_stamp(kf) $(F) {
         kq_amx_arm(F)
         unsafe {
-            var tb = tb0
-            while (tb < tend) {
-                let tbe = min(tb + TB, tend)
-                let tbs = tb + ((tbe - tb) / ts) * ts
-                var g = int64(ub)
-                while (g < int64(ue)) {
-                    let gn = min(ngr, int64(ue) - g)
-                    let kqg = kqp + g * mr * nsb * qsb
-                    let ksg = ksp + g * mr * nsb * ssb
-                    var tk = tb
-                    if (tk < tbs && gn == ngr) {
-                        kq_panel_gen(kqg, ksg, mr, nsb, n, ngr, pp, F)
-                        while (tk < tbs) {
-                            kq_tile_gen(myp, reinterpret<uint8 const?>(pp), ksg, reinterpret<int8 const?>(xbp), xsp, xbsp, n, d, g, tk, F)
-                            tk += ts
-                        }
-                    }
-                    while (tk < tbe) {
-                        kq_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, g * mr, (g + gn) * mr, F)
-                        tk++
-                    }
-                    g += gn
-                }
-                tb += TB
-            }
+            bf16_walk(int64(ub), int64(ue), ngr, tb0, tend, TB, amx_bf16_tile_tokens(), $(g : int64) {
+                kq_panel_gen(kqp + g * mr * nsb * qsb, ksp + g * mr * nsb * ssb, mr, nsb, n, ngr, pp, F)
+            }, $(g, tk : int64) {
+                kq_tile_gen(myp, reinterpret<uint8 const?>(pp), ksp + g * mr * nsb * ssb, reinterpret<int8 const?>(xbp), xsp, xbsp, n, d, g, tk, F)
+            }, $(g, gn, tk : int64) {
+                kq_gemv_gen(myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * nsb, xbsp + tk * nb16, n, g * mr, (g + gn) * mr, F)
+            })
         }
     }
 }
@@ -3065,10 +3062,10 @@ def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
     var pbase = panels.base
     let pstride = panels.stride
     if (form > 0l) {
-        let nu = int((ng + form - 1l) / form)
+        let nu = bf16_units(ng, form)
         maybe_parallel_for_indexed(0, nu, min(chunks, nu)) $(slot, ub, ue) {
             unsafe {
-                kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, xbp, n, d, mr, TB, int(min(int64(ub) * form, ng)), int(min(int64(ue) * form, ng)), 0l, ntok, pbase + int64(slot) * pstride)
+                kq_batch_cell_gen(fmt, myp, kqp, ksp, xqp, xsp, xbsp, xbp, n, d, mr, TB, bf16_unit_group(ub, form, ng), bf16_unit_group(ue, form, ng), 0l, ntok, pbase + int64(slot) * pstride)
             }
         }
     } else {
@@ -3388,14 +3385,14 @@ def private q8q8_batch_kernel_s16_gen(var yp : float?; wp : int8 const?; sp : ui
     if (form > 0l) {
         let xbp = xbf16_build(xqp, xsp, n, ntok, 32l)
         let TBb = bf16_token_block()
-        let nu = int((ng + form - 1l) / form)
+        let nu = bf16_units(ng, form)
         let chunks = min(matmul_chunks(int(ng * mr), get_q8_batch_chunks_per_job(), n * d * ntok), nu)
         var panels = walk_panels(bf16_panel_bytes(n, form))
         var pbase = panels.base
         let pstride = panels.stride
         maybe_parallel_for_indexed(0, nu, chunks) $(slot, ub, ue) {
             unsafe {
-                q8q8_batch_cell_bf16_s16(myp, wp, sp, xqp, xsp, xbp, n, d, nb, mr, TBb, int(min(int64(ub) * form, ng)), int(min(int64(ue) * form, ng)), 0l, ntok, form, reinterpret<uint16?>(pbase + int64(slot) * pstride))
+                q8q8_batch_cell_bf16_s16(myp, wp, sp, xqp, xsp, xbp, n, d, nb, mr, TBb, bf16_unit_group(ub, form, ng), bf16_unit_group(ue, form, ng), 0l, ntok, form, reinterpret<uint16?>(pbase + int64(slot) * pstride))
             }
         }
     } elif (ts != 4l) {
