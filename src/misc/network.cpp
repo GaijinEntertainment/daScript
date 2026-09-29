@@ -23,9 +23,11 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#if !defined(__ORBIS__) && !defined(__PROSPERO__)
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <poll.h>
+#endif
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -38,6 +40,12 @@
 #include <sys/errno.h>
 #endif
 
+#endif
+
+#if defined(__ORBIS__) || defined(__PROSPERO__)
+#define DAS_NETWORK_CLIENT 0
+#else
+#define DAS_NETWORK_CLIENT 1
 #endif
 
 namespace das {
@@ -249,11 +257,16 @@ namespace das {
             address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
             return true;
         }
+#if DAS_NETWORK_CLIENT
         return inet_pton(AF_INET, host, &address.sin_addr) == 1;
+#else
+        return false;
+#endif
     }
 
     static const int SEND_WAIT_MS = 10000;
 
+#if DAS_NETWORK_CLIENT
     static bool connect_pending ( int err ) {
 #ifdef _WIN32
         return socket_would_block(err);
@@ -261,6 +274,7 @@ namespace das {
         return err==EINPROGRESS || socket_would_block(err);
 #endif
     }
+#endif
 
     typedef std::chrono::steady_clock::time_point deadline_t;
 
@@ -269,6 +283,11 @@ namespace das {
     }
 
     static int wait_writable_until ( socket_t sock, deadline_t deadline ) {
+#if !DAS_NETWORK_CLIENT
+        (void)sock;
+        (void)deadline;
+        return -1;
+#else
         for ( ;; ) {
             auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
             if ( left < 0 ) left = 0;
@@ -295,6 +314,7 @@ namespace das {
             int err = last_socket_error();
             if ( !socket_would_block(err) ) return err;
         }
+#endif
     }
 
     Client::Client() {
@@ -310,6 +330,13 @@ namespace das {
             onError("already connected", -1);
             return false;
         }
+#if !DAS_NETWORK_CLIENT
+        (void)host;
+        (void)port;
+        (void)timeout_ms;
+        onError("no client connections on this platform", -1);
+        return false;
+#else
         struct addrinfo hints;
         memset(&hints, 0, sizeof(hints));
         hints.ai_family = AF_UNSPEC;
@@ -382,6 +409,7 @@ namespace das {
         onLog("connected");
         onConnect();
         return true;
+#endif
     }
 
     bool Client::is_connected() const {
