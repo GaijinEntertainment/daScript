@@ -154,8 +154,10 @@ warms it outside the sandbox with one build of **each** mode, because the page r
 
 A tracked file that differs from HEAD only in its line endings was rewritten by a build - a
 generated `.das.inc` committed with the other ending - and the roll puts it back before moving;
-any other modified tracked file is a hand edit and the roll refuses to start. It reports the old
-and new id.
+so it does the committed flex outputs under `src/parser/` (`ds_lexer.cpp`, `lex.yy.h`,
+`ds2_lexer.cpp`, `lex2.yy.h`), which the host build regenerates with its own flex and whose content
+then differs. Any other modified tracked file is a hand edit and the roll refuses to start - a
+refusal repeats every night until someone resolves it. It reports the old and new id.
 Verify afterwards with the browser leg of `utils/internal/dasweb-verify`, which drives the live site.
 
 **Nightly, gated on green.** A toolchain left behind master compiles every sample with old

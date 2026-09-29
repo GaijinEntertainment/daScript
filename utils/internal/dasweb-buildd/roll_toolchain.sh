@@ -127,8 +127,18 @@ if [ -n "$GREEN_CHECK" ]; then
     exit $?
 fi
 
+# The committed flex outputs: the host build regenerates them with its own flex, whose
+# output differs in content from the committed copy.
+is_build_regenerated() {
+    case "$1" in
+        src/parser/ds_lexer.cpp|src/parser/lex.yy.h|src/parser/ds2_lexer.cpp|src/parser/lex2.yy.h) return 0 ;;
+    esac
+    return 1
+}
+
 # A tracked file that differs from HEAD only in its line endings was rewritten by
-# a build (a generated .das.inc committed with the other ending), and is put back.
+# a build (a generated .das.inc committed with the other ending), and is put back,
+# as is a committed flex output the build regenerated.
 # Any other tracked-file change is a hand edit: rolling would silently discard or
 # preserve it, so the roll refuses. Untracked build dirs are expected and fine.
 settle_worktree() {
@@ -136,6 +146,9 @@ settle_worktree() {
     while IFS= read -r -d '' f; do
         if git diff --quiet --ignore-cr-at-eol -- "$f"; then
             echo "restoring $f: it differs from HEAD in line endings only, a build rewrote it"
+            run git checkout -- "$f"
+        elif is_build_regenerated "$f"; then
+            echo "restoring $f: the host build regenerates it with its own flex"
             run git checkout -- "$f"
         else
             edits="$edits  $f"$'\n'
