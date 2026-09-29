@@ -1967,7 +1967,7 @@
    control flow at one group and the tile's four tokens - it needs its own before/after pair);
    `q8q8_bias_sums` onto `b32g_fill_bsums` under a scale argument; the two q8 batch kernels
    (`q8q8_batch_kernel_neon_laneq_gen`, `q8q8_batch_kernel_s16_gen`) as one generic over the
-   scale plane; the two-thread race cells of `tests/test_prefill_cpu_kernels.das` over one helper;
+   scale plane;
    `q8q8_panel_gen` and its s16 twin over one row scatter shared with `kq_panel_rows_bf16`;
    `q8_panel_gen_impl` as a unit kind of `panel_gen_impl`; `panel_quads`' unpack arms shared with
    `emit_block_kqv2`'s; one `kq_family_registries(fmt)` ladder behind the harness's six; one
@@ -2021,3 +2021,23 @@
    instruction cannot be vectorized` - and each at `<unknown>`, so the loop and its module are
    unread. Done = each loop named (the emitter attaches a location to a loop it hints), then
    vectorized or its hint dropped.
+196. **Test and harness fixtures are written more than once.** The K-quant planes with their
+   Q8_K activations: `build_planes` (`harness/token_block_race.das`), `build_pool` and the
+   activation block under it (`harness/moe_kq_probe.das`), `build_kq_fixture`
+   (`harness/gen_tune_probe.das`), `build_kq_region` and `build_acts`
+   (`tests/test_prefill_cpu_kernels.das`). The bf16 envelope, 1e-2 of the image's largest
+   magnitude: `BF16_ENVELOPE` (`harness/token_block_race.das`), `BF16_ENVELOPE_REL` with
+   `bf16_envelope` (`harness/gen_tune_probe.das`), `cmp_bf16`
+   (`tests/test_prefill_cpu_kernels.das`), `held_bf16` (`tests/test_q8q8_family.das`). The
+   two-thread race: `walk_thread` with `walk_two_contexts` beside `plane_thread` with
+   `xbf16_two_contexts` (`tests/test_prefill_cpu_kernels.das`), one start barrier, round loop and
+   assert set under two round bodies. The server rig: `with_mtp_server`
+   (`utils/dasllama-server/test_openai_server_mtp.das`, repo root) spells the Metal mode as a
+   `bool` where `with_llama_server` takes a `MetalMode`, and the ready poll is written in every
+   `with_*_server` rig of that folder. Elapsed seconds off `get_time_usec`:
+   `tests/fio/popen_timeout_tree.das`, `seconds_since` (`utils/internal/preflight/main.das`),
+   `now_seconds` (`utils/watchdog/watchdog.das`), all repo root. Done = one fixture module the
+   tests and the harness both require for the planes and the envelope, one two-thread helper
+   taking the round's body, the rigs' boot and ready poll in `_server_rig.das`, and an elapsed
+   seconds builtin beside `get_time_usec` - each with the suites that read it green, or the fold
+   refused by name.
