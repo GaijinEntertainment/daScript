@@ -45,6 +45,8 @@ The words these rules share:
   backend and holds its model.
 - A third-party row is a figure from a run of a third-party program serving the same model on the
   same input size.
+- A cell, script or exe of this repository is a board cell, a script in the tree at the diff's
+  tip, or an exe built from that tree; a script outside the tree is not one, whatever it calls.
 
 **The naming that a rule governing a figure asks for attaches to a figure only by a sentence, a
 table heading or a provenance line that unambiguously covers it, or by a citation of a passage
@@ -89,19 +91,15 @@ outside the benchmark process.**
 committed board row of the same model, served-turn leg and backend where one exists.**
 
 **A figure a diff writes down - in `PERF_LEDGER.md` or any other checked-in text - that no cell,
-script, or exe of this repository produced names where it came from: a published figure names
-its source and the report; a figure a third-party program
-(an exe or a script) produced names that program, its version, the model, the command line, and
-any environment settings the command line does not show.** A citation of an architecture section
+script, or exe of this repository produced names where it came from: a published figure names its source and the report; a figure
+a third-party program (an exe or a script) produced names that program, its version, the model,
+the command line, and any environment settings the command line does not show; a figure a script
+outside the tree produced names it as outside the tree, with the command line it ran.** A citation of an architecture section
 that spells that run - no placeholder in its exe, model or command line - names it.
 
-**A diff never rests an adoption decision about what the engine serves on a figure from
-another project - it rests on a measurement a cell or instrument of this repository took.**
-
-**A figure that picks a value, a formula or a kernel the diff ships comes from a script or exe
-checked in at the diff's tip, named with its command line; a figure from a script that is not
-checked in picks nothing, and the text that carries it says the script is not checked in.** A
-script nobody can run from the tree is a figure nobody can take again.
+**A figure the diff's text gives as the reason it ships one value, formula or kernel over
+another comes from a script in the tree at the diff's tip, or an exe built from that tree, named
+with its command line.** A figure from a script outside the tree cannot be measured again.
 
 **A diff never edits the figures or conclusion of a dated `PERF_LEDGER.md` entry - one whose
 bold head, or the heading it sits under, carries a date - and never adds figures to one; a new
@@ -160,7 +158,7 @@ same change, in the `ARCHITECTURE_MEASUREMENT*.md` section that describes the ha
 the row is compared with; where no section describes that instrument, the diff adds one.** The
 next entry re-runs the reference from the section, not from the earlier entry's prose.
 
-**A figure a run of this repository produced that is not a served-turn leg, whose value depends
+**A figure a cell, script or exe of this repository produced that is not a served-turn leg, whose value depends
 on the box it ran on, names the harness, the flags, the environment overrides, the box and the
 exe or script that produced it - or names the committed record file and the row or key it sits
 under, when that record is a board record or its own fields name that harness, flags, box and
