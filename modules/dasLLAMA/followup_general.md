@@ -1962,19 +1962,8 @@
    `ffn_down` at Q4_1 (GGUF type 3), and the loader stops at `type 3 not supported`; the reference
    build's Q4_0 carriers routinely mix one. Done = Q4_1 decoded to the q51-style per-32 (d, m) plane, or the
    loader names the tensor and the format it wants re-quantized to.
-187. **The batch walks allocate their panel per dispatch chunk, under no region-entry
-   annotation.** The four kernel-table batch functions (`q8q8_batch_kernel_neon_laneq_gen`,
-   `q8q8_batch_kernel_s16_gen`, `kq_batch_kernel_gen`, `kq_batch_groupn_gen`) are reached only
-   through the backend table and carry no `[hot_path]` / `[no_alloc]`, so the allocation lint
-   never walks them; under them every chunk of a prefill batch allocates its panel - the byte
-   panel of the k5/k6 and grid formats (`kq_batch_cell_gen`'s `scratch`) and the bf16 panel of
-   the three bf16 cells. A panel shared by the lanes and resized inside the dispatch raced
-   (`can't resize locked array`). Done = one `@scratch @exact_size` panel per walk, sized for
-   `get_dispatch_slot_bound()` slots before the dispatch, each cell taking its slot's slice, and
-   the four entries annotated.
-188. **The bf16 walk is written twice, and the harness's format ladders six times.** The folds
-   left unapplied: one walk helper over blocks (panel, tile, gemv tail) for the q8 and superblock
-   cells and the harness's `run_tile_bf16` / `run_kq_tile_bf16`, the tile-unit chunking folded in;
+188. **The bf16 panel scatter is written three times, and the harness's format ladders six.** The
+   folds left unapplied:
    `q8q8_panel_gen` and its s16 twin over one row scatter shared with `kq_panel_rows_bf16`;
    `q8_panel_gen_impl` as a unit kind of `panel_gen_impl`; `panel_quads`' unpack arms shared with
    `emit_block_kqv2`'s; one `kq_family_registries(fmt)` ladder behind the harness's six; one
@@ -1986,10 +1975,13 @@
    Sapphire Rapids - the same `x86-amx` class - is unmeasured. Done = the confirm races one
    superblock carrier (`DASLLAMA_CONFIRM_MODEL`'s K-quant twin), or a Sapphire Rapids carrier row
    in the ledger.
-190. **The bf16 walk's token block is one floor for every shape.** The one-process race on
-   Granite Rapids splits by K length: at n=2048 a block of 256 beats 512 by 10%, at n=8192 512
-   beats 256 by 8% (`PERF_LEDGER.md`, the AMX bf16 tile arc); end to end 512 holds. Done = the
-   block chosen per weight shape, raced end to end on the 1B and 4B carriers.
+190. **The bf16 walk's token block is one number for every shape and every lane count.** The
+   one-process race on Granite Rapids (`PERF_LEDGER.md`, the AMX bf16 walk follow-up) splits on
+   the weight's output width and on the lanes a core carries: at 16 lanes on 8 cores 512 is the
+   best block on every weight of K 4096 and up, and 256 leads it by 5% on the widest output
+   (K 2560, 9728 rows); at 8 lanes - one a core - 256 leads 512 by 1.5x on that shape.
+   `bf16_token_block` answers 512 in whole tiles. Done = the block a tuner knob
+   raced per lanes-per-core regime, confirmed end to end on the 1B and 4B carriers.
 191. **The generated tier branches on format ids as literals.** The emitter reads `te.kq == 33`
    and the runtime ladders `fmt == 4` (`kq_layout_of`), and the bf16 panel code follows them
    (`panel_is_grid`, `panel_scales`, `panel_quads`, `panel_ioff`, the panel stubs' ids, the
