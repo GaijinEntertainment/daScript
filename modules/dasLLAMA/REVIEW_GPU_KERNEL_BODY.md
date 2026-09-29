@@ -18,8 +18,9 @@ of one kernel instance (one class, one set of template constants) that a model's
 records. The main loop is a loop whose trip count grows with the work one thread does, per
 element or per row.
 
-**A host-fixed main-loop branch whose deciding value is a per-call extent is never stamped: peel
-it (the full chunks run under the stamped chunk bound, then one tail pass carries the guard), or,
+**A host-fixed main-loop branch whose deciding value is a per-call extent is never stamped (baked
+into the kernel as a `@template_constant` or literal): peel it (the full chunks run under the
+stamped chunk bound, then one tail pass carries the guard), or,
 outside an `[unroll]` loop, replace it with an index clamp that runs the guarded work on an index
 inside the extent and never stores that iteration's result.**
 
@@ -86,11 +87,12 @@ per simdgroup, one `@workgroup` value that one lane writes and every lane reads 
 class deriving `MetalTgReduceBase` calls its fold methods over its own `partial[]`; any other
 class calls `tg_sum_all` / `tg_max_all` over its own `@workgroup` array.**
 
-**A diff that adds or changes a hand-written fold of one plain float sum or max (no compensation
-term, no index carried alongside) over every lane of a Vulkan kernel's workgroup - a subgroup
-shuffle loop, a lane-0 loop over a `@workgroup` array, one `@workgroup` value that one lane writes
-and every lane reads - is a defect: derive `WgReduceBase` and call its `wg_sum`, `wg_max` or
-`wg_rms_inv` instead.** A fold into more than one result - separate sums over parts of the
+**A diff that adds or changes, in the body of a dispatched kernel class (one a `[vk_dispatch]`
+declares), a hand-written fold of one plain float sum or max (no compensation term, no index
+carried alongside) over every lane of a Vulkan kernel's workgroup - a subgroup shuffle loop, a
+lane-0 loop over a `@workgroup` array, one `@workgroup` value that one lane writes and every lane
+reads - is a defect: derive `WgReduceBase` and call its `wg_sum`, `wg_max` or `wg_rms_inv`
+instead.** A fold into more than one result - separate sums over parts of the
 workgroup - is not one value; `ARCHITECTURE_GPU.md#gpu-backends` names the bodies that fold that
 way.
 
@@ -109,15 +111,18 @@ for a simdgroup matrix op, vote, ballot or reduction, the partner lanes a shuffl
 call the widest set among the ops it reaches. A lane that exits early, or reaches the op a
 different number of times, leaves the set unable to complete it.
 
-**An encoder that dispatches a kernel form (a kernel class or a template instance) indexing any
-fixed-capacity array or buffer by a host-chosen count - a loop with no bounds or tail guard, a
-walk bounded by a stamped constant, a `@workgroup` stage sized by a literal - never lets an
-address pass the allocation: it sizes a device buffer to the walk's last address, and a
-threadgroup stage's literal capacity is held by a check in the dispatching code that declines a
-larger shape before the dispatch is recorded.** A `requires =` contract on the class is that
-guarantee for the dimension it names; an unchecked claim that an extent divides evenly is not. A
-padded chunk's walk can run past the live extent, and one read of stale bytes in a shared tile
-corrupts real rows.
+**An encoder that dispatches a kernel form (a kernel class or a template instance) indexing a
+device buffer by a host-chosen count or base offset, in a walk with no bounds or tail guard or a
+walk bounded by a stamped constant, sizes that buffer to the walk's last address, so no address
+passes the allocation.** A dimension the class's `requires =` contract names needs no
+padded buffer, because the builder rejects the misaligned shape; an unchecked claim that an
+extent divides evenly does not. A walk that rounds the extent up to whole chunks reads past the
+live extent, and one read of stale bytes in a shared tile corrupts real rows.
+
+**An encoder that dispatches a kernel form whose `@workgroup` stage is sized by a literal, and
+indexed by a host-chosen count or base offset, declines a shape larger than that literal in the
+dispatching code before the dispatch is recorded.** Workgroup memory has no bounds check, so an
+index past the literal reads or writes another stage's bytes.
 
 **Never let a pad row that feeds the reduction of a live output row - a pad along the reduction
 axis - reach a `matmul2d` or a staged cooperative tile as an operand; stage it as zero, or bound

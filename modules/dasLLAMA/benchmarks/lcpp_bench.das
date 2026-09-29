@@ -54,6 +54,9 @@ require dasllama/dasllama_env
 // `-o json` emits public bench records (schema: METHODOLOGY.md "The record") on stdout — progress goes to
 // stderr then, like llama-bench itself. `--ngl` != 0 is the whole graph on Metal
 // (MetalMode.required — a CPU fallback fails the run, never silently mismeasures).
+// ATTRIBUTION SWEEP: --mtp-ab times its off and on arms (the plain step against the speculative round) without
+// comparing their outputs - the arms attribute the round's draft, verify and acceptance cost, not an adoption; the
+// round's output invariance is tests/test_mtp.das's.
 
 enum private OutFmt {
     txt
@@ -1133,8 +1136,12 @@ def private corpus_ids(t : Model; tk : Tokenizer; tx : string; chat : bool) : ar
     return <- ids
 }
 
-// Greedy pick over the last logits — the tg-real row's sampler. Runs INSIDE the timed window, but
-// both A/B arms pay it identically so it cancels for judging.
+//! the reasons that fired, in the words a status page prints, for a refusal line
+def private cpu_pass_words() : string {
+    var inscope passes <- gpu_cpu_passes()
+    return join([for (p in passes); "{p.words} x{p.count}"], "; ")
+}
+
 def private argmax_logit(s : Session; vocab : int64) : int64 {
     var best = 0l
     var bv = s.logits[0]
@@ -1689,7 +1696,7 @@ def main() : int {
             }
             if (real_row) {
                 // REAL greedy continuation: fresh session per prompt (no KV/recurrent bleed),
-                // prefill untimed as llama-bench excludes the prompt, argmax inside the timed loop
+                // prefill untimed as llama-bench excludes the prompt, the sample inside the timed loop
                 // (both arms pay it, so it cancels). NOT comparable to the synthetic tg row.
                 let mtp_on = cfg.mtp_ab && arm != 0
                 var drafted = 0l
@@ -1705,9 +1712,13 @@ def main() : int {
                 pp_dr |> resize(length(toks))
                 pp_ac |> resize(length(toks))
                 var sp = SamplingParams(temp = cfg.mtp_temp)
-                for (_rep in range(reps)) {
+                let ask = sampler_is_argmax(sp)
+                var refused = ""   // one rep with no figure, or one served off the row's backend stamp, drops the whole row
+                let vk_stamp = !gpu && moe_gpu_tier_installed()   // the row records the armed Vulkan tier as its backend: a call the driver passed to the CPU rails ran off it
+                for (rep in range(reps)) {
                     var total_us = 0l
                     var rep_gen = 0l
+                    let passes0 = cpu_pass_total()
                     for (pi in range(length(toks))) {
                         var rs <- make_run_state(c, KVDtype.f16, KVDtype.f16)
                         let pl = long_length(toks[pi])
@@ -1716,24 +1727,25 @@ def main() : int {
                             set_seed_(rs, 4242)
                             rs.spec_params = unsafe(addr(sp))
                         }
+                        rs.pick_asked = ask
                         let t0 = ref_time_ticks()
                         var p_gen = ngen
                         if (mtp_on) {
                             rs.n_past = pl   // forward_prefill leaves n_past alone; the round drives it
-                            var tok = sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size)
+                            var tok = sample_(rs, sp)
                             var gen = 0l
                             while (gen < ngen) {
                                 gen += 1l + mtp_spec_round(t, rs, tok)   // tok + the accepted drafts; only the advance is timed
                                 if (rs.mtp_pre_drawn) {
                                     parked++
                                 }
-                                tok = sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size)
+                                tok = sample_(rs, sp)
                             }
                             p_gen = gen   // a trailing accept may overshoot by 1 — count what ran
                         } else {
                             var pos = pl
                             for (_g in range64(ngen)) {
-                                forward(t, rs, sp.temp > 0.0 ? sample_(rs, sp) : argmax_logit(rs, c.vocab_size), pos)
+                                forward(t, rs, sample_(rs, sp), pos)
                                 pos++
                             }
                         }
@@ -1748,7 +1760,27 @@ def main() : int {
                         pp_ac[pi] += rs.mtp_accepted
                         delete rs
                     }
+                    if (rep_gen <= 0l || total_us <= 0l) {
+                        refused = "rep {rep} produced no figure ({rep_gen} tokens in {total_us} us)"
+                        break
+                    }
+                    let passed = cpu_pass_total() - passes0
+                    if (vk_stamp && passed > 0l) {
+                        let words = cpu_pass_words()
+                        refused = "rep {rep} ran off the row's vulkan backend: the resident driver passed {passed} call(s) to the CPU rails ({words})"
+                        break
+                    }
                     tps |> push(double(rep_gen) * 1.0e6lf / double(total_us))
+                }
+                if (!empty(refused)) {
+                    say(fmt, "REFUSED tg-real{ngen}{dtag} - {refused}\n")
+                    g_refused_rows++
+                    delete tps
+                    delete pp_us
+                    delete pp_gen
+                    delete pp_dr
+                    delete pp_ac
+                    continue
                 }
                 if (mtp_on && sp.temp > 0.0 && parked == 0l) {
                     panic("lcpp_bench: --mtp-temp {sp.temp} is set but the accept walk never parked a draw - the lever did not engage")
@@ -1804,18 +1836,19 @@ def main() : int {
                         set_seed_(ps, 4242)
                         ps.spec_params = unsafe(addr(sp))
                     }
+                    ps.pick_asked = ask
                     if (mtp_on) {
                         ps.n_past = pl0
-                        var ptok = sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size)
+                        var ptok = sample_(ps, sp)
                         var pgen = 0l
                         while (pgen < ngen) {
                             pgen += 1l + mtp_spec_round(t, ps, ptok)
-                            ptok = sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size)
+                            ptok = sample_(ps, sp)
                         }
                     } else {
                         var ppos = pl0
                         for (_g in range64(ngen)) {
-                            forward(t, ps, sp.temp > 0.0 ? sample_(ps, sp) : argmax_logit(ps, c.vocab_size), ppos)
+                            forward(t, ps, sample_(ps, sp), ppos)
                             ppos++
                         }
                     }

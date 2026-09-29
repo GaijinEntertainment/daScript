@@ -210,8 +210,9 @@ def private tile_cell_arms(t : T?; tag : string; fmt : int; var f : TileFixture;
 // feeds gl_GlobalInvocationID). The facts the cells' gates key on: a Vulkan device (a class's
 // ensure engages it); an NV_coopmat2 device in cm2 mode (DASLLAMA_COOPMAT=cm2) for the cm2
 // l/m/s/e arms; KHR cooperative matrix at subgroup 32 for the KHR arm; DASLLAMA_CM2_TILE and
-// DASLLAMA_CM2_SPLITK for the tile-pick cell. Without dasVulkan (or with no device) every check
-// skips or feints cleanly.
+// DASLLAMA_CM2_SPLITK for the tile-pick cell; a device over the deltanet chain's shared-memory
+// cap for the dn step cells (`g_gpu.dn_shared_ok`, else they skip). Without dasVulkan (or with
+// no device) every check skips or feints cleanly.
 
 [test]
 def test_vkd_class_dispatch(t0 : T?) {
@@ -1134,14 +1135,16 @@ def private first_max_rows(y : array<float>; vocab, rows : int64) : array<uint> 
 
 [test]
 def test_vkd_cls_argmax(t0 : T?) {
-    t0 |> run("cls_argmax: every row's pick is the first maximum's id through the two passes, at a 262144 and a 1000 vocab, ties and an all-equal row included") <| @(t : T?) {
+    t0 |> run("cls_argmax: every row's pick is the first maximum's id through the two passes, at a 262144 and a 1000 vocab, ties, an all-equal row, a row with NaN and -inf lanes and an all-NaN row included") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_cls_argmax_part() || !ensure_cls_argmax_fin()) {
                 t |> skip("no Vulkan device")
                 return
             }
+            let nan = unsafe(reinterpret<float>(0x7FC00000u))
+            let ninf = unsafe(reinterpret<float>(0xFF800000u))
             for (vocab in fixed_array(262144l, 1000l)) {
-                let rows = 4l
+                let rows = 6l
                 var y : array<float>
                 y |> resize(vocab * rows)
                 for (i in range64(vocab * rows)) {
@@ -1155,25 +1158,25 @@ def test_vkd_cls_argmax(t0 : T?) {
                 for (i in range64(vocab)) {   //! row 0 pinned whole (every id suppressed): the first id wins, as the host's walk reads
                     y[i] = -1.0e30
                 }
+                //! row 4: NaN lanes below and above the maximum and a -inf lane, the widest finite lane at 123 must win; row 5: every lane NaN
+                y[4l * vocab + 5l] = nan
+                y[4l * vocab + 123l] = hi
+                y[4l * vocab + 700l] = nan
+                y[4l * vocab + 701l] = ninf
+                for (i in range64(vocab)) {
+                    y[5l * vocab + i] = nan
+                }
                 var got <- cls_argmax_run(y, vocab, rows)
                 var want <- first_max_rows(y, vocab, rows)
-                var bad = 0
-                for (r in range64(rows)) {
-                    if (got[r] != want[r]) {
-                        bad++
-                    }
-                }
-                t |> success(bad == 0, "vocab {vocab}: every row's device pick is the host's first maximum ({bad} of {rows} rows off; row 1 {got[1]} of {want[1]}, row 2 {got[2]} of {want[2]})")
+                let bad = mismatch_exact(got, want)
+                to_log(LOG_INFO, "cls_argmax at vocab {vocab}: device picks {got}, the host's first maxima {want} ({bad} of {rows} rows off)\n")
+                t |> success(bad == 0, "vocab {vocab}: every row's device pick is the host's first maximum ({bad} of {rows} rows off; row 1 {got[1]} of {want[1]}, row 2 {got[2]} of {want[2]}, row 4 {got[4]} of {want[4]}, row 5 {got[5]} of {want[5]})")
                 t |> equal(int64(want[1]), 37l, "vocab {vocab}: the tie lands on the lower id")
                 t |> equal(int64(got[0]), 0l, "vocab {vocab}: the all-equal row lands id 0")
+                t |> equal(int64(got[4]), 123l, "vocab {vocab}: the row with NaN and -inf lanes lands its widest finite lane")
+                t |> equal(int64(got[5]), 0l, "vocab {vocab}: the all-NaN row lands id 0, never the empty-slice sentinel 0xFFFFFFFF ({got[5]})")
                 want[3] = want[3] == 0u ? 1u : 0u   //! the poison: a wrong id on one row must red the compare
-                var badp = 0
-                for (r in range64(rows)) {
-                    if (got[r] != want[r]) {
-                        badp++
-                    }
-                }
-                t |> equal(badp, 1, "vocab {vocab}: the pick compare reds one poisoned row")
+                t |> equal(mismatch_exact(got, want), 1, "vocab {vocab}: the pick compare reds one poisoned row")
                 delete got
                 delete want
                 delete y
@@ -8429,9 +8432,10 @@ struct DnRowsOut {
     of32 : array<float>
 }
 
-//! one `dn_step_cls` dispatch over `nrows` rows on buffers of its own: two calls share no device plane
+//! `dn_step_cls` over `nrows` rows on buffers of its own - one dispatch, or under `seq` a dispatch a row in order (the rows' first
+//! row in the push, the same-slab verify's form) - two calls share no device plane
 def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, nslots, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv : int;
-                             offs : int[8]; eps, qscale : float; out_f32 : bool) : DnRowsOut {
+                             offs : int[8]; eps, qscale : float; out_f32 : bool; seq : bool = false) : DnRowsOut {
     var r : DnRowsOut
     let proj_bytes = int64(nrows * prow) * 4l
     let st_bytes = int64(nslots * st_n) * 4l
@@ -8457,7 +8461,7 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
             upload_region_at(projd, 0l, addr<uint8 const?>(proj[0]), proj_bytes)
             upload_region_at(std, 0l, addr<uint8 const?>(st[0]), st_bytes)
             upload_region_at(smd, 0l, addr<uint8 const?>(sm[0]), sm_bytes)
-            for (i in range(nrows)) {   //! the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal
+            for (i in range(seq ? 1 : nrows)) {   // the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal (sequential rows write the image the row before read, so the first row's alone is filled here - the rest between the dispatches)
                 nan_sentinel_upload(smd, int64(ring) * 4l, int64(offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4l)
             }
             nan_sentinel_upload(scd, sc_bytes)
@@ -8480,7 +8484,18 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
                 beta_off = uint(offs[0]), g_off = uint(offs[1]), a_off = uint(offs[2]), dt_off = uint(offs[3]),
                 taps_off = uint(offs[4]), wnorm_off = uint(offs[5]), hist_off = uint(offs[6]),
                 eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, beta_row_stride = uint(offs[7]))
-            enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
+            if (seq) {
+                for (i in range(nrows)) {
+                    if (i > 0) {   // the image this row writes held the row before's input: a sentinel now, so a skipped ring advance cannot compare equal
+                        vhz_dep(raw, h, 0u, 8u, true)
+                        vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(smd)), uint64((offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4), uint64(ring * 4), NAN_SENTINEL_BITS)
+                    }
+                    pc.row0 = uint(i)
+                    enc_dn_step_cls(raw, h, sc, pc, int64(nvh))
+                }
+            } else {
+                enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
+            }
             vkd_run_copy(raw, h, fixed_array(std, smd, scd, qd, ofd), host,
                 fixed_array(0l, st_bytes, st_bytes + sm_bytes, st_bytes + sm_bytes + sc_bytes, st_bytes + sm_bytes + sc_bytes + q_bytes),
                 fixed_array(st_bytes, sm_bytes, sc_bytes, q_bytes, of_bytes), 1u | 2u | 4u | 8u | 32u)
@@ -8506,76 +8521,146 @@ def private n_differing(got, want : array<auto(TT)>; gbase, wbase, n : int) : in
     return bad
 }
 
+//! the first differing element's index in the compared run, -1 where none differs
+def private first_differing(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
+    for (i in range(n)) {
+        return i if (got[gbase + i] != want[wbase + i])
+    }
+    return -1
+}
+
+//! the dn step cells' fixture: `nrows` rows over `nslots` slots at head size `ds` - the rows' projections, every slot's state,
+//! the smalls plane (eps, qscale, the rows' beta and alpha rows, a, dt, the taps, the norm row, a ring pair a slot) and the
+//! offsets the push carries
+struct private DnFixture {
+    nrows : int
+    nslots : int
+    nkh : int
+    nvh : int
+    cd : int
+    dconv : int
+    eps : float
+    qscale : float
+    bstride : int
+    beta_off : int
+    g_off : int
+    hist_off : int
+    ring : int
+    sm_n : int
+    prow : int
+    st_n : int
+    nblk : int
+    orow : int
+    offs : int[8]
+    projh : array<float>
+    sth : array<float>
+    smh : array<float>
+}
+
+def private dn_fixture(nrows, nslots, ds : int; out_f32 : bool) : DnFixture {
+    var f <- DnFixture(nrows = nrows, nslots = nslots, nkh = 2, nvh = 4, dconv = 4, eps = 0.00001, qscale = 1.25, beta_off = 16)
+    let kd = f.nkh * ds
+    f.cd = 2 * kd + f.nvh * ds
+    let taps = f.dconv - 1
+    f.bstride = 2 * f.nvh
+    f.g_off = f.beta_off + nrows * f.bstride
+    let a_off = f.g_off + nrows * f.nvh
+    let dt_off = a_off + f.nvh
+    let taps_off = dt_off + f.nvh
+    let wnorm_off = taps_off + f.cd * f.dconv
+    f.hist_off = wnorm_off + ds
+    f.ring = f.cd * taps
+    f.sm_n = f.hist_off + nslots * 2 * f.ring
+    f.prow = f.cd + f.nvh * ds
+    f.st_n = f.nvh * ds * ds
+    f.nblk = f.nvh * ds / 32
+    f.orow = out_f32 ? f.nvh * ds : f.nblk * 8
+    f.offs = fixed_array(f.beta_off, f.g_off, a_off, dt_off, taps_off, wnorm_off, f.hist_off, f.bstride)
+    f.projh |> resize(nrows * f.prow)
+    f.sth |> resize(nslots * f.st_n)
+    f.smh |> resize(f.sm_n)
+    for (i in range(nrows * f.prow)) {
+        f.projh[i] = float((i * 29) % 67) * 0.03 - 1.0
+    }
+    for (i in range(nslots * f.st_n)) {
+        f.sth[i] = float((i * 13) % 53) * 0.02 - 0.5
+    }
+    for (i in range(f.sm_n)) {
+        f.smh[i] = float((i * 17) % 43) * 0.02 - 0.4
+    }
+    f.smh[0] = f.eps
+    f.smh[1] = f.qscale
+    for (i in range(f.nvh)) {
+        f.smh[a_off + i] = -0.4 - float(i) * 0.1
+    }
+    return <- f
+}
+
+//! `dn_step_rows_run` over the fixture's `nrows` rows (`proj` the rows' projections, `st` the slots' states, `sm` the smalls) in `pars` / `slots`
+def private dn_fixture_run(f : DnFixture; proj, st, sm : array<float>; pars, slots : array<int>; nrows : int; ds : int; out_f32 : bool; seq : bool = false) : DnRowsOut {
+    return <- dn_step_rows_run(proj, st, sm, pars, slots, nrows, f.nslots, f.prow, f.st_n, f.sm_n, f.nblk, ds, f.nvh, f.nkh, f.cd, f.dconv, f.offs, f.eps, f.qscale, out_f32, seq)
+}
+
+//! a row's beta and alpha rows moved to row 0's place in a copy of `sm`: the one-row dispatch reads row 0
+def private dn_row_smalls(sm : array<float>; r, beta_off, g_off, bstride, nvh : int) : array<float> {
+    var sm1 := sm
+    for (i in range(nvh)) {
+        sm1[beta_off + i] = sm[beta_off + r * bstride + i]
+        sm1[g_off + i] = sm[g_off + r * nvh + i]
+    }
+    return <- sm1
+}
+
+//! row `r`'s o row of `got` against `want`'s row 0: the elements off, the first off (the scales' first too on the q8 form),
+//! and the largest f32 difference with its head and column, logged under `tag` and answered as the count off
+def private dn_o_row_off(tag : string; got, want : DnRowsOut; r, nvh, ds, nblk : int; out_f32 : bool) : int {
+    if (out_f32) {
+        let n = nvh * ds
+        let off = n_differing(got.of32, want.of32, r * n, 0, n)
+        let md = span_maxdiff(got.of32, want.of32, r * n, 0, n)
+        to_log(LOG_INFO, "{tag}: row {r}'s o row {off} of {n} f32 elements off, the largest difference {md.diff} at head {md.at / ds} col {md.at % ds}\n")
+        return off
+    }
+    let sc_off = n_differing(got.oscales, want.oscales, r * nblk, 0, nblk)
+    let q_off = n_differing(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8)
+    let sc_first = first_differing(got.oscales, want.oscales, r * nblk, 0, nblk)
+    let q_first = first_differing(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8)
+    let md = span_maxdiff(got.oscales, want.oscales, r * nblk, 0, nblk)
+    to_log(LOG_INFO, "{tag}: row {r}'s o row {sc_off} of {nblk} scales off (the first at {sc_first}, the largest difference {md.diff} at block {md.at}), {q_off} of {nblk * 8} quant words off (the first at {q_first})\n")
+    return sc_off + q_off
+}
+
+//! the slot state and ring pair of `got` against `want` at the same offsets: the elements off and the largest difference with its
+//! row and column (a state row is `ds` wide, a ring row is a tap of `cd` channels), logged under `tag`
+def private dn_state_ring_off(tag : string; got, want : DnRowsOut; st_off, st_n, hist_off, ring, cd, ds : int) : int {
+    let st_diffs = n_differing(got.state, want.state, st_off, st_off, st_n)
+    let ring_diffs = n_differing(got.smalls, want.smalls, hist_off, hist_off, 2 * ring)
+    let sm = span_maxdiff(got.state, want.state, st_off, st_off, st_n)
+    let rm = span_maxdiff(got.smalls, want.smalls, hist_off, hist_off, 2 * ring)
+    to_log(LOG_INFO, "{tag}: the state {st_diffs} elements off (the largest difference {sm.diff} at row {sm.at / ds} col {sm.at % ds}), the two ring images {ring_diffs} elements off (the largest difference {rm.diff} at tap {rm.at / cd} channel {rm.at % cd})\n")
+    return st_diffs + ring_diffs
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
     let nrows = 2
-    let nkh = 2
-    let nvh = 4
-    let kd = nkh * ds
-    let cd = 2 * kd + nvh * ds
-    let dconv = 4
-    let taps = dconv - 1
-    let eps = 0.00001
-    let qscale = 1.25
-    let bstride = 2 * nvh
-    let beta_off = 16
-    let g_off = beta_off + nrows * bstride
-    let a_off = g_off + nrows * nvh
-    let dt_off = a_off + nvh
-    let taps_off = dt_off + nvh
-    let wnorm_off = taps_off + cd * dconv
-    let hist_off = wnorm_off + ds
-    let ring = cd * taps
-    let sm_n = hist_off + nrows * 2 * ring
-    let prow = cd + nvh * ds
-    let st_n = nvh * ds * ds
-    let nblk = nvh * ds / 32
-    let offs = fixed_array(beta_off, g_off, a_off, dt_off, taps_off, wnorm_off, hist_off, bstride)
-    var projh : array<float>
-    var sth : array<float>
-    var smh : array<float>
-    projh |> resize(nrows * prow)
-    sth |> resize(nrows * st_n)
-    smh |> resize(sm_n)
-    for (i in range(nrows * prow)) {
-        projh[i] = float((i * 29) % 67) * 0.03 - 1.0
-    }
-    for (i in range(nrows * st_n)) {
-        sth[i] = float((i * 13) % 53) * 0.02 - 0.5
-    }
-    for (i in range(sm_n)) {
-        smh[i] = float((i * 17) % 43) * 0.02 - 0.4
-    }
-    smh[0] = eps
-    smh[1] = qscale
-    for (i in range(nvh)) {
-        smh[a_off + i] = -0.4 - float(i) * 0.1   //! a stays negative (decay)
-    }
+    var f <- dn_fixture(nrows, nrows, ds, out_f32)
     var pars <- [1, 0]   //! the slots' parities differ: each row reads its own image
     var slots <- [0, 1]
-    var got <- dn_step_rows_run(projh, sth, smh, pars, slots, nrows, nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
+    var got <- dn_fixture_run(f, f.projh, f.sth, f.smh, pars, slots, nrows, ds, out_f32)
+    let tag = "dn_step_fused, {nrows} rows in two slots, ds {ds}, o as {out_f32 ? "f32" : "q8"}"
     for (r in range(nrows)) {
-        var proj1 : array<float>
-        proj1 |> resize(prow)
-        for (i in range(prow)) {
-            proj1[i] = projh[r * prow + i]
-        }
-        var sm1 := smh
-        for (i in range(nvh)) {   //! row r's beta and alpha rows at row 0's place: the one-row dispatch reads row 0
-            sm1[beta_off + i] = smh[beta_off + r * bstride + i]
-            sm1[g_off + i] = smh[g_off + r * nvh + i]
-        }
+        var proj1 <- copy_span(f.projh, r * f.prow, f.prow)
+        var sm1 <- dn_row_smalls(f.smh, r, f.beta_off, f.g_off, f.bstride, f.nvh)
         var pars1 <- [pars[r]]
         var slots1 <- [slots[r]]
-        var want <- dn_step_rows_run(proj1, sth, sm1, pars1, slots1, 1, nrows, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, out_f32)
-        let st_diffs = n_differing(got.state, want.state, r * st_n, r * st_n, st_n)
-        let ring_diffs = n_differing(got.smalls, want.smalls, hist_off + r * 2 * ring, hist_off + r * 2 * ring, 2 * ring)
-        let o_diffs = (out_f32 ? n_differing(got.of32, want.of32, r * nvh * ds, 0, nvh * ds)
-            : n_differing(got.oscales, want.oscales, r * nblk, 0, nblk) + n_differing(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8))
-        t |> success(st_diffs == 0 && ring_diffs == 0 && o_diffs == 0,
-            "dn_step_fused row {r} of {nrows} in slot {slots[r]} at ds {ds}, o as {out_f32 ? "f32" : "q8"}: state {st_diffs}, ring {ring_diffs}, o row {o_diffs} elements off the one-row dispatch")
+        var want <- dn_fixture_run(f, proj1, f.sth, sm1, pars1, slots1, 1, ds, out_f32)
+        let st_ring_off = dn_state_ring_off("{tag} row {r} in slot {slots[r]}", got, want, r * f.st_n, f.st_n, f.hist_off + r * 2 * f.ring, f.ring, f.cd, ds)
+        let o_off = dn_o_row_off(tag, got, want, r, f.nvh, ds, f.nblk, out_f32)
+        t |> success(st_ring_off == 0 && o_off == 0,
+            "{tag}: row {r} in slot {slots[r]} - state and ring {st_ring_off}, o row {o_off} elements off the one-row dispatch")
         let other = 1 - r   //! the control: row r's reference must miss the other row's o row, so the compare can fail
-        let ctrl = out_f32 ? n_differing(got.of32, want.of32, other * nvh * ds, 0, nvh * ds) : n_differing(got.oquants, want.oquants, other * nblk * 8, 0, nblk * 8)
+        let ctrl = out_f32 ? n_differing(got.of32, want.of32, other * f.nvh * ds, 0, f.nvh * ds) : n_differing(got.oquants, want.oquants, other * f.nblk * 8, 0, f.nblk * 8)
         t |> success(ctrl > 0, "control: row {r}'s one-row reference misses row {other}'s o row ({ctrl} elements apart)")
         delete proj1
         delete sm1
@@ -8584,11 +8669,82 @@ def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
         delete want
     }
     delete got
-    delete projh
-    delete sth
-    delete smh
+    delete f
     delete pars
     delete slots
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
+def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
+    let nrows = 3
+    var f <- dn_fixture(nrows, 1, ds, out_f32)
+    var pars <- [1, 0, 1]   //! the ring parity flips a row: each row reads the image the row before it wrote
+    var slots <- [0, 0, 0]
+    var got <- dn_fixture_run(f, f.projh, f.sth, f.smh, pars, slots, nrows, ds, out_f32, true)
+    let tag = "dn_step_fused, {nrows} rows of one slot a dispatch a row, ds {ds}, o as {out_f32 ? "f32" : "q8"}"
+    let ring1 = f.hist_off + f.ring   //! the second row's ring image: sentinel-filled between the dispatches, so its input is what the run wrote
+    to_log(LOG_INFO, "{tag}: state[0] {got.state[0]} from {f.sth[0]}, the second row's ring image [0] {got.smalls[ring1]} from {f.smh[ring1]}\n")
+    t |> success(got.state[0] != f.sth[0], "{tag}: the slot's state moved off its input at element 0 ({got.state[0]} from {f.sth[0]})")
+    t |> success(got.smalls[ring1] != f.smh[ring1], "{tag}: the second row's ring image moved off its input at element 0 ({got.smalls[ring1]} from {f.smh[ring1]})")
+    var st_r := f.sth
+    var sm_r := f.smh
+    for (r in range(nrows)) {
+        var proj1 <- copy_span(f.projh, r * f.prow, f.prow)
+        var sm1 <- dn_row_smalls(sm_r, r, f.beta_off, f.g_off, f.bstride, f.nvh)
+        var pars1 <- [pars[r]]
+        var slots1 <- [0]
+        var want <- dn_fixture_run(f, proj1, st_r, sm1, pars1, slots1, 1, ds, out_f32)
+        let o_off = dn_o_row_off(tag, got, want, r, f.nvh, ds, f.nblk, out_f32)
+        t |> success(o_off == 0, "{tag}: row {r}'s o row {o_off} of {f.orow} elements off the one-row dispatch on the state row {r - 1} left")
+        if (r == 1) {
+            var sm0 <- dn_row_smalls(f.smh, r, f.beta_off, f.g_off, f.bstride, f.nvh)
+            var cold <- dn_fixture_run(f, proj1, f.sth, sm0, pars1, slots1, 1, ds, out_f32)
+            let ctrl = out_f32 ? n_differing(got.of32, cold.of32, r * f.nvh * ds, 0, f.nvh * ds) : n_differing(got.oquants, cold.oquants, r * f.nblk * 8, 0, f.nblk * 8)
+            t |> success(ctrl > 0, "{tag} control: row 1 from the untouched state misses the sequential row 1 ({ctrl} elements apart)")
+            delete sm0
+            delete cold
+        }
+        if (r == nrows - 1) {
+            let st_ring_off = dn_state_ring_off("{tag} after the last row", got, want, 0, f.st_n, f.hist_off, f.ring, f.cd, ds)
+            t |> success(st_ring_off == 0, "{tag}: after the last row the state and the two ring images are the chained one-row dispatches' ({st_ring_off} elements off)")
+        }
+        st_r := want.state
+        sm_r := want.smalls
+        delete proj1
+        delete sm1
+        delete pars1
+        delete slots1
+        delete want
+    }
+    delete st_r
+    delete sm_r
+    delete got
+    delete f
+    delete pars
+    delete slots
+}
+
+[test]
+def test_vkd_dn_step_rows_sameslot(t0 : T?) {
+    t0 |> run("dn_step_fused over three rows of one slot a dispatch a row == the one-row dispatch a row at a time, chained") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!g_gpu.dn_shared_ok) {
+                t |> skip("dn chain declined on this device (shared-memory cap)")
+                return
+            }
+            verify(ensure_dn_step_cls(), "the dn step class rail must engage on a device over the shared cap")
+            for (ds in fixed_array(64, 128)) {
+                dn_step_sameslot_arm(t, ds, false)
+                dn_step_sameslot_arm(t, ds, true)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
 }
 
 [test]

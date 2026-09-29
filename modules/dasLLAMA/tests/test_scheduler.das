@@ -10,7 +10,8 @@ require dasllama/dasllama_batch   // batch_step_census: how the speculative tick
 require dasllama/dasllama                               // facade: load/encode/generate references + engine knobs
 require dasllama/dasllama_blocks   // embed_text_rows: the media arms build rows from the prompt's own tokens
 require dasllama/dasllama_common   // layer_is_recurrent: the deltanet-on-GPU cell finds a recurrent layer to probe
-require dasllama/dasllama_gpu_tier   // moe_gpu_dnd_on_gpu: that cell skips unless the tier serves the decode step
+require dasllama/dasllama_gpu_tier   // moe_gpu_dnd_on_gpu: that cell skips unless the tier serves the decode step; moe_gpu_tier_installed / gpu_want_auto
+require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_verifies: the resident pick-ask cell's witnesses
 require daslib/jobque_boost
 require daslib/fio
 require daslib/strings_boost   // join: the decoded stream logs beside the token-exact compares
@@ -667,6 +668,67 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
         set_prefill_attn_mode(prev_attn)
         set_act_vec(prev_act)
         set_deltanet_prefill_mode(prev_dn)
+    }
+}
+
+// ===== the speculative tick under the resident driver: a greedy stream asks a pick every tick and consumes it =====
+
+[test]
+def test_scheduler_mtp_resident_picks(t : T?) {
+    t |> run("scheduler mtp under the resident driver: every tick of a greedy stream asks a pick - the device verify lands picks alone and sample_ consumes each - the stream token for token the plain scheduler's on the same device rail, every round's verify served on the device (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        if (!stat(MTP_MODEL_PATH).is_valid) {
+            t |> skip("{MTP_MODEL_PATH} not present")
+            return
+        }
+        if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
+            t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
+            return
+        }
+        if (mirror_kv_dtype() != KVDtype.f16) {
+            t |> skip("the scheduler's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
+            return
+        }
+        with_job_que() {
+            setup_dasllama_jobque()
+            var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
+            m.config.seq_len = min(m.config.seq_len, 512l)
+            t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid (the load log names any decline)")
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var sch0 <- create_scheduler(m, 1l, 4l, 64l)   // the plain scheduler on unpaged f16 sessions: the device rail, its picks asked a step
+            var events0 : array<SchedEvent>
+            t |> success(submit(m, sch0, make_req(1l, prompt, greedy, 24l, none)), "plain stream queued")
+            drain(m, sch0, events0)
+            var ref_toks <- toks_of(events0, 1l)
+            delete sch0
+            let prev_spec = get_mtp_spec()
+            set_mtp_spec(true)
+            let verifies0 = moe_gpu_resident_verifies()
+            var sch <- create_scheduler(m, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(2l, prompt, greedy, 24l, none)), "spec stream queued")
+            drain(m, sch, events)
+            set_mtp_spec(prev_spec)
+            var got <- toks_of(events, 2l)
+            log_streams("plain", events0, 1l, "spec (resident)", events, 2l)
+            t |> success(ids_equal(got, ref_toks), "the spec stream under the resident driver == the plain scheduler's stream ({got} vs {ref_toks})")
+            t |> equal(finished_of(events, 2l).n_gen, 24l)
+            t |> success(sch.mtp_drafted > 0l, "the speculative tick drafted ({sch.mtp_drafted} drafts, {sch.mtp_accepted} accepted)")
+            let served = moe_gpu_resident_verifies() - verifies0
+            t |> equal(served, sch.mtp_drafted, "every drafted round's verify served on the device under the tick's pick ask ({served} of {sch.mtp_drafted}); a pick left unconsumed would have refused the next round's opening")
+            delete got
+            delete events
+            delete sch
+            delete ref_toks
+            delete events0
+            delete prompt
+            delete m
+        }
     }
 }
 

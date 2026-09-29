@@ -12,6 +12,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_common   // Model, Session, forward_prefill, forward
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_prefills: the driver's witnesses
+require dasllama/dasllama_gpu_tier   // gpu_cpu_passes_: the calls the driver handed to the CPU rails, by reason
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
 require _model_tier   // logits_maxdiff, mirror_kv_dtype, live_maxabs, SUPPRESSED_LOGIT
 
@@ -34,6 +35,71 @@ def argmax_of(v : array<float>) : int64 {
         }
     }
     return bi
+}
+
+//! the served witness: no call of the armed driver passed to the CPU rails since the model armed
+def served_every_call(t : T?) {
+    var passes <- gpu_cpu_passes_()
+    t |> equal(length(passes), 0, "the device served every call: {passes}")
+    delete passes
+}
+
+//! how many calls the driver passed to the CPU rails for `reason` (the `RdecPass` name) since the model armed
+def pass_count(reason : string) : int64 {
+    var passes <- gpu_cpu_passes_()
+    var n = 0l
+    for (p in passes) {
+        if (p.reason == reason) {
+            n += p.count
+        }
+    }
+    delete passes
+    return n
+}
+
+//! the pick a device landed against the CPU logits of the same row, tie-aware: the pick is the CPU argmax, or its CPU logit sits
+//! within `rel` of the CPU argmax's (a near-tie the two chains' rounding flips); both decoded and logged with their CPU logits
+def pick_agrees(t : T?; tr : Model; what : string; pick : int64; cpu : array<float>; rel : float) : bool {
+    let ac = argmax_of(cpu)
+    let bar = rel * live_maxabs(cpu)
+    let in_bar = pick >= 0l && pick < long_length(cpu) && cpu[pick] >= cpu[ac] - bar
+    to_log(LOG_INFO, "{what}: device pick {pick} '{decode_(tr, [pick])}' (CPU logit {pick >= 0l && pick < long_length(cpu) ? cpu[pick] : 0.0}), CPU argmax {ac} '{decode_(tr, [ac])}' ({cpu[ac]}), tie bar {bar}\n")
+    t |> success(pick == ac || in_bar, "{what}: the device pick is the CPU argmax, or its CPU logit is within {bar} of the CPU argmax's (a near-tie)")
+    return pick == ac
+}
+
+//! every row r of `gpu` within `rel` of the max |value| of `cpu[r]`, and the control row `cpu[r + ctrl_off]` - where one exists -
+//! past `ctrl_bars` bars of the same row: the widest miss and the tightest control logged with their rows; `row_tag` names a row
+def rows_within_control(t : T?; what : string; gpu, cpu : array<array<float>>; rel : float; ctrl_off : int64; ctrl_bars : float; row_tag : block<(r : int64) : string>) {
+    var worst = 0.0
+    var worst_row = -1l
+    var worst_bar = 0.0
+    var tight_off = 0.0
+    var tight_bar = 0.0
+    var tight_row = -1l
+    let n = long_length(gpu)
+    for (r in range64(n)) {
+        let tag = "{what} {invoke(row_tag, r)}"
+        let bar = rel * logits_maxabs(cpu[r])
+        let diff = logits_maxdiff(gpu[r], cpu[r])
+        if (diff > worst) {
+            worst = diff
+            worst_row = r
+            worst_bar = bar
+        }
+        t |> success(diff <= bar, "{tag}: the device row within {bar} of the CPU row (maxdiff {diff})")
+        let cr = r + ctrl_off
+        if (cr >= 0l && cr < long_length(cpu)) {
+            let off = logits_maxdiff(gpu[r], cpu[cr])
+            if (tight_row < 0l || off * tight_bar < tight_off * bar) {
+                tight_off = off
+                tight_bar = bar
+                tight_row = r
+            }
+            t |> success(off > ctrl_bars * bar, "{tag} control: the CPU row {ctrl_off} away misses the device row by {ctrl_bars} bars (maxdiff {off}, bar {bar})")
+        }
+    }
+    to_log(LOG_INFO, "{what}: {n} rows, the widest miss {worst} at row {worst_row} (bar {worst_bar}); the tightest control {tight_off} at row {tight_row} (bar {tight_bar}, {tight_bar > 0.0 ? tight_off / tight_bar : 0.0} bars)\n")
 }
 
 //! the prefill's logits, then each fed step's, through `s`; `after_prefill` runs between the prefill and the first step
@@ -74,7 +140,7 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
     t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {long_length(prompt)}-token prompt")
     invoke(after_gpu)
     delete sg
-    moe_gpu_drop_model()   //! every later step is the CPU chain
+    moe_gpu_drop_model()
     var sc <- create_session(tr, mirror_kv_dtype())
     pair.cpu <- feed_logits(tr, sc, prompt, toks)
     delete sc

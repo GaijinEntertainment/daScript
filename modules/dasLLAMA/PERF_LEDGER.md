@@ -27,6 +27,132 @@ what it costs today and what the fix would change.
   B=2 and B=4 to 5e-4 logits against the single step over 16 steps (0 argmax flips), and
   `mtp-dff-3.8fn` pins it in the suite.
 
+- **OPEN (2026-09-27) - the Vulkan resident driver's NextN prompt warm: the head's slab warmed on
+  the window chain, and what it costs a prompt.** Where the driver homes a NextN head and the
+  round is on (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`) every window of a
+  resident prefill encodes one more layer's worth of rows after the trunk: the last layer's FFN
+  over the whole window instead of its last thirty-two rows, eh_proj [2dim -> dim] and the head's
+  k and v projections [dim -> kvd] over the window's rows, two norms, a feed requant, the head's
+  q/k norm and the rope store - on Qwen3.5-0.8B-MTP the eh_proj plane's 2,228,224 bytes and the k
+  and v planes' 557,056 each read once a window, the last layer's three FFN planes (3,899,392 each)
+  over 512 rows in place of 32. The chain's planes grow by the head's staging - the embed rows, the
+  shifted post-norm rows and the [enorm ; hnorm] image with its feed: `PF_WINDOW x (4 dim + 8 dim
+  + 2 dim + dim / 4) bytes` under a Q8_0 feed, `PF_WINDOW x (16 dim) bytes` under the f16 feed, plus
+  `PF_WINDOW x cos_elems x 4` for the rope rows - 512 x 14,592 = 7,471,104 bytes at dim 1024 on the
+  Q8_0 feed, 512 x 16,384 = 8,388,608 on the f16 feed, and 131,072 of rope rows at a 64-wide plane;
+  the head rows' readback moves `(npos - 1) x kvd x 2 sides x 2` bytes a prompt (1 MB a 512-row
+  prompt on the 0.8B's f16 rows). Owed from the pod: pp512 of `Qwen3.5-0.8B-MTP-Q8_0.gguf` under
+  `DASLLAMA_GPU=1` with `set_mtp_spec` on against off (`lcpp_bench --mtp-ab -p 512` with the
+  `DASLLAMA_GPU_PROF=1` window profile: the `vk_rdpf` submit wall per window with the warm against
+  without), and the round's acceptance on the SpecBench chat corpus against the CPU round's on the
+  same box - the reading the warm exists for.
+
+- **OPEN (2026-09-27) - the Vulkan resident driver's same-slab speculative verify: its row
+  buffers and its round against the CPU verify.** Where the driver homes a NextN head
+  (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`) the per-row planes hold
+  max(regions, depth + 1) rows, eight at most, so a one-region load gains `depth` rows.
+  A row is 2 x vocab x 4 bytes of logits (the device plane and its host landing) beside the
+  activation rows: 4 dim + 2 hid + 2 qd + 2 kvd (+ 2 qd under a gated q) floats, the quant
+  rows' wide + wide / 8 + qd + qd / 8 bytes, the attention partials' n_heads x (splits x (hs + 2)
+  + 1) floats, the host x, carry, rope and TokMeta rows, the picks' 520 bytes, on a hybrid the deltanet projection (cd + di floats)
+  and o rows (the step's fixed 8,192 + 1,024 + 32,768 bytes), and under the head its three cat
+  rows (6 dim floats), its TokMeta row and two rope rows. On Qwen3.5-0.8B-MTP (vocab 248,320,
+  dim 1024, hid 3584, qd 2048, kvd 512, gated q, cd 6144, di 2048, 8 heads of 256, a 64-wide rope
+  row) that is 1,986,560 bytes of logits and 197,384 of the rest, 2,183,944 a row, plus the
+  partials' 8 x (splits x 1,032) + 32 (132,128 at 16 splits): one region gains 2,316,072 bytes at
+  depth 1 (nb 1 -> 2) and 16,212,504 at depth 7 (nb 8), both at 16 splits. The plan's scratch
+  term counts the same rows. Owed from the pod: `lcpp_bench --mtp-ab` on the 0.8B-MTP under
+  `DASLLAMA_GPU=1` with `--prof` and `JOBQUE_PROFILING=1` - the `mtp.verify` section against a
+  one-row step's wall and against the CPU verify's on the same box; the reject's `mtp.rollback`
+  section against the `mtp.snapshot` + `mtp.replay` the CPU restore paid (the recurrent state's
+  round trip, about 20 MB down and up on the 0.8B, retired: the verify command copies each
+  recurrent layer's slot state and ring pair after every row but its last into a rollback scratch
+  of `depth x n_rec x (nvh x ds x ds + 2 x cd x (dconv - 1)) x 4` bytes, and the reject copies one
+  row back - on Qwen3.5-0.8B-MTP (18 recurrent layers, 16 heads of 128, cd 6144, dconv 4)
+  21,528,576 bytes at depth 1 and 150,700,032 at depth 7, counted in the plan's scratch term,
+  `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`); the verify command's own
+  `DASLLAMA_GPU_PROF=1` ledger (`vk_rdec gpu avg/verify` with its `dn avg/verify` line and
+  `vk_rdec host wall/verify`, `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`) against the
+  one-row `vk_rdec gpu avg/token` line of the same run's off arm, role by role - under the greedy
+  `--mtp-ab` arms' pick ask the verify lands the picks and two hidden rows alone (the
+  2 x vocab x 4-byte logits plane, its host copy, the four row copies and both host argmaxes gone
+  from the round), the re-warm runs no q GEMV and the store pass over the k heads alone
+  (`warm_q` gone from the ledger, `warm_qknrope` smaller), and no head row is read back (the `kv
+  readback` piece gone from `host wall/verify`). The on/off rate with the drafts' acceptance, as
+  measured: `benchmarks/lcpp_bench.das --mtp-ab -n 64 -r 2` (`-r 4` on the 0.8B) as the `-jit`
+  script (debug-jit) under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16`,
+  `DAS_TUNE_POLICY` unset (the box profile), the resident driver at cm2 coopmat mode, on the
+  RTX PRO 4500 pod, tok/s off / on, the off arm the plain tg64: Qwen3.5-0.8B-MTP-Q8_0 444.7
+  +/- 9.5 / 574.9 +/- 14.3 (x1.29, acceptance 81.9%); Qwen3.5-4B-MTP-Q8_0 138.0 / 202.5 (x1.47,
+  82.6%); Qwen3.5-9B-MTP UD-Q5_K_XL 103.8 / 149.3 (x1.44, 82.7%); Qwen3.8-27B-Q4_K_M with its
+  Q8_0 head, the image rail off, 37.1 / 54.3 (x1.46, 69.9%) - direction-grade, the on and off
+  arms in one process per row. The stamped ledgers at 66b143122 on the 0.8B under the same
+  command with `DASLLAMA_GPU_PROF=1`, microseconds: the verify's host wall 2917 (GPU 2870), the
+  draft's 491 (GPU 449), against a one-row step's 2571 (GPU 2357). Measured on the RTX PRO 4500
+  pod - `benchmarks/lcpp_bench.das --model Qwen3.5-0.8B-MTP-Q8_0.gguf --mtp-ab -n 96 -r 1
+  --for-debug-purposes` as the `-jit` script (debug-jit) under `DASLLAMA_GPU=1
+  DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16 DAS_LOG_LEVEL=info DASLLAMA_GPU_PROF=1`,
+  `DAS_TUNE_POLICY` unset (the box profile), the resident driver at cm2 coopmat mode,
+  microseconds a round from the `DASLLAMA_GPU_PROF=1` ledger: the two-row verify's `dn_seq`
+  reads 421 against the one-row `step` 243 and the rollback copies (`roll`) 74 - a recurrent
+  layer's row costs its dispatch latency (16 workgroups, one a head), not the state's reload. A
+  form that looped the rows inside one dispatch a layer with the scratch stored in-kernel and the
+  final ring pair written by a last-arriving workgroup was bit for bit the chained steps and read
+  `dn_seq` 721 under the same command and environment at its own commit (direction-grade, two
+  commits): the loop serializes the rows a workgroup already ran back to back, and the epilogue's
+  barrier and staged copy add to every layer - the per-row dispatch stays. What moves `dn_seq` is
+  more workgroups a head (the ds x ds state split across workgroups), a step-kernel change the
+  one-row decode shares.
+
+- **LANDED (2026-09-28) - the head K-row bar of `tests/test_gpu_resident_hybrid.das`
+  (`HEAD_K_BAR_REL = 0.08`, twice the deltanet bar): the prompt warm's K rows against the CPU
+  warm's.** The cell `test_gpu_resident_hybrid_mtp_head_warm`, through `tests/run.das` under
+  `-jit`, `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16`, `DAS_TUNE_POLICY` unset
+  (the box profile), the resident driver at cm2 coopmat mode, on the RTX PRO 4500 pod, on
+  Qwen3.5-0.8B-MTP-Q8_0 over the 40-token prompt: the widest miss reads 0.05 of the CPU row's max
+  under both codecs - f16 mirrors 0.357 at row 38 on a 0.577 bar, f32 mirrors
+  (`DASLLAMA_VK_KV32=1`) 0.278 at row 2 - and the one-down control lands 7.3 to 7.6 bars away.
+  The bar is twice the deltanet bar because the row is the f16-stored projection of a hidden row
+  already held within the deltanet bar; the control is tightened to two bars from it.
+
+- **OPEN (2026-09-27) - the Vulkan resident driver's NextN draft head: its plane and slot bytes,
+  and the device draft against the CPU draft.** Where the driver takes a model's head
+  (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`) the plan grows by the head's eight
+  planes and one K/V slot a region; a headless model plans what it did. The planes are
+  (2 dim x dim + dim x qrows + 2 dim x kvd + qd x dim + 3 dim x hid) weights at their formats' block
+  bytes - Qwen3.5-0.8B-MTP-Q8_0 (dim 1024, the gated q's 4096 rows, kvd 512, qd 2048, hid 3584,
+  every head plane Q8_0 at 34 bytes a 32-weight block): eh_proj 2,228,224 bytes, q 4,456,448, k and
+  v 557,056 each, o 2,228,224, gate, up and down 3,899,392 each, 21,725,184 in all. The slot is
+  regions x seq_cap x kvd x 2 sides x 2 bytes (f16), regions x seq_cap x 2,048 bytes on the 0.8B:
+  8,388,608 at one region of 4096 positions, 67,108,864 at four regions of 8192. The norms plane
+  gains (5 dim + 2 head_size) x 4 bytes (22,528 on the 0.8B) and the draft's staging 3 x 2 dim x 4
+  bytes a row of the per-row planes (24,576 a row at dim 1024, 122,880 at dim 5120; the next entry
+  prices the rows). Owed from the pod: the 0.8B-MTP's `resident image`
+  and `NextN draft head in the arena` load lines (the bytes read, not computed); the draft's wall
+  against the CPU `forward_mtp` - `lcpp_bench --mtp-ab` under `DASLLAMA_GPU=1` with `--prof` and
+  `JOBQUE_PROFILING=1`, the `mtp.draft` section against the CPU draft's on the same box - including
+  the hydrate's upload where one runs, a submit of its own beside the draft's (the drafted row
+  stays on the device, so no readback follows the command, and the greedy round takes the pick the
+  seat answers, the vocab x 4-byte logits row neither landing nor re-read by a host argmax); the
+  draft command's own `DASLLAMA_GPU_PROF=1` ledger (`vk_rdec gpu avg/draft` and `vk_rdec host
+  wall/draft`, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), the classifier's share of it
+  against the one-row `cls` role; and the acceptance the
+  device draft reads off the head's slab the window chain warmed (the entry above) - the pod
+  measures.
+
+- **OPEN (2026-09-27) - the Vulkan resident driver's speculative carry: its landing plane and its
+  step cost on a NextN-headed model.** The landing plane (`RDec.hid_host`, host-visible, allocated
+  only where the driver is prepared with `carry`) is dim x 4 x nb bytes, nb the per-row planes'
+  rows (a row a region, or the speculative verify's rows where more, eight at most):
+  Qwen3.5-0.8B-MTP (dim 1024) 4,096 bytes a row, 32,768 at eight. Each step moves
+  dim x 4 bytes a row over the logits' path (4 KB a token on the 0.8B), and the last layer's
+  residual step leaves the q8 down GEMV's epilogue for the row-storing stamp, one dispatch more a
+  token - while the speculative knob is on; with it off the step pays none of this and keeps the
+  fused forms (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate`). Owed from the pod:
+  tg128 of `Qwen3.5-0.8B-MTP-Q8_0.gguf` with `set_mtp_spec` on against `Qwen3.5-0.8B-Q8_0.gguf`
+  (the same trunk, no carry) under `DASLLAMA_GPU=1`, with the `DASLLAMA_GPU_PROF=1` token profile
+  of each, so the step's delta is read rather than estimated.
+
 - **LANDED (2026-09-27) - the Metal speculative round on the hyper-connection model
   (Qwen3.8-Flash-Next + its split shared head): the verify's rows carry the wide residual into the
   draft head, the n-gram side input takes the panel form with the accepted rows committed after the
@@ -56,6 +182,7 @@ what it costs today and what the fix would change.
   the IQ3_S planes, the scale rows unchanged); the dequant is bit-identical to the grid form's
   (`test_kquant`). The GPU tiers keep the grid form - their gather is a device read. Provenance:
   the four bench logs and two profile logs of the 2026-09-27 session, `followup_general.md` 170.
+
 - **LANDED (2026-09-27) - the Vulkan TTS dedup pass: the Pocket row GEMV (`TtsPkGemvT`) folds
   its own subgroup reduction onto the shared `WgReduceBase`, and the pass's bench rows against
   master's.** Box: the pod - the RunPod RTX PRO 4500 Blackwell, Linux, the Vulkan backend - one

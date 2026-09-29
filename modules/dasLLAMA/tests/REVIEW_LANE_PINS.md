@@ -1,14 +1,15 @@
 # dasLLAMA tests - Lane Pins Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
-`../followup_metal.md`.
+docs: `../ARCHITECTURE_RUNTIME.md`, `../ARCHITECTURE_MEDIA.md`. Planned work:
+`../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
 asserts belong to every cell that calls it. A lane setter is a call whose value a family's
 loader reads to pick its lane, or a facade call that makes that call. A driver setter is any
-other `set_*` / `pin_*` call in `../dasllama/` whose value a later load, route choice or kernel
-dispatch in the same process reads.
+other `../dasllama/` call that writes process-global state a later load, route choice or kernel
+dispatch reads. A driver setter's getter is a `../dasllama/` call that returns exactly the value
+the driver setter last wrote.
 
 **A cell, or the `[init]` of the file where the cell is defined, sets every driver setter whose
 value the cell's claim depends on, even when that value is its DEFAULT.**
@@ -30,9 +31,9 @@ setter's getter returned before the cell set it.**
 **A diff that adds or edits a cell setting a driver setter that has no getter adds that getter
 in `../dasllama/`, in the same change.**
 
-**A cell asserting the unpinned default lane compares against the predicates the family's
-`*_serves_q8` accessor reads for its unpinned default (whatever its body calls), never against a
-hardcoded lane.** The default lane differs per box.
+**A cell asserting the unpinned default lane of a family that has a `*_serves_q8` accessor
+compares against the predicates that accessor reads for its unpinned default (whatever its body
+calls), never against a hardcoded lane.** The default lane differs per box.
 
 **An image-suite cell whose subject IS the lane knob loads through the `.dlim`-baking loader,
 never around it.** The pin is part of what the image identity records.

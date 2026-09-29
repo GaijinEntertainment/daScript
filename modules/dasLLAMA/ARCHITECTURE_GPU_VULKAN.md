@@ -13,7 +13,8 @@ the coopmat mode ladder, the class-pipeline build seat, the MoE expert chain on 
 the KHR arm's hand-staged kq tile - are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, and the decode GEMV
 family's lane split by row length is `ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes`. What a
 model has to fit on the card before any of this runs - the residency plan, and the marks swap
-that lets one GPU slot serve many models - is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, and the
+that lets one GPU slot serve many models - is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the NextN
+draft head the driver homes is `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`, and the
 N-row token command a batched step's rows go through is in `ARCHITECTURE_GPU_VULKAN_NROW.md`.
 The decode-era mechanisms of the per-op tier are in `ARCHITECTURE_GPU_VULKAN_DECODE.md`. The GPU
 backend role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
@@ -70,7 +71,8 @@ past the window - unlike the MoE chain's gathered image and hidden plane, which
 hidden and residual values that nothing reads. The sliced GEMMs do not split k: the split-k
 reduce sums partial planes from row 0, so a region starting below the window's end would reduce
 the wrong rows. The slice takes the f16-fed cm2 route only (`gu6 && dn6`); the other feeds run
-the full window. Only the plain residual step (`cls_ar`) and the f16 activation honor the row base: the fused
+the full window, and so does a window that warms the NextN head's slab, whose rows read every
+row's post-norm hidden (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`). Only the plain residual step (`cls_ar`) and the f16 activation honor the row base: the fused
 residual twins feed the NEXT layer's projections and never run on the last layer, so they index from row 0 by design.
 
 **The k and v GEMMs merge into ONE dispatch when the layer's q, k and v weight planes are all

@@ -117,9 +117,6 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
 4. **Real batched decode** - the resident mirror is single-sequence; batch rows round-trip
    their KV per step (`rdec_sync_kv` in, `rdec_read_kv` out). Metal has a true batched driver
    (P4). Options: multi-sequence mirror slabs, or per-row device KV like Metal's `KVMirror`.
-5. **MTP / speculative decode** - Metal-only today (`metal_mtp_spec_eval`, same-slab verify).
-   Register the vulkan `mtp_spec`/`mtp_seam` overrides once batch (4) exists - the verify step
-   is a B=2 batch.
 6. **mx4 / q51 device kernels** - absent on Vulkan (CPU+Metal only). Needed before gpt-oss
    (mx4 experts) or gemma-4-26B (q51 stacks) can go resident on PC.
 7. **Tune-race parity** - Metal races tensor-op twins per box (`metal_tensor_race*`); Vulkan
@@ -1679,8 +1676,10 @@ module) is independent and can land any time - it is pure structure.
     two setters are `mtp_walk_sampled` and `rdec_land_pick`, and `mtp_round_begin` panics on
     either latch left set. The work: one `pre_drawn` / `pre_tok` pair, both setters writing it,
     the six `test_mtp_sampled_walk.das` assertions reading the one name - after saying in one
-    line that a speculative round and a device pick are never live on one session in one step
-    (the scheduler's speculative arm never asks a pick).
+    line that the two latches are never both set on one session: the sampled walk parks a draw
+    and rides no pick ask, a round under the scheduler's per-tick pick ask publishes the committed
+    row's pick through `land_pick` and parks no draw, and `mtp_round_begin` panics on either
+    latch left set.
 87. **The mistral3 family has no batched evidence.** Mistral-Small-3.1-24B-Instruct-2503 Q4_K_M
     (`performance/model_specs.das`, 14 GB) serves through the N-row command like the other dense
     K-quant carriers, but no box of ours stocks it beside its models, so no regions file pins its
@@ -1969,3 +1968,55 @@ module) is independent and can land any time - it is pure structure.
     the 0.6.5 release (Boris's ruling): the host flow of every TTS seat - the stage ping-pong,
     the concat when the width differs, the head-block loop - is identical and could run once over
     an encoder interface, about 450 lines.
+
+116. **The speculative round has no Vulkan round seat.** The round's four backend seats
+    (`register_mtp_spec_override`, `_spec_batch_`, `_round_`, `_seam_` in `dasllama_common.das`)
+    are filled by the Metal decode driver and the Metal gemma drafter alone. The resident driver
+    homes the NextN draft head and serves the round's draft through its own seat
+    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), under the Vulkan owner
+    (`register_mtp_seat_owner`, "the resident driver is armed on t"), serves the round's
+    two-row verify as same-slab rows of the N-row command with the head's re-warm in the same
+    command - the k-head store alone, no q GEMV - landing the rows' picks and hidden and, under a
+    bare-argmax caller's pick ask, no logits, the committed row's pick published for `sample_`
+    as a plain step's is (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), the draft's pick
+    answered from the device and the round's head rows staying on the device until a pass
+    hydrates them (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), and warms the head's
+    slab over a prompt it serves as the window chain's extra layer, the prompt's rows read back
+    to the host (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`; the CPU warm stands
+    down behind a driver that landed the logits, so it never reads the host `x_b` rows such a
+    driver leaves unwritten); the resident overrides land the
+    post-norm hidden carry (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), so with
+    `set_mtp_spec` or the server's `--mtp` the round's cold gate passes and the CPU round runs
+    around the device draft and verify, and a reject of a verify the seat served rolls the region
+    back on the device from the copies the verify command took - no snapshot, no replayed step
+    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`, the rollback seat). A verify the
+    seat declines runs the CPU two-row prefill over the snapshot the round then takes, inside the
+    verify window the resident prefill declines by name
+    (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window`): a hybrid's passes to the CPU rails,
+    and a routed-head carrier (GLM-4.5-Air's shape - no recurrent layer, a head the driver
+    declines) is served by the CPU verify under the window with its trunk resident.
+    `test_mtp.das`'s sessions carry f32 K/V, so they reach the driver only under
+    `DASLLAMA_VK_KV32=1`. What is still owed, in Metal's shape (`ARCHITECTURE_GPU_MTP.md`) on the
+    resident driver: the Vulkan round seat (`register_mtp_round_override("vulkan", ...)`) - a
+    round at depth k > 1 (the verify's per-row planes and the rollback scratch already hold the
+    box knob's depth plus one, eight rows at most, and the scratch's rows serve a reject to any
+    `a < k`) and the joint verify across streams - then the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
+    Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at
+    depth 3 on the M5 Max), gemma-4-26B with the assistant drafter as the second round kind; the
+    invariance cells of `tests/test_mtp.das` and the scheduler arm are the parity, `lcpp_bench
+    --mtp-ab` on the pod the rate, a CUDA reference row per carrier beside it.
+117. **The Vulkan MTP arc's declined folds are one dedup pass.** The arc's dupe audit folded the
+    seat lookup, the draft and verify decline ladders, the head prologue, the host timing block and
+    the test helpers it named duplicates; four sibling sets stayed by ruling, each a fold whose
+    evidence is the kernel cells and the hybrid file on the pod, in the shape of the TTS dedup pass:
+    (a) the head's K/V row seats as one more layer - `vk_rdec_head_sync_rows` and
+    `vk_rdec_head_read_rows` beside `vk_rdec_sync_kv` and the tier's forwarders differ on the head
+    (`l == n_layers`) alone, and the fold changes the seat signatures the Metal twin shares; (b) the
+    hybrid file's bar-and-control helpers `carries_within` and `head_rows_within` beside
+    `_resident_feed.das`'s `rows_within_control` - one form over a row list with the bar and the
+    control's rows passed in; (c) the hybrid file's feed collectors (`feed_under_spec` and the
+    per-cell copies of a session's logits and carry rows) - one collector over a step list; (d) the
+    reject cells' helpers (the rolled-back state read-back, the fresh-session control) shared with
+    `test_mtp.das`'s `reject_round_ids`. A kernel fold's identity gate is `harness/vk_spv_diff.das`
+    over `DASLLAMA_VK_SPV_DUMP` at the base and the tip; a test fold's is the file's cell count and
+    skip count unchanged on the pod under both mirrors.

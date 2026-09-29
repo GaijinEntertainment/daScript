@@ -3,7 +3,9 @@
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
 document carries the residency plan that sizes a whole model before a byte uploads, the marks
 swap that lets one GPU slot serve many models, and the token command's logits landing on the
-transfer queue. The N-row token command a batched step's rows go through, and the residual
+transfer queue. The NextN draft head the driver homes beside the trunk, its draft command, the
+prompt warm the window chain gives its slab and the rollback a rejected verify takes on the
+device, are in `ARCHITECTURE_GPU_VULKAN_MTP.md`. The N-row token command a batched step's rows go through, and the residual
 step's two forms it holds bit for bit, are in `ARCHITECTURE_GPU_VULKAN_NROW.md`. The prefill
 chain and byte stores that run once a model is resident are in `ARCHITECTURE_GPU_VULKAN.md`, and
 the cooperative-matrix GEMM tiles under them are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the per-op
@@ -228,8 +230,11 @@ a slice of the row (`CLS_ARGMAX_CHUNKS`, 64, compiled into both passes: a 4096-w
 vocab, so a row's pass is a wave of small workgroups and not one workgroup's walk over a megabyte;
 9-12 us a step from a 128k to a 262k vocab), then `ClsArgmaxFin`, a workgroup a row over the
 chunks' partials - the first maximum's id, the lowest on a tie, as the host's `parallel_argmax`
-reads (a thread's first element seeds its candidate, so an all-equal or non-finite row lands id
-0, and only an empty slice lands `0xFFFFFFFF`, which the landing refuses as an engine bug), into
+reads (every lane reads through `lane_val`, NaN and -inf as the lowest float, and a thread's
+first element seeds its candidate, so an all-equal row lands id 0, a row with non-finite lanes its
+widest finite lane and an all-NaN row id 0; only an empty slice lands `0xFFFFFFFF`, which the
+landing refuses as an engine bug, and a landed pick that reads non-finite panics naming the row -
+`rdec_landed_finite`), into
 `RDec.pick_dev`. The ask decides only what lands: the transfer command copies the picks behind the
 logits, and a step whose every row asks for its pick takes the picks-only twin (`RDec.xlog_pick_cmd`),
 so the logits plane never leaves the device and the host copies nothing (a device without the
@@ -243,13 +248,37 @@ picks back (`rdec_unland_picks`), since the CPU rails redo every row's logits. T
 a step for every stream whose parameters are a bare argmax (`sampler_is_argmax`: temperature at or
 under zero, penalties off - the served default) and clears the ask after the step's sample; a
 temperature or a penalty lands the logits as before, and so does every caller that never sets
-`Session.pick_asked` (the tests read the rows). A stream's first token samples off its prefill's
-logits inline, so a request of n tokens lands n - 1 picks. On the pod the host side of a four-row
+`Session.pick_asked` (the tests read the rows). The speculative round's commands land the same
+way: its draft lands the pick alone wherever the walk compares ids, its verify the rows' picks
+alone under the ask, and the round then publishes the committed row's pick through the same
+`Session.pick_ready` / `pick_tok` pair (`land_pick`, which the driver's `rdec_land_pick` counts
+through; `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`); `benchmarks/lcpp_bench.das`'s
+`--mtp-ab` arms ask the same way under a greedy temperature, so the A/B measures the served shape.
+A stream's first token samples off its
+prefill's logits inline, so a request of n tokens lands n - 1 picks. On the pod the host side of a four-row
 step held the logits copy (252-266 us of 4 MB on the E-series) and four pool argmaxes; the pick
 leaves a 16-byte landing, and its planes take 4 x (2 x 64 + 1) bytes a row of the plan. The figures in this section and the next are
 the pod's (RTX PRO 4500, `-jit`, cm2): the `DASLLAMA_GPU_PROF=1` token profile of
 `benchmarks/lcpp_bench.das` for the step times and rates, `harness/vk_dma_probe.das` for the copy
 rates; `PERF_LEDGER.md`'s 2026-09-19 section is the record.
+
+**A NextN-headed model's steps land the speculative carry beside their logits.** The speculative
+round drafts from `Session.mtp_h`, the post-final-norm hidden of the last evaluated row, and runs
+cold unless `mtp_h_pos1` names the position it starts at (`ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`);
+the CPU tail stashes both after every decode and prefill, and the resident overrides return before
+that tail. So a driver prepared with `carry` - set where the model has a NextN head and the tier
+installed the landing (`install_rdec_carry`) - takes the row-storing form of the classifier feed's
+stamp at the token command's final site (`storex`: the normed float rows stay in `xb_dev` beside
+the Q8_0 blocks), and every step copies those rows home on the logits' path - in the transfer
+command, the picks-only twin included, or inside the token command on a device without the
+transfer family; the window chain's last window copies its last row's normed hidden out of the
+prefill plane beside its logits. The overrides then write the row into `mtp_h` and move
+`mtp_h_pos1` as the CPU tail does - a step's row to `pos + 1`, a prompt's last row to
+`start_pos + npos`, each batched row into its own session (`rdec_stash_carry`). A device-home
+session takes no carry: the CPU round has no host rows to draft or verify it against. The
+carry costs `dim x 4` bytes a row over the bus (4 KB a token on Qwen3.5-0.8B) and the last
+layer's fused down epilogue, which writes Q8_0 blocks and no float row, so that layer's residual
+step runs as its own dispatch; a model without a head records the command it always did.
 
 ### A call that passes to the CPU rails hydrates first {#resident-pass-hydrate}
 

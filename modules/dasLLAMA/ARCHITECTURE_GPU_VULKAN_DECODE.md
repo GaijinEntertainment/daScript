@@ -9,7 +9,8 @@ layer takes in either era - the prefill window's and the token command's - is in
 `ARCHITECTURE_GPU_VULKAN_MOE.md`; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq
 tile and the decode GEMV family's lane split are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the
 residency plan and the marks swap under them and the token command's logits landing on the
-transfer queue are in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, and the N-row token command is
+transfer queue are in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the NextN draft head is
+`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`, and the N-row token command is
 `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`.
 
 ### The per-op tier's decode attention block {#decode-attention-block}
@@ -189,8 +190,9 @@ finalizer live beside Session in the engine module: a struct's finalizer is reso
 scope of the module that deletes it, and a Session dies in modules that see the engine and
 never the tier (the scheduler reaps its streams through the facade). A session's own
 position-zero reset releases its own copies the same way (`dn_reset`), and so does its
-speculative-round rollback (`mtp_state_restore`): the session's host state is authoritative,
-and the other sessions' copies stay theirs. The whole-device invalidate
+speculative-round restore on the CPU rail (`mtp_state_restore`): the session's host state is
+authoritative, and the other sessions' copies stay theirs; the device rollback of a rejected verify
+keeps the slots, valid and dirty (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`). The whole-device invalidate
 (`vk_dn_step_invalidate`) remains the seam for a dropped model, where every host copy is
 authoritative at once. The engine reaches those seams through the tier's forwarders:
 `dn_flush_layer` per layer before any CPU read of `dn_state` or the conv history,

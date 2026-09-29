@@ -104,6 +104,26 @@ def maxdiff_at(got, want : array<float>) : int {
 //! the NaN elements of `a`: the sentinel words a dispatch left
 def nan_count(a : array<float>) : int => count(a, $(v) => is_nan(v))
 
+//! true when every element of `a` is finite: no NaN, no infinity
+def all_finite(a : array<float>) : bool => all(a, $(v) => is_finite(v))
+
+//! the largest |got[gbase + i] - want[wbase + i]| over `n` elements and its index `i` (0 where every element agrees; a NaN on
+//! either side counts as the largest difference) - the exact compares' log line, with the index split into a row and a column by the caller
+def span_maxdiff(got, want : array<float>; gbase, wbase, n : int) : tuple<diff : float; at : int> {
+    var m = 0.0
+    var at = 0
+    for (i in range(n)) {
+        let g = got[gbase + i]
+        let w = want[wbase + i]
+        let dd = (is_nan(g) || is_nan(w)) ? uint_bits_to_float(0x7f800000u) : abs(g - w)
+        if (dd > m) {
+            m = dd
+            at = i
+        }
+    }
+    return (diff = m, at = at)
+}
+
 //! true when every element of `a` is bit-equal to `v`
 def elem_all(a : array<float>; v : float) : bool => all(a, $(e) => e == v)
 

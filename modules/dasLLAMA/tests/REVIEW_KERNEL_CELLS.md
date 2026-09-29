@@ -1,8 +1,9 @@
 # dasLLAMA tests - Kernel Cells Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
-`../followup_metal.md`.
+docs: `../ARCHITECTURE_GPU.md` for a `[vk_dispatch]` or `[metal_dispatch]` kernel,
+`../ARCHITECTURE_CPU_KERNELS.md` for a CPU kernel in `../dasllama/dasllama_math*.das`. Planned
+work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's asserts
 belong to every cell that calls it. A kernel run is a dispatch or a CPU kernel call. A kernel-unit
@@ -16,7 +17,11 @@ each stamp as its own class. A CPU oracle is the same computation written in pla
 the CPU. A path of a class is each kargs-selected branch, each branch a sentinel value in a bound
 buffer selects, and each trip-count regime of each loop whose trip count a kargs value sets - zero
 trips, one trip, a whole number of workgroup strides, or a partial tail. To loosen an assert is to
-let pass an input the old assert failed: a wider bar, a shorter domain, a dropped length check.
+let pass an input the old assert failed: a wider bar, a shorter domain, a dropped length check. A
+control is an extra assert in the same cell proving a compare can fail - a poisoned input, or a
+poisoned expectation (the expected value with a known amount added), that must land outside the
+bar, a mechanism unhooked whose result must miss, or a second, independent computation the
+result must agree with; a cell's own reference is never its control.
 
 **A diff that changes a kernel's dispatch grid - the count its dispatch needs, or its workgroup
 size - updates every gate that dispatches that kernel, in the same change.** A gate left on the
@@ -35,9 +40,9 @@ struct a bound buffer holds - updates every gate of that kernel the change made 
 same change.** A stale gate reads the wrong buffer and passes on garbage that happens to compare.
 
 **A kernel-unit cell's compare of kernel output against its reference logs, whether it passes or
-fails, the largest difference it measured with that element's row and column; a bit-for-bit
-compare of halfwords or bytes logs its mismatch count and first mismatching index instead.** A
-failure, or a pass that looks wrong, must say how far and where, not only how many.
+fails, the largest difference it measured with that element's row and column; an exact compare
+logs its mismatch count and first mismatching index instead.** A failure, or a pass that looks
+wrong, must say how far and where, not only how many.
 
 **A kernel-unit cell with a kernel run whose output no CPU-oracle compare covers at that run's
 shapes is a defect: the compare sits in that cell, or - where the cell compares two kernel forms
@@ -58,10 +63,9 @@ dispatches it on every path its body has.** A path no cell reaches is one a merg
 every cell still passes.
 
 **Before every kernel run whose output a kernel-unit cell reads - directly or through a later run
-in the same cell - in an assert that must pass and that a stale value could satisfy, the cell
-fills with a sentinel every range of that run's output buffers the run writes without reading.** A
-stale value is the previous run's, or garbage that happens to sit inside the tolerance bar; an
-unprefilled output can pass by keeping it.
+in the same cell - in any assert, the cell fills with a sentinel every range of that run's
+output buffers the run writes without reading.** A stale value is the previous run's, or garbage
+that happens to sit inside the tolerance bar; an unprefilled output can pass by keeping it.
 
 **A compare of a kernel against a CPU oracle asserts bit-identity only where the cell fixes the
 floating-point operation order on both sides, or builds operands that keep every intermediate
@@ -70,18 +74,15 @@ sides, or the operands exact by construction, the oracle's result is the kernel'
 construction; an exact compare of indices or schedule words against a CPU oracle is not a
 bit-identity assert.
 
-**A kernel-unit cell whose output buffer is its input buffer, and whose reference - its CPU oracle,
-or the second kernel form it compares against - does not differ from that input by construction,
+**A kernel-unit cell whose output buffer is its input buffer, and whose reference - its CPU
+oracle, or the second kernel form it compares against - is not built to differ from that input,
 pairs its compare with an assert that the output differs from the input at a known index.** An
 in-place kernel that never ran leaves the input, which can wrongly satisfy a tolerant compare.
 
-**A diff that adds or loosens, in a kernel-unit cell, an assert holding a measured figure within
-a nonzero tolerance or past a floor or ceiling - a compare on a class or at a kargs value, a
-rate, an error, a count - ships a control for each such assert, in the same change.** A control
-is an extra assert in the same cell proving the compare can fail - a poisoned input, or a poisoned
-expectation (the expected value with a known amount added), that must land outside the bar, a
-mechanism unhooked whose result must miss, or a second, independent computation the result must
-agree with; the cell's own reference is never its control.
+**A diff that adds or loosens, in a kernel-unit cell, an assert that is not itself a control,
+holding a measured figure within a nonzero tolerance or past a floor or ceiling - a compare on a
+class or at a kargs value, a rate, an error, a count - ships a control for each such assert, in
+the same change.**
 
 **A size, depth, or row count that a kernel-unit cell's name, a comment inside the cell, or an
 assert's text claims, and that the cell passes as a literal argument to the kernel it dispatches

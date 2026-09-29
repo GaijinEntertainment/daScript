@@ -1924,3 +1924,53 @@
    cells stand against it until the rig fetches jfk (it is whisper.cpp's sample) and the gemma4a
    clip is replaced by a traceable one or built by the test. Done = both clips come from the rig
    or the repository and the cells' expectations are re-pinned on them.
+
+179. **A Vulkan-served model's first load writes its planes twice - the CPU lane's image
+   (`<file>.cpu-<class>.dlim`, the planar flavor) and then the `vulkan` lane's image, which
+   carries the planar planes again beside the device-layout twin.** The lane naming
+   (`ARCHITECTURE_IMAGE.md#image-lane-name`) keeps the two files apart and out of each other's
+   GC; it does not change what each holds. `vulkan_bake_flavor` (`dasllama/dasllama_image.das`)
+   saves through `build_image`'s whole field walk with a hook that refuses nothing, so the
+   vulkan lane's image holds every planar plane (the q8 blobs and scales, the fp32 token table an
+   untied classifier keeps) plus `vkblob`: on Qwen3.8-27B-Q4_K_M the CPU lane's image is
+   24.1 GB and the vulkan lane's 43.0 GB for 18.1 GB of device planes, 67 GB and about forty
+   minutes (the gather 24 of them) - the first load with the image rail on of
+   `benchmarks/lcpp_bench.das --model Qwen3.8-27B-Q4_K_M.gguf --mtp-ab -n 16 -r 1
+   --for-debug-purposes` as the `-jit` script under `DASLLAMA_GPU=1
+   DASLLAMA_MTP_HEAD=/workspace/models/mtp-Qwen3.8-27B-Q8_0.gguf` on the RTX PRO 4500 pod, the
+   models on its MooseFS `/workspace` volume, the two sizes read off that volume after the load,
+   the minutes its wall. The P3 trim (`trim_model_planes`) would
+   drop the CPU families the resident driver never reads, but it declines a model with a NextN
+   head (the `-mtp` lane), and the flavor save never consults `image_save_enabled`
+   (`DASLLAMA_IMAGE_SAVE=0` skips the CPU lane's file only). Done = the vulkan lane's image
+   carries the device twin, the plan and what the CPU still reads (the trim past the NextN
+   decline, the untied fp32 table packed), the flavor save honours `image_save_enabled`, and a
+   first load under an armed backend bakes the vulkan lane's image from the in-memory image
+   instead of persisting the CPU lane's file first.
+
+180. **An uncaught panic on a job context ends the process with exit code 0 and its message on
+   stderr only.** On Linux `DAS_ENABLE_EXCEPTIONS` is off, so `Context::throw_fatal_error`
+   (`src/simulate/simulate_exceptions.cpp`) on a context with no `throwBuf` - every jobque clone,
+   the lanes the resident gather and upload run on - prints "unhandled exception" through
+   `to_err` and calls `exit(0)`. A bench whose stdout is captured reads as a clean run that
+   printed no rows: two of three runs of the row 179 command (`benchmarks/lcpp_bench.das --model
+   Qwen3.8-27B-Q4_K_M.gguf --mtp-ab -n 16 -r 1 --for-debug-purposes` as the `-jit` script under
+   `DASLLAMA_GPU=1 DASLLAMA_MTP_HEAD=/workspace/models/mtp-Qwen3.8-27B-Q8_0.gguf`, a first load
+   with the image rail on, on the RTX PRO 4500 pod off its MooseFS `/workspace` volume) ended
+   this way. Done = an uncaught
+   panic exits non-zero everywhere (`exit(1)` at the two sites), and the team-chunk invocation
+   (`src/builtin/module_builtin_jobque.cpp`, `team_parallel_for_invoke`) runs under
+   `runWithCatch` and reports `JOB EXCEPTION` as the fifo path does.
+181. **`test_vision_chat.das`'s deepstack cell is SIGKILLed on the pod under its 62 GB cgroup cap.**
+   `test_vision_chat_deepstack` (Qwen3-VL 4B, the 300-row mrope image quantum declined to the CPU
+   prefill loop - "the `vulkan` override does not rope from per-row tables") dies with "Killed"
+   (exit 137) in every stocked run on the RTX PRO 4500 pod since 09-24, on master's code, while
+   the container's `memory.max` reads 62 GB against the box's 251 GB (`memory.events` counts 18
+   kills); the file's earlier cells pass, so a `--changed` run on the pod reads one red it did not
+   cause. Measured alone (the cell under a 2 s sampler of the cgroup and the process): the daslang
+   process itself reaches 60.7 GB resident before the kill, page cache aside - a 4B model and a
+   300-row quantum have no business there. The suspect is the session's K/V at the file's full
+   context on the CPU rails (a Qwen3-VL 4B session at 262144 positions in f32 is ~77 GB of cache,
+   and the CPU loop the mrope quantum falls to is the one path that touches it row by row), so
+   the fix is the cell's session sized to its turn (or the cache grown lazily on that path), never
+   a documented pod cap.

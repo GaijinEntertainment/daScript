@@ -8,15 +8,18 @@ work: `../followup_metal.md` for Metal, `../followup_vulkan.md` for Vulkan,
 An instrument is a file that times a run itself and reports a wall-clock time or rate as its
 result, printed or returned to a caller that prints it; a file that reads a child process's clock
 is not one, and a serving path's profiler-gated report (a run whose result is the served output,
-the numbers a side report) is not one. A race times two candidates for one computation in one
-process, either of which the run could adopt; an arm is one candidate's timed run; a compared arm
-is one whose output the run reads back and measures against another arm's output or a CPU
-reference; the baseline arm is the arm running the implementation already in use. A served turn
-is one whole request the engine serves - a prefill-plus-decode run, or a transcription or
-synthesis end to end; a board cell is a timed cell whose rows land in `../performance/records/`
-or `../PERF_LEDGER.md`. A result row is a row carrying a time, a rate, or a per-kernel occupancy
+the numbers a side report) is not one. A race times two implementations of one computation in
+one process, either of which the run could adopt - two values of one flag or environment switch
+are not two implementations; an arm is one implementation's timed run; a compared arm is one
+whose output the run reads back and measures against another arm's output or a CPU reference;
+the baseline arm is the arm running the implementation already in use. A served turn is one
+whole request the engine serves - a prefill-plus-decode run, or a transcription or synthesis end
+to end; a board cell is a timed cell whose rows land in `../performance/records/<box>.json` or
+`../PERF_LEDGER.md`. A result row is a row carrying a time, a rate, or a per-kernel occupancy
 count. An A/B arm is one of two timed runs an instrument makes in ONE process that differ only in
 one flag or environment switch - the lever - set to a different value in each; off/on or graded.
+A refusing rep is a rep that produced no figure, or ran on a backend other than its row's backend
+stamp - the backend name the row records as having served it.
 
 **Code that dispatches a GPU kernel to measure it rather than to serve a call, wherever the diff
 puts it, applies `../REVIEW_GPU_RACE.md` too.**
@@ -74,21 +77,19 @@ re-derives.
 also prints both of those times on that report line.** A plain elapsed-time row - one clock pair,
 no attribution across stages - is not a difference.
 
-**A diff that changes what a board cell times ships before/after rows for each affected cell
-and corpus - or withdraws the affected rows and names the withdrawal and its reason in the PR
-body.** What a cell times changes when a change inside its timed body, to its input corpus, or
-to the pinned reference build (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else
-deciding which reference binary or environment the run measures) moves the measured quantity; a
-change that alters nothing the timed body loads, runs, or counts does not. The new rows or
-the withdrawal land in the file the affected rows live in - `../performance/records/<box>.json`
-or `../PERF_LEDGER.md`.
+**A diff that changes a board cell's input corpus, or the pinned reference build
+(`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else deciding which reference binary or
+environment the run measures), so that the measured quantity moves, ships before/after rows for
+each affected cell and corpus - or withdraws the affected rows and names the withdrawal and its
+reason in the PR body.** The new rows or the withdrawal land in the file the affected rows live
+in - `../performance/records/<box>.json` or `../PERF_LEDGER.md`.
 
 **A diff that changes a GPU kernel emitter under this folder - a `[vk_dispatch]` or
-`[metal_kernel]` body or a `*_msl` source global - and ships no before/after rows for a board
-cell or instrument that times the changed kernel names, in the PR body, the compare showing the
-emitted kernel code byte-identical before and after: the `*_msl` source text, the AIR it builds
-into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes** (the engine's own emitters answer to
-`../REVIEW_GPU.md`).
+`[metal_kernel]` body or a `*_msl` source global - either ships before/after rows for a board
+cell or instrument that times the changed kernel, or names in the PR body the compare showing
+the emitted kernel code byte-identical before and after: the `*_msl` source text, the AIR it
+builds into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes** (the engine's own emitters
+answer to `../REVIEW_GPU.md`).
 
 **A diff that adds a result-row mode - to a new or an existing instrument - or changes how such
 a mode reports or exits, makes every result-row mode of that instrument exit non-zero on a run
@@ -106,8 +107,8 @@ lever that silently no-ops prints a 1.00x row nobody can tell from a real tie.
 report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the
 lever helps, so a per-prompt loss hides inside a winning mean.
 
-**A diff that adds or changes a row measured over reps reports one number over ALL of them. A rep
-refuses when it produced no figure, or when it ran on a backend other than the row's backend
-stamp - the backend name the row records as having served the row. One refusing rep drops the
-whole row, and the row reports the refusal and its reason and no number.** A partial row reads
-like a measured one and is a different quantity.
+**A diff that adds or changes a row measured over reps reports one number over ALL of them.**
+
+**A diff that adds or changes a row measured over reps drops the whole row when any rep refuses:
+the row reports the refusal and its reason and no number.** A partial row reads like a measured
+one and is a different quantity.

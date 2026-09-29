@@ -3,12 +3,12 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
 
-**Never put anything that cannot compile on the CPU into a kernel body or into a function a
-kernel calls - keep both in ordinary das.** A kernel built from ordinary values is compared
-against its own CPU run; a marker struct - one that stands on the CPU for a value whose storage
-exists only on the device (a tile, a tensor, a layout or view over one, a sampler, an image) and
-has no storage of its own - and the builtins over it compile on the CPU, and their CPU bodies
-compute nothing.
+**Kernel arithmetic stays in ordinary das, so the kernel is compared against its own CPU run. A
+marker struct and the builtins over it appear only as the operand plumbing the coopmat and
+`tmm2d` load rules require.** A marker struct is one that stands on the CPU for a value whose
+storage exists only on the device (a tile, a tensor, a layout or view over one, a sampler, an
+image) and has no storage of its own; the builtins over it compile on the CPU, and their CPU
+bodies compute nothing.
 
 **A diff that adds or changes an emitter builtin whose operands are all ordinary CPU values - a
 declaration in `daslib/shader_lingua_franca.das`, `dasSpirv/spirv/spirv_builtins.das` or
@@ -71,13 +71,14 @@ declaration by name.** A declaration in that module is available to both emitter
 `[metal_kernel(float_a_ok=true)]` is the license (`dasMetal/metal/msl_emit.das`) - is a defect.**
 A float operand keeps the op off its native fast path.
 
-**A diff that adds a global-rooted-array read - a module global, a `@workgroup` array or a
-`self.<member>` resource read in a kernel body or a `def` it calls - or moves one to a new index,
-past a condition that kept it out, or into a compiled `[spirv_kernel]`, `[compute_shader]` or
-`[metal_kernel]` variant it was not in (a removed gate or a widened gate constant), or changes
-the bound a dispatch hands that kernel or the size the read's buffer is allocated at, keeps the
-read's index inside the region the buffer's sizing site allocates for that dispatch - the dispatch's own
-bound is not that region - or inside slack, an allocation past the region's end that the
-kernel's module-root `ARCHITECTURE*.md` names.** A guard on the read, a clamp into the region, a
-guard on the store of a block the read loads whole, and a `static_if` or `@template_gate` that
-compiles the read out of a variant each keep a read out.
+**A diff that adds a global-rooted-array read, moves one to a new index, past a condition that
+stopped it from running at an index outside the region, or into a compiled variant it was not
+in, or changes the bound a dispatch hands its kernel or the size its buffer is allocated at,
+keeps the read's index inside the region the code that allocates the buffer sizes for that
+dispatch - the dispatch's own bound is not that region - or inside slack, an allocation past the
+region's end that the kernel's module-root `ARCHITECTURE*.md` names.** A global-rooted-array read
+is a module global, a `@workgroup` array or a `self.<member>` resource read in a kernel body or a
+`def` it calls; a compiled variant is a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]`
+variant, and a removed gate or a widened gate constant moves a read into one. A guard on the
+read, a clamp into the region, a guard on the store of a block the read loads whole, or a
+`static_if` or `@template_gate` that compiles the read out of a variant satisfies the rule.

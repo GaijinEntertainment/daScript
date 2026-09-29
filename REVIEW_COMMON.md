@@ -30,16 +30,17 @@ without the change?" - is `skills/tdd_audit.md`.
 **A diff that changes a function carrying `[arch(at="<doc>.md#<anchor>")]`, or C++ under a
 `// <doc>.md#<anchor>` pointer - beyond comments - audits the anchor's other citing functions
 and the cited section: read the section, check it still describes the code and each citer
-still conforms, verdict per function.** The citers of one anchor share one mechanism; MCP
-`arch_sites` lists them, both spellings.
+still conforms, and records a verdict per function in the PR description.** The citers of one
+anchor share one mechanism; MCP `arch_sites` lists them, both spellings. An edit made during that
+audit does not start another audit of the same anchor.
 
 **A diff that adds, removes, or retargets an `[arch(at=...)]` citation or a
 `// <doc>.md#<anchor>` pointer audits the cited section against the code - both sections on a
-retarget.** The citation claims the section describes this function; verify it does.
+retarget - and records the verdict in the PR description.** The citation claims the section
+describes this function; verify it does.
 
-**A diff that changes an anchored section audits every function citing that anchor.** One
-audit pass over an anchor's section text and citer set discharges every audit duty the diff
-triggers on that anchor - the duties never cascade.
+**A diff that changes an anchored section audits every function citing that anchor, and records
+a verdict per function in the PR description.**
 
 **A diff that moves a fact out of a function's comment into an `ARCHITECTURE*.md` lands three
 things in the same change: the statement, a `{#anchor}` on the heading of the section it joins,
@@ -48,18 +49,18 @@ pointer on a C or C++ one - and the comment goes.** The citation is
 what keeps the section true: a section nothing cites is never re-checked when the code changes.
 
 **A rule that a test, a lint, or the folder's `REVIEW.das` enforces is deleted.** Automation
-replaces the rule; the checklist keeps at most "weakening that check is a defect." A rule
-that COULD be automated is a lint or `REVIEW.das` candidate - say so in the review round.
+replaces the rule; the checklist keeps at most "weakening that check is a defect." A gate that
+enforces part of a rule leaves only the uncovered part as prose. A rule that COULD be automated
+is a lint or `REVIEW.das` candidate - say so in the review round.
 
-**A `REVIEW.das` runs standalone and reports in one shape** - `daslang <folder>/REVIEW.das`
-from the repo root prints one `path: finding` line per finding (`path:line: finding` when a
-line is known) and exits nonzero when any fired. A gate that reports otherwise is a defect.
-Support library: `dastest/review_gate`.
+**A `REVIEW.das` that does not run standalone as `daslang <folder>/REVIEW.das` from the repo
+root, print one `path: finding` line per finding (`path:line: finding` when a line is known),
+and exit nonzero when any fired, is a defect.** Support library: `dastest/review_gate`.
 
-**Every review round runs the folder's `REVIEW.das` before it reads the diff, and a red gate
-stops the round until the gate is green.**
+**A diff that leaves its folder's `REVIEW.das` red is a defect.**
 
-**A `REVIEW.das` without its sibling `REVIEW.md` is a defect.**
+**A diff that adds a `REVIEW.das` adds its sibling `REVIEW.md` in the same change; weakening a
+check that enforces this is a defect.**
 
 **A rule is absolute; sanctioned violations live in the architecture doc.** No "except",
 "exempt", "carve-out", or "the one sanctioned" - move the boundary inside the trigger, fix
@@ -72,8 +73,9 @@ Subfolder-scoped rules move to that subfolder's own `REVIEW.md` - creating it is
 objection; checklists are cheap, thousands can sit in a repository and few fire per PR. A rule
 whose trigger lies entirely outside the folder can never fire and is deleted.
 
-**A parent checklist routes strays by KIND, not by location** - "a `[test]` file, wherever the
-diff puts it, answers to the `tests/` subfolder's checklist".
+**A checklist whose subfolders carry their own `REVIEW.md` states so, and routes a file placed
+outside its kind's subfolder by KIND, not by location** - "a `[test]` file, wherever the diff
+puts it, answers to the `tests/` subfolder's checklist".
 
 **One rule is one short paragraph - bold criterion first, blank line between rules.** A rule
 that needs more than that is describing how to write code, not how to review it. Split it or
@@ -109,11 +111,13 @@ root - the rule must say which.
 
 **Cite files by name; cite an architecture doc the checklist's opening names by anchor
 (`<doc>.md#<anchor>`), and never require the cited section to be read before the rule can be
-applied.** No file cites a checklist rule by number, position, or nickname. A file outside the
-rule documents - source, commit message, doc - quotes the rule's words; a rule document routes to
-the checklist instead, and never quotes or restates its rule. A criterion whose home is an
-architecture doc the opening does not name is restated in place and cited nowhere. A quote states the reason the code is shaped this
-way and survives any rewording; a position points at whatever sits there today.
+applied; a criterion whose home is an architecture doc the opening does not name is restated in
+place and cited nowhere.**
+
+**No file cites a checklist rule by number, position, or nickname.** A file outside the rule
+documents - source, commit message, doc - quotes the rule's words. A quote states the reason the
+code is shaped this way and survives any rewording; a position points at whatever sits there
+today.
 
 **Name the API a rule is about; never name an example of it.** A rule governing specific
 functions or files must name them or it cannot be checked - that name is the criterion. An
@@ -134,8 +138,8 @@ its line here, with its tests, in the same change.") over `` `file` `` - role li
 a bare never-phrase ("Zero network"). A clause with its own defect-verdict or same-change
 obligation is a rule, and it lives in the flat list above.
 
-**Adding a rule starts with reading the whole checklist** - duplication, drift, and homeless
-placement all start with a rule appended by an author who had not just read the file.
+**A diff that adds a rule restating one already in the checklist is a defect - extend the
+existing rule instead.**
 
-**A rule the diff adds or lengthens that is longer than every other rule in the file is split,
-or its extra prose moved to the architecture doc.**
+**A diff that makes a rule longer than the longest rule the file had before the diff splits it,
+or moves its extra prose to the architecture doc.**

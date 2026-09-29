@@ -56,15 +56,6 @@ def cleanup_temp_dir {
     }
 }
 
-def private all_finite(a : array<float>) : bool {
-    for (v in a) {
-        if (!(abs(v) <= 1.0e30)) {   // one test for NaN and for inf/overflow: NaN fails every compare
-            return false
-        }
-    }
-    return true
-}
-
 def private greedy_top(logits : array<float>; vocab : int64) : int64 {
     var best = 0l
     var bv = logits[0]

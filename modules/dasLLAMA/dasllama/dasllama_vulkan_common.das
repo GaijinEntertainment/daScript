@@ -1200,7 +1200,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             rides = "the SM count the dense tile pick, split-k and the decode attention's partials plane read ({sm} here) - past four pieces the token command records a wide twin at eight; without it the l tile serves every dense GEMM, nothing splits k and the attention stays at four pieces"),
         VkExtEntry(name = "timelineSemaphore (Vulkan 1.2)", present = timeline_semaphore_supported(phys),
             knob = "DASLLAMA_VK_XFERQ", off = !g_env_vulkan.vk_xferq,
-            rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident token command's logits behind a compute-timeline wait; without it the copies ride the compute queue and the token command copies its own logits under its fence"),
+            rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident commands' rows behind a compute-timeline wait - the token command's logits and picks, the NextN draft's and the same-slab verify's, and the carry row every one of them lands beside; without it the copies ride the compute queue and each command copies its own landing under its fence"),
         VkExtEntry(name = "computeFullSubgroups (subgroupSizeControl, Vulkan 1.3)", present = compute_full_subgroups_supported(phys),
             knob = "DASLLAMA_VK_FULLSG", off = !g_env_vulkan.vk_fullsg,
             rides = "full subgroups on the one-dimensional workgroups, an A/B arm off by default"),
@@ -2355,6 +2355,7 @@ struct RLayer {
     s_dnstep : VkDescriptorSet
     m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
     dn : array<DnStep>
+    roll_off : int64                //! this layer's byte offset in a rollback scratch row (`RDec.roll_dev`): its slot state, then its ring pair
     // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
     pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
     pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
@@ -2471,6 +2472,40 @@ struct RDec {
     xlog_pick_recorded : array<bool>
     pick_dev : uint64             //! the rows' argmax ids (`ClsArgmaxPart` then `ClsArgmaxFin`, after the epilogue), and their host landing
     pick_host : HostBuf
+    carry : bool                  //! the plan's carry, whatever the knob said at the load: the landing's planes exist, and the final site can store the rows' post-final-norm hidden in xb_dev and land it into hid_host beside the logits (a NextN-headed model whose tier installed the landing)
+    carry_live : bool             //! the carry as this step wants it - `carry` and the speculative round on; a flip re-records the commands whose last site stores or lands the row (`rd_carry_sync`)
+    hid_host : HostBuf            //! the landed carry rows: the token command's, or the window chain's last row at row 0
+    head_norm_base : int64        //! the NextN draft head's norm block in the norms plane (`rdec_head_norm_base`); 0 = prepared without the head
+    head_on : bool                //! the head is set (`vk_rdec_set_head`): the draft command serves
+    head : RLayer = RLayer()      //! the head's layer (index n_layers), kept out of `layers` and the token command's trunk walk
+    head_eh_blk : int64           //! the head's eh_proj plane's arena block and format
+    head_eh_fmt : int
+    head_m_eh : HostBuf
+    head_s_eh, head_s_cat_ar, head_s_cat_rq : VkDescriptorSet   //! the head's eh_proj GEMV, the embed and carry norms, the concatenated row's requant
+    head_cat_in_dev, head_cat_dev : uint64   //! the head's [embed ; carry] rows as the host uploads them, a row pair a head row (`nb` pairs), and their [enorm ; hnorm] image the eh_proj GEMV reads
+    head_cat_host : HostBuf
+    head_tok : HostBuf            //! the head rows' own TokMeta block and rope rows: the verify's head rows sit a position below its trunk rows
+    head_cos_dev : uint64
+    head_cos_host : HostBuf
+    head_s_hx_ar : VkDescriptorSet   //! the verify's head attention norm of the eh_proj rows into cat (`head_s_cat_rq` quantizes them): xb keeps the trunk rows the landing reads
+    pf_head_ask : bool            //! the next window chain warms the head's slab over the prompt rows it serves (`vk_rdec_head_warm_ask`)
+    pf_head_rows : int64          //! the head rows the last chain wrote
+    pf_head_ready : bool          //! the chain's head planes and sets are built (`pf_head_setup`)
+    pf_head_declined : bool       //! or the device declined them, said once
+    head_pf_wemb, head_pf_hsrc, head_pf_hcos : uint64   //! the chain's head planes: the window's unscaled embed rows; the trunk's post-norm rows a row down, the previous window's last at row 0; the head rows' rope rows
+    head_pf_cat, head_pf_catq, head_pf_cats, head_pf_catf : uint64   //! the chain's head rows' [enorm ; hnorm] image and its eh_proj feed (Q8_0 blocks, or halves on the f16 feed)
+    head_draft_cmd : array<VkCommandBuffer>   //! one recorded draft command per region: the head's mirror base rides its push, as the token command's does
+    head_draft_recorded : array<bool>
+    v_cmd : array<VkCommandBuffer>   //! the same-slab verify commands by row count (index 0 unused; `rd_v_idx`), region-free as the N-row command's on an attention model, a set a region on a hybrid (the rollback copies bake the region's slot), and their unsplit twins
+    v_cmd_unsplit : array<VkCommandBuffer>
+    v_recorded : array<bool>
+    v_rail : NRail = NRail.unasked   //! the verify's form on the armed model: the head, the N-row rail and the head planes' N-column leaves, decided once
+    verify_rows : int64           //! the rows one stream's verify steps at once: the round's depth plus one, within `nb` (0 = the head off or the verify uninstalled)
+    roll_dev : uint64             //! the verify's rollback scratch: a row per verify row the round can reject past (`roll_rows` = `verify_rows` - 1), each row every recurrent layer's slot state and ring pair in layer order (`RLayer.roll_off`); 0 = none
+    roll_rows : int64
+    roll_row_bytes : int64
+    roll_region : int64 = -1l     //! ... the region whose slots the last verify copied (-1 = none to roll back), and that verify's rows
+    roll_vrows : int64
     pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
     s_pick_part, s_pick_fin : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
@@ -2500,7 +2535,7 @@ struct RDec {
     cmd_wide : array<VkCommandBuffer>   //! the wide twin: the same chain with the attention at RD_SPLIT_WIDE_PIECES, submitted from RD_WIDE_POS, recorded on first use
     wide_on : bool                //! ... exists: the device's split count reaches past the split form's pieces
     tok_wide_recorded : array<bool>
-    nb : int64 = 1l               //! the rows the per-row planes hold: the N-row token command's most, one per region to RD_NB_MAX
+    nb : int64 = 1l               //! the rows the per-row planes hold: one per region, or the speculative verify's rows where it asks more, to RD_NB_MAX
     cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
     cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS; the rows take no wide form (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
     tok_n_recorded : array<bool>
@@ -2620,7 +2655,7 @@ def rd_unmake_sets {
     g_rd.comb_sets_made = false
 }
 
-//! every region's token command re-records: the sets or planes it references were replaced
+//! every region's token and draft commands and the verify commands re-record: the sets or planes they reference were replaced
 def rd_invalidate_token {
     for (rec in g_rd.tok_recorded) {
         rec = false
@@ -2629,6 +2664,12 @@ def rd_invalidate_token {
         rec = false
     }
     for (rec in g_rd.tok_n_recorded) {
+        rec = false
+    }
+    for (rec in g_rd.head_draft_recorded) {
+        rec = false
+    }
+    for (rec in g_rd.v_recorded) {
         rec = false
     }
 }
@@ -2722,29 +2763,42 @@ def fill_gemv_regions_qkv(hb : HostBuf; blk_q, blk_k, blk_v : int64; qpieces, pi
 // BOTTOM_OF_PIPE stamps; results ride a same-submit copy, no extra fence. Overlapped hazard
 // levels put the whole level's cost on the LAST member's delta (earlier members read near-zero)
 
+//! a recorded form's stamp list: the recorder's names in stamp order (stamp 0 the anchor), its stamp count, and whether the pool overflowed
+struct RdqStamps {
+    names : array<string>
+    n : uint
+    overflow : bool
+}
+
+//! a form's ledger: the stamps' summed intervals by name over the commands sampled, and the host side of the same commands
+struct RdqLedger {
+    us_by_name : table<string; double>   //! a name repeated in a command sums: every layer's "q", both kv halves
+    print_order : array<string>          //! the names in first-seen order, the tables' print order
+    total : double                       //! the commands' device spans, first stamp to last, summed
+    count : int64                        //! the commands sampled
+    idle_us : double                     //! the device's idle between the command sampled before it (any form's) and this form's, summed
+    wall_us : double                     //! the host wall of the same commands, and its pieces:
+    memcpy_us : double                   //! the memcpys and meta
+    submit_us : double                   //! the submit
+    wait_us : double                     //! the wait
+    land_us : double                     //! the landing copy
+}
+
 // decode per-role accumulation across tokens (stamps overwrite each submit); printed every 32
 var g_rdq_n = 0u
-var g_rdq_count = 0l
-var g_rdq_total = 0.0lf
 var g_rdq_stamp_names : array<string>        //! the recorded token command's stamp names in stamp order, the recorder's own account of what each interval bills
-var g_rdq_names_unsplit : array<string>        //! ... the unsplit twin's, its stamp count and its overflow flag
-var g_rdq_n_unsplit = 0u
-var g_rdq_overflow_unsplit = false
-var g_rdq_names_wide : array<string>        //! ... and the wide twin's
-var g_rdq_n_wide = 0u
-var g_rdq_overflow_wide = false
+var g_rdq_unsplit : RdqStamps   //! the unsplit twin's list, stamp count and overflow flag
+var g_rdq_wide : RdqStamps      //! ... and the wide twin's
 var g_rdq_attn_form = RdForm.split   //! the attention form the last sampled token took: a switch restarts the averages
-var g_rdq_names_n : array<string>   //! the N-row command's stamp names, its stamp count and overflow flag, and its unsplit twin's
-var g_rdq_n_n = 0u
-var g_rdq_overflow_n = false
-var g_rdq_names_n_unsplit : array<string>
-var g_rdq_n_n_unsplit = 0u
-var g_rdq_overflow_n_unsplit = false
+var g_rdq_nrow : RdqStamps      //! the N-row command's, and its unsplit twin's
+var g_rdq_nrow_unsplit : RdqStamps
 var g_rdq_form_n = false   //! the last sampled submit was an N-row step: a switch between the one-row and N-row forms restarts the averages
-var g_rdq_us_by_name : table<string; double>   //! the stamps' summed intervals by name (a name repeated in a token sums: every layer's "q", both kv halves)
-var g_rdq_print_order : array<string>        //! the names in first-seen order, the tables' print order
-var g_rdq_wall_us = 0.0lf   // the host side of the same tokens: memcpys + submit + fence + logits copy
-var g_rdq_host_us : double[4]   //! ... split into its pieces: the memcpys and meta, the submit, the fence spin, the logits copy
+var g_rdq_verify : array<RdqStamps>   //! the same-slab verify commands' by row count (index 0 unused), and their unsplit twins'
+var g_rdq_verify_unsplit : array<RdqStamps>
+var g_rdq_draft : RdqStamps           //! the draft command's
+var g_rdq_token_ledger : RdqLedger    //! the token command's ledger: the one-row forms and the N-row command, a switch between them restarting it
+var g_rdq_verify_ledger : RdqLedger   //! the verify command's - its own, so the round's alternating commands never restart the token ledger
+var g_rdq_draft_ledger : RdqLedger    //! the draft command's
 var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP): the recorded names and the pool saturate together, so the sampler reads this instead
 
 //! the token command changed attention forms mid-run: say so and restart the ledger's averages (the recorded stamp names
@@ -2752,40 +2806,45 @@ var g_rdq_overflow = false   //! a stamp the query pool could not take (PFQ_CAP)
 [cold_path]
 def rdq_form_switch(form : RdForm; pos : int64) {
     to_log(LOG_INFO, "vk_rdec gpu: the token command takes its {form} form from position {pos} - the averages restart\n")
-    rdq_reset_averages()
+    rdq_reset_averages(g_rdq_token_ledger)
 }
 
-def rdq_reset_averages {
-    g_rdq_count = 0l
-    g_rdq_total = 0.0lf
-    g_rdq_wall_us = 0.0lf
-    for (i in range(4)) {
-        g_rdq_host_us[i] = 0.0lf
-    }
-    g_rdq_us_by_name |> clear()
-    g_rdq_print_order |> clear()
+def rdq_reset_averages(var led : RdqLedger) {
+    led.count = 0l
+    led.total = 0.0lf
+    led.idle_us = 0.0lf
+    led.wall_us = 0.0lf
+    led.memcpy_us = 0.0lf
+    led.submit_us = 0.0lf
+    led.wait_us = 0.0lf
+    led.land_us = 0.0lf
+    led.us_by_name |> clear()
+    led.print_order |> clear()
+}
+
+def private rdq_clear_stamps(var st : RdqStamps) {
+    st.names |> clear()
+    st.n = 0u
+    st.overflow = false
 }
 
 //! the decode profiler's accumulators back to zero: a model drop or a new resident model - averages never span models
 def rdq_reset {
-    rdq_reset_averages()
+    rdq_reset_averages(g_rdq_token_ledger)
+    rdq_reset_averages(g_rdq_verify_ledger)
+    rdq_reset_averages(g_rdq_draft_ledger)
     g_rdq_n = 0u
     g_rdq_overflow = false
     g_rdq_stamp_names |> clear()
-    g_rdq_names_unsplit |> clear()
-    g_rdq_n_unsplit = 0u
-    g_rdq_overflow_unsplit = false
-    g_rdq_names_wide |> clear()
-    g_rdq_n_wide = 0u
-    g_rdq_overflow_wide = false
+    rdq_clear_stamps(g_rdq_unsplit)
+    rdq_clear_stamps(g_rdq_wide)
     g_rdq_attn_form = RdForm.split
-    g_rdq_names_n |> clear()
-    g_rdq_n_n = 0u
-    g_rdq_overflow_n = false
-    g_rdq_names_n_unsplit |> clear()
-    g_rdq_n_n_unsplit = 0u
-    g_rdq_overflow_n_unsplit = false
+    rdq_clear_stamps(g_rdq_nrow)
+    rdq_clear_stamps(g_rdq_nrow_unsplit)
     g_rdq_form_n = false
+    delete g_rdq_verify
+    delete g_rdq_verify_unsplit
+    rdq_clear_stamps(g_rdq_draft)
 }
 
 let PFQ_CAP = 2048u
@@ -3794,6 +3853,20 @@ def cmd_copy_range(raw : VkCommandBuffer; src : uint64; src_off : int64; dst : u
     var region = VkBufferCopy(srcOffset = uint64(src_off), dstOffset = uint64(dst_off), size = uint64(bytes))
     unsafe {
         vkCmdCopyBuffer(raw, reinterpret<VkBuffer>(src), reinterpret<VkBuffer>(dst), 1u, addr(region))
+    }
+}
+
+var @scratch g_copy_rows_regions : array<VkBufferCopy>
+
+//! `rows` copies of `bytes` in ONE copy command: row i from `src_off + i * src_stride` to `dst_off + i * dst_stride`
+def cmd_copy_rows(raw : VkCommandBuffer; src : uint64; src_off, src_stride : int64; dst : uint64; dst_off, dst_stride : int64; bytes, rows : int64) {
+    return if (rows <= 0l)
+    g_copy_rows_regions |> resize(rows)
+    for (i in range64(rows)) {
+        g_copy_rows_regions[i] = VkBufferCopy(srcOffset = uint64(src_off + i * src_stride), dstOffset = uint64(dst_off + i * dst_stride), size = uint64(bytes))
+    }
+    unsafe {
+        vkCmdCopyBuffer(raw, reinterpret<VkBuffer>(src), reinterpret<VkBuffer>(dst), uint(rows), addr(g_copy_rows_regions[0]))
     }
 }
 

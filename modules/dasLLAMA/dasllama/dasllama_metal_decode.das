@@ -4316,6 +4316,9 @@ def private load_batch_knobs() {
     g_b_pre = g_env_metal.batch_pre
 }
 
+[hot_path]   // per speculative round, reached through the engine's registered seat owner
+def private metal_mtp_owns(t : Model) : bool => t.metal_blob
+
 [init]
 def dasllama_metal_decode_register() {
     // registered but dormant: only select_decode_override("metal") (env rail DASLLAMA_PIN_DECODE
@@ -4328,6 +4331,7 @@ def dasllama_metal_decode_register() {
     register_mtp_spec_batch_override("metal", @@metal_mtp_spec_eval_batch)
     register_mtp_round_override("metal", @@metal_mtp_spec_round)
     register_mtp_seam_override("metal", @@metal_mtp_seam_row)
+    register_mtp_seat_owner("metal", @@metal_mtp_owns)
     g_env_logits = g_env_metal.logits
     g_env_batch_mm = g_env_metal.batch_mm
     g_env_attn_d = g_env_metal.attn_d

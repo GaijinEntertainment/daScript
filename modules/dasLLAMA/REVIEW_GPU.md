@@ -1,8 +1,9 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned
-work: `followup_metal.md` for Metal, `followup_vulkan.md` for Vulkan.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`, `ARCHITECTURE_GPU_MTP.md`,
+`ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work: `followup_metal.md` for Metal,
+`followup_vulkan.md` for Vulkan.
 
 A restated property of a kernel class is one a timing arm or a test-side dispatcher writes out
 rather than reads: a binding number, the kargs (kernel-argument struct) or push-constant layout,
@@ -56,9 +57,10 @@ or kargs field carries) or the size a buffer the kernel reads is allocated at, w
 puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.** A kernel read's range
 depends on both, and a host-only change reaches no kernel file.
 
-**A diff that names GPU-vs-CPU parity evidence - a run, a log, a claim - or changes the text of
-a Vulkan serving log line a parity rule reads - the resident driver's arm line, the per-op tier's
-`GPU MoE tier:` report, the override's pass-back line - applies `REVIEW_GPU_PARITY.md` too.**
+**A diff that names GPU-vs-CPU parity evidence or driver-against-itself evidence - a run, a log,
+a claim - or changes the text of a Vulkan serving log line a parity rule reads - the resident
+driver's arm line, the per-op tier's `GPU MoE tier:` report, the override's pass-back line -
+applies `REVIEW_GPU_PARITY.md` too.**
 
 **A diff that files GPU planned work - work that would change a kernel, a GPU driver, or a
 dispatch - in `followup_general.md` is a defect** - it goes to `followup_metal.md` or
@@ -132,10 +134,6 @@ on a host address, an offset or a handle alone - also compare a counter bumped o
 reallocation, or drop every cached entry built over the old buffer at the reallocation.** An
 address, offset or handle names whatever occupies it now.
 
-**Weakening `REVIEW.das`'s device-creation check is a defect - a new name in
-`DEVICE_CREATION_FILES` or `DEVICE_CREATION_FUNCTIONS`, or a device- or queue-creating call
-spelling absent from `DEVICE_CREATION_CALLS`, weakens it.**
-
 **Never compile or release a Metal PSO (pipeline state object) from an engine file
 (`dasllama/`) other than the one that owns its kernel class** - it goes through that file's
 own init/release pair.
@@ -149,19 +147,23 @@ Vulkan driver's lives in that driver's own file.**
 **A function that decides whether a GPU seat or driver declines a call, wherever the diff puts
 it, counts each decline only through a `DeclineCounter` (`dasllama/dasllama_metal_common.das`) or
 `VkDeclineCounter` (`dasllama/dasllama_vulkan_common.das`) and the `note_decline` / `note` call
-its common file declares on it.**
+its common file declares on it, or, in `dasllama/dasllama_gpu_resident.das`, through
+`note_gpu_cpu_pass` (`dasllama/dasllama_gpu_tier.das`) over an `RdecPass` value.**
 
 **Never give a `*_decline_caps` predicate a parameter beyond the model, the row count, and
 whether the call carries a uniform attention span - however that parameter is derived; window
 readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
 `decode_decline` instead.**
 
-**A diff that adds or removes a hook seat only the Vulkan family fills (an `install_*` or
-`set_*_hook(s)` slot in `dasllama/dasllama_gpu_tier.das`), a hook a GPU driver registers in a
-model family's registry, or a prefill builder a tower driver borrows names it - a seat by its
-`install_*` / `set_*` name, a registered hook by the seat's register function, a builder by its
-name - in the same change, in the row of `ARCHITECTURE_GPU.md#gpu-backends`'s role table for
-the file that fills, registers or borrows it.**
+**A diff that adds or removes an `install_*` or `set_*_hook(s)` seat in
+`dasllama/dasllama_gpu_tier.das` that only the Vulkan family fills names the seat, by its
+`install_*` / `set_*` name, in the `dasllama_gpu_tier.das` entry of
+`ARCHITECTURE_GPU.md#gpu-backends`, in the same change.**
+
+**A diff that adds or removes a hook a GPU driver registers in a model family's registry, or a
+prefill builder a tower driver borrows, names it - the hook by the seat's register function, the
+builder by its name - in that driver's row of the role table in
+`ARCHITECTURE_GPU.md#gpu-backends`, in the same change.**
 
 **A diff that adds or removes a registered override only one GPU backend files
 (`register_*("metal", ...)` or `register_*("vulkan", ...)`, a family hook a tower driver registers
@@ -169,9 +171,9 @@ aside); a `dasllama/dasllama_gpu_tier.das` seat Metal fills; a function one back
 no counterpart under the other backend's prefix - the same name after the prefix, the same role -
 called by code outside that backend's files; a `[metal_dispatch]` or `[vk_dispatch]` argument or
 field annotation the other lens lacks; or a decode or prefill behavior only one backend's drivers
-provide - lands its own entry in `ARCHITECTURE_GPU.md#gpu-backends`'s closed asymmetry list in the
-same change, even when the list already carries one of the same class.** One backend serving the
-same path faster or slower is not such a change.
+provide - lands its own entry in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, the closed
+asymmetry list, in the same change, even when the list already carries one of the same class.**
+One backend serving the same path faster or slower is not such a change.
 
 **A change that can alter what a GPU decode or prefill call on a session computes or selects
 ships GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside
@@ -284,5 +286,3 @@ an unserved format, so an unlisted format decodes under whatever the pick's defa
 `metal_ple_pre_gpu_gate` admit that format only where the table's base and row stride are whole
 superblocks of the format's own block size.** A base off the format's own block grid is gathered
 under a layout that is not its own.
-
-**Weakening `check_ple_gather_sites` in `REVIEW.das` is a defect.**

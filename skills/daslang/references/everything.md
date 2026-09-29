@@ -4954,7 +4954,7 @@ The AST_BOOST module provides high-level utilities for working with the AST. It 
 
 ### Collect carriers
 
-- `collect_carrier_violation` - Returns an empty string when `fn` cannot reach a heap collection, or when its frame provably holds nothing the collector must walk.
+- `collect_carrier_violation` - Returns an empty string when `fn` cannot reach a heap collection, or when its frame provably holds nothing the collector must walk: no argument or named local of a collectable type, no reference local, no block reaching a collect, and every call to a carrier a statement of its own; `[unsafe_heap_collect]` skips the proof.
 
 ### Queries
 

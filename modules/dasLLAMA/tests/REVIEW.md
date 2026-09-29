@@ -41,7 +41,8 @@ harmonic-source kernels match the CPU chain under both resample laws - is a defe
 **Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
 models stocked (the stocked files of the areas the change reaches; a core module with no
 `MODULE_AREAS` row reaches every area), plus every test here the change reaches - never the whole
-directory, never the whole `stocked` suite.** A change reaches a test when it alters anything the
+directory, never the whole `stocked` suite where `--changed` reaches fewer than every area.** A
+change reaches a test when it alters anything the
 test's result depends on - the test file, a shared helper, engine code it exercises, an in-tree
 fixture or corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
@@ -55,7 +56,7 @@ stocked, through a `run.das` suite listing the cell's file - with `--arm` naming
 `run.das` accepts `--arm` for that suite - and names the box in the PR body.** A run without
 `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
-**The `--changed` or `stocked` run a PR cites carries no `--exclude`** - an excluding run is the
+**The `--changed` run a PR cites carries no `--exclude`** - an excluding run is the
 iteration form between PRs; a PR that ships on it never ran the coverage it dropped.
 
 **A test file in this folder whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in
@@ -88,7 +89,9 @@ suite, its skip condition, or what it claims - a shape, a length, a format or a 
 sweeps, or a tolerance it holds - corrects or adds, in the same change, the `CLAUDE.md` entry of
 every test file running the cell, counts and skip clauses included.** A file's entry is the
 clause that describes the file, named with or without its `.das` suffix; a `{a,b}` shorthand or
-a suite roster needs no update.
+a suite roster needs no update. An entry may describe a class of cells in one clause - the cells
+of one helper, the arms of one name pattern (`mtp-ff-<tag>`) - when that clause's counts and skip
+clauses hold for every cell in the class.
 
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm filter
@@ -166,13 +169,15 @@ kernel it itself dispatches or calls, is asserted in that cell by an assert on t
 a resize, or a counter showing the path ran is not evidence the number was reached; a device's
 geometry (subgroup width, SM count) is no coverage claim.
 
-**A freeform token-parity cell - a token-exact compare over a text-generation prompt whose
-continuation can tie - stays token-exact only when its two sides run one code path, and states in
-the cell what makes them one (the shared entry point, or an assert pinning the lane); a freeform
-cell whose sides can round differently (different lanes, backends, batch shapes or kernel forms)
-uses the forced-feed logits-tolerance form - the same fixed tokens fed to both sides, logits
-compared within a bar.** A counting cell - one whose prompt forces a continuation that cannot tie,
-so greedy tokens are fixed - stays token-exact.
+**An exact token or id compare over a prompt whose continuation can tie, whose two sides run
+different lanes, backends, batch shapes or kernel forms, is a defect - it takes the forced-feed
+logits-tolerance form: the same fixed tokens fed to both sides, the logits compared within a
+bar. A counting cell, whose prompt forces a continuation that cannot tie, stays exact on any two
+sides.**
+
+**An exact token or id compare over a prompt whose continuation can tie, whose two sides run one
+code path, states in the cell what makes them one - the shared entry point, or an assert pinning
+the lane.**
 
 **A diff that adds an ASR family ships a token-for-token oracle cell for it - a transcript
 compared against a reference leg, an external dump or a CPU control.**
@@ -182,7 +187,7 @@ is a defect.** A stocked artifact is anything the test reads out of `models_dir(
 repo's build does not produce - model files, mmprojs, front-end packs, image fixtures, oracle
 dumps. Any one of these names the producer: a row in `../performance/model_specs.das`; a row's
 `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
-script beside `../performance/model_specs.das`; for an oracle dump, the mint script stocked
+script in `../harness/`; for an oracle dump, the mint script stocked
 beside the dumps under `models_dir()`, named by the test that loads the dump.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header - the
@@ -208,15 +213,18 @@ it spawns.** A set after that process starts is invisible to a config already re
 **A cell whose claim depends on an environment-read knob its own process has already read names
 that knob's value in the text a red prints - the cell label or the assert.**
 
-**A diff that adds or loosens an assert holding a figure the run measures - the difference
-between two computed sides, a rate, an error, or a count the run decides - within a nonzero
-tolerance, or past a floor or ceiling, in a cell that is not a kernel-unit cell, ships in the same
-change, in each such cell holding the assert, a control that lands outside that bound.** A bound
-nothing has exceeded where it is applied is not known to discriminate there.
+**A diff that adds or loosens an assert whose pass means two sides agree or a figure is good
+enough - the difference between two computed sides, a rate, an error, or a count the run
+decides, within a nonzero tolerance or past a floor or ceiling - in a cell that is not a
+kernel-unit cell, ships in the same change, in each such cell holding the assert, a control that
+lands outside that bound.** A bound nothing has exceeded where it is applied is not known to
+discriminate there.
 
-**A control for a measured-figure assert in a cell that is not a kernel-unit cell changes an input
-the computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled -
-and re-runs the compare; a value added to the output after the fact is not one.**
+**A control for an assert whose pass means two sides agree or a figure is good enough - a
+difference, a rate, an error or a count within a nonzero tolerance or past a floor or ceiling -
+in a cell that is not a kernel-unit cell changes an input the computation reads - a zeroed weight
+region, a poisoned input element, a mechanism disabled - and re-runs the compare; a value added
+to the output after the fact is not one.**
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

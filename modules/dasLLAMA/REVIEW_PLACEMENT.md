@@ -27,9 +27,9 @@ change that charter row in the same change.**
 ("on Vulkan ...", "Metal's ...", "on a build without das_metal" - the Vulkan file) licenses only
 that backend's file; a concern the row names without a backend licenses both.**
 
-**A charter line's parenthetical examples illustrate its concern and never narrow it: a diff
-adding a family, format or arm the parenthetical does not name lands it in the file whose
-concern is named, and adds it to that parenthetical in the same change.**
+**A diff adding a new item of the sort a charter line's parenthetical lists (a model family, a
+weight format, a dispatch arm) lands it in that charter line's file, whether or not the
+parenthetical names it, and adds it to the parenthetical in the same change.**
 
 **Never add a charter line for a file outside `dasllama/` - that file answers to its own
 folder's checklist.**
@@ -125,8 +125,9 @@ root).
 **An `[init]`-only side-effect require in an engine file (`dasllama/`) lives in
 `dasllama/dasllama_common.das` when `dasllama_common.das`'s own code needs the registration to have
 run and the registered module does not require the engine back, and in
-`dasllama/dasllama_transformer.das` otherwise.** The require umbrella breaks the cycle a module
-requiring the engine back would close.
+`dasllama/dasllama_transformer.das` otherwise - a require of a backend's entry as that umbrella's
+conditional require on the backend module, `require ?vulkan ...` or `require ?das_metal ...`.**
+The require umbrella breaks the cycle a module requiring the engine back would close.
 
 **A registration only a program root (test, harness, benchmark, tool) needs gets no side-effect
 require in an engine file - the program root requires the registration module directly.**
@@ -139,6 +140,7 @@ that establishes it.** The `[init]` is the only code that runs where the global 
 side-effect require in the same change that adds it** - a registration no engine file reaches
 never fires for a consumer of the `dasllama/dasllama.das` facade.
 
-**Platform-specific code - a device call, a `require` of a backend module, or a read of a
-backend's own state other than its `g_env_<backend>` knobs - in an engine file (`dasllama/`)
-lands only in that platform's backend file.**
+**Platform-specific code - a device call, a `require` of a backend module (the platform's C++
+binding: `vulkan`, `das_metal`), or a read of a backend's own state other than its
+`g_env_<backend>` knobs - in an engine file (`dasllama/`) lands only in one of that backend's
+role files or its entry, per the role table of `ARCHITECTURE_GPU.md#gpu-backends`.**

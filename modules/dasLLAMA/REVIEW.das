@@ -1377,6 +1377,59 @@ def private check_no_hand_pipelines {
     delete files
 }
 
+let private RESIDENT_FILE = "modules/dasLLAMA/dasllama/dasllama_gpu_resident.das"
+
+//! the resident verify seat in call order: the gated entry, then the body it calls. Every decline in either - a `return`
+//! whose value is not `true` - sits above the call that moves the session's recurrent state to the device (`rdec_dn_own_all`),
+//! since a decline below it hands the CPU verify a session whose state the device holds
+//! (ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback)
+let private VERIFY_SEAT_BODIES <- ["vulkan_resident_verify_gated", "vulkan_resident_verify_go"]
+
+//! a line's `return` value where the line is a return statement (the `if` tail of a postfix form dropped), "" elsewhere
+def private return_value_of(line : string) : string {
+    let s = strip(line)
+    return "" if (!(s |> starts_with("return ")))
+    let expr = slice(s, length("return "))
+    let tail = find(expr, " if ")
+    return strip(tail >= 0 ? slice(expr, 0, tail) : expr)
+}
+
+def private check_verify_decline_before_state_move {
+    var inscope fns <- function_bodies(RESIDENT_FILE) $(header) {   // the bodies come comment-stripped: a `rdec_dn_own_all` or a `return` in a comment counts for nothing
+        for (name in VERIFY_SEAT_BODIES) {
+            return true if (header |> starts_with("def private {name}("))
+        }
+        return false
+    }
+    return if (empty(fns))   //! a tree without the seat bodies (the walker fixtures, a build without the Vulkan seats) has no decline to order
+    var moved = false
+    for (name in VERIFY_SEAT_BODIES) {
+        var seen = false
+        for (f in fns) {
+            continue if (!(f.body |> starts_with("def private {name}(")))
+            seen = true
+            var line_no = f.line - 1
+            for (line in split(f.body, "\n")) {
+                line_no++
+                if (find(line, "rdec_dn_own_all(") >= 0) {
+                    moved = true
+                    continue
+                }
+                let ret = return_value_of(line)
+                if (moved && !empty(ret) && ret != "true") {
+                    gate_finding(RESIDENT_FILE, line_no, "the resident verify seat declines (`return {ret}`) after rdec_dn_own_all moved the session's recurrent state to the device - the CPU verify then reads a session whose state the device holds; move the check above the call (ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback)")
+                }
+            }
+        }
+        if (!seen) {
+            gate_finding(RESIDENT_FILE, "no `def private {name}(` - the check that every verify-seat decline sits above the recurrent state's move to the device (ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback) has no seat body to walk; keep the spelling or move this check with it")
+        }
+    }
+    if (!moved) {
+        gate_finding(RESIDENT_FILE, "no `rdec_dn_own_all(` call inside the resident verify seat - the check that every verify-seat decline sits above the recurrent state's move to the device (ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback) has no state move to order against; keep the spelling or move this check with it")
+    }
+}
+
 // A `[test]` file that requires the engine lives in tests/ - unless it requires a file of its
 // own folder by bare same-dir name (a bench self-check beside its subject), which tests/REVIEW.md's
 // out-of-folder ledger owns instead.
@@ -1695,6 +1748,7 @@ def main() : int {
     check_kq_gemv_grid_literals()
     check_vk_extension_roster()
     check_no_hand_pipelines()
+    check_verify_decline_before_state_move()
     check_test_file_placement()
     check_unicode_tables_stamp()
     check_device_creation_sites()
