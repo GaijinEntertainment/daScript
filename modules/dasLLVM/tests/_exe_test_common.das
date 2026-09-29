@@ -6,6 +6,7 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 require math
+require _spawn_common
 
 // the exe tests' shared helpers: the daslang under test, a log tail, a shell capture, and the
 // build-then-run of a fixture root as a standalone exe
@@ -78,7 +79,10 @@ def build_and_run(t : T?; dir : string; tag : string; root : string; jit_args : 
         argv |> push("--")
         argv |> push_from(jit_args)
     }
-    let brc = run_and_capture(argv, bout, 300.0)
+    var brc = 0
+    with_child_log_info() {
+        brc = run_and_capture(argv, bout, 300.0)
+    }
     t |> equal(0, brc, "the -exe build ({tag}) succeeds: {tail(bout)}")
     for (says in build_says) {
         t |> success(find(bout, says) >= 0, "the build ({tag}) announces `{says}`: {tail(bout)}")

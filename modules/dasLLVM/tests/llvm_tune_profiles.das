@@ -25,12 +25,11 @@ require llvm/daslib/llvm_tune
 // its features field is this box's fingerprint (or empty, to fake a less-capable minting
 // box).
 
-//! the tune environment a spawned child sees: everything cleared, verbose, and the relaunch
-//! depth given - "" for the process the test spawns, "1" for what a re-exec'd child sees
+//! the env a spawned child sees: tune knobs cleared, tune verbose, info logging; relaunch: "" for the child the test spawns, "1" for a re-exec'd one
 def private tune_env_prefix(relaunch : string) : string {
     return (get_platform_name() == "windows" ?
-        "set DAS_TUNE_MODE=&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& set DAS_TUNE_ONLY=&& set DAS_TUNE_RELAUNCH={relaunch}&& " :
-        "DAS_TUNE_MODE= DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_TUNE_ONLY= DAS_TUNE_RELAUNCH={relaunch} ")
+        "set DAS_TUNE_MODE=&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& set DAS_TUNE_ONLY=&& set DAS_LOG_LEVEL=info&& set DAS_TUNE_RELAUNCH={relaunch}&& " :
+        "DAS_TUNE_MODE= DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_TUNE_ONLY= DAS_LOG_LEVEL=info DAS_TUNE_RELAUNCH={relaunch} ")
 }
 
 def private count_hits(lines : array<string>; needle : string) : int {

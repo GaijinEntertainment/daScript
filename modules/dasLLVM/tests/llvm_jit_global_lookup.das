@@ -1,6 +1,7 @@
 options gen2
 require dastest/testing_boost public
 require daslib/fio
+require _spawn_common
 require daslib/strings_boost
 require strings
 require math
@@ -48,37 +49,39 @@ def private count_of(s : string; needle : string) : int {
 
 [test]
 def test_global_lookup_once_per_function(t : T?) {
-    t |> run("four accesses to two globals emit one lookup per global") @(t : T?) {
-        let root = "modules/dasLLVM/tests/_global_lookup_root.das"
-        var out = ""
-        //! -jit-no-cache: the dump only exists when codegen runs; -no-module-cache: nothing is written beside the fixture
-        let rc = run_and_capture([das_exe(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"], out, 300.0)
-        t |> equal(0, rc, "the fixture runs under -jit: {tail(out)}")
-        t |> success(find(out, "FOUR_SUMS ") >= 0, "the fixture printed its sum: {tail(out)}")
-        let ir = function_ir(out, "four_sums")
-        t |> success(!empty(ir), "the dump carries four_sums: {tail(out)}")
-        let lookups = count_of(ir, "@jit_get_global_mnh(")
-        t |> equal(2, lookups, "one jit_get_global_mnh per global (xs, ys) in four_sums, not one per access:\n{ir}")
-        //! the lazy half: a global written on one branch only is never looked up ahead of the branch - the
-        //! entry block carries no constant-hash lookup (LLVM may fold both branches into ONE lookup whose
-        //! hash is a select, which still probes once per call and never for the untaken global)
-        let bir = function_ir(out, "branchy Cb")
-        t |> success(!empty(bir), "the dump carries branchy: {tail(out)}")
-        let total = count_of(bir, "@jit_get_global_mnh(")
-        t |> success(total >= 1 && total <= 2, "at most one lookup per branch global (ga, gb) in branchy, got {total}:\n{bir}")
-        let entry = entry_block_ir(bir)
-        let hoisted = count_of(entry, "@jit_get_global_mnh(") - count_of(entry, "@jit_get_global_mnh(i64 %")
-        t |> equal(0, hoisted, "no constant-hash lookup in branchy's entry block - an untaken branch pays nothing:\n{bir}")
-    }
-    t |> run("a solid-context global is one base load per function and no lookup") @(t : T?) {
-        let root = "modules/dasLLVM/tests/_global_lookup_solid_root.das"
-        var out = ""
-        let rc = run_and_capture([das_exe(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"], out, 300.0)
-        t |> equal(0, rc, "the solid fixture runs under -jit: {tail(out)}")
-        t |> success(find(out, "FOUR_SUMS ") >= 0, "the solid fixture printed its sum: {tail(out)}")
-        let ir = function_ir(out, "four_sums")
-        t |> success(!empty(ir), "the dump carries four_sums: {tail(out)}")
-        t |> equal(0, count_of(ir, "@jit_get_global_mnh("), "a solid-context global never goes through the hash lookup:\n{ir}")
-        t |> equal(1, count_of(ir, "load ptr, ptr"), "one load of the context's globals base serves every access of both globals:\n{ir}")
+    with_child_log_info() {
+        t |> run("four accesses to two globals emit one lookup per global") @(t : T?) {
+            let root = "modules/dasLLVM/tests/_global_lookup_root.das"
+            var out = ""
+            //! -jit-no-cache: the dump only exists when codegen runs; -no-module-cache: nothing is written beside the fixture
+            let rc = run_and_capture([das_exe(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"], out, 300.0)
+            t |> equal(0, rc, "the fixture runs under -jit: {tail(out)}")
+            t |> success(find(out, "FOUR_SUMS ") >= 0, "the fixture printed its sum: {tail(out)}")
+            let ir = function_ir(out, "four_sums")
+            t |> success(!empty(ir), "the dump carries four_sums: {tail(out)}")
+            let lookups = count_of(ir, "@jit_get_global_mnh(")
+            t |> equal(2, lookups, "one jit_get_global_mnh per global (xs, ys) in four_sums, not one per access:\n{ir}")
+            //! the lazy half: a global written on one branch only is never looked up ahead of the branch - the
+            //! entry block carries no constant-hash lookup (LLVM may fold both branches into ONE lookup whose
+            //! hash is a select, which still probes once per call and never for the untaken global)
+            let bir = function_ir(out, "branchy Cb")
+            t |> success(!empty(bir), "the dump carries branchy: {tail(out)}")
+            let total = count_of(bir, "@jit_get_global_mnh(")
+            t |> success(total >= 1 && total <= 2, "at most one lookup per branch global (ga, gb) in branchy, got {total}:\n{bir}")
+            let entry = entry_block_ir(bir)
+            let hoisted = count_of(entry, "@jit_get_global_mnh(") - count_of(entry, "@jit_get_global_mnh(i64 %")
+            t |> equal(0, hoisted, "no constant-hash lookup in branchy's entry block - an untaken branch pays nothing:\n{bir}")
+        }
+        t |> run("a solid-context global is one base load per function and no lookup") @(t : T?) {
+            let root = "modules/dasLLVM/tests/_global_lookup_solid_root.das"
+            var out = ""
+            let rc = run_and_capture([das_exe(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"], out, 300.0)
+            t |> equal(0, rc, "the solid fixture runs under -jit: {tail(out)}")
+            t |> success(find(out, "FOUR_SUMS ") >= 0, "the solid fixture printed its sum: {tail(out)}")
+            let ir = function_ir(out, "four_sums")
+            t |> success(!empty(ir), "the dump carries four_sums: {tail(out)}")
+            t |> equal(0, count_of(ir, "@jit_get_global_mnh("), "a solid-context global never goes through the hash lookup:\n{ir}")
+            t |> equal(1, count_of(ir, "load ptr, ptr"), "one load of the context's globals base serves every access of both globals:\n{ir}")
+        }
     }
 }
