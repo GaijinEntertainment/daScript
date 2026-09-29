@@ -22,19 +22,6 @@ phase binds (`ResolveExternVisitor`, `generate_llvm_code`, `instrument_jit`). A 
 bypasses the content-addressed name entirely; its probe compares function hashes only, which is why
 the summary line asserts the opt-level tag only when the tier is actually known.
 
-### 2.2 The runtime's type layouts are a key input {#handled-layouts-key}
-
-Generated code bakes the size of a handled (C++-bound) type and the offset of each of its fields
-as constants, and no AST hash sees either: a C++ member added to a bound class moves every field
-behind it while each function's source stays the same. `jit_env_salt` therefore folds
-`handled_layout_hash` - one term per registered handled type (module, name, size) and one per
-field (module, type, field, offset), over every module the running binary registers, summed so
-the order of the walk is no input. A rebuilt runtime whose layouts moved keys a new DLL and new
-partition objects, and the old ones are collected as stale; a rebuild that moved none hits the
-cache. The walk reads 183 types and 1596 fields in a core build and costs tens of microseconds.
-What the salt does not see is a bound type's behavior behind an unchanged layout - that is the
-version's job (sec.2).
-
 ### 2.1 The split obj cache - positional invalidation
 
 Under `--jit-split-modules`, each per-module partition object is content-addressed too
@@ -54,3 +41,16 @@ rename-without-body change still re-keys, because the module hash folds symbol n
 just function hashes; and **the cache holds exactly one generation** - the GC keep-set is
 the current link set, so reverting an edit is an eviction, not a hit: the run after a revert
 re-emits from the reverted module on, same as the edit did.
+
+### The runtime's type layouts are a key input {#handled-layouts-key}
+
+Generated code bakes the size of a handled (C++-bound) type and the offset of each of its fields
+as constants, and no AST hash sees either: a C++ member added to a bound class moves every field
+behind it while each function's source stays the same. `jit_env_salt` therefore folds
+`handled_layout_hash` - one term per handled type annotation (module, name, size) and, where the
+annotation binds a structure, one per field (module, type, field, offset), over every module the
+running binary registers, summed so the order of the walk is no input. A rebuilt runtime whose
+layouts moved keys a new DLL and new partition objects, and the old ones are collected as stale;
+a rebuild that moved none hits the cache. The walk costs tens of microseconds, so every compile
+takes it. What the salt does not see is a bound type's behavior behind an unchanged layout -
+that is `LLVM_JIT_CODEGEN_VERSION`'s job.

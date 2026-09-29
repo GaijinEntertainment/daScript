@@ -212,16 +212,17 @@ def public handled_layout_term(mod, typ, field : string; value : uint64) : uint6
     return (h ^ value) * JIT_FNV_PRIME
 }
 
-//! the size and field offsets of every handled type the running binary registers, summed so the walk's order is no input
+//! the size of every handled type the running binary registers and the field offsets of every structure among them, summed so the walk's order is no input
 [arch(at = "../ARCHITECTURE_CODEGEN_IDENTITY.md#handled-layouts-key")]
 def public handled_layout_hash() : uint64 {
     var acc = 0ul
     program_for_each_registered_module() $(m) {
         let mod = string(m.name)
         module_for_each_annotation(m) $(value) {
-            return if (!value.isBasicStructureAnnotation)
+            return if (!value.isTypeAnnotation)
             let typ = string(value.name)
             acc += handled_layout_term(mod, typ, "", uint64(get_handled_type_size(unsafe(reinterpret<TypeAnnotation?>(value)))))
+            return if (!value.isBasicStructureAnnotation)
             for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(value))) $(name, _cppName, _xtype, offset) {
                 acc += handled_layout_term(mod, typ, name, uint64(offset))
             }

@@ -3,6 +3,8 @@ options no_aot
 
 require dastest/testing_boost public
 require llvm/daslib/llvm_jit_plan
+require daslib/ast_boost
+require daslib/rtti
 
 def private salt(layouts : uint64) : uint64 {
     return jit_env_salt(3, 0, false, false, "", true, true, JitSanitize(), layouts)
@@ -30,6 +32,27 @@ def test_layout_hash(t : T?) {
         let first = handled_layout_hash()
         t |> success(first != 0ul, "the walk found handled types")
         t |> equal(handled_layout_hash(), first)
+    }
+    t |> run("a handled type that binds no structure is a term too") @(t : T?) {
+        var structures = 0ul
+        var others = 0
+        program_for_each_registered_module() $(m) {
+            let mod = string(m.name)
+            module_for_each_annotation(m) $(value) {
+                return if (!value.isTypeAnnotation)
+                if (!value.isBasicStructureAnnotation) {
+                    others++
+                    return
+                }
+                let typ = string(value.name)
+                structures += handled_layout_term(mod, typ, "", uint64(get_handled_type_size(unsafe(reinterpret<TypeAnnotation?>(value)))))
+                for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(value))) $(name, _cppName, _xtype, offset) {
+                    structures += handled_layout_term(mod, typ, name, uint64(offset))
+                }
+            }
+        }
+        t |> success(others > 0, "the binary registers handled types that bind no structure ({others})")
+        t |> success(handled_layout_hash() != structures, "the hash is not the structures' terms alone")
     }
 }
 
