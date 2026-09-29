@@ -15,8 +15,9 @@ whose every caller the runtime re-enters once per serving step
 
 **Every kernel dispatch (the host function that records it), loop or call path a diff adds that
 the runtime re-enters once per serving step is, or is reached by, a region entry that carries
-`[hot_path]` or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts, or is reached only
-through a `[cold_path]` function, guarded and rarely taken.**
+`[hot_path]` or any of the `[no_alloc]` / `[no_env]` / `[no_io]` contracts; or that dispatch,
+loop or path has one entry only, a guarded and rarely-taken function that carries
+`[cold_path]`.**
 
 **A function a serving step reaches only through a registered function value - a function value
 stored in a table or variable that the runtime calls through - is a region entry, and carries

@@ -139,8 +139,8 @@ corpus it reads, the model components (encoder, decoder, tower) it runs or the b
 serves them, the tokens or rows it divides the wall by - ships before/after rows for each
 affected cell and corpus, or withdraws the affected rows and names the withdrawal and its reason
 in the PR body; the new rows or the withdrawal land in the file the affected rows live in -
-`performance/records/<box>.json` or `PERF_LEDGER.md`.** A change to a kernel - faster, slower,
-another buffer, other numerics - changes none of the three.
+`performance/records/<box>.json` or `PERF_LEDGER.md`.** A change to a kernel triggers this rule
+only when it changes one of those.
 
 **A rate or wall of any served-turn leg, or a ratio of two such rates or walls, written down as
 a measurement rather than as a prediction is a defect unless it cites the committed board row it

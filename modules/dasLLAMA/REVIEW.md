@@ -79,8 +79,8 @@ folder's `tests/REVIEW.md` - open it; the walk does not surface it for a `daslla
 
 **A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]`
 declares), or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes)
-change, a change to a function that the code copying K/V rows between the host cache and that
-device copy reaches through any chain of calls, a GPU kernel timing race (two kernels timed against each other to pick one - not a data
+change, a change to a `kv_*` function that a GPU driver file (`dasllama_metal*.das`,
+`dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, a GPU kernel timing race (two kernels timed against each other to pick one - not a data
 race), a call that makes, arms or tears down device-home serving - a session whose K/V region
 lives only on the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`) - a
 knockout (an arm that skips a stage to measure that stage's cost), a hand-binding arm (one that

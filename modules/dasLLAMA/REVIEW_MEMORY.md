@@ -22,7 +22,7 @@ stays green.
 root) or from a `maybe_parallel_for*` body (`dasllama/dasllama_par.das`), which can dispatch onto
 those same lanes - is a `def` returning it, never a module global with a declaration initializer
 (`let` or `var`), and nothing reachable from such a body writes or resizes a module global -
-such a body writes into a buffer the dispatching caller sizes and passes in.** A pooled lane's globals are not
+write into a buffer the dispatching caller sizes and passes in instead.** A pooled lane's globals are not
 its own: a read comes back zero, a resize trips on a stale array.
 
 **A buffer in `dasllama/` whose element count grows with a count the model file sets is declared
@@ -41,5 +41,6 @@ count with its value at two shapes that differ in it.**
 
 **A diff after which an allocation that exists before and after it starts or stops growing with
 a scaling count without gaining a term ships peak footprint and wall-clock, each measured before
-and after the diff at the largest shape the code path accepts, in `PERF_LEDGER.md`.** The pair
-records what the change costs; it picks nothing.
+and after the diff at the largest shape the code path accepts - or, where the path accepts any
+value of the count, at one shape the entry names - in `PERF_LEDGER.md`.** The pair records what
+the change costs; it picks nothing.

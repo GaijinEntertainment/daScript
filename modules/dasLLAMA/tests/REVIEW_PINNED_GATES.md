@@ -66,6 +66,4 @@ as its evidence, adds the cell carrying it to the pinned set in the same change*
 cell; or, when the new cell leaves every cell of its file pinned, by replacing the file's named
 cells with one file entry naming what it pins; or, when the file already has a file entry, by
 adding each axis the new cell or assert asserts to that entry's must-hold list where it is
-missing. A new entry in an existing cell's expectation list is not a new assert. A constant
-declared in `../dasllama/` that the cell asserts as its own claim is not something maintained
-outside the cell.
+missing. A new entry in an existing cell's expectation list is not a new assert.

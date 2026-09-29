@@ -8,8 +8,8 @@ A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a
 asserts belong to every cell that calls it. A lane setter is a call whose value a family's
 loader reads to pick its lane, or a facade call that makes that call. A driver setter is any
 other `../dasllama/` call that writes process-global state a later load, route choice or kernel
-dispatch reads. A driver setter's getter is a `../dasllama/` call, or a set of them, that returns
-every value the driver setter last wrote.
+dispatch reads. A driver setter's getter is the `../dasllama/` call, or the set of them, that
+returns the values the driver setter last wrote.
 
 **A cell, or the `[init]` of the file where the cell is defined, sets every driver setter whose
 value the cell's claim depends on, even when that value is its DEFAULT.**
@@ -27,10 +27,11 @@ declining the other lane, instead of pinning, measures whichever lane the box's 
 helper it calls, or through a loader parameter that takes the lane - returns with each lane it
 pinned unset through the lane setter's paired unset call, and each driver setter it set back at
 the value that setter's getter returned before the cell set it.** A set made inside a
-`new_thread` block ends with that thread's context and owes no restore.
+`new_thread` block to a module global writes that thread's context alone and owes no restore; a
+set to state every context shares owes it.
 
-**A diff that adds or edits a cell setting a driver setter whose getter lacks a call adds the
-calls it lacks in `../dasllama/`, in the same change.**
+**A diff that adds or edits a cell setting a driver setter some value of which no `../dasllama/`
+call returns adds a call returning each such value, in `../dasllama/`, in the same change.**
 
 **A cell asserting the unpinned default lane of a family that has a `*_serves_q8` accessor
 compares against the predicates that accessor reads for its unpinned default (whatever its body

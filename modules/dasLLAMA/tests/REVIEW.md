@@ -25,8 +25,8 @@ dropped length check.
 **A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists,
 changes which `run.das` suites list one, or adds a cell or an assert whose expected value must be
 kept in step with something maintained outside the cell, or that a checked-in table names as its
-evidence, applies that checklist too.** A constant declared in `../dasllama/` that the cell
-asserts as its own claim is not something maintained outside the cell.
+evidence, applies that checklist too.** An assert that compares against a `../dasllama/`
+constant by name, not against a literal copy of it, keeps nothing in step.
 
 **A cell that calls a `set_*` / `pin_*` function in `../dasllama/` whose value a later load, route
 choice or kernel dispatch in the same process reads, passes a loader parameter that takes a
@@ -182,12 +182,16 @@ kernel it itself dispatches or calls, is asserted in that cell by an assert on t
 a resize, or a counter asserted to show a route ran is not evidence the number was reached; a device's
 geometry (subgroup width, SM count) is no coverage claim.
 
-**An exact token or id compare over a prompt whose continuation can tie either states in the
-cell what makes its two sides round alike - the shared entry point, an assert pinning the lane,
-or a lane pin plus the storage layout that alone differs (a flat K/V cache against a paged one) -
-or takes the forced-feed logits-tolerance form: the same fixed tokens fed to both sides, the
-logits compared within a bar. A counting cell, whose prompt forces a continuation that cannot
-tie, stays exact on any two sides.**
+**An exact token or id compare over a prompt whose continuation can tie, whose two sides run
+different lanes, backends, batch shapes or kernel forms, is a defect - it takes the forced-feed
+logits-tolerance form: the same fixed tokens fed to both sides, the logits compared within a
+bar. A counting cell, whose prompt forces a continuation that cannot tie, stays exact on any two
+sides.**
+
+**An exact token or id compare over a prompt whose continuation can tie, whose two sides run one
+code path or the same kernels over another storage layout (a flat K/V cache against a paged
+one), states in the cell what makes them compute bit-identical logits - the shared entry point,
+an assert pinning the lane, or a lane pin plus the layout that alone differs.**
 
 **A diff that adds an ASR family ships a token-for-token oracle cell for it - a transcript
 compared against a reference leg, an external dump or a CPU control.**

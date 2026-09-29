@@ -16,7 +16,8 @@ to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well.**
 **A diff that adds a `main.das` or `cli_args.das` flag, changes what the flag makes the program
 do, its default, or a file or path it reads or writes, or edits any copy of its text, leaves its
 `@clarg_doc`, every `README.md` passage that names the flag, and its row in
-`doc/source/reference/utils/dasllama_server.rst` or `dasllama_cli.rst` (repo root) stating the
+`doc/source/reference/utils/dasllama_server.rst` or
+`doc/source/reference/utils/dasllama_cli.rst` (repo root) stating the
 flag's behavior, default, and files and paths as the diff leaves them, no copy leaving out one
 that another states.** A change to the value `serving_knobs.das` derives for a knob changes what
 every flag that reads that knob makes the program do. A reason or a measured number a copy gives
