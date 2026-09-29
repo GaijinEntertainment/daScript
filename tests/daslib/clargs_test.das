@@ -1181,3 +1181,24 @@ def test_get_host_binary(t : T?) {
     let bare = "no-such-binary-7f37b1e9"
     t |> success(!fexist(get_full_file_name(bare)), "a bare name resolves beside the cwd, where nothing sits - get_host_binary keeps such a name bare for PATH")
 }
+
+[test]
+def test_get_host_binary_relative_start(t : T?) {
+    let host = get_host_binary()
+    if (!fexist(host)) {
+        t |> skip("the host was found on PATH, so there is no path to start it by")
+        return
+    }
+    var err : string
+    let rel = relative(host, getcwd(), err)
+    if (!empty(err) || is_absolute(rel)) {
+        t |> skip("the host is not under the current directory: {err}")
+        return
+    }
+    let argv0 = get_platform_name() == "windows" ? replace_extension(rel, "") : rel
+    var output : string
+    let rc = run_and_capture([argv0, path_join(get_das_root(), "tests/daslib/_host_binary_probe.das")], output, 120.0)
+    t |> equal(rc, 0, "the host starts by '{argv0}': {output}")
+    let child = strip(output)
+    t |> success(is_absolute(child) && fexist(child), "a host started by '{argv0}' finds itself by an absolute path, not '{child}'")
+}
