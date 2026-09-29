@@ -1199,11 +1199,13 @@ namespace das {
             dup2(pipefd[1], STDOUT_FILENO);
             dup2(pipefd[1], STDERR_FILENO);
             close(pipefd[1]);
+            setpgid(0, 0);
             execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
             _exit(127);
         }
         // Parent process
         close(pipefd[1]);
+        setpgid(pid, pid);
         FILE * f = fdopen(pipefd[0], "r");
         atomic<bool> timedOut{false};
         atomic<bool> processDone{false};
@@ -1215,7 +1217,7 @@ namespace das {
             }
             if ( !processDone.load() ) {
                 timedOut = true;
-                kill(pid, SIGKILL);
+                killpg(pid, SIGKILL);
             }
         });
         vec4f args[1];
@@ -1579,6 +1581,7 @@ namespace das {
             dup2(pipefd[1], STDOUT_FILENO);
             dup2(pipefd[1], STDERR_FILENO);
             close(pipefd[1]);
+            if ( timeout_sec > 0.0f ) setpgid(0, 0);
             execvp(cargv[0], cargv.data());
             _exit(127);
         }
@@ -1588,6 +1591,7 @@ namespace das {
         atomic<bool> processDone{false};
         thread watchdog;
         if ( timeout_sec > 0.0f ) {
+            setpgid(pid, pid);
             watchdog = thread([pid, timeout_sec, &timedOut, &processDone]() {
                 auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds((int)(timeout_sec * 1000.0f));
                 while ( std::chrono::steady_clock::now() < deadline ) {
@@ -1596,7 +1600,7 @@ namespace das {
                 }
                 if ( !processDone.load() ) {
                     timedOut = true;
-                    kill(pid, SIGKILL);
+                    killpg(pid, SIGKILL);
                 }
             });
         }
