@@ -392,6 +392,80 @@ def test_metal_batched_row_deltanet(t : T?) {
     }
 }
 
+let PAGED_PROMPT = 40l
+let PAGED_NEW = 40l   //! prompt plus reply is 80 rows: past one 64-row page, so a stream's rows span two pages
+
+//! every stream's greedy tokens after `nst` requests of `nnew` tokens each run to the end on a scheduler of `page_rows`-row pages (0 = flat sessions)
+[cold_path]
+def private served_tokens(tr : Model; nst, page_rows, nnew : int64) : array<array<int64>> {
+    var sch <- create_scheduler(tr, nst, nst, 64l, page_rows, 0l, KVDtype.f16, false)
+    var events : array<SchedEvent>
+    for (i in range64(nst)) {
+        var req <- PendingReq(id = i + 1l, prompt <- bench_prompt(PAGED_PROMPT, i + 1l), max_new = nnew)
+        verify(submit(tr, sch, req), "the queue holds the streams")
+    }
+    drain(tr, sch, events)
+    var toks <- [for (i in range64(nst)); toks_of(events, i + 1l)]
+    delete events
+    delete sch
+    return <- toks
+}
+
+// Both sides run `served_tokens` on the same blob model through the same Metal drivers, and the
+// mirror gathers a paged session's pool rows byte for byte, so the two streams are one code path
+// over one set of bytes: the compare is exact. Each side's driver steps are counted on their own.
+[test]
+def test_metal_paged_deltanet(t : T?) {
+    t |> run("paged sessions on a deltanet hybrid emit what flat sessions emit - the recurrent layers own no K/V rows (Qwen3.5-0.8B Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            if (!jit_enabled()) {
+                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+                return
+            }
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+            if (!model_available(t, path)) return
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 512l)
+            with_job_que() {
+                setup_dasllama_jobque_()
+                for (nst in [1l, 2l]) {
+                    let steps0 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
+                    var flat <- served_tokens(tr, nst, 0l, PAGED_NEW)
+                    let steps1 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
+                    var paged <- served_tokens(tr, nst, 64l, PAGED_NEW)
+                    let steps2 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
+                    var first <- served_tokens(tr, nst, 64l, 1l)   // the control: a reply of one token takes it off the prefill
+                    let steps3 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
+                    to_log(LOG_INFO, "{nst} stream(s): Metal decode steps - flat {steps1 - steps0}, paged {steps2 - steps1}, a one-token reply {steps3 - steps2}\n")
+                    t |> success(steps1 - steps0 >= PAGED_NEW - 1l, "{nst} stream(s): the Metal drivers served the flat sessions' steps ({steps1 - steps0})")
+                    t |> success(steps2 - steps1 >= PAGED_NEW - 1l, "{nst} stream(s): the Metal drivers served the paged sessions' steps ({steps2 - steps1})")
+                    t |> success(steps3 - steps2 < PAGED_NEW - 1l, "{nst} stream(s): a one-token reply stays under the floor ({steps3 - steps2} steps)")
+                    for (i in range64(nst)) {
+                        t |> equal(long_length(flat[i]), PAGED_NEW, "{nst} stream(s), stream {i + 1l}: the flat session emitted every token")
+                        var diverged = empty(flat[i])
+                        for (a in flat[i]) {
+                            diverged ||= a != flat[i][0]
+                        }
+                        to_log(LOG_INFO, "{nst} stream(s), stream {i + 1l}, flat text: {eyeball_text(tr, flat[i])}\n")
+                        to_log(LOG_INFO, "{nst} stream(s), stream {i + 1l}, paged text: {eyeball_text(tr, paged[i])}\n")
+                        t |> success(ids_equal(flat[i], paged[i]), "{nst} stream(s), stream {i + 1l}: the paged session's tokens are the flat session's")
+                        t |> success(diverged, "{nst} stream(s), stream {i + 1l}: the stream is more than one token repeated, so a dead session would show")
+                    }
+                    delete flat
+                    delete paged
+                    delete first
+                }
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
 [test]
 def test_metal_batched_row_pre_encode(t : T?) {
     t |> run("four greedy streams emit the same tokens whether each batched step is encoded at its call or pre-encoded under the step before it (Llama-3.2-1B Q8)") <| @(t : T?) {

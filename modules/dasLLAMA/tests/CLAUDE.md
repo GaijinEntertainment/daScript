@@ -1082,7 +1082,14 @@ not group 0's; the Llama carrier also
 runs the pre-encode cell: four greedy streams through the scheduler with the batched driver's
 pre-encoded step off (the reference, its taken count pinned at zero) and on (the taken count at
 sixteen or more; the shipped default reads off), token for token per stream, then the rail's
-retire under a parked step and the drivers' shutdown against the Metal live-object count. Stocked
+retire under a parked step and the drivers' shutdown against the Metal live-object count; the
+deltanet carrier also runs the paged cell (`test_metal_paged_deltanet`): one and two greedy
+streams of 40 prompt and 40 reply tokens on a scheduler of 64-row pages - the server's session
+kind, each stream's rows past one page - emit token for token what flat sessions emit (one code
+path over one set of bytes: the mirror gathers the pool's rows verbatim), each side's Metal
+decode steps counted on their own with a one-token reply as the floor's control, both streams
+decoded in the log (a recurrent layer owns no K/V rows, so its pool blob is empty and the
+mirror's walk reads no base for it). Stocked
 suite; skips off the JIT, without dasMetal, or without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
 name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table
 off, where every step is per-row by construction.
