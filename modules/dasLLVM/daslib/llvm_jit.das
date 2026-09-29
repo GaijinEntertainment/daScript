@@ -763,6 +763,9 @@ class public LlvmJitVisitor : AstVisitor {
         // split mode: function impls (never blocks/lambdas - those stay partition-local) are
         // cross-partition callable
         build_llvm_function_pair(fnmna, isCMRES(fun), fun.arguments, fun.result, null, fun.annotations, g_jit_split_active)
+        if (is_never_fast_math(fun.annotations)) {
+            LLVMAddTargetDependentFunctionAttr(ffunc, JIT_NEVER_FAST_MATH_ATTR, "")
+        }
         thisFunc = null
     }
 
@@ -6731,6 +6734,9 @@ class public LlvmJitVisitor : AstVisitor {
         build_llvm_function_pair(fnmna, isCmres, thisBlock.arguments, thisBlock.returnType, captureType, expr.annotations)
         // function pair
         ffunc = LLVMGetNamedFunction(g_mod, fnmna.impl())
+        if (func != null && is_never_fast_math(func.annotations)) {
+            LLVMAddTargetDependentFunctionAttr(ffunc, JIT_NEVER_FAST_MATH_ATTR, "")
+        }
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
         // build wrapper function
         build_wrapper_function(fnmna, block_das_name(thisBlock, func), thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)

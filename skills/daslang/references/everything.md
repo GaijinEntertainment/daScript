@@ -226,6 +226,7 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 - `_macro` - Marks a function to be executed during the macro compilation pass, similar to `[init]` but running at macro time.
 - `unsafe_when_not_clone_array` - Marks a function as unsafe to call outside of an array `clone` operation, restricting its usage context.
 - `unsafe_deref` - Optimization annotation that removes null-pointer checks, bounds checks on array and string indexing, and similar safety validations.
+- `never_fast_math` - Keeps the function's floating-point arithmetic, and that of the block literals written in its body, exact under options fast_math: the LLVM tiers (JIT, LLVM-AOT, -exe) emit it without the reassoc, nsz and contract flags every other function gets.
 - `expect_any_vector` - Contract annotation restricting a function argument to accept only `das::vector` template types.
 - `builtin_array_sort` - Internal function annotation that provides the sorting implementation used by the built-in `sort` function.
 - `alias_cmres` - Declares that the function always aliases cmres (copy-or-move result), disabling cmres return optimizations for it.

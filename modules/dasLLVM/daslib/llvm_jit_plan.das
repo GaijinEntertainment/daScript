@@ -40,6 +40,17 @@ let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 // kernels make real infs and arcp+ninf's rcp-estimate div computes inf*0=NaN (tests/jit/fast_math_specials.das).
 var public g_jit_fast_math = false
 
+let public JIT_NEVER_FAST_MATH_ATTR = "das-never-fast-math"
+
+def public is_never_fast_math(annotations : AnnotationList) : bool {
+    for (ann in annotations) {
+        if (ann.annotation.name == "never_fast_math") {
+            return true
+        }
+    }
+    return false
+}
+
 //! `--jit-sanitize` / `options jit_sanitize`, resolved: `address` runs LLVM's asan pass over the emitted IR, `undefined`
 //! its bounds check, which reports through the host's ubsan runtime
 struct public JitSanitize {
@@ -157,8 +168,7 @@ def public fold_llvm_code_hints(funcs : array<FunctionPtr>; seed : uint64) : uin
     return h
 }
 
-// [hint(...)] args become LLVM function attributes (alwaysinline/noalias=/optnone/...) — backend-only,
-// no SimNode, so the aot hash is blind to them exactly like loop hints; fold them into both keys
+[arch(at = "../ARCHITECTURE_JIT_ENTRY.md#hint-folds")]
 def public fold_function_hints(funcs : array<FunctionPtr>; seed : uint64) : uint64 {
     var h = seed
     for (fn in funcs) {
@@ -167,6 +177,9 @@ def public fold_function_hints(funcs : array<FunctionPtr>; seed : uint64) : uint
                 h = (h ^ hash(get_mangled_name(fn))) * JIT_FNV_PRIME
                 h = (h ^ hash("hint")) * JIT_FNV_PRIME
                 h = fold_annotation_args(ann.arguments, h)
+            } elif (ann.annotation.name == "never_fast_math") {
+                h = (h ^ hash(get_mangled_name(fn))) * JIT_FNV_PRIME
+                h = (h ^ hash("never_fast_math")) * JIT_FNV_PRIME
             }
         }
     }

@@ -19,3 +19,11 @@ triggered sound waits behind everything already in the ring. When underruns appe
 reviewable question is what stalled the producer, not what number would have hidden it, and
 `sound_playback_underrun_frames` is the evidence - a browser-only count, so a native zero from it
 proves nothing.
+
+**A das function whose per-sample update keeps two saved filter values that each feed the
+other's next value - a biquad, state-variable or resonant filter - carries `[never_fast_math]`: a
+diff whose hunks land in such a function leaves it carrying the annotation, and a diff adding one
+adds it.** Fast math may keep two copies of a saved
+value that round differently, and at a low cutoff or a narrow band their difference grows every
+sample until the output is NaN - on some CPUs only, so a clean run proves nothing
+(`ARCHITECTURE.md#biquad-never-fast-math`).

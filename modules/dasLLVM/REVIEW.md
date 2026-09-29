@@ -49,13 +49,20 @@ there.
   `ARCHITECTURE.md` sec.1). Only work on the path that reaches the report is timed: option
   resolution before the first timer, log lines, and failure-path teardown are not.
 
-- **A change that can alter the machine code the JIT's DLL or split-obj cache serves back for
-  identical inputs - IR generation, target-machine setup, a `[llvm_code]` generator body, or the
-  call ABI the generated code binds: function signatures, the name scheme, the prologue, the
-  externs the install phase binds - bumps `LLVM_JIT_CODEGEN_VERSION`**
-  (`daslib/llvm_jit_plan.das`). Both keys fold each function's AST hash, the hint inputs they
-  carry - loop-hint names, `[llvm_code]` arguments, function hints - and this constant, so a
-  change none of those covers serves the old machine code back (`ARCHITECTURE.md` sec.1.2).
+- **A change that alters the machine code emitted for a function without changing any input the
+  JIT cache keys fold bumps `LLVM_JIT_CODEGEN_VERSION` (`daslib/llvm_jit_plan.das`)** - IR
+  generation, target-machine setup, a `[llvm_code]` generator body, or the call ABI the generated
+  code binds: function signatures, the name scheme, the prologue, the externs the install phase
+  binds. The folded inputs are what `jit_dll_basename` (`daslib/llvm_jit_plan.das`) and the
+  split-partition key in `run_jit` (`daslib/llvm_jit_run.das`) fold; a key that does not change
+  serves the old machine code back.
+
+- **A diff that adds an input only the backend reads - an annotation, or an annotation argument,
+  that changes emitted code and leaves the function's AOT hash unchanged - folds it, after the
+  carrying function's mangled name, into the DLL key and the split-obj key through a
+  `fold_*_hints` function in `daslib/llvm_jit_plan.das`, in the same change** (`ARCHITECTURE_JIT_ENTRY.md#hint-folds`). A
+  `LLVM_JIT_CODEGEN_VERSION` bump re-keys once, so adding or removing the input on a function
+  afterwards still serves the old machine code back.
 
 - **A diff that adds a `require` line naming a `[llvm_code]` generator module outside this
   module - a package's, dasLLAMA's - to `daslib/llvm_user_modules.das` is a defect; the package

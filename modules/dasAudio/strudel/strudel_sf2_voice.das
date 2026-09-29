@@ -457,6 +457,7 @@ def private sf2_biquad_setup(var bq : SF2Biquad&; fc_normalized : float) {
     bq.b2 = (1.0lf - K * bq.q_inv + KK) * norm
 }
 
+[never_fast_math]
 def private sf2_biquad_tick(var bq : SF2Biquad&; input : float) : float {
     if (!bq.active) return input
     let inp = double(input)

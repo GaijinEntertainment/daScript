@@ -64,6 +64,12 @@ def test_inline_contract_errors(t : T?) {
         t |> expect_issue("_inline_never_inline_conflict.das",
             "[never_inline] conflicts with [inline]")
     }
+    t |> run("[inline] combined with [never_fast_math], either order") @(t : T?) {
+        t |> expect_issue("_inline_never_fast_math_conflict.das",
+            "[never_fast_math] conflicts with [inline]")
+        t |> expect_issue("_never_fast_math_inline_conflict.das",
+            "[inline] conflicts with [never_inline] or [never_fast_math]")
+    }
     t |> run("early return with a tail inside a finally-carrying block") @(t : T?) {
         t |> expect_issue("_inline_finally_hazard.das",
             "early returns conflict with a finally section")

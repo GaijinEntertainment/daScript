@@ -1,7 +1,8 @@
 # dasLLVM Architecture - the JIT entry and the cache hit
 
 Companion of `ARCHITECTURE.md` (sec.1 routes here). Contract: `ARCHITECTURE_COMMON.md` (repo
-root). This document carries how a program reaches the JIT and what a DLL cache hit costs.
+root). This document carries how a program reaches the JIT, what a DLL cache hit costs, what the
+keys fold beyond the AOT hashes, and how a build's files are published.
 
 ## 1. Three modules where there was one
 
@@ -87,6 +88,19 @@ an exe has no jit state to free, and the strict sweep refuses a `[no_jit]` funct
 A batch of programs in one process (dastest) exercises both: a program that fails inside the
 emitter must drain the codegen accumulators (`reset_codegen_accumulators`) on its way out, or the
 next program's fileinfo ctor asserts on names that belonged to the last one.
+
+## 5. The hint folds key what the AOT hash cannot see {#hint-folds}
+
+A function's AOT hash walks what simulation reads, so an input only the backend reads is invisible
+to it: loop-hint annotation arguments, `[llvm_code]` generator arguments, `[hint(...)]` arguments
+(they become LLVM function attributes - `alwaysinline`, `noalias=`, `optnone`) and
+`[never_fast_math]` (`ARCHITECTURE_FAST_MATH.md#never-fast-math`). None of them has a SimNode, so
+changing one alone leaves the AOT hash identical, and the cache would serve the old code back.
+`fold_loop_hints`, `fold_llvm_code_hints` and `fold_function_hints` (`daslib/llvm_jit_plan.das`)
+fold them per function into both cache keys - the DLL key and each split partition's key - beside
+the AOT hashes. `fold_function_hints` folds each annotation after its function's mangled name:
+the key is a sequence of tokens, so without the name a marker moved from one function to another
+folds to the same key and a warm cache serves code where the wrong function carries it.
 
 ## 6. An artifact is published by rename {#artifact-publish}
 

@@ -37,3 +37,9 @@ def test_hint_folds_bind_to_their_function(t : T?) {
     t |> success(fold_source_function_hints(t, two_functions(hint, true)) != fold_source_function_hints(t, two_functions(hint, false)), "a [hint] moved to another function changes the key")
 }
 
+[test]
+def test_never_fast_math_rekeys_the_jit_cache(t : T?) {
+    let marker = "[never_fast_math]"
+    t |> success(fold_source_function_hints(t, two_functions("", true)) != fold_source_function_hints(t, two_functions(marker, true)), "[never_fast_math] changes the fold both cache keys take, so a cached DLL built with the stamp is not served back")
+    t |> success(fold_source_function_hints(t, two_functions(marker, true)) != fold_source_function_hints(t, two_functions(marker, false)), "[never_fast_math] moved to another function changes the key")
+}

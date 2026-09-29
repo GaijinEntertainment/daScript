@@ -380,6 +380,18 @@ Optimization and AOT
     ``[inline]`` call to one degrades to a plain call. As with ``disable_inline``,
     the declaration-level contract checks (body shape, recursion, ``@@``) still run.
 
+``[never_fast_math]``
+    Keeps the function's floating-point arithmetic exact under ``options fast_math``: the
+    LLVM tiers (JIT, LLVM-AOT, ``-exe``) emit it, and the block literals written in its body,
+    without the ``reassoc``, ``nsz`` and ``contract`` flags every other function gets. The
+    flags stay off after LLVM inlines the function into a caller; the annotation implies
+    ``[never_inline]``, since daslang's own inliner would move the arithmetic into the caller
+    first, and combining it with ``[inline]`` is a compile-time error. It is meant for a
+    recurrence whose feedback gain is above one, such as an IIR filter tick: fast-math lets the
+    optimizer keep two copies of the filter state that round differently, and the recurrence
+    amplifies the gap between them every step. The interpreter never reassociates, and C++ AOT
+    follows the host compiler's own fast-math flag, so neither changes.
+
 ``[hybrid]``
     Marks a function as an AOT hybrid — it can call interpreted code from AOT context.
 

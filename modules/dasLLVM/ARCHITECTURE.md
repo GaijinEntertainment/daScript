@@ -2,10 +2,10 @@
 
 The design document `REVIEW.md` cites. Numbered sections are the stable reference targets;
 usage and installation live in `README.md`, the debugger rail and its roadmap in `DEBUGGING.md`.
-Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU
-classes), `ARCHITECTURE_DEBUG_INFO.md` (the `--jit-debug` DWARF rail - sec.12),
-`ARCHITECTURE_JIT_ENTRY.md` (the entry module, the emitter-free cache hit, the candidate-set key)
-and `ARCHITECTURE_EXE.md` (the standalone exe's link decision and startup - sec.10).
+Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU classes),
+`ARCHITECTURE_DEBUG_INFO.md` (the `--jit-debug` DWARF rail - sec.12), `ARCHITECTURE_JIT_ENTRY.md`
+(the entry module, the emitter-free cache hit, the candidate-set key), `ARCHITECTURE_EXE.md` (the
+standalone exe's link decision and startup - sec.10) and `ARCHITECTURE_FAST_MATH.md` (`[never_fast_math]`).
 
 ## 1. The jit backend pipeline
 

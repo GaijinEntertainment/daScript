@@ -38,12 +38,14 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x728e8ef9ba987b1aul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xdb985f1b144bb86eul
 
+[arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
     while (fn != null) {
-        var bb = LLVMGetFirstBasicBlock(fn)
+        let never_fast_math = LLVMGetStringAttributeAtIndex(fn, 0xFFFFFFFFu, JIT_NEVER_FAST_MATH_ATTR, uint(length(JIT_NEVER_FAST_MATH_ATTR))) != null
+        var bb = never_fast_math ? null : LLVMGetFirstBasicBlock(fn)
         while (bb != null) {
             var inst = LLVMGetFirstInstruction(bb)
             while (inst != null) {

@@ -321,6 +321,7 @@ def formant_biquad_setup_bpf(var bq : FormantBiquad; freq, q, sample_rate : floa
     bq.z2 = 0.0lf
 }
 
+[never_fast_math]
 def formant_biquad_tick(var bq : FormantBiquad; input : float) : float {
     //! Process one sample through the biquad and return the output.
     let inp = double(input)
