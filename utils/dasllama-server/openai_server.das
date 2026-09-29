@@ -5546,8 +5546,7 @@ def private init_one_scheduler(var s : ModelSlot) {
     }
     let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : g_sched_defaults.kv_dtype
     let want = s.opts.mtp >= 0 ? s.opts.mtp : g_sched_defaults.mtp
-    let on_metal = get_metal_mode() != MetalMode.off && slot_flavor(s) == "metal"
-    var spec = want > 0 || (want < 0 && mtp_auto_arms(s_streams, on_metal, s.backend_effective))
+    var spec = want > 0 || (want < 0 && mtp_auto_arms(s_streams, slot_flavor(s) == "metal", s.backend_effective))
     if (spec && s.model.config.n_layer_nextn <= 0l) {
         if (want > 0) {
             to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")

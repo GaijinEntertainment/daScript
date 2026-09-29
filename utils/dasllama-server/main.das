@@ -574,18 +574,12 @@ def private cfg_sourced(key : string) : bool
 def mtp_setting(sourced : bool; on : bool) : int
     => sourced ? (on ? 1 : 0) : -1
 
-//! What the unset default resolves to for the server-wide slot shape - the GET /config surface
-//! reports resolved values, and unset no longer means off.
-def mtp_default_resolved(streams : int; gpu : string) : bool
-    => streams == 1 && (gpu == "metal" || gpu == "metal-required" || gpu == "vulkan")
-
-//! The backend word the MTP default reads: the legacy `--metal` path (gpu "") serves on Metal
-//! when its mode is not off. Non-private: test_openai_server_mtp.das gates it.
-def mtp_backend_word(gpu : string; metal : string) : string {
-    return gpu if (!empty(gpu))
-    let m = to_lower(metal)
-    return (m == "auto" || m == "when_available" || m == "required") ? "metal" : ""
-}
+//! What the unset default resolves to on the GET /config surface, before any model loads: the slot's own rule
+//! (`mtp_auto_arms`) over the configured backend, a Vulkan pick read as serving the model whole.
+//! Non-private: test_openai_server_mtp.das gates it.
+def mtp_default_resolved(streams : int; gpu, metal : string) : bool
+    => mtp_auto_arms(int64(streams), resolved_metal_mode(metal_mode_of(metal).mode, gpu) != MetalMode.off,
+                     gpu == "vulkan" ? "gpu:resident" : "cpu")
 
 //! One roster entry as the control page's editor reads and writes it; `mtp` rides as the bool the
 //! editor validates, an inherited (-1) knob as absence.
@@ -663,7 +657,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         page_rows = cfg.page_rows > 0 ? cfg.page_rows : 64,
         prefix = cfg.prefix,
         flat = cfg.flat,
-        mtp = cfg_sourced("mtp") ? cfg.mtp : mtp_default_resolved(cfg.streams > 0 ? cfg.streams : 4, mtp_backend_word(gpu, cfg.metal)),
+        mtp = cfg_sourced("mtp") ? cfg.mtp : mtp_default_resolved(cfg.streams > 0 ? cfg.streams : 4, gpu, cfg.metal),
         rope_scaling = cfg.rope_scaling,
         rope_scale = double(cfg.rope_scale),
         yarn_orig_ctx = cfg.yarn_orig_ctx,

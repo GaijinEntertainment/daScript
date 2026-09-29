@@ -157,13 +157,14 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> equal(mtp_setting(false, true), -1, "an unsourced true is still unset")
     }
     t |> run("the unset default resolves on for one stream on a GPU, off on the CPU or at several streams") @(t : T?) {
-        t |> success(mtp_default_resolved(1, "metal"), "one stream on Metal")
-        t |> success(mtp_default_resolved(1, "metal-required"), "one stream on required Metal")
-        t |> success(mtp_default_resolved(1, "vulkan"), "one stream on a Vulkan device")
-        t |> success(!mtp_default_resolved(1, ""), "one stream, no device")
-        t |> success(!mtp_default_resolved(1, "off"), "one stream on the CPU")
-        t |> success(!mtp_default_resolved(4, "metal"), "four streams on Metal")
-        t |> success(!mtp_default_resolved(4, "vulkan"), "four streams on a Vulkan device")
+        t |> success(mtp_default_resolved(1, "metal", ""), "one stream on Metal")
+        t |> success(mtp_default_resolved(1, "metal-required", ""), "one stream on required Metal")
+        t |> success(mtp_default_resolved(1, "vulkan", ""), "one stream on a Vulkan device")
+        t |> success(mtp_default_resolved(1, "", "auto"), "one stream on the legacy --metal auto")
+        t |> success(!mtp_default_resolved(1, "", ""), "one stream, no device")
+        t |> success(!mtp_default_resolved(1, "off", "required"), "one stream on the CPU, whatever --metal says")
+        t |> success(!mtp_default_resolved(4, "metal", ""), "four streams on Metal")
+        t |> success(!mtp_default_resolved(4, "vulkan", ""), "four streams on a Vulkan device")
     }
     t |> run("a slot arms on one stream whose decode runs on a GPU") @(t : T?) {
         t |> success(mtp_auto_arms(1l, true, "cpu"), "the Metal flavor - its tier word reads cpu")
@@ -173,12 +174,17 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> success(!mtp_auto_arms(4l, true, "cpu"), "four streams on Metal")
         t |> success(!mtp_auto_arms(4l, false, "gpu:resident"), "four streams on a Vulkan device")
     }
-    t |> run("the backend word: the --gpu pick when there is one, else the legacy --metal mode") @(t : T?) {
-        t |> equal(mtp_backend_word("vulkan", "auto"), "vulkan", "a --gpu pick wins over --metal")
-        t |> equal(mtp_backend_word("off", "required"), "off", "gpu = off keeps Metal out")
-        t |> equal(mtp_backend_word("", "auto"), "metal", "legacy --metal auto")
-        t |> equal(mtp_backend_word("", "Required"), "metal", "legacy --metal required, any case")
-        t |> equal(mtp_backend_word("", "off"), "", "legacy --metal off")
-        t |> equal(mtp_backend_word("", ""), "", "nothing set")
+    t |> run("the Metal mode: the --gpu pick when there is one, else the legacy --metal mode") @(t : T?) {
+        t |> success(resolved_metal_mode(MetalMode.when_available, "vulkan") == MetalMode.off, "a --gpu pick wins over --metal")
+        t |> success(resolved_metal_mode(MetalMode.required, "off") == MetalMode.off, "gpu = off keeps Metal out")
+        t |> success(resolved_metal_mode(MetalMode.off, "metal") == MetalMode.when_available, "gpu = metal")
+        t |> success(resolved_metal_mode(MetalMode.off, "metal-required") == MetalMode.required, "gpu = metal-required")
+        t |> success(resolved_metal_mode(MetalMode.required, "") == MetalMode.required, "no --gpu pick: the legacy mode stands")
+    }
+    t |> run("a --metal spelling names its mode in any case, and an unknown one names none") @(t : T?) {
+        t |> success(metal_mode_of("Required").mode == MetalMode.required && metal_mode_of("Required").known)
+        t |> success(metal_mode_of("auto").mode == MetalMode.when_available && metal_mode_of("when_available").known)
+        t |> success(metal_mode_of("").mode == MetalMode.off && metal_mode_of("").known && metal_mode_of("off").known)
+        t |> success(metal_mode_of("fast").mode == MetalMode.off && !metal_mode_of("fast").known)
     }
 }
