@@ -205,11 +205,37 @@ def private has_generated_kernel(prog : Program?; jit_all_functions : bool) : bo
     return found
 }
 
+//! one handled type's size, or one of its fields' offsets, as a term of `handled_layout_hash`; a type's term passes "" for the field
+def public handled_layout_term(mod, typ, field : string; value : uint64) : uint64 {
+    var h = (hash(mod) ^ hash(typ)) * JIT_FNV_PRIME
+    h = (h ^ hash(field)) * JIT_FNV_PRIME
+    return (h ^ value) * JIT_FNV_PRIME
+}
+
+//! the size and field offsets of every handled type the running binary registers, summed so the walk's order is no input
+[arch(at = "../ARCHITECTURE_CODEGEN_IDENTITY.md#handled-layouts-key")]
+def public handled_layout_hash() : uint64 {
+    var acc = 0ul
+    program_for_each_registered_module() $(m) {
+        let mod = string(m.name)
+        module_for_each_annotation(m) $(value) {
+            return if (!value.isBasicStructureAnnotation)
+            let typ = string(value.name)
+            acc += handled_layout_term(mod, typ, "", uint64(get_handled_type_size(unsafe(reinterpret<TypeAnnotation?>(value)))))
+            for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(value))) $(name, _cppName, _xtype, offset) {
+                acc += handled_layout_term(mod, typ, name, uint64(offset))
+            }
+        }
+    }
+    return acc
+}
+
 // The environment/config salt shared by the whole-DLL key AND the per-partition obj cache key.
 // ONE helper on purpose: a salt component folded into the DLL key but not the partition key
 // would let a config change reuse stale cached partition objects.
 def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool; // nolint:STYLE037,STYLE038 - one flat fold per emission input; a split would hide which inputs key the cache
-                        target_triple : string; split : bool; use_host_cpu : bool; sanitize : JitSanitize) : uint64 {
+                        target_triple : string; split : bool; use_host_cpu : bool; sanitize : JitSanitize;
+                        layouts : uint64 = handled_layout_hash()) : uint64 {
     var h = LLVM_JIT_CODEGEN_VERSION
     // host/binary identity: object format follows the triple (COFF vs ELF on one checkout), and the emitting binary bakes its Context offsets into every global access - neither is in any AST hash
     if (empty(target_triple)) {
@@ -224,6 +250,7 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
     h = (h ^ uint64(SIMFUNCTION_OFFSET_OF_JIT_FUNCTION)) * JIT_FNV_PRIME
     h = (h ^ uint64(ARRAY_MAGIC)) * JIT_FNV_PRIME
     h = (h ^ uint64(ARRAY_LOCK_EXEMPT_FLAGS)) * JIT_FNV_PRIME
+    h = (h ^ layouts) * JIT_FNV_PRIME
     // full host-CPU identity when the TargetMachine bakes it - the cpuid bits below cover only the matrix-tier features; a wider box's object is an illegal instruction on a narrower one
     if (use_host_cpu) {
         let host_cpu = LLVMGetHostCPUName()
