@@ -914,12 +914,19 @@ namespace das
             : ExprConst(a,Type::tString), text(str) { __rtti = "ExprConstString"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( ExpressionPtr expr ) const override;
+        enum class BlobState : uint8_t { unknown, string, blob };
         const string & getValue() const { return text; }
-        bool isBlob() const { return text.find('\0') != string::npos; }
+        bool isBlob() const {
+            if ( blobState == BlobState::unknown ) {
+                blobState = text.find('\0') != string::npos ? BlobState::blob : BlobState::string;
+            }
+            return blobState == BlobState::blob;
+        }
         virtual bool rtti_isStringConstant() const override { return true; }
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         string  text;
+        mutable BlobState blobState = BlobState::unknown;
     };
 
     struct DAS_API ExprStringBuilder : Expression {

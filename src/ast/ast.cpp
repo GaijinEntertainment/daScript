@@ -1349,6 +1349,7 @@ namespace das {
         auto cexpr = clonePtr<ExprConstString>(expr);
         ExprConst::clone(cexpr);
         cexpr->text = text;
+        cexpr->blobState = blobState;
         return cexpr;
     }
 
