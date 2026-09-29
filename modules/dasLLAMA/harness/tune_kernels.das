@@ -2643,7 +2643,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
         "dot_bf16" => "vec8_u2", "add_scale_inplace" => "vec8_u2",
         "axpy_tq4kv" => "vec8_u2", "cvt_tq4kv_to_f32" => "vec8_u2",
         "dot_q8tq4kv" => "vec16", "quantize_tq4kv_row" => "plain",
-        "dot_q8q8_f16s" => "vec16", "dot_q51e" => "vec16"
+        "dot_q8q8_f16s" => "vec16", "dot_q51e" => "vec16", "dot_iq4nl32e" => "vec16"
     }
     if (partialMint) {   // a filtered mint seeds nothing - only the raced kernels write
         winners |> clear()
