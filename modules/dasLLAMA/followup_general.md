@@ -2004,3 +2004,9 @@
    start; `performance/REVIEW.das` checks the provenance and not the kernel set. Done = the gate
    compares each profile's kernel names with the scope's `[tune]` / `[tuned]` census and reds a
    missing or an unknown name.
+195. **Sixteen loops that ask to vectorize do not, on arm64, and nothing names them.** A cold
+   `-jit` compile of `utils/dasllama-server/cli.das` (repo root) on an Apple M5 Max prints
+   sixteen `loop not vectorized` warnings - fourteen on `instruction return type cannot be
+   vectorized`, two on `call instruction cannot be vectorized` - each at `<unknown>`, so the
+   loop and its module are unread. Done = each loop named (the emitter attaches a location to a
+   loop it hints), then vectorized or its hint dropped.
