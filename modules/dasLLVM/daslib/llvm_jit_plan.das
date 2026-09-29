@@ -164,6 +164,7 @@ def public fold_function_hints(funcs : array<FunctionPtr>; seed : uint64) : uint
     for (fn in funcs) {
         for (ann in fn.annotations) {
             if (ann.annotation.name == "hint") {
+                h = (h ^ hash(get_mangled_name(fn))) * JIT_FNV_PRIME
                 h = (h ^ hash("hint")) * JIT_FNV_PRIME
                 h = fold_annotation_args(ann.arguments, h)
             }
