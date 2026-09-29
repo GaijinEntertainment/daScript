@@ -24,13 +24,9 @@ JIT never takes that path - so coverage lost there reports green on every lane.
 `language/`), and the PR body names the run that showed the `test_aot` pass: a local
 `preflight --full`, a `--target run_tests_aot` build, or a CI job link.** Per-PR CI builds only
 the AOT subset binary (`tests/aot/CMakeLists.txt`), so the PR's own checks do not prove
-`test_aot`.
+`test_aot`, and the glob picks a new file up silently.
 
 **A diff that marks a `.das` file under `tests/` `options no_aot`, or filters one out of an
 `AOT_*_FILES` variable of `tests/aot/CMakeLists.txt`, states in a comment beside the option or
-the filter what stops the file compiling or running on its suite's `test_aot` lane.** The glob
-picks a new file up silently, and an opt-out with no reason leaves the AOT lane unseen.
-
-**A new `.das` file under `tests/` that a glob in `tests/aot/CMakeLists.txt` puts in an
-`AOT_*_FILES` variable and that does not compile on its suite's `test_aot` lane is filtered out
-of that variable or marked `options no_aot`, in the same change.**
+the filter what stops the file compiling or running on its suite's `test_aot` lane.** Without a
+stated reason no later diff can tell whether the opt-out is still needed.

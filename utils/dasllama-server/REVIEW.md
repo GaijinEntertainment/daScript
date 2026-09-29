@@ -13,24 +13,15 @@ number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 **A `[test]` file in this folder that carries a `require dasllama/...` line of its own answers
 to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well.**
 
-**A diff that adds a `main.das` or `cli_args.das` flag, changes anything its `@clarg_doc` states
-- what the flag makes the program do, its default, or a file or path the flag reads or writes -
-or edits any copy of its text, leaves every copy stating the same behavior, the same default and
-the same files and paths, no copy leaving out one that another states.** The copies of a
-`main.das` flag are its `@clarg_doc`, its `README.md` table row with its `Default` cell, the
-`README.md` section on its config-file key where one exists, and its row in
-`doc/source/reference/utils/dasllama_server.rst` (repo root); of a `cli_args.das` flag, its
-`@clarg_doc`, its entry in the `README.md` dasllama-cli section (the command's row, or the
-shared-flags paragraph for a flag more than one command takes), and its row in
-`doc/source/reference/utils/dasllama_cli.rst` (repo root). A reason or a measured number a copy
-gives beside the behavior is no part of it. A copy left behind sends the user to a flag that no
-longer does what it says.
-
-**A diff that changes the value `serving_knobs.das` derives for any input leaves, for every
-`main.das` and `cli_args.das` flag that reads that knob, the flag's `@clarg_doc`, its `README.md`
-entry and its row in `doc/source/reference/utils/dasllama_server.rst` or
-`doc/source/reference/utils/dasllama_cli.rst` (repo root) stating the new derivation, in the
-same change.** Both programs read the one derivation.
+**A diff that adds a `main.das` or `cli_args.das` flag, changes what the flag makes the program
+do, its default, or a file or path it reads or writes, or edits any copy of its text, leaves its
+`@clarg_doc`, every `README.md` passage that names the flag, and its row in
+`doc/source/reference/utils/dasllama_server.rst` or `dasllama_cli.rst` (repo root) stating the
+flag's behavior, default, and files and paths as the diff leaves them, no copy leaving out one
+that another states.** A change to the value `serving_knobs.das` derives for a knob changes what
+every flag that reads that knob makes the program do. A reason or a measured number a copy gives
+beside the behavior is no part of it. A copy left behind sends the user to a flag that no longer
+does what it says.
 
 **Weakening `REVIEW.das` (beside this file) - dropping a check, narrowing what a check scans,
 adding a name to a check's exempt set (the names it does not flag), or blunting a finding
@@ -61,11 +52,11 @@ the route that answers with that key first, or, for a key no machine available f
 produce, hand-compose the fixture and name it as hand-composed, with why, in its row of
 `tests/fixtures/README.md`.**
 
-**A diff that adds a key to what a route answers, or changes when the route answers one or what
-decides the value it answers, names the key and that condition in the route's `README.md` row
-and updates every other `README.md` passage that names the key or the condition, in the same
-change.** The row is
-where a consumer learns the key exists and when to expect it.
+**A diff that adds a key to what a route answers, or changes when the route answers a key or
+what decides that key's value, names the key, when the route answers it and what decides its
+value in the route's `README.md` row, and updates every other `README.md` passage that names any
+of them, in the same change.** The row is where a consumer learns the key exists and when to
+expect it.
 
 **A `served` or `served_note` value a diff adds or changes in `openai_server.das` - all of it
 but the engine text it quotes - uses only words a user understands without knowing how the

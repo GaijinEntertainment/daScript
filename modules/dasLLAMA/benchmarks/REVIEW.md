@@ -8,18 +8,19 @@ work: `../followup_metal.md` for Metal, `../followup_vulkan.md` for Vulkan,
 An instrument is a file that times a run itself and reports a wall-clock time or rate as its
 result, printed or returned to a caller that prints it; a file that reads a child process's clock
 is not one, and a serving path's profiler-gated report (a run whose result is the served output,
-the numbers a side report) is not one. A race times two or more implementations of one
-computation in one process, any of which the run could adopt - two values of one lever are not
-two implementations; an arm is one timed run of a race or of an A/B; a compared arm is one whose
-output - what its own run wrote, timed or not - the run reads back and measures against another
-arm's output or a CPU reference; the baseline arm is the arm running the implementation, or the
-lever value, already in use. A served turn is one
-whole request the engine serves - a prefill-plus-decode run, or a transcription or synthesis end
-to end; a board cell is a timed cell whose rows land in `../performance/records/<box>.json` or
-`../PERF_LEDGER.md`. A result row is a row carrying a time, a rate, or a per-kernel occupancy
-count. An A/B arm is one of two or more timed runs an instrument makes in ONE process that differ
+the numbers a side report) is not one. A race times two implementations of one computation in
+one process, either of which the run could adopt - two values of one lever are not two
+implementations. An A/B is two or more timed runs an instrument makes in ONE process that differ
 only in one lever - a flag, an environment switch, a runtime setter or a profile key - set to a
-different value in each; off/on or graded.
+different value in each, off/on or graded. An arm is every timed run of one implementation in a
+race or of one lever value in an A/B; an A/B arm is an arm of an A/B; a compared arm is one whose
+output - what a run of the same implementation or lever value wrote, timed or not - the run
+reads back and measures against another arm's output or a CPU reference; the baseline arm is the
+arm running the implementation, or the lever value, already in use. A served turn is one whole
+request the engine serves - a prefill-plus-decode run, or a transcription or synthesis end to
+end; a board cell is a timed cell whose rows land in `../performance/records/<box>.json` or
+`../PERF_LEDGER.md`. A result row is a row carrying a time, a rate, or a per-kernel occupancy
+count.
 A refusing rep is a rep that produced no figure, or ran on a backend other than its row's backend
 stamp - the backend name the row records as having served it.
 
@@ -34,27 +35,26 @@ performance tree - stamps its rows with the tune manifest (`DAS_TUNE_MANIFEST`) 
 profile (`../performance/defaults/<class>.tune-defaults.json`) the run compiled
 against.** Without the gate or the stamp the instrument measures fallback kernels silently.
 
-**A diff that adds or changes a race, or an A/B of more than two arms, alternates its arms - one
-timed round per arm, best-of across rounds.**
+**A diff that adds or changes a race alternates its arms - one timed round per arm, best-of
+across rounds.**
 
-**A diff that adds or changes a race or an A/B reports each arm's row on its own - never two
-arms' numbers on one row - and names, on the row or on the run's header line, the backend that
-served it.**
+**A diff that adds or changes a race reports each arm's row on its own - never two arms' numbers
+on one row.**
 
 **A diff that adds or changes a compared arm other than the baseline prints on its report line
 either the bit-exact compare over the sampled region (the output elements the run compares), on
 a `bit-exact vs ...` line, when the arm's result is bit-identical to the baseline's, or else a
 bounded-difference compare against the baseline arm or the CPU reference plus the bound it
-passed.** How the arm
-orders its sums, and whether its multiply-adds fuse, decide bit-identity - not the declared
-precision.
+passed.** How the arm orders its sums, and whether its multiply-adds fuse, decide bit-identity -
+not the declared precision.
 
 **A diff that adds or changes a race or an A/B with a compared arm also checks its baseline arm
-against a CPU reference.** The reference check runs in the same process, on the same output
+against a CPU reference, and prints that compare on the baseline's report line, bit-exact or
+bounded with the bound it passed.** The reference check runs in the same process, on the same output
 elements the arms are judged on. Two arms can agree and both be wrong; only the reference makes
 the winner right.
 
-**A diff that adds or changes an arm that is not a compared arm makes that arm carry the
+**A diff that adds or changes a race arm that is not a compared arm makes that arm carry the
 literal token `timing-only` on its report line.**
 
 **A diff that adds or changes a mode that times its arms without reading their outputs back and
@@ -111,8 +111,8 @@ lever that silently no-ops prints a 1.00x row nobody can tell from a real tie.
 report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the
 lever helps, so a per-prompt loss hides inside a winning mean.
 
-**A diff that adds or changes a row measured over reps reports one number over every rep after
-the warmup the instrument declares.**
+**A diff that adds or changes a row measured over reps computes every number the row reports
+over all the reps after the warmup reps the instrument's header comment names.**
 
 **A diff that adds or changes a row measured over reps drops the whole row when any rep refuses:
 the row reports the refusal and its reason and no number.** A partial row reads like a measured

@@ -68,9 +68,9 @@ does not execute them.
 **An arm the diff adds or changes that covers a change to a tool, whose load-bearing
 assertions no CI row can run, ships with a row that compile-checks the file the arm sits in -
 `dastest --compile-only` - added in the same change if no row already compile-checks that
-file, and records in the PR description an executed run against the build the diff produces -
-the machine the assertions ran on, why no CI row can run them, and the pass count - or cites the
-log of a workflow run on this diff's branch showing those assertions ran.** A run against an
+file, and its PR description either records an executed run against the build the diff produces
+(the machine the assertions ran on, why no CI row can run them, the pass count) or cites the log
+of a workflow run on this diff's branch showing those assertions ran.** A run against an
 already-deployed artifact proves nothing about the diff under review.
 
 **A diff that adds or renames a key in a `watchdog.json` that belongs to a tool, wherever the
