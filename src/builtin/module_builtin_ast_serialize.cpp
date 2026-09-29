@@ -1186,7 +1186,7 @@ namespace das {
                 default: SERIALIZER_VERIFYF(false, "Unreachable");
             }
             info->serialize(*this);
-            if ( fileAccess && !info->name.empty() ) {
+            if ( fileAccess && !info->name.empty() && !isCppBindingAt(LineInfo(info, 0, 0, 0, 0)) ) {
                 if ( FileInfo * live = fileAccess->getFileInfo(info->name) ) {
                     info = live;
                 }
