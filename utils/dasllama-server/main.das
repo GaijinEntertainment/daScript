@@ -235,17 +235,12 @@ var private g_last_memory_log_at = 0l
 var private g_last_gc_at = 0l
 let GC_MIN_INTERVAL_SECONDS = 60l
 
-def private cli_has_flag(flag : string) : bool {
+//! Whether this process was given `flag`, bare or as `flag=value`. Non-private: test_server_flags.das gates it.
+def cli_has_flag(flag : string) : bool {
     var args <- get_user_args()
-    let eqform = "{flag}="
-    for (a in args) {
-        if (a == flag || a |> starts_with(eqform)) {
-            delete args
-            return true
-        }
-    }
+    let has = flag_present(args, flag)
     delete args
-    return false
+    return has
 }
 
 // per-key config provenance for the GET /config surface: "cli" | "toml"; absent = default.

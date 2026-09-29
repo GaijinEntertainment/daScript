@@ -90,6 +90,7 @@ if(NOT DAS_TOOLS_DISABLED)
             utils/dasllama-server/test_user_state.das
             utils/dasllama-server/test_model_override.das
             utils/dasllama-server/test_slot_served.das
+            utils/dasllama-server/test_server_flags.das
         JIT_FILES utils/dasllama-server/test_worker_dispatch.das)
     
     das_lane_dastest_target(run_tests_dasllama_env_registry COMMENT "Testing the dasLLAMA env-knob registry"

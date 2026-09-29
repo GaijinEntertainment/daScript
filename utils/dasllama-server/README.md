@@ -694,6 +694,9 @@ absent; set `DASLLAMA_MODELS_DIR`):
 - `test_setup_mode.das` - model-free, runs end to end even interpreted (setup mode never
   infers): a slotless boot serves setup stats and the catalog while every inference route
   fails closed.
+- `test_server_flags.das` - model-free: the flag-presence test behind the config surface's
+  provenance - a flag the process was given reads present, bare or as `flag=value`, and an
+  absent one or a prefix of a given one reads absent.
 - `tests/` - the control page itself, under real Playwright (Node + chromium): badge states,
   models panel, streams/history, chat wire + SSE rendering, the speech studio, config editor,
   exchange section, the confirm-gated controls. Model-free - the page runs against JSON/SSE fixtures captured
