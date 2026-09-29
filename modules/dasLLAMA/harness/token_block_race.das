@@ -37,6 +37,8 @@ let FMT = 4
 let BF16_ENVELOPE = 1.0e-2
 //! an int8 walk sums a row's blocks in another order than the disk-order dot: the same products, f32 rounding apart
 let FLOAT_ORDER = 1.0e-5
+//! what an arm's output holds before its walk: an element the walk leaves reads as outside every bound
+let NOT_WRITTEN = unsafe(reinterpret<float>(0x7FC00000u))
 
 struct Shape {
     n : int64
@@ -141,7 +143,7 @@ def private held(got : array<float>; want : array<float>; rel : float) : tuple<d
 }
 
 def private compare_words(h : tuple<diff : float; bound : float; ok : bool>; against : string; count : int) : string {
-    if (h.bound == 0.0 && h.ok) {
+    if (h.diff == 0.0 && h.ok) {
         return "bit-exact vs {against} on {count} sampled elements"
     }
     return "{h.ok ? "within" : "OUTSIDE"} {h.bound} of {against} on {count} sampled elements (largest difference {h.diff})"
@@ -180,6 +182,9 @@ def private race(sh : Shape) : int {
         times |> emplace(none)
         set_q8_token_block(b)
         walked |> push(kq_token_block(FMT, sh.n))
+        for (v in y) {
+            v = NOT_WRITTEN
+        }
         matmul_kq_batch(FMT, y, p.kq, p.ks, 0l, p.xq, p.xs, p.xbs, sh.n, sh.d, NTOK)
         var img <- [for (i in at); y[i]]
         images |> emplace(img)
@@ -209,7 +214,7 @@ def private race(sh : Shape) : int {
             : held(images[ci], images[base], bf16 ? BF16_ENVELOPE : 0.0))
         let asked = walked[ci] == sh.blocks[ci]
         let words = isBase ? "baseline, {compare_words(h, "the disk-order dots", length(at))}" : compare_words(h, "the {BASELINE} arm", length(at))
-        print("K={sh.n} rows={sh.d} ntok={NTOK} lanes={get_dispatch_lanes()} block={sh.blocks[ci]} walked={walked[ci]} best_ms={st.best} median_ms={st.median} cv%={st.cv} | {words}{asked ? "" : " | INERT: the walk ran another block"}\n")
+        print("K={sh.n} rows={sh.d} ntok={NTOK} backend={active_kernel_backend()} lanes={get_dispatch_lanes()} block={sh.blocks[ci]} walked={walked[ci]} best_ms={st.best} median_ms={st.median} cv%={st.cv} | {words}{asked ? "" : " | INERT: the walk ran another block"}\n")
         good &&= h.ok && asked
         rows++
     }
@@ -232,7 +237,10 @@ def main() : int {
         let budget = get_q8_l2_budget()
         let floor = bf16_token_block_floor()
         pin_kernel_backend(gen_backend())
-        if (!kernel_backend_has_kq() || !kernel_backend_has_kq_batch()) {
+        if (active_kernel_backend() != gen_backend()) {
+            print("token_block_race: this box serves {active_kernel_backend()}, the pin on {gen_backend()} did not take - no row\n")
+            bad++
+        } elif (!kernel_backend_has_kq() || !kernel_backend_has_kq_batch()) {
             print("token_block_race: {gen_backend()} carries no kq batch kernel on this box - no row\n")
             bad++
         } elif (!tune_gate()) {
