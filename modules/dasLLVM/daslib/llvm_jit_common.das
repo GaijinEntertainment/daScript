@@ -417,6 +417,7 @@ var public g_target_x64_vnniint8 = false
 // amx-tile and amx-int8 cpuid bits, hyphen-spelled like the LLVM target features so the force env
 // and llc -mattr take the same names. The per-process XTILEDATA grant is the family's own witness.
 var public g_target_x64_amx = false
+var public g_target_x64_amx_bf16 = false
 
 // The JIT target OS is Linux: host platform on native runs, the triple's OS field on cross
 // targets. Gates emission that calls Linux-only externs (the amx witness's arch_prctl).
@@ -678,6 +679,8 @@ def public init_jit_target_flags(target_triple : string = ""; host_features_aske
     g_target_x64_avx512vbmi = g_target_x64_avx512bw && x64_tier_feature("avx512vbmi", forced_only)
     g_target_x64_vnniint8 = g_target_x64_avx2 && x64_tier_feature("avxvnniint8", forced_only)
     g_target_x64_amx = g_target_is_x64 && x64_tier_feature("amx-tile", forced_only) && x64_tier_feature("amx-int8", forced_only)
+    g_target_x64_amx_bf16 = (g_target_x64_avx512bw && x64_tier_feature("avx512bf16", forced_only)
+        && x64_tier_feature("amx-tile", forced_only) && x64_tier_feature("amx-bf16", forced_only))
     // target OS truth (native = host platform; cross = the triple's OS field)
     g_target_os_linux = (empty(target_triple)
         ? get_platform_name() == "linux"
@@ -708,6 +711,7 @@ def public with_class_target_gates(klass : string; blk : block<void>) {
     let s_avx512vbmi = g_target_x64_avx512vbmi
     let s_vnniint8 = g_target_x64_vnniint8
     let s_amx = g_target_x64_amx
+    let s_amx_bf16 = g_target_x64_amx_bf16
     let s_dotprod = g_target_arm64_dotprod
     let s_i8mm = g_target_arm64_i8mm
     let s_fullfp16 = g_target_arm64_fullfp16
@@ -721,6 +725,8 @@ def public with_class_target_gates(klass : string; blk : block<void>) {
     g_target_x64_avx512vbmi = g_target_x64_avx512bw && jit_class_has(klass, "avx512vbmi")
     g_target_x64_vnniint8 = g_target_x64_avx2 && jit_class_has(klass, "avxvnniint8")
     g_target_x64_amx = g_target_is_x64 && jit_class_has(klass, "amx-tile") && jit_class_has(klass, "amx-int8")
+    g_target_x64_amx_bf16 = (g_target_x64_avx512bw && jit_class_has(klass, "avx512bf16")
+        && jit_class_has(klass, "amx-tile") && jit_class_has(klass, "amx-bf16"))
     g_target_arm64_dotprod = g_target_is_aarch64 && jit_class_has(klass, "dotprod")
     g_target_arm64_i8mm = g_target_is_aarch64 && jit_class_has(klass, "i8mm")
     g_target_arm64_fullfp16 = g_target_is_aarch64 && jit_class_has(klass, "fullfp16")
@@ -734,6 +740,7 @@ def public with_class_target_gates(klass : string; blk : block<void>) {
     g_target_x64_avx512vbmi = s_avx512vbmi
     g_target_x64_vnniint8 = s_vnniint8
     g_target_x64_amx = s_amx
+    g_target_x64_amx_bf16 = s_amx_bf16
     g_target_arm64_dotprod = s_dotprod
     g_target_arm64_i8mm = s_i8mm
     g_target_arm64_fullfp16 = s_fullfp16

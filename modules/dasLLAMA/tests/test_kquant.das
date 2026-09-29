@@ -1,3 +1,4 @@
+//! The K-quant and grid formats: plane dequants, dots, the grp repack, the bf16 panel, tiles and GEMVs against in-test references, and the model-gated load cells. Skips: an interpreted run and a missing stocked model (the model cells), no gen backend registered (batch groupn), a backend with no kq slots (the repacked-plane serve cell), and a format whose stamp is a bf16 tile (the 4-token tile cells).
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // the layout arm loads a multi-GB model; explicit delete below
@@ -1562,6 +1563,71 @@ def test_kq_gemv_rows(t : T?) {
     }
 }
 
+def private bf16_value(h : uint16) : float => unsafe(reinterpret<float>(uint(h) << 16u))
+
+// A bf16 panel holds every weight of `wrow` at its pair-layout slot within `rel` of the weight
+// plus `slack`; the same slots against their pair neighbors' weights must miss. A slot the
+// builder never wrote keeps its NaN and counts as off.
+def private bf16_panel_holds(t : T?; panel : array<uint16>; wrow : array<float>; n, d : int64; rel, slack : float; what : string) {
+    var bad = 0
+    var worst = 0.0
+    var worstRow = 0l
+    var worstCol = 0l
+    var neighborSeen = 0
+    for (r in range64(d)) {
+        for (k in range64(n)) {
+            let slot = (r / 16l) * 16l * n + (k / 32l) * 512l + ((k % 32l) / 2l) * 32l + (r % 16l) * 2l + (k & 1l)
+            let w = wrow[r * n + k]
+            let df = abs(bf16_value(panel[slot]) - w)
+            if (!(df <= abs(w) * rel + slack)) {
+                bad++
+            }
+            if (!(df <= worst)) {
+                worst = df
+                worstRow = r
+                worstCol = k
+            }
+            let wn = wrow[r * n + (k ^ 1l)]
+            if (!(abs(bf16_value(panel[slot]) - wn) <= abs(wn) * rel + slack)) {
+                neighborSeen++
+            }
+        }
+    }
+    to_log(LOG_INFO, "{what}: max err {worst} at row {int(worstRow)} weight {int(worstCol)}\n")
+    t |> success(bad == 0, "{what}: {bad} of {int(d * n)} slots off the weight, max err {worst} at row {int(worstRow)} weight {int(worstCol)}")
+    t |> success(neighborSeen > 0, "{what}: a slot compared against its pair neighbor's weight must be seen off, and was not")
+}
+
+// The bf16 panel over grp16 planes: the row-dequant panel rounds to nearest, half a bf16 step
+// (2^-8 of the weight); the panel a bf16 stamp builds (a tile form above 0 - off one the
+// companion is an empty body) sits within a whole step plus the f32 slack of its fused scale fold.
+def private bf16_panel_cell(t : T?; fmt : int; kq : array<uint8>; ks : array<uint8>; wrow : array<float>; n, d : int64) {
+    let ngr = d / 16l
+    var mag = 0.0
+    for (w in wrow) {
+        mag = max(mag, abs(w))
+    }
+    var panel : array<uint16>
+    panel |> resize(ngr * 16l * n)
+    for (h in panel) {
+        h = uint16(0x7FC0)
+    }
+    unsafe {
+        kq_panel_rows_bf16(fmt, addr<uint8 const?>(kq[0]), addr<uint8 const?>(ks[0]), 16l, n / 256l, n, ngr, addr(panel[0]))
+    }
+    bf16_panel_holds(t, panel, wrow, n, d, 0.00390625, 0.0, "{kq_tag(fmt)} row-dequant bf16 panel")
+    if (kq_tileform_of(fmt) > 0) {
+        for (h in panel) {
+            h = uint16(0x7FC0)
+        }
+        unsafe {
+            kq_panel_bf16(fmt, addr<uint8 const?>(kq[0]), addr<uint8 const?>(ks[0]), 16l, n / 256l, n, ngr, addr(panel[0]))
+        }
+        bf16_panel_holds(t, panel, wrow, n, d, 0.0078125, mag * 1.0e-5, "{kq_tag(fmt)} stamped bf16 panel")
+    }
+    delete panel
+}
+
 // Stage-4 repack oracle core: build a d-row disk plane of `fmt` (transcoded synthetic
 // superblocks, per-row LCG-perturbed quant payloads — every quant bit pattern is valid),
 // capture the portable disk dots + row dequants, repack in place at `mr`, and require the
@@ -1731,6 +1797,9 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
         t |> success(deqbad == 0, "grp<mr> row dequant bit-matches the disk row dequant after repack")
         delete row
     }
+    if (mr == 16l) {
+        bf16_panel_cell(t, fmt, kq, ks, wrow, n, d)
+    }
     delete kq
     delete ks
     delete want
@@ -1762,6 +1831,10 @@ def test_kq_repack_grp(t : T?) {
 // companion's mr — the same value the stubs/kernels read, so this holds on the reference
 // bodies (interp) AND the stamped kernels (-jit) alike.
 def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {   // nolint:STYLE037 — the flat per-format ladder (one arm per kq format) is the honest shape
+    if (kq_tileform_of(fmt) > 0) {
+        t |> skip("the stamped tile is the bf16 tile - it reads a bf16 panel over 32 tokens, not the quant planes over 4; test_prefill_cpu_kernels reaches it through the batch kernel")
+        return
+    }
     let d = 32l
     let ntok = 7l   // 4-token tile + a 3-token gemv tail
     let nsb = n / 256l
@@ -2278,7 +2351,9 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let mr = kq_layout_of(fmt)
-    // bucket mix: a 1-row run (pure gemv tail), whole tiles, tile+tail, and a TB-spanning run
+    // bucket mix: a 1-row run (pure gemv tail), whole tiles, tile+tail, and a TB-spanning run;
+    // every run is under a bf16 tile's 32 tokens, so on that stamp the rows core serves them all
+    // and the compare stays exact (test_prefill_cpu_kernels holds the longer runs' envelope)
     var cnts <- [1l, 4l, 6l, 13l]
     let nreg = long_length(cnts)
     var nk = 0l

@@ -13,8 +13,8 @@ require _compares   // mismatch_exact: the bit-for-bit compare
 
 // The 2-D batch chunk grid (batch_grid_2d) must be BIT-FOR-BIT the 1-D walk: only chunk
 // boundaries move, never the per-(token,row) dot fold. Every registered backend runs the same
-// batch under knob 0/1/2 and the outputs must match exactly (portable/sdot ignore the knob —
-// trivial equality; the gen batch walk is the real subject). target_chunk_work=1 admits the
+// batch under knob 0/1/2 and the outputs must match exactly (portable/sdot and a bf16 tile walk
+// ignore the knob — trivial equality; the gen batch walk is the real subject). target_chunk_work=1 admits the
 // full lane pool so the starved shapes engage the grid on any box with enough lanes; a tiny
 // q8_token_block exercises the TB-block loop INSIDE a token cell.
 

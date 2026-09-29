@@ -8,9 +8,12 @@ A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a
 asserts belong to every cell that calls it. A test file is a `.das` that dastest runs: one
 carrying at least one `[test]` function, or one whose `cant_`, `failed_` or `invalid_` prefix
 makes its compile the assertion. A test file's header is its top comment block. A kernel-unit
-cell is a cell that itself dispatches a `[metal_dispatch]` or `[vk_dispatch]` class or calls a
-CPU kernel in `../dasllama/dasllama_math*.das`. To loosen an assert is to let pass an input the
-old assert failed: a wider bar, a shorter domain, a dropped length check.
+cell is a cell in which a `[metal_dispatch]` or `[vk_dispatch]` class is dispatched, or a CPU
+kernel in `../dasllama/dasllama_math*.das` is called, by a statement in test code - the cell
+itself, or a helper in its own file or in a `_*.das` test-helper module; a kernel run that only
+happens inside a function in `../dasllama/` does not make a cell a kernel-unit cell. To loosen
+an assert is to let pass an input the old assert failed: a wider bar, a shorter domain, a
+dropped length check.
 
 **A kernel-unit cell, wherever the diff puts it, and a diff that changes a CPU kernel in
 `../dasllama/dasllama_math*.das`, apply `REVIEW_KERNEL_CELLS.md` (beside this file) too.**
@@ -121,8 +124,11 @@ the build omits, a stocked model, a stocked fixture - an oracle dump, a clip, a 
 registers that skip on the fact before it asserts, never a bare return and never a failure;
 `feint` is a print, not a skip.
 
-**A cell's skip condition keys on a fact the box owns - a device capability, a run-mode knob's
-value, a host toolchain's presence, a compile-time module-presence check (`typeinfo
+**A cell's skip condition, and any condition that picks a cell's assert or bar by something
+other than an input the cell sets itself (a format, a shape, a loop value), keys on a fact the
+box owns - a device capability, a run-mode knob's value, the value a tune companion
+returns on this box (a function whose body the `[tune]` stamp in force selects, like
+`kq_tileform_of`), a host toolchain's presence, a compile-time module-presence check (`typeinfo
 builtin_module_exists`) - or on a stocked fixture beside the models (a model file, an mmproj, an
 oracle dump); never on the existence of an artifact this repo's build or a previous test run
 produced (a minted `.dlim`, a generated binary, a dump a test wrote).** An artifact condition goes

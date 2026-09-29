@@ -19,10 +19,10 @@ under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this f
 to a check's licensed set - the names a check does not flag - applies `REVIEW_GATES.md` (beside
 this file) too.**
 
-**A diff that lands the work a `followup_*.md` row names deletes the row - or, when the row lists
-several items, only the landed item - and repoints every checked-in citation naming the landed
-item to where the landed fact now lives (the architecture doc or the code) or drops it, dated
-`PERF_LEDGER.md` entries included.**
+**A diff that removes the problem a `followup_*.md` row states, by the row's fix or another,
+deletes the row - or, when the row lists several items, only the item it resolved - and repoints
+every checked-in citation naming that item to where the fact now lives (the architecture doc or
+the code) or drops it, dated `PERF_LEDGER.md` entries included.**
 
 **Code that times a run itself and hands the wall or rate back as its result - a file that prints
 it, or a function that returns it to whichever file calls it - a kernel race (a run timing two
@@ -209,13 +209,13 @@ flow, eviction, a generated name; not a reported wall-clock time or a best-of re
 reported wall-clock times - is marked `// clock: control`** - unmarked, it cannot be told
 apart from the ad-hoc profiling an engine file may not carry.
 
-**A diff that adds an override, or gives one a new effect, without the announce is a defect.** An
-announce is the line the run prints where the override changes the outcome. An override is an
-environment knob, an exported runtime setter, or an on-disk state file - one a run writes or a
-user places, never data a build ships - that moves a gate, policy, or threshold off its default
-and so changes which code the run takes or what it writes, reads, mints, or computes. A measured
-time, the run's own duration, or a different moment at which the same work happens is not such a
-change; a CLI flag is never an override.
+**A diff that adds an override, or changes what one does - a value it now clamps or ignores
+included - without the announce is a defect.** An announce is the line the run prints where the
+override changes the outcome. An override is an environment knob, an exported runtime setter, or
+an on-disk state file - one a run writes or a user places, never data a build ships - that moves
+a gate, policy, or threshold off its default and so changes which code the run takes or what it
+writes, reads, mints, or computes. A measured time, the run's own duration, or a different
+moment at which the same work happens is not such a change; a CLI flag is never an override.
 
 **An announce names the override by the spelling a user would set - the env variable, the sidecar
 or file key, the setter's name - and, for one on unless turned off, the spelling that turns it off
@@ -286,12 +286,15 @@ profile re-runs the tuning the profile was meant to save.
 
 **A value that a team-lane kernel reads - anything reachable from a `team_parallel_for` /
 `team_parallel_for_indexed` / `team_parallel_stages` body (`daslib/jobque_boost.das`, repo
-root) - is a `def` returning it, never a module global with a declaration initializer (`let`
-or `var`).** A team lane never runs global initializers, so the global reads zero there.
+root) or from a `maybe_parallel_for*` body (`dasllama/dasllama_par.das`), which can dispatch onto
+those same lanes - is a `def` returning it, never a module global with a declaration initializer
+(`let` or `var`), and nothing reachable from such a body writes or resizes a module global.** A
+pooled lane's globals are not its own: a read comes back zero, a resize trips on a stale array.
 
 **A buffer in `dasllama/` whose element count grows with a count the model file sets is declared
-`@exact_size`, and every `resize` of it follows a `reserve(n)` or `ensure_capacity(n)` whose `n`
-is the resized count - a `dasllama/dasllama_math.das` sizing helper (`reserve_resize`,
-`grow_resize`, `ensure_length`, `overwrite_resize`), the builtin `scratch_resize` on a `@scratch`
-carrier, or the pair spelled out - however small the count looks.** A bare grow past the heap's
-unreserved-size cap panics the load on the first big model, not at the call site.
+`@exact_size` (`@scratch @exact_size` on a `@scratch` carrier), and every `resize` of it follows
+a `reserve(n)` or `ensure_capacity(n)` whose `n` is the resized count - a sizing helper of
+`dasllama/dasllama_math.das` (`reserve_resize`, `grow_resize`, `ensure_length`,
+`overwrite_resize`), the builtin `scratch_resize` on a `@scratch` carrier, or the pair spelled
+out - however small the count looks.** A bare grow past the heap's unreserved-size cap panics
+the load on the first big model, not at the call site.

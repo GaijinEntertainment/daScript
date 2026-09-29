@@ -32,9 +32,13 @@ there.
 
 - **A diff that changes which arm of a branch keyed on the target triple a non-host triple
   selects - a key added, changed or removed - or changes code only a cross target's arm reaches,
-  records in its PR body the `-exe --jit-target=<triple>` build for that target that exercised
-  the behavior; the host's own triple is discharged by the module-owned suite.** The suite runs
-  on the host, so any other target's arm is checked only by the artifact built for it.
+  records in its PR body the `--jit-target=<triple>` command for that target that reached the
+  changed arm: an `-exe` build, or a `--jit-compile-only` run when the arm is one only
+  compile-only takes (it keeps the `[tune]` grid where an exe build stamps reference bodies) -
+  and beside a compile-only run, the run of that code on a box of the target, or the statement
+  that no such box ran it; the host's own triple is discharged by the module-owned suite.** The
+  suite runs on the host, so any other target's arm is checked only by a command built for it,
+  and a compile-only run shows the code emits, never that it runs.
 
 - **A diff that adds work to, or moves work within, what `run_jit`
   (`daslib/llvm_jit_run.das`) or `run_jit_linked` (`daslib/llvm_jit_link.das`) executes - its
@@ -111,11 +115,11 @@ there.
   sidecar at submission, and the checked-in corpus the test sweeps cannot show it. A new key
   inside an existing section passes the validator as it stands.
 
-- **A diff introducing an override knob adds it to `ARCHITECTURE.md` sec.3's inventory in the
-  same change.** An override knob is supplied at run time - an environment variable, a
-  command-line flag, or an exported runtime setter - and changes what a run compiles, tunes,
-  or emits beyond its defaults. Anything written in source - `[tune]`-family and `[hint]`
-  annotation arguments - is a declaration, not an override.
+- **A diff that adds an override knob, or gives one a new effect, adds the knob or the effect
+  to `ARCHITECTURE.md` sec.3's inventory in the same change.** An override knob is supplied at
+  run time - an environment variable, a command-line flag, or an exported runtime setter - and
+  changes what a run compiles, tunes, or emits beyond its defaults. Anything written in source
+  - `[tune]`-family and `[hint]` annotation arguments - is a declaration, not an override.
 
 - **A diff that adds an override knob, or gives one a new effect, also logs at least one line
   naming the knob where it takes effect.** A diff that only exposes the knob puts the line at

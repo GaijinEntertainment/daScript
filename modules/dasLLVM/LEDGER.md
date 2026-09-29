@@ -57,3 +57,9 @@ leaves when it lands or is refuted.
   during the same compile keep host layouts (reached through the bound `g_Program`), the
   cross-target program takes the table, and struct layouts fix at inference, so the switch
   cannot be codegen-only. Sized at two to three days; the check stays as the proof and gate.
+- **A gate for the class-scoped tier gates.** `with_class_target_gates`
+  (`daslib/llvm_jit_common.das`) saves, sets and restores each `g_target_*` tier gate by hand,
+  and a gate set there with no save and restore leaks the last class's value into every later
+  emission; `tests/llvm_class_target_gates.das` holds the thirteen gates it names today. The
+  change: a `REVIEW.das` check that every global the function assigns before its `invoke` is
+  assigned again after it, so a new gate cannot be added half way.

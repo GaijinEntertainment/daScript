@@ -1339,22 +1339,13 @@
    top-level key absent from `README.md`. (k) `REVIEW_IMAGE`: an addition on the left of a
    `> msize` compare in `dasllama_image.das`; `REVIEW_TTS`: `styletts2_synthesize` carries
    `[hot_path]`; a family name or tag string in the two shared TTS files.
-118. **Per-box profiles for the classes the fat exe ships - after dasllama-server ships and
-   releases run.** Two of the same nature, each a box and a mint rather than fat-mode plumbing
-   (`modules/dasLLVM/fat_mode_plan.md`, Later). (a) M4/M5: the shipped `arm-i8mm` profile is
-   one mint for M2 through M5, and on the M4 Pro its picks lose ~5% to the `arm-neon` baseline
-   on the CPU (562 vs 593 tok/s pp512 E2B q8, 3 reps); M4 and M5 carry SME and M2/M3 do not,
-   so an `arm-sme` class is the boundary - one `sme` line in `das_cpu_supports` (darwin sysctl
-   `hw.optional.arm.FEAT_SME`), one `JIT_CPU_CLASSES` row, one mint. (b) Intel AMX: the shipped
-   `x86-amx` profile crowns no AMX perm, so the class ties `x86-vnni512` (2888 vs 2949 tok/s
-   pp512 Qwen3-0.6B q8 on the 8488C). The session-5 SPR record says why: `nrsplit1` ties vnni at
-   24 lanes, wins at 48 (+15% geomean) and wins the classifier everywhere (1.45-1.84x), but the
-   tuner's confirm rejected the crown end to end (2969 vs 3218 tok/s) because the gemv companion
-   rides the family's stamp and decode lost 8.5%. The fix is families as separate backends - the
-   tile on AMX, the gemv on vnni, mixed per slot by the `set_batch_backend` hybrid rail - then a
-   re-mint on an AMX box at the served lane count with the confirm; and the AMX class must never
-   inherit the vnni class's `bias128` perm (-15% on AMX). Both land as profile files the fat exe
-   picks up with no plumbing change; the AWS SPR AMI (`dasbox-spr-20260710`) is the AMX box.
+118. **A per-box profile for the M4/M5 - after dasllama-server ships and releases run.** A box
+   and a mint rather than fat-mode plumbing (`modules/dasLLVM/fat_mode_plan.md`, Later). The
+   shipped `arm-i8mm` profile is one mint for M2 through M5, and on the M4 Pro its picks lose
+   ~5% to the `arm-neon` baseline on the CPU (562 vs 593 tok/s pp512 E2B q8, 3 reps); M4 and M5
+   carry SME and M2/M3 do not, so an `arm-sme` class is the boundary - one `sme` line in
+   `das_cpu_supports` (darwin sysctl `hw.optional.arm.FEAT_SME`), one `JIT_CPU_CLASSES` row, one
+   mint. It lands as a profile file the fat exe picks up with no plumbing change.
 
 119. **The bundle's second exe carries its own runtime.** The watchdog ships as a standalone
    exe (18-31 MB per platform) because `bin/watchdog` links the runtime statically, while the
@@ -1957,3 +1948,67 @@
    cause named (the o feed's Q8_0 requant rounding beside the x feed's f16 rows is the suspect, the
    `_resident_regions` census witness the instrument) or the bar re-read on this box with the
    one-step-off control still past it.
+
+184. **The fp16 tiles are unwritten.** The fp16 tiles of Granite Rapids (`amx-fp16`, probed,
+   gating nothing) are a perm variant of the bf16 emitter with `TDPFP16PS` and an f16 panel - the
+   same panel companions with an f16 convert in place of the bf16 one, an f16 activation widen,
+   and one more decline rail. Done = the variant raced against the bf16 crown on an AMX box.
+185. **The confirm arm reads an empty stamp from its child.** `confirm_winner` in
+   `harness/gen_tune_probe.das` logs `arm expected stamp '<seat>' but the child stamped '' -
+   scoring 0` for both arms and then scores them anyway (the mint on `i-02a87cabc8fcd2e4c`
+   confirmed the q8 bf16 crown on those scores). Done = the child's stamp line reaches the parser,
+   or the check is dropped as the dead code it is.
+186. **A Q4_1 tensor refuses the load.** bartowski's `Llama-3.2-1B-Instruct-Q4_0.gguf` keeps
+   `ffn_down` at Q4_1 (GGUF type 3), and the loader stops at `type 3 not supported`; the reference
+   build's Q4_0 carriers routinely mix one. Done = Q4_1 decoded to the q51-style per-32 (d, m) plane, or the
+   loader names the tensor and the format it wants re-quantized to.
+187. **The batch walks allocate their panel per dispatch chunk, under no region-entry
+   annotation.** The four kernel-table batch functions (`q8q8_batch_kernel_neon_laneq_gen`,
+   `q8q8_batch_kernel_s16_gen`, `kq_batch_kernel_gen`, `kq_batch_groupn_gen`) are reached only
+   through the backend table and carry no `[hot_path]` / `[no_alloc]`, so the allocation lint
+   never walks them; under them every chunk of a prefill batch allocates its panel - the byte
+   panel of the k5/k6 and grid formats (`kq_batch_cell_gen`'s `scratch`) and the bf16 panel of
+   the three bf16 cells. A panel shared by the lanes and resized inside the dispatch raced
+   (`can't resize locked array`). Done = one `@scratch @exact_size` panel per walk, sized for
+   `get_dispatch_slot_bound()` slots before the dispatch, each cell taking its slot's slice, and
+   the four entries annotated.
+188. **The bf16 walk is written twice, and the harness's format ladders six times.** The folds
+   left unapplied: one walk helper over blocks (panel, tile, gemv tail) for the q8 and superblock
+   cells and the harness's `run_tile_bf16` / `run_kq_tile_bf16`, the tile-unit chunking folded in;
+   `q8q8_panel_gen` and its s16 twin over one row scatter shared with `kq_panel_rows_bf16`;
+   `q8_panel_gen_impl` as a unit kind of `panel_gen_impl`; `panel_quads`' unpack arms shared with
+   `emit_block_kqv2`'s; one `kq_family_registries(fmt)` ladder behind the harness's six; one
+   `by_suffix(registry)` behind its five `*_variants_by_suffix`. Done = each fold applied and the
+   x64 emission rail and the AMX TEST gate green, or the fold refused in an architecture section.
+189. **A superblock family's bf16 crown passes no end-to-end confirm.** `confirm_winner` runs for
+   the q8 family alone, so a k/iq family's `amx_bf16` crown is the one-lane race's verdict; on
+   Granite Rapids the carriers confirm it by hand (`PERF_LEDGER.md`, the AMX bf16 tile arc), and
+   Sapphire Rapids - the same `x86-amx` class - is unmeasured. Done = the confirm races one
+   superblock carrier (`DASLLAMA_CONFIRM_MODEL`'s K-quant twin), or a Sapphire Rapids carrier row
+   in the ledger.
+190. **The bf16 walk's token block is one floor for every shape.** The one-process race on
+   Granite Rapids splits by K length: at n=2048 a block of 256 beats 512 by 10%, at n=8192 512
+   beats 256 by 8% (`PERF_LEDGER.md`, the AMX bf16 tile arc); end to end 512 holds. Done = the
+   block chosen per weight shape, raced end to end on the 1B and 4B carriers.
+191. **The generated tier branches on format ids as literals.** The emitter reads `te.kq == 33`
+   and the runtime ladders `fmt == 4` (`kq_layout_of`), and the bf16 panel code follows them
+   (`panel_is_grid`, `panel_scales`, `panel_quads`, `panel_ioff`, the panel stubs' ids, the
+   harness's `kq_tileforms` / `kq_arm_variant` / `kq_panel_variant`), with `256l` and `32l`
+   for the superblock and block widths; `REVIEW_KQ_FORMATS.md` wants the id resolved through
+   `kq_fmt_of_id` and the widths by name. Done = the generated tier's ladders over `KqFmt`
+   members, old and new in one pass, the x64 emission rail and the AMX TEST gate green.
+192. **No board row covers the `x86-amx` class.** `performance/records/` holds no Intel box, so
+   the bf16 walk a no-flag run takes on one is outside every regression check; the carriers in
+   `PERF_LEDGER.md` are the only reading. Done = a Granite Rapids record from
+   `performance/gen_bench_records.das`.
+193. **The cells the kernel-unit definition reaches through a helper are unaudited.** A cell
+   that runs a kernel through a helper in its file or a `_*.das` module (`_kq_dot.das`,
+   `_metal_kernel_common.das`) is a kernel-unit cell (`tests/REVIEW_KERNEL_CELLS.md`), and owes
+   the CPU-oracle compare, the sentinel fill, the control and the logged largest difference; no
+   pass has read those cells against the rules. Done = each such cell read, fixed or recorded.
+194. **No gate holds a class profile to the scope's kernel census.** A
+   `performance/defaults/<class>.tune-defaults.json` that lacks a kernel the `dasllama` scope
+   demands reads incomplete on every box that adopts it, and the box re-runs the tuner at each
+   start; `performance/REVIEW.das` checks the provenance and not the kernel set. Done = the gate
+   compares each profile's kernel names with the scope's `[tune]` / `[tuned]` census and reds a
+   missing or an unknown name.

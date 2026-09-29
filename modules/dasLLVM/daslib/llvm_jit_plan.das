@@ -31,7 +31,7 @@ require jit
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x93ul   // 0x93: a string constant with null bytes emits every byte
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x94ul   // 0x94: the x86-amx class carries amx-bf16 and avx512bf16, and the amx tile generators emit the bf16 leg
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -259,6 +259,9 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
     }
     if (cpu_supports("amx-tile") && cpu_supports("amx-int8")) {   // tune_cpu_class picks x86-amx, which selects grid decode forms
         h = (h ^ 0x1Cul) * JIT_FNV_PRIME
+    }
+    if (cpu_supports("amx-tile") && cpu_supports("amx-bf16") && cpu_supports("avx512bf16")) {   // the amx_bf16 tile gate: a bf16-less AMX part declines the perm
+        h = (h ^ 0x1Dul) * JIT_FNV_PRIME
     }
     if (cpu_supports("avxvnniint8")) {
         isa |= 32ul
@@ -900,7 +903,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     // --jit-compile-only: build + verify + optimize (+dump), write/load/install nothing —
     // the program runs interpreted. Also bypasses the DLL cache probe, so the
     // generators always run (this is the cross-emission smoke rail).
-    plan.compile_only = cli_opts.compile_only |> unwrap_or((prog._options |> find_arg("jit_compile_only")) ?as tBool ?? false)
+    plan.compile_only = jit_compile_only(cli_opts, prog)
     // Offline AOT: emit the whole used function set to a .o for static linking, with a
     // load ctor registering them into the AOT library. Mutually exclusive with dll
     // mode (no in-memory engine work, no instrument).

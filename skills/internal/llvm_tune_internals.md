@@ -70,7 +70,9 @@ context - which is why the infer pass moved to `daslib/tune` with the annotation
 ## The gates
 
 `tune_aot_gate()` and `tune_exe_gate()` are deliberately separate: cross-box artifacts are
-fully tune-free, while `-exe` still stamps and still emits the status `[init]`. **`aot_module`
+fully tune-free - except a `--jit-compile-only` dump under a cross triple, which keeps the grid so
+the x64 emission rail can inspect it off-box - while `-exe` still stamps and still emits the
+status `[init]`. **`aot_module`
 is not a tune signal** - it means "module-shaped compile", which dastest sets on every test
 compile and the AST serializer needs.
 

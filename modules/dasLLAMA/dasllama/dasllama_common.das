@@ -1771,7 +1771,12 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     } else {
         g_box_profile_runtime_declined = "no_runtime_section"   //! a fallback-stamp sidecar: kernels, no box state
     }
-    apply_i64_knob(rt, "q8_token_block") $(v) { set_q8_token_block(v) }
+    apply_i64_knob(rt, "q8_token_block") $(v) {
+        set_q8_token_block(v)
+        if (v < bf16_token_block_floor()) {
+            to_log(LOG_INFO, "dasLLAMA: box profile runtime: q8_token_block = {v} reads as {bf16_token_block_floor()} on a bf16 tile walk\n")
+        }
+    }
     apply_i64_knob(rt, "q8_l2_budget") $(v) { set_q8_l2_budget(v) }
     apply_i64_knob(rt, "target_chunk_work") $(v) { set_target_chunk_work(v) }
     apply_i64_knob(rt, "attn_par_threshold") $(v) { set_attn_par_threshold(v) }

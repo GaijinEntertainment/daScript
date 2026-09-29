@@ -999,6 +999,8 @@ def matmul_q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #;
 var g_q8_token_block = 128l
 def public set_q8_token_block(tb : int64) { g_q8_token_block = max(tb, 1l) }
 def public get_q8_token_block() : int64 { return g_q8_token_block }
+//! the least token block a bf16 tile walk reads, where its pp512 stops gaining on Granite Rapids (PERF_LEDGER.md, the AMX bf16 tile arc)
+def public bf16_token_block_floor() : int64 => 512l
 
 // ===== Token-block L2 budget (shared, ISA-agnostic) =====
 // A token-blocked Q8·Q8 GEMM keeps TB×n L2-resident; past L2 the slice spills and prefill falls

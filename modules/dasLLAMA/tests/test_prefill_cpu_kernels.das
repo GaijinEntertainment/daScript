@@ -1,4 +1,4 @@
-//! The prefill and KV CPU kernels no suite gated before - the batched K-quant GEMMs and the per-position GEMV route a tier without those slots runs instead, the q8_0 cache dequant seam, the batch activation requants, and repack_kq_weight's round trip: every cell asserts on whatever tier is active, and the native batched arms ride a restored kq-backend pin.
+//! The prefill and KV CPU kernels no suite gated before - the batched K-quant GEMMs and the per-position GEMV route a tier without those slots runs instead, the q8_0 cache dequant seam, the batch activation requants, and repack_kq_weight's round trip: every cell asserts on whatever tier is active, and the native batched arms ride a restored kq-backend pin; and the bf16 tile's activation plane.
 options gen2
 options stack = 524288
 options _dasllama_internal = true
@@ -14,6 +14,8 @@ require dasllama/dasllama_gemm_schema
 require _kq_dot   // dot_kq on the run-time format
 require _q4k_disk
 require daslib/f16_cvt
+require daslib/jobque_boost
+require daslib/fio
 require math
 require _compares   // mismatch_exact: the plane bytes' compare
 
@@ -38,6 +40,41 @@ def private cmp_exact(t : T?; got : array<float>; want : array<float>; n : int64
     }
     t |> success(bad == 0, "{tag}: {bad} of {int(n)} elements differ")
     t |> success(seen > 0, "{tag}: the poisoned expected element must be seen, and was not")
+}
+
+def private nan_fill(var a : array<float>) {
+    let nan = unsafe(reinterpret<float>(0x7FC00000u))
+    for (v in a) {
+        v = nan
+    }
+}
+
+// The bf16 envelope: a bf16 operand sits within 2^-8 of its value, so a weight-activation
+// product within 2^-7 of its own magnitude; the terms round independently, so a row's error is
+// 2^-7 / sqrt(3) of the terms' rms times sqrt(n), against an output of the same order - 0.5% of
+// the image's largest magnitude on these fixtures, held at 1%. A NaN is outside it.
+def private cmp_bf16(t : T?; got : array<float>; want : array<float>; n, d : int64; tag : string) {
+    var mag = 0.0
+    for (i in range64(n)) {
+        mag = max(mag, abs(want[i]))
+    }
+    var over = 0
+    var worst = 0.0
+    var worstAt = 0l
+    for (i in range64(n)) {
+        let df = abs(got[i] - want[i])
+        if (!(df <= 1.0e-2 * mag)) {
+            over++
+        }
+        if (!(df <= worst)) {
+            worst = df
+            worstAt = i
+        }
+    }
+    to_log(LOG_INFO, "{tag}: max err {worst} at token {int(worstAt / d)} row {int(worstAt % d)}, magnitude {mag}\n")
+    t |> success(over == 0, "{tag}: {over} of {int(n)} elements outside the bf16 envelope (max err {worst} at token {int(worstAt / d)} row {int(worstAt % d)}, magnitude {mag})")
+    let pi = n / 2l
+    t |> success(abs(got[pi] - (want[pi] + mag)) > 1.0e-2 * mag, "{tag}: the image's magnitude {mag} added to expected element {int(pi)} must land outside the envelope")
 }
 
 def private put_f16(var b : array<uint8>; off : int64; v : float) {
@@ -209,15 +246,24 @@ def private kq_batch_gate(t : T?; fmt : int; n, d, ntok : int64) {
         repack_kq_weight(fmt, kq, ks, 0l, n, d)
         var ybatch : array<float>
         ybatch |> resize(ntok * d)
+        nan_fill(ybatch)
         matmul_kq_batch(fmt, ybatch, kq, ks, 0l, xq, xs, xbs, n, d, ntok)
         var yser : array<float>
         yser |> resize(ntok * d)
+        nan_fill(yser)
         for (p in range64(ntok)) {
             quant_one(src, p * n, n, q1, s1, b1)
             matmul_kq_active(fmt, yser, kq, ks, 0l, q1, s1, b1, n, d, p * d)
         }
-        cmp_exact(t, ybatch, yser, ntok * d,
-            "{fmt_tag(fmt)} native kq batch is bit-for-bit ntok x matmul_kq_active (ntok={int(ntok)})")
+        if (kq_tileform_of(fmt) > 0) {
+            cmp_bf16(t, ybatch, want, ntok * d, d,
+                "{fmt_tag(fmt)} native kq batch on the bf16 tile vs per-(token,row) disk dots (n={int(n)} d={int(d)} ntok={int(ntok)})")
+            cmp_bf16(t, ybatch, yser, ntok * d, d,
+                "{fmt_tag(fmt)} native kq batch on the bf16 tile vs ntok x matmul_kq_active (n={int(n)} d={int(d)} ntok={int(ntok)})")
+        } else {
+            cmp_exact(t, ybatch, yser, ntok * d,
+                "{fmt_tag(fmt)} native kq batch is bit-for-bit ntok x matmul_kq_active (ntok={int(ntok)})")
+        }
         delete ybatch
         delete yser
     }
@@ -247,6 +293,144 @@ def test_kq_batch(t : T?) {
         t |> run("{fmt_tag(fmt)} batched kq GEMM at the multi-superblock shape (n=1024 d=64 ntok=6)") @(t : T?) {
             kq_batch_gate(t, fmt, 1024l, 64l, 6l)
         }
+        t |> run("{fmt_tag(fmt)} batched kq GEMM at n=512 d=48 ntok=67") @(t : T?) {
+            kq_batch_gate(t, fmt, 512l, 48l, 67l)
+        }
+    }
+}
+
+def private bf16_value(h : uint16) : float => unsafe(reinterpret<float>(uint(h) << 16u))
+
+def private xbf16_gate(t : T?; n, ntok : int64) {
+    var src : array<float>
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    build_acts(src, xq, xs, xbs, ntok, n)
+    var stale : array<int8>
+    stale |> resize(ntok * n)
+    for (sv, qv in stale, xq) {
+        sv = int8(int(qv) > 0 ? int(qv) - 1 : int(qv) + 1)
+    }
+    var bad = 0
+    var worst = 0.0
+    var worstAt = 0l
+    var truncatedSeen = 0
+    unsafe {
+        xbf16_build(addr<int8 const?>(stale[0]), addr<float const?>(xs[0]), n, ntok, 256l)
+        let hp = reinterpret<uint16 const?>(xbf16_build(addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, ntok, 256l))
+        t |> success((int64(intptr(hp)) & 63l) == 0l, "xbf16_build hands back a 64-byte aligned plane")
+        for (p in range64(ntok)) {
+            for (i in range64(n)) {
+                let x = float(xq[p * n + i]) * xs[p * (n / 256l) + i / 256l]
+                let df = abs(bf16_value(hp[p * n + i]) - x)
+                if (!(df <= abs(x) * 0.00390625)) {
+                    bad++
+                }
+                if (!(df <= worst)) {
+                    worst = df
+                    worstAt = p * n + i
+                }
+                let truncated = uint16(reinterpret<uint>(x) >> 16u)
+                if (!(abs(bf16_value(truncated) - x) <= abs(x) * 0.00390625)) {
+                    truncatedSeen++
+                }
+            }
+        }
+    }
+    to_log(LOG_INFO, "xbf16_build (n={int(n)} ntok={int(ntok)}): max err {worst} at token {int(worstAt / n)} element {int(worstAt % n)}\n")
+    t |> success(bad == 0, "xbf16_build (n={int(n)} ntok={int(ntok)}): {bad} of {int(ntok * n)} elements off q times its superblock scale rounded to bf16, max err {worst} at token {int(worstAt / n)} element {int(worstAt % n)}")
+    delete stale
+    t |> success(truncatedSeen > 0, "xbf16_build: a truncated bf16 must be seen past half a step, and was not")
+    delete src
+    delete xq
+    delete xs
+    delete xbs
+}
+
+// Two contexts build their planes at once, each over its own activation row: a plane is a
+// context's own, so neither build reads the other's values. The contexts are two threads', the
+// shape two concurrent inferences take; a team lane is no such context (the fork pool's lanes
+// own no globals). A thread waits for the other to start, then rebuilds and re-reads its plane
+// `rounds` times.
+def private plane_thread(lane : int; n : int64; rounds : int; xqp : int8 const?; xsp : float const?; wp : uint16 const?;
+                         var sp : int?; var dp : int?; var bp : int64?; var pp : int64?; var wg : JobStatus?) {
+    new_thread() @() {
+        unsafe {
+            sp[lane] = 1
+            let t0 = ref_time_ticks()
+            while (sp[1 - lane] == 0 && get_time_usec(t0) < 2000000) {
+                sleep(1u)
+            }
+            for (_r in range(rounds)) {
+                let hp = reinterpret<uint16 const?>(xbf16_build(xqp + int64(lane) * n, xsp + int64(lane) * (n / 256l), n, 1l, 256l))
+                pp[lane] = int64(intptr(hp))
+                for (i in range64(n)) {
+                    if (hp[i] != wp[int64(lane) * n + i]) {
+                        bp[lane]++
+                    }
+                }
+                dp[lane]++
+            }
+        }
+        wg |> notify_and_release
+    }
+}
+
+def private xbf16_two_contexts(t : T?; n : int64; rounds : int) {
+    var src : array<float>
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    build_acts(src, xq, xs, xbs, 2l, n)
+    var want : array<uint16>
+    want |> resize(2l * n)
+    unsafe {
+        for (p in range64(2l)) {
+            let hp = reinterpret<uint16 const?>(xbf16_build(addr<int8 const?>(xq[p * n]), addr<float const?>(xs[p * (n / 256l)]), n, 1l, 256l))
+            for (i in range64(n)) {
+                want[p * n + i] = hp[i]
+            }
+        }
+    }
+    var rowsDiffer = 0
+    for (i in range64(n)) {
+        rowsDiffer += want[i] != want[n + i] ? 1 : 0
+    }
+    var started : int[2]
+    var done : int[2]
+    var bad : int64[2]
+    var plane : int64[2]
+    with_job_que() {
+        with_wait_group(2) $(wg) {
+            unsafe {
+                for (lane in range(2)) {
+                    plane_thread(lane, n, rounds, addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<uint16 const?>(want[0]),
+                        addr(started[0]), addr(done[0]), addr(bad[0]), addr(plane[0]), wg)
+                }
+            }
+        }
+    }
+    to_log(LOG_INFO, "xbf16_build in two threads (n={int(n)}, {rounds} rounds each): {bad[0]} and {bad[1]} elements off, planes at {plane[0]} and {plane[1]}\n")
+    t |> equal(done[0] + done[1], 2 * rounds, "both threads ran every round")
+    t |> success(rowsDiffer > 0, "the two threads' activation rows differ ({rowsDiffer} of {int(n)} elements), so a shared plane would show")
+    t |> success(plane[0] != plane[1], "the two threads' planes sit at distinct addresses")
+    t |> equal(bad[0], 0l, "thread 0 read its own plane in every round")
+    t |> equal(bad[1], 0l, "thread 1 read its own plane in every round")
+    delete src
+    delete xq
+    delete xs
+    delete xbs
+    delete want
+}
+
+[test]
+def test_xbf16_build(t : T?) {
+    t |> run("the bf16 activation plane is q times its scale, rounded to nearest, on a cache line") @(t : T?) {
+        xbf16_gate(t, 512l, 3l)
+    }
+    t |> run("two threads building at once each read their own plane") @(t : T?) {
+        xbf16_two_contexts(t, 8192l, 400)
     }
 }
 
@@ -276,7 +460,7 @@ def private groupn_fallback(t : T?; fmt : int; kq : array<uint8>; ks : array<uin
 
 def private groupn_fused(t : T?; fmt : int; var kq : array<uint8>; var ks : array<uint8>;
                          offs : array<int64>; cnts : array<int64>; xq : array<int8>; xs : array<float>;
-                         xbs : array<int>; n, d, nk : int64) {
+                         xbs : array<int>; n, d, nk : int64; want : array<float>) {
     let nsb = n / 256l
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
@@ -286,6 +470,7 @@ def private groupn_fused(t : T?; fmt : int; var kq : array<uint8>; var ks : arra
     }
     var yb : array<float>
     yb |> resize(nk * d)
+    nan_fill(yb)
     matmul_kq_batch_groupn(fmt, yb, kq, ks, offs, nreg, xq, xs, xbs, n, d)
     var wantg : array<float>
     wantg |> resize(nk * d)
@@ -301,14 +486,26 @@ def private groupn_fused(t : T?; fmt : int; var kq : array<uint8>; var ks : arra
             row0 += cnts[r]
         }
     }
-    cmp_exact(t, yb, wantg, nk * d,
-        "{fmt_tag(fmt)} fused kq batch groupn bit-matches per-(region, token) rows-core calls")
+    var longest = 0l
+    for (c in cnts) {
+        longest = max(longest, c)
+    }
+    // a bf16 tile walk sums a region of a tile's tokens or more in the tile; under that the rows core serves every token
+    if (kq_tileform_of(fmt) > 0 && longest >= amx_bf16_tile_tokens()) {
+        cmp_bf16(t, yb, want, nk * d, d,
+            "{fmt_tag(fmt)} fused kq batch groupn on the bf16 tile vs per-(region,token) disk dots")
+        cmp_bf16(t, yb, wantg, nk * d, d,
+            "{fmt_tag(fmt)} fused kq batch groupn on the bf16 tile vs per-(region, token) rows-core calls")
+    } else {
+        cmp_exact(t, yb, wantg, nk * d,
+            "{fmt_tag(fmt)} fused kq batch groupn bit-matches per-(region, token) rows-core calls")
+    }
     delete yb
     delete wantg
 }
 
-def private kq_batch_groupn_gate(t : T?; fmt : int; n, d : int64) {
-    var cnts <- [1l, 4l, 6l]
+def private kq_batch_groupn_gate(t : T?; fmt : int; n, d : int64; longRuns : bool = false) {
+    var cnts <- longRuns ? [3l, 35l, 67l] : [1l, 4l, 6l]
     let nreg = long_length(cnts)
     var nk = 0l
     for (c in cnts) {
@@ -344,7 +541,7 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n, d : int64) {
     let prev = active_kernel_backend()
     pin_kernel_backend(gen_backend_name())
     if (kernel_backend_has_kq() && kernel_backend_has_kq_batch_groupn()) {
-        groupn_fused(t, fmt, kq, ks, offs, cnts, xq, xs, xbs, n, d, nk)
+        groupn_fused(t, fmt, kq, ks, offs, cnts, xq, xs, xbs, n, d, nk, want)
     }
     clear_kernel_backend_pin()
     select_kernel_backend(prev)
@@ -364,6 +561,9 @@ def test_kq_batch_groupn_portable(t : T?) {
     for (fmt in [4, 6, 40]) {
         t |> run("{fmt_tag(fmt)} fused MoE-prefill region walk (runs 1/4/6) on whatever backend is active") @(t : T?) {
             kq_batch_groupn_gate(t, fmt, 512l, 32l)
+        }
+        t |> run("{fmt_tag(fmt)} fused MoE-prefill region walk (runs 3/35/67, n=512 d=48) on whatever backend is active") @(t : T?) {
+            kq_batch_groupn_gate(t, fmt, 512l, 48l, true)
         }
     }
     t |> run("k4 fused region walk at the expert-slice shape (n=1024 d=128)") @(t : T?) {

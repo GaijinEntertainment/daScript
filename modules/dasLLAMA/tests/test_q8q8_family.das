@@ -1,3 +1,4 @@
+//! The q8q8 kernel family against an in-test fp64 dequant reference, on every registered backend. Skips: the tile half of the two stamped-tile cells where the stamp is a bf16 tile.
 options gen2
 options stack = 524288
 options _dasllama_internal = true
@@ -133,6 +134,41 @@ def private held(t : T?; got : array<float>; ref : array<float>; bar : array<flo
         worst = max(worst, df)
     }
     t |> success(over == 0, "{what}: {over} of {long_length(got)} past the fp64 bar, maxdiff {worst}, bar[0] {bar[0]}")
+}
+
+def private nan_fill(var a : array<float>) {
+    let nan = unsafe(reinterpret<float>(0x7FC00000u))
+    for (v in a) {
+        v = nan
+    }
+}
+
+// The bf16 envelope: a bf16 operand sits within 2^-8 of its value, so a weight-activation
+// product within 2^-7 of its own magnitude; the terms round independently, so a row's error is
+// 2^-7 / sqrt(3) of the terms' rms times sqrt(n), against an output of the same order - 0.5% of
+// the image's largest magnitude on these fixtures, held at 1%. A NaN is outside it.
+def private held_bf16(t : T?; got : array<float>; ref : array<float>; d : int64; what : string) {
+    var mag = 0.0
+    for (rv in ref) {
+        mag = max(mag, abs(rv))
+    }
+    var over = 0
+    var worst = 0.0
+    var worstAt = 0l
+    for (i in range64(long_length(ref))) {
+        let df = abs(got[i] - ref[i])
+        if (!(df <= 1.0e-2 * mag)) {
+            over++
+        }
+        if (!(df <= worst)) {
+            worst = df
+            worstAt = i
+        }
+    }
+    to_log(LOG_INFO, "{what}: maxdiff {worst} at token {worstAt / d} row {worstAt % d}, magnitude {mag}\n")
+    t |> success(over == 0, "{what}: {over} of {long_length(got)} outside the bf16 envelope, maxdiff {worst} at token {worstAt / d} row {worstAt % d}, magnitude {mag}")
+    let pi = long_length(ref) / 2l
+    t |> success(abs(got[pi] - (ref[pi] + mag)) > 1.0e-2 * mag, "{what}: the image's magnitude {mag} added to expected element {pi} must land outside the envelope")
 }
 
 def private poisoned(t : T?; got : array<float>; ref : array<float>; bar : array<float>; what : string) {
@@ -307,9 +343,24 @@ def private q8q8_stamped_gate(t : T?; n : int64) {
         let sp = addr<float const?>(s[0])
         let xqp = addr<int8 const?>(xq[0])
         let xsp = addr<float const?>(xs[0])
+        var ygp = addr(ygemv[0])
+        for (p in range64(ntok)) {
+            q8q8_gemv_gen(ygp + p * d, wp, sp, xqp + p * n, xsp + p * nb, n, 0l, ng * mr)
+        }
+    }
+    held(t, ygemv, ref, bar, "q8q8 stamped GEMV, n={n}")
+    poisoned(t, ygemv, ref, bar, "q8q8 stamped GEMV, n={n}")
+    if (q8q8_tileform_gen() > 0) {
+        t |> skip("the stamped tile is the bf16 tile - it reads a bf16 panel, not the int8 planes; the mm/batch cell reaches it through the batch kernel")
+        return
+    }
+    unsafe {
+        let wp = addr<int8 const?>(q[0])
+        let sp = addr<float const?>(s[0])
+        let xqp = addr<int8 const?>(xq[0])
+        let xsp = addr<float const?>(xs[0])
         let xbsp = addr<int const?>(xbs[0])
         var ytp = addr(ytile[0])
-        var ygp = addr(ygemv[0])
         q8q8_amx_cfg_gen()
         for (gu in range64(ng / gs)) {
             let gg = gu * gs
@@ -323,18 +374,13 @@ def private q8q8_stamped_gate(t : T?; n : int64) {
                 tk++
             }
         }
-        for (p in range64(ntok)) {
-            q8q8_gemv_gen(ygp + p * d, wp, sp, xqp + p * n, xsp + p * nb, n, 0l, ng * mr)
-        }
     }
     identical(t, ytile, ygemv, "q8q8 tile (mr={mr} tokstep={ts}) bit-matches the per-token GEMV, n={n}")
-    held(t, ygemv, ref, bar, "q8q8 stamped GEMV, n={n}")
     held(t, ytile, ref, bar, "q8q8 stamped tile, n={n}")
-    poisoned(t, ygemv, ref, bar, "q8q8 stamped GEMV, n={n}")
+    poisoned(t, ytile, ref, bar, "q8q8 stamped tile, n={n}")
 }
 
-def private q8q8_wrapper_gate(t : T?; n : int64) {
-    let d = 64l
+def private q8q8_wrapper_gate(t : T?; n : int64; d : int64 = 64l) {
     let ntok = 2l * int64(q8q8_tokstep_gen()) + 3l
     var wf : array<float>
     var xf : array<float>
@@ -361,15 +407,24 @@ def private q8q8_wrapper_gate(t : T?; n : int64) {
         gemv_image_q8(ymm, q, s, xq, xs, ntok, d, n)
         var ybat : array<float>
         ybat |> resize(ntok * d)
+        nan_fill(ybat)
         matmul_q8q8_batch(ybat, q, s, xq, xs, n, d, ntok)
+        let bf16 = name == "x64-gen" && q8q8_tileform_gen() > 0
         if (name == "portable") {
-            identical(t, ybat, ymm, "{name} matmul_q8q8_batch bit-matches ntok x matmul_q8q8, n={n}")
+            identical(t, ybat, ymm, "{name} matmul_q8q8_batch bit-matches ntok x matmul_q8q8, n={n} d={d}")
+        } elif (bf16) {
+            held_bf16(t, ybat, ymm, d, "{name} matmul_q8q8_batch on the bf16 tile vs ntok x matmul_q8q8, n={n} d={d}")
         } else {
-            held(t, ybat, ymm, bar, "{name} matmul_q8q8_batch within the fp64 bar of ntok x matmul_q8q8, n={n}")
+            held(t, ybat, ymm, bar, "{name} matmul_q8q8_batch within the fp64 bar of ntok x matmul_q8q8, n={n} d={d}")
         }
-        held(t, ymm, ref, bar, "{name} matmul_q8q8, n={n}")
-        held(t, ybat, ref, bar, "{name} matmul_q8q8_batch, n={n}")
-        poisoned(t, ymm, ref, bar, "{name} matmul_q8q8, n={n}")
+        held(t, ymm, ref, bar, "{name} matmul_q8q8, n={n} d={d}")
+        if (bf16) {
+            held_bf16(t, ybat, ref, d, "{name} matmul_q8q8_batch on the bf16 tile, n={n} d={d}")
+        } else {
+            held(t, ybat, ref, bar, "{name} matmul_q8q8_batch, n={n} d={d}")
+            poisoned(t, ybat, ref, bar, "{name} matmul_q8q8_batch, n={n} d={d}")
+        }
+        poisoned(t, ymm, ref, bar, "{name} matmul_q8q8, n={n} d={d}")
     }
     restore_backend(saved)
 }
@@ -384,6 +439,9 @@ def test_q8q8_tile_gemv_reference(t : T?) {
             }
             t |> run("q8q8 mm/batch vs fp64 dequant on every backend, n={n}") @(t : T?) {
                 q8q8_wrapper_gate(t, n)
+            }
+            t |> run("q8q8 mm/batch vs fp64 dequant on every backend, n={n} d=48") @(t : T?) {
+                q8q8_wrapper_gate(t, n, 48l)
             }
         }
     }
@@ -493,9 +551,24 @@ def private s16_stamped_gate(t : T?; n : int64) {
         let sp = addr<uint16 const?>(s16[0])
         let xqp = addr<int8 const?>(xq[0])
         let xsp = addr<float const?>(xs[0])
+        var ygp = addr(ygemv[0])
+        for (p in range64(ntok)) {
+            q8q8_gemv_s16_gen(ygp + p * d, wp, sp, xqp + p * n, xsp + p * nb, n, 0l, ng * mr)
+        }
+    }
+    held(t, ygemv, ref, bar, "q8q8 stamped s16 GEMV, n={n}")
+    poisoned(t, ygemv, ref, bar, "q8q8 stamped s16 GEMV, n={n}")
+    if (q8q8_tileform_gen() > 0) {
+        t |> skip("the stamped s16 tile is the bf16 tile - it reads a bf16 panel, not the int8 planes; the overloads cell reaches it through the batch kernel")
+        return
+    }
+    unsafe {
+        let wp = addr<int8 const?>(q[0])
+        let sp = addr<uint16 const?>(s16[0])
+        let xqp = addr<int8 const?>(xq[0])
+        let xsp = addr<float const?>(xs[0])
         let xbsp = addr<int const?>(xbs[0])
         var ytp = addr(ytile[0])
-        var ygp = addr(ygemv[0])
         q8q8_amx_cfg_gen()
         for (gu in range64(ng / gs)) {
             let gg = gu * gs
@@ -509,12 +582,8 @@ def private s16_stamped_gate(t : T?; n : int64) {
                 tk++
             }
         }
-        for (p in range64(ntok)) {
-            q8q8_gemv_s16_gen(ygp + p * d, wp, sp, xqp + p * n, xsp + p * nb, n, 0l, ng * mr)
-        }
     }
     identical(t, ytile, ygemv, "q8q8 s16 tile (mr={mr} tokstep={ts}) bit-matches the per-token s16 GEMV, n={n}")
-    held(t, ygemv, ref, bar, "q8q8 stamped s16 GEMV, n={n}")
     held(t, ytile, ref, bar, "q8q8 stamped s16 tile, n={n}")
     poisoned(t, ytile, ref, bar, "q8q8 stamped s16 tile, n={n}")
 }
@@ -563,6 +632,7 @@ def private s16_wrapper_gate(t : T?; n : int64) {
         gemv_image_s16(ymm16, q, s16, xq, xs, ntok, d, n)
         var ybat16 : array<float>
         ybat16 |> resize(ntok * d)
+        nan_fill(ybat16)
         matmul_q8q8_batch(ybat16, q, s16, 0l, xq, xs, n, d, ntok)
         var ygn : array<float>
         var ygn16 : array<float>
@@ -570,11 +640,20 @@ def private s16_wrapper_gate(t : T?; n : int64) {
         ygn16 |> resize(d)
         matmul_q8q8_groupn(ygn, q, s, offs, 2l, xq, xs, n, dreg)
         matmul_q8q8_groupn(ygn16, q, s16, offs, 2l, xq, xs, n, dreg)
+        let bf16 = name == "x64-gen" && q8q8_tileform_gen() > 0
         identical(t, ymm16, ymm, "{name} matmul_q8q8 s16 bit-matches the f32 plane, n={n}")
-        identical(t, ybat16, ymm16, "{name} matmul_q8q8_batch s16 bit-matches ntok x matmul_q8q8 s16, n={n}")
+        if (bf16) {
+            held_bf16(t, ybat16, ymm16, d, "{name} matmul_q8q8_batch s16 on the bf16 tile vs ntok x matmul_q8q8 s16, n={n}")
+        } else {
+            identical(t, ybat16, ymm16, "{name} matmul_q8q8_batch s16 bit-matches ntok x matmul_q8q8 s16, n={n}")
+        }
         identical(t, ygn16, ygn, "{name} matmul_q8q8_groupn s16 bit-matches the f32 plane, n={n}")
         held(t, ymm16, ref, bar, "{name} matmul_q8q8 s16, n={n}")
-        held(t, ybat16, ref, bar, "{name} matmul_q8q8_batch s16, n={n}")
+        if (bf16) {
+            held_bf16(t, ybat16, ref, d, "{name} matmul_q8q8_batch s16 on the bf16 tile, n={n}")
+        } else {
+            held(t, ybat16, ref, bar, "{name} matmul_q8q8_batch s16, n={n}")
+        }
         held(t, ygn16, gref, gbar, "{name} matmul_q8q8_groupn s16, n={n}")
         poisoned(t, ybat16, ref, bar, "{name} matmul_q8q8_batch s16, n={n}")
         poisoned(t, ygn16, gref, gbar, "{name} matmul_q8q8_groupn s16, n={n}")

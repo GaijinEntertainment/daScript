@@ -216,6 +216,18 @@ per-32 twin took.
   IS the framework's fallback, so the stubs are the cheapest way to have a real family; the
   `[tune]` family must exist before the emitter does because the loader's kq dispatch, the layout
   companion and the tuner's completeness check all resolve it by name.
+- The AMX bf16 leg (`ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile`): q40's grid carries two
+  `amx_bf16` rows, and a family that copies them owes the leg's companions. In
+  `dasllama_math_gen.das`: the stubs `<fmt>q8_tileform_gen` (returns 0), `<fmt>q8_amx_cfg_gen`,
+  `<fmt>q8_witness_gen` and `<fmt>q8_panel_gen` (body `kq_panel_rows_bf16(<id>, ...)`) with
+  their `tune_companion` rows (`kq_tileform`, `kq_amx_cfg`, `kq_witness`, `<fmt>_panel`), and
+  the format's `KqTag_<fmt>` overload of `kq_tileform`, `kq_amx_arm` and `kq_panel_gen` - a
+  `KqFmt` member without one fails the compile. In `dasllama_gemm_gen.das`: the format's
+  arm in `panel_supported`, `panel_scales`, `panel_quads` and `panel_ioff`, and the
+  `<fmt>_panel` generator with its registration. In `harness/gen_tune_probe.das`: the arms of
+  `kq_tileforms`, `kq_arm_variant` and `kq_panel_variant`. In
+  `harness/gen_x64_emission_probe.das` and `gen_x64_emission_check.sh`: the panel registry and
+  its gate row. A format whose panel is not written yet leaves the two rows out of its grid.
 - `harness/gen_tune_probe.das`: `pack_kq_disk_block`, `repack_kq_grp_fmt`, `build_kq_fixture`
   (block size, transcode, the yref oracle), `kq_tile_variants`, `kq_gemv_variants_by_suffix`,
   `kq_layout_mrs`, `run_kq_tile`'s `packed`, `kq_tile_entry`, the family list. Without this

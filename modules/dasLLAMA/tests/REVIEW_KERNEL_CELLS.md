@@ -7,11 +7,13 @@ work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's asserts
 belong to every cell that calls it. A kernel run is a dispatch or a CPU kernel call. A kernel-unit
-cell is a cell that itself dispatches a `[vk_dispatch]` or `[metal_dispatch]` class, or itself
-calls a CPU kernel in `../dasllama/dasllama_math*.das`, rather than through a serving call in
-`../dasllama/`. A gate is any call site that supplies a kernel's dispatch count or fills its kargs
-(kernel-argument) struct itself, other than a serving call in `../dasllama/` the kernel exists
-for - a cell, a probe, a harness. A stamp is a `[vk_dispatch]` or `[metal_dispatch]` class that
+cell is a cell in which a `[metal_dispatch]` or `[vk_dispatch]` class is dispatched, or a CPU
+kernel in `../dasllama/dasllama_math*.das` is called, by a statement in test code - the cell
+itself, or a helper in its own file or in a `_*.das` test-helper module; a kernel run that only
+happens inside a function in `../dasllama/` does not make a cell a kernel-unit cell. A gate is
+any call site that supplies a kernel's dispatch count or fills its kargs (kernel-argument)
+struct itself, other than a serving call in `../dasllama/` the kernel exists for - a cell, a
+probe, a harness. A stamp is a `[vk_dispatch]` or `[metal_dispatch]` class that
 compiles to its own shader module - a class no other class derives from; every rule here treats
 each stamp as its own class. A CPU oracle is the same computation written in plain code and run on
 the CPU. A path of a class is each kargs-selected branch, each branch a sentinel value in a bound
