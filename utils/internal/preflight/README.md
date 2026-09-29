@@ -72,8 +72,11 @@ passing silently. Exit code is non-zero when any gate fails.
 The full interpreter and AOT sweeps pass `--max-file-time` to `dastest`. The
 parallel cold JIT sweep defaults to 60 seconds because healthy files can cross
 30 seconds under worker contention. Any completed test file above its ceiling
-fails preflight even when its assertions pass; the suite-wide timeout remains
-the separate deadlock guard.
+fails preflight even when its assertions pass. The JIT sweep also passes
+`--test-timeout 300`: a worker that never finishes is killed with everything it
+started - at 1200 seconds for a batch of four, under the suite's 1800 - and the
+files it had not reported run again one by one. The suite-wide timeout remains
+the guard for a dastest that itself stops.
 
 `ci_only_das.txt` lists the in-repo das surface that no default local build
 compiles (dasOpenGL today); see the header comment there before adding
