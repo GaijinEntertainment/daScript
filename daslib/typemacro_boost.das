@@ -707,11 +707,11 @@ def private tsi_stamp_methods(var st : StructurePtr; temMethods : array<Function
         fc.name := "{instName}`{mname}"
         fc.moreFlags.isTemplate = false
         fc.classParent = st
-        fc.result = apply_template(rules, func.at, clone_type(func.result))
+        fc.result = apply_template(rules, func.at, fc.result)
         for (arg in fc.arguments) {
-            arg._type = apply_template(rules, arg.at, clone_type(arg._type))
+            arg._type = apply_template(rules, arg.at, arg._type)
         }
-        fc.body = apply_template(rules, func.at, clone_expression(func.body), false)
+        fc.body = apply_template(rules, func.at, fc.body, false)
         if (!(mod |> add_function(fc))) {
             errors := "[template_struct_instance] can't add method {instName}`{mname}"
             return false
