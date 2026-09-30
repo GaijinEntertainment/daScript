@@ -33,6 +33,9 @@ def private box_from_cpu(cpu : string) : string {
     if (cpu |> find("8700GE") >= 0) {
         return "zen4"
     }
+    if (cpu |> find("6975P") >= 0) {
+        return "gnr"
+    }
     return ""
 }
 
