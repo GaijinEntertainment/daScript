@@ -29,6 +29,7 @@ let private MAX_SHORT = 64
 let private MAX_CMD = 8192
 let private MAX_TEXT = 65536         // ASR transcripts — the largest legitimate string in a record
 let private MAX_PROV_VALUE = 1024
+let private MAX_TUNE_STAMP = 8192    // a run's tune stamp names a perm a tile family: seventeen families at an amx perm's name pass 1024
 let private MAX_MEASURE = 1.0e12lf   // tok/s, ms, counts — beyond is garbage; a NaN fails the compare too
 let private MAX_BYTES = 1.0e15lf
 
@@ -340,7 +341,7 @@ def private validate_run(run : JsonValue const?; submission : bool; path : strin
     chk_str(run, "sha", false, MAX_SHORT, path, errors)
     chk_str(run, "version", false, MAX_SHORT, path, errors)
     chk_str(run, "versions", false, MAX_PROV_VALUE, path, errors)
-    chk_str(run, "tune", false, MAX_PROV_VALUE, path, errors)
+    chk_str(run, "tune", false, MAX_TUNE_STAMP, path, errors)
     chk_str(run, "tune_sha", false, MAX_NAME, path, errors)
     chk_str(run, "noise", false, MAX_SHORT, path, errors)
     chk_str(run, "parity", false, MAX_SHORT, path, errors)
@@ -365,7 +366,7 @@ def private validate_run(run : JsonValue const?; submission : bool; path : strin
             chk_str(run, "version", true, MAX_SHORT, path, errors)
             chk_str(run, "sha", true, MAX_SHORT, path, errors)
             chk_str(run, "exec_fmt", true, MAX_NAME * 2, path, errors)
-            chk_str(run, "tune", true, MAX_PROV_VALUE, path, errors)
+            chk_str(run, "tune", true, MAX_TUNE_STAMP, path, errors)
             chk_str(run, "tune_sha", true, MAX_NAME, path, errors)
         }
     }

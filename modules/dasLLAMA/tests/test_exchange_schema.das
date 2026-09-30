@@ -233,6 +233,28 @@ def test_hostile_records(t : T?) {
 }
 
 [test]
+def test_tune_stamp_bound(t : T?) {
+    t |> run("the tune stamp names a perm a tile family, under a bound of its own") @(t : T?) {
+        var r1 <- make_das_run()
+        r1.tune = repeat("iq3xxsq8_tile_gen=dot_amx_bf16_width512_mr16_kstep1_nrsplit2 (manifest); ", 17)
+        let stamp_len = length(r1.tune)
+        var runs1 : array<BenchRun>
+        runs1 |> emplace(r1)
+        var e1 : array<string>
+        t |> success(validate_record_store(write_store(runs1), e1), "a seventeen-family amx tune stamp ({stamp_len} characters) passes")
+        delete e1
+        var r2 <- make_das_run()
+        r2.tune = repeat("x", 8193)
+        var runs2 : array<BenchRun>
+        runs2 |> emplace(r2)
+        var e2 : array<string>
+        t |> success(!validate_record_store(write_store(runs2), e2), "a tune stamp past the bound is a hostile record")
+        delete e2
+        remove(TMP)
+    }
+}
+
+[test]
 def test_hostile_sidecars(t : T?) {   // nolint:STYLE038 - flat one-shape-per-arm rejection list; no arm stands alone
     t |> run("a minimal versioned sidecar passes both grades") @(t : T?) {
         var good = %json~
