@@ -6,16 +6,19 @@ require daslib/validate_code
 //! Fan-out fixture for the `[verify_completion]` recursion walk: every level calls both
 //! functions of the level below, so a walk without a visited-memo explores 2^N paths
 //! while a memoized walk sees each function once. `[never_inline]` keeps the inliner
-//! from collapsing the graph before the annotation ever runs.
+//! from collapsing the graph before the annotation ever runs, and the leaves read a
+//! global so the constant folder cannot evaluate the 2^N calls at compile time.
+
+var private g_leaf = 1
 
 [never_inline]
 def leaf0a() : int {
-    return 1
+    return g_leaf
 }
 
 [never_inline]
 def leaf0b() : int {
-    return 2
+    return g_leaf + 1
 }
 
 [never_inline]

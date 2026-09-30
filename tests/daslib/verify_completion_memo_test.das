@@ -8,7 +8,8 @@ require strings
 
 //! `[verify_completion]` walks the call graph looking for recursion. The walk memoizes the
 //! functions it has already cleared, so a wide fan-out graph costs one visit per function
-//! instead of one per path. Without the memo the fixture below takes tens of seconds.
+//! instead of one per path. Without the memo the fixture takes about 12 s in Release, with it
+//! about 2 ms, so the budget holds on Debug and sanitizer builds too.
 
 let private BUDGET_USEC = 5000000
 
