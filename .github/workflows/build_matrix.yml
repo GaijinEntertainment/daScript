@@ -120,6 +120,16 @@ jobs:
         path: vcpkg
         key: vcpkg-${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows-v2
 
+    # A sanitizer backend job writes ~10 GB of build output beside the sccache directory; the image's
+    # preinstalled SDKs leave a standard runner ~14 GB, and a runner whose disk fills dies mid-step
+    # with no log. The df lines are the evidence either way.
+    - name: "Free runner disk (Linux sanitizer cells)"
+      if: runner.os == 'Linux' && matrix.sanitizers != 'none'
+      run: |
+        df -h /
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        df -h /
+
     - name: "Install: Required Dev Packages"
       run: |
         set -eux
@@ -172,6 +182,9 @@ jobs:
     - run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+        if [ "${{ matrix.sanitizers }}" != "none" ]; then
+          echo "SCCACHE_CACHE_SIZE=4G" >> $GITHUB_ENV
+        fi
         # Non-Windows: export the launcher via env (also wraps the GLFW/libhv
         # ExternalProject sub-builds — harmless on gcc/clang). Windows must NOT
         # export it: CMake seeds CMAKE_<LANG>_COMPILER_LAUNCHER from the env
@@ -245,6 +258,13 @@ jobs:
     - name: "Nightly Backend Sweeps"
       if: inputs.lane == 'build_nightly' && matrix.phase == 'backend'
       run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_backend_sweeps --parallel
+
+    - name: "Disk after the test steps (Linux)"
+      if: ${{ always() && runner.os == 'Linux' }}
+      continue-on-error: true
+      run: |
+        df -h /
+        du -sch $(ls -d build bin lib .jitted_scripts "$SCCACHE_DIR" 2>/dev/null)
 
     # The lane targets above are what compiles (Build only configures), so the slot is saved
     # here, and on a red sweep too: the objects a failed run compiled are as good as any.
