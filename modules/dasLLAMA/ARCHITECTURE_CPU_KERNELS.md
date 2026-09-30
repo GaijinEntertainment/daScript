@@ -91,8 +91,17 @@ tile then runs `TDPBF16PS` over all of K with C in the tiles and stores straight
 K length is free. The tile covers 32 tokens (two A tiles) by one or two row groups (the perm's
 `nrsplit`, the tile-form companion's value). A tile form above 0 IS the 32-token tile, so the
 superblock families carry no tokstep companion (`amx_bf16_tile_tokens()`); the q8 family keeps
-its own, which the int8 tile also answers. The walk hands sub-32 token tails and a group tail
-short of the tile to the gemv rows core, which rides busd512 like every amx companion. The
+its own, which the int8 tile also answers. A token tail short of the tile walks four tokens at a
+time through the family's `tile4` companion - the stamped perm's 4-token vector tile over the
+same int8 plane, the busd lattice like every amx companion - and the last one to three tokens,
+like a group tail short of the tile, through the gemv rows core. A batch shorter than the tile
+step runs no amx tile at all: the q8 kernels and the superblock cell take the vector walk
+(`q8q8_batch_cell_gen`, `kq_batch_cell_gen`) on `tile4`, which builds no activation plane and no
+bf16 panel and dispatches once - the decode step's four rows are that batch. A `tile4` stamped
+from an amx perm prefetches its weight stream a fixed distance ahead (`tile4_perm`, one prefetch a
+line, on the packed planes; a byte panel is the walk's fresh scratch): four tokens of dots a
+weight line leave the core too few lines in flight off DRAM without it, and the four-row step
+runs a fifth slower (`debug-jit`; `PERF_LEDGER.md`, the AMX short-batch arc). The
 panel amortizes over the token block, so the walk reads its block off `q8_token_block` floored
 at 512 tokens and rounded down to whole tiles (`bf16_token_block`), under no L2 clamp - a block
 the clamp cuts pays a second panel and a token tail - and it chunks its groups in whole tile units

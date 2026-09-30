@@ -57,6 +57,7 @@ def private pow2d(k : int) : double {
     return v
 }
 
+//! a row's f32 dot adds `nb` block terms, each add rounding within 2^-24 (6e-8) of the envelope `env` - the sum of the terms' magnitudes - so the row sits within nb * 6e-8 * env of the fp64 sum; REF_ULP holds that at 1e-6, the scale products' own rounding inside the margin
 def private ref_bar(env : double; nb : int64) : float {
     return REF_ULP * float(nb) * max(float(env), 1.0)
 }
@@ -115,25 +116,37 @@ def private ref_dot_mx4_f64(wn : array<uint8>; we : array<uint8>; roff, eoff : i
 
 def private identical(t : T?; got : array<float>; want : array<float>; what : string) {
     var bad = 0
-    for (gv, wv in got, want) {
+    var first = -1l
+    for (i, gv, wv in count(), got, want) {
         if (gv != wv) {
             bad++
+            if (first < 0l) {
+                first = int64(i)
+            }
         }
     }
-    t |> success(bad == 0, "{what}: {bad} of {long_length(got)} elements differ")
+    to_log(LOG_INFO, "{what}: {bad} of {long_length(got)} elements differ, the first at {first}\n")
+    t |> success(bad == 0, "{what}: {bad} of {long_length(got)} elements differ, the first at {first}")
 }
 
-def private held(t : T?; got : array<float>; ref : array<float>; bar : array<float>; what : string) {
+//! `d` is the image's row count a token: the largest difference is logged with its token and row (its element where `d` is 0)
+def private held(t : T?; got : array<float>; ref : array<float>; bar : array<float>; what : string; d : int64 = 0l) {
     var over = 0
     var worst = 0.0
-    for (gv, rv, bv in got, ref, bar) {
+    var worstAt = 0l
+    for (i, gv, rv, bv in count(), got, ref, bar) {
         let df = abs(gv - rv)
         if (df > bv) {
             over++
         }
-        worst = max(worst, df)
+        if (df > worst) {
+            worst = df
+            worstAt = int64(i)
+        }
     }
-    t |> success(over == 0, "{what}: {over} of {long_length(got)} past the fp64 bar, maxdiff {worst}, bar[0] {bar[0]}")
+    let spot = d > 0l ? "token {worstAt / d} row {worstAt % d}" : "element {worstAt}"
+    to_log(LOG_INFO, "{what}: maxdiff {worst} at {spot}, its bar {bar[worstAt]}\n")
+    t |> success(over == 0, "{what}: {over} of {long_length(got)} past the fp64 bar, maxdiff {worst} at {spot}, its bar {bar[worstAt]}")
 }
 
 def private nan_fill(var a : array<float>) {
@@ -306,6 +319,56 @@ def private restore_backend(saved : string) {
     }
 }
 
+def private tile4_image_q8(var y : array<float>; q : array<int8>; s : array<float>; xq : array<int8>; xs : array<float>; xbs : array<int>; ntok, d, n, mr : int64) {
+    let nb = n / 32l
+    y |> resize(ntok * d)
+    nan_fill(y)
+    unsafe {
+        let wp = addr<int8 const?>(q[0])
+        let sp = addr<float const?>(s[0])
+        let xqp = addr<int8 const?>(xq[0])
+        let xsp = addr<float const?>(xs[0])
+        let xbsp = addr<int const?>(xbs[0])
+        var yp = addr(y[0])
+        for (g in range64(d / mr)) {
+            var tk = 0l
+            while (tk + 4l <= ntok) {
+                q8q8_tile4_gen(yp, wp + g * mr * n, sp + g * mr * nb, xqp, xsp, xbsp, n, d, g, tk)
+                tk += 4l
+            }
+            while (tk < ntok) {
+                q8q8_gemv_gen(yp + tk * d, wp, sp, xqp + tk * n, xsp + tk * nb, n, g * mr, (g + 1l) * mr)
+                tk++
+            }
+        }
+    }
+}
+
+def private tile4_image_s16(var y : array<float>; q : array<int8>; s16 : array<uint16>; xq : array<int8>; xs : array<float>; xbs : array<int>; ntok, d, n, mr : int64) {
+    let nb = n / 32l
+    y |> resize(ntok * d)
+    nan_fill(y)
+    unsafe {
+        let wp = addr<int8 const?>(q[0])
+        let sp = addr<uint16 const?>(s16[0])
+        let xqp = addr<int8 const?>(xq[0])
+        let xsp = addr<float const?>(xs[0])
+        let xbsp = addr<int const?>(xbs[0])
+        var yp = addr(y[0])
+        for (g in range64(d / mr)) {
+            var tk = 0l
+            while (tk + 4l <= ntok) {
+                q8q8_tile4_s16_gen(yp, wp + g * mr * n, sp + g * mr * nb, xqp, xsp, xbsp, n, d, g, tk)
+                tk += 4l
+            }
+            while (tk < ntok) {
+                q8q8_gemv_s16_gen(yp + tk * d, wp, sp, xqp + tk * n, xsp + tk * nb, n, g * mr, (g + 1l) * mr)
+                tk++
+            }
+        }
+    }
+}
+
 def private q8q8_stamped_gate(t : T?; n : int64) {
     let d = 64l
     let nb = n / 32l
@@ -350,6 +413,11 @@ def private q8q8_stamped_gate(t : T?; n : int64) {
     }
     held(t, ygemv, ref, bar, "q8q8 stamped GEMV, n={n}")
     poisoned(t, ygemv, ref, bar, "q8q8 stamped GEMV, n={n}")
+    var ytile4 : array<float>
+    tile4_image_q8(ytile4, q, s, xq, xs, xbs, ntok, d, n, mr)
+    identical(t, ytile4, ygemv, "q8q8 tile4 (mr={mr}) bit-matches the per-token GEMV, n={n}")
+    held(t, ytile4, ref, bar, "q8q8 stamped tile4, n={n}", d)
+    poisoned(t, ytile4, ref, bar, "q8q8 stamped tile4, n={n}")
     if (q8q8_tileform_gen() > 0) {
         t |> skip("the stamped tile is the bf16 tile - it reads a bf16 panel, not the int8 planes; the mm/batch cell reaches it through the batch kernel")
         return
@@ -380,8 +448,9 @@ def private q8q8_stamped_gate(t : T?; n : int64) {
     poisoned(t, ytile, ref, bar, "q8q8 stamped tile, n={n}")
 }
 
-def private q8q8_wrapper_gate(t : T?; n : int64; d : int64 = 64l) {
-    let ntok = 2l * int64(q8q8_tokstep_gen()) + 3l
+def private q8q8_wrapper_gate(t : T?; n : int64; d : int64 = 64l; ntok_override : int64 = 0l) {
+    let ts = int64(q8q8_tokstep_gen())
+    let ntok = ntok_override > 0l ? ntok_override : 2l * ts + 3l
     var wf : array<float>
     var xf : array<float>
     fill_unit(wf, d * n, 0x51D1Au)
@@ -409,9 +478,10 @@ def private q8q8_wrapper_gate(t : T?; n : int64; d : int64 = 64l) {
         ybat |> resize(ntok * d)
         nan_fill(ybat)
         matmul_q8q8_batch(ybat, q, s, xq, xs, n, d, ntok)
-        let bf16 = name == "x64-gen" && q8q8_tileform_gen() > 0
-        if (name == "portable") {
-            identical(t, ybat, ymm, "{name} matmul_q8q8_batch bit-matches ntok x matmul_q8q8, n={n} d={d}")
+        let bf16_stamp = name == "x64-gen" && q8q8_tileform_gen() > 0
+        let bf16 = bf16_stamp && ntok >= ts
+        if (name == "portable" || (bf16_stamp && ntok < ts)) {
+            identical(t, ybat, ymm, "{name} matmul_q8q8_batch bit-matches ntok x matmul_q8q8, n={n} d={d} ntok={ntok}")
         } elif (bf16) {
             held_bf16(t, ybat, ymm, d, "{name} matmul_q8q8_batch on the bf16 tile vs ntok x matmul_q8q8, n={n} d={d}")
         } else {
@@ -442,6 +512,10 @@ def test_q8q8_tile_gemv_reference(t : T?) {
             }
             t |> run("q8q8 mm/batch vs fp64 dequant on every backend, n={n} d=48") @(t : T?) {
                 q8q8_wrapper_gate(t, n, 48l)
+            }
+            t |> run("q8q8 mm/batch at the decode batch shapes, ntok 4 and 9, n={n}") @(t : T?) {
+                q8q8_wrapper_gate(t, n, 64l, 4l)
+                q8q8_wrapper_gate(t, n, 64l, 9l)
             }
         }
     }
@@ -509,7 +583,7 @@ def private s16_kernel_gate(t : T?; n : int64) {
     poisoned(t, ygn16, gref, gbar, "q8q8_groupn_kernel_s16, n={n}")
 }
 
-def private s16_stamped_gate(t : T?; n : int64) {
+def private s16_stamped_gate(t : T?; n : int64) {   // nolint:STYLE038 — one fixture, then the GEMV, tile4 and tile compares in place; a split would hand the planes around
     let d = 64l
     let nb = n / 32l
     let mr = int64(q8q8_layout_gen())
@@ -558,6 +632,11 @@ def private s16_stamped_gate(t : T?; n : int64) {
     }
     held(t, ygemv, ref, bar, "q8q8 stamped s16 GEMV, n={n}")
     poisoned(t, ygemv, ref, bar, "q8q8 stamped s16 GEMV, n={n}")
+    var ytile4 : array<float>
+    tile4_image_s16(ytile4, q, s16, xq, xs, xbs, ntok, d, n, mr)
+    identical(t, ytile4, ygemv, "q8q8 s16 tile4 (mr={mr}) bit-matches the per-token s16 GEMV, n={n}")
+    held(t, ytile4, ref, bar, "q8q8 stamped s16 tile4, n={n}", d)
+    poisoned(t, ytile4, ref, bar, "q8q8 stamped s16 tile4, n={n}")
     if (q8q8_tileform_gen() > 0) {
         t |> skip("the stamped s16 tile is the bf16 tile - it reads a bf16 panel, not the int8 planes; the overloads cell reaches it through the batch kernel")
         return
@@ -588,11 +667,12 @@ def private s16_stamped_gate(t : T?; n : int64) {
     poisoned(t, ytile, ref, bar, "q8q8 stamped s16 tile, n={n}")
 }
 
-def private s16_wrapper_gate(t : T?; n : int64) {
+def private s16_wrapper_gate(t : T?; n : int64; ntok_override : int64 = 0l) {
     let d = 64l
     let dreg = d / 2l
     let nb = n / 32l
-    let ntok = 2l * int64(q8q8_tokstep_gen()) + 3l
+    let ts = int64(q8q8_tokstep_gen())
+    let ntok = ntok_override > 0l ? ntok_override : 2l * ts + 3l
     var wf : array<float>
     var xf : array<float>
     fill_unit(wf, d * n, 0x5F18Au)
@@ -640,12 +720,12 @@ def private s16_wrapper_gate(t : T?; n : int64) {
         ygn16 |> resize(d)
         matmul_q8q8_groupn(ygn, q, s, offs, 2l, xq, xs, n, dreg)
         matmul_q8q8_groupn(ygn16, q, s16, offs, 2l, xq, xs, n, dreg)
-        let bf16 = name == "x64-gen" && q8q8_tileform_gen() > 0
+        let bf16 = name == "x64-gen" && q8q8_tileform_gen() > 0 && ntok >= ts
         identical(t, ymm16, ymm, "{name} matmul_q8q8 s16 bit-matches the f32 plane, n={n}")
         if (bf16) {
             held_bf16(t, ybat16, ymm16, d, "{name} matmul_q8q8_batch s16 on the bf16 tile vs ntok x matmul_q8q8 s16, n={n}")
         } else {
-            identical(t, ybat16, ymm16, "{name} matmul_q8q8_batch s16 bit-matches ntok x matmul_q8q8 s16, n={n}")
+            identical(t, ybat16, ymm16, "{name} matmul_q8q8_batch s16 bit-matches ntok x matmul_q8q8 s16, n={n} ntok={ntok}")
         }
         identical(t, ygn16, ygn, "{name} matmul_q8q8_groupn s16 bit-matches the f32 plane, n={n}")
         held(t, ymm16, ref, bar, "{name} matmul_q8q8 s16, n={n}")
@@ -674,6 +754,10 @@ def test_q8q8_wscale_f16(t : T?) {
             }
             t |> run("wscale_f16 matmul_q8q8 overloads on every backend, n={n}") @(t : T?) {
                 s16_wrapper_gate(t, n)
+            }
+            t |> run("wscale_f16 matmul_q8q8 overloads at the decode batch shapes, ntok 4 and 9, n={n}") @(t : T?) {
+                s16_wrapper_gate(t, n, 4l)
+                s16_wrapper_gate(t, n, 9l)
             }
         }
     }

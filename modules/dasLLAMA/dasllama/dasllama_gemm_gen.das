@@ -49,7 +49,8 @@ require llvm/daslib/llvm_tune
 // are dasllama/dasllama_math_gen.das::q8q8_tile_gen, ::q8q8_layout_gen, ::q8q8_wbias_gen,
 // ::q8q8_kgroup_gen, ::q8q8_tokstep_gen, ::q8q8_gemv_gen, ::mx4q8_gemv_gen, ::mx4q8_tile_gen,
 // ::q8q8_family_live (the witness), the wscale_f16 twins ::q8q8_tile_s16_gen /
-// ::q8q8_gemv_s16_gen (same perm, same fold order — only the scale-fold load widens f16), and
+// ::q8q8_gemv_s16_gen (same perm, same fold order — only the scale-fold load widens f16), the
+// 4-token vector tiles ::q8q8_tile4_gen / ::q8q8_tile4_s16_gen (an amx perm's tile4 companion), and
 // the K-quant rows cores ::k4q8_gemv_gen / ::k5q8_gemv_gen / ::k6q8_gemv_gen (unsigned-quant
 // superblock GEMVs over the grp<mr> kq planes — kq stage 4).
 
@@ -488,6 +489,14 @@ def private prefetch_wg(var te : TileEmit; var off : LLVMOpaqueValue?) {
     LLVMBuildCall2(b, te.prefetch_ty, te.prefetch_decl, args, "")
 }
 
+let private CACHE_LINE = 64
+
+def private prefetch_block(var te : TileEmit; var wb : LLVMOpaqueValue?; bytes : int) {
+    for (line in range(bytes / CACHE_LINE)) {
+        prefetch_wg(te, LLVMBuildAdd(te.builder, wb, te.types->ConstI64(uint64(te.pf + line * CACHE_LINE)), ""))
+    }
+}
+
 // One 32-k block for tokens [tokBase, tokBase+tokCount): 8*rq shared weight vectors x tokens
 // lane-dots at full width, then the per-block scale fold — the exact op order of
 // dot_q8q8_laneq4x4_template, so fast-math contraction sees the same input across emitters.
@@ -524,7 +533,7 @@ def private emit_block(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLV
                 var off = boff == 0 ? wb : LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(boff)), "")
                 wv[kg * rq + qd] = load_vec(te, te.vwi8, te.wg, off, "wv{kg * rq + qd}")
                 uw[kg * rq + qd] = abs_w(te, wv[kg * rq + qd], "uw{kg * rq + qd}")
-                if (te.pf != 0 && tokCount == 1) {   // the gemv's weight stream: the same line, pf bytes ahead
+                if (te.pf != 0 && tokBase == 0) {
                     prefetch_wg(te, LLVMBuildAdd(b, off, te.types->ConstI64(uint64(te.pf)), ""))
                 }
             }
@@ -1077,6 +1086,9 @@ def private emit_block_kqv2(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f
     let q40 = te.kq == 40
     let qsb = (te.kq == 4 || q40) ? 128 : (k3 ? 96 : (k2 ? 64 : (te.kqBytes ? 256 : (te.kq == 5 ? 160 : 192))))
     var wb = LLVMBuildMul(b, sbi, te.types->ConstI64(uint64(mr * qsb)), "wb")
+    if (te.pf != 0 && tokBase == 0 && !te.kqBytes) {
+        prefetch_block(te, wb, mr * qsb)
+    }
     var sb = LLVMBuildMul(b, sbi, te.types->ConstI64(uint64(mr * (k63 ? 18 : (q40 ? 16 : 20)))), "sb")
     var xb = LLVMBuildMul(b, sbi, te.types->ConstI64(0x100ul), "xb")
     var gb = LLVMBuildShl(b, sbi, te.types->ConstI64(3ul), "gb")
@@ -2206,6 +2218,9 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
         wb = te.types->ConstI64(0ul)
     } else {
         wb = LLVMBuildMul(b, sbi, te.types->ConstI64(uint64(mr * (panel ? 256 : 128))), "wb")
+        if (te.pf != 0 && tokBase == 0 && !panel) {
+            prefetch_block(te, wb, mr * int(IQ4XS_QSB))
+        }
     }
     var sb = LLVMBuildMul(b, sbi, te.types->ConstI64(uint64(mr * (nl ? 16 : 20))), "sb")
     var xb = LLVMBuildMul(b, sbi, te.types->ConstI64(0x100ul), "xb")
@@ -3074,7 +3089,29 @@ def private tile_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
         return p.pipe != 0 ? emit_amx_tile_pipelined(gc, p, f16s) : emit_amx_tile(gc, p, f16s)
     }
     if (dot_kind(p.dotPrim) == DOT_AMX_BF16) return emit_amx_bf16_tile(gc, p)
+    return emit_vector_tile(gc, p, f16s)
+}
 
+//! an amx perm's tile4: four blocks a K-step (a superblock family's step is its superblock), one accumulator slice, the weight stream prefetched - `harness/tile4_race.das` races the shape
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile")]
+def private tile4_perm(p : TilePerm) : TilePerm {
+    var cp = companion_perm(p)
+    if (is_amx_kind(dot_kind(p.dotPrim))) {
+        cp.kstep = 4
+        cp.nrsplit = 4
+        cp.pf = 2048
+    }
+    return cp
+}
+
+def private tile4_gen_impl(var gc : LlvmCodeCtx; f16s : bool) : bool {
+    if (!is_tile_signature(gc.fn)) return false
+    let p = parse_perm(gc)
+    if (perm_declines(gc, p)) return false
+    return emit_vector_tile(gc, tile4_perm(p), f16s)
+}
+
+def private emit_vector_tile(var gc : LlvmCodeCtx; p : TilePerm; f16s : bool) : bool {
     var te = TileEmit(sgF16 = f16s)
     if (!setup_tile_emit(te, gc, p, false)) return false
 
@@ -3122,6 +3159,10 @@ def private tile_gen(var gc : LlvmCodeCtx) : bool => tile_gen_impl(gc, false)
 // the wscale_f16 tile twin (stamped as a companion with the SAME perm): the binary16 group-
 // scale plane, widened in the fold load — bit-identical over the plane the halfwords widen to
 def private tile_s16_gen(var gc : LlvmCodeCtx) : bool => tile_gen_impl(gc, true)
+
+def private tile4_gen(var gc : LlvmCodeCtx) : bool => tile4_gen_impl(gc, false)
+
+def private tile4_s16_gen(var gc : LlvmCodeCtx) : bool => tile4_gen_impl(gc, true)
 
 def private is_layout_signature(fn : Function const?) : bool {
     return empty(fn.arguments) && fn.result.baseType == Type.tInt
@@ -4160,8 +4201,17 @@ def private kq_tile_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
     if (dot_kind(p0.dotPrim) == DOT_AMX_BF16) {
         return emit_amx_bf16_tile(gc, p0)
     }
-    let p = companion_perm(p0)
+    return emit_kq_vector_tile(gc, companion_perm(p0), fmt)
+}
 
+def private kq_tile4_gen_impl(var gc : LlvmCodeCtx; fmt : int) : bool {
+    if (!is_tile_signature(gc.fn)) return false
+    let p0 = parse_perm(gc)
+    if (perm_declines(gc, p0)) return false
+    return emit_kq_vector_tile(gc, tile4_perm(p0), fmt)
+}
+
+def private emit_kq_vector_tile(var gc : LlvmCodeCtx; p : TilePerm; fmt : int) : bool {
     var te = TileEmit(kq = fmt, kqBytes = fmt == 5 || fmt == 6)   // only the k5/k6 tiles get the byte-expanded panel
     if (!setup_tile_emit(te, gc, p, fmt == 44 || fmt == 45 || fmt == 35)) return false
 
@@ -4252,6 +4302,21 @@ def private k5_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 5)
 def private k6_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 6)
 def private q40_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 40)
 
+def private k4_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 4)
+def private k5_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 5)
+def private k6_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 6)
+def private q40_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 40)
+def private iq4xs_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 44)
+def private iq3s4_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 35)
+def private k3_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 3)
+def private iq3s_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 33)
+def private iq3xxs_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 34)
+def private iq4nl_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 45)
+def private k2_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 2)
+def private iq2s_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 23)
+def private iq2xs_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 24)
+def private iq2xxs_tile4_gen(var gc : LlvmCodeCtx) : bool => kq_tile4_gen_impl(gc, 25)
+
 // The per-32 4-token TILE: the kq tile walk with the 32-weight block unit and Q8_0-form
 // activations (per-32 xs floats + per-32 asum ints — emit_block_q51's contract; the iq4nl32
 // body reads no asum).
@@ -4313,7 +4378,7 @@ def private iq2xxs_gemv_gen(var gc : LlvmCodeCtx) : bool => kq_gemv_gen_impl(gc,
 def private iq2xxs_tile_gen(var gc : LlvmCodeCtx) : bool => kq_tile_gen_impl(gc, 25)
 
 [macro_function]
-def public register_dasllama_gemm_generators {
+def public register_dasllama_gemm_generators {   // nolint:STYLE038 — the one registry, a row per generator
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_tile", @@tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_layout", @@layout_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_wbias", @@wbias_gen)
@@ -4322,6 +4387,8 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_amx_cfg", @@cfg_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_gemv", @@gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_tile_s16", @@tile_s16_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q8q8_tile4", @@tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q8q8_tile4_s16", @@tile4_s16_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_gemv_s16", @@gemv_s16_gen)
     register_llvm_code_generator("dasllama_gemm_gen::mx4_gemv", @@mx4_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::mx4_tile", @@mx4_tile_gen)
@@ -4357,6 +4424,20 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::iq2xs_tile", @@iq2xs_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq2xxs_gemv", @@iq2xxs_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq2xxs_tile", @@iq2xxs_tile_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k4_tile4", @@k4_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k5_tile4", @@k5_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k6_tile4", @@k6_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q40_tile4", @@q40_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq4xs_tile4", @@iq4xs_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq3s4_tile4", @@iq3s4_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k3_tile4", @@k3_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq3s_tile4", @@iq3s_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq3xxs_tile4", @@iq3xxs_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq4nl_tile4", @@iq4nl_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::k2_tile4", @@k2_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2s_tile4", @@iq2s_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2xs_tile4", @@iq2xs_tile4_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::iq2xxs_tile4", @@iq2xxs_tile4_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_witness", @@witness_gen)
     register_llvm_code_generator("dasllama_gemm_gen::kq_amx_cfg", @@cfg_gen)
     register_llvm_code_generator("dasllama_gemm_gen::kq_witness", @@witness_gen)

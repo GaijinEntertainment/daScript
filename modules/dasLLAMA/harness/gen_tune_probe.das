@@ -301,6 +301,8 @@ def run_tile_bf16(tile, cfg; panel : Q8PanelFn; fx : Fixture; q : array<int8>; s
             invoke(panel, wp + g * mr * fx.n, sp + g * mr * fx.nb, mr, fx.nb, fx.n, form, pp)
         }, $(g, tk : int64) {
             invoke(tile, yp, reinterpret<int8 const?>(pp), sp + g * mr * fx.nb, xbp, xsp, null, fx.n, fx.d, g, tk)
+        }, $(g, tk : int64) {
+            panic("run_tile_bf16: the fixture leaves a 4-token tail at group {g} token {tk}")
         }, $(g, gn, tk : int64) {
             panic("run_tile_bf16: the fixture leaves a tail at group {g} (+{gn}) token {tk}")
         })
@@ -352,6 +354,19 @@ def gemv_variants_by_suffix() : table<string; MatmulQ8Q8RowsFn> {
         tab[v._0] = v._1
     }
     delete gvs
+    return <- tab
+}
+
+typedef Q8TileFn = function<(var yp : float?; wg : int8 const?; sg : float const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n : int64; d : int64; g : int64; t0 : int64) : void>
+
+//! suffix -> the tile4 companion, keyed like the tile registry
+def tile4_variants_by_suffix() : table<string; Q8TileFn> {
+    var tab : table<string; Q8TileFn>
+    var tvs <- q8q8_tile4_gen_variants()
+    for (v in tvs) {
+        tab[v._0] = v._1
+    }
+    delete tvs
     return <- tab
 }
 
@@ -800,6 +815,60 @@ def kq_tile_variants(fmt : int64) : array<tuple<string; KqTileFn>> {
     return <- k6q8_tile_gen_variants()
 }
 
+//! the tile4 registries, on the same format ladder as kq_tile_variants
+def kq_tile4_variants(fmt : int64) : array<tuple<string; KqTileFn>> {
+    if (fmt == 4l) {
+        return <- k4q8_tile4_gen_variants()
+    }
+    if (fmt == 5l) {
+        return <- k5q8_tile4_gen_variants()
+    }
+    if (fmt == 40l) {
+        return <- q40q8_tile4_gen_variants()
+    }
+    if (fmt == 44l) {
+        return <- iq4xsq8_tile4_gen_variants()
+    }
+    if (fmt == 3l) {
+        return <- k3q8_tile4_gen_variants()
+    }
+    if (fmt == 33l) {
+        return <- iq3sq8_tile4_gen_variants()
+    }
+    if (fmt == 35l) {
+        return <- iq3s4q8_tile4_gen_variants()
+    }
+    if (fmt == 34l) {
+        return <- iq3xxsq8_tile4_gen_variants()
+    }
+    if (fmt == 45l) {
+        return <- iq4nlq8_tile4_gen_variants()
+    }
+    if (fmt == 2l) {
+        return <- k2q8_tile4_gen_variants()
+    }
+    if (fmt == 23l) {
+        return <- iq2sq8_tile4_gen_variants()
+    }
+    if (fmt == 24l) {
+        return <- iq2xsq8_tile4_gen_variants()
+    }
+    if (fmt == 25l) {
+        return <- iq2xxsq8_tile4_gen_variants()
+    }
+    return <- k6q8_tile4_gen_variants()
+}
+
+def kq_tile4_variants_by_suffix(fmt : int64) : table<string; KqTileFn> {
+    var tab : table<string; KqTileFn>
+    var tvs <- kq_tile4_variants(fmt)
+    for (v in tvs) {
+        tab[v._0] = v._1
+    }
+    delete tvs
+    return <- tab
+}
+
 def kq_gemv_variants_by_suffix(fmt : int64) : table<string; KqRowsFn> {   // nolint:STYLE037,STYLE038 — the flat per-format ladder (one arm per kq format) is the honest shape
     var tab : table<string; KqRowsFn>
     if (fmt == 4l) {
@@ -1108,6 +1177,8 @@ def run_kq_tile_bf16(tile; gemv; panel : KqPanelFn; fx : KqFixture; kq : array<u
             }
         }, $(g, tk : int64) {
             invoke(tile, yp, reinterpret<uint8 const?>(pp), ksp + g * mr * fx.nsb * ssb, xbp, xsp, xbsp, fx.n, fx.d, g, tk)
+        }, $(g, tk : int64) {
+            panic("run_kq_tile_bf16: the fixture leaves a 4-token tail at group {g} token {tk} - the gate holds tile4 on its own")
         }, $(g, gn, tk : int64) {
             invoke(gemv, yp + tk * fx.d, kqp, ksp, xqp + tk * fx.n, xsp + tk * fx.nsb, xbsp + tk * (fx.n / 16l), fx.n, g * mr, (g + gn) * mr)
         })
@@ -1227,7 +1298,7 @@ def close_to_kq_ref(fx : KqFixture; y : array<float>; var maxdiff : float&; form
 
 // one variant's kq gate over a format's fixture set: repack per-variant copies at the
 // variant's mr, run tile + gemv (token 0), compare against the scalar oracle
-def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn;
+def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn; tile4 : KqTileFn;
                     kfxs : array<KqFixture>; mr : int64; var maxdiff : float&; form : int64 = 0l) : bool {
     var ok = true
     if (form > 0l) {
@@ -1273,8 +1344,24 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn;
             }
         }
         ok = ok && gok
+        var yk4 : array<float>
+        yk4 |> resize(kfx.ntok * kfx.d)
+        run_kq_tile(tile4, kfx, kqv, ksv, mr, yk4)
+        let t4ok = close_to_kq_ref(kfx, yk4, maxdiff)
+        if (!t4ok) {
+            let tol = kq_tol(kfx, length(yk4))
+            var shown = 0
+            for (i in range(length(yk4))) {
+                if (abs(yk4[i] - kfx.yref[i]) > tol && shown < 6) {
+                    tune_detail("  DBG k{kfx.fmt} tile4 {suffix} n={kfx.n}: y[{i}] (tok {i / int(kfx.d)} col {i % int(kfx.d)}) = {yk4[i]} want {kfx.yref[i]}\n")
+                    shown++
+                }
+            }
+        }
+        ok = ok && t4ok
         delete yk
         delete ykg
+        delete yk4
         delete kqv
         delete ksv
     }
@@ -1468,6 +1555,7 @@ def b32_tune_family(fmt : KqFmt; var rows_out : table<string; JsonValue?>) : str
 def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
     var tvs <- kq_tile_variants(fmt)
     var gtab <- kq_gemv_variants_by_suffix(fmt)
+    var t4tab <- kq_tile4_variants_by_suffix(fmt)
     var mrs <- kq_layout_mrs(fmt)
     var forms <- kq_tileforms(fmt)
     var allok = true
@@ -1475,13 +1563,15 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
         let mr = int64(mrs?[v._0] ?? 4)
         let form = int64(forms?[v._0] ?? 0)
         verify(gtab |> key_exists(v._0))
+        verify(t4tab |> key_exists(v._0))
         var maxdiff = 0.0
-        let ok = kq_gate_variant(v._0, v._1, gtab[v._0], kfxs, mr, maxdiff, form)
+        let ok = kq_gate_variant(v._0, v._1, gtab[v._0], t4tab[v._0], kfxs, mr, maxdiff, form)
         print("k{fmt} {v._0} (mr={mr}{form > 0l ? ", bf16 tile" : ""}): {ok ? "ok" : "MISMATCH"} (maxdiff {maxdiff})\n")
         allok = allok && ok
     }
     delete forms
     delete mrs
+    delete t4tab
     delete gtab
     delete tvs
     return allok
@@ -1750,21 +1840,21 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     var fxs <- [ <- build_fixture(64l, 32l, 32l), <- build_fixture(96l, 32l, 32l), <- build_fixture(2048l, 64l, 32l)]
     var mfxs <- [ <- build_mx4_fixture(96l, 32l), <- build_mx4_fixture(2048l, 64l)]
     // kq shapes: nsb=1 (single superblock), nsb=3 (odd walk), production-ish; d divides every
-    // grid mr, ntok covers two 4-token tile calls
-    var kfxs4 <- [ <- build_kq_fixture(4l, 256l, 32l, 8l), <- build_kq_fixture(4l, 768l, 32l, 8l), <- build_kq_fixture(4l, 2048l, 32l, 8l)]
-    var kfxs5 <- [ <- build_kq_fixture(5l, 256l, 32l, 8l), <- build_kq_fixture(5l, 768l, 32l, 8l), <- build_kq_fixture(5l, 2048l, 32l, 8l)]
-    var kfxs6 <- [ <- build_kq_fixture(6l, 256l, 32l, 8l), <- build_kq_fixture(6l, 768l, 32l, 8l), <- build_kq_fixture(6l, 2048l, 32l, 8l)]
-    var kfxs40 <- [ <- build_kq_fixture(40l, 256l, 32l, 8l), <- build_kq_fixture(40l, 768l, 32l, 8l), <- build_kq_fixture(40l, 2048l, 32l, 8l)]
-    var kfxs44 <- [ <- build_kq_fixture(44l, 256l, 32l, 8l), <- build_kq_fixture(44l, 768l, 32l, 8l), <- build_kq_fixture(44l, 2048l, 32l, 8l)]
-    var kfxs3 <- [ <- build_kq_fixture(3l, 256l, 32l, 8l), <- build_kq_fixture(3l, 768l, 32l, 8l), <- build_kq_fixture(3l, 2048l, 32l, 8l)]
-    var kfxs33 <- [ <- build_kq_fixture(33l, 256l, 32l, 8l), <- build_kq_fixture(33l, 768l, 32l, 8l), <- build_kq_fixture(33l, 2048l, 32l, 8l)]
-    var kfxs35 <- [ <- build_kq_fixture(35l, 256l, 32l, 8l), <- build_kq_fixture(35l, 768l, 32l, 8l), <- build_kq_fixture(35l, 2048l, 32l, 8l)]
-    var kfxs34 <- [ <- build_kq_fixture(34l, 256l, 32l, 8l), <- build_kq_fixture(34l, 768l, 32l, 8l), <- build_kq_fixture(34l, 2048l, 32l, 8l)]
-    var kfxs45 <- [ <- build_kq_fixture(45l, 256l, 32l, 8l), <- build_kq_fixture(45l, 768l, 32l, 8l), <- build_kq_fixture(45l, 2048l, 32l, 8l)]
-    var kfxs2 <- [ <- build_kq_fixture(2l, 256l, 32l, 8l), <- build_kq_fixture(2l, 768l, 32l, 8l), <- build_kq_fixture(2l, 2048l, 32l, 8l)]
-    var kfxs23 <- [ <- build_kq_fixture(23l, 256l, 32l, 8l), <- build_kq_fixture(23l, 768l, 32l, 8l), <- build_kq_fixture(23l, 2048l, 32l, 8l)]
-    var kfxs24 <- [ <- build_kq_fixture(24l, 256l, 32l, 8l), <- build_kq_fixture(24l, 768l, 32l, 8l), <- build_kq_fixture(24l, 2048l, 32l, 8l)]
-    var kfxs25 <- [ <- build_kq_fixture(25l, 256l, 32l, 8l), <- build_kq_fixture(25l, 768l, 32l, 8l), <- build_kq_fixture(25l, 2048l, 32l, 8l)]
+    // grid mr, ntok=32 is one whole bf16 tile - a shorter fixture walks a bf16 row's rows core alone and never its tile
+    var kfxs4 <- [ <- build_kq_fixture(4l, 256l, 32l, 32l), <- build_kq_fixture(4l, 768l, 32l, 32l), <- build_kq_fixture(4l, 2048l, 32l, 32l)]
+    var kfxs5 <- [ <- build_kq_fixture(5l, 256l, 32l, 32l), <- build_kq_fixture(5l, 768l, 32l, 32l), <- build_kq_fixture(5l, 2048l, 32l, 32l)]
+    var kfxs6 <- [ <- build_kq_fixture(6l, 256l, 32l, 32l), <- build_kq_fixture(6l, 768l, 32l, 32l), <- build_kq_fixture(6l, 2048l, 32l, 32l)]
+    var kfxs40 <- [ <- build_kq_fixture(40l, 256l, 32l, 32l), <- build_kq_fixture(40l, 768l, 32l, 32l), <- build_kq_fixture(40l, 2048l, 32l, 32l)]
+    var kfxs44 <- [ <- build_kq_fixture(44l, 256l, 32l, 32l), <- build_kq_fixture(44l, 768l, 32l, 32l), <- build_kq_fixture(44l, 2048l, 32l, 32l)]
+    var kfxs3 <- [ <- build_kq_fixture(3l, 256l, 32l, 32l), <- build_kq_fixture(3l, 768l, 32l, 32l), <- build_kq_fixture(3l, 2048l, 32l, 32l)]
+    var kfxs33 <- [ <- build_kq_fixture(33l, 256l, 32l, 32l), <- build_kq_fixture(33l, 768l, 32l, 32l), <- build_kq_fixture(33l, 2048l, 32l, 32l)]
+    var kfxs35 <- [ <- build_kq_fixture(35l, 256l, 32l, 32l), <- build_kq_fixture(35l, 768l, 32l, 32l), <- build_kq_fixture(35l, 2048l, 32l, 32l)]
+    var kfxs34 <- [ <- build_kq_fixture(34l, 256l, 32l, 32l), <- build_kq_fixture(34l, 768l, 32l, 32l), <- build_kq_fixture(34l, 2048l, 32l, 32l)]
+    var kfxs45 <- [ <- build_kq_fixture(45l, 256l, 32l, 32l), <- build_kq_fixture(45l, 768l, 32l, 32l), <- build_kq_fixture(45l, 2048l, 32l, 32l)]
+    var kfxs2 <- [ <- build_kq_fixture(2l, 256l, 32l, 32l), <- build_kq_fixture(2l, 768l, 32l, 32l), <- build_kq_fixture(2l, 2048l, 32l, 32l)]
+    var kfxs23 <- [ <- build_kq_fixture(23l, 256l, 32l, 32l), <- build_kq_fixture(23l, 768l, 32l, 32l), <- build_kq_fixture(23l, 2048l, 32l, 32l)]
+    var kfxs24 <- [ <- build_kq_fixture(24l, 256l, 32l, 32l), <- build_kq_fixture(24l, 768l, 32l, 32l), <- build_kq_fixture(24l, 2048l, 32l, 32l)]
+    var kfxs25 <- [ <- build_kq_fixture(25l, 256l, 32l, 32l), <- build_kq_fixture(25l, 768l, 32l, 32l), <- build_kq_fixture(25l, 2048l, 32l, 32l)]
     var vs <- q8q8_tile_gen_variants()
     var mrs <- variant_mrs()
     var wbs <- variant_wbias()
@@ -1772,6 +1862,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     var tss <- variant_toksteps()
     var forms <- variant_tileforms()
     var gtab <- gemv_variants_by_suffix()
+    var t4tab <- tile4_variants_by_suffix()
     var mtab <- mx4_variants_by_suffix()
     var wtab <- witness_variants_by_suffix()
     var ctab <- cfg_variants_by_suffix()
@@ -1785,6 +1876,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
         let gsv = max(tsv / 16l, 1l)
         let formv = int64(forms?[v._0] ?? 0)
         verify(gtab |> key_exists(v._0))
+        verify(t4tab |> key_exists(v._0))
         verify(mtab |> key_exists(v._0))
         verify(wtab |> key_exists(v._0))
         verify(ctab |> key_exists(v._0))
@@ -1817,8 +1909,10 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
         }
         var ok = true
         var gok = true
+        var t4ok = true
         var maxdiff = 0.0
         var gmaxdiff = 0.0
+        var t4maxdiff = 0.0
         for (fx in fxs) {
             var qv := fx.q
             var sv := fx.s
@@ -1858,8 +1952,23 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
                 }
             }
             gok = gok && gfxok
+            var y4 : array<float>
+            y4 |> resize(fx.ntok * fx.d)
+            run_tile(t4tab[v._0], ctab[v._0], fx, qv, sv, mr, 4l, 1l, y4)
+            let t4fxok = close_to_ref(fx, y4, t4maxdiff)
+            if (!t4fxok) {
+                var shown = 0
+                for (i in range(length(y4))) {
+                    if (abs(y4[i] - fx.yref[i]) > max(CLOSE_ABS, CLOSE_REL * abs(fx.yref[i])) && shown < 6) {
+                        tune_detail("  DBG tile4 {v._0} n={fx.n}: y[{i}] (tok {i / int(fx.d)} col {i % int(fx.d)}) = {y4[i]} want {fx.yref[i]}\n")
+                        shown++
+                    }
+                }
+            }
+            t4ok = t4ok && t4fxok
             delete y
             delete yg
+            delete y4
             delete qv
             delete sv
         }
@@ -1892,8 +2001,8 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
         }
         let biasTag = wbias != 0l ? " bias{wbias}" : ""
         let kgTag = kgv != 4l ? " kg{kgv}" : ""
-        print("{v._0} (mr={mr}{biasTag}{kgTag}, {live ? "live" : "ref"}): tile {ok ? "ok" : "MISMATCH"} (maxdiff {maxdiff}), gemv {gok ? "ok" : "MISMATCH"} (maxdiff {gmaxdiff}), mx4 {mok ? "ok" : "MISMATCH"} (maxdiff {mmaxdiff})\n")
-        allok = allok && ok && gok && mok
+        print("{v._0} (mr={mr}{biasTag}{kgTag}, {live ? "live" : "ref"}): tile {ok ? "ok" : "MISMATCH"} (maxdiff {maxdiff}), gemv {gok ? "ok" : "MISMATCH"} (maxdiff {gmaxdiff}), tile4 {t4ok ? "ok" : "MISMATCH"} (maxdiff {t4maxdiff}), mx4 {mok ? "ok" : "MISMATCH"} (maxdiff {mmaxdiff})\n")
+        allok = allok && ok && gok && t4ok && mok
     }
     // the kq families gate their OWN grids (per-format [tune] entries since the family split)
     allok = kq_test_family(4l, kfxs4) && allok
@@ -1913,6 +2022,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     delete wtab
     delete mtab
     delete gtab
+    delete t4tab
     delete ctab
     delete ptab
     delete tss
