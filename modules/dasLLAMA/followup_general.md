@@ -2000,10 +2000,6 @@
    for the superblock and block widths; `REVIEW_KQ_FORMATS.md` wants the id resolved through
    `kq_fmt_of_id` and the widths by name. Done = the generated tier's ladders over `KqFmt`
    members, old and new in one pass, the x64 emission rail and the AMX TEST gate green.
-192. **No board row covers the `x86-amx` class.** `performance/records/` holds no Intel box, so
-   the bf16 walk a no-flag run takes on one is outside every regression check; the carriers in
-   `PERF_LEDGER.md` are the only reading. Done = a Granite Rapids record from
-   `performance/gen_bench_records.das`.
 193. **The cells the kernel-unit definition reaches through a helper are unaudited.** A cell
    that runs a kernel through a helper in its file or a `_*.das` module (`_kq_dot.das`,
    `_metal_kernel_common.das`) is a kernel-unit cell (`tests/REVIEW_KERNEL_CELLS.md`), and owes
