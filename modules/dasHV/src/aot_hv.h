@@ -37,10 +37,10 @@ namespace das {
     int das_wss_close_channel ( Handle<hv::WebSocketChannel> h );
     bool das_wss_set_bind_host ( Handle<hv::WebSocketServer> h, const char * host );
     bool das_wss_upgrade(Handle<hv::WebSocketServer> h, int timeout_ms, Lambda lmb, Context * context, LineInfoArg * at);
-int das_accept_websocket(Handle<WebSocketAdmission> admission, const char * protocol);
-int das_reject_websocket(Handle<WebSocketAdmission> admission, int status);
-bool das_wss_set_access_log(Handle<hv::WebSocketServer> h, bool enabled);
-bool das_wss_set_limits(Handle<hv::WebSocketServer> h, int http_bytes, int ws_bytes, int events, int queue_bytes);
+    int das_accept_websocket(Handle<WebSocketAdmission> admission, const char * protocol);
+    int das_reject_websocket(Handle<WebSocketAdmission> admission, int status);
+    bool das_wss_set_access_log(Handle<hv::WebSocketServer> h, bool enabled);
+    bool das_wss_set_limits(Handle<hv::WebSocketServer> h, int http_bytes, int ws_bytes, int events, int queue_bytes);
     int das_wss_start ( Handle<hv::WebSocketServer> h );
     int das_wss_bound_port ( Handle<hv::WebSocketServer> h );
     void das_wss_tick ( Handle<hv::WebSocketServer> h );
@@ -117,8 +117,8 @@ bool das_wss_set_limits(Handle<hv::WebSocketServer> h, int http_bytes, int ws_by
     void das_req_HEAD ( const char * url, const TBlock<void,HttpResponse*> & block, Context * context, LineInfoArg * at );
     void das_req_HEAD_H ( const char * url, const TTable<char *,char *> & tab, const TBlock<void,HttpResponse*> & block, Context * context, LineInfoArg * at );
     int das_req_REQUEST_CHECKED(HttpRequest * req, const char * ca_file, int max_response_bytes,
-    const TBlock<void,TTemporary<HttpResponse*>> & block, Context * context, LineInfoArg * at);
-void das_req_REQUEST ( HttpRequest * req, const TBlock<void,HttpResponse*> & block, Context * context, LineInfoArg * at );
+        const TBlock<void,TTemporary<HttpResponse*>> & block, Context * context, LineInfoArg * at);
+    void das_req_REQUEST ( HttpRequest * req, const TBlock<void,HttpResponse*> & block, Context * context, LineInfoArg * at );
     void das_req_REQUEST_CB ( HttpRequest * req, const TBlock<void,const uint8_t*,int32_t> & on_body, const TBlock<void,HttpResponse*> & on_complete, Context * context, LineInfoArg * at );
     void das_req_REQUEST_CB_S ( HttpRequest * req, const TBlock<void,const char*> & on_body, const TBlock<void,HttpResponse*> & on_complete, Context * context, LineInfoArg * at );
 
