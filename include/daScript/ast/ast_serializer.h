@@ -142,6 +142,7 @@ namespace das {
         uint64_t            resumedCorrupt = 0;     // of those, failures a rewrite REPAIRS (anything but builtinHashDrift)
         bool                builtinHashDrift = false;   // last record failed on a builtin cumulative-hash mismatch (lazily populated builtin, e.g. dasbind) - deterministic per process, a rewrite changes nothing
         bool                quietCache = false;
+        int32_t             recordDepth = 0;
         uint64_t            servedModules = 0;
         int                 readingRecord = 0;      // >0 while a record's payload deserializes (a late require nested in it cannot read)
         string              cutoffFile;
@@ -305,7 +306,7 @@ namespace das {
         void collectFileInfo ( vector<FileInfoPtr> & orphanedFileInfos );
         void getCompiledModules ( );
         void patch ();
-        AstSerializer & operator << ( string & str ) { return serializeString(str, false); }
+        AstSerializer & operator << ( string & str ) { return serializeString(str, recordDepth == 0); }
         AstSerializer & operator << ( const char * & value );
         AstSerializer & operator << ( bool & value ) { serialize(value); return *this; }
         AstSerializer & operator << ( vec4f & value ) { serialize(value); return *this; }
