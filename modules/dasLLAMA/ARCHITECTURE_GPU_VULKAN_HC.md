@@ -220,10 +220,11 @@ into the head's wide residual over the rows' wide panel (`hcres_dev`, dead past 
 rows' carry is copied aside), the head's attention mixer and its attention at the head's slot storing the
 rows' K/V. The seat (`vulkan_resident_verify_go`)
 widens its rows to the carry's width, gathers the rows' side rows through the arch's pre-step (which
-advances the n-gram window; `rdec_ngram_window_save` and the rollback's re-advance over the accepted rows
-put it back on a reject) and hands the rows step as `RdecVerifyFn`'s `experts`. The rail
-(`rd_ensure_hc_v_rail`) builds the N-row command's stamps first (its GEMV leaves, the rows requant, the
-per-row top-k) and the hc leaves past them. The parity cell is `tests/test_gpu_resident_hc.das`'s verify
+advances the n-gram window; `mtp_ple_window_snapshot` - the CPU round's own - and the rollback's re-advance
+over the accepted rows put it back on a reject) and hands the rows step as `RdecVerifyFn`'s `experts`. The
+rail (`rd_ensure_hc_v_rail`) serves depth 1 alone - two rows, the count the driver was prepared for; any
+other declines with its reason and the CPU verify serves - and builds the N-row command's stamps first (its
+GEMV leaves, the rows requant, the per-row top-k) and the hc leaves past them. The parity cell is `tests/test_gpu_resident_hc.das`'s verify
 cell: one round on the device against the split command's own one-row steps on the same picks
 (`moe_pick_tape_lane`, a lane replay of a rows-form tape) at the split bar, and against the CPU's one-row
 steps at the wide bar - the CPU compare is the parity evidence, the device-vs-device compare a rounding
