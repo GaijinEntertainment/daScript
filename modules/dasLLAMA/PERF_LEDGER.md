@@ -3731,3 +3731,93 @@ reps, 4 prompts), off then on, with the drafts accepted.
   40.44 +- 0.74 (0.69x), 1095 of 1475. Metal: Ornith-1.5-35B-A3B Q4_K_M 132.53 +- 1.69 / 143.37
   +- 0.85 (on is 1.08x off), 1080 of 1470. The server's default arms the round on a one-stream
   GPU slot and leaves it off on the CPU.
+
+### From the AMX short-batch arc (2026-09-30, Granite Rapids `c8i.4xlarge` `i-02a87cabc8fcd2e4c`, 8 cores, 8 lanes)
+
+The race: `DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=8 bin/daslang -jit -no-module-cache
+modules/dasLLAMA/harness/tile4_race.das` at commit `60beeec07` (the `x86-amx` class profile stamps
+the kernels, no sidecar; `DAS_TUNE_POLICY` unset), one process a run, two runs. A four-token step
+over 1536 MB of q8 planes a shape, walked plane after plane so every weight group streams from
+DRAM; every arm timed once a round in turn, 31 rounds after 3 dropped. An arm is the stamped
+GEMV a token, the stamped tile4, or the vector tile at a kstep (`k`), nrsplit (`n`) and prefetch
+distance in bytes (`pf`); each figure is the median ms of a pass over all the planes (cv %), run a
+/ run b. Every tile arm's output is bit for bit the GEMV arm's, the stamped tile4's the `k4 n4
+pf2048` arm's.
+
+- **The tile4's shape - kstep 4, nrsplit 4, a 2048-byte prefetch - leads every candidate on
+  every shape, 1.45x to 1.58x the GEMV a token.**
+  K 1536 x 6144 rows, 170 planes: gemv a token 28.57 (1.4) / 28.46 (1.1); tile4 (stamped) 19.70
+  (1.8) / 19.58 (1.2); k1 n4 pf0 24.01 (2.5) / 23.93 (2.0); k2 n2 pf0 25.07 (1.9) / 25.08 (1.9);
+  k2 n4 pf0 24.54 (2.0) / 24.48 (2.3); k4 n4 pf0 21.68 (1.9) / 21.68 (2.2); k2 n4 pf1024 21.39
+  (1.8) / 21.43 (2.0); k2 n4 pf2048 20.19 (1.7) / 20.32 (1.4); k2 n4 pf4096 20.12 (1.6) / 20.13
+  (1.2); k1 n4 pf2048 20.20 (1.8) / 20.11 (1.8); k2 n2 pf2048 22.11 (1.2) / 21.94 (1.0); k4 n4
+  pf2048 19.59 (1.4) / 19.54 (1.1); k4 n4 pf4096 19.76 (1.4) / 19.74 (1.2).
+  K 6144 x 1536 rows, 170 planes: gemv a token 28.42 (1.4) / 28.42 (1.1); tile4 (stamped) 19.66
+  (1.2) / 19.66 (1.1); k1 n4 pf0 24.21 (2.3) / 24.38 (1.9); k2 n2 pf0 25.86 (2.0) / 25.76 (2.0);
+  k2 n4 pf0 24.91 (3.2) / 24.70 (2.7); k4 n4 pf0 22.42 (2.7) / 22.23 (1.9); k2 n4 pf1024 22.73
+  (5.3) / 21.84 (4.8), past the 3% spread and void; k2 n4 pf2048 20.52 (2.4) / 20.52 (1.7); k2 n4
+  pf4096 20.45 (2.0) / 20.55 (1.6); k1 n4 pf2048 20.56 (1.7) / 20.51 (1.6); k2 n2 pf2048 22.53
+  (1.2) / 22.54 (1.2); k4 n4 pf2048 19.64 (1.3) / 19.60 (1.2); k4 n4 pf4096 20.07 (1.4) / 20.05
+  (1.5).
+  K 2560 x 9728 rows, 64 planes: gemv a token 29.37 (1.5) / 29.71 (1.3); tile4 (stamped) 18.70
+  (1.1) / 18.95 (1.0); k1 n4 pf0 23.51 (2.4) / 23.91 (2.0); k2 n2 pf0 24.61 (2.4) / 25.10 (2.1);
+  k2 n4 pf0 24.00 (2.8) / 24.16 (3.2); k4 n4 pf0 21.47 (2.2) / 21.77 (2.7); k2 n4 pf1024 20.76
+  (3.9) / 21.60 (4.9), void; k2 n4 pf2048 19.61 (1.6) / 19.59 (1.5); k2 n4 pf4096 19.71 (1.5) /
+  19.73 (1.5); k1 n4 pf2048 19.48 (1.5) / 19.59 (1.3); k2 n2 pf2048 21.36 (1.1) / 21.52 (1.0); k4
+  n4 pf2048 18.68 (1.1) / 18.89 (0.9); k4 n4 pf4096 19.09 (1.4) / 19.42 (1.6).
+  K 9728 x 2560 rows, 64 planes: gemv a token 29.57 (1.9) / 29.16 (1.6); tile4 (stamped) 18.71
+  (1.2) / 18.55 (1.2); k1 n4 pf0 23.76 (2.6) / 23.60 (2.1); k2 n2 pf0 25.21 (2.5) / 25.09 (2.1);
+  k2 n4 pf0 24.30 (2.6) / 24.09 (2.2); k4 n4 pf0 21.77 (2.4) / 21.47 (2.4); k2 n4 pf1024 21.32
+  (5.5) / 20.76 (5.4), void; k2 n4 pf2048 19.52 (1.8) / 19.39 (2.0); k2 n4 pf4096 19.67 (1.6) /
+  19.52 (1.7); k1 n4 pf2048 19.39 (1.3) / 19.31 (1.6); k2 n2 pf2048 21.63 (1.2) / 21.62 (1.1); k4
+  n4 pf2048 18.66 (0.8) / 18.54 (1.0); k4 n4 pf4096 18.98 (1.5) / 18.95 (1.4).
+  The prefetch is worth 1.11x to 1.17x at kstep 4 (the `k4 n4 pf0` arm against `k4 n4 pf2048`),
+  and that tile with no prefetch is already 1.27x to 1.37x the GEMV a token.
+
+The served turn: `benchmarks/lcpp_bench.das` as the `-jit` script under `-no-module-cache`,
+`lcpp_bench.das -- -m <gguf> -p 64 -n 128 -r 3 --npl 4 -t 8 --for-debug-purposes`,
+`DAS_TUNE_POLICY` unset, the box's sidecar beside the script (its mint at master `202427bd2`),
+served on the `x64-gen` backend, one process a reading, `.jitted_scripts` removed before each
+process. An arm is the tree's `dasllama/` sources put in place before its process starts, and
+the tile4 of these readings is the `k2 n4 pf2048` arm of the race - they were taken before it.
+Each pair compares across processes and is `direction-grade`; rates are tok/s (the spread over 3
+reps), tg128@4 summed over the 4 streams. The released reading of the landed shape is the
+board's (`performance/records/gnr.json`).
+
+- **A batch shorter than the amx tile's 32 tokens on the 4-token vector tile: 1.35x master's
+  tg128@4 on gemma-4-E2B Q8_0, tg128 unmoved.** Master walks such a batch one GEMV pass a token
+  (`bf16_walk` runs no tile below the token step); the arm hands it to the stamped perm's
+  `tile4` companion, with no activation plane and no panel built. Master then the arm, tg128@4 /
+  tg128: gemma-4-E2B Q8_0 76.46 +- 0.41 / 32.50 +- 0.38 against 103.05 +- 0.56 / 32.24 +- 0.40
+  (a second master process read 81.36 +- 0.37 / 32.80 +- 0.04); Qwen3VL-4B Q8_0 49.91 +- 0.09 /
+  18.97 +- 0.21 against 65.32 +- 0.42 / 19.30 +- 0.03; Qwen2.5-Omni-3B Q8_0 65.45 +- 0.34 /
+  24.93 +- 0.34 against 86.08 +- 0.29 / 24.89 +- 0.19; gemma-4-E4B Q8_0 41.98 +- 0.43 / 16.22 +-
+  0.07 against 55.27 +- 0.05 / 16.20 +- 0.04.
+- **In the served turn the prefetch is most of the gain.** The arms are `tile4_perm`'s three
+  constants edited in `dasllama/dasllama_gemm_gen.das`, gemma-4-E2B Q8_0, tg128@4 at kstep /
+  nrsplit / prefetch distance: 2 / 4 / 0 80.35 +- 0.40; 1 / 4 / 0 74.32 +- 0.12; 2 / 2 / 0 78.73
+  +- 0.22; 4 / 4 / 0 83.73 +- 1.26; 2 / 4 / 2048 101.87 +- 0.88; 2 / 4 / 4096 103.63 +- 0.32.
+  With no prefetch the vector tile reads master's rate here, where the race's planes give it
+  1.27x and more: a whole step streams every layer's groups, and four dots a line leave too few
+  lines in flight.
+- **The batch below the tile step skipping the bf16 walk reads 1.14x the walk's tile4 tail.**
+  The arms are the kernels with the `below_amx_step` test forced false at its two q8 sites (the
+  batch takes `bf16_walk`, whose tail below a tile runs `tile4`, after the activation plane and
+  the panel scratch are built for nothing) and the kernels as they are, gemma-4-E2B Q8_0,
+  tg128@4: 90.94 +- 0.19 against 103.99 +- 0.87. The predicate is structural - a batch below the
+  step runs no tile, so the plane and the panel are dead work - and this pair is its reading,
+  taken in two processes.
+- **The superblock families gain less: their step is less bound by the weight stream.** Master,
+  then the `tile4` with no prefetch in the superblock block emitters, then with the packed
+  planes' prefetch, tg128@4: gemma-4-12B Q4_K_M 22.30 +- 0.13 / 22.51 +- 0.13 / 23.33 +- 0.03;
+  Qwen3.8-27B IQ4_XS 8.64 +- 0.02 / 9.71 +- 0.01 / 10.29 +- 0.02. Qwen3-30B-A3B Q4_K_M read
+  40.15 +- 0.71 on the no-prefetch arm; its master reading, 37.90 +- 2.09, is past the 3% spread
+  and void.
+- **Refuted: an `amx_bf16` perm over the bias-128 plane.** The vnni512 class's bias-128 `vpdpbusd`
+  lattice reads ahead of the amx class's at tg128@4, so the arm stamped the amx perm with
+  `bias=128` (the panel un-biasing the plane, the GEMV and `tile4` riding the biased lattice).
+  gemma-4-E2B Q8_0, two alternated passes, unbiased then biased, tg128@4 / tg128: 103.08 +- 0.59
+  / 31.53 +- 0.13 and 103.26 +- 0.69 / 32.16 +- 0.33 against 98.00 +- 0.40 / 29.97 +- 0.20 and
+  99.02 +- 0.50 / 30.29 +- 0.48 - the biased arm is 0.95x on both legs. `.jitted_scripts` was
+  kept across these four processes; the perm's `bias` argument keys the biased arm's kernels
+  apart.
