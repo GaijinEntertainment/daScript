@@ -18,6 +18,7 @@ require index
 require commands
 require daslib/result
 require package_runner public
+require test_package_runner_errors
 
 // On Darwin daspkg release emits a clickable `.app`; everything else is the
 // flat `<out_dir>/<name>/...` layout. These helpers let release tests assert
@@ -2787,4 +2788,9 @@ def test_ship_external_files(t : T?) {
     t |> equal(length(failed_copy), 0)
     let cleanup = rmdir_rec_result(root)
     t |> success(cleanup is value && cleanup as value, "temp directory removed")
+}
+
+[test]
+def test_package_hook_failures(t : T?) {
+    failing_package_hooks_do_not_publish_partial_metadata(t)
 }
