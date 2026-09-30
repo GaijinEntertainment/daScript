@@ -151,7 +151,6 @@ jobs:
               libvorbis-dev \
               libflac-dev \
               libclang-dev \
-              lld \
               libx11-dev \
               libdbus-1-dev \
               libxrandr-dev \

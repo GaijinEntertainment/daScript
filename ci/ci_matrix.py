@@ -12,11 +12,7 @@ import json
 import sys
 
 CLANG = "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
-# GNU ld peaks at 8.3 GB linking the asan standalone_sweep_aot, beside the JIT -lib chunks on a
-# 16 GB runner; lld links it at 5.1 GB in a sixth of the time. That target only: lld drops the
-# .ctors that register an LLVM-emitted object, so test_llvm_aot stays on GNU ld
-SANITIZER_EXTRA = CLANG + " -DDAS_STANDALONE_SWEEP_LINKER=lld"
-LINUX_ARM_EXTRA = CLANG +" -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF"
+LINUX_ARM_EXTRA = CLANG + " -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF"
 WINDOWS_EXTRA = ("-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
                  " -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")
 
@@ -67,7 +63,7 @@ def build_cells(nightly):
             for phase in SANITIZER_PHASES:
                 cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers=san,
                                   runner="ubuntu-latest", build_name="linux_" + san, nightly_only="ON",
-                                  fast_math="OFF", phase=phase, cmake_extra=SANITIZER_EXTRA, **cmake))
+                                  fast_math="OFF", phase=phase, cmake_extra=CLANG, **cmake))
         # the tree built -ffast-math, the way an embedder that passes it does (dagor is one)
         cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers="none",
                           fast_math="ON", runner="ubuntu-latest", build_name="linux_fastmath",

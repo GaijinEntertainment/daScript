@@ -9,8 +9,6 @@ endif()
 
 set(DAS_STANDALONE_SWEEP_FILTER "" CACHE STRING
     "Regex narrowing the standalone sweep corpus (empty = every file test_aot covers)")
-set(DAS_STANDALONE_SWEEP_LINKER "" CACHE STRING
-    "Linker standalone_sweep_aot links with, as -fuse-ld=<value> (empty = the toolchain's default)")
 
 # DAS_AOT_CTX resolves against the tree root, not this subdirectory
 set(_sweep_in "")
@@ -25,6 +23,10 @@ list(REMOVE_DUPLICATES _sweep_in)
 list(FILTER _sweep_in EXCLUDE REGEX "/_")   # required helpers, not entry points
 if(NOT DAS_STANDALONE_SWEEP_FILTER STREQUAL "")
     list(FILTER _sweep_in INCLUDE REGEX "${DAS_STANDALONE_SWEEP_FILTER}")
+endif()
+# a sanitizer build sweeps tests/language only, as its JIT and LLVM-AOT sweeps do
+if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
+    list(FILTER _sweep_in INCLUDE REGEX "/tests/language/")
 endif()
 
 # `options no_aot`, a quote and require_module_now each leave a file with no standalone form;
@@ -69,9 +71,6 @@ add_custom_command(
 add_executable(standalone_sweep_aot EXCLUDE_FROM_ALL
     "${CMAKE_CURRENT_SOURCE_DIR}/sweep_driver.c" ${_contexts} ${SWEEP_CTX_GENERATED_SRC})
 target_link_libraries(standalone_sweep_aot PRIVATE libDaScript ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
-if(NOT DAS_STANDALONE_SWEEP_LINKER STREQUAL "")
-    target_link_options(standalone_sweep_aot PRIVATE "-fuse-ld=${DAS_STANDALONE_SWEEP_LINKER}")
-endif()
 # the same corpus test_aot compiles, so the same include list
 target_include_directories(standalone_sweep_aot PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}" ${TEST_AOT_INCLUDE_DIRS} ${DAS_CONFIG_INCLUDE_DIR})
