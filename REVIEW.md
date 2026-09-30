@@ -11,8 +11,3 @@ names what keeps every process from compiling two of its name's files; a `why` t
 defect.** The first file a process compiles that declares `module X shared` becomes that
 process's module `X`, and every later file declaring or requiring `X` in the same process gets
 that module - so any process compiling both gives the second file the first's module.
-
-**A diff changing `getVersion()` in `include/daScript/ast/ast_serializer.h`
-replaces its version comment instead of appending to it.** The comment describes the current
-version rather than earlier versions. A diff that keeps the old note in a parenthesis is a defect; git carries the
-history.

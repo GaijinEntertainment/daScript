@@ -102,7 +102,7 @@ static int async_status(hv::HttpClient & client, const std::string & url) {
     }) != 0) return -1;
     return future.wait_for(std::chrono::seconds(5)) == std::future_status::ready ? future.get() : -2;
 }
-static bool client_probes(const std::string & root, int dns_port) {
+static bool client_probes(const std::string & root, int dns_port, const std::atomic<int> & plaintext_hits) {
     const std::string ca_file = root + "/ca.pem";
 #ifdef _WIN32
     _putenv_s("SSL_CERT_FILE", ca_file.c_str());
@@ -125,7 +125,7 @@ static bool client_probes(const std::string & root, int dns_port) {
     hv::HttpClient async;
     const bool first = async_status(async, dns_url + "/ok") == 200;
     const bool different_host = async_status(async, "https://127.0.0.1:" + std::to_string(dns_port) + "/ok") == 0;
-    const bool downgrade = async_status(async, dns_url + "/redirect") == 0;
+    const bool downgrade = async_status(async, dns_url + "/redirect") == 0 && plaintext_hits.load() == 0;
     FILE * output = fopen((root + "/client-results").c_str(), "wb");
     if (!output) return false;
     fprintf(output, "%d %d %d %d %d %d", same, cross, bounded, first, different_host, downgrade);
@@ -181,7 +181,7 @@ int main(int argc, char ** argv) {
     dns_port = start(dns_server, root + "/dns.pem", root + "/key.pem");
     ip_port = start(ip_server, root + "/ip.pem", root + "/key.pem");
     if (dns_port <= 0 || ip_port <= 0) return 6;
-    if (argc == 3 && std::string(argv[2]) == "clients" && !client_probes(root, dns_port)) return 12;
+    if (argc == 3 && std::string(argv[2]) == "clients" && !client_probes(root, dns_port, plaintext_hits)) return 12;
     FILE * ready = fopen((root + "/ready.tmp").c_str(), "wb");
     if (!ready) return 7;
     fprintf(ready, "%d\n%d\n", dns_port, ip_port); fclose(ready);

@@ -26,7 +26,7 @@ struct Bad {}
 (ERROR)
 
 ==================
-Unsigned annotation rejects unsigned suffix
+Annotation rejects unsigned suffix
 :error
 ==================
 [comment(value=1u)]
@@ -35,7 +35,7 @@ struct Bad {}
 (ERROR)
 
 ==================
-Unsigned annotation rejects hexadecimal unsigned literal
+Annotation rejects hexadecimal unsigned literal
 :error
 ==================
 [comment(value=0x1)]
@@ -44,7 +44,7 @@ struct Bad {}
 (ERROR)
 
 ==================
-Unsigned annotation rejects double suffix
+Annotation rejects double suffix
 :error
 ==================
 [comment(value=1.5d)]

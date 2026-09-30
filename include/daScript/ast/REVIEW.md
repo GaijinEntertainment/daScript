@@ -33,3 +33,8 @@
   answer mid-simulate.
   `src/ast/ARCHITECTURE.md` sec.4 lists the per-compile fields that remain and why each is
   tolerated.
+
+- **A diff changing `getVersion()` in `include/daScript/ast/ast_serializer.h`
+  replaces its version comment instead of appending to it.** The comment describes the current
+  version rather than earlier versions. A diff that keeps the old note in a parenthesis is a defect; git carries the
+  history.

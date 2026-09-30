@@ -104,3 +104,24 @@ TEST_CASE("WebSocket control frames cannot be fragmented or oversized") {
         CHECK(delivered == 0);
     }
 }
+
+TEST_CASE("WebSocket reserved opcodes are not delivered") {
+    WebSocketParser parser;
+    int delivered = 0;
+    parser.onMessage = [&](int, const std::string &) { ++delivered; };
+    const auto packet = frame(3, true, "reserved");
+    CHECK(parser.FeedRecvData(packet.data(), packet.size()) != int(packet.size()));
+    CHECK(delivered == 0);
+}
+
+TEST_CASE("WebSocket data opener cannot replace an unfinished message") {
+    WebSocketParser parser;
+    int delivered = 0;
+    parser.onMessage = [&](int, const std::string &) { ++delivered; };
+    const auto first = frame(WS_OPCODE_TEXT, false, "first");
+    REQUIRE(parser.FeedRecvData(first.data(), first.size()) == int(first.size()));
+    const auto second = frame(WS_OPCODE_BINARY, true, "second");
+    CHECK(parser.FeedRecvData(second.data(), second.size()) != int(second.size()));
+    CHECK(parser.message == "first");
+    CHECK(delivered == 0);
+}
