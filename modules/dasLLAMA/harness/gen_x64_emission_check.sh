@@ -269,6 +269,40 @@ gate "q8 s16 panel bf16 convert" "$P" vcvtneps2bf16 32
 gate "q8 s16 panel f16 scales" "$P" vcvtph2ps 1
 gate "q8 s16 panel no-tile" "$P" tdpbf16ps 0
 
+# the tile4 companions: an amx perm's is the busd512 vector tile at kstep 4 with no tile op (7
+# block instances - 4 in the loop body, a 3-block remainder chain - x 8 kg x 4 tokens = 224
+# dots), its weight stream prefetched on the first token slice alone: 7 x 8 weight lines = 56 on
+# the q8 plane, one a line of the 16 x 128-byte group on a packed superblock plane; a byte-panel
+# format's reads the walk's fresh scratch and prefetches nothing; a vector perm's is its tile,
+# with no prefetch
+for f in q8q8_tile4_gen q8q8_tile4_s16_gen; do
+    for p in amx_bf16 amx_int8; do
+        K="${f}__dot_${p}_width512_mr16_kstep1_nrsplit2 "
+        gate "$f $p dots" "$K" vpdpbusd 224
+        gate "$f $p prefetch" "$K" prefetch 56
+        gate "$f $p no-bf16" "$K" tdpbf16ps 0
+        gate "$f $p no-int8" "$K" tdpbssd 0
+        gate "$f $p no-tile-load" "$K" tileloadd 0
+    done
+done
+K='q8q8_tile4_gen__dot_vpdpbusd_width512_mr16_kstep2 '
+gate "q8q8_tile4_gen vector dots" "$K" vpdpbusd 96
+gate "q8q8_tile4_gen vector no-prefetch" "$K" prefetch 0
+for f in k4 q40 iq4xs; do
+    K="${f}q8_tile4_gen__dot_amx_bf16_width512_mr16_kstep1_nrsplit2 "
+    gate "$f tile4 dots" "$K" vpdpbusd 256
+    gate "$f tile4 prefetch" "$K" prefetch 32
+    gate "$f tile4 no-tile" "$K" tdpbf16ps 0
+done
+for f in k6 iq3s; do
+    K="${f}q8_tile4_gen__dot_amx_bf16_width512_mr16_kstep1_nrsplit2 "
+    gate "$f tile4 dots" "$K" vpdpbusd 256
+    gate "$f tile4 panel no-prefetch" "$K" prefetch 0
+    gate "$f tile4 no-tile" "$K" tdpbf16ps 0
+done
+K='k4q8_tile4_gen__dot_vpdpbusd_width512_mr16 '
+gate "k4 tile4 vector no-prefetch" "$K" prefetch 0
+
 # off Linux the tile perms decline (the XTILEDATA grant is arch_prctl): the same features under a
 # Windows triple emit the vector grid and no tile op
 echo "== cross compile-only dump, x86_64-pc-windows-msvc =="

@@ -1491,6 +1491,30 @@ def private check_unicode_tables_stamp {
     }
 }
 
+let private GEMM_GEN_FILES = [
+    "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
+    "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
+]
+let private GEMM_GEN_STAMP_HASH = 0x373e2b3fc67219feul
+
+[arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
+def private check_gemm_gen_stamp {
+    var h = 0xcbf29ce484222325ul
+    for (path in GEMM_GEN_FILES) {
+        return if (!fexist(path))   //! a fixture tree without the generated tier has no generator to stamp
+        h = fnv1a("{base_name(path)}\n", h)
+        for (line in split(strip_line_comments(read_lf(path)), "\n")) {
+            let code = strip(line)
+            continue if (empty(code))   //! a comment line leaves an empty one behind, which is no code
+            h = fnv1a("{code}\n", h)
+        }
+    }
+    if (h != GEMM_GEN_STAMP_HASH) {
+        gate_finding(GEMM_GEN_FILES[0],
+            "the generated GEMM tier's generator sources changed (dasllama_gemm_gen.das, dasllama_gemm_schema.das - ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers): a generator's text is outside the JIT cache key, so `.jitted_scripts` serves the kernels the old text emitted - bump LLVM_JIT_CODEGEN_VERSION in modules/dasLLVM/daslib/llvm_jit_plan.das unless the emitted code is the same for every perm (the bump moves LLVM_JIT_EMITTER_HASH, which tests-cpp/small/test_jit_emitter_pin.cpp prints), then re-stamp GEMM_GEN_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das")
+    }
+}
+
 // One device and queue per GPU family, from its _common file's init. The exceptions the rule
 // names: dasllama_metal_gemm.das owns its device (ARCHITECTURE_GPU.md#gpu-backends), and the two
 // tuner race entries build theirs because the tuner runs before the driver inits.
@@ -1752,6 +1776,7 @@ def main() : int {
     check_verify_decline_before_state_move()
     check_test_file_placement()
     check_unicode_tables_stamp()
+    check_gemm_gen_stamp()
     check_device_creation_sites()
     check_ple_gather_sites()
     check_arch_cites_by_name()

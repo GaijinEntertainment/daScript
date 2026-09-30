@@ -195,6 +195,11 @@ export LLAMA_BENCH_CLEAN=<...>/build-clean-cpu/bin/llama-bench
 export LLAMA_BENCH_STOCK=<...>/build-stock/bin/llama-bench
 ```
 
+`--src` is a FULL clone. The tool lays `mtmd-timing.patch` on the pinned worktree by three-way
+merge against the commit the patch was cut at, and a shallow clone holds no blob of that commit:
+the apply stops at `repository lacks the necessary blob to perform 3-way merge`. Deepen it first
+(`git -C <llama.cpp> fetch --unshallow origin`).
+
 A Vulkan reference (`-DGGML_VULKAN=ON`) is built with a glslc that knows
 `GL_NV_cooperative_matrix_decode_vector` - Vulkan SDK 1.4.357 or later - and its device banner
 reads `NV_coopmat2v` on a driver that lists the extension. Built with an older SDK the exe keeps

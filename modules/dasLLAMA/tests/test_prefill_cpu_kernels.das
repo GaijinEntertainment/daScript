@@ -29,17 +29,22 @@ def private poison_of(v : float) : float => max(0.5, abs(v) * 1.0e-3)
 
 def private cmp_exact(t : T?; got : array<float>; want : array<float>; n : int64; tag : string) {
     var bad = 0
+    var first = -1l
     var seen = 0
     let pi = n / 2l
     for (i in range64(n)) {
         if (got[i] != want[i]) {
             bad++
+            if (first < 0l) {
+                first = i
+            }
         }
         if (got[i] != (i == pi ? want[i] + poison_of(want[i]) : want[i])) {
             seen++
         }
     }
-    t |> success(bad == 0, "{tag}: {bad} of {int(n)} elements differ")
+    to_log(LOG_INFO, "{tag}: {bad} of {int(n)} elements differ, the first at {first}\n")
+    t |> success(bad == 0, "{tag}: {bad} of {int(n)} elements differ, the first at {first}")
     t |> success(seen > 0, "{tag}: the poisoned expected element must be seen, and was not")
 }
 
@@ -55,6 +60,14 @@ def private nan_fill(var a : array<float>) {
 // 2^-7 / sqrt(3) of the terms' rms times sqrt(n), against an output of the same order - 0.5% of
 // the image's largest magnitude on these fixtures, held at 1%. A NaN is outside it.
 def private cmp_bf16(t : T?; got : array<float>; want : array<float>; n, d : int64; tag : string) {
+    cmp_rel(t, got, want, n, d, 1.0e-2, "the bf16 envelope", tag)
+}
+
+//! a generated walk adds a row's superblock terms in another order than the disk-order dot: the same integer products, each f32 add within 2^-24 of the running sum - 1e-5 of the image's largest magnitude holds it at these row lengths
+let FLOAT_ORDER = 1.0e-5
+
+//! every element within `rel` of the image's largest magnitude (a NaN is outside), the largest difference logged with its token and row, and that magnitude added to one expected element landing outside
+def private cmp_rel(t : T?; got : array<float>; want : array<float>; n, d : int64; rel : float; bound : string; tag : string) {
     var mag = 0.0
     for (i in range64(n)) {
         mag = max(mag, abs(want[i]))
@@ -64,7 +77,7 @@ def private cmp_bf16(t : T?; got : array<float>; want : array<float>; n, d : int
     var worstAt = 0l
     for (i in range64(n)) {
         let df = abs(got[i] - want[i])
-        if (!(df <= 1.0e-2 * mag)) {
+        if (!(df <= rel * mag)) {
             over++
         }
         if (!(df <= worst)) {
@@ -73,9 +86,9 @@ def private cmp_bf16(t : T?; got : array<float>; want : array<float>; n, d : int
         }
     }
     to_log(LOG_INFO, "{tag}: max err {worst} at token {int(worstAt / d)} row {int(worstAt % d)}, magnitude {mag}\n")
-    t |> success(over == 0, "{tag}: {over} of {int(n)} elements outside the bf16 envelope (max err {worst} at token {int(worstAt / d)} row {int(worstAt % d)}, magnitude {mag})")
+    t |> success(over == 0, "{tag}: {over} of {int(n)} elements outside {bound} (max err {worst} at token {int(worstAt / d)} row {int(worstAt % d)}, magnitude {mag})")
     let pi = n / 2l
-    t |> success(abs(got[pi] - (want[pi] + mag)) > 1.0e-2 * mag, "{tag}: the image's magnitude {mag} added to expected element {int(pi)} must land outside the envelope")
+    t |> success(abs(got[pi] - (want[pi] + mag)) > rel * mag, "{tag}: the image's magnitude {mag} added to expected element {int(pi)} must land outside {bound}")
 }
 
 def private put_f16(var b : array<uint8>; off : int64; v : float) {
@@ -256,7 +269,7 @@ def private kq_batch_gate(t : T?; fmt : int; n, d, ntok : int64) {
             quant_one(src, p * n, n, q1, s1, b1)
             matmul_kq_active(fmt, yser, kq, ks, 0l, q1, s1, b1, n, d, p * d)
         }
-        if (kq_tileform_of(fmt) > 0) {
+        if (kq_tileform_of(fmt) > 0 && ntok >= amx_bf16_tile_tokens()) {
             cmp_bf16(t, ybatch, want, ntok * d, d,
                 "{fmt_tag(fmt)} native kq batch on the bf16 tile vs per-(token,row) disk dots (n={int(n)} d={int(d)} ntok={int(ntok)})")
             cmp_bf16(t, ybatch, yser, ntok * d, d,
@@ -264,6 +277,8 @@ def private kq_batch_gate(t : T?; fmt : int; n, d, ntok : int64) {
         } else {
             cmp_exact(t, ybatch, yser, ntok * d,
                 "{fmt_tag(fmt)} native kq batch is bit-for-bit ntok x matmul_kq_active (ntok={int(ntok)})")
+            cmp_rel(t, ybatch, want, ntok * d, d, FLOAT_ORDER, "the f32 fold order",
+                "{fmt_tag(fmt)} native kq batch vs per-(token,row) disk dots (n={int(n)} d={int(d)} ntok={int(ntok)})")
         }
         delete ybatch
         delete yser
@@ -286,7 +301,7 @@ def private kq_batch_gate(t : T?; fmt : int; n, d, ntok : int64) {
 [test]
 def test_kq_batch(t : T?) {
     for (fmt in [4, 6, 40]) {
-        for (ntok in [1l, 5l, 13l]) {
+        for (ntok in [1l, 4l, 5l, 9l, 13l]) {
             t |> run("{fmt_tag(fmt)} batched kq GEMM at ntok={int(ntok)}: the tier's route matches the per-token disk dots") @(t : T?) {
                 kq_batch_gate(t, fmt, 512l, 32l, ntok)
             }

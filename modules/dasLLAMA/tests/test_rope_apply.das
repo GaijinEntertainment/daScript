@@ -522,3 +522,20 @@ def test_rope_apply_freq_factors(t : T?) {
         }
     }
 }
+
+[test]
+def test_rope_tabs_no_rows(t : T?) {
+    t |> run("a table over no positions is empty, and a table that held rows is cut to it") @(t : T?) {
+        var ff <- ff_none()
+        var ct : array<float>
+        var st : array<float>
+        build_rope_tabs(ct, st, 10000.0, 1.0, 1.0, ff, false, 0l, 2l, 64l)
+        t |> equal(length(ct), 64, "two positions fill two rows of half the head")
+        build_rope_tabs(ct, st, 10000.0, 1.0, 1.0, ff, false, 0l, 0l, 64l)
+        t |> equal(length(ct), 0, "no positions, no cos rows")
+        t |> equal(length(st), 0, "no positions, no sin rows")
+        delete ct
+        delete st
+        delete ff
+    }
+}

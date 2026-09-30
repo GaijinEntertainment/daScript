@@ -118,6 +118,7 @@ def private rope_tabs_fill(@scratch var cos_tab : array<float>; @scratch var sin
     let half = head_size / 2l
     cos_tab |> resize(nrows * half)
     sin_tab |> resize(nrows * half)
+    return if (nrows * half == 0l)
     unsafe {
         var cp = addr(cos_tab[0])
         var sp = addr(sin_tab[0])

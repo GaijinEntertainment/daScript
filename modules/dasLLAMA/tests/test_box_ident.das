@@ -18,6 +18,7 @@ def test_box_ident(t : T?) {
         t |> equal("m5", box_tag_for_cpu("Apple M5 Max"))
         t |> equal("zen2", box_tag_for_cpu("AMD Ryzen Threadripper 3990X 64-Core Processor"))
         t |> equal("zen4", box_tag_for_cpu("AMD Ryzen 7 PRO 8700GE w/ Radeon 780M Graphics"))
+        t |> equal("gnr", box_tag_for_cpu("Intel(R) Xeon(R) 6975P-C"))
     }
     t |> run("unknown hardware slugs from the brand - never a fleet tag") @(t : T?) {
         t |> equal("apple-m6-ultra", box_tag_for_cpu("Apple M6 Ultra"))

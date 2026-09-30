@@ -51,7 +51,13 @@ def main {
     npanels += length(iq2sq8_panel_gen_variants())
     npanels += length(iq2xsq8_panel_gen_variants())
     npanels += length(iq2xxsq8_panel_gen_variants())
-    print("tile variants: {length(vs)}, gemv: {length(gvs)}, mx4: {length(mvs)}, witness: {length(wvs)}, tokstep: {length(tvs)}, cfg: {length(cvs)}, tileform: {length(qfs)}, panel: {length(qps)}, k4 tile: {length(kvs)} (tileform {length(kfs)}, cfg {length(kcs)}, witness {length(kws)}, panel {length(kps)}), other panels {npanels}\n")
+    var ntile4 = length(q8q8_tile4_gen_variants()) + length(q8q8_tile4_s16_gen_variants())
+    ntile4 += length(k4q8_tile4_gen_variants()) + length(k5q8_tile4_gen_variants()) + length(k6q8_tile4_gen_variants())
+    ntile4 += length(q40q8_tile4_gen_variants()) + length(iq4xsq8_tile4_gen_variants()) + length(iq3s4q8_tile4_gen_variants())
+    ntile4 += length(k3q8_tile4_gen_variants()) + length(iq3sq8_tile4_gen_variants()) + length(iq3xxsq8_tile4_gen_variants())
+    ntile4 += length(iq4nlq8_tile4_gen_variants()) + length(k2q8_tile4_gen_variants()) + length(iq2sq8_tile4_gen_variants())
+    ntile4 += length(iq2xsq8_tile4_gen_variants()) + length(iq2xxsq8_tile4_gen_variants())
+    print("tile variants: {length(vs)}, gemv: {length(gvs)}, mx4: {length(mvs)}, witness: {length(wvs)}, tokstep: {length(tvs)}, cfg: {length(cvs)}, tileform: {length(qfs)}, panel: {length(qps)}, k4 tile: {length(kvs)} (tileform {length(kfs)}, cfg {length(kcs)}, witness {length(kws)}, panel {length(kps)}), other panels {npanels}, tile4 {ntile4}\n")
     delete kps
     delete qfs
     delete qps

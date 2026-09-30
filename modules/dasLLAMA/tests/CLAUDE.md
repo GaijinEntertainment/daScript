@@ -755,7 +755,12 @@ carries its leg's shape (the cpu legs' das child at `--npl-plen 128 --npl-reps 3
 `-npp 128`, `--no-op-offload` on the stock cpu arm alone; the metal leg at `-npp 512` with
 neither), image-chat receipts match their
 `backend`/`flavor` stamps and pin the fixture and mmproj, and every das row's `tune_sha`
-resolves to its committed generation archive.
+resolves to its committed generation archive; and the remote-desktop probe's process read: over
+an injected listing (`executable_in`) an executable counts by its file name, as a path or bare,
+a line under the excepted path does not (the same line with no exception the control), and a
+line that only mentions the name does not; live (`process_listed`) a name only the probe's own
+command line spells is not listed and the running executable is - that last assert skips where
+the executable's name is longer than the 15 characters a Linux process list keeps.
 `test_exchange_schema.das` - model-free: the exchange validator, sweeping the ENTIRE in-tree
 records/sidecar corpus, so a writer-schema change reds here first.
 `test_fat_start.das` - model-free: the runtime section's writer and a fat exe's first-start race
@@ -765,7 +770,9 @@ the box-profile apply firing an installed race hook exactly once for a missing s
 fat hook declining outside a fat exe; and the per-user sidecar placement - the `~/.dasllama/tune`
 path, the one-time adoption of a sidecar beside the exe, the placement hook's wiring (registered
 by the engine, run before the apply reads the path, absent without harm), and when a sidecar
-location counts as explicitly chosen.
+location counts as explicitly chosen: a runtime override is, and is the path read; with none, the
+location is explicit exactly where `DAS_TUNE_MANIFEST` chose one (the suite runner sets it on a
+box with a minted manifest), and that manifest is the path read again once the override clears.
 `test_fat_hook_umbrella.das` - model-free: a program requiring the engine umbrella alone (what
 the shipped bench requires, never the facade) carries the first-start race hook - the umbrella's
 `[init]` set registers it, or a fat bench exe would serve Metal uncrowned forever.
@@ -1958,7 +1965,7 @@ pre-initialized C (so the accumulate contract is part of the claim) and against 
 bit-for-bit. Every tolerance bar in the file ships its control in the same cell: the expected
 value offset by an added 0.01, which must land outside the bar.
 `test_q8q8_family.das` - model-free: the q8q8 kernel family end to end. Six widths with tails
-(64, 96, 512, 1024, 1056, 3072) across five cells, each judged by an in-test fp64 dequant
+(64, 96, 512, 1024, 1056, 3072) across six `[test]` functions (twelve cells), each judged by an in-test fp64 dequant
 reference (int8 products summed exactly, both block scales applied in double) whose bar is the
 per-block envelope times the block count, and each bar carrying a poison leg - 0.25 ADDED to
 one expected element - that must EXCEED it. The stamped family repacks through
@@ -1975,10 +1982,15 @@ above 0 - an x86 box with AMX bf16, nowhere else) the two batch compares, f32 an
 the bf16 envelope instead (`held_bf16`: every element within 1e-2 of the image's largest
 magnitude - a NaN counts as outside - that magnitude added to one expected element landing
 outside it), since the tile rounds every weight and activation to bf16 before the dot; on that
-stamp the two stamped-tile cells assert their GEMV and then register a skip and return, the
-stamped tile reading a bf16 panel where the cell holds int8 planes. The f32 batch cell runs at
-d=64 and again at d=48 (on a grp16 bf16 stamp: a two-group tile and a one-group tail), its
-batch output NaN-filled before the run.
+stamp the two stamped-tile cells assert their GEMV and the tile4 companion (the perm's 4-token
+vector tile over the int8 planes, bit-exact against the per-token GEMV on every stamp, held to
+the fp64 bar with its poison) and then register a skip and return, the stamped tile reading a
+bf16 panel where the cell holds int8 planes. On an int8 amx stamp the two cells run the tile
+itself, and call the family's witness first: it is the tile unit's grant, which a cell that
+selects no backend would otherwise never ask for. The f32 batch cell runs at d=64 and again at d=48
+(on a grp16 bf16 stamp: a two-group tile and a one-group tail), its batch output NaN-filled
+before the run; the wrapper cells also run at ntok 4 and 9 (the decode step's shapes), where a
+bf16 stamp's batch never reaches the panel and is bit-exact against ntok GEMVs.
 `matmul_q8q8_group3` (f32 and s16) runs against three
 independent GEMVs on unequal regions 32/40/44 (the row tail); `matmul_q8` / `dot_q8` cover the fp32-activation rail;
 the mx4 cell drives `matmul_mx4q8_batch` and `matmul_mx4q8_batch_groupn` against ntok
@@ -1997,18 +2009,23 @@ added-value poison that must exceed it. The `_tab` forms also ride a tight twin 
 un-tabled forms (loose only by the cross-compilation-unit cos/sin ulp drift), the `_part` forms
 are bit-exact against a full apply over the gathered rotated prefix with the un-rotated dims
 proven to pass through, and `rope_apply` is bit-exact against the leaf its `neox` flag names,
-including the `use_ff = false` p-RoPE arm. The Apple-only Metal rope tests use these kernels as
+including the `use_ff = false` p-RoPE arm. `build_rope_tabs` over no positions leaves both tables
+empty, a table that held rows cut to it. The Apple-only Metal rope tests use these kernels as
 their oracle; this file gates them on every platform.
 `test_prefill_cpu_kernels.das` - model-free: the prefill and KV CPU kernels, on q4_K / q6_K /
 q4_0 synthetic disk planes built in-file. `matmul_kq_batch` and
 `matmul_kq_batch_groupn` - the per-position and per-expert GEMV routes a tier with no kq batch
 slot runs, bit-matched against per-(token,row) and per-(region,token) disk dots, with no skip on
 any tier; where a kq-carrying backend can be pinned (restored on exit) the native batched
-kernels additionally ride bit-for-bit against `matmul_kq_active` and the rows-core GEMVs -
+kernels additionally ride bit-for-bit against `matmul_kq_active` and the rows-core GEMVs, and
+against the disk dots within the f32 fold order (1e-5 of the image's largest magnitude, that
+magnitude added to one expected element landing outside it) -
 or, where the format's stamp is a bf16 tile (`kq_tileform_of(fmt)` above 0, an x86 box with AMX
-bf16), the batch against the disk dots and against `matmul_kq_active` within the bf16 envelope
-(1e-2 of the image's largest magnitude, a NaN outside it, that magnitude added to one expected
-element landing outside it). The batch cells run at ntok 1/5/13, at n=1024 d=64 ntok=6, and at
+bf16) and the batch is at least the tile's 32 tokens, the batch against the disk dots and
+against `matmul_kq_active` within the bf16 envelope (1e-2 of the image's largest magnitude, a
+NaN outside it, that magnitude added to one expected element landing outside it); a shorter
+batch on that stamp never reaches the panel - its walk is the tile4 companion and the rows core -
+and is bit-exact. The batch cells run at ntok 1/4/5/9/13, at n=1024 d=64 ntok=6, and at
 n=512 d=48 ntok=67 - on a grp16 bf16 stamp the shape that reaches the tile, its token tail and
 its group tail; the region walk runs 1/4/6 and 3/35/67 (n=512 d=48), the long runs under the
 envelope on a bf16 stamp and exact off it. Every batch output is NaN-filled before its run.

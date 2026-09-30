@@ -211,10 +211,17 @@ per-32 twin took.
   tail ladders - a packed format with no arm here dereferences a null scale plane inside the k6
   tile under the JIT, a panel format with no arm silently decodes as k6), `kq_batch_kernel_gen`
   tail, `kq_batch_groupn_gen` tail, `kq_groupn_gen` (two ladders), both
-  `register_kernel_backend` rows (`kq_rows_<fmt> = @@<fmt>q8_gemv_gen`).
+  `register_kernel_backend` rows (`kq_rows_<fmt> = @@<fmt>q8_gemv_gen`). The tile's `tile4`
+  companion (`ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile`): the stub `<fmt>q8_tile4_gen` (body
+  `kq_tile_ref(<id>, ...)`) with its `tune_companion` row (`<fmt>_tile4`), the format's
+  `KqTag_<fmt>` overload of `kq_tile4_gen` - a `KqFmt` member without one fails the compile -
+  and, for a format whose tile reads the packed planes (`kq_reads_packed_planes`), its arm in
+  `kq_ref_row_dot`: a packed format with no arm there reads its group as a byte panel in every
+  tile stub's reference body.
 - `dasllama_math.das`: the `KernelBackend.kq_rows_<fmt>` slot, its `g_kq_rows_<fmt>` global,
   the activation copy, `kq_rows_fn`, the null-guard, the bake arm in `active_kq_layout_mr`.
-- `dasllama_gemm_gen.das`: `register_llvm_code_generator` for `<fmt>_gemv` and `<fmt>_tile`.
+- `dasllama_gemm_gen.das`: `register_llvm_code_generator` for `<fmt>_gemv`, `<fmt>_tile` and
+  `<fmt>_tile4` (`kq_tile4_gen_impl(gc, <id>)`).
   Until the emitter arm exists, register generators that return `false` - a declined generator
   IS the framework's fallback, so the stubs are the cheapest way to have a real family; the
   `[tune]` family must exist before the emitter does because the loader's kq dispatch, the layout
@@ -232,8 +239,11 @@ per-32 twin took.
   `harness/gen_x64_emission_probe.das` and `gen_x64_emission_check.sh`: the panel registry and
   its gate row. A format whose panel is not written yet leaves the two rows out of its grid.
 - `harness/gen_tune_probe.das`: `pack_kq_disk_block`, `repack_kq_grp_fmt`, `build_kq_fixture`
-  (block size, transcode, the yref oracle), `kq_tile_variants`, `kq_gemv_variants_by_suffix`,
-  `kq_layout_mrs`, `run_kq_tile`'s `packed`, `kq_tile_entry`, the family list. Without this
+  (block size, transcode, the yref oracle), `kq_tile_variants`, `kq_tile4_variants` (the TEST
+  gate stops on a family with no arm there), `kq_gemv_variants_by_suffix`,
+  `kq_layout_mrs`, `run_kq_tile`'s `packed`, `kq_tile_entry`, the family list; and the
+  `<fmt>q8_tile4_gen_variants()` term in `harness/gen_x64_emission_probe.das`, so the emission
+  rail dumps the companion. Without this
   the scope's completeness check demands a sidecar entry the tuner never writes, and every
   start re-tunes. Keep a stub family out of the probe's TEST list until its emitter arm lands:
   the shared layout companion generates for any perm `perm_declines` admits, so a declined tile
