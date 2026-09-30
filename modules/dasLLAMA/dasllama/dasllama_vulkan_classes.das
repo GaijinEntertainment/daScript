@@ -2379,6 +2379,9 @@ class HcCombine {
     }
 }
 
+//! a window's `pos0` that reads the first position off the token record (`tok[0].pos`): a command recorded once and resubmitted at every position
+let PLE_POS_TOK = 0xFFFFFFFFu
+
 struct PleGateArgs {
     dim : uint
     hc : uint
@@ -2495,20 +2498,50 @@ class PleConv {
         if (g < rows * hcd) {
             let r = g / hcd
             let e = g - r * hcd
-            let pos = int(pa.rows == 0u ? tok[0].pos : pa.pos0 + r)
+            let pos0 = pa.pos0 == PLE_POS_TOK ? tok[0].pos : pa.pos0
+            let pos = int(pa.rows == 0u ? tok[0].pos : pos0 + r)
             let ring = tok[0].dnslot * nrows * hcd
             var co = 0.0
             var k = 0u
             while (k < pa.kern) {
                 let src_pos = pos - int((pa.kern - 1u - k) * pa.dil)
                 if (src_pos >= 0) {
-                    let inwin = pa.rows != 0u && src_pos >= int(pa.pos0)
-                    let hv = inwin ? panel[uint(src_pos - int(pa.pos0)) * hcd + e] : hist[ring + uint(src_pos) % nrows * hcd + e]
+                    let inwin = pa.rows != 0u && src_pos >= int(pos0)
+                    let hv = inwin ? panel[uint(src_pos - int(pos0)) * hcd + e] : hist[ring + uint(src_pos) % nrows * hcd + e]
                     co += wn[conv_off + e * pa.kern + k] * hv
                 }
                 k++
             }
             res[g] = (res[g] + gated[g]) + silu_f32(co)
+        }
+    }
+}
+
+struct PleCommitArgs {
+    dim : uint
+    hc : uint
+    nrows : uint   //! the conv ring's rows
+    rows : uint    //! the panel rows committed: row r lands in the ring's slot of position tok[0].pos + r
+}
+
+//! the window's normed gated rows into the conv ring, one element a thread: the verify's rows land after the conv read them,
+//! at the slot of each row's position off the token record (the ring's slots wrap at `nrows`)
+[vk_dispatch(name = "ple_commit_cls", grid = "wgs", params = "wgs : int64")]
+class PleCommit {
+    @ssbo @binding = 0 @readonly panel : array<float>   //! the window's normed gated rows [rows x hc x dim]
+    @ssbo @binding = 1 hist : array<float>              //! the conv ring [regions x nrows x hc x dim]
+    @ssbo @binding = 2 @readonly tok : array<TokMeta>
+    @push_constant pa : PleCommitArgs
+
+    [spirv_kernel(local_size_x = 256, name = "ple_commit_cls_spv")]
+    def run {
+        let g = gl_GlobalInvocationID.x
+        let hcd = pa.hc * pa.dim
+        if (g < pa.rows * hcd) {
+            let r = g / hcd
+            let e = g - r * hcd
+            let slot = tok[0].dnslot * pa.nrows + (tok[0].pos + r) % max(1u, pa.nrows)
+            hist[slot * hcd + e] = panel[g]
         }
     }
 }

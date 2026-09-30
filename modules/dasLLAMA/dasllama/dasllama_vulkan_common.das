@@ -2409,9 +2409,10 @@ struct RdHotLayer {
     f1, f3, f2 : int                    //! the gate, up and down planes' formats
     blk1, blk3, blk2 : int64            //! an expert's weight blocks a plane: a slot's stride in the region records
     xnb2 : int64                        //! the down feed's blocks a row
+    xnb1 : int64                        //! the gate and up feed's blocks a row: the rows chain's regions read their row's quantized feed
     st1, st3, st2 : int                 //! the planes' stacks
     s_gate, s_up, s_down : VkDescriptorSet
-    cmds : array<VkCommandBuffer>       //! the hit chain a hit count, [k + 1]: recorded on first use
+    cmds : array<VkCommandBuffer>       //! the hit chain a region count, [nb x k + 1]: recorded on first use (a step's hits, or the verify rows' k-padded hits a row)
     recorded : array<bool>
 }
 
@@ -2655,9 +2656,31 @@ struct RDec {
     hcloq_dev, hclos_dev : uint64 //! ... activated and quantized, the up GEMV's feed
     hcgate_dev : uint64           //! the up projection [hc x dim]
     hcinj_dev : uint64            //! the site's scatter logits [hc]
-    hcn_dev, hcinjw_dev : uint64  //! the mixer weights: the norm rows [sites + 1 x hc x dim] (the head's last), the inject rows [sites x hc x hc_dim]
+    hcn_dev, hcinjw_dev : uint64  //! the mixer weights: the norm rows [sites + 1 x hc x dim] (the trunk's head mixer's after the sites', then a NextN head's own and the carry's), the inject rows [sites x hc x hc_dim]
     hcn_bytes, hcinjw_bytes : int64
-    hc_sites : array<HcSite>      //! a site a block seam (2 x layers), then the head mixer's
+    hc_sites : array<HcSite>      //! a site a block seam (2 x layers, then 2 more for the NextN head's block where it rides), then the head mixer's, then the NextN head's own head mixer
+    hc_head : bool                //! the NextN head rides the chain: its block's two mixer sites, its own head mixer (`hc_mtp_site`) and the carry's per-stream norm rows (`hc_hnorm_row`) are set
+    hc_mtp_site, hc_hnorm_row : int64   //! the site index of the NextN head's own head mixer, and the row index of the carry's norm gammas in `hcn_dev`
+    hc_final_site : int64         //! the site index of the trunk's head mixer (past every block seam, the NextN head's included)
+    pf_hc_head_ready : bool       //! the window chain's hc head warm planes and sets are built (`pf_hc_head_setup`)
+    head_pf_hsrc_w : uint64       //! the shifted wide rows the head warm norms: row 0 the previous window's last wide row, rows 1.. this window's rows 0..wlen-2 [np x hc x dim]
+    head_pf_wsm : uint64          //! the head's wide residual rows as eh_proj lands them, stream-major [hc x np x dim]
+    head_pf_s_hnorm, head_pf_s_enorm : VkDescriptorSet   //! the carry rows' grouped norm (hsrc_w -> pf_hcxn), the embed rows' norm (pf_x -> pf_xb2)
+    hccarry_dev : uint64          //! the NextN head's carry, uploaded wide [hc x dim]: the prelude norms its streams into the cat rows
+    hc_draft_cmd : array<VkCommandBuffer>   //! the hc draft's second segment per region (the first is `head_draft_cmd`): the head's routed sum up, its head mixer, the classifier and the pick
+    s_hc_norm_carry : VkDescriptorSet   //! the carry's grouped norm: `hccarry_dev` in, `hcxn_dev` out
+    head_s_eh_hc : VkDescriptorSet      //! eh_proj with the cat rows as columns, into the head's wide residual
+    hcatq_dev, hcats_dev : uint64       //! the hc cat rows' Q8_0 image [nb x hc x 2 dim] and its scales: eh_proj's feed on the chain
+    hccarry_out_dev : uint64            //! the rows' wide residual before the head mixer, the carry's landing source [nb x hc x dim] (the wide panel is reused past it)
+    hcsrc_dev : uint64                  //! the verify warm's carry rows: the parked carry, then rows 0 .. n-2 of the rows' wide residual [nb x hc x dim]
+    hemb_dev : uint64                   //! the verify's head embed rows [nb x dim]
+    hemb_host : HostBuf
+    s_hc_norm_vsrc : VkDescriptorSet    //! the verify warm's carry norm: `hcsrc_dev` in, `hcxn_dev` out
+    head_s_emb_ar : VkDescriptorSet     //! the verify's embed rows normed under `mtp_enorm`: `hemb_dev` in, `xb2_dev` out
+    plepanel_dev : uint64               //! the verify rows' normed gated rows [nb x hc x dim]: the conv reads the rows inside the window off it, the ring past them
+    s_ple_commit : VkDescriptorSet      //! the panel's rows into the ring's slots after the rows
+    hc_v_seg : array<VkCommandBuffer>   //! the hc verify's segments per region (`nseg` a region), recorded at the verify's row count
+    hc_v_recorded : array<bool>
     s_hc_norm, s_hc_inj, s_hc_xnrq, s_hc_lorq, s_hc_mix : VkDescriptorSet
     s_hc_comb_a, s_hc_comb_f : VkDescriptorSet   //! the scatter after the attention head (the wo row) and after the FFN (the shared row plus the host's routed sum)
     //! the n-gram side input before layer `ngram_layer`'s attention mixer (`vk_rdec_set_ngram`)
@@ -3376,9 +3399,18 @@ def private vkd_unregistered_panic(c : VkdClass; ord : int) {
     panic("dasLLAMA vulkan lens: dispatch through an unregistered pipeline - kernel slot {ord} of the class whose built slots read [{join(built, ", ")}] ({length(c.bindings)} bindings, a {c.push_bytes}-byte push, pipe epoch {c.pipe_epochs[ord]} of {g_vkd_pipe_epoch}): its ensure_ never ran, or ran before the model drop")
 }
 
+[cold_path]
+def private vkd_unbuilt_panic(c : VkdClass; ord : int) {
+    let built <- [for (p in c.pipes); g_pipe_names?[intptr(boost_value_to_vk(p))] ?? "-"]
+    panic("dasLLAMA vulkan lens: dispatch through a kernel slot the class never built - slot {ord} of a class with {length(c.pipes)} built slot(s) reading [{join(built, ", ")}] ({length(c.bindings)} bindings, a {c.push_bytes}-byte push): its ensure_* ran for fewer stamps than the dispatch asks (an N-column or row-count stamp past the ensured count)")
+}
+
 // the class twin of hz_dispatch: same masks/coverage/barrier rail, the CLASS pipeline layout;
 // ord picks the kernel's pipe slot
 def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : VkDescriptorSet; ord : int; groups : uint) {
+    if (ord >= length(c.pipes)) {
+        vkd_unbuilt_panic(c, ord)
+    }
     if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(c.pipes[ord])))) {
         vkd_unregistered_panic(c, ord)
     }

@@ -117,6 +117,16 @@ whose formats the chain's f16 feed does not admit stay the host's whole. A per-3
 (q51, mx4, iq4nl32) takes the chain's s column alone (`batch_tile_edges`): its one cm2 stamp is the
 32-row tile.
 
+**The pool's policy is picked offline, on a trace of the routed picks.** Under
+`DASLLAMA_MOE_TRACE=<file>` every host expert step records its picks (`rdec_trace_picks`): a record
+is a layer, its row count, then k expert ids a row and k weights a row; a record of layer -1 with no
+rows marks a prompt that starts at position 0. The file (`rdec_trace_write`) opens with the magic
+`MOET` and three int32s - the routed layers, the expert count and k, set where the driver arms - and
+holds the records to its end: the first flush writes the header and every later flush appends, the
+last at the model drop. `harness/hot_pool_sim.das` replays a trace through a policy at a slot count;
+the live run's per-layer line under `DASLLAMA_GPU_PROF` (`rdec_hot_say`: a layer's hit share and
+swaps since the pool armed, where the misses sit) is its cross-check.
+
 ### The hyper-connection window chain {#hc-window-chain}
 
 **A prompt runs through the window chain in the same seams, over the window's rows at once, with the
@@ -147,3 +157,74 @@ rows copy into the ring's slots (`pos % nrows`, the region the tok meta's `dnslo
 the window - the decode steps then advance the ring on the device (`Session.ple_ring_device`). A prompt
 served this way passes nothing to the CPU (`RdecPass.hc_prefill` is a model the seats do not hold), and
 the deltanet state and the ring stay on the device as any other hybrid's do.
+
+### The NextN head on the chain {#hc-draft-head}
+
+**The draft head rides the chain as one more routed layer: its block's two mixer seams sit past the
+trunk's in the site list, its routed experts sum on the host like the trunk's, and it owns a slot set of
+the hot expert pool.** The loader lays the head's seams at sites `2 x n_layers` and `2 x n_layers + 1`;
+the trunk's head mixer follows them (`RDec.hc_final_site`), then the head's own head mixer
+(`mtp_hc_head_*`, `hc_mtp_site`) and the carry's per-stream norm gammas (`mtp_hnorm`, `hc_hnorm_row`).
+The resident side admits a routed head where the tier serves host experts (`resident_head_routed`), counts
+it in every routed walk (`resident_routed_layers`: the plan, the router plane's last slot, the biases, the
+pool's `HotLayer`s), and reads its dense triple off the shared expert's planes (`resident_head_fmts`,
+`resident_head_ffn_plane`). The carry is the trunk's WIDE residual before the head mixer (`hc x dim`
+floats a row, `Session.mtp_h` at `mtp_h_dim`): every hc command copies it aside (`hccarry_out_dev`)
+before the head mixer runs, and the landing reads that plane (`rd_carry_src`, `rd_carry_width`) as the
+plain driver reads the post-norm row. The draft (`rd_record_hc_draft`) is two segments: the first opens on
+the embed row and the wide carry (`head_cat_host`), norms the embed row under `mtp_enorm`, grouped-norms
+the carry's streams under the hnorm gammas (`s_hc_norm_carry`), lays the pairs `[enorm ; hnorm_c]` out as
+hc cat rows, runs eh_proj with the rows as columns into the head's own wide residual (`head_s_eh_hc`; the
+N-column leaf ensured for hc columns), then the head's block as a trunk layer's - mixer, attention, scatter,
+mixer, the shared expert, the router - and lands the FFN-mixed row and the router logits; the host sums
+the head's picks (`rdec_host_experts_step` at layer `n_layers`, the pool's slots where they hit); the
+second segment takes the sum, scatters it, copies the head's wide residual aside as the carry, runs the
+head's head mixer, the classifier and the pick. The seat passes the host step as `RdecDraftFn`'s
+`experts`. The window chain warms the head's slab over the prompt in the hc form (`pf_hc_head_warm`
+after the window's head mixer and tail): head row j pairs the window's embed row j + 1 - carry with the
+trunk's wide residual at the row before it (the previous window's last row for row 0, kept in
+`head_pf_hsrc_w`), norms the pair per stream, lays the hc pairs out stream-major as cat rows, runs eh_proj
+with the rows as columns (`head_pf_wsm`), lays the head's wide rows row-major over the window's wide panel
+(dead past the head mixer), runs the head's attention mixer over the head rows and its k and v projections,
+q/k norm and rope store (`pf_head_kv_store`, the store the plain warm shares). The parity cell is
+`tests/test_gpu_resident_hc.das`'s draft cell: the device draft against the CPU `forward_mtp` on the
+same token, wide carry and row, the head's select pinned by the pick tape.
+
+### The verify's rows on the chain {#hc-verify-rows}
+
+**The speculative verify is the split command over `n` rows: the seams' rows forms, every row's routed
+sum on the host between the segments, the deltanet steps a row at a time with the roll copies between,
+the n-gram side input in its panel form committed to the ring after the rows, and the head warmed over the
+rows in the last segment.** `rd_record_hc_segments_n` records the segments at the driver's verify row
+count (`RDec.hc_v_seg`, a region's `nseg` command buffers): the wide rows open as hc copies of every
+embedded row, the mixers take `nrows` (`HcNorm` over `hc x nrows` workgroups, the inject `RouterGemv` and
+the q8 down and up GEMVs with the rows as columns, `HcMix` and `HcCombine` over the rows), the attention
+and deltanet blocks take the N-row command's rows forms (`seq`: the fused step a row with
+`rd_encode_roll_copy` between, so a reject rolls back on the device as the plain hybrid's does), the
+router lands every row's logits, and the host's rows step (`rdec_host_experts_rows`) selects and sums
+each row. The pool serves the rows through the decode form's hit chain (`rdec_hot_rows_step`,
+`vk_rdec_hot_submit_rows`): one chain over `nrows x k` regions, each row's hits first and its misses
+padded with slot 0 at weight 0 (the combine skips a zero weight), each region reading its row's
+quantized feed (`RdHotLayer.xnb1`), and the next segment's combine runs a row a workgroup over row r's
+window of k slot rows (`r0 = 1`, `r1 = nrows x k + 1`) onto its accumulator row; `s.moe_exp_gpu` marks the
+pooled experts and `s.moe_w_cpu` zeroes their weights, so `moe_routed_rows_sum` sums the misses alone.
+The side input's rows form takes the panel (`PleGate` and `PleConv` at `rows > 0` with `pos0 =
+PLE_POS_TOK`, the window's first position read off the token record so the recorded command serves every
+position) and `PleCommit` lands the rows' normed gated rows in the ring's slots after the conv read them;
+at depth 1 a rejected row's slot is rewritten by the next token before any conv reads it. After the rows'
+classifier the head warms over them (`rd_encode_hc_verify_warm`): row i pairs its embed row (`hemb_dev`)
+with the carry of the row before it - the parked carry for row 0, the rows' wide residual for the rest
+(`hcsrc_dev`) - normed per stream, the pairs as hc cat rows a head row, eh_proj with `hc x nrows` columns
+into the head's wide residual over the rows' wide panel (`hcres_dev`, dead past the head mixer once the
+rows' carry is copied aside), the head's attention mixer and its attention at the head's slot storing the
+rows' K/V. The seat (`vulkan_resident_verify_go`)
+widens its rows to the carry's width, gathers the rows' side rows through the arch's pre-step (which
+advances the n-gram window; `rdec_ngram_window_save` and the rollback's re-advance over the accepted rows
+put it back on a reject) and hands the rows step as `RdecVerifyFn`'s `experts`. The rail
+(`rd_ensure_hc_v_rail`) builds the N-row command's stamps first (its GEMV leaves, the rows requant, the
+per-row top-k) and the hc leaves past them. The parity cell is `tests/test_gpu_resident_hc.das`'s verify
+cell: one round on the device against the split command's own one-row steps on the same picks
+(`moe_pick_tape_lane`, a lane replay of a rows-form tape) at the split bar, and against the CPU's one-row
+steps at the wide bar. Measured on the zen2 (`PERF_LEDGER.md`), the round does not pay while the pool's
+hits sit near 40% on real text - the verify rows' host sums cost more than a plain token - so a server slot
+leaves the round off on this form (`gpu_resident_experts_host`).

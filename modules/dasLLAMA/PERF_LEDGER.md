@@ -11,6 +11,72 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-01) - the NextN head on the hyper-connection chain
+  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`, `#hc-verify-rows`): the round loses on this form while
+  the pool's hits sit near 40% on real text, and the real-text token is 45 ms against the synthetic
+  row's 34 - the hits, not the head, are the lever, and the routed pick trace with its offline pool
+  sim (`DASLLAMA_MOE_TRACE`, `harness/hot_pool_sim.das`) says where it goes.** zen2 (Ryzen 16 threads,
+  RTX 5060 Ti 16 GB on a PCIe 4.0 x8 link, 3.9-4.3 GB held by the desktop), Qwen3.8-Flash-Next
+  UD-IQ4_XS with its split head (`mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf`, `DASLLAMA_MTP_HEAD`),
+  `bin/Release/daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <shard 1> --mtp-ab
+  --mtp-depth 1 -p 0 -r 1 -t 16 --for-debug-purposes` under `DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1`,
+  eight real-text prompts, one process a row (direction-grade). Acceptance on the CPU rail (no
+  `DASLLAMA_GPU`; the rail does not move it): 456 of 571 drafts accepted, 79.9% - the same 456 of 571
+  under `--mtp-depth 2` and `3`, since the CPU round is one token deep and the flag reaches the seated
+  rounds alone - tg-real128 off 7.07 / on 7.08 tok/s (7.15 / 7.15 at depth 3), the CPU round flat. On the device (`DASLLAMA_GPU=1`, the head resident, the
+  pool at the plan's 32 slots serving the verify rows through the rows chain): tg-real128 off 22.49 ->
+  on 18.77 tok/s = x0.83 at 407 of 619 accepted (65.8%); a second process 22.85 -> 18.99 at the same
+  65.8%; tg-real64 22.57 -> 18.57 and 22.61 -> 18.73 at 62.7%; per prompt x0.70..x0.90 at 48.8-75.7%.
+  The device accepts 14 points under the CPU: the device draft and the verify rows route their near-ties
+  apart, as every arm pair on this model does (`ARCHITECTURE_ENGINE.md#moe-pick-tape`). The round under
+  `DASLLAMA_GPU_PROF=1` (debug-jit): the draft 4 ms, the verify 81 ms of which the device 25 and the
+  host's sums of the two rows' misses 56, the pool serving 48-53% of the rows' picks; a plain real-text
+  token 45 ms = device 22 + the host's sums 22.7 at hits 31-45% a layer (the per-layer line of the
+  profile: hits, picks and swaps a routed layer) - the entry below's synthetic ids read 70-83% hits and
+  29.7 tok/s, a third over the 22.5 of real text. So a round costs 85 ms for 1.66 tokens (51 ms a
+  token) against a plain token's 45. The trace (`DASLLAMA_MOE_TRACE=<file>` over the same command: every
+  host expert step's layer, rows, k ids and weights, a mark a prompt window; 24.7 MB for the eight
+  prompts' two arms, 1084090 decode picks and 1927680 window rows) replayed through
+  `bin/Release/daslang.exe -jit modules/dasLLAMA/harness/hot_pool_sim.das -- <trace> --policy <p> --swaps
+  <n> [--slots 64] [--async --place-host-us 0]` (the token modeled from the profile's costs: the device
+  22.0 ms, a miss 72 us, a placement 570 us of host gather + 270 us of upload; `--per-layer` matches the
+  live profile layer for layer):
+
+  | policy, 32 slots a layer | decode hits | placements a token | modeled token | tok/s |
+  | :--- | ---: | ---: | ---: | ---: |
+  | heat, the shipped one (decay 256, hysteresis 2x+1, 1 swap) | 37.5% | 2.38 | 45.7 ms = 22.0 + misses 21.7 + placements 2.0 | 21.9 |
+  | lru, 1 swap a step | 58.2% | 50.1 | 78.6 = 22.0 + 14.5 + 42.1 | 12.7 |
+  | lru, 2 swaps | 70.9% | 92.2 | 109.5 = 22.0 + 10.1 + 77.4 | 9.1 |
+  | lru, 4 swaps | 87.3% | 154.6 | 156.3 = 22.0 + 4.4 + 129.9 | 6.4 |
+  | lru, 64 slots, 2 swaps | 82.4% | 82.6 | 97.5 = 22.0 + 6.1 + 69.4 | 10.3 |
+  | lru 4, async placements, the gather on the path (`--async`) | 87.3% | 154.6 | 114.6 = max(22.0 + 4.4 + host 88.1, link 26.6) | 8.7 |
+  | lru 1, async, no host gather (`--place-host-us 0`) | 58.2% | 50.1 | 36.5 = max(22.0 + 14.5, link 8.6) | 27.4 |
+  | lru 2, async, no host gather | 70.9% | 92.2 | 32.1 = max(22.0 + 10.1, link 15.9) | 31.1 |
+  | lru 4, async, no host gather | 87.3% | 154.6 | 26.6 = max(22.0 + 4.4, link 26.6) | 37.6 |
+
+  The heat row is the calibration: 45.7 modeled against the 45 measured, 37.5% against 31-45%. The
+  picks have recency: LRU at four swaps a step holds 87% of them in 32 slots, but a placement's 0.84 ms
+  on the token's path (`followup_vulkan.md` row 125) turns 155 placements into 130 ms, and even with the
+  upload off the path the host's layout gather (570 us) binds. With the gather gone - the experts
+  mirrored in their device layout in host memory (55 GB beside the 94 of the file; the box holds 256)
+  and the placements on the transfer queue behind the segments - the token is the longer of the
+  compute path and the link, and LRU-4 reads 37.6 tok/s link-bound (a placement 172 us of a 13 GB/s
+  link: 127 experts a token free under the 22 ms device floor), 1.67x the 22.5 of today; a policy
+  placing fewer experts for the same hits heads for the floor's 45. The order: the mirror and the
+  async placements first (structural, the policy unchanged), LRU-N on it, a predictor after, each
+  tried in the sim before the live run. The round rides the same lift - its verify rows at 85% hits
+  cost a token's misses, not two - so `mtp_auto_arms` leaves it off where the resident driver sums the
+  experts on the host (`gpu_resident_experts_host`), and a slot's `mtp=1` arms it by hand. Parity:
+  `test_gpu_resident_hc.das`'s draft cell (the device draft against the CPU `forward_mtp` on one
+  token, wide carry and row: argmax 271 on both at 9.57 / 9.50, the logits row 0.22 within 1.91, the
+  wide carry 0.06 within 1.10, the controls 3.00 and 3.50, the head's one select replayed) and its
+  verify cell (one round: the draft 271, verify row 0's argmax 12 rejecting it, one rollback; the two
+  rows against the split command's own one-row steps on the same picks - the logits 0.82 within 1.52,
+  the carry 0.30 within 0.39, the controls 11.62 and 5.10 - and against the CPU's one-row steps at
+  the wide bar - rows 1.52 and 3.10 within 3.47 and 4.24, the carry 0.49 within 1.02, the controls
+  12.06-12.53 and 4.86; 97 selects replayed, 2 of the CPU draft's own picks off the device's); kernel cell
+  `test_vkd_ple_side`'s commit arm (the position off the token record, two rows committed to the ring).
+
 - **LANDED (2026-09-29) - the hot expert pool on the hyper-connection carrier
   (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`), the `iq3s4` device format under it, and the resident
   plan sizing the pool with the mirror.** zen2 (Ryzen 16 threads, RTX 5060 Ti 16 GB, 3.9-4.3 GB held

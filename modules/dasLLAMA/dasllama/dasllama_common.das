@@ -5078,10 +5078,8 @@ def mtp_state_restore(var s : Session) {
     moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
 }
 
-// After a 2-row verify forward_prefill([tok, draft], 2, pos): row 0's post-norm hidden and
-// logits (forward_prefill's own tail only produced row 1's). Reads s.x_b row 0 — still intact,
-// the prefill tail never overwrites the batch residual stream.
-def private mtp_verify_row0(t : Model; var s : Session) {
+//! row 0's logits after a rows prefill (the CPU verify's truth for the committed token, into `s.mtp_logits`), and its carry into `s.mtp_h0`
+def mtp_verify_row0(t : Model; var s : Session) {
     let c = t.config
     let dim = c.dim
     if (t.blocks.final_norm != null) {   // the arch's own tail over row 0 (the hyper-connection head mixer)

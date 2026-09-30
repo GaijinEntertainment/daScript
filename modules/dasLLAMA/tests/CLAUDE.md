@@ -682,7 +682,9 @@ holds the n-gram side input's gate and conv (`PleGate`, `PleConv`) to a CPU form
 tap reaches and at one under the taps' reach (the taps before the sequence reading zero), the gate's
 ring slot written and the other slots kept, the fixture's stream dots asserted to take both signs, and
 the window's panel form - three rows whose taps read the ring before the window and the panel inside it,
-then a second position block primed from window rows; `test_vkd_dn_scan_narrow`
+then a second position block primed from window rows, and the verify's form - the window's first position
+read off the token record (`PLE_POS_TOK`) and the two rows committed to the ring's slots of their positions
+after the conv (`PleCommit`), the pos-off-push form asserted to leave the ring untouched; `test_vkd_dn_scan_narrow`
 runs the scan at ds 32 over 64 rows, and `test_vkd_dn_9b_scan` at the 9B geometry - 512 rows,
 one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate arrays' exact
 bound); `test_vkd_dn_step_rows` runs the fused step over two rows in two region slots against the
@@ -1082,6 +1084,14 @@ the sum of both shares, and - the prompt past the pool's 32-row window floor - t
 every routed layer's window and served some of its slot rows through the expert tiles over the pool's planes, the
 host the rest. Skips without the shards
 (`DASLLAMA_PARITY_FULL=1` admits them), without the armed tier, when interpreted, and under `DASLLAMA_VK_KV32=1`.
+With the split head shard beside the model (`DASLLAMA_MTP_HEAD`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`,
+`#hc-verify-rows`) two more cells: the draft cell runs one NextN draft through the resident head on the chain
+against the CPU `forward_mtp` on the same token, wide carry and row - the head's one select pinned by the pick
+tape, the logits and the wide carry each within their bar with the one-row-back control; the verify cell runs
+one speculative round on the device (the draft, the two-row verify, the accept or the rollback) and holds its
+two rows to the split command's own one-row steps on the same picks (`moe_pick_tape_lane`, a lane replay of the
+rows-form tape) at the split bars, and to the CPU's one-row steps at the wide bars, the other row as each
+row's control. Both skip where the head shard is not beside the model.
 `test_gpu_resident_llama.das` - stocked suite, `-jit` only; the whole-model resident driver on the
 llama family (Llama-3.2-1B Q8_0, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M, `DASLLAMA_GPU=1`): the
 NORM rope, no q/k/v bias, no q/k norm, the tied classifier of the 3.2 files - the qwen2 file's

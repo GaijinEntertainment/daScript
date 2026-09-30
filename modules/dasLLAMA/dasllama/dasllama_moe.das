@@ -787,6 +787,7 @@ enum MoePickTape {
 var private g_moe_tape_mode = MoePickTape.off
 var private g_moe_tape : array<int64>   //! the picks of every decode select in call order, k a select
 var private g_moe_tape_pos = 0l
+var private g_moe_tape_stride = 1l
 var private g_moe_tape_seen = 0l   //! the replay's selects
 var private g_moe_tape_miss = 0l   //! ... and the picks its own top-k would have made that the tape did not carry
 var private @scratch g_moe_tape_own : array<int64>
@@ -799,12 +800,22 @@ var private @scratch g_moe_tape_lg : array<float>
 def moe_pick_tape(mode : MoePickTape) {
     g_moe_tape_mode = mode
     g_moe_tape_pos = 0l
+    g_moe_tape_stride = 1l
     g_moe_tape_seen = 0l
     g_moe_tape_miss = 0l
     if (mode == MoePickTape.record) {
         g_moe_tape |> clear()
         g_moe_tape |> reserve(MOE_TAPE_RESERVE)
     }
+}
+
+[arch(at="../ARCHITECTURE_ENGINE.md#moe-pick-tape")]
+def moe_pick_tape_lane(first, stride, k : int64) {
+    g_moe_tape_mode = MoePickTape.replay
+    g_moe_tape_pos = first * k
+    g_moe_tape_stride = stride
+    g_moe_tape_seen = 0l
+    g_moe_tape_miss = 0l
 }
 
 //! the replay's selects so far, and the own picks the tape did not carry
@@ -845,7 +856,7 @@ def moe_pick_tape_rows_done(idx_b : array<int64>; npos, k : int64) {
             g_moe_tape |> push(idx_b[j])   // nolint:PERF026,LINT019 — the tape records only under a parity cell; its arming reserved the run
         }
     } elif (g_moe_tape_mode == MoePickTape.replay) {
-        g_moe_tape_pos += npos * k
+        g_moe_tape_pos += npos * k * g_moe_tape_stride
         g_moe_tape_seen += npos
     }
 }

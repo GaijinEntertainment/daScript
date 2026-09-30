@@ -2083,13 +2083,12 @@ module) is independent and can land any time - it is pure structure.
     back to the host. Done = the window's segment schedules the hits on the device (the sched, gather,
     ladder and combine kernels over the pool's planes, the combine accumulating onto the host's sums),
     no rows cross the link, and the prompt's row is re-measured.
-124. **The NextN head on the hyper-connection chain.** The split token command lands no carry and the
-    draft and verify seats decline it; the carrier's split head (`mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf`,
-    2.58 GiB of which 2.5 is its own Q8_0 routed experts) has the CPU round alone, which loses on this
-    model (`followup_general.md` row 178). Done = the head's mixers and eh_proj resident, its routed
-    experts on the host like the trunk's, the wide-residual carry landed with the logits, and the
-    two-row verify through the split command (a segment lands two rows, the host sums both), the
-    round measured net against plain decode on `benchmarks/lcpp_bench.das --mtp-ab`.
+124. **The NextN head on the hyper-connection chain - SHIPPED (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`,
+    `#hc-verify-rows`).** The head's mixers and eh_proj resident, its routed experts on the host like
+    the trunk's, the wide carry landed beside the logits, the two-row verify through the split command;
+    the round reads x0.83 against plain decode on the zen2 at 65.8% acceptance (`PERF_LEDGER.md`'s
+    NextN entry) because the verify rows' host sums cost more than a token, so `mtp_auto_arms` leaves
+    it off where the experts sum on the host. Row 127's lift is what turns it net positive.
 125. **Placing an expert in a pool slot copies it twice.** The gather writes the expert's device layout
     into host scratch (0.57 ms) and the upload copies the scratch into the slot (0.27 ms; both
     `DASLLAMA_GPU_PROF=1`'s pool line, debug-jit), so a pool of 32 x 48 slots fills in 1.3 s at the
@@ -2104,3 +2103,26 @@ module) is independent and can land any time - it is pure structure.
     the `lcpp_bench` rows of `PERF_LEDGER.md`'s hot-pool entry). Done = the
     reserve measured on a box with a live desktop (the plan's slack against the rows, three slacks or
     more), and the constant or the rule set from the reading.
+127. **A pool placement rides the token's path.** The gather of an expert's device layout (0.57 ms) and
+    its upload (0.27) run inside the host's routed step, so the pool swaps one expert a layer a step and
+    holds 31-45% of real text's picks; the trace sim (`harness/hot_pool_sim.das`, `PERF_LEDGER.md`'s
+    NextN entry) reads 87% for LRU at four swaps a step, worth 37.6 tok/s against 22.5, once a placement
+    costs the path nothing. Done = the routed experts mirrored in their device layout in pinned host
+    memory at load (55 GB beside the file's 94; the plan declines the mirror where the host's room does
+    not hold it), a placement one transfer-queue copy off the mirror behind the segments, the pool's
+    swaps a step the sim's, and the live profile's hits and token wall against the sim's row.
+128. **The pool's policy is a decaying count.** With row 127 landed the placements are free to the link's
+    budget (127 experts a token at 13 GB/s under the 22 ms device floor) and the policy decides the hits:
+    LRU-N first (the sim's 58-87% at one to four swaps), then a predictor - the previous layer's picks
+    over a co-occurrence table, or the next token's picks prefetched during this token's segments -
+    placing fewer experts for the same hits. Done = each policy tried in the sim against the trace
+    before its live run, the winner's hits and token wall on the ledger.
+129. **The rows' side panel commits at depth 1 alone.** `PleCommit` lands every verify row's normed gated
+    row in the ring's slot of its position after the conv read them, and a rejected row's slot is
+    rewritten by the next token before any conv reads it - true at depth 1, where one row past the
+    accepted prefix is at stake. Done = a depth past 1 commits the accepted rows alone, or the rollback
+    restores the slots it rewrote.
+130. **The device draft accepts 14 points under the CPU draft.** The device's draft and the verify rows
+    route their near-ties apart (65.8% against the CPU rail's 79.9% on the same prompts), and every
+    point of acceptance is a share of the round's second token. Done = the gap read on the pick tape
+    (the draft's picks against the verify row's on the same token) and the arm that flips named.

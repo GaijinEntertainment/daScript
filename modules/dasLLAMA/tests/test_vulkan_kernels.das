@@ -8484,8 +8484,9 @@ def private ple_side_case(t : T?; pos : int) {
 }
 
 //! the side input's window form over `rows` rows from `pos0` against the CPU form a row at a time: the gate's rows and its normed
-//! panel rows, the conv reading a tap inside the window off the panel and before it off the ring, the ring itself untouched
-def private ple_panel_case(t : T?; rows, pos0 : int) {
+//! panel rows, the conv reading a tap inside the window off the panel and before it off the ring;
+//! `tok_pos`: `pos0` off the token record (`PLE_POS_TOK`, the verify's form) and the rows committed to the ring after the conv (`PleCommit`); without it the ring stays untouched
+def private ple_panel_case(t : T?; rows, pos0 : int; tok_pos : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let dim = HCT_DIM
         let hc = HCT_HC
@@ -8547,7 +8548,16 @@ def private ple_panel_case(t : T?; rows, pos0 : int) {
             }
         }
         t |> success(from_ring > 0 && from_panel > 0, "the fixture's taps read both the ring and the panel ({from_ring} ring, {from_panel} panel)")
-        var toks <- [TokMeta(pos = 0u, cnt = 1u, dnslot = 0u)]
+        var hist_ref := hist
+        if (tok_pos) {
+            for (r in range(rows)) {
+                let slot = (pos0 + r) % PLT_NROWS
+                for (e in range(hcd)) {
+                    hist_ref[slot * hcd + e] = panel_ref[r * hcd + e]
+                }
+            }
+        }
+        var toks <- [TokMeta(pos = uint(tok_pos ? pos0 : 0), cnt = 1u, dnslot = 0u)]
         with_cell_planes() $(var cp : CellPlanes) {
             let kp = cp |> in_(key)
             let rp = cp |> io_(res)
@@ -8559,19 +8569,31 @@ def private ple_panel_case(t : T?; rows, pos0 : int) {
             let pp = cp |> out_(rows * hcd)
             var sg = cp |> cls_set(fixed_array(kp, rp, vp, gp, hp, wp, tp, pp), @@set_ple_gate_cls)
             var sc = cp |> cls_set(fixed_array(rp, gp, hp, wp, tp, pp), @@set_ple_conv_cls)
+            var sm = cp |> cls_set(fixed_array(pp, hp, tp), @@set_ple_commit_cls)
+            let push_pos = tok_pos ? PLE_POS_TOK : uint(pos0)
             var pg = PleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(PLT_NROWS),
-                rows = uint(rows), pos0 = uint(pos0), eps = HCT_EPS, inv_sq = 1.0 / sqrt(float(dim)))
+                rows = uint(rows), pos0 = push_pos, eps = HCT_EPS, inv_sq = 1.0 / sqrt(float(dim)))
             var pc = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(PLT_KERN), dil = uint(PLT_DIL),
-                rows = uint(rows), pos0 = uint(pos0))
+                rows = uint(rows), pos0 = push_pos)
+            var pm = PleCommitArgs(dim = uint(dim), hc = uint(hc), nrows = uint(PLT_NROWS), rows = uint(rows))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_ple_gate_cls(raw, h, sg, pg, int64(rows * hc))
                 enc_ple_conv_cls(raw, h, sc, pc, int64((rows * hcd + 255) / 256))
+                if (tok_pos) {
+                    enc_ple_commit_cls(raw, h, sm, pm, int64((rows * hcd + 255) / 256))
+                }
             }
-            check_rows(t, "ple_gate window gated rows from pos {pos0}", cp |> plane_run(gp), gated_ref, BAR_APPROX, dim)
-            check_rows(t, "ple_gate window panel rows (the normed gated rows)", cp |> plane_run(pp), panel_ref, BAR_APPROX, dim)
-            check_rows(t, "ple_gate window leaves the ring untouched", cp |> plane_run(hp), hist, BAR_APPROX, hcd)
-            check_rows(t, "ple_conv window residual landing (taps off the panel and the ring)", cp |> plane_run(rp), res_ref, BAR_APPROX, dim)
+            let form = tok_pos ? "pos off the token record" : "pos off the push"
+            check_rows(t, "ple_gate window gated rows from pos {pos0} ({form})", cp |> plane_run(gp), gated_ref, BAR_APPROX, dim)
+            check_rows(t, "ple_gate window panel rows (the normed gated rows, {form})", cp |> plane_run(pp), panel_ref, BAR_APPROX, dim)
+            if (tok_pos) {
+                check_rows(t, "ple_commit lands the rows in the ring's slots of their positions", cp |> plane_run(hp), hist_ref, BAR_APPROX, hcd)
+            } else {
+                check_rows(t, "ple_gate window leaves the ring untouched", cp |> plane_run(hp), hist, BAR_APPROX, hcd)
+            }
+            check_rows(t, "ple_conv window residual landing (taps off the panel and the ring, {form})", cp |> plane_run(rp), res_ref, BAR_APPROX, dim)
         }
+        delete hist_ref
         delete toks
         delete gated_ref
         delete panel_ref
@@ -8585,13 +8607,14 @@ def private ple_panel_case(t : T?; rows, pos0 : int) {
 def test_vkd_ple_side(t0 : T?) {
     t0 |> run("ple_gate + ple_conv: the n-gram side input's gate, its ring slot and the conv's landing == the CPU form, inside and under the taps' reach") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_ple_gate_cls() || !ensure_ple_conv_cls()) {
+            if (!vk_moe_init() || !ensure_ple_gate_cls() || !ensure_ple_conv_cls() || !ensure_ple_commit_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
             ple_side_case(t, 7)   //! every tap reads a written slot
             ple_side_case(t, 1)   //! the two earlier taps sit before the sequence and read zero
             ple_panel_case(t, 3, 6)   //! the window form: three rows whose taps read the ring before the window and the panel inside it
+            ple_panel_case(t, 2, 6, true)   //! the verify's form: the position off the token record, the two rows committed to the ring after the conv
         } else {
             t |> skip("dasVulkan not present")
         }
