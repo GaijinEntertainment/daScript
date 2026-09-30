@@ -1,0 +1,1 @@
+Encrypts and authenticates plain with AES-256-GCM. Key is 32 bytes and nonce is 12 bytes; never reuse a nonce with the same key. Output contains ciphertext followed by a 16-byte tag. AAD is authenticated but not encrypted. Returns false and clears output on failure.

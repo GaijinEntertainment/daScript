@@ -649,10 +649,10 @@ var private no_trailing_zeros = false
 
 struct JsonReadLimits {
     //! Bounds for strict, scalar-safe reads. Maximum nesting is capped at 256.
-    max_bytes : int = 1048576
-    max_depth : int = 64
-    max_tokens : int = 65536
-    max_string_bytes : int = 65536
+    max_bytes : int = 1048576 //! Maximum input bytes.
+    max_depth : int = 64 //! Maximum array/object nesting; at most 256.
+    max_tokens : int = 65536 //! Maximum lexer tokens before tree construction.
+    max_string_bytes : int = 65536 //! Maximum bytes per decoded JSON string.
 }
 
 def private check_json_tokens(text : string; limits : JsonReadLimits; var error : string&) : bool {

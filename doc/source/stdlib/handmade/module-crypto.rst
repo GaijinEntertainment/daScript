@@ -1,0 +1,1 @@
+Native OpenSSL cryptographic primitives. Enable dasCrypto with OpenSSL 3 or newer; this module is unavailable in Emscripten. Byte inputs are bounded to 16 MiB unless a narrower limit is stated. Output-producing functions clear their output on failure and allow output/input aliasing. Callers own key storage and protocol validation.

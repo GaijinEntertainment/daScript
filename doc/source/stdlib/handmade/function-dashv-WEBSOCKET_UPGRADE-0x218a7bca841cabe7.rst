@@ -1,0 +1,1 @@
+Registers a deferred WebSocket admission callback before server start. Timeout must be 1–60000 milliseconds. The callback runs on the script tick thread with a borrowed request and a ticket; accept or reject the ticket after checking application policy. Returns false for invalid timeout, missing server or running server.

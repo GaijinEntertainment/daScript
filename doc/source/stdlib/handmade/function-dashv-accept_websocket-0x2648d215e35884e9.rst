@@ -1,0 +1,1 @@
+Submits acceptance of a live, undecided WebSocket ticket with a protocol offered by the client. Returns zero when submitted; nonzero for an invalid/expired ticket or invalid protocol. The ticket becomes unusable after submission.

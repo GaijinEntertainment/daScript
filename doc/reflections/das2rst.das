@@ -120,6 +120,7 @@ require daslib/type_traits
 require daslib/typemacro_boost
 require daslib/validate_code
 require dashv/dashv_boost
+require crypto
 require openai/openai_common
 require openai/openai_chat
 require openai/openai_embeddings
@@ -229,7 +230,7 @@ def document_module_fio(_root : string) {
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
         group_by_regex("Direct IO and mapping advice", mod, %regex~(dwrite_open|dwrite_append|dwrite_band|dwrite_commit|dwrite_stat|dwrite_close|prefetch_map)$%%),
-        group_by_regex("File manipulation", mod, %regex~(f|long_f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|is_reparse_point|set_mtime)%%),
+        group_by_regex("File manipulation", mod, %regex~(try_fflush|f|long_f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|is_reparse_point|set_mtime)%%),
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name|extension|stem|replace_extension|path_join|normalize|to_generic_path|tilde_home|is_absolute|relative|relative_result|parent)$%%),
         group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|mkdir_result|rmdir|rmdir_rec|rmdir_rec_result|rmdir_result|chdir|getcwd)$%%),
         group_by_regex("Glob and pattern matching", mod, %regex~(match_glob|glob|glob_filtered|is_glob_pattern|expand_glob|parse_file_list)$%%),
@@ -269,6 +270,17 @@ def document_module_network(_root : string) {
     document("Network socket library", mod, "network.rst", groups)
 }
 
+def document_module_crypto(_root : string) {
+    var mod = get_module("crypto")
+    var groups <- array<DocGroup>(
+        group_by_regex("Randomness and comparison", mod, %regex~.*(crypto_random_bytes|crypto_equal)$%%),
+        group_by_regex("Message authentication", mod, %regex~.*crypto_hmac_.*%%),
+        group_by_regex("Authenticated encryption", mod, %regex~.*crypto_aes256_gcm_.*%%),
+        group_by_regex("Signature verification", mod, %regex~.*crypto_verify_rsa_sha256$%%)
+    )
+    document("Cryptographic primitives", mod, "crypto.rst", groups)
+}
+
 def document_module_dashv(_root : string) {
     var mod = get_module("dashv")
     var groups <- array<DocGroup>(
@@ -277,9 +289,9 @@ def document_module_dashv(_root : string) {
         group_by_regex("WebSocket channel send", mod, %regex~(send)$%%),
         group_by_regex("Handle operations", mod, %regex~(is_alive|==|!=)$%%),
         group_by_regex("HTTP route registration", mod, %regex~(GET|POST|PUT|DELETE|PATCH|HEAD|ANY|SSE|STREAM)$%%),
-        group_by_regex("HTTP server configuration", mod, %regex~(STATIC|allow_cors|set_document_root|set_home_page|set_index_of|set_error_page)$%%),
+        group_by_regex("HTTP server configuration", mod, %regex~(set_limits|set_access_log|WEBSOCKET_UPGRADE|accept_websocket|reject_websocket|STATIC|allow_cors|set_document_root|set_home_page|set_index_of|set_error_page)$%%),
         group_by_regex("HTTP response helpers", mod, %regex~(TEXT_PLAIN|JSON|REDIRECT|SERVE_FILE|DATA|set_header|set_content_type)$%%),
-        group_by_regex("HTTP client requests", mod, %regex~(request|request_cb|status_message)$%%),
+        group_by_regex("HTTP client requests", mod, %regex~(request|request_checked|request_cb|status_message)$%%),
         group_by_regex("Message and header access", mod, %regex~(get_header|each_header|client_ip|.*content_length)$%%),
         group_by_regex("Request configuration", mod, %regex~(set_basic_auth|set_bearer_token_auth|set_timeout|set_connect_timeout|allow_redirect|set_param|get_param|each_param)$%%),
         group_by_regex("Cookies", mod, %regex~(add_cookie|get_cookie|each_cookie)$%%),
@@ -592,7 +604,7 @@ def document_module_json(_root : string) {
     var mod = find_module("json")
     var groups <- array<DocGroup>(
         group_by_regex("Value conversion", mod, %regex~(JV|JVNull)$%%),
-        group_by_regex("Read and write", mod, %regex~(read_json|write_json|write_json_compact)$%%),
+        group_by_regex("Read and write", mod, %regex~(read_json|read_json_bounded|write_json|write_json_compact)$%%),
         group_by_regex("Memory management", mod, %regex~(delete_json|update|json_null_sentinel)$%%),
         group_by_regex("JSON properties", mod, %regex~(set_no_trailing_zeros|set_no_empty_arrays|set_allow_duplicate_keys)$%%),
         group_by_regex("Broken JSON", mod, %regex~(try_fixing_broken_json)$%%)
@@ -1449,7 +1461,7 @@ def document_module_logger(_root : string) {
         group_by_regex("Setup", mod, %regex~.*(logger_init|logger_init_tee|logger_set_name|logger_set_path|logger_get_path|logger_get_name)$%%),
         group_by_regex("Level filters", mod, %regex~.*(logger_set_min_level|logger_get_min_level|logger_set_category_level|logger_clear_category_levels)$%%),
         group_by_regex("Output control", mod, %regex~.*(logger_set_stderr_fallback|logger_set_tee|logger_set_echo_stderr|logger_flush|logger_close|logger_capture_diagnostics)$%%),
-        group_by_regex("Log calls", mod, %regex~.*(logger_log|logger_trace|logger_debug|logger_info|logger_warning|logger_error|logger_critical)$%%),
+        group_by_regex("Log calls", mod, %regex~.*(logger_log|logger_try_log|logger_trace|logger_debug|logger_info|logger_warning|logger_error|logger_critical)$%%),
         group_by_regex("Stdout hook", mod, %regex~.*(logger_install_hook)$%%)
     )
     document("Structured JSON Lines logger", mod, "logger.rst", groups)
@@ -1981,6 +1993,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_clipboard(root)
     document_module_stddlg(root)
     document_module_network(root)
+    document_module_crypto(root)
     document_module_dashv(root)
     document_module_openai(root)
     document_module_stbimage(root)

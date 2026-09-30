@@ -1,0 +1,1 @@
+Authenticates and decrypts ciphertext followed by its 16-byte AES-256-GCM tag. Key is 32 bytes and nonce is 12 bytes. Returns false and clears output for invalid sizes, tag or AAD; unauthenticated plaintext is never published.

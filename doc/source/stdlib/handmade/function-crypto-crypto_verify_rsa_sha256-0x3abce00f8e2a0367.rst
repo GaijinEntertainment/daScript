@@ -1,0 +1,1 @@
+Verifies an RSA PKCS#1 v1.5 SHA-256 signature. Modulus and exponent are unsigned big-endian bytes; modulus is 2048–8192 bits and exponent is at most 8 bytes. Signature length equals the modulus byte length. Returns false for invalid inputs or signature. This does not parse certificates or establish trust in the supplied key.
