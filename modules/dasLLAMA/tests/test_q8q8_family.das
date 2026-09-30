@@ -429,6 +429,7 @@ def private q8q8_stamped_gate(t : T?; n : int64) {
         let xsp = addr<float const?>(xs[0])
         let xbsp = addr<int const?>(xbs[0])
         var ytp = addr(ytile[0])
+        q8q8_family_live()   //! on an amx stamp the witness is the tile unit's grant: a tile called with no backend selected faults without it
         q8q8_amx_cfg_gen()
         for (gu in range64(ng / gs)) {
             let gg = gu * gs
@@ -648,6 +649,7 @@ def private s16_stamped_gate(t : T?; n : int64) {   // nolint:STYLE038 — one f
         let xsp = addr<float const?>(xs[0])
         let xbsp = addr<int const?>(xbs[0])
         var ytp = addr(ytile[0])
+        q8q8_family_live()   //! on an amx stamp the witness is the tile unit's grant: a tile called with no backend selected faults without it
         q8q8_amx_cfg_gen()
         for (gu in range64(ng / gs)) {
             let gg = gu * gs

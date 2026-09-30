@@ -1974,7 +1974,9 @@ outside it), since the tile rounds every weight and activation to bf16 before th
 stamp the two stamped-tile cells assert their GEMV and the tile4 companion (the perm's 4-token
 vector tile over the int8 planes, bit-exact against the per-token GEMV on every stamp, held to
 the fp64 bar with its poison) and then register a skip and return, the stamped tile reading a
-bf16 panel where the cell holds int8 planes. The f32 batch cell runs at d=64 and again at d=48
+bf16 panel where the cell holds int8 planes. On an int8 amx stamp the two cells run the tile
+itself, and call the family's witness first: it is the tile unit's grant, which a cell that
+selects no backend would otherwise never ask for. The f32 batch cell runs at d=64 and again at d=48
 (on a grp16 bf16 stamp: a two-group tile and a one-group tail), its batch output NaN-filled
 before the run; the wrapper cells also run at ntok 4 and 9 (the decode step's shapes), where a
 bf16 stamp's batch never reaches the panel and is bit-exact against ntok GEMVs.
