@@ -7,7 +7,8 @@ require dasllama/dasllama_version
 // The record store is the site's single source of truth; this is the net under its schema:
 // ASR-shaped runs (workload, ms/audio_s tests, files) must round-trip the JSON store, the
 // upsert identity must treat workload as part of the key, and annotations must land on the
-// rows they select — and only those.
+// rows they select — and only those. The remote-desktop probe's process read rides here too; its
+// live cell skips where the running executable's name is longer than Linux keeps of one.
 
 let TMP = "modules/dasLLAMA/performance/records/_test_schema.json"   // _ prefix: excluded from the site merge
 
@@ -211,6 +212,34 @@ def test_optional_fields_round_trip(t : T?) {
         remove(TMP)
         delete back
         delete models
+    }
+}
+
+let LINUX_COMM_WIDTH = 15   // the characters of an executable's name a Linux process list keeps
+
+[test]
+def test_process_listed(t : T?) {
+    t |> run("a listing names an executable by its file name, and the excepted path does not count") @(t : T?) {
+        let system_daemon = "/System/Library/PrivateFrameworks/CoreParsec.framework/parsecd"
+        let app_daemon = "/Applications/Parsec.app/Contents/MacOS/parsecd"
+        t |> success(executable_in("/usr/sbin/cfprefsd\n{app_daemon}\n", "parsecd", "CoreParsec.framework"), "the app's daemon, by path")
+        t |> success(executable_in("systemd\nparsecd\n", "parsecd", ""), "a bare name, as Linux lists it")
+        t |> success(!executable_in("{system_daemon}\n/usr/bin/grep\n", "parsecd", "CoreParsec.framework"), "the system daemon sits under the excepted path")
+        t |> success(executable_in("{system_daemon}\n", "parsecd", ""), "with no exception the same line counts")
+        t |> success(!executable_in("sh -c pgrep -fl parsecd\n/usr/libexec/parsecd-helper\n", "parsecd", ""), "a line that only mentions the name is no executable of that name")
+        t |> success(!executable_in("", "parsecd", ""), "an empty listing names nothing")
+    }
+    t |> run("the live probe reads executables, not command lines") @(t : T?) {
+        t |> equal(process_listed("no_such_daemon_qq"), false, "a name only the probe's own command line spells is not listed")
+        var me = base_name(get_command_line_arguments()[0])
+        if (me |> ends_with(".exe")) {
+            me = slice(me, 0, length(me) - 4)
+        }
+        if (length(me) > LINUX_COMM_WIDTH) {
+            t |> skip("own executable `{me}` is longer than the {LINUX_COMM_WIDTH} characters a Linux process list keeps")
+            return
+        }
+        t |> success(process_listed(me), "the running executable `{me}` is listed")
     }
 }
 

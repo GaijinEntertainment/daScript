@@ -752,7 +752,12 @@ carries its leg's shape (the cpu legs' das child at `--npl-plen 128 --npl-reps 3
 `-npp 128`, `--no-op-offload` on the stock cpu arm alone; the metal leg at `-npp 512` with
 neither), image-chat receipts match their
 `backend`/`flavor` stamps and pin the fixture and mmproj, and every das row's `tune_sha`
-resolves to its committed generation archive.
+resolves to its committed generation archive; and the remote-desktop probe's process read: over
+an injected listing (`executable_in`) an executable counts by its file name, as a path or bare,
+a line under the excepted path does not (the same line with no exception the control), and a
+line that only mentions the name does not; live (`process_listed`) a name only the probe's own
+command line spells is not listed and the running executable is - that last assert skips where
+the executable's name is longer than the 15 characters a Linux process list keeps.
 `test_exchange_schema.das` - model-free: the exchange validator, sweeping the ENTIRE in-tree
 records/sidecar corpus, so a writer-schema change reds here first.
 `test_fat_start.das` - model-free: the runtime section's writer and a fat exe's first-start race

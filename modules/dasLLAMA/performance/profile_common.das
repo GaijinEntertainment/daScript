@@ -679,14 +679,27 @@ struct HardwareInfo {
 // (tune-hardening measurements) — "Parsec off" is a standing bench rule, so the row records
 // whether it actually was. Process-list probe; "off" is a probed verdict, "" means unprobed.
 def private platform_remote_desktop() : string {
-    if (is_windows()) {
-        let out = run_capture("tasklist /FI \"IMAGENAME eq parsecd.exe\" 2>nul", false)
-        return find(out, "parsecd") >= 0 ? "parsec" : "off"
-    }
     // macOS ships its OWN daemon named parsecd (CoreParsec.framework, a Spotlight helper) —
-    // only the Parsec app's daemon counts, so list full command lines and drop the system one
-    let out = run_capture("pgrep -fl parsecd 2>/dev/null | grep -v CoreParsec.framework", true)
-    return empty(out) ? "off" : "parsec"
+    // only the Parsec app's daemon counts
+    return process_listed("parsecd", "CoreParsec.framework") ? "parsec" : "off"
+}
+
+//! True when `listing` - one executable a line, a bare name or a path - names `name`; a line that contains `except_path` does not count.
+def executable_in(listing : string; name : string; except_path : string) : bool {
+    for (exe in split(listing, "\n")) {
+        continue if (!empty(except_path) && find(exe, except_path) >= 0)
+        return true if (base_name(strip(exe)) == name)
+    }
+    return false
+}
+
+//! True when a process whose executable is named `name` runs. Reads executable names, never command lines - the probe's own command line carries `name`.
+def process_listed(name : string; except_path : string = "") : bool {
+    if (is_windows()) {
+        let out = run_capture("tasklist /FI \"IMAGENAME eq {name}.exe\" 2>nul", false)
+        return find(out, name) >= 0
+    }
+    return executable_in(run_capture("ps -e -o comm= 2>/dev/null", false), name, except_path)
 }
 
 def private is_macos() : bool {
