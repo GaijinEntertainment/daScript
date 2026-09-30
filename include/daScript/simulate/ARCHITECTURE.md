@@ -84,6 +84,19 @@ static empty table and answers every probe with a miss, so a context that never 
 compile that failed at the seal, and a standalone exe between its creation and its adopt all
 answer `NOT_FOUND` rather than reading through a null pointer.
 
+## A panic skips `finally` in AOT too {#aot-finally-unwind}
+
+A panic skips every `finally` it leaves - in the interpreter, which has no handler between the
+throw and the recover, and in the JIT and any build with `DAS_ENABLE_EXCEPTIONS` off, where the
+panic is a longjmp that runs no destructor. AOT emits a `finally` as `das_finally` (`aot.h`), an
+RAII guard whose destructor runs the block, so where the panic is a C++ throw - Windows builds
+with the LLVM backend off - the unwind would run it. The guard records
+`std::uncaught_exceptions()` when it is built and runs nothing when its destructor finds more in
+flight. Running the block during an unwind is also fatal on its own: code that expects the body
+to have finished - a capture macro's check that a captured `JobStatus` was released - panics
+again inside a destructor, which is `noexcept`, and the process dies in `std::terminate`. The
+guard costs nothing where exceptions are off.
+
 ## Sanctioned hot-path additions
 
 The ledger the checklist's hot-path rules route to. Each entry: what was added, where, why
