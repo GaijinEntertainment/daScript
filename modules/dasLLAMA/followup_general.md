@@ -1954,16 +1954,24 @@
    `ffn_down` at Q4_1 (GGUF type 3), and the loader stops at `type 3 not supported`; the reference
    build's Q4_0 carriers routinely mix one. Done = Q4_1 decoded to the q51-style per-32 (d, m) plane, or the
    loader names the tensor and the format it wants re-quantized to.
-188. **The bf16 panel scatter is written three times, and the harness's format ladders six.** The
+188. **The bf16 panel scatter is written three times, and the harness's format ladders seven.** The
    folds left unapplied: the int8 walk inside `kq_batch_cell_gen` onto `bf16_walk` (the same
-   control flow at one group and the tile's four tokens - it needs its own before/after pair);
+   control flow at one group and the tile's four tokens, and since the walk's `tile4` arm the
+   same walk `kq_batch_cell_bf16` runs on a range shorter than the tile - it needs its own
+   before/after pair);
    `q8q8_bias_sums` onto `b32g_fill_bsums` under a scale argument; the two q8 batch kernels
    (`q8q8_batch_kernel_neon_laneq_gen`, `q8q8_batch_kernel_s16_gen`) as one generic over the
-   scale plane;
+   scale plane, their `short` arm with them; the batch cells under them the same way -
+   `q8q8_batch_cell_gen` and `q8q8_batch_cell_s16_gen` read token for token alike but for the
+   scale plane's type and the stamps they call, as do `q8q8_batch_amx_cell_gen` and its s16
+   twin, and `q8q8_batch_cell_bf16_template` is the form (a `def template`, two
+   `[from_template]` stubs); the tile stubs' reference bodies `q8q8_tile_ref` and
+   `q8q8_tile_s16_ref` over one dot placeholder;
    `q8q8_panel_gen` and its s16 twin over one row scatter shared with `kq_panel_rows_bf16`;
    `q8_panel_gen_impl` as a unit kind of `panel_gen_impl`; `panel_quads`' unpack arms shared with
-   `emit_block_kqv2`'s; one `kq_family_registries(fmt)` ladder behind the harness's six; one
-   `by_suffix(registry)` behind its five `*_variants_by_suffix`. Done = each fold applied and the
+   `emit_block_kqv2`'s; one `kq_family_registries(fmt)` ladder behind the harness's seven
+   (`kq_tile4_variants` the seventh); one `by_suffix(registry)` behind its seven
+   `*_variants_by_suffix`. Done = each fold applied and the
    x64 emission rail and the AMX TEST gate green, or the fold refused in an architecture section.
 189. **A superblock family's bf16 crown passes no end-to-end confirm.** `confirm_winner` runs for
    the q8 family alone, so a k/iq family's `amx_bf16` crown is the one-lane race's verdict; on
@@ -1987,7 +1995,8 @@
 191. **The generated tier branches on format ids as literals.** The emitter reads `te.kq == 33`
    and the runtime ladders `fmt == 4` (`kq_layout_of`), and the bf16 panel code follows them
    (`panel_is_grid`, `panel_scales`, `panel_quads`, `panel_ioff`, the panel stubs' ids, the
-   harness's `kq_tileforms` / `kq_arm_variant` / `kq_panel_variant`), with `256l` and `32l`
+   harness's `kq_tileforms` / `kq_arm_variant` / `kq_panel_variant`, and `kq_ref_row_dot`'s
+   ladder, which spells the id set of `kq_reads_packed_planes`), with `256l` and `32l`
    for the superblock and block widths; `REVIEW_KQ_FORMATS.md` wants the id resolved through
    `kq_fmt_of_id` and the widths by name. Done = the generated tier's ladders over `KqFmt`
    members, old and new in one pass, the x64 emission rail and the AMX TEST gate green.
@@ -2021,6 +2030,10 @@
    magnitude: `BF16_ENVELOPE` (`harness/token_block_race.das`), `BF16_ENVELOPE_REL` with
    `bf16_envelope` (`harness/gen_tune_probe.das`), `cmp_bf16`
    (`tests/test_prefill_cpu_kernels.das`), `held_bf16` (`tests/test_q8q8_family.das`). The
+   f32 and f16-scale image builders of `tests/test_q8q8_family.das`: `gemv_image_q8` beside
+   `gemv_image_s16`, `tile4_image_q8` beside `tile4_image_s16`, each pair one body over the
+   scale plane's type. The mismatch dump of `harness/gen_tune_probe.das`, one eight-line block
+   at seven sites. The
    two-thread race: `walk_thread` with `walk_two_contexts` beside `plane_thread` with
    `xbf16_two_contexts` (`tests/test_prefill_cpu_kernels.das`), one start barrier, round loop and
    assert set under two round bodies. The server rig: `with_mtp_server`
@@ -2029,7 +2042,53 @@
    `with_*_server` rig of that folder. Elapsed seconds off `get_time_usec`:
    `tests/fio/popen_timeout_tree.das`, `seconds_since` (`utils/internal/preflight/main.das`),
    `now_seconds` (`utils/watchdog/watchdog.das`), all repo root. Done = one fixture module the
-   tests and the harness both require for the planes and the envelope, one two-thread helper
+   tests and the harness both require for the planes and the envelope, one image builder a
+   pair generic over the scale plane, one dump helper in the harness, one two-thread helper
    taking the round's body, the rigs' boot and ready poll in `_server_rig.das`, and an elapsed
    seconds builtin beside `get_time_usec` - each with the suites that read it green, or the fold
    refused by name.
+197. **The `tile4` companion's shape is three constants no tuner races.** `tile4_perm`
+   (`dasllama/dasllama_gemm_gen.das`) stamps an amx perm's 4-token vector tile at kstep 4,
+   nrsplit 4 and a 2048-byte prefetch distance, for every family and every shape, off one race
+   on Granite Rapids over q8 planes (`harness/tile4_race.das`; `PERF_LEDGER.md`, the AMX
+   short-batch arc); a superblock family's prefetch distance and Sapphire Rapids are unraced.
+   Done = the `tile4` a tuner seat raced per family at ntok 4, or the race run over a superblock
+   plane and on Sapphire Rapids.
+198. **The reference-build tool applies its patch on a shallow clone and fails late.**
+   `benchmarks/setup_lcpp_ref.das` lays `mtmd-timing.patch` by three-way merge, which needs the
+   blob of the commit the patch was cut at; on a shallow `--src` the apply stops at git's own
+   `repository lacks the necessary blob` after the worktree is made, and `BRINGUP.md` carries the
+   trap as prose. Done = the tool reads `git rev-parse --is-shallow-repository` before it makes
+   the worktree and refuses a shallow `--src` by name with the `fetch --unshallow` line, and the
+   `BRINGUP.md` paragraph goes.
+199. **The 4-row decode step on the `x86-amx` class is unread past the weight GEMMs.** The
+   `tile4` walk covers the FFN and the projections' tiles; the per-row attention, the classifier
+   and the per-layer embedding at four rows have no reading on the landed walk. Done =
+   `benchmarks/decode_prof.das` at 1 and 4 rows on a q8 carrier, the largest bucket that grows
+   faster than the rows fixed or named here.
+200. **The q8q8 grid's prefetch row prefetches nothing.** The `[tune_perm]` row `dot =
+   "vpdpbusd", width = 512, mr = 16, kstep = 2, gkstep = 2, bias = 128, prefetch = 2048`
+   (`dasllama/dasllama_math_gen.das`) spells the distance `prefetch`, and the generators read `pf`
+   (`parse_perm`, `dasllama/dasllama_gemm_gen.das`): the row emits the crown beside it, the tuner
+   races one kernel twice, and the GEMV's weight stream has no raced prefetch on any class - the
+   stream a one-row decode step reads, as the four-row step reads its tile4's. Done = the row
+   spelled `pf`, its GEMV prefetch in the x64 emission rail and raced on an avx512 box (the class
+   profiles re-exported where a crown moves), or the row deleted.
+201. **Checklist defects the AMX short-batch audit round named.** `REVIEW.md`: the caller/callee
+   guard rule's fix ("drop the caller's copy") is wrong where the caller's check also gates its
+   own work - the fix is one decision computed once and passed down; its measured-choice rule
+   admits a script in the tree whose arms are hand-swapped sources - it wants every arm
+   selectable at the tip. `REVIEW_MEASUREMENT.md`: the pair rule binds a commit message or PR
+   body and lets a pair in a checked-in document escape. `REVIEW_KQ_FORMATS.md`: the literal-id
+   rule covers an id mapped to a number and not an id mapped to a per-format function.
+   `REVIEW_DOCS.md`: the row-number rule does not say whether a number used and dropped inside one
+   branch counts. `tests/REVIEW.md`: the capability rule fires on a cell that skips and not on one
+   whose bar or route a capability selects without skipping; the skip-fact list stands in for
+   the property; the sweep rule does not say whether an input row counts.
+   `tests/REVIEW_PINNED_GATES.md`: a new cell in a pinned file has no rule naming its axis.
+   `harness/REVIEW.md`: the race-placement rule's trigger covers every unbenched kernel where
+   its harm is a kernel that pins a matmul backend. `performance/REVIEW.md`: three rules check
+   which build timed a row, and the board-cell sentence binds no diff. The root `REVIEW.md` and
+   `modules/REVIEW.md` do not say their subfolders carry checklists; `modules/dasLLVM/REVIEW.md`'s
+   two `[llvm_code]` rules are unbounded by folder and one names an example. Done = each reworded
+   under `skills/review_md.md`, one document at a time, or refused by name.
