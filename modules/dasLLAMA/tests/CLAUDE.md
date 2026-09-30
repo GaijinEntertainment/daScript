@@ -762,7 +762,9 @@ the box-profile apply firing an installed race hook exactly once for a missing s
 fat hook declining outside a fat exe; and the per-user sidecar placement - the `~/.dasllama/tune`
 path, the one-time adoption of a sidecar beside the exe, the placement hook's wiring (registered
 by the engine, run before the apply reads the path, absent without harm), and when a sidecar
-location counts as explicitly chosen.
+location counts as explicitly chosen: a runtime override is, and is the path read; with none, the
+location is explicit exactly where `DAS_TUNE_MANIFEST` chose one (the suite runner sets it on a
+box with a minted manifest), and that manifest is the path read again once the override clears.
 `test_fat_hook_umbrella.das` - model-free: a program requiring the engine umbrella alone (what
 the shipped bench requires, never the facade) carries the first-start race hook - the umbrella's
 `[init]` set registers it, or a fat bench exe would serve Metal uncrowned forever.

@@ -10,6 +10,7 @@ require llvm/daslib/llvm_tune    // set_tune_manifest_runtime_path, tune_sidecar
 require daslib/json_boost
 require daslib/jobque_boost   // with_job_que - the snapshot's lane count and the race both need a queue
 require daslib/fio
+require daslib/env_registry
 require strings
 
 // The runtime section's writer and first-start race (dasllama_fat_start), model-free: the
@@ -203,10 +204,16 @@ def test_fat_sidecar_lives_per_user(t : T?) {
         }
     }
     t |> run("a chosen sidecar location is explicit; the default beside the app is not") @(t : T?) {
-        t |> success(!tune_manifest_explicit(), "nothing chosen in this process")
+        let env_manifest = env_is_set("DAS_TUNE_MANIFEST") ? env_value_of("DAS_TUNE_MANIFEST") : ""
+        let env_chose_manifest = !empty(env_manifest)   // the suite runner hands a stocked box its manifest this way
+        t |> equal(tune_manifest_explicit(), env_chose_manifest, "nothing chosen in this process - explicit only where the environment chose (DAS_TUNE_MANIFEST='{env_manifest}')")
         set_tune_manifest_runtime_path("chosen.tune.json")
         t |> success(tune_manifest_explicit(), "the runtime override chooses it")
+        t |> equal(tune_manifest_path(), "chosen.tune.json", "and it is the path read")
         set_tune_manifest_runtime_path("")
-        t |> success(!tune_manifest_explicit(), "cleared")
+        t |> equal(tune_manifest_explicit(), env_chose_manifest, "cleared (DAS_TUNE_MANIFEST='{env_manifest}')")
+        if (env_chose_manifest) {
+            t |> equal(tune_manifest_path(), env_manifest, "cleared, the environment's manifest is the path read again")
+        }
     }
 }
