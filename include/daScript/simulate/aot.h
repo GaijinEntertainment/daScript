@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm> // constexpr std::max
+#include <exception>
 
 #include "daScript/misc/callable.h"
 #include "daScript/misc/macro.h"
@@ -2143,16 +2144,25 @@ namespace das {
         }
     };
 
+    // include/daScript/simulate/ARCHITECTURE.md#aot-finally-unwind
     template <typename TT>
     struct das_final_call {
         TT finalizer;
+#if DAS_ENABLE_EXCEPTIONS
+        int unwindingAtEntry = std::uncaught_exceptions();
+#endif
         das_final_call() = delete;
         das_final_call(const das_final_call &) = delete;
         das_final_call & operator = (const das_final_call &) = delete;
         das_final_call & operator = (das_final_call &&) = delete;
         das_final_call(das_final_call &&) = default;
         __forceinline das_final_call ( TT && fn ) : finalizer(das::move(fn)) {}
-        __forceinline ~das_final_call () { finalizer(); }
+        __forceinline ~das_final_call () {
+#if DAS_ENABLE_EXCEPTIONS
+            if ( std::uncaught_exceptions() > unwindingAtEntry ) return;
+#endif
+            finalizer();
+        }
     };
 
     template <typename TT>
