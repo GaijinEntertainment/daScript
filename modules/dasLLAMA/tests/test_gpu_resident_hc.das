@@ -70,7 +70,7 @@ def test_gpu_resident_hc(t : T?) {
             let slots = gpu_resident_hot_slots()
             to_log(LOG_INFO, "hot expert pool: {gpu_resident_hot_slots()} slots a layer, {hot.uploads} experts uploaded, {hot.hits} of {hot.picks} decode picks and {hot.window_hits} of {hot.window_rows} window slot rows served on the device\n")
             if (slots > 0l) {
-                let knob = "gpu_resident_hot_slots() = {slots}, DASLLAMA_GPU_HEAT = '{get_env_variable("DASLLAMA_GPU_HEAT")}'"
+                let knob = "gpu_resident_hot_slots() = {slots}, DASLLAMA_GPU_HEAT = {g_env_gpu.gpu_heat ?? HOT_SLOTS_AUTO} (-1 = unset, the plan's own count)"
                 t |> equal(hot.picks, long_length(toks) * tr.config.n_layers * tr.config.n_expert_used, "every routed layer took the pool, and every decode pick went through it ({knob})")
                 t |> success(hot.uploads > 0l && hot.hits > 0l && hot.hits < hot.picks, "the prompt's picks filled the pool, the device served some of the steps' picks and the host the rest - both shares of the sum under the bar below ({knob}: {hot.hits} hits of {hot.picks} picks, {hot.uploads} uploads)")
                 t |> equal(hot.window_rows, long_length(prompt) * tr.config.n_layers * tr.config.n_expert_used, "the tier's expert chain took every routed layer's window ({knob})")

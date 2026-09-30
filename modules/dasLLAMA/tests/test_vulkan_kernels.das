@@ -3226,14 +3226,22 @@ def private lut_cm2_cell(t : T?; name : string; fmt : int;
 [test]
 def test_vkd_iq4xs_cm2_batch(t0 : T?) {
     t0 |> run("cm2 IQ4_XS l/m/s/e tiles and the KHR tile == the CPU oracle (workgroup-staged codebook decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        lut_cm2_cell(t, "iq4xs", int(KqFmt.iq4xs), @@iq4xsf16_gemm_oracle, @@iq3s4f16_gemm_oracle)
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            lut_cm2_cell(t, "iq4xs", int(KqFmt.iq4xs), @@iq4xsf16_gemm_oracle, @@iq3s4f16_gemm_oracle)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
     }
 }
 
 [test]
 def test_vkd_iq3s4_cm2_batch(t0 : T?) {
     t0 |> run("cm2 iq3s4 l/m/s/e tiles and the KHR tile == the CPU oracle (the odd codebook staged, the iq3 row's 1 + 2s sub-scale); the iq4xs oracle is its control") <| @(t : T?) {
-        lut_cm2_cell(t, "iq3s4", int(KqFmt.iq3s4), @@iq3s4f16_gemm_oracle, @@iq4xsf16_gemm_oracle)
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            lut_cm2_cell(t, "iq3s4", int(KqFmt.iq3s4), @@iq3s4f16_gemm_oracle, @@iq4xsf16_gemm_oracle)
+        } else {
+            t |> skip("dasVulkan not present")
+        }
     }
 }
 
