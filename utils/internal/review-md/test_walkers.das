@@ -368,6 +368,59 @@ def test_dasllama_cite_require_gates(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
+//! the generator stamp on the planted tree: no generator files - the check stands down; planted - red until the stamp the finding prints is set;
+//! a comment edit leaves the stamp alone, a code edit moves it
+[test]
+def test_dasllama_gemm_gen_stamp(t : T?) {
+    let tree = getcwd()
+    if (!fexist(path_join(tree, "modules/dasLLAMA/REVIEW.das"))) {
+        t |> skip("not run from the repo root")
+        return
+    }
+    let fixture_r = create_temp_directory_result("review_dasllama_gemm_gen")
+    t |> success(fixture_r is value, "temp fixture dir created")
+    if (!(fixture_r is value)) return
+    let fixture = unsafe(fixture_r.value)
+    make_dasllama_fixture(t, tree, fixture)
+    restamp_dasllama_gate(t, fixture)
+    let gate = path_join(fixture, "modules/dasLLAMA/REVIEW.das")
+    let needle = "dasllama_gemm_gen.das: the generated GEMM tier's generator sources changed"
+    let marker = "GEMM_GEN_STAMP_HASH = "
+    let gen_at = "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das"
+    let gen_text = "options gen2\n\ndef tile_kstep() : int \{\n    return 2\n\}\n"
+
+    let absent = spawn_at(fixture, [gate])
+    t |> equal(0, absent.rc, "a tree without the generated tier has no generator to stamp: {absent.out}")
+
+    write_at(t, fixture, gen_at, gen_text)
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das", "options gen2\n")
+    write_at(t, fixture, "modules/dasLLAMA/.das_module", "\"dasllama_gemm_gen\", \"dasllama_gemm_schema\", " + DASLLAMA_MODULE_LIST)
+    let planted = spawn_at(fixture, [gate])
+    t |> equal(1, planted.rc, "the planted generators do not match the shipped stamp")
+    t |> success(find(planted.out, needle) >= 0, "finding fired: {needle}")
+    let at = find(planted.out, marker)
+    t |> success(at >= 0, "the finding prints the hash to re-stamp with: {planted.out}")
+    if (at >= 0) {
+        let from = at + length(marker)
+        let hash = slice(planted.out, from, find(planted.out, "ul", from))
+        let stamped = [for (line in split(fread(gate), "\n")); line |> starts_with("let private {marker}") ? "let private {marker}{hash}ul" : line]
+        t |> success(fwrite(gate, join(stamped, "\n")), "re-stamped the fixture's gate copy")
+        let green = spawn_at(fixture, [gate])
+        t |> equal(0, green.rc, "the stamp the finding printed is green: {green.out}")
+
+        write_at(t, fixture, gen_at, "{gen_text}// a comment is outside the stamp\n")
+        let commented = spawn_at(fixture, [gate])
+        t |> equal(0, commented.rc, "a comment edit leaves the stamp alone: {commented.out}")
+
+        write_at(t, fixture, gen_at, replace(gen_text, "return 2", "return 4"))
+        let edited = spawn_at(fixture, [gate])
+        t |> equal(1, edited.rc, "a code edit moves the stamp")
+        t |> success(find(edited.out, needle) >= 0, "finding fired: {needle}")
+    }
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
 def make_vulkan_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasVulkan/daslib/vulkan_toy.das", "options gen2\n")
     write_at(t, root, "modules/dasVulkan/daslib/vulkan_toy_boost.das", "options gen2\n")

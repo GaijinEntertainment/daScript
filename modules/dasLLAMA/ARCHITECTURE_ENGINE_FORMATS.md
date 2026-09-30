@@ -162,7 +162,7 @@ classifier and final norm are dead by construction (tensor lookup is first-match
 is last). The prepared image folds the head's name and size into its path hash, so the
 trunk-only and trunk+head images never collide and one image file serves both trunk and head.
 
-### CPU kernel tiers
+### CPU kernel tiers {#cpu-kernel-tiers}
 
 - **`dasllama_math.das`** - the numeric ABSTRACTION: typedefs, active backend pointers, public
   wrappers, dispatch shaping, and the array-sizing helpers every tier and the engine share
@@ -188,7 +188,12 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   The bf16 tile's operand builders - the activation widen (`xbf16_build`, its `bf16_bits`
   narrow) and the row-dequant reference panel (`kq_panel_rows_bf16`) - sit in
   `dasllama_math_gen.das` beside the walk that runs them once per batch call, in its JIT
-  partition (`ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining`).
+  partition (`ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining`). The JIT cache keys a
+  generated kernel by its stub's hash and its perm's arguments, never by the generator's text,
+  so `REVIEW.das`'s `check_gemm_gen_stamp` pins one hash over `dasllama_gemm_gen.das` and
+  `dasllama_gemm_schema.das` with their comments and blank lines cut: a code edit to either is red until the stamp
+  moves, and the finding asks for the `LLVM_JIT_CODEGEN_VERSION` bump that re-keys the cached
+  kernels. The check licenses no names.
 - **`dasllama_tune.das`** - the per-box loop-hint tuner (`[tuned]` / `[dasllama_grid]`) and the
   perm-less clone `[from_template]` (a template body into an empty stub, placeholder calls
   renamed to the annotation's targets - the kernel shapes' stamp). Tuning
