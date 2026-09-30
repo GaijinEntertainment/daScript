@@ -24,6 +24,10 @@ list(FILTER _sweep_in EXCLUDE REGEX "/_")   # required helpers, not entry points
 if(NOT DAS_STANDALONE_SWEEP_FILTER STREQUAL "")
     list(FILTER _sweep_in INCLUDE REGEX "${DAS_STANDALONE_SWEEP_FILTER}")
 endif()
+# a sanitizer build sweeps tests/language only, as its JIT and LLVM-AOT sweeps do
+if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
+    list(FILTER _sweep_in INCLUDE REGEX "/tests/language/")
+endif()
 
 # `options no_aot`, a quote and require_module_now each leave a file with no standalone form;
 # a stem another file already claimed would emit one namespace twice and collide at link
