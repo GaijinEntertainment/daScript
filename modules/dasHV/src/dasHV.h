@@ -12,6 +12,7 @@ MAKE_EXTERNAL_TYPE_FACTORY(HttpRequest,HttpRequest)
 MAKE_EXTERNAL_TYPE_FACTORY(HttpResponse,HttpResponse)
 MAKE_EXTERNAL_TYPE_FACTORY(HttpContext,hv::HttpContext)
 MAKE_EXTERNAL_TYPE_FACTORY(HttpResponseWriter,hv::HttpResponseWriter)
+MAKE_EXTERNAL_TYPE_FACTORY(WebSocketAdmission,das::WebSocketAdmission)
 
 DAS_BIND_ENUM_CAST(ws_opcode)
 DAS_BASE_BIND_ENUM_GEN(ws_opcode,ws_opcode)
@@ -42,6 +43,11 @@ int das_wss_send_buf ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t
 int das_wss_send_fragment ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t len, int32_t fragment, ws_opcode opcode );
 int das_wss_close_channel ( Handle<hv::WebSocketChannel> h );
 bool das_wss_set_bind_host ( Handle<hv::WebSocketServer> h, const char * host );
+bool das_wss_upgrade(Handle<hv::WebSocketServer> h, int timeout_ms, Lambda lmb, Context * context, LineInfoArg * at);
+int das_accept_websocket(Handle<WebSocketAdmission> admission, const char * protocol);
+int das_reject_websocket(Handle<WebSocketAdmission> admission, int status);
+bool das_wss_set_access_log(Handle<hv::WebSocketServer> h, bool enabled);
+bool das_wss_set_limits(Handle<hv::WebSocketServer> h, int http_bytes, int ws_bytes, int events, int queue_bytes);
 int das_wss_start ( Handle<hv::WebSocketServer> h );
 int das_wss_bound_port ( Handle<hv::WebSocketServer> h );
 void das_wss_tick ( Handle<hv::WebSocketServer> h );
@@ -102,6 +108,8 @@ void das_req_HEAD ( const char * url, const TBlock<void,HttpResponse*> & block, 
 void das_req_HEAD_H ( const char * url, const TTable<char *,char *> & tab, const TBlock<void,HttpResponse*> & block, Context * context, LineInfoArg * at );
 
 // Generic request
+int das_req_REQUEST_CHECKED(HttpRequest * req, const char * ca_file, int max_response_bytes,
+    const TBlock<void,TTemporary<HttpResponse*>> & block, Context * context, LineInfoArg * at);
 void das_req_REQUEST ( HttpRequest * req, const TBlock<void,HttpResponse*> & block, Context * context, LineInfoArg * at );
 
 // Streaming request — invokes on_body per chunk, then on_complete when done

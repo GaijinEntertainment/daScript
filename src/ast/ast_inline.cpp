@@ -2329,6 +2329,7 @@ namespace das {
         // the position into a splice-friendly shape and let the next round splice there.
         // true = the site was consumed (lowered, or refused with a report); false = the
         // position is eager - the splice proceeds
+        // src/ast/ARCHITECTURE.md#inline-conditional-lowering
         bool InlinePatch::tryLowerCallPosition ( const PlannedSite & site, const SpliceSubject & subj,
                 CallerSpliceState & state, int anchorIndex ) {
             auto callLike = site.callLike;
@@ -2421,8 +2422,18 @@ namespace das {
                         return true;
                     }
                 }
+                if ( !condOp->type ) {
+                    siteFail(site, "can't inline " + subjName + ": '" + opName + "' carries no type - hoist the call into its own statement", callLike->at);
+                    return true;
+                }
+                // the arms store into an uninitialized declaration (30316)
+                if ( !condOp->type->ref && condOp->type->hasNonTrivialCtor() ) {
+                    siteFail(site, "can't inline " + subjName + ": '" + opName + "' result type "
+                        + condOp->type->describe() + " requires nontrivial construction - hoist the call into its own statement", callLike->at);
+                    return true;
+                }
                 // rewrite var+if in place only for a GENERATED hoist temp - a user declaration
-                // keeps its metadata (constness, aka), hoists fresh, and rewrites next round
+                // keeps its metadata (constness, aka) and receives a separate lowered temp.
                 Variable * rootVar = nullptr;
                 if ( site.stmt->rtti_isLet() ) {
                     auto let = static_cast<ExprLet *>(site.stmt);
@@ -2445,18 +2456,7 @@ namespace das {
                     }
                     list.insert(list.begin()+anchorIndex, hoist);
                     indexShift[site.anchor.block] += 1;
-                    changed = true;
-                    return true;
-                }
-                if ( !condOp->type ) {
-                    siteFail(site, "can't inline " + subjName + ": '" + opName + "' carries no type - hoist the call into its own statement", callLike->at);
-                    return true;
-                }
-                // the arms store into an uninitialized declaration (30316)
-                if ( !condOp->type->ref && condOp->type->hasNonTrivialCtor() ) {
-                    siteFail(site, "can't inline " + subjName + ": '" + opName + "' result type "
-                        + condOp->type->describe() + " requires nontrivial construction - hoist the call into its own statement", callLike->at);
-                    return true;
+                    rootVar = hoist->variables[0];
                 }
                 vector<ExpressionPtr> replacement;
                 replacement.push_back(makeUninitDecl(site.stmt->at, rootVar->name, condOp->type));

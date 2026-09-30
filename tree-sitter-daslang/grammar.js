@@ -274,6 +274,7 @@ module.exports = grammar({
       $.identifier,
       $.integer_literal,
       $.float_literal,
+      seq('-', choice($.integer_literal, $.float_literal)),
       'true',
       'false',
       seq('@@', $.identifier),  // function pointer value (e.g., @@hash)

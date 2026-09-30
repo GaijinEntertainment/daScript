@@ -13,6 +13,7 @@ module json shared public
 //! See also ``json_boost`` for automatic struct ↔ JSON conversion.
 
 require daslib/strings_boost
+require daslib/utf8_utils
 
 variant JsValue {
     //! Single JSON element.
@@ -271,7 +272,32 @@ def private next(var text : iterator<int>; var character, line, row : int&) : bo
 
 def private is_json_white_space(ch : int) : bool => ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t'
 
-def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one linear lexer state machine
+def private valid_number_spelling(text : array<uint8>) : bool {
+    var i = 0
+    let n = length(text)
+    if (i < n && text[i] == '-'u8) { i++ }
+    if (i == n) { return false }
+    if (text[i] == '0'u8) { i++ }
+    else {
+        if (int(text[i]) < '1' || int(text[i]) > '9') { return false }
+        while (i < n && is_number(int(text[i]))) { i++ }
+    }
+    if (i < n && text[i] == '.'u8) {
+        i++; let start = i
+        while (i < n && is_number(int(text[i]))) { i++ }
+        if (i == start) { return false }
+    }
+    if (i < n && (text[i] == 'e'u8 || text[i] == 'E'u8)) {
+        i++
+        if (i < n && (text[i] == '+'u8 || text[i] == '-'u8)) { i++ }
+        let start = i
+        while (i < n && is_number(int(text[i]))) { i++ }
+        if (i == start) { return false }
+    }
+    return i == n
+}
+
+def private _lexer(var stext : string implicit; strict : bool = false; max_string_bytes : int = -1) {  // nolint:STYLE038 - one linear lexer state machine
     //! creates a lexer generator from the input `stext` string.
     return <- generator<TokenAt> {
         var tin : iterator<int>
@@ -291,6 +317,14 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                 next(tin, ahead)
             } elif (ahead == '"') {
                 while (next(tin, ahead, line, row) && ahead != '"') {
+                    if (strict && ahead < 32) {
+                        yield TokenAt(value = Token(_error = "unescaped control character"), line = line, row = row)
+                        return false
+                    }
+                    if (max_string_bytes >= 0 && length(str) > max_string_bytes) {
+                        yield TokenAt(value = Token(_error = "string byte limit exceeded"), line = line, row = row)
+                        return false
+                    }
                     if (ahead == '\\') {
                         if (next(tin, ahead, line, row)) {
                             if (ahead == 'u') {
@@ -309,6 +343,10 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                                 }
                                 if (valid_hex && length(hex_str) == 4) {
                                     let codepoint = hex4_codepoint(hex_str)
+                                    if (strict && (codepoint == 0u || (is_high_surrogate(pending_high) && !is_low_surrogate(codepoint)) || (is_low_surrogate(codepoint) && !is_high_surrogate(pending_high)))) {
+                                        yield TokenAt(value = Token(_error = "invalid or unsupported Unicode escape"), line = line, row = row)
+                                        return false
+                                    }
                                     if (is_high_surrogate(codepoint)) {
                                         flush_unpaired_surrogate(str, pending_high)
                                         pending_high = codepoint
@@ -322,6 +360,10 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                                         push_utf8(str, codepoint)
                                     }
                                 } else {
+                                    if (strict) {
+                                        yield TokenAt(value = Token(_error = "invalid Unicode escape"), line = line, row = row)
+                                        return false
+                                    }
                                     flush_unpaired_surrogate(str, pending_high)
                                     push(str, uint8('\\')) // nolint:STYLE012 the unparsed escape appends to the accumulating token buffer
                                     push(str, uint8('u'))
@@ -331,6 +373,10 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                                     }
                                 }
                                 continue
+                            }
+                            if (strict && (is_high_surrogate(pending_high) || !(ahead == '"' || ahead == '\\' || ahead == '/' || ahead == 'b' || ahead == 'f' || ahead == 'n' || ahead == 'r' || ahead == 't'))) {
+                                yield TokenAt(value = Token(_error = "invalid string escape"), line = line, row = row)
+                                return false
                             }
                             flush_unpaired_surrogate(str, pending_high)
                             if (ahead == 'b') {
@@ -352,6 +398,10 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                             return false
                         }
                     } else {
+                        if (strict && is_high_surrogate(pending_high)) {
+                            yield TokenAt(value = Token(_error = "unpaired high surrogate"), line = line, row = row)
+                            return false
+                        }
                         flush_unpaired_surrogate(str, pending_high)
                         push(str, uint8(ahead))
                     }
@@ -360,7 +410,15 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                     yield TokenAt(value = Token(_error = "string exceeds text"), line = line, row = row)
                     return false
                 }
+                if (strict && is_high_surrogate(pending_high)) {
+                    yield TokenAt(value = Token(_error = "unpaired high surrogate"), line = line, row = row)
+                    return false
+                }
                 flush_unpaired_surrogate(str, pending_high)
+                if (max_string_bytes >= 0 && length(str) > max_string_bytes) {
+                    yield TokenAt(value = Token(_error = "string byte limit exceeded"), line = line, row = row)
+                    return false
+                }
                 yield TokenAt(value = Token(_string = string(str)), line = line, row = row)
                 clear(str)
                 next(tin, ahead)
@@ -391,6 +449,10 @@ def private _lexer(var stext : string implicit) {  // nolint:STYLE038 - one line
                         push(str, uint8(ahead))
                         anyNumbers = true
                     }
+                }
+                if (strict && !valid_number_spelling(str)) {
+                    yield TokenAt(value = Token(_error = "invalid number spelling"), line = line, row = row)
+                    return false
                 }
                 var num = string(str)
                 if (!anyNumbers) {
@@ -479,7 +541,7 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
     return parse_value(itv, ahead, error)
 }
 
-def private parse_value(var itv : iterator<TokenAt>; var ahead : TokenAt; var error : string&) : JsonValue? {  // nolint:STYLE037 - recursive descent, one arm per json production
+def private parse_value(var itv : iterator<TokenAt>; var ahead : TokenAt; var error : string&) : JsonValue? {  // nolint:STYLE037,STYLE038 - recursive descent shares the token cursor and error path, one arm per JSON production
     //! parses a JSON value whose first token `ahead` has already been read.
     if (ahead.value is _symbol) {
         let sym = ahead.value as _symbol
@@ -489,6 +551,7 @@ def private parse_value(var itv : iterator<TokenAt>; var ahead : TokenAt; var er
         }
         if (sym == '[') {
             var arr : array<JsonValue?>
+            {
             var element : TokenAt
             while (next(itv, element)) {
                 if (empty(arr) && (element.value is _symbol) && (element.value as _symbol) == ']') return JV(arr)
@@ -505,8 +568,10 @@ def private parse_value(var itv : iterator<TokenAt>; var ahead : TokenAt; var er
             }
             error = "unexpected eos";
             return null;
+            } finally { unsafe { delete arr } }
         } elif (sym == '{') {
             var tab : table<string; JsonValue?>;
+            {
             while (!empty(itv)) {
                 if (!expect_token(itv, ahead, Token_string, error)) {
                     if ((ahead.value is _symbol) && (ahead.value as _symbol) == '}' && empty(tab)) {
@@ -520,6 +585,7 @@ def private parse_value(var itv : iterator<TokenAt>; var ahead : TokenAt; var er
                 var value = parse_value(itv, error);
                 if (value == null) return null;
                 if (!allow_duplicate_keys && key_exists(tab, key)) {
+                    delete_json(value)
                     error = "duplicate key {key} at {ahead.line}:{ahead.row}";
                     return null;
                 }
@@ -538,6 +604,7 @@ def private parse_value(var itv : iterator<TokenAt>; var ahead : TokenAt; var er
                 return null;
             }
             return JV(tab);
+            } finally { unsafe { delete tab } }
         } else {
             error = "unexpected symbol `{to_char(sym)}` aka ASCII {sym} at {ahead.line}:{ahead.row}";
             return null;
@@ -579,6 +646,77 @@ def read_json(text : array<uint8>; var error : string&) : JsonValue? {
 }
 
 var private no_trailing_zeros = false
+
+struct JsonReadLimits {
+    //! Bounds for strict, scalar-safe reads. Maximum nesting is capped at 256.
+    max_bytes : int = 1048576
+    max_depth : int = 64
+    max_tokens : int = 65536
+    max_string_bytes : int = 65536
+}
+
+def private check_json_tokens(text : string; limits : JsonReadLimits; var error : string&) : bool {
+    var lex <- _lexer(clone_string(text), true, limits.max_string_bytes)
+    {
+        var token : TokenAt
+        var count = 0; var depth = 0
+        while (next(lex, token)) {
+            if (count >= limits.max_tokens) { error = "token limit exceeded"; return false }
+            count++
+            if (token.value is _error) { error = token.value as _error; return false }
+            if (token.value is _symbol) {
+                let symbol = token.value as _symbol
+                if (symbol == '[' || symbol == '{') {
+                    depth++
+                    if (depth > limits.max_depth) { error = "nesting limit exceeded"; return false }
+                } elif (symbol == ']' || symbol == '}') {
+                    depth--
+                    if (depth < 0) { error = "unexpected closing delimiter"; return false }
+                }
+            }
+        }
+        if (count == 0 || depth != 0) { error = "incomplete JSON value"; return false }
+        return true
+    } finally { delete lex }
+}
+
+def read_json_bounded(text : array<uint8> const implicit; limits : JsonReadLimits; var error : string&) : JsonValue? {
+    //! Strict read with preflight budgets before recursive tree construction. Rejects invalid
+    //! UTF-8, duplicate keys, trailing tokens, malformed escapes/numbers and escaped NUL
+    //! (daslang strings are NUL-terminated). The ordinary reader's options are preserved.
+    error = ""
+    if (limits.max_bytes < 1 || limits.max_depth < 1 || limits.max_depth > 256 || limits.max_tokens < 1 || limits.max_string_bytes < 0) {
+        error = "invalid JSON limits"; return null
+    }
+    if (length(text) > limits.max_bytes) { error = "input byte limit exceeded"; return null }
+    if (!is_utf8_string_valid(text)) { error = "invalid UTF-8"; return null }
+    for (byte in text) { if (byte == 0u8) { error = "raw NUL in JSON input"; return null } }
+    var input = string(text)
+    {
+        if (!check_json_tokens(input, limits, error)) { return null }
+        var lex <- _lexer(clone_string(input), true, limits.max_string_bytes)
+        let previous_duplicates = set_allow_duplicate_keys(false)
+        {
+            var result = parse_value(lex, error)
+            var trailing : TokenAt
+            if (result != null && next(lex, trailing)) {
+                delete_json(result); result = null; error = "trailing JSON input"
+            }
+            if (result == null && empty(error)) { error = "missing JSON value" }
+            return result
+        } finally {
+            set_allow_duplicate_keys(previous_duplicates)
+            delete lex
+        }
+    } finally { unsafe(delete_string(input)) }
+}
+
+def read_json_bounded(text : string implicit; limits : JsonReadLimits; var error : string&) : JsonValue? {
+    //! String form of the bounded reader; use the byte-array form for network input.
+    var result : JsonValue?
+    peek_data(text) $(bytes) { result = read_json_bounded(bytes, limits, error) }
+    return result
+}
 
 def set_no_trailing_zeros(value : bool) {
     //! if `value` is true, then numbers are written without trailing zeros.

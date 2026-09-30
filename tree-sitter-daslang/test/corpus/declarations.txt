@@ -488,3 +488,44 @@ require ../../foo/bar.das
       (identifier)
       (identifier)
       (identifier))))
+
+================================================================================
+Signed numeric annotations
+================================================================================
+
+[comment(min=-2, offset=-1.5, values=(-3, -2.5))]
+struct Signed {
+  @min=-2 @offset=-1.5 value : int
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (structure_declaration
+    (annotation_list
+      (annotation_declaration
+        (annotation_name
+          (identifier))
+        (annotation_argument_list
+          (annotation_argument
+            (identifier)
+            (integer_literal))
+          (annotation_argument
+            (identifier)
+            (float_literal))
+          (annotation_argument
+            (identifier)
+            (integer_literal)
+            (float_literal)))))
+    (identifier)
+    (structure_member
+      (structure_field
+        (metadata_argument_list
+          (annotation_argument
+            (identifier)
+            (integer_literal))
+          (annotation_argument
+            (identifier)
+            (float_literal)))
+        (identifier)
+        (basic_type)))))

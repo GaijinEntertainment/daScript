@@ -19,8 +19,8 @@ foreach(_i RANGE 0 ${_last})
     endif()
 endforeach()
 if(NOT _cmd)
-    message(FATAL_ERROR "scrub_clang_include.cmake: no command after '--'. "
-        "Usage: cmake -P scrub_clang_include.cmake -- <command> [args...]")
+    message(FATAL_ERROR "scrub_openssl_include.cmake: no command after '--'. "
+        "Usage: cmake -P scrub_openssl_include.cmake -- <command> [args...]")
 endif()
 
 # Drop any INCLUDE entry under a clang resource dir (.../lib/clang/...).
@@ -38,5 +38,5 @@ set(ENV{INCLUDE} "${_keep}")
 
 execute_process(COMMAND ${_cmd} RESULT_VARIABLE _rv)
 if(_rv)
-    message(FATAL_ERROR "scrub_clang_include: command failed (${_rv}): ${_cmd}")
+    message(FATAL_ERROR "scrub_openssl_include: command failed (${_rv}): ${_cmd}")
 endif()

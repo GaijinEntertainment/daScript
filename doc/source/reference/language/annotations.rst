@@ -45,6 +45,11 @@ Some annotations accept arguments:
         pass
     }
 
+Numeric annotation arguments accept negative integer and floating-point literals,
+including field metadata and argument lists. For example, ``[comment(min=-2)]`` and
+``@offset=-1.5`` preserve their signed values in annotation reflection. These are
+literal values, not arbitrary constant expressions.
+
 ---------------------
 Function Annotations
 ---------------------

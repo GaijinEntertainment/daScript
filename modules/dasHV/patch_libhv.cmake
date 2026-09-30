@@ -1,3 +1,4 @@
+cmake_minimum_required(VERSION 3.12)
 # Apply the libhv fixes this tree carries on top of the pinned tarball; each one is dropped when the
 # pin moves past its upstream merge. The first run saves each file as <file>.das_pristine, and every
 # run patches from that copy - so re-running, or editing a hunk here, rebuilds the file from the
@@ -18,7 +19,12 @@ function(das_hv_patch_begin file)
     if(NOT EXISTS "${path}.das_pristine")
         configure_file("${path}" "${path}.das_pristine" COPYONLY)
     endif()
-    file(READ "${path}.das_pristine" src)
+    get_property(patched GLOBAL PROPERTY das_hv_patched_files)
+    if(path IN_LIST patched)
+        file(READ "${path}" src)
+    else()
+        file(READ "${path}.das_pristine" src)
+    endif()
     set(das_hv_file "${file}" PARENT_SCOPE)
     set(das_hv_src "${src}" PARENT_SCOPE)
 endfunction()
@@ -37,6 +43,7 @@ endfunction()
 
 function(das_hv_patch_end)
     file(WRITE "${LIBHV_SRC_DIR}/${das_hv_file}" "${das_hv_src}")
+    set_property(GLOBAL APPEND PROPERTY das_hv_patched_files "${LIBHV_SRC_DIR}/${das_hv_file}")
     message(STATUS "patch_libhv.cmake: patched ${das_hv_file}")
 endfunction()
 
@@ -71,7 +78,6 @@ void logger_set_file(logger_t* logger, const char* filepath) {
     if (suffix && strcmp(suffix, ".log") == 0) {
         *suffix = '\0';
     }
-    // close the current logfile, the next write opens the new one
     if (logger->fp_) {
         fclose(logger->fp_);
         logger->fp_ = NULL;
@@ -83,3 +89,13 @@ void logger_set_file(logger_t* logger, const char* filepath) {
 }
 ]=])
 das_hv_patch_end()
+
+include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_limits.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_upgrade.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_tls.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_pipeline.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_logging.cmake)

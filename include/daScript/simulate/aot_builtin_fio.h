@@ -94,6 +94,7 @@ namespace das {
     DAS_API const FILE * builtin_fopen  ( const char * name, const char * mode, Context * context, LineInfoArg * at );
     DAS_API void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at );
     DAS_API void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at );
+    DAS_API bool builtin_try_fflush ( const FILE * f );
     DAS_API void builtin_fprint ( const FILE * f, const char * text, Context * context, LineInfoArg * at );
     DAS_API char * builtin_fread ( const FILE * _f, Context * context, LineInfoArg * at );
     DAS_API char* builtin_fgets(const FILE* _f, Context* context, LineInfoArg * at );

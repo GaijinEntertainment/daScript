@@ -196,6 +196,7 @@ namespace das {
     void builtin_fprint(const FILE *f, const char *text, Context *context, LineInfoArg *at) GENERATE_IO_STUB
     void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_try_fflush ( const FILE * ) { return false; }
     void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) GENERATE_IO_STUB
     void * builtin_fmap_open ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void * builtin_fmap_open_rw ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -456,6 +457,12 @@ namespace das {
     void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "can't fflush NULL");
         fflush((FILE *)f);
+    }
+
+    bool builtin_try_fflush ( const FILE * f ) {
+        if ( !f ) return false;
+        auto stream = const_cast<FILE *>(f);
+        return ::fflush(stream) == 0 && ::ferror(stream) == 0;
     }
 
     const FILE * builtin_stdin() {
@@ -3118,6 +3125,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_fflush)>(*this, lib, "fflush",
                 SideEffects::modifyExternal, "builtin_fflush")
                     ->args({"file","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_try_fflush)>(*this, lib, "try_fflush",
+                SideEffects::modifyExternal, "builtin_try_fflush")
+                    ->args({"file"})->setNoDiscard();
             addExtern<DAS_BIND_FUN(builtin_fprint)>(*this, lib, "fprint",
                 SideEffects::modifyExternal, "builtin_fprint")
                     ->args({"file","text","context","line"});

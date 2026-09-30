@@ -28,6 +28,8 @@ let CANARY_SECTIONS : array<CanarySection> <- [
         snippet = "enum CanMode : uint8 \{\n    one\n    two\n\}"),
     CanarySection(name = "struct private + field default + @annotation",
         snippet = "struct private CanS \{\n    a : int = 7\n    @safe_when_uninitialized b : int\n\}"),
+    CanarySection(name = "signed annotation numbers",
+        snippet = "[comment(min=-2, offset=-1.5, values=(-3, -2.5))]\nstruct CanSigned \{\n    @min=-2 @offset=-1.5\n    value : int\n\}"),
     CanarySection(name = "bitfield declaration",
         snippet = "bitfield CanFlags \{\n    alpha\n    beta\n    gamma\n\}"),
     CanarySection(name = "variant declaration",

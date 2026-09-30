@@ -77,6 +77,11 @@ IF(NOT DAS_HV_DISABLED)
     FILE(GLOB AOT_LIVE_HOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/live_host/*.das")
 ENDIF()
 
+SET(AOT_CRYPTO_FILES)
+IF(NOT DAS_CRYPTO_DISABLED)
+    FILE(GLOB AOT_CRYPTO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/crypto/*.das")
+ENDIF()
+
 SET(AOT_DASSQLITE_MODULE_FILES ${DASSQLITE_AOT_FILES})
 
 SET(AOT_DASSQLITE_FILES)
@@ -155,7 +160,7 @@ ENDIF()
 
 SET(AOT_DASHV_MODULE_FILES ${DASHV_AOT_FILES})
 IF(DASHV_AOT_FILES)
-    LIST(APPEND AOT_DASHV_MODULE_FILES tests/dasHV/_dashv_test_common.das)
+    LIST(APPEND AOT_DASHV_MODULE_FILES tests/dasHV/_dashv_test_common.das tests/dasHV/_server_limits_fixture.das)
 ENDIF()
 
 SET(AOT_DASHV_FILES)
@@ -294,6 +299,7 @@ SET(AOT_DASLIB_FILES
     tests/daslib/clargs_test.das
     tests/daslib/test_toml.das
     tests/daslib/test_logger.das
+    tests/daslib/test_logger_checked.das
     tests/daslib/tty_test.das
     tests/daslib/test_sha_256.das
     tests/daslib/test_faker.das
@@ -473,6 +479,7 @@ set(DAS_AOT_IRREGULAR
     "live_host|mod|-|-|1"
     "strudel|reg|NOT DAS_AUDIO_DISABLED|-|1"
     "strudel|mod|-|-|1"
+    "crypto|reg|NOT DAS_CRYPTO_DISABLED|-|1"
     "dassqlite|reg|NOT DAS_SQLITE_DISABLED|-|1"
     "dassqlite|mod|-|-|1"
     "sql_conformance|reg|NOT DAS_SQLITE_DISABLED|-|1"

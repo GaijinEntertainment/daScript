@@ -1,0 +1,22 @@
+if(NOT DAS_CRYPTO_DISABLED AND NOT DAS_CRYPTO_INCLUDED)
+    if(EMSCRIPTEN)
+        message(FATAL_ERROR "dasCrypto currently requires native OpenSSL; disable it for Emscripten")
+    endif()
+    set(DAS_CRYPTO_INCLUDED TRUE)
+    include(${PROJECT_SOURCE_DIR}/cmake/DasOpenSSL.cmake)
+    if(NOT OPENSSL_FROM_SOURCES AND OPENSSL_VERSION VERSION_LESS "3.0")
+        message(FATAL_ERROR "dasCrypto requires OpenSSL 3.0 or newer")
+    endif()
+    set(DAS_CRYPTO_DIR ${PROJECT_SOURCE_DIR}/modules/dasCrypto)
+    ADD_MODULE_CPP(Crypto)
+    ADD_MODULE_LIB(libDasModuleCrypto dasModuleCrypto
+        ${DAS_CRYPTO_DIR}/src/dasCrypto.cpp
+        ${DAS_CRYPTO_DIR}/src/dasCrypto.h)
+    foreach(target libDasModuleCrypto dasModuleCrypto)
+        das_link_openssl(${target})
+        SETUP_CPP11(${target})
+    endforeach()
+    das_copy_openssl_runtime(dasModuleCrypto dasCrypto)
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasHV/OPENSSL.LICENSE
+        DESTINATION ${DAS_INSTALL_DOCDIR} RENAME CRYPTO_OPENSSL.LICENSE)
+endif()

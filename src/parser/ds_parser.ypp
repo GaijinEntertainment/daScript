@@ -999,7 +999,9 @@ annotation_argument_value
     |   NAME[value]              { $$ = new AnnotationArgument("",*$value); delete $value; }
     |   '@' '@' NAME[value]      { $$ = new AnnotationArgument("",*$value); delete $value; }
     |   INTEGER[value]           { $$ = new AnnotationArgument("",$value); }
+    |   '-' INTEGER[value]       { $$ = new AnnotationArgument("",int32_t(0u - uint32_t($value))); }
     |   DAS_FLOAT[value]         { $$ = new AnnotationArgument("",float($value)); }
+    |   '-' DAS_FLOAT[value]     { $$ = new AnnotationArgument("",-float($value)); }
     |   DAS_TRUE                 { $$ = new AnnotationArgument("",true); }
     |   DAS_FALSE                { $$ = new AnnotationArgument("",false); }
     ;
@@ -1028,7 +1030,9 @@ annotation_argument
     |   annotation_argument_name[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
     |   annotation_argument_name[name] '=' '@' '@' NAME[value]      { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
     |   annotation_argument_name[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value,tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' '-' INTEGER[value]       { $$ = new AnnotationArgument(*$name,int32_t(0u - uint32_t($value)),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_FLOAT[value]         { $$ = new AnnotationArgument(*$name,float($value),tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' '-' DAS_FLOAT[value]     { $$ = new AnnotationArgument(*$name,-float($value),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true,tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_FALSE                { $$ = new AnnotationArgument(*$name,false,tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name]                              { $$ = new AnnotationArgument(*$name,true,tokAt(scanner,@name)); delete $name; }

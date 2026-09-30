@@ -3,6 +3,7 @@
 #include <future>
 #include <atomic>
 #include <cstdlib>
+#include <chrono>
 
 #include "../../../src/builtin/module_builtin_rtti.h"
 
@@ -11,6 +12,8 @@
 #include <hv/hlog.h>
 #include <hv/hasync.h>
 #include <hv/hsocket.h>
+#include <hv/herr.h>
+#include <hv/hurl.h>
 
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(WebSocketClient,hv::WebSocketClient)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(WebSocketServer,hv::WebSocketServer)
@@ -20,6 +23,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpRequest,HttpRequest)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpResponse,HttpResponse)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpContext,hv::HttpContext)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpResponseWriter,hv::HttpResponseWriter)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(WebSocketAdmission,das::WebSocketAdmission)
 
 namespace das {
 
@@ -328,8 +332,19 @@ struct HttpResponseWriterAnnotation : ManagedStructureAnnotation<hv::HttpRespons
     }
 };
 
+struct WebSocketAdmission {
+    HttpRequestPtr request;
+    HttpResponseWriterPtr writer;
+    Handle<hv::WebSocketServer> owner;
+    Handle<WebSocketAdmission> handle;
+    atomic<bool> open{true};
+    atomic<bool> decided{false};
+    std::chrono::steady_clock::time_point deadline;
+};
+
 class WebServer_Adapter : public hv::WebSocketServer, public HvWebServer_Adapter {
 public:
+    // modules/dasHV/ARCHITECTURE.md#websocket-admission-capacity
     WebServer_Adapter ( char * pClass, const StructInfo * info, Context * ctx )
         : HvWebServer_Adapter(info), classPtr(pClass), context(ctx) {
         registerWebSocketService(&service);
@@ -338,14 +353,27 @@ public:
             Handle<hv::WebSocketChannel> h;
             {
                 lock_guard<mutex> cguard(channel_lock);
-                h = HandleRegistry<hv::WebSocketChannel>::instance().acquire(channel);
-                channel_handles[channel.get()] = h;
+                auto admission = admissions.find(url.get());
+                if (admission != admissions.end()) {
+                    admission->second->open.store(false);
+                    HandleRegistry<WebSocketAdmission>::instance().release(admission->second->handle);
+                    admissions.erase(admission);
+                }
+                if (!max_pending_events || channel_handles.size() + admissions.size() < max_pending_events) {
+                    h = HandleRegistry<hv::WebSocketChannel>::instance().acquire(channel);
+                    channel_handles[channel.get()] = h;
+                }
             }
+            if (!h) { channel->close(); return; }
             std::string urlStr = url ? url->url : std::string();
-            lock_guard<mutex> guard(lock);
-            que.emplace_back([this, h, urlStr](){
-                onWsOpen(h, urlStr);
-            });
+            if (!enqueue([this, h, urlStr](){ onWsOpen(h, urlStr); }, urlStr.size())) {
+                {
+                    lock_guard<mutex> cguard(channel_lock);
+                    channel_handles.erase(channel.get());
+                }
+                HandleRegistry<hv::WebSocketChannel>::instance().release(h);
+                channel->close();
+            }
         };
         service.onclose = [this](const WebSocketChannelPtr& channel) {
             // Keep the channel→handle mapping here until the queued close
@@ -354,8 +382,11 @@ public:
             // chance to release the handle. Eagerly erasing the map entry
             // would leak it in that race.
             hv::WebSocketChannel * raw = channel.get();
-            lock_guard<mutex> guard(lock);
-            que.emplace_back([this, raw](){
+            {
+                lock_guard<mutex> cguard(channel_lock);
+                if (channel_handles.find(raw) == channel_handles.end()) return;
+            }
+            enqueue([this, raw](){
                 Handle<hv::WebSocketChannel> h;
                 {
                     lock_guard<mutex> cguard(channel_lock);
@@ -368,7 +399,7 @@ public:
                 if ( !h ) return;
                 onWsClose(h);
                 HandleRegistry<hv::WebSocketChannel>::instance().release(h);
-            });
+            }, 0, true);
         };
         service.onmessage = [this](const WebSocketChannelPtr& channel, const std::string& msg) {
             Handle<hv::WebSocketChannel> h;
@@ -378,13 +409,14 @@ public:
                 if ( it != channel_handles.end() ) h = it->second;
             }
             if ( !h ) return;
-            lock_guard<mutex> guard(lock);
-            que.emplace_back([this, h, msg](){
-                onWsMessage(h, msg);
-            });
+            const auto opcode = channel->opcode;
+            if (!enqueue([this, h, msg, opcode](){ onWsMessageFrame(h, msg, opcode); }, msg.size())) {
+                channel->close();
+            }
         };
     }
     ~WebServer_Adapter() {
+        alive.reset();
         // Same destruction-order guard as the client adapter: stop the server
         // threads while `que`/locks are still alive, or a late service
         // callback races our member destruction.
@@ -394,32 +426,42 @@ public:
             HandleRegistry<hv::WebSocketChannel>::instance().release(kv.second);
         }
         channel_handles.clear();
+        for (auto & admission : admissions) {
+            admission.second->open.store(false);
+            HandleRegistry<WebSocketAdmission>::instance().release(admission.second->handle);
+        }
+        admissions.clear();
     }
     void onWsOpen ( Handle<hv::WebSocketChannel> h, const std::string & url ) {
-        lock_guard<mutex> guard(lock);
         if ( auto fnOnOpen = get_onWsOpen(classPtr) ) {
             invoke_onWsOpen(context,fnOnOpen,classPtr,h,(char *)url.c_str());
         }
     }
     void onWsClose ( Handle<hv::WebSocketChannel> h ) {
-        lock_guard<mutex> guard(lock);
         if ( auto fnOnClose = get_onWsClose(classPtr) ) {
             invoke_onWsClose(context,fnOnClose,classPtr,h);
         }
     }
-    void onWsMessage ( Handle<hv::WebSocketChannel> h, const std::string & msg ) {
-        lock_guard<mutex> guard(lock);
-        if ( auto fnOnMessage = get_onWsMessage(classPtr) ) {
-            invoke_onWsMessage(context,fnOnMessage,classPtr,h,(char *)msg.c_str());
+    void onWsMessageFrame(Handle<hv::WebSocketChannel> h, const std::string & msg, ws_opcode opcode) {
+        if (auto fn = get_onWsMessageFrame(classPtr)) {
+            invoke_onWsMessageFrame(context, fn, classPtr, h, (char *)msg.data(), int32_t(msg.size()), opcode);
         }
     }
     void tick() {
-        vector<function<void()>> q;
+        vector<PendingEvent> q;
         {
             lock_guard<mutex> guard(lock);
             swap(q, que);
         }
-        for ( auto & ev : q ) ev();
+        for (auto & event : q) {
+            event.invoke();
+            event.invoke = nullptr;
+            if (!event.cleanup) {
+                lock_guard<mutex> guard(lock);
+                --pending_events;
+                pending_bytes -= event.bytes;
+            }
+        }
         // onTick runs user das code on the main thread and touches none of the
         // lock-protected state (`que`); holding `lock` here would block the libhv
         // worker thread from enqueueing requests for the whole onTick duration.
@@ -444,10 +486,11 @@ public:
             // lives on — the send must run here, not on the tick thread.
             auto connLoop = this->loop();
             auto resp = make_shared<HttpResponse>(*ctx->response);
-            lock_guard<mutex> guard(lock);
-            que.emplace_back([context,at,lmb,ctx,connLoop,resp](){
+            auto req = make_shared<HttpRequest>(*ctx->request);
+            req->http_cb = nullptr;
+            if (!enqueue([context,at,lmb,ctx,connLoop,resp,req](){
                 int st = das_invoke_lambda<int>::invoke<HttpRequest*,HttpResponse*>(
-                    context, at, lmb, ctx->request.get(), resp.get());
+                    context, at, lmb, req.get(), resp.get());
                 resp->status_code = (http_status) st;
                 if ( connLoop ) {
                     connLoop->runInLoop([ctx,resp](){ *ctx->response = *resp; ctx->send(); });
@@ -455,7 +498,9 @@ public:
                     *ctx->response = *resp;
                     ctx->send();
                 }
-            });
+            }, request_size(*req))) {
+                return HTTP_STATUS_SERVICE_UNAVAILABLE;
+            }
             return HTTP_STATUS_UNFINISHED;
         };
     }
@@ -521,12 +566,9 @@ public:
         router.Any(path,[this,context,at,lmb](HttpRequest * req,HttpResponse * resp) -> int {
             promise<int> p;
             auto f = p.get_future();
-            {
-                lock_guard<mutex> guard(lock);
-                que.emplace_back([&](){
-                    p.set_value(das_invoke_lambda<int>::invoke<HttpRequest*,HttpResponse*>(context,at,lmb,req,resp));
-                });
-            }
+            if (!enqueue([&](){
+                p.set_value(das_invoke_lambda<int>::invoke<HttpRequest*,HttpResponse*>(context,at,lmb,req,resp));
+            }, request_size(*req))) return HTTP_STATUS_SERVICE_UNAVAILABLE;
             return f.get();
         });
     }
@@ -544,45 +586,129 @@ public:
         auto it = active_writers.find(w);
         return it != active_writers.end() ? it->second.first : HttpResponseWriterPtr();
     }
-    // Streaming route: an async (writer) handler. libhv hands us a live HttpResponseWriter and keeps
-    // the connection open until we End() it. The das handler runs on the tick thread (its context +
-    // job queue live there, like makeCtxHandler), so we hold the writer alive in active_writers and
-    // enqueue the das invocation to `que`; the das handler drives writes through the das_writer_* ops,
-    // each of which marshals the actual socket write back to this loop via runInLoop.
-    void STREAM ( const char * relative_path, Lambda lmb, Context * context, LineInfoArg * at ) {
-        lock_guard<mutex> guard(lock);
-        router.Any(relative_path, [this,context,at,lmb](const HttpRequestPtr & req, const HttpResponseWriterPtr & writer) {
+    http_ctx_handler makeDeferredHandler(Lambda lmb, Context * context, LineInfoArg * at) {
+        return [this,context,at,lmb](const HttpContextPtr & ctx) -> int {
+            auto req = make_shared<HttpRequest>(*ctx->request);
+            req->http_cb = nullptr;
+            auto writer = ctx->writer;
             auto open = make_shared<atomic<bool>>(true);
-            auto mark_close = [writer,open](){
-                if ( !writer->isOpened() ) open->store(false);
-                else writer->onclose = [open](){ open->store(false); };
-            };
-            if ( auto wloop = this->loop(0) ) wloop->runInLoop(mark_close);
-            else mark_close();
+            writer->onclose = [open](){ open->store(false); };
             {
                 lock_guard<mutex> wguard(writer_lock);
+                if (max_pending_events && active_writers.size() >= max_pending_events) return HTTP_STATUS_SERVICE_UNAVAILABLE;
                 active_writers[writer.get()] = make_pair(writer, open);
             }
-            {
-                lock_guard<mutex> qguard(lock);
-                que.emplace_back([context,at,lmb,req,writer](){
-                    das_invoke_lambda<void>::invoke<HttpRequest*,hv::HttpResponseWriter*>(
-                        context, at, lmb, req.get(), writer.get());
-                });
+            if (!enqueue([context,at,lmb,req,writer](){
+                das_invoke_lambda<void>::invoke<HttpRequest*,hv::HttpResponseWriter*>(
+                    context, at, lmb, req.get(), writer.get());
+            }, request_size(*req))) {
+                release_writer(writer.get());
+                return HTTP_STATUS_SERVICE_UNAVAILABLE;
             }
-        });
+            return HTTP_STATUS_UNFINISHED;
+        };
     }
+    void STREAM(const char * path, Lambda lmb, Context * context, LineInfoArg * at) {
+        lock_guard<mutex> guard(lock);
+        router.Any(path, makeDeferredHandler(lmb, context, at));
+    }
+    bool UPGRADE(int timeout_ms, Lambda lmb, Context * context, LineInfoArg * at) {
+        if (started || timeout_ms < 1 || timeout_ms > 60000) return false;
+        lock_guard<mutex> guard(lock);
+        service.upgrade_timeout_ms = timeout_ms;
+        service.onupgrade = [this,timeout_ms,lmb,context,at](const HttpContextPtr & ctx) -> int {
+            auto data = make_shared<WebSocketAdmission>();
+            data->request = ctx->request;
+            data->writer = ctx->writer;
+            data->owner = self_handle;
+            data->deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+            {
+                lock_guard<mutex> guard(channel_lock);
+                if (max_pending_events && channel_handles.size() + admissions.size() >= max_pending_events) return HTTP_STATUS_SERVICE_UNAVAILABLE;
+                data->handle = HandleRegistry<WebSocketAdmission>::instance().acquire(data);
+                admissions[ctx->request.get()] = data;
+            }
+            const auto handle = data->handle;
+            auto key = ctx->request.get();
+            ctx->writer->onclose = [this,key,handle](){ release_admission(key, handle); };
+            auto request = make_shared<HttpRequest>(*ctx->request);
+            request->http_cb = nullptr;
+            if (!enqueue([handle,request,lmb,context,at](){
+                if (HandleRegistry<WebSocketAdmission>::instance().is_alive(handle)) {
+                    das_invoke_lambda<void>::invoke<HttpRequest*,Handle<WebSocketAdmission>>(
+                        context, at, lmb, request.get(), handle);
+                }
+            }, request_size(*request))) {
+                release_admission(key, handle);
+                return HTTP_STATUS_SERVICE_UNAVAILABLE;
+            }
+            return HTTP_STATUS_UNFINISHED;
+        };
+        return true;
+    }
+    void release_admission(HttpRequest * key, Handle<WebSocketAdmission> handle) {
+        lock_guard<mutex> guard(channel_lock);
+        auto found = admissions.find(key);
+        if (found != admissions.end() && found->second->handle == handle) {
+            found->second->open.store(false);
+            admissions.erase(found);
+        }
+        HandleRegistry<WebSocketAdmission>::instance().release(handle);
+    }
+    weak_ptr<int> lifetime() const { return alive; }
+    Handle<hv::WebSocketServer> self_handle;
+    bool set_access_log(bool enabled) {
+        if (started) return false;
+        router.enable_access_log = enabled;
+        return true;
+    }
+    bool set_limits(int http_bytes, int ws_bytes, int event_count, int queue_bytes) {
+        if (started || http_bytes <= 0 || ws_bytes <= 0 || event_count <= 0 || queue_bytes <= 0) return false;
+        router.max_request_body_size = size_t(http_bytes);
+        service.max_message_size = size_t(ws_bytes);
+        max_pending_events = size_t(event_count);
+        max_pending_bytes = size_t(queue_bytes);
+        return true;
+    }
+    bool started = false;
+
 protected:
     HttpService router;
     WebSocketService service;
     void *      classPtr;
     Context *   context;
     mutex       lock;
-    vector<function<void()>>    que;
+    struct PendingEvent {
+        function<void()> invoke;
+        size_t bytes;
+        bool cleanup;
+    };
+    vector<PendingEvent> que;
+    size_t max_pending_events = 0, max_pending_bytes = 0;
+    size_t pending_events = 0, pending_bytes = 0;
+    static size_t request_size(const HttpRequest & req) {
+        size_t bytes = 256 + req.body.size() + req.url.size() * 2;
+        for (const auto & header : req.headers) bytes += 128 + header.first.size() + header.second.size();
+        for (const auto & cookie : req.cookies) bytes += 128 + cookie.name.size() + cookie.value.size();
+        return bytes;
+    }
+    bool enqueue(function<void()> invoke, size_t bytes, bool cleanup = false) {
+        lock_guard<mutex> guard(lock);
+        if (!cleanup) {
+            if ((max_pending_events && pending_events >= max_pending_events) ||
+                (max_pending_bytes && (bytes > max_pending_bytes || pending_bytes > max_pending_bytes - bytes))) return false;
+            ++pending_events;
+            pending_bytes += bytes;
+        }
+        que.push_back(PendingEvent{std::move(invoke), bytes, cleanup});
+        return true;
+    }
     mutex       writer_lock;
     map<hv::HttpResponseWriter*, pair<HttpResponseWriterPtr, shared_ptr<atomic<bool>>>>  active_writers;
     mutex       channel_lock;
     map<hv::WebSocketChannel*, Handle<hv::WebSocketChannel>>  channel_handles;
+    map<HttpRequest*,shared_ptr<WebSocketAdmission>> admissions;
+    shared_ptr<int> alive = make_shared<int>(0);
 };
 
 string getDasRoot ( void );
@@ -623,7 +749,8 @@ Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const
     adapter->port = port;
     adapter->https_port = httpsPort;
     shared_ptr<hv::WebSocketServer> sp(adapter);
-    return HandleRegistry<hv::WebSocketServer>::instance().acquire(sp);
+    adapter->self_handle = HandleRegistry<hv::WebSocketServer>::instance().acquire(sp);
+    return adapter->self_handle;
 }
 
 int das_wss_send ( Handle<hv::WebSocketChannel> h, const char * msg, ws_opcode opcode, bool fin ) {
@@ -663,10 +790,22 @@ bool das_wss_set_bind_host ( Handle<hv::WebSocketServer> h, const char * host ) 
     return true;
 }
 
+bool das_wss_set_access_log(Handle<hv::WebSocketServer> h, bool enabled) {
+    auto adapter = lookup_server(h);
+    return adapter && adapter->set_access_log(enabled);
+}
+
+bool das_wss_set_limits(Handle<hv::WebSocketServer> h, int http_bytes, int ws_bytes, int events, int queue_bytes) {
+    auto adapter = lookup_server(h);
+    return adapter && adapter->set_limits(http_bytes, ws_bytes, events, queue_bytes);
+}
+
 int das_wss_start ( Handle<hv::WebSocketServer> h ) {
     auto adapter = lookup_server(h);
     if ( !adapter ) return -1;
-    return adapter->start();
+    const int result = adapter->start();
+    if (result == 0) adapter->started = true;
+    return result;
 }
 
 int das_wss_bound_port ( Handle<hv::WebSocketServer> h ) {
@@ -684,7 +823,9 @@ void das_wss_tick ( Handle<hv::WebSocketServer> h ) {
 int das_wss_stop ( Handle<hv::WebSocketServer> h ) {
     auto adapter = lookup_server(h);
     if ( !adapter ) return -1;
-    return adapter->stop();
+    const int result = adapter->stop();
+    adapter->started = false;
+    return result;
 }
 
 void das_wss_get ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
@@ -734,6 +875,11 @@ void das_wss_stream ( Handle<hv::WebSocketServer> h, const char * url, Lambda lm
 // HttpResponseWriter operations. Each marshals the real socket write onto the connection's event loop
 // via runInLoop (the writer is a SocketChannel with loop affinity; the das handler runs on the tick
 // thread) and captures the writer's shared_ptr so it outlives the async post.
+
+bool das_wss_upgrade(Handle<hv::WebSocketServer> h, int timeout_ms, Lambda lmb, Context * context, LineInfoArg * at) {
+    auto adapter = lookup_server(h);
+    return adapter && adapter->UPGRADE(timeout_ms, lmb, context, at);
+}
 
 static void post_writer_op ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w,
         std::function<void(hv::HttpResponseWriter*)> fn ) {
@@ -786,6 +932,38 @@ int das_writer_respond ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter *
         if ( adapter ) adapter->release_writer(w);
     });
     return 0;
+}
+
+static int decide_websocket(Handle<WebSocketAdmission> handle, int status, const string & protocol) {
+    auto admission = HandleRegistry<WebSocketAdmission>::instance().lookup(handle);
+    if (!admission || !admission->open.load() || std::chrono::steady_clock::now() >= admission->deadline) return -1;
+    auto owner = HandleRegistry<hv::WebSocketServer>::instance().lookup(admission->owner);
+    auto adapter = (WebServer_Adapter *)owner.get();
+    if (!adapter || !adapter->started) return -1;
+    auto loop = adapter->loop(0);
+    if (!loop || admission->decided.exchange(true)) return -1;
+    HandleRegistry<WebSocketAdmission>::instance().release(handle);
+    auto alive = adapter->lifetime();
+    loop->queueInLoop([alive,admission,status,protocol](){
+        if (alive.expired() || !admission->open.load() || !admission->writer->isConnected()) return;
+        auto & writer = admission->writer;
+        if (!writer->awaiting_upgrade) return;
+        writer->WriteStatus((http_status)status);
+        if (!protocol.empty()) writer->WriteHeader(SEC_WEBSOCKET_PROTOCOL, protocol.c_str());
+        writer->End();
+    });
+    return 0;
+}
+
+int das_accept_websocket(Handle<WebSocketAdmission> admission, const char * protocol) {
+    const string selected = protocol ? protocol : "";
+    if (selected.size() > 128 || selected.find_first_of("\r\n") != string::npos) return -1;
+    return decide_websocket(admission, HTTP_STATUS_SWITCHING_PROTOCOLS, selected);
+}
+
+int das_reject_websocket(Handle<WebSocketAdmission> admission, int status) {
+    if (status < 400 || status > 599) return -1;
+    return decide_websocket(admission, status, "");
 }
 
 // Set a header on a writer-rail response. Order matters only relative to the terminal op:
@@ -1134,6 +1312,36 @@ void das_req_REQUEST ( HttpRequest * req, const TBlock<void,HttpResponse*> & blo
     das_invoke<void>::invoke<HttpResponse*>(context,at,block,resp.get());
 }
 
+int das_req_REQUEST_CHECKED(HttpRequest * req, const char * ca_file, int max_response_bytes,
+        const TBlock<void,TTemporary<HttpResponse*>> & block, Context * context, LineInfoArg * at) {
+    if (!req || max_response_bytes < 1 || max_response_bytes > 16 * 1024 * 1024 ||
+        req->url.size() > 8192 || req->url.find('\0') != string::npos || req->timeout == 0 || req->timeout > 120) return ERR_INVALID_PARAM;
+    HUrl url;
+    if (!url.parse(req->url) || url.host.empty() || !url.username.empty() || !url.password.empty()) return ERR_INVALID_PARAM;
+    if (stricmp(url.scheme.c_str(), "https") != 0) return ERR_INVALID_PROTOCOL;
+    url.scheme = "https";
+    url.fragment.clear();
+    HttpRequest request = *req;
+    request.url = url.dump();
+    request.proxy = 0;
+    request.redirect = 0;
+    request.retry_count = 0;
+    request.http_cb = nullptr;
+    request.response_body_limit = size_t(max_response_bytes);
+    std::unique_ptr<http_client_t,decltype(&http_client_del)> client(http_client_new(), http_client_del);
+    if (!client) return ERR_NULL_POINTER;
+    hssl_ctx_opt_t tls{};
+    tls.endpoint = HSSL_CLIENT;
+    tls.verify_peer = 1;
+    tls.ca_file = ca_file && *ca_file ? ca_file : nullptr;
+    const int configured = http_client_new_ssl_ctx(client.get(), &tls);
+    if (configured != 0) return configured;
+    HttpResponse response;
+    const int result = http_client_send(client.get(), &request, &response);
+    if (result == 0) das_invoke<void>::invoke<HttpResponse*>(context, at, block, &response);
+    return result;
+}
+
 // Streaming request — invokes on_body per chunk
 void das_req_REQUEST_CB ( HttpRequest * req, const TBlock<void,const uint8_t*,int32_t> & on_body,
         const TBlock<void,HttpResponse*> & on_complete, Context * context, LineInfoArg * at ) {
@@ -1452,6 +1660,9 @@ public:
             "", "das::Handle<hv::WebSocketChannel>");
         addAnnotation(new HttpMessageAnnotation(lib));
         addAnnotation(new HttpRequestAnnotation(lib));
+        addAnnotation(new HttpResponseWriterAnnotation(lib));
+        addHandleAnnotation<WebSocketAdmission>(this, lib, "WebSocketAdmission", "",
+            "das::Handle<das::WebSocketAdmission>");
         addAnnotation(new HttpResponseAnnotation(lib));
         addExtern<DAS_BIND_FUN(das_http_response_content_length)>(*this, lib, ".`content_length",
             SideEffects::none, "das_http_response_content_length")
@@ -1472,6 +1683,18 @@ public:
         addExtern<DAS_BIND_FUN(das_wss_close_channel)> (*this, lib, "close",
             SideEffects::worstDefault, "das_wss_close_channel")
                 ->args({"channel"});
+        addExtern<DAS_BIND_FUN(das_wss_upgrade)>(*this, lib, "WEBSOCKET_UPGRADE",
+            SideEffects::worstDefault, "das_wss_upgrade")
+            ->args({"server", "timeout_ms", "handler", "context", "at"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_accept_websocket)>(*this, lib, "accept_websocket",
+            SideEffects::worstDefault, "das_accept_websocket")->args({"admission", "protocol"});
+        addExtern<DAS_BIND_FUN(das_reject_websocket)>(*this, lib, "reject_websocket",
+            SideEffects::worstDefault, "das_reject_websocket")->args({"admission", "status"});
+        addExtern<DAS_BIND_FUN(das_wss_set_access_log)>(*this, lib, "set_access_log",
+            SideEffects::worstDefault, "das_wss_set_access_log")->args({"server", "enabled"});
+        addExtern<DAS_BIND_FUN(das_wss_set_limits)>(*this, lib, "set_limits",
+            SideEffects::worstDefault, "das_wss_set_limits")
+            ->args({"server", "http_body_bytes", "websocket_message_bytes", "pending_events", "pending_bytes"});
         addExtern<DAS_BIND_FUN(das_wss_set_bind_host)> (*this, lib, "set_bind_host",
             SideEffects::worstDefault, "das_wss_set_bind_host")
                 ->args({"server","host"});
@@ -1607,6 +1830,9 @@ public:
             SideEffects::worstDefault, "das_req_HEAD_H")
                 ->args({"url","headers","block","context","at"});
         // Generic request
+        addExtern<DAS_BIND_FUN(das_req_REQUEST_CHECKED)>(*this, lib, "request_checked",
+            SideEffects::worstDefault, "das_req_REQUEST_CHECKED")
+            ->args({"request", "ca_file", "max_response_bytes", "block", "context", "at"});
         addExtern<DAS_BIND_FUN(das_req_REQUEST)> (*this, lib, "request",
             SideEffects::worstDefault, "das_req_REQUEST")
                 ->args({"request","block","context","at"});
@@ -1711,7 +1937,6 @@ public:
             SideEffects::worstDefault, "das_req_REQUEST_CB_S")
                 ->args({"request","on_body","on_complete","context","at"});
         // Server-side SSE
-        addAnnotation(new HttpResponseWriterAnnotation(lib));
         addExtern<DAS_BIND_FUN(das_wss_sse)> (*this, lib, "SSE",
             SideEffects::worstDefault, "das_wss_sse")
                 ->args({"server","url","lambda","context","at"})->unsafeOperation = true;
@@ -1764,4 +1989,3 @@ REGISTER_DYN_MODULE(Module_HV,Module_HV);
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_HV,das);
-

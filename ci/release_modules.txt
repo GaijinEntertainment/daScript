@@ -1,6 +1,7 @@
 # This file is used in CI to choose what modules will be enabled in release files.
 # It should be done in format: <module_name>:<cmake_module_option>=<VALUE(ON/OFF)>
 dasHV:DAS_HV_DISABLED=OFF
+dasCrypto:DAS_CRYPTO_DISABLED=OFF
 dasLLVM:DAS_LLVM_DISABLED=OFF
 dasSMT:DAS_SMT_DISABLED=OFF
 dasAudio:DAS_AUDIO_DISABLED=OFF

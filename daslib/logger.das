@@ -149,23 +149,28 @@ def private write_record(var w : StringBuilderWriter; ts, lvl, cat, msg : string
     }
 }
 
-def private emit(level : int; category, message : string; fields : JsonValue?) {
-    return if (!should_log(level, category))
+def private emit(level : int; category, message : string; fields : JsonValue?) : bool {
+    if (!should_log(level, category)) return false
     ensure_open()
     let line = build_string() $(var w) {
         write_record(w, iso8601_now(), level_name(level), category, message, fields)
     }
     if (log_file != null) {
-        fwrite(log_file, line)
-        fflush(log_file)
+        var written = false
+        peek_data(line) $(bytes) {
+            written = fwrite(log_file, bytes) == length(bytes)
+        }
+        let flushed = try_fflush(log_file)
+        if (!written || !flushed) return false
         if (log_echo_stderr) {
             fwrite(fstderr(), "[{level_name(level)}] {strip_right(message)}\n")   // a to_log line carries its own newline
         }
-        return
+        return true
     }
     if (log_fallback_to_stderr) {
         fwrite(fstderr(), line)
     }
+    return false
 }
 
 def logger_set_name(name : string) {
@@ -240,6 +245,13 @@ def logger_set_stderr_fallback(enabled : bool) {
 def logger_log(level : int; category, message : string; fields : JsonValue? = null) {
     //! Generic log entry. Prefer the named-level helpers below.
     emit(level, category, message, fields)
+}
+
+def logger_try_log(level : int; category, message : string; fields : JsonValue? = null) : bool {
+    //! True only when the complete JSONL record was written and flushed to the file.
+    //! False for filtered records or file open/write/flush failure; stderr fallback is not success.
+    //! After fixing an I/O problem, ``logger_close`` allows a subsequent call to reopen the file.
+    return emit(level, category, message, fields)
 }
 
 def logger_trace(category, message : string; fields : JsonValue? = null) {
