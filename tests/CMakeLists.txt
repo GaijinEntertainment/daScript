@@ -224,20 +224,23 @@ foreach(_t run_standalone_sweep_aot run_tests_llvm_aot standalone_sweep_jit)
 endforeach()
 
 file(GLOB_RECURSE _ci_ast_verify_files RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/tests/*.das)
+list(FILTER _ci_ast_verify_files EXCLUDE REGEX "(^|/)(cant_|failed_|invalid_)[^/]*$")
 set(_ci_ast_verify_stamps)
-foreach(_f IN LISTS _ci_ast_verify_files)
-    get_filename_component(_name ${_f} NAME)
-    if(_name MATCHES "^(cant_|failed_|invalid_)")
-        continue()
-    endif()
-    set(_stamp ${CMAKE_CURRENT_BINARY_DIR}/ast_verify/${_f}.stamp)
+list(LENGTH _ci_ast_verify_files _ci_ast_verify_count)
+math(EXPR _ci_ast_verify_size "(${_ci_ast_verify_count} + 63) / 64")
+DAS_CHUNKS(_ci_ast_verify_batches ${_ci_ast_verify_size} ${_ci_ast_verify_files})
+foreach(_n ${_ci_ast_verify_batches})
+    set(_chunk ${_ci_ast_verify_batches_${_n}})
+    list(TRANSFORM _chunk PREPEND "--file;" OUTPUT_VARIABLE _args)
+    list(TRANSFORM _chunk PREPEND "${PROJECT_SOURCE_DIR}/" OUTPUT_VARIABLE _deps)
+    set(_stamp ${CMAKE_CURRENT_BINARY_DIR}/ast_verify/chunk_${_n}.stamp)
     add_custom_command(
         OUTPUT ${_stamp}
-        COMMAND $<TARGET_FILE:daslang> ./utils/ast-verify/main.das -- --file ${_f}
+        COMMAND $<TARGET_FILE:daslang> ./utils/ast-verify/main.das -- ${_args}
         COMMAND ${CMAKE_COMMAND} -E touch ${_stamp}
-        DEPENDS daslang ${PROJECT_SOURCE_DIR}/${_f} ${PROJECT_SOURCE_DIR}/utils/ast-verify/main.das
+        DEPENDS daslang ${_deps} ${PROJECT_SOURCE_DIR}/utils/ast-verify/main.das
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        COMMENT "ast-verify ${_f}"
+        COMMENT "ast-verify chunk ${_n}"
     )
     list(APPEND _ci_ast_verify_stamps ${_stamp})
 endforeach()
