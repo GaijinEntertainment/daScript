@@ -77,6 +77,11 @@ def test_model_spec_views(t : T?) {
         var inscope miss <- spec_by_file("no-such-model.gguf")
         t |> equal(miss.file, "", "a miss is the empty spec")
         t |> success(empty(miss.parity.gen), "a miss carries no evidence")
+        let shard = "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
+        var inscope by_path <- spec_by_file(shard)
+        t |> equal(by_path.file, shard, "a subfolder row comes back by its models-dir path")
+        var inscope by_base <- spec_by_file("Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf")
+        t |> equal(by_base.file, shard, "and by the base name the pregate holds")
     }
     t |> run("counting_prompt renders 1..N with the trailing comma") @(t : T?) {
         t |> equal(counting_prompt(3), "1, 2, 3,")

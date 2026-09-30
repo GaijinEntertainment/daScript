@@ -1447,16 +1447,369 @@ def private shexp_gpu_decline_reason(c : Config; l, npos : int64) : string {
     return "the prefill route lever is off"
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
-def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
+//! the (position, slot) pairs bucketed by expert - a CSR built in place: moe_cnt[e] ends as expert e's run END, moe_bkt the pairs in expert order
+def private moe_prefill_bucket(var s : Session; nk, ne : int64) {
+    for (e in range64(ne)) {
+        s.moe_cnt[e] = 0l
+    }
+    for (r in range64(nk)) {
+        s.moe_cnt[s.moe_idx_b[r]]++
+    }
+    var run = 0l
+    for (e in range64(ne)) {
+        let cn = s.moe_cnt[e]
+        s.moe_cnt[e] = run
+        run += cn
+    }
+    for (r in range64(nk)) {
+        let e = s.moe_idx_b[r]
+        s.moe_bkt[s.moe_cnt[e]] = r
+        s.moe_cnt[e]++
+    }
+}
+
+[arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
+def private moe_prefill_regions_lpt(t : Model; var s : Session; l, nk, split_cap : int64; skip_gpu_experts : bool = false) : int64 {
+    let c = t.config
+    let dim = c.dim
+    let ne = c.n_expert
+    let nfe = c.n_ff_exp
+    let cap_reg = split_cap > 0l ? ne + nk / split_cap + 1l : ne
+    s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(cap_reg * 3l)
+    s.moe_offs3 |> clear(); s.moe_offs3 |> reserve(cap_reg * 3l)
+    s.moe_offs2 |> clear(); s.moe_offs2 |> reserve(cap_reg * 3l)
+    if (c.moe_exps_bias) {
+        s.moe_boffs1 |> clear(); s.moe_boffs1 |> reserve(cap_reg)
+        s.moe_boffs3 |> clear(); s.moe_boffs3 |> reserve(cap_reg)
+        s.moe_boffs2 |> clear(); s.moe_boffs2 |> reserve(cap_reg)
+    }
+    s.moe_ord |> clear()
+    s.moe_ord |> reserve(ne)   // capacity persists across layers — no per-layer alloc
+    for (e in range64(ne)) {
+        let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
+        let cnt = s.moe_cnt[e] - b0
+        if (cnt > 0l && !(skip_gpu_experts && s.moe_exp_gpu[e] != int8(0))) {   // a split's device experts take no host region
+            s.moe_ord |> push(int2(int(e), int(cnt)))
+        }
+    }
+    lpt_order(s.moe_ord)
+    var nreg = 0l
+    for (oe in s.moe_ord) {
+        let e = int64(oe.x)
+        let cnt = int64(oe.y)
+        let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
+        let eg = l * ne + e
+        let base = e * dim * nfe
+        var sub0 = 0l
+        while (sub0 < cnt) {   //! sub-regions share the expert's weights; the bias lists repeat per sub-region
+            let scnt = split_cap > 0l ? min(cnt - sub0, split_cap) : cnt
+            s.moe_offs1 |> push(t.we1_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
+            s.moe_offs1 |> push(b0 + sub0)
+            s.moe_offs1 |> push(scnt)
+            s.moe_offs3 |> push(t.we3_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
+            s.moe_offs3 |> push(b0 + sub0)
+            s.moe_offs3 |> push(scnt)
+            s.moe_offs2 |> push(t.we2_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
+            s.moe_offs2 |> push(b0 + sub0)
+            s.moe_offs2 |> push(scnt)
+            if (c.moe_exps_bias) {
+                s.moe_boffs1 |> push(t.web1_off + eg * nfe)
+                s.moe_boffs3 |> push(t.web3_off + eg * nfe)
+                s.moe_boffs2 |> push(t.web2_off + eg * dim)
+            }
+            nreg++
+            sub0 += scnt
+        }
+    }
+    return nreg
+}
+
+//! the raw down rows land in s.moe_gout in bucket order; the down biases add before the routed weight scales a row
+def private moe_prefill_fused_cpu(t : Model; var s : Session; l, nreg, nk, ts_g1 : int64) {
+    let c = t.config
+    let dim = c.dim
+    let nfe = c.n_ff_exp
+    let f1 = fmt_at(t.we1_fmt, l)
+    let f2 = fmt_at(t.we2_fmt, l)
+    let f3 = fmt_at(t.we3_fmt, l)
+    mm_b_f_groupn(s.moe_ghb, t, f1, s.moe_offs1, s.moe_boffs1, c.moe_exps_bias, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
+    mm_b_f_groupn(s.moe_ghb2, t, f3, s.moe_offs3, s.moe_boffs3, c.moe_exps_bias, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
+    prof_add("mm_gemm", ts_g1)
+    let ts_act = prof_ticks()
+    gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, nk)
+    prof_add("act", ts_act)
+    requant_rows_f(f2, s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
+    let ts_g3 = prof_ticks()
+    mm_b_f_groupn(s.moe_gout, t, f2, s.moe_offs2, s.moe_boffs2, c.moe_exps_bias, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
+    prof_add("mm_gemm", ts_g3)
+}
+
+def private moe_prefill_park(var s : Session; nk, dim : int64) {
+    trace_tag(TRACE_TAG_PARK)
+    let ts_park = prof_ticks()
+    unsafe {
+        let gp = addr < float const? >(s.moe_gout[0])
+        var ep = addr(s.moe_eout[0])
+        let bp = addr < int64 const? >(s.moe_bkt[0])
+        maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(nk), get_dispatch_lanes()) $(rb, re) {
+            unsafe {
+                for (j in range(rb, re)) {
+                    let jj = int64(j)
+                    copy_floats(ep + bp[jj] * dim, gp + jj * dim, dim)
+                }
+            }
+        }
+    }
+    prof_add("moe_park", ts_park)
+}
+
+//! one batched GEMM chain per touched expert (the unfused arm); the raw down rows park for the ordered reduce; under `split`
+//! the experts marked in s.moe_exp_gpu are the device's and take no chain here
+def private moe_prefill_per_expert(t : Model; var s : Session; l : int64; moe_kform : bool; skip_gpu_experts : bool = false) {
+    let c = t.config
+    let dim = c.dim
+    let ne = c.n_expert
+    let k = c.n_expert_used
+    let nfe = c.n_ff_exp
+    let f1 = fmt_at(t.we1_fmt, l)
+    let f2 = fmt_at(t.we2_fmt, l)
+    let f3 = fmt_at(t.we3_fmt, l)
+    for (e in range64(ne)) {
+        let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
+        let cnt = s.moe_cnt[e] - b0
+        if (cnt == 0l || (skip_gpu_experts && s.moe_exp_gpu[e] != int8(0))) {
+            continue
+        }
+        let ts_gather = prof_ticks()
+        moe_gather_rows(s, b0, cnt, dim, k, moe_kform, moe_kform)
+        prof_add("moe_gather", ts_gather)
+        let eg = l * ne + e
+        let base = e * dim * nfe
+        if (!t.experts_mx4 || g_active_mx4_native_batch) {   // the stack's native batch tiles, per-kind fmt (down may differ)
+            mm_b_f_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
+            mm_b_f_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
+        } else {
+            let ts_ex = prof_ticks()
+            expand_mx4_region_q8(t, t.we1_offs[l] + base, dim, nfe, s.mx4_wq, s.mx4_ws)
+            prof_add("moe_expand", ts_ex)
+            let ts_g1 = prof_ticks()
+            matmul_q8q8_batch(s.moe_ghb, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
+            prof_add("mm_gemm", ts_g1)
+            let ts_ex2 = prof_ticks()
+            expand_mx4_region_q8(t, t.we3_offs[l] + base, dim, nfe, s.mx4_wq, s.mx4_ws)
+            prof_add("moe_expand", ts_ex2)
+            let ts_g2 = prof_ticks()
+            matmul_q8q8_batch(s.moe_ghb2, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
+            prof_add("mm_gemm", ts_g2)
+        }
+        if (c.moe_exps_bias) {  // gpt-oss: this expert's gate/up biases before the activation
+            for (r in range64(cnt)) {
+                add_bias(s.moe_ghb, r * nfe, t.fblob, t.web1_off + eg * nfe, nfe)
+                add_bias(s.moe_ghb2, r * nfe, t.fblob, t.web3_off + eg * nfe, nfe)
+            }
+        }
+        let ts_act = prof_ticks()
+        gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, cnt)
+        prof_add("act", ts_act)
+        requant_rows_f(f2, s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
+        if (!t.experts_mx4 || g_active_mx4_native_batch) {
+            mm_b_f_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
+        } else {
+            let ts_ex3 = prof_ticks()
+            expand_mx4_region_q8(t, t.we2_offs[l] + base, nfe, dim, s.mx4_wq, s.mx4_ws)
+            prof_add("moe_expand", ts_ex3)
+            let ts_g3 = prof_ticks()
+            matmul_q8q8_batch(s.moe_gout, s.mx4_wq, s.mx4_ws, s.moe_hq, s.moe_hs, nfe, dim, cnt)
+            prof_add("mm_gemm", ts_g3)
+        }
+        if (c.moe_exps_bias) {  // ... and its down bias, added before the routed weight scales it
+            for (r in range64(cnt)) {
+                add_bias(s.moe_gout, r * dim, t.fblob, t.web2_off + eg * dim, dim)
+            }
+        }
+        let ts_park = prof_ticks()
+        for (r in range64(cnt)) {
+            copy_floats(s.moe_gout, r * dim, s.moe_eout, s.moe_bkt[b0 + r] * dim, dim)
+        }
+        prof_add("moe_park", ts_park)
+    }
+}
+
+//! slot order, decode's accumulation order; a zero-weight slot (a split's device share) is skipped: its parked row is stale
+def private moe_reduce_row(var arow : float?; ep : float const?; wp : float const?; k, dim : int64) {
+    unsafe {
+        for (i in range64(dim)) {
+            arow[i] = 0.0
+        }
+        for (j in range64(k)) {
+            let w = wp[j]
+            continue if (w == 0.0)
+            let er = ep + j * dim
+            for (i in range64(dim)) {
+                arow[i] += w * er[i]
+            }
+        }
+    }
+}
+
+def private moe_prefill_scratch(t : Model; var s : Session; npos, grows : int64; kq_layer : bool) {
     let c = t.config
     let dim = c.dim
     let nb = dim / 32l
     let ne = c.n_expert
+    let nk = npos * c.n_expert_used
+    let nfx = max(c.n_ff_exp, c.n_ff_shexp)
+    s.moe_rlog |> grow_resize(npos * ne)
+    s.moe_idx_b |> grow_resize(nk)
+    s.moe_w_b |> grow_resize(nk)
+    s.moe_cnt |> grow_resize(ne)
+    s.moe_bkt |> grow_resize(nk)
+    s.moe_gxq |> grow_resize(grows * dim)
+    s.moe_gxs |> grow_resize(grows * nb)
+    s.moe_ghb |> grow_resize(grows * nfx)
+    s.moe_ghb2 |> grow_resize(grows * nfx)
+    s.moe_hq |> grow_resize(grows * nfx)
+    s.moe_hs |> grow_resize(grows * nfx / 32l)
+    s.moe_gout |> grow_resize(grows * dim)
+    s.moe_eout |> grow_resize(nk * dim)
+    if (c.n_ff_shexp > 0l && c.moe_shexp_gated) {
+        s.moe_gl_b |> grow_resize(npos)
+    }
+    if (kq_layer) {
+        s.moe_gxbs |> grow_resize(grows * dim / 16l)
+        s.moe_hbs |> grow_resize(grows * nfx / 16l)
+    }
+}
+
+//! the router bias adds into s.moe_rlog in place; the shared gate's logit is left to the driver's scatter
+def private moe_prefill_select_rows(t : Model; var s : Session; l, npos : int64) {
+    let c = t.config
+    let ne = c.n_expert
+    let k = c.n_expert_used
+    let ts_select = prof_ticks()
+    unsafe {
+        var rlp = addr(s.moe_rlog[0])
+        var idxp = addr(s.moe_idx_b[0])
+        var wp = addr(s.moe_w_b[0])
+        let rbp = c.moe_router_bias ? addr<float const?>(t.fblob[t.router_b_off + l * ne]) : null
+        let ebp = c.moe_exp_probs ? addr<float const?>(t.fblob[t.exp_probs_off + l * ne]) : null
+        let gate = c.moe_gate
+        let norm_topk = c.norm_topk_prob
+        let wscale = c.expert_weights_scale
+        let tp = moe_pick_tape_rows_begin(npos, k)
+        maybe_parallel_for(npos > 1l, 0, int(npos), get_dispatch_lanes()) $(pb, pe) {
+            unsafe {
+                for (pp in range(pb, pe)) {
+                    let p = int64(pp)
+                    var lgp = rlp + p * ne
+                    if (rbp != null) {
+                        for (i in range64(ne)) {
+                            lgp[i] += rbp[i]
+                        }
+                    }
+                    if (tp != null) {
+                        moe_pick_tape_mask_row(lgp, ne, k, tp + p * k)
+                    }
+                    moe_select_core(gate, ne, k, norm_topk, wscale, lgp, idxp, wp, p * k, ebp)
+                }
+            }
+        }
+    }
+    moe_pick_tape_rows_done(s.moe_idx_b, npos, k)
+    moe_prefill_bucket(s, npos * k, ne)
+    prof_add("moe_route", ts_select)
+}
+
+//! The routed experts' sums of `npos` rows alone, on the CPU, for a driver that holds every other plane of the layer: the rows
+//! in s.xb_b and the router logits in s.moe_rlog (position-major, `ne` a row) -> s.xb2_b = the k experts' outputs under their
+//! weights, a row a position - the grouped path's CPU stages; the shared expert and the residual are the driver's
+def moe_routed_sum_rows(t : Model; var s : Session; l, npos : int64) {
+    moe_routed_rows_select(t, s, l, npos)
+    moe_routed_rows_sum(t, s, l, npos, false)
+}
+
+//! the rows' routed chain takes the fused region dispatches, else a chain an expert
+def private moe_routed_rows_take_fused_regions(t : Model; l : int64) : bool {
+    let f1 = fmt_at(t.we1_fmt, l)
+    let f2 = fmt_at(t.we2_fmt, l)
+    let f3 = fmt_at(t.we3_fmt, l)
+    let sb_fusable = t.kq_repacked && kernel_backend_has_kq_batch_groupn()
+    return ((t.experts_mx4 && g_active_mx4_native_batch && g_moe_fused_expert_gemms)
+        || (moe_layer_kq(t, l) && g_moe_fused_expert_gemms
+            && (kq_sb(f1) ? sb_fusable : f1 == KqFmt.q51)
+            && (kq_sb(f2) ? sb_fusable : f2 == KqFmt.q51)
+            && (kq_sb(f3) ? sb_fusable : f3 == KqFmt.q51)))
+}
+
+//! `moe_routed_sum_rows`' first half: the rows' selects off s.moe_rlog into s.moe_idx_b / s.moe_w_b and the bucket by expert
+//! (s.moe_cnt an expert's run end, s.moe_bkt the slot rows in expert order) - what a driver reads to split the picks
+def moe_routed_rows_select(t : Model; var s : Session; l, npos : int64) {
+    let nk = npos * t.config.n_expert_used
+    moe_prefill_scratch(t, s, npos, moe_routed_rows_take_fused_regions(t, l) ? nk : npos, moe_layer_kq(t, l))
+    s.xb2_b |> grow_resize(npos * t.config.dim)
+    moe_prefill_select_rows(t, s, l, npos)
+}
+
+//! ... and its second: the experts' chains and the rows' sums into s.xb2_b. Under `split` the experts marked in
+//! s.moe_exp_gpu are a driver's and s.moe_w_cpu carries the weights with their slots at zero: the sums are the rest's alone
+def moe_routed_rows_sum(t : Model; var s : Session; l, npos : int64; skip_gpu_experts : bool) {
+    let c = t.config
+    let dim = c.dim
+    let k = c.n_expert_used
+    let nk = npos * k
+    let kq_layer = moe_layer_kq(t, l)
+    let f1 = fmt_at(t.we1_fmt, l)
+    let f3 = fmt_at(t.we3_fmt, l)
+    let fused = moe_routed_rows_take_fused_regions(t, l)
+    let moe_kform = kq_layer && moe_pair_kform(f1, f3)
+    if (moe_kform) {
+        s.kxqb |> resize(npos * dim)
+        s.kxsb |> resize(npos * dim / 256l)
+        s.kxbsb |> resize(npos * dim / 16l)
+        requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
+    } else {
+        requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
+    }
+    if (fused) {
+        trace_tag(TRACE_TAG_MOE)
+        let ts_gather = prof_ticks()
+        moe_gather_rows(s, 0l, nk, dim, k, moe_kform, moe_kform)
+        prof_add("moe_gather", ts_gather)
+        let nreg = moe_prefill_regions_lpt(t, s, l, nk, 32l, skip_gpu_experts)
+        if (nreg > 0l) {
+            moe_prefill_fused_cpu(t, s, l, nreg, nk, prof_ticks())
+            moe_prefill_park(s, nk, dim)
+        }
+    } else {
+        trace_tag(TRACE_TAG_MOE)
+        moe_prefill_per_expert(t, s, l, moe_kform, skip_gpu_experts)
+    }
+    trace_tag(TRACE_TAG_PARK)
+    let ts_red = prof_ticks()
+    unsafe {
+        var ap = addr(s.xb2_b[0])
+        let ep = addr<float const?>(s.moe_eout[0])
+        let wp = skip_gpu_experts ? addr<float const?>(s.moe_w_cpu[0]) : addr<float const?>(s.moe_w_b[0])
+        maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let pp = int64(p)
+                    moe_reduce_row(ap + pp * dim, ep + pp * k * dim, wp + pp * k, k, dim)
+                }
+            }
+        }
+    }
+    prof_add("moe_reduce", ts_red)
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
+def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
+    let c = t.config
+    let dim = c.dim
+    let ne = c.n_expert
     let k = c.n_expert_used
     let nfe = c.n_ff_exp
     let nsh = c.n_ff_shexp
-    let nfx = max(nfe, nsh)
     let nk = npos * k
     // fused (native mx4-batch): gather/hidden/output images span every routed row at once, bucket-ordered
     let kq_layer = moe_layer_kq(t, l)
@@ -1477,28 +1830,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     let gpu_xf = gpu_comb && moe_gpu_ffn_xf_ok(npos, dim, int(f1), int(f3), int(f2))
     var split_gpu_regions = 0l
     let fused = (t.experts_mx4 && g_active_mx4_native_batch && g_moe_fused_expert_gemms) || fused_kq || fused_gpu
-    let grows = fused ? nk : npos
-    // a long media prefill (omni ASR, ~2.6k rows x k experts) sizes these into the tens of MB (sizing mirrors ple.das)
-    s.moe_rlog |> grow_resize(npos * ne)
-    s.moe_idx_b |> grow_resize(nk)
-    s.moe_w_b |> grow_resize(nk)
-    s.moe_cnt |> grow_resize(ne)
-    s.moe_bkt |> grow_resize(nk)
-    s.moe_gxq |> grow_resize(grows * dim)
-    s.moe_gxs |> grow_resize(grows * nb)
-    s.moe_ghb |> grow_resize(grows * nfx)
-    s.moe_ghb2 |> grow_resize(grows * nfx)
-    s.moe_hq |> grow_resize(grows * nfx)
-    s.moe_hs |> grow_resize(grows * nfx / 32l)
-    s.moe_gout |> grow_resize(grows * dim)
-    s.moe_eout |> grow_resize(nk * dim)
-    if (nsh > 0l && c.moe_shexp_gated) {
-        s.moe_gl_b |> grow_resize(npos)
-    }
-    if (kq_layer) {
-        s.moe_gxbs |> grow_resize(grows * dim / 16l)
-        s.moe_hbs |> grow_resize(grows * nfx / 16l)
-    }
+    moe_prefill_scratch(t, s, npos, fused ? nk : npos, kq_layer)
 
     // 1. route every position: one batched router GEMM, then the shared select per row; shexp gate dots ride along
     trace_tag(TRACE_TAG_ROUTE)
@@ -1519,6 +1851,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         let gate = c.moe_gate
         let norm_topk = c.norm_topk_prob
         let wscale = c.expert_weights_scale
+        let tp = moe_pick_tape_rows_begin(npos, k)
         maybe_parallel_for(npos > 1l, 0, int(npos), get_dispatch_lanes()) $(pb, pe) {
             unsafe {
                 for (pp in range(pb, pe)) {
@@ -1529,6 +1862,9 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                             lgp[i] += rbp[i]
                         }
                     }
+                    if (tp != null) {
+                        moe_pick_tape_mask_row(lgp, ne, k, tp + p * k)
+                    }
                     moe_select_core(gate, ne, k, norm_topk, wscale, lgp, idxp, wp, p * k, ebp)
                     if (glp != null) {
                         glp[p] = 1.0 / (1.0 + exp(-dot(gvp, xbp + p * dim, dim)))
@@ -1537,24 +1873,8 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
             }
         }
     }
-    // bucket (position, slot) pairs by expert — CSR in-place cursor: moe_cnt[e] ends as e's run END
-    for (e in range64(ne)) {
-        s.moe_cnt[e] = 0l
-    }
-    for (r in range64(nk)) {
-        s.moe_cnt[s.moe_idx_b[r]]++
-    }
-    var run = 0l
-    for (e in range64(ne)) {
-        let cn = s.moe_cnt[e]
-        s.moe_cnt[e] = run
-        run += cn
-    }
-    for (r in range64(nk)) {
-        let e = s.moe_idx_b[r]
-        s.moe_bkt[s.moe_cnt[e]] = r
-        s.moe_cnt[e]++
-    }
+    moe_pick_tape_rows_done(s.moe_idx_b, npos, k)
+    moe_prefill_bucket(s, nk, ne)
     prof_add("moe_route", ts_select)
 
     // 2. quantize every normed activation row ONCE; kq v2 gate/up gathers off Q8_K, q8 stacks off Q8_0
@@ -1625,54 +1945,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         }
         prof_add("moe_gather", ts_gather)
         let split_cap = !gpu_comb && !fused_gpu ? 32l : 0l
-        let cap_reg = split_cap > 0l ? ne + nk / split_cap + 1l : ne
-        s.moe_offs1 |> clear(); s.moe_offs1 |> reserve(cap_reg * 3l)
-        s.moe_offs3 |> clear(); s.moe_offs3 |> reserve(cap_reg * 3l)
-        s.moe_offs2 |> clear(); s.moe_offs2 |> reserve(cap_reg * 3l)
-        if (c.moe_exps_bias) {
-            s.moe_boffs1 |> clear(); s.moe_boffs1 |> reserve(cap_reg)
-            s.moe_boffs3 |> clear(); s.moe_boffs3 |> reserve(cap_reg)
-            s.moe_boffs2 |> clear(); s.moe_boffs2 |> reserve(cap_reg)
-        }
-        // LPT order (biggest buckets first) front-loads expensive spans; expert-order left 32% of GEMM windows idle
-        s.moe_ord |> clear()
-        s.moe_ord |> reserve(ne)   // capacity persists across layers — no per-layer alloc
-        for (e in range64(ne)) {
-            let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
-            let cnt = s.moe_cnt[e] - b0
-            if (cnt > 0l) {
-                s.moe_ord |> push(int2(int(e), int(cnt)))
-            }
-        }
-        lpt_order(s.moe_ord)
-        var nreg = 0l
-        for (oe in s.moe_ord) {
-            let e = int64(oe.x)
-            let cnt = int64(oe.y)
-            let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
-            let eg = l * ne + e
-            let base = e * dim * nfe
-            var sub0 = 0l
-            while (sub0 < cnt) {   //! sub-regions share the expert's weights; the bias lists repeat per sub-region
-                let scnt = split_cap > 0l ? min(cnt - sub0, split_cap) : cnt
-                s.moe_offs1 |> push(t.we1_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-                s.moe_offs1 |> push(b0 + sub0)
-                s.moe_offs1 |> push(scnt)
-                s.moe_offs3 |> push(t.we3_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-                s.moe_offs3 |> push(b0 + sub0)
-                s.moe_offs3 |> push(scnt)
-                s.moe_offs2 |> push(t.we2_offs[l] + base)   // nolint:STYLE012 — loop-append into reused scratch
-                s.moe_offs2 |> push(b0 + sub0)
-                s.moe_offs2 |> push(scnt)
-                if (c.moe_exps_bias) {
-                    s.moe_boffs1 |> push(t.web1_off + eg * nfe)
-                    s.moe_boffs3 |> push(t.web3_off + eg * nfe)
-                    s.moe_boffs2 |> push(t.web2_off + eg * dim)
-                }
-                nreg++
-                sub0 += scnt
-            }
-        }
+        let nreg = moe_prefill_regions_lpt(t, s, l, nk, split_cap)
         if (gpu_xf && moe_gpu_layer_streamed(l) && gpu_want_moe_split() && sb_fusable
                 && kq_sb(f1) && kq_sb(f3) && kq_sb(f2) && nk <= moe_gpu_ffn_xf_async_rows(dim, nfe)) {
             let bytes_e = float(nfe * dim) * (kq_bytes_per_weight(f1) + kq_bytes_per_weight(f3) + kq_bytes_per_weight(f2))
@@ -1768,101 +2041,18 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
             prof_add("moe_gpu", ts_g1)
         } else {
-            mm_b_f_groupn(s.moe_ghb, t, f1, s.moe_offs1, s.moe_boffs1, c.moe_exps_bias, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
-            mm_b_f_groupn(s.moe_ghb2, t, f3, s.moe_offs3, s.moe_boffs3, c.moe_exps_bias, nreg, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe)
-            prof_add("mm_gemm", ts_g1)
-            let ts_act = prof_ticks()
-            gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, nk)
-            prof_add("act", ts_act)
-            requant_rows_f(f2, s.moe_ghb, nfe, nk, s.moe_hq, s.moe_hs, s.moe_hbs)
-            let ts_g3 = prof_ticks()
-            // the down biases add before the routed weight scales the row
-            mm_b_f_groupn(s.moe_gout, t, f2, s.moe_offs2, s.moe_boffs2, c.moe_exps_bias, nreg, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim)
-            prof_add("mm_gemm", ts_g3)
+            moe_prefill_fused_cpu(t, s, l, nreg, nk, ts_g1)
         }
         // threaded bucket scatter: serial was an ~8ms ALL-LANE hole here (~67MB traffic at pp512/30B)
         if (!gpu_comb) {
-            trace_tag(TRACE_TAG_PARK)
-            let ts_park = prof_ticks()
-            unsafe {
-                let gp = addr < float const? >(s.moe_gout[0])
-                var ep = addr(s.moe_eout[0])
-                let bp = addr < int64 const? >(s.moe_bkt[0])
-                maybe_parallel_for(nk * dim >= g_act_par_threshold, 0, int(nk), get_dispatch_lanes()) $(rb, re) {
-                    unsafe {
-                        for (j in range(rb, re)) {
-                            let jj = int64(j)
-                            copy_floats(ep + bp[jj] * dim, gp + jj * dim, dim)
-                        }
-                    }
-                }
-            }
-            prof_add("moe_park", ts_park)
+            moe_prefill_park(s, nk, dim)
         }
     }
 
     // 3. one batched GEMM chain per touched expert; raw down rows park for the ordered reduce (skipped when fused ran)
     if (!fused) {
         trace_tag(TRACE_TAG_MOE)
-    }
-    for (e in range64(fused ? 0l : ne)) {
-        let b0 = e == 0l ? 0l : s.moe_cnt[e - 1l]
-        let cnt = s.moe_cnt[e] - b0
-        if (cnt == 0l) {
-            continue
-        }
-        let ts_gather = prof_ticks()
-        moe_gather_rows(s, b0, cnt, dim, k, moe_kform, moe_kform)
-        prof_add("moe_gather", ts_gather)
-        let eg = l * ne + e
-        let base = e * dim * nfe
-        if (!t.experts_mx4 || g_active_mx4_native_batch) {   // the stack's native batch tiles, per-kind fmt (down may differ)
-            mm_b_f_pre(s.moe_ghb, t, f1, t.we1_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-            mm_b_f_pre(s.moe_ghb2, t, f3, t.we3_offs[l] + base, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
-        } else {
-            let ts_ex = prof_ticks()
-            expand_mx4_region_q8(t, t.we1_offs[l] + base, dim, nfe, s.mx4_wq, s.mx4_ws)
-            prof_add("moe_expand", ts_ex)
-            let ts_g1 = prof_ticks()
-            matmul_q8q8_batch(s.moe_ghb, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            prof_add("mm_gemm", ts_g1)
-            let ts_ex2 = prof_ticks()
-            expand_mx4_region_q8(t, t.we3_offs[l] + base, dim, nfe, s.mx4_wq, s.mx4_ws)
-            prof_add("moe_expand", ts_ex2)
-            let ts_g2 = prof_ticks()
-            matmul_q8q8_batch(s.moe_ghb2, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-            prof_add("mm_gemm", ts_g2)
-        }
-        if (c.moe_exps_bias) {  // gpt-oss: this expert's gate/up biases before the activation
-            for (r in range64(cnt)) {
-                add_bias(s.moe_ghb, r * nfe, t.fblob, t.web1_off + eg * nfe, nfe)
-                add_bias(s.moe_ghb2, r * nfe, t.fblob, t.web3_off + eg * nfe, nfe)
-            }
-        }
-        let ts_act = prof_ticks()
-        gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nfe, cnt)
-        prof_add("act", ts_act)
-        requant_rows_f(f2, s.moe_ghb, nfe, cnt, s.moe_hq, s.moe_hs, s.moe_hbs)
-        if (!t.experts_mx4 || g_active_mx4_native_batch) {
-            mm_b_f_pre(s.moe_gout, t, f2, t.we2_offs[l] + base, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
-        } else {
-            let ts_ex3 = prof_ticks()
-            expand_mx4_region_q8(t, t.we2_offs[l] + base, nfe, dim, s.mx4_wq, s.mx4_ws)
-            prof_add("moe_expand", ts_ex3)
-            let ts_g3 = prof_ticks()
-            matmul_q8q8_batch(s.moe_gout, s.mx4_wq, s.mx4_ws, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-            prof_add("mm_gemm", ts_g3)
-        }
-        if (c.moe_exps_bias) {  // ... and its down bias, added before the routed weight scales it
-            for (r in range64(cnt)) {
-                add_bias(s.moe_gout, r * dim, t.fblob, t.web2_off + eg * dim, dim)
-            }
-        }
-        let ts_park = prof_ticks()
-        for (r in range64(cnt)) {
-            copy_floats(s.moe_gout, r * dim, s.moe_eout, s.moe_bkt[b0 + r] * dim, dim)
-        }
-        prof_add("moe_park", ts_park)
+        moe_prefill_per_expert(t, s, l, moe_kform)
     }
 
     // 4. shared expert for ALL positions — a plain dense batched FFN off the whole-batch image
@@ -1913,16 +2103,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                             arow[i] = cr[i]
                         }
                     } else {
-                        for (i in range64(dim)) {
-                            arow[i] = 0.0
-                        }
-                        for (j in range64(k)) {
-                            let w = wp[pp * k + j]
-                            let er = ep + (pp * k + j) * dim
-                            for (i in range64(dim)) {
-                                arow[i] += w * er[i]
-                            }
-                        }
+                        moe_reduce_row(arow, ep + pp * k * dim, wp + pp * k, k, dim)
                     }
                     if (sp != null) {
                         let g = gp != null ? gp[pp] : 1.0   // ungated shexp (glm4moe) adds at weight 1

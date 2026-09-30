@@ -28,7 +28,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_YARN_BETA_FAST` | number | 0 | YaRN: the low correction dim beta_fast; 0 = the file's, else 32. |
 | `DASLLAMA_YARN_BETA_SLOW` | number | 0 | YaRN: the high correction dim beta_slow; 0 = the file's, else 1. |
 | `DASLLAMA_PIN_BACKEND` | text | unset | Pin the matmul backend by name, bypassing the measured auto-selection. |
-| `DASLLAMA_IQ3S_SERVE` | text | auto | How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut on a CPU-only load, grid where a GPU tier targets the load (its grid gather is cheap). |
+| `DASLLAMA_IQ3S_SERVE` | text | auto | How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut wherever the serving rails decode it (the CPU rails and the Vulkan tier), grid under the Metal tier (it gathers the grid and carries no iq3s4 kernel). |
 | `DASLLAMA_PIN_BATCH_BACKEND` | text | unset | Pin the batched (prefill) matmul backend independently of the decode one. |
 | `DASLLAMA_EXPERT_REUSE` | flag | off | Arm the MoE expert-reuse counter (probes and servers; benches use set_expert_reuse instead). |
 | `DASLLAMA_NOISY` | flag | off | Print engine diagnostics (tier selection, upload plan, arm/decline reasons). |
@@ -60,7 +60,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_MOE_SPLIT` | flag | on | Split each STREAMED expert layer's prefill between the GPU (the experts it can stream in the CPU's time) and the CPU (the rest, concurrently); 0 streams whole layers. |
 | `DASLLAMA_GPU_DEC_TAIL` | flag | on | Decode FFN tail: a resident expert layer's FFN carries the combine, the residual and the next layer's attention feed on the device, so the two submits share one fence wait; 0 collects every FFN on the host. |
 | `DASLLAMA_GPU_DEC_SPAN` | flag | on | Whole-token decode span: every resident expert layer's attention, router, top-k, FFN and combine as ONE recorded chain and one submit per token; 0 runs the per-layer submits. |
-| `DASLLAMA_GPU_HEAT` | number | 0 | Expert heat threshold: hold the N hottest experts resident regardless of layer placement. |
+| `DASLLAMA_GPU_HEAT` | number | 0 | Hot expert slots a layer. On the per-op tier: hold the N hottest experts of a streamed layer resident (unset = none). On the whole-model driver with the routed experts on the host (a hyper-connection MoE): the slots of the hot expert pool - unset = 64 where the card has the room past the weights and the mirror, else up to 32 out of the mirror's context; a count asks that many; 0 keeps every routed expert on the host. |
 | `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
 
 ## Vision

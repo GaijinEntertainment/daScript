@@ -123,10 +123,14 @@ one table lookup a nibble in place of the grid gather, which is where the IQ3_S 
 its time. The member's descriptor row names the source type (`GGML_TYPE_IQ3_S`, 110 disk bytes)
 with its own schema and stream ids, so the image and the stream rail carry it like any lattice
 member. The choice is `kq_fmt_of`'s at the load (`iq3s_serve_lut`, the `DASLLAMA_IQ3S_SERVE`
-knob: `grid`, `lut`, `auto` = lut on a CPU-only load), and it is an image identity bit
-(`DlimCpuConfig.iq3s_lut`), because it changes plane bytes. The GPU tiers keep the grid form:
-their gather is a device read, and no Metal or Vulkan kernel decodes `iq3s4`, so it sits on every
-Vulkan ladder's skip list and off the Metal roster, and a load a GPU tier targets serves `iq3s`.
+knob: `grid`, `lut`, `auto` = lut wherever the serving rails decode it), and it is an image
+identity bit (`DlimCpuConfig.iq3s_lut`), because it changes plane bytes. The Vulkan tier decodes
+it on every ladder: the device row is iq4xs's quant plane under iq3s's scale word, the codebook is
+arithmetic (`2q - 15`, no table bound), and the stamps are the iq4xs kernels with the odd
+codebook and the grid scale switched in. So a host that sums routed experts beside a Vulkan
+device reads the fast planes, and the device reads the same bytes. The Metal tier keeps the grid
+form: its gather is a device read and no Metal kernel decodes `iq3s4`, so the member sits off the
+Metal roster and a load the Metal tier targets serves `iq3s`.
 
 ### The load and image rail {#the-load-and-image-rail}
 

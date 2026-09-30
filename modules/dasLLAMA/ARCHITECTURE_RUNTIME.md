@@ -258,7 +258,8 @@ skewed routing draw becomes one unit the barrier waits on - measured 620 against
 Zipf k4 draw (`harness/moe_kq_probe.das`). The CPU arms therefore split a region into sub-regions
 of at most 32 rows: sub-regions of one expert share its weight offset, and the per-expert bias
 lists repeat once per sub-region. The GPU arms keep whole regions - their kernels chunk by work
-already.
+already. The list runs biggest bucket first (`lpt_order`): the dispatcher hands out units in list
+order, so the heavy spans start first; in expert order a late heavy expert left the other lanes idle.
 
 ### The engine dispatches only on a configured job queue {#jobque-policy}
 

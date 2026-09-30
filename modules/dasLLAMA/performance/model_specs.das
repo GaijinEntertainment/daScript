@@ -11,6 +11,7 @@ module model_specs shared public
 
 require dasllama/dasllama_lint public
 require strings public
+require daslib/fio   // base_name - spec_by_file's split-shard rows
 require dasllama/dasllama_common public   // QuantMode
 
 // ===== Row types =====
@@ -944,14 +945,13 @@ def bench_image_fixture() : string {
     return "coco-val2017-000000039769.jpg"
 }
 
-//! The spec row keyed `file` (empty `file` field back = no such spec) — a fresh copy off the
-//! table, so a caller (a test run-lambda, the bench parity pregate) holds no reference into an
-//! iterated table.
+//! The spec row keyed `file` - its models-dir path or its base name (a split-shard row sits in a subfolder, the
+//! pregate holds the base name); an empty `file` back = no such spec. A fresh copy, never a reference into the table.
 def spec_by_file(file : string) : ModelSpec {
     var all <- model_specs()
     var out <- ModelSpec()
     for (s in all) {
-        if (s.file == file) {
+        if (s.file == file || base_name(s.file) == file) {
             out <- s
             break
         }

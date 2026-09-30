@@ -2067,3 +2067,40 @@ module) is independent and can land any time - it is pure structure.
     (`PERF_LEDGER.md`, the CPU self-speculation entry), and a slot loaded off the device never
     arms after it takes it. Done = the unset default re-read at every owner switch, with a cell
     that switches the owner between two NextN slots and reads `mtp_drafted` on each.
+122. **The hyper-connection chain takes one form of the token command and one window form.**
+    `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command` serves a hyper-connection MoE's decode as the split
+    token command and `#hc-window-chain` its prompt, but the split command records the split attention
+    form alone (no unsplit twin under `RD_UNSPLIT_POS`, no wide twin past `RD_WIDE_POS`), one mirror
+    region, no N-row rows and no same-slab verify; the window chain runs no chunked overlap and stamps
+    no profile roles. Done = the attention twins recorded per segment, the regions and rows forms as the
+    serving shapes ask for them, and the window's `--prof` roles.
+123. **A window's pool hits ride the batch arm's chain, with a host round trip and one tile column.**
+    `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool` runs a window's hits through `vk_moe_ffn_batch_xf_begin`:
+    the window's rows go up (5 MB at 512 rows), the combined rows come back (5 MB) and the host adds
+    them, and each plane's regions take one cm2 column (`batch_tile_edges`) where the resident block's
+    own schedule takes the e and s columns per bucket (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`).
+    The chain is bounded by its one chunk (`moe_gpu_ffn_xf_async_rows`), so a wider window would fall
+    back to the host. Done = the window's segment schedules the hits on the device (the sched, gather,
+    ladder and combine kernels over the pool's planes, the combine accumulating onto the host's sums),
+    no rows cross the link, and the prompt's row is re-measured.
+124. **The NextN head on the hyper-connection chain.** The split token command lands no carry and the
+    draft and verify seats decline it; the carrier's split head (`mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf`,
+    2.58 GiB of which 2.5 is its own Q8_0 routed experts) has the CPU round alone, which loses on this
+    model (`followup_general.md` row 178). Done = the head's mixers and eh_proj resident, its routed
+    experts on the host like the trunk's, the wide-residual carry landed with the logits, and the
+    two-row verify through the split command (a segment lands two rows, the host sums both), the
+    round measured net against plain decode on `benchmarks/lcpp_bench.das --mtp-ab`.
+125. **Placing an expert in a pool slot copies it twice.** The gather writes the expert's device layout
+    into host scratch (0.57 ms) and the upload copies the scratch into the slot (0.27 ms; both
+    `DASLLAMA_GPU_PROF=1`'s pool line, debug-jit), so a pool of 32 x 48 slots fills in 1.3 s at the
+    first window and a decode that starts with no prompt reads 14-21 tok/s over its first 128 tokens
+    (debug-jit; no board row carries this model on Vulkan). Done = the gather writes the slot's mapped bytes where the
+    device buffer is host-visible, and the fill's cost is re-measured.
+126. **The resident plan's reserve beside a desktop is 1 GiB, and this box pages inside it.** With the
+    OS's room answered, the plan fills the card to the per-process budget less the other processes'
+    bytes less `RDEC_OS_RESERVE`; on the zen2 (RTX 5060 Ti, a desktop holding 3.9-4.3 GB) a plan 681 MB
+    under that room read tg128 2.93 tok/s under the driver's paging warning, one 1.3 GB under it read
+    30.0, and one 550 MB under it read the prompt's row 5% low at four times the spread (debug-jit,
+    the `lcpp_bench` rows of `PERF_LEDGER.md`'s hot-pool entry). Done = the
+    reserve measured on a box with a live desktop (the plan's slack against the rows, three slacks or
+    more), and the constant or the rule set from the reading.

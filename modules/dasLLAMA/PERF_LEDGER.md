@@ -11,6 +11,100 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **LANDED (2026-09-29) - the hot expert pool on the hyper-connection carrier
+  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`), the `iq3s4` device format under it, and the resident
+  plan sizing the pool with the mirror.** zen2 (Ryzen 16 threads, RTX 5060 Ti 16 GB, 3.9-4.3 GB held
+  by the desktop, NVIDIA driver 616.56), Qwen3.8-Flash-Next UD-IQ4_XS, `bin/Release/daslang.exe -jit
+  benchmarks/lcpp_bench.das -- --ngl 0 -p 512 -n 128 -r 6 -t 16 --for-debug-purposes` under
+  `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1` (`DAS_TUNE_POLICY` unset - the box's
+  sidecar; `DASLLAMA_COOPMAT` at its default, cm2 on this card; `DASLLAMA_IQ3S_SERVE=auto`, the `iq3s4`
+  form), one process a row, the rows of one day on one branch - direction-grade across the rows:
+
+  | pool | the window's hits | mirror | pp512 | tg128 |
+  | :--- | :--- | :--- | ---: | ---: |
+  | the plan's own: 32 slots (4025 MB) | on the device | 114518 positions (2684 MB) | 286.01 +/- 8.85 | 29.74 +/- 0.50 |
+  | 32 slots (`DASLLAMA_GPU_HEAT=32`) | on the device | 32768 (`DASLLAMA_GPU_CTX_MAX`, 768 MB) | 288.81 +/- 8.72 | 29.93 +/- 0.49 |
+  | the plan's own: 32 slots | the host's | 64413 (1509 MB) | 121.49 +/- 4.08 | 29.70 +/- 0.44 |
+  | 32 slots | the host's | 32768 (768 MB) | 128.39 +/- 0.72 | 30.04 +/- 0.41 |
+  | none (`DASLLAMA_GPU_HEAT=0`) | - | 32768 (768 MB) | 128.76 +/- 0.36 | 19.38 +/- 0.06 |
+  | none, the plan before this entry | - | 203419 (4767 MB) | 110.33 +/- 2.08 | 2.93 +/- 0.03 |
+
+  The reference rows (external): llama.cpp b10659 (`6c84c7d5d`, the qwen4exp commit), the Vulkan and
+  the CUDA 13.4 builds' `llama-bench -m <shard 1> -ngl 99 -ncmoe 48 -t 16 -p 512 -n 128 -r 3` with the
+  48 layers' experts on the CPU - Vulkan pp512 91.66 / tg128 13.07, CUDA 147.3 +/- 21 / 17.32
+  (`ARCHITECTURE_MEASUREMENT.md#host-experts-reference`). Decode is 1.55x the host-experts form (30.04
+  against 19.38) and 1.71x the CUDA row (29.74 against 17.32); the prompt's row is 2.24x the host-experts
+  form (288.81 against 128.76) and 1.96x the CUDA row (288.81 against 147.3) once the window's hits run
+  through the batch arm's chain beside the host (the middle rows: the pool serving decode alone leaves
+  the prompt's row where it was). Over four windows and 32 steps the pool placed 1656 experts - the 1536 of its fill and
+  120 swaps - for 0.9 s of gather and 0.45 s of upload, once a load. The bottom row is the box paging: the plan filled the card to 681 MB under its
+  room beside a 4.3 GB desktop, the driver's own warning fired (a decode token under 40 GB/s over the
+  resident weights), and the row this ledger's entry below reads at 110.13 / 19.66 was the same plan
+  on a quieter desktop - its prompt row already paid some of it. The token under
+  `DASLLAMA_GPU_PROF=1`, warm, 32 slots: 32.3 ms, of it the host's sums of the misses 8.6 ms (29.5 with
+  every pick on the host), the segments and the hit chains 22 ms, the last segment's wait 1.5 ms; the
+  device serves 70-83% of the picks on the bench's synthetic ids, 74.6% in the parity cell's steps.
+  Research before the kernels (`bin/Release/daslang.exe -jit harness/vk_gemv_probe.das -- 2560 672`,
+  the expert gate shape, this card): `iq3s4` decodes at 418 GB/s streaming and 7.2 us a cold plane of
+  0.9 MB (iq4xs 294-352 GB/s, 9.2 us; iq3s 400 GB/s, 8.3 us; k4 402 GB/s, 8.1 us; q8 418 GB/s, 11.1
+  us), the host's chain 61 us an expert (the `DASLLAMA_GPU_PROF=1` token report: the host's routed sums
+  over the picks it summed) - the device is six to ten times the host on a hit. Placing an expert in a
+  slot (the same report's pool line, the gather and upload clocks summed over the placements): the
+  gather of its three planes 0.57 ms and the upload of 2.6 MiB 0.27 ms (the gather parallel over rows;
+  it read 1.85 ms while one expert's rows ran on one lane), so a pool of 32 x 48 slots fills in 1.3 s,
+  once a model load, at the first window's host steps; a full pool swapped 6-20 experts over 32 tokens.
+  The pool's bytes are `slots x routed layers x (the three expert planes' slot bytes)`: 32 x 48 x 2.6
+  MiB = 4025 MB, and 64 slots would be 8050 MB, which the plan yields only beside the whole mirror. A
+  decode that starts with no prompt fills two slots a layer a step and reads 14-21 tok/s over its first
+  128 tokens (a tg128 row run with no prompt row before it in the process). Parity: `test_gpu_resident_hc.das` run directly through dastest (`bin/Release/daslang.exe -jit
+  dastest/dastest.das -- --test modules/dasLLAMA/tests/test_gpu_resident_hc.das` under `DASLLAMA_GPU=1
+  DASLLAMA_PARITY_FULL=1`) with the pool armed, a 48-token prompt through the window chain (its hits on
+  the device) and six fed steps - the prompt's row 0.46 against 2.00, the steps 0.37-0.68 against bars
+  1.70-2.56, the one-step-off control 5.15-11.98, argmax equal on all seven rows, 1536 experts
+  uploaded, 18793 of 23040 window slot rows and 2359 of 2880 decode picks on the device, 36 of the CPU's
+  own picks off the tape; the bench's frozen pinned-greedy fixture (`lcpp_bench`'s fixture gate)
+  reproduces its opening tokens with the pool serving. Kernel cells:
+  `test_vkd_hot_combine`, the `iq3s4` stamps' fourteen cells, `test_resident_hot_slots` and
+  `test_vk_coopmat_default_and_tile_pick`'s per-32 column arm (model-free).
+
+- **LANDED (2026-09-29) - the Vulkan whole-model driver on the hyper-connection carrier
+  (Qwen3.8-Flash-Next UD-IQ4_XS, 94 GB, 512 experts top-10): every plane but the routed expert stacks
+  resident, the token command and the prompt's windows recorded as 49 segments cut after each layer's
+  router, the host summing the routed experts between them
+  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`, `#hc-window-chain`).** zen2 (Ryzen 16 threads, RTX
+  5060 Ti 16 GB on a PCIe 4.0 x8 link, 4 GB held by the desktop), `bin/Release/daslang.exe -jit
+  benchmarks/lcpp_bench.das -- --ngl 0 -p 512 -n 128 -t 16 -r 3 --for-debug-purposes` under
+  `DASLLAMA_GPU=1 DASLLAMA_IQ3S_SERVE=lut DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1`: tg128 19.66
+  +/- 0.19 / 18.07 +/- 0.25 / 18.93 +/- 0.11 tok/s over three processes (direction-grade; the CPU chain
+  6.89; the reference rows, external - llama.cpp b10659 `llama-bench -ngl 99 -ncmoe 48 -t 16 -p 512 -n
+  128 -r 3`, the experts on the CPU: Vulkan 13.07, CUDA 17.32), pp512 110.13 +/- 0.37 through the
+  window chain (63.18 +/- 0.80 with the prompt read on the CPU, the form before it; llama.cpp Vulkan
+  91.66, CUDA 147.3 +/- 21, external - both stream the 55.4 GiB of experts across the link per
+  512-token batch, `nvidia-smi dmon -s t` reading 10.5-12.0 GB/s under CUDA and 4.8-7.2 under Vulkan,
+  external). The token under `DASLLAMA_GPU_PROF=1`: 52.6 ms, of it the host's
+  routed sums 29.5 ms, the 49 segments' submits and waits the rest, the last segment's wait 1.6 ms.
+  Resident bytes: 4.98 GiB (deltanet 2.09, hc mixers 0.64 as 97 q8 down/up pairs of [10240 x 320], the
+  n-gram key [3840 x 10240] and value [3840 x 2560] planes 49 MB, token_embd 0.63, attention 0.59, head
+  0.49, router 0.23, shexp 0.23); the conv ring 10 rows x 10240 floats a region (400 KB), the token's
+  segment landings 10 KB + 2 KB + 10 KB host-visible, 49 command buffers a region; the window's panels
+  at 512 rows: five [512 x 10240] float planes of 21 MB each (the wide rows, the normed streams, the up
+  projection, the gated rows, the side panel), the key rows 21 MB, the streams' Q8_0 image 5.9 MB, the
+  side rows 7.9 MB + 2.2 MB, the landings 5.2 MB + 1.1 MB + 5.2 MB host-visible, 49 command buffers;
+  the 55.4 GiB of routed experts and the 26.8 GiB n-gram table stay on the host. Parity (the cell's
+  form before the hot pool; the entry above carries its 48-token form): `tests/run.das` cell
+  `test_gpu_resident_hc.das`, a 24-token prompt through the window chain and six fed steps, the
+  CPU arm routing as the device arm did through the decode pick tape
+  (`ARCHITECTURE_ENGINE.md#moe-pick-tape`) - every row within 0.20 x max|logit| (the prompt's row
+  0.88 against 2.55, the steps 0.62-0.86 against bars 2.00-2.48, argmax equal on all seven), the
+  one-step-off control 5.81-10.64, 1440 selects replayed, the CPU's own decode top-k off the tape 62
+  of 2880 picks; without the tape the arms read 1.8-4.1 with two argmax flips, and the CPU chain on
+  `DAS_TUNE_POLICY=reference` reads 3.4-7.0 against the tuned chain with three flips of seven rows - a
+  probe's reading, the model's own near-tie sensitivity. The bench's frozen pinned-greedy fixture
+  reproduces 8/8 opening tokens with decode on the device. Kernel cells: `test_vulkan_kernels.das`
+  `test_vkd_hc_seams` (four cells), `test_vkd_hc_rows` (the rows forms, four cells) and
+  `test_vkd_ple_side` (two positions and the window's panel form), the deltanet sigmoid stamps under
+  their silu controls.
+
 - **LANDED (2026-09-28) - the Metal batch rail's hyper-connection arm (Qwen3.8-Flash-Next tg128@4):
   the batched step opens the rows' wide residual, runs the mixers through the shared layer body,
   gathers each row's n-gram heads on its own session and writes each row's conv ring in place.**

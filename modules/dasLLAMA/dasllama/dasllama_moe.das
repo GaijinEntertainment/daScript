@@ -14,8 +14,9 @@ require math
 
 // MoE expert routing and dispatch: the top-k router, the per-expert FFN accumulation, the shared
 // expert, and the two opt-in decode instruments (cross-token expert reuse, GPU heat pinning).
-// forward() never names any of this — the block kernels reach it through moe_ffn_core, which is
-// why the whole subsystem lifts out of the hub without a hook.
+// forward() never names any of this - the block kernels reach it through moe_ffn_core, and the
+// whole-model driver's host-served experts through moe_routed_sum_k and the pick tape's rows helpers -
+// which is why the whole subsystem lifts out of the hub without a hook.
 
 // ===== cross-token expert reuse instrument (decode) =====
 // DASLLAMA_EXPERT_REUSE=1 arms per-layer recording of decode expert picks — the data gate for
@@ -405,22 +406,10 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
     for (i in range64(dim)) {
         s.moe_acc[i] = 0.0
     }
-    // Q8: quantize the shared activation ONCE (dedicated moe_xq/moe_xs so down-proj requant doesn't clobber it)
     let pre_q8 = t.quant == QuantMode.q8
     let layer_kq = pre_q8 && moe_layer_kq(t, l)
     if (pre_q8) {
-        let ts_rq = prof_ticks()
-        if (layer_kq && moe_pair_kform(fmt_at(t.we1_fmt, l), fmt_at(t.we3_fmt, l))) {
-            // kq v2: kq gate/up stacks read the Q8_K-form scratch
-            quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
-            if (c.n_ff_shexp > 0l && !c.moe_dense_shexp) {
-                // the q8 shexp downstream reads the hoisted moe_xq image — without this it silently drops out
-                quantize_q8_0_into(s.xb, dim, s.moe_xq, s.moe_xs, 0l, 0l)
-            }
-        } else {
-            quantize_q8_0_into(s.xb, dim, s.moe_xq, s.moe_xs, 0l, 0l)
-        }
-        prof_add("mm_requant", ts_rq)
+        moe_quant_feed(t, s, l, layer_kq)
     }
     let nfe = c.n_ff_exp
     let ege = dim * nfe
@@ -586,41 +575,10 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             moe_experts_chain(t, s, l)
             moe_chained = true
         } else {
-            for (j in range64(k)) {
-                let e = l * ne + s.moe_idx[j]
-                s.moe_offs[j * 2l] = t.we1_offs[l] + s.moe_idx[j] * ege
-                s.moe_offs[j * 2l + 1l] = 0l   // gates share the single hoisted xb image
-                s.moe_boffs[j] = t.web1_off + e * nfe
-            }
-            mm_at_f_groupn(s.moe_gu, t, f1, s.moe_offs, s.moe_boffs, biased, k, s.moe_xq, s.moe_xs, s.kxq, s.kxs, s.kxbs, dim, nfe)
-            for (j in range64(k)) {
-                let e = l * ne + s.moe_idx[j]
-                s.moe_offs[j * 2l] = t.we3_offs[l] + s.moe_idx[j] * ege
-                s.moe_offs[j * 2l + 1l] = 0l   // ups read the same hoisted xb image (explicit, not inherited from the gate pass)
-                s.moe_boffs[j] = t.web3_off + e * nfe
-            }
-            mm_at_f_groupn(s.moe_gu2, t, f3, s.moe_offs, s.moe_boffs, biased, k, s.moe_xq, s.moe_xs, s.kxq, s.kxs, s.kxbs, dim, nfe)
-            prof_add("mm_moe", ts_gu)
-            let ts_act = prof_ticks()
-            gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, k)
-            prof_add("act", ts_act)
-            requant_rows_f(f2, s.moe_gu, nfe, k, s.moe_dq, s.moe_ds, s.moe_dbs)   // books mm_requant
-            let ts_down = prof_ticks()
-            for (j in range64(k)) {
-                let e = l * ne + s.moe_idx[j]
-                s.moe_offs[j * 2l] = t.we2_offs[l] + s.moe_idx[j] * ege
-                s.moe_offs[j * 2l + 1l] = j * nfe   // each down reads its own requantized row
-                s.moe_boffs[j] = t.web2_off + e * dim   // down bias added before the routed weight scales it
-            }
-            mm_at_f_groupn(s.moe_dn, t, f2, s.moe_offs, s.moe_boffs, biased, k, s.moe_dq, s.moe_ds, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
-            prof_add("mm_moe_dn", ts_down)
+            moe_routed_plain(t, s, l, k, biased, ts_gu)
         }
         if (nhits == 0l && !moe_chained) {   // the split arm reduced its own row banks; the chain reduced inline
-            let ts_red = prof_ticks()
-            for (j in range64(k)) {   // slot order preserved — the sum is bit-identical
-                axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.moe_dn[j * dim])), s.moe_w[j], dim)
-            }
-            prof_add("moe_reduce", ts_red)
+            moe_routed_reduce(s, k, dim)
         }
     } else {
         // fp32 reference path: the per-expert loop (q4_0 never routes here — MoE loads are q8/fp32)
@@ -649,6 +607,99 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             prof_add("moe_reduce", ts_red)
         }
     }
+}
+
+//! s.xb quantized once into the dedicated moe_xq / moe_xs, which the down requant does not clobber: a q8 shared expert downstream reads that Q8_0 image
+def private moe_quant_feed(t : Model; var s : Session; l : int64; layer_kq : bool) {
+    let c = t.config
+    let ts_rq = prof_ticks()
+    if (layer_kq && moe_pair_kform(fmt_at(t.we1_fmt, l), fmt_at(t.we3_fmt, l))) {
+        quantize_q8_k_into(s.xb, c.dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
+        if (c.n_ff_shexp > 0l && !c.moe_dense_shexp) {
+            quantize_q8_0_into(s.xb, c.dim, s.moe_xq, s.moe_xs, 0l, 0l)
+        }
+    } else {
+        quantize_q8_0_into(s.xb, c.dim, s.moe_xq, s.moe_xs, 0l, 0l)
+    }
+    prof_add("mm_requant", ts_rq)
+}
+
+//! the plain q8 routed chain over the first `k` picks of s.moe_idx into s.moe_dn's k rows; `ts_gu` opened the `mm_moe` bucket
+def private moe_routed_plain(t : Model; var s : Session; l, k : int64; biased : bool; ts_gu : int64) {
+    let c = t.config
+    let dim = c.dim
+    let ne = c.n_expert
+    let nfe = c.n_ff_exp
+    let ege = dim * nfe
+    let f1 = fmt_at(t.we1_fmt, l)
+    let f2 = fmt_at(t.we2_fmt, l)
+    let f3 = fmt_at(t.we3_fmt, l)
+    for (j in range64(k)) {
+        let e = l * ne + s.moe_idx[j]
+        s.moe_offs[j * 2l] = t.we1_offs[l] + s.moe_idx[j] * ege
+        s.moe_offs[j * 2l + 1l] = 0l   // gates share the single hoisted xb image
+        s.moe_boffs[j] = t.web1_off + e * nfe
+    }
+    mm_at_f_groupn(s.moe_gu, t, f1, s.moe_offs, s.moe_boffs, biased, k, s.moe_xq, s.moe_xs, s.kxq, s.kxs, s.kxbs, dim, nfe)
+    for (j in range64(k)) {
+        let e = l * ne + s.moe_idx[j]
+        s.moe_offs[j * 2l] = t.we3_offs[l] + s.moe_idx[j] * ege
+        s.moe_offs[j * 2l + 1l] = 0l   // ups read the same hoisted xb image (explicit, not inherited from the gate pass)
+        s.moe_boffs[j] = t.web3_off + e * nfe
+    }
+    mm_at_f_groupn(s.moe_gu2, t, f3, s.moe_offs, s.moe_boffs, biased, k, s.moe_xq, s.moe_xs, s.kxq, s.kxs, s.kxbs, dim, nfe)
+    prof_add("mm_moe", ts_gu)
+    let ts_act = prof_ticks()
+    gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, k)
+    prof_add("act", ts_act)
+    requant_rows_f(f2, s.moe_gu, nfe, k, s.moe_dq, s.moe_ds, s.moe_dbs)   // books mm_requant
+    let ts_down = prof_ticks()
+    for (j in range64(k)) {
+        let e = l * ne + s.moe_idx[j]
+        s.moe_offs[j * 2l] = t.we2_offs[l] + s.moe_idx[j] * ege
+        s.moe_offs[j * 2l + 1l] = j * nfe   // each down reads its own requantized row
+        s.moe_boffs[j] = t.web2_off + e * dim   // down bias added before the routed weight scales it
+    }
+    mm_at_f_groupn(s.moe_dn, t, f2, s.moe_offs, s.moe_boffs, biased, k, s.moe_dq, s.moe_ds, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
+    prof_add("mm_moe_dn", ts_down)
+}
+
+//! s.moe_acc += the k down rows under their routing weights, in slot order - the sum is bit-identical to the per-expert loop's
+def private moe_routed_reduce(var s : Session; k, dim : int64) {
+    let ts_red = prof_ticks()
+    for (j in range64(k)) {
+        axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.moe_dn[j * dim])), s.moe_w[j], dim)
+    }
+    prof_add("moe_reduce", ts_red)
+}
+
+//! The routed experts' sum alone, on the CPU, for a driver that holds every other plane of the layer: the row in s.xb and
+//! the picks in s.moe_idx / s.moe_w (a q8 model, the plain chain - no heat split, no device stacks) into
+//! s.moe_acc = sum_j w_j FFN_e_j(xb). The reuse instrument counts these picks as it counts the CPU forward's.
+def moe_routed_sum(t : Model; var s : Session; l : int64) {
+    moe_routed_note(t, s, l)
+    moe_routed_sum_k(t, s, l, t.config.n_expert_used)
+}
+
+//! the reuse instrument's count of the layer's picks in s.moe_idx, for a driver that then splits them
+def moe_routed_note(t : Model; s : Session; l : int64) {
+    if (expert_reuse_armed()) {
+        expert_reuse_note(l, s.moe_idx, t.config.n_expert_used, t.config.n_expert)
+    }
+}
+
+//! `moe_routed_sum` over the first `k` picks of s.moe_idx / s.moe_w alone - the picks a driver left to the host, packed to the
+//! front; none leaves s.moe_acc zero
+def moe_routed_sum_k(t : Model; var s : Session; l, k : int64) {
+    assert(t.quant == QuantMode.q8, "moe_routed_sum_k: the routed chain wants the q8 serving mode")
+    let c = t.config
+    for (i in range64(c.dim)) {
+        s.moe_acc[i] = 0.0
+    }
+    return if (k == 0l)
+    moe_quant_feed(t, s, l, moe_layer_kq(t, l))
+    moe_routed_plain(t, s, l, k, c.moe_exps_bias, prof_ticks())
+    moe_routed_reduce(s, k, c.dim)
 }
 
 // MoE FFN core (qwen2moe / gpt-oss): router logits on the rmsnormed activation in s.xb -> softmax /
@@ -724,11 +775,113 @@ def moe_ffn_core(t : Model; var s : Session; l : int64) {
     }
 }
 
+let private MOE_TAPE_RESERVE = 65_536l   //! picks reserved at arming: past 128 steps of a 48-layer top-10 model before the tape grows
+
+//! the decode pick tape's state (`moe_pick_tape`)
+enum MoePickTape {
+    off
+    record
+    replay
+}
+
+var private g_moe_tape_mode = MoePickTape.off
+var private g_moe_tape : array<int64>   //! the picks of every decode select in call order, k a select
+var private g_moe_tape_pos = 0l
+var private g_moe_tape_seen = 0l   //! the replay's selects
+var private g_moe_tape_miss = 0l   //! ... and the picks its own top-k would have made that the tape did not carry
+var private @scratch g_moe_tape_own : array<int64>
+var private @scratch g_moe_tape_w : array<float>
+var private @scratch g_moe_tape_lg : array<float>
+
+//! The decode pick tape, a parity instrument: `record` takes every decode select's picks in call order, `replay` pins a
+//! recorded tape and counts the row's own picks it did not carry, `off` stops
+[arch(at="../ARCHITECTURE_ENGINE.md#moe-pick-tape")]
+def moe_pick_tape(mode : MoePickTape) {
+    g_moe_tape_mode = mode
+    g_moe_tape_pos = 0l
+    g_moe_tape_seen = 0l
+    g_moe_tape_miss = 0l
+    if (mode == MoePickTape.record) {
+        g_moe_tape |> clear()
+        g_moe_tape |> reserve(MOE_TAPE_RESERVE)
+    }
+}
+
+//! the replay's selects so far, and the own picks the tape did not carry
+def moe_pick_tape_stats() : tuple<seen : int64; miss : int64> => (seen = g_moe_tape_seen, miss = g_moe_tape_miss)
+
+//! the rows' taped picks under a replay, null otherwise
+[arch(at="../ARCHITECTURE_ENGINE.md#moe-pick-tape")]
+def moe_pick_tape_rows_begin(npos, k : int64) : int64 const? {
+    if (g_moe_tape_mode != MoePickTape.replay) {
+        return null
+    }
+    if (g_moe_tape_pos + npos * k > long_length(g_moe_tape)) {
+        panic("moe_pick_tape: the pick tape ran out - the replaying arm selects more rows than the recorded one")
+    }
+    return unsafe(addr<int64 const?>(g_moe_tape[g_moe_tape_pos]))
+}
+
+//! whether expert `e` is among the `k` picks
+def private picks_have(picks : int64 const?; k, e : int64) : bool {
+    for (i in range64(k)) {
+        return true if (unsafe(picks[i]) == e)
+    }
+    return false
+}
+
+//! a row's logits masked to its taped picks: every other expert reads -1e30 before the row's own select
+def moe_pick_tape_mask_row(var lg : float?; ne, k : int64; picks : int64 const?) {
+    for (e in range64(ne)) {
+        if (!picks_have(picks, k, e)) {
+            unsafe(lg[e]) = -1.0e30
+        }
+    }
+}
+
+def moe_pick_tape_rows_done(idx_b : array<int64>; npos, k : int64) {
+    if (g_moe_tape_mode == MoePickTape.record) {
+        for (j in range64(npos * k)) {
+            g_moe_tape |> push(idx_b[j])   // nolint:PERF026,LINT019 — the tape records only under a parity cell; its arming reserved the run
+        }
+    } elif (g_moe_tape_mode == MoePickTape.replay) {
+        g_moe_tape_pos += npos * k
+        g_moe_tape_seen += npos
+    }
+}
+
+//! the decode replay is the rows form over one row, plus the count of the row's own picks the tape did not carry
+def private moe_select_replay(c : Config; var lg : float?; var idx : array<int64>; var w : array<float>; bias : float const?) {
+    let ne = c.n_expert
+    let k = c.n_expert_used
+    let picks = moe_pick_tape_rows_begin(1l, k)
+    g_moe_tape_lg |> grow_resize(ne)
+    g_moe_tape_own |> grow_resize(k)
+    g_moe_tape_w |> grow_resize(k)
+    unsafe {
+        memcpy(addr<void?>(g_moe_tape_lg[0]), reinterpret<void const?>(lg), ne * 4l)
+        moe_select_core(c.moe_gate, ne, k, c.norm_topk_prob, c.expert_weights_scale, addr(g_moe_tape_lg[0]), addr(g_moe_tape_own[0]), addr(g_moe_tape_w[0]), 0l, bias)
+        for (j in range64(k)) {
+            g_moe_tape_miss += picks_have(picks, k, g_moe_tape_own[j]) ? 0l : 1l
+        }
+        moe_pick_tape_mask_row(lg, ne, k, picks)
+        moe_select_core(c.moe_gate, ne, k, c.norm_topk_prob, c.expert_weights_scale, lg, addr(idx[0]), addr(w[0]), 0l, bias)
+    }
+    moe_pick_tape_rows_done(idx, 1l, k)
+}
+
 // Config/Session-facing wrapper over the pointer core; off is 0 for decode, p*k for grouped prefill.
 def moe_select(c : Config; var lg : float?; var idx : array<int64>; var w : array<float>; off : int64; bias : float const? = null) {
+    if (g_moe_tape_mode == MoePickTape.replay && off == 0l) {
+        moe_select_replay(c, lg, idx, w, bias)
+        return
+    }
     unsafe {
         moe_select_core(c.moe_gate, c.n_expert, c.n_expert_used, c.norm_topk_prob, c.expert_weights_scale,
             lg, addr(idx[0]), addr(w[0]), off, bias)
+    }
+    if (g_moe_tape_mode == MoePickTape.record && off == 0l) {
+        moe_pick_tape_rows_done(idx, 1l, c.n_expert_used)
     }
 }
 

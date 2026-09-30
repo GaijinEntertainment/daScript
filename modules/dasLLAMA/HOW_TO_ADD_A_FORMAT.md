@@ -48,10 +48,13 @@ plane (exactness against the source form is a `test_kquant.das` cell - both tran
 superblock, dequants bit-identical, over LCG-perturbed source bytes); `kq_fmt_of`
 (`dasllama_load.das`) maps the native tag to the served one behind an `[EnvConfig]` knob whose
 resolved value is a `DlimCpuConfig` field (it changes plane bytes, so it is image identity - the
-struct's header rule); and the GPU tiers stay on the native form, so the member joins every
-Vulkan ladder's `kq_tile_stamp` skip list (sec.6), `pf_f16_feed` refuses it, `gemv_cls_has_n`
-excludes it, and the Metal roster (`moe_fmt_metal_served`) leaves it out - a load a GPU tier
-targets serves the native form (`auto`). The kernels are the shape it borrows (iq3s4: the iq4xs
+struct's header rule); and a GPU tier either decodes the served form or stays on the native one,
+decided per tier. A tier that decodes it takes the whole of sec.6 for the member (iq3s4 on
+Vulkan: the borrowed shape's stamps with its own codebook and scale word, a census row and a
+kernel cell per stamp). A tier that does not leaves the member off its roster (Metal's
+`moe_fmt_metal_served`) and the knob's `auto` serves the native form under it. A tier never
+half-joins: a member on some of a tier's ladders and on the skip list of the others serves a
+load that passes admission and then has no kernel. The kernels are the shape it borrows (iq3s4: the iq4xs
 LUT kernels over its own codebook, sec.4/5), and the tune family is its own (`<fmt>q8_tile_gen`
 with the borrowed emitter's `fallback`, its two class-profile rows copied from the shape it
 borrows).

@@ -17,7 +17,17 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   family to drop.
 - **The `dasllama_gpu_tier` cooperation SPI is Vulkan-only**: every hook seat the tier exposes (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the
   Vulkan family alone, and the tier's entry in `ARCHITECTURE_GPU.md#gpu-backends` enumerates the seats; a new seat lands in that
-  entry, not as a new entry here. The one seat outside that rule is the entry below.
+  entry, not as a new entry here. The one seat outside that rule is the deltanet mirror room seat, its own entry
+  here.
+- **The split token command with the routed experts on the host is Vulkan-only**
+  (`vk_rdec_token_split`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`): a hyper-connection MoE's expert
+  stacks never fit a discrete card beside its other planes, so the Vulkan whole-model driver cuts its
+  command at every routed block and the host sums the experts between the segments; Metal serves the
+  same model whole from unified memory and its drivers split nothing.
+- **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, the tier's three
+  hot seats, `DASLLAMA_GPU_HEAT`): where the routed experts live on the host, the Vulkan driver keeps
+  the hottest ones in per-layer device slots and serves their picks there; Metal has every expert
+  resident, so nothing is hot or cold.
 - **The deltanet mirror room seat is Metal-only.** `set_moe_gpu_dn_room_hook` (the engine half
   `gpu_dn_room_`, the facade's `gpu_dn_room`) carries a scheduler's stream count to whatever
   keeps sessions' recurrent state device-resident; `_common`'s `dn_mirror_room` is its one

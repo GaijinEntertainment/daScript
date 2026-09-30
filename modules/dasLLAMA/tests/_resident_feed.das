@@ -164,8 +164,9 @@ def feed_steps_within(t : T?; tr : Model; tag : string; nprompt : int64; gpu, cp
         let what = tag + (st == 0l ? "prefill ({nprompt} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})") + " [{tile_arm_tag()}]"
         to_log(LOG_INFO, "{what}: argmax cpu {ac} '{decode_(tr, [ac])}' ({cpu[st][ac]}), {gpu_name} {ag} '{decode_(tr, [ag])}' ({gpu[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
         t |> success(diff <= bar, "{what} logits: {gpu_name} within {bar} of {cpu_name} (maxdiff {diff})")
-        if (st > 0l) {
-            let off = logits_maxdiff(gpu[st], cpu[st - 1l])
+        let ctrl = st > 0l ? st - 1l : 1l   // the row one step off: the step before, or the step after for the prompt's row
+        if (ctrl < long_length(cpu)) {
+            let off = logits_maxdiff(gpu[st], cpu[ctrl])
             to_log(LOG_INFO, "{what}: one-step-off control maxdiff {off} (bar {bar})\n")
             t |> success(off > bar, "{what} control: the bar discriminates a one-step-off compare (maxdiff {off} vs bar {bar})")
         }
