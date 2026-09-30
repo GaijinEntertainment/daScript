@@ -2136,10 +2136,31 @@ module) is independent and can land any time - it is pure structure.
 129. **The rows' side panel commits at depth 1 alone.** `PleCommit` lands every verify row's normed gated
     row in the ring's slot of its position after the conv read them, and a rejected row's slot is
     rewritten by the next token before any conv reads it - true at depth 1, where one row past the
-    accepted prefix is at stake. Done = a depth past 1 commits the accepted rows alone, or the rollback
-    restores the slots it rewrote.
+    accepted prefix is at stake, so `rd_ensure_hc_v_rail` declines every other row count and the CPU
+    verify serves a deeper draft. Done = a depth past 1 commits the accepted rows alone, or the rollback
+    restores the slots it rewrote, and the rail admits the depth.
 130. **The device draft accepts 14 points under the CPU draft.** The device's draft and the verify rows
     route their near-ties apart (65.8% against the CPU rail's 79.9% on the same eight prompts,
     `PERF_LEDGER.md`'s NextN entry, the `--mtp-ab` rows), and every
     point of acceptance is a share of the round's second token. Done = the gap read on the pick tape
     (the draft's picks against the verify row's on the same token) and the arm that flips named.
+131. **The NextN-on-the-chain arc's instruments have no cell of their own.** The MOET trace writer
+    (`DASLLAMA_MOE_TRACE`: the header, the prompt mark, the flush at `RDEC_TRACE_FLUSH_RECORDS`, the
+    flush at the drop), `harness/hot_pool_sim.das`'s reader and policies, `gpu_resident_experts_host`
+    after a load and after the drop, the `hot_submit_rows` seat's unset panic and restore, and the
+    declines of `rd_ensure_hc_v_rail` are reached only by the serving cells or by no cell. Done = a
+    cell in `test_gpu_resident_hc.das` writes a trace to a temp file, drops the model and reads it back
+    (the magic, the header's three counts, one mark, a window record a layer, a one-row record a layer
+    a step); a model-free cell replays a hand-made trace through `heat`, `lru` and `lfu` asserting the
+    hits and placements; `test_gpu_tier.das` gains the unset rows seat; the facade predicate is asserted
+    true then false around the drop; the rail's declines run under a fixture that lacks a leaf.
+132. **The stocked resident cells written for the pod read red on a 16 GB card beside a desktop.** On
+    the zen2 (RTX 5060 Ti, 2.6-2.7 GB held by other processes) `test_gpu_resident_regions_gemma4`
+    (the 12B: needs 17667 MB of 11649), `_gemma4moe` (needs 20166 of 11647) and `_gptoss` (2 regions
+    of 4667 positions where the cell asks 3) fail on the room the plan finds, and
+    `test_gpu_resident_moe`'s census floor misses by three planes (`_hybrid` 117 of 120, `_no_shexp`
+    134 of 144) on this box on master (934fe7b2e, run through this tree's binary against a detached
+    worktree) as on the arc's tip; `test_gpu_resident_hybrid_kq_q8out` is `followup_general.md` row
+    183. Done = the regions cells skip, naming the room, where the plan cannot arm the regions they
+    ask, and the census floor's miss on this card named (the pieces one layer routes off the cm2e
+    column) or the floor keyed to the card.
