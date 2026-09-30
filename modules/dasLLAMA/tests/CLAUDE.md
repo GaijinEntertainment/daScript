@@ -1986,7 +1986,8 @@ added-value poison that must exceed it. The `_tab` forms also ride a tight twin 
 un-tabled forms (loose only by the cross-compilation-unit cos/sin ulp drift), the `_part` forms
 are bit-exact against a full apply over the gathered rotated prefix with the un-rotated dims
 proven to pass through, and `rope_apply` is bit-exact against the leaf its `neox` flag names,
-including the `use_ff = false` p-RoPE arm. The Apple-only Metal rope tests use these kernels as
+including the `use_ff = false` p-RoPE arm. `build_rope_tabs` over no positions leaves both tables
+empty, a table that held rows cut to it. The Apple-only Metal rope tests use these kernels as
 their oracle; this file gates them on every platform.
 `test_prefill_cpu_kernels.das` - model-free: the prefill and KV CPU kernels, on q4_K / q6_K /
 q4_0 synthetic disk planes built in-file. `matmul_kq_batch` and
