@@ -89,8 +89,9 @@ answer `NOT_FOUND` rather than reading through a null pointer.
 A panic skips every `finally` it leaves - in the interpreter, which has no handler between the
 throw and the recover, and in the JIT and any build with `DAS_ENABLE_EXCEPTIONS` off, where the
 panic is a longjmp that runs no destructor. AOT emits a `finally` as `das_finally` (`aot.h`), an
-RAII guard whose destructor runs the block, so where the panic is a C++ throw - Windows builds
-with the LLVM backend off - the unwind would run it. The guard records
+RAII guard whose destructor runs the block, so where the panic is a C++ throw - a build with
+`DAS_ENABLE_EXCEPTIONS` on, which `CMakeLists.txt` turns on for Windows with the LLVM backend off -
+the unwind would run it. The guard records
 `std::uncaught_exceptions()` when it is built and runs nothing when its destructor finds more in
 flight. Running the block during an unwind is also fatal on its own: code that expects the body
 to have finished - a capture macro's check that a captured `JobStatus` was released - panics
@@ -169,3 +170,13 @@ correctness required it, and the alternative that was rejected.
   portable handle spelling is `intptr`, which switches on `sizeof`. Rejected alternative:
   rejecting the cast during inference, which would break the reverse spelling and the two
   tiers that already answer correctly.
+
+- **The unwind check on `das_final_call`** (`aot.h`) - under `DAS_ENABLE_EXCEPTIONS` only, the
+  guard stores `std::uncaught_exceptions()` when it is built and compares it again in its
+  destructor: two calls, a compare and a branch per evaluation of a block with a `finally`.
+  Correctness requires it because the unwind of a panic otherwise runs the block, which no other
+  tier does and which ends in `std::terminate` when the block panics again (`#aot-finally-unwind`).
+  Without the flag the guard is the old one. Rejected alternatives: a `noexcept(false)` destructor,
+  which still runs the block during the unwind; and an emitter that writes `finally` as explicit
+  calls at every exit instead of a guard, a rewrite of every `return`, `break` and `continue` path
+  in `daslib/aot_cpp.das` for the same behavior.

@@ -11,6 +11,11 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   first. So `das_ref` in `include/daScript/simulate/aot.h` returns the `Block` subobject for a
   `Block`-derived type; the C++ data walker reads that address as a `Block`. The pair moves
   together; nothing but the full `test_aot` lane fails on a mismatch.
+- **A `finally` is a guard, and a panic skips it**: the emitter writes a `finally` as
+  `das_finally([&](){...})`, and `das_final_call` in `include/daScript/simulate/aot.h` runs
+  nothing when its destructor fires during an unwind
+  (`include/daScript/simulate/ARCHITECTURE.md#aot-finally-unwind`). The pair moves together;
+  only `test_aot` on a `DAS_ENABLE_EXCEPTIONS` build fails on a mismatch.
 - **C++ identifier mangling**: `aotSuffixNameEx` prepends `_S`/`_E`/`_V`/`_f_` when a das
   name is a C++ keyword, holds a non-alnum char, or is `DELETE` (winnt.h). Structs and
   enums share ONE C++ namespace while daslang keeps separate tables, so `struct X` +
