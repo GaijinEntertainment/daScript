@@ -1186,7 +1186,7 @@ namespace das {
                 default: SERIALIZER_VERIFYF(false, "Unreachable");
             }
             info->serialize(*this);
-            if ( fileAccess && !info->name.empty() ) {
+            if ( fileAccess && !info->name.empty() && !isCppBindingAt(LineInfo(info, 0, 0, 0, 0)) ) {
                 if ( FileInfo * live = fileAccess->getFileInfo(info->name) ) {
                     info = live;
                 }
@@ -3319,8 +3319,15 @@ namespace das {
         if ( writing ) buffer->flush();
     }
 
+    struct SerializerRecordScope {
+        AstSerializer & ser;
+        SerializerRecordScope ( AstSerializer & s ) : ser(s) { ser.recordDepth ++; }
+        ~SerializerRecordScope () { ser.recordDepth --; }
+    };
+
     void AstSerializer::serializeProgramImpl ( ProgramPtr program, ModuleGroup & libGroup ) {
         auto & ser = *this;
+        SerializerRecordScope record(ser);
         // version gate — the module-cache path (trySerializeProgramModule) checks only the
         // file name and content stamp before this; a cache written by a different serializer version must
         // fail cleanly here (the caller falls back to a full parse on ser.failed), not misparse
@@ -3569,6 +3576,7 @@ namespace das {
 
     // Used in daNetGame currently
     void Program::serialize ( AstSerializer & ser ) {
+        SerializerRecordScope record(ser);
         // version gate: any layout change shifts every subsequent field, so a stale stream must
         // fail cleanly here — not misparse into a patch() throw thousands of fields later
         uint32_t version = AstSerializer::getVersion();

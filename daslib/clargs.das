@@ -76,11 +76,13 @@ def public get_user_args() : array<string> {
 
 def public get_host_binary() : string {
     //! The host binary for a program that spawns the daslang it runs under: `argv[0]` made absolute
-    //! when it names an existing file (a later `cd` cannot lose it), else unchanged - a bare name the
-    //! shell found on PATH, for PATH to find again at spawn.
+    //! when it names an existing file (on Windows maybe without the `.exe` the shell added), else
+    //! unchanged - a bare name the shell found on PATH, for PATH to find again at spawn.
     let arg0 = get_command_line_arguments()[0]
     let full = get_full_file_name(arg0)
-    return fexist(full) ? full : arg0
+    if (fexist(full)) return full
+    if (get_platform_name() == "windows" && fexist("{full}.exe")) return "{full}.exe"
+    return arg0
 }
 
 def clargs_flag_name(field_name : string) : string {
