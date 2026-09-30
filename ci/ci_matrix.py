@@ -13,9 +13,9 @@ import sys
 
 CLANG = "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
 # GNU ld peaks at 8.3 GB linking the asan standalone_sweep_aot, beside the JIT -lib chunks on a
-# 16 GB runner; lld links it at 5.1 GB in a sixth of the time
-SANITIZER_EXTRA = CLANG + (" -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld -DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld"
-                           " -DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=lld")
+# 16 GB runner; lld links it at 5.1 GB in a sixth of the time. That target only: lld drops the
+# .ctors that register an LLVM-emitted object, so test_llvm_aot stays on GNU ld
+SANITIZER_EXTRA = CLANG + " -DDAS_STANDALONE_SWEEP_LINKER=lld"
 LINUX_ARM_EXTRA = CLANG +" -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF"
 WINDOWS_EXTRA = ("-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
                  " -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")

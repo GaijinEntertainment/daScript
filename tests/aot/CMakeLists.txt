@@ -675,6 +675,12 @@ if(NOT ${DAS_LLVM_DISABLED})
     # spirv joins them on the fp16 side: aarch64 lowers the lattice natively (g_lattice_fp16_ops_native),
     # so both sides keep those functions AOT-able and their hashes then disagree - error[50101], arm only.
     list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "tests/(msl|metal|spirv)/")
+    # a sanitizer build sweeps tests/language only (tests/CMakeLists.txt), so it emits and links only those
+    set(_llvm_aot_sanitized OFF)
+    if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
+        set(_llvm_aot_sanitized ON)
+        list(FILTER LLVM_AOT_TEST_FILES INCLUDE REGEX "^tests/language/")
+    endif()
 
     set(LLVM_AOT_TEST_LIST ${PROJECT_BINARY_DIR}/llvm_aot_corpus.txt)
     set(_llvm_aot_list_text "")
@@ -684,7 +690,10 @@ if(NOT ${DAS_LLVM_DISABLED})
     file(WRITE ${LLVM_AOT_TEST_LIST} "${_llvm_aot_list_text}")
 
     FILE(GLOB _llvm_aot_harness RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/dastest/*.das")
-    set(LLVM_AOT_OBJECT_FILES ${LLVM_AOT_TEST_FILES} ${_llvm_aot_harness} ${AotDaslibList})
+    set(LLVM_AOT_OBJECT_FILES ${LLVM_AOT_TEST_FILES} ${_llvm_aot_harness})
+    if(NOT _llvm_aot_sanitized)
+        list(APPEND LLVM_AOT_OBJECT_FILES ${AotDaslibList})
+    endif()
     list(REMOVE_ITEM LLVM_AOT_OBJECT_FILES daslib/json_boost.das daslib/regex_boost.das)
     list(REMOVE_DUPLICATES LLVM_AOT_OBJECT_FILES)
 
