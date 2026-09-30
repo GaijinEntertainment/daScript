@@ -460,7 +460,7 @@ def private _lexer(var stext : string implicit; strict : bool = false; max_strin
                     return false
                 }
                 if (is_integer && fits_int64(num)) {
-                    yield TokenAt(value = Token(_longint = int64(num)), line = line, row = row)
+                    yield TokenAt(value = Token(_longint = to_int64(num)), line = line, row = row)
                 } else {
                     var conversion : ConversionResult
                     var consumed = 0

@@ -36,3 +36,6 @@ static int http_client_redirect(HttpRequest* req, HttpResponse* resp) {
                 goto disconnect;
             }
             if (retry_count-- > 0 && left_time > req->retry_delay + connect_timeout * 1000) {
+
+    for (const auto& pair : cli->headers) {
+        if (req->headers.find(pair.first) == req->headers.end()) {

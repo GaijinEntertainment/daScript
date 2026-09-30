@@ -41,6 +41,6 @@ def pump(var server : auto; var peer : WirePeer?; ready : block<() : bool>) : bo
 
 def frame(opcode : int; final_frame : bool; payload : array<uint8>) : array<uint8> {
     var result <- [uint8(opcode | (final_frame ? 128 : 0)), uint8(128 | length(payload)), uint8(0), uint8(0), uint8(0), uint8(0)]
-    for (byte in payload) { result |> push(byte) }
+    result |> push_from(payload)
     return <- result
 }

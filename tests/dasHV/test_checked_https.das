@@ -1,6 +1,5 @@
 options gen2
 options indenting = 4
-options no_aot // native TLS fixture is controlled through subprocess APIs
 require _tls_fixture
 
 [test]
@@ -34,7 +33,7 @@ def checked_https_verifies_trust_and_peer_name(t : T?) {
 
 [test]
 def checked_https_bounds_bodies_and_does_not_follow_redirects(t : T?) {
-    with_tls_fixture(t) $(root, dns_port, ip_port) {
+    with_tls_fixture(t) $(root, dns_port, _ip_port) {
         var replies = 0
         with_http_request() $(var request) {
             request.timeout = 3
@@ -54,7 +53,7 @@ def checked_https_bounds_bodies_and_does_not_follow_redirects(t : T?) {
 
 [test]
 def checked_https_never_publishes_truncated_response(t : T?) {
-    with_tls_fixture(t) $(root, dns_port, ip_port) {
+    with_tls_fixture(t) $(root, dns_port, _ip_port) {
         var replies = 0
         with_http_request() $(var request) {
             request.timeout = 3
@@ -68,5 +67,28 @@ def checked_https_never_publishes_truncated_response(t : T?) {
             }
             t |> equal(count_result, 0)
         }
+    }
+}
+
+[test]
+def checked_url_rejects_request_line_controls(t : T?) {
+    with_tls_fixture(t) $(root, dns_port, _ip_port) {
+        for (tail in ["/ok HTTP/1.1\r\nX-Injected: yes\r\nX-Padding:", "/ok\r\nX-Injected: yes", "/ok\t", "/ok\n"]) {
+            var called = false
+            with_http_request() $(var request) {
+                request.url := "https://localhost:{dns_port}{tail}"
+                set_timeout(request, 3)
+                let result = request_checked(request, "{root}/ca.pem", 4096) $(_response) { called = true }
+                t |> equal(result, 1011)
+                t |> success(!called)
+            }
+        }
+    }
+}
+
+[test]
+def native_clients_keep_tls_origins_and_redirect_credentials_separate(t : T?) {
+    with_tls_fixture_mode(t, "clients") $(root, _dns_port, _ip_port) {
+        t |> equal(fread("{root}/client-results"), "1 1 1 1 1 1")
     }
 }

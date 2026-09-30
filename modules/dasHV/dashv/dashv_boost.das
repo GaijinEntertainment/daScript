@@ -84,7 +84,7 @@ class HvWebServer {
     server : WebSocketServer
     private http_route_handlers : array<lambda<(var req : HttpRequest?; var resp : HttpResponse?) : http_status>>
     private stream_route_handlers : array<lambda<(var req : HttpRequest?; var writer : HttpResponseWriter?) : void>>
-    private upgrade_handler : lambda<(var req : HttpRequest?; admission : WebSocketAdmission) : void>
+    private upgrade_handler : lambda<(var req : HttpRequest?#; admission : WebSocketAdmission) : void>
     def init(port : int) {
         //! Initializes an HTTP/WebSocket server on the specified port. Port ``0`` asks the
         //! operating system for any free port; ``bound_port`` reports the one it gave.
@@ -217,9 +217,9 @@ class HvWebServer {
         http_route_handlers |> push(lmb)
         unsafe(SSE(server, uri, lmb))
     }
-    def WEBSOCKET_UPGRADE(timeout_ms : int; lmb : lambda<(var req : HttpRequest?; admission : WebSocketAdmission) : void>) : bool {
-        //! Registers admission before HTTP 101. Inspect headers/cookies on the tick thread;
-        //! call accept_websocket with a selected offered protocol, or reject_websocket.
+    def WEBSOCKET_UPGRADE(timeout_ms : int; lmb : lambda<(var req : HttpRequest?#; admission : WebSocketAdmission) : void>) : bool {
+        //! Registers admission before HTTP 101; the request is borrowed for the callback.
+        //! Clone needed data before deferring, then call accept_websocket or reject_websocket.
         //! The generation-checked admission ticket expires on decision, disconnect or timeout.
         //! Keep it in the transport owner while an isolated worker decides. Registration
         //! is only permitted before start; deadlines must be 1 through 60000 milliseconds.

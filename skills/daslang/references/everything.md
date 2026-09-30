@@ -1155,7 +1155,7 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 
 - `STATIC` - Registers a static-file route: serves files under dir at the URL prefix path.
 - `WEBSOCKET_UPGRADE` - Registers a deferred WebSocket admission callback before server start.
-- `accept_websocket` - Submits acceptance of a live, undecided WebSocket ticket with a protocol offered by the client.
+- `accept_websocket` - Submits acceptance of a live, undecided WebSocket ticket.
 - `allow_cors` - Enables cross-origin resource sharing (CORS) on all server responses.
 - `reject_websocket` - Submits rejection of a live, undecided WebSocket ticket with HTTP status 400–599.
 - `set_access_log` - Enables or disables libhv request access logging before server start.
@@ -5578,7 +5578,7 @@ The DASHV_BOOST module provides high-level daScript wrapper classes for the low-
 - `HvWebServer.set_index_of` - Enables directory listing for the specified directory.
 - `HvWebServer.set_error_page` - Sets a custom error page file.
 - `HvWebServer.SSE` - Registers an SSE (Server-Sent Events) handler for `uri`.
-- `HvWebServer.WEBSOCKET_UPGRADE` - Registers admission before HTTP 101.
+- `HvWebServer.WEBSOCKET_UPGRADE` - Registers admission before HTTP 101; the request is borrowed for the callback.
 - `HvWebServer.STREAM` - Registers a streaming (incremental) handler for `uri` (any HTTP method, like `ANY`).
 
 ### HTTP request helpers

@@ -79,3 +79,20 @@ def transaction_result_commit_constraint_failure_rolls_back(t : T?) {
         t |> equal(db |> query_scalar("SELECT count(*) FROM parent", type<int>), 1)
     }
 }
+
+[test]
+def void_transaction_callback_can_return_early(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        db |> exec("CREATE TABLE values_table (id INTEGER PRIMARY KEY)")
+        var after_return = false
+        let result = db |> try_transaction() $ {
+            db |> exec("INSERT INTO values_table VALUES (1)")
+            if (db |> query_scalar("SELECT count(*) FROM values_table", type<int>) == 1) { return }
+            after_return = true
+        }
+        t |> success(result |> is_none)
+        t |> success(!after_return)
+        t |> success(!in_transaction(db))
+        t |> equal(db |> query_scalar("SELECT count(*) FROM values_table", type<int>), 1)
+    }
+}

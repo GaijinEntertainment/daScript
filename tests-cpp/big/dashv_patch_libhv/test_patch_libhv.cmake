@@ -6,7 +6,12 @@
 function(stage case_dir fixture_text)
     file(REMOVE_RECURSE "${case_dir}")
     file(WRITE "${case_dir}/base/hlog.c" "${fixture_text}")
-    file(COPY "${CMAKE_CURRENT_LIST_DIR}/pristine/" DESTINATION "${case_dir}")
+    file(GLOB_RECURSE excerpts RELATIVE "${CMAKE_CURRENT_LIST_DIR}/pristine" "${CMAKE_CURRENT_LIST_DIR}/pristine/*.txt")
+    foreach(excerpt IN LISTS excerpts)
+        string(REGEX REPLACE "\\.txt$" "" source_name "${excerpt}")
+        file(READ "${CMAKE_CURRENT_LIST_DIR}/pristine/${excerpt}" contents)
+        file(WRITE "${case_dir}/${source_name}" "${contents}")
+    endforeach()
 endfunction()
 
 function(run_patch src_dir out_rc out_log)

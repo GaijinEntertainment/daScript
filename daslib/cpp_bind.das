@@ -86,8 +86,7 @@ def log_cpp_class_adapter(var cpp_file : StringBuilderWriter; name : string; var
     var methods : array<tuple<name : string; index : int>>
     var types : array<TypeDeclPtr>
     for (fld, idx in cinfo.structType.fields, count()) {
-        if (!fld._type.isFunction || fld.name == "__finalize") continue
-        if (fld.init != null && find_index(implemented_methods, string(fld.name)) < 0) continue
+        if (!fld._type.isFunction || fld.name == "__finalize" || (fld.init != null && find_index(implemented_methods, string(fld.name)) < 0)) continue
         push(methods, (name = "{fld.name}", index = idx))
         push_clone(types, fld._type)
     }

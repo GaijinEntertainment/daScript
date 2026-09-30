@@ -204,21 +204,8 @@ static int http_client_redirect(HttpRequest* req, HttpResponse* resp) {
 static int http_client_redirect(http_client_t* cli, HttpRequest* req, HttpResponse* resp) {
     std::string location = resp->headers["Location"];
     if (!location.empty()) {
-        if (req->redirect_count >= 5) return ERR_OVER_LIMIT;
-        HttpRequest next = *req;
-        next.url = location;
-        next.ParseUrl();
-        if (req->IsHttps() && !next.IsHttps()) return ERR_INVALID_PROTOCOL;
-        if (stricmp(req->host.c_str(), next.host.c_str()) != 0 || req->port != next.port || req->scheme != next.scheme) {
-            req->headers.erase("Authorization");
-            req->headers.erase("Proxy-Authorization");
-            req->headers.erase("Cookie");
-            req->cookies.clear();
-        }
-        ++req->redirect_count;
-        req->url = location;
-        req->ParseUrl();
-        req->headers["Host"] = req->host;
+        const int redirected = req->RedirectTo(location);
+        if (redirected != 0) return redirected;
         resp->Reset();
         return http_client_send(cli, req, resp);
     }
@@ -229,6 +216,15 @@ das_hv_hunk([=[
         return http_client_redirect(req, resp);
 ]=] [=[
         return http_client_redirect(cli, req, resp);
+]=])
+das_hv_hunk([=[
+    for (const auto& pair : cli->headers) {
+        if (req->headers.find(pair.first) == req->headers.end()) {
+]=] [=[
+    for (const auto& pair : cli->headers) {
+        if (req->redirect_count && (stricmp(pair.first.c_str(), "Authorization") == 0 ||
+            stricmp(pair.first.c_str(), "Proxy-Authorization") == 0 || stricmp(pair.first.c_str(), "Cookie") == 0)) continue;
+        if (req->headers.find(pair.first) == req->headers.end()) {
 ]=])
 das_hv_patch_end()
 
@@ -270,6 +266,42 @@ das_hv_hunk([=[
 ]=] [=[
             hio_set_hostname(connio, host);
 ]=])
+das_hv_hunk([=[
+    auto iter = conn_pools.find(strAddr);
+]=] [=[
+    const std::string pool_key = req->scheme + "://" + req->host + ":" + std::to_string(req->port) + "@" + strAddr;
+    auto iter = conn_pools.find(pool_key);
+]=])
+das_hv_hunk([=[
+    ctx->task = task;
+    channel->onconnect = [&channel]() {
+]=] [=[
+    ctx->task = task;
+    ctx->pool_key = pool_key;
+    channel->onconnect = [&channel]() {
+]=])
+das_hv_hunk([=[
+                    hlogi("redirect %s => %s", req->url.c_str(), location.c_str());
+                    req->url = location;
+                    req->ParseUrl();
+                    req->headers["Host"] = req->host;
+]=] [=[
+                    if (req->RedirectTo(location) != 0) {
+                        ctx->errorCallback();
+                        channel->close();
+                        return;
+                    }
+]=])
+das_hv_hunk([=[
+                conn_pools[channel->peeraddr()].add(channel->fd());
+]=] [=[
+                conn_pools[ctx->pool_key].add(channel->fd());
+]=])
+das_hv_hunk([=[
+        auto iter = conn_pools.find(channel->peeraddr());
+]=] [=[
+        auto iter = conn_pools.find(ctx->pool_key);
+]=])
 das_hv_patch_end()
 
 das_hv_patch_begin("http/HttpMessage.h")
@@ -279,6 +311,12 @@ das_hv_hunk([=[
     uint32_t            retry_delay;    // unit: ms
     size_t              response_body_limit = 0;
     unsigned            redirect_count = 0;
+]=])
+das_hv_hunk([=[
+    void ParseUrl();
+]=] [=[
+    void ParseUrl();
+    int RedirectTo(const std::string& location);
 ]=])
 das_hv_patch_end()
 
@@ -291,5 +329,46 @@ das_hv_hunk([=[
     redirect_count = 0;
     response_body_limit = 0;
     proxy = 0;
+]=])
+das_hv_hunk([=[
+#include "hurl.h"
+]=] [=[
+#include "hurl.h"
+#include "herr.h"
+]=])
+das_hv_hunk([=[
+void HttpRequest::ParseUrl() {
+]=] [=[
+int HttpRequest::RedirectTo(const std::string& location) {
+    if (redirect_count >= 5) return ERR_OVER_LIMIT;
+    if (location.empty() || location.size() > 8192) return ERR_INVALID_PARAM;
+    for (unsigned char byte : location) if (byte <= 32 || byte == 127) return ERR_INVALID_PARAM;
+    HttpRequest next = *this;
+    next.url = location;
+    next.ParseUrl();
+    if (IsHttps() && !next.IsHttps()) return ERR_INVALID_PROTOCOL;
+    if (stricmp(host.c_str(), next.host.c_str()) != 0 || port != next.port || scheme != next.scheme) {
+        headers.erase("Authorization");
+        headers.erase("Proxy-Authorization");
+        headers.erase("Cookie");
+        cookies.clear();
+    }
+    ++redirect_count;
+    url = location;
+    headers.erase("Host");
+    ParseUrl();
+    return 0;
+}
+
+void HttpRequest::ParseUrl() {
+]=])
+das_hv_patch_end()
+
+das_hv_patch_begin("http/client/AsyncHttpClient.h")
+das_hv_hunk([=[
+    HttpClientTaskPtr   task;
+]=] [=[
+    HttpClientTaskPtr   task;
+    std::string        pool_key;
 ]=])
 das_hv_patch_end()

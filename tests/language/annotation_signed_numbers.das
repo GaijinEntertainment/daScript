@@ -2,7 +2,7 @@ options gen2
 require dastest/testing_boost public
 require daslib/rtti
 
-[comment(min=-2, offset=-1.5, zero=-0)]
+[comment(min=-2, offset=-1.5, zero=-0, values=(-2, -1.5))]
 struct SignedAnnotation {
     @min = -2 @offset = -1.5
     value : int

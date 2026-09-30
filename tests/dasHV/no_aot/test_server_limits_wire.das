@@ -24,13 +24,11 @@ def chunked_overflow_rejects_without_running_handler(t : T?) {
 }
 
 def private check_saturation(t : T?; event_budget, byte_budget : int; body : string) {
-    var server = new LimitedServer()
-    server.event_limit = event_budget
-    server.byte_limit = byte_budget
-    server.http_limit = length(body)
+    var server = new LimitedServer(event_limit = event_budget, byte_limit = byte_budget, http_limit = length(body))
     server->init(0)
     t |> equal(server->start(), 0)
     var peers : array<WirePeer?>
+    peers |> reserve(3)
     for (_ in range(3)) {
         var peer = new WirePeer()
         t |> success(peer->connect("127.0.0.1", server->bound_port()))
@@ -148,7 +146,7 @@ def pipelined_http_replies_keep_request_order_and_bodies(t : T?) {
     t |> success(starts_with(response, "HTTP/1.1 200"), "the first request owns the first response")
     let first_body = find(response, "\r\n\r\n") + 4
     if (first_body >= 4 && first_body < length(response)) {
-        t |> equal(character_at(response, first_body), 'a')
+        t |> equal(slice(response, first_body, first_body + 1), "a")
         let next = find(response, "HTTP/1.1 ", first_body + 1)
         t |> success(next > first_body)
         if (next > first_body) {
@@ -157,7 +155,7 @@ def pipelined_http_replies_keep_request_order_and_bodies(t : T?) {
             if (starts_with(second, "HTTP/1.1 200")) {
                 let second_body = find(second, "\r\n\r\n") + 4
                 t |> success(second_body < length(second))
-                if (second_body < length(second)) { t |> equal(character_at(second, second_body), 'b') }
+                if (second_body < length(second)) { t |> equal(slice(second, second_body, second_body + 1), "b") }
             }
         }
     } else { t |> failure("first response body is missing") }

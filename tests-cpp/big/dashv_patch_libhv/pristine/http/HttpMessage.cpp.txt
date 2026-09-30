@@ -2,3 +2,7 @@
 
     redirect = 1;
     proxy = 0;
+
+#include "hurl.h"
+
+void HttpRequest::ParseUrl() {

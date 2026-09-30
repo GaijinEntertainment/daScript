@@ -10,7 +10,12 @@
 static std::string frame(int opcode, bool final, const std::string & payload) {
     std::string result;
     result.push_back(char(opcode | (final ? 0x80 : 0)));
-    result.push_back(char(0x80 | payload.size()));
+    if (payload.size() <= 125) result.push_back(char(0x80 | payload.size()));
+    else {
+        result.push_back(char(0xfe));
+        result.push_back(char(payload.size() >> 8));
+        result.push_back(char(payload.size()));
+    }
     result.append(4, '\0');
     result += payload;
     return result;
@@ -88,4 +93,14 @@ TEST_CASE("WebSocket continuation requires an open message") {
     WebSocketParser parser;
     auto data = frame(WS_OPCODE_CONTINUE, true, "no start");
     CHECK(parser.FeedRecvData(data.data(), data.size()) != int(data.size()));
+}
+
+TEST_CASE("WebSocket control frames cannot be fragmented or oversized") {
+    for (const auto & packet : {frame(WS_OPCODE_PING, false, "x"), frame(WS_OPCODE_PING, true, std::string(126, 'x'))}) {
+        WebSocketParser parser;
+        int delivered = 0;
+        parser.onMessage = [&](int, const std::string &) { ++delivered; };
+        CHECK(parser.FeedRecvData(packet.data(), packet.size()) != int(packet.size()));
+        CHECK(delivered == 0);
+    }
 }

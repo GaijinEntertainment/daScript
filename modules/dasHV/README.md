@@ -87,7 +87,7 @@ explicit trust configuration; disabling verification is not the default.
 `request_checked(request, ca_file, max_response_bytes, block)` performs a synchronous
 HTTPS request with a separate verified TLS context. An empty CA filename selects
 system trust. It rejects HTTP URLs, user-info URLs, URLs over 8192 bytes or containing
-NUL, response limits outside 1–16777216 bytes, and timeouts outside 1–120 seconds.
+raw spaces or ASCII control bytes, response limits outside 1–16777216 bytes, and timeouts outside 1–120 seconds.
 Redirects, automatic retries and request proxies are disabled for this operation.
 The body limit is applied before response allocation. Truncated responses fail.
 
@@ -97,9 +97,10 @@ callback runs only on transport success, including non-2xx HTTP responses; inspe
 Use `strings::to_bytes(response.body)` to copy binary bodies without losing NUL bytes.
 Do not retain the response pointer. This API does not validate provider JSON or claims.
 
-Ordinary native synchronous requests retain redirects, bounded to five hops, but do
+Ordinary native synchronous and asynchronous requests retain redirects, bounded to five hops, but do
 not follow an HTTPS-to-HTTP downgrade; cross-origin redirects remove authorization
-and cookie headers. Services handling credentials should prefer `request_checked`
+and cookie headers. Pooled asynchronous connections are separated by scheme,
+hostname, port and resolved address. Services handling credentials should prefer `request_checked`
 and explicitly decide which responses and destinations are acceptable.
 
 ## Request logging

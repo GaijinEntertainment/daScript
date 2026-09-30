@@ -1297,24 +1297,10 @@ def try_transaction(db : SqlRunner; blk : block<() : void>) : SqlError {
 def try_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void>) : SqlError {
     //! Non-panic 3-arg overload. Same semantics as ``try_transaction(db, blk)``
     //! with a SQLite-specific BEGIN modifier.
-    let was_in_txn = db |> in_transaction()
-    let begin_err = db |> try_exec(txn_begin_sql(was_in_txn, mode))
-    if (begin_err |> is_some) return begin_err
-    var success : bool
-    {
+    return db |> try_transaction(mode) $() : SqlError {
         invoke(blk)
-        success = true
-    } finally {
-        if (!success) {
-            txn_best_effort_rollback(db, was_in_txn)
-        }
+        return none(type<string>)
     }
-    // COMMIT/RELEASE can still fail (SQLITE_BUSY/IO); roll back so the connection isn't left mid-transaction.
-    let commit_err = db |> try_exec(txn_commit_sql(was_in_txn))
-    if (commit_err |> is_some) {
-        txn_best_effort_rollback(db, was_in_txn)
-    }
-    return commit_err
 }
 
 def try_transaction(db : SqlRunner; blk : block<() : SqlError>) : SqlError {

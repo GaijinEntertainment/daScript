@@ -160,7 +160,7 @@ ENDIF()
 
 SET(AOT_DASHV_MODULE_FILES ${DASHV_AOT_FILES})
 IF(DASHV_AOT_FILES)
-    LIST(APPEND AOT_DASHV_MODULE_FILES tests/dasHV/_dashv_test_common.das tests/dasHV/_server_limits_fixture.das)
+    LIST(APPEND AOT_DASHV_MODULE_FILES tests/dasHV/_dashv_test_common.das tests/dasHV/_server_limits_fixture.das tests/dasHV/_tls_fixture.das)
 ENDIF()
 
 SET(AOT_DASHV_FILES)

@@ -17,7 +17,7 @@ class AdmissionServer : HvWebServer {
         GET("/ping") <| @(var req : HttpRequest?; var response : HttpResponse?) : http_status {
             return response |> TEXT_PLAIN("pong")
         }
-        verify(WEBSOCKET_UPGRADE(deadline_ms) <| @(var req : HttpRequest?; admission : WebSocketAdmission) {
+        verify(WEBSOCKET_UPGRADE(deadline_ms) <| @(var req : HttpRequest?#; admission : WebSocketAdmission) {
             self.decisions++
             if (get_header(req, "Origin") != "https://allowed.example" || get_cookie(req, "sid") != "fixture") {
                 reject_websocket(admission, 403)
@@ -177,12 +177,11 @@ def malformed_handshake_is_rejected_before_authorizer(t : T?) {
 
 [test]
 def outstanding_decisions_keep_reserved_capacity_after_callbacks(t : T?) {
-    var server = new AdmissionServer()
-    server.event_budget = 2
-    server.deadline_ms = 5000
+    var server = new AdmissionServer(event_budget = 2, deadline_ms = 5000)
     server->init(0)
     t |> equal(server->start(), 0)
     var peers : array<WirePeer?>
+    peers |> reserve(3)
     for (index in range(3)) {
         var peer = new WirePeer()
         t |> success(peer->connect("127.0.0.1", server->bound_port()))
@@ -201,4 +200,20 @@ def outstanding_decisions_keep_reserved_capacity_after_callbacks(t : T?) {
     unsafe { delete peers }
     server->stop(); server->cleanup()
     unsafe { delete server }
+}
+
+[test]
+def invalid_decision_arguments_leave_the_ticket_available(t : T?) {
+    with_pending(t, 5000) $(var server, peer) {
+        for (status in [399, 600]) {
+            t |> success(reject_websocket(server.pending, status) != 0)
+            t |> success(is_alive(server.pending))
+        }
+        for (protocol in ["test.v1\r\nX-Injected: yes", repeat("a", 129)]) {
+            t |> success(accept_websocket(server.pending, protocol) != 0)
+            t |> success(is_alive(server.pending))
+        }
+        t |> equal(accept_websocket(server.pending, "test.v1"), 0)
+        t |> success(pump(server, peer, $ { return server.opened == 1; }))
+    }
 }

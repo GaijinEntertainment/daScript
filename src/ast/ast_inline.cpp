@@ -2329,7 +2329,7 @@ namespace das {
         // the position into a splice-friendly shape and let the next round splice there.
         // true = the site was consumed (lowered, or refused with a report); false = the
         // position is eager - the splice proceeds
-        // src/ast/ARCHITECTURE.md#inline-conditional-lowering
+        // src/ast/ARCHITECTURE_INLINE.md#inline-conditional-lowering
         bool InlinePatch::tryLowerCallPosition ( const PlannedSite & site, const SpliceSubject & subj,
                 CallerSpliceState & state, int anchorIndex ) {
             auto callLike = site.callLike;

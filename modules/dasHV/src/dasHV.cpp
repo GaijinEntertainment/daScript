@@ -617,18 +617,18 @@ public:
         lock_guard<mutex> guard(lock);
         service.upgrade_timeout_ms = timeout_ms;
         service.onupgrade = [this,timeout_ms,lmb,context,at](const HttpContextPtr & ctx) -> int {
-            auto data = make_shared<WebSocketAdmission>();
-            data->request = ctx->request;
-            data->writer = ctx->writer;
-            data->owner = self_handle;
-            data->deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+            auto admission = make_shared<WebSocketAdmission>();
+            admission->request = ctx->request;
+            admission->writer = ctx->writer;
+            admission->owner = self_handle;
+            admission->deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
             {
                 lock_guard<mutex> guard(channel_lock);
                 if (max_pending_events && channel_handles.size() + admissions.size() >= max_pending_events) return HTTP_STATUS_SERVICE_UNAVAILABLE;
-                data->handle = HandleRegistry<WebSocketAdmission>::instance().acquire(data);
-                admissions[ctx->request.get()] = data;
+                admission->handle = HandleRegistry<WebSocketAdmission>::instance().acquire(admission);
+                admissions[ctx->request.get()] = admission;
             }
-            const auto handle = data->handle;
+            const auto handle = admission->handle;
             auto key = ctx->request.get();
             ctx->writer->onclose = [this,key,handle](){ release_admission(key, handle); };
             auto request = make_shared<HttpRequest>(*ctx->request);
@@ -1316,6 +1316,9 @@ int das_req_REQUEST_CHECKED(HttpRequest * req, const char * ca_file, int max_res
         const TBlock<void,TTemporary<HttpResponse*>> & block, Context * context, LineInfoArg * at) {
     if (!req || max_response_bytes < 1 || max_response_bytes > 16 * 1024 * 1024 ||
         req->url.size() > 8192 || req->url.find('\0') != string::npos || req->timeout == 0 || req->timeout > 120) return ERR_INVALID_PARAM;
+    for (unsigned char byte : req->url) {
+        if (byte <= 32 || byte == 127) return ERR_INVALID_PARAM;
+    }
     HUrl url;
     if (!url.parse(req->url) || url.host.empty() || !url.username.empty() || !url.password.empty()) return ERR_INVALID_PARAM;
     if (stricmp(url.scheme.c_str(), "https") != 0) return ERR_INVALID_PROTOCOL;

@@ -1,6 +1,11 @@
 # Modules Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
+Architecture doc: `../CLAUDE.md`.
+
+Module subfolders also carry checklists. A module's bindings and script library follow
+that module's checklist even when placed outside its folder; tests follow its tests
+checklist when one exists.
 
 **A diff that changes GPU kernel code applies `REVIEW_SHADER_EMITTERS.md` (beside this file)
 together with its own folder's checklist.** GPU kernel code is a function carrying

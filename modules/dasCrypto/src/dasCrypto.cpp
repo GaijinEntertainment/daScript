@@ -13,12 +13,12 @@
 
 namespace das {
 namespace {
-    constexpr uint32_t max_bytes = 16u * 1024u * 1024u;
+    constexpr uint32_t max_payload_bytes = 16u * 1024u * 1024u;
     const uint8_t empty_byte = 0;
     const uint8_t * bytes(const TArray<uint8_t> & value) {
         return value.size ? reinterpret_cast<const uint8_t *>(value.data) : &empty_byte;
     }
-    bool bounded(const TArray<uint8_t> & value) { return value.size <= max_bytes; }
+    bool input_fits(const TArray<uint8_t> & value) { return value.size <= max_payload_bytes; }
     void clear_output(TArray<uint8_t> & output, Context * context, LineInfoArg * at) {
         if (output.size) OPENSSL_cleanse(output.data, output.size);
         builtin_array_resize(output, 0, sizeof(uint8_t), context, at);
@@ -35,7 +35,7 @@ namespace {
         ~SecretBytes() { if (!data.empty()) OPENSSL_cleanse(data.data(), data.size()); }
     };
     bool hmac(const char * digest, const TArray<uint8_t> & key, const TArray<uint8_t> & message, TArray<uint8_t> & output, Context * context, LineInfoArg * at) {
-        if (!bounded(key) || !bounded(message)) { clear_output(output, context, at); return false; }
+        if (!input_fits(key) || !input_fits(message)) { clear_output(output, context, at); return false; }
         uint8_t buffer[EVP_MAX_MD_SIZE];
         size_t size = 0;
         const bool ok = EVP_Q_mac(nullptr, "HMAC", nullptr, digest, nullptr, bytes(key), key.size,
@@ -55,7 +55,7 @@ bool crypto_random_bytes(int count, TArray<uint8_t> & output, Context * context,
     return publish(output, result.data.data(), uint32_t(count), context, at);
 }
 bool crypto_equal(const TArray<uint8_t> & a, const TArray<uint8_t> & b) {
-    return bounded(a) && bounded(b) && a.size == b.size && (!a.size || CRYPTO_memcmp(a.data, b.data, a.size) == 0);
+    return input_fits(a) && input_fits(b) && a.size == b.size && (!a.size || CRYPTO_memcmp(a.data, b.data, a.size) == 0);
 }
 bool crypto_hmac_sha256(const TArray<uint8_t> & key, const TArray<uint8_t> & message, TArray<uint8_t> & output, Context * context, LineInfoArg * at) {
     return hmac("SHA256", key, message, output, context, at);
@@ -64,7 +64,7 @@ bool crypto_hmac_sha1(const TArray<uint8_t> & key, const TArray<uint8_t> & messa
     return hmac("SHA1", key, message, output, context, at);
 }
 bool crypto_aes256_gcm_seal(const TArray<uint8_t> & key, const TArray<uint8_t> & nonce, const TArray<uint8_t> & plain, const TArray<uint8_t> & aad, TArray<uint8_t> & output, Context * context, LineInfoArg * at) {
-    if (key.size != 32 || nonce.size != 12 || !bounded(plain) || !bounded(aad)) { clear_output(output, context, at); return false; }
+    if (key.size != 32 || nonce.size != 12 || !input_fits(plain) || !input_fits(aad)) { clear_output(output, context, at); return false; }
     Cipher cipher(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
     SecretBytes result(size_t(plain.size) + 16);
     int size = 0, final_size = 0;
@@ -78,7 +78,7 @@ bool crypto_aes256_gcm_seal(const TArray<uint8_t> & key, const TArray<uint8_t> &
     return publish(output, result.data.data(), uint32_t(result.data.size()), context, at);
 }
 bool crypto_aes256_gcm_open(const TArray<uint8_t> & key, const TArray<uint8_t> & nonce, const TArray<uint8_t> & ciphertext, const TArray<uint8_t> & aad, TArray<uint8_t> & output, Context * context, LineInfoArg * at) {
-    if (key.size != 32 || nonce.size != 12 || ciphertext.size < 16 || ciphertext.size > max_bytes + 16 || !bounded(aad)) { clear_output(output, context, at); return false; }
+    if (key.size != 32 || nonce.size != 12 || ciphertext.size < 16 || ciphertext.size > max_payload_bytes + 16 || !input_fits(aad)) { clear_output(output, context, at); return false; }
     Cipher cipher(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
     const uint32_t plain_size = ciphertext.size - 16;
     SecretBytes result(size_t(plain_size) + 16);
@@ -93,7 +93,7 @@ bool crypto_aes256_gcm_open(const TArray<uint8_t> & key, const TArray<uint8_t> &
     return publish(output, result.data.data(), plain_size, context, at);
 }
 bool crypto_verify_rsa_sha256(const TArray<uint8_t> & modulus, const TArray<uint8_t> & exponent, const TArray<uint8_t> & message, const TArray<uint8_t> & signature) {
-    if (modulus.size < 256 || modulus.size > 1024 || exponent.size == 0 || exponent.size > 8 || signature.size != modulus.size || !bounded(message)) return false;
+    if (modulus.size < 256 || modulus.size > 1024 || exponent.size == 0 || exponent.size > 8 || signature.size != modulus.size || !input_fits(message)) return false;
     using Big = std::unique_ptr<BIGNUM, decltype(&BN_free)>;
     using Builder = std::unique_ptr<OSSL_PARAM_BLD, decltype(&OSSL_PARAM_BLD_free)>;
     using Params = std::unique_ptr<OSSL_PARAM, decltype(&OSSL_PARAM_free)>;

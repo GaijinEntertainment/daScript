@@ -100,7 +100,7 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 	)
 	ExternalProject_Add_StepDependencies(LIBHV patch ${DAS_HV_DIR}/patch_libhv.cmake ${DAS_HV_DIR}/patch_libhv_limits.cmake ${DAS_HV_DIR}/patch_libhv_upgrade.cmake ${DAS_HV_DIR}/patch_libhv_tls.cmake ${DAS_HV_DIR}/patch_libhv_pipeline.cmake ${DAS_HV_DIR}/patch_libhv_logging.cmake)
     set(HV_PATCHED_PUBLIC_HEADERS)
-    foreach(header HttpParser.h HttpMessage.h WebSocketParser.h WebSocketServer.h HttpResponseWriter.h HttpService.h)
+    foreach(header AsyncHttpClient.h HttpParser.h HttpMessage.h WebSocketParser.h WebSocketServer.h HttpResponseWriter.h HttpService.h)
         list(APPEND HV_PATCHED_PUBLIC_HEADERS "${DAS_HV_DIR}/hv/$<CONFIG>/include/hv/${header}")
     endforeach()
     ExternalProject_Add_Step(LIBHV public_headers

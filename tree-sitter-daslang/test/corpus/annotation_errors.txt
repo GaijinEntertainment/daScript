@@ -1,0 +1,53 @@
+==================
+Signed annotation rejects unsigned suffix
+:error
+==================
+[comment(value=-1u)]
+struct Bad {}
+---
+(ERROR)
+
+==================
+Signed annotation rejects hexadecimal unsigned literal
+:error
+==================
+[comment(value=-0x1)]
+struct Bad {}
+---
+(ERROR)
+
+==================
+Signed annotation rejects double suffix
+:error
+==================
+[comment(value=-1.5d)]
+struct Bad {}
+---
+(ERROR)
+
+==================
+Unsigned annotation rejects unsigned suffix
+:error
+==================
+[comment(value=1u)]
+struct Bad {}
+---
+(ERROR)
+
+==================
+Unsigned annotation rejects hexadecimal unsigned literal
+:error
+==================
+[comment(value=0x1)]
+struct Bad {}
+---
+(ERROR)
+
+==================
+Unsigned annotation rejects double suffix
+:error
+==================
+[comment(value=1.5d)]
+struct Bad {}
+---
+(ERROR)
