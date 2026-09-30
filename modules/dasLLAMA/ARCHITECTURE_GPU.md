@@ -159,7 +159,7 @@ that a question answered for one backend has an obvious address in the other. Th
   MoE layer, and the routed block on a layer another seat built), its hyper-connection seats `install_moe_gpu_resident_hc`
   (the mixer sites' planes, the n-gram side input's, the host-experts switch and the split token command,
   `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`), its hot expert pool seats `install_moe_gpu_resident_hot` (a routed
-  layer's slots, an expert's planes into a slot, a step's hits; a tier without them serves every routed expert on the
+  layer's slots, an expert's planes into a slot, a step's hits, a verify's rows' hits; a tier without them serves every routed expert on the
   host, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`), its mirror-region seat `install_moe_gpu_resident_regions`
   (`rdec_select_region` names the region every mirror address and the next token command resolve against; a tier
   without it serves one region), its N-row batch seat `install_moe_gpu_resident_batch` (the N-row token command beside
@@ -173,7 +173,8 @@ that a question answered for one backend has an obvious address in the other. Th
   Metal integrates as a whole-forward driver through common's override registries (the ASR-decoder driver is the one
   exception: whisper is not a `Model`, so its hooks are family registries in `dasllama_whisper`, same decline contract).
 - **`dasllama_gpu_resident.das`** - the WHOLE-MODEL residency rail: bake the device layout offline into the flavor
-  image, upload a model's stacks to the tier, drive decode/prefill entirely on device, and decide the trimmed lane -
+  image, upload a model's stacks to the tier, drive decode/prefill entirely on device, record the routed pick trace
+  (`DASLLAMA_MOE_TRACE`, the pool's offline instrument), and decide the trimmed lane -
   its admission (`resident_would_serve`) and the emb region the CPU keeps (`trim_pack_emb`). It is device-AGNOSTIC - it
   holds no device call and requires no GPU module, reaching the hardware only through the `dasllama_gpu_tier` SPI and
   entering the engine only through common's override registries. `"vulkan"` is the tier string it registers under, not
@@ -182,7 +183,7 @@ that a question answered for one backend has an obvious address in the other. Th
   `dasllama_blocks` for the routed sums it runs on the host. On a hyper-connection MoE it keeps the routed experts
   on the host and sums them between the command's segments (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`),
   and it owns the hot expert pool's POLICY - which experts sit in the tier's slots, which picks the device serves
-  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`); the pool's device side is the tier's three hot seats.
+  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`); the pool's device side is the tier's four hot seats.
 - **A dry bake runs the whole resident arm with no device.** `vulkan_bake_role` puts the tier in
   bake mode, and each `rdec_*` device seam answers for itself so the arm walk reaches the end: a
   seam that only records a layout (`vk_rdec_set_emb`) answers true, one that would allocate device

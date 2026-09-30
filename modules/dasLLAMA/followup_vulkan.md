@@ -2083,12 +2083,6 @@ module) is independent and can land any time - it is pure structure.
     back to the host. Done = the window's segment schedules the hits on the device (the sched, gather,
     ladder and combine kernels over the pool's planes, the combine accumulating onto the host's sums),
     no rows cross the link, and the prompt's row is re-measured.
-124. **The NextN head on the hyper-connection chain - SHIPPED (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`,
-    `#hc-verify-rows`).** The head's mixers and eh_proj resident, its routed experts on the host like
-    the trunk's, the wide carry landed beside the logits, the two-row verify through the split command;
-    the round reads x0.83 against plain decode on the zen2 at 65.8% acceptance (`PERF_LEDGER.md`'s
-    NextN entry) because the verify rows' host sums cost more than a token, so `mtp_auto_arms` leaves
-    it off where the experts sum on the host. Row 127's lift is what turns it net positive.
 125. **Placing an expert in a pool slot copies it twice.** The gather writes the expert's device layout
     into host scratch (0.57 ms) and the upload copies the scratch into the slot (0.27 ms; both
     `DASLLAMA_GPU_PROF=1`'s pool line, debug-jit), so a pool of 32 x 48 slots fills in 1.3 s at the
@@ -2105,15 +2099,37 @@ module) is independent and can land any time - it is pure structure.
     more), and the constant or the rule set from the reading.
 127. **A pool placement rides the token's path.** The gather of an expert's device layout (0.57 ms) and
     its upload (0.27) run inside the host's routed step, so the pool swaps one expert a layer a step and
-    holds 31-45% of real text's picks; the trace sim (`harness/hot_pool_sim.das`, `PERF_LEDGER.md`'s
-    NextN entry) reads 87% for LRU at four swaps a step, worth 37.6 tok/s against 22.5, once a placement
-    costs the path nothing. Done = the routed experts mirrored in their device layout in pinned host
+    holds 31-45% of real text's picks (`PERF_LEDGER.md`'s NextN entry, the profile). The trace sim
+    (`harness/hot_pool_sim.das` over the same entry's eight-prompt trace, the token modeled from the
+    profile's costs - the device 22.0 ms, a miss 72 us, a placement 570 us of host gather + 270 us of
+    upload; the calibration row is on the ledger) at 32 slots a layer, the zen2's trace, debug-jit:
+
+    | policy | decode hits | placements a token | modeled token | tok/s |
+    | :--- | ---: | ---: | ---: | ---: |
+    | heat, the shipped one (decay 256, hysteresis 2x+1, 1 swap) | 37.5% | 2.38 | 45.7 ms = 22.0 + misses 21.7 + placements 2.0 | 21.9 |
+    | lru, 1 swap a step | 58.2% | 50.1 | 78.6 = 22.0 + 14.5 + 42.1 | 12.7 |
+    | lru, 2 swaps | 70.9% | 92.2 | 109.5 = 22.0 + 10.1 + 77.4 | 9.1 |
+    | lru, 4 swaps | 87.3% | 154.6 | 156.3 = 22.0 + 4.4 + 129.9 | 6.4 |
+    | lru, 64 slots, 2 swaps | 82.4% | 82.6 | 97.5 = 22.0 + 6.1 + 69.4 | 10.3 |
+    | lru 4, async placements, the gather on the path (`--async`) | 87.3% | 154.6 | 114.6 = max(22.0 + 4.4 + host 88.1, link 26.6) | 8.7 |
+    | lru 1, async, no host gather (`--place-host-us 0`) | 58.2% | 50.1 | 36.5 = max(22.0 + 14.5, link 8.6) | 27.4 |
+    | lru 2, async, no host gather | 70.9% | 92.2 | 32.1 = max(22.0 + 10.1, link 15.9) | 31.1 |
+    | lru 4, async, no host gather | 87.3% | 154.6 | 26.6 = max(22.0 + 4.4, link 26.6) | 37.6 |
+
+    The picks have recency: LRU at four swaps a step holds 87% of them in the same 32 slots, but a
+    placement's 0.84 ms on the token's path (row 125) turns 155 placements into 130 ms, and even with
+    the upload off the path the host's layout gather (570 us) binds. With the gather gone - the experts
+    mirrored in their device layout in host memory (55 GB beside the 94 of the file; the zen2 holds 256)
+    and the placements on the transfer queue behind the segments - the token is the longer of the
+    compute path and the link, and LRU-4 models 37.6 tok/s link-bound (a placement 172 us of a 13 GB/s
+    link: 127 experts a token free under the 22 ms device floor), 1.67x the ledger's 22.5 (debug-jit,
+    no board row carries this model). Done = the routed experts mirrored in their device layout in pinned host
     memory at load (55 GB beside the file's 94; the plan declines the mirror where the host's room does
     not hold it), a placement one transfer-queue copy off the mirror behind the segments, the pool's
     swaps a step the sim's, and the live profile's hits and token wall against the sim's row.
 128. **The pool's policy is a decaying count.** With row 127 landed the placements are free to the link's
-    budget (127 experts a token at 13 GB/s under the 22 ms device floor) and the policy decides the hits:
-    LRU-N first (the sim's 58-87% at one to four swaps), then a predictor - the previous layer's picks
+    budget (row 127's table: 127 experts a token at 13 GB/s under the 22 ms device floor) and the policy
+    decides the hits: LRU-N first (the same table's 58-87% at one to four swaps), then a predictor - the previous layer's picks
     over a co-occurrence table, or the next token's picks prefetched during this token's segments -
     placing fewer experts for the same hits. Done = each policy tried in the sim against the trace
     before its live run, the winner's hits and token wall on the ledger.
@@ -2123,6 +2139,7 @@ module) is independent and can land any time - it is pure structure.
     accepted prefix is at stake. Done = a depth past 1 commits the accepted rows alone, or the rollback
     restores the slots it rewrote.
 130. **The device draft accepts 14 points under the CPU draft.** The device's draft and the verify rows
-    route their near-ties apart (65.8% against the CPU rail's 79.9% on the same prompts), and every
+    route their near-ties apart (65.8% against the CPU rail's 79.9% on the same eight prompts,
+    `PERF_LEDGER.md`'s NextN entry, the `--mtp-ab` rows), and every
     point of acceptance is a share of the round's second token. Done = the gap read on the pick tape
     (the draft's picks against the verify row's on the same token) and the arm that flips named.

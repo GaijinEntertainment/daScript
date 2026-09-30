@@ -837,7 +837,7 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the hyper-connection chain (Qwen3.8-Flash-Next, the one qwen4exp carrier, above the zoo's tier): the mixer seams and the
     // n-gram side input; their coverage is test_vkd_hc_seams, test_vkd_hc_rows and test_vkd_ple_side, the serving run
     // test_gpu_resident_hc.das
-    "hc_init_cls_spv", "hc_norm_cls_spv", "hc_lo_rq_cls_spv", "hc_mix_cls_spv", "hc_comb_cls_spv", "ple_gate_cls_spv", "ple_conv_cls_spv",
+    "hc_init_cls_spv", "hc_norm_cls_spv", "hc_lo_rq_cls_spv", "hc_mix_cls_spv", "hc_comb_cls_spv", "ple_gate_cls_spv", "ple_conv_cls_spv", "ple_commit_cls_spv",
     // ... and the deltanet out-gate's sigmoid stamps the same carrier's recurrent layers take; their coverage is the sigmoid
     // arms of test_vkd_dn_family
     "dn_step_sig_cls_spv", "dn_scan_p3_sig_cls_spv",

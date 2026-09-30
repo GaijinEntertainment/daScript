@@ -683,8 +683,9 @@ tap reaches and at one under the taps' reach (the taps before the sequence readi
 ring slot written and the other slots kept, the fixture's stream dots asserted to take both signs, and
 the window's panel form - three rows whose taps read the ring before the window and the panel inside it,
 then a second position block primed from window rows, and the verify's form - the window's first position
-read off the token record (`PLE_POS_TOK`) and the two rows committed to the ring's slots of their positions
-after the conv (`PleCommit`), the pos-off-push form asserted to leave the ring untouched; `test_vkd_dn_scan_narrow`
+read off the token record (`PLE_POS_TOK`) and three rows committed to the ring's slots of their positions
+after the conv (`PleCommit`; 1152 elements, the last workgroup partial), the pos-off-push form asserted to leave the
+ring untouched; `test_vkd_dn_scan_narrow`
 runs the scan at ds 32 over 64 rows, and `test_vkd_dn_9b_scan` at the 9B geometry - 512 rows,
 one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate arrays' exact
 bound); `test_vkd_dn_step_rows` runs the fused step over two rows in two region slots against the
@@ -1091,7 +1092,7 @@ tape, the logits and the wide carry each within their bar with the one-row-back 
 one speculative round on the device (the draft, the two-row verify, the accept or the rollback) and holds its
 two rows to the split command's own one-row steps on the same picks (`moe_pick_tape_lane`, a lane replay of the
 rows-form tape) at the split bars, and to the CPU's one-row steps at the wide bars, the other row as each
-row's control. Both skip where the head shard is not beside the model.
+row's control. Both also skip where the head shard is not beside the model.
 `test_gpu_resident_llama.das` - stocked suite, `-jit` only; the whole-model resident driver on the
 llama family (Llama-3.2-1B Q8_0, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M, `DASLLAMA_GPU=1`): the
 NORM rope, no q/k/v bias, no q/k norm, the tied classifier of the 3.2 files - the qwen2 file's

@@ -435,20 +435,6 @@ let private DRAFT_PROMPT = 40l
 let private DRAFT_TOKEN = 2000l
 let private ROUNDS = 6l   //! the speculative rounds the device-vs-CPU cells run, one fed token each
 
-//! a draft's two outputs: the logits and the head's own hidden `forward_mtp` leaves in the session
-struct private Draft {
-    logits : array<float>
-    h : array<float>
-}
-
-//! `forward_mtp` of `tok` at head row `row` from the carry `h0`, through whichever seat the process has installed
-[cold_path]
-def private draft_from(tr : Model; var s : Session; tok, row : int64; h0 : array<float>) : Draft {
-    copy_floats(h0, 0l, s.mtp_h, 0l, long_length(h0))
-    forward_mtp(tr, s, tok, row)
-    return <- Draft(logits <- [for (x in s.logits); x], h <- [for (x in s.mtp_h); x])
-}
-
 //! `prompt` through the prefill at `start_pos` with the speculative warm on, so the head's host rows the draft hydrates hold history;
 //! a continuation (`start_pos` past 0) on the hybrid passes to the CPU rails, which leave the recurrent state and the carry at its end
 def private prefill_warm(tr : Model; var s : Session; prompt : array<int64>; start_pos : int64 = 0l) {

@@ -100,8 +100,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   its same-slab form the speculative verify steps one stream's rows through, and the residual
   step's two forms it holds bit for bit.
 - `ARCHITECTURE_GPU_VULKAN_HC.md` - the whole-model driver's hyper-connection chain (qwen4exp):
-  the wide residual's mixer seams on the device, the n-gram side input, and the split token
-  command whose routed experts run on the host between its segments.
+  the wide residual's mixer seams on the device, the n-gram side input, the split token
+  command whose routed experts run on the host between its segments, the hot expert pool, and
+  the NextN head and its verify rows on the chain.
 - `ARCHITECTURE_GPU_VULKAN_DECODE.md` - the per-op tier's decode era - the decode attention block
   over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, the whole-token decode
   span, the deltanet decode step's per-session resident state, and the whole-model driver's

@@ -24,10 +24,14 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   stacks never fit a discrete card beside its other planes, so the Vulkan whole-model driver cuts its
   command at every routed block and the host sums the experts between the segments; Metal serves the
   same model whole from unified memory and its drivers split nothing.
-- **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, the tier's three
+- **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, the tier's four
   hot seats, `DASLLAMA_GPU_HEAT`): where the routed experts live on the host, the Vulkan driver keeps
   the hottest ones in per-layer device slots and serves their picks there; Metal has every expert
   resident, so nothing is hot or cold.
+- **The NextN head on the hyper-connection chain is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`,
+  `#hc-verify-rows`): the Vulkan driver runs a routed head as one more chain layer, its experts summed
+  on the host, and verifies two rows through the split command; Metal's batch rail runs the same head
+  whole from unified memory (`ARCHITECTURE_GPU_MTP_DECODE.md`) and splits nothing.
 - **The deltanet mirror room seat is Metal-only.** `set_moe_gpu_dn_room_hook` (the engine half
   `gpu_dn_room_`, the facade's `gpu_dn_room`) carries a scheduler's stream count to whatever
   keeps sessions' recurrent state device-resident; `_common`'s `dn_mirror_room` is its one

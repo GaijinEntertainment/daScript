@@ -821,6 +821,9 @@ def moe_pick_tape_lane(first, stride, k : int64) {
 //! the replay's selects so far, and the own picks the tape did not carry
 def moe_pick_tape_stats() : tuple<seen : int64; miss : int64> => (seen = g_moe_tape_seen, miss = g_moe_tape_miss)
 
+//! the tape's mode, and a lane replay's stride (1 outside a lane)
+def moe_pick_tape_mode() : tuple<mode : MoePickTape; stride : int64> => (mode = g_moe_tape_mode, stride = g_moe_tape_stride)
+
 //! the rows' taped picks under a replay, null otherwise
 [arch(at="../ARCHITECTURE_ENGINE.md#moe-pick-tape")]
 def moe_pick_tape_rows_begin(npos, k : int64) : int64 const? {

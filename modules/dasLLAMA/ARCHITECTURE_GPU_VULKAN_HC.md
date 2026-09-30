@@ -2,8 +2,9 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the
 whole-model driver's form for a hyper-connection model (qwen4exp, Qwen3.8-Flash-Next): the wide residual
-and its mixer seams on the device, the n-gram side input, and the split token command whose routed
-experts run on the host. The heads the chain runs between its seams are
+and its mixer seams on the device, the n-gram side input, the split token command whose routed
+experts run on the host, the hot expert pool beside it, and the NextN head riding the chain with its
+verify's rows. The heads the chain runs between its seams are
 `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`'s; the residency plan that admits the model is
 `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`.
 
@@ -49,8 +50,8 @@ full queue wait, so the segments share no hazard tracker; inside a segment the s
 ride other roles' hazard bits (the wide residual x's, the normed streams the wo row's, the low-rank row
 the gate plane's, its quants the hidden's, the up projection the up plane's, the scatter logits the
 routing smalls'), which only adds barriers. The host's select reaches any expert count, so the
-256-expert reach of the device select kernels does not gate this form; one mirror region serves it, and
-its N-row command and NextN verify are not written.
+256-expert reach of the device select kernels does not gate this form; one mirror region serves it, its
+N-row command is not written, and its NextN verify is the split command's rows form (`#hc-verify-rows`).
 
 ### The hot expert pool {#hc-hot-pool}
 
@@ -225,6 +226,7 @@ put it back on a reject) and hands the rows step as `RdecVerifyFn`'s `experts`. 
 per-row top-k) and the hc leaves past them. The parity cell is `tests/test_gpu_resident_hc.das`'s verify
 cell: one round on the device against the split command's own one-row steps on the same picks
 (`moe_pick_tape_lane`, a lane replay of a rows-form tape) at the split bar, and against the CPU's one-row
-steps at the wide bar. Measured on the zen2 (`PERF_LEDGER.md`), the round does not pay while the pool's
+steps at the wide bar - the CPU compare is the parity evidence, the device-vs-device compare a rounding
+control. Measured on the zen2 (`PERF_LEDGER.md`), the round does not pay while the pool's
 hits sit near 40% on real text - the verify rows' host sums cost more than a plain token - so a server slot
 leaves the round off on this form (`gpu_resident_experts_host`).

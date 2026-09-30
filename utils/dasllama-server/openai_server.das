@@ -5529,10 +5529,9 @@ struct private SchedDefaults {
 
 var private g_sched_defaults = SchedDefaults()
 
-//! ... and not where the resident driver sums the routed experts on the host (`experts_on_host`: a hyper-connection MoE on a card its experts do not fit - the round's verify rows cost host sums the pool serves in part, `PERF_LEDGER.md`'s Flash-Next round).
-//! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, and on a slot the device serves in part, the verify round's second row costs a second decode step, more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
-def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_on_host : bool = false) : bool
-    => streams == 1l && (on_metal || (backend_effective == "gpu:resident" && !experts_on_host))
+//! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, on a slot the device serves in part, and where the resident driver sums the routed experts on the host (`experts_host`: a hyper-connection MoE the card does not hold whole - `PERF_LEDGER.md`'s NextN entry), the verify round costs more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
+def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false) : bool
+    => streams == 1l && (on_metal || (backend_effective == "gpu:resident" && !experts_host))
 
 def private init_one_scheduler(var s : ModelSlot) {
     let s_streams = s.opts.streams >= 0l ? s.opts.streams : g_sched_defaults.max_streams

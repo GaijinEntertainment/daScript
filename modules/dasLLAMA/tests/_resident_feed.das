@@ -68,6 +68,20 @@ def pick_agrees(t : T?; tr : Model; what : string; pick : int64; cpu : array<flo
     return pick == ac
 }
 
+//! a draft's two outputs: the logits and the head's own hidden `forward_mtp` leaves in the session
+struct Draft {
+    logits : array<float>
+    h : array<float>
+}
+
+//! `forward_mtp` of `tok` at head row `row` from the carry `h0`, through whichever seat the process has installed
+[cold_path]
+def draft_from(tr : Model; var s : Session; tok, row : int64; h0 : array<float>) : Draft {
+    copy_floats(h0, 0l, s.mtp_h, 0l, long_length(h0))
+    forward_mtp(tr, s, tok, row)
+    return <- Draft(logits <- [for (x in s.logits); x], h <- [for (x in s.mtp_h); x])
+}
+
 //! every row r of `gpu` within `rel` of the max |value| of `cpu[r]`, and the control row `cpu[r + ctrl_off]` - where one exists -
 //! past `ctrl_bars` bars of the same row: the widest miss and the tightest control logged with their rows; `row_tag` names a row
 def rows_within_control(t : T?; what : string; gpu, cpu : array<array<float>>; rel : float; ctrl_off : int64; ctrl_bars : float; row_tag : block<(r : int64) : string>) {

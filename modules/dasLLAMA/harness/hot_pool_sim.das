@@ -1,5 +1,6 @@
 options gen2
 options stack = 524288
+options _dasllama_internal = true   // the engine's trace and pool constants: an instrument, not a user of the facade
 
 // The hot expert pool's offline instrument: a routed pick trace (`DASLLAMA_MOE_TRACE`, the host expert steps of a serving run -
 // a layer, its rows, k expert ids and weights a row, a mark at each prompt that starts at position 0) replayed through a pool
@@ -14,8 +15,14 @@ require daslib/clargs
 require daslib/fio
 require math
 require strings
+require dasllama/dasllama_gpu_resident   // MOET_MAGIC, RDEC_TRACE_PROMPT_MARK, RDEC_HOT_WINDOW_MIN: the trace's and the pool's constants, one home
 
-let WINDOW_MIN_ROWS = 32   //! the engine's RDEC_HOT_WINDOW_MIN: a record under it is a decode step or a verify's rows, at it and past it a window
+enum Policy {
+    heat   //! the shipped one: decaying pick counts, a swap under hysteresis
+    lru   //! the least recently picked slot leaves, every miss placed within the budget
+    lfu   //! pick counts with no decay
+}
+
 
 [CommandLineArgs]
 struct Args {
@@ -97,7 +104,7 @@ def read_trace(path : string) : Trace {
     unsafe {
         let base = addr<uint8?>(bytes[0])
         let magic = *reinterpret<int?>(base)
-        if (magic != 0x54454f4d) {
+        if (magic != MOET_MAGIC) {
             panic("hot_pool_sim: {path} is not a MOET trace")
         }
         tr.layers = *reinterpret<int?>(base + 4l)
@@ -126,7 +133,7 @@ def read_trace(path : string) : Trace {
 struct Layer {
     slot_of : array<int>     //! [ne] the expert's slot, -1 = host
     expert_of : array<int>   //! [slots] the slot's expert, -1 = free
-    heat : array<float>      //! [ne] the policy's score: decaying counts (heat), counts (lfu), the last pick's tick (lru)
+    score : array<float>     //! [ne] higher stays
     rows : int
     nfree : int
     hits, picks, places, window_rows, window_hits : int64
@@ -134,14 +141,15 @@ struct Layer {
 
 var g_tick = 0
 var g_cfg = Args()
+var g_policy = Policy.heat
 
 def layer_init(var L : Layer; ne, slots : int) {
     L.slot_of |> resize(ne)
     L.expert_of |> resize(slots)
-    L.heat |> resize(ne)
+    L.score |> resize(ne)
     for (i in range(ne)) {
         L.slot_of[i] = -1
-        L.heat[i] = 0.0
+        L.score[i] = 0.0
     }
     for (i in range(slots)) {
         L.expert_of[i] = -1
@@ -154,16 +162,16 @@ def note(var L : Layer; ids : array<int>; n, rows : int) {
     g_tick++
     for (j in range(n)) {
         let e = ids[j]
-        if (g_cfg.policy == "lru") {
-            L.heat[e] = float(g_tick)
+        if (g_policy == Policy.lru) {
+            L.score[e] = float(g_tick)
         } else {
-            L.heat[e]++
+            L.score[e]++
         }
     }
     L.rows += rows
-    if (g_cfg.policy == "heat" && L.rows >= g_cfg.decay) {
+    if (g_policy == Policy.heat && L.rows >= g_cfg.decay) {
         L.rows = 0
-        for (h in L.heat) {
+        for (h in L.score) {
             h *= 0.5
         }
     }
@@ -177,20 +185,16 @@ def slot_for(L : Layer; e : int; ids : array<int>; n : int) : int {
     var victim = -1
     for (sl in range(length(L.expert_of))) {
         let ex = L.expert_of[sl]
-        var picked = false
-        for (j in range(n)) {
-            picked = picked || ids[j] == ex
-        }
-        continue if (picked)
-        if (victim < 0 || L.heat[ex] < L.heat[L.expert_of[victim]]) {
+        continue if (find_index(ids, ex) >= 0 && find_index(ids, ex) < n)
+        if (victim < 0 || L.score[ex] < L.score[L.expert_of[victim]]) {
             victim = sl
         }
     }
     return -1 if (victim < 0)
-    if (g_cfg.policy == "lru") {
+    if (g_policy == Policy.lru) {
         return victim
     }
-    return L.heat[e] > g_cfg.hyst * L.heat[L.expert_of[victim]] + 1.0 ? victim : -1
+    return L.score[e] > g_cfg.hyst * L.score[L.expert_of[victim]] + 1.0 ? victim : -1
 }
 
 def place(var L : Layer; e, slot : int) {
@@ -224,10 +228,10 @@ def decode_step(var L : Layer; ids : array<int>; k : int) {
     L.picks += int64(k)
 }
 
-def window(var L : Layer; ids : array<int>; n, rows : int) {
+def window_step(var L : Layer; ids : array<int>; n, rows : int) {
     note(L, ids, n, rows)
-    var order <- [for (e in range(length(L.heat))); e; where L.heat[e] > 0.0 && L.slot_of[e] < 0]
-    order |> sort() $(a, b) => L.heat[a] > L.heat[b]
+    var order <- [for (e in range(length(L.score))); e; where L.score[e] > 0.0 && L.slot_of[e] < 0]
+    order |> sort() $(a, b) => L.score[a] > L.score[b]
     var swaps = g_cfg.window_swaps
     for (e in order) {
         break if (L.nfree == 0 && swaps == 0)
@@ -246,12 +250,26 @@ def window(var L : Layer; ids : array<int>; n, rows : int) {
     L.window_rows += int64(n)
 }
 
+//! the `--policy` word as the enum; any other word is a usage error
+def policy_of(word : string) : Policy {
+    if (word == "heat") {
+        return Policy.heat
+    } elif (word == "lru") {
+        return Policy.lru
+    } elif (word == "lfu") {
+        return Policy.lfu
+    }
+    panic("hot_pool_sim: --policy {word} is not heat, lru or lfu")
+    return Policy.heat
+}
+
 [export]
 def main : int {
     var cfg = Args()
     let rc = parse_args_with_help(cfg, "hot_pool_sim")
     return rc if (rc >= 0)
     g_cfg = cfg
+    g_policy = policy_of(cfg.policy)
     var tr <- read_trace(cfg.trace)
     var layers : array<Layer>
     layers |> resize(tr.layers)
@@ -260,8 +278,9 @@ def main : int {
     }
     var seqs = 0
     var tokens = 0l
+    var first_routed = -1   // the first routed layer the trace carries: a token is one decode record of it (a dense lead leaves layer 0 out)
     for (r in tr.recs) {
-        if (r.layer < 0) {
+        if (r.layer == RDEC_TRACE_PROMPT_MARK) {
             seqs++
             if (cfg.reset_per_seq) {
                 for (L in layers) {
@@ -270,14 +289,17 @@ def main : int {
             }
             continue
         }
-        if (r.rows < WINDOW_MIN_ROWS) {   // a decode step, or a verify's few rows: the step form a row (the window chain takes 32 rows and more)
+        if (int64(r.rows) < RDEC_HOT_WINDOW_MIN) {
             for (row in range(r.rows)) {
                 let ids <- [for (j in range(tr.k)); r.ids[row * tr.k + j]]
                 decode_step(layers[r.layer], ids, tr.k)
-                tokens += r.layer == 0 ? 1l : 0l
+                if (first_routed < 0) {
+                    first_routed = r.layer
+                }
+                tokens += r.layer == first_routed ? 1l : 0l
             }
         } else {
-            window(layers[r.layer], r.ids, r.rows * tr.k, r.rows)
+            window_step(layers[r.layer], r.ids, r.rows * tr.k, r.rows)
         }
     }
     var hits = 0l

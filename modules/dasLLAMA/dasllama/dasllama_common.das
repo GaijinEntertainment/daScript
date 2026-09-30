@@ -5060,10 +5060,21 @@ def mtp_state_snapshot(var s : Session) {
     copy_floats_par(s.dn_conv_state, s.mtp_snap_conv, nc)
     copy_floats_par(s.dn_state, s.mtp_snap_state, ns)
     s.mtp_snap_pos = s.dn_pos
-    // the n-gram window is forward-only state too: a rejected draft must not stay a predecessor
+    mtp_ple_window_snapshot(s)
+}
+
+//! the n-gram window into `mtp_snap_ple`: forward-only state, so a rejected draft must not stay a predecessor
+def mtp_ple_window_snapshot(var s : Session) {
     s.mtp_snap_ple |> overwrite_resize(long_length(s.ple_prev))
     for (i in range64(long_length(s.ple_prev))) {
         s.mtp_snap_ple[i] = s.ple_prev[i]
+    }
+}
+
+//! the window back from `mtp_snap_ple`
+def mtp_ple_window_restore(var s : Session) {
+    for (i in range64(min(long_length(s.ple_prev), long_length(s.mtp_snap_ple)))) {
+        s.ple_prev[i] = s.mtp_snap_ple[i]
     }
 }
 
@@ -5072,9 +5083,7 @@ def mtp_state_restore(var s : Session) {
     copy_floats_par(s.mtp_snap_conv, s.dn_conv_state, long_length(s.mtp_snap_conv))
     copy_floats_par(s.mtp_snap_state, s.dn_state, long_length(s.mtp_snap_state))
     s.dn_pos = s.mtp_snap_pos
-    for (i in range64(long_length(s.mtp_snap_ple))) {
-        s.ple_prev[i] = s.mtp_snap_ple[i]
-    }
+    mtp_ple_window_restore(s)
     moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
 }
 

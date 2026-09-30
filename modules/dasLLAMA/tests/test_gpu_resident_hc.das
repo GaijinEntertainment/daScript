@@ -24,6 +24,8 @@ require _resident_feed   // feed_logits, feed_steps_within
 // window chain, every step through the token command - and through the all-CPU chain, the CPU chain routing as the device
 // arm did (the decode pick tape): 512 experts top-10 over 4 mixed streams flip a near-tie on kernel-order noise alone, and
 // one flipped expert moves the whole row past any bar. Every row's logits within the bar, the one-step-off control past it.
+// The NextN cells (the draft, the speculative round) also need the split head shard beside the trunk
+// (Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf) and skip without it.
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -35,28 +37,18 @@ def private allow_cpu_prefill_intent() {
 let private LOGIT_BAR_REL = 0.20
 let private HC_PROMPT = 48l   //! past the pool's 32-row window floor: the prompt's routed rows split between the device and the host
 //! the head's wide carry with the routing pinned: the arms read 0.06 against a max of 22 (0.3%), the draft one row back 3.5 (16%)
+//! (PERF_LEDGER.md, the NextN entry: the draft cell's readings)
 let private CARRY_BAR_REL = 0.05
 //! the verify rows against the split command's one-row steps on the same lanes (N-column stamps round apart, the two pools split picks apart; the regions files' split bar): rows read 0.05-0.07 of the max logit, carry rows 0.01-0.08, the one-row-off controls 10 bars and more
 let private SPLIT_BAR_REL = 0.12
 let private SPLIT_CARRY_BAR_REL = 0.10
 //! ... and against the CPU chain's one-row steps, that rounding compounding with the rails' own (the regions files' rows-form wide bar): rows read 0.16-0.25 of the max logit (row 1 inherits row 0's), carry rows 0.07-0.17
+//! (both PERF_LEDGER.md, the NextN entry: the verify cell's readings)
 let private WIDE_BAR_REL = 0.35
 let private WIDE_CARRY_BAR_REL = 0.25
 let private FN_TRUNK = "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
 let private FN_HEAD = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"
 let private DRAFT_TOKEN = 3000l
-
-struct private Draft {
-    logits : array<float>
-    h : array<float>
-}
-
-//! one draft at `row` from the carry `h0`: through the seat where one serves, else the CPU forward_mtp
-def private draft_from(tr : Model; var s : Session; tok, row : int64; h0 : array<float>) : Draft {
-    copy_floats(h0, 0l, s.mtp_h, 0l, long_length(h0))
-    forward_mtp(tr, s, tok, row)
-    return <- Draft(logits <- [for (x in s.logits); x], h <- [for (x in s.mtp_h); x])
-}
 
 def private hc_ready(t : T?) : bool {
     if (!jit_enabled()) {
@@ -76,7 +68,7 @@ def private hc_ready(t : T?) : bool {
 }
 
 struct private Round {
-    d : int64   //! the draft the round verified
+    draft : int64
     dev0, dev1 : array<float>   //! the verify's two logits rows off the device
     devh0, devh1 : array<float>   //! ... and its two wide carry rows
     h0 : array<float>   //! the carry the round drafted from (the prompt's last wide residual)
@@ -84,6 +76,7 @@ struct private Round {
 
 //! one speculative round on the device over `prompt`: the draft, the two-row verify, the accept or the rollback - the counters say
 //! every seat served, the accept follows row 0's argmax, and the pick tape records the head's select then the rows' selects a layer
+[cold_path]
 def private hc_round(t : T?; tr : Model; prompt : array<int64>) : Round {
     var s <- create_session(tr, mirror_kv_dtype())
     let spec0 = get_mtp_spec()
@@ -101,7 +94,7 @@ def private hc_round(t : T?; tr : Model; prompt : array<int64>) : Round {
     t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the round's draft ran on the device")
     t |> equal(moe_gpu_resident_verifies(), verifies0 + 1l, "the round's verify ran on the device")
     served_every_call(t)
-    r.d = s.mtp_vbatch[1]
+    r.draft = s.mtp_vbatch[1]
     let vocab = tr.config.vocab_size
     let hd = hc_dim(tr.config)
     t |> success(long_length(s.mtp_logits_b) >= 2l * vocab && long_length(s.mtp_hrows) >= 2l * hd, "the verify landed two logits rows and two wide carry rows")
@@ -109,10 +102,12 @@ def private hc_round(t : T?; tr : Model; prompt : array<int64>) : Round {
     r.dev1 <- [for (i in range64(vocab)); s.mtp_logits_b[vocab + i]]
     r.devh0 <- [for (i in range64(hd)); s.mtp_hrows[i]]
     r.devh1 <- [for (i in range64(hd)); s.mtp_hrows[hd + i]]
+    t |> equal(moe_gpu_resident_verify_rows(), 2l, "the device verify landed two rows: the token and the draft")
     let a0 = argmax_of(r.dev0)
-    to_log(LOG_INFO, "hc round: draft {r.d}, verify row 0 argmax {a0} ({a0 == r.d ? "accepts" : "rejects"} the draft), accepted {acc}, rollbacks {moe_gpu_resident_rollbacks() - rollbacks0}, position {s.n_past}\n")
-    t |> equal(acc, a0 == r.d ? 1l : 0l, "the round accepted the draft exactly where row 0's argmax is the draft")
-    t |> equal(moe_gpu_resident_rollbacks() - rollbacks0, a0 == r.d ? 0l : 1l, "a reject rolled the region back on the device, an accept did not")
+    let a1 = argmax_of(r.dev1)
+    to_log(LOG_INFO, "hc round: draft {r.draft} '{decode_(tr, [r.draft])}', verify row 0 argmax {a0} '{decode_(tr, [a0])}' ({a0 == r.draft ? "accepts" : "rejects"} the draft), row 1 argmax {a1} '{decode_(tr, [a1])}', accepted {acc}, rollbacks {moe_gpu_resident_rollbacks() - rollbacks0}, position {s.n_past}\n")
+    t |> equal(acc, a0 == r.draft ? 1l : 0l, "the round accepted the draft exactly where row 0's argmax is the draft")
+    t |> equal(moe_gpu_resident_rollbacks() - rollbacks0, a0 == r.draft ? 0l : 1l, "a reject rolled the region back on the device, an accept did not")
     t |> equal(s.n_past, HC_PROMPT + 1l + acc, "the position moved by the token and the accepted draft")
     delete s
     return <- r
@@ -126,6 +121,7 @@ struct private LaneSteps {
 
 //! the round's two tokens as one-row steps on its pick lanes (row 0's lane, then row 1's): `carry_split` reads the split step's landed
 //! carry (`mtp_h`), else the CPU chain's wide residual
+[cold_path]
 def private lane_steps(tr : Model; var s : Session; tok0, tok1, k : int64; carry_split : bool) : LaneSteps {
     var r : LaneSteps
     moe_pick_tape_lane(1l, 2l, k)
@@ -139,6 +135,9 @@ def private lane_steps(tr : Model; var s : Session; tok0, tok1, k : int64; carry
     moe_pick_tape(MoePickTape.off)
     r.l1 <- [for (x in s.logits); x]
     r.h1 <- [for (x in (carry_split ? s.mtp_h : s.hc_res)); x]
+    let a0 = argmax_of(r.l0)
+    let a1 = argmax_of(r.l1)
+    to_log(LOG_INFO, "hc lane steps ({carry_split ? "the split command" : "the CPU chain"}): row 0 argmax {a0} '{decode_(tr, [a0])}', row 1 argmax {a1} '{decode_(tr, [a1])}'\n")
     return <- r
 }
 
@@ -157,12 +156,15 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
         if (!hc_ready(t)) return
         set_mtp_head_path(path_join(models_dir(), FN_HEAD))
         var tr <- load_model_(path_join(models_dir(), FN_TRUNK), QuantMode.q8)
-        set_mtp_head_path("")
+        clear_mtp_head_path()
+        t |> success(!mtp_head_path_pin().set, "the head pin is cleared for the process after the load")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk and its head (the load log names any decline)")
         with_job_que() {
             setup_dasllama_jobque_()
+            let tape_before = moe_pick_tape_mode()
             var prompt <- [for (i in range64(HC_PROMPT)); 1000l + (i * 37l) % 5000l]
             var r <- hc_round(t, tr, prompt)
+            let heat = g_env_gpu.gpu_heat ?? HOT_SLOTS_AUTO
             let k = tr.config.n_expert_used
             let nl = tr.config.n_layers
             var sd <- create_session(tr, mirror_kv_dtype())
@@ -170,12 +172,14 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
             set_mtp_spec(true)   // the split steps land the carry
             forward_prefill(tr, sd, prompt, long_length(prompt), 0l)
             sd.n_past = long_length(prompt)
-            var ds <- lane_steps(tr, sd, DRAFT_TOKEN, r.d, k, true)
+            var ds <- lane_steps(tr, sd, DRAFT_TOKEN, r.draft, k, true)
             set_mtp_spec(spec1)
             delete sd
             t |> equal(ds.seen, 2l * nl, "the two split steps replayed the rows' lanes, a select a routed layer each")
-            within(t, "hc verify rows against the split command's one-row steps, picks alike", [ <- clone_to_move(r.dev0), <- clone_to_move(r.dev1)], [ <- clone_to_move(ds.l0), <- clone_to_move(ds.l1)], SPLIT_BAR_REL, "(the other row's step as the control)")
-            within(t, "hc verify carry rows against the split command's one-row steps, picks alike", [ <- clone_to_move(r.devh0), <- clone_to_move(r.devh1)], [ <- clone_to_move(ds.h0), <- clone_to_move(ds.h1)], SPLIT_CARRY_BAR_REL, "(the other row's carry as the control)")
+            within(t, "hc verify row 0 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", [ <- clone_to_move(r.dev0)], [ <- clone_to_move(ds.l0), <- clone_to_move(ds.l1)], SPLIT_BAR_REL, "(the split command's row 1 as the control)")
+            within(t, "hc verify row 1 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", [ <- clone_to_move(r.dev1)], [ <- clone_to_move(ds.l1), <- clone_to_move(ds.l0)], SPLIT_BAR_REL, "(the split command's row 0 as the control)")
+            within(t, "hc verify carry row 0 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", [ <- clone_to_move(r.devh0)], [ <- clone_to_move(ds.h0), <- clone_to_move(ds.h1)], SPLIT_CARRY_BAR_REL, "(the split command's carry row 1 as the control)")
+            within(t, "hc verify carry row 1 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", [ <- clone_to_move(r.devh1)], [ <- clone_to_move(ds.h1), <- clone_to_move(ds.h0)], SPLIT_CARRY_BAR_REL, "(the split command's carry row 0 as the control)")
             delete ds
             moe_gpu_drop_model()
             var sc <- create_session(tr, mirror_kv_dtype())
@@ -184,17 +188,20 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
             moe_pick_tape_lane(0l, 1l, k)
             var cpu_draft <- draft_from(tr, sc, DRAFT_TOKEN, HC_PROMPT - 1l, r.h0)
             let tape_d = moe_pick_tape_stats()
-            var cs <- lane_steps(tr, sc, DRAFT_TOKEN, r.d, k, false)
+            var cs <- lane_steps(tr, sc, DRAFT_TOKEN, r.draft, k, false)
             t |> equal(tape_d.seen + cs.seen, 1l + 2l * nl, "the CPU draft and the two token steps replayed the round's selects, a lane each")
-            to_log(LOG_INFO, "hc round: the CPU draft's argmax {argmax_of(cpu_draft.logits)} against the device's draft {r.d}; tape: {tape_d.seen + cs.seen} selects replayed, {tape_d.miss} of the CPU draft's own picks off the device head's\n")
+            let cpu_a = argmax_of(cpu_draft.logits)
+            to_log(LOG_INFO, "hc round: the CPU draft's argmax {cpu_a} '{decode_(tr, [cpu_a])}' against the device's draft {r.draft} '{decode_(tr, [r.draft])}'; tape: {tape_d.seen + cs.seen} selects replayed, {tape_d.miss} of the CPU draft's own picks off the device head's\n")
             within(t, "hc verify row 1 logits against the CPU's one-row step", [ <- clone_to_move(r.dev1)], [ <- clone_to_move(cs.l1), <- clone_to_move(cs.l0)], WIDE_BAR_REL, "(the CPU's row 0 as the control)")
             within(t, "hc verify row 0 logits against the CPU's one-row step", [ <- clone_to_move(r.dev0)], [ <- clone_to_move(cs.l0), <- clone_to_move(cs.l1)], WIDE_BAR_REL, "(the CPU's row 1 as the control)")
-            within(t, "hc verify wide carry rows against the CPU's one-row steps", [ <- clone_to_move(r.devh0), <- clone_to_move(r.devh1)], [ <- clone_to_move(cs.h0), <- clone_to_move(cs.h1)], WIDE_CARRY_BAR_REL, "(the CPU row one away as the control)")
+            within(t, "hc verify wide carry row 0 against the CPU's one-row step", [ <- clone_to_move(r.devh0)], [ <- clone_to_move(cs.h0), <- clone_to_move(cs.h1)], WIDE_CARRY_BAR_REL, "(the CPU's carry row 1 as the control)")
+            within(t, "hc verify wide carry row 1 against the CPU's one-row step", [ <- clone_to_move(r.devh1)], [ <- clone_to_move(cs.h1), <- clone_to_move(cs.h0)], WIDE_CARRY_BAR_REL, "(the CPU's carry row 0 as the control)")
             delete cs
             delete cpu_draft
             delete sc
             delete r
             delete prompt
+            t |> equal(int(moe_pick_tape_mode().mode), int(tape_before.mode), "the pick tape is back at the mode the cell found")
         }
         delete tr
     }
@@ -207,11 +214,13 @@ def test_gpu_resident_hc_mtp_draft(t : T?) {
         if (!hc_ready(t)) return
         set_mtp_head_path(path_join(models_dir(), FN_HEAD))
         var tr <- load_model_(path_join(models_dir(), FN_TRUNK), QuantMode.q8)
-        set_mtp_head_path("")
+        clear_mtp_head_path()
+        t |> success(!mtp_head_path_pin().set, "the head pin is cleared for the process after the load")
         t |> equal(tr.config.n_layer_nextn, 1l, "the split head attached")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk and its head (the load log names any decline)")
         with_job_que() {
             setup_dasllama_jobque_()
+            let tape_before = moe_pick_tape_mode()
             var prompt <- [for (i in range64(HC_PROMPT)); 1000l + (i * 37l) % 5000l]
             var s <- create_session(tr, mirror_kv_dtype())
             let spec0 = get_mtp_spec()
@@ -242,18 +251,12 @@ def test_gpu_resident_hc_mtp_draft(t : T?) {
             let ag = argmax_of(gpu.logits)
             let ac = argmax_of(cpu.logits)
             to_log(LOG_INFO, "hc draft (row {row}, token {DRAFT_TOKEN}): argmax cpu {ac} ({cpu.logits[ac]}), resident {ag} ({gpu.logits[ag]}), device pick {pick}; tape: {tape.seen} selects replayed, {tape.miss} of the CPU head's own picks off the device's\n")
-            var g <- [ <- clone_to_move(gpu.logits)]
-            var c <- [ <- clone_to_move(cpu.logits), <- clone_to_move(one_row_back.logits)]
-            rows_within_control(t, "hc draft logits", g, c, LOGIT_BAR_REL, 1l, 1.0, $(_r) => "(the CPU draft one row back as the control)")
-            var gh <- [ <- clone_to_move(gpu.h)]
-            var ch <- [ <- clone_to_move(cpu.h), <- clone_to_move(one_row_back.h)]
-            rows_within_control(t, "hc draft wide carry", gh, ch, CARRY_BAR_REL, 1l, 1.0, $(_r) => "(the CPU draft one row back as the control)")
+            t |> equal(tape.seen, 1l, "the CPU head replayed the device head's one select")
+            within(t, "hc draft logits", [ <- clone_to_move(gpu.logits)], [ <- clone_to_move(cpu.logits), <- clone_to_move(one_row_back.logits)], LOGIT_BAR_REL, "(the CPU draft one row back as the control)")
+            within(t, "hc draft wide carry", [ <- clone_to_move(gpu.h)], [ <- clone_to_move(cpu.h), <- clone_to_move(one_row_back.h)], CARRY_BAR_REL, "(the CPU draft one row back as the control)")
             t |> equal(pick, ag, "the device pick is the argmax of the logits it landed")
             pick_agrees(t, tr, "hc draft (row {row}, token {DRAFT_TOKEN})", pick, cpu.logits, LOGIT_BAR_REL)
-            delete g
-            delete c
-            delete gh
-            delete ch
+            t |> equal(int(moe_pick_tape_mode().mode), int(tape_before.mode), "the pick tape is back at the mode the cell found")
             delete gpu
             delete cpu
             delete one_row_back

@@ -1151,7 +1151,7 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
     assert(g_rd != null, "vk_rdec_set_hc: after prepare")
     let dim = g_rd.dim
     let hcd = hc * dim
-    let nb = g_rd.nb   //! the split token command runs one row; the NextN verify's rows share the planes
+    let nb = g_rd.nb
     if (!(ensure_hc_norm_cls() && ensure_router_gemv_cls() && ensure_cls_dn_rq() && gemv_cls_ensure(int(KqFmt.q8))
             && ensure_hc_lo_rq_cls() && ensure_hc_mix_cls() && ensure_hc_comb_cls())) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the hyper-connection class rails declined on this device\n")
@@ -1166,7 +1166,7 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
     r.hc_n = hc
     r.hc_lr = lr
     r.hcres_dev = make_device_buf(hcd * 4l * nb)
-    r.hccarry_out_dev = make_device_buf(hcd * 4l * nb, r.carry && r.log_xfer)   //! the carry's source on this model: it leaves on the transfer queue as the logits do
+    r.hccarry_out_dev = make_device_buf(hcd * 4l * nb, r.carry && r.log_xfer)   // the carry's source on this model: it leaves on the transfer queue as the logits do
     if (r.carry) {
         destroy_host_buf(r.hid_host)
         r.hid_host = make_host_buf(hcd * 4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
@@ -1181,15 +1181,15 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
     r.hcinj_dev = make_device_buf(hc * 4l * nb)
     assert(long_length(norm_rows) == n_sites * hcd && long_length(head_norm) == hcd && long_length(inject_rows) == n_sites * hc * hcd,
         "vk_rdec_set_hc: the norm rows are [sites x hc x dim], the head's [hc x dim], the inject rows [sites x hc x hc_dim]")
-    r.hc_head = mtp_head_down >= 0l
-    assert(!r.hc_head || (long_length(mtp_head_norm) == hcd && long_length(hnorm_rows) == hcd), "vk_rdec_set_hc: the NextN head's mixer norm and the carry's norm rows are [hc x dim]")
-    let head_norm_rows = r.hc_head ? 2l : 0l   //! the NextN head's own head mixer's norm rows, then the carry's
-    r.hcn_bytes = (n_sites + 1l + head_norm_rows) * hcd * 4l
+    r.hc_nextn = mtp_head_down >= 0l
+    assert(!r.hc_nextn || (long_length(mtp_head_norm) == hcd && long_length(hnorm_rows) == hcd), "vk_rdec_set_hc: the NextN head's mixer norm and the carry's norm rows are [hc x dim]")
+    let nextn_norm_rows = r.hc_nextn ? 2l : 0l   // the NextN head's own head mixer's, then the carry's
+    r.hcn_bytes = (n_sites + 1l + nextn_norm_rows) * hcd * 4l
     r.hcn_dev = make_device_buf(r.hcn_bytes)
     upload_region_at(r.hcn_dev, 0l, unsafe(addr<uint8 const?>(norm_rows[0])), n_sites * hcd * 4l)
     upload_region_at(r.hcn_dev, n_sites * hcd * 4l, unsafe(addr<uint8 const?>(head_norm[0])), hcd * 4l)
     r.hc_final_site = n_sites
-    if (r.hc_head) {
+    if (r.hc_nextn) {
         r.hc_mtp_site = n_sites + 1l
         r.hc_hnorm_row = n_sites + 2l
         upload_region_at(r.hcn_dev, r.hc_mtp_site * hcd * 4l, unsafe(addr<uint8 const?>(mtp_head_norm[0])), hcd * 4l)
@@ -1222,7 +1222,7 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
         r.s_hc_comb_f = set_hc_comb_cls(fixed_array(r.hcres_dev, r.ffnout_dev, r.hcinj_dev, r.dummy, r.dummy),
             fixed_array(hcd * 4l * nb, dim * 4l * nb, hc * 4l * nb, 256l, 256l), fixed_array(VHZ_X, VHZ_FFO, VHZ_MRT, 0u, 0u))
     }
-    if (r.hc_head) {
+    if (r.hc_nextn) {
         r.s_hc_norm_carry = set_hc_norm_cls(fixed_array(r.hccarry_dev, r.hcxn_dev, r.hcn_dev), fixed_array(hcd * 4l, hcd * 4l * nb, r.hcn_bytes), fixed_array(VHZ_X, VHZ_XB2, 0u))
         r.s_hc_norm_vsrc = set_hc_norm_cls(fixed_array(r.hcsrc_dev, r.hcxn_dev, r.hcn_dev), fixed_array(hcd * 4l * nb, hcd * 4l * nb, r.hcn_bytes), fixed_array(VHZ_GATE, VHZ_XB2, 0u))
         r.head_cat_in_dev = make_device_buf(2l * dim * 4l * hc * nb)
@@ -1236,7 +1236,7 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
             r.hc_draft_cmd[ri] = alloc_cmd()
         }
     }
-    r.hc_sites |> resize(n_sites + 1l + (r.hc_head ? 1l : 0l))
+    r.hc_sites |> resize(n_sites + 1l + (r.hc_nextn ? 1l : 0l))
     for (si in range64(long_length(r.hc_sites))) {
         var S & = unsafe(r.hc_sites[si])
         S.bdown = si < n_sites ? down_blks[si] : (si == n_sites ? head_down : mtp_head_down)
@@ -1596,7 +1596,12 @@ def vk_rdec_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float co
     var H & = unsafe(g_rd.hot_layers[l])
     let k = g_rd.k
     let nreg = nrows * k
-    assert(H.on && nreg <= MAX_ROUTED_SLOTS && nrows <= g_rd.nb, "vk_rdec_hot_submit_rows: a layer with no pool, or more rows than the planes hold")
+    if (!H.on) {
+        panic("vk_rdec_hot_submit_rows: layer {l} has no pool")
+    }
+    if (nreg > MAX_ROUTED_SLOTS || nrows > g_rd.nb) {
+        panic("vk_rdec_hot_submit_rows: {nrows} rows x {k} = {nreg} regions against {MAX_ROUTED_SLOTS}, the planes hold {g_rd.nb} rows")
+    }
     unsafe {
         var m1 = reinterpret<uint?>(g_rd.hot_meta1.mapped)
         var m3 = reinterpret<uint?>(g_rd.hot_meta3.mapped)
@@ -1754,7 +1759,7 @@ def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows
         for (c in range64(hc)) {
             let cat_row = i * hc + c
             cmd_copy_range(raw, g_rd.xb2_dev, i * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb, rowb)
-            cmd_copy_range(raw, g_rd.hcxn_dev, (i * hc + c) * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb + rowb, rowb)
+            cmd_copy_range(raw, g_rd.hcxn_dev, cat_row * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb + rowb, rowb)
         }
     }
     rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc * nrows)
@@ -1852,7 +1857,7 @@ def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64;
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the NextN head's eh_proj format {feh} found no GEMV or requant class on this device - the CPU draft serves\n")
         return false
     }
-    if (g_rd.hc_head && !(gemv_cls_has_n(feh) && gemv_cls_ensure_n(feh, g_rd.hc_n))) {
+    if (g_rd.hc_nextn && !(gemv_cls_has_n(feh) && gemv_cls_ensure_n(feh, g_rd.hc_n))) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the NextN head's eh_proj format {feh} has no N-column GEMV leaf for the {g_rd.hc_n} streams on this device - the CPU draft serves\n")
         return false
     }
@@ -1866,14 +1871,14 @@ def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64;
     g_rd.head_eh_blk = beh
     g_rd.head_eh_fmt = feh
     g_rd.head_m_eh = rd_meta()
-    let cat_rows = g_rd.hc_head ? g_rd.hc_n * nb : nb   //! on the chain the cat planes hold a stream a row, a head row's hc of them
+    let cat_rows = g_rd.hc_nextn ? g_rd.hc_n * nb : nb   // on the chain each head row feeds hc cat rows, one a stream
     let cat_bytes = 2l * dim * 4l * cat_rows
     g_rd.head_s_cat_ar = set_cls_ar(fixed_array(g_rd.head_cat_in_dev, g_rd.head_cat_in_dev, g_rd.norms_dev, g_rd.head_cat_dev),
         fixed_array(cat_bytes, cat_bytes, g_rd.norms_bytes, cat_bytes),
         fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
     let xq_bytes = 2l * dim * cat_rows
-    let xs_bytes = (2l * dim / 32l) * 4l * cat_rows
-    if (g_rd.hc_head) {
+    let xs_bytes = (2l * dim / Q8_BLOCK_ELEMS) * 4l * cat_rows
+    if (g_rd.hc_nextn) {
         g_rd.head_s_cat_rq = set_rq_cls(fixed_array(g_rd.head_cat_dev, g_rd.hcatq_dev, g_rd.hcats_dev),
             fixed_array(cat_bytes, xq_bytes, xs_bytes),
             fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
@@ -3382,7 +3387,7 @@ def private rd_record_hc_draft {
     rd_encode_hc_scatter(raw, h, L, true)
     vhz_dep(raw, h, VHZ_X, rd_carry_bit(), true)
     cmd_copy_whole(raw, g_rd.hcres_dev, g_rd.hccarry_out_dev, hcd * 4l)
-    if (!g_rd.log_xfer || !g_rd.carry_live) {   //! the head's own carry lands whatever the knob says: the command copies it wherever the transfer command will not
+    if (!g_rd.log_xfer || !g_rd.carry_live) {   // the head's own carry lands whatever the knob says: the command copies it wherever the transfer command will not
         vhz_dep(raw, h, rd_carry_bit(), 0u, true)
         cmd_copy_whole(raw, g_rd.hccarry_out_dev, g_rd.hid_host.buf, hcd * 4l)
     }
@@ -3404,8 +3409,7 @@ def private rd_record_hc_draft {
     }
     pfq_end(raw)
     vk_check(vkEndCommandBuffer(raw), null)
-    var two : RdqStamps
-    rd_take_stamps(two, g_pfq_n)
+    rd_take_stamps(g_rdq_hc_draft_tail, g_pfq_n)
     rd_put_back_stamps(one)
     g_rd.head_draft_recorded[g_rd.region] = true
 }
@@ -3422,7 +3426,7 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
     vk_rdec_head_sync_rows(hyd0, row - hyd0, kp, vp)
     unsafe {
         if (!g_rd.head_draft_recorded[g_rd.region]) {
-            if (g_rd.hc_head) {
+            if (g_rd.hc_nextn) {
                 rd_record_hc_draft()
             } else {
                 rd_record_draft()
@@ -3439,7 +3443,7 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
         tm.dnslot = uint(g_rd.region)
         var cmd = g_rd.head_draft_cmd[g_rd.region]
         let t1 = ref_time_ticks()
-        if (g_rd.hc_head) {
+        if (g_rd.hc_nextn) {
             submit_wait(cmd)
             invoke(experts, g_rd.n_layers, reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped))
             cmd = g_rd.hc_draft_cmd[g_rd.region]
@@ -3458,7 +3462,9 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
         if (g_rdq_draft_ledger.count % 32l == 31l) {
             rdq_host_report(g_rdq_draft_ledger, "draft", 1l)
         }
-        if (g_rdq_draft.n > 2u) {
+        if (g_rd.hc_nextn && g_rdq_hc_draft_tail.n > 2u) {
+            rdq_sample(g_rdq_draft_ledger, "draft tail", "the NextN head's second segment (the pool holds the last segment's stamps)", g_rdq_hc_draft_tail)
+        } elif (!g_rd.hc_nextn && g_rdq_draft.n > 2u) {
             rdq_sample(g_rdq_draft_ledger, "draft", "the NextN head", g_rdq_draft)
         }
     }
@@ -3568,45 +3574,50 @@ def private rd_record_verify(n : int64) {
 //! once a driver: the verify's segment command buffers, a region's `nseg`, and the per-region recorded flags
 [cold_path]
 def private rd_hc_v_seg_alloc() {
+    g_rd.hc_v_seg |> reserve(g_rd.regions * g_rd.nseg)
     g_rd.hc_v_seg |> resize(g_rd.regions * g_rd.nseg)
     for (i in range64(long_length(g_rd.hc_v_seg))) {
         g_rd.hc_v_seg[i] = alloc_cmd()
     }
+    g_rd.hc_v_recorded |> reserve(g_rd.regions)
     g_rd.hc_v_recorded |> resize(g_rd.regions)
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
 def private rd_ensure_hc_v_rail : bool {
-    if (!g_rd.head_on || !g_rd.carry || !g_rd.hc_head) return rd_v_decline("the NextN head is off the chain (the load log names why)")
+    if (!g_rd.head_on || !g_rd.carry || !g_rd.hc_nextn) return rd_v_decline("the NextN head is off the chain (the load log names why)")
     if (g_rd.verify_rows < 2l) return rd_v_decline("the driver was prepared for {g_rd.verify_rows} verify rows (the tier's verify seat was not installed at the load)")
-    if (vk_rdec_token_n_rows() < 2l) return rd_v_decline("the N-row rail declined on this model (its line above): the rows form's stamps are its")
+    if (g_rd.verify_rows != 2l) return rd_v_decline("the hyper-connection verify serves depth 1 alone - two rows, the driver was prepared for {g_rd.verify_rows} (the side panel commits every row, followup_vulkan.md row 129)")
+    if (vk_rdec_token_n_rows() < 2l) return rd_v_decline("the N-row rail declined on this model (its line above); the hyper-connection verify is built on it")
     rd_ensure_n_sets()
     let nb = g_rd.nb
     let L & = unsafe(g_rd.head)
     let q8 = int(KqFmt.q8)
-    var ok = (gemv_cls_has_n(q8) && gemv_cls_ensure_n(q8, nb) && gemv_cls_ensure_n(g_rd.head_eh_fmt, g_rd.hc_n * nb)
-        && gemv_cls_has_n(L.fq) && gemv_cls_ensure_n(L.fq, nb) && gemv_cls_has_n(L.fk) && gemv_cls_ensure_n(L.fk, nb) && (L.vfk || (gemv_cls_has_n(L.fv) && gemv_cls_ensure_n(L.fv, nb))))
-    for (T in g_rd.layers) {
-        break if (!ok)
-        if (T.recurrent) {
-            ok = gemv_cls_has_n(T.fqkv) && gemv_cls_ensure_n(T.fqkv, nb) && gemv_cls_has_n(T.fz) && gemv_cls_ensure_n(T.fz, nb) && gemv_cls_has_n(T.fout) && gemv_cls_ensure_n(T.fout, nb)
-        } else {
-            ok = (gemv_cls_has_n(T.fq) && gemv_cls_ensure_n(T.fq, nb) && gemv_cls_has_n(T.fk) && gemv_cls_ensure_n(T.fk, nb) && (T.vfk || (gemv_cls_has_n(T.fv) && gemv_cls_ensure_n(T.fv, nb)))
-                && gemv_cls_has_n(T.fo) && gemv_cls_ensure_n(T.fo, nb))
-        }
-        if (ok && has_dense_triple(T)) {
-            ok = gemv_cls_has_n(T.f1) && gemv_cls_ensure_n(T.f1, nb) && gemv_cls_has_n(T.f3) && gemv_cls_ensure_n(T.f3, nb) && gemv_cls_has_n(T.f2) && gemv_cls_ensure_n(T.f2, nb)
-        }
-    }
-    return ok || rd_v_decline("a plane's format has no N-column GEMV leaf on this device (the hyper-connection rows form)")
+    if (!(gemv_cls_has_n(q8) && gemv_cls_ensure_n(q8, nb))) return rd_v_decline("the q8 mixer planes have no {nb}-column GEMV leaf on this device")
+    if (!gemv_cls_ensure_n(g_rd.head_eh_fmt, g_rd.hc_n * nb)) return rd_v_decline("the head's eh_proj format {g_rd.head_eh_fmt} has no {g_rd.hc_n * nb}-column GEMV leaf on this device")
+    if (!(gemv_cls_has_n(L.fq) && gemv_cls_ensure_n(L.fq, nb))) return rd_v_decline("the head's q format {L.fq} has no {nb}-column GEMV leaf on this device")
+    if (!(gemv_cls_has_n(L.fk) && gemv_cls_ensure_n(L.fk, nb))) return rd_v_decline("the head's k format {L.fk} has no {nb}-column GEMV leaf on this device")
+    if (!(L.vfk || (gemv_cls_has_n(L.fv) && gemv_cls_ensure_n(L.fv, nb)))) return rd_v_decline("the head's v format {L.fv} has no {nb}-column GEMV leaf on this device")
+    return true
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]   //! per speculative round, reached through the tier's registered seat
+//! the verify's rows are not this driver's: logged once a model, the CPU verify serves the call
+[cold_path]
+def private rd_v_rows_mismatch(n : int64) : bool {
+    if (!g_rd.v_rows_said) {
+        g_rd.v_rows_said = true
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: a verify of {n} rows against the {g_rd.verify_rows} the driver was prepared for - the CPU verify serves\n")
+    }
+    return false
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]   //! per speculative round, reached through the tier's registered seat
 def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
     if (g_rd.v_rail == NRail.unasked) {
         g_rd.v_rail = rd_ensure_hc_v_rail() ? NRail.built : NRail.declined
     }
-    return false if (g_rd.v_rail != NRail.built || n < 2l || n > g_rd.verify_rows)
+    return false if (g_rd.v_rail != NRail.built)
+    return rd_v_rows_mismatch(n) if (n != g_rd.verify_rows)
     rd_carry_sync()
     let dim = g_rd.dim
     let hcd = g_rd.hc_n * dim
@@ -3704,7 +3715,7 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
     if (g_rd != null && g_rd.ready && g_rd.hc) {
         return rd_hc_verify(x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)
     }
-    return false if (n < 2l || n > vk_rdec_verify_rows())
+    return rd_v_rows_mismatch(n) if (n < 2l || n > vk_rdec_verify_rows())
     rd_carry_sync()
     let dim = g_rd.dim
     let r = g_rd.region

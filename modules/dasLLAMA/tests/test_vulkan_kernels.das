@@ -8614,7 +8614,7 @@ def test_vkd_ple_side(t0 : T?) {
             ple_side_case(t, 7)   //! every tap reads a written slot
             ple_side_case(t, 1)   //! the two earlier taps sit before the sequence and read zero
             ple_panel_case(t, 3, 6)   //! the window form: three rows whose taps read the ring before the window and the panel inside it
-            ple_panel_case(t, 2, 6, true)   //! the verify's form: the position off the token record, the two rows committed to the ring after the conv
+            ple_panel_case(t, 3, 6, true)   //! the verify's form: the position off the token record, three rows committed to the ring after the conv (1152 elements: the last workgroup partial, so the guard's false arm runs)
         } else {
             t |> skip("dasVulkan not present")
         }

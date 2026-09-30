@@ -1012,7 +1012,7 @@ def private pf_head_setup : bool {
         g_rd.head_pf_catf = make_device_buf(np * 2l * dim * 2l)
     } else {
         g_rd.head_pf_catq = make_device_buf(np * 2l * dim)
-        g_rd.head_pf_cats = make_device_buf(np * (2l * dim / 32l) * 4l)
+        g_rd.head_pf_cats = make_device_buf(np * (2l * dim / Q8_BLOCK_ELEMS) * 4l)
     }
     let normbytes = g_rd.norms_bytes
     let xb = np * dim * 4l
@@ -1022,7 +1022,7 @@ def private pf_head_setup : bool {
         fixed_array(xb, xb, normbytes, xb), fixed_array(VHZ_GATE, VHZ_GATE, 0u, VHZ_FFO))
     g_rd.pf_sets[hb + 8] = (e6
         ? set_f16cvt_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catf), fixed_array(catb, np * 2l * dim * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
-        : set_rq_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catq, g_rd.head_pf_cats), fixed_array(catb, np * 2l * dim, np * (2l * dim / 32l) * 4l),
+        : set_rq_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catq, g_rd.head_pf_cats), fixed_array(catb, np * 2l * dim, np * (2l * dim / Q8_BLOCK_ELEMS) * 4l),
             fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
     g_rd.pf_sets[hb + 0] = (q6
         ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf), fixed_array(xb, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
@@ -1058,11 +1058,11 @@ def private pf_hc_head_setup : bool {
         g_rd.head_pf_catf = make_device_buf(np * hc * 2l * dim * 2l)
     } else {
         g_rd.head_pf_catq = make_device_buf(np * hc * 2l * dim)
-        g_rd.head_pf_cats = make_device_buf(np * hc * (2l * dim / 32l) * 4l)
+        g_rd.head_pf_cats = make_device_buf(np * hc * (2l * dim / Q8_BLOCK_ELEMS) * 4l)
     }
     g_rd.pf_sets[hb + 8] = (e6
         ? set_f16cvt_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catf), fixed_array(catb, np * hc * 2l * dim * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
-        : set_rq_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catq, g_rd.head_pf_cats), fixed_array(catb, np * hc * 2l * dim, np * hc * (2l * dim / 32l) * 4l),
+        : set_rq_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catq, g_rd.head_pf_cats), fixed_array(catb, np * hc * 2l * dim, np * hc * (2l * dim / Q8_BLOCK_ELEMS) * 4l),
             fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
     g_rd.head_pf_hsrc_w = make_device_buf(np * hcd * 4l)
     g_rd.head_pf_wsm = make_device_buf(np * hcd * 4l)
@@ -1082,9 +1082,9 @@ def private pf_hc_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0
     let hcd = hc * dim
     let rowb = dim * 4l
     let wrowb = hcd * 4l
-    let carry = w0 > 0l ? 1l : 0l
-    let nh = wlen - 1l + carry
-    let src_row0 = 1l - carry   // head row j reads the window's row j + src_row0 of the embed rows, and row j + src_row0 of the shifted wide rows
+    let prev_row = w0 > 0l ? 1l : 0l
+    let nh = wlen - 1l + prev_row
+    let src_row0 = 1l - prev_row
     var L & = unsafe(g_rd.head)
     let hb = pf_head_block()
     let hbn = uint(g_rd.head_norm_base)
@@ -1110,10 +1110,10 @@ def private pf_hc_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0
         }
         let pe = arena_planes(g_rd.head_eh_fmt, g_rd.head_eh_blk)
         pf_gemm_enc(raw, h, hb + 0, g_rd.head_eh_fmt, pe.wq, pe.ws, e6 ? g_rd.head_pf_catf : g_rd.head_pf_catq, e6 ? g_rd.dummy : g_rd.head_pf_cats, g_rd.head_pf_wsm,
-            pe.wqb, pe.wsb, e6 ? np * hc * 2l * dim * 2l : np * hc * 2l * dim, e6 ? 256l : np * hc * (2l * dim / 32l) * 4l, np * hcd * 4l, VHZ_AQ, VHZ_X,
+            pe.wqb, pe.wsb, e6 ? np * hc * 2l * dim * 2l : np * hc * 2l * dim, e6 ? 256l : np * hc * (2l * dim / Q8_BLOCK_ELEMS) * 4l, np * hcd * 4l, VHZ_AQ, VHZ_X,
             2l * dim, dim, g_rd.head_eh_blk, ncat, e6, 0l, 0l, false)
     }
-    //! the next window's carry row lands in slot 0 only after the norm above read the previous one there
+    //! the next window's prev_row row lands in slot 0 only after the norm above read the previous one there
     vhz_dep(raw, h, VHZ_X | VHZ_GATE, VHZ_GATE, true)
     cmd_copy_range(raw, g_rd.pf_hcres, (wlen - 1l) * wrowb, g_rd.head_pf_hsrc_w, 0l, wrowb)
     return if (nh <= 0l)
@@ -1129,7 +1129,7 @@ def private pf_hc_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0
     } else {
         rq_enc(raw, h, g_rd.pf_sets[hb + 0], kq_sb(L.fq), 0l, nh * dim)
     }
-    pf_head_kv_store(raw, h, L, nh, pos0 + w0 - carry, q6)
+    pf_head_kv_store(raw, h, L, nh, pos0 + w0 - prev_row, q6)
     g_rd.pf_head_rows += nh
 }
 
@@ -1215,7 +1215,7 @@ def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : 
     }
     let pe = arena_planes(g_rd.head_eh_fmt, g_rd.head_eh_blk)
     pf_gemm_enc(raw, h, hb + 0, g_rd.head_eh_fmt, pe.wq, pe.ws, e6 ? g_rd.head_pf_catf : g_rd.head_pf_catq, e6 ? g_rd.dummy : g_rd.head_pf_cats, g_rd.pf_x,
-        pe.wqb, pe.wsb, e6 ? np * 2l * dim * 2l : np * 2l * dim, e6 ? 256l : np * (2l * dim / 32l) * 4l, np * dim * 4l, VHZ_AQ, VHZ_X,
+        pe.wqb, pe.wsb, e6 ? np * 2l * dim * 2l : np * 2l * dim, e6 ? 256l : np * (2l * dim / Q8_BLOCK_ELEMS) * 4l, np * dim * 4l, VHZ_AQ, VHZ_X,
         2l * dim, dim, g_rd.head_eh_blk, nh, e6, 0l, 0l, false)
     var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, g_rd.pf_sets[pf_prologue_block()], pca, nh)
@@ -1534,7 +1534,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
     let fa128s = !(cm2_fa_on() && vk_fa_on() && g_rd.kv16) && g_gpu.has_coopmat && vk_fa_on()
     g_rd.pf_head_rows = 0l
     let bp = pf_prologue_block()
-    let warm = (g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && g_rd.hc_head
+    let warm = (g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && g_rd.hc_nextn
         && (g_rd.pf_hc_head_ready || (!g_rd.pf_head_declined && pf_head_setup() && pf_hc_head_setup())))
     unsafe {
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)

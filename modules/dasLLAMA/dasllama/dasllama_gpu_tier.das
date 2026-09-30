@@ -327,7 +327,7 @@ def public rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk,
 def public rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_moe_layer, l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2, fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2, g) }
 def public rdec_set_moe_experts(l, router_slot, be1, be3, be2 : int64; fe1, fe3, fe2 : int) { invoke(g_rdec_set_moe_experts, l, router_slot, be1, be3, be2, fe1, fe3, fe2) }
 
-//! The mixer sites' planes after the layers register (`hc` streams, low-rank `lr`, `n_sites` = 2 x layers): the norm rows
+//! The mixer sites' planes after the layers register (`hc` streams, low-rank `lr`, `n_sites` = 2 x the routed layers, a NextN head on the chain among them): the norm rows
 //! [sites x hc x dim] and inject rows [sites x hc x hc_dim] as f32, the q8 down/up arena blocks a site, the head mixer's; false = the rails declined
 typedef RdecSetHcFn = function<(hc : int64; lr : int64; n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks : array<int64>; up_blks : array<int64>; head_norm : array<float>; head_down : int64; head_up : int64;
                                  mtp_head_norm : array<float>; mtp_head_down : int64; mtp_head_up : int64; hnorm_rows : array<float>) : bool>
@@ -431,7 +431,7 @@ def private rdec_unset_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : arr
 }
 [unused_argument(l, nrows, slots, w)]
 def private rdec_unset_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float const?) {
-    panic("dasLLAMA: the resident driver's hot pool rows seat is not installed")
+    panic("dasLLAMA: resident hot expert rows submit hit without an installed GPU driver")
 }
 
 [unused_argument(l, nhit, slots, w)]

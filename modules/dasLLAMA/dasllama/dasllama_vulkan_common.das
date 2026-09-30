@@ -2539,6 +2539,7 @@ struct RDec {
     comb_sets_made : bool   //! the MoE layers' combine form is decided and its quantizing sets built (`rd_ensure_comb_sets`; both commands ask)
     n_rail : NRail = NRail.unasked   //! the N-row command's kernel classes on this device; declined = the command answers 0 rows
     n_decline_said : bool            //! the N-row command's decline reason logged for this model, once
+    v_rows_said : bool               //! the verify's row-count mismatch logged for this model, once
     s_quant_final : VkDescriptorSet
     dummy : uint64                // filler for unused bindings
     cls_fmt_marker : int
@@ -2659,7 +2660,7 @@ struct RDec {
     hcn_dev, hcinjw_dev : uint64  //! the mixer weights: the norm rows [sites + 1 x hc x dim] (the trunk's head mixer's after the sites', then a NextN head's own and the carry's), the inject rows [sites x hc x hc_dim]
     hcn_bytes, hcinjw_bytes : int64
     hc_sites : array<HcSite>      //! a site a block seam (2 x layers, then 2 more for the NextN head's block where it rides), then the head mixer's, then the NextN head's own head mixer
-    hc_head : bool                //! the NextN head rides the chain: its block's two mixer sites, its own head mixer (`hc_mtp_site`) and the carry's per-stream norm rows (`hc_hnorm_row`) are set
+    hc_nextn : bool               //! the NextN head rides the chain: `hc_mtp_site` and `hc_hnorm_row` are set
     hc_mtp_site, hc_hnorm_row : int64   //! the site index of the NextN head's own head mixer, and the row index of the carry's norm gammas in `hcn_dev`
     hc_final_site : int64         //! the site index of the trunk's head mixer (past every block seam, the NextN head's included)
     pf_hc_head_ready : bool       //! the window chain's hc head warm planes and sets are built (`pf_hc_head_setup`)
@@ -2679,8 +2680,8 @@ struct RDec {
     head_s_emb_ar : VkDescriptorSet     //! the verify's embed rows normed under `mtp_enorm`: `hemb_dev` in, `xb2_dev` out
     plepanel_dev : uint64               //! the verify rows' normed gated rows [nb x hc x dim]: the conv reads the rows inside the window off it, the ring past them
     s_ple_commit : VkDescriptorSet      //! the panel's rows into the ring's slots after the rows
-    hc_v_seg : array<VkCommandBuffer>   //! the hc verify's segments per region (`nseg` a region), recorded at the verify's row count
-    hc_v_recorded : array<bool>
+    @exact_size hc_v_seg : array<VkCommandBuffer>   //! the hc verify's segments per region (`nseg` a region), recorded at the verify's row count
+    @exact_size hc_v_recorded : array<bool>
     s_hc_norm, s_hc_inj, s_hc_xnrq, s_hc_lorq, s_hc_mix : VkDescriptorSet
     s_hc_comb_a, s_hc_comb_f : VkDescriptorSet   //! the scatter after the attention head (the wo row) and after the FFN (the shared row plus the host's routed sum)
     //! the n-gram side input before layer `ngram_layer`'s attention mixer (`vk_rdec_set_ngram`)
@@ -2903,6 +2904,7 @@ var g_rdq_form_n = false   //! the last sampled submit was an N-row step: a swit
 var g_rdq_verify : array<RdqStamps>   //! the same-slab verify commands' by row count (index 0 unused), and their unsplit twins'
 var g_rdq_verify_unsplit : array<RdqStamps>
 var g_rdq_draft : RdqStamps           //! the draft command's
+var g_rdq_hc_draft_tail : RdqStamps   //! the hyper-connection draft's second segment (the query pool holds the last segment's stamps)
 var g_rdq_token_ledger : RdqLedger    //! the token command's ledger: the one-row forms and the N-row command, a switch between them restarting it
 var g_rdq_verify_ledger : RdqLedger   //! the verify command's - its own, so the round's alternating commands never restart the token ledger
 var g_rdq_draft_ledger : RdqLedger    //! the draft command's

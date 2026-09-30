@@ -143,7 +143,7 @@ struct ServerArgs {
     @clarg_doc = "Flat preallocated KV sessions — disables paged serving and the prefix cache"
     flat : bool
 
-    @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) on a GPU - Metal, or the whole model resident on a Vulkan device - and off at several streams, on the CPU, or on a model the device serves in part; an armed round keeps every stream's cache on the host, so a drafting Vulkan slot serves host-cached sessions in place of device-home ones; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
+    @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) on a GPU - Metal, or the whole model resident on a Vulkan device - and off at several streams, on the CPU, on a model the device serves in part, or where the resident driver sums a MoE's routed experts on the host (the card does not hold them); an armed round keeps every stream's cache on the host, so a drafting Vulkan slot serves host-cached sessions in place of device-home ones; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
     mtp : bool
 
     @clarg_doc = "RoPE scaling override for the load: yarn | linear | none (default: the model file's own rope.scaling keys; none drops them, a file's per-pair factor tensors stay). The Qwen families publish the YaRN recipe and enable it as a setting, for long conversations only: --rope-scaling yarn --rope-scale 4; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (model.gguf.metal-yarn4.dlim). Per-model in a [[models]] roster: rope_scaling"
@@ -575,7 +575,8 @@ def mtp_setting(sourced : bool; on : bool) : int
     => sourced ? (on ? 1 : 0) : -1
 
 //! What the unset default resolves to on the GET /config surface, before any model loads: the slot's own rule
-//! (`mtp_auto_arms`) over the configured backend, a Vulkan pick read as serving the model whole.
+//! (`mtp_auto_arms`) over the configured backend, a Vulkan pick read as serving the model whole - whether the
+//! driver will sum a MoE's routed experts on the host (which leaves the round off) is known only at the load.
 //! Non-private: test_openai_server_mtp.das gates it.
 def mtp_default_resolved(streams : int; gpu, metal : string) : bool
     => mtp_auto_arms(int64(streams), resolved_metal_mode(metal_mode_of(metal).mode, gpu) != MetalMode.off,
