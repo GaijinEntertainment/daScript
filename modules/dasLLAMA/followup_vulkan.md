@@ -2083,13 +2083,6 @@ module) is independent and can land any time - it is pure structure.
     back to the host. Done = the window's segment schedules the hits on the device (the sched, gather,
     ladder and combine kernels over the pool's planes, the combine accumulating onto the host's sums),
     no rows cross the link, and the prompt's row is re-measured.
-124. **The NextN head on the hyper-connection chain.** The split token command lands no carry and the
-    draft and verify seats decline it; the carrier's split head (`mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf`,
-    2.58 GiB of which 2.5 is its own Q8_0 routed experts) has the CPU round alone, which loses on this
-    model (`followup_general.md` row 178). Done = the head's mixers and eh_proj resident, its routed
-    experts on the host like the trunk's, the wide-residual carry landed with the logits, and the
-    two-row verify through the split command (a segment lands two rows, the host sums both), the
-    round measured net against plain decode on `benchmarks/lcpp_bench.das --mtp-ab`.
 125. **Placing an expert in a pool slot copies it twice.** The gather writes the expert's device layout
     into host scratch (0.57 ms) and the upload copies the scratch into the slot (0.27 ms; both
     `DASLLAMA_GPU_PROF=1`'s pool line, debug-jit), so a pool of 32 x 48 slots fills in 1.3 s at the
@@ -2104,3 +2097,71 @@ module) is independent and can land any time - it is pure structure.
     the `lcpp_bench` rows of `PERF_LEDGER.md`'s hot-pool entry). Done = the
     reserve measured on a box with a live desktop (the plan's slack against the rows, three slacks or
     more), and the constant or the rule set from the reading.
+127. **A pool placement rides the token's path.** The gather of an expert's device layout (0.57 ms) and
+    its upload (0.27) run inside the host's routed step, so the pool swaps one expert a layer a step and
+    holds 31-45% of real text's picks (`PERF_LEDGER.md`'s NextN entry, the profile). The trace sim
+    (`harness/hot_pool_sim.das` over the same entry's eight-prompt trace, the token modeled from the
+    profile's costs - the device 22.0 ms, a miss 72 us, a placement 570 us of host gather + 270 us of
+    upload; the calibration row is on the ledger) at 32 slots a layer, the zen2's trace, debug-jit:
+
+    | policy | decode hits | placements a token | modeled token | tok/s |
+    | :--- | ---: | ---: | ---: | ---: |
+    | heat, the shipped one (decay 256, hysteresis 2x+1, 1 swap) | 37.5% | 2.38 | 45.7 ms = 22.0 + misses 21.7 + placements 2.0 | 21.9 |
+    | lru, 1 swap a step | 58.2% | 50.1 | 78.6 = 22.0 + 14.5 + 42.1 | 12.7 |
+    | lru, 2 swaps | 70.9% | 92.2 | 109.5 = 22.0 + 10.1 + 77.4 | 9.1 |
+    | lru, 4 swaps | 87.3% | 154.6 | 156.3 = 22.0 + 4.4 + 129.9 | 6.4 |
+    | lru, 64 slots, 2 swaps | 82.4% | 82.6 | 97.5 = 22.0 + 6.1 + 69.4 | 10.3 |
+    | lru 4, async placements, the gather on the path (`--async`) | 87.3% | 154.6 | 114.6 = max(22.0 + 4.4 + host 88.1, link 26.6) | 8.7 |
+    | lru 1, async, no host gather (`--place-host-us 0`) | 58.2% | 50.1 | 36.5 = max(22.0 + 14.5, link 8.6) | 27.4 |
+    | lru 2, async, no host gather | 70.9% | 92.2 | 32.1 = max(22.0 + 10.1, link 15.9) | 31.1 |
+    | lru 4, async, no host gather | 87.3% | 154.6 | 26.6 = max(22.0 + 4.4, link 26.6) | 37.6 |
+
+    The picks have recency: LRU at four swaps a step holds 87% of them in the same 32 slots, but a
+    placement's 0.84 ms on the token's path (row 125) turns 155 placements into 130 ms, and even with
+    the upload off the path the host's layout gather (570 us) binds. With the gather gone - the experts
+    mirrored in their device layout in host memory (55 GB beside the 94 of the file; the zen2 holds 256)
+    and the placements on the transfer queue behind the segments - the token is the longer of the
+    compute path and the link, and LRU-4 models 37.6 tok/s link-bound (a placement 172 us of a 13 GB/s
+    link: 127 experts a token free under the 22 ms device floor), 1.67x the ledger's 22.5 (debug-jit,
+    no board row carries this model). Done = the routed experts mirrored in their device layout in pinned host
+    memory at load (55 GB beside the file's 94; the plan declines the mirror where the host's room does
+    not hold it), a placement one transfer-queue copy off the mirror behind the segments, LRU at four
+    swaps a step as the mechanism's first policy (row 128 refines it, the sim kept as the offline
+    bench), and the live profile's hits and token wall against the sim's row.
+128. **The pool's policy is a decaying count.** With row 127 landed the placements are free to the link's
+    budget (row 127's table: 127 experts a token at 13 GB/s under the 22 ms device floor) and the policy
+    decides the hits: LRU-N first (the same table's 58-87% at one to four swaps), then a predictor - the previous layer's picks
+    over a co-occurrence table, or the next token's picks prefetched during this token's segments -
+    placing fewer experts for the same hits. Done = each policy tried in the sim against the trace
+    before its live run, the winner's hits and token wall on the ledger.
+129. **The rows' side panel commits at depth 1 alone.** `PleCommit` lands every verify row's normed gated
+    row in the ring's slot of its position after the conv read them, and a rejected row's slot is
+    rewritten by the next token before any conv reads it - true at depth 1, where one row past the
+    accepted prefix is at stake, so `rd_ensure_hc_v_rail` declines every other row count and the CPU
+    verify serves a deeper draft. Done = a depth past 1 commits the accepted rows alone, or the rollback
+    restores the slots it rewrote, and the rail admits the depth.
+130. **The device draft accepts 14 points under the CPU draft.** The device's draft and the verify rows
+    route their near-ties apart (65.8% against the CPU rail's 79.9% on the same eight prompts,
+    `PERF_LEDGER.md`'s NextN entry, the `--mtp-ab` rows), and every
+    point of acceptance is a share of the round's second token. Done = the gap read on the pick tape
+    (the draft's picks against the verify row's on the same token) and the arm that flips named.
+131. **The NextN-on-the-chain arc's instruments have no cell of their own.** The MOET trace writer
+    (`DASLLAMA_MOE_TRACE`: the header, the prompt mark, the flush at `RDEC_TRACE_FLUSH_RECORDS`, the
+    flush at the drop), `harness/hot_pool_sim.das`'s reader and policies, `gpu_resident_experts_host`
+    after a load and after the drop, the `hot_submit_rows` seat's unset panic and restore, and the
+    declines of `rd_ensure_hc_v_rail` are reached only by the serving cells or by no cell. Done = a
+    cell in `test_gpu_resident_hc.das` writes a trace to a temp file, drops the model and reads it back
+    (the magic, the header's three counts, one mark, a window record a layer, a one-row record a layer
+    a step); a model-free cell replays a hand-made trace through `heat`, `lru` and `lfu` asserting the
+    hits and placements; `test_gpu_tier.das` gains the unset rows seat; the facade predicate is asserted
+    true then false around the drop; the rail's declines run under a fixture that lacks a leaf.
+132. **The stocked resident cells written for the pod read red on a 16 GB card beside a desktop.** On
+    the zen2 (RTX 5060 Ti, 2.6-2.7 GB held by other processes) `test_gpu_resident_regions_gemma4`
+    (the 12B: needs 17667 MB of 11649), `_gemma4moe` (needs 20166 of 11647) and `_gptoss` (2 regions
+    of 4667 positions where the cell asks 3) fail on the room the plan finds, and
+    `test_gpu_resident_moe`'s census floor misses by three planes (`_hybrid` 117 of 120, `_no_shexp`
+    134 of 144) on this box on master (934fe7b2e, run through this tree's binary against a detached
+    worktree) as on the arc's tip; `test_gpu_resident_hybrid_kq_q8out` is `followup_general.md` row
+    183. Done = the regions cells skip, naming the room, where the plan cannot arm the regions they
+    ask, and the census floor's miss on this card named (the pieces one layer routes off the cm2e
+    column) or the floor keyed to the card.

@@ -259,7 +259,11 @@ the rows' taped picks (the lanes run in their own contexts and read the tape thr
 alone), `moe_pick_tape_mask_row` masks each row to its picks before its own select, and
 `moe_pick_tape_rows_done` advances past the rows, or appends their picks when recording; a rows
 replay counts no misses. `moe_select`'s own grouped path (`off > 0`) never touches the tape. The
-arming is `MoePickTape.record`, the replay `MoePickTape.replay`, `MoePickTape.off` stops. A 512-expert top-10 router over
+arming is `MoePickTape.record`, the replay `MoePickTape.replay`, `MoePickTape.off` stops. A rows-form
+tape is row-major a layer (row 0's select, row 1's, ...), and a one-row chain replays one of its rows
+as a lane (`moe_pick_tape_lane`: the replay starts at select `first` and advances `stride` selects a
+select), so the verify's device rows compare against the split command's own one-row steps on the
+picks the rows made. A 512-expert top-10 router over
 mixed residual streams flips a near-tie on kernel-order noise alone, and one flipped expert of ten
 moves the whole row past any logits bar: on Qwen3.8-Flash-Next the CPU chain on its reference
 kernel bodies parts from the tuned chain by 3-7 logits with argmax flips on three rows of seven,

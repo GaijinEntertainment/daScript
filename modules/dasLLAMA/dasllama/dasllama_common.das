@@ -5060,10 +5060,21 @@ def mtp_state_snapshot(var s : Session) {
     copy_floats_par(s.dn_conv_state, s.mtp_snap_conv, nc)
     copy_floats_par(s.dn_state, s.mtp_snap_state, ns)
     s.mtp_snap_pos = s.dn_pos
-    // the n-gram window is forward-only state too: a rejected draft must not stay a predecessor
+    mtp_ple_window_snapshot(s)
+}
+
+//! the n-gram window into `mtp_snap_ple`: forward-only state, so a rejected draft must not stay a predecessor
+def mtp_ple_window_snapshot(var s : Session) {
     s.mtp_snap_ple |> overwrite_resize(long_length(s.ple_prev))
     for (i in range64(long_length(s.ple_prev))) {
         s.mtp_snap_ple[i] = s.ple_prev[i]
+    }
+}
+
+//! the window back from `mtp_snap_ple`
+def mtp_ple_window_restore(var s : Session) {
+    for (i in range64(min(long_length(s.ple_prev), long_length(s.mtp_snap_ple)))) {
+        s.ple_prev[i] = s.mtp_snap_ple[i]
     }
 }
 
@@ -5072,16 +5083,12 @@ def mtp_state_restore(var s : Session) {
     copy_floats_par(s.mtp_snap_conv, s.dn_conv_state, long_length(s.mtp_snap_conv))
     copy_floats_par(s.mtp_snap_state, s.dn_state, long_length(s.mtp_snap_state))
     s.dn_pos = s.mtp_snap_pos
-    for (i in range64(long_length(s.mtp_snap_ple))) {
-        s.ple_prev[i] = s.mtp_snap_ple[i]
-    }
+    mtp_ple_window_restore(s)
     moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
 }
 
-// After a 2-row verify forward_prefill([tok, draft], 2, pos): row 0's post-norm hidden and
-// logits (forward_prefill's own tail only produced row 1's). Reads s.x_b row 0 — still intact,
-// the prefill tail never overwrites the batch residual stream.
-def private mtp_verify_row0(t : Model; var s : Session) {
+//! row 0's logits after a rows prefill (the CPU verify's truth for the committed token, into `s.mtp_logits`), and its carry into `s.mtp_h0`
+def mtp_verify_row0(t : Model; var s : Session) {
     let c = t.config
     let dim = c.dim
     if (t.blocks.final_norm != null) {   // the arch's own tail over row 0 (the hyper-connection head mixer)

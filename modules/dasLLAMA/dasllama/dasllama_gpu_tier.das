@@ -327,9 +327,10 @@ def public rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk,
 def public rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_moe_layer, l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2, fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2, g) }
 def public rdec_set_moe_experts(l, router_slot, be1, be3, be2 : int64; fe1, fe3, fe2 : int) { invoke(g_rdec_set_moe_experts, l, router_slot, be1, be3, be2, fe1, fe3, fe2) }
 
-//! The mixer sites' planes after the layers register (`hc` streams, low-rank `lr`, `n_sites` = 2 x layers): the norm rows
+//! The mixer sites' planes after the layers register (`hc` streams, low-rank `lr`, `n_sites` = 2 x the routed layers, a NextN head on the chain among them): the norm rows
 //! [sites x hc x dim] and inject rows [sites x hc x hc_dim] as f32, the q8 down/up arena blocks a site, the head mixer's; false = the rails declined
-typedef RdecSetHcFn = function<(hc : int64; lr : int64; n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks : array<int64>; up_blks : array<int64>; head_norm : array<float>; head_down : int64; head_up : int64) : bool>
+typedef RdecSetHcFn = function<(hc : int64; lr : int64; n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks : array<int64>; up_blks : array<int64>; head_norm : array<float>; head_down : int64; head_up : int64;
+                                 mtp_head_norm : array<float>; mtp_head_down : int64; mtp_head_up : int64; hnorm_rows : array<float>) : bool>
 //! The n-gram side input before layer `l`'s attention mixer: the key [hc_dim x ind] and value [dim x ind] q8 planes' blocks, the
 //! conv ring's rows, taps and dilation, the three norm rows [3 x hc x dim] (key, query, conv input) and the taps [hc_dim x kern].
 typedef RdecSetNgramFn = function<(l : int64; ind : int64; nrows : int64; kern : int64; dil : int64; bkey : int64; bval : int64; norm_rows : array<float>; conv_taps : array<float>) : bool>
@@ -361,8 +362,9 @@ def private rdec_unset_ngram_ring(var host : float?; up : bool) {
     panic("dasLLAMA: resident n-gram ring sync hit without an installed GPU driver")
 }
 
-[unused_argument(hc, lr, n_sites, norm_rows, inject_rows, down_blks, up_blks, head_norm, head_down, head_up)]
-def private rdec_unset_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks, up_blks : array<int64>; head_norm : array<float>; head_down, head_up : int64) : bool => false
+[unused_argument(hc, lr, n_sites, norm_rows, inject_rows, down_blks, up_blks, head_norm, head_down, head_up, mtp_head_norm, mtp_head_down, mtp_head_up, hnorm_rows)]
+def private rdec_unset_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks, up_blks : array<int64>; head_norm : array<float>; head_down, head_up : int64;
+                              mtp_head_norm : array<float>; mtp_head_down, mtp_head_up : int64; hnorm_rows : array<float>) : bool => false
 [unused_argument(l, ind, nrows, kern, dil, bkey, bval, norm_rows, conv_taps)]
 def private rdec_unset_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : array<float>; conv_taps : array<float>) : bool => false
 [unused_argument(on)]
@@ -399,8 +401,10 @@ def public rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; sid
 }
 
 def public rdec_hc_installed() : bool => g_rdec_hc_installed
-def public rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks, up_blks : array<int64>; head_norm : array<float>; head_down, head_up : int64) : bool
-    => invoke(g_rdec_set_hc, hc, lr, n_sites, norm_rows, inject_rows, down_blks, up_blks, head_norm, head_down, head_up)
+//! `mtp_head_*` the NextN head's own head mixer and `hnorm_rows` the carry's per-stream norm gammas where the head rides the chain (empty rows and -1 blocks otherwise)
+def public rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks, up_blks : array<int64>; head_norm : array<float>; head_down, head_up : int64;
+                       mtp_head_norm : array<float>; mtp_head_down, mtp_head_up : int64; hnorm_rows : array<float>) : bool
+    => invoke(g_rdec_set_hc, hc, lr, n_sites, norm_rows, inject_rows, down_blks, up_blks, head_norm, head_down, head_up, mtp_head_norm, mtp_head_down, mtp_head_up, hnorm_rows)
 def public rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : array<float>; conv_taps : array<float>) : bool
     => invoke(g_rdec_set_ngram, l, ind, nrows, kern, dil, bkey, bval, norm_rows, conv_taps)
 def public rdec_set_host_experts(on : bool) { invoke(g_rdec_set_host_experts, on) }
@@ -416,6 +420,8 @@ typedef RdecHotUploadFn = function<(l : int64; slot : int64; wq1 : array<uint8>;
 //! The hits of layer `l`'s routed step: `nhit` pool slots and their routing weights. The device runs their chain while the host
 //! sums the misses, and the next segment adds the hit rows to the host's sum.
 typedef RdecHotSubmitFn = function<(l : int64; nhit : int64; slots : int64 const?; w : float const?) : void>
+//! the verify rows' hits of layer `l`: k slot and weight entries a row, a row's hits first, its misses padded at weight 0
+typedef RdecHotSubmitRowsFn = function<(l : int64; nrows : int64; slots : int64 const?; w : float const?) : void>
 
 [unused_argument(l, slots, f1, f3, f2)]
 def private rdec_unset_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; stride : int64> => (base = -1l, stride = 0l)
@@ -423,6 +429,11 @@ def private rdec_unset_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<bas
 def private rdec_unset_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint8>; wq3 : array<uint8>; ws3 : array<uint8>; wq2 : array<uint8>; ws2 : array<uint8>) {
     panic("dasLLAMA: resident hot expert upload hit without an installed GPU driver")
 }
+[unused_argument(l, nrows, slots, w)]
+def private rdec_unset_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float const?) {
+    panic("dasLLAMA: resident hot expert rows submit hit without an installed GPU driver")
+}
+
 [unused_argument(l, nhit, slots, w)]
 def private rdec_unset_hot_submit(l, nhit : int64; slots : int64 const?; w : float const?) {
     panic("dasLLAMA: resident hot expert submit hit without an installed GPU driver")
@@ -431,10 +442,12 @@ def private rdec_unset_hot_submit(l, nhit : int64; slots : int64 const?; w : flo
 var g_rdec_hot_layer = @@rdec_unset_hot_layer
 var g_rdec_hot_upload = @@rdec_unset_hot_upload
 var g_rdec_hot_submit = @@rdec_unset_hot_submit
+var g_rdec_hot_submit_rows = @@rdec_unset_hot_submit_rows
 var g_rdec_hot_installed = false
 
 //! Install the resident driver's hot expert pool seats - separately, so a tier without them serves every routed expert on the host.
-def public install_moe_gpu_resident_hot(hot_layer : RdecHotLayerFn; hot_upload : RdecHotUploadFn; hot_submit : RdecHotSubmitFn) {
+def public install_moe_gpu_resident_hot(hot_layer : RdecHotLayerFn; hot_upload : RdecHotUploadFn; hot_submit : RdecHotSubmitFn; hot_submit_rows : RdecHotSubmitRowsFn) {
+    g_rdec_hot_submit_rows = hot_submit_rows
     g_rdec_hot_layer = hot_layer
     g_rdec_hot_upload = hot_upload
     g_rdec_hot_submit = hot_submit
@@ -447,6 +460,7 @@ def public rdec_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint
     invoke(g_rdec_hot_upload, l, slot, wq1, ws1, wq3, ws3, wq2, ws2)
 }
 def public rdec_hot_submit(l, nhit : int64; slots : int64 const?; w : float const?) { invoke(g_rdec_hot_submit, l, nhit, slots, w) }
+def public rdec_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float const?) { invoke(g_rdec_hot_submit_rows, l, nrows, slots, w) }
 
 var private g_gpu_resident_route = true
 
@@ -617,11 +631,11 @@ typedef RdecSetHeadFn = function<(beh : int64; feh : int; bq : int64; bk : int64
 //! one NextN draft at head row `row` of the selected region: the host head rows [hyd0, row) at `kp` / `vp` (the head's cache from row 0)
 //! come up, then `x` (the embedded token) and the carry `h` run the head; `rdec_land_carry`'s row 0 takes its hidden, `logits` its logits
 //! unless `pick_only` (they stay on the device), row `row`'s K/V stays on the device (`rdec_head_read_rows` on a pass). Answers the argmax id, -1 where the driver holds no head
-typedef RdecDraftFn = function<(x : array<float>; h : array<float>; cossin : array<float>; row : int64; hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>) : int64>
+typedef RdecDraftFn = function<(x : array<float>; h : array<float>; cossin : array<float>; row : int64; hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64>
 [unused_argument(beh, feh, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
 def private rdec_unset_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool => false
-[unused_argument(x, h, cossin, row, hyd0, kp, vp, pick_only, logits)]
-def private rdec_unset_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>) : int64 => -1l
+[unused_argument(x, h, cossin, row, hyd0, kp, vp, pick_only, logits, experts)]
+def private rdec_unset_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 => -1l
 var g_rdec_set_head = @@rdec_unset_set_head
 var g_rdec_draft = @@rdec_unset_draft
 var g_rdec_draft_installed = false
@@ -651,15 +665,16 @@ def public reinstall_rdec_draft(draft : RdecDraftFn) {
 def public rdec_draft_installed() : bool => g_rdec_draft_installed
 def public rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool
     => invoke(g_rdec_set_head, beh, feh, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)
-def public rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>) : int64
-    => invoke(g_rdec_draft, x, h, cossin, row, hyd0, kp, vp, pick_only, logits)
+//! `experts` sums a routed head's experts on the host between the draft's segments (the hyper-connection chain); a dense head never calls it
+def public rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64
+    => invoke(g_rdec_draft, x, h, cossin, row, hyd0, kp, vp, pick_only, logits, experts)
 
 //! the same-slab verify of one stream's `n` rows at `pos` in the selected region: `x` / `cossin` the rows' residuals and rope rows,
 //! `hemb` / `hcos` the head rows' unscaled embeds and rope rows a position below, `h0` the pre-draft carry; the rows' picks and hidden land
 //! in `picks` / `hid`, their logits in `logits` unless `pick_only` (a guard step lands them for the over-commit check); the head's K/V rows `pos - 1` .. stay on the device. False where it steps no `n` rows
-typedef RdecVerifyFn = function<(x : array<float>; cossin : array<float>; hemb : array<float>; hcos : array<float>; h0 : array<float>; pos : int64; n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool>
-[unused_argument(x, cossin, hemb, hcos, h0, pos, n, pick_only, logits, picks, hid)]
-def private rdec_unset_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool => false
+typedef RdecVerifyFn = function<(x : array<float>; cossin : array<float>; hemb : array<float>; hcos : array<float>; h0 : array<float>; side : array<float>; pos : int64; n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool>
+[unused_argument(x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)]
+def private rdec_unset_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool => false
 def private rdec_no_verify_rows : int64 => 0l
 def public rdec_no_verify_landed_logits : bool => false   //! public: a default argument resolves at the caller's site
 var g_rdec_verify = @@rdec_unset_verify
@@ -680,8 +695,9 @@ def public install_rdec_verify(verify : RdecVerifyFn; rows : function<() : int64
 def public rdec_verify_installed() : bool => g_rdec_verify_installed
 def public rdec_verify_rows() : int64 => invoke(g_rdec_verify_rows)
 def public rdec_verify_landed_logits() : bool => invoke(g_rdec_verify_landed_logits)
-def public rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool
-    => invoke(g_rdec_verify, x, cossin, hemb, hcos, h0, pos, n, pick_only, logits, picks, hid)
+//! `side` the rows' n-gram side rows and `experts` the host's routed sums of the rows between a hyper-connection chain's segments; empty and unreached elsewhere
+def public rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool
+    => invoke(g_rdec_verify, x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)
 
 //! the same-slab verify's reject in the selected region: every recurrent slot and ring pair back to the copy the verify command
 //! took after its row `a` - the last row the round committed - so the round takes no host snapshot and replays no step; false
@@ -2426,6 +2442,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_hot_submit == null) {
         g_rdec_hot_submit = @@rdec_unset_hot_submit
+    }
+    if (g_rdec_hot_submit_rows == null) {
+        g_rdec_hot_submit_rows = @@rdec_unset_hot_submit_rows
     }
     if (g_moe_gpu_ffn_xf == null) {
         g_moe_gpu_ffn_xf = @@moe_gpu_unset_ffn_xf

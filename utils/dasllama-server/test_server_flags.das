@@ -71,6 +71,7 @@ def test_mtp_setting_tri_state(t : T?) {
     t |> run("a slot arms on one stream whose decode runs on a GPU") @(t : T?) {
         t |> success(mtp_auto_arms(1l, true, "cpu"), "the Metal flavor - its tier word reads cpu")
         t |> success(mtp_auto_arms(1l, false, "gpu:resident"), "the whole model resident on a Vulkan device")
+        t |> success(!mtp_auto_arms(1l, false, "gpu:resident", true), "... but not where its routed experts sum on the host (the round loses there)")
         t |> success(!mtp_auto_arms(1l, false, "gpu:rails"), "a model the device serves in part")
         t |> success(!mtp_auto_arms(1l, false, "cpu"), "the CPU")
         t |> success(!mtp_auto_arms(4l, true, "cpu"), "four streams on Metal")

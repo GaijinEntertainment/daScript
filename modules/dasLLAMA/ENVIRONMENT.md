@@ -62,6 +62,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_DEC_SPAN` | flag | on | Whole-token decode span: every resident expert layer's attention, router, top-k, FFN and combine as ONE recorded chain and one submit per token; 0 runs the per-layer submits. |
 | `DASLLAMA_GPU_HEAT` | number | 0 | Hot expert slots a layer. On the per-op tier: hold the N hottest experts of a streamed layer resident (unset = none). On the whole-model driver with the routed experts on the host (a hyper-connection MoE): the slots of the hot expert pool - unset = 64 where the card has the room past the weights and the mirror, else up to 32 out of the mirror's context; a count asks that many; 0 keeps every routed expert on the host. |
 | `DASLLAMA_GPU_PROF` | flag | off | Report lifetime GPU queue submissions (real commands plus staging round-trips). |
+| `DASLLAMA_MOE_TRACE` | text | unset | Record the routed picks of every layer's host expert step under the whole-model driver - a layer, its rows, k expert ids and weights a row, in serving order - and write them to this file when the model drops: the hot expert pool's policy experiments replay the trace offline (harness/hot_pool_sim.das). Unset: no trace. |
 
 ## Vision
 

@@ -5529,9 +5529,9 @@ struct private SchedDefaults {
 
 var private g_sched_defaults = SchedDefaults()
 
-//! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, and on a slot the device serves in part, the verify round's second row costs a second decode step, more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
-def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string) : bool
-    => streams == 1l && (on_metal || backend_effective == "gpu:resident")
+//! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, on a slot the device serves in part, and where the resident driver sums the routed experts on the host (`experts_host`: a hyper-connection MoE the card does not hold whole - `PERF_LEDGER.md`'s NextN entry), the verify round costs more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
+def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false) : bool
+    => streams == 1l && (on_metal || (backend_effective == "gpu:resident" && !experts_host))
 
 def private init_one_scheduler(var s : ModelSlot) {
     let s_streams = s.opts.streams >= 0l ? s.opts.streams : g_sched_defaults.max_streams
@@ -5546,7 +5546,7 @@ def private init_one_scheduler(var s : ModelSlot) {
     }
     let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : g_sched_defaults.kv_dtype
     let want = s.opts.mtp >= 0 ? s.opts.mtp : g_sched_defaults.mtp
-    var spec = want > 0 || (want < 0 && mtp_auto_arms(s_streams, slot_flavor(s) == "metal", s.backend_effective))
+    var spec = want > 0 || (want < 0 && mtp_auto_arms(s_streams, slot_flavor(s) == "metal", s.backend_effective, gpu_resident_experts_host()))
     if (spec && s.model.config.n_layer_nextn <= 0l) {
         if (want > 0) {
             to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")

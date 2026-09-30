@@ -186,6 +186,9 @@ struct public GpuTierEnv {
 
     @clarg_doc = "Report lifetime GPU queue submissions (real commands plus staging round-trips)."
     gpu_prof : bool = false
+
+    @clarg_doc = "Record the routed picks of every layer's host expert step under the whole-model driver - a layer, its rows, k expert ids and weights a row, in serving order - and write them to this file when the model drops: the hot expert pool's policy experiments replay the trace offline (harness/hot_pool_sim.das). Unset: no trace."
+    moe_trace : string = ""
 }
 
 // ===== Vision =====

@@ -681,6 +681,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // maps the rest). No board row yet: the 640-wide expert down rows demote to q8 (followup 168)
         ModelSpec(file = "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
             display = "Qwen3.8-Flash-Next-iq4xs", quant_label = "iq4_xs",
+            // the split NextN head (`shared`: its own Q8_0 routed experts inside) rides as a companion: the hc cells pin it as the trunk's head
+            companions <- [
+                ProvEntry(name = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf", root = "llm",
+                    url = "{HF}/unsloth/Qwen3.8-Flash-Next-GGUF/resolve/main/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
+                    bytes = 2786568256l, sha256 = "5ff54097406a905cf3a724c709124ceb0e3e10235ee862298969e91c96fa96e6")],
             parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
         // the Metal sweep's Qwen quant matrix - every Qwen text file the M5 box stocks that the
         // rows above do not name; no board row, no provenance, the counting fixture as the

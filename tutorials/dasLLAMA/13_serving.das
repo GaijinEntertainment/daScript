@@ -244,6 +244,9 @@ def section_gpu_slots(m : Model) {
 // (0 on a CPU box, under the per-op rails, and on Metal). gpu_resident_decline
 // says why the driver does not serve, gpu_device_session_ctx the positions per
 // region, gpu_device_session_dtype the K/V codec a device-home session carries.
+// gpu_resident_experts_host says the driver serves a MoE whose routed experts
+// sum on the CPU between the device's segments (the card does not hold them):
+// a slower form, and one whose speculative round a server leaves off.
 //
 // A finished session calls gpu_device_kv_park before its delete. The region is
 // free for the next stream, and park answers a CLAIM: a number that names the
@@ -263,6 +266,9 @@ def section_device_streams(m : Model; var sch : Scheduler) {
         return
     }
     print("the device holds {regions} streams, {gpu_device_session_ctx()} positions each, K/V in {gpu_device_session_dtype()}\n")
+    if (gpu_resident_experts_host()) {
+        print("the routed experts sum on the CPU between the device's segments\n")
+    }
     print("it prefills {gpu_device_prefill_window()} positions a window: a prompt in chunks hands it at least that many at a time\n")
 
     // turn one: prefill, then park

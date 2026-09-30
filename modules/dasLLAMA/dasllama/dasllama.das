@@ -684,6 +684,13 @@ def gpu_resident_decline() : string {
     return gpu_resident_decline_()
 }
 
+def gpu_resident_experts_host() : bool {
+    //! Whether the whole-model driver serving the model loaded last sums its routed experts on the
+    //! host (a hyper-connection MoE the card does not hold whole) - the form whose speculative
+    //! round does not pay, so a server slot leaves the round off unless asked.
+    return gpu_resident_experts_host_()
+}
+
 def gpu_device_sessions() : int64 {
     //! How many DEVICE-HOME sessions (``create_device_session``) the installed model serves at once:
     //! the armed driver's region count, 0 when the model is not served whole from the device.

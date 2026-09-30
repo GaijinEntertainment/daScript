@@ -11,6 +11,64 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-01) - the NextN head on the hyper-connection chain
+  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`, `#hc-verify-rows`): the round loses on this form while
+  the pool's hits sit near 40% on real text, and the real-text token is 45 ms against the synthetic
+  row's 34 - the hits, not the head, are the lever, and the routed pick trace with its offline pool
+  sim (`DASLLAMA_MOE_TRACE`, `harness/hot_pool_sim.das`) says where it goes.** zen2 (Ryzen 16 threads,
+  RTX 5060 Ti 16 GB on a PCIe 4.0 x8 link, 3.9-4.3 GB held by the desktop), Qwen3.8-Flash-Next
+  UD-IQ4_XS with its split head (`mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf`, `DASLLAMA_MTP_HEAD`),
+  `bin/Release/daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <shard 1> --mtp-ab
+  --mtp-depth 1 -p 0 -r 1 -t 16 --for-debug-purposes` under `DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1`,
+  eight real-text prompts of 128 tokens, one rep a prompt, one process a row. Acceptance on the CPU
+  rail (no `DASLLAMA_GPU`; the rail does not move it): 456 of 571 drafts accepted, 79.9% (per prompt
+  64.1-95.5%) - the same 456 of 571 under `--mtp-depth 2` and `3`, since the CPU round is one token
+  deep and the flag reaches the seated rounds alone - tg-real128 off 7.07 / on 7.08 tok/s (per prompt
+  off 7.0-7.1, on 5.8-8.6; 7.15 / 7.15 at depth 3), the CPU round flat. On the device (`DASLLAMA_GPU=1`,
+  the head resident, the pool at the plan's 32 slots serving the verify rows through the rows chain):
+  tg-real128 off 22.49 -> on 18.77 tok/s, x0.83 at 407 of 619 accepted, 65.8% (per prompt off 20.1-24.8,
+  on 16.0-21.7, x0.74-x0.94 at 47.1-77.8%); a second process 22.85 -> 18.99 at the same 65.8%
+  (direction-grade across the two); tg-real64 22.57 -> 18.57 and 22.61 -> 18.73 at 62.7%. The device
+  accepts 14 points under the CPU (65.8 against 79.9, the two rails' processes, direction-grade): the
+  device draft and the verify rows route their near-ties apart, as every arm pair on this model does
+  (`ARCHITECTURE_ENGINE.md#moe-pick-tape`). The round under
+  `DASLLAMA_GPU_PROF=1` (debug-jit): the draft 4 ms, the verify 81 ms of which the device 25 and the
+  host's sums of the two rows' misses 56, the pool serving 48-53% of the rows' picks; a plain real-text
+  token 45 ms = device 22 + the host's sums 22.7 at hits 31-45% a layer (the per-layer line of the
+  profile: hits, picks and swaps a routed layer) - the entry below's synthetic ids read 70-83% hits and
+  29.7 tok/s, a third over the 22.5 of real text (two runs, direction-grade). So a round costs 85 ms for
+  1.66 tokens (51 ms a token) against a plain token's 45. The trace (`DASLLAMA_MOE_TRACE=<file>` over the
+  same command: every host expert step's layer, rows, k ids and weights, a mark a prompt; 24.7 MB for
+  the eight prompts' two arms, 1084090 decode picks and 1927680 window rows) replayed through
+  `bin/Release/daslang.exe -jit modules/dasLLAMA/harness/hot_pool_sim.das -- <trace> --policy heat
+  --per-layer` reproduces the live run: 37.5% of the decode picks on the device against the profile's
+  31-45%, 2.38 placements a token, a token modeled at 45.7 ms (the device 22.0 + the misses 21.7 + the
+  placements 2.0, from the profile's costs: a miss 72 us, a placement 570 us of host gather + 270 us of
+  upload) against the 45 measured, and `--per-layer` matches the profile's line layer for layer - the
+  instrument is calibrated; the policies it ranks are `followup_vulkan.md` row 127's table, which owns
+  the lever. The round rides the same lift - its verify rows at 85% hits cost a token's misses, not
+  two - so `mtp_auto_arms` leaves it off where the resident driver sums the experts on the host
+  (`gpu_resident_experts_host`), and a slot's `mtp=1` arms it by hand. The new device planes the rows
+  form adds, at this model's shape (dim 2560, hc 4, the verify's nb 2): the wide rows, the carry's
+  source, the rows' carry source, the normed streams and the gated rows 80 KB each, the head's cat
+  planes 160 KB each (two), the embed rows 20 KB, the side panel 80 KB, the rest under 40 KB - 1.4 MB
+  a driver; the prompt's head warm at the 512-row window: the head's cat plane 42 MB (its f16 twin 21,
+  its Q8 image 10.5 + 1.3), the wide-residual source and the stream-major scratch 21 MB each - 117 MB
+  a driver. Parity (the CPU chain is the reference; the split command's own one-row steps are a
+  rounding control, not parity): `test_gpu_resident_hc.das`'s draft cell (the device draft against the
+  CPU `forward_mtp` on one token, wide carry and row, `LOGIT_BAR_REL` 0.20 and `CARRY_BAR_REL` 0.05 of
+  the row's max: argmax 271 on both at 9.57 / 9.50, the logits row 0.22 within 1.91, the wide carry
+  0.06 within 1.10, the controls 3.00 and 3.50, the head's one select replayed) and its verify cell
+  (one round: the draft 271, verify row 0's argmax 12 rejecting it, one rollback; the two rows against
+  the CPU's one-row steps at `WIDE_BAR_REL` 0.35 and `WIDE_CARRY_BAR_REL` 0.25, the other row as each
+  row's control - rows 1.52 and 3.10 within 3.47 and 4.24, the carry rows 0.49 and 0.49 within 1.74 and
+  1.02, the controls 12.53 and 12.06, 4.86 and 4.81 - and the rounding control against the split
+  command's own one-row steps on the same picks at `SPLIT_BAR_REL` 0.12 and `SPLIT_CARRY_BAR_REL` 0.10 -
+  rows 0.42 and 0.82 within 1.14 and 1.52, the carry rows 0.07 and 0.30 within 0.73 and 0.39, the
+  controls 11.62 and 11.74, 5.10 and 5.12; 97 selects replayed, 2 of the CPU draft's own picks off the
+  device's); kernel
+  cell `test_vkd_ple_side`'s commit arm (the position off the token record, three rows committed to the ring).
+
 - **LANDED (2026-09-29) - the hot expert pool on the hyper-connection carrier
   (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`), the `iq3s4` device format under it, and the resident
   plan sizing the pool with the mirror.** zen2 (Ryzen 16 threads, RTX 5060 Ti 16 GB, 3.9-4.3 GB held
@@ -33,7 +91,8 @@ what it costs today and what the fix would change.
   the CUDA 13.4 builds' `llama-bench -m <shard 1> -ngl 99 -ncmoe 48 -t 16 -p 512 -n 128 -r 3` with the
   48 layers' experts on the CPU - Vulkan pp512 91.66 / tg128 13.07, CUDA 147.3 +/- 21 / 17.32
   (`ARCHITECTURE_MEASUREMENT.md#host-experts-reference`). Decode is 1.55x the host-experts form (30.04
-  against 19.38) and 1.71x the CUDA row (29.74 against 17.32); the prompt's row is 2.24x the host-experts
+  against 19.38) and 1.71x the CUDA row (29.74 against 17.32) - on the bench's synthetic ids, whose picks
+  the pool holds at 70-83%; real text reads 22.5 tok/s at 31-45% hits (the NextN entry above); the prompt's row is 2.24x the host-experts
   form (288.81 against 128.76) and 1.96x the CUDA row (288.81 against 147.3) once the window's hits run
   through the batch arm's chain beside the host (the middle rows: the pool serving decode alone leaves
   the prompt's row where it was). Over four windows and 32 steps the pool placed 1656 experts - the 1536 of its fill and

@@ -771,7 +771,7 @@ def vk_rdec_set_moe_experts(l, router_slot, be1, be3, be2 : int64; fe1, fe3, fe2
         return
     }
     assert(g_rd != null && g_rd.moe, "vk_rdec_set_moe_experts before prepare_moe")
-    var L & = unsafe(g_rd.layers[l])
+    var L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
     assert(L.made, "vk_rdec_set_moe_experts before the layer's own registration")
     L.moe = true
     L.router_slot = router_slot
@@ -1133,21 +1133,25 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
 }
 
 //! a q8 mixer plane's GEMV set over the arena block `blk`: the feed pair `xq`/`xs` of `n` elements into `y` of `d` rows
+//! the feed and the output bind over the driver's `nb` rows, so the rows form's columns stay in range
 def private rd_hc_gemv_set(blk : int64; var meta : HostBuf; xq, xs : uint64; n : int64; xbit : uint; y : uint64; d : int64; ybit : uint) : VkDescriptorSet {
     meta = rd_meta()
     fill_gemv_regions(meta, blk)
-    return arena_gemv_set(int(KqFmt.q8), arena_planes(int(KqFmt.q8), blk), meta.buf, META_BYTES, 0u, xq, xs, n, (n / Q8_BLOCK_ELEMS) * 4l, xbit, y, d * 4l, ybit)
+    let nb = g_rd.nb
+    return arena_gemv_set(int(KqFmt.q8), arena_planes(int(KqFmt.q8), blk), meta.buf, META_BYTES, 0u, xq, xs, n * nb, (n / Q8_BLOCK_ELEMS) * 4l * nb, xbit, y, d * 4l * nb, ybit)
 }
 
 //! The hyper-connection mixers' planes (`RdecSetHcFn`): the wide residual and every site's device state.
-[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
-def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks, up_blks : array<int64>; head_norm : array<float>; head_down, head_up : int64) : bool {
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]
+def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks, up_blks : array<int64>; head_norm : array<float>; head_down, head_up : int64;
+                   mtp_head_norm : array<float>; mtp_head_down, mtp_head_up : int64; hnorm_rows : array<float>) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return true
     }
-    assert(g_rd != null && g_rd.nb == 1l, "vk_rdec_set_hc: after prepare, one row")
+    assert(g_rd != null, "vk_rdec_set_hc: after prepare")
     let dim = g_rd.dim
     let hcd = hc * dim
+    let nb = g_rd.nb
     if (!(ensure_hc_norm_cls() && ensure_router_gemv_cls() && ensure_cls_dn_rq() && gemv_cls_ensure(int(KqFmt.q8))
             && ensure_hc_lo_rq_cls() && ensure_hc_mix_cls() && ensure_hc_comb_cls())) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the hyper-connection class rails declined on this device\n")
@@ -1161,21 +1165,40 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
     r.hc = true
     r.hc_n = hc
     r.hc_lr = lr
-    r.hcres_dev = make_device_buf(hcd * 4l)
-    r.hcxn_dev = make_device_buf(hcd * 4l)
-    r.hcxnq_dev = make_device_buf(hcd)
-    r.hcxns_dev = make_device_buf((hcd / Q8_BLOCK_ELEMS) * 4l)
-    r.hclo_dev = make_device_buf(lr * 4l)
-    r.hcloq_dev = make_device_buf(lr)
-    r.hclos_dev = make_device_buf((lr / Q8_BLOCK_ELEMS) * 4l)
-    r.hcgate_dev = make_device_buf(hcd * 4l)
-    r.hcinj_dev = make_device_buf(hc * 4l)
+    r.hcres_dev = make_device_buf(hcd * 4l * nb)
+    r.hccarry_out_dev = make_device_buf(hcd * 4l * nb, r.carry && r.log_xfer)   // the carry's source on this model: it leaves on the transfer queue as the logits do
+    if (r.carry) {
+        destroy_host_buf(r.hid_host)
+        r.hid_host = make_host_buf(hcd * 4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
+    }
+    r.hcxn_dev = make_device_buf(hcd * 4l * nb)
+    r.hcxnq_dev = make_device_buf(hcd * nb)
+    r.hcxns_dev = make_device_buf((hcd / Q8_BLOCK_ELEMS) * 4l * nb)
+    r.hclo_dev = make_device_buf(lr * 4l * nb)
+    r.hcloq_dev = make_device_buf(lr * nb)
+    r.hclos_dev = make_device_buf((lr / Q8_BLOCK_ELEMS) * 4l * nb)
+    r.hcgate_dev = make_device_buf(hcd * 4l * nb)
+    r.hcinj_dev = make_device_buf(hc * 4l * nb)
     assert(long_length(norm_rows) == n_sites * hcd && long_length(head_norm) == hcd && long_length(inject_rows) == n_sites * hc * hcd,
         "vk_rdec_set_hc: the norm rows are [sites x hc x dim], the head's [hc x dim], the inject rows [sites x hc x hc_dim]")
-    r.hcn_bytes = (n_sites + 1l) * hcd * 4l
+    r.hc_nextn = mtp_head_down >= 0l
+    assert(!r.hc_nextn || (long_length(mtp_head_norm) == hcd && long_length(hnorm_rows) == hcd), "vk_rdec_set_hc: the NextN head's mixer norm and the carry's norm rows are [hc x dim]")
+    let nextn_norm_rows = r.hc_nextn ? 2l : 0l   // the NextN head's own head mixer's, then the carry's
+    r.hcn_bytes = (n_sites + 1l + nextn_norm_rows) * hcd * 4l
     r.hcn_dev = make_device_buf(r.hcn_bytes)
     upload_region_at(r.hcn_dev, 0l, unsafe(addr<uint8 const?>(norm_rows[0])), n_sites * hcd * 4l)
     upload_region_at(r.hcn_dev, n_sites * hcd * 4l, unsafe(addr<uint8 const?>(head_norm[0])), hcd * 4l)
+    r.hc_final_site = n_sites
+    if (r.hc_nextn) {
+        r.hc_mtp_site = n_sites + 1l
+        r.hc_hnorm_row = n_sites + 2l
+        upload_region_at(r.hcn_dev, r.hc_mtp_site * hcd * 4l, unsafe(addr<uint8 const?>(mtp_head_norm[0])), hcd * 4l)
+        upload_region_at(r.hcn_dev, r.hc_hnorm_row * hcd * 4l, unsafe(addr<uint8 const?>(hnorm_rows[0])), hcd * 4l)
+        r.hccarry_dev = make_device_buf(hcd * 4l)
+        r.hcsrc_dev = make_device_buf(hcd * 4l * nb)
+        r.hemb_dev = make_device_buf(dim * 4l * nb)
+        r.hemb_host = make_host_buf(dim * 4l * nb, false, [cached = true])
+    }
     r.hcinjw_bytes = long_length(inject_rows) * 4l
     if (!vk_range_ok(r.hcinjw_bytes) || !vk_range_ok(r.hcn_bytes) || !vk_range_ok(PF_WINDOW * hcd * 4l)) {   //! the inject rows, the norm rows and a window's wide panels bind as one range each
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the hyper-connection inject rows ({n_sites} sites x {hc} x {hcd}) pass the device's storage range {vk_max_storage_range()}\n")
@@ -1183,34 +1206,48 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
     }
     r.hcinjw_dev = make_device_buf(r.hcinjw_bytes)
     upload_region_at(r.hcinjw_dev, 0l, unsafe(addr<uint8 const?>(inject_rows[0])), r.hcinjw_bytes)
-    r.s_hc_norm = set_hc_norm_cls(fixed_array(r.hcres_dev, r.hcxn_dev, r.hcn_dev), fixed_array(hcd * 4l, hcd * 4l, r.hcn_bytes), fixed_array(VHZ_X, VHZ_XB2, 0u))
+    r.s_hc_norm = set_hc_norm_cls(fixed_array(r.hcres_dev, r.hcxn_dev, r.hcn_dev), fixed_array(hcd * 4l * nb, hcd * 4l * nb, r.hcn_bytes), fixed_array(VHZ_X, VHZ_XB2, 0u))
     r.s_hc_inj = set_router_gemv_cls(fixed_array(r.hcinjw_dev, r.hcxn_dev, r.hcinj_dev, r.norms_dev),
-        fixed_array(r.hcinjw_bytes, hcd * 4l, hc * 4l, r.norms_bytes), fixed_array(0u, VHZ_XB2, VHZ_MRT, 0u))
-    r.s_hc_xnrq = set_rq_cls(fixed_array(r.hcxn_dev, r.hcxnq_dev, r.hcxns_dev), fixed_array(hcd * 4l, hcd, (hcd / Q8_BLOCK_ELEMS) * 4l), fixed_array(VHZ_XB2, VHZ_XQ, VHZ_XQ))
-    r.s_hc_lorq = set_hc_lo_rq_cls(fixed_array(r.hclo_dev, r.hcloq_dev, r.hclos_dev), fixed_array(lr * 4l, lr, (lr / Q8_BLOCK_ELEMS) * 4l), fixed_array(VHZ_GATE, VHZ_HQ, VHZ_HQ))
-    r.s_hc_mix = set_hc_mix_cls(fixed_array(r.hcxn_dev, r.hcgate_dev, r.xb_dev), fixed_array(hcd * 4l, hcd * 4l, dim * 4l), fixed_array(VHZ_XB2, VHZ_UP, VHZ_XB))
+        fixed_array(r.hcinjw_bytes, hcd * 4l * nb, hc * 4l * nb, r.norms_bytes), fixed_array(0u, VHZ_XB2, VHZ_MRT, 0u))
+    r.s_hc_xnrq = set_rq_cls(fixed_array(r.hcxn_dev, r.hcxnq_dev, r.hcxns_dev), fixed_array(hcd * 4l * nb, hcd * nb, (hcd / Q8_BLOCK_ELEMS) * 4l * nb), fixed_array(VHZ_XB2, VHZ_XQ, VHZ_XQ))
+    r.s_hc_lorq = set_hc_lo_rq_cls(fixed_array(r.hclo_dev, r.hcloq_dev, r.hclos_dev), fixed_array(lr * 4l * nb, lr * nb, (lr / Q8_BLOCK_ELEMS) * 4l * nb), fixed_array(VHZ_GATE, VHZ_HQ, VHZ_HQ))
+    r.s_hc_mix = set_hc_mix_cls(fixed_array(r.hcxn_dev, r.hcgate_dev, r.xb_dev), fixed_array(hcd * 4l * nb, hcd * 4l * nb, dim * 4l * nb), fixed_array(VHZ_XB2, VHZ_UP, VHZ_XB))
     r.s_hc_comb_a = set_hc_comb_cls(fixed_array(r.hcres_dev, r.xb2_dev, r.hcinj_dev, r.dummy, r.dummy),
-        fixed_array(hcd * 4l, dim * 4l, hc * 4l, 256l, 256l), fixed_array(VHZ_X, VHZ_XB2, VHZ_MRT, 0u, 0u))
+        fixed_array(hcd * 4l * nb, dim * 4l * nb, hc * 4l * nb, 256l, 256l), fixed_array(VHZ_X, VHZ_XB2, VHZ_MRT, 0u, 0u))
     if (r.moe) {   //! the FFN seam's scatter on a routed model reads the routed sum and the gate logit off the router row
-        r.hacc_dev = make_device_buf(dim * 4l)
+        r.hacc_dev = make_device_buf(dim * 4l * nb)
         r.s_hc_comb_f = set_hc_comb_cls(fixed_array(r.hcres_dev, r.ffnout_dev, r.hcinj_dev, r.hacc_dev, r.moe_dlog_dev),
-            fixed_array(hcd * 4l, dim * 4l, hc * 4l, dim * 4l, r.ner * 4l), fixed_array(VHZ_X, VHZ_FFO, VHZ_MRT, VHZ_MDN, VHZ_MRT))
+            fixed_array(hcd * 4l * nb, dim * 4l * nb, hc * 4l * nb, dim * 4l * nb, r.ner * 4l * nb), fixed_array(VHZ_X, VHZ_FFO, VHZ_MRT, VHZ_MDN, VHZ_MRT))
     } else {
         r.s_hc_comb_f = set_hc_comb_cls(fixed_array(r.hcres_dev, r.ffnout_dev, r.hcinj_dev, r.dummy, r.dummy),
-            fixed_array(hcd * 4l, dim * 4l, hc * 4l, 256l, 256l), fixed_array(VHZ_X, VHZ_FFO, VHZ_MRT, 0u, 0u))
+            fixed_array(hcd * 4l * nb, dim * 4l * nb, hc * 4l * nb, 256l, 256l), fixed_array(VHZ_X, VHZ_FFO, VHZ_MRT, 0u, 0u))
     }
-    r.hc_sites |> resize(n_sites + 1l)
-    for (si in range64(n_sites + 1l)) {
+    if (r.hc_nextn) {
+        r.s_hc_norm_carry = set_hc_norm_cls(fixed_array(r.hccarry_dev, r.hcxn_dev, r.hcn_dev), fixed_array(hcd * 4l, hcd * 4l * nb, r.hcn_bytes), fixed_array(VHZ_X, VHZ_XB2, 0u))
+        r.s_hc_norm_vsrc = set_hc_norm_cls(fixed_array(r.hcsrc_dev, r.hcxn_dev, r.hcn_dev), fixed_array(hcd * 4l * nb, hcd * 4l * nb, r.hcn_bytes), fixed_array(VHZ_GATE, VHZ_XB2, 0u))
+        r.head_cat_in_dev = make_device_buf(2l * dim * 4l * hc * nb)
+        r.head_cat_dev = make_device_buf(2l * dim * 4l * hc * nb)
+        destroy_host_buf(r.head_cat_host)
+        r.head_cat_host = make_host_buf((dim + hcd) * 4l, false, [cached = true])
+        r.hcatq_dev = make_device_buf(2l * dim * hc * nb)
+        r.hcats_dev = make_device_buf((2l * dim * hc / Q8_BLOCK_ELEMS) * 4l * nb)
+        r.hc_draft_cmd |> resize(long_length(r.head_draft_cmd))
+        for (ri in range64(long_length(r.hc_draft_cmd))) {
+            r.hc_draft_cmd[ri] = alloc_cmd()
+        }
+    }
+    r.hc_sites |> resize(n_sites + 1l + (r.hc_nextn ? 1l : 0l))
+    for (si in range64(long_length(r.hc_sites))) {
         var S & = unsafe(r.hc_sites[si])
-        S.bdown = si < n_sites ? down_blks[si] : head_down
-        S.bup = si < n_sites ? up_blks[si] : head_up
+        S.bdown = si < n_sites ? down_blks[si] : (si == n_sites ? head_down : mtp_head_down)
+        S.bup = si < n_sites ? up_blks[si] : (si == n_sites ? head_up : mtp_head_up)
         S.s_down = rd_hc_gemv_set(S.bdown, S.m_down, r.hcxnq_dev, r.hcxns_dev, hcd, VHZ_XQ, r.hclo_dev, lr, VHZ_GATE)
         S.s_up = rd_hc_gemv_set(S.bup, S.m_up, r.hcloq_dev, r.hclos_dev, lr, VHZ_HQ, r.hcgate_dev, hcd, VHZ_UP)
     }
-    if (r.experts_host) {   //! the split command's landings: the FFN-mixed row and the router logits down, the routed sum up
-        r.hx_host = make_host_buf(dim * 4l, false, [cached = true])
-        r.hlog_host = make_host_buf(r.ner * 4l, false, [cached = true])
-        r.hacc_host = make_host_buf(dim * 4l, false, [cached = true])
+    if (r.experts_host) {
+        r.hx_host = make_host_buf(dim * 4l * nb, false, [cached = true])
+        r.hlog_host = make_host_buf(r.ner * 4l * nb, false, [cached = true])
+        r.hacc_host = make_host_buf(dim * 4l * nb, false, [cached = true])
         r.nseg = 1l
         r.seg_layer |> clear()
         for (l in range64(long_length(r.layers))) {
@@ -1261,13 +1298,15 @@ def vk_rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : 
     r.ngram_dil = dil
     r.ple_bkey = bkey
     r.ple_bval = bval
-    r.ple_emb_dev = make_device_buf(ind * 4l)
-    r.ple_emb_host = make_host_buf(ind * 4l, false, [cached = true])
-    r.pleq_dev = make_device_buf(ind)
-    r.ples_dev = make_device_buf((ind / Q8_BLOCK_ELEMS) * 4l)
-    r.plekey_dev = make_device_buf(hcd * 4l)
-    r.pleval_dev = make_device_buf(dim * 4l)
-    r.plegated_dev = make_device_buf(hcd * 4l)
+    let nb = r.nb
+    r.ple_emb_dev = make_device_buf(ind * 4l * nb)
+    r.ple_emb_host = make_host_buf(ind * 4l * nb, false, [cached = true])
+    r.pleq_dev = make_device_buf(ind * nb)
+    r.ples_dev = make_device_buf((ind / Q8_BLOCK_ELEMS) * 4l * nb)
+    r.plekey_dev = make_device_buf(hcd * 4l * nb)
+    r.pleval_dev = make_device_buf(dim * 4l * nb)
+    r.plegated_dev = make_device_buf(hcd * 4l * nb)
+    r.plepanel_dev = make_device_buf(hcd * 4l * nb)
     let hist_bytes = r.regions * nrows * hcd * 4l
     r.plehist_dev = make_device_buf(hist_bytes)
     upload_zeros(r.plehist_dev, 0l, hist_bytes)
@@ -1279,13 +1318,18 @@ def vk_rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : 
     r.plew_dev = make_device_buf(r.plew_bytes)
     upload_region_at(r.plew_dev, 0l, unsafe(addr<uint8 const?>(norm_rows[0])), 3l * hcd * 4l)
     upload_region_at(r.plew_dev, 3l * hcd * 4l, unsafe(addr<uint8 const?>(conv_taps[0])), hcd * kern * 4l)
-    r.s_ple_rq = set_rq_cls(fixed_array(r.ple_emb_dev, r.pleq_dev, r.ples_dev), fixed_array(ind * 4l, ind, (ind / Q8_BLOCK_ELEMS) * 4l), fixed_array(VHZ_COS, VHZ_XQ, VHZ_XQ))
+    r.s_ple_rq = set_rq_cls(fixed_array(r.ple_emb_dev, r.pleq_dev, r.ples_dev), fixed_array(ind * 4l * nb, ind * nb, (ind / Q8_BLOCK_ELEMS) * 4l * nb), fixed_array(VHZ_COS, VHZ_XQ, VHZ_XQ))
     r.s_ple_key = rd_hc_gemv_set(bkey, r.m_ple_key, r.pleq_dev, r.ples_dev, ind, VHZ_XQ, r.plekey_dev, hcd, VHZ_Q)
     r.s_ple_val = rd_hc_gemv_set(bval, r.m_ple_val, r.pleq_dev, r.ples_dev, ind, VHZ_XQ, r.pleval_dev, dim, VHZ_ATT)
-    r.s_ple_gate = set_ple_gate_cls(fixed_array(r.plekey_dev, r.hcres_dev, r.pleval_dev, r.plegated_dev, r.plehist_dev, r.plew_dev, r.tok_meta.buf, r.plehist_dev),
-        fixed_array(hcd * 4l, hcd * 4l, dim * 4l, hcd * 4l, hist_bytes, r.plew_bytes, TOK_META_BYTES, hist_bytes), fixed_array(VHZ_Q, VHZ_X, VHZ_ATT, VHZ_AQ, VHZ_DNSM, 0u, 0u, VHZ_DNSM))
-    r.s_ple_conv = set_ple_conv_cls(fixed_array(r.hcres_dev, r.plegated_dev, r.plehist_dev, r.plew_dev, r.tok_meta.buf, r.plehist_dev),
-        fixed_array(hcd * 4l, hcd * 4l, hist_bytes, r.plew_bytes, TOK_META_BYTES, hist_bytes), fixed_array(VHZ_X, VHZ_AQ, VHZ_DNSM, 0u, 0u, VHZ_DNSM))
+    r.s_ple_gate = set_ple_gate_cls(fixed_array(r.plekey_dev, r.hcres_dev, r.pleval_dev, r.plegated_dev, r.plehist_dev, r.plew_dev, r.tok_meta.buf, r.plepanel_dev),
+        fixed_array(hcd * 4l * nb, hcd * 4l * nb, dim * 4l * nb, hcd * 4l * nb, hist_bytes, r.plew_bytes, TOK_META_BYTES * nb, hcd * 4l * nb), fixed_array(VHZ_Q, VHZ_X, VHZ_ATT, VHZ_AQ, VHZ_DNSM, 0u, 0u, VHZ_DNSM))
+    r.s_ple_conv = set_ple_conv_cls(fixed_array(r.hcres_dev, r.plegated_dev, r.plehist_dev, r.plew_dev, r.tok_meta.buf, r.plepanel_dev),
+        fixed_array(hcd * 4l * nb, hcd * 4l * nb, hist_bytes, r.plew_bytes, TOK_META_BYTES * nb, hcd * 4l * nb), fixed_array(VHZ_X, VHZ_AQ, VHZ_DNSM, 0u, 0u, VHZ_DNSM))
+    if (nb > 1l) {
+        verify(ensure_ple_commit_cls(), "vk decode: the n-gram ring commit class must engage where the side input's did")
+        r.s_ple_commit = set_ple_commit_cls(fixed_array(r.plepanel_dev, r.plehist_dev, r.tok_meta.buf),
+            fixed_array(hcd * 4l * nb, hist_bytes, TOK_META_BYTES * nb), fixed_array(VHZ_DNSM, VHZ_DNSM, 0u))
+    }
     rd_invalidate_token()
     return true
 }
@@ -1313,53 +1357,58 @@ def vk_rdec_ngram_ring(var host : float?; up : bool) {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
-def private rd_encode_hc_mix(raw : VkCommandBuffer; var h : VkHaz; site : int64; head : bool) {
+def private rd_encode_hc_mix(raw : VkCommandBuffer; var h : VkHaz; site : int64; head : bool; nrows : int64 = 1l) {
     let dim = g_rd.dim
     let hc = g_rd.hc_n
     let hcd = hc * dim
     let lr = g_rd.hc_lr
     var S & = unsafe(g_rd.hc_sites[site])
     var pcn = HcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(site * hcd), row0 = 0u, eps = g_rd.eps)
-    enc_hc_norm_cls(raw, h, g_rd.s_hc_norm, pcn, hc)
+    enc_hc_norm_cls(raw, h, g_rd.s_hc_norm, pcn, hc * nrows)
     if (!head) {
-        var pci = RouterArgs(ne = uint(hc), dim = uint(hcd), woff = uint(site * hc * hcd), obase = 0u, norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = 1u)
+        var pci = RouterArgs(ne = uint(hc), dim = uint(hcd), woff = uint(site * hc * hcd), obase = 0u, norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = uint(nrows))
         enc_router_gemv_cls(raw, h, g_rd.s_hc_inj, pci, hc)
     }
-    rq_enc(raw, h, g_rd.s_hc_xnrq, false, 0l, hcd)
-    var pcd = GemvArgs(n = uint(hcd), d = uint(lr), nreg = 1u, ybase = 0u)
+    rq_enc(raw, h, g_rd.s_hc_xnrq, false, 0l, hcd * nrows)
+    var pcd = GemvArgs(n = uint(hcd), d = uint(lr), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(lr))
     gemv_enc(int(KqFmt.q8), raw, h, S.s_down, pcd, lr)
-    var pcl = HcLoArgs(nblk = uint(lr / Q8_BLOCK_ELEMS), inv_hc = 1.0 / float(hc))
-    enc_hc_lo_rq_cls(raw, h, g_rd.s_hc_lorq, pcl, rq_wgs(false, lr))
-    var pcu = GemvArgs(n = uint(lr), d = uint(hcd), nreg = 1u, ybase = 0u)
+    var pcl = HcLoArgs(nblk = uint(lr * nrows / Q8_BLOCK_ELEMS), inv_hc = 1.0 / float(hc))
+    enc_hc_lo_rq_cls(raw, h, g_rd.s_hc_lorq, pcl, rq_wgs(false, lr * nrows))
+    var pcu = GemvArgs(n = uint(lr), d = uint(hcd), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(hcd))
     gemv_enc(int(KqFmt.q8), raw, h, S.s_up, pcu, hcd)
-    var pcm = HcMixArgs(dim = uint(dim), hc = uint(hc), rows = 1u)
-    enc_hc_mix_cls(raw, h, g_rd.s_hc_mix, pcm, (dim + 255l) / 256l)
+    var pcm = HcMixArgs(dim = uint(dim), hc = uint(hc), rows = uint(nrows))
+    enc_hc_mix_cls(raw, h, g_rd.s_hc_mix, pcm, (dim * nrows + 255l) / 256l)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
-def private rd_encode_hc_scatter(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; ffn : bool) {
+def private rd_encode_hc_scatter(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; ffn : bool; nrows : int64 = 1l) {
     let hcd = g_rd.hc_n * g_rd.dim
     let moe = ffn && L.moe
     var pcc = HcCombArgs(dim = uint(g_rd.dim), hc = uint(g_rd.hc_n), moe_on = moe ? 1u : 0u, sh_on = (moe && has_dense_triple(L)) ? 1u : 0u,
-        gated = (moe && g_rd.sh_gated) ? 1u : 0u, rows = 1u, row0 = 0u, lstride = uint(g_rd.ner))
-    enc_hc_comb_cls(raw, h, ffn ? g_rd.s_hc_comb_f : g_rd.s_hc_comb_a, pcc, (hcd + 255l) / 256l)
+        gated = (moe && g_rd.sh_gated) ? 1u : 0u, rows = uint(nrows), row0 = 0u, lstride = uint(g_rd.ner))
+    enc_hc_comb_cls(raw, h, ffn ? g_rd.s_hc_comb_f : g_rd.s_hc_comb_a, pcc, (hcd * nrows + 255l) / 256l)
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
-def private rd_encode_hc_side(raw : VkCommandBuffer; var h : VkHaz) {
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
+def private rd_encode_hc_side(raw : VkCommandBuffer; var h : VkHaz; nrows : int64 = 1l) {
     let dim = g_rd.dim
     let hc = g_rd.hc_n
     let hcd = hc * dim
     let ind = g_rd.ngram_ind
-    rq_enc(raw, h, g_rd.s_ple_rq, false, 0l, ind)
-    var pck = GemvArgs(n = uint(ind), d = uint(hcd), nreg = 1u, ybase = 0u)
+    rq_enc(raw, h, g_rd.s_ple_rq, false, 0l, ind * nrows)
+    var pck = GemvArgs(n = uint(ind), d = uint(hcd), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(hcd))
     gemv_enc(int(KqFmt.q8), raw, h, g_rd.s_ple_key, pck, hcd)
-    var pcv = GemvArgs(n = uint(ind), d = uint(dim), nreg = 1u, ybase = 0u)
+    var pcv = GemvArgs(n = uint(ind), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(dim))
     gemv_enc(int(KqFmt.q8), raw, h, g_rd.s_ple_val, pcv, dim)
-    var pcg = PleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(g_rd.ngram_nrows), rows = 0u, pos0 = 0u, eps = g_rd.eps, inv_sq = 1.0 / sqrt(float(dim)))
-    enc_ple_gate_cls(raw, h, g_rd.s_ple_gate, pcg, hc)
-    var pcc = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(g_rd.ngram_kern), dil = uint(g_rd.ngram_dil), rows = 0u, pos0 = 0u)
-    enc_ple_conv_cls(raw, h, g_rd.s_ple_conv, pcc, (hcd + 255l) / 256l)
+    let win = nrows > 1l
+    var pcg = PleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(g_rd.ngram_nrows), rows = win ? uint(nrows) : 0u, pos0 = win ? PLE_POS_TOK : 0u, eps = g_rd.eps, inv_sq = 1.0 / sqrt(float(dim)))
+    enc_ple_gate_cls(raw, h, g_rd.s_ple_gate, pcg, hc * nrows)
+    var pcc = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(g_rd.ngram_kern), dil = uint(g_rd.ngram_dil), rows = win ? uint(nrows) : 0u, pos0 = win ? PLE_POS_TOK : 0u)
+    enc_ple_conv_cls(raw, h, g_rd.s_ple_conv, pcc, (hcd * nrows + 255l) / 256l)
+    if (win) {
+        var pcm = PleCommitArgs(dim = uint(dim), hc = uint(hc), nrows = uint(g_rd.ngram_nrows), rows = uint(nrows))
+        enc_ple_commit_cls(raw, h, g_rd.s_ple_commit, pcm, (hcd * nrows + 255l) / 256l)
+    }
 }
 
 //! one stack serves both the window's expert chain and the decode hit chain
@@ -1400,7 +1449,7 @@ def private rd_hot_shared(slots : int64) {
     r.s_hot_act = set_actrq_cls(fixed_array(r.egate_dev, r.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev),
         fixed_array(egu_bytes, egu_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES), fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     r.s_hot_comb = set_combine_cls(fixed_array(r.hacc_dev, r.hot_ident1_dev, r.hot_w.buf, r.edown_dev),
-        fixed_array(dim * 4l, slots_bytes, slots_bytes, nb * r.k * dim * 4l), fixed_array(VHZ_MDN, 0u, 0u, VHZ_MDN))
+        fixed_array(dim * 4l * nb, slots_bytes, slots_bytes, nb * r.k * dim * 4l), fixed_array(VHZ_MDN, 0u, 0u, VHZ_MDN))
 }
 
 //! Routed layer `l`'s hot expert pool (`RdecHotLayerFn`): `slots` slots of the gate, up and down planes in their formats, the
@@ -1430,7 +1479,7 @@ def vk_rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; 
         return none
     }
     var H = RdHotLayer(f1 = f1, f3 = f3, f2 = f2, blk1 = kq_blocks_for(dim, nfe, f1), blk3 = kq_blocks_for(dim, nfe, f3),
-        blk2 = kq_blocks_for(nfe, dim, f2), xnb2 = nfe / kq_unit(f2))
+        blk2 = kq_blocks_for(nfe, dim, f2), xnb2 = nfe / kq_unit(f2), xnb1 = dim / kq_unit(f1))
     let widest = max(max(H.blk1 * arena_block_bytes(f1).wq, H.blk3 * arena_block_bytes(f3).wq), H.blk2 * arena_block_bytes(f2).wq)
     if (!vk_range_ok(slots * widest) || slots * dim * nfe >= HEAT_STRIDE) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: layer {l}'s pool of {slots} slots passes the device's storage range {vk_max_storage_range()} - its experts stay on the host\n")
@@ -1451,8 +1500,8 @@ def vk_rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; 
         g_rd.eup_dev, nb * k * nfe * 4l, VHZ_UP)
     H.s_down = arena_gemv_set(f2, p2, g_rd.hot_meta2.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHZ_HQ,
         g_rd.edown_dev, nb * k * dim * 4l, VHZ_MDN)
-    H.cmds |> resize(k + 1l)
-    H.recorded |> resize(k + 1l)
+    H.cmds |> resize(nb * k + 1l)
+    H.recorded |> resize(nb * k + 1l)
     H.on = true
     while (long_length(g_rd.hot_layers) <= l) {
         g_rd.hot_layers |> emplace(RdHotLayer())
@@ -1489,7 +1538,7 @@ def vk_rdec_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint8>; 
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
-def private rd_record_hot(l, nhit : int64) {
+def private rd_record_hot(l, nhit : int64; nrows : int64 = 1l) {
     var H & = unsafe(g_rd.hot_layers[l])
     let dim = g_rd.dim
     let nfe = g_rd.nfe
@@ -1497,7 +1546,7 @@ def private rd_record_hot(l, nhit : int64) {
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
     var h : VkHaz
-    rq_enc(raw, h, g_rd.s_hot_rq, H.f1, dim)
+    rq_enc(raw, h, g_rd.s_hot_rq, H.f1, dim * nrows)
     var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(nhit), ybase = 0u)
     gemv_enc(H.f1, raw, h, H.s_gate, pcg, nhit * nfe)
     gemv_enc(H.f3, raw, h, H.s_up, pcg, nhit * nfe)
@@ -1542,35 +1591,77 @@ def vk_rdec_hot_submit(l, nhit : int64; slots : int64 const?; w : float const?) 
     g_rd.hot_hits += nhit
 }
 
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
+def vk_rdec_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float const?) {
+    var H & = unsafe(g_rd.hot_layers[l])
+    let k = g_rd.k
+    let nreg = nrows * k
+    if (!H.on) {
+        panic("vk_rdec_hot_submit_rows: layer {l} has no pool")
+    }
+    if (nreg > MAX_ROUTED_SLOTS || nrows > g_rd.nb) {
+        panic("vk_rdec_hot_submit_rows: {nrows} rows x {k} = {nreg} regions against {MAX_ROUTED_SLOTS}, the planes hold {g_rd.nb} rows")
+    }
+    unsafe {
+        var m1 = reinterpret<uint?>(g_rd.hot_meta1.mapped)
+        var m3 = reinterpret<uint?>(g_rd.hot_meta3.mapped)
+        var m2 = reinterpret<uint?>(g_rd.hot_meta2.mapped)
+        var wp = reinterpret<float?>(g_rd.hot_w.mapped)
+        for (j in range64(MAX_ROUTED_SLOTS)) {
+            wp[j] = j < nreg ? w[j] : 0.0
+        }
+        for (j in range64(nreg)) {
+            let xrow = uint((j / k) * H.xnb1)
+            m1[j * 2l] = uint(slots[j] * H.blk1)
+            m1[j * 2l + 1l] = xrow
+            m3[j * 2l] = uint(slots[j] * H.blk3)
+            m3[j * 2l + 1l] = xrow
+            m2[j * 2l] = uint(slots[j] * H.blk2)
+            m2[j * 2l + 1l] = uint(j * H.xnb2)
+        }
+    }
+    if (!H.recorded[nreg]) {
+        rd_record_hot(l, nreg, nrows)
+    }
+    submit_nofence(H.cmds[nreg])
+    g_rd.hot_submits++
+    var hits = 0l
+    for (j in range64(nreg)) {
+        hits += unsafe(w[j]) != 0.0 ? 1l : 0l
+    }
+    g_rd.hot_hits += hits
+}
+
 //! the hit chains submitted and the picks they served since the driver armed
 def vk_rdec_hot_stats() : tuple<submits : int64; hits : int64>
     => g_rd != null ? (submits = g_rd.hot_submits, hits = g_rd.hot_hits) : (submits = 0l, hits = 0l)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
-def private rd_encode_routed_sum(raw : VkCommandBuffer; var h : VkHaz; l : int64) {
+def private rd_encode_routed_sum(raw : VkCommandBuffer; var h : VkHaz; l : int64; nrows : int64 = 1l) {
     let hot = l < long_length(g_rd.hot_layers) && g_rd.hot_layers[l].on
     if (hot) {
         h.w = VHZ_MDN
         h.pend_compute = true
     }
     vhz_dep(raw, h, 0u, VHZ_MDN, true)
-    cmd_copy_whole(raw, g_rd.hacc_host.buf, g_rd.hacc_dev, g_rd.dim * 4l)
+    cmd_copy_whole(raw, g_rd.hacc_host.buf, g_rd.hacc_dev, g_rd.dim * 4l * nrows)
     if (hot) {
-        var pcc = CombineArgs(n = uint(g_rd.dim), k = uint(g_rd.k), r0 = 1u, r1 = uint(g_rd.k) + 1u)
-        enc_combine_cls(raw, h, g_rd.s_hot_comb, pcc, 1l)
+        var pcc = CombineArgs(n = uint(g_rd.dim), k = uint(g_rd.k), r0 = 1u, r1 = uint(nrows * g_rd.k) + 1u)
+        enc_combine_cls(raw, h, g_rd.s_hot_comb, pcc, nrows)
     }
 }
 
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
-def private rd_record_hc_segments {
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
+def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<VkCommandBuffer>; seg0 : int64) {
     rd_fill_gemv_regions_all()
     let dim = g_rd.dim
     let hc = g_rd.hc_n
+    let hcd = hc * dim
     let nlfin = rd_norm_final()
     let (_fuse, fuse_qkr) = rd_fuse_gates()
-    let seg0 = g_rd.region * g_rd.nseg
+    let ncols = uint(nrows)
     var seg = 0l
-    var raw = g_rd.cmd_seg[seg0]
+    var raw = segs[seg0]
     unsafe {
         let rf : VkCommandBufferResetFlags
         vk_check(vkResetCommandBuffer(raw, rf), null)
@@ -1578,58 +1669,107 @@ def private rd_record_hc_segments {
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         var h : VkHaz
         vhz_dep(raw, h, 0u, VHZ_X, true)
-        cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l)
+        cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
         vhz_dep(raw, h, 0u, VHZ_COS, true)
-        cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l)
+        cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l * nrows)
         if (g_rd.ngram) {
-            cmd_copy_whole(raw, g_rd.ple_emb_host.buf, g_rd.ple_emb_dev, g_rd.ngram_ind * 4l)
+            cmd_copy_whole(raw, g_rd.ple_emb_host.buf, g_rd.ple_emb_dev, g_rd.ngram_ind * 4l * nrows)
         }
         vhz_dep(raw, h, VHZ_X, VHZ_X, true)
         for (c in range64(hc)) {
-            cmd_copy_range(raw, g_rd.x_dev, 0l, g_rd.hcres_dev, c * dim * 4l, dim * 4l)
+            cmd_copy_rows(raw, g_rd.x_dev, 0l, dim * 4l, g_rd.hcres_dev, c * dim * 4l, hcd * 4l, dim * 4l, nrows)
         }
         for (l in range64(g_rd.n_layers)) {
             var L & = g_rd.layers[l]
             if (g_rd.ngram && l == g_rd.ngram_layer) {
-                rd_encode_hc_side(raw, h)
+                rd_encode_hc_side(raw, h, nrows)
             }
-            rd_encode_hc_mix(raw, h, 2l * l, false)
-            rq_enc(raw, h, L.s_quant_xb, L.recurrent ? L.fqkv : L.fq, dim)
+            rd_encode_hc_mix(raw, h, 2l * l, false, nrows)
+            rq_enc(raw, h, L.s_quant_xb, L.recurrent ? L.fqkv : L.fq, dim * nrows)
             if (L.recurrent) {
-                rd_encode_dn_head(raw, h, L, 1l, 1u, false)
+                rd_encode_dn_head(raw, h, L, nrows, ncols, seq)
             } else {
-                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), 1l, 1u, 0)
+                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), nrows, ncols, 0)
             }
-            rd_encode_hc_scatter(raw, h, L, false)
-            rd_encode_hc_mix(raw, h, 2l * l + 1l, false)
-            rq_enc(raw, h, L.s_quant_xb2, L.f1, dim)
+            rd_encode_hc_scatter(raw, h, L, false, nrows)
+            rd_encode_hc_mix(raw, h, 2l * l + 1l, false, nrows)
+            rq_enc(raw, h, L.s_quant_xb2, L.f1, dim * nrows)
             if (has_dense_triple(L)) {
-                rd_encode_ffn(raw, h, L, l, nlfin, 1l, 1u, 0)
+                rd_encode_ffn(raw, h, L, l, nlfin, nrows, ncols, 0)
             }
             if (L.moe) {
                 verify(L.experts_host, "vk decode: the hyper-connection chain serves routed experts on the host alone")
                 var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
-                    norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = 1u)
+                    norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = ncols)
                 enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
                 vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-                cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l)
-                cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l)
+                cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l * nrows)
+                cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l * nrows)
                 vk_check(vkEndCommandBuffer(raw), null)
                 seg++
-                raw = g_rd.cmd_seg[seg0 + seg]
+                raw = segs[seg0 + seg]
                 vk_check(vkResetCommandBuffer(raw, rf), null)
                 vk_check(vkBeginCommandBuffer(raw, begin), null)
                 h = VkHaz()
-                rd_encode_routed_sum(raw, h, l)
+                rd_encode_routed_sum(raw, h, l, nrows)
             }
-            rd_encode_hc_scatter(raw, h, L, true)
+            rd_encode_hc_scatter(raw, h, L, true, nrows)
         }
-        rd_encode_hc_mix(raw, h, 2l * g_rd.n_layers, true)
-        rd_encode_tail(raw, h, 1l, 1u, false, false)
+        vhz_dep(raw, h, VHZ_X, rd_carry_bit(), true)
+        cmd_copy_whole(raw, g_rd.hcres_dev, g_rd.hccarry_out_dev, hcd * 4l * nrows)
+        rd_encode_hc_mix(raw, h, g_rd.hc_final_site, true, nrows)
+        rd_encode_tail(raw, h, nrows, ncols, false, false)
+        if (nrows > 1l) {
+            rd_encode_hc_verify_warm(raw, h, nrows)
+        }
         vk_check(vkEndCommandBuffer(raw), null)
     }
     verify(seg + 1l == g_rd.nseg, "vk decode: the split command's segments must be the host-expert layers plus one")
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
+def private rd_record_hc_segments {
+    rd_record_hc_segments_n(1l, false, g_rd.cmd_seg, g_rd.region * g_rd.nseg)
     g_rd.seg_recorded[g_rd.region] = true
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
+def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows : int64) {
+    let dim = g_rd.dim
+    let hc = g_rd.hc_n
+    let hcd = hc * dim
+    let rowb = dim * 4l
+    let wrowb = hcd * 4l
+    let hb = uint(g_rd.head_norm_base)
+    var L & = unsafe(g_rd.head)
+    vhz_dep(raw, h, 0u, VHZ_X, true)
+    cmd_copy_whole(raw, g_rd.hemb_host.buf, g_rd.hemb_dev, rowb * nrows)
+    cmd_copy_range(raw, g_rd.head_cat_host.buf, rowb, g_rd.hccarry_dev, 0l, wrowb)
+    vhz_dep(raw, h, 0u, VHZ_COS, true)
+    cmd_copy_whole(raw, g_rd.head_cos_host.buf, g_rd.head_cos_dev, g_rd.cos_elems * 4l * nrows)
+    vhz_dep(raw, h, VHZ_X | rd_carry_bit(), VHZ_GATE, true)
+    cmd_copy_whole(raw, g_rd.hccarry_dev, g_rd.hcsrc_dev, wrowb)
+    cmd_copy_range(raw, g_rd.hccarry_out_dev, 0l, g_rd.hcsrc_dev, wrowb, (nrows - 1l) * wrowb)
+    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 0u)
+    enc_cls_ar(raw, h, g_rd.head_s_emb_ar, pce, nrows)
+    var pcn = HcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = 0u, eps = g_rd.eps)
+    enc_hc_norm_cls(raw, h, g_rd.s_hc_norm_vsrc, pcn, hc * nrows)
+    vhz_dep(raw, h, VHZ_XB2, VHZ_XB, true)
+    for (i in range64(nrows)) {
+        for (c in range64(hc)) {
+            let cat_row = i * hc + c
+            cmd_copy_range(raw, g_rd.xb2_dev, i * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb, rowb)
+            cmd_copy_range(raw, g_rd.hcxn_dev, cat_row * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb + rowb, rowb)
+        }
+    }
+    rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc * nrows)
+    rd_ts(raw, "t:warm_cat")
+    var pceh = GemvArgs(n = uint(2l * dim), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(hc * nrows), ystride = uint(dim))
+    gemv_enc(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, pceh, dim)
+    rd_ts(raw, "t:warm_eh")
+    rd_encode_hc_mix(raw, h, 2l * g_rd.n_layers, false, nrows)
+    rq_enc(raw, h, L.s_quant_xb, L.fq, dim * nrows)
+    rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), nrows, uint(nrows), 0, true, "t:warm_")
 }
 
 //! The split token (`RdecTokenSplitFn`); `side` is the n-gram side input's gathered row, empty on a model without one.
@@ -1709,12 +1849,16 @@ def rd_enc_cls_epi(raw : VkCommandBuffer; var h : VkHaz; nrows : int64 = 1l) {
     enc_cls_epi(raw, h, g_rd.cls_epi_set, pce, (g_rd.vocab * nrows + 255l) / 256l)
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]
 def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool {
     return true if (g_gpu != null && g_gpu.dry)
     assert(g_rd != null && g_rd.ready && g_rd.head_norm_base > 0l, "vk_rdec_set_head on a driver prepared without the head, or before set_cls")
     if (!(gemv_cls_ensure(feh) && ensure_cls_ar() && ensure_cls_dn_rq() && (!kq_sb(feh) || ensure_cls_q8k_rq()))) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the NextN head's eh_proj format {feh} found no GEMV or requant class on this device - the CPU draft serves\n")
+        return false
+    }
+    if (g_rd.hc_nextn && !(gemv_cls_has_n(feh) && gemv_cls_ensure_n(feh, g_rd.hc_n))) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the NextN head's eh_proj format {feh} has no N-column GEMV leaf for the {g_rd.hc_n} streams on this device - the CPU draft serves\n")
         return false
     }
     let dim = g_rd.dim
@@ -1727,15 +1871,26 @@ def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64;
     g_rd.head_eh_blk = beh
     g_rd.head_eh_fmt = feh
     g_rd.head_m_eh = rd_meta()
-    let cat_bytes = 2l * dim * 4l * nb
+    let cat_rows = g_rd.hc_nextn ? g_rd.hc_n * nb : nb   // on the chain each head row feeds hc cat rows, one a stream
+    let cat_bytes = 2l * dim * 4l * cat_rows
     g_rd.head_s_cat_ar = set_cls_ar(fixed_array(g_rd.head_cat_in_dev, g_rd.head_cat_in_dev, g_rd.norms_dev, g_rd.head_cat_dev),
         fixed_array(cat_bytes, cat_bytes, g_rd.norms_bytes, cat_bytes),
         fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
-    let xq_bytes = 2l * dim * nb
-    let xs_bytes = (2l * dim / 32l) * 4l * nb
-    g_rd.head_s_cat_rq = set_rq_cls(fixed_array(g_rd.head_cat_dev, g_rd.xq_dev, g_rd.xs_dev),
-        fixed_array(cat_bytes, xq_bytes, xs_bytes),
-        fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+    let xq_bytes = 2l * dim * cat_rows
+    let xs_bytes = (2l * dim / Q8_BLOCK_ELEMS) * 4l * cat_rows
+    if (g_rd.hc_nextn) {
+        g_rd.head_s_cat_rq = set_rq_cls(fixed_array(g_rd.head_cat_dev, g_rd.hcatq_dev, g_rd.hcats_dev),
+            fixed_array(cat_bytes, xq_bytes, xs_bytes),
+            fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+        g_rd.head_s_eh_hc = arena_gemv_set(feh, arena_planes(feh, beh), g_rd.head_m_eh.buf, META_BYTES, 0u, g_rd.hcatq_dev, g_rd.hcats_dev, xq_bytes, xs_bytes, VHZ_XQ,
+            g_rd.hcres_dev, g_rd.hc_n * dim * 4l * nb, VHZ_X)
+        g_rd.head_s_emb_ar = set_cls_ar(fixed_array(g_rd.hemb_dev, g_rd.hemb_dev, g_rd.norms_dev, g_rd.xb2_dev),
+            fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb), fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB2))
+    } else {
+        g_rd.head_s_cat_rq = set_rq_cls(fixed_array(g_rd.head_cat_dev, g_rd.xq_dev, g_rd.xs_dev),
+            fixed_array(cat_bytes, xq_bytes, xs_bytes),
+            fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+    }
     g_rd.head_s_eh = arena_gemv_set(feh, arena_planes(feh, beh), g_rd.head_m_eh.buf, META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, xq_bytes, xs_bytes, VHZ_XQ,
         g_rd.x_dev, dim * 4l * nb, VHZ_X)
     g_rd.head_s_hx_ar = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.head_cat_dev),
@@ -2647,8 +2802,8 @@ def private rd_encode_tail(raw : VkCommandBuffer; var h : VkHaz; nrows : int64; 
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
         cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l * nrows)
         if (g_rd.carry_live) {
-            vhz_dep(raw, h, VHZ_XB, 0u, true)
-            cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hid_host.buf, dim * 4l * nrows)
+            vhz_dep(raw, h, rd_carry_bit(), 0u, true)
+            cmd_copy_whole(raw, rd_carry_src(), g_rd.hid_host.buf, rd_carry_width() * 4l * nrows)
         }
         rd_ts(raw, "t:dma")   //! the logits' trip to host memory, billed apart: on a box whose host-visible memory is slow it is the step's largest interval
     }
@@ -2790,7 +2945,7 @@ def private rd_xlog(nrows : int64; picks_only : bool) : VkCommandBuffer {
         }
         cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l * nrows)
         if (g_rd.carry_live) {
-            cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hid_host.buf, g_rd.dim * 4l * nrows)
+            cmd_copy_whole(raw, rd_carry_src(), g_rd.hid_host.buf, rd_carry_width() * 4l * nrows)
         }
         vk_check(vkEndCommandBuffer(raw), null)
         if (picks_only) {
@@ -3085,11 +3240,18 @@ def private rd_land_one(pick_only : bool; var logits : array<float>) : int64 {
     return -1l
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]
+def private rd_carry_width : int64 => g_rd.hc ? g_rd.hc_n * g_rd.dim : g_rd.dim
+
+def private rd_carry_src : uint64 => g_rd.hc ? g_rd.hccarry_out_dev : g_rd.xb_dev
+
+def private rd_carry_bit : uint => g_rd.hc ? VHZ_X : VHZ_XB
+
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]   //! per token, reached through the tier's registered seat
 def vk_rdec_land_carry(row : int64; var dst : array<float>) {
     assert(g_rd != null && g_rd.carry, "vk_rdec_land_carry on a driver prepared without the carry")
-    assert(row >= 0l && row < g_rd.nb && long_length(dst) >= g_rd.dim, "vk_rdec_land_carry: the row is past the landed rows, or the destination is short of a row")
-    let row_bytes = g_rd.dim * 4l
+    let row_bytes = rd_carry_width() * 4l
+    assert(row >= 0l && row < g_rd.nb && long_length(dst) * 4l >= row_bytes, "vk_rdec_land_carry: the row is past the landed rows, or the destination is short of a row")
     unsafe {
         memcpy(addr<void?>(dst[0]), reinterpret<void?>(reinterpret<uint8?>(g_rd.hid_host.mapped) + row * row_bytes), row_bytes)
     }
@@ -3156,22 +3318,122 @@ def private rd_record_draft {
     g_rd.head_draft_recorded[g_rd.region] = true
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   //! per speculative round, reached through the tier's registered seat
-def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>) : int64 {
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]   //! once per region and set epoch
+def private rd_record_hc_draft {
+    let dim = g_rd.dim
+    let hc = g_rd.hc_n
+    let hcd = hc * dim
+    let l = g_rd.n_layers
+    let nlfin = rd_norm_final()
+    let (_fuse, fuse_qkr) = rd_fuse_gates()
+    var L & = unsafe(g_rd.head)
+    verify(L.moe && L.experts_host, "vk decode: the hyper-connection chain's NextN head serves its routed experts on the host")
+    rd_fill_head_regions()
+    let rf : VkCommandBufferResetFlags
+    let begin = VkCommandBufferBeginInfo()
+    var raw = g_rd.head_draft_cmd[g_rd.region]
+    vk_check(vkResetCommandBuffer(raw, rf), null)
+    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var one : RdqStamps
+    rd_take_stamps(one, g_rdq_n)
+    rd_stamps_begin(raw)
+    var h : VkHaz
+    vhz_dep(raw, h, 0u, VHZ_X, true)
+    cmd_copy_whole(raw, g_rd.head_cat_host.buf, g_rd.head_cat_in_dev, dim * 4l)
+    cmd_copy_range(raw, g_rd.head_cat_host.buf, dim * 4l, g_rd.hccarry_dev, 0l, hcd * 4l)
+    vhz_dep(raw, h, 0u, VHZ_COS, true)
+    cmd_copy_whole(raw, g_rd.head_cos_host.buf, g_rd.head_cos_dev, g_rd.cos_elems * 4l)
+    rd_ts(raw, "p:upload")
+    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(g_rd.head_norm_base + RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 0u)
+    enc_cls_ar(raw, h, g_rd.head_s_cat_ar, pce, 1l)
+    var pcn = HcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = 0u, eps = g_rd.eps)
+    enc_hc_norm_cls(raw, h, g_rd.s_hc_norm_carry, pcn, hc)
+    vhz_dep(raw, h, VHZ_XB | VHZ_XB2, VHZ_XB, true)
+    for (c in range64(hc)) {
+        if (c > 0l) {
+            cmd_copy_range(raw, g_rd.head_cat_dev, 0l, g_rd.head_cat_dev, c * 2l * dim * 4l, dim * 4l)
+        }
+        cmd_copy_range(raw, g_rd.hcxn_dev, c * dim * 4l, g_rd.head_cat_dev, (c * 2l + 1l) * dim * 4l, dim * 4l)
+    }
+    rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc)
+    rd_ts(raw, "p:draft_cat")
+    var pceh = GemvArgs(n = uint(2l * dim), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(hc), ystride = uint(dim))
+    gemv_enc(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, pceh, dim)
+    rd_ts(raw, "p:draft_eh")
+    rd_encode_hc_mix(raw, h, 2l * l, false)
+    rq_enc(raw, h, L.s_quant_xb, L.fq, dim)
+    rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), 1l, 1u, 0)
+    rd_encode_hc_scatter(raw, h, L, false)
+    rd_encode_hc_mix(raw, h, 2l * l + 1l, false)
+    rq_enc(raw, h, L.s_quant_xb2, L.f1, dim)
+    if (has_dense_triple(L)) {
+        rd_encode_ffn(raw, h, L, l, nlfin, 1l, 1u, 0)
+    }
+    var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
+        norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = 1u)
+    enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
+    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
+    cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l)
+    cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l)
+    pfq_end(raw)
+    vk_check(vkEndCommandBuffer(raw), null)
+    rd_take_stamps(g_rdq_draft, g_pfq_n)
+    raw = g_rd.hc_draft_cmd[g_rd.region]
+    vk_check(vkResetCommandBuffer(raw, rf), null)
+    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    rd_stamps_begin(raw)
+    h = VkHaz()
+    rd_encode_routed_sum(raw, h, l)
+    rd_encode_hc_scatter(raw, h, L, true)
+    vhz_dep(raw, h, VHZ_X, rd_carry_bit(), true)
+    cmd_copy_whole(raw, g_rd.hcres_dev, g_rd.hccarry_out_dev, hcd * 4l)
+    if (!g_rd.log_xfer || !g_rd.carry_live) {   // the head's own carry lands whatever the knob says: the command copies it wherever the transfer command will not
+        vhz_dep(raw, h, rd_carry_bit(), 0u, true)
+        cmd_copy_whole(raw, g_rd.hccarry_out_dev, g_rd.hid_host.buf, hcd * 4l)
+    }
+    rd_encode_hc_mix(raw, h, g_rd.hc_mtp_site, true)
+    rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim)
+    rd_ts(raw, "t:draft_norm")
+    var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = 1u, ystride = uint(g_rd.vocab))
+    gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
+    rd_ts(raw, "t:draft_cls")
+    var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))
+    enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
+    enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, 1l)
+    rd_ts(raw, "t:draft_pick")
+    if (!g_rd.log_xfer) {
+        vhz_dep(raw, h, VHZ_LOG, 0u, true)
+        cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
+        cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l)
+        rd_ts(raw, "t:dma")
+    }
+    pfq_end(raw)
+    vk_check(vkEndCommandBuffer(raw), null)
+    rd_take_stamps(g_rdq_hc_draft_tail, g_pfq_n)
+    rd_put_back_stamps(one)
+    g_rd.head_draft_recorded[g_rd.region] = true
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]   //! per speculative round, reached through the tier's registered seat
+def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
     return -1l if (g_rd == null || !g_rd.ready || !g_rd.head_on || !g_rd.carry)
     rd_carry_sync()
     let dim = g_rd.dim
     assert(hyd0 >= 0l && row >= 0l, "vk_rdec_draft: a negative head row")
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
-    var pick = -1l
+    var pick : int64
     vk_rdec_head_sync_rows(hyd0, row - hyd0, kp, vp)
     unsafe {
         if (!g_rd.head_draft_recorded[g_rd.region]) {
-            rd_record_draft()
+            if (g_rd.hc_nextn) {
+                rd_record_hc_draft()
+            } else {
+                rd_record_draft()
+            }
         }
         memcpy(g_rd.head_cat_host.mapped, addr<void?>(x[0]), dim * 4l)
-        memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h[0]), dim * 4l)
+        memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h[0]), rd_carry_width() * 4l)
         memcpy(g_rd.head_cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
         var tm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
         tm.pos = uint(row)
@@ -3180,18 +3442,19 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
         tm.mirbase = 0u   // the head's region rides the draft command's push
         tm.dnslot = uint(g_rd.region)
         var cmd = g_rd.head_draft_cmd[g_rd.region]
+        let t1 = ref_time_ticks()
+        if (g_rd.hc_nextn) {
+            submit_wait(cmd)
+            invoke(experts, g_rd.n_layers, reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped))
+            cmd = g_rd.hc_draft_cmd[g_rd.region]
+        }
+        rd_submit_land(cmd, 1l, pick_only)
+        let t2 = ref_time_ticks()
+        rd_wait_land()
+        let t3 = ref_time_ticks()
+        pick = rd_land_draft(pick_only, logits)
         if (prof) {
-            let t1 = ref_time_ticks()
-            rd_submit_land(cmd, 1l, pick_only)
-            let t2 = ref_time_ticks()
-            rd_wait_land()
-            let t3 = ref_time_ticks()
-            pick = rd_land_draft(pick_only, logits)
             rdq_host_add(g_rdq_draft_ledger, ts0, t1, t2, t3, ref_time_ticks())
-        } else {
-            rd_submit_land(cmd, 1l, pick_only)
-            rd_wait_land()
-            pick = rd_land_draft(pick_only, logits)
         }
     }
     if (prof) {
@@ -3199,7 +3462,9 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
         if (g_rdq_draft_ledger.count % 32l == 31l) {
             rdq_host_report(g_rdq_draft_ledger, "draft", 1l)
         }
-        if (g_rdq_draft.n > 2u) {
+        if (g_rd.hc_nextn && g_rdq_hc_draft_tail.n > 2u) {
+            rdq_sample(g_rdq_draft_ledger, "draft tail", "the NextN head's second segment (the pool holds the last segment's stamps)", g_rdq_hc_draft_tail)
+        } elif (!g_rd.hc_nextn && g_rdq_draft.n > 2u) {
             rdq_sample(g_rdq_draft_ledger, "draft", "the NextN head", g_rdq_draft)
         }
     }
@@ -3233,7 +3498,7 @@ def private rd_ensure_v_rail : bool {
 def vk_rdec_verify_rows : int64 {
     if (g_rd == null || !g_rd.ready) return 0l
     if (g_rd.v_rail == NRail.unasked) {
-        g_rd.v_rail = rd_ensure_v_rail() ? NRail.built : NRail.declined
+        g_rd.v_rail = (g_rd.hc ? rd_ensure_hc_v_rail() : rd_ensure_v_rail()) ? NRail.built : NRail.declined
     }
     return g_rd.v_rail == NRail.built ? g_rd.verify_rows : 0l
 }
@@ -3306,9 +3571,151 @@ def private rd_record_verify(n : int64) {
     g_rd.v_recorded[vi] = true
 }
 
+//! once a driver: the verify's segment command buffers, a region's `nseg`, and the per-region recorded flags
+[cold_path]
+def private rd_hc_v_seg_alloc() {
+    g_rd.hc_v_seg |> reserve(g_rd.regions * g_rd.nseg)
+    g_rd.hc_v_seg |> resize(g_rd.regions * g_rd.nseg)
+    for (i in range64(long_length(g_rd.hc_v_seg))) {
+        g_rd.hc_v_seg[i] = alloc_cmd()
+    }
+    g_rd.hc_v_recorded |> reserve(g_rd.regions)
+    g_rd.hc_v_recorded |> resize(g_rd.regions)
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
+def private rd_ensure_hc_v_rail : bool {
+    if (!g_rd.head_on || !g_rd.carry || !g_rd.hc_nextn) return rd_v_decline("the NextN head is off the chain (the load log names why)")
+    if (g_rd.verify_rows < 2l) return rd_v_decline("the driver was prepared for {g_rd.verify_rows} verify rows (the tier's verify seat was not installed at the load)")
+    if (g_rd.verify_rows != 2l) return rd_v_decline("the hyper-connection verify serves depth 1 alone - two rows, the driver was prepared for {g_rd.verify_rows} (the side panel commits every row, followup_vulkan.md row 129)")
+    if (vk_rdec_token_n_rows() < 2l) return rd_v_decline("the N-row rail declined on this model (its line above); the hyper-connection verify is built on it")
+    rd_ensure_n_sets()
+    let nb = g_rd.nb
+    let L & = unsafe(g_rd.head)
+    let q8 = int(KqFmt.q8)
+    if (!(gemv_cls_has_n(q8) && gemv_cls_ensure_n(q8, nb))) return rd_v_decline("the q8 mixer planes have no {nb}-column GEMV leaf on this device")
+    if (!gemv_cls_ensure_n(g_rd.head_eh_fmt, g_rd.hc_n * nb)) return rd_v_decline("the head's eh_proj format {g_rd.head_eh_fmt} has no {g_rd.hc_n * nb}-column GEMV leaf on this device")
+    if (!(gemv_cls_has_n(L.fq) && gemv_cls_ensure_n(L.fq, nb))) return rd_v_decline("the head's q format {L.fq} has no {nb}-column GEMV leaf on this device")
+    if (!(gemv_cls_has_n(L.fk) && gemv_cls_ensure_n(L.fk, nb))) return rd_v_decline("the head's k format {L.fk} has no {nb}-column GEMV leaf on this device")
+    if (!(L.vfk || (gemv_cls_has_n(L.fv) && gemv_cls_ensure_n(L.fv, nb)))) return rd_v_decline("the head's v format {L.fv} has no {nb}-column GEMV leaf on this device")
+    return true
+}
+
+//! the verify's rows are not this driver's: logged once a model, the CPU verify serves the call
+[cold_path]
+def private rd_v_rows_mismatch(n : int64) : bool {
+    if (!g_rd.v_rows_said) {
+        g_rd.v_rows_said = true
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: a verify of {n} rows against the {g_rd.verify_rows} the driver was prepared for - the CPU verify serves\n")
+    }
+    return false
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]   //! per speculative round, reached through the tier's registered seat
+def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
+    if (g_rd.v_rail == NRail.unasked) {
+        g_rd.v_rail = rd_ensure_hc_v_rail() ? NRail.built : NRail.declined
+    }
+    return false if (g_rd.v_rail != NRail.built)
+    return rd_v_rows_mismatch(n) if (n != g_rd.verify_rows)
+    rd_carry_sync()
+    let dim = g_rd.dim
+    let hcd = g_rd.hc_n * dim
+    let r = g_rd.region
+    verify(pos >= 1l && long_length(logits) >= n * g_rd.vocab && long_length(picks) >= n && long_length(hid) >= n * hcd && long_length(h0) >= hcd,
+        "vk_rdec_verify: a verify below row 1 (the head's first row is pos - 1), or a landing short of its rows")
+    verify(!g_rd.ngram || long_length(side) >= n * g_rd.ngram_ind, "vk_rdec_verify: the side rows are short of the verify's rows")
+    if (long_length(g_rd.hc_v_seg) == 0l) {
+        rd_hc_v_seg_alloc()
+    }
+    let seg0 = r * g_rd.nseg
+    if (!g_rd.hc_v_recorded[r]) {
+        verify(n == g_rd.verify_rows, "vk_rdec_verify: the hyper-connection verify runs at the row count the driver was prepared for")
+        rd_record_hc_segments_n(n, true, g_rd.hc_v_seg, seg0)
+        g_rd.hc_v_recorded[r] = true
+    }
+    let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
+    let guard = rd_guard_rows(g_rd.tokens_served, n)
+    let picks_only = pick_only && !guard
+    g_rd_verify_landed_logits = !picks_only
+    let prof = vk_prof()
+    let ts0 = ref_time_ticks()
+    var host_us = 0l
+    unsafe {
+        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), dim * 4l * n)
+        memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * n)
+        memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
+        memcpy(g_rd.hemb_host.mapped, addr<void?>(hemb[0]), dim * 4l * n)
+        memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h0[0]), hcd * 4l)
+        if (g_rd.ngram) {
+            memcpy(g_rd.ple_emb_host.mapped, addr<void?>(side[0]), g_rd.ngram_ind * 4l * n)
+        }
+        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
+        var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
+        for (i in range64(n)) {
+            tm[i].pos = uint(pos + i)
+            tm[i].cnt = uint(pos + i + 1l)
+            tm[i].parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u
+            tm[i].mirbase = uint(r * g_rd.mir_elems)
+            tm[i].dnslot = uint(r)
+            hm[i].pos = uint(pos - 1l + i)
+            hm[i].cnt = uint(pos + i)
+            hm[i].parity = 0u
+            hm[i].mirbase = uint(r * g_rd.mir_elems)
+            hm[i].dnslot = uint(r)
+        }
+        let t1 = ref_time_ticks()
+        for (seg in range64(g_rd.nseg - 1l)) {
+            var cmd = g_rd.hc_v_seg[seg0 + seg]
+            submit_wait(cmd)
+            let th = ref_time_ticks()
+            invoke(experts, g_rd.seg_layer[seg], reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped), 0l, n)
+            host_us += int64(get_time_usec(th))
+        }
+        var last = g_rd.hc_v_seg[seg0 + g_rd.nseg - 1l]
+        let t2 = ref_time_ticks()
+        rd_submit_land(last, n, picks_only)
+        rd_wait_land()
+        let t3 = ref_time_ticks()
+        if (!picks_only) {
+            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * n)
+        }
+        memcpy(addr<void?>(hid[0]), g_rd.hid_host.mapped, hcd * 4l * n)
+        if (prof) {
+            rdq_host_add(g_rdq_verify_ledger, ts0, t1, t2, t3, ref_time_ticks())
+            g_rdq_verify_ledger.host_experts_us += double(host_us)
+        }
+    }
+    for (i in range64(n)) {
+        picks[i] = rd_landed_pick(i)
+    }
+    g_rd.tokens_served += n
+    if (guard) {
+        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
+    }
+    if (g_rd.hybrid) {
+        for (_i in range64(n)) {
+            rd_dn_advance_parity(r)
+        }
+        g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l
+        g_rd.roll_vrows = n
+    }
+    if (prof) {
+        g_rdq_verify_ledger.wall_us += double(get_time_usec(ts0))
+        g_rdq_verify_ledger.count++
+        if (g_rdq_verify_ledger.count % 32l == 0l) {
+            rdq_host_report(g_rdq_verify_ledger, "verify", n)
+        }
+    }
+    return true
+}
+
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   //! per speculative round, reached through the tier's registered seat
-def vk_rdec_verify(x, cossin, hemb, hcos, h0 : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) : bool {
-    return false if (n < 2l || n > vk_rdec_verify_rows())
+def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
+    if (g_rd != null && g_rd.ready && g_rd.hc) {
+        return rd_hc_verify(x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)
+    }
+    return rd_v_rows_mismatch(n) if (n < 2l || n > vk_rdec_verify_rows())
     rd_carry_sync()
     let dim = g_rd.dim
     let r = g_rd.region

@@ -5,7 +5,8 @@ document carries the NextN draft head the resident driver homes beside the trunk
 command that steps it, the prompt warm the window chain gives its slab, the rollback a
 rejected device verify takes from the copies the verify command made, the verify window a
 declined verify seat runs the CPU verify in, and the speculative knob's per-step gate on the
-carry. The residency plan,
+carry. A head that rides the hyper-connection chain - its routed experts on the host beside the
+trunk's - is `ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`, its verify `#hc-verify-rows`. The residency plan,
 the marks swap and the logits landing the head rides are in
 `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; the same-slab verify that re-warms the head's rows a
 round at a time is in `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`; the Metal round
@@ -17,9 +18,12 @@ these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 **A NextN-headed model's draft head rides the arena as layer `n_layers`, and a recorded draft
 command steps it.** Where the tier installed the draft seat (`install_rdec_draft`) and the carry
 landing, and the head has the trunk's attention shape, a dense FFN and planes the resident GEMVs
-serve (`resident_head_decline` logs any other head at load, whose draft stays the CPU's), the plan
-counts eight planes - eh_proj [2dim -> dim] in its own format, the q/k/v/o quad, the FFN triple -
-and one more K/V slot a region past the trunk's; a headless model plans what it always did. The
+serve (`resident_head_decline` logs any other head at load, whose draft stays the CPU's; on the
+hyper-connection chain a routed head with its experts on the host is admitted too,
+`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`), the plan counts eight planes - eh_proj [2dim -> dim]
+in its own format, the q/k/v/o quad, the FFN triple (a routed head's dense triple is its shared
+expert's) - the chain's planes for a head on it, and one more K/V slot a region past the trunk's; a
+headless model plans what it always did. The
 norms plane takes the head's q/k rows at index `n_layers` of the q/k block and five rows past it -
 the attention, FFN, embed, carry and head norms, the final norm's row where the file ships no head
 norm (`rdec_norms_len`) - since layer `n_layers`' own rows would index the final norm's. The layer

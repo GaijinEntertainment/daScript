@@ -281,6 +281,9 @@ def public clear_mtp_head_path() {
     g_mtp_head_override_set = false
 }
 
+//! the pinned head path and whether one is pinned at all (an empty pin turns the environment's `DASLLAMA_MTP_HEAD` off)
+def public mtp_head_path_pin() : tuple<set : bool; path : string> => (set = g_mtp_head_override_set, path = g_mtp_head_override)
+
 //! The split NextN/MTP head that rides `path`'s shard walk: the override / `DASLLAMA_MTP_HEAD` when
 //! set, else the `mtp-<trunk basename>` sibling beside the trunk (the published split-head layout),
 //! else "". An assistant drafter is never a head - its weights ride their own lane.
