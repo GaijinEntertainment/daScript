@@ -443,7 +443,7 @@ let private RDEC_VRAM_HEADROOM = 2_147_483_648l    // auto-arm slack past the ti
 let private RDEC_VRAM_HEADROOM_PCT = 27l
 let private RDEC_OS_RESERVE = 1_073_741_824l
 let private RDEC_MISC_BYTES = 67_108_864l          // decode smalls + batch act planes + metas
-let private RDEC_HOT_CHAIN_BYTES = 335_544_320l    //! the batch arm's cm2 chain the hot expert pool's windows ride: its activation, hidden, output and combine planes
+let RDEC_HOT_CHAIN_BYTES = 335_544_320l    //! the batch arm's cm2 chain the hot expert pool's windows ride: its activation, hidden, output and combine planes
 
 //! Layer `l` routes through expert stacks: past the dense lead, with its expert planes present.
 def layer_is_moe(t : Model; l : int64) : bool => (t.config.n_expert > 0l && l >= t.config.n_layer_dense_lead
@@ -799,16 +799,13 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
     p.weight_bytes += resident_dn_ba_f32_bytes(t)
     p.weight_bytes += resident_router_bytes(c, n_moe)
     if (resident_host_experts(c) && rdec_hot_installed() && c.n_expert_used <= int64(RDEC_HOT_PICKS)) {
-        p.scratch_bytes += RDEC_HOT_CHAIN_BYTES
-        let slot_bytes = resident_hot_slot_bytes_all_layers(t)
         let room = p.usable_bytes - p.weight_bytes - p.scratch_bytes
         let floor_kv = g_rdec_regions_want * min(seq_cap, RDEC_HOT_CTX_FLOOR) * (krow + vrow)
         let slots_ask = g_env_gpu.gpu_heat ?? (gpu_want_heat() > 0l ? gpu_want_heat() : HOT_SLOTS_AUTO)
-        p.hot_slots = resident_hot_slots(slots_ask, room - p.kv_bytes, room - floor_kv, slot_bytes, c.n_expert)
-        if (hot_cap != HOT_SLOTS_AUTO) {
-            p.hot_slots = min(p.hot_slots, hot_cap)
-        }
-        p.hot_bytes = p.hot_slots * slot_bytes
+        let fit = resident_hot_fit(slots_ask, hot_cap, room - p.kv_bytes, room - floor_kv, resident_hot_slot_bytes_all_layers(t), c.n_expert)
+        p.hot_slots = fit.slots
+        p.hot_bytes = fit.hot_bytes
+        p.scratch_bytes += fit.chain_bytes
     }
     let total = p.weight_bytes + p.kv_bytes + p.scratch_bytes + p.hot_bytes
     let usable = p.usable_bytes
@@ -2625,6 +2622,17 @@ def resident_hot_slots(want, room_bytes, floor_bytes, slot_bytes_all_layers, n_e
     }
     slots = min(slots, n_expert)
     return slots >= RDEC_HOT_SLOTS_MIN ? slots : 0l
+}
+
+//! The pool's share of the plan: the slots (`resident_hot_slots` over the room the chain's scratch leaves, capped by
+//! `hot_cap` where a first plan settled one), their bytes, and the chain's scratch - charged only with a pool
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
+def resident_hot_fit(want, hot_cap, room_bytes, floor_bytes, slot_bytes_all_layers, n_expert : int64) : tuple<slots : int64; hot_bytes : int64; chain_bytes : int64> {
+    var slots = resident_hot_slots(want, room_bytes - RDEC_HOT_CHAIN_BYTES, floor_bytes - RDEC_HOT_CHAIN_BYTES, slot_bytes_all_layers, n_expert)
+    if (hot_cap != HOT_SLOTS_AUTO) {
+        slots = min(slots, hot_cap)
+    }
+    return (slots = slots, hot_bytes = slots * slot_bytes_all_layers, chain_bytes = slots > 0l ? RDEC_HOT_CHAIN_BYTES : 0l)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]

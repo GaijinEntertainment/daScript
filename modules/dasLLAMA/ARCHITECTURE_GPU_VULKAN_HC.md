@@ -69,7 +69,10 @@ floor, and a plan that fills the card to its cap beside a desktop pages (the car
 2.9 tok/s so, 30 with the pool and a mirror of 88 thousand positions). `DASLLAMA_GPU_HEAT` asks a
 count, served from the same floor's room, and 0 asks none. The pick shortens the mirror's context to
 what the pool leaves and holds the pool at the count the first plan settled on, so the slack of the
-shortened context stays slack. Under four slots no pool arms.
+shortened context stays slack. Under four slots no pool arms. The chain a window's hits ride
+(`RDEC_HOT_CHAIN_BYTES`, 320 MB of scratch) is taken off the room before the slots are counted and
+charged to the plan only with a pool (`resident_hot_fit`): a plan with no pool - none asked, or none
+that fits - keeps the mirror's context and the room a model needs to fit.
 
 **The host owns the policy.** It holds, a layer, the slot of every expert and the expert of every slot
 (`HotLayer`) and a pick count an expert that halves every 256 routed rows. After a window's host step

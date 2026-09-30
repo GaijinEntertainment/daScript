@@ -884,7 +884,9 @@ both. `test_plan_room` is the GPU plan's room arithmetic - the tier cap less hea
 the OS's room where the OS answers. `test_resident_hot_slots` is the hot expert pool's slot rule
 (`resident_hot_slots`): 64 slots where they fit beside the whole mirror, up to 32 out of the mirror's
 context where they do not, never past the room a mirror at its floor leaves, a count asked served from
-that room, no pool under four slots or on a plan past its room. `test_resident_region_ctx` is a mirror region's share of its
+that room, no pool under four slots or on a plan past its room; its second subtest holds the pool's
+share of the plan (`resident_hot_fit`): the chain's scratch is taken off the room before the slots are
+counted and charged only with a pool, a first plan's cap holds the count. `test_resident_region_ctx` is a mirror region's share of its
 side's one binding: the whole of it at one region, a quarter at four, the session's own context
 where that is shorter, and one region for a count under one. `test_mtp_seat_owner` holds the
 speculative round's seat ownership on a Model shell under two fake decode overrides: with the

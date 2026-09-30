@@ -445,6 +445,27 @@ def test_resident_hot_slots(t : T?) {
         t |> equal(0l, resident_hot_slots(-1l, -500l * mib, -100l * mib, column, 512l), "a plan already past its room takes none")
         t |> equal(8l, resident_hot_slots(-1l, 9000l * mib, 12000l * mib, column, 8l), "a layer's experts cap its slots")
     }
+    t |> run("the pool's share of the plan: the chain's scratch is charged with a pool and never without one, and the slots are sized past it") @(t : T?) {
+        let mib = 1_048_576l
+        let column = 125l * mib
+        let chain = RDEC_HOT_CHAIN_BYTES
+        let none = resident_hot_fit(0l, HOT_SLOTS_AUTO, 9000l * mib, 12000l * mib, column, 512l)
+        t |> equal(0l, none.slots, "no pool asked: no slots")
+        t |> equal(0l, none.chain_bytes, "no pool asked: the chain's scratch is not charged")
+        t |> equal(0l, none.hot_bytes, "no pool asked: no pool bytes")
+        let tight = resident_hot_fit(HOT_SLOTS_AUTO, HOT_SLOTS_AUTO, 0l, 3l * column + chain, column, 512l)
+        t |> equal(0l, tight.slots, "three slots past the chain's scratch: no pool")
+        t |> equal(0l, tight.chain_bytes, "... and nothing charged for the chain the pool would have ridden")
+        let some = resident_hot_fit(HOT_SLOTS_AUTO, HOT_SLOTS_AUTO, 64l * column + chain, 12000l * mib, column, 512l)
+        t |> equal(64l, some.slots, "64 slots fit beside the mirror once the chain's scratch is taken off the room")
+        t |> equal(chain, some.chain_bytes, "a pool charges the chain's scratch")
+        t |> equal(64l * column, some.hot_bytes, "the pool's bytes are its slots'")
+        let short = resident_hot_fit(HOT_SLOTS_AUTO, HOT_SLOTS_AUTO, 64l * column, 12000l * mib, column, 512l)
+        t |> equal(61l, short.slots, "the chain's scratch comes out of the same room: 320 MB is two and a half slots of 125 MB, so 61 fit where 64 did")
+        let capped = resident_hot_fit(HOT_SLOTS_AUTO, 16l, 9000l * mib, 12000l * mib, column, 512l)
+        t |> equal(16l, capped.slots, "a cap a first plan settled holds the count")
+        t |> equal(chain, capped.chain_bytes, "... with the chain still charged")
+    }
 }
 
 [test]
