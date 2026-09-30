@@ -78,11 +78,14 @@ there.
   code, so a jittable function on its path joins every jitted program's DLL (the block-passing
   helpers cannot be lowered: `ARCHITECTURE_JIT_ENTRY.md` sec.4).
 
-- **A diff that adds an environment or config input to a JIT cache key folds it inside
-  `jit_env_salt` (`daslib/llvm_jit_plan.das`), never directly into either JIT key - the DLL
-  key or the split-obj key (`ARCHITECTURE_CODEGEN_IDENTITY.md` sec.2)** - salt feeds both keys, and a config
-  folded into one but not the other links stale objects. Inputs that vary per function set
-  (AOT hashes) fold into the key directly, not through the salt.
+- **A diff that adds to a JIT cache key an input that is the same for every function of one
+  compile - the environment, the configuration, the host, or anything read from the running
+  binary such as its type layouts, among others - folds it inside `jit_env_salt`
+  (`daslib/llvm_jit_plan.das`), never directly into either JIT key - the DLL key or the
+  split-obj key (`ARCHITECTURE_CODEGEN_IDENTITY.md#split-obj-cache`)** - salt feeds both keys,
+  and an input folded into one but not the other links stale objects. An input that differs
+  between functions of one compile (a per-function AOT hash) folds into each key directly, not
+  through the salt.
 
 - **A macro under this module's `daslib/` that reads a file at compile time registers it with
   `add_module_cache_dependency` before any early return, in the same change**

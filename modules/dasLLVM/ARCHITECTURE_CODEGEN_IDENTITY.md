@@ -22,7 +22,7 @@ phase binds (`ResolveExternVisitor`, `generate_llvm_code`, `instrument_jit`). A 
 bypasses the content-addressed name entirely; its probe compares function hashes only, which is why
 the summary line asserts the opt-level tag only when the tier is actually known.
 
-### 2.1 The split obj cache - positional invalidation
+### 2.1 The split obj cache - positional invalidation {#split-obj-cache}
 
 Under `--jit-split-modules`, each per-module partition object is content-addressed too
 (`--jit-obj-cache`, on by default under split): its key is the running fold of every module

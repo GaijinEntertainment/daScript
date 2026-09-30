@@ -14,9 +14,10 @@ The words these rules share:
 
 - A figure is any number a run produced - a rate, a wall, a count, a byte size, or a ratio or
   percentage of two such numbers, produced by the runs its sides came from - or an error or
-  agreement reading (a cosine, a max-abs error) a test's tolerance is set from, or that a change
-  cites as evidence that a tolerance set for another cell, model or tier holds for the one it adds
-  or alters.
+  agreement reading (a cosine, a max-abs error) that a test's tolerance, or the bound an
+  instrument's bounded-difference compare checks against, is set from, or that a change cites as
+  evidence that a tolerance set for another cell, model or tier holds for the one it adds or
+  alters.
 - A served-turn leg is prefill, decode, a batched decode row, or a whole served request end to
   end; the wall of one internal stage (one model component's forward pass, one decoder block) is
   not a leg.
@@ -35,8 +36,9 @@ The words these rules share:
   written as such a row). An `--oracle` re-measure never writes the store and is not one; nor is
   a reading a `harness/` instrument produces, whether or not it writes a record.
 - The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`, not as the
-  released exe; a `-jit` reading is a wall or rate, or a ratio of two, that an instrument - the
-  `-jit` script included - printed while running under `-jit`.
+  released exe; a `-jit` reading is a wall or rate that an instrument - the `-jit` script
+  included - printed while running under `-jit`, or a ratio of two such prints, whoever computed
+  it.
 - A rig leg is a child cell `performance/gen_bench_records.das` spawns whose record row has
   `engine` `das`, named by that row's `(backend, flavor)` pair whatever its `workload`.
 - A box can mint a spawned cell when a rig leg drives the path the owed row measures, the box
@@ -132,11 +134,13 @@ re-mints a board row (`performance/records/<box>.json`) that exercises it, in th
 names that row in the PR body.** The board is the module's committed record of what serving
 costs; a kernel win that never lands there is invisible to the next regression check.
 
-**A diff that changes what a board cell's timed body loads, runs, or counts ships before/after
-rows for each affected cell and corpus, or withdraws the affected rows and names the withdrawal
-and its reason in the PR body; the new rows or the withdrawal land in the file the affected rows
-live in - `performance/records/<box>.json` or `PERF_LEDGER.md`.** A change inside the timed body
-that alters nothing it loads, runs, or counts changes nothing the cell times.
+**A diff that changes what a board cell's timed body loads, runs, or counts - the model or
+corpus it reads, the model components (encoder, decoder, tower) it runs or the backend that
+serves them, the tokens or rows it divides the wall by - ships before/after rows for each
+affected cell and corpus, or withdraws the affected rows and names the withdrawal and its reason
+in the PR body; the new rows or the withdrawal land in the file the affected rows live in -
+`performance/records/<box>.json` or `PERF_LEDGER.md`.** A change to a kernel triggers this rule
+only when it changes one of those.
 
 **A rate or wall of any served-turn leg, or a ratio of two such rates or walls, written down as
 a measurement rather than as a prediction is a defect unless it cites the committed board row it

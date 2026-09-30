@@ -79,7 +79,8 @@ folder's `tests/REVIEW.md` - open it; the walk does not surface it for a `daslla
 
 **A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]`
 declares), or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes)
-change, a GPU kernel timing race (two kernels timed against each other to pick one - not a data
+change, a change to a `kv_*` function that a GPU driver file (`dasllama_metal*.das`,
+`dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, a GPU kernel timing race (two kernels timed against each other to pick one - not a data
 race), a call that makes, arms or tears down device-home serving - a session whose K/V region
 lives only on the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`) - a
 knockout (an arm that skips a stage to measure that stage's cost), a hand-binding arm (one that
@@ -159,10 +160,9 @@ spelling missing from `DEVICE_CREATION_CALLS` weakens it.**
 
 **Weakening `check_ple_gather_sites` in `REVIEW.das` is a defect.**
 
-**A diff that sets a constant in `dasllama/` to the value a timing of candidate values chose, or
-that adds or changes a predicate there that picks among kernel variants computing the same result
-because one measured faster (not because it is the smallest variant that fits the dispatch), takes
-the winner from a race that timed every candidate interleaved in one process with one script, and
+**A diff that makes any choice in `dasllama/` because one candidate measured faster - a constant
+set to a value, a formula that gains or drops a term and a predicate that picks among kernel
+variants computing the same result included - takes the winner from a race that timed every candidate interleaved in one process with one script, and
 puts that race's rows, each naming its candidate, in the PR body or the change's dated
 `PERF_LEDGER.md` row.** Timings taken in two processes or at two commits also differ by everything
 else that changed between the runs, so they cannot pick a candidate.

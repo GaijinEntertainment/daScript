@@ -9,15 +9,18 @@ An instrument is a file that times a run itself and reports a wall-clock time or
 result, printed or returned to a caller that prints it; a file that reads a child process's clock
 is not one, and a serving path's profiler-gated report (a run whose result is the served output,
 the numbers a side report) is not one. A race times two implementations of one computation in
-one process, either of which the run could adopt - two values of one flag or environment switch
-are not two implementations; an arm is one implementation's timed run; a compared arm is one
-whose output the run reads back and measures against another arm's output or a CPU reference;
-the baseline arm is the arm running the implementation already in use. A served turn is one
-whole request the engine serves - a prefill-plus-decode run, or a transcription or synthesis end
-to end; a board cell is a timed cell whose rows land in `../performance/records/<box>.json` or
+one process, either of which the run could adopt - two values of one lever are not two
+implementations. An A/B is two or more timed runs an instrument makes in ONE process that differ
+only in one lever - a flag, an environment switch, a runtime setter or a profile key - set to a
+different value in each, off/on or graded. An arm is every timed run of one implementation in a
+race or of one lever value in an A/B; an A/B arm is an arm of an A/B; a compared arm is one whose
+output - what a run of the same implementation or lever value wrote, timed or not - the run
+reads back and measures against another arm's output or a CPU reference; the baseline arm is the
+arm running the implementation, or the lever value, already in use. A served turn is one whole
+request the engine serves - a prefill-plus-decode run, or a transcription or synthesis end to
+end; a board cell is a timed cell whose rows land in `../performance/records/<box>.json` or
 `../PERF_LEDGER.md`. A result row is a row carrying a time, a rate, or a per-kernel occupancy
-count. An A/B arm is one of two timed runs an instrument makes in ONE process that differ only in
-one flag or environment switch - the lever - set to a different value in each; off/on or graded.
+count.
 A refusing rep is a rep that produced no figure, or ran on a backend other than its row's backend
 stamp - the backend name the row records as having served it.
 
@@ -38,15 +41,16 @@ across rounds.**
 **A diff that adds or changes a race reports each arm's row on its own - never two arms' numbers
 on one row.**
 
-**A diff that adds or changes a compared arm prints on its report line either the bit-exact
-compare over the sampled region (the output elements the run compares), on a `bit-exact vs ...`
-line, when the arm's result is bit-identical to the baseline's, or else a bounded-difference
-compare against the baseline arm or the CPU reference plus the bound it passed.** How the arm
-orders its sums, and whether its multiply-adds fuse, decide bit-identity - not the declared
-precision.
+**A diff that adds or changes a compared arm other than the baseline prints on its report line
+either the bit-exact compare over the sampled region (the output elements the run compares), on
+a `bit-exact vs ...` line, when the arm's result is bit-identical to the baseline's, or else a
+bounded-difference compare against the baseline arm or the CPU reference plus the bound it
+passed.** How the arm orders its sums, and whether its multiply-adds fuse, decide bit-identity -
+not the declared precision.
 
-**A diff that adds or changes a race with a compared arm also checks the race's baseline arm
-against a CPU reference.** The reference check runs in the same process, on the same output
+**A diff that adds or changes a race or an A/B with a compared arm also checks its baseline arm
+against a CPU reference, and prints that compare on the baseline's report line, bit-exact or
+bounded with the bound it passed.** The reference check runs in the same process, on the same output
 elements the arms are judged on. Two arms can agree and both be wrong; only the reference makes
 the winner right.
 
@@ -107,7 +111,8 @@ lever that silently no-ops prints a 1.00x row nobody can tell from a real tie.
 report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the
 lever helps, so a per-prompt loss hides inside a winning mean.
 
-**A diff that adds or changes a row measured over reps reports one number over ALL of them.**
+**A diff that adds or changes a row measured over reps computes every number the row reports
+over all the reps after the warmup reps the instrument's header comment names.**
 
 **A diff that adds or changes a row measured over reps drops the whole row when any rep refuses:
 the row reports the refusal and its reason and no number.** A partial row reads like a measured
