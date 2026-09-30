@@ -3250,6 +3250,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `gpu_device_sessions` - How many DEVICE-HOME sessions (`create_device_session`) the installed model serves at once: the armed driver's region count, 0 when the model is not served whole from the device.
 - `gpu_dn_room` - Tell the GPU driver how many sessions' recurrent state it keeps device-resident at once: a scheduler names its stream count before the first prefill, so no stream's deltanet state evicts under the batched step it rides.
 - `gpu_resident_decline` - Why the whole-model GPU driver does not serve the model loaded last: its decline reason (with the remedy where one exists), or why it was never attempted.
+- `gpu_resident_experts_host` - Whether the whole-model driver serving the model loaded last sums its routed experts on the host (a hyper-connection MoE the card does not hold whole) - the form whose speculative round does not pay, so a server slot leaves the round off unless asked.
 - `set_gpu_ctx_max` - Cap the whole-model GPU driver's K/V context at `n` positions per region for the models loaded next (0 lifts it): a server's `ctx`.
 - `set_gpu_resident_regions` - Ask the whole-model GPU driver for `n` K/V regions on the models loaded next, so `n` sessions keep their K/V on the device at once - a server's stream count.
 
