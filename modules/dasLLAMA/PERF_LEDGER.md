@@ -91,7 +91,8 @@ what it costs today and what the fix would change.
   the CUDA 13.4 builds' `llama-bench -m <shard 1> -ngl 99 -ncmoe 48 -t 16 -p 512 -n 128 -r 3` with the
   48 layers' experts on the CPU - Vulkan pp512 91.66 / tg128 13.07, CUDA 147.3 +/- 21 / 17.32
   (`ARCHITECTURE_MEASUREMENT.md#host-experts-reference`). Decode is 1.55x the host-experts form (30.04
-  against 19.38) and 1.71x the CUDA row (29.74 against 17.32); the prompt's row is 2.24x the host-experts
+  against 19.38) and 1.71x the CUDA row (29.74 against 17.32) - on the bench's synthetic ids, whose picks
+  the pool holds at 70-83%; real text reads 22.5 tok/s at 31-45% hits (the NextN entry above); the prompt's row is 2.24x the host-experts
   form (288.81 against 128.76) and 1.96x the CUDA row (288.81 against 147.3) once the window's hits run
   through the batch arm's chain beside the host (the middle rows: the pool serving decode alone leaves
   the prompt's row where it was). Over four windows and 32 steps the pool placed 1656 experts - the 1536 of its fill and

@@ -2125,8 +2125,9 @@ module) is independent and can land any time - it is pure structure.
     link: 127 experts a token free under the 22 ms device floor), 1.67x the ledger's 22.5 (debug-jit,
     no board row carries this model). Done = the routed experts mirrored in their device layout in pinned host
     memory at load (55 GB beside the file's 94; the plan declines the mirror where the host's room does
-    not hold it), a placement one transfer-queue copy off the mirror behind the segments, the pool's
-    swaps a step the sim's, and the live profile's hits and token wall against the sim's row.
+    not hold it), a placement one transfer-queue copy off the mirror behind the segments, LRU at four
+    swaps a step as the mechanism's first policy (row 128 refines it, the sim kept as the offline
+    bench), and the live profile's hits and token wall against the sim's row.
 128. **The pool's policy is a decaying count.** With row 127 landed the placements are free to the link's
     budget (row 127's table: 127 experts a token at 13 GB/s under the 22 ms device floor) and the policy
     decides the hits: LRU-N first (the same table's 58-87% at one to four swaps), then a predictor - the previous layer's picks
