@@ -1811,14 +1811,6 @@
     line. Done = `--temp/--top-k/--top-p` on the tg row, a `tg128@sampled` cell beside `tg128`,
     and the ledger entry re-minted from it.
 
-171. **The iq4nl32 rail's Vulkan device run.** The per-32 IQ4_NL plane pair
-    (`iq4nl32q`/`iq4nl32s`) serves Qwen3.8-Flash-Next's 640-wide `ffn_down_exps` stacks on the
-    CPU (the portable kernels and the `iq4nl32q8_*_gen` family), on Metal and through the Vulkan
-    classes (`Iq4nl32Cm2T`'s three stamps, `Iq4nl32Gemv`), but the Vulkan tile cells
-    (`test_vkd_iq4nl32_cm2_batch`) have run on no coopmat device - this Mac's MoltenVK serves the
-    GEMV cell alone. Done = the cm2 and KHR arms green on the 5060 Ti and the Flash-Next decode
-    rows re-measured on the Vulkan tier.
-
 172. **The n-gram hash table as a mapped view.** Qwen3.8-Flash-Next's `per_layer_token_embd` is
     28.8 GB of gather-only rows the load copies into `Model.ngram_tab`; every other read of a
     model file leaves the mapping when the load ends. Done = the table stays a borrowed view over
@@ -1848,7 +1840,7 @@
     98.1 -> 105.5 GB. Still open: the grid form's emitter path - a dword read of the qs column in
     the row-group form (`ARCHITECTURE_CPU_KERNELS.md#grid-decode-forms` says it did not pay on the panel
     form's box; unmeasured on the M5) buys at most 1.3-1.5x on a bucket the codebook form beats 3.7x,
-    so it is a GPU-rail question (the GPUs keep the grid) more than a CPU one; the attention block
+    so it is a GPU-rail question (Vulkan serves the `iq3s4` arithmetic form under `DASLLAMA_IQ3S_SERVE=auto`, Metal keeps the grid) more than a CPU one; the attention block
     (`mm_qkv` 8.8, `mm_wo` 3.4, `attn` 2.9 ms) is the CPU token's largest bucket now, and the
     Flash-Next CPU tg128 board row is not re-minted yet.
 

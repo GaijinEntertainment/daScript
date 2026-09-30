@@ -67,7 +67,8 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   hub with no hook.
 - **`dasllama_moe.das`** - MoE expert routing and dispatch: the top-k router, per-expert FFN
   accumulation, the shared expert, and the decode instruments. The block kernels reach it only
-  through `moe_ffn_core`.
+  through `moe_ffn_core`; the whole-model driver's host-served experts reach it through
+  `moe_routed_sum_k` and the pick tape's rows helpers.
 - **`dasllama_attn_prefill.das`** - prefill attention, threaded over heads. `prefill_attention`
   is the only entry; the classic/flash head kernels and their KV-codec ladders are its
   implementation.
@@ -153,7 +154,10 @@ inside hyper-connections: the residual is `hc_count` parallel streams (`Session.
 `hc_res_b`), every block reads the mixer's collapsed row from `xb` and scatters its output back
 through the `block_in` / `block_resid` seams every block kernel routes its norm and residual add
 through (`dasllama_common`, the hyper-connection section: `hc_mix_row`, `hc_combine_row`); the
-head mixer stands where `output_norm` would. The n-gram PLE side input hashes the token and its
+head mixer stands where `output_norm` would. The prefill forms (`hc_mix_b`, the scatter in
+`block_resid_b`) split their per-row passes - the grouped norm, the mixer's tail, the scatter -
+over positions, each row the row form's code (`hc_mix_tail`, `hc_combine`), so a lane count moves
+no bit; on one lane the passes are a quarter of the Flash-Next CPU prefill window. The n-gram PLE side input hashes the token and its
 predecessors into rows of `Model.ngram_tab` (the disk block form, gathered per token, never a
 plane) and adds a gated value plus a dilated causal conv into the wide residual before layer
 `ple_layer`'s attention mixer; its window and conv ring are session state that resets at position 0
@@ -242,6 +246,25 @@ reference below the indexer's `indexer_top_k` budget.
 `REVIEW.das`'s `check_harness_dashv` walks `harness/` and reds a tool that requires `dashv` and
 names `dasllama.io`: the exchange module is the sidecar exchange host's one client, and a harness
 tool reaches it through `dasllama/dasllama_exchange`. It licenses no names.
+
+### The decode pick tape {#moe-pick-tape}
+
+`dasllama_moe.das`'s `moe_pick_tape` pins one arm's routing on another for a forced-feed parity
+compare. Recording, every decode `moe_select` appends its k picks in call order; replaying, the
+select masks every expert the tape does not carry to -1e30 before the same top-k, so the picks are
+the tape's and the weights are the picked experts' own (exact under a top-k renorm: the masked
+experts cancel out of the ratio), and it counts the row's own top-k picks the tape did not carry.
+The prefill's grouped selects take the rows form: `moe_pick_tape_rows_begin` hands the replaying lanes
+the rows' taped picks (the lanes run in their own contexts and read the tape through that pointer
+alone), `moe_pick_tape_mask_row` masks each row to its picks before its own select, and
+`moe_pick_tape_rows_done` advances past the rows, or appends their picks when recording; a rows
+replay counts no misses. `moe_select`'s own grouped path (`off > 0`) never touches the tape. The
+arming is `MoePickTape.record`, the replay `MoePickTape.replay`, `MoePickTape.off` stops. A 512-expert top-10 router over
+mixed residual streams flips a near-tie on kernel-order noise alone, and one flipped expert of ten
+moves the whole row past any logits bar: on Qwen3.8-Flash-Next the CPU chain on its reference
+kernel bodies parts from the tuned chain by 3-7 logits with argmax flips on three rows of seven,
+so a compare of two arms reads the seams only with the routing pinned
+(`tests/test_gpu_resident_hc.das`; the arms' own picks off the tape are logged, never asserted).
 
 ### Serving {#scheduler-step}
 

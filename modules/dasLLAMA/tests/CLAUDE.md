@@ -628,6 +628,11 @@ their own arm lists;
 `test_vkd_dec_combine_pair` holds the decode span's two combine classes - the routed sum, and the routed
 sum with the shared expert's row gated and ungated - to the CPU sum at a width off the workgroup
 grid, with the gate's move and a poisoned element as its controls;
+`test_vkd_hot_combine` holds the hot expert pool's combine - `MoeCombine` with its slot window at 1 .. k
+over slot rows 1 .. k - to the host's row plus the hit rows under their weights, at a width past one
+workgroup's threads: the rows of the zero-weight slots are NaN and every output is finite (a product
+would carry the NaN), a poisoned element reds the bar, and the same dispatch with the window at 0
+loses the host's row;
 `test_vkd_ext_roster` asserts, for every entry of the device-init roster (`vk_ext_roster`: every
 Vulkan capability the tier keys a route on, what rides on it), that the entry's presence reads the
 same as the arming field it decides, so the roster's log line and the tier's route cannot
@@ -661,7 +666,23 @@ tile family, the only tile the class rides. `test_vkd_f16_gemm_khr` runs the sam
 arm through the KHR twin (the E-series projection off cm2) at three shapes, one with rows off the
 16-row fragment, wherever the device has KHR cooperative matrices at subgroup 32. `test_vkd_dn_family` holds the deltanet conv, the
 fused step and the two-phase scan to CPU oracles at head sizes 64 and 128 (the step's one-part
-and two-part state columns, the scan's four- and eight-lane clusters); `test_vkd_dn_scan_narrow`
+and two-part state columns, the scan's four- and eight-lane clusters), and the sigmoid out-gate stamps
+(`dn_step_sig_cls`, `dn_scan_p3_sig_cls`, the qwen4exp form) against the same oracles under sigmoid(z) with
+the silu oracle as the control each stamp must miss; `test_vkd_hc_seams` holds the hyper-connection
+seams to CPU oracles - the grouped rms with the gamma row picked per stream at a site offset (`HcNorm`),
+the low-rank row's silu(lo / hc) requant against the CPU quantizer (`HcLoRq`, the scales bit-close, the
+dequantized row within one quant step), the gated stream mean (`HcMix`) and the scatter on its four flag
+paths - the plain row, the routed sum with the shared row gated, ungated, and with no shared row
+(`HcCombine`, the gated and ungated arms asserted apart); `test_vkd_hc_rows` holds the window forms of the
+same seams - `HcInit` opening the wide rows as hc copies of every embedded row, `HcNorm` over two wide rows
+at once and the last row alone into row 0 (the head mixer's read), `HcMix` over two rows' gated means,
+`HcCombine` over rows 1..2 of three, each under its own logits, row 0 untouched - each against the
+one-row CPU form a row at a time, the rows outside the dispatch's slice untouched; `test_vkd_ple_side`
+holds the n-gram side input's gate and conv (`PleGate`, `PleConv`) to a CPU form at a position every
+tap reaches and at one under the taps' reach (the taps before the sequence reading zero), the gate's
+ring slot written and the other slots kept, the fixture's stream dots asserted to take both signs, and
+the window's panel form - three rows whose taps read the ring before the window and the panel inside it,
+then a second position block primed from window rows; `test_vkd_dn_scan_narrow`
 runs the scan at ds 32 over 64 rows, and `test_vkd_dn_9b_scan` at the 9B geometry - 512 rows,
 one row, and the whole `DN_WINDOW` (the prefetch's first-token clamp, the gate arrays' exact
 bound); `test_vkd_dn_step_rows` runs the fused step over two rows in two region slots against the
@@ -860,7 +881,10 @@ only case that isolates the roster, since no format one admits the other refuses
 carries an off-lattice dense width past `mm_tile_widths_64_ok` and past `decode_shape_decline`
 on both the decode and the batch needs mask, and the same width on a dense twin declines
 both. `test_plan_room` is the GPU plan's room arithmetic - the tier cap less headroom, capped by
-the OS's room where the OS answers. `test_resident_region_ctx` is a mirror region's share of its
+the OS's room where the OS answers. `test_resident_hot_slots` is the hot expert pool's slot rule
+(`resident_hot_slots`): 64 slots where they fit beside the whole mirror, up to 32 out of the mirror's
+context where they do not, never past the room a mirror at its floor leaves, a count asked served from
+that room, no pool under four slots or on a plan past its room. `test_resident_region_ctx` is a mirror region's share of its
 side's one binding: the whole of it at one region, a quarter at four, the session's own context
 where that is shorter, and one region for a count under one. `test_mtp_seat_owner` holds the
 speculative round's seat ownership on a Model shell under two fake decode overrides: with the
@@ -1040,6 +1064,22 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
 carries the bias and the driver armed on it; skips without the model or the armed tier.
+`test_gpu_resident_hc.das` - stocked suite, `-jit` only; the whole-model resident driver on the hyper-connection
+carrier Qwen3.8-Flash-Next UD-IQ4_XS (three shards, the large tier, `DASLLAMA_GPU=1`): the wide residual's mixer
+seams, the n-gram side input and the deltanet sigmoid out-gate on the device, the routed experts summed on the host
+between the segments of the window chain and of the split token command - the hybrid file's forced-feed
+logits-tolerance form at the routed block's 20% bar (test_gpu_resident_moe's reading) with the one-step-off
+control, a 48-token prompt and six fed steps, the CPU arm routing as the device arm did through the decode pick
+tape (`ARCHITECTURE_ENGINE.md#moe-pick-tape`: a near-tie of 512 experts flips on kernel-order noise and one
+flipped expert of ten moves the row past any bar; the cell asserts the tape aligned select for select, the
+prompt's rows first, and logs the CPU's own decode picks off it); the cell asserts the window chain served the
+prompt, nothing passed to the CPU (`hc_prefill`), and the driver stayed armed; where the plan armed the hot
+expert pool (`gpu_resident_hot_slots`) it asserts every decode pick of every routed layer went through the
+pool, experts were uploaded, and the device served some of the picks and the host the rest, so the bar holds
+the sum of both shares, and - the prompt past the pool's 32-row window floor - that the tier's expert chain took
+every routed layer's window and served some of its slot rows through the expert tiles over the pool's planes, the
+host the rest. Skips without the shards
+(`DASLLAMA_PARITY_FULL=1` admits them), without the armed tier, when interpreted, and under `DASLLAMA_VK_KV32=1`.
 `test_gpu_resident_llama.das` - stocked suite, `-jit` only; the whole-model resident driver on the
 llama family (Llama-3.2-1B Q8_0, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M, `DASLLAMA_GPU=1`): the
 NORM rope, no q/k/v bias, no q/k norm, the tied classifier of the 3.2 files - the qwen2 file's
@@ -1612,6 +1652,12 @@ arms over constructed carriers - the text-only (none) shape, the loader's refusa
 (missing file, audio-only mmproj), and the `vision_exec_fmt` lane stamp (the qwen3v q8 flag
 reaching it; qwen25v exact-only); model-gated: the gemma4uv arm on the 12B mmproj - the sniffed
 family tag, the 48 px align, the 3840 projection width.
+`test_qwen4exp.das` - model-free: the hyper-connection carrier's CPU forms on a synthetic Model shell -
+`test_hc_mixer` (the mixer seams against the scalar form), `test_hc_mixer_batched` (`hc_mix_b` and
+`block_resid_b` split over positions bit for bit the inline leg, the split leg asserted to dispatch,
+rows at the ends and the middle against the scalar mixer at 1e-5 / 1e-4 with the next row's reference
+as the control on both bars), and the n-gram side input's gather, window and row decoders
+(`test_ngram_gather`, `test_ngram_window`, `test_ngram_row_decoders`).
 `test_ple_check.das` - model-free: the gemma4 router input's row identity (`gemma4_router` over
 npos rows against the npos = 1 decode call, bit for bit, on a synthetic scale row) and the PLE go-live tripwire (`ple_check_table`) on synthetic
 Model shells - short plane trips per format arm, full plane passes, non-PLE exempt.

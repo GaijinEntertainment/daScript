@@ -26,7 +26,9 @@ A companion's sections are listed in three places: its line in this document's r
 (under `File charters` or `Mechanisms`), the companion's own opening, and the routing sentence of
 any sibling companion that sends a reader to it.
 
-- `ARCHITECTURE_ENGINE.md` - the engine core, arch-registration, support and serving charters.
+- `ARCHITECTURE_ENGINE.md` - the engine core, arch-registration, support and serving charters, and
+  the decode pick tape a parity cell pins one arm's routing on another with
+  (`ARCHITECTURE_ENGINE.md#moe-pick-tape`).
 - `ARCHITECTURE_ENGINE_FORMATS.md` - the format, load-rail and CPU-kernel-tier charters, plus
   the shapes they key off - the bigram merge heap both tokenizer backends run
   (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`), the one RoPE fill over a position source
@@ -97,6 +99,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - the N-row token command a batched step's rows go through,
   its same-slab form the speculative verify steps one stream's rows through, and the residual
   step's two forms it holds bit for bit.
+- `ARCHITECTURE_GPU_VULKAN_HC.md` - the whole-model driver's hyper-connection chain (qwen4exp):
+  the wide residual's mixer seams on the device, the n-gram side input, and the split token
+  command whose routed experts run on the host between its segments.
 - `ARCHITECTURE_GPU_VULKAN_DECODE.md` - the per-op tier's decode era - the decode attention block
   over per-layer K/V mirrors, the streamed expert layer's GPU/CPU split, the whole-token decode
   span, the deltanet decode step's per-session resident state, and the whole-model driver's

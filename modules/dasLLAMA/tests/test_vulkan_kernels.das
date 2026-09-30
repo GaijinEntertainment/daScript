@@ -21,6 +21,7 @@ require ?vulkan dasllama/dasllama_vulkan_prefill
 require ?vulkan dasllama/dasllama_vulkan_decode   // da_nsplit - the decode attention's key-split pick the tile-pick cell pins
 require ?vulkan dasllama/dasllama_vulkan_seams
 require ?vulkan dasllama/dasllama_kqformat
+require ?vulkan dasllama/dasllama_convert   // quantize_q8_0_into: the hyper-connection low-rank requant's oracle
 require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS sizes the q8 plane helper outside the vulkan arm; kq_dev_ssb_i - the fixtures size their device scale planes per format
 require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane (only vulkan-guarded arms replay)
 require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
@@ -1059,7 +1060,7 @@ def test_vkd_cls_epi_rows(t0 : T?) {
                         maxdiff = d
                         worst = i
                     }
-                    if (d > bar) {
+                    if (!(d <= bar)) {
                         over++
                     }
                     if (abs(four[i] - (want[i] + 0.01)) > bar) {
@@ -1396,13 +1397,14 @@ def private ws_word(i : uint) : uint {
 
 def private q8_scale_off(got, d_ref : float) : bool => abs(got - d_ref) > 2e-3 * max(d_ref, 1e-6)
 
-def private q8_value_off(deq, want, d_ref : float) : bool => abs(deq - want) > d_ref + 2e-3 * abs(want)
+//! spelled "not within" so a NaN on either side reads as off
+def private q8_value_off(deq, want, d_ref : float) : bool => !(abs(deq - want) <= d_ref + 2e-3 * abs(want))
 
 // the dot-product cells' bar - 1e-3 of the larger of 1 and the reference - over n outputs from base
 def private rel_mismatches(got, want : array<float>; base, n : int) : int {
     var bad = 0
     for (i in range(n)) {
-        if (abs(got[base + i] - want[base + i]) > 1e-3 * max(1.0, abs(want[base + i]))) {
+        if (!(abs(got[base + i] - want[base + i]) <= 1e-3 * max(1.0, abs(want[base + i])))) {
             bad++
         }
     }
@@ -1415,7 +1417,7 @@ def private ba_plane_mismatches(got, want : array<float>; npos, ne, nvh, ob_b, o
     for (p in range(npos)) {
         for (e in range(ne)) {
             let at = (e < nvh ? ob_b : ob_g) + p * ostride + e % nvh
-            if (abs(got[at] - want[at]) > 1e-3 * max(1.0, abs(want[at]))) {
+            if (!(abs(got[at] - want[at]) <= 1e-3 * max(1.0, abs(want[at])))) {
                 bad++
             }
         }
@@ -1441,8 +1443,8 @@ def private mismatch_qbytes(got, want : array<uint>; tol : int) : int {
     return bad
 }
 
-//! the thirteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
-let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs))
+//! the fourteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
+let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs), int(KqFmt.iq3s4))
 
 //! the family's class rails engage on the device: every leaf's pipeline builds, else the cell skips
 def private kq_leaf_rails_engage(ensure : block<(fmt : int) : bool>) : bool {
@@ -1454,7 +1456,7 @@ def private kq_leaf_rails_engage(ensure : block<(fmt : int) : bool>) : bool {
 
 [test]
 def test_vkd_kq_gemv_family(t0 : T?) {
-    t0 |> run("kq GEMV class family == the CPU oracle (all 13 formats)") <| @(t : T?) {
+    t0 |> run("kq GEMV class family == the CPU oracle (all 14 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => gemv_cls_ensure(fmt)) {
                 t |> skip("no Vulkan device, or a kq GEMV class pipeline failed to build")
@@ -2347,7 +2349,7 @@ def test_vkd_q8_batch_tile(t0 : T?) {
 
 [test]
 def test_vkd_kq_batch_family(t0 : T?) {
-    t0 |> run("kq batch tile class family == the CPU oracle (all 13 formats)") <| @(t : T?) {
+    t0 |> run("kq batch tile class family == the CPU oracle (all 14 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!kq_leaf_rails_engage() <| $(fmt : int) => kq_batch_cls_ensure(fmt, false)) {
                 t |> skip("no Vulkan device, or a kq batch class pipeline failed to build")
@@ -3181,33 +3183,57 @@ def test_vkd_iq4nl_cm2_batch(t0 : T?) {
     }
 }
 
+//! a nibble-codebook format's cm2 l/m/s/e tiles and KHR tile against its f16 oracle over arbitrary quant bytes and two-word
+//! scale rows; `control` is the sibling codebook's oracle, which the same planes must read apart
+def private lut_cm2_cell(t : T?; name : string; fmt : int;
+                         oracle : function<(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec : int; n : int; d : int; var y : array<float>) : void>;
+                         control : function<(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec : int; n : int; d : int; var y : array<float>) : void>) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
+            t |> skip("no Vulkan device")
+            return
+        }
+        let totsb = TILE_CELL_SB
+        var wqh : array<uint>
+        var wsuh : array<uint>
+        wqh |> resize(totsb * 32)
+        wsuh |> resize(totsb * 2)
+        for (i in range(totsb * 32)) {
+            wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
+        }
+        for (sb in range(totsb)) {
+            wsuh[sb * 2] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + 613u) << 16u)   //! cool d | the row's high bits
+            wsuh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + 613u)   //! the eight 4-bit sub-scale fields
+        }
+        var f <- tile_fixture(TILE_CELL_K, 256, wqh, wsuh, 3u, 5u)
+        var y_ref <- tile_cell_arms(t, name, fmt, f, tile_arms_all(), oracle)
+        if (!empty(y_ref)) {
+            let d = TILE_CELL_D
+            let recs <- [0u, 0u, uint(TILE_CELL_ROWS0), 0u, uint(d * (f.n / f.blk_k)), uint(TILE_CELL_ROWS0), uint(TILE_CELL_ROWS1), 0u]
+            var y_other : array<float>
+            y_other |> resize(f.rows * d)
+            invoke(control, f.wqh, f.wsh, f.xfh, recs, 2, f.n, d, y_other)
+            t |> success(mismatch_rel("", y_other, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref)) > 0, "the {name} planes read apart under the sibling codebook's oracle (the fixture tells the two forms apart)")
+            delete y_other
+        }
+        delete y_ref
+        delete f
+    } else {
+        t |> skip("dasVulkan not present")
+    }
+}
+
 [test]
 def test_vkd_iq4xs_cm2_batch(t0 : T?) {
     t0 |> run("cm2 IQ4_XS l/m/s/e tiles and the KHR tile == the CPU oracle (workgroup-staged codebook decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                t |> skip("no Vulkan device")
-                return
-            }
-            let totsb = TILE_CELL_SB
-            var wqh : array<uint>
-            var wsuh : array<uint>
-            wqh |> resize(totsb * 32)
-            wsuh |> resize(totsb * 2)
-            for (i in range(totsb * 32)) {
-                wqh[i] = hash_word(uint(i) + 29u)     // arbitrary quant bytes
-            }
-            for (sb in range(totsb)) {
-                wsuh[sb * 2] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0)) | (hash_word(uint(sb * 2) + 613u) << 16u)   //! cool d | the row's high bits
-                wsuh[sb * 2 + 1] = hash_word(uint(sb * 2 + 1) + 613u)   //! the eight 4-bit sub-scale fields
-            }
-            var f <- tile_fixture(TILE_CELL_K, 256, wqh, wsuh, 3u, 5u)
-            var y_ref <- tile_cell_arms(t, "iq4xs", int(KqFmt.iq4xs), f, tile_arms_all(), @@iq4xsf16_gemm_oracle)
-            delete y_ref
-            delete f
-        } else {
-            t |> skip("dasVulkan not present")
-        }
+        lut_cm2_cell(t, "iq4xs", int(KqFmt.iq4xs), @@iq4xsf16_gemm_oracle, @@iq3s4f16_gemm_oracle)
+    }
+}
+
+[test]
+def test_vkd_iq3s4_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 iq3s4 l/m/s/e tiles and the KHR tile == the CPU oracle (the odd codebook staged, the iq3 row's 1 + 2s sub-scale); the iq4xs oracle is its control") <| @(t : T?) {
+        lut_cm2_cell(t, "iq3s4", int(KqFmt.iq3s4), @@iq3s4f16_gemm_oracle, @@iq4xsf16_gemm_oracle)
     }
 }
 
@@ -3738,7 +3764,7 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
                 m = max(m, abs(y_ref[b * blk + i]))
             }
             let d = m / 127.0
-            if (abs(s_cls[b] - d) > 1.0e-6 + 1.0e-3 * d) {
+            if (!(abs(s_cls[b] - d) <= 1.0e-6 + 1.0e-3 * d)) {
                 bad_s++
             }
             let id = d != 0.0 ? 1.0 / d : 0.0
@@ -4633,7 +4659,7 @@ def private fa_h256_gated_run(nheads, kv_mul, rows, w0 : int) : tuple<bad : int;
         let bad = mismatch_approx(y_cls, y_ref)
         var bad16 = 0
         for (i in range(rows * qd)) {
-            if (abs(float(y16[i]) - y_cls[i]) > 2e-3 * max(1.0, abs(y_cls[i]))) {
+            if (!(abs(float(y16[i]) - y_cls[i]) <= 2e-3 * max(1.0, abs(y_cls[i])))) {
                 bad16++
             }
         }
@@ -4771,7 +4797,7 @@ def private fa_h256_softcap_run(nheads, kv_mul, rows, w0 : int; cap : float; khr
         var bad16 = 0
         // the f16 twin's 2e-3 bar: the O accumulator's f16 step is bounded as test_vkd_fa_cm2's oracle note states, on the same fixture magnitudes
         for (i in range(rows * qd)) {
-            if (abs(float(y16[i]) - y_cls[i]) > 2e-3 * max(1.0, abs(y_cls[i]))) {
+            if (!(abs(float(y16[i]) - y_cls[i]) <= 2e-3 * max(1.0, abs(y_cls[i])))) {
                 bad16++
             }
         }
@@ -6242,7 +6268,7 @@ def private q8_gemv_pleact_run(t; n, d : int) {
             env += float(ienv) * abs(ws16) * xs[b]
         }
         let bar = 2e-3 * env + 1e-6
-        if (abs(y_cls[row] - acc) > bar) {
+        if (!(abs(y_cls[row] - acc) <= bar)) {
             bad++
         }
         if (abs(y_cls[row] - (acc + 3.0 * bar)) <= bar) {   // the control: the expectation pushed three bars must miss
@@ -6420,7 +6446,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     var pbadx = 0
     for (k in range(d)) {
         let bar = 1e-4 * abs(xr_ref[k]) + 1e-4 + 4e-4 * abs(aref[k]) * ascale
-        if (abs(xr_cls[k] - xr_ref[k]) > bar) {
+        if (!(abs(xr_cls[k] - xr_ref[k]) <= bar)) {
             badx++
         }
         if (abs(xr_cls[k] - (xr_ref[k] + 0.1 * abs(xr_ref[k]) + 0.1)) > bar) {   //! the control: an expectation pushed a tenth off must red
@@ -7230,7 +7256,7 @@ def test_vkd_gemv_ncol(t0 : T?) {
                 return
             }
             let fmts <- kq_gemv_fmts()
-            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the family's roster is q8 and the thirteen kq leaves")
+            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the family's roster is q8 and the fourteen kq leaves")
             for (f in fmts) {
                 t |> success(gemv_cls_ensure(int(f)), "{f}: the one-column class rail engages")
                 gemv_ncol_arm(t, f, 1024, 96)   //! n a multiple of 256 for the superblock formats, d even for the row-pair stamps
@@ -8003,6 +8029,567 @@ def test_vkd_at_prep(t0 : T?) {
     }
 }
 
+let private HCT_DIM = 96        //! off the 256-lane workgroup: the row loops take a tail, the elementwise grids a partial group
+let private HCT_HC = 4
+let private HCT_LR = 32         //! one Q8_0 block of low-rank row
+let private HCT_HCD = HCT_HC * HCT_DIM
+let private HCT_EPS = 1e-6
+
+//! the CPU rmsnorm of `n` elements from `xo` under the weight row at `wo`: (x . inv) . w, the kernels' order
+def private hct_rms(x : array<float>; xo : int; w : array<float>; wo : int; n : int; var out : array<float>; oo : int) {
+    var ss = 0.0
+    for (i in range(n)) {
+        ss += x[xo + i] * x[xo + i]
+    }
+    let inv = 1.0 / sqrt(ss / float(n) + HCT_EPS)
+    for (i in range(n)) {
+        out[oo + i] = (x[xo + i] * inv) * w[wo + i]
+    }
+}
+
+def private hct_sigmoid(v : float) : float => 1.0 / (1.0 + exp(-v))
+
+//! the scatter's CPU form: res_c += out x 2 sigmoid(inj_c / hc), `out` the block row, or under `moe` the routed sum plus the shared row at `g`
+def private hct_comb_ref(res : array<float>; outr, inj, acc : array<float>; moe, sh : bool; g : float) : array<float> {
+    var r := res
+    for (c in range(HCT_HC)) {
+        let w = 2.0 / (1.0 + exp(-inj[c] / float(HCT_HC)))
+        for (i in range(HCT_DIM)) {
+            var v = outr[i]
+            if (moe) {
+                v = acc[i] + (sh ? v * g : 0.0)
+            }
+            r[c * HCT_DIM + i] += v * w
+        }
+    }
+    return <- r
+}
+
+[test]
+def test_vkd_hc_seams(t0 : T?) {
+    t0 |> run("hc_norm: stream c of the wide row under gamma row c == the CPU rmsnorm, the site's rows at an offset") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_hc_norm_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let res <- row_fill(HCT_HCD, 31, 7, 0.05, 1.7)
+            let wn <- row_fill(2 * HCT_HCD, 13, 5, 0.03, 1.1)   //! two sites' gamma rows: the dispatch reads the second site's
+            var want : array<float>
+            want |> resize(HCT_HCD)
+            for (c in range(HCT_HC)) {
+                hct_rms(res, c * HCT_DIM, wn, HCT_HCD + c * HCT_DIM, HCT_DIM, want, c * HCT_DIM)
+            }
+            with_cell_planes() $(var cp : CellPlanes) {
+                let rp = cp |> in_(res)
+                let wp = cp |> in_(wn)
+                let xp = cp |> out_(HCT_HCD)
+                var s = cp |> cls_set(fixed_array(rp, xp, wp), @@set_hc_norm_cls)
+                var pa = HcNormArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), woff = uint(HCT_HCD), row0 = 0u, eps = HCT_EPS)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_hc_norm_cls(raw, h, s, pa, int64(HCT_HC))
+                }
+                check_rows(t, "hc_norm vs the grouped CPU rmsnorm", cp |> plane_run(xp), want, BAR_APPROX, HCT_DIM)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t0 |> run("hc_lo_rq: silu(lo / hc) into Q8_0 blocks == the CPU quantizer over the activated row") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_hc_lo_rq_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let lo <- row_fill(HCT_LR, 19, 3, 0.4, 6.0)
+            var act : array<float>
+            act |> resize(HCT_LR)
+            for (i in range(HCT_LR)) {
+                let v = lo[i] / float(HCT_HC)
+                act[i] = v / (1.0 + exp(-v))
+            }
+            var q_ref : array<int8>
+            var s_ref : array<float>
+            q_ref |> resize(HCT_LR)
+            s_ref |> resize(HCT_LR / 32)
+            quantize_q8_0_into(act, int64(HCT_LR), q_ref, s_ref, 0l, 0l)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let lp = cp |> in_(lo)
+                let qp = cp |> out_(HCT_LR / 4)   //! the quant bytes: a float slot holds four
+                let sp = cp |> out_(HCT_LR / 32)
+                var s = cp |> cls_set(fixed_array(lp, qp, sp), @@set_hc_lo_rq_cls)
+                var pa = HcLoArgs(nblk = uint(HCT_LR / 32), inv_hc = 1.0 / float(HCT_HC))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_hc_lo_rq_cls(raw, h, s, pa, rq_wgs(false, int64(HCT_LR)))
+                }
+                let scales <- cp |> plane_run(sp)
+                check_rows(t, "hc_lo_rq block scales vs the CPU quantizer", scales, s_ref, BAR_APPROX, FLAT_ROWS)
+                let qbytes <- staged(cp.host.mapped, cp.host_off[qp], HCT_LR, type<int8>)
+                var deq : array<float>
+                var deq_ref : array<float>
+                deq |> resize(HCT_LR)
+                deq_ref |> resize(HCT_LR)
+                for (i in range(HCT_LR)) {
+                    deq[i] = float(int(qbytes[i])) * scales[i / 32]
+                    deq_ref[i] = float(int(q_ref[i])) * s_ref[i / 32]
+                }
+                //! a quant may round a step apart where the device's exp lands the activation on the other side of a boundary: the bar is one step
+                check_rows(t, "hc_lo_rq dequantized row vs the CPU quantizer's", deq, deq_ref, Bar(rel = 0.0, abs_floor = 1.01 * s_ref[0], poison = 1.0), FLAT_ROWS)
+                delete deq
+                delete deq_ref
+            }
+            delete act
+            delete q_ref
+            delete s_ref
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t0 |> run("hc_mix: the sigmoid-gated stream mean into the block input row == the CPU form") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_hc_mix_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let xn <- row_fill(HCT_HCD, 23, 11, 0.05, 1.3)
+            let gate <- row_fill(HCT_HCD, 29, 5, 0.2, 3.0)
+            var want : array<float>
+            want |> resize(HCT_DIM)
+            for (i in range(HCT_DIM)) {
+                var acc = 0.0
+                for (c in range(HCT_HC)) {
+                    acc += xn[c * HCT_DIM + i] * hct_sigmoid(gate[c * HCT_DIM + i])
+                }
+                want[i] = acc * (1.0 / float(HCT_HC))
+            }
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> in_(xn)
+                let gp = cp |> in_(gate)
+                let bp = cp |> out_(HCT_DIM)
+                var s = cp |> cls_set(fixed_array(xp, gp, bp), @@set_hc_mix_cls)
+                var pa = HcMixArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), rows = 1u)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_hc_mix_cls(raw, h, s, pa, int64((HCT_DIM + 255) / 256))
+                }
+                check_rows(t, "hc_mix vs the CPU gated mean", cp |> plane_run(bp), want, BAR_APPROX, FLAT_ROWS)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t0 |> run("hc_comb: the scatter under the site logits - the plain row, the routed sum with the shared row gated, ungated, and with no shared row") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_hc_comb_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let res <- row_fill(HCT_HCD, 37, 3, 0.05, 1.2)
+            let outr <- row_fill(HCT_DIM, 41, 7, 0.06, 1.5)
+            let inj <- row_fill(HCT_HC, 43, 5, 0.9, 1.8)
+            let acc <- row_fill(HCT_DIM, 47, 9, 0.04, 1.1)
+            let lstride = 9
+            let lidx = lstride - 1   // the gate logit sits in the row's last column
+            var logits <- row_fill(lstride, 53, 1, 0.5, 2.0)
+            logits[lidx] = 0.7   // a sigmoid off one half, so the ungated arm reads apart
+            let g = hct_sigmoid(logits[lidx])
+            with_cell_planes() $(var cp : CellPlanes) {
+                let rp0 = cp |> io_(res)
+                let rp1 = cp |> io_(res)
+                let rp2 = cp |> io_(res)
+                let rp3 = cp |> io_(res)
+                let op = cp |> in_(outr)
+                let ip = cp |> in_(inj)
+                let ap = cp |> in_(acc)
+                let lp = cp |> in_(logits)
+                var s0 = cp |> cls_set(fixed_array(rp0, op, ip, ap, lp), @@set_hc_comb_cls)
+                var s1 = cp |> cls_set(fixed_array(rp1, op, ip, ap, lp), @@set_hc_comb_cls)
+                var s2 = cp |> cls_set(fixed_array(rp2, op, ip, ap, lp), @@set_hc_comb_cls)
+                var s3 = cp |> cls_set(fixed_array(rp3, op, ip, ap, lp), @@set_hc_comb_cls)
+                let wgs = int64((HCT_HCD + 255) / 256)
+                var pa0 = HcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 0u, sh_on = 0u, gated = 0u, rows = 1u, row0 = 0u, lstride = uint(lstride))
+                var pa1 = HcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 1u, gated = 1u, rows = 1u, row0 = 0u, lstride = uint(lstride))
+                var pa2 = HcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 1u, gated = 0u, rows = 1u, row0 = 0u, lstride = uint(lstride))
+                var pa3 = HcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 0u, gated = 1u, rows = 1u, row0 = 0u, lstride = uint(lstride))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_hc_comb_cls(raw, h, s0, pa0, wgs)
+                    enc_hc_comb_cls(raw, h, s1, pa1, wgs)
+                    enc_hc_comb_cls(raw, h, s2, pa2, wgs)
+                    enc_hc_comb_cls(raw, h, s3, pa3, wgs)
+                }
+                check_rows(t, "hc_comb plain (the block row)", cp |> plane_run(rp0), hct_comb_ref(res, outr, inj, acc, false, false, 1.0), BAR_APPROX, HCT_DIM)
+                check_rows(t, "hc_comb routed + gated shared row", cp |> plane_run(rp1), hct_comb_ref(res, outr, inj, acc, true, true, g), BAR_APPROX, HCT_DIM)
+                check_rows(t, "hc_comb routed + ungated shared row", cp |> plane_run(rp2), hct_comb_ref(res, outr, inj, acc, true, true, 1.0), BAR_APPROX, HCT_DIM)
+                check_rows(t, "hc_comb routed, no shared row", cp |> plane_run(rp3), hct_comb_ref(res, outr, inj, acc, true, false, g), BAR_APPROX, HCT_DIM)
+                let r1 <- cp |> plane_run(rp1)
+                let r2 <- cp |> plane_run(rp2)
+                t |> success(mismatch_approx(r1, r2) > 0, "the gated and ungated arms land apart (the gate is read)")
+            }
+            delete logits
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+def private hct_slice(a : array<float>; off, n : int) : array<float> {
+    return <- [for (i in range(n)); a[off + i]]
+}
+
+//! the window forms of the mixer seams: the norm at a row offset, the gated mean and the scatter over rows - each against the
+//! one-row CPU form applied a row at a time, the rows outside the dispatch's slice untouched
+[test]
+def test_vkd_hc_rows(t0 : T?) {
+    t0 |> run("hc_init: hc copies of every embedded row open the wide rows") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_hc_init_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let rows = 3
+            let x <- row_fill(rows * HCT_DIM, 31, 7, 0.05, 1.7)
+            var want : array<float>
+            want |> resize(rows * HCT_HCD)
+            for (r in range(rows)) {
+                for (c in range(HCT_HC)) {
+                    for (i in range(HCT_DIM)) {
+                        want[r * HCT_HCD + c * HCT_DIM + i] = x[r * HCT_DIM + i]
+                    }
+                }
+            }
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> in_(x)
+                let rp = cp |> out_(rows * HCT_HCD)
+                var s = cp |> cls_set(fixed_array(xp, rp), @@set_hc_init_cls)
+                var pa = HcInitArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), rows = uint(rows))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_hc_init_cls(raw, h, s, pa, int64((rows * HCT_HCD + 255) / 256))
+                }
+                check_rows(t, "hc_init wide rows", cp |> plane_run(rp), want, BAR_APPROX, HCT_HCD)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t0 |> run("hc_norm over rows: two wide rows normed at once, and the last row alone from row0 into row 0 (the head mixer's read)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_hc_norm_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let res <- row_fill(2 * HCT_HCD, 31, 7, 0.05, 1.7)
+            let wn <- row_fill(HCT_HCD, 13, 5, 0.03, 1.1)
+            var want : array<float>
+            want |> resize(2 * HCT_HCD)
+            for (g in range(2 * HCT_HC)) {
+                hct_rms(res, g * HCT_DIM, wn, (g % HCT_HC) * HCT_DIM, HCT_DIM, want, g * HCT_DIM)
+            }
+            let want1 <- hct_slice(want, HCT_HCD, HCT_HCD)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let rp = cp |> in_(res)
+                let wp = cp |> in_(wn)
+                let xp = cp |> out_(2 * HCT_HCD)
+                let xp1 = cp |> out_(HCT_HCD)
+                var s = cp |> cls_set(fixed_array(rp, xp, wp), @@set_hc_norm_cls)
+                var s1 = cp |> cls_set(fixed_array(rp, xp1, wp), @@set_hc_norm_cls)
+                var pa = HcNormArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), woff = 0u, row0 = 0u, eps = HCT_EPS)
+                var pa1 = HcNormArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), woff = 0u, row0 = 1u, eps = HCT_EPS)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_hc_norm_cls(raw, h, s, pa, int64(2 * HCT_HC))
+                    enc_hc_norm_cls(raw, h, s1, pa1, int64(HCT_HC))
+                }
+                check_rows(t, "hc_norm two rows", cp |> plane_run(xp), want, BAR_APPROX, HCT_DIM)
+                check_rows(t, "hc_norm the last row from row0 into row 0", cp |> plane_run(xp1), want1, BAR_APPROX, HCT_DIM)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t0 |> run("hc_mix over rows: two rows' gated stream means") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_hc_mix_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let xn <- row_fill(2 * HCT_HCD, 23, 11, 0.05, 1.3)
+            let gate <- row_fill(2 * HCT_HCD, 29, 5, 0.2, 3.0)
+            var want : array<float>
+            want |> resize(2 * HCT_DIM)
+            for (r in range(2)) {
+                for (i in range(HCT_DIM)) {
+                    var acc = 0.0
+                    for (c in range(HCT_HC)) {
+                        let e = r * HCT_HCD + c * HCT_DIM + i
+                        acc += xn[e] * hct_sigmoid(gate[e])
+                    }
+                    want[r * HCT_DIM + i] = acc * (1.0 / float(HCT_HC))
+                }
+            }
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> in_(xn)
+                let gp = cp |> in_(gate)
+                let bp = cp |> out_(2 * HCT_DIM)
+                var s = cp |> cls_set(fixed_array(xp, gp, bp), @@set_hc_mix_cls)
+                var pa = HcMixArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), rows = 2u)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_hc_mix_cls(raw, h, s, pa, int64((2 * HCT_DIM + 255) / 256))
+                }
+                check_rows(t, "hc_mix two rows", cp |> plane_run(bp), want, BAR_APPROX, HCT_DIM)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t0 |> run("hc_comb over rows: the routed + gated scatter of rows 1..2 of three, each row under its own logits, row 0 untouched") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_hc_comb_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let rows = 3
+            let lstride = 9
+            let lidx = lstride - 1
+            let res <- row_fill(rows * HCT_HCD, 37, 3, 0.05, 1.2)
+            let outr <- row_fill(rows * HCT_DIM, 41, 7, 0.06, 1.5)
+            let inj <- row_fill(rows * HCT_HC, 43, 5, 0.9, 1.8)
+            let acc <- row_fill(rows * HCT_DIM, 47, 9, 0.04, 1.1)
+            let logits <- row_fill(rows * lstride, 53, 1, 0.5, 2.0)
+            var want : array<float>
+            want |> reserve(rows * HCT_HCD)
+            want |> push_from(hct_slice(res, 0, HCT_HCD))
+            for (r in range(1, rows)) {
+                let g = hct_sigmoid(logits[r * lstride + lidx])
+                want |> push_from(hct_comb_ref(hct_slice(res, r * HCT_HCD, HCT_HCD), hct_slice(outr, r * HCT_DIM, HCT_DIM),
+                    hct_slice(inj, r * HCT_HC, HCT_HC), hct_slice(acc, r * HCT_DIM, HCT_DIM), true, true, g))
+            }
+            with_cell_planes() $(var cp : CellPlanes) {
+                let rp = cp |> io_(res)
+                let op = cp |> in_(outr)
+                let ip = cp |> in_(inj)
+                let ap = cp |> in_(acc)
+                let lp = cp |> in_(logits)
+                var s = cp |> cls_set(fixed_array(rp, op, ip, ap, lp), @@set_hc_comb_cls)
+                var pa = HcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 1u, gated = 1u,
+                    rows = uint(rows - 1), row0 = 1u, lstride = uint(lstride))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_hc_comb_cls(raw, h, s, pa, int64(((rows - 1) * HCT_HCD + 255) / 256))
+                }
+                check_rows(t, "hc_comb rows 1..2 scattered, row 0 kept", cp |> plane_run(rp), want, BAR_APPROX, HCT_DIM)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+let private PLT_NROWS = 5   //! the conv ring: (kern - 1) x dil + 1 rows at kern 3, dil 2
+let private PLT_KERN = 3
+let private PLT_DIL = 2
+
+//! the side input's two kernels at position `pos` against the CPU form: the gate's `gated` rows and the ring slot it writes, the
+//! conv's landing in the residual; a position under the taps' reach (`pos` < (kern - 1) x dil) reads zero before the sequence
+def private ple_side_case(t : T?; pos : int) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let dim = HCT_DIM
+        let hc = HCT_HC
+        let hcd = HCT_HCD
+        var key <- row_fill(hcd, 31, 7, 0.05, 1.7)
+        for (i in range(dim, 2 * dim)) {   //! streams 1 and 3 read a negated key: their dots take the other sign
+            key[i] = -key[i]
+            key[2 * dim + i] = -key[2 * dim + i]
+        }
+        let res <- row_fill(hcd, 13, 5, 0.06, 1.9)
+        let val <- row_fill(dim, 17, 3, 0.05, 1.4)
+        let hist <- row_fill(PLT_NROWS * hcd, 19, 11, 0.04, 1.2)
+        let wn <- row_fill(3 * hcd + hcd * PLT_KERN, 23, 9, 0.03, 1.1)
+        var gated_ref : array<float>
+        var hist_ref := hist
+        var res_ref := res
+        gated_ref |> resize(hcd)
+        var npos_sv = 0
+        var nneg_sv = 0
+        var kn : array<float>
+        var qn : array<float>
+        kn |> resize(hcd)
+        qn |> resize(hcd)
+        let slot = (pos % PLT_NROWS) * hcd
+        for (c in range(hc)) {
+            hct_rms(key, c * dim, wn, c * dim, dim, kn, c * dim)
+            hct_rms(res, c * dim, wn, hcd + c * dim, dim, qn, c * dim)
+            var sv = 0.0
+            for (i in range(dim)) {
+                sv += kn[c * dim + i] * qn[c * dim + i]
+            }
+            sv *= 1.0 / sqrt(float(dim))
+            if (sv > 0.0) {
+                npos_sv++
+            } elif (sv < 0.0) {
+                nneg_sv++
+            }
+            let mag = sqrt(max(abs(sv), 1.0e-6))
+            let g = hct_sigmoid(sv > 0.0 ? mag : (sv < 0.0 ? -mag : 0.0))
+            for (i in range(dim)) {
+                gated_ref[c * dim + i] = val[i] * g
+            }
+            hct_rms(gated_ref, c * dim, wn, 2 * hcd + c * dim, dim, hist_ref, slot + c * dim)
+        }
+        t |> success(npos_sv > 0 && nneg_sv > 0, "the fixture's stream dots take both signs ({npos_sv} positive, {nneg_sv} negative)")
+        for (e in range(hcd)) {
+            var co = 0.0
+            for (k in range(PLT_KERN)) {
+                let src_pos = pos - (PLT_KERN - 1 - k) * PLT_DIL
+                if (src_pos >= 0) {
+                    co += wn[3 * hcd + e * PLT_KERN + k] * hist_ref[(src_pos % PLT_NROWS) * hcd + e]
+                }
+            }
+            res_ref[e] = (res[e] + gated_ref[e]) + co / (1.0 + exp(-co))
+        }
+        var toks <- [TokMeta(pos = uint(pos), cnt = uint(pos + 1), dnslot = 0u)]
+        with_cell_planes() $(var cp : CellPlanes) {
+            let kp = cp |> in_(key)
+            let rp = cp |> io_(res)
+            let vp = cp |> in_(val)
+            let gp = cp |> out_(hcd)
+            let hp = cp |> io_(hist)
+            let wp = cp |> in_(wn)
+            let tp = cp |> in_plain(toks)
+            var sg = cp |> cls_set(fixed_array(kp, rp, vp, gp, hp, wp, tp, hp), @@set_ple_gate_cls)
+            var sc = cp |> cls_set(fixed_array(rp, gp, hp, wp, tp, hp), @@set_ple_conv_cls)
+            var pg = PleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(PLT_NROWS),
+                rows = 0u, pos0 = 0u, eps = HCT_EPS, inv_sq = 1.0 / sqrt(float(dim)))
+            var pc = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(PLT_KERN), dil = uint(PLT_DIL),
+                rows = 0u, pos0 = 0u)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_ple_gate_cls(raw, h, sg, pg, int64(hc))
+                enc_ple_conv_cls(raw, h, sc, pc, int64((hcd + 255) / 256))
+            }
+            check_rows(t, "ple_gate gated rows at pos {pos}", cp |> plane_run(gp), gated_ref, BAR_APPROX, dim)
+            check_rows(t, "ple_gate conv ring at pos {pos} (the slot written, the others kept)", cp |> plane_run(hp), hist_ref, BAR_APPROX, hcd)
+            check_rows(t, "ple_conv residual landing at pos {pos}", cp |> plane_run(rp), res_ref, BAR_APPROX, dim)
+        }
+        delete toks
+        delete gated_ref
+        delete hist_ref
+        delete res_ref
+        delete kn
+        delete qn
+    }
+}
+
+//! the side input's window form over `rows` rows from `pos0` against the CPU form a row at a time: the gate's rows and its normed
+//! panel rows, the conv reading a tap inside the window off the panel and before it off the ring, the ring itself untouched
+def private ple_panel_case(t : T?; rows, pos0 : int) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let dim = HCT_DIM
+        let hc = HCT_HC
+        let hcd = HCT_HCD
+        var key <- row_fill(rows * hcd, 31, 7, 0.05, 1.7)
+        for (r in range(rows)) {
+            for (i in range(dim, 2 * dim)) {   //! streams 1 and 3 read a negated key, as the one-row case
+                key[r * hcd + i] = -key[r * hcd + i]
+                key[r * hcd + 2 * dim + i] = -key[r * hcd + 2 * dim + i]
+            }
+        }
+        let res <- row_fill(rows * hcd, 13, 5, 0.06, 1.9)
+        let val <- row_fill(rows * dim, 17, 3, 0.05, 1.4)
+        let hist <- row_fill(PLT_NROWS * hcd, 19, 11, 0.04, 1.2)
+        let wn <- row_fill(3 * hcd + hcd * PLT_KERN, 23, 9, 0.03, 1.1)
+        var gated_ref : array<float>
+        var panel_ref : array<float>
+        var res_ref := res
+        gated_ref |> resize(rows * hcd)
+        panel_ref |> resize(rows * hcd)
+        var kn : array<float>
+        var qn : array<float>
+        kn |> resize(hcd)
+        qn |> resize(hcd)
+        for (r in range(rows)) {
+            for (c in range(hc)) {
+                hct_rms(key, r * hcd + c * dim, wn, c * dim, dim, kn, c * dim)
+                hct_rms(res, r * hcd + c * dim, wn, hcd + c * dim, dim, qn, c * dim)
+                var sv = 0.0
+                for (i in range(dim)) {
+                    sv += kn[c * dim + i] * qn[c * dim + i]
+                }
+                sv *= 1.0 / sqrt(float(dim))
+                let mag = sqrt(max(abs(sv), 1.0e-6))
+                let g = hct_sigmoid(sv > 0.0 ? mag : (sv < 0.0 ? -mag : 0.0))
+                for (i in range(dim)) {
+                    gated_ref[r * hcd + c * dim + i] = val[r * dim + i] * g
+                }
+                hct_rms(gated_ref, r * hcd + c * dim, wn, 2 * hcd + c * dim, dim, panel_ref, r * hcd + c * dim)
+            }
+        }
+        var from_ring = 0
+        var from_panel = 0
+        for (r in range(rows)) {
+            let pos = pos0 + r
+            for (e in range(hcd)) {
+                var co = 0.0
+                for (k in range(PLT_KERN)) {
+                    let src_pos = pos - (PLT_KERN - 1 - k) * PLT_DIL
+                    if (src_pos >= pos0) {
+                        co += wn[3 * hcd + e * PLT_KERN + k] * panel_ref[(src_pos - pos0) * hcd + e]
+                        from_panel += e == 0 ? 1 : 0
+                    } elif (src_pos >= 0) {
+                        co += wn[3 * hcd + e * PLT_KERN + k] * hist[(src_pos % PLT_NROWS) * hcd + e]
+                        from_ring += e == 0 ? 1 : 0
+                    }
+                }
+                res_ref[r * hcd + e] = (res[r * hcd + e] + gated_ref[r * hcd + e]) + co / (1.0 + exp(-co))
+            }
+        }
+        t |> success(from_ring > 0 && from_panel > 0, "the fixture's taps read both the ring and the panel ({from_ring} ring, {from_panel} panel)")
+        var toks <- [TokMeta(pos = 0u, cnt = 1u, dnslot = 0u)]
+        with_cell_planes() $(var cp : CellPlanes) {
+            let kp = cp |> in_(key)
+            let rp = cp |> io_(res)
+            let vp = cp |> in_(val)
+            let gp = cp |> out_(rows * hcd)
+            let hp = cp |> io_(hist)
+            let wp = cp |> in_(wn)
+            let tp = cp |> in_plain(toks)
+            let pp = cp |> out_(rows * hcd)
+            var sg = cp |> cls_set(fixed_array(kp, rp, vp, gp, hp, wp, tp, pp), @@set_ple_gate_cls)
+            var sc = cp |> cls_set(fixed_array(rp, gp, hp, wp, tp, pp), @@set_ple_conv_cls)
+            var pg = PleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(PLT_NROWS),
+                rows = uint(rows), pos0 = uint(pos0), eps = HCT_EPS, inv_sq = 1.0 / sqrt(float(dim)))
+            var pc = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(PLT_KERN), dil = uint(PLT_DIL),
+                rows = uint(rows), pos0 = uint(pos0))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_ple_gate_cls(raw, h, sg, pg, int64(rows * hc))
+                enc_ple_conv_cls(raw, h, sc, pc, int64((rows * hcd + 255) / 256))
+            }
+            check_rows(t, "ple_gate window gated rows from pos {pos0}", cp |> plane_run(gp), gated_ref, BAR_APPROX, dim)
+            check_rows(t, "ple_gate window panel rows (the normed gated rows)", cp |> plane_run(pp), panel_ref, BAR_APPROX, dim)
+            check_rows(t, "ple_gate window leaves the ring untouched", cp |> plane_run(hp), hist, BAR_APPROX, hcd)
+            check_rows(t, "ple_conv window residual landing (taps off the panel and the ring)", cp |> plane_run(rp), res_ref, BAR_APPROX, dim)
+        }
+        delete toks
+        delete gated_ref
+        delete panel_ref
+        delete res_ref
+        delete kn
+        delete qn
+    }
+}
+
+[test]
+def test_vkd_ple_side(t0 : T?) {
+    t0 |> run("ple_gate + ple_conv: the n-gram side input's gate, its ring slot and the conv's landing == the CPU form, inside and under the taps' reach") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_ple_gate_cls() || !ensure_ple_conv_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            ple_side_case(t, 7)   //! every tap reads a written slot
+            ple_side_case(t, 1)   //! the two earlier taps sit before the sequence and read zero
+            ple_panel_case(t, 3, 6)   //! the window form: three rows whose taps read the ring before the window and the panel inside it
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 [test]
 def test_vkd_dn_family(t0 : T?) {
     t0 |> run("deltanet class kernels == the CPU oracle (conv, fused step, 2-phase scan)") <| @(t : T?) {
@@ -8161,6 +8748,8 @@ def test_vkd_dn_family(t0 : T?) {
                 st_ref := sth
                 var out_ref : array<float>
                 out_ref |> resize(nvh * ds)
+                var out_ref_sig : array<float>   //! the same row under the sigmoid out-gate (the `dn_step_sig_cls` stamp's)
+                out_ref_sig |> resize(nvh * ds)
                 for (hh in range(nvh)) {
                     let kh = hh % nkh
                     var dq : array<float>
@@ -8229,6 +8818,7 @@ def test_vkd_dn_family(t0 : T?) {
                     for (j in range(ds)) {
                         let zv = projh[cd + hh * ds + j]
                         out_ref[hh * ds + j] = dout[j] * inv * smh[wnorm_off + j] * (zv / (1.0 + exp(-zv)))
+                        out_ref_sig[hh * ds + j] = dout[j] * inv * smh[wnorm_off + j] * (1.0 / (1.0 + exp(-zv)))
                     }
                     delete dq
                     delete dk
@@ -8247,6 +8837,14 @@ def test_vkd_dn_family(t0 : T?) {
                 let badf = mismatch_approx(gotf.of32, out_ref) + mismatch_approx(gotf.state, st_ref) + mismatch_approx(gotf.smalls, sm_ref)
                 t |> success(badf == 0, "dn_step_fused's f32 o row (oform 1) at ds {ds} matches the pre-quant oracle with state and ring advanced alike ({badf} elements off)")
                 delete gotf
+                //! the sigmoid out-gate stamp (`dn_step_sig_cls`, qwen4exp): the same step, the o row gated by sigmoid(z); the silu oracle is its control
+                var gots <- dn_step_rows_run(projh, sth, smh, pars, slots, 1, 1, cd + nvh * ds, nvh * ds * ds, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, true, false, true)
+                let bads = mismatch_approx(gots.of32, out_ref_sig) + mismatch_approx(gots.state, st_ref) + mismatch_approx(gots.smalls, sm_ref)
+                let wids = span_maxdiff(gots.of32, out_ref_sig, 0, 0, length(out_ref_sig))
+                t |> success(bads == 0, "dn_step_sig's f32 o row at ds {ds} matches the sigmoid-gated oracle with state and ring advanced alike ({bads} elements off, the o row's widest {wids.diff} at {wids.at})")
+                t |> success(mismatch_approx(gots.of32, out_ref) > 0, "dn_step_sig at ds {ds} lands off the silu oracle (the two stamps differ)")
+                delete gots
+                delete out_ref_sig
                 delete projh
                 delete sth
                 delete smh
@@ -8352,6 +8950,8 @@ def test_vkd_dn_family(t0 : T?) {
                 // arithmetic, so the drift is pure reassociation; peak-floored bars absorb it
                 var o_ref : array<float>
                 o_ref |> resize(cmp_n)
+                var o_ref_sig : array<float>   //! the same rows under the sigmoid out-gate (the `dn_scan_p3_sig_cls` stamp's), the state part alike
+                o_ref_sig |> resize(cmp_n)
                 for (hh in range(nvh)) {
                     let kh = hh % nkh
                     var st_h : array<float>
@@ -8394,12 +8994,14 @@ def test_vkd_dn_family(t0 : T?) {
                         for (j in range(ds)) {
                             let zv = zh[tt * di + hh * ds + j]
                             o_ref[tt * di + hh * ds + j] = orow[j] * inv * smh[wnorm_off + j] * (zv / (1.0 + exp(-zv)))
+                            o_ref_sig[tt * di + hh * ds + j] = orow[j] * inv * smh[wnorm_off + j] * (1.0 / (1.0 + exp(-zv)))
                         }
                         delete dvn
                         delete orow
                     }
                     for (e in range(ds * ds)) {
                         o_ref[npos * di + hh * ds * ds + e] = st_h[e]
+                        o_ref_sig[npos * di + hh * ds * ds + e] = st_h[e]
                     }
                     delete st_h
                 }
@@ -8410,6 +9012,37 @@ def test_vkd_dn_family(t0 : T?) {
                 poison[0] += 1.0 + 2.0 * logits_maxabs(o_ref)
                 t |> success(mismatch_rel("", poison, o_ref, 1e-2, floor) > 0, "dn_scan + out-norm at ds {ds}: the bar reds a poisoned value")
                 delete poison
+                //! the sigmoid out-gate stamp (`dn_scan_p3_sig_cls`, qwen4exp): the scan again from the same state, its rows gated by sigmoid(z); the silu oracle is its control
+                var o_cls_sig : array<float>
+                o_cls_sig |> resize(cmp_n)
+                unsafe {
+                    upload_region_at(st2, 0l, addr<uint8 const?>(sth[0]), st_bytes)
+                    nan_sentinel_upload(sl2, o_bytes, int64(o_off) * 4l)
+                    verify(ensure_dn_scan_p3_sig_cls(), "the sigmoid out-norm stamp must compile on a device that compiled the silu one")
+                    var sc1s = set_dn_scan_cls(fixed_array(convd, st2, smd, sl2), fixed_array(conv_bytes, st_bytes, sm_bytes, slab_bytes), fixed_array(1u, 2u, 8u, 4u))
+                    var sc3s = set_dn_scan_p3_sig_cls(fixed_array(zd, sl2, smd), fixed_array(z_bytes, slab_bytes, sm_bytes), fixed_array(16u, 4u, 8u))
+                    var raws = alloc_cmd()
+                    let begins = VkCommandBufferBeginInfo()
+                    vk_check(vkBeginCommandBuffer(raws, begins), null)
+                    var hs : VkHaz
+                    var pcss = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                        beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = uint(o_off), di = uint(di))
+                    enc_dn_scan_cls(raws, hs, sc1s, pcss, dn_scan_wgs(int64(nvh), int64(ds)))
+                    var pc3s = DnScanP3Args(npos = uint(npos), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(o_off), wnorm_off = uint(wnorm_off), eps = eps)
+                    enc_dn_scan_p3_sig_cls(raws, hs, sc3s, pc3s, int64(npos))
+                    vhz_dep(raws, hs, 2u | 4u, 0u, true)
+                    cmd_copy_range(raws, sl2, int64(o_off) * 4l, host.buf, 0l, o_bytes)
+                    cmd_copy_range(raws, st2, 0l, host.buf, o_bytes, st_bytes)
+                    vk_check(vkEndCommandBuffer(raws), null)
+                    submit_wait(raws)
+                    memcpy(addr<void?>(o_cls_sig[0]), host.mapped, o_bytes + st_bytes)
+                }
+                let bads = mismatch_rel("", o_cls_sig, o_ref_sig, 1e-2, floor)
+                let wids = span_maxdiff(o_cls_sig, o_ref_sig, 0, 0, cmp_n)
+                t |> success(bads == 0, "dn_scan + the sigmoid out-norm stamp matches the CPU oracle at ds {ds} ({bads} of {cmp_n} off, widest {wids.diff} at {wids.at})")
+                t |> success(mismatch_rel("", o_cls_sig, o_ref, 1e-2, floor) > 0, "dn_scan_p3_sig at ds {ds} lands off the silu oracle (the two stamps differ)")
+                delete o_cls_sig
+                delete o_ref_sig
                 delete convh
                 delete zh
                 delete sth
@@ -8432,10 +9065,20 @@ struct DnRowsOut {
     of32 : array<float>
 }
 
+def private dn_step_enc(raw; var h; var sc; var pc; wgs : int64; zsig : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (zsig) {
+            enc_dn_step_sig_cls(raw, h, sc, pc, wgs)
+        } else {
+            enc_dn_step_cls(raw, h, sc, pc, wgs)
+        }
+    }
+}
+
 //! `dn_step_cls` over `nrows` rows on buffers of its own - one dispatch, or under `seq` a dispatch a row in order (the rows' first
-//! row in the push, the same-slab verify's form) - two calls share no device plane
+//! row in the push, the same-slab verify's form) - two calls share no device plane; `zsig` takes the sigmoid out-gate stamp
 def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, nslots, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv : int;
-                             offs : int[8]; eps, qscale : float; out_f32 : bool; seq : bool = false) : DnRowsOut {
+                             offs : int[8]; eps, qscale : float; out_f32 : bool; seq : bool = false; zsig : bool = false) : DnRowsOut {
     var r : DnRowsOut
     let proj_bytes = int64(nrows * prow) * 4l
     let st_bytes = int64(nslots * st_n) * 4l
@@ -8473,9 +9116,13 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
                 tm[i].parity = uint(pars[i])
                 tm[i].dnslot = uint(slots[i])
             }
-            var sc = set_dn_step_cls(fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd),
-                fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES * int64(nrows), of_bytes),
-                fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
+            let bufs = fixed_array(projd, std, smd, scd, qd, tokb.buf, ofd)
+            let sizes = fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES * int64(nrows), of_bytes)
+            let bits = fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u)
+            if (zsig) {
+                verify(ensure_dn_step_sig_cls(), "the sigmoid out-gate stamp must compile on a device that compiled the silu one")
+            }
+            var sc = zsig ? set_dn_step_sig_cls(bufs, sizes, bits) : set_dn_step_cls(bufs, sizes, bits)
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -8491,10 +9138,10 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
                         vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(smd)), uint64((offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4), uint64(ring * 4), NAN_SENTINEL_BITS)
                     }
                     pc.row0 = uint(i)
-                    enc_dn_step_cls(raw, h, sc, pc, int64(nvh))
+                    dn_step_enc(raw, h, sc, pc, int64(nvh), zsig)
                 }
             } else {
-                enc_dn_step_cls(raw, h, sc, pc, int64(nvh * nrows))
+                dn_step_enc(raw, h, sc, pc, int64(nvh * nrows), zsig)
             }
             vkd_run_copy(raw, h, fixed_array(std, smd, scd, qd, ofd), host,
                 fixed_array(0l, st_bytes, st_bytes + sm_bytes, st_bytes + sm_bytes + sc_bytes, st_bytes + sm_bytes + sc_bytes + q_bytes),
@@ -10076,6 +10723,106 @@ def test_vkd_emb_gather_pair(t0 : T?) {
 }
 
 [test]
+def test_vkd_hot_combine(t0 : T?) {
+    t0 |> run("the hot expert pool's combine (the slot window past 0 over slot rows 1 .. k): the hit rows add to the host's sum, a zero weight skips its stale row") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_combine_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let n = 300   //! past one workgroup's 256 threads: the strided loop's second trip
+            let k = 5
+            let nhit = 3
+            var miss : array<float>
+            var w : array<float>
+            var down : array<float>
+            var ident1 : array<uint>
+            miss |> resize(n)
+            w |> resize(k)
+            down |> resize(k * n)
+            ident1 |> resize(k)
+            for (i in range(n)) {
+                miss[i] = float(int(hash_word(uint(i) + 71u) % 2001u)) * 0.001 - 1.0
+            }
+            for (j in range(k)) {
+                w[j] = j < nhit ? 0.05 + float(j) * 0.07 : 0.0
+                ident1[j] = uint(j + 1)
+            }
+            let nan = unsafe(reinterpret<float>(0x7FC00000u))
+            for (i in range(k * n)) {
+                down[i] = i < nhit * n ? float(int(hash_word(uint(i) + 83u) % 2001u)) * 0.001 - 1.0 : nan   // a miss's row is stale: no hit chain wrote it
+            }
+            let x_bytes = int64(n) * 4l
+            let w_bytes = int64(k) * 4l
+            let d_bytes = int64(k * n) * 4l
+            let ad = make_device_buf(x_bytes)
+            let id = make_device_buf(w_bytes)
+            let wd = make_device_buf(w_bytes)
+            let dd = make_device_buf(d_bytes)
+            let a0d = make_device_buf(x_bytes)
+            var host = make_host_buf(x_bytes * 2l, true, [cached = true])
+            var y : array<float>
+            var y0 : array<float>
+            y |> resize(n)
+            y0 |> resize(n)
+            unsafe {
+                upload_region_at(ad, 0l, addr<uint8 const?>(miss[0]), x_bytes)
+                upload_region_at(a0d, 0l, addr<uint8 const?>(miss[0]), x_bytes)
+                upload_region_at(id, 0l, addr<uint8 const?>(ident1[0]), w_bytes)
+                upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), w_bytes)
+                upload_region_at(dd, 0l, addr<uint8 const?>(down[0]), d_bytes)
+                var sp = set_combine_cls(fixed_array(ad, id, wd, dd), fixed_array(x_bytes, w_bytes, w_bytes, d_bytes), fixed_array(1u, 2u, 4u, 8u))
+                var s0 = set_combine_cls(fixed_array(a0d, id, wd, dd), fixed_array(x_bytes, w_bytes, w_bytes, d_bytes), fixed_array(16u, 2u, 4u, 8u))
+                var raw = alloc_cmd()
+                let begin = VkCommandBufferBeginInfo()
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                var h : VkHaz
+                var pc = CombineArgs(n = uint(n), k = uint(k), r0 = 1u, r1 = uint(k) + 1u)
+                enc_combine_cls(raw, h, sp, pc, 1l)
+                var pc0 = CombineArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(k))   // the window at 0 starts the sum: the host's row is lost
+                enc_combine_cls(raw, h, s0, pc0, 1l)
+                vkd_run_copy(raw, h, fixed_array(ad, a0d), host, fixed_array(0l, x_bytes), fixed_array(x_bytes, x_bytes), 17u)
+                memcpy(addr<void?>(y[0]), host.mapped, x_bytes)
+                memcpy(addr<void?>(y0[0]), reinterpret<void?>(intptr(host.mapped) + uint64(x_bytes)), x_bytes)
+            }
+            var want : array<float>
+            want |> resize(n)
+            for (i in range(n)) {
+                var acc = miss[i]
+                for (j in range(nhit)) {
+                    acc += w[j] * down[j * n + i]
+                }
+                want[i] = acc
+            }
+            var finite = 0
+            var lost = 0
+            for (i in range(n)) {
+                finite++ if (y[i] == y[i] && abs(y[i]) < 1.0e6)
+                lost++ if (!(abs(y0[i] - want[i]) <= 1.0e-4))
+            }
+            t |> equal(finite, n, "no stale row reached the sum: a zero weight skips its row, whose NaN a product would carry")
+            let bad = rel_mismatches(y, want, 0, n)
+            let widest = span_maxdiff(y, want, 0, 0, n)
+            t |> success(bad == 0, "the hit rows add to the host's sum under their weights ({bad} of {n} off, widest {widest.diff} at {widest.at})")
+            var poison := want
+            poison[n - 1] += 0.01
+            t |> success(rel_mismatches(y, poison, 0, n) == 1, "control: the bar reds one poisoned element")
+            t |> success(lost > n / 2, "control: a slot window at 0 starts the sum over, loses the host's row and reads a row past the hits ({lost} of {n} off)")
+            delete miss
+            delete w
+            delete down
+            delete ident1
+            delete y
+            delete y0
+            delete want
+            delete poison
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
 def test_vkd_dec_combine_pair(t0 : T?) {
     t0 |> run("decode combine class kernels (routed, routed + shared gated and ungated) == the CPU sum") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -10396,6 +11143,10 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(cm2_tile_cols(768l, 32l), 32l)       // the expert-bucket shape (30B-A3B pp512: ~32 rows per region) takes s
             t |> equal(cm2_tile_cols(768l, 64l), 32l)       // ... up to the half-m edge
             t |> equal(cm2_tile_cols(768l, 65l), 128l)      // past it an m column is more than half full
+            t |> equal(batch_tile_edges(int(KqFmt.iq3s4), 672l, 112l, true).tc, 128l, "the batch arm's cm2 column follows the pick on a superblock format")
+            t |> equal(batch_tile_edges(int(KqFmt.iq4nl32), 2560l, 112l, true).tc, 32l, "... and is the s column on a per-32 expert plane, its one cm2 stamp")
+            t |> equal(batch_tile_edges(int(KqFmt.q51), 2560l, 512l, true).tc, 32l, "... q51 too")
+            t |> equal(batch_tile_edges(int(KqFmt.mx4), 2880l, 512l, true).tc, 32l, "... and mx4")
             t |> equal(cm2_tiles(512l, 512l), 16l)                             // the 1B k/v shape: four m columns of four
             t |> equal(pick_str(cm2_gemm_pick(512l, 512l, 2048l)), "256x4x512")   // ... alone it fills under half the SMs: four l chunks (32 workgroups of 8 steps, 205 units with the reduce, against 320 whole)
             t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 80l).nsplit, 1l)       // ... beside q and the other kv projection (96 in the group): never
@@ -11607,7 +12358,7 @@ def test_vkd_moe_routing(t0 : T?) {
 def test_vkd_gemv_lane_rule(t0 : T?) {
     t0 |> run("gemv_lanes_per_row: the measured lane split per format class and row length") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl)
+            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4)
             let lattice = fixed_array(KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq3s)
             //! row length -> (the grid formats' lanes, the k-lattice formats' lanes); 0 = the whole subgroup
             let rows = fixed_array((n = 768l, g = 8u, l = 8u), (n = 1024l, g = 8u, l = 16u), (n = 1536l, g = 8u, l = 16u),

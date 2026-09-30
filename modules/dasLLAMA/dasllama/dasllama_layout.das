@@ -825,38 +825,38 @@ def private moe_gpu_gather_stack_b32(qplane, splane : array<uint8>; qb, sb : int
         let sp = addr<uint8 const?>(splane[b0 * sb])
         var wqp = addr(wq[0])
         var wsp = addr(ws[0])
-        let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1
-        maybe_parallel_for(0, nslices, njobs) $(ssb, sse) {
+        let nrows = nslices * int(slice_rows)
+        let njobs = is_job_que_available() ? min(nrows, 4 * (get_total_hw_jobs() + 1)) : 1
+        maybe_parallel_for(0, nrows, njobs) $(rowb, rowe) {   //! a row a unit: one slice alone still spreads over the lanes
             unsafe {
-                for (s in range(ssb, sse)) {
-                    let sliceQ = int64(s) * slice_rows * qrow
-                    let sliceS = int64(s) * slice_rows * srow
-                    for (ri in range64(slice_rows)) {
-                        let rr = int64(s) * slice_rows + ri
-                        let grouped = repacked && ri < ng * mr
-                        let g = ri / mr
-                        let r = ri % mr
-                        for (bi in range64(nb)) {
-                            var dq = wqp + rr * qrow + bi * qb
-                            var dsc = wsp + (rr * nb + bi) * sb
-                            if (grouped) {
-                                let gq = qp + sliceQ + g * mr * qrow + bi * qb * mr
-                                let gs = sp + sliceS + g * mr * srow + bi * sb * mr
-                                for (j in range64(qb)) {
-                                    dq[j] = gq[(j / 4l) * 4l * mr + r * 4l + j % 4l]
-                                }
-                                for (h in range64(sb)) {
-                                    dsc[h] = gs[r * sb + h]
-                                }
-                            } else {
-                                let rq = qp + sliceQ + ri * qrow + bi * qb
-                                let rs = sp + sliceS + ri * srow + bi * sb
-                                for (m in range64(qb)) {
-                                    dq[m] = rq[m]
-                                }
-                                for (m in range64(sb)) {
-                                    dsc[m] = rs[m]
-                                }
+                for (row in range(rowb, rowe)) {
+                    let rr = int64(row)
+                    let ri = rr % slice_rows
+                    let sliceQ = (rr - ri) * qrow
+                    let sliceS = (rr - ri) * srow
+                    let grouped = repacked && ri < ng * mr
+                    let g = ri / mr
+                    let r = ri % mr
+                    for (bi in range64(nb)) {
+                        var dq = wqp + rr * qrow + bi * qb
+                        var dsc = wsp + (rr * nb + bi) * sb
+                        if (grouped) {
+                            let gq = qp + sliceQ + g * mr * qrow + bi * qb * mr
+                            let gs = sp + sliceS + g * mr * srow + bi * sb * mr
+                            for (j in range64(qb)) {
+                                dq[j] = gq[(j / 4l) * 4l * mr + r * 4l + j % 4l]
+                            }
+                            for (h in range64(sb)) {
+                                dsc[h] = gs[r * sb + h]
+                            }
+                        } else {
+                            let rq = qp + sliceQ + ri * qrow + bi * qb
+                            let rs = sp + sliceS + ri * srow + bi * sb
+                            for (m in range64(qb)) {
+                                dq[m] = rq[m]
+                            }
+                            for (m in range64(sb)) {
+                                dsc[m] = rs[m]
                             }
                         }
                     }
@@ -895,32 +895,32 @@ def moe_gpu_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int6
         let sp = addr<uint8 const?>(t.mxs[b0 * MX4_SB])
         var wqp = addr(wq[0])
         var wsp = addr(ws[0])
-        let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1
-        maybe_parallel_for(0, nslices, njobs) $(ssb, sse) {
+        let nrows = nslices * int(slice_rows)
+        let njobs = is_job_que_available() ? min(nrows, 4 * (get_total_hw_jobs() + 1)) : 1
+        maybe_parallel_for(0, nrows, njobs) $(rowb, rowe) {   //! a row a unit: one slice alone still spreads over the lanes
             unsafe {
-                for (s in range(ssb, sse)) {
-                    let sliceQ = int64(s) * slice_rows * qrow
-                    let sliceS = int64(s) * slice_rows * srow
-                    for (ri in range64(slice_rows)) {
-                        let rr = int64(s) * slice_rows + ri
-                        let grouped = repacked && ri < ng * mr
-                        let g = ri / mr
-                        let r = ri % mr
-                        for (bi in range64(nb)) {
-                            var dq = wqp + rr * qrow + bi * MX4_QB
-                            if (grouped) {
-                                let gq = qp + sliceQ + g * mr * qrow + bi * MX4_QB * mr
-                                for (j in range64(MX4_QB)) {
-                                    dq[j] = gq[(j / 4l) * 4l * mr + r * 4l + j % 4l]
-                                }
-                                wsp[rr * nb + bi] = sp[sliceS + g * mr * srow + bi * mr + r]
-                            } else {
-                                let rq = qp + sliceQ + ri * qrow + bi * MX4_QB
-                                for (m in range64(MX4_QB)) {
-                                    dq[m] = rq[m]
-                                }
-                                wsp[rr * nb + bi] = sp[sliceS + ri * srow + bi]
+                for (row in range(rowb, rowe)) {
+                    let rr = int64(row)
+                    let ri = rr % slice_rows
+                    let sliceQ = (rr - ri) * qrow
+                    let sliceS = (rr - ri) * srow
+                    let grouped = repacked && ri < ng * mr
+                    let g = ri / mr
+                    let r = ri % mr
+                    for (bi in range64(nb)) {
+                        var dq = wqp + rr * qrow + bi * MX4_QB
+                        if (grouped) {
+                            let gq = qp + sliceQ + g * mr * qrow + bi * MX4_QB * mr
+                            for (j in range64(MX4_QB)) {
+                                dq[j] = gq[(j / 4l) * 4l * mr + r * 4l + j % 4l]
                             }
+                            wsp[rr * nb + bi] = sp[sliceS + g * mr * srow + bi * mr + r]
+                        } else {
+                            let rq = qp + sliceQ + ri * qrow + bi * MX4_QB
+                            for (m in range64(MX4_QB)) {
+                                dq[m] = rq[m]
+                            }
+                            wsp[rr * nb + bi] = sp[sliceS + ri * srow + bi]
                         }
                     }
                 }
@@ -954,170 +954,170 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
         let sp = addr<uint8 const?>(t.kq[int(fmt)].s[sb0 * dssb])
         var wqp = addr(wq[0])
         var wsp = addr(ws[0])
-        let njobs = is_job_que_available() ? min(nslices, 4 * (get_total_hw_jobs() + 1)) : 1
-        maybe_parallel_for(0, nslices, njobs) $(ssb, sse) {
+        let nrows = nslices * int(slice_rows)
+        let njobs = is_job_que_available() ? min(nrows, 4 * (get_total_hw_jobs() + 1)) : 1
+        maybe_parallel_for(0, nrows, njobs) $(rowb, rowe) {   //! a row a unit: one slice alone still spreads over the lanes
             unsafe {
-                for (s in range(ssb, sse)) {
-                    let sliceQ = int64(s) * slice_rows * qrow
-                    let sliceS = int64(s) * slice_rows * srow
-                    for (ri in range64(slice_rows)) {
-                        let rr = int64(s) * slice_rows + ri
-                        let grouped = repacked && ri < ng * mr
-                        let g = ri / mr
-                        let r = ri % mr
-                        for (sbi in range64(nsb)) {
-                            var dq = wqp + rr * qrow + sbi * qsb
-                            var dsc = wsp + (rr * nsb + sbi) * dev_ssb
-                            if (grouped) {
-                                let gq = qp + sliceQ + g * mr * qrow + sbi * qsb * mr
-                                let gs = sp + sliceS + g * mr * srow + sbi * dssb * mr
-                                if (fmt == KqFmt.iq3s) {   // 26 uniform 4-byte columns over [qs][qh][signs]
-                                    for (m in range64(104l)) {
-                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
-                                    }
-                                } elif (fmt == KqFmt.iq3xxs) {   // 24 uniform 4-byte columns over [qs][aux]
-                                    for (m in range64(96l)) {
-                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
-                                    }
-                                } elif (fmt == KqFmt.k3) {   // the sub-block-packed qs + hmask columns
-                                    for (m in range64(64l)) {
-                                        let half = (m % 32l) / 16l
-                                        let j = (m % 16l) / 4l
-                                        var qbyte = 0u
-                                        for (bb in range64(4l)) {
-                                            let col = ((m / 32l) * 4l + bb) * 2l + half
-                                            qbyte |= ((uint(gq[(col * mr + r) * 4l + m % 4l]) >> uint(2l * j)) & 3u) << uint(2l * bb)
-                                        }
-                                        dq[m] = uint8(qbyte)
-                                    }
-                                    for (m in range64(32l)) {
-                                        var hbyte = 0u
-                                        for (blk in range64(8l)) {
-                                            hbyte |= ((uint(gq[64l * mr + (blk * mr + r) * 4l + m % 4l]) >> uint(m / 4l)) & 1u) << uint(blk)
-                                        }
-                                        dq[64l + m] = uint8(hbyte)
-                                    }
-                                } elif (fmt == KqFmt.k2) {   // 16 qs columns, nothing else
-                                    for (m in range64(64l)) {
-                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
-                                    }
-                                } elif (fmt == KqFmt.iq2s) {   // 18 uniform 4-byte columns over [idx][signs][qh]
-                                    for (m in range64(72l)) {
-                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
-                                    }
-                                } elif (fmt == KqFmt.iq2xs) {   // 16 uniform 4-byte columns over the u16 qs words
-                                    for (m in range64(64l)) {
-                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
-                                    }
-                                } elif (fmt == KqFmt.iq2xxs) {   // 16 uniform 4-byte columns over the u16 qs words
-                                    for (m in range64(64l)) {
-                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
-                                    }
-                                } else {
-                                    for (m in range64(128l)) {   // nibble region: verbatim per (blk, j, t)
-                                        dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
-                                    }
+                for (row in range(rowb, rowe)) {
+                    let rr = int64(row)
+                    let ri = rr % slice_rows
+                    let sliceQ = (rr - ri) * qrow
+                    let sliceS = (rr - ri) * srow
+                    let grouped = repacked && ri < ng * mr
+                    let g = ri / mr
+                    let r = ri % mr
+                    for (sbi in range64(nsb)) {
+                        var dq = wqp + rr * qrow + sbi * qsb
+                        var dsc = wsp + (rr * nsb + sbi) * dev_ssb
+                        if (grouped) {
+                            let gq = qp + sliceQ + g * mr * qrow + sbi * qsb * mr
+                            let gs = sp + sliceS + g * mr * srow + sbi * dssb * mr
+                            if (fmt == KqFmt.iq3s) {   // 26 uniform 4-byte columns over [qs][qh][signs]
+                                for (m in range64(104l)) {
+                                    dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                 }
-                                if (fmt == KqFmt.k5) {
-                                    for (bj in range64(32l)) {
-                                        dq[128l + bj] = gq[128l * mr + bj * mr + r]
-                                    }
-                                } elif (fmt == KqFmt.k6) {   // the sub-block-packed qh columns
-                                    for (p in range64(64l)) {
-                                        let half = (p % 32l) / 16l
-                                        let j = (p % 16l) / 4l
-                                        var qhbyte = 0u
-                                        for (bb in range64(4l)) {
-                                            let col = ((p / 32l) * 4l + bb) * 2l + half
-                                            qhbyte |= ((uint(gq[128l * mr + (col * mr + r) * 4l + p % 4l]) >> uint(2l * j)) & 3u) << uint(2l * bb)
-                                        }
-                                        dq[128l + p] = uint8(qhbyte)
-                                    }
+                            } elif (fmt == KqFmt.iq3xxs) {   // 24 uniform 4-byte columns over [qs][aux]
+                                for (m in range64(96l)) {
+                                    dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                 }
-                                if (fmt == KqFmt.k6 || fmt == KqFmt.k3) {
-                                    for (idx in range64(16l)) {
-                                        dsc[idx] = gs[idx * mr + r]
+                            } elif (fmt == KqFmt.k3) {   // the sub-block-packed qs + hmask columns
+                                for (m in range64(64l)) {
+                                    let half = (m % 32l) / 16l
+                                    let j = (m % 16l) / 4l
+                                    var qbyte = 0u
+                                    for (bb in range64(4l)) {
+                                        let col = ((m / 32l) * 4l + bb) * 2l + half
+                                        qbyte |= ((uint(gq[(col * mr + r) * 4l + m % 4l]) >> uint(2l * j)) & 3u) << uint(2l * bb)
                                     }
-                                    dsc[16] = gs[16l * mr + 2l * r]
-                                    dsc[17] = gs[16l * mr + 2l * r + 1l]
-                                    dsc[18] = uint8(0)
-                                    dsc[19] = uint8(0)
-                                } elif (fmt == KqFmt.q40 || fmt == KqFmt.iq4nl) {
-                                    for (blk in range64(8l)) {   // 8 per-block f16 d, mr-interleaved (iq4nl repacks with q40's interleave)
-                                        dsc[blk * 2l] = gs[blk * 2l * mr + 2l * r]
-                                        dsc[blk * 2l + 1l] = gs[blk * 2l * mr + 2l * r + 1l]
-                                    }
-                                    for (idx in range64(16l, 20l)) {
-                                        dsc[idx] = uint8(0)
-                                    }
-                                } elif (fmt == KqFmt.k2) {   // the field-major grp header re-packs to [d][dmin][16 pair bytes]
-                                    dsc[0] = gs[16l * mr + 2l * r]
-                                    dsc[1] = gs[16l * mr + 2l * r + 1l]
-                                    dsc[2] = gs[18l * mr + 2l * r]
-                                    dsc[3] = gs[18l * mr + 2l * r + 1l]
-                                    for (idx in range64(16l)) {
-                                        dsc[4l + idx] = gs[idx * mr + r]
-                                    }
-                                } elif (two_word_row) {   // the k4-shaped grp row (d at 2r, the eight sub-scale bytes mr-strided from 4mr) packs to two words
-                                    pack_iq_dev_row(fmt, dsc, gs + 2l * r, gs + 4l * mr + r, mr)
-                                } else {
-                                    dsc[0] = gs[2l * r]
-                                    dsc[1] = gs[2l * r + 1l]
-                                    dsc[2] = gs[2l * mr + 2l * r]
-                                    dsc[3] = gs[2l * mr + 2l * r + 1l]
+                                    dq[m] = uint8(qbyte)
+                                }
+                                for (m in range64(32l)) {
+                                    var hbyte = 0u
                                     for (blk in range64(8l)) {
-                                        dsc[4l + blk] = gs[4l * mr + blk * mr + r]
-                                        dsc[12l + blk] = gs[12l * mr + blk * mr + r]
+                                        hbyte |= ((uint(gq[64l * mr + (blk * mr + r) * 4l + m % 4l]) >> uint(m / 4l)) & 1u) << uint(blk)
                                     }
+                                    dq[64l + m] = uint8(hbyte)
+                                }
+                            } elif (fmt == KqFmt.k2) {   // 16 qs columns, nothing else
+                                for (m in range64(64l)) {
+                                    dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                }
+                            } elif (fmt == KqFmt.iq2s) {   // 18 uniform 4-byte columns over [idx][signs][qh]
+                                for (m in range64(72l)) {
+                                    dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                }
+                            } elif (fmt == KqFmt.iq2xs) {   // 16 uniform 4-byte columns over the u16 qs words
+                                for (m in range64(64l)) {
+                                    dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
+                                }
+                            } elif (fmt == KqFmt.iq2xxs) {   // 16 uniform 4-byte columns over the u16 qs words
+                                for (m in range64(64l)) {
+                                    dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                 }
                             } else {
-                                let rq = qp + sliceQ + ri * qrow + sbi * qsb
-                                let rs = sp + sliceS + ri * srow + sbi * dssb
-                                if (fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
-                                    for (m in range64(qsb)) {   // disk bytes already in the device form (k/k+16 pairs; k3's lanes)
-                                        dq[m] = rq[m]
-                                    }
-                                } else {
-                                    for (m in range64(128l)) {   // re-pair disk k/k+32 nibbles to k/k+16
-                                        let k = (m / 16l) * 32l + m % 16l
-                                        let lo = fmt == KqFmt.k6 ? k6_nib(rq, k) : k45_nib(rq, k)
-                                        let hi = fmt == KqFmt.k6 ? k6_nib(rq, k + 16l) : k45_nib(rq, k + 16l)
-                                        dq[m] = uint8(lo | (hi << 4u))
-                                    }
+                                for (m in range64(128l)) {   // nibble region: verbatim per (blk, j, t)
+                                    dq[m] = gq[((m / 4l) * mr + r) * 4l + m % 4l]
                                 }
-                                if (fmt == KqFmt.k5) {
-                                    for (bj in range64(32l)) {
-                                        let k = (bj / 4l) * 32l + (bj % 4l) * 4l
-                                        var hb = 0u
-                                        for (tt in range64(4l)) {
-                                            hb |= k5_hbit(rq + 128l, k + tt) << uint(tt)
-                                            hb |= k5_hbit(rq + 128l, k + 16l + tt) << uint(4l + tt)
-                                        }
-                                        dq[128l + bj] = uint8(hb)
-                                    }
-                                } elif (fmt == KqFmt.k6) {
-                                    for (p in range64(64l)) {
-                                        dq[128l + p] = rq[128l + p]
-                                    }
+                            }
+                            if (fmt == KqFmt.k5) {
+                                for (bj in range64(32l)) {
+                                    dq[128l + bj] = gq[128l * mr + bj * mr + r]
                                 }
-                                if (two_word_row) {   // the plane row (d, then the eight decoded sub-scale bytes at 4) packs to two words
-                                    pack_iq_dev_row(fmt, dsc, rs, rs + 4l, 1l)
-                                } elif (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.k3 || fmt == KqFmt.iq4nl || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs) {   // rows already in the decoded device form
-                                    for (idx in range64(dssb)) {
-                                        dsc[idx] = rs[idx]
+                            } elif (fmt == KqFmt.k6) {   // the sub-block-packed qh columns
+                                for (p in range64(64l)) {
+                                    let half = (p % 32l) / 16l
+                                    let j = (p % 16l) / 4l
+                                    var qhbyte = 0u
+                                    for (bb in range64(4l)) {
+                                        let col = ((p / 32l) * 4l + bb) * 2l + half
+                                        qhbyte |= ((uint(gq[128l * mr + (col * mr + r) * 4l + p % 4l]) >> uint(2l * j)) & 3u) << uint(2l * bb)
                                     }
-                                    for (idx in range64(dssb, KQ_DEV_SSB)) {
-                                        dsc[idx] = uint8(0)
+                                    dq[128l + p] = uint8(qhbyte)
+                                }
+                            }
+                            if (fmt == KqFmt.k6 || fmt == KqFmt.k3) {
+                                for (idx in range64(16l)) {
+                                    dsc[idx] = gs[idx * mr + r]
+                                }
+                                dsc[16] = gs[16l * mr + 2l * r]
+                                dsc[17] = gs[16l * mr + 2l * r + 1l]
+                                dsc[18] = uint8(0)
+                                dsc[19] = uint8(0)
+                            } elif (fmt == KqFmt.q40 || fmt == KqFmt.iq4nl) {
+                                for (blk in range64(8l)) {   // 8 per-block f16 d, mr-interleaved (iq4nl repacks with q40's interleave)
+                                    dsc[blk * 2l] = gs[blk * 2l * mr + 2l * r]
+                                    dsc[blk * 2l + 1l] = gs[blk * 2l * mr + 2l * r + 1l]
+                                }
+                                for (idx in range64(16l, 20l)) {
+                                    dsc[idx] = uint8(0)
+                                }
+                            } elif (fmt == KqFmt.k2) {   // the field-major grp header re-packs to [d][dmin][16 pair bytes]
+                                dsc[0] = gs[16l * mr + 2l * r]
+                                dsc[1] = gs[16l * mr + 2l * r + 1l]
+                                dsc[2] = gs[18l * mr + 2l * r]
+                                dsc[3] = gs[18l * mr + 2l * r + 1l]
+                                for (idx in range64(16l)) {
+                                    dsc[4l + idx] = gs[idx * mr + r]
+                                }
+                            } elif (two_word_row) {   // the k4-shaped grp row (d at 2r, the eight sub-scale bytes mr-strided from 4mr) packs to two words
+                                pack_iq_dev_row(fmt, dsc, gs + 2l * r, gs + 4l * mr + r, mr)
+                            } else {
+                                dsc[0] = gs[2l * r]
+                                dsc[1] = gs[2l * r + 1l]
+                                dsc[2] = gs[2l * mr + 2l * r]
+                                dsc[3] = gs[2l * mr + 2l * r + 1l]
+                                for (blk in range64(8l)) {
+                                    dsc[4l + blk] = gs[4l * mr + blk * mr + r]
+                                    dsc[12l + blk] = gs[12l * mr + blk * mr + r]
+                                }
+                            }
+                        } else {
+                            let rq = qp + sliceQ + ri * qrow + sbi * qsb
+                            let rs = sp + sliceS + ri * srow + sbi * dssb
+                            if (fmt == KqFmt.q40 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq4nl || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
+                                for (m in range64(qsb)) {   // disk bytes already in the device form (k/k+16 pairs; k3's lanes)
+                                    dq[m] = rq[m]
+                                }
+                            } else {
+                                for (m in range64(128l)) {   // re-pair disk k/k+32 nibbles to k/k+16
+                                    let k = (m / 16l) * 32l + m % 16l
+                                    let lo = fmt == KqFmt.k6 ? k6_nib(rq, k) : k45_nib(rq, k)
+                                    let hi = fmt == KqFmt.k6 ? k6_nib(rq, k + 16l) : k45_nib(rq, k + 16l)
+                                    dq[m] = uint8(lo | (hi << 4u))
+                                }
+                            }
+                            if (fmt == KqFmt.k5) {
+                                for (bj in range64(32l)) {
+                                    let k = (bj / 4l) * 32l + (bj % 4l) * 4l
+                                    var hb = 0u
+                                    for (tt in range64(4l)) {
+                                        hb |= k5_hbit(rq + 128l, k + tt) << uint(tt)
+                                        hb |= k5_hbit(rq + 128l, k + 16l + tt) << uint(4l + tt)
                                     }
-                                } else {
-                                    for (idx in range64(4l)) {   // f16 d + f16 dmin verbatim
-                                        dsc[idx] = rs[idx]
-                                    }
-                                    for (blk in range64(8l)) {   // decode the 6-bit sc/mn packing
-                                        let sm = k4_sc_mn(rs + 4l, blk)
-                                        dsc[4l + blk] = uint8(sm.x)
-                                        dsc[12l + blk] = uint8(sm.y)
-                                    }
+                                    dq[128l + bj] = uint8(hb)
+                                }
+                            } elif (fmt == KqFmt.k6) {
+                                for (p in range64(64l)) {
+                                    dq[128l + p] = rq[128l + p]
+                                }
+                            }
+                            if (two_word_row) {   // the plane row (d, then the eight decoded sub-scale bytes at 4) packs to two words
+                                pack_iq_dev_row(fmt, dsc, rs, rs + 4l, 1l)
+                            } elif (fmt == KqFmt.k6 || fmt == KqFmt.q40 || fmt == KqFmt.k3 || fmt == KqFmt.iq4nl || fmt == KqFmt.k2 || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs) {   // rows already in the decoded device form
+                                for (idx in range64(dssb)) {
+                                    dsc[idx] = rs[idx]
+                                }
+                                for (idx in range64(dssb, KQ_DEV_SSB)) {
+                                    dsc[idx] = uint8(0)
+                                }
+                            } else {
+                                for (idx in range64(4l)) {   // f16 d + f16 dmin verbatim
+                                    dsc[idx] = rs[idx]
+                                }
+                                for (blk in range64(8l)) {   // decode the 6-bit sc/mn packing
+                                    let sm = k4_sc_mn(rs + 4l, blk)
+                                    dsc[4l + blk] = uint8(sm.x)
+                                    dsc[12l + blk] = uint8(sm.y)
                                 }
                             }
                         }

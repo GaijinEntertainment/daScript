@@ -146,7 +146,7 @@ class GridWordsMacro : AstFunctionAnnotation {
 }
 
 //! the formats whose cm2 e stamp is the m stamp byte for byte (their k step is 64, the m tile's), so the e ladder takes the m class; the five grid-codebook formats step 32 on the e column and keep a stamp of their own
-let KQ_CM2E_ALIASES_M = "q8 k4 k5 k6 q40 iq4xs iq4nl k3 k2"
+let KQ_CM2E_ALIASES_M = "q8 k4 k5 k6 q40 iq4xs iq3s4 iq4nl k3 k2"
 
 def kq_cm2e_aliases_m(fmt_name : string) : bool => word_in(KQ_CM2E_ALIASES_M, fmt_name)
 

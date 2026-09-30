@@ -1901,8 +1901,8 @@ def public get_kq_q51_native() : bool {
 }
 
 //! Whether an IQ3_S weight loads as the iq3s4 served form (DASLLAMA_IQ3S_SERVE): `lut` / `grid` decide
-//! outright; `auto` = the LUT form on a CPU-only load, the grid form where a GPU tier targets the load
-//! (a device gathers the grid for nothing, and the GPU tiers carry no iq3s4 kernels)
+//! outright; `auto` = the LUT form wherever the rails that serve the load decode it - the CPU rails and the
+//! Vulkan tier do, the Metal tier gathers the grid and carries no iq3s4 kernel
 def public iq3s_serve_lut() : bool {
     let mode = g_env_engine.iq3s_serve
     if (mode == "lut") {
@@ -1914,7 +1914,7 @@ def public iq3s_serve_lut() : bool {
     if (mode != "auto") {
         to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_IQ3S_SERVE='{mode}' is not one of auto | grid | lut - reading auto\n")
     }
-    return get_metal_mode() == MetalMode.off && !moe_gpu_tier_installed()
+    return get_metal_mode() == MetalMode.off
 }
 
 //! The rope-scaling override a load bakes in place of the file's rope.scaling keys: `kind` "" keeps the
@@ -2513,6 +2513,7 @@ struct Session {
     // PLE n-gram side input (config.ple_layer >= 0): forward-only state like the deltanet's
     ple_prev : array<int64>        // the last (ngram_size - 1) token ids, oldest first (-1 = none yet)
     @exact_size ple_conv_hist : array<float>   // the conv's history ring: (taps-1)*dilation + 1 rows of hc x dim
+    ple_ring_device : bool         //! the ring's current rows sit in the resident driver's device slot, not here (the driver syncs them up before a token and down before a pass)
     ple_emb : array<float>         // decode: the gathered heads x head_dim row
     ple_key : array<float>         // hc x dim
     ple_val : array<float>         // dim
@@ -2974,15 +2975,30 @@ def rms_batch(var out : array<float>; src : array<float>; t : Model; woff : int6
 
 // ===== hyper-connections (config.hyper_conn): the wide residual and the block seams =====
 
-//! grouped RMSNorm of one wide row: stream ch of res[roff..] normalizes over dim and scales by gamma row ch
-def hc_grouped_norm(t : Model; res : array<float>; roff, woff : int64; var out : array<float>; ooff : int64) {
-    let c = t.config
-    let dim = c.dim
+//! grouped RMSNorm of one wide row: stream ch of res normalizes over dim and scales by gamma row ch of w
+def private hc_grouped_norm(var out : float?; res : float const?; w : float const?; dim, nh : int64; eps : float) {
     unsafe {
-        for (ch in range64(c.hc_count)) {
-            rmsnorm(addr(out[ooff + ch * dim]), addr < float const? >(res[roff + ch * dim]),
-                addr < float const? >(t.fblob[woff + ch * dim]), dim, c.norm_eps)
+        for (ch in range64(nh)) {
+            rmsnorm(out + ch * dim, res + ch * dim, w + ch * dim, dim, eps)
         }
+    }
+}
+
+//! the mixer's tail over one normed wide row: `inj_w` null = the head mixer (no scatter logits); xb <- the mean of the sigmoid-gated streams
+def private hc_mix_tail(var xn : float?; gate : float const?; inj_w : float const?; var inject : float?; var xb : float?; dim, nh : int64) {
+    let hcd = nh * dim
+    unsafe {
+        if (inj_w != null) {   // the scatter logits read the normed streams BEFORE the gate lands in them
+            for (ch in range64(nh)) {
+                inject[ch] = dot(inj_w + ch * hcd, xn, hcd)
+            }
+        }
+        sigmoid_gate(xn, gate, hcd)
+        copy_floats(xb, xn, dim)
+        for (ch in range64(1l, nh)) {
+            add_inplace(xb, xn + ch * dim, dim)
+        }
+        scale_inplace(xb, 1.0 / float(nh), dim)
     }
 }
 
@@ -2990,12 +3006,12 @@ def hc_grouped_norm(t : Model; res : array<float>; roff, woff : int64; var out :
 //! low-rank projection; s.hc_inject <- the scatter logits (inject_off < 0 = the head mixer, no scatter)
 def hc_mix_row(t : Model; var s : Session; res : array<float>; roff, norm_off, down_off, up_off, inject_off : int64) {
     let c = t.config
-    let dim = c.dim
     let hcd = hc_dim(c)
-    let nh = c.hc_count
     let lr = c.hc_low_rank
-    let inv = 1.0 / float(nh)
-    hc_grouped_norm(t, res, roff, norm_off, s.hc_xn, 0l)
+    let inv = 1.0 / float(c.hc_count)
+    unsafe {
+        hc_grouped_norm(addr(s.hc_xn[0]), addr < float const? >(res[roff]), addr < float const? >(t.fblob[norm_off]), c.dim, c.hc_count, c.norm_eps)
+    }
     mm_f(s.hc_lo, t, KqFmt.q8, down_off, s.hc_xn, s.xq, s.xs, s.xbs, hcd, lr)
     for (j in range64(lr)) {
         let v = s.hc_lo[j] * inv
@@ -3003,19 +3019,8 @@ def hc_mix_row(t : Model; var s : Session; res : array<float>; roff, norm_off, d
     }
     mm_f(s.hc_gate, t, KqFmt.q8, up_off, s.hc_lo, s.xq, s.xs, s.xbs, lr, hcd)
     unsafe {
-        var xn = addr(s.hc_xn[0])
-        if (inject_off >= 0l) {   // the scatter logits read the normed streams BEFORE the gate lands in them
-            for (ch in range64(nh)) {
-                s.hc_inject[ch] = dot(addr < float const? >(t.fblob[inject_off + ch * hcd]), xn, hcd)
-            }
-        }
-        sigmoid_gate(xn, addr < float const? >(s.hc_gate[0]), hcd)
-        var xb = addr(s.xb[0])
-        copy_floats(xb, xn, dim)
-        for (ch in range64(1l, nh)) {
-            add_inplace(xb, xn + ch * dim, dim)
-        }
-        scale_inplace(xb, inv, dim)
+        let inj_w = inject_off >= 0l ? addr < float const? >(t.fblob[inject_off]) : null
+        hc_mix_tail(addr(s.hc_xn[0]), addr < float const? >(s.hc_gate[0]), inj_w, addr(s.hc_inject[0]), addr(s.xb[0]), c.dim, c.hc_count)
     }
 }
 
@@ -3024,16 +3029,29 @@ def hc_mix(t : Model; var s : Session; norm_off, down_off, up_off, inject_off : 
     hc_mix_row(t, s, s.hc_res, 0l, norm_off, down_off, up_off, inject_off)
 }
 
-//! The mixer over every row of the prefill residual (s.hc_res_b) into xb_b, the scatter logits into hc_inject_b
+//! The mixer over every row of the prefill residual (s.hc_res_b) into xb_b, the scatter logits into hc_inject_b;
+//! the per-row passes split over positions, each row the decode mixer's arithmetic
 def hc_mix_b(t : Model; var s : Session; norm_off, down_off, up_off, inject_off, npos : int64) {
     let c = t.config
     let dim = c.dim
     let hcd = hc_dim(c)
     let nh = c.hc_count
     let lr = c.hc_low_rank
+    let eps = c.norm_eps
     let inv = 1.0 / float(nh)
-    for (p in range64(npos)) {
-        hc_grouped_norm(t, s.hc_res_b, p * hcd, norm_off, s.hc_xn_b, p * hcd)
+    let par = hcd * npos >= g_norm_par_threshold
+    unsafe {
+        var xnp = addr(s.hc_xn_b[0])
+        let resp = addr < float const? >(s.hc_res_b[0])
+        let wp = addr < float const? >(t.fblob[norm_off])
+        maybe_parallel_for(par, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let off = int64(p) * hcd
+                    hc_grouped_norm(xnp + off, resp + off, wp, dim, nh, eps)
+                }
+            }
+        }
     }
     mm_b_f(s, s.hc_lo_b, t, KqFmt.q8, down_off, s.hc_xn_b, hcd, lr, npos)
     for (j in range64(npos * lr)) {
@@ -3042,36 +3060,38 @@ def hc_mix_b(t : Model; var s : Session; norm_off, down_off, up_off, inject_off,
     }
     mm_b_f(s, s.hc_gate_b, t, KqFmt.q8, up_off, s.hc_lo_b, lr, hcd, npos)
     unsafe {
-        for (p in range64(npos)) {
-            var xn = addr(s.hc_xn_b[p * hcd])
-            for (ch in range64(nh)) {
-                s.hc_inject_b[p * nh + ch] = dot(addr < float const? >(t.fblob[inject_off + ch * hcd]), xn, hcd)
+        var xnp = addr(s.hc_xn_b[0])
+        let gp = addr < float const? >(s.hc_gate_b[0])
+        let inj_w = addr < float const? >(t.fblob[inject_off])
+        var injp = addr(s.hc_inject_b[0])
+        var xbp = addr(s.xb_b[0])
+        maybe_parallel_for(par, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+            unsafe {
+                for (p in range(rb, re)) {
+                    let pp = int64(p)
+                    hc_mix_tail(xnp + pp * hcd, gp + pp * hcd, inj_w, injp + pp * nh, xbp + pp * dim, dim, nh)
+                }
             }
-            sigmoid_gate(xn, addr < float const? >(s.hc_gate_b[p * hcd]), hcd)
-            var xb = addr(s.xb_b[p * dim])
-            copy_floats(xb, xn, dim)
-            for (ch in range64(1l, nh)) {
-                add_inplace(xb, xn + ch * dim, dim)
+        }
+    }
+}
+
+//! Scatter one block output row into its wide row r: stream ch += out * 2 sigmoid(inject_ch / hc)
+def private hc_combine(var r : float?; out : float const?; inject : float const?; dim, nh : int64) {
+    unsafe {
+        for (ch in range64(nh)) {
+            let w = 2.0 / (1.0 + exp(-inject[ch] / float(nh)))
+            var rc = r + ch * dim
+            for (i in range64(dim)) {
+                rc[i] += out[i] * w
             }
-            scale_inplace(xb, inv, dim)
         }
     }
 }
 
 //! Scatter a block's output into the streams: res_ch += out * 2 sigmoid(inject_ch / hc) - a zero logit is a plain residual add
 def hc_combine_row(t : Model; var res : array<float>; roff : int64; out : float const?; inject : float const?) {
-    let c = t.config
-    let nh = c.hc_count
-    let dim = c.dim
-    unsafe {
-        for (ch in range64(nh)) {
-            let w = 2.0 / (1.0 + exp(-inject[ch] / float(nh)))
-            var r = addr(res[roff + ch * dim])
-            for (i in range64(dim)) {
-                r[i] += out[i] * w
-            }
-        }
-    }
+    hc_combine(unsafe(addr(res[roff])), out, inject, t.config.dim, t.config.hc_count)
 }
 
 //! A block's input row is xb: the residual through the layer norm at fblob[woff], or - under hyper-connections - the
@@ -3103,10 +3123,20 @@ def block_resid(t : Model; var s : Session; out : array<float>) {
 def block_resid_b(t : Model; var s : Session; out_b : array<float>; npos : int64) {
     let c = t.config
     unsafe {
-        if (c.hyper_conn) {
-            for (p in range64(npos)) {
-                hc_combine_row(t, s.hc_res_b, p * hc_dim(c), addr < float const? >(out_b[p * c.dim]),
-                    addr < float const? >(s.hc_inject_b[p * c.hc_count]))
+        if (c.hyper_conn) {   //! the rows split over positions: each scatters into its own wide row
+            let dim = c.dim
+            let nh = c.hc_count
+            let hcd = hc_dim(c)
+            var rp = addr(s.hc_res_b[0])
+            let op = addr < float const? >(out_b[0])
+            let ip = addr < float const? >(s.hc_inject_b[0])
+            maybe_parallel_for(hcd * npos >= g_norm_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
+                unsafe {
+                    for (p in range(rb, re)) {
+                        let pp = int64(p)
+                        hc_combine(rp + pp * hcd, op + pp * dim, ip + pp * nh, dim, nh)
+                    }
+                }
             }
         } else {
             add_inplace(addr(s.x_b[0]), addr < float const? >(out_b[0]), npos * c.dim)

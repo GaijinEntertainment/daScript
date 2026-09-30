@@ -353,6 +353,8 @@ def kq_cls_ref(fmt : int; wq, ws, xq : array<uint>; xs : array<float>) : KqGemvB
         k = new KqGemvK5()
     } elif (fmt == int(KqFmt.iq4xs)) {
         k = new KqGemvIq4xs()
+    } elif (fmt == int(KqFmt.iq3s4)) {
+        k = new KqGemvIq3s4()   // an arithmetic codebook - no workgroup state to fill
     } elif (fmt == int(KqFmt.k3)) {
         k = new KqGemvK3()
     } elif (fmt == int(KqFmt.iq3s)) {
@@ -435,7 +437,7 @@ def gemv_float_walk(regions : array<uint>; n, d, nreg : int; sb_dot : block<(var
 
 //! whether `fmt` carries a float witness beside the class oracle (`kq_gemv_float_oracle`)
 def kq_has_float_oracle(fmt : int) : bool {
-    for (f in fixed_array(KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)) {
+    for (f in fixed_array(KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)) {
         if (int(f) == fmt) return true
     }
     return false
@@ -445,7 +447,9 @@ def kq_has_float_oracle(fmt : int) : bool {
 //! Q8_K bytes - the gate a wrong pack, lane, mask, index or sign pick in the class cannot pass while staying self-consistent
 def kq_gemv_float_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>; regions : array<uint>; n, d, nreg : int) : array<float> {
     if (fmt == int(KqFmt.iq4xs)) {
-        return <- iq4xs_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg)
+        return <- lut_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg, iq4nl_lut(), false)
+    } elif (fmt == int(KqFmt.iq3s4)) {
+        return <- lut_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg, iq3s4_lut(), true)
     } elif (fmt == int(KqFmt.k3)) {
         return <- k3_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg)
     } elif (fmt == int(KqFmt.iq3s)) {
@@ -464,14 +468,17 @@ def kq_gemv_float_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
     return <- none
 }
 
-//! IQ4_XS GEMV float oracle: w = d*sc*LUT[q] straight off the plane bytes (q40 nibble tiling, the k4 row shape with signed sc)
-def iq4xs_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>;
-                            regions : array<uint>; n, d, nreg : int) : array<float> {
-    let lut = iq4nl_lut()
+//! a two-word-row sub-block scale off the device row: iq4xs's signed ls - 32, or the iq3 row's 1 + 2s (`grid`: iq3s4's)
+def lut_row_sc(w0, w1 : uint; blk : int; grid : bool) : int => grid ? grid_sc(w1, uint(blk)) : iq4xs_sc(w0, w1, uint(blk))
+
+//! the nibble-codebook GEMV float oracle (iq4xs, iq3s4): w = d*sc*LUT[q] straight off the plane bytes - the q40 nibble
+//! tiling, the two-word scale row, `lut` the format's codebook and `grid` its sub-scale form
+def lut_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>; regions : array<uint>; n, d, nreg : int;
+                          lut : int8[16]; grid : bool) : array<float> {
     var y <- gemv_float_walk(regions, n, d, nreg) $(var acc : float&; sb, xsb : int) {
         let dd = unpackHalf2x16(ws[sb * 2]).x
         for (blk in range(8)) {
-            let sc = iq4xs_sc(ws[sb * 2], ws[sb * 2 + 1], uint(blk))
+            let sc = lut_row_sc(ws[sb * 2], ws[sb * 2 + 1], blk, grid)
             var bacc = 0.0
             for (m in range(16)) {
                 let b = byte_u8(wq, sb * 128 + blk * 16 + m)
@@ -847,17 +854,28 @@ def mx4f16_gemm_oracle(wq : array<uint>; wsb : array<uint>; xf : array<uint>;
     }
 }
 
-def iq4xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
-                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
-    let lut = iq4nl_lut()
+//! the nibble-codebook x f16 GEMM oracle (the iq4xs and iq3s4 tiles' shape): per weight d * sc * LUT[q] off the device
+//! forms, rounded f16 as the decode rounds
+def private lutf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec, n, d : int;
+                               var y : array<float>; lut : int8[16]; grid : bool) {
     f16_gemm_walk(xf, recs, nrec, n, d, 256, y) $(sb, e : int) : float {
         let g = e / 32
         let dv = unpackHalf2x16(wsu[sb * 2]).x
-        let sc = float(iq4xs_sc(wsu[sb * 2], wsu[sb * 2 + 1], uint(g)))
+        let sc = float(lut_row_sc(wsu[sb * 2], wsu[sb * 2 + 1], g, grid))
         let by = byte_u8(wq, sb * 128 + g * 16 + e % 16)
         let q = (by >> (((e % 32) / 16) * 4)) & 0xF
         return float(float16(dv * sc * float(lut[q])))
     }
+}
+
+def iq4xsf16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    lutf16_gemm_oracle(wq, wsu, xf, recs, nrec, n, d, y, iq4nl_lut(), false)
+}
+
+def iq3s4f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
+                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    lutf16_gemm_oracle(wq, wsu, xf, recs, nrec, n, d, y, iq3s4_lut(), true)
 }
 
 def k3f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;

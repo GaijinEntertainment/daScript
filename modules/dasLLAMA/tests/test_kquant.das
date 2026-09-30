@@ -3343,10 +3343,12 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
     }
     t |> equal(bad, 0, "kq {fmt}: the two-word device scale rows decode back to the plane's d and sub-scales")
     t |> equal(long_length(wqDisk), d * nsb * qsb, "kq {fmt}: the quant plane gathers whole")
-    if (fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s) {
+    if (fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s || fmt == KqFmt.iq3s4) {
         unsafe {
             if (fmt == KqFmt.iq4xs) {
                 repack_kq_grp(KqFmt.iq4xs, addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
+            } elif (fmt == KqFmt.iq3s4) {
+                repack_kq_grp(KqFmt.iq3s4, addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
             } else {
                 repack_kq_grp(KqFmt.iq3s, addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
             }
@@ -3378,7 +3380,7 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
 
 [test]
 def test_kq_gpu_gather_iq(t : T?) {
-    for (fmt in [KqFmt.iq4xs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2xxs]) {
+    for (fmt in [KqFmt.iq4xs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2xxs, KqFmt.iq3s4]) {
         t |> run("moe_gpu_gather_stack_kq {fmt}: the codebook format's two-word device scale rows") @(t : T?) {
             kq_gpu_gather_iq_gate(t, fmt)
         }

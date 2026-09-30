@@ -829,6 +829,18 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the iq4nl32 expert rail (the 32-block IQ4_NL down planes off the 256 lattice - Qwen3.8-Flash-Next, above the zoo's tier) -
     // its s and e stamps and its decode GEMV; their coverage is test_vkd_iq4nl32_cm2_batch and test_vkd_iq4nl32_gemv
     "iq4nl32_batch_cm2s_cls_spv", "iq4nl32_batch_cm2e_cls_spv", "iq4nl32_gemv_cls_spv",
+    // the iq3s4 rail (IQ3_S served as a nibble codebook plane: the same carrier's gate and up stacks) - its decode GEMV, its
+    // batch tile and its cm2 l/m/s and KHR stamps; their coverage is the iq3s4 rows of test_vkd_kq_gemv_family and
+    // test_vkd_kq_batch_family and test_vkd_iq3s4_cm2_batch
+    "kq_gemv_iq3s4_cls_spv", "kq_batch_iq3s4_cls_spv", "kq_batch_iq3s4_cm2l_cls_spv", "kq_batch_iq3s4_cm2m_cls_spv",
+    "kq_batch_iq3s4_cm2s_cls_spv", "kq_batch_iq3s4_khr_cls_spv",
+    // the hyper-connection chain (Qwen3.8-Flash-Next, the one qwen4exp carrier, above the zoo's tier): the mixer seams and the
+    // n-gram side input; their coverage is test_vkd_hc_seams, test_vkd_hc_rows and test_vkd_ple_side, the serving run
+    // test_gpu_resident_hc.das
+    "hc_init_cls_spv", "hc_norm_cls_spv", "hc_lo_rq_cls_spv", "hc_mix_cls_spv", "hc_comb_cls_spv", "ple_gate_cls_spv", "ple_conv_cls_spv",
+    // ... and the deltanet out-gate's sigmoid stamps the same carrier's recurrent layers take; their coverage is the sigmoid
+    // arms of test_vkd_dn_family
+    "dn_step_sig_cls_spv", "dn_scan_p3_sig_cls_spv",
     // the per-32 expert rails' KHR arms (the expert schedule on a KHR-mode card: the 26B-A4B Q4_K_M's q51 down stacks, gpt-oss's
     // mx4 stacks, Flash-Next's iq4nl32 stacks - carriers above the zoo's tier); their coverage is the KHR arm of
     // test_vkd_q51_cm2_batch, test_vkd_mx4_cm2_batch and test_vkd_iq4nl32_cm2_batch
@@ -960,7 +972,7 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // for iq3s, test_gpu_resident_regions_hybrid_q3kxl.das for the eight low-bit leaves
     "q8_gemv_n2_cls_spv", "q8_gemv_n4_cls_spv", "q8_gemv_n8_cls_spv",
     "q8_gemv_n2p_cls_spv", "q8_gemv_n4p_cls_spv", "q8_gemv_n8p_cls_spv",
-    "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv",
+    "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv", "kq_gemv_iq3s4_n_cls_spv",
     "kq_gemv_k3_n_cls_spv", "kq_gemv_k2_n_cls_spv", "kq_gemv_iq3s_n_cls_spv", "kq_gemv_iq3xxs_n_cls_spv", "kq_gemv_iq4nl_n_cls_spv",
     "kq_gemv_iq2s_n_cls_spv", "kq_gemv_iq2xs_n_cls_spv", "kq_gemv_iq2xxs_n_cls_spv",
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages

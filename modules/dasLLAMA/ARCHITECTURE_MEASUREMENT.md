@@ -150,6 +150,16 @@ ruler's static fixture has read a retired pass three times off its profile. `har
 times one device-to-host copy at four sizes on the compute queue by the device clock and on the
 transfer queue by the host clock in one run: each queue's row is the other's alternate, and the pod's 4.3 GB/s against 19-27 is the whole verdict.
 
+### The host-experts reference row {#host-experts-reference}
+
+A MoE whose expert stacks do not fit the card beside its other planes is measured against
+llama.cpp with the same split: `llama-bench -m <shard 1> -ngl 99 -ncmoe <n_layers> -t <threads>
+-p 512 -n 128 -r 3` keeps every layer's routed experts on the CPU and the rest of the model on
+the device, the shape the resident driver's split token command serves. The row is external
+(`REVIEW_MEASUREMENT.md`): it names the build tag, the backend build (Vulkan or CUDA) and the
+driver version beside the figures, and `-ngl 99` alone is not the reference - it streams the
+experts across the link every batch and measures the link.
+
 ### Sanctioned instrumentation rails {#sanctioned-instrumentation-rails}
 
 Engine timing goes through the rails that aggregate and tag it: the `jobque_profile` markers

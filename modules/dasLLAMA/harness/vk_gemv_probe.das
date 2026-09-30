@@ -269,7 +269,7 @@ def main : int {
         cols_ruler(n, d)
         return 0
     }
-    let fmts = fixed_array(KqFmt.k4, KqFmt.q40, KqFmt.k5, KqFmt.k6, KqFmt.iq4xs, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)
+    let fmts = fixed_array(KqFmt.k4, KqFmt.q40, KqFmt.k5, KqFmt.k6, KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.k3, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq4nl, KqFmt.k2, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs)
     for (f in fmts) {
         verify(gemv_cls_ensure(int(f)), "vk_gemv_probe: every kq gemv class rail must engage on a live device")
     }

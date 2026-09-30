@@ -1902,7 +1902,7 @@ let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedul
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_ensure(fmt : int) : bool {
     var r = false
-    kq_tile_stamp(fmt, "iq3s4") <| $() {
+    kq_tile_stamp(fmt) <| $() {
         r = tile_ensure_khr_cls()
     }
     return r
@@ -1911,7 +1911,7 @@ def khr_cls_ensure(fmt : int) : bool {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     var r : VkDescriptorSet
-    kq_tile_stamp(fmt, "iq3s4") <| $() {
+    kq_tile_stamp(fmt) <| $() {
         r = tile_set_khr_cls(bufs, sizes, gbits)
     }
     return r
@@ -1919,7 +1919,7 @@ def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
 def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    kq_tile_stamp(fmt, "iq3s4") <| $() {
+    kq_tile_stamp(fmt) <| $() {
         tile_enc_khr_cls(raw, h, s, pc, groups)
     }
 }
@@ -1927,7 +1927,7 @@ def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescr
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2e_cls_ensure(fmt : int) : bool {
     var r = false
-    kq_tile_stamp(fmt, "iq3s4") <| $() {
+    kq_tile_stamp(fmt) <| $() {
         r = tile_ensure_cm2e_cls()
     }
     return r
@@ -1936,7 +1936,7 @@ def cm2e_cls_ensure(fmt : int) : bool {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2e_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
     var r : VkDescriptorSet
-    kq_tile_stamp(fmt, "iq3s4") <| $() {
+    kq_tile_stamp(fmt) <| $() {
         r = tile_set_cm2e_cls(bufs, sizes, gbits)
     }
     return r
@@ -1944,8 +1944,48 @@ def cm2e_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbit
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2e_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    kq_tile_stamp(fmt, "iq3s4") <| $() {
+    kq_tile_stamp(fmt) <| $() {
         tile_enc_cm2e_cls(raw, h, s, pc, groups)
+    }
+}
+
+def private cm2_b32_require_s_column(fmt : int; tc : int64) {
+    if (tc != 32l) {
+        panic("vk classes: a per-32 expert plane ({kq_fmt_of_slot(fmt)}) reached a dense tile column - its one cm2 stamp is the s tile")
+    }
+}
+
+def private cm2_dense_ensure(fmt : int; tc : int64) : bool {
+    var r = false
+    kq_tile_stamp(fmt, "q51 mx4 iq4nl32") <| $() {
+        r = tc == 256l ? tile_ensure_cm2l_cls() : (tc == 128l ? tile_ensure_cm2m_cls() : tile_ensure_cm2s_cls())
+    }
+    return r
+}
+
+def private cm2_dense_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+    var r : VkDescriptorSet
+    kq_tile_stamp(fmt, "q51 mx4 iq4nl32") <| $() {
+        if (tc == 256l) {
+            r = tile_set_cm2l_cls(bufs, sizes, gbits)
+        } elif (tc == 128l) {
+            r = tile_set_cm2m_cls(bufs, sizes, gbits)
+        } else {
+            r = tile_set_cm2s_cls(bufs, sizes, gbits)
+        }
+    }
+    return r
+}
+
+def private cm2_dense_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    kq_tile_stamp(fmt, "q51 mx4 iq4nl32") <| $() {
+        if (tc == 256l) {
+            tile_enc_cm2l_cls(raw, h, s, pc, groups)
+        } elif (tc == 128l) {
+            tile_enc_cm2m_cls(raw, h, s, pc, groups)
+        } else {
+            tile_enc_cm2s_cls(raw, h, s, pc, groups)
+        }
     }
 }
 
@@ -1959,23 +1999,11 @@ def cm2_cls_ensure(fmt : int; tc : int64) : bool {
     if (tc == CM2_TC_E) {
         return cm2e_cls_ensure(fmt)
     }
-    if (fmt == int(KqFmt.q51)) {
-        verify(tc == 32l, "vk classes: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
-        return ensure_q51_batch_cm2s_cls()
+    if (cm2_b32_routed(fmt)) {
+        cm2_b32_require_s_column(fmt, tc)
+        return fmt == int(KqFmt.q51) ? ensure_q51_batch_cm2s_cls() : (fmt == int(KqFmt.mx4) ? ensure_mx4_batch_cm2s_cls() : ensure_iq4nl32_batch_cm2s_cls())
     }
-    if (fmt == int(KqFmt.mx4)) {
-        verify(tc == 32l, "vk classes: an mx4 plane reached a dense tile column - the resident plan admits mx4 as a routed expert plane only")
-        return ensure_mx4_batch_cm2s_cls()
-    }
-    if (fmt == int(KqFmt.iq4nl32)) {
-        verify(tc == 32l, "vk classes: an iq4nl32 plane reached a dense tile column - the resident plan admits iq4nl32 as a routed expert plane only")
-        return ensure_iq4nl32_batch_cm2s_cls()
-    }
-    var r = false
-    kq_tile_stamp(fmt, "q51 mx4 iq4nl32 iq3s4") <| $() {
-        r = tc == 256l ? tile_ensure_cm2l_cls() : (tc == 128l ? tile_ensure_cm2m_cls() : tile_ensure_cm2s_cls())
-    }
-    return r
+    return cm2_dense_ensure(fmt, tc)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
@@ -1987,29 +2015,12 @@ def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 con
     if (tc == CM2_TC_E) {
         return cm2e_cls_set(fmt, bufs, sizes, gbits)
     }
-    if (fmt == int(KqFmt.q51)) {
-        verify(tc == 32l, "vk classes: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
-        return set_q51_batch_cm2s_cls(bufs, sizes, gbits)
+    if (cm2_b32_routed(fmt)) {
+        cm2_b32_require_s_column(fmt, tc)
+        return (fmt == int(KqFmt.q51) ? set_q51_batch_cm2s_cls(bufs, sizes, gbits)
+            : (fmt == int(KqFmt.mx4) ? set_mx4_batch_cm2s_cls(bufs, sizes, gbits) : set_iq4nl32_batch_cm2s_cls(bufs, sizes, gbits)))
     }
-    if (fmt == int(KqFmt.mx4)) {
-        verify(tc == 32l, "vk classes: an mx4 plane reached a dense tile column - the resident plan admits mx4 as a routed expert plane only")
-        return set_mx4_batch_cm2s_cls(bufs, sizes, gbits)
-    }
-    if (fmt == int(KqFmt.iq4nl32)) {
-        verify(tc == 32l, "vk classes: an iq4nl32 plane reached a dense tile column - the resident plan admits iq4nl32 as a routed expert plane only")
-        return set_iq4nl32_batch_cm2s_cls(bufs, sizes, gbits)
-    }
-    var r : VkDescriptorSet
-    kq_tile_stamp(fmt, "q51 mx4 iq4nl32 iq3s4") <| $() {
-        if (tc == 256l) {
-            r = tile_set_cm2l_cls(bufs, sizes, gbits)
-        } elif (tc == 128l) {
-            r = tile_set_cm2m_cls(bufs, sizes, gbits)
-        } else {
-            r = tile_set_cm2s_cls(bufs, sizes, gbits)
-        }
-    }
-    return r
+    return cm2_dense_set(fmt, tc, bufs, sizes, gbits)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
@@ -2019,25 +2030,17 @@ def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var
         khr_cls_enc(fmt, raw, h, s, pc, groups)
     } elif (tc == CM2_TC_E) {
         cm2e_cls_enc(fmt, raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.q51)) {
-        verify(tc == 32l, "vk classes: a q51 plane reached a dense tile column - the resident plan admits q51 as a routed expert plane only")
-        enc_q51_batch_cm2s_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.mx4)) {
-        verify(tc == 32l, "vk classes: an mx4 plane reached a dense tile column - the resident plan admits mx4 as a routed expert plane only")
-        enc_mx4_batch_cm2s_cls(raw, h, s, pc, groups)
-    } elif (fmt == int(KqFmt.iq4nl32)) {
-        verify(tc == 32l, "vk classes: an iq4nl32 plane reached a dense tile column - the resident plan admits iq4nl32 as a routed expert plane only")
-        enc_iq4nl32_batch_cm2s_cls(raw, h, s, pc, groups)
-    } else {
-        kq_tile_stamp(fmt, "q51 mx4 iq4nl32 iq3s4") <| $() {
-            if (tc == 256l) {
-                tile_enc_cm2l_cls(raw, h, s, pc, groups)
-            } elif (tc == 128l) {
-                tile_enc_cm2m_cls(raw, h, s, pc, groups)
-            } else {
-                tile_enc_cm2s_cls(raw, h, s, pc, groups)
-            }
+    } elif (cm2_b32_routed(fmt)) {
+        cm2_b32_require_s_column(fmt, tc)
+        if (fmt == int(KqFmt.q51)) {
+            enc_q51_batch_cm2s_cls(raw, h, s, pc, groups)
+        } elif (fmt == int(KqFmt.mx4)) {
+            enc_mx4_batch_cm2s_cls(raw, h, s, pc, groups)
+        } else {
+            enc_iq4nl32_batch_cm2s_cls(raw, h, s, pc, groups)
         }
+    } else {
+        cm2_dense_enc(fmt, tc, raw, h, s, pc, groups)
     }
 }
 
@@ -2215,6 +2218,301 @@ class MoeGatherF16 {
     }
 }
 
+struct HcInitArgs {
+    dim : uint
+    hc : uint
+    rows : uint
+}
+
+//! the wide residual opens as hc copies of every embedded row, one element a thread
+[vk_dispatch(name = "hc_init_cls", grid = "wgs", params = "wgs : int64")]
+class HcInit {
+    @ssbo @binding = 0 x : array<float>     //! the embedded rows [rows x dim]
+    @ssbo @binding = 1 res : array<float>   //! the wide rows [rows x hc x dim]
+    @push_constant pa : HcInitArgs
+
+    [spirv_kernel(local_size_x = 256, name = "hc_init_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x
+        let hcd = pa.hc * pa.dim
+        if (e < pa.rows * hcd) {
+            let r = e / hcd
+            let i = (e - r * hcd) % max(1u, pa.dim)
+            res[e] = x[r * pa.dim + i]
+        }
+    }
+}
+
+struct HcNormArgs {
+    dim : uint
+    hc : uint     //! the residual streams: workgroup g norms stream g % hc of row row0 + g / hc
+    woff : uint   //! the site's gamma rows in wn: stream c's at woff + c * dim
+    row0 : uint   //! the first wide row read; the normed rows land from row 0 (the head mixer norms the window's last row alone)
+    eps : float
+}
+
+//! the grouped rms of the wide residual rows: stream c of a row normalizes over dim and scales by gamma row c - one workgroup
+//! a stream row, the CPU `rmsnorm`'s (x . inv) . w order; `TowerRms`'s pass with the gamma row picked per stream
+[vk_dispatch(name = "hc_norm_cls", grid = "wgs", params = "wgs : int64")]
+class HcNorm : WgReduceBase {
+    @ssbo @binding = 0 res : array<float>    //! the wide rows, [rows x hc x dim]
+    @ssbo @binding = 1 xn : array<float>     //! the normed streams, the same layout
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @push_constant pa : HcNormArgs
+
+    [spirv_kernel(local_size_x = 256, name = "hc_norm_cls_spv")]
+    def run {
+        let g = gl_WorkGroupID.x
+        let src = pa.row0 * pa.hc * pa.dim + g * pa.dim
+        let base = g * pa.dim
+        let wb = pa.woff + (g % max(1u, pa.hc)) * pa.dim
+        let tid = gl_LocalInvocationID.x
+        var ss = 0.0
+        var i = tid
+        while (i < pa.dim) {
+            let v = res[src + i]
+            ss += v * v
+            i += 256u
+        }
+        let inv = wg_rms_inv(ss, pa.dim, pa.eps, 0u)
+        i = tid
+        while (i < pa.dim) {
+            xn[base + i] = (res[src + i] * inv) * wn[wb + i]
+            i += 256u
+        }
+    }
+}
+
+struct HcLoArgs {
+    nblk : uint      //! the low-rank row's 32-blocks
+    inv_hc : float   //! 1 / hc: the mixer's low-rank row is silu(lo / hc) before the up projection
+}
+
+//! the mixer's low-rank row activated and requantized for the up GEMV: silu(lo / hc) into Q8_0 blocks
+[vk_dispatch(name = "hc_lo_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class HcLoRq : RqT {
+    @ssbo @binding = 0 src : array<float>
+    @ssbo @binding = 1 outq : array<int8>
+    @ssbo @binding = 2 outs : array<float>
+    @push_constant pa : HcLoArgs
+
+    def lo(e : uint) : float => silu_f32(src[e] * pa.inv_hc)
+    def override load4(eb : uint) : float4 => float4(lo(eb), lo(eb + 1u), lo(eb + 2u), lo(eb + 3u))
+    def override load1(e : uint) : float => lo(e)
+}
+
+struct HcMixArgs {
+    dim : uint
+    hc : uint
+    rows : uint
+}
+
+//! the mixer's tail: the block input row xb = the mean over the streams of the normed stream gated by the sigmoid of its
+//! up-projection row, one element a thread over the rows (the scatter logits read xn before this: they ride `RouterGemv`
+//! over the inject rows)
+[vk_dispatch(name = "hc_mix_cls", grid = "wgs", params = "wgs : int64")]
+class HcMix {
+    @ssbo @binding = 0 xn : array<float>     //! the normed streams [rows x hc x dim]
+    @ssbo @binding = 1 gate : array<float>   //! the up projection [rows x hc x dim]
+    @ssbo @binding = 2 xb : array<float>     //! the block input rows [rows x dim]
+    @push_constant pa : HcMixArgs
+
+    [spirv_kernel(local_size_x = 256, name = "hc_mix_cls_spv")]
+    def run {
+        let e = gl_GlobalInvocationID.x
+        if (e < pa.rows * pa.dim) {
+            let r = e / pa.dim
+            let i = e - r * pa.dim
+            let rb = r * pa.hc * pa.dim
+            var acc = 0.0
+            var c = 0u
+            while (c < pa.hc) {
+                let x = rb + c * pa.dim + i
+                acc += xn[x] * sigmoid_f32(gate[x])
+                c++
+            }
+            xb[e] = acc * (1.0 / float(pa.hc))
+        }
+    }
+}
+
+struct HcCombArgs {
+    dim : uint
+    hc : uint
+    moe_on : uint    //! the block output is the routed sum in `acc`, plus the shared expert's row under `sh_on`
+    sh_on : uint     //! ... the shared row `outr` at its gate joins the routed sum (0 = a routed block with no shared expert)
+    gated : uint     //! ... the gate: the sigmoid of the router logit at the row's last column, `lstride - 1` (0 = the shared row at unit weight)
+    rows : uint      //! the rows scattered, from `row0` (a window's last-layer slice scatters the rows the classifier reads)
+    row0 : uint
+    lstride : uint   //! the logits row stride (elements)
+}
+
+//! the scatter of a block's output into the streams: res_c += out x 2 sigmoid(inject_c / hc), one element a thread over
+//! the rows; on a MoE layer the output row is the routed experts' sum the host landed in `acc`, plus the shared expert's
+//! row at its gate
+[vk_dispatch(name = "hc_comb_cls", grid = "wgs", params = "wgs : int64")]
+class HcCombine {
+    @ssbo @binding = 0 res : array<float>     //! the wide residual [rows x hc x dim], updated in place
+    @ssbo @binding = 1 outr : array<float>    //! the block output rows [rows x dim]
+    @ssbo @binding = 2 inj : array<float>     //! the site's hc scatter logits [rows x hc]
+    @ssbo @binding = 3 acc : array<float>     //! the routed sums [rows x dim], read under `moe_on`
+    @ssbo @binding = 4 logits : array<float>  //! the router logits rows, a row's gate logit at `lidx` read under `gated`
+    @push_constant pa : HcCombArgs
+
+    [spirv_kernel(local_size_x = 256, name = "hc_comb_cls_spv")]
+    def run {
+        let g = gl_GlobalInvocationID.x
+        let hcd = pa.hc * pa.dim
+        if (g < pa.rows * hcd) {
+            let r = pa.row0 + g / hcd
+            let ee = g % hcd
+            let c = ee / pa.dim
+            let i = ee - c * pa.dim
+            let w = 2.0 / (1.0 + exp(-inj[r * pa.hc + c] / float(pa.hc)))
+            var v = outr[r * pa.dim + i]
+            if (pa.moe_on != 0u) {
+                let gt = pa.gated != 0u ? sigmoid_f32(logits[r * pa.lstride + pa.lstride - 1u]) : 1.0
+                v = acc[r * pa.dim + i] + (pa.sh_on != 0u ? v * gt : 0.0)
+            }
+            res[r * hcd + ee] += v * w
+        }
+    }
+}
+
+struct PleGateArgs {
+    dim : uint
+    hc : uint
+    nrows : uint       //! the conv ring's rows: (taps - 1) x dilation + 1
+    rows : uint        //! 0: the recorded token's row, its position off `tok`, the normed gated row into the ring's slot; else a window of `rows` rows from `pos0`, workgroup g = stream g % hc of row g / hc, the normed rows into `panel`
+    pos0 : uint        //! the window's first position
+    eps : float
+    inv_sq : float     //! 1 / sqrt(dim): the key . query dot's scale
+}
+
+//! the n-gram side input's gate, one workgroup a stream row: the normed key against the normed residual stream, the signed
+//! square root of their scaled dot through a sigmoid, the value row scaled by it into `gated`, and the grouped-normed gated
+//! row into the conv ring's slot of its position (`tok[0].pos % nrows` of the row's region `dnslot`) or the window's panel
+[vk_dispatch(name = "ple_gate_cls", grid = "wgs", params = "wgs : int64")]
+class PleGate : WgReduceBase {
+    @ssbo @binding = 0 key : array<float>     //! the key projections [rows x hc x dim]
+    @ssbo @binding = 1 res : array<float>     //! the wide residual [rows x hc x dim]
+    @ssbo @binding = 2 val : array<float>     //! the value projections [rows x dim]
+    @ssbo @binding = 3 gated : array<float>   //! out: val x the stream's gate, [rows x hc x dim]
+    @ssbo @binding = 4 hist : array<float>    //! the conv ring: [regions x nrows x hc x dim]
+    @ssbo @binding = 5 @role = "weight" wn : array<float>
+    @ssbo @binding = 6 tok : array<TokMeta>
+    @ssbo @binding = 7 panel : array<float>   //! the window's normed gated rows [rows x hc x dim] (the ring itself when `rows` is 0)
+    @push_constant pa : PleGateArgs
+
+    [spirv_kernel(local_size_x = 256, name = "ple_gate_cls_spv")]
+    def run {
+        let wg = gl_WorkGroupID.x
+        let r = wg / max(1u, pa.hc)
+        let c = wg - r * pa.hc
+        let base = wg * pa.dim
+        let vbase = r * pa.dim
+        let hcd = pa.hc * pa.dim   // the norm rows in wn: the key's at 0, the query's (the residual's) at hcd, the conv input's at 2 hcd
+        let tid = gl_LocalInvocationID.x
+        var sk = 0.0
+        var sq = 0.0
+        var i = tid
+        while (i < pa.dim) {
+            let kv = key[base + i]
+            let qv = res[base + i]
+            sk += kv * kv
+            sq += qv * qv
+            i += 256u
+        }
+        let ink = wg_rms_inv(sk, pa.dim, pa.eps, 0u)
+        let inq = wg_rms_inv(sq, pa.dim, pa.eps, 1u)
+        let cb = c * pa.dim
+        var pd = 0.0
+        i = tid
+        while (i < pa.dim) {
+            let kn = (key[base + i] * ink) * wn[cb + i]
+            let qn = (res[base + i] * inq) * wn[hcd + cb + i]
+            pd += kn * qn
+            i += 256u
+        }
+        let sv = wg_sum(pd, 0u) * pa.inv_sq
+        let mag = sqrt(max(abs(sv), 1.0e-6))
+        let sg = sv > 0.0 ? mag : (sv < 0.0 ? -mag : 0.0)
+        let g = sigmoid_f32(sg)
+        var sg2 = 0.0
+        i = tid
+        while (i < pa.dim) {
+            let gv = val[vbase + i] * g
+            gated[base + i] = gv
+            sg2 += gv * gv
+            i += 256u
+        }
+        let ing = wg_rms_inv(sg2, pa.dim, pa.eps, 1u)
+        if (pa.rows == 0u) {
+            let slot = (tok[0].dnslot * pa.nrows + tok[0].pos % max(1u, pa.nrows)) * hcd
+            i = tid
+            while (i < pa.dim) {
+                hist[slot + cb + i] = (gated[base + i] * ing) * wn[2u * hcd + cb + i]
+                i += 256u
+            }
+        } else {
+            i = tid
+            while (i < pa.dim) {
+                panel[base + i] = (gated[base + i] * ing) * wn[2u * hcd + cb + i]
+                i += 256u
+            }
+        }
+    }
+}
+
+struct PleConvArgs {
+    dim : uint
+    hc : uint
+    kern : uint       //! the conv's taps
+    dil : uint        //! ... dilated by the n-gram size
+    rows : uint       //! 0: the recorded token's row off `tok`, every tap off the ring; else `rows` rows from position `pos0`, a tap inside the window off the panel, before it off the ring
+    pos0 : uint       //! the window's first position
+}
+
+//! the side input's landing, one element a thread over the rows: the dilated depthwise causal conv over the ring (a tap
+//! before the sequence reads zero) and, in a window, the panel, its silu and the gated value added to the residual stream
+[vk_dispatch(name = "ple_conv_cls", grid = "wgs", params = "wgs : int64")]
+class PleConv {
+    @ssbo @binding = 0 res : array<float>     //! the wide residual [rows x hc x dim], updated in place
+    @ssbo @binding = 1 gated : array<float>
+    @ssbo @binding = 2 hist : array<float>
+    @ssbo @binding = 3 @role = "weight" wn : array<float>
+    @ssbo @binding = 4 tok : array<TokMeta>
+    @ssbo @binding = 5 panel : array<float>   //! the window's normed gated rows (the ring itself when `rows` is 0)
+    @push_constant pa : PleConvArgs
+
+    [spirv_kernel(local_size_x = 256, name = "ple_conv_cls_spv")]
+    def run {
+        let g = gl_GlobalInvocationID.x
+        let hcd = pa.hc * pa.dim
+        let rows = max(pa.rows, 1u)
+        let nrows = max(1u, (pa.kern - 1u) * pa.dil + 1u)   // the ring's rows
+        let conv_off = 3u * hcd   // the taps in wn past the three norm rows: channel chn's `kern` taps contiguous at conv_off + chn * kern
+        if (g < rows * hcd) {
+            let r = g / hcd
+            let e = g - r * hcd
+            let pos = int(pa.rows == 0u ? tok[0].pos : pa.pos0 + r)
+            let ring = tok[0].dnslot * nrows * hcd
+            var co = 0.0
+            var k = 0u
+            while (k < pa.kern) {
+                let src_pos = pos - int((pa.kern - 1u - k) * pa.dil)
+                if (src_pos >= 0) {
+                    let inwin = pa.rows != 0u && src_pos >= int(pa.pos0)
+                    let hv = inwin ? panel[uint(src_pos - int(pa.pos0)) * hcd + e] : hist[ring + uint(src_pos) % nrows * hcd + e]
+                    co += wn[conv_off + e * pa.kern + k] * hv
+                }
+                k++
+            }
+            res[g] = (res[g] + gated[g]) + silu_f32(co)
+        }
+    }
+}
+
 // ===== deltanet: the conv front =====
 
 struct DnConvArgs {
@@ -2369,8 +2667,10 @@ struct DnStepArgs {
     row0 : uint   //! the dispatch's first row: the same-slab verify steps one stream's rows one dispatch a row in one slot, each reading the state the row before it wrote
 }
 
-[vk_dispatch(name = "dn_step_cls", grid = "wgs", params = "wgs : int64")]
-class DnStepFused : WgReduceBase {
+//! the fused deltanet decode step; its stamps differ on the out-gate alone (`ZSIG`)
+[ |> template_struct_instance]
+class template DnStepFusedT : WgReduceBase {
+    @template_constant ZSIG : bool = false   //!< the out-gate is sigmoid(z) (qwen4exp's `Config.dn_z_sigmoid`) instead of silu(z)
     @ssbo @binding = 0 proj : array<float>     // the fresh projection row (+ z rows at cd)
     @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state (in place)
     @ssbo @binding = 2 smalls : array<float>   // beta/g/taps/wnorm/a/dt + the conv HISTORY ring (rw)
@@ -2390,7 +2690,15 @@ class DnStepFused : WgReduceBase {
     @workgroup sg_qk : float[16]      //! per-subgroup partials of the raw q.k
     @workgroup ds8 : float[8]
 
-    [spirv_kernel(local_size_x = 256, name = "dn_step_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+    def zgate(zv : float) : float {
+        static_if (ZSIG) {
+            return sigmoid_f32(zv)
+        } else {
+            return silu_f32(zv)
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
     def run {   // nolint:STYLE037,STYLE038 — the fused chain: conv, norms, the delta rule, out-norm and the o row in one dispatch
         let ds = pa.ds
         let nvh = max(1u, (pa.cd - 2u * pa.kd) / ds)   //! the head count the geometry pins: cd = 2 kd + nvh ds
@@ -2539,7 +2847,7 @@ class DnStepFused : WgReduceBase {
         while (e < ds) {
             let zv = proj[prow + pa.cd + h * ds + e]
             let xn = dout[e] * oinv * smalls[pa.wnorm_off + e]
-            dout[e] = xn * silu_f32(zv)
+            dout[e] = xn * zgate(zv)
             e += 256u
         }
         barrier()
@@ -2571,6 +2879,14 @@ class DnStepFused : WgReduceBase {
             }
         }
     }
+}
+
+[vk_dispatch(name = "dn_step_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class DnStepFused : DnStepFusedT {}
+
+[vk_dispatch(name = "dn_step_sig_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class DnStepFusedSig : DnStepFusedT {
+    override ZSIG = true
 }
 
 // ===== deltanet: the sequential scan + the gated out-norm =====
@@ -2858,16 +3174,25 @@ struct DnScanP3Args {
     eps : float
 }
 
-//! the gated out-norm over the scan's raw o rows, in place: rms(o_h) * wnorm, gated by silu(z)
-[vk_dispatch(name = "dn_scan_p3_cls", grid = "npos", params = "npos : int64")]
-class DnScanP3 {
+//! the gated out-norm over the scan's raw o rows, in place: rms(o_h) * wnorm, gated by silu(z) - or sigmoid(z) under `ZSIG`
+[ |> template_struct_instance]
+class template DnScanP3T {
+    @template_constant ZSIG : bool = false   //!< the out-gate is sigmoid(z) (qwen4exp) instead of silu(z)
     @ssbo @binding = 0 zrows : array<float>    // the z gate rows
     @ssbo @binding = 1 orows : array<float>    // the work surface holding the raw o rows at o_off
     @ssbo @binding = 2 smalls : array<float>   // wnorm (push offset)
     @push_constant pa : DnScanP3Args
     @workgroup hinv : float[64]                // per-head inverse rms (heads <= 64)
 
-    [spirv_kernel(local_size_x = 256, name = "dn_scan_p3_cls_spv")]
+    def zgate(zv : float) : float {
+        static_if (ZSIG) {
+            return sigmoid_f32(zv)
+        } else {
+            return silu_f32(zv)
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256)]
     def run {
         let p = gl_WorkGroupID.x
         let tid = gl_LocalInvocationID.x
@@ -2888,10 +3213,18 @@ class DnScanP3 {
         while (e < pa.di) {
             let zv = zrows[p * pa.di + e]
             let xn = orows[ob + e] * hinv[e / ds] * smalls[pa.wnorm_off + e % ds]
-            orows[ob + e] = xn * silu_f32(zv)
+            orows[ob + e] = xn * zgate(zv)
             e += 256u
         }
     }
+}
+
+[vk_dispatch(name = "dn_scan_p3_cls", kernel = "run", grid = "npos", params = "npos : int64")]
+class DnScanP3 : DnScanP3T {}
+
+[vk_dispatch(name = "dn_scan_p3_sig_cls", kernel = "run", grid = "npos", params = "npos : int64")]
+class DnScanP3Sig : DnScanP3T {
+    override ZSIG = true
 }
 
 // ===== prefill attention: the prep pass =====
@@ -5158,6 +5491,13 @@ def private iq4_word(n : uint) : uint {
     return b0 | (b1 << 8u) | (b2 << 16u) | (b3 << 24u)
 }
 
+//! the iq3s4 codebook decode of one word of four nibble lanes into four SIGNED int8 lanes: the odd value 2q - 15 by
+//! arithmetic a byte (2q + 1 keeps its low nibble from 16 up and takes 0xF0 above it under 16) - no carry crosses a lane
+def private iq3s4_word(n : uint) : uint {
+    let v = (n & 0x0F0F0F0Fu) * 2u + 0x01010101u
+    return (v & 0x0F0F0F0Fu) | ((0x01010101u - ((v >> 4u) & 0x01010101u)) * 0xF0u)
+}
+
 [arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def iq4xs_sc(w0, w1, blk : uint) : int {
     let ls = ((w1 >> (4u * blk)) & 15u) | (((w0 >> (16u + 2u * blk)) & 3u) << 4u)
@@ -5365,6 +5705,11 @@ class KqBatchQ40 : KqBatchK4 {
 // block-sum term) and one signed-scale plane — per block acc += xs * d*sc * idot
 [vk_dispatch(name = "kq_batch_iq4xs_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchIq4xs : KqBatchBase {
+    //! the format's codebook over a word of four nibble lanes, and its sub-block scale off the two-word row: the two
+    //! places a codebook format on this tiling differs (`KqBatchIq3s4` overrides both)
+    def cb_word(n : uint) : uint => iq4_word(n)
+    def sub_sc(w0, w1, blk : uint) : int => iq4xs_sc(w0, w1, blk)
+
     def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
             let k = word + uint(ki) * 8u
@@ -5374,8 +5719,8 @@ class KqBatchIq4xs : KqBatchBase {
             if (wcol < pa.d) {
                 let wsb = wsb0 + wcol * nsb + s
                 let rb4 = wsb * 32u + bu * 4u
-                wv = uint4(iq4_word((wq[rb4] >> sh) & 0x0F0F0F0F), iq4_word((wq[rb4 + 1u] >> sh) & 0x0F0F0F0F),
-                    iq4_word((wq[rb4 + 2u] >> sh) & 0x0F0F0F0F), iq4_word((wq[rb4 + 3u] >> sh) & 0x0F0F0F0F))
+                wv = uint4(cb_word((wq[rb4] >> sh) & 0x0F0F0F0F), cb_word((wq[rb4 + 1u] >> sh) & 0x0F0F0F0F),
+                    cb_word((wq[rb4 + 2u] >> sh) & 0x0F0F0F0F), cb_word((wq[rb4 + 3u] >> sh) & 0x0F0F0F0F))
             }
             ww4[grp * 17u + k] = wv
         }
@@ -5388,7 +5733,7 @@ class KqBatchIq4xs : KqBatchBase {
         if (wt * 32u + slane < pa.d) {
             let wsb = wsb0 + (wt * 32u + slane) * nsb + s
             let w0 = wsu[wsb * 2u]
-            sa = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, wsu[wsb * 2u + 1u], sblk))
+            sa = unpackHalf2x16(w0).x * float(sub_sc(w0, wsu[wsb * 2u + 1u], sblk))
         }
         wsw[sblk * 32u + slane] = sa
     }
@@ -5410,15 +5755,18 @@ class KqBatchIq4xs : KqBatchBase {
 // the grid formats' scale stage over the iq3 row: d x the (1 + 2s) fields, not iq4xs's ls - 32;
 // iq4xs's fold (no bsum term) inherits. iq3s, iq3xxs and iq2xxs stage their grids and gather on it
 class KqBatchGridBase : KqBatchIq4xs {
-    def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
-        let slane = tid % 32u
-        let sblk = tid / 32u
-        var sa = 0.0
-        if (wt * 32u + slane < pa.d) {
-            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            sa = unpackHalf2x16(wsu[wsb * 2u]).x * float(grid_sc(wsu[wsb * 2u + 1u], sblk))
-        }
-        wsw[sblk * 32u + slane] = sa
+    [unused_argument(w0)]
+    def override sub_sc(w0, w1, blk : uint) : int => grid_sc(w1, blk)
+}
+
+//! iq3s4 (IQ3_S as a nibble codebook plane): iq4xs's tiling and staging, the odd codebook 2q - 15, the iq3 row's (1 + 2s) sub-scale
+[vk_dispatch(name = "kq_batch_iq3s4_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
+class KqBatchIq3s4 : KqBatchGridBase {
+    def override cb_word(n : uint) : uint => iq3s4_word(n)
+
+    [spirv_kernel(local_size_x = 256, name = "kq_batch_iq3s4_cls_spv")]
+    def override run {
+        tile_shell()
     }
 }
 
@@ -6573,6 +6921,8 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant DECV4 : bool = false               //!< the format's hand-laid `decode_v4` is the twin instead of the synthesized one
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
     @workgroup @template_gate = IQLUT iq4lut : float16[16]   // kvalues_iq4nl as f16
+    @template_constant IQODD : bool = false               //!< under IQLUT the staged codebook is iq3s4's odd values 2q - 15
+    @template_constant SCGRID : bool = false              //!< under SCIQ4 the two-word row's sub-scale is the iq3 row's 1 + 2s (`grid_sc`), not iq4xs's ls - 32
     @template_constant IQ3GRID : bool = false             // stage the 2 KB iq3s grid into workgroup memory
     @workgroup @template_gate = IQ3GRID iq3s_gridc : uint[512]
     @template_constant IQ3XGRID : bool = false            // stage the 1 KB halved iq3xxs grid into workgroup memory
@@ -6626,8 +6976,12 @@ class template KqCm2BatchT : MoeCmBase {
         static_if (IQLUT) {
             if (gl_LocalInvocationID.x < 16u) {
                 let li = gl_LocalInvocationID.x
-                let tbl = uint4(3215825025u, 4142587343u, 639175937u, 1901675829u)
-                iq4lut[li] = float16(float((int((tbl[int(li >> 2u)] >> ((li & 3u) * 8u)) & 255u) ^ 128) - 128))
+                static_if (IQODD) {
+                    iq4lut[li] = float16(float(int(li) * 2 - 15))
+                } else {
+                    let tbl = uint4(3215825025u, 4142587343u, 639175937u, 1901675829u)
+                    iq4lut[li] = float16(float((int((tbl[int(li >> 2u)] >> ((li & 3u) * 8u)) & 255u) ^ 128) - 128))
+                }
             }
         }
         static_if (IQ3GRID) {
@@ -6664,6 +7018,15 @@ class template KqCm2BatchT : MoeCmBase {
         }
     }
 
+    //! a two-word scale row's sub-block scale: iq4xs's signed ls - 32, or the iq3 row's 1 + 2s under `SCGRID`
+    def iq_sub_sc(w0, w1, blk : uint) : int {
+        static_if (SCGRID) {
+            return grid_sc(w1, blk)
+        } else {
+            return iq4xs_sc(w0, w1, blk)
+        }
+    }
+
     //! the scale cache for superblock column `sb` of the tile's rows from m0; a row past the plane reads the last row (its entries unused)
     def sc_fill(m0, wblk0, sb : uint) {
         static_if (SCACHE) {
@@ -6677,7 +7040,7 @@ class template KqCm2BatchT : MoeCmBase {
                 let w1 = ws_words[srow + 1u]
                 let d = unpackHalf2x16(w0).x
                 for [unroll] (i in range(4)) {
-                    sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = float2(d * float(iq4xs_sc(w0, w1, g0 + uint(i))), 0.0)
+                    sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = float2(d * float(iq_sub_sc(w0, w1, g0 + uint(i))), 0.0)
                 }
             } static_elif (SCK6) {
                 //! the Q6_K row: words 0-3 the sixteen int8 sub-block scales, word 4 the f16 d; a thread fills eight sub-blocks of its row from two words
@@ -7018,7 +7381,7 @@ class template K4Cm2T : KqCm2BatchT {
             static_if (IQLUT) {
                 let srow = blk * 2u
                 let w0 = ws[srow]
-                let ds = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, ws[srow + 1u], g))
+                let ds = unpackHalf2x16(w0).x * float(iq_sub_sc(w0, ws[srow + 1u], g))
                 for [unroll_full] (c in range(4)) {
                     let w = w4[c] >> sh
                     khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(iq4lut[int(w & 0xFu)]), ds * float(iq4lut[int((w >> 8u) & 0xFu)])))
@@ -7471,6 +7834,15 @@ def mx4_dec4(nib : uint; sc : float) : float4 {
 class template Iq4xsCm2T : K4Cm2T {
     override IQLUT = true
     override SCIQ4 = true
+}
+
+//! iq3s4 (IQ3_S served as a nibble codebook plane): iq4xs's tile over the odd codebook and the iq3 row's sub-scale
+[ |> template_struct_instance]
+class template Iq3s4Cm2T : K4Cm2T {
+    override IQLUT = true
+    override SCIQ4 = true
+    override IQODD = true
+    override SCGRID = true
 }
 
 [ |> template_struct_instance]
@@ -8215,6 +8587,34 @@ class Iq4xsCm2SBatch : Iq4xsCm2T {
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
+[vk_dispatch(name = "kq_batch_iq3s4_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3s4Cm2LBatch : Iq3s4Cm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x256
+    typedef ACC = coopmatWgAcc_f16_128x256
+    typedef ACCW = coopmatWgAcc_f32_128x256
+}
+
+[vk_dispatch(name = "kq_batch_iq3s4_cm2m_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3s4Cm2MBatch : Iq3s4Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq3s4_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3s4Cm2SBatch : Iq3s4Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+}
+
 [vk_dispatch(name = "kq_batch_k3_cm2l_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class K3Cm2LBatch : K3Cm2T {
     typedef AT = coopmatWgA_f16_128x64
@@ -8631,6 +9031,17 @@ class Q40KhrBatch : Q40Cm2T {
 
 [vk_dispatch(name = "kq_batch_iq4xs_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4xsKhrBatch : Iq4xsCm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "kq_batch_iq3s4_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Iq3s4KhrBatch : Iq3s4Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
@@ -12602,6 +13013,8 @@ def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {
         return ensure_kq_batch_q40_cls()
     } elif (fmt == int(KqFmt.iq4xs)) {
         return ensure_kq_batch_iq4xs_cls()
+    } elif (fmt == int(KqFmt.iq3s4)) {
+        return ensure_kq_batch_iq3s4_cls()
     } elif (fmt == int(KqFmt.k3)) {
         return ensure_kq_batch_k3_cls()
     } elif (fmt == int(KqFmt.iq3s)) {
@@ -12646,6 +13059,8 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
         enc_kq_batch_q40_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq4xs)) {
         enc_kq_batch_iq4xs_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq3s4)) {
+        enc_kq_batch_iq3s4_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.k3)) {
         enc_kq_batch_k3_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq3s)) {
@@ -12690,6 +13105,8 @@ def gemv_cls_ensure(fmt : int) : bool {
         return ensure_kq_gemv_q40_cls()
     } elif (fmt == int(KqFmt.iq4xs)) {
         return ensure_kq_gemv_iq4xs_cls()
+    } elif (fmt == int(KqFmt.iq3s4)) {
+        return ensure_kq_gemv_iq3s4_cls()
     } elif (fmt == int(KqFmt.k3)) {
         return ensure_kq_gemv_k3_cls()
     } elif (fmt == int(KqFmt.iq3s)) {
@@ -12749,6 +13166,8 @@ def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkD
         enc_kq_gemv_q40_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq4xs)) {
         enc_kq_gemv_iq4xs_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq3s4)) {
+        enc_kq_gemv_iq3s4_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.k3)) {
         enc_kq_gemv_k3_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq3s)) {
@@ -12780,7 +13199,7 @@ def gemv_wgs(rows : int64; lanes_per_row : uint) : int64 {
 
 //! the codebook and grid formats: a block's decode gathers, so a lane wants more blocks in flight than the k-lattice's
 def gemv_grid_fmt(fmt : int) : bool {
-    return fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl)
+    return fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
@@ -12809,7 +13228,7 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 // ===== the N-column GEMV leaves: one weight pass over `pa.ncols` activation rows =====
 
 //! the formats with an N-column leaf: every kq leaf and the q8 stamps; the per-32 expert GEMVs (q51, mx4) have no N form, so a dense plane in one steps a row at a time
-def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || (kq_sb(fmt) && fmt != int(KqFmt.iq3s4))   //! iq3s4 is the CPU rail's served form: no Vulkan leaf
+def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || kq_sb(fmt)
 
 //! the decode GEMV family's roster - q8 and every kq leaf, in enum order: what the kernel cells and the probe's ruler walk
 def kq_gemv_fmts() : array<KqFmt> {
@@ -12844,6 +13263,8 @@ def gemv_cls_ensure_n(fmt : int; nb : int64 = 8l) : bool {
         return ensure_kq_gemv_q40_n_cls()
     } elif (fmt == int(KqFmt.iq4xs)) {
         return ensure_kq_gemv_iq4xs_n_cls()
+    } elif (fmt == int(KqFmt.iq3s4)) {
+        return ensure_kq_gemv_iq3s4_n_cls()
     } elif (fmt == int(KqFmt.k3)) {
         return ensure_kq_gemv_k3_n_cls()
     } elif (fmt == int(KqFmt.iq3s)) {
@@ -12910,6 +13331,8 @@ def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
         enc_kq_gemv_q40_n_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq4xs)) {
         enc_kq_gemv_iq4xs_n_cls(raw, h, set_, pc, wgs)
+    } elif (fmt == int(KqFmt.iq3s4)) {
+        enc_kq_gemv_iq3s4_n_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.k3)) {
         enc_kq_gemv_k3_n_cls(raw, h, set_, pc, wgs)
     } elif (fmt == int(KqFmt.iq3s)) {
@@ -13082,11 +13505,22 @@ class KqGemvQ40N : Q40GemvT {
 // lanes (no block-sum term), the k4 scale-row shape with SIGNED (ls - 32) sub-scales and no min
 [ |> template_struct_instance]
 class template Iq4xsGemvT : KqGemvLeafT {
+    @template_constant IQODD : bool = false   //!< the iq3s4 form: the odd codebook 2q - 15 and the iq3 row's (1 + 2s) sub-scale over the same nibble tiling
+
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
-        iq4_split(wq4[wsb * 8u + blk], wl, wh)
+        let wv = wq4[wsb * 8u + blk]
         let w0 = wsu[wsb * 2u]
-        let a = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, wsu[wsb * 2u + 1u], blk))
-        return float4(a, 0.0, a, 0.0)
+        let w1 = wsu[wsb * 2u + 1u]
+        static_if (IQODD) {
+            wl = uint4(iq3s4_word(wv.x & KQC_LOW), iq3s4_word(wv.y & KQC_LOW), iq3s4_word(wv.z & KQC_LOW), iq3s4_word(wv.w & KQC_LOW))
+            wh = uint4(iq3s4_word((wv.x >> 4u) & KQC_LOW), iq3s4_word((wv.y >> 4u) & KQC_LOW), iq3s4_word((wv.z >> 4u) & KQC_LOW), iq3s4_word((wv.w >> 4u) & KQC_LOW))
+            let a = unpackHalf2x16(w0).x * float(grid_sc(w1, blk))
+            return float4(a, 0.0, a, 0.0)
+        } else {
+            iq4_split(wv, wl, wh)
+            let a = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, w1, blk))
+            return float4(a, 0.0, a, 0.0)
+        }
     }
 }
 
@@ -13095,6 +13529,17 @@ class KqGemvIq4xs : Iq4xsGemvT {}
 
 [vk_dispatch(name = "kq_gemv_iq4xs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq4xsN : Iq4xsGemvT {
+    override NCOL = true
+}
+
+[vk_dispatch(name = "kq_gemv_iq3s4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3s4 : Iq4xsGemvT {
+    override IQODD = true
+}
+
+[vk_dispatch(name = "kq_gemv_iq3s4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3s4N : Iq4xsGemvT {
+    override IQODD = true
     override NCOL = true
 }
 

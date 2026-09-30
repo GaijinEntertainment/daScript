@@ -131,7 +131,9 @@ typedef RdecPlaceFn = function<(wq : array<uint8>; ws : array<uint8>; n : int64;
 struct RdecDnGeom {
     cd, kd, di, nvh, nkh, ds, dconv : int64
     ba_f32 : bool
+    zsig : bool    //! the out-gate is sigmoid(z) (qwen4exp) instead of silu(z): the step and scan kernels' `ZSIG` stamps serve
 }
+let public RDEC_ROUTED_SLOTS = 64l   //! the routed slots a decode step stages: every row's k picks fit in them, and the hot expert pool takes no more picks a step
 let public RDEC_NORM_ROWS = 10l   //! rms_att, rms_ffn, post-attention, post-FFN, the per-layer-embedding post norm, then the gemma-4 MoE layer's router scale, routed pre norm, dense post norm and routed post norm, then the attention output bias row (gpt-oss) - zero rows where a model lacks them
 let public RDEC_HEAD_NORM_ROWS = 5l   //! the NextN draft head's block: its attention norm, its FFN norm, the embed norm, the carry norm, the head norm (the final norm's row where the file ships none)
 let public RDEC_HEAD_ATT = 0l
@@ -324,6 +326,127 @@ def public rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk,
     => invoke(g_rdec_prepare_moe, ne, k, nfe, nsh, n_moe, sh_gated, norm_topk, is_gelu, act_oai, wscale, router, dscale, rbias, gbias, ubias, dbias)
 def public rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_moe_layer, l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2, fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2, g) }
 def public rdec_set_moe_experts(l, router_slot, be1, be3, be2 : int64; fe1, fe3, fe2 : int) { invoke(g_rdec_set_moe_experts, l, router_slot, be1, be3, be2, fe1, fe3, fe2) }
+
+//! The mixer sites' planes after the layers register (`hc` streams, low-rank `lr`, `n_sites` = 2 x layers): the norm rows
+//! [sites x hc x dim] and inject rows [sites x hc x hc_dim] as f32, the q8 down/up arena blocks a site, the head mixer's; false = the rails declined
+typedef RdecSetHcFn = function<(hc : int64; lr : int64; n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks : array<int64>; up_blks : array<int64>; head_norm : array<float>; head_down : int64; head_up : int64) : bool>
+//! The n-gram side input before layer `l`'s attention mixer: the key [hc_dim x ind] and value [dim x ind] q8 planes' blocks, the
+//! conv ring's rows, taps and dilation, the three norm rows [3 x hc x dim] (key, query, conv input) and the taps [hc_dim x kern].
+typedef RdecSetNgramFn = function<(l : int64; ind : int64; nrows : int64; kern : int64; dil : int64; bkey : int64; bval : int64; norm_rows : array<float>; conv_taps : array<float>) : bool>
+//! The routed experts of every MoE layer serve on the host: the token command splits at each routed block, landing the mixed row
+//! and the router logits and taking the routed sum back (`RdecTokenSplitFn`); set after the prepare, before the MoE prepare and the layers' registration.
+typedef RdecSetHostExpertsFn = function<(on : bool) : void>
+//! The host's routed sum for layer `l`: the FFN-mixed row `xb` [dim] and the router logits [ner] in, the weighted expert sum into `acc` [dim].
+typedef RdecHostExpertsFn = function<(l : int64; xb : float const?; logits : float const?; var acc : float?) : void>
+//! The split token: as `RdecTokenFn`, with `side` the n-gram side input's gathered row where the model has one, and the host's
+//! routed sum called between the command's segments.
+typedef RdecTokenSplitFn = function<(x : array<float>; cossin : array<float>; side : array<float>; pos : int64; cnt : int64; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64>
+//! The n-gram conv ring of the selected region against the session's host ring (`rows x hc x dim` floats): up after a CPU prefill
+//! or pass, down before the CPU rails read the session again.
+typedef RdecNgramRingFn = function<(var host : float?; up : bool) : void>
+//! The host's routed sums of layer `l`'s rows `row0 .. row0 + nrows` of a window: the FFN-mixed rows `xb` [rows x dim] and the
+//! router logits [rows x ner] in, the weighted expert sums into `acc` [rows x dim] - the rows before `row0` untouched.
+typedef RdecHostExpertsRowsFn = function<(l : int64; xb : float const?; logits : float const?; var acc : float?; row0 : int64; nrows : int64) : void>
+//! The hyper-connection window chain: the embedded rows, the rope rows and the n-gram side rows [npos x ind] of a prompt from
+//! `pos0`, the host's routed sums called between every window's segments, the last row's logits out.
+typedef RdecPrefillHcFn = function<(x_batch : array<float>; cos_batch : array<float>; side : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
+
+[unused_argument(x_batch, cos_batch, side, npos, pos0, logits, experts)]
+def private rdec_unset_prefill_hc(x_batch : array<float>; cos_batch : array<float>; side : array<float>; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    panic("dasLLAMA: resident hyper-connection prefill hit without an installed GPU driver")
+}
+
+[unused_argument(host, up)]
+def private rdec_unset_ngram_ring(var host : float?; up : bool) {
+    panic("dasLLAMA: resident n-gram ring sync hit without an installed GPU driver")
+}
+
+[unused_argument(hc, lr, n_sites, norm_rows, inject_rows, down_blks, up_blks, head_norm, head_down, head_up)]
+def private rdec_unset_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks, up_blks : array<int64>; head_norm : array<float>; head_down, head_up : int64) : bool => false
+[unused_argument(l, ind, nrows, kern, dil, bkey, bval, norm_rows, conv_taps)]
+def private rdec_unset_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : array<float>; conv_taps : array<float>) : bool => false
+[unused_argument(on)]
+def private rdec_unset_set_host_experts(on : bool) {}
+[unused_argument(x, cossin, side, pos, cnt, pick_only, logits, experts)]
+def private rdec_unset_token_split(x : array<float>; cossin : array<float>; side : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
+    panic("dasLLAMA: resident split token hit without an installed GPU driver")
+    return -1l
+}
+
+var g_rdec_set_hc = @@rdec_unset_set_hc
+var g_rdec_set_ngram = @@rdec_unset_set_ngram
+var g_rdec_set_host_experts = @@rdec_unset_set_host_experts
+var g_rdec_token_split = @@rdec_unset_token_split
+var g_rdec_ngram_ring = @@rdec_unset_ngram_ring
+var g_rdec_prefill_hc = @@rdec_unset_prefill_hc
+var g_rdec_hc_installed = false
+
+//! Install the resident driver's hyper-connection seats - separately, so a tier without them declines a hyper-connection model by name.
+def public install_moe_gpu_resident_hc(set_hc : RdecSetHcFn; set_ngram : RdecSetNgramFn; set_host_experts : RdecSetHostExpertsFn; token_split : RdecTokenSplitFn;
+                                       ngram_ring : RdecNgramRingFn; prefill_hc : RdecPrefillHcFn) {
+    g_rdec_set_hc = set_hc
+    g_rdec_set_ngram = set_ngram
+    g_rdec_set_host_experts = set_host_experts
+    g_rdec_token_split = token_split
+    g_rdec_ngram_ring = ngram_ring
+    g_rdec_prefill_hc = prefill_hc
+    g_rdec_hc_installed = true
+}
+
+def public rdec_ngram_ring(var host : float?; up : bool) { invoke(g_rdec_ngram_ring, host, up) }
+def public rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; side : array<float>; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    invoke(g_rdec_prefill_hc, x_batch, cos_batch, side, npos, pos0, logits, experts)
+}
+
+def public rdec_hc_installed() : bool => g_rdec_hc_installed
+def public rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks, up_blks : array<int64>; head_norm : array<float>; head_down, head_up : int64) : bool
+    => invoke(g_rdec_set_hc, hc, lr, n_sites, norm_rows, inject_rows, down_blks, up_blks, head_norm, head_down, head_up)
+def public rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : array<float>; conv_taps : array<float>) : bool
+    => invoke(g_rdec_set_ngram, l, ind, nrows, kern, dil, bkey, bval, norm_rows, conv_taps)
+def public rdec_set_host_experts(on : bool) { invoke(g_rdec_set_host_experts, on) }
+def public rdec_token_split(x : array<float>; cossin : array<float>; side : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64
+    => invoke(g_rdec_token_split, x, cossin, side, pos, cnt, pick_only, logits, experts)
+
+//! Routed layer `l`'s hot expert pool: `slots` device slots of one expert's gate, up and down planes each, in the planes' formats.
+//! Returns the offset the gate plane's slot 0 answers to in the tier's expert chains, the up and down planes a `stride` and two
+//! past it, a slot an expert's elements wide; `base` under 0 = no pool on this layer.
+typedef RdecHotLayerFn = function<(l : int64; slots : int64; f1 : int; f3 : int; f2 : int) : tuple<base : int64; stride : int64>>
+//! One expert's planes into slot `slot` of layer `l`'s pool, in the gather's device layout: the gate, up and down quants and scales.
+typedef RdecHotUploadFn = function<(l : int64; slot : int64; wq1 : array<uint8>; ws1 : array<uint8>; wq3 : array<uint8>; ws3 : array<uint8>; wq2 : array<uint8>; ws2 : array<uint8>) : void>
+//! The hits of layer `l`'s routed step: `nhit` pool slots and their routing weights. The device runs their chain while the host
+//! sums the misses, and the next segment adds the hit rows to the host's sum.
+typedef RdecHotSubmitFn = function<(l : int64; nhit : int64; slots : int64 const?; w : float const?) : void>
+
+[unused_argument(l, slots, f1, f3, f2)]
+def private rdec_unset_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; stride : int64> => (base = -1l, stride = 0l)
+[unused_argument(l, slot, wq1, ws1, wq3, ws3, wq2, ws2)]
+def private rdec_unset_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint8>; wq3 : array<uint8>; ws3 : array<uint8>; wq2 : array<uint8>; ws2 : array<uint8>) {
+    panic("dasLLAMA: resident hot expert upload hit without an installed GPU driver")
+}
+[unused_argument(l, nhit, slots, w)]
+def private rdec_unset_hot_submit(l, nhit : int64; slots : int64 const?; w : float const?) {
+    panic("dasLLAMA: resident hot expert submit hit without an installed GPU driver")
+}
+
+var g_rdec_hot_layer = @@rdec_unset_hot_layer
+var g_rdec_hot_upload = @@rdec_unset_hot_upload
+var g_rdec_hot_submit = @@rdec_unset_hot_submit
+var g_rdec_hot_installed = false
+
+//! Install the resident driver's hot expert pool seats - separately, so a tier without them serves every routed expert on the host.
+def public install_moe_gpu_resident_hot(hot_layer : RdecHotLayerFn; hot_upload : RdecHotUploadFn; hot_submit : RdecHotSubmitFn) {
+    g_rdec_hot_layer = hot_layer
+    g_rdec_hot_upload = hot_upload
+    g_rdec_hot_submit = hot_submit
+    g_rdec_hot_installed = true
+}
+
+def public rdec_hot_installed() : bool => g_rdec_hot_installed
+def public rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; stride : int64> => invoke(g_rdec_hot_layer, l, slots, f1, f3, f2)
+def public rdec_hot_upload(l, slot : int64; wq1 : array<uint8>; ws1 : array<uint8>; wq3 : array<uint8>; ws3 : array<uint8>; wq2 : array<uint8>; ws2 : array<uint8>) {
+    invoke(g_rdec_hot_upload, l, slot, wq1, ws1, wq3, ws3, wq2, ws2)
+}
+def public rdec_hot_submit(l, nhit : int64; slots : int64 const?; w : float const?) { invoke(g_rdec_hot_submit, l, nhit, slots, w) }
 
 var private g_gpu_resident_route = true
 
@@ -2276,6 +2399,33 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_head_read_rows == null) {
         g_rdec_head_read_rows = @@rdec_unset_head_kv_rows
+    }
+    if (g_rdec_set_hc == null) {
+        g_rdec_set_hc = @@rdec_unset_set_hc
+    }
+    if (g_rdec_set_ngram == null) {
+        g_rdec_set_ngram = @@rdec_unset_set_ngram
+    }
+    if (g_rdec_set_host_experts == null) {
+        g_rdec_set_host_experts = @@rdec_unset_set_host_experts
+    }
+    if (g_rdec_token_split == null) {
+        g_rdec_token_split = @@rdec_unset_token_split
+    }
+    if (g_rdec_ngram_ring == null) {
+        g_rdec_ngram_ring = @@rdec_unset_ngram_ring
+    }
+    if (g_rdec_prefill_hc == null) {
+        g_rdec_prefill_hc = @@rdec_unset_prefill_hc
+    }
+    if (g_rdec_hot_layer == null) {
+        g_rdec_hot_layer = @@rdec_unset_hot_layer
+    }
+    if (g_rdec_hot_upload == null) {
+        g_rdec_hot_upload = @@rdec_unset_hot_upload
+    }
+    if (g_rdec_hot_submit == null) {
+        g_rdec_hot_submit = @@rdec_unset_hot_submit
     }
     if (g_moe_gpu_ffn_xf == null) {
         g_moe_gpu_ffn_xf = @@moe_gpu_unset_ffn_xf

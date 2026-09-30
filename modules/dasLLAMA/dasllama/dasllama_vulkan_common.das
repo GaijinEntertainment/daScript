@@ -128,6 +128,9 @@ def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_C
 def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool
     => (hs == 64l || hs == 128l || hs == 256l || hs == 512l) && !gated && (cap == 0.0 || hs == 256l)
 
+//! the per-32 formats that serve as routed expert planes only: their one cm2 column is the s tile
+def cm2_b32_routed(fmt : int) : bool => fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || fmt == int(KqFmt.iq4nl32)
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tile_cols(d, cnt : int64) : int64 {
     if (g_gpu.coopmat_mode == COOPMAT_MM) {
@@ -233,7 +236,7 @@ def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int
 // mode 4's f16-fed prefill GEMMs): only callers that STAGE f16 activations may pass it
 def batch_tile_edges(fmt : int; d, cnt : int64; cm2l : bool = false) : tuple<tile : int64; td : int64; tc : int64> {
     if (cm2l) {
-        return (tile = 128l, td = 128l, tc = cm2_tile_cols(d, cnt))
+        return (tile = 128l, td = 128l, tc = cm2_b32_routed(fmt) ? 32l : cm2_tile_cols(d, cnt))
     }
     let tile = fmt == 0 ? q8_batch_tile_for(d, cnt) : BATCH_TILE
     return (tile = tile, td = tile, tc = tile)
@@ -312,6 +315,7 @@ let TOK_META_BYTES = 32l   //! one TokMeta row (the kernels index the block by r
 // offset, so find_stack / fill_stack_sched_rows / the whole FFN GEMV rail run verbatim on them
 let HEAT_BASE = 1l << 42l
 let HEAT_STRIDE = 1l << 32l          // per pool-stack offset room (>> nslots * ege)
+let HOT_BASE = 1l << 45l             //! the resident driver's hot expert pools: their stacks' offsets, past every per-op pool's
 let HEAT_UPLOAD_CAP = 2              // steady-state expert uploads per advise call
 let HEAT_UPLOAD_CAP_FILL = 8         // while the pool is underfull (warmup fills fast)
 
@@ -1216,7 +1220,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             knob = "DASLLAMA_VK_REBAR", off = !g_env_vulkan.vk_rebar,
             rides = "uploads write straight into VRAM; without it every upload stages through host memory"),
         VkExtEntry(name = "maxStorageBufferRange", present = props.limits.maxStorageBufferRange > 0u,
-            rides = "one side of the whole-model driver's K/V mirror binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context; a mirror past it declines the driver and the per-op tier serves; the tower driver (the vision and audio towers) binds a tower's gathered weights, its largest scratch buffer and canary's rel table as one range each, and declines `shape` past it; the TTS seats bind each weight slab and each scratch slot as one range and decline a slot past it (the Pocket codec's column slots at a long chunk)"),
+            rides = "one side of the whole-model driver's K/V mirror binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context; a mirror past it declines the driver and the per-op tier serves; a hyper-connection model's mixer inject rows and window panels bind as one range each and decline the seats past it, and a routed layer's hot expert pool binds each plane as one range and keeps its experts on the host past it; the tower driver (the vision and audio towers) binds a tower's gathered weights, its largest scratch buffer and canary's rel table as one range each, and declines `shape` past it; the TTS seats bind each weight slab and each scratch slot as one range and decline a slot past it (the Pocket codec's column slots at a long chunk)"),
         VkExtEntry(name = "maxComputeSharedMemorySize of 33024 B or more", present = props.limits.maxComputeSharedMemorySize >= 33024u,
             rides = "the 8192-float row slabs of the add+rms family and the prefill-attention prep ({int(props.limits.maxComputeSharedMemorySize)} B here); without them the deltanet and prefill-attention chains stay on the CPU rail"),
         VkExtEntry(name = "VK_NV_cooperative_vector", present = cooperative_vector_supported(phys),
@@ -2044,23 +2048,12 @@ def arena_local_blk(blk : int64) : int64 => blk & ((1l << 32l) - 1l)
 
 // per-block plane strides — the block is 32 weights for q8 and a 256-weight superblock for kq.
 // Mirrors stack_plane_bytes: it computes the same totals as count * these strides.
-// the tier's stack fmt space is int(KqFmt) — bridge to the gemm_schema kq id space
+//! the tier's stack fmt space is int(KqFmt) - the bridge to the gemm_schema kq id space (`kq_schema_id`); a fmt no superblock format carries panics
 def vk_kq_schema_id(fmt : int) : int {
-    if (fmt == int(KqFmt.k4)) return 4
-    if (fmt == int(KqFmt.k5)) return 5
-    if (fmt == int(KqFmt.k6)) return 6
-    if (fmt == int(KqFmt.q40)) return 40
-    if (fmt == int(KqFmt.iq4xs)) return 44
-    if (fmt == int(KqFmt.k3)) return 3
-    if (fmt == int(KqFmt.iq3s)) return 33
-    if (fmt == int(KqFmt.iq3xxs)) return 34
-    if (fmt == int(KqFmt.iq4nl)) return 45
-    if (fmt == int(KqFmt.k2)) return 2
-    if (fmt == int(KqFmt.iq2s)) return 23
-    if (fmt == int(KqFmt.iq2xs)) return 24
-    if (fmt == int(KqFmt.iq2xxs)) return 25
-    panic("vk_kq_schema_id: not a kq stack fmt")
-    return 0
+    if (fmt < 0 || fmt >= KQ_FMT_COUNT) {
+        panic("vk_kq_schema_id: not a kq stack fmt ({fmt})")
+    }
+    return kq_schema_id(kq_fmt_of_slot(fmt))
 }
 
 
@@ -2396,10 +2389,31 @@ struct RLayer {
     pf_eact_set : VkDescriptorSet
     pf_arcomb_set, pf_arcomb_f16_set : VkDescriptorSet   //! the residual step with the combine folded in: the f32 and f16 normed-row forms
     moe_g4 : bool                   //! the gemma-4 form: the dense triple is a parallel shared expert, the routed feed and the router take their own norms of x, the combine norms both branches (`ClsArCombG4`)
+    experts_host : bool             //! the routed experts serve on the host: no expert planes, the router alone runs here and the token command ends its segment after it
 }
 
 //! the layer's dense FFN triple is placed: its own FFN, or an MoE layer's shared expert (an MoE layer without one has none)
 def has_dense_triple(L : RLayer) : bool => L.b1 >= 0l
+
+//! one hyper-connection mixer site's planes: the q8 down [low_rank x hc_dim] and up [hc_dim x low_rank] arena blocks, their GEMV sets and region metas
+struct HcSite {
+    bdown, bup : int64
+    s_down, s_up : VkDescriptorSet
+    m_down, m_up : HostBuf
+}
+
+//! a routed layer's hot expert pool: `RDec.hot_slots` slots of one expert's three planes each, in the planes' device layout,
+//! each plane a stack of the tier at a base of its own so the expert chain of a window finds it by offset
+struct RdHotLayer {
+    on : bool
+    f1, f3, f2 : int                    //! the gate, up and down planes' formats
+    blk1, blk3, blk2 : int64            //! an expert's weight blocks a plane: a slot's stride in the region records
+    xnb2 : int64                        //! the down feed's blocks a row
+    st1, st3, st2 : int                 //! the planes' stacks
+    s_gate, s_up, s_down : VkDescriptorSet
+    cmds : array<VkCommandBuffer>       //! the hit chain a hit count, [k + 1]: recorded on first use
+    recorded : array<bool>
+}
 
 //! the N-row token command's kernel classes on this device: built once before a step commits to the command, or one declined
 enum NRail {
@@ -2446,6 +2460,7 @@ struct RDec {
     hybrid : bool
     dn_cd, dn_kd, dn_di, dn_nvh, dn_nkh, dn_ds, dn_dconv : int64
     dn_ba_f32 : bool              // beta/alpha rows come as f32 in the file (dn_ba_dev, f16 on the device) rather than q8 arena planes
+    dn_zsig : bool                //! the deltanet out-gate is sigmoid(z): the step kernel's `ZSIG` stamp serves (qwen4exp)
     dn_proj_dev : uint64          // [cd + di] floats: the fused qkv row, the z row at cd
     fused_sets_made : bool        //! the fused add+rms+requant sites' stamps and sets are picked once, at the first record
     rq_pro_stamp : RqStamp        //! the prologue site's: layer 0's feed form, the row stored where its head reads floats
@@ -2630,6 +2645,71 @@ struct RDec {
     pf_my1, pf_my2 : uint64       //! [nk x nfe] the gate / up rows
     pf_mhf : uint64               //! [nk + slack x nfe] the hidden rows, f16
     pf_mdn : uint64               //! [nk x dim] the routed down rows
+    //! the hyper-connection form (qwen4exp): the wide residual and the mixer seams every block reads through (`vk_rdec_set_hc`)
+    hc : bool
+    hc_n, hc_lr : int64           //! the streams, the mixer's low-rank width
+    hcres_dev : uint64            //! the wide residual [hc x dim], the token's one copy
+    hcxn_dev : uint64             //! the grouped-normed streams [hc x dim]
+    hcxnq_dev, hcxns_dev : uint64 //! ... their Q8_0 image, the down GEMV's feed
+    hclo_dev : uint64             //! the low-rank row [lr]
+    hcloq_dev, hclos_dev : uint64 //! ... activated and quantized, the up GEMV's feed
+    hcgate_dev : uint64           //! the up projection [hc x dim]
+    hcinj_dev : uint64            //! the site's scatter logits [hc]
+    hcn_dev, hcinjw_dev : uint64  //! the mixer weights: the norm rows [sites + 1 x hc x dim] (the head's last), the inject rows [sites x hc x hc_dim]
+    hcn_bytes, hcinjw_bytes : int64
+    hc_sites : array<HcSite>      //! a site a block seam (2 x layers), then the head mixer's
+    s_hc_norm, s_hc_inj, s_hc_xnrq, s_hc_lorq, s_hc_mix : VkDescriptorSet
+    s_hc_comb_a, s_hc_comb_f : VkDescriptorSet   //! the scatter after the attention head (the wo row) and after the FFN (the shared row plus the host's routed sum)
+    //! the n-gram side input before layer `ngram_layer`'s attention mixer (`vk_rdec_set_ngram`)
+    ngram : bool
+    ngram_layer, ngram_ind, ngram_nrows, ngram_kern, ngram_dil : int64
+    ple_emb_dev : uint64          //! the gathered heads row [ind], copied in-cmd from `ple_emb_host`
+    ple_emb_host : HostBuf
+    pleq_dev, ples_dev : uint64   //! ... its Q8_0 image, the key and value GEMVs' feed
+    plekey_dev, pleval_dev : uint64   //! the projections [hc x dim], [dim]
+    plegated_dev : uint64         //! the gated value rows [hc x dim]
+    plehist_dev : uint64          //! the conv ring [regions x nrows x hc x dim]
+    plew_dev : uint64             //! the side input's weights: the three norm rows, then the conv taps
+    plew_bytes : int64
+    ple_bkey, ple_bval : int64
+    s_ple_rq, s_ple_key, s_ple_val, s_ple_gate, s_ple_conv : VkDescriptorSet
+    m_ple_key, m_ple_val : HostBuf
+    //! the routed experts on the host (`vk_rdec_set_host_experts`): the token command splits at every routed block
+    experts_host : bool
+    nseg : int64                  //! the segments a token takes: the routed layers plus one
+    cmd_seg : array<VkCommandBuffer>   //! [regions x nseg], recorded once per region
+    seg_recorded : array<bool>
+    seg_layer : array<int64>      //! the routed layer a segment ends on (the last segment ends on none: -1)
+    hx_host : HostBuf             //! the landed FFN-mixed row [dim] a routed block's host sum reads
+    hlog_host : HostBuf           //! ... and the router logits row [ner]
+    hacc_host : HostBuf           //! the host's routed sum [dim], copied in-cmd into `hacc_dev`
+    hacc_dev : uint64             //! the routed sum the FFN seam's scatter reads [dim]: the host's sum, the pool's hit rows added on the device
+    //! the hot expert pool (`vk_rdec_hot_layer`): a routed layer's hot experts on the device, their chain run while the host sums the misses
+    hot_slots : int64             //! slots a routed layer (0 = no pool)
+    hot_layers : array<RdHotLayer>
+    hot_meta1, hot_meta3, hot_meta2 : HostBuf   //! the hit chain's region records, written by the host a step
+    hot_w : HostBuf               //! the hits' routing weights [k], zero past the hit count
+    hot_ident1_dev : uint64       //! 1 .. k: the combine's slot rows, one past the row index so its window starts past 0 and the sum accumulates
+    s_hot_rq, s_hot_act, s_hot_comb : VkDescriptorSet
+    hot_submits, hot_hits : int64 //! the hit chains submitted and the picks they served
+    //! the hyper-connection window chain (`vk_rdec_prefill_hc`): a window's wide rows and mixer panels, its segments cut at every
+    //! routed layer's router, the host's routed sums of the rows between them
+    pf_hc_ready : bool
+    pf_hcres, pf_hcxn : uint64        //! [np x hc x dim] the wide rows, the normed streams
+    pf_hcxq, pf_hcxs : uint64         //! ... the normed streams' Q8_0 image (the mixer's down GEMM feed; wider than the shared xq plane)
+    pf_hclo : uint64                  //! [np x lr] the low-rank rows (activated and quantized into the shared hq/hs)
+    pf_hcup : uint64                  //! [np x hc x dim] the up projection
+    pf_hcinj : uint64                 //! [np x hc] the site's scatter logits
+    pf_hcemb, pf_hcembq, pf_hcembs : uint64   //! [np x ind] the side rows and their Q8_0 image
+    pf_plekey, pf_pleval : uint64     //! [np x hc x dim], [np x dim] the side projections
+    pf_plegated, pf_hpanel : uint64   //! [np x hc x dim] the gated value rows, the normed gated rows the conv reads inside the window
+    pf_hacc_dev : uint64              //! [np x dim] the host's routed sums, copied in-cmd
+    pf_hx_host, pf_hlog_host, pf_hacc_host : HostBuf   //! the landings a routed layer's host step reads and writes: the FFN-mixed rows [np x dim], the router logits [np x ner], the sums [np x dim]
+    pf_seg : array<VkCommandBuffer>   //! the window's segments: the routed layers plus one
+    pf_hc_meta0 : int                 //! the first of the mixer GEMMs' meta slots in pf_meta: two a site (down, up), then the head's two, then the side key and value
+    pf_s_hc_init, pf_s_hc_norm, pf_s_hc_inj, pf_s_hc_xnrq, pf_s_hc_lorq, pf_s_hc_mix : VkDescriptorSet
+    pf_s_hc_comb_a, pf_s_hc_comb_f : VkDescriptorSet
+    pf_s_ple_rq, pf_s_ple_gate, pf_s_ple_conv : VkDescriptorSet
 }
 
 let PF_WINDOW = 512l   // prefill activation-buffer rows; longer prompts run as sequential windows
@@ -2658,6 +2738,9 @@ def rd_unmake_sets {
 //! every region's token and draft commands and the verify commands re-record: the sets or planes they reference were replaced
 def rd_invalidate_token {
     for (rec in g_rd.tok_recorded) {
+        rec = false
+    }
+    for (rec in g_rd.seg_recorded) {
         rec = false
     }
     for (rec in g_rd.tok_wide_recorded) {
@@ -2782,6 +2865,7 @@ struct RdqLedger {
     submit_us : double                   //! the submit
     wait_us : double                     //! the wait
     land_us : double                     //! the landing copy
+    host_experts_us : double             //! the host's routed sums between a split command's segments
 }
 
 // decode per-role accumulation across tokens (stamps overwrite each submit); printed every 32

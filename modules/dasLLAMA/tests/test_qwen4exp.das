@@ -7,6 +7,8 @@ require dasllama/dasllama_transformer   // the umbrella: hc_mix_row / hc_combine
 require dasllama/dasllama_arch_qwen4exp   // ngram_gather
 require dasllama/dasllama_kqformat   // GGML_TYPE_* + iq4nl_lut
 require dasllama/dasllama_math   // rmsnorm - the reference's grouped norm
+require dasllama/dasllama_par   // get_disp_count - the split legs' witness
+require daslib/jobque_boost   // with_job_que - the threaded leg
 require math
 
 // Model-free gates for the qwen4exp mechanisms: the hyper-connection mixer and scatter against a
@@ -165,6 +167,126 @@ def test_hc_mixer(t : T?) {
         delete out
         delete inj
         delete s
+        delete m
+    }
+}
+
+let private NPOS = 2048l   //! HCD x NPOS past g_norm_par_threshold: the batched mixer and scatter split over positions
+let private HC_ROWS_SEED = 4242u   //! the seed both the batched run and the scalar reference fill the wide rows from
+
+struct private HcBatch {
+    mixed : array<float>
+    inject : array<float>
+    res : array<float>
+    mix_dispatches : int64    //! the batched mixer's, its two GEMMs included
+    gemm_dispatches : int64   //! the same two GEMMs run alone on the mixer's shapes
+    resid_dispatches : int64  //! the batched scatter's, which has no GEMM
+}
+
+//! the batched mixer then the batched scatter over NPOS seeded wide rows; `out_b` rows are the block output
+def private hc_batch_run(m : Model) : HcBatch {
+    var s <- make_run_state(m.config)
+    s.hc_res_b |> resize(NPOS * HCD)
+    s.hc_xn_b |> resize(NPOS * HCD)
+    s.hc_gate_b |> resize(NPOS * HCD)
+    s.hc_lo_b |> resize(NPOS * LR)
+    s.hc_inject_b |> resize(NPOS * HC)
+    s.xb_b |> resize(NPOS * DIM)
+    var seed = HC_ROWS_SEED
+    for (i in range64(NPOS * HCD)) {
+        s.hc_res_b[i] = lcg(seed) * 4.0
+    }
+    var out_b <- [for (_i in range64(NPOS * DIM)); lcg(seed)]
+    let d0 = get_disp_count()
+    hc_mix_b(m, s, 0l, 0l, LR * HCD, HCD, NPOS)
+    let d1 = get_disp_count()
+    var r = HcBatch(mixed := s.xb_b, inject := s.hc_inject_b, mix_dispatches = d1 - d0)
+    block_resid_b(m, s, out_b, NPOS)
+    r.resid_dispatches = get_disp_count() - d1
+    r.res := s.hc_res_b
+    let d2 = get_disp_count()
+    mm_b_f(s, s.hc_lo_b, m, KqFmt.q8, 0l, s.hc_xn_b, HCD, LR, NPOS)
+    mm_b_f(s, s.hc_gate_b, m, KqFmt.q8, LR * HCD, s.hc_lo_b, LR, HCD, NPOS)
+    r.gemm_dispatches = get_disp_count() - d2
+    delete out_b
+    delete s
+    return <- r
+}
+
+def private count_diffs(a, b : array<float>) : int {
+    var n = 0
+    for (x, y in a, b) {
+        if (x != y) {
+            n++
+        }
+    }
+    return n
+}
+
+[test]
+def test_hc_mixer_batched(t : T?) {
+    t |> run("hc_mix_b and block_resid_b split over positions without moving a bit, and each row is the mixer's") @(t : T?) {
+        var m = Model()
+        hc_fixture(m)
+        var inline_leg <- hc_batch_run(m)
+        var threaded <- HcBatch()
+        with_job_que() {
+            setup_dasllama_jobque_()
+            delete threaded
+            threaded <- hc_batch_run(m)
+        }
+        t |> success(!is_job_que_available(), "the inline leg needs a que-less process to be one lane")
+        t |> equal(inline_leg.mix_dispatches + inline_leg.resid_dispatches, 0l, "a que-less process must run the batched mixer and scatter inline")
+        t |> equal(threaded.mix_dispatches, threaded.gemm_dispatches + 2l, "the threaded mixer dispatches its norm pass and its tail pass beside its two GEMMs")
+        t |> success(threaded.resid_dispatches > 0l, "the threaded scatter must dispatch, else both legs are the same one lane")
+        t |> equal(count_diffs(threaded.mixed, inline_leg.mixed), 0, "mixed rows differing between the split and the inline leg")
+        t |> equal(count_diffs(threaded.inject, inline_leg.inject), 0, "scatter logits differing between the split and the inline leg")
+        t |> equal(count_diffs(threaded.res, inline_leg.res), 0, "wide rows differing after the split scatter")
+        // rows at the ends and the middle against the scalar mixer: a misplaced row offset lands elsewhere
+        var seed = HC_ROWS_SEED
+        var res0 <- [for (_i in range64(NPOS * HCD)); lcg(seed) * 4.0]   // the seed walk hc_batch_run filled the rows with
+        for (p in [0l, 1l, NPOS / 2l, NPOS - 1l]) {
+            var row <- [for (i in range64(HCD)); res0[p * HCD + i]]
+            var want_mixed : array<float>
+            var want_inject : array<float>
+            hc_mix_reference(m, row, want_mixed, want_inject)
+            var dm = 0.0
+            for (i in range64(DIM)) {
+                dm = max(dm, abs(threaded.mixed[p * DIM + i] - want_mixed[i]))
+            }
+            var di = 0.0
+            for (ch in range64(HC)) {
+                di = max(di, abs(threaded.inject[p * HC + ch] - want_inject[ch]))
+            }
+            t |> success(dm < 1.0e-5, "row {p}: mixed within 1e-5 of the reference (maxdiff {dm})")
+            t |> success(di < 1.0e-4, "row {p}: inject within 1e-4 of the reference (maxdiff {di})")
+            // control: the reference row one position over must miss both bars
+            if (p + 1l < NPOS) {
+                var next <- [for (i in range64(HCD)); res0[(p + 1l) * HCD + i]]
+                var off_mixed : array<float>
+                var off_inject : array<float>
+                hc_mix_reference(m, next, off_mixed, off_inject)
+                var dc = 0.0
+                for (i in range64(DIM)) {
+                    dc = max(dc, abs(threaded.mixed[p * DIM + i] - off_mixed[i]))
+                }
+                var dci = 0.0
+                for (ch in range64(HC)) {
+                    dci = max(dci, abs(threaded.inject[p * HC + ch] - off_inject[ch]))
+                }
+                t |> success(dc >= 1.0e-5, "row {p}: the next row's reference misses the mixed bar (maxdiff {dc})")
+                t |> success(dci >= 1.0e-4, "row {p}: the next row's reference misses the inject bar (maxdiff {dci})")
+                delete next
+                delete off_mixed
+                delete off_inject
+            }
+            delete row
+            delete want_mixed
+            delete want_inject
+        }
+        delete res0
+        delete inline_leg
+        delete threaded
         delete m
     }
 }

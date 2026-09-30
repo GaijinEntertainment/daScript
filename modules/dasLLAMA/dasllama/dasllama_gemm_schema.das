@@ -58,7 +58,7 @@ let KQ_DEV_SSB = 20l
 
 //! The codebook formats whose device scale row is two words: word 0 = f16 d with the format's
 //! native high bits above it, word 1 = eight 4-bit fields.
-def kq_two_word_row(f : KqFmt) : bool => f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2xxs
+def kq_two_word_row(f : KqFmt) : bool => f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
 
 //! The device scale-row stride of a kq format: 8 B for the two-word-row formats, KQ_DEV_SSB for the rest.
 def kq_dev_ssb(f : KqFmt) : int64 => kq_two_word_row(f) ? 8l : KQ_DEV_SSB

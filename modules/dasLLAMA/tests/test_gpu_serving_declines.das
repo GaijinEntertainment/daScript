@@ -430,6 +430,24 @@ def test_plan_room(t : T?) {
 }
 
 [test]
+def test_resident_hot_slots(t : T?) {
+    t |> run("the hot expert pool's slots: 64 beside the whole mirror, up to 32 out of the mirror's context, a count asked from the floor's room, none under four") @(t : T?) {
+        let mib = 1_048_576l
+        let column = 125l * mib
+        t |> equal(64l, resident_hot_slots(-1l, 9000l * mib, 12000l * mib, column, 512l), "unasked, 64 slots fit beside the whole mirror: the pool takes them and the mirror keeps its context")
+        t |> equal(40l, resident_hot_slots(-1l, 5000l * mib, 12000l * mib, column, 512l), "unasked, 40 fit beside the mirror: past 32, the mirror yields nothing")
+        t |> equal(32l, resident_hot_slots(-1l, 681l * mib, 5600l * mib, column, 512l), "unasked, five fit beside the mirror: the mirror's context yields the room of 32")
+        t |> equal(20l, resident_hot_slots(-1l, 681l * mib, 2500l * mib, column, 512l), "... and no more than the floor's room holds")
+        t |> equal(44l, resident_hot_slots(48l, 681l * mib, 5600l * mib, column, 512l), "a count asked is served from the floor's room")
+        t |> equal(16l, resident_hot_slots(16l, 9000l * mib, 12000l * mib, column, 512l), "a count asked under the room stands")
+        t |> equal(0l, resident_hot_slots(0l, 9000l * mib, 12000l * mib, column, 512l), "0 asks no pool")
+        t |> equal(0l, resident_hot_slots(-1l, 0l, 3l * column, column, 512l), "three slots do not pay for their submit: no pool")
+        t |> equal(0l, resident_hot_slots(-1l, -500l * mib, -100l * mib, column, 512l), "a plan already past its room takes none")
+        t |> equal(8l, resident_hot_slots(-1l, 9000l * mib, 12000l * mib, column, 8l), "a layer's experts cap its slots")
+    }
+}
+
+[test]
 def test_resident_arm_floor(t : T?) {
     t |> run("the smallest context a capped mirror arms at: the built-in floor, the env floor, and a caller's pin under either") @(t : T?) {
         t |> equal(4096l, resident_arm_floor(0l, 0l), "no env floor, no pin: the built-in 4096")

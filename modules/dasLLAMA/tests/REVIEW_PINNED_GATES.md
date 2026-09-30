@@ -13,7 +13,9 @@ The pinned set, one entry a line, each with what it must keep holding:
 - `test_program_roots.das` must hold the `ROOT_DIRS` sweep, `options stack = 524288` and the
   prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
-- `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table.
+- `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table, and
+  `spec_by_file` answering by the models-dir path and by the gguf's base name (a split-shard row
+  sits in a subfolder).
 - `test_metal_prefill_kernels.das`'s `test_metal_prefill_kernels` cell must hold its
   `attn_trio_gate` calls whose `AttnKeys` sets `softcap`, `hass`, `uend` or `ulo` - the softcap,
   sink, uniform-span and mixed-span arms.

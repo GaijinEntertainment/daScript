@@ -65,7 +65,7 @@ struct public EngineEnv {
     @clarg_doc = "Pin the matmul backend by name, bypassing the measured auto-selection."
     pin_backend : string = ""
 
-    @clarg_doc = "How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut on a CPU-only load, grid where a GPU tier targets the load (its grid gather is cheap)."
+    @clarg_doc = "How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut wherever the serving rails decode it (the CPU rails and the Vulkan tier), grid under the Metal tier (it gathers the grid and carries no iq3s4 kernel)."
     iq3s_serve : string = "auto"
 
     @clarg_doc = "Pin the batched (prefill) matmul backend independently of the decode one."
@@ -181,7 +181,7 @@ struct public GpuTierEnv {
     gpu_dec_span : bool = true
 
     @clarg_default_doc = "0"
-    @clarg_doc = "Expert heat threshold: hold the N hottest experts resident regardless of layer placement."
+    @clarg_doc = "Hot expert slots a layer. On the per-op tier: hold the N hottest experts of a streamed layer resident (unset = none). On the whole-model driver with the routed experts on the host (a hyper-connection MoE): the slots of the hot expert pool - unset = 64 where the card has the room past the weights and the mirror, else up to 32 out of the mirror's context; a count asks that many; 0 keeps every routed expert on the host."
     gpu_heat : Option<int64>
 
     @clarg_doc = "Report lifetime GPU queue submissions (real commands plus staging round-trips)."
