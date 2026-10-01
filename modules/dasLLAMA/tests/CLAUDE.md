@@ -51,7 +51,7 @@ the COMPLETE output to a log file, and prints that path on the DONE line. It own
 timeout - 3600 s per child on the stocked gate, under `--full` and under `--changed` (the stocked
 files of the reached areas), where the large tier's parity file alone runs past 20 minutes and the
 llama resident file's CPU chains past 1200 s on a cold JIT cache, 1200 s in arm mode - and repeats a file only when `--nreps` is
-passed explicitly (default 1, never best-of-N). Every child runs `-jit -module-cache .jitted_scripts/module_cache/dastest.dascache`;
+passed explicitly (default 1, never best-of-N). Every child runs `-jit -module-cache .cache/daslang/module_cache/dastest.dascache`;
 that cache serves dastest's own module graph only - the test program dastest compiles at
 runtime sits past it, so each child still pays the engine compile.
 No preflight tier runs the two per-PR suites: `preflight -- --only dasllama-model-free` and

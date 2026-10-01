@@ -37,7 +37,7 @@ def private convert_inputs(inputs : array<string>; root, output : string; binary
 [export]
 def main(){
     var args <- get_user_args(); var inputs : array<string>
-    var root = ""; var output = ""; var cache = ".jitted_scripts/assets/textures"
+    var root = ""; var output = ""; var cache = ".cache/daslang/assets/textures"
     var binary = false; var force = false; var i = 0
     while (i < length(args)){
         let arg = args[i++]

@@ -958,7 +958,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     // strict: a standalone exe with a no_jit function fails the build (collect_standalone_functions)
     plan.exe_strict = true
     plan.config_out_path = string(prog.policies.jit_output_path)
-    plan.output_path = plan.config_out_path |> empty() ? ".jitted_scripts/{prog.thisNamespace}" : plan.config_out_path
+    plan.output_path = plan.config_out_path |> empty() ? ".cache/daslang/{prog.thisNamespace}" : plan.config_out_path
     plan.path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
     // CLI --jit-path-to-linker wins over the script-level policy.
     plan.path_to_linker = cli_opts.path_to_linker |> unwrap_or(string(prog.policies.jit_path_to_linker))
@@ -1061,7 +1061,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     // jit_output_path or an exe keeps the user's path.
     if (plan.use_dll && plan.config_out_path |> empty()) {
         plan.dll_hash_basename = jit_dll_basename(plan.candidates, plan.opt_level, plan.size_level, plan.emit_prologue, plan.debug_info, plan.target_triple, plan.jit_split, plan.use_host_cpu, plan.sanitize)
-        plan.output_path = ".jitted_scripts/{prog.thisNamespace}/{plan.dll_hash_basename}"
+        plan.output_path = ".cache/daslang/{prog.thisNamespace}/{plan.dll_hash_basename}"
     }
     return <- plan
 }

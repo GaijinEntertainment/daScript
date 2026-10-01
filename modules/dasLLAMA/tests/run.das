@@ -17,7 +17,7 @@ require math
 require dasllama/dasllama_env
 require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
 
-let MODULE_CACHE = ".jitted_scripts/module_cache/dastest.dascache"
+let MODULE_CACHE = ".cache/daslang/module_cache/dastest.dascache"
 
 [CommandLineArgs]
 struct RunArgs {

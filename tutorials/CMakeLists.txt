@@ -9,6 +9,7 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/tutorials/
     PATTERN "*.py" EXCLUDE
     PATTERN "modules" EXCLUDE
     PATTERN "_build" EXCLUDE
+    PATTERN ".cache" EXCLUDE
     PATTERN ".jitted_scripts" EXCLUDE
     PATTERN "jitted_scripts" EXCLUDE
     PATTERN "_aot_generated" EXCLUDE

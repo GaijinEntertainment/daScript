@@ -316,7 +316,7 @@ differ. IQ4_XS took:
 5. No `perm_declines` change: the tbl1 rail already sits on every sdot perm (it is the mx4
    companion's), and pshufb is implied by the x64 tiers.
 
-After ANY emitter change, `rm -rf .jitted_scripts` (or bump `LLVM_JIT_CODEGEN_VERSION`) before
+After ANY emitter change, `rm -rf .cache/daslang` (or bump `LLVM_JIT_CODEGEN_VERSION`) before
 trusting a probe or bench: the registered generators run at codegen time and their bodies do not
 fold into the cached DLL's hash, so a cache hit executes the OLD stamps with no signal - the
 same numbers across every edit, the `DLL cache hit` line the only tell. A sidecar minted while the

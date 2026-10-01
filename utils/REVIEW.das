@@ -61,7 +61,7 @@ def private mentions_path(text : string; p : string) : bool {
 def private list_dirs(parent : string) : array<string> {
     var out : array<string>
     dir(parent) $(name) {
-        return if (name |> starts_with("."))      // `.`, `..`, and a JIT's `.jitted_scripts` cache
+        return if (name |> starts_with("."))      // `.`, `..`, and the `.cache` folder
         let st = stat(path_join(parent, name))
         if (st.is_valid && st.is_dir) {
             out |> push(name)

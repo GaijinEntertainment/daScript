@@ -71,7 +71,7 @@ and unknown codes are harmless. The `-no-lint` command-line flag skips the lint 
 
 | Variable | Type | Effect |
 |---|---|---|
-| `DAS_MODULE_CACHE_LIMIT` | number (MB) | Size cap of the default module-cache directory (`.jitted_scripts/module_cache/`, `skills/internal/build_and_debug.md`). After a run writes a record, the oldest records by mtime go until the directory fits; a record a run read counts as fresh. Default 4096; `0` turns eviction off; garbage keeps the default. An explicit `-module-cache <path>` is never pruned. Left out of the record key, with the three `DAS_DEPFILE*` variables below. |
+| `DAS_MODULE_CACHE_LIMIT` | number (MB) | Size cap of the default module-cache directory (`.cache/daslang/module_cache/`, `skills/internal/build_and_debug.md`). After a run writes a record, the oldest records by mtime go until the directory fits; a record a run read counts as fresh. Default 4096; `0` turns eviction off; garbage keeps the default. An explicit `-module-cache <path>` is never pruned. Left out of the record key, with the three `DAS_DEPFILE*` variables below. |
 
 ## Build integration
 

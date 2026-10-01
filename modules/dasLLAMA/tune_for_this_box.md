@@ -188,7 +188,7 @@ NOTE the per-app consequence: the tuner writes the sidecar of the app it RUNS AS
 `DAS_TUNE_MANIFEST` at that app's sidecar. Missing/stale file or key = silent default, so an
 untuned box ships the hand-tuned M1 hints. The file is **gitignored** (per-app, per-box
 artifact) and any change **re-keys the JIT DLL cache automatically** (loop hints are folded
-into `jit_dll_basename` - no manual `.jitted_scripts` clearing). A consumer compile logs
+into `jit_dll_basename` - no manual `.cache/daslang` clearing). A consumer compile logs
 `dasllama_tune: dot <- vec16 (<resolved path>)` per applied entry, and `load_model` logs
 `dasLLAMA: box profile runtime: <key> = <v>` per applied runtime entry - that's your proof it
 took.

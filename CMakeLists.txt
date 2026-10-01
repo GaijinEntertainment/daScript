@@ -2233,6 +2233,7 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/
     PATTERN "_build" EXCLUDE
     PATTERN ".daspkg_cache" EXCLUDE
     PATTERN ".daspkg_tmp" EXCLUDE
+    PATTERN ".cache" EXCLUDE
     PATTERN ".jitted_scripts" EXCLUDE
     PATTERN "jitted_scripts" EXCLUDE
     PATTERN "_aot_generated" EXCLUDE

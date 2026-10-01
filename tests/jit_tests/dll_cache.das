@@ -78,7 +78,7 @@ def test_dll_cache(t : T?) {
     t |> equal(write_probe(1), true)
     let ns = compile_probe()
     t |> equal(empty(ns), false)
-    let subdir = ".jitted_scripts/{ns}"
+    let subdir = ".cache/daslang/{ns}"
     clear_subdir(subdir)
 
     // compile 1: cache miss, one DLL appears

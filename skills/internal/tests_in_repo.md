@@ -42,7 +42,7 @@ false `error[50101]` / JIT failures. For AOT/JIT validation, sweep `--test tests
 per subfolder during file collection (only for the `.das_test` at the `--test <root>`
 argument; directly naming a child folder bypasses it). It gates folders on module
 availability (`dasHV`, `dasSQLITE`, ...) and on sweep mode by scanning argv - `--use-aot`
-skips `ast`, `ast_match`, `no_aot`, `jit_tests`, `.jitted_scripts` and `strudel_device`;
+skips `ast`, `ast_match`, `no_aot`, `jit_tests`, `.cache` and `strudel_device`;
 `-jit` skips only `gc` (heap_collect can't see heap
 pointers whose only reference is a local in a jitted frame - native-stack locals are
 invisible to the collector, so GC-semantics tests are interp-only; the other former `-jit`

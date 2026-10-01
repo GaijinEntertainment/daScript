@@ -945,11 +945,10 @@ def test_supervise_crash_then_clean_exit(t : T?) {
         let state_dir = path_join(root, "state")
         mkdir(state_dir)
         // the child names a cached JIT DLL under the (cwd-relative) jit dir; the bundle must
-        // copy it and its siblings under jitted_scripts/ keeping the relative layout
-        mkdir(path_join(root, ".jitted_scripts"))
-        mkdir(path_join(root, ".jitted_scripts/sub"))
-        fwrite(path_join(root, ".jitted_scripts/sub/fake.dll"), "dll")
-        fwrite(path_join(root, ".jitted_scripts/sub/fake.pdb"), "pdb")
+        // copy it and its siblings under cache/ keeping the relative layout
+        mkdir_rec(path_join(root, ".cache/daslang/sub"))
+        fwrite(path_join(root, ".cache/daslang/sub/fake.dll"), "dll")
+        fwrite(path_join(root, ".cache/daslang/sub/fake.pdb"), "pdb")
         var code = 0
         var sup = watchdog_start(program_mode_args(root, state_dir, "crash-then-ok"), root, 0, code)
         t |> success(sup != null, "supervision started (code {code})")
@@ -970,8 +969,8 @@ def test_supervise_crash_then_clean_exit(t : T?) {
                 bundles++
                 let bundle = path_join(sup.cfg.crash_dir, fname)
                 t |> success(fexist(path_join(bundle, "crash.json")), "crash.json in the bundle")
-                t |> success(fexist(path_join(bundle, "jitted_scripts/sub/fake.dll")), "the named JIT DLL is in the bundle under its relative path")
-                t |> success(fexist(path_join(bundle, "jitted_scripts/sub/fake.pdb")), "and its sibling artifacts beside it")
+                t |> success(fexist(path_join(bundle, "cache/sub/fake.dll")), "the named JIT DLL is in the bundle under its relative path")
+                t |> success(fexist(path_join(bundle, "cache/sub/fake.pdb")), "and its sibling artifacts beside it")
             }
         }
         t |> equal(bundles, 1)

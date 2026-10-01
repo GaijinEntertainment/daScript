@@ -70,7 +70,7 @@ ProbeRun run_probe ( const string & script, const string & cachePath ) {
 
 TEST_CASE("dasbind: a registrar served from the module cache still retargets a fresh dependent") {
     const string root = getDasRoot() + "/tests-cpp/small/";
-    const string cachePath = getDasRoot() + "/.jitted_scripts/tests_cpp_dasbind_cache.dascache";   // gitignored, outside the pruned default directory
+    const string cachePath = getDasRoot() + "/.cache/daslang/tests_cpp_dasbind_cache.dascache";   // gitignored, outside the pruned default directory
     remove(cachePath.c_str());
 
     // cold: the registrar compiles from source, its apply registers the proxies, the cache is written
