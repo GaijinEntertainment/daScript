@@ -3,6 +3,7 @@
 
 SET(AOT_TESTING_FILES
     dastest/testing.das
+    dastest/review_gate.das
 )
 
 # AOT all daslib .das files — catches codegen regressions for any module,
@@ -41,6 +42,9 @@ SET(AOT_MSL_MODULE_FILES ${DASMETAL_AOT_FILES} tests/msl/_msl_common.das)
 FILE(GLOB AOT_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/aot/*.das")
 # Exclude _-prefixed helper modules (required transitively, not standalone test entry points)
 list(FILTER AOT_TESTS_FILES EXCLUDE REGEX "/_")
+list(APPEND AOT_TESTS_FILES tests/REVIEW.das)
+
+SET(AOT_DASTEST_FILES tests/dastest/test_tests_review_gate.das)
 
 FILE(GLOB AOT_BARE_BLOCK_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/bare_block/*.das")
 list(FILTER AOT_BARE_BLOCK_FILES EXCLUDE REGEX "failed_|cant_|invalid_")
@@ -417,7 +421,7 @@ set(TEST_AOT_ALL_DAS "")   # test-body .das (not module libs); LLVM-AOT corpus e
 
 set(DAS_AOT_SUITES
     algorithm apply archive assert_once ast_match async bare_block base64 bitfields bool_array
-    class_boost daslib dasgltf daspeg data_walker debug debug_agent decs depfile dynamic_cast_rtti fio
+    class_boost daslib dasgltf daspeg dastest data_walker debug debug_agent decs depfile dynamic_cast_rtti fio
     fixed_array flatten fs functional gc glsl handle_types hash_map interfaces jit
     jobque json jsonrpc language linq lint long_array_table loops lpipe lsp
     macro_boost macro_call match math mcp md_boost module_cache module_tests network option promote quote
