@@ -5783,7 +5783,7 @@ class public LlvmJitVisitor : AstVisitor {
         if (needMemset) {
             LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(memset_bytes), 16u)
         }
-        if (expr.ascendFlags.useStackRef) {
+        if (expr.ascendFlags.useStackRef || onStack) {
             let stackref_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
             setE(expr.subexpr, stackref_ptr)
         } elif (!expr.subexpr._type.isHandle) {
