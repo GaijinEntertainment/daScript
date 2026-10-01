@@ -34,6 +34,9 @@ def get_das_exe() : string {
     if (get_platform_name() == "windows") {
         result = replace(result, "/", "\\")
     }
-    if (!fexist(result)) return args[0]
-    return result
+    if (fexist(result)) return result
+    let self = get_full_file_name(args[0])
+    if (fexist(self)) return self
+    if (get_platform_name() == "windows" && fexist("{self}.exe")) return "{self}.exe"
+    return args[0]
 }
