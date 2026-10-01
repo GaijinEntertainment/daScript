@@ -3,6 +3,7 @@
 #include <hv/HttpParser.h>
 #include <hv/WebSocketParser.h>
 #include <hv/wsdef.h>
+#include <hv/hlog.h>
 #include <memory>
 #include <atomic>
 #include <thread>
@@ -178,4 +179,18 @@ TEST_CASE("HTTP Date cache is isolated between serving threads") {
     CHECK(responses[0].find(std::string("Date: ") + first) != std::string::npos);
     CHECK(responses[1].find(std::string("Date: ") + second) != std::string::npos);
     HttpMessage::date_cache()[0] = '\0';
+}
+
+TEST_CASE("Logger fsync configuration is safe across serving threads") {
+    std::unique_ptr<logger_t, decltype(&logger_destroy)> logger(logger_create(), logger_destroy);
+    REQUIRE(logger != nullptr);
+    std::atomic<bool> start{false};
+    auto configure = [&]() {
+        while (!start.load(std::memory_order_acquire)) std::this_thread::yield();
+        for (int i = 0; i < 20000; ++i) logger_enable_fsync(logger.get(), i & 1);
+    };
+    std::thread one(configure), two(configure);
+    start.store(true, std::memory_order_release);
+    one.join();
+    two.join();
 }

@@ -7,6 +7,7 @@ cmake_minimum_required(VERSION 3.12)
 #
 #   base/hlog.c - logger_set_file closes the open log file, so a later hlog_set_file switches files
 #                 instead of writing to the old one until the date changes (ithewei/libhv#892).
+#                 logger_enable_fsync uses the logger mutex shared by all serving threads.
 #
 # Usage: cmake -DLIBHV_SRC_DIR=<libhv source dir> -P patch_libhv.cmake
 
@@ -85,6 +86,17 @@ void logger_set_file(logger_t* logger, const char* filepath) {
     logger->cur_logfile[0] = '\0';
     logger->last_logfile_ts = 0;
     logger->can_write_cnt = -1;
+    hmutex_unlock(&logger->mutex_);
+}
+]=])
+das_hv_hunk([=[
+void logger_enable_fsync(logger_t* logger, int on) {
+    logger->enable_fsync = on;
+}
+]=] [=[
+void logger_enable_fsync(logger_t* logger, int on) {
+    hmutex_lock(&logger->mutex_);
+    logger->enable_fsync = on;
     hmutex_unlock(&logger->mutex_);
 }
 ]=])

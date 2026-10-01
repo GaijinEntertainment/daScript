@@ -1,5 +1,5 @@
-# modules/dasHV/patch_libhv.cmake over a fixture of the two hlog.c passages it anchors on. Labelled
-# small: one cmake -P over a two-passage fixture, so every per-PR ctest runs it.
+# modules/dasHV/patch_libhv.cmake over a fixture of the logger passages it anchors on. Labelled
+# small: one cmake -P over a logger fixture, so every per-PR ctest runs it.
 
 add_test(
     NAME dashv_patch_libhv

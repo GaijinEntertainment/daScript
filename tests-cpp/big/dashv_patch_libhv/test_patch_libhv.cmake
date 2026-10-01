@@ -1,4 +1,4 @@
-# Drives modules/dasHV/patch_libhv.cmake over pristine_hlog.c: a fresh run patches and saves the
+# Drives modules/dasHV/patch_libhv.cmake over the pinned logger excerpts: a fresh run patches and saves the
 # pristine copy, a re-run rebuilds from that copy, a drifted anchor and a missing source dir fail.
 #
 # Usage: cmake -DPATCH_SCRIPT=<patch_libhv.cmake> -DFIXTURE=<pristine_hlog.c> -DWORK_DIR=<dir> -P test_patch_libhv.cmake
@@ -50,6 +50,11 @@ endif()
 string(FIND "${patched}" "fclose(logger->fp_);" at_close)
 if(at_close EQUAL -1)
     fail("logger_set_file does not close the open log file")
+endif()
+
+string(FIND "${patched}" "void logger_enable_fsync(logger_t* logger, int on) {\n    hmutex_lock(&logger->mutex_);\n    logger->enable_fsync = on;\n    hmutex_unlock(&logger->mutex_);\n}" at_fsync)
+if(at_fsync EQUAL -1)
+    fail("logger_enable_fsync does not synchronize with logfile_write")
 endif()
 
 run_patch("${fresh}" rc log)
