@@ -165,7 +165,9 @@ mirror's live and shadow bases, its tape slots), the route table carries every r
 position, `recurrent_verify` scans each group's rows against that stream's mirror through the
 kargs row index with the shadow-and-tape discipline of `ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay` per group, and the draft head's
 inputs assemble per group (a group's saved pre-draft hidden parks at cat row `nr + its index`).
-The landing scatters each group's K/V rows and logits into its own stream; the accept walk, the
+The landing scatters each group's K/V rows and logits into its own stream - a paged stream's block
+table grows to the round's k+1 rows before its drafts, since a round at a page's last row lands
+the next page's first; the accept walk, the
 replay (one command buffer per replaying group), the flip and the commit run per stream exactly as
 the one-stream round's. The one-stream round is the rounds over one session. `mtp_spec_eval_batch`
 is the engine seat the scheduler ticks through (`register_mtp_spec_batch_override`); without a

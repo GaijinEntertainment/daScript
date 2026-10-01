@@ -1180,7 +1180,10 @@ rows forms are per row, so the joint pass and the solo pass round alike), and it
 the same three streams with the LAST one on a prompt past 200 tokens, so the joint round's groups
 sit at different depths across three 64-row chunk boundaries - the round's chunk count, its
 attention form and every group's layer bases must follow that group's own depth and mirror cap,
-not group 0's; the Llama carrier also
+not group 0's, and the paged cell (`test_metal_paged_mtp`): one speculative stream of 150 reply
+tokens on a scheduler of 64-row pages - the server's session kind - emits token for token what a
+flat session emits, drafts accepted on both sides, so a round at a page's last row lands its
+second verify row on the next page; the Llama carrier also
 runs the pre-encode cell: four greedy streams through the scheduler with the batched driver's
 pre-encoded step off (the reference, its taken count pinned at zero) and on (the taken count at
 sixteen or more; the shipped default reads off), token for token per stream, then the rail's

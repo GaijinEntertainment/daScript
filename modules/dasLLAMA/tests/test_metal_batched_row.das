@@ -421,6 +421,53 @@ def test_metal_paged_deltanet(t : T?) {
     }
 }
 
+let PAGED_MTP_NEW = 150l   //! past two 64-row pages, so rounds land on a page's last row
+
+//! A round verifies the row past its token, so a round at a page's last row writes the next page's first.
+[test]
+def test_metal_paged_mtp(t : T?) {
+    t |> run("a paged self-speculative stream emits what a flat one emits across page boundaries (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 512l)
+            with_dasllama_jobque_() {
+                let prev_spec = get_mtp_spec()
+                set_mtp_spec(true)
+                var prompt <- encode(tr, "Count from one to one hundred: one, two, three,", true, false)
+                var none : array<int64>
+                let greedy = SamplingParams()
+                var toks : array<array<int64>>
+                for (page_rows in [0l, 64l]) {
+                    let kind = page_rows == 0l ? "flat" : "paged"
+                    var sch <- create_scheduler(tr, 1l, 4l, 64l, page_rows, 0l, KVDtype.f16, true)
+                    var events : array<SchedEvent>
+                    t |> success(submit(tr, sch, make_req(1l, prompt, greedy, PAGED_MTP_NEW, none)), "{kind} stream queued")
+                    drain(tr, sch, events)
+                    toks |> emplace(toks_of(events, 1l))
+                    t |> equal(long_length(toks[length(toks) - 1]), PAGED_MTP_NEW, "{kind}: the stream emitted every token")
+                    t |> success(sch.mtp_accepted > 0l, "{kind}: the rounds drafted and accepted ({sch.mtp_accepted} of {sch.mtp_drafted}) - a plain fallback would pass vacuously")
+                    delete sch
+                    delete events
+                }
+                set_mtp_spec(prev_spec)
+                t |> success(long_length(prompt) + PAGED_MTP_NEW > 128l, "the stream's rows span three pages ({long_length(prompt)} prompt tokens)")
+                log_gen_texts(tr, "speculative stream (flat, paged)", toks[0], toks[1])
+                t |> success(ids_equal(toks[0], toks[1]), "the paged stream's tokens are the flat stream's")
+                delete toks
+                delete prompt
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
 [test]
 def test_metal_batched_row_pre_encode(t : T?) {
     t |> run("four greedy streams emit the same tokens whether each batched step is encoded at its call or pre-encoded under the step before it (Llama-3.2-1B Q8)") <| @(t : T?) {

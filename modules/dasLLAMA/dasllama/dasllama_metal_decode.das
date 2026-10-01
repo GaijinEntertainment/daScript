@@ -2300,6 +2300,7 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
             mtp_round_plain(t, s, toks[i], pos)
             continue
         }
+        kv_ensure(s, pos + nr)
         s.mtp_xb_save |> overwrite_resize(mtp_h_dim(c))   //! the pre-draft carry: the verify's row 0 input
         unsafe {
             memcpy(addr < void? >(s.mtp_xb_save[0]), addr < void? >(s.mtp_h[0]), mtp_h_dim(c) * 4l)
