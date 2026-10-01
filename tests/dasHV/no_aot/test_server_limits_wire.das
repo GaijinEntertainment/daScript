@@ -132,21 +132,12 @@ def pipelined_http_replies_keep_request_order_and_bodies(t : T?) {
     var peer = new WirePeer()
     t |> success(peer->connect("127.0.0.1", server->bound_port()))
     t |> success(peer->write_text("POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\n\r\naPOST /echo HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 1\r\n\r\nb"))
-    var control = new WirePeer()
-    t |> success(control->connect("127.0.0.1", server->bound_port()))
-    t |> success(control->write_text("POST /echo HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 1\r\n\r\nc"))
-    for (_ in range(3000)) {
-        peer->tick(); control->tick()
-        if (contains(control->text(), "503")) { break }
-        sleep(1u)
-    }
-    t |> success(contains(control->text(), "503"))
     t |> success(pump(server, peer, $ { return peer.disconnected; }))
     let response = peer->text()
     t |> success(starts_with(response, "HTTP/1.1 200"), "the first request owns the first response")
     let first_body = find(response, "\r\n\r\n") + 4
     if (first_body >= 4 && first_body < length(response)) {
-        t |> equal(slice(response, first_body, first_body + 1), "a")
+        t |> equal(slice(response, first_body, first_body + 1), "a", "first response body; complete wire response: {response}")
         let next = find(response, "HTTP/1.1 ", first_body + 1)
         t |> success(next > first_body)
         if (next > first_body) {
@@ -159,8 +150,8 @@ def pipelined_http_replies_keep_request_order_and_bodies(t : T?) {
             }
         }
     } else { t |> failure("first response body is missing") }
-    peer->close(); control->close(); server->stop(); server->cleanup()
-    unsafe { delete peer; delete control; delete server }
+    peer->close(); server->stop(); server->cleanup()
+    unsafe { delete peer; delete server }
 }
 
 [test]

@@ -55,19 +55,24 @@ static Cert certificate(EVP_PKEY * subject_key, X509 * issuer, EVP_PKEY * signer
     if (!X509_sign(result.get(), signer, EVP_sha256())) return Cert(nullptr, X509_free);
     return result;
 }
-static bool save_cert(const std::string & path, X509 * cert) {
+using Bio = std::unique_ptr<BIO, decltype(&BIO_free)>;
+static bool save_pem(const std::string & path, BIO * encoded) {
+    char * data = nullptr;
+    const long length = BIO_get_mem_data(encoded, &data);
+    if (length <= 0) return false;
     FILE * file = fopen(path.c_str(), "wb");
     if (!file) return false;
-    const bool ok = PEM_write_X509(file, cert) == 1;
-    fclose(file);
-    return ok;
+    const bool written = fwrite(data, 1, static_cast<size_t>(length), file) == static_cast<size_t>(length);
+    const bool closed = fclose(file) == 0;
+    return written && closed;
+}
+static bool save_cert(const std::string & path, X509 * cert) {
+    Bio encoded(BIO_new(BIO_s_mem()), BIO_free);
+    return encoded && PEM_write_bio_X509(encoded.get(), cert) == 1 && save_pem(path, encoded.get());
 }
 static bool save_key(const std::string & path, EVP_PKEY * value) {
-    FILE * file = fopen(path.c_str(), "wb");
-    if (!file) return false;
-    const bool ok = PEM_write_PrivateKey(file, value, nullptr, nullptr, 0, nullptr, nullptr) == 1;
-    fclose(file);
-    return ok;
+    Bio encoded(BIO_new(BIO_s_mem()), BIO_free);
+    return encoded && PEM_write_bio_PrivateKey(encoded.get(), value, nullptr, nullptr, 0, nullptr, nullptr) == 1 && save_pem(path, encoded.get());
 }
 static int start(hv::HttpServer & server, const std::string & cert, const std::string & key_file) {
     hssl_ctx_opt_t options{};
