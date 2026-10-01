@@ -82,6 +82,17 @@ def dyn_array(b : B?) {
 }
 ```
 
+## Files a test writes
+
+`test_temp_dir()` (`testing_boost`) returns a directory private to the current run of a test
+file: created on the first call, removed with everything in it when the run ends. Two runs of the
+same file never see each other's files there. The directory belongs to the context that asked for
+it, so a `new_thread` body or a job - each runs in its own context - gets a different one.
+
+```das
+let out = path_join(test_temp_dir(), "out.png")
+```
+
 ## review_gate.das
 
 Not part of the test runner: `dastest/review_gate.das` is the support library for

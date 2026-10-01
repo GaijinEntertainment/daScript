@@ -107,8 +107,8 @@ def test_parent(t : T?) {
 [test]
 def test_file_size(t : T?) {
     t |> run("known file size") @(t : T?) {
-        let root = get_das_root()
-        let tmp = root + "/_test_fs_size.tmp"
+        let tmp_dir = test_temp_dir()
+        let tmp = tmp_dir + "/_test_fs_size.tmp"
         fopen(tmp, "wb") $(f) {
             fwrite(f, "12345")
         }
@@ -127,8 +127,8 @@ def test_file_size(t : T?) {
 [test]
 def test_equivalent(t : T?) {
     t |> run("same file") @(t : T?) {
-        let root = get_das_root()
-        let tmp = root + "/_test_fs_equiv.tmp"
+        let tmp_dir = test_temp_dir()
+        let tmp = tmp_dir + "/_test_fs_equiv.tmp"
         fopen(tmp, "wb") $(f) {
             fwrite(f, "test")
         }
@@ -138,9 +138,9 @@ def test_equivalent(t : T?) {
         remove(tmp)
     }
     t |> run("different files") @(t : T?) {
-        let root = get_das_root()
-        let a = root + "/_test_fs_equiv_a.tmp"
-        let b = root + "/_test_fs_equiv_b.tmp"
+        let tmp_dir = test_temp_dir()
+        let a = tmp_dir + "/_test_fs_equiv_a.tmp"
+        let b = tmp_dir + "/_test_fs_equiv_b.tmp"
         fopen(a, "wb") $(f) {
             fwrite(f, "a")
         }
@@ -158,8 +158,8 @@ def test_equivalent(t : T?) {
 [test]
 def test_is_symlink(t : T?) {
     t |> run("regular file is not symlink") @(t : T?) {
-        let root = get_das_root()
-        let tmp = root + "/_test_fs_symlink.tmp"
+        let tmp_dir = test_temp_dir()
+        let tmp = tmp_dir + "/_test_fs_symlink.tmp"
         fopen(tmp, "wb") $(f) {
             fwrite(f, "test")
         }
@@ -169,8 +169,8 @@ def test_is_symlink(t : T?) {
         remove(tmp)
     }
     t |> run("UTF-8 regular file is not symlink") @(t : T?) {
-        let root = get_das_root()
-        let tmp = root + "/_test_fs_symlink-Привет.tmp"
+        let tmp_dir = test_temp_dir()
+        let tmp = tmp_dir + "/_test_fs_symlink-Привет.tmp"
         fopen(tmp, "wb") $(f) {
             fwrite(f, "test")
         }
@@ -193,9 +193,9 @@ def test_is_symlink(t : T?) {
 [test]
 def test_copy_file(t : T?) {
     t |> run("copy existing file") @(t : T?) {
-        let root = get_das_root()
-        let src = root + "/_test_fs_copy_src.tmp"
-        let dst = root + "/_test_fs_copy_dst.tmp"
+        let tmp_dir = test_temp_dir()
+        let src = tmp_dir + "/_test_fs_copy_src.tmp"
+        let dst = tmp_dir + "/_test_fs_copy_dst.tmp"
         fopen(src, "wb") $(f) {
             fwrite(f, "hello copy")
         }
@@ -211,9 +211,9 @@ def test_copy_file(t : T?) {
         remove(dst)
     }
     t |> run("no overwrite") @(t : T?) {
-        let root = get_das_root()
-        let src = root + "/_test_fs_copy_noow_src.tmp"
-        let dst = root + "/_test_fs_copy_noow_dst.tmp"
+        let tmp_dir = test_temp_dir()
+        let src = tmp_dir + "/_test_fs_copy_noow_src.tmp"
+        let dst = tmp_dir + "/_test_fs_copy_noow_dst.tmp"
         fopen(src, "wb") $(f) {
             fwrite(f, "src")
         }
@@ -226,9 +226,9 @@ def test_copy_file(t : T?) {
         remove(dst)
     }
     t |> run("with overwrite") @(t : T?) {
-        let root = get_das_root()
-        let src = root + "/_test_fs_copy_ow_src.tmp"
-        let dst = root + "/_test_fs_copy_ow_dst.tmp"
+        let tmp_dir = test_temp_dir()
+        let src = tmp_dir + "/_test_fs_copy_ow_src.tmp"
+        let dst = tmp_dir + "/_test_fs_copy_ow_dst.tmp"
         fopen(src, "wb") $(f) {
             fwrite(f, "new content")
         }
@@ -250,8 +250,8 @@ def test_copy_file(t : T?) {
 [test]
 def test_dir_rec(t : T?) {
     t |> run("recursive listing") @(t : T?) {
-        let root = get_das_root()
-        let base = root + "/_test_fs_dir_rec"
+        let tmp_dir = test_temp_dir()
+        let base = tmp_dir + "/_test_fs_dir_rec"
         mkdir(base)
         mkdir(base + "/sub")
         fopen(base + "/a.txt", "wb") $(f) {
@@ -283,8 +283,8 @@ def test_dir_rec(t : T?) {
         rmdir_rec(base)
     }
     t |> run("relative paths") @(t : T?) {
-        let root = get_das_root()
-        let base = root + "/_test_fs_dir_rec2"
+        let tmp_dir = test_temp_dir()
+        let base = tmp_dir + "/_test_fs_dir_rec2"
         mkdir(base)
         fopen(base + "/file.txt", "wb") $(f) {
             fwrite(f, "x")
@@ -357,8 +357,8 @@ def test_disk_space(t : T?) {
 [test]
 def test_set_mtime(t : T?) {
     t |> run("set modification time") @(t : T?) {
-        let root = get_das_root()
-        let tmp = root + "/_test_fs_mtime.tmp"
+        let tmp_dir = test_temp_dir()
+        let tmp = tmp_dir + "/_test_fs_mtime.tmp"
         fopen(tmp, "wb") $(f) {
             fwrite(f, "test")
         }

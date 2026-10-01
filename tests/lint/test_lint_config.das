@@ -5,28 +5,8 @@ require daslib/lint_config
 require daslib/fio
 require strings
 
-// Per-process temp directory. Created on first call, removed by [finalize].
-// Avoids two problems:
-//   1. Earlier version wrote `_lint_config_fixture.toml` into the worktree's
-//      `tests/lint/` and never deleted it — left as untracked-modified state
-//      across runs.
-//   2. Parallel `dastest` invocations would race on that shared path. With
-//      a process-private temp dir each invocation is hermetic.
-var private _tmp_dir : string
-var private _tmp_dir_inited = false
-
 def fixture_path() : string {
-    if (!_tmp_dir_inited) {
-        let r = create_temp_directory_result("lint_config_test")
-        // Fail-fast: silently writing to "" would resolve to the current
-        // working directory and defeat the hermetic / parallel-safe goal.
-        if (!(r is value)) {
-            panic("could not create temp dir for lint_config test: {unsafe(r.error)}")
-        }
-        _tmp_dir = unsafe(r.value)
-        _tmp_dir_inited = true
-    }
-    return path_join(_tmp_dir, "fixture.toml")
+    return path_join(test_temp_dir(), "fixture.toml")
 }
 
 def write_fixture(content : string) {
@@ -34,13 +14,6 @@ def write_fixture(content : string) {
         if (f != null) {
             fwrite(f, content)
         }
-    }
-}
-
-[finalize]
-def cleanup_temp_dir {
-    if (_tmp_dir_inited && !empty(_tmp_dir)) {
-        rmdir_rec(_tmp_dir)
     }
 }
 
@@ -191,7 +164,7 @@ def private plant(dir, name, content : string) {
 }
 
 def private cascade_root() : string {
-    let root = path_join(_tmp_dir, "cascade")
+    let root = path_join(test_temp_dir(), "cascade")
     mkdir_rec(path_join(root, "a/b"))
     mkdir(path_join(root, ".git"))
     plant(root, ".lint_config", "[format]\nforce_clean_comments = true\n")
@@ -202,9 +175,8 @@ def private cascade_root() : string {
 
 [test]
 def test_format_policy_cascade(t : T?) {
-    fixture_path()
     t |> run("no config anywhere: format on, keep comments") @@(t : T?) {
-        let bare = path_join(_tmp_dir, "bare")
+        let bare = path_join(test_temp_dir(), "bare")
         mkdir_rec(bare)
         mkdir(path_join(bare, ".git"))
         let pol = format_policy_for(path_join(bare, "x.das"))
@@ -250,9 +222,8 @@ def test_format_policy_cascade(t : T?) {
 
 [test]
 def test_format_policy_per_key_cascade(t : T?) {
-    fixture_path()
     t |> run("nearest level wins its key; the other key still cascades from above") @@(t : T?) {
-        let root = path_join(_tmp_dir, "perkey")
+        let root = path_join(test_temp_dir(), "perkey")
         mkdir_rec(path_join(root, "a"))
         mkdir(path_join(root, ".git"))
         plant(root, ".lint_config", "[format]\nforce_clean_comments = true\nformat_enabled = true\n")
@@ -262,7 +233,7 @@ def test_format_policy_per_key_cascade(t : T?) {
         t |> success(pol.format_enabled, "format_enabled cascades from root")
     }
     t |> run("a decided key is immune to an ancestor's redefinition") @@(t : T?) {
-        let root = path_join(_tmp_dir, "immune")
+        let root = path_join(test_temp_dir(), "immune")
         mkdir_rec(path_join(root, "a/b"))
         mkdir(path_join(root, ".git"))
         plant(root, ".lint_config", "[format]\nforce_clean_comments = true\n")
@@ -272,7 +243,7 @@ def test_format_policy_per_key_cascade(t : T?) {
         t |> success(pol.force_clean_comments, "b's own value stands against a's")
     }
     t |> run("a config with no [format] table falls through to its parent") @@(t : T?) {
-        let root = path_join(_tmp_dir, "noformat")
+        let root = path_join(test_temp_dir(), "noformat")
         mkdir_rec(path_join(root, "a"))
         mkdir(path_join(root, ".git"))
         plant(root, ".lint_config", "[format]\nforce_clean_comments = true\n")
@@ -286,16 +257,15 @@ def test_format_policy_per_key_cascade(t : T?) {
         t |> success(!pol.force_clean_comments)
     }
     t |> run("a path outside any repository terminates at the filesystem root") @@(t : T?) {
-        let pol = format_policy_for(path_join(_tmp_dir, "no_git_here/x.das"))
+        let pol = format_policy_for(path_join(test_temp_dir(), "no_git_here/x.das"))
         t |> success(pol.format_enabled)
     }
 }
 
 [test]
 def test_partition_by_format_policy(t : T?) {
-    fixture_path()
     t |> run("skips disabled trees, jobs carry their folder's policy") @@(t : T?) {
-        let root = path_join(_tmp_dir, "partition")
+        let root = path_join(test_temp_dir(), "partition")
         mkdir_rec(path_join(root, "swept"))
         mkdir_rec(path_join(root, "corpus"))
         mkdir_rec(path_join(root, "plain"))
