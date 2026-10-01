@@ -39,6 +39,8 @@ SET(AOT_SPIRV_MODULE_FILES ${DASSPIRV_AOT_FILES} tests/spirv/_spirv_common.das)
 SET(AOT_MSL_MODULE_FILES ${DASMETAL_AOT_FILES} tests/msl/_msl_common.das)
 
 FILE(GLOB AOT_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/aot/*.das")
+list(APPEND AOT_TESTS_FILES tests/REVIEW.das)
+SET(AOT_DASTEST_MODULE_FILES dastest/review_gate.das)
 # Exclude _-prefixed helper modules (required transitively, not standalone test entry points)
 list(FILTER AOT_TESTS_FILES EXCLUDE REGEX "/_")
 
@@ -423,7 +425,7 @@ set(TEST_AOT_ALL_DAS "")   # test-body .das (not module libs); LLVM-AOT corpus e
 
 set(DAS_AOT_SUITES
     algorithm apply archive assert_once ast_match async bare_block base64 bitfields bool_array
-    class_boost daslib dasgltf daspeg data_walker debug debug_agent decs depfile dynamic_cast_rtti fio
+    class_boost daslib dasgltf daspeg dastest data_walker debug debug_agent decs depfile dynamic_cast_rtti fio
     fixed_array flatten fs functional gc glsl handle_types hash_map interfaces jit
     jobque json jsonrpc language linq lint long_array_table loops lpipe lsp
     macro_boost macro_call match math mcp md_boost module_cache module_tests network option promote quote
@@ -440,14 +442,18 @@ foreach(_s IN LISTS DAS_AOT_SUITES)
     set(${_u}_AOT_GENERATED_SRC)
     list(LENGTH AOT_${_u}_FILES _nf)
     if(_nf GREATER 0)
+        if(_s STREQUAL "tests" OR _s STREQUAL "dastest")
+            set(DAS_AOT_EXTRA_DEPENDS ${PROJECT_SOURCE_DIR}/dastest/review_gate.das)
+        endif()
         DAS_AOT("${AOT_${_u}_FILES}" ${_u}_AOT_GENERATED_SRC test_aot_${_s} daslang)
+        set(DAS_AOT_EXTRA_DEPENDS "")
     endif()
     list(APPEND TEST_AOT_TARGETS test_aot_${_s})
     list(APPEND TEST_AOT_GENVARS ${_u}_AOT_GENERATED_SRC)
     list(APPEND TEST_AOT_ALL_DAS ${AOT_${_u}_FILES})
 endforeach()
 
-set(DAS_AOT_MODULE_SUITES daslib decs glsl language linq macro_boost math quote stbimage typemacro)
+set(DAS_AOT_MODULE_SUITES daslib dastest decs glsl language linq macro_boost math quote stbimage typemacro)
 foreach(_s IN LISTS DAS_AOT_MODULE_SUITES)
     string(TOUPPER ${_s} _u)
     add_custom_target(test_aot_${_s}_modules)
@@ -708,7 +714,7 @@ if(NOT ${DAS_LLVM_DISABLED})
     SET(LLVM_AOT_GENERATED_OBJ)
     # compiling the corpus runs the tests' macros: tests/dasbind's [extern] bindings dlopen the
     # probe library, the same dependency the C++ AOT row above declares
-    set(DAS_AOT_EXTRA_DEPENDS ${DAS_AOT_DASBIND_DEPENDS})
+    set(DAS_AOT_EXTRA_DEPENDS ${DAS_AOT_DASBIND_DEPENDS} ${PROJECT_SOURCE_DIR}/dastest/review_gate.das)
     DAS_LLVM_AOT_LIB("${LLVM_AOT_OBJECT_FILES}" LLVM_AOT_GENERATED_OBJ test_llvm_aot_corpus)
     set(DAS_AOT_EXTRA_DEPENDS "")
 
