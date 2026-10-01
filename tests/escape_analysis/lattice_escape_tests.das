@@ -20,7 +20,6 @@
 // fresh-owned return value) - now implemented and passing.
 options gen2
 options persistent_heap
-options no_aot
 options no_optimization
 options force_escape_free = true
 options force_partial_escape_free = true   // flow-sensitive partial frees (default off) - this suite tests them

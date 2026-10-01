@@ -12,7 +12,7 @@
 //   control: if it did NOT grow, allocations would be elided and the test above would be vacuous.
 options gen2
 options persistent_heap
-options no_aot
+options no_aot   // test_escape_pure is a UnitTest interop with no AOT declaration, so the generated C++ cannot name it
 options no_optimization
 options force_escape_free = true
 
