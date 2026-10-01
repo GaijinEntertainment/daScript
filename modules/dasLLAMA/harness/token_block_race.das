@@ -5,8 +5,9 @@ options _dasllama_internal = true
 
 require llvm/daslib/llvm_tune
 require ../performance/profile_common.das   // tune_gate - the standing pre-measure stack
-require ../tests/_q4k_disk.das              // q4k_disk_superblock - the K-quant superblock the planes transcode
-require ../tests/_kq_dot.das                // dot_kq - the disk-order dot, the CPU reference
+require ../tests/_kq_fixtures.das          // q4k_disk_superblock - the K-quant superblock the planes transcode; dot_kq - the disk-order dot, the CPU reference
+require _race_fixture                       // the round loop, the poison, the compare and the refusal tally
+require _gen_probe_fixture                  // BF16_ENVELOPE_REL - the bf16 tile's envelope
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_gen
@@ -33,12 +34,8 @@ let NTOK = 512l
 let SAMPLE_TOKENS = 4l
 let SAMPLE_ROWS = 32l
 let FMT = 4
-//! a bf16 tile rounds every weight and activation to bf16 before the dot: a row sits within 1e-2 of the image's largest magnitude
-let BF16_ENVELOPE = 1.0e-2
 //! an int8 walk sums a row's blocks in another order than the disk-order dot: the same products, f32 rounding apart
 let FLOAT_ORDER = 1.0e-5
-//! what an arm's output holds before its walk: an element the walk leaves reads as outside every bound
-let NOT_WRITTEN = unsafe(reinterpret<float>(0x7FC00000u))
 
 struct Shape {
     n : int64
@@ -129,40 +126,6 @@ def private disk_dots(p : Planes; n, d : int64; at : array<int64>) : array<float
     return <- want
 }
 
-//! the largest difference of `got` from `want` over the sampled region, and the bound it answers to
-def private held(got : array<float>; want : array<float>; rel : float) : tuple<diff : float; bound : float; ok : bool> {
-    var diff = 0.0
-    var mag = 0.0
-    var finite = true
-    for (g, w in got, want) {
-        finite &&= is_finite(g)
-        diff = max(diff, abs(g - w))
-        mag = max(mag, abs(w))
-    }
-    return (diff = diff, bound = rel * mag, ok = finite && diff <= rel * mag)
-}
-
-def private compare_words(h : tuple<diff : float; bound : float; ok : bool>; against : string; count : int) : string {
-    if (h.diff == 0.0 && h.ok) {
-        return "bit-exact vs {against} on {count} sampled elements"
-    }
-    return "{h.ok ? "within" : "OUTSIDE"} {h.bound} of {against} on {count} sampled elements (largest difference {h.diff})"
-}
-
-def private stats(var ms : array<float>) : tuple<best : float; median : float; cv : float> {
-    sort(ms)
-    var mean = 0.0
-    for (v in ms) {
-        mean += v
-    }
-    mean /= float(length(ms))
-    var sq = 0.0
-    for (v in ms) {
-        sq += (v - mean) * (v - mean)
-    }
-    return (best = ms[0], median = ms[length(ms) / 2], cv = sqrt(sq / float(length(ms))) / mean * 100.0)
-}
-
 //! one shape's arms; answers the rows it reported, or -1 when an arm failed its compare or did not run the block asked
 def private race(sh : Shape) : int {
     var p <- build_planes(sh.n, sh.d)
@@ -171,35 +134,24 @@ def private race(sh : Shape) : int {
     let bf16 = kq_tileform_of(FMT) > 0
     var y : array<float>
     y |> resize(NTOK * sh.d)
-    var times : array<array<float>>
     var images : array<array<float>>
     var walked : array<int64>
-    times |> reserve(length(sh.blocks))
     images |> reserve(length(sh.blocks))
     walked |> reserve(length(sh.blocks))
     for (b in sh.blocks) {
-        var none : array<float>
-        times |> emplace(none)
         set_q8_token_block(b)
         walked |> push(kq_token_block(FMT, sh.n))
-        for (v in y) {
-            v = NOT_WRITTEN
-        }
+        poison(y)
         matmul_kq_batch(FMT, y, p.kq, p.ks, 0l, p.xq, p.xs, p.xbs, sh.n, sh.d, NTOK)
         var img <- [for (i in at); y[i]]
         images |> emplace(img)
     }
-    for (round in range(ROUNDS + WARMUP)) {
-        for (ci in range(length(sh.blocks))) {
-            set_q8_token_block(sh.blocks[ci])
-            let t0 = ref_time_ticks()
-            matmul_kq_batch(FMT, y, p.kq, p.ks, 0l, p.xq, p.xs, p.xbs, sh.n, sh.d, NTOK)
-            let ms = float(get_time_usec(t0)) / 1000.0
-            if (round >= WARMUP) {
-                times[ci] |> push(ms)
-            }
-        }
-    }
+    var times <- time_rounds(length(sh.blocks), ROUNDS, WARMUP, $(ci : int) {
+        set_q8_token_block(sh.blocks[ci])
+    }, $(_ci : int) {
+        matmul_kq_batch(FMT, y, p.kq, p.ks, 0l, p.xq, p.xs, p.xbs, sh.n, sh.d, NTOK)
+    })
+    let region = "{length(at)} sampled elements"
     let base = find_index(sh.blocks, BASELINE)
     var rows = 0
     var good = base >= 0
@@ -210,10 +162,10 @@ def private race(sh : Shape) : int {
         continue if (base < 0)
         let st = stats(times[ci])
         let isBase = ci == base
-        let h = (isBase ? held(images[ci], want, bf16 ? BF16_ENVELOPE : FLOAT_ORDER)
-            : held(images[ci], images[base], bf16 ? BF16_ENVELOPE : 0.0))
+        let h = (isBase ? held(images[ci], want, bf16 ? BF16_ENVELOPE_REL : FLOAT_ORDER)
+            : held(images[ci], images[base], bf16 ? BF16_ENVELOPE_REL : 0.0))
         let asked = walked[ci] == sh.blocks[ci]
-        let words = isBase ? "baseline, {compare_words(h, "the disk-order dots", length(at))}" : compare_words(h, "the {BASELINE} arm", length(at))
+        let words = isBase ? "baseline, {compare_words(h, "the disk-order dots", region)}" : compare_words(h, "the {BASELINE} arm", region)
         print("K={sh.n} rows={sh.d} ntok={NTOK} backend={active_kernel_backend()} lanes={get_dispatch_lanes()} block={sh.blocks[ci]} walked={walked[ci]} best_ms={st.best} median_ms={st.median} cv%={st.cv} | {words}{asked ? "" : " | INERT: the walk ran another block"}\n")
         good &&= h.ok && asked
         rows++
@@ -227,10 +179,8 @@ def private race(sh : Shape) : int {
 
 [export]
 def main() : int {
-    var rows = 0
-    var bad = 0
-    with_job_que() {
-        setup_dasllama_jobque_()
+    var t : RaceTally
+    with_dasllama_jobque() {
         let active = active_kernel_backend()
         let pin = kernel_backend_pin()
         let knob = get_q8_token_block()
@@ -239,13 +189,13 @@ def main() : int {
         pin_kernel_backend(gen_backend())
         if (active_kernel_backend() != gen_backend()) {
             print("token_block_race: this box serves {active_kernel_backend()}, the pin on {gen_backend()} did not take - no row\n")
-            bad++
+            t.bad++
         } elif (!kernel_backend_has_kq() || !kernel_backend_has_kq_batch()) {
             print("token_block_race: {gen_backend()} carries no kq batch kernel on this box - no row\n")
-            bad++
+            t.bad++
         } elif (!tune_gate()) {
             print("token_block_race: the tune gate refused - no row\n")
-            bad++
+            t.bad++
         } else {
             set_q8_l2_budget(1l << 40l)
             set_bf16_token_block_floor(1l)
@@ -259,12 +209,7 @@ def main() : int {
                 Shape(n = 16384l, d = 4096l, blocks <- [256l, 384l, 512l])
             ]
             for (sh in shapes) {
-                let r = race(sh)
-                if (r < 0) {
-                    bad++
-                } else {
-                    rows += r
-                }
+                t |> tally(race(sh))
             }
             delete shapes
         }
@@ -277,9 +222,5 @@ def main() : int {
         }
         select_kernel_backend(active)
     }
-    if (rows == 0 || bad > 0) {
-        print("token_block_race: {rows} rows, {bad} refusals - the run fails\n")
-        return 1
-    }
-    return 0
+    return race_exit(t, "token_block_race")
 }

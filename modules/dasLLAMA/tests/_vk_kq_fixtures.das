@@ -170,12 +170,12 @@ def fill_q8_stack(rows, n : int64; seed : int64; var wqb : array<uint8>; var wsb
 }
 
 //! the device-vs-reference bars every Vulkan cell shares: an element is off when it misses BOTH
-//! the absolute bar and the relative one (a fraction of the reference row's max)
+//! the absolute bar and the relative one (a fraction of the reference row's max); a NaN is inside neither
 def count_bad(gpu, refv : array<float>; abs_bar, rel_bar : float) : int {
     var bad = 0
     for (g, r in gpu, refv) {
         let d = abs(g - r)
-        if (d > abs_bar && d > rel_bar) {
+        if (!(d <= max(abs_bar, rel_bar))) {
             bad++
         }
     }

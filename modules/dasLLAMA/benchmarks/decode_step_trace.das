@@ -4,7 +4,7 @@ options _jit_fast_math = true   // ggml-parity FP laxity — the CPU prefill/sam
 options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
-require dasllama/dasllama_math   // setup_dasllama_jobque_ + pin_kernel_backend + parallel_argmax
+require dasllama/dasllama_math   // with_dasllama_jobque + pin_kernel_backend
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
 require ?das_metal dasllama/dasllama_metal_decode   // GPU driver half, Apple builds only
 require daslib/jobque_boost
@@ -60,10 +60,6 @@ def private build_prompt(n : int64) : array<int64> {
     return <- [for (i in range64(n)); 1000l + (i % 5000l)]
 }
 
-def private greedy_top(s : Session; vocab : int64) : int64 {
-    return parallel_argmax(s.logits, vocab)
-}
-
 def private run_trace(cfg) {   // untyped param = generic — non-Apple builds never compile the Metal-typed body
     if (empty(g_env_engine.pin_backend)) {
         pin_kernel_backend("portable")
@@ -93,8 +89,7 @@ def private run_trace(cfg) {   // untyped param = generic — non-Apple builds n
     print("active backend: {active_kernel_backend()}  kv: {cfg.kv}  spec: {cfg.spec}\n")
     set_metal_decode_speculate(cfg.spec)
     var s <- make_run_state(c, cfg.kv, cfg.kv)
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         // warmup: JIT both paths + first-touch the resident weight regions
         let warm <- build_prompt(8l)
         for (wp in range64(8l)) {
@@ -106,7 +101,7 @@ def private run_trace(cfg) {   // untyped param = generic — non-Apple builds n
         if (p > 0l) {
             let prompt <- build_prompt(p)
             forward_prefill(t, s, prompt, p, 0l)
-            tok = greedy_top(s, c.vocab_size)
+            tok = argmax(s, c.vocab_size)
             pos = p
         }
         metal_decode_stage_reset()
@@ -114,7 +109,7 @@ def private run_trace(cfg) {   // untyped param = generic — non-Apple builds n
         let t0 = ref_time_ticks()
         for (i in range64(n)) {
             forward(t, s, tok, pos + i)
-            tok = greedy_top(s, c.vocab_size)
+            tok = argmax(s, c.vocab_size)
         }
         let us = get_time_usec(t0)
         var tr <- metal_decode_trace_take()

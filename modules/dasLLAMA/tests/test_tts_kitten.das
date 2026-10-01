@@ -8,7 +8,7 @@ require dasllama/dasllama_kitten
 require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_styletts2
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require daslib/jobque_boost
 require daslib/defer
 require daslib/fio
@@ -148,8 +148,7 @@ def test_kitten_generator_hook(t : T?) {
         if (tts_data_missing(t, gguf_path("nano"), false)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             let r = hook_probe(gguf_path("nano"))
             t |> equal(r.calls_after_decline, 1, "one chunk, one hook call")
             t |> equal(r.served_after_decline, 0, "a decline serves nothing")
@@ -198,8 +197,7 @@ def test_kitten_over_long_chunk(t : T?) {
         if (!model_available(t, gguf_path("nano"))) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var inscope m <- load_styletts2(gguf_path("nano"))
             let cap = m.albert.max_pos
             var inscope ids : array<int>

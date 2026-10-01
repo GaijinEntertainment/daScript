@@ -8,7 +8,7 @@ require dasllama/dasllama_vision_embedder
 require dasllama/dasllama_vision
 require dasllama/dasllama_vision_io
 require dasllama/dasllama_tower   // set_asr_prof / asr_prof_report — the encode-stage rail
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require ?das_metal dasllama/dasllama_metal_tower   // [init] registers the GPU block serve — without it the CPU f32 path runs
 require ../performance/profile_common.das   // tune_gate — the standing pre-measure stack
 require daslib/jobque_boost
@@ -57,8 +57,7 @@ def main {
     if (!tune_gate()) {   // never attribute on fallback winners — the stage split would be of the wrong kernels
         panic("qwen_encode_split: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         probe_one("/Users/borisbatkin/Work/llama.cpp/models/mmproj-Qwen3VL-8B-Instruct-F16.gguf", pic)
         probe_one("/Users/borisbatkin/Work/llama.cpp/models/mmproj-gemma-3-4b-it-F16.gguf", pic)
         probe_one("/Users/borisbatkin/Work/llama.cpp/models/mmproj-Qwen2.5-Omni-3B-f16.gguf", pic)

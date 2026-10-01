@@ -74,8 +74,14 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   already) - and both speak the multi-kernel form (`kernel=` names the method, one macro instance per kernel, declared roles must cover every kernel).
 - **`family=` is Vulkan-only.** A vulkan family shares the per-class surface - the `VkdClass`
   global, the `set_*` builder, the pipe slots - across classes with one binding layout. Metal's
-  `enc_*` builder is the entire generated surface, so there is nothing for a family to share;
-  cross-class PSO/source sharing on Metal is a PSO-lifecycle question, not a lens one.
+  generated surface is the `enc_*` builder and its `<builder>_pso` twin, both per class, so there
+  is nothing for a family to share; cross-class PSO/source sharing on Metal is a PSO-lifecycle
+  question, not a lens one.
+- **The `<builder>_pso` form is Metal-only.** `[metal_dispatch]` also generates each builder over a
+  pipeline the caller passes (`ARCHITECTURE_GPU.md` names it), so a kernel gate under `tests/`
+  dispatches its own pipeline through the production bind list while the engine's builder reads
+  its module-private pipeline global; `[vk_dispatch]` has no counterpart, since a Vulkan cell binds
+  through the class's `VkdClass` global and its `set_*` builder, which the tests reach directly.
 - **`@default` is Metal-only.** A `[metal_dispatch]` field may name a fallback global
   (`@default = g_one`) that the generated builder binds when the caller passes null;
   `[vk_dispatch]` has no counterpart - vulkan callers pass a real buffer at every slot, and an

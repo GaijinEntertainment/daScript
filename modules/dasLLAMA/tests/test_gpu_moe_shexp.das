@@ -13,7 +13,7 @@ def private allow_cpu_prefill_intent() {
 }
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: the route lever kept the whole-model driver off the twin
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto / moe_gpu_shexp_on_gpu / set_moe_gpu_shexp_route / set_gpu_resident_route
 require dasllama/dasllama_blocks   // shexp_gpu_prefill_layers: the device arm's engage witness
@@ -41,19 +41,16 @@ let private FED_STEPS = 4l
 
 //! one prompt of `n` tokens plus the fed steps through both arms of the route lever
 def private shexp_forced_feed(t : T?; n : int64) {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return
-    }
     let path = path_join(models_dir(), TWIN)
-    if (!model_available(t, path)) return
+    return if (!jit_model_available(t, path))
     if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
         t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the MoE tier")
         return
     }
+    let route0 = gpu_resident_route_lever()
     set_gpu_resident_route(false)   //! the per-op rails' claims: the whole-model driver would take the twin (test_gpu_resident_moe.das holds that arm)
     var tr <- load_model_(path, QuantMode.q8)
-    set_gpu_resident_route(true)   //! the lever reads at the load alone
+    set_gpu_resident_route(route0)   //! the lever reads at the load alone
     t |> success(!moe_gpu_resident_active(), "the route lever kept the whole-model driver off the twin")
     t |> success(tr.config.n_ff_shexp > 0l && !tr.config.moe_dense_shexp, "the twin carries a gated shared expert")
     let layers = tr.config.n_layers
@@ -68,10 +65,9 @@ def private shexp_forced_feed(t : T?; n : int64) {
         delete tr
         return
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
-        var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
-        var toks <- [for (i in range64(FED_STEPS)); 2000l + (i * 53l) % 4000l]
+    with_dasllama_jobque() {
+        var prompt <- resident_prompt(n)
+        var toks <- resident_feed(FED_STEPS)
         set_moe_gpu_shexp_route(true)
         let served0 = shexp_gpu_prefill_layers()
         let span0 = span_tokens()

@@ -32,8 +32,7 @@ def main() {
     var m <- load_asr_model(dec, mmproj)
     let samples <- load_audio_16k_mono(wav)
     let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         // warmup (JIT compile + first-touch)
         var s0 <- create_session(m, "auto")
         var ntok = 0

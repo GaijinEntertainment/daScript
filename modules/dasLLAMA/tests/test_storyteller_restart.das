@@ -7,7 +7,6 @@ require daslib/fio
 require daslib/strings_boost
 require daslib/strings_convert
 require daslib/env_registry
-require math
 require strings
 require _model_tier
 require _example_rail
@@ -35,13 +34,7 @@ let PACK_FILES <- ["tts_g2p.bin", "tts_postag.bin"]
 
 //! the window server and every fixture file, each absence registering its own loud skip
 def private ready(t : T?) : bool {
-    if (!has_window_server()) {
-        t |> skip("no window server (DISPLAY and WAYLAND_DISPLAY unset) - the example opens a window")
-        return false
-    }
-    for (name in ["stories15M-Q8_0.gguf", "kitten-nano.gguf"]) {
-        return false if (!model_available(t, path_join(models_dir(), name)))
-    }
+    return false if (!example_ready(t, ["stories15M-Q8_0.gguf", "kitten-nano.gguf"]))
     for (name in PACK_FILES) {
         if (!stat(path_join(models_dir(), name)).is_valid) {
             t |> skip("{name} not present")
@@ -55,25 +48,20 @@ def private ready(t : T?) : bool {
 //! a stop at `max_frames` (0 = none); a non-empty `lanes` pins DAS_JOBQUE_THREADS for the child, which slows
 //! the speech thread's model load and starves it
 def private run_storyteller(restart_at, restart_on_clip, max_frames : int; lanes : string; var out : string&) : int {
-    let prev_image = env_value_of("DASLLAMA_IMAGE")
     let prev_lanes = env_value_of("DAS_JOBQUE_THREADS")
-    set_env_variable("DASLLAMA_IMAGE", "0")   //! never mint a sidecar beside the stocked models
     if (!empty(lanes)) {
         set_env_variable("DAS_JOBQUE_THREADS", lanes)
     }
-    let root = get_das_root()
-    var argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/storyteller/main.das", "--",
-                 "--models", models_dir(), "--smoke", "--max-frames", "{max_frames}", "--null-audio"]
+    var args <- ["--max-frames", "{max_frames}", "--null-audio"]
     if (restart_at > 0) {
-        argv |> push("--restart-at")
-        argv |> push("{restart_at}")
+        args |> push("--restart-at")
+        args |> push("{restart_at}")
     }
     if (restart_on_clip > 0) {
-        argv |> push("--restart-on-clip")
-        argv |> push("{restart_on_clip}")
+        args |> push("--restart-on-clip")
+        args |> push("{restart_on_clip}")
     }
-    let rc = run_and_capture(argv, out, 300.0)
-    set_env_variable("DASLLAMA_IMAGE", prev_image)
+    let rc = run_example("storyteller/main.das", args, out)
     if (!empty(lanes)) {
         set_env_variable("DAS_JOBQUE_THREADS", prev_lanes)
     }
@@ -101,14 +89,7 @@ def private unheard_of(out : string) : int {
     return r |> is_err ? -1 : r |> unwrap
 }
 
-def private witness(out : string) : string {
-    var inscope lines <- split(out, "\n")
-    return join([for (line in lines); line; where find(line, "storyteller:") >= 0], "\n")
-}
-
-def private tail_of(out : string) : string {
-    return slice(out, max(0, length(out) - 600))
-}
+def private witness(out : string) : string => example_witness(out, "storyteller")
 
 [test]
 def test_restart_while_reading(t : T?) {
@@ -117,7 +98,7 @@ def test_restart_while_reading(t : T?) {
         var out = ""
         let rc = run_storyteller(0, 2, NO_CAP, "", out)   // as story 1's second clip begins: written out, being read
         return if (skip_without_window(t, rc, out))
-        t |> equal(0, rc, "the smoke run exits clean: {tail_of(out)}")
+        t |> equal(0, rc, "the smoke run exits clean: {example_tail(out)}")
         t |> equal(count_of(out, RESTART_MARK), 1, "one restart:\n{witness(out)}")
         t |> equal(count_of(out, STOP_LINE), 1, "story 1's clip was playing and stopped once:\n{witness(out)}")
         t |> success(unheard_of(out) >= 1, "the restart found unplayed sentences of story 1 to drop:\n{witness(out)}")
@@ -133,7 +114,7 @@ def test_restart_skips_the_replaced_story_queue(t : T?) {
         let restart_at = 100   // story 1 is still being written; the starved speech thread has sentences queued
         let rc = run_storyteller(restart_at, 0, NO_CAP, "2", out)
         return if (skip_without_window(t, rc, out))
-        t |> equal(0, rc, "the smoke run exits clean: {tail_of(out)}")
+        t |> equal(0, rc, "the smoke run exits clean: {example_tail(out)}")
         t |> equal(count_of(out, "{RESTART_MARK}{restart_at}"), 1, "one restart, at the frame the rail named:\n{witness(out)}")
         let skipped = count_of(out, SKIP_LINE)
         t |> success(skipped >= 1, "the speech thread skipped story 1's queued sentences instead of synthesizing them first:\n{witness(out)}")
@@ -149,7 +130,7 @@ def test_frame_cap_and_no_restart_by_default(t : T?) {
         var out = ""
         let rc = run_storyteller(0, 0, CAP_FRAMES, "", out)
         return if (skip_without_window(t, rc, out))
-        t |> equal(0, rc, "the capped run exits clean: {tail_of(out)}")
+        t |> equal(0, rc, "the capped run exits clean: {example_tail(out)}")
         t |> success(find(out, FIRST_START) >= 0, "the first story starts at frame 0:\n{witness(out)}")
         t |> success(find(out, CAP_LINE) >= 0, "the cap line names the story and the frame it stopped at:\n{witness(out)}")
         t |> equal(count_of(out, RESTART_MARK), 0, "no --restart-at, no second story:\n{witness(out)}")

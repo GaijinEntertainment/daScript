@@ -6,22 +6,11 @@ require dasllama/dasllama_math
 require dasllama/dasllama_par
 require daslib/jobque_boost
 require math
+require _compares   // Sweep: the length sweeps' tally and verdict; opaque: the seeds' taint seam
 
 //! The activation, norm and fp32 GEMM kernels - softmax_sink, swiglu_oai(4), softcap(4),
 //! sigmoid_gate(4), silu_mul4, silu4_batch, l2_norm_rows and gemm_f32 / _jo / _uk_4x16 - against
 //! closed forms and in-test fp64 references over shapes that reach every tail.
-
-var g_taint = 0u
-
-[init]
-def init_activation_taint() {
-    g_taint = 0u
-}
-
-[sideeffects]
-def private opaque_seed(s : uint) : uint {
-    return s ^ g_taint
-}
 
 let ACT_SWEEP <- [ 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65,
                    100, 127, 128, 129, 1023, 1024, 1025 ]
@@ -29,26 +18,15 @@ let L2_SHAPES <- [ 1, 1, 1, 7, 3, 8, 4, 64, 2, 127, 5, 33, 3, 128, 7, 4 ]
 let GEMM_SHAPES <- [ 1, 1, 1, 2, 3, 5, 3, 7, 16, 4, 5, 16, 4, 16, 16, 5, 9, 17,
                      7, 4, 33, 8, 32, 48, 9, 13, 19, 4, 1, 16, 6, 2, 31, 16, 40, 64 ]
 
-let POISON = 0.01
+let ACT_POISON = 0.01
 let XMAG = 4.0
 let ZMAG = 8.0
 let OAI_MAG = 56.0
 let SENTINEL = 1.0e9
 let L2_EPS = 1.0e-6
 
-struct ActSweep {
-    bad : int
-    inert : int
-    cases : int
-    elems : int
-    worst : float
-    worst_bar : float
-    worst_n : int
-    poison_inside : int
-}
-
 def private lcg_pm(n : int; seed : uint; lo, hi : float) : array<float> {
-    var st = opaque_seed(seed)
+    var st = opaque(seed)
     var a : array<float>
     a |> resize(n)
     for (v in a) {
@@ -69,44 +47,11 @@ def private filled(n : int; v : float) : array<float> {
     return <- a
 }
 
-def private check(var r : ActSweep; n : int; bar : float; got, want : array<float>) {
-    r.cases++
-    for (g, w in got, want) {
-        r.elems++
-        let diff = abs(g - w)
-        if (diff > bar) {
-            r.bad++
-        }
-        if (abs(g - (w + POISON)) <= bar) {
-            r.poison_inside++
-        }
-        if (diff >= r.worst) {
-            r.worst = diff
-            r.worst_bar = bar
-            r.worst_n = n
-        }
-    }
-}
+//! one swept length at `bar`, the poison leg `ACT_POISON` off the expectation
+def private act_check(var r : Sweep; n : int; bar : float; got, want : array<float>) => sweep_check(r, n, bar, got, want, ACT_POISON)
 
-def private count_inert(var r : ActSweep; got, before : array<float>) {
-    for (g, b in got, before) {
-        if (g == b) {
-            r.inert++
-        }
-    }
-}
-
-def private report(t : T?; name : string; r : ActSweep) {
-    t |> success(r.cases > 0 && r.elems > 0, "{name}: the sweep must run at least one case")
-    t |> equal(r.bad, 0, "{name}: values past the bar, worst |diff| {r.worst} against bar {r.worst_bar} at n={r.worst_n}")
-    t |> equal(r.poison_inside, 0, "{name}: poison legs inside the bar - a bar nothing exceeds discriminates nothing")
-    feint("{name}: {r.elems} elements, worst |diff| {r.worst} against bar {r.worst_bar} at n={r.worst_n}\n")
-}
-
-def private report_moved(t : T?; name : string; r : ActSweep) {
-    report(t, name, r)
-    t |> equal(r.inert, 0, "{name}: elements the kernel left exactly where it found them")
-}
+//! `report_sweep`, and every element of the in-place run moved
+def private report_moved(t : T?; name : string; r : Sweep) => report_sweep(t, name, r, 0, true)
 
 def private softmax_bar(n : int) : float {
     return 1.0e-6 + 4.0e-7 * float(n)
@@ -133,14 +78,14 @@ def private softmax_sink_ref(x : array<float>; sink : float) : tuple<array<float
     return out => float(sk / sum)
 }
 
-def private sweep_softmax_sink(sink : float; seed : uint) : ActSweep {
-    var r = ActSweep()
+def private sweep_softmax_sink(sink : float; seed : uint) : Sweep {
+    var r = Sweep()
     for (n in ACT_SWEEP) {
-        let x0 <- lcg_pm(n, opaque_seed(seed) + uint(n), 0.25, 6.0)
+        let x0 <- lcg_pm(n, opaque(seed) + uint(n), 0.25, 6.0)
         let want <- softmax_sink_ref(x0, sink)
         var x := x0
         softmax_sink(x, int64(n), sink)
-        check(r, n, softmax_bar(n), x, want._0)
+        act_check(r, n, softmax_bar(n), x, want._0)
         var total = 0.0lf
         for (v in x) {
             total += double(v)
@@ -152,21 +97,21 @@ def private sweep_softmax_sink(sink : float; seed : uint) : ActSweep {
     return r
 }
 
-def private sweep_softmax_sink_shift() : ActSweep {
-    var r = ActSweep()
+def private sweep_softmax_sink_shift() : Sweep {
+    var r = Sweep()
     for (n in ACT_SWEEP) {
-        let x0 <- lcg_pm(n, opaque_seed(0x71a5u) + uint(n), 0.25, 6.0)
+        let x0 <- lcg_pm(n, opaque(0x71a5u) + uint(n), 0.25, 6.0)
         let want <- softmax_sink_ref(x0, 1.5)
         var plain := x0
         softmax_sink(plain, int64(n), 1.5)
-        check(r, n, softmax_bar(n), plain, want._0)
+        act_check(r, n, softmax_bar(n), plain, want._0)
         var shifted : array<float>
         shifted |> resize(n)
         for (s, v in shifted, x0) {
             s = v + 5.0
         }
         softmax_sink(shifted, int64(n), 6.5)
-        check(r, n, softmax_bar(n), shifted, plain)
+        act_check(r, n, softmax_bar(n), shifted, plain)
     }
     return r
 }
@@ -184,10 +129,10 @@ def private softcap_bar(cap : float) : float {
     return 1.0e-6 + 1.0e-6 * cap
 }
 
-def private sweep_softcap(cap : float; vec : bool) : ActSweep {
-    var r = ActSweep()
+def private sweep_softcap(cap : float; vec : bool) : Sweep {
+    var r = Sweep()
     for (n in ACT_SWEEP) {
-        let x0 <- lcg_pm(n, opaque_seed(vec ? 0x2c81u : 0x9b44u) + uint(n), 0.5, 200.0)
+        let x0 <- lcg_pm(n, opaque(vec ? 0x2c81u : 0x9b44u) + uint(n), 0.5, 200.0)
         let want <- softcap_ref(x0, cap)
         var x := x0
         if (vec) {
@@ -195,8 +140,8 @@ def private sweep_softcap(cap : float; vec : bool) : ActSweep {
         } else {
             softcap(x, int64(n), cap)
         }
-        check(r, n, softcap_bar(cap), x, want)
-        count_inert(r, x, x0)
+        act_check(r, n, softcap_bar(cap), x, want)
+        sweep_inert(r, x, x0)
         for (v in x) {
             if (abs(v) > cap) {
                 r.bad++
@@ -215,11 +160,11 @@ def private sigmoid_gate_ref(x, g : array<float>) : array<float> {
     return <- out
 }
 
-def private sweep_sigmoid_gate(vec : bool) : ActSweep {
-    var r = ActSweep()
+def private sweep_sigmoid_gate(vec : bool) : Sweep {
+    var r = Sweep()
     for (n in ACT_SWEEP) {
-        let x0 <- lcg_pm(n, opaque_seed(0x5ab3u) + uint(n), 0.25, XMAG)
-        let g <- lcg_pm(n, opaque_seed(0x9d10u) + uint(n), 0.25, ZMAG)
+        let x0 <- lcg_pm(n, opaque(0x5ab3u) + uint(n), 0.25, XMAG)
+        let g <- lcg_pm(n, opaque(0x9d10u) + uint(n), 0.25, ZMAG)
         let want <- sigmoid_gate_ref(x0, g)
         var x := x0
         if (vec) {
@@ -227,8 +172,8 @@ def private sweep_sigmoid_gate(vec : bool) : ActSweep {
         } else {
             sigmoid_gate(unsafe(addr(x[0])), unsafe(addr(g[0])), int64(n))
         }
-        check(r, n, 1.0e-6 + 1.0e-6 * XMAG, x, want)
-        count_inert(r, x, x0)
+        act_check(r, n, 1.0e-6 + 1.0e-6 * XMAG, x, want)
+        sweep_inert(r, x, x0)
     }
     return r
 }
@@ -244,11 +189,11 @@ def private swiglu_oai_ref(g, u : array<float>) : array<float> {
     return <- out
 }
 
-def private sweep_swiglu_oai(vec : bool) : ActSweep {
-    var r = ActSweep()
+def private sweep_swiglu_oai(vec : bool) : Sweep {
+    var r = Sweep()
     for (n in ACT_SWEEP) {
-        let g0 <- lcg_pm(n, opaque_seed(0x4411u) + uint(n), 0.25, 12.0)
-        let u <- lcg_pm(n, opaque_seed(0x77c2u) + uint(n), 0.25, 12.0)
+        let g0 <- lcg_pm(n, opaque(0x4411u) + uint(n), 0.25, 12.0)
+        let u <- lcg_pm(n, opaque(0x77c2u) + uint(n), 0.25, 12.0)
         let want <- swiglu_oai_ref(g0, u)
         var g := g0
         if (vec) {
@@ -256,7 +201,7 @@ def private sweep_swiglu_oai(vec : bool) : ActSweep {
         } else {
             swiglu_oai(unsafe(addr(g[0])), unsafe(addr(u[0])), int64(n))
         }
-        check(r, n, 1.0e-6 + 1.0e-6 * OAI_MAG, g, want)
+        act_check(r, n, 1.0e-6 + 1.0e-6 * OAI_MAG, g, want)
     }
     return r
 }
@@ -288,7 +233,7 @@ def private oai_pair_diffs(ga, gb, ua, ub : array<float>; vec : bool) : int {
 
 def private oai_clamp_case(vec : bool) : ClampCase {
     let n = 18
-    let u <- lcg_pm(n, opaque_seed(0x3f00u), 1.5, 5.0)
+    let u <- lcg_pm(n, opaque(0x3f00u), 1.5, 5.0)
     var res = ClampCase()
     res.clamp_diffs += oai_pair_diffs(filled(n, 20.0), filled(n, 7.0), u, u, vec)
     res.clamp_diffs += oai_pair_diffs(filled(n, 2.0), filled(n, 2.0), filled(n, 20.0), filled(n, 7.0), vec)
@@ -307,17 +252,17 @@ def private silu_mul_ref(a, z : array<float>) : array<float> {
     return <- out
 }
 
-def private sweep_silu_mul4() : ActSweep {
-    var r = ActSweep()
+def private sweep_silu_mul4() : Sweep {
+    var r = Sweep()
     for (n in ACT_SWEEP) {
-        let a <- lcg_pm(n, opaque_seed(0x6e21u) + uint(n), 0.25, XMAG)
-        let z <- lcg_pm(n, opaque_seed(0xf13cu) + uint(n), 0.25, ZMAG)
+        let a <- lcg_pm(n, opaque(0x6e21u) + uint(n), 0.25, XMAG)
+        let z <- lcg_pm(n, opaque(0xf13cu) + uint(n), 0.25, ZMAG)
         let want <- silu_mul_ref(a, z)
         let before <- filled(n, SENTINEL)
         var o := before
         silu_mul4(unsafe(addr(o[0])), unsafe(addr(a[0])), unsafe(addr(z[0])), int64(n))
-        check(r, n, 1.0e-6 + 1.0e-6 * XMAG * ZMAG, o, want)
-        count_inert(r, o, before)
+        act_check(r, n, 1.0e-6 + 1.0e-6 * XMAG * ZMAG, o, want)
+        sweep_inert(r, o, before)
     }
     return r
 }
@@ -338,9 +283,9 @@ struct BatchCase {
     elems : int
 }
 
-def private silu4_batch_case(var r : ActSweep; d, npos : int) : BatchCase {
+def private silu4_batch_case(var r : Sweep; d, npos : int) : BatchCase {
     var res = BatchCase(elems = d * npos)
-    let x0 <- lcg_pm(d * npos, opaque_seed(0x84c1u) + uint(d * 131 + npos), 0.25, ZMAG)
+    let x0 <- lcg_pm(d * npos, opaque(0x84c1u) + uint(d * 131 + npos), 0.25, ZMAG)
     var whole := x0
     silu4(whole, int64(d) * int64(npos))
     var batched := x0
@@ -348,8 +293,8 @@ def private silu4_batch_case(var r : ActSweep; d, npos : int) : BatchCase {
     silu4_batch(batched, int64(d), int64(npos))
     res.dispatches = get_disp_count() - before
     let want <- silu_ref(x0)
-    check(r, d * npos, 1.0e-6 + 1.0e-6 * ZMAG, whole, want)
-    count_inert(r, batched, x0)
+    act_check(r, d * npos, 1.0e-6 + 1.0e-6 * ZMAG, whole, want)
+    sweep_inert(r, batched, x0)
     for (bv, wv in batched, whole) {
         if (bv != wv) {
             res.split_diffs++
@@ -380,17 +325,17 @@ def private l2_bar(row_size : int) : float {
     return 1.0e-6 + 2.0e-7 * float(row_size)
 }
 
-def private sweep_l2_norm_rows() : ActSweep {
-    var r = ActSweep()
+def private sweep_l2_norm_rows() : Sweep {
+    var r = Sweep()
     for (s in range(length(L2_SHAPES) / 2)) {
         let rows = L2_SHAPES[s * 2]
         let row_size = L2_SHAPES[s * 2 + 1]
-        let v0 <- lcg_pm(rows * row_size, opaque_seed(0xa1b2u) + uint(s), 1.25, 3.0)
+        let v0 <- lcg_pm(rows * row_size, opaque(0xa1b2u) + uint(s), 1.25, 3.0)
         let want <- l2_ref(v0, rows, row_size, L2_EPS)
         var v := v0
         l2_norm_rows(unsafe(addr(v[0])), int64(rows), int64(row_size), L2_EPS)
-        check(r, row_size, l2_bar(row_size), v, want)
-        count_inert(r, v, v0)
+        act_check(r, row_size, l2_bar(row_size), v, want)
+        sweep_inert(r, v, v0)
         for (rw in range(rows)) {
             var sum = 0.0lf
             for (i in range(row_size)) {
@@ -404,8 +349,8 @@ def private sweep_l2_norm_rows() : ActSweep {
     return r
 }
 
-def private l2_eps_floor() : ActSweep {
-    var r = ActSweep()
+def private l2_eps_floor() : Sweep {
+    var r = Sweep()
     let rows = 3
     let row_size = 8
     var v0 <- filled(rows * row_size, 0.0)
@@ -415,7 +360,7 @@ def private l2_eps_floor() : ActSweep {
     let want <- l2_ref(v0, rows, row_size, L2_EPS)
     var v := v0
     l2_norm_rows(unsafe(addr(v[0])), int64(rows), int64(row_size), L2_EPS)
-    check(r, row_size, l2_bar(row_size), v, want)
+    act_check(r, row_size, l2_bar(row_size), v, want)
     return r
 }
 
@@ -455,9 +400,9 @@ def private sweep_gemm() : GemmCase {
         let M = GEMM_SHAPES[s * 3]
         let K = GEMM_SHAPES[s * 3 + 1]
         let N = GEMM_SHAPES[s * 3 + 2]
-        let a <- lcg_pm(M * K, opaque_seed(0x1717u) + uint(s), 0.25, 1.0)
-        let b <- lcg_pm(K * N, opaque_seed(0x2828u) + uint(s), 0.25, 1.0)
-        let c0 <- lcg_pm(M * N, opaque_seed(0x3939u) + uint(s), 0.25, 1.0)
+        let a <- lcg_pm(M * K, opaque(0x1717u) + uint(s), 0.25, 1.0)
+        let b <- lcg_pm(K * N, opaque(0x2828u) + uint(s), 0.25, 1.0)
+        let c0 <- lcg_pm(M * N, opaque(0x3939u) + uint(s), 0.25, 1.0)
         let want <- gemm_ref(c0, a, b, M, K, N)
         var c1 := c0
         gemm_f32(unsafe(addr(c1[0])), unsafe(addr(a[0])), unsafe(addr(b[0])), int64(M), int64(K), int64(N))
@@ -480,7 +425,7 @@ def private tally_gemm(var r : GemmCase; K : int; c1, c2, want : array<float>) {
         if (g != j) {
             r.jo_diffs++
         }
-        if (abs(g - (w + POISON)) <= bar) {
+        if (abs(g - (w + ACT_POISON)) <= bar) {
             r.poison_inside++
         }
         if (diff >= r.worst) {
@@ -492,8 +437,8 @@ def private tally_gemm(var r : GemmCase; K : int; c1, c2, want : array<float>) {
 }
 
 def private zero_size_moves() : int {
-    let before <- lcg_pm(8, opaque_seed(0x0f01u), 0.25, 2.0)
-    let g <- lcg_pm(8, opaque_seed(0x0f02u), 0.25, 2.0)
+    let before <- lcg_pm(8, opaque(0x0f01u), 0.25, 2.0)
+    let g <- lcg_pm(8, opaque(0x0f02u), 0.25, 2.0)
     var x := before
     softmax_sink(x, 0l, 1.0)
     softcap(x, 0l, 30.0)
@@ -517,11 +462,11 @@ def private zero_size_moves() : int {
 [test]
 def test_softmax_sink(t : T?) {
     t |> run("softmax_sink against an fp64 reference, the row plus the sink mass summing to one") @(t : T?) {
-        report(t, "softmax_sink negligible sink", sweep_softmax_sink(-1000.0, 0x1001u))
-        report(t, "softmax_sink dominant sink", sweep_softmax_sink(8.0, 0x1002u))
+        report_sweep(t, "softmax_sink negligible sink", sweep_softmax_sink(-1000.0, 0x1001u))
+        report_sweep(t, "softmax_sink dominant sink", sweep_softmax_sink(8.0, 0x1002u))
     }
     t |> run("softmax_sink is invariant to a shift of the scores and the sink together") @(t : T?) {
-        report(t, "softmax_sink shift", sweep_softmax_sink_shift())
+        report_sweep(t, "softmax_sink shift", sweep_softmax_sink_shift())
     }
 }
 
@@ -551,7 +496,7 @@ def test_sigmoid_gate(t : T?) {
 def test_swiglu_oai(t : T?) {
     t |> run("swiglu_oai against an fp64 reference carrying the trained clamps") @(t : T?) {
         report_moved(t, "swiglu_oai", sweep_swiglu_oai(false))
-        report(t, "swiglu_oai4", sweep_swiglu_oai(true))
+        report_sweep(t, "swiglu_oai4", sweep_swiglu_oai(true))
     }
     t |> run("the gate limit and the up-branch band are the activation, not an optimization") @(t : T?) {
         let scalar = oai_clamp_case(false)
@@ -573,11 +518,10 @@ def test_silu_mul4(t : T?) {
 [test]
 def test_silu4_batch(t : T?) {
     t |> run("silu4_batch splits rows without moving a bit, threaded and inline") @(t : T?) {
-        var r = ActSweep()
+        var r = Sweep()
         let inline_wide = silu4_batch_case(r, 256, 512)
         var threaded = BatchCase()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             threaded = silu4_batch_case(r, 256, 512)
         }
         report_moved(t, "silu4_batch", r)
@@ -588,9 +532,8 @@ def test_silu4_batch(t : T?) {
         t |> success(threaded.dispatches > 0l, "the threaded leg must dispatch, else both legs are the same one lane")
     }
     t |> run("silu4_batch falls back whole where the row length or the row count forbids a split") @(t : T?) {
-        var r = ActSweep()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        var r = Sweep()
+        with_dasllama_jobque() {
             let odd = silu4_batch_case(r, 250, 64)
             let single = silu4_batch_case(r, 64, 1)
             let tail = silu4_batch_case(r, 4, 1025)
@@ -611,7 +554,7 @@ def test_l2_norm_rows(t : T?) {
         report_moved(t, "l2_norm_rows", sweep_l2_norm_rows())
     }
     t |> run("l2_norm_rows floors the divisor at eps") @(t : T?) {
-        report(t, "l2_norm_rows eps floor", l2_eps_floor())
+        report_sweep(t, "l2_norm_rows eps floor", l2_eps_floor())
     }
 }
 

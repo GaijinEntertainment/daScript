@@ -168,8 +168,6 @@ def private run_half(name : string; paranoid : bool) : bool {
     return rc == 0
 }
 
-// exit code of a half whose --tune-only filter matched nothing (tune_kernels / gen_tune_probe)
-let TUNE_ONLY_NO_MATCH = 3
 var private g_no_match_halves = 0
 var private g_half_ms : table<string; int>
 

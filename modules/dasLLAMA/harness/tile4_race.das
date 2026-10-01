@@ -4,6 +4,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require ../performance/profile_common.das   // tune_gate - the standing pre-measure stack
+require _race_fixture                       // the round loop, the poison, the compare and the refusal tally
 require dasllama/dasllama_math
 require dasllama/dasllama_math_gen
 require dasllama/dasllama_repack
@@ -31,8 +32,6 @@ let NTOK = 4l
 let PLANES_BYTES = 1536l << 20l   // under 2^31: the planes sit in one array
 //! a vector tile sums a row's blocks in another order than the GEMV: the same integer products, f32 rounding apart
 let FLOAT_ORDER = 1.0e-5
-//! what an arm's output holds before its step: an element the step leaves reads as outside every bound
-let NOT_WRITTEN = unsafe(reinterpret<float>(0x7FC00000u))
 
 let ARM_GEMV = 0
 let ARM_STAMPED = 1
@@ -228,40 +227,6 @@ def private step(arm : int; p : Planes; sh : Shape; mr : int64; first, count : i
     }
 }
 
-//! the largest difference of `got` from `want`, and the bound it answers to
-def private held(got : array<float>; want : array<float>; rel : float) : tuple<diff : float; bound : float; ok : bool> {
-    var diff = 0.0
-    var mag = 0.0
-    var finite = true
-    for (g, w in got, want) {
-        finite &&= is_finite(g)
-        diff = max(diff, abs(g - w))
-        mag = max(mag, abs(w))
-    }
-    return (diff = diff, bound = rel * mag, ok = finite && diff <= rel * mag)
-}
-
-def private compare_words(h : tuple<diff : float; bound : float; ok : bool>; against : string; count : int) : string {
-    if (h.diff == 0.0 && h.ok) {
-        return "bit-exact vs {against} on {count} elements"
-    }
-    return "{h.ok ? "within" : "OUTSIDE"} {h.bound} of {against} on {count} elements (largest difference {h.diff})"
-}
-
-def private stats(var ms : array<float>) : tuple<best : float; median : float; cv : float> {
-    sort(ms)
-    var mean = 0.0
-    for (v in ms) {
-        mean += v
-    }
-    mean /= float(length(ms))
-    var sq = 0.0
-    for (v in ms) {
-        sq += (v - mean) * (v - mean)
-    }
-    return (best = ms[0], median = ms[length(ms) / 2], cv = sqrt(sq / float(length(ms))) / mean * 100.0)
-}
-
 //! one shape's arms; answers the rows it reported, or -1 when an arm sat outside its bound
 def private race(sh : Shape; mr : int64) : int {
     var p <- build_planes(sh, mr)
@@ -270,28 +235,15 @@ def private race(sh : Shape; mr : int64) : int {
     var y : array<float>
     y |> resize(NTOK * sh.d)
     var images : array<array<float>>
-    var times : array<array<float>>
     images |> reserve(narms)
-    times |> reserve(narms)
     for (arm in range(narms)) {
-        for (v in y) {
-            v = NOT_WRITTEN
-        }
+        poison(y)
         step(arm, p, sh, mr, 0l, 1l, y)
         var img := y
         images |> emplace(img)
-        var none : array<float>
-        times |> emplace(none)
     }
-    for (round in range(ROUNDS + WARMUP)) {
-        for (arm in range(narms)) {
-            let t0 = ref_time_ticks()
-            step(arm, p, sh, mr, 0l, p.count, y)
-            let ms = float(get_time_usec(t0)) / 1000.0
-            if (round >= WARMUP) {
-                times[arm] |> push(ms)
-            }
-        }
+    var times <- time_rounds(narms, ROUNDS, WARMUP) $(arm : int) {
+        step(arm, p, sh, mr, 0l, p.count, y)
     }
     var rows = 0
     var good = base >= 0
@@ -301,7 +253,7 @@ def private race(sh : Shape; mr : int64) : int {
             : arm == ARM_STAMPED ? held(images[arm], images[base], 0.0)
             : held(images[arm], images[ARM_GEMV], FLOAT_ORDER))
         let words = (arm == ARM_GEMV ? "the reference arm"
-            : compare_words(h, arm == ARM_STAMPED ? "the {BASELINE} arm" : "the gemv arm", length(images[arm])))
+            : compare_words(h, arm == ARM_STAMPED ? "the {BASELINE} arm" : "the gemv arm", "{length(images[arm])} elements"))
         let gmac = double(NTOK * sh.n * sh.d * p.count) / double(st.best) / 1.0e6lf
         print("K={sh.n} rows={sh.d} ntok={NTOK} planes={p.count} lanes={get_dispatch_lanes()} arm={ARM_NAMES[arm]}{arm == base ? " (baseline)" : ""} best_ms={st.best} median_ms={st.median} cv%={st.cv} GMAC/s={gmac} | {words}\n")
         good &&= h.ok
@@ -316,32 +268,21 @@ def private race(sh : Shape; mr : int64) : int {
 
 [export]
 def main() : int {
-    var rows = 0
-    var bad = 0
-    with_job_que() {
-        setup_dasllama_jobque_()
+    var t : RaceTally
+    with_dasllama_jobque() {
         let mr = int64(q8q8_layout_gen())
         if (q8q8_tileform_gen() <= 0 || mr != 16l || q8q8_wbias_gen() != 0) {
             print("tile4_race: this box's q8 stamp is no amx bf16 tile (tile form {q8q8_tileform_gen()}, mr {mr}, wbias {q8q8_wbias_gen()}) - the candidates read that stamp's plane - no row\n")
-            bad++
+            t.bad++
         } elif (!tune_gate()) {
             print("tile4_race: the tune gate refused - no row\n")
-            bad++
+            t.bad++
         } else {
             print("tile4_race: {get_dispatch_lanes()} lanes, {ROUNDS} rounds after {WARMUP} dropped, {PLANES_BYTES >> 20l} MB of planes a shape\n")
             for (sh in [Shape(n = 1536l, d = 6144l), Shape(n = 6144l, d = 1536l), Shape(n = 2560l, d = 9728l), Shape(n = 9728l, d = 2560l)]) {
-                let r = race(sh, mr)
-                if (r < 0) {
-                    bad++
-                } else {
-                    rows += r
-                }
+                t |> tally(race(sh, mr))
             }
         }
     }
-    if (rows == 0 || bad > 0) {
-        print("tile4_race: {rows} rows, {bad} refusals - the run fails\n")
-        return 1
-    }
-    return 0
+    return race_exit(t, "tile4_race")
 }

@@ -28,10 +28,7 @@ let GEMMA2_GEN <- [235248l, 235321l, 235269l, 235248l, 235315l, 235269l, 235248l
 [test]
 def test_sampling_greedy_matches_oracle(t : T?) {
     t |> run("greedy sampling generate reproduces the gemma2 oracle") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
@@ -380,10 +377,7 @@ def test_fast_path_ties(t : T?) {
 [test]
 def test_sampling_deterministic(t : T?) {
     t |> run("same seed => identical sampled output") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")

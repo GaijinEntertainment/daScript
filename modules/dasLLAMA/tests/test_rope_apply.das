@@ -7,15 +7,17 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_rope
 require math
+require _compares   // check: the rope compares' bar, log and poison; opaque: the fixture's taint seam
 
-var g_taint = 0.0
-
-[sideeffects]
-def private opaque(x : float) : float => x + g_taint
-
-let ROPE_BAR = 2.0e-3
 let ROPE_POISON = 0.05
-let TWIN_BAR = 1.0e-5
+let ROPE = Bar(abs_floor = 2.0e-3, poison = ROPE_POISON)   //! one rotation's f32 accumulation plus the f32 angle's own rounding, against the fp64 angles
+let TWIN = Bar(abs_floor = 1.0e-5, poison = ROPE_POISON)   //! a tabled form against its un-tabled twin: the cross-compilation-unit cos/sin ulp drift
+let SAME = Bar(exact = true, poison = ROPE_POISON)   //! two forms of one rotation, bit for bit
+
+//! the compare of `n = hs x heads` rope outputs, named by head and dim
+def private rope_check(t : T?; got, want : array<float>; hs : int64; bar : Bar; tag : string) {
+    check(t, tag, got, want, bar, Shape(row_width = int(hs)))
+}
 
 def private ff_none() : array<float> {
     var e : array<float>
@@ -86,73 +88,36 @@ def private ref_neox(v : array<float>; var outv : array<float>; pos, hs, rot, n 
     }
 }
 
-def private maxdiff(a : array<float>; b : array<float>; n : int64) : float {
-    var worst = 0.0
-    for (i in range64(n)) {
-        worst = max(worst, abs(a[i] - b[i]))
-    }
-    return worst
-}
-
-def private poisoned_maxdiff(a : array<float>; b : array<float>; n : int64) : float {
-    var worst = 0.0
-    for (i in range64(n)) {
-        let w = i == n / 2l ? b[i] + ROPE_POISON : b[i]
-        worst = max(worst, abs(a[i] - w))
-    }
-    return worst
-}
-
-def private cmp_bar(t : T?; got : array<float>; want : array<float>; n : int64; bar : float; tag : string) {
-    let worst = maxdiff(got, want, n)
-    t |> success(worst <= bar, "{tag}: maxdiff {worst} exceeds the bar {bar}")
-    let pworst = poisoned_maxdiff(got, want, n)
-    t |> success(pworst > bar, "{tag}: a +{ROPE_POISON} poison on one expected element scored {pworst}, which must exceed {bar}")
-}
-
-def private cmp_exact(t : T?; got : array<float>; want : array<float>; n : int64; tag : string) {
-    var bad = 0
-    var poisoned = 0
-    for (i in range64(n)) {
-        if (got[i] != want[i]) {
-            bad++
-        }
-        if (got[i] != (i == n / 2l ? want[i] + ROPE_POISON : want[i])) {
-            poisoned++
-        }
-    }
-    t |> success(bad == 0, "{tag}: {bad} of {int(n)} elements differ")
-    t |> success(poisoned > 0, "{tag}: a +{ROPE_POISON} poison on one expected element must be seen")
-}
-
-def private norm_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : float) {
-    let n = hs * nh
-    var v : array<float>
-    fill_vec(v, n)
-    var want : array<float>
+//! the fp64 reference of the full-head rope `neox` names
+def private ref_full(v : array<float>; var outv : array<float>; pos, hs, n : int64; theta, fscale, mscale : float; neox : bool) {
     var ff <- ff_none()
-    ref_norm(v, want, pos, hs, n, theta, fscale, mscale, ff, false)
-    var got : array<float>
-    copy_vec(v, got, n)
-    rope_scaled(got, pos, hs, n, theta, fscale, ff, mscale)
-    cmp_bar(t, got, want, n, ROPE_BAR, "rope_scaled hs={int(hs)} nh={int(nh)} pos={int(pos)}")
-    delete v
-    delete got
-    delete want
+    if (neox) {
+        ref_neox(v, outv, pos, hs, hs, n, theta, fscale, mscale, ff, false)
+    } else {
+        ref_norm(v, outv, pos, hs, n, theta, fscale, mscale, ff, false)
+    }
     delete ff
 }
 
-def private neox_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : float) {
+//! the leaf's name for a compare tag: `rope_scaled` or `rope_scaled_neox`
+def private leaf_name(neox : bool) : string => neox ? "rope_scaled_neox" : "rope_scaled"
+
+//! `rope_scaled` or `rope_scaled_neox`, as `neox` names, against the fp64 angles
+def private apply_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : float; neox : bool) {
     let n = hs * nh
     var v : array<float>
     fill_vec(v, n)
     var want : array<float>
+    ref_full(v, want, pos, hs, n, theta, fscale, mscale, neox)
     var ff <- ff_none()
-    ref_neox(v, want, pos, hs, hs, n, theta, fscale, mscale, ff, false)
     var got : array<float>
     copy_vec(v, got, n)
-    rope_scaled_neox(got, pos, hs, n, theta, fscale, ff, mscale)
-    cmp_bar(t, got, want, n, ROPE_BAR, "rope_scaled_neox hs={int(hs)} nh={int(nh)} pos={int(pos)}")
+    if (neox) {
+        rope_scaled_neox(got, pos, hs, n, theta, fscale, ff, mscale)
+    } else {
+        rope_scaled(got, pos, hs, n, theta, fscale, ff, mscale)
+    }
+    rope_check(t, got, want, hs, ROPE, "{leaf_name(neox)} hs={int(hs)} nh={int(nh)} pos={int(pos)}")
     delete v
     delete got
     delete want
@@ -163,9 +128,9 @@ def private neox_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : float
 def test_rope_apply_norm(t : T?) {
     for (pos in [0l, 1l, 7l, 37l, 512l]) {
         t |> run("rope_scaled at pos {pos}: head 64x2, 96x1 and the 40-wide tail head vs the fp64 angles") @(t : T?) {
-            norm_gate(t, pos, 64l, 2l, 10000.0, 1.0, 1.0)
-            norm_gate(t, pos, 96l, 1l, 1000000.0, 1.0, 1.0)
-            norm_gate(t, pos, 40l, 3l, 10000.0, 0.5, 1.19)
+            apply_gate(t, pos, 64l, 2l, 10000.0, 1.0, 1.0, false)
+            apply_gate(t, pos, 96l, 1l, 1000000.0, 1.0, 1.0, false)
+            apply_gate(t, pos, 40l, 3l, 10000.0, 0.5, 1.19, false)
         }
     }
 }
@@ -174,62 +139,43 @@ def test_rope_apply_norm(t : T?) {
 def test_rope_apply_neox(t : T?) {
     for (pos in [0l, 1l, 7l, 37l, 512l]) {
         t |> run("rope_scaled_neox at pos {pos}: head 64x2, 96x1 and the 40-wide tail head vs the fp64 angles") @(t : T?) {
-            neox_gate(t, pos, 64l, 2l, 10000.0, 1.0, 1.0)
-            neox_gate(t, pos, 96l, 1l, 1000000.0, 1.0, 1.0)
-            neox_gate(t, pos, 40l, 3l, 10000.0, 0.5, 1.19)
+            apply_gate(t, pos, 64l, 2l, 10000.0, 1.0, 1.0, true)
+            apply_gate(t, pos, 96l, 1l, 1000000.0, 1.0, 1.0, true)
+            apply_gate(t, pos, 40l, 3l, 10000.0, 0.5, 1.19, true)
         }
     }
 }
 
-def private tab_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : float) {
+//! `rope_scaled_tab` or `rope_scaled_neox_tab`, as `neox` names, against the fp64 angles and against its un-tabled twin
+def private tab_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : float; neox : bool) {
     let n = hs * nh
     var v : array<float>
     fill_vec(v, n)
     var ff <- ff_none()
     var want : array<float>
-    ref_norm(v, want, pos, hs, n, theta, fscale, mscale, ff, false)
+    ref_full(v, want, pos, hs, n, theta, fscale, mscale, neox)
     var direct : array<float>
     copy_vec(v, direct, n)
-    rope_scaled(direct, pos, hs, n, theta, fscale, ff, mscale)
+    if (neox) {
+        rope_scaled_neox(direct, pos, hs, n, theta, fscale, ff, mscale)
+    } else {
+        rope_scaled(direct, pos, hs, n, theta, fscale, ff, mscale)
+    }
     var ct : array<float>
     var st : array<float>
     build_rope_tabs(ct, st, theta, fscale, mscale, ff, true, pos, 1l, hs)
     var got : array<float>
     copy_vec(v, got, n)
     unsafe {
-        rope_scaled_tab(addr(got[0]), hs, n, addr<float const?>(ct[0]), addr<float const?>(st[0]))
+        if (neox) {
+            rope_scaled_neox_tab(addr(got[0]), hs, n, addr<float const?>(ct[0]), addr<float const?>(st[0]))
+        } else {
+            rope_scaled_tab(addr(got[0]), hs, n, addr<float const?>(ct[0]), addr<float const?>(st[0]))
+        }
     }
-    cmp_bar(t, got, want, n, ROPE_BAR, "rope_scaled_tab hs={int(hs)} nh={int(nh)} pos={int(pos)}")
-    cmp_bar(t, got, direct, n, TWIN_BAR, "rope_scaled_tab twin of rope_scaled hs={int(hs)} pos={int(pos)}")
-    delete v
-    delete got
-    delete direct
-    delete want
-    delete ct
-    delete st
-    delete ff
-}
-
-def private neox_tab_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : float) {
-    let n = hs * nh
-    var v : array<float>
-    fill_vec(v, n)
-    var ff <- ff_none()
-    var want : array<float>
-    ref_neox(v, want, pos, hs, hs, n, theta, fscale, mscale, ff, false)
-    var direct : array<float>
-    copy_vec(v, direct, n)
-    rope_scaled_neox(direct, pos, hs, n, theta, fscale, ff, mscale)
-    var ct : array<float>
-    var st : array<float>
-    build_rope_tabs(ct, st, theta, fscale, mscale, ff, true, pos, 1l, hs)
-    var got : array<float>
-    copy_vec(v, got, n)
-    unsafe {
-        rope_scaled_neox_tab(addr(got[0]), hs, n, addr<float const?>(ct[0]), addr<float const?>(st[0]))
-    }
-    cmp_bar(t, got, want, n, ROPE_BAR, "rope_scaled_neox_tab hs={int(hs)} nh={int(nh)} pos={int(pos)}")
-    cmp_bar(t, got, direct, n, TWIN_BAR, "rope_scaled_neox_tab twin of rope_scaled_neox hs={int(hs)} pos={int(pos)}")
+    let leaf = leaf_name(neox)
+    rope_check(t, got, want, hs, ROPE, "{leaf}_tab hs={int(hs)} nh={int(nh)} pos={int(pos)}")
+    rope_check(t, got, direct, hs, TWIN, "{leaf}_tab twin of {leaf} hs={int(hs)} pos={int(pos)}")
     delete v
     delete got
     delete direct
@@ -243,8 +189,8 @@ def private neox_tab_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : f
 def test_rope_apply_tab(t : T?) {
     for (pos in [0l, 1l, 37l, 512l]) {
         t |> run("rope_scaled_tab at pos {pos}: the fp64 angles, and the un-tabled twin") @(t : T?) {
-            tab_gate(t, pos, 64l, 2l, 10000.0, 1.0, 1.0)
-            tab_gate(t, pos, 40l, 3l, 10000.0, 0.5, 1.19)
+            tab_gate(t, pos, 64l, 2l, 10000.0, 1.0, 1.0, false)
+            tab_gate(t, pos, 40l, 3l, 10000.0, 0.5, 1.19, false)
         }
     }
 }
@@ -253,8 +199,8 @@ def test_rope_apply_tab(t : T?) {
 def test_rope_apply_neox_tab(t : T?) {
     for (pos in [0l, 1l, 37l, 512l]) {
         t |> run("rope_scaled_neox_tab at pos {pos}: the fp64 angles, and the un-tabled twin") @(t : T?) {
-            neox_tab_gate(t, pos, 64l, 2l, 10000.0, 1.0, 1.0)
-            neox_tab_gate(t, pos, 40l, 3l, 10000.0, 0.5, 1.19)
+            tab_gate(t, pos, 64l, 2l, 10000.0, 1.0, 1.0, true)
+            tab_gate(t, pos, 40l, 3l, 10000.0, 0.5, 1.19, true)
         }
     }
 }
@@ -269,7 +215,7 @@ def private part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscale : 
     var got : array<float>
     copy_vec(v, got, n)
     rope_scaled_neox_part(unsafe(addr(got[0])), pos, hs, rot, n, theta, fscale, false, null, mscale)
-    cmp_bar(t, got, want, n, ROPE_BAR, "rope_scaled_neox_part hs={int(hs)} rot={int(rot)} pos={int(pos)}")
+    rope_check(t, got, want, hs, ROPE, "rope_scaled_neox_part hs={int(hs)} rot={int(rot)} pos={int(pos)}")
     var compact : array<float>
     compact |> resize(nh * rot)
     for (h in range64(nh)) {
@@ -285,7 +231,7 @@ def private part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscale : 
             full[h * hs + j] = compact[h * rot + j]
         }
     }
-    cmp_exact(t, got, full, n, "rope_scaled_neox_part == the full leaf over the rotated prefix hs={int(hs)} rot={int(rot)}")
+    rope_check(t, got, full, hs, SAME, "rope_scaled_neox_part == the full leaf over the rotated prefix hs={int(hs)} rot={int(rot)}")
     var tail_moved = 0
     for (h in range64(nh)) {
         for (j in range64(rot, hs)) {
@@ -316,7 +262,7 @@ def private tab_part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscal
     var direct : array<float>
     copy_vec(v, direct, n)
     rope_scaled_neox_part(unsafe(addr(direct[0])), pos, hs, rot, n, theta, fscale, has_ff, ff_ptr(ff), mscale)
-    cmp_bar(t, direct, want, n, ROPE_BAR, "rope_scaled_neox_part{tag} hs={int(hs)} rot={int(rot)} pos={int(pos)}")
+    rope_check(t, direct, want, hs, ROPE, "rope_scaled_neox_part{tag} hs={int(hs)} rot={int(rot)} pos={int(pos)}")
     var ct : array<float>
     var st : array<float>
     build_rope_tabs(ct, st, theta, fscale, mscale, ff, true, pos, 1l, rot)
@@ -325,8 +271,8 @@ def private tab_part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscal
     unsafe {
         rope_scaled_neox_tab_part(addr(got[0]), hs, rot, n, addr<float const?>(ct[0]), addr<float const?>(st[0]))
     }
-    cmp_bar(t, got, want, n, ROPE_BAR, "rope_scaled_neox_tab_part{tag} hs={int(hs)} rot={int(rot)} pos={int(pos)}")
-    cmp_bar(t, got, direct, n, TWIN_BAR, "rope_scaled_neox_tab_part{tag} twin of the direct part form hs={int(hs)} rot={int(rot)}")
+    rope_check(t, got, want, hs, ROPE, "rope_scaled_neox_tab_part{tag} hs={int(hs)} rot={int(rot)} pos={int(pos)}")
+    rope_check(t, got, direct, hs, TWIN, "rope_scaled_neox_tab_part{tag} twin of the direct part form hs={int(hs)} rot={int(rot)}")
     delete v
     delete got
     delete direct
@@ -367,17 +313,18 @@ def private ref_yarn_divisors(rot : int64; theta, factor, beta_fast, beta_slow :
 def test_yarn_rope_freqs_band(tst : T?) {
     tst |> run("yarn_rope_freqs: the NTK-by-parts band of llama.cpp's rope_yarn, spelled out in fp64") @(t : T?) {
         let bar = 1.0e-5
+        let band = Bar(abs_floor = bar, poison = ROPE_POISON)
         for (geom in [(rot = 64l, theta = 10000000.0, factor = 4.0, orig = 32768l), (rot = 64l, theta = 10000000.0, factor = 4.0, orig = 262144l),
                       (rot = 128l, theta = 150000.0, factor = 32.0, orig = 4096l), (rot = 20l, theta = 10000.0, factor = 2.5, orig = 512l)]) {
             var ff <- yarn_rope_freqs(geom.rot, geom.theta, geom.factor, 32.0, 1.0, geom.orig)
             var want <- ref_yarn_divisors(geom.rot, double(geom.theta), double(geom.factor), 32.0lf, 1.0lf, geom.orig)
             t |> equal(long_length(ff), geom.rot / 2l, "one divisor a pair (rot {geom.rot})")
-            cmp_bar(t, ff, want, geom.rot / 2l, bar, "yarn_rope_freqs rot={int(geom.rot)} x{geom.factor} over {geom.orig}")
+            check(t, "yarn_rope_freqs rot={int(geom.rot)} x{geom.factor} over {geom.orig}", ff, want, band, FLAT_SHAPE)
             t |> success(abs(ff[0] - 1.0) < 1.0e-6 && abs(ff[geom.rot / 2l - 1l] - geom.factor) < 1.0e-5,
                 "the highest pair keeps full frequency, the lowest interpolates by the factor ({ff[0]} .. {ff[geom.rot / 2l - 1l]})")
             // the poison: the band of a wider beta_fast sits elsewhere, so a ramp in the wrong units or at the wrong edge reads past the bar
             var shifted <- ref_yarn_divisors(geom.rot, double(geom.theta), double(geom.factor), 4.0lf, 1.0lf, geom.orig)
-            t |> success(maxdiff(ff, shifted, geom.rot / 2l) > bar, "a shifted band lands outside the bar (maxdiff {maxdiff(ff, shifted, geom.rot / 2l)})")
+            t |> success(logits_maxdiff(ff, shifted) > bar, "a shifted band lands outside the bar (maxdiff {logits_maxdiff(ff, shifted)})")
             delete ff
             delete want
             delete shifted
@@ -422,11 +369,11 @@ def test_rope_apply_dispatch(t : T?) {
             var pform : array<float>
             copy_vec(v, pform, n)
             rope_apply(unsafe(addr(pform[0])), pos, hs, n, 10000.0, 1.0, false, null, neox, 1.19)
-            cmp_exact(t, pform, leaf, n, "rope_apply(ptr, neox={neox}) == the leaf")
+            rope_check(t, pform, leaf, hs, SAME, "rope_apply(ptr, neox={neox}) == the leaf")
             var aform : array<float>
             copy_vec(v, aform, n)
             rope_apply(aform, pos, hs, n, 10000.0, 1.0, ff, neox, 1.19, true)
-            cmp_exact(t, aform, leaf, n, "rope_apply(array, neox={neox}) == the leaf")
+            rope_check(t, aform, leaf, hs, SAME, "rope_apply(array, neox={neox}) == the leaf")
             delete leaf
             delete pform
             delete aform
@@ -453,7 +400,7 @@ def test_rope_apply_dispatch(t : T?) {
             var bare : array<float>
             copy_vec(v, bare, n)
             rope_apply(bare, pos, hs, n, 10000.0, 1.0, none, neox, 1.0, true)
-            cmp_exact(t, off, bare, n, "use_ff=false (neox={neox}) == the no-factors apply")
+            rope_check(t, off, bare, hs, SAME, "use_ff=false (neox={neox}) == the no-factors apply")
             var on : array<float>
             copy_vec(v, on, n)
             rope_apply(on, pos, hs, n, 10000.0, 1.0, ff, neox, 1.0, true)
@@ -488,7 +435,7 @@ def private ff_gate(t : T?; pos, hs, nh : int64; neox : bool) {
     var got : array<float>
     copy_vec(v, got, n)
     rope_apply(unsafe(addr(got[0])), pos, hs, n, 500000.0, 1.0, true, ff_ptr(ff), neox, 1.0)
-    cmp_bar(t, got, want, n, ROPE_BAR, "freq-factors (neox={neox}) hs={int(hs)} pos={int(pos)}")
+    rope_check(t, got, want, hs, ROPE, "freq-factors (neox={neox}) hs={int(hs)} pos={int(pos)}")
     var ones : array<float>
     ones |> resize(hs / 2l)
     for (c in ones) {
@@ -501,7 +448,7 @@ def private ff_gate(t : T?; pos, hs, nh : int64; neox : bool) {
     var without : array<float>
     copy_vec(v, without, n)
     rope_apply(without, pos, hs, n, 500000.0, 1.0, none, neox, 1.0, true)
-    cmp_exact(t, with_ones, without, n, "all-ones factors (neox={neox}) must divide away exactly")
+    rope_check(t, with_ones, without, hs, SAME, "all-ones factors (neox={neox}) must divide away exactly")
     delete v
     delete got
     delete want

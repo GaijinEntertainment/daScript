@@ -13,7 +13,7 @@ require dasllama/dasllama_audio
 require dasllama/dasllama_tower
 require dasllama/dasllama_common   // KVDtype — the oracle cells pin the f32 parity rail
 require dasllama/dasllama_gguf
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require daslib/jobque_boost
 require daslib/fio
 require daslib/defer
@@ -259,12 +259,8 @@ def test_asr_surface(t : T?) {
 [test]
 def test_qwen3a_tower(t : T?) {
     t |> run("qwen3a tower: conv2d frontend + windowed encode matches mtmd on jfk") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
@@ -287,8 +283,7 @@ def test_qwen3a_tower(t : T?) {
             t |> equal(mel.n_len, 1101l, "effective mel frames (11 s)")
             var enc <- make_encoder_state(tw.core)
             var cs = Qwen3aConvState()
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 let win <- qwen3a_mel_window(mel, 0l)
                 t |> equal(win.n_len, 800l, "window 0 padded frames")
                 qwen3a_encode(tw, enc, cs, win)
@@ -306,12 +301,8 @@ def test_qwen3a_tower(t : T?) {
 [test]
 def test_parakeet_oracle(t : T?) {
     t |> run("parakeet-TDT greedy on jfk.wav is token-for-token with parakeet-cli") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
@@ -326,8 +317,7 @@ def test_parakeet_oracle(t : T?) {
         t |> equal(m.pk.n_vocab, 1024l, "vocab")
         t |> equal(m.pk.n_layer, 24l, "layers")
         t |> equal(m.pk.durations[4], 4, "tdt durations")
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var inscope s <- create_session(m)
             var inscope segs <- session_segs(m, s, samples)
             // parakeet-cli -ng -ps (CPU, f32 self-convert): 33 tokens, these exact ends
@@ -364,12 +354,8 @@ def test_parakeet_oracle(t : T?) {
 [test]
 def test_parakeet_v3_oracle(t : T?) {
     t |> run("parakeet-TDT v3 (25-lang) greedy on jfk.wav is token-for-token with parakeet-cli") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
@@ -382,8 +368,7 @@ def test_parakeet_v3_oracle(t : T?) {
         t |> equal(length(c.languages), 25, "25 languages")
         t |> equal(m.pk.n_vocab, 8192l, "vocab")
         t |> equal(m.pk.q8, !parakeet_gpu_serves(), "default load follows the lane policy - q8 unless the Metal driver serves")
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var inscope s <- create_session(m, "de")   // any of the 25; parakeet has no conditioning
             var inscope segs <- session_segs(m, s, samples)
             //! parakeet-cli -ng -ps (CPU, f32 self-convert) gives these 38 tokens; either lane stays id-exact on jfk
@@ -403,20 +388,15 @@ def test_parakeet_v3_oracle(t : T?) {
 [test]
 def test_whisper_transcribe_oracle(t : T?) {
     t |> run("tiny greedy on jfk.wav is token-for-token with whisper-cli") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
-        if (!model_available(t, model_path)) return
+        return if (!jit_model_available(t, model_path))
         let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
         }
         var w <- load_whisper_model(model_path)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var inscope s <- create_session(w)
             var inscope segs : array<TranscribeSegment>
             transcribe(w, s, samples) $(seg) {
@@ -579,8 +559,7 @@ def test_whisper_vulkan_twin(t : T?) {
                     set_asr_tower_fp32(false)
                     var inscope m <- mint_asr_whisper(model_path)
                     tt |> success(m.whisper.enc.q8, "the served mint is q8")
-                    with_job_que() {
-                        setup_dasllama_jobque_()
+                    with_dasllama_jobque() {
                         set_vulkan_tower(false)
                         let d0 = vulkan_tower_stats()
                         var inscope cpu_segs <- transcribe_segs(m, samples)
@@ -629,8 +608,7 @@ def test_whisper_vulkan_wdec(t : T?) {
                     set_asr_tower_fp32(false)
                     var inscope m <- mint_asr_whisper(model_path)
                     tt |> success(m.whisper.dq8, "the served mint carries the q8 decoder")
-                    with_job_que() {
-                        setup_dasllama_jobque_()
+                    with_dasllama_jobque() {
                         set_vulkan_wdec(false)
                         let d0 = vulkan_wdec_stats()
                         var inscope cpu_segs <- transcribe_segs(m, samples)
@@ -679,8 +657,7 @@ def test_whisper_vulkan_stem_flush(t : T?) {
                 set_asr_fp32(false)
                 set_asr_tower_fp32(false)
                 var inscope m <- mint_asr_whisper(model_path)
-                with_job_que() {
-                    setup_dasllama_jobque_()
+                with_dasllama_jobque() {
                     set_vulkan_tower(false)
                     var inscope cpu_segs <- transcribe_segs(m, samples)
                     set_vulkan_tower(true)
@@ -738,8 +715,7 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
                 var cpu_logits : array<float>
                 var cpu_moved : array<float>
                 var dev_logits : array<float>
-                with_job_que() {
-                    setup_dasllama_jobque_()
+                with_dasllama_jobque() {
                     set_vulkan_wdec(false)
                     var inscope sc <- create_session(m)
                     transcribe(m, sc, samples) $(_seg) {}
@@ -789,8 +765,7 @@ def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrS
             set_asr_fp32(false)
             set_asr_tower_fp32(false)
             var inscope m <- mint_asr_whisper(model_path)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 var inscope s <- create_session(m)
                 invoke(body, m, s, samples)
             }
@@ -888,8 +863,7 @@ def private wdec_f32_declines(tt : T?; name, model_path : string; samples : arra
         let tag = "{name} jfk f32 decoder"
         var inscope mf <- mint_whisper(model_path, false, false, -1l)
         tt |> success(!mf.dq8, "{tag}: the mint carries the f32 decoder")
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             let f0 = vulkan_wdec_stats()
             var inscope sf <- create_session(mf)
             var n_segs = 0
@@ -908,12 +882,8 @@ def private wdec_f32_declines(tt : T?; name, model_path : string; samples : arra
 [test]
 def test_whisper_q8_gate(t : T?) {
     t |> run("tiny q8 tower (the load_asr_model default) stays token-identical to fp32 on jfk") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
-        if (!model_available(t, model_path)) return
+        return if (!jit_model_available(t, model_path))
         let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
@@ -928,8 +898,7 @@ def test_whisper_q8_gate(t : T?) {
             set_asr_fp32(false)
             t |> success(m.whisper.enc.q8, "default load is q8")
             t |> success(!mf.whisper.enc.q8, "knob forces fp32")
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 var inscope segs <- transcribe_segs(m, samples)
                 var inscope fsegs <- transcribe_segs(mf, samples)
                 to_log(LOG_INFO, "whisper-tiny q8 jfk eyeball: '{segs[0].text}'\n")
@@ -946,12 +915,8 @@ def test_whisper_q8_gate(t : T?) {
 [test]
 def test_whisper_tower_fp32_knob(t : T?) {
     t |> run("tiny mixed f32-enc/q8-dec (set_asr_tower_fp32, the GPU serving mode) stays token-identical on jfk") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
-        if (!model_available(t, model_path)) return
+        return if (!jit_model_available(t, model_path))
         let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
@@ -976,8 +941,7 @@ def test_whisper_tower_fp32_knob(t : T?) {
         t |> success(mm.whisper.dq8, "tower knob leaves the decoder q8")
         t |> equal(asr_exec_fmt(mm), "f32/q8", "exec fmt stamps the halves")
         var inscope m <- load_asr_model(model_path)   // the q8/q8 default = the transcript truth
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var inscope segs <- transcribe_segs(m, samples)
             var inscope msegs <- transcribe_segs(mm, samples)
             t |> equal(length(segs), length(msegs), "segment count")
@@ -1031,12 +995,8 @@ def private word_forms(text : string) : array<string> {
 def test_whisper_crowned_word_level(t : T?) {
     t |> run("the CROWNED lanes agree at word level on jfk (the crowned-pipeline quality gate)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
-            if (!model_available(t, model_path)) return
+            return if (!jit_model_available(t, model_path))
             let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
@@ -1063,8 +1023,7 @@ def test_whisper_crowned_word_level(t : T?) {
             var inscope m <- load_asr_model(model_path)
             let s0 = metal_tower_stats()
             let w0 = metal_wdec_stats()
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 var inscope s <- create_session(m)
                 var text_default = ""
                 transcribe(m, s, samples) $(seg) {
@@ -1131,10 +1090,7 @@ def private check_canary_clip(t : T?; m : AsrModel; wav : string; expected : arr
 [test]
 def test_canary_qwen_oracle(t : T?) {
     t |> run("Canary-Qwen 2.5B greedy is token-for-token with the NeMo SALM oracle") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!parity_full_mode()) {   // ~6.7 GB two-file (decoder GGUF + f32 encoder bin) — large-tier
             t |> skip("canary-qwen is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
             return
@@ -1152,8 +1108,7 @@ def test_canary_qwen_oracle(t : T?) {
         t |> success(!c.translate && c.timestamps == AsrTimestamps.none && !c.streaming, "no translate / timestamps / streaming")
         t |> equal(m.cenc.n_layer, 32l, "FastConformer-32")
         t |> equal(m.cenc.proj_dim, 2048l, "projects to the Qwen3 hidden width")
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             // Frozen NeMo SALM greedy ids (harness/canary_qwen_expected.tsv); trailing 151645 = text EOS
             check_canary_clip(t, m, path_join(corpus_dir(), "jfk.wav"),
                 [3036, 773, 847, 12357, 8877, 2548, 537, 1128, 697, 3146, 646, 653, 369, 498, 2548,
@@ -1177,10 +1132,7 @@ def test_canary_qwen_oracle(t : T?) {
 [test]
 def test_gemma4a_audio_oracle(t : T?) {
     t |> run("Gemma-4 E2B audio greedy is token-for-token with llama-mtmd-cli (confident prefix)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let dec = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
         let mmproj = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (!model_available(t, dec) || !model_available(t, mmproj)) {
@@ -1198,8 +1150,7 @@ def test_gemma4a_audio_oracle(t : T?) {
             return
         }
         set_asr_kv(KVDtype.f32)   // the frozen mtmd-prefix ids are the f32 parity rail; below every skip
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var inscope s <- create_session(m, "en")
             var inscope segs <- session_segs(m, s, samples)
             t |> equal(length(segs), 1, "one segment")
@@ -1252,10 +1203,7 @@ def private check_q3omni_clip(t : T?; m : AsrModel; wav : string; expected : arr
 [test]
 def test_qwen3omni_audio_oracle(t : T?) {
     t |> run("Qwen3-Omni-30B greedy audio transcription is token-for-token with llama-mtmd-cli") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!parity_full_mode()) {   // ~34 GB (Q8 thinker + bf16 mmproj) — large-tier
             t |> skip("Qwen3-Omni-30B is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
             return
@@ -1274,8 +1222,7 @@ def test_qwen3omni_audio_oracle(t : T?) {
         let c <- caps(m)
         t |> success(empty(c.languages) && !c.translate && c.timestamps == AsrTimestamps.none && !c.streaming,
             "detects language internally, no translate / timestamps / streaming")
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             // frozen llama-mtmd-cli --temp 0 --jinja greedy ids (trailing 151645 = <|im_end|> EOG)
             check_q3omni_clip(t, m, path_join(corpus_dir(), "jfk.wav"),
                 [3036, 773, 11, 847, 12357, 8877, 11, 2548, 537, 1128, 697, 3146, 646, 653, 369,
@@ -1294,10 +1241,7 @@ def test_qwen3omni_audio_oracle(t : T?) {
 [test]
 def test_mel_state_reuse_deterministic(t : T?) {
     t |> run("gemma4a/canary log-mel is bit-identical across calls on one reused state") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let wav = path_join(corpus_dir(), "jfk.wav")
         let samples <- read_wav_pcm16_mono(wav)
         if (empty(samples)) {

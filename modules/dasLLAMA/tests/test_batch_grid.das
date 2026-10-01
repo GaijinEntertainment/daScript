@@ -57,7 +57,7 @@ def private check_shape(t : T?; n, d, ntok, tb : int64) {
     }
     set_q8_token_block(tb)
     set_target_chunk_work(1l)   // admit every lane — the small d is then chunk-starved for real
-    let saved = active_kernel_backend()
+    let seat = kernel_backend_seat()
     for (name in kernel_backend_names()) {
         pin_kernel_backend(name)
         var wq : array<int8>
@@ -84,10 +84,7 @@ def private check_shape(t : T?; n, d, ntok, tb : int64) {
         delete y1
         delete y2
     }
-    clear_kernel_backend_pin()
-    if (saved != "") {
-        select_kernel_backend(saved)
-    }
+    restore_kernel_backend(seat)
     restore_grid_knobs()
     delete wf
     delete xf
@@ -98,8 +95,7 @@ def private check_shape(t : T?; n, d, ntok, tb : int64) {
 
 [test]
 def test_batch_grid_bit_exact(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         restore_grid_knobs()
         t |> run("starved 64x64, ragged token tail (33 = 8 tiles + 1)") @(t : T?) {
             check_shape(t, 64l, 64l, 33l, 128l)

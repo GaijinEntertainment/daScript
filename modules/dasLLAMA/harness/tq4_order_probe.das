@@ -102,8 +102,7 @@ def main {   // nolint:STYLE037,STYLE038 — two stats passes over (layer, head,
     for (d in range(ND)) {
         var sd <- make_run_state(c, KVDtype.f32, KVDtype.f32)
         var ids <- encode(tok, domain_text(d))
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             eval_(tr, sd, ids)
         }
         print("domain {DOMAIN_NAMES[d]}: {length(ids)} tokens\n")

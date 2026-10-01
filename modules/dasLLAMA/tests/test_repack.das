@@ -13,7 +13,7 @@ require dasllama/dasllama_repack
 require dasllama/dasllama_math_default   // dequant_kq_row_grp — the independent grp reader
 require dasllama/dasllama_gguf           // dequant_*_plane_superblock — the independent disk reader
 require dasllama/dasllama_gemm_schema    // kq_qsb/kq_ssb — the fmt-id plane strides
-require daslib/f16_cvt                   // plausible f16 scale halfwords
+require _kq_fixtures                    // put_f16: a plausible f16 halfword (LE), so dequant never sees NaN/Inf
 
 // deterministic byte source (LCG) — no Math.random in tests
 struct private Rng {
@@ -35,13 +35,6 @@ def private fill_sbytes(var a : array<int8>; var rng : Rng) {
     for (c in a) {
         c = int8(next_u32(rng))
     }
-}
-
-// write a plausible f16 halfword (LE) so dequant never sees NaN/Inf
-def private put_f16(var a : array<uint8>; off : int64; v : float) {
-    let h = f32_to_f16(v)
-    a[off] = uint8(h & 0xFFu)
-    a[off + 1l] = uint8(h >> 8u)
 }
 
 def private f16_val(var rng : Rng; lo, hi : float) : float {

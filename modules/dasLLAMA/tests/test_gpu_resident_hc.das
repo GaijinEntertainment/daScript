@@ -8,7 +8,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require dasllama/dasllama_env   // g_env_vulkan.vk_kv32: the f32 mirror passes the f16 sessions as codec
@@ -51,15 +51,7 @@ let private FN_HEAD = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared
 let private DRAFT_TOKEN = 3000l
 
 def private hc_ready(t : T?) : bool {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return false
-    }
-    if (!model_available(t, path_join(models_dir(), FN_TRUNK)) || !model_available(t, path_join(models_dir(), FN_HEAD))) return false
-    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-        return false
-    }
+    if (!resident_ready(t, path_join(models_dir(), FN_TRUNK)) || !model_available(t, path_join(models_dir(), FN_HEAD))) return false
     if (g_env_vulkan.vk_kv32 != 0l) {
         t |> skip("DASLLAMA_VK_KV32=1: the f32 mirror passes every f16 session as codec")
         return false
@@ -159,10 +151,9 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
         clear_mtp_head_path()
         t |> success(!mtp_head_path_pin().set, "the head pin is cleared for the process after the load")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk and its head (the load log names any decline)")
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             let tape_before = moe_pick_tape_mode()
-            var prompt <- [for (i in range64(HC_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var prompt <- resident_prompt(HC_PROMPT)
             var r <- hc_round(t, tr, prompt)
             let heat = g_env_gpu.gpu_heat ?? HOT_SLOTS_AUTO
             let k = tr.config.n_expert_used
@@ -218,10 +209,9 @@ def test_gpu_resident_hc_mtp_draft(t : T?) {
         t |> success(!mtp_head_path_pin().set, "the head pin is cleared for the process after the load")
         t |> equal(tr.config.n_layer_nextn, 1l, "the split head attached")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk and its head (the load log names any decline)")
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             let tape_before = moe_pick_tape_mode()
-            var prompt <- [for (i in range64(HC_PROMPT)); 1000l + (i * 37l) % 5000l]
+            var prompt <- resident_prompt(HC_PROMPT)
             var s <- create_session(tr, mirror_kv_dtype())
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
@@ -271,16 +261,8 @@ def test_gpu_resident_hc_mtp_draft(t : T?) {
 [test]
 def test_gpu_resident_hc(t : T?) {
     t |> run("Qwen3.8-Flash-Next: the window chain and the split token command (the mixers, the side input and the sigmoid out-gate on device, the routed experts on the host) vs the CPU chain") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), FN_TRUNK)
-        if (!model_available(t, path)) return
-        if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-            t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-            return
-        }
+        if (!resident_ready(t, path)) return
         if (g_env_vulkan.vk_kv32 != 0l) {
             t |> skip("DASLLAMA_VK_KV32=1: the f32 mirror passes every f16 session as codec")
             return
@@ -288,10 +270,9 @@ def test_gpu_resident_hc(t : T?) {
         var tr <- load_model_(path, QuantMode.q8)
         t |> success(tr.config.hyper_conn && tr.config.n_expert > 0l && tr.config.dn_z_sigmoid, "the carrier is the hyper-connection MoE with the sigmoid out-gate the chain exists for")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on it (the load log names any decline)")
-        with_job_que() {
-            setup_dasllama_jobque_()
-            var prompt <- [for (i in range64(HC_PROMPT)); 1000l + (i * 37l) % 5000l]
-            var toks <- [for (i in range64(6l)); 2000l + (i * 53l) % 4000l]
+        with_dasllama_jobque() {
+            var prompt <- resident_prompt(HC_PROMPT)
+            var toks <- resident_feed(6l)
             let served0 = moe_gpu_resident_prefills()
             var sg <- create_session(tr, mirror_kv_dtype())
             moe_pick_tape(MoePickTape.record)

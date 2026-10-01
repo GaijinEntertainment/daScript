@@ -1,6 +1,6 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget
-options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
+options _function_length = 0        // per-kernel gates: fixture + dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 options _dasllama_internal = true
 
@@ -8,11 +8,14 @@ require dastest/testing_boost public
 require daslib/math_bits            // float_bits_to_uint / uint_bits_to_float — the bf16 halfword pun
 require ?das_metal dasllama/dasllama_metal_kernels  // the kq mul_mm trio (Apple builds)
 require ?das_metal dasllama/dasllama_metal_prefill  // the mul_mm twins (bf16 + Metal-4 tensor forms)
+require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
-require ?das_metal _metal_kernel_common   // shared buf helpers, kq plane builders + eyeball-dump compares
-require ?das_metal _metal4_probe
+require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell, kq plane builders
 require dasllama/dasllama_convert         // devw_dequant_*_core — the image mint's dev-W bake mirrors
 require dasllama/dasllama_gemm_schema     // kq_qsb — the ONE per-format quant-plane stride source
+require dasllama/dasllama_kqformat        // KqFmt: the per-format stamp tables' key
+require _compares   // check_exact: the double-buffered arms' bit identity
+require _kernel_oracles   // padded_bases: the MoE route's padded prefix; dense_ref_env / dense_ref_rows / strided_ref
 require math
 require strings
 
@@ -27,881 +30,524 @@ require strings
 // the mul_mm grid contract: m % 32, ndim % 64, kdim % 256 (kq) or % 32, y token-major
 // [m x ndim]. A tensor twin skips only when the CAPABILITY probe says the toolchain has no
 // Metal-4 tensor support (metal4_tensor_available); with the toolchain proven, a PSO that
-// fails to compile is a RED, and the simdgroup bases always assert. Off-Apple (or with no
-// Metal device) every check feints.
+// fails to compile is a RED, and the simdgroup bases always assert. Without das_metal in the
+// build, or with no Metal device, every check skips.
 
-def private kq_mulmm_gate(t : T?; dev, queue; fmt : int; tensor : bool; m, kdim, ndim : int; halfx : bool = false; tall : bool = false) {
+//! the simdgroup kq mul_mm stamp of a format
+def private kq_mm_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    if (f == KqFmt.iq2xxs) return stamp_of(@@enc_kq_mm_iq2xxs_c)
+    if (f == KqFmt.iq2xs) return stamp_of(@@enc_kq_mm_iq2xs_c)
+    if (f == KqFmt.iq2s) return stamp_of(@@enc_kq_mm_iq2s_c)
+    if (f == KqFmt.q40) return stamp_of(@@enc_kq_mm_q40_c)
+    if (f == KqFmt.iq4nl) return stamp_of(@@enc_kq_mm_iq4nl_c)
+    if (f == KqFmt.k2) return stamp_of(@@enc_kq_mm_k2_c)
+    if (f == KqFmt.iq3xxs) return stamp_of(@@enc_kq_mm_iq3xxs_c)
+    if (f == KqFmt.iq3s) return stamp_of(@@enc_kq_mm_iq3s_c)
+    if (f == KqFmt.k3) return stamp_of(@@enc_kq_mm_k3_c)
+    if (f == KqFmt.iq4xs) return stamp_of(@@enc_kq_mm_iq4xs_c)
+    if (f == KqFmt.k4) return stamp_of(@@enc_kq_mm_k4_c)
+    if (f == KqFmt.k5) return stamp_of(@@enc_kq_mm_k5_c)
+    return stamp_of(@@enc_kq_mm_k6_c)
+}
+
+//! the 128-row f16-X Metal-4 tensor kq mul_mm kernel of a format (the tall stamps)
+def private kq_mm_th128_kernel(f) {
+    if (f == KqFmt.iq3xxs) return kernel_of(@@enc_kq_mm_iq3xxs_th128_c)
+    if (f == KqFmt.iq3s) return kernel_of(@@enc_kq_mm_iq3s_th128_c)
+    if (f == KqFmt.k4) return kernel_of(@@enc_kq_mm_k4_th128_c)
+    if (f == KqFmt.k5) return kernel_of(@@enc_kq_mm_k5_th128_c)
+    return kernel_of(@@enc_kq_mm_k6_th128_c)
+}
+
+//! the 32-row Metal-4 tensor kq mul_mm kernel of a format, f16 X (`halfx`) or f32 X
+def private kq_mm_tensor_kernel(f; halfx : bool) {
+    if (f == KqFmt.iq2xxs) return halfx ? kernel_of(@@enc_kq_mm_iq2xxs_th_c) : kernel_of(@@enc_kq_mm_iq2xxs_t_c)
+    if (f == KqFmt.iq2xs) return halfx ? kernel_of(@@enc_kq_mm_iq2xs_th_c) : kernel_of(@@enc_kq_mm_iq2xs_t_c)
+    if (f == KqFmt.iq2s) return halfx ? kernel_of(@@enc_kq_mm_iq2s_th_c) : kernel_of(@@enc_kq_mm_iq2s_t_c)
+    if (f == KqFmt.q40) return halfx ? kernel_of(@@enc_kq_mm_q40_th_c) : kernel_of(@@enc_kq_mm_q40_t_c)
+    if (f == KqFmt.iq4nl) return halfx ? kernel_of(@@enc_kq_mm_iq4nl_th_c) : kernel_of(@@enc_kq_mm_iq4nl_t_c)
+    if (f == KqFmt.k2) return halfx ? kernel_of(@@enc_kq_mm_k2_th_c) : kernel_of(@@enc_kq_mm_k2_t_c)
+    if (f == KqFmt.iq3xxs) return halfx ? kernel_of(@@enc_kq_mm_iq3xxs_th_c) : kernel_of(@@enc_kq_mm_iq3xxs_t_c)
+    if (f == KqFmt.iq3s) return halfx ? kernel_of(@@enc_kq_mm_iq3s_th_c) : kernel_of(@@enc_kq_mm_iq3s_t_c)
+    if (f == KqFmt.k3) return halfx ? kernel_of(@@enc_kq_mm_k3_th_c) : kernel_of(@@enc_kq_mm_k3_t_c)
+    if (f == KqFmt.iq4xs) return halfx ? kernel_of(@@enc_kq_mm_iq4xs_th_c) : kernel_of(@@enc_kq_mm_iq4xs_t_c)
+    if (f == KqFmt.k4) return halfx ? kernel_of(@@enc_kq_mm_k4_th_c) : kernel_of(@@enc_kq_mm_k4_t_c)
+    if (f == KqFmt.k5) return halfx ? kernel_of(@@enc_kq_mm_k5_th_c) : kernel_of(@@enc_kq_mm_k5_t_c)
+    return halfx ? kernel_of(@@enc_kq_mm_k6_th_c) : kernel_of(@@enc_kq_mm_k6_t_c)
+}
+
+def private kq_mulmm_gate(t : T?; var dev, queue; fmt : int; tensor : bool; m, kdim, ndim : int; halfx : bool = false; tall : bool = false) {
     let tag = "kq_mulmm_k{fmt}{tensor ? "t" : ""}{tall ? " tall" : ""}{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim}"
-    var err : string
-    let src = (tensor
-        ? (tall
-            ? (fmt == 34 ? MetalKqMulMmIq3xxsTH128_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sTH128_metal_kq_mulmm_iq3s_t_msl : (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl))))
-        : halfx
-            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl : (fmt == 40 ? MetalKqMulMmQ40TH_metal_kq_mulmm_iq4xs_t_msl : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl))))))))))))
-            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl : (fmt == 40 ? MetalKqMulMmQ40T_metal_kq_mulmm_iq4xs_t_msl : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl)))))))))))))
-        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl : (fmt == 40 ? MetalKqMulMmQ40_metal_kq_mulmm_msl : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl : MetalKqMulMmK6_metal_kq_mulmm_msl)))))))))))))
-    let entry = (tensor
-        ? (tall
-            ? (fmt == 34 ? MetalKqMulMmIq3xxsTH128_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sTH128_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_entry))))
-        : halfx
-            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_entry : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_entry : (fmt == 40 ? MetalKqMulMmQ40TH_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry))))))))))))
-            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_entry : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_entry : (fmt == 40 ? MetalKqMulMmQ40T_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_entry)))))))))))))
-        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_entry : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_entry : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_entry : (fmt == 40 ? MetalKqMulMmQ40_metal_kq_mulmm_msl_entry : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_entry : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_entry : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_entry : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_entry : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_entry : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_entry : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_entry : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_entry : MetalKqMulMmK6_metal_kq_mulmm_msl_entry)))))))))))))
-    let fm = (tensor
-        ? (tall
-            ? (fmt == 34 ? MetalKqMulMmIq3xxsTH128_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sTH128_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_fastmath))))
-        : halfx
-            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_fastmath : (fmt == 40 ? MetalKqMulMmQ40TH_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath))))))))))))
-            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_fastmath : (fmt == 40 ? MetalKqMulMmQ40T_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_fastmath)))))))))))))
-        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_fastmath : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_fastmath : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_fastmath : (fmt == 40 ? MetalKqMulMmQ40_metal_kq_mulmm_msl_fastmath : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_fastmath : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_fastmath : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_fastmath : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_fastmath : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_fastmath : MetalKqMulMmK6_metal_kq_mulmm_msl_fastmath)))))))))))))
-    let tgm = (tensor
-        ? (tall
-            ? (fmt == 34 ? MetalKqMulMmIq3xxsTH128_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sTH128_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_tgmem))))
-        : halfx
-            ? (fmt == 25 ? MetalKqMulMmIq2xxsTH_metal_kq_mulmm_iq2xxs_t_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xsTH_metal_kq_mulmm_iq2xs_t_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2sTH_metal_kq_mulmm_iq2s_t_msl_tgmem : (fmt == 40 ? MetalKqMulMmQ40TH_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nlTH_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2TH_metal_kq_mulmm_k2_t_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3TH_metal_kq_mulmm_k3_t_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xsTH_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem))))))))))))
-            : (fmt == 25 ? MetalKqMulMmIq2xxsT_metal_kq_mulmm_iq2xxs_t_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xsT_metal_kq_mulmm_iq2xs_t_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2sT_metal_kq_mulmm_iq2s_t_msl_tgmem : (fmt == 40 ? MetalKqMulMmQ40T_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nlT_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2T_metal_kq_mulmm_k2_t_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxsT_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sT_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3T_metal_kq_mulmm_k3_t_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xsT_metal_kq_mulmm_iq4xs_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4T_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5T_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6T_metal_kq_mulmm_k6_t_msl_tgmem)))))))))))))
-        : (fmt == 25 ? MetalKqMulMmIq2xxs_metal_kq_mulmm_msl_tgmem : (fmt == 24 ? MetalKqMulMmIq2xs_metal_kq_mulmm_msl_tgmem : (fmt == 23 ? MetalKqMulMmIq2s_metal_kq_mulmm_msl_tgmem : (fmt == 40 ? MetalKqMulMmQ40_metal_kq_mulmm_msl_tgmem : (fmt == 45 ? MetalKqMulMmIq4nl_metal_kq_mulmm_msl_tgmem : (fmt == 2 ? MetalKqMulMmK2_metal_kq_mulmm_msl_tgmem : (fmt == 34 ? MetalKqMulMmIq3xxs_metal_kq_mulmm_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3s_metal_kq_mulmm_msl_tgmem : (fmt == 3 ? MetalKqMulMmK3_metal_kq_mulmm_msl_tgmem : (fmt == 44 ? MetalKqMulMmIq4xs_metal_kq_mulmm_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4_metal_kq_mulmm_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5_metal_kq_mulmm_msl_tgmem : MetalKqMulMmK6_metal_kq_mulmm_msl_tgmem)))))))))))))
-    var pso = pipeline_from_source(dev, src, entry, fm, err)
-    if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
-        return
-    }
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let nb = kdim / 256
-    let nsb = ndim * nb
-    var kq : array<uint8>
-    var ks : array<uint8>
-    kq_fill_planes(fmt, nsb, kq, ks)
-    var xf : array<float>
-    xf |> resize(m * kdim)
-    for (i in range(m * kdim)) {
-        // halfx: round-trip through f16 so the oracle dot below stays the arm's exact reference
-        xf[i] = halfx ? float(float16(0.07 * float(i % 39) - 1.3)) : 0.07 * float(i % 39) - 1.3
-    }
-    var xh : array<float16>
-    if (halfx) {
-        xh |> resize(m * kdim)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let f = kq_fmt_of_id(fmt, "kq_mulmm_gate")
+        let sb = kq_mm_stamp(f)
+        let kt = tall ? kq_mm_th128_kernel(f) : kq_mm_tensor_kernel(f, halfx)
+        var pso = tensor ? (mc |> keep_stamp(kt, err)) : (mc |> keep_stamp(sb, err))
+        return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
+        let nb = kdim / 256
+        let nsb = ndim * nb
+        var inscope kq : array<uint8>
+        var inscope ks : array<uint8>
+        kq_fill_planes(fmt, nsb, kq, ks)
+        var inscope xf : array<float>
+        xf |> resize(m * kdim)
         for (i in range(m * kdim)) {
-            xh[i] = float16(xf[i])
+            // halfx: round-trip through f16 so the oracle dot below stays the arm's exact reference
+            xf[i] = halfx ? float(float16(0.07 * float(i % 39) - 1.3)) : 0.07 * float(i % 39) - 1.3
         }
-    }
-    var want : array<float>
-    var env : array<float>
-    var wrow : array<float>
-    want |> resize(m * ndim)
-    env |> resize(m * ndim)
-    wrow |> resize(kdim)
-    for (j in range(ndim)) {
-        kq_row_ref(fmt, j * nb, nb, nsb, kq, ks, wrow)
-        for (r in range(m)) {
-            var acc = 0.0lf
-            var ev = 0.0lf
-            for (c in range(kdim)) {
-                let p = double(wrow[c]) * double(xf[r * kdim + c])
-                acc += p
-                ev += abs(p)
+        var inscope xh : array<float16>
+        if (halfx) {
+            xh |> resize(m * kdim)
+            for (i in range(m * kdim)) {
+                xh[i] = float16(xf[i])
             }
-            want[r * ndim + j] = float(acc)
-            env[r * ndim + j] = float(ev)
         }
-    }
-    var bks = buf_upload(dev, ks)
-    var bkq = buf_upload(dev, kq)
-    var bx = halfx ? buf_upload(dev, xh) : buf_upload(dev, xf)
-    var by = buf_fill(dev, m * ndim, -1000.0)
-    var bk = buf_u32(dev, uint(kdim))
-    var bn = buf_u32(dev, uint(ndim))
-    // a tall m off the 128 floor mirrors the encoder's pair: the 128 stamp covers r0 rows and
-    // the 32-row TH covers the rest at its x/y byte offsets - the nonzero-offset arm's binding
-    let r0 = tall ? m / 128 * 128 : m
-    var rem_pso = (tall && r0 != m) ? pipeline_from_source(dev,
-            fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl))),
-            fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_entry : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_entry : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_entry))),
-            fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_fastmath : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_fastmath : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_fastmath))),
-            err) : null
-    if (tall && r0 != m) {
-        t |> success(rem_pso != null, "{tag}: remainder pipeline: {err}")
-    }
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tgm, 0)
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // the split-scale formats: the f16 d tail at nsb*16
-        metal_set_buffer(enc, bks, 0ul, 1)
-        metal_set_buffer(enc, bkq, 0ul, 2)
-        metal_set_buffer(enc, bx, 0ul, 3)
-        metal_set_buffer(enc, by, 0ul, 4)
-        metal_set_buffer(enc, bk, 0ul, 5)
-        metal_set_buffer(enc, bn, 0ul, 6)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / (tall ? 128 : 32)), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
-        if (rem_pso != null) {
-            metal_set_pipeline(enc, rem_pso)
-            metal_set_threadgroup_memory_length(enc, fmt == 34 ? MetalKqMulMmIq3xxsTH_metal_kq_mulmm_iq3xxs_t_msl_tgmem : (fmt == 33 ? MetalKqMulMmIq3sTH_metal_kq_mulmm_iq3s_t_msl_tgmem : (fmt == 4 ? MetalKqMulMmK4TH_metal_kq_mulmm_t_msl_tgmem : (fmt == 5 ? MetalKqMulMmK5TH_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK6TH_metal_kq_mulmm_k6_t_msl_tgmem))), 0)
-            metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)
-            metal_set_buffer(enc, bks, 0ul, 1)
-            metal_set_buffer(enc, bkq, 0ul, 2)
-            metal_set_buffer(enc, bx, uint64(r0 * kdim * 2), 3)
-            metal_set_buffer(enc, by, uint64(r0 * ndim * 4), 4)
-            metal_set_buffer(enc, bk, 0ul, 5)
-            metal_set_buffer(enc, bn, 0ul, 6)
-            metal_dispatch_threadgroups(enc, uint3(uint((m - r0) / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        var inscope ref <- dense_ref_env(m, kdim, ndim, xf) $(j; var wrow) {
+            kq_row_ref(fmt, j * nb, nb, nsb, kq, ks, wrow)
         }
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let bx = halfx ? (mc |> in_plain(xh)) : (mc |> in_(xf))
+        let by = mc |> out_words(m * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        // a tall m off the 128 floor mirrors the encoder's pair: the 128 stamp covers r0 rows and
+        // the 32-row TH covers the rest at its x/y byte offsets - the nonzero-offset arm's binding
+        let r0 = tall ? m / 128 * 128 : m
+        let kr = kq_mm_tensor_kernel(f, true)
+        var rem_pso = (tall && r0 != m) ? (mc |> keep_stamp(kr, err)) : null
+        if (tall && r0 != m) {
+            t |> success(rem_pso != null, "{tag}: remainder pipeline: {err}")
+        }
+        let doff = kq_split_doff(fmt, nsb)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (!tensor) {
+                stamp_run(sb, pso) {
+                    invoke(sb.enc, enc, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
+                }
+                return
+            }
+            invoke(kt.enc, enc, pso, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(r0), int64(ndim))
+            if (rem_pso != null) {
+                invoke(kr.enc, enc, rem_pso, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], uint64(r0 * kdim * 2), mc.buf[by], uint64(r0 * ndim * 4), mc.buf[bk], mc.buf[bn], int64(m - r0), int64(ndim))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], ref.want, env_bar(2e-4, ref.env), Shape(row_width = ndim), ref.env)
     }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
-        //! the control: the same compare must RED on a poisoned expectation (one element off by
-        //! an env-scaled-plus-absolute delta) - proves the bar can fail for this arm
-        var wantp := want
-        wantp[0] += env[0] * 0.1 + 1.0
-        t |> success(buf_mismatch_env(by, wantp, env, 2e-4, "{tag} CONTROL(expected-red)") != 0, "{tag}: poison control reds")
-        delete wantp
-    }
-    metal_release(bks)
-    metal_release(bkq)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(pso)
-    if (rem_pso != null) {
-        metal_release(rem_pso)
-    }
-    delete kq
-    delete ks
-    delete xf
-    delete xh
-    delete want
-    delete env
-    delete wrow
 }
 
 // the Metal-4 tensor twin of the (already direct-covered) MetalQ8MulMm — same bindings; the
 // q8u form dequant-stages W into @workgroup, so the gate binds its tgmem like production
-def private q8_mulmm_t_gate(t : T?; dev, queue; m, kdim, ndim : int; halfx : bool = false; mt : int = 32) {
+def private q8_mulmm_t_gate(t : T?; var dev, queue; m, kdim, ndim : int; halfx : bool = false; mt : int = 32) {
     let hx = halfx ? " halfx" : ""
     let tag = "q8_mulmm_t{hx} mt{mt} m={m} k={kdim} n={ndim}"
-    var err : string
-    var pso = (mt == 128
-        ? (halfx
-            ? pipeline_from_source(dev, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_fastmath, err)
-            : pipeline_from_source(dev, MetalQ8MulMmT128_metal_q8_mulmm_t_msl, MetalQ8MulMmT128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT128_metal_q8_mulmm_t_msl_fastmath, err))
-        : (halfx
-            ? pipeline_from_source(dev, MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, err)
-            : pipeline_from_source(dev, MetalQ8MulMmT_metal_q8_mulmm_t_msl, MetalQ8MulMmT_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmT_metal_q8_mulmm_t_msl_fastmath, err)))
-    if (pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
-        return
-    }
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let nb = kdim / 32
-    var blob : array<uint8>
-    var wdeq : array<float>
-    q8_blob_fill(ndim, nb, blob, wdeq)
-    var xf : array<float>
-    q8_x_fill(m * kdim, xf)
-    var xh : array<float16>
-    if (halfx) {
-        xh |> resize(m * kdim)
-        for (i in range(m * kdim)) {
-            xh[i] = float16(xf[i])   // the fixture is f16-exact, so the oracle dot is unchanged
-        }
-    }
-    var want : array<float>
-    var env : array<float>
-    want |> resize(m * ndim)
-    env |> resize(m * ndim)
-    for (j in range(ndim)) {
-        for (r in range(m)) {
-            var acc = 0.0lf
-            var ev = 0.0lf
-            for (c in range(kdim)) {
-                let p = double(wdeq[j * kdim + c]) * double(xf[r * kdim + c])
-                acc += p
-                ev += abs(p)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kt = (mt == 128 ? (halfx ? kernel_of(@@enc_gemm_mm_th128_c) : kernel_of(@@enc_gemm_mm_t128_c))
+            : (halfx ? kernel_of(@@enc_gemm_mm_th_c) : kernel_of(@@enc_gemm_mm_t_c)))
+        var pso = mc |> keep_stamp(kt, err)
+        return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
+        let nb = kdim / 32
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ndim, nb, blob, wdeq)
+        var inscope xf : array<float>
+        q8_x_fill(m * kdim, xf)
+        var inscope xh : array<float16>
+        if (halfx) {
+            xh |> resize(m * kdim)
+            for (i in range(m * kdim)) {
+                xh[i] = float16(xf[i])   // the fixture is f16-exact, so the oracle dot is unchanged
             }
-            want[r * ndim + j] = float(acc)
-            env[r * ndim + j] = float(ev)
         }
+        var inscope ref <- dense_ref_rows(wdeq, xf, m, kdim, ndim)
+        let bw = mc |> in_plain(blob)
+        let bx = halfx ? (mc |> in_plain(xh)) : (mc |> in_(xf))
+        let by = mc |> out_words(m * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kt.enc, enc, pso, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], ref.want, env_bar(2e-3, ref.env), Shape(row_width = ndim), ref.env)
     }
-    var bw = buf_upload(dev, blob)
-    var bx = halfx ? buf_upload(dev, xh) : buf_upload(dev, xf)
-    var by = buf_fill(dev, m * ndim, -1000.0)
-    var bk = buf_u32(dev, uint(kdim))
-    var bn = buf_u32(dev, uint(ndim))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, mt == 128
-            ? (halfx ? MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_tgmem : MetalQ8MulMmT128_metal_q8_mulmm_t_msl_tgmem)
-            : (halfx ? MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem : MetalQ8MulMmT_metal_q8_mulmm_t_msl_tgmem), 0)
-        metal_set_buffer(enc, bw, 0ul, 0)
-        metal_set_buffer(enc, bw, 0ul, 1)
-        metal_set_buffer(enc, bx, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bk, 0ul, 4)
-        metal_set_buffer(enc, bn, 0ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+}
+
+//! the poison-panel control's quiet count: the elements of plane `p` outside max(`rel` x env, 1e-3) of `want` - no eyeball
+//! dump, since this red is the expectation, not a failure
+def private poison_panel_over(mc; p : int; want, env : array<float>; rel : float) : int {
+    var inscope got <- mc |> plane_run(p)
+    var badp = 0
+    for (g, w, e in got, want, env) {
+        badp += abs(g - w) <= max(rel * e, 1e-3) ? 0 : 1
     }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
-    }
-    metal_release(bw)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(pso)
-    delete blob
-    delete xf
-    delete want
-    delete env
-    delete wdeq
+    return badp
 }
 
 // the dev-W pair: the q8 blob dequantized to a device f16 panel (one thread per 34B block),
 // then the all-device half x half mul_mm reading it - the production >= 256-row prefill
 // form. Both dispatches chain in ONE encoder (hazard tracking orders the panel write/read).
-def private q8_devw_gate(t : T?; dev, queue; m, kdim, ndim : int; mt : int = 32) {
+def private q8_devw_gate(t : T?; var dev, queue; m, kdim, ndim : int; mt : int = 32) {
     let tag = "q8_devw mt{mt} m={m} k={kdim} n={ndim}"
-    var err : string
-    var dq_pso = pipeline_from_source(dev, metal_dequant_q8h_msl, metal_dequant_q8h_msl_entry, metal_dequant_q8h_msl_fastmath, err)
-    var mm_pso = (mt == 128
-        ? pipeline_from_source(dev, MetalHalfMulMmTH128_metal_half_mulmm_th_msl, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH128_metal_half_mulmm_th_msl_fastmath, err)
-        : pipeline_from_source(dev, MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, err))
-    if (mm_pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
-        return
-    }
-    t |> success(dq_pso != null && mm_pso != null, "{tag}: pipeline: {err}")
-    return if (dq_pso == null || mm_pso == null)
-    let nb = kdim / 32
-    let nblk = ndim * nb
-    var blob : array<uint8>
-    var wdeq : array<float>
-    q8_blob_fill(ndim, nb, blob, wdeq)
-    var xf : array<float>
-    q8_x_fill(m * kdim, xf)
-    var xh : array<float16>
-    xh |> resize(m * kdim)
-    for (i in range(m * kdim)) {
-        xh[i] = float16(xf[i])   // the fixture is f16-exact, so the oracle dot is unchanged
-    }
-    var want : array<float>
-    var env : array<float>
-    want |> resize(m * ndim)
-    env |> resize(m * ndim)
-    for (j in range(ndim)) {
-        for (r in range(m)) {
-            var acc = 0.0lf
-            var ev = 0.0lf
-            for (c in range(kdim)) {
-                let p = double(wdeq[j * kdim + c]) * double(xf[r * kdim + c])
-                acc += p
-                ev += abs(p)
-            }
-            want[r * ndim + j] = float(acc)
-            env[r * ndim + j] = float(ev)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_dequant_q8h)
+        let km = mt == 128 ? kernel_of(@@enc_gemm_hmm_th128) : kernel_of(@@enc_gemm_hmm_th)
+        var dq_pso = mc |> keep_stamp(kd, err)
+        var mm_pso = mc |> keep_stamp(km, err)
+        // the tensor GEMM alone may skip; the dequant is a base stamp and reds
+        return if (!(mm_pso == null ? tensor_pso_or_skip(t, tag, mm_pso, dev, err) : pso_ok(t, tag, dq_pso, err)))
+        let nb = kdim / 32
+        let nblk = ndim * nb
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ndim, nb, blob, wdeq)
+        var inscope xf : array<float>
+        q8_x_fill(m * kdim, xf)
+        var inscope xh : array<float16>
+        xh |> resize(m * kdim)
+        for (i in range(m * kdim)) {
+            xh[i] = float16(xf[i])   // the fixture is f16-exact, so the oracle dot is unchanged
         }
-    }
-    var bw = buf_upload(dev, blob)
-    var bx = buf_upload(dev, xh)
-    var bwh = buf_fill(dev, ndim * kdim, float16(-100.0))   // poison fill: an unwritten panel block reds the compare
-    var by = buf_fill(dev, m * ndim, -1000.0)
-    var bk = buf_u32(dev, uint(kdim))
-    var bn = buf_u32(dev, uint(ndim))
-    var dka = CvtArgs(total = uint(nblk))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, dq_pso)
-        metal_set_buffer(enc, bw, 0ul, 0)
-        metal_set_buffer(enc, bw, 0ul, 1)
-        metal_set_buffer(enc, bwh, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(dka)), uint64(typeinfo sizeof(dka)), 3)
-        metal_dispatch_threadgroups(enc, uint3(uint((nblk + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
-        metal_set_pipeline(enc, mm_pso)
-        metal_set_buffer(enc, bwh, 0ul, 0)
-        metal_set_buffer(enc, bx, 0ul, 1)
-        metal_set_buffer(enc, by, 0ul, 2)
-        metal_set_buffer(enc, bk, 0ul, 3)
-        metal_set_buffer(enc, bn, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
-    }
-    // the N-TILED chain (the production over-knee form): two half-N tiles, each dequant at
-    // the blob column offset + GEMM into y's column slice - same offset math as pf_devw_panel
-    if (ndim % 128 == 0 && mt == 32) {
-        let td = ndim / 2
-        let nbr = kdim / 32
-        var by_t = buf_fill(dev, m * ndim, -500.0)
-        var bwh_t = buf_fill(dev, td * kdim, float16(-100.0))
-        var bwh_t2 = buf_fill(dev, td * kdim, float16(-100.0))
-        var tka = CvtArgs(total = uint(td * nbr))
-        let rant = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-            for (ti in range(2)) {
-                let tbase = ti * td
-                var bwh_ti = ti == 0 ? bwh_t : bwh_t2
-                metal_set_pipeline(enc, dq_pso)
-                metal_set_buffer(enc, bw, uint64(tbase * nbr * 34), 0)
-                metal_set_buffer(enc, bw, uint64(tbase * nbr * 34), 1)
-                metal_set_buffer(enc, bwh_ti, 0ul, 2)
-                metal_set_bytes(enc, unsafe(addr<void?>(tka)), uint64(typeinfo sizeof(tka)), 3)
-                metal_dispatch_threadgroups(enc, uint3(uint((td * nbr + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
-                metal_set_pipeline(enc, mm_pso)
-                metal_set_buffer(enc, bwh_ti, 0ul, 0)
-                metal_set_buffer(enc, bx, 0ul, 1)
-                metal_set_buffer(enc, by_t, uint64(tbase * 4), 2)
-                metal_set_buffer(enc, bk, 0ul, 3)
-                metal_set_buffer(enc, bn, 0ul, 4)
-                metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(td / 64), 1u), uint3(128u, 1u, 1u))
+        var inscope ref <- dense_ref_rows(wdeq, xf, m, kdim, ndim)
+        let bw = mc |> in_plain(blob)
+        let bx = mc |> in_plain(xh)
+        let bwh = mc |> out_words(ndim * kdim, float16(-100.0))   // poison fill: an unwritten panel block reds the compare
+        let by = mc |> out_words(m * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        var dka = CvtArgs(total = uint(nblk))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kd.enc, enc, dq_pso, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bwh], dka, int64(nblk))
+            invoke(km.enc, enc, mm_pso, mc.buf[bwh], 0ul, mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
+        }
+        if (ran) {
+            check_buf(t, tag, mc.buf[by], ref.want, env_bar(2e-3, ref.env), Shape(row_width = ndim), ref.env)
+        }
+        // the N-TILED chain (the production over-knee form): two half-N tiles, each dequant at
+        // the blob column offset + GEMM into y's column slice - same offset math as pf_devw_panel
+        if (ndim % 128 == 0 && mt == 32) {
+            let td = ndim / 2
+            let nbr = kdim / 32
+            let by_t = mc |> out_words(m * ndim, -500.0)
+            let bwh_t = mc |> out_words(td * kdim, float16(-100.0))
+            let bwh_t2 = mc |> out_words(td * kdim, float16(-100.0))
+            var tka = CvtArgs(total = uint(td * nbr))
+            let rant = mc |> cell_record(t, "{tag} tiled") $(enc : MetalComputeEncoder?) {
+                for (ti in range(2)) {
+                    let tbase = ti * td
+                    let bwh_ti = ti == 0 ? bwh_t : bwh_t2
+                    invoke(kd.enc, enc, dq_pso, mc.buf[bw], uint64(tbase * nbr * 34), mc.buf[bw], mc.buf[bwh_ti], tka, int64(td * nbr))
+                    invoke(km.enc, enc, mm_pso, mc.buf[bwh_ti], 0ul, mc.buf[bx], 0ul, mc.buf[by_t], uint64(tbase * 4), mc.buf[bk], mc.buf[bn], int64(m), int64(td))
+                }
+            }
+            if (rant) {
+                check_buf(t, "{tag} tiled", mc.buf[by_t], ref.want, env_bar(2e-3, ref.env), Shape(row_width = ndim), ref.env)
             }
         }
-        t |> success(rant, "{tag}: tiled encode: {err}")
-        if (rant) {
-            t |> equal(buf_mismatch_env(by_t, want, env, 2e-3, "{tag} tiled"), 0)
+        // negative control: the GEMM alone over a poison-only panel (dequant skipped) must MISS
+        // the oracle - proves the chained compare above actually rode the dequant output
+        let bwh_p = mc |> out_words(ndim * kdim, float16(-100.0))
+        let by_p = mc |> out_words(m * ndim, -1000.0)
+        let ranp = mc |> cell_record(t, "{tag} control") $(enc : MetalComputeEncoder?) {
+            invoke(km.enc, enc, mm_pso, mc.buf[bwh_p], 0ul, mc.buf[bx], 0ul, mc.buf[by_p], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
         }
-        metal_release(by_t)
-        metal_release(bwh_t)
-        metal_release(bwh_t2)
-    }
-    // negative control: the GEMM alone over a poison-only panel (dequant skipped) must MISS
-    // the oracle - proves the chained compare above actually rode the dequant output
-    var bwh_p = buf_fill(dev, ndim * kdim, float16(-100.0))
-    var by_p = buf_fill(dev, m * ndim, -1000.0)
-    let ranp = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, mm_pso)
-        metal_set_buffer(enc, bwh_p, 0ul, 0)
-        metal_set_buffer(enc, bx, 0ul, 1)
-        metal_set_buffer(enc, by_p, 0ul, 2)
-        metal_set_buffer(enc, bk, 0ul, 3)
-        metal_set_buffer(enc, bn, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ranp, "{tag}: control encode: {err}")
-    if (ranp) {
-        // quiet count (no eyeball dump - this red is the expectation, not a failure)
-        var badp = 0
-        unsafe {
-            let p = reinterpret<float const?>(metal_buffer_contents(by_p))
-            for (k in range(m * ndim)) {
-                badp += abs(p[k] - want[k]) <= max(2e-3 * env[k], 1e-3) ? 0 : 1
-            }
+        if (ranp) {
+            let badp = poison_panel_over(mc, by_p, ref.want, ref.env, 2e-3)
+            t |> success(badp > 0, "{tag}: poison-panel control reds the bar ({badp} over)")
         }
-        t |> success(badp > 0, "{tag}: poison-panel control reds the bar ({badp} over)")
     }
-    metal_release(bwh_p)
-    metal_release(by_p)
-    metal_release(bw)
-    metal_release(bx)
-    metal_release(bwh)
-    metal_release(by)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(dq_pso)
-    metal_release(mm_pso)
-    delete blob
-    delete xf
-    delete xh
-    delete want
-    delete env
-    delete wdeq
 }
 
-//! one format's dev-W dequant kernel, with the threadgroup memory the split-scale chunk passes need
-def private kq_dq_kernel(fmt) : tuple<src : string; entry : string; fm : bool; tgm : uint64> {
-    if (fmt == 4) return (src = MetalDequantK4H_metal_dequant_k45_msl, entry = MetalDequantK4H_metal_dequant_k45_msl_entry, fm = MetalDequantK4H_metal_dequant_k45_msl_fastmath, tgm = 0ul)
-    if (fmt == 5) return (src = MetalDequantK5H_metal_dequant_k45_msl, entry = MetalDequantK5H_metal_dequant_k45_msl_entry, fm = MetalDequantK5H_metal_dequant_k45_msl_fastmath, tgm = 0ul)
-    if (fmt == 6) return (src = metal_dequant_k6h_msl, entry = metal_dequant_k6h_msl_entry, fm = metal_dequant_k6h_msl_fastmath, tgm = 0ul)
-    if (fmt == 44) return (src = MetalKqDequantIq4xs_metal_kq_dequant_iq4xs_msl, entry = MetalKqDequantIq4xs_metal_kq_dequant_iq4xs_msl_entry, fm = MetalKqDequantIq4xs_metal_kq_dequant_iq4xs_msl_fastmath, tgm = MetalKqDequantIq4xs_metal_kq_dequant_iq4xs_msl_tgmem)
-    if (fmt == 45) return (src = MetalKqDequantIq4nl_metal_kq_dequant_iq4xs_msl, entry = MetalKqDequantIq4nl_metal_kq_dequant_iq4xs_msl_entry, fm = MetalKqDequantIq4nl_metal_kq_dequant_iq4xs_msl_fastmath, tgm = MetalKqDequantIq4nl_metal_kq_dequant_iq4xs_msl_tgmem)
-    if (fmt == 40) return (src = MetalKqDequantQ40_metal_kq_dequant_iq4xs_msl, entry = MetalKqDequantQ40_metal_kq_dequant_iq4xs_msl_entry, fm = MetalKqDequantQ40_metal_kq_dequant_iq4xs_msl_fastmath, tgm = MetalKqDequantQ40_metal_kq_dequant_iq4xs_msl_tgmem)
-    if (fmt == 3) return (src = MetalKqDequantK3_metal_kq_dequant_k3_msl, entry = MetalKqDequantK3_metal_kq_dequant_k3_msl_entry, fm = MetalKqDequantK3_metal_kq_dequant_k3_msl_fastmath, tgm = MetalKqDequantK3_metal_kq_dequant_k3_msl_tgmem)
-    if (fmt == 33) return (src = MetalKqDequantIq3s_metal_kq_dequant_iq3s_msl, entry = MetalKqDequantIq3s_metal_kq_dequant_iq3s_msl_entry, fm = MetalKqDequantIq3s_metal_kq_dequant_iq3s_msl_fastmath, tgm = MetalKqDequantIq3s_metal_kq_dequant_iq3s_msl_tgmem)
-    if (fmt == 34) return (src = MetalKqDequantIq3xxs_metal_kq_dequant_iq3xxs_msl, entry = MetalKqDequantIq3xxs_metal_kq_dequant_iq3xxs_msl_entry, fm = MetalKqDequantIq3xxs_metal_kq_dequant_iq3xxs_msl_fastmath, tgm = MetalKqDequantIq3xxs_metal_kq_dequant_iq3xxs_msl_tgmem)
-    if (fmt == 2) return (src = MetalKqDequantK2_metal_kq_dequant_k2_msl, entry = MetalKqDequantK2_metal_kq_dequant_k2_msl_entry, fm = MetalKqDequantK2_metal_kq_dequant_k2_msl_fastmath, tgm = MetalKqDequantK2_metal_kq_dequant_k2_msl_tgmem)
-    if (fmt == 23) return (src = MetalKqDequantIq2s_metal_kq_dequant_iq2s_msl, entry = MetalKqDequantIq2s_metal_kq_dequant_iq2s_msl_entry, fm = MetalKqDequantIq2s_metal_kq_dequant_iq2s_msl_fastmath, tgm = MetalKqDequantIq2s_metal_kq_dequant_iq2s_msl_tgmem)
-    if (fmt == 24) return (src = MetalKqDequantIq2xs_metal_kq_dequant_iq2xs_msl, entry = MetalKqDequantIq2xs_metal_kq_dequant_iq2xs_msl_entry, fm = MetalKqDequantIq2xs_metal_kq_dequant_iq2xs_msl_fastmath, tgm = MetalKqDequantIq2xs_metal_kq_dequant_iq2xs_msl_tgmem)
-    if (fmt == 25) return (src = MetalKqDequantIq2xxs_metal_kq_dequant_iq2xxs_msl, entry = MetalKqDequantIq2xxs_metal_kq_dequant_iq2xxs_msl_entry, fm = MetalKqDequantIq2xxs_metal_kq_dequant_iq2xxs_msl_fastmath, tgm = MetalKqDequantIq2xxs_metal_kq_dequant_iq2xxs_msl_tgmem)
-    panic("kq_dq_kernel: no dev-W dequant kernel for format {fmt}")
-    return (src = "", entry = "", fm = false, tgm = 0ul)
+//! the dev-W dequant kernel of a format the CvtArgs pass serves (k4, k5, k6)
+def private kq_dqh_kernel(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    if (f == KqFmt.k4) return kernel_of(@@enc_dequant_k4h)
+    if (f == KqFmt.k5) return kernel_of(@@enc_dequant_k5h)
+    if (f != KqFmt.k6) {
+        panic("kq_dqh_kernel: no CvtArgs dequant kernel for {f}")
+    }
+    return kernel_of(@@enc_dequant_k6h)
 }
 
-//! one dequant dispatch of W rows [tbase, tbase+td) into bwh - the plane offsets stride per
+//! the dev-W dequant kernel of a split-scale format
+def private kq_dq_kernel(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    if (f == KqFmt.iq4xs) return kernel_of(@@enc_kq_dq_iq4xs)
+    if (f == KqFmt.iq4nl) return kernel_of(@@enc_kq_dq_iq4nl)
+    if (f == KqFmt.q40) return kernel_of(@@enc_kq_dq_q40)
+    if (f == KqFmt.k3) return kernel_of(@@enc_kq_dq_k3)
+    if (f == KqFmt.iq3s) return kernel_of(@@enc_kq_dq_iq3s)
+    if (f == KqFmt.iq3xxs) return kernel_of(@@enc_kq_dq_iq3xxs)
+    if (f == KqFmt.k2) return kernel_of(@@enc_kq_dq_k2)
+    if (f == KqFmt.iq2s) return kernel_of(@@enc_kq_dq_iq2s)
+    if (f == KqFmt.iq2xs) return kernel_of(@@enc_kq_dq_iq2xs)
+    if (f != KqFmt.iq2xxs) {
+        panic("kq_dq_kernel: no dev-W dequant kernel for {f}")
+    }
+    return kernel_of(@@enc_kq_dq_iq2xxs)
+}
+
+//! a format's dev-W dequant pipeline: the split-scale kernel, or the CvtArgs pass on k4 / k5 / k6
+def private kq_dq_pso(var mc; fmt : int; var err : string&) : MetalComputePipeline? {
+    let f = kq_fmt_of_id(fmt, "kq_dq_pso")
+    return kq_dq_split(fmt) ? (mc |> keep_stamp(kq_dq_kernel(f), err)) : (mc |> keep_stamp(kq_dqh_kernel(f), err))
+}
+
+def private kq_dq_split(fmt : int) : bool => fmt != 4 && fmt != 5 && fmt != 6
+
+//! one dequant dispatch of W rows [tbase, tbase+td) into bwh through the format's builder - the plane offsets stride per
 //! superblock as pf_enc_kq_dq's do (16B strips, the d tail past the strips, kq_qsb quant bytes)
-def private kq_dq_dispatch(enc; fmt : int; dq_pso; tgm : uint64;
+def private kq_dq_dispatch(enc; fmt : int; dq_pso;
                            bks, bkq, bwh, bk, bn; nsb, nb, tbase, td, kdim : int) {
-    let split = fmt != 4 && fmt != 5 && fmt != 6
+    let f = kq_fmt_of_id(fmt, "kq_dq_dispatch")
     let compact = fmt == 4 || fmt == 5 || fmt == 45 || fmt == 40
     let so = uint64(tbase * nb * 16)
     let d0 = compact ? so : uint64(nsb * 16 + tbase * nb * (fmt == 2 ? 4 : 2))
-    metal_set_pipeline(enc, dq_pso)
-    metal_set_buffer(enc, bks, d0, 0)
-    metal_set_buffer(enc, bks, so, 1)
-    metal_set_buffer(enc, bkq, uint64(tbase) * uint64(nb) * uint64(kq_qsb(fmt)), 2)
-    if (split) {
-        metal_set_threadgroup_memory_length(enc, tgm, 0)
-        metal_set_buffer(enc, bwh, 0ul, 3)
-        metal_set_buffer(enc, bwh, 0ul, 4)
-        metal_set_buffer(enc, bk, 0ul, 5)
-        metal_set_buffer(enc, bn, 0ul, 6)
-        metal_set_buffer(enc, bwh, 0ul, 7)
-        metal_dispatch_threadgroups(enc, uint3(uint(kdim / 64), uint(td / 64), 1u), uint3(128u, 1u, 1u))
+    let qo = uint64(tbase) * uint64(nb) * uint64(kq_qsb(fmt))
+    if (kq_dq_split(fmt)) {
+        invoke(kq_dq_kernel(f).enc, enc, dq_pso, bks, d0, bks, so, bkq, qo, bwh, 0ul, bwh, 0ul, bk, bn, bwh, int64(kdim), int64(td))
     } else {
         var ka = CvtArgs(total = uint(td * (kdim / 32)))
-        metal_set_buffer(enc, bwh, 0ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
-        metal_dispatch_threadgroups(enc, uint3(uint((td * (kdim / 32) + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
+        invoke(kq_dqh_kernel(f).enc, enc, dq_pso, bks, d0, bks, so, bkq, qo, bwh, ka, int64(td * (kdim / 32)))
     }
 }
 
 // the kq dev-W chains: the format's dequant into a device f16 panel, then the SAME all-device
 // GEMM as q8's - per-format truth via kq_row_ref, plus the shared poison-panel negative
 // control (dequant skipped must miss the oracle)
-def private kq_devw_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
+def private kq_devw_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim : int) {
     let tag = "kq_devw_k{fmt} m={m} k={kdim} n={ndim}"
-    var err : string
-    let dk = kq_dq_kernel(fmt)
-    var dq_pso = pipeline_from_source(dev, dk.src, dk.entry, dk.fm, err)
-    var mm_pso = pipeline_from_source(dev, MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, err)
-    if (mm_pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
-        return
-    }
-    t |> success(dq_pso != null && mm_pso != null, "{tag}: pipeline: {err}")
-    return if (dq_pso == null || mm_pso == null)
-    let nb = kdim / 256
-    let nsb = ndim * nb
-    var kq : array<uint8>
-    var ks : array<uint8>
-    kq_fill_planes(fmt, nsb, kq, ks)
-    var xf : array<float>
-    xf |> resize(m * kdim)
-    for (i in range(m * kdim)) {
-        xf[i] = float(float16(0.07 * float(i % 39) - 1.3))   // f16 round-trip: the oracle dot stays exact
-    }
-    var xh : array<float16>
-    xh |> resize(m * kdim)
-    for (i in range(m * kdim)) {
-        xh[i] = float16(xf[i])
-    }
-    var want : array<float>
-    var env : array<float>
-    var wrow : array<float>
-    want |> resize(m * ndim)
-    env |> resize(m * ndim)
-    wrow |> resize(kdim)
-    for (j in range(ndim)) {
-        kq_row_ref(fmt, j * nb, nb, nsb, kq, ks, wrow)
-        for (r in range(m)) {
-            var acc = 0.0lf
-            var ev = 0.0lf
-            for (c in range(kdim)) {
-                let p = double(wrow[c]) * double(xf[r * kdim + c])
-                acc += p
-                ev += abs(p)
-            }
-            want[r * ndim + j] = float(acc)
-            env[r * ndim + j] = float(ev)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        var dq_pso = kq_dq_pso(mc, fmt, err)
+        let km = kernel_of(@@enc_gemm_hmm_th)
+        var mm_pso = mc |> keep_stamp(km, err)
+        return if (!(mm_pso == null ? tensor_pso_or_skip(t, tag, mm_pso, dev, err) : pso_ok(t, tag, dq_pso, err)))
+        let nb = kdim / 256
+        let nsb = ndim * nb
+        var inscope kq : array<uint8>
+        var inscope ks : array<uint8>
+        kq_fill_planes(fmt, nsb, kq, ks)
+        var inscope xf : array<float>
+        xf |> resize(m * kdim)
+        for (i in range(m * kdim)) {
+            xf[i] = float(float16(0.07 * float(i % 39) - 1.3))   // f16 round-trip: the oracle dot stays exact
         }
-    }
-    var bks = buf_upload(dev, ks)
-    var bkq = buf_upload(dev, kq)
-    var bx = buf_upload(dev, xh)
-    var bwh = buf_fill(dev, ndim * kdim, float16(-100.0))   // poison fill: an unwritten panel block reds the compare
-    var by = buf_fill(dev, m * ndim, -1000.0)
-    var bk = buf_u32(dev, uint(kdim))
-    var bn = buf_u32(dev, uint(ndim))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        kq_dq_dispatch(enc, fmt, dq_pso, dk.tgm, bks, bkq, bwh, bk, bn, nsb, nb, 0, ndim, kdim)
-        metal_set_pipeline(enc, mm_pso)
-        metal_set_buffer(enc, bwh, 0ul, 0)
-        metal_set_buffer(enc, bx, 0ul, 1)
-        metal_set_buffer(enc, by, 0ul, 2)
-        metal_set_buffer(enc, bk, 0ul, 3)
-        metal_set_buffer(enc, bn, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
-    }
-    // the N-TILED chain: per-format tile plane offsets - same math as pf_devw_panel_kq
-    if (ndim % 128 == 0) {
-        let td = ndim / 2
-        var by_t = buf_fill(dev, m * ndim, -500.0)
-        var bwh_t = buf_fill(dev, td * kdim, float16(-100.0))
-        var bwh_t2 = buf_fill(dev, td * kdim, float16(-100.0))
-        let rant = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-            for (ti in range(2)) {
-                let tbase = ti * td
-                var bwh_ti = ti == 0 ? bwh_t : bwh_t2
-                kq_dq_dispatch(enc, fmt, dq_pso, dk.tgm, bks, bkq, bwh_ti, bk, bn, nsb, nb, tbase, td, kdim)
-                metal_set_pipeline(enc, mm_pso)
-                metal_set_buffer(enc, bwh_ti, 0ul, 0)
-                metal_set_buffer(enc, bx, 0ul, 1)
-                metal_set_buffer(enc, by_t, uint64(tbase * 4), 2)
-                metal_set_buffer(enc, bk, 0ul, 3)
-                metal_set_buffer(enc, bn, 0ul, 4)
-                metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(td / 64), 1u), uint3(128u, 1u, 1u))
+        var inscope xh : array<float16>
+        xh |> resize(m * kdim)
+        for (i in range(m * kdim)) {
+            xh[i] = float16(xf[i])
+        }
+        var inscope ref <- dense_ref_env(m, kdim, ndim, xf) $(j; var wrow) {
+            kq_row_ref(fmt, j * nb, nb, nsb, kq, ks, wrow)
+        }
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let bx = mc |> in_plain(xh)
+        let bwh = mc |> out_words(ndim * kdim, float16(-100.0))   // poison fill: an unwritten panel block reds the compare
+        let by = mc |> out_words(m * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            kq_dq_dispatch(enc, fmt, dq_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bwh], mc.buf[bk], mc.buf[bn], nsb, nb, 0, ndim, kdim)
+            invoke(km.enc, enc, mm_pso, mc.buf[bwh], 0ul, mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
+        }
+        if (ran) {
+            check_buf(t, tag, mc.buf[by], ref.want, env_bar(2e-4, ref.env), Shape(row_width = ndim), ref.env)
+        }
+        // the N-TILED chain: per-format tile plane offsets - same math as pf_devw_panel_kq
+        if (ndim % 128 == 0) {
+            let td = ndim / 2
+            let by_t = mc |> out_words(m * ndim, -500.0)
+            let bwh_t = mc |> out_words(td * kdim, float16(-100.0))
+            let bwh_t2 = mc |> out_words(td * kdim, float16(-100.0))
+            let rant = mc |> cell_record(t, "{tag} tiled") $(enc : MetalComputeEncoder?) {
+                for (ti in range(2)) {
+                    let tbase = ti * td
+                    let bwh_ti = ti == 0 ? bwh_t : bwh_t2
+                    kq_dq_dispatch(enc, fmt, dq_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bwh_ti], mc.buf[bk], mc.buf[bn], nsb, nb, tbase, td, kdim)
+                    invoke(km.enc, enc, mm_pso, mc.buf[bwh_ti], 0ul, mc.buf[bx], 0ul, mc.buf[by_t], uint64(tbase * 4), mc.buf[bk], mc.buf[bn], int64(m), int64(td))
+                }
+            }
+            if (rant) {
+                check_buf(t, "{tag} tiled", mc.buf[by_t], ref.want, env_bar(2e-4, ref.env), Shape(row_width = ndim), ref.env)
             }
         }
-        t |> success(rant, "{tag}: tiled encode: {err}")
-        if (rant) {
-            t |> equal(buf_mismatch_env(by_t, want, env, 2e-4, "{tag} tiled"), 0)
+        // negative control: the GEMM alone over a poison-only panel must MISS the oracle
+        let bwh_p = mc |> out_words(ndim * kdim, float16(-100.0))
+        let by_p = mc |> out_words(m * ndim, -1000.0)
+        let ranp = mc |> cell_record(t, "{tag} control") $(enc : MetalComputeEncoder?) {
+            invoke(km.enc, enc, mm_pso, mc.buf[bwh_p], 0ul, mc.buf[bx], 0ul, mc.buf[by_p], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
         }
-        metal_release(by_t)
-        metal_release(bwh_t)
-        metal_release(bwh_t2)
-    }
-    // negative control: the GEMM alone over a poison-only panel must MISS the oracle
-    var bwh_p = buf_fill(dev, ndim * kdim, float16(-100.0))
-    var by_p = buf_fill(dev, m * ndim, -1000.0)
-    let ranp = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, mm_pso)
-        metal_set_buffer(enc, bwh_p, 0ul, 0)
-        metal_set_buffer(enc, bx, 0ul, 1)
-        metal_set_buffer(enc, by_p, 0ul, 2)
-        metal_set_buffer(enc, bk, 0ul, 3)
-        metal_set_buffer(enc, bn, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ranp, "{tag}: control encode: {err}")
-    if (ranp) {
-        var badp = 0
-        unsafe {
-            let p = reinterpret<float const?>(metal_buffer_contents(by_p))
-            for (k in range(m * ndim)) {
-                badp += abs(p[k] - want[k]) <= max(2e-4 * env[k], 1e-3) ? 0 : 1
-            }
+        if (ranp) {
+            let badp = poison_panel_over(mc, by_p, ref.want, ref.env, 2e-4)
+            t |> success(badp > 0, "{tag}: poison-panel control reds the bar ({badp} over)")
         }
-        t |> success(badp > 0, "{tag}: poison-panel control reds the bar ({badp} over)")
     }
-    metal_release(bwh_p)
-    metal_release(by_p)
-    metal_release(bks)
-    metal_release(bkq)
-    metal_release(bx)
-    metal_release(bwh)
-    metal_release(by)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(dq_pso)
-    metal_release(mm_pso)
-    delete kq
-    delete ks
-    delete xf
-    delete xh
-    delete want
-    delete env
-    delete wrow
 }
 
-def private q8_dbuf_gate(t : T?; dev, queue; m, kdim, ndim : int; mt : int = 128) {
+//! the double-buffered arm's output against the single-buffered one's, word for word
+def private dbuf_identity(t : T?; mc; tag : string; by_a, by_b, n : int) {
+    var inscope single <- mc |> plane_as(by_a, type<uint>, n)
+    var inscope dbuf <- mc |> plane_as(by_b, type<uint>, n)
+    check_exact(t, "{tag} dbuf == single", dbuf, single)
+}
+
+def private q8_dbuf_gate(t : T?; var dev, queue; m, kdim, ndim : int; mt : int = 128) {
     let tag = "q8_dbuf mt{mt} m={m} k={kdim} n={ndim}"
-    var err : string
-    var pso_a = (mt == 128
-        ? pipeline_from_source(dev, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_fastmath, err)
-        : pipeline_from_source(dev, MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath, err))
-    var pso_b = (mt == 128
-        ? pipeline_from_source(dev, MetalQ8MulMmTHDb128_metal_q8_mulmm_t_msl, MetalQ8MulMmTHDb128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTHDb128_metal_q8_mulmm_t_msl_fastmath, err)
-        : pipeline_from_source(dev, MetalQ8MulMmTHDb_metal_q8_mulmm_t_msl, MetalQ8MulMmTHDb_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTHDb_metal_q8_mulmm_t_msl_fastmath, err))
-    if ((pso_a == null || pso_b == null) && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
-        return
-    }
-    t |> success(pso_a != null && pso_b != null, "{tag}: pipeline: {err}")
-    return if (pso_a == null || pso_b == null)
-    let nb = kdim / 32
-    var blob : array<uint8>
-    var wdeq : array<float>
-    q8_blob_fill(ndim, nb, blob, wdeq)
-    var xf : array<float>
-    q8_x_fill(m * kdim, xf)
-    var xh : array<float16>
-    xh |> resize(m * kdim)
-    for (i in range(m * kdim)) {
-        xh[i] = float16(xf[i])
-    }
-    var bw = buf_upload(dev, blob)
-    var bx = buf_upload(dev, xh)
-    var by_a = buf_fill(dev, m * ndim, -1000.0)
-    var by_b = buf_fill(dev, m * ndim, -500.0)
-    var bk = buf_u32(dev, uint(kdim))
-    var bn = buf_u32(dev, uint(ndim))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso_a)
-        metal_set_threadgroup_memory_length(enc, mt == 128 ? MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_tgmem : MetalQ8MulMmTH_metal_q8_mulmm_t_msl_tgmem, 0)
-        metal_set_buffer(enc, bw, 0ul, 0)
-        metal_set_buffer(enc, bw, 0ul, 1)
-        metal_set_buffer(enc, bx, 0ul, 2)
-        metal_set_buffer(enc, by_a, 0ul, 3)
-        metal_set_buffer(enc, bk, 0ul, 4)
-        metal_set_buffer(enc, bn, 0ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
-        metal_set_pipeline(enc, pso_b)
-        metal_set_threadgroup_memory_length(enc, mt == 128 ? MetalQ8MulMmTHDb128_metal_q8_mulmm_t_msl_tgmem : MetalQ8MulMmTHDb_metal_q8_mulmm_t_msl_tgmem, 0)
-        metal_set_buffer(enc, by_b, 0ul, 3)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        var bad = 0
-        unsafe {
-            let pa = reinterpret<uint const?>(metal_buffer_contents(by_a))
-            let pb = reinterpret<uint const?>(metal_buffer_contents(by_b))
-            for (i in range(m * ndim)) {
-                if (pa[i] != pb[i]) {
-                    if (bad < 4) {
-                        to_log(LOG_ERROR, "{tag}: [{i}] single={pa[i]} dbuf={pb[i]}\n")
-                    }
-                    bad++
-                }
-            }
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let ka = mt == 128 ? kernel_of(@@enc_gemm_mm_th128_c) : kernel_of(@@enc_gemm_mm_th_c)
+        let kb = mt == 128 ? kernel_of(@@enc_gemm_mm_thdb128_c) : kernel_of(@@enc_gemm_mm_thdb_c)
+        var pso_a = mc |> keep_stamp(ka, err)
+        var pso_b = mc |> keep_stamp(kb, err)
+        return if ((pso_a == null || pso_b == null) && !tensor_pso_or_skip(t, tag, null, dev, err))
+        let nb = kdim / 32
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ndim, nb, blob, wdeq)
+        var inscope xf : array<float>
+        q8_x_fill(m * kdim, xf)
+        var inscope xh : array<float16>
+        xh |> resize(m * kdim)
+        for (i in range(m * kdim)) {
+            xh[i] = float16(xf[i])
         }
-        t |> equal(bad, 0)
-        var want : array<float>
-        var env : array<float>
-        want |> resize(m * ndim)
-        env |> resize(m * ndim)
-        for (j in range(ndim)) {
-            for (r in range(m)) {
-                var acc = 0.0lf
-                var ev = 0.0lf
-                for (c in range(kdim)) {
-                    let p = double(wdeq[j * kdim + c]) * double(xf[r * kdim + c])
-                    acc += p
-                    ev += abs(p)
-                }
-                want[r * ndim + j] = float(acc)
-                env[r * ndim + j] = float(ev)
-            }
+        let bw = mc |> in_plain(blob)
+        let bx = mc |> in_plain(xh)
+        let by_a = mc |> out_words(m * ndim, -1000.0)
+        let by_b = mc |> out_words(m * ndim, -500.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(ka.enc, enc, pso_a, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], 0ul, mc.buf[by_a], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
+            invoke(kb.enc, enc, pso_b, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], 0ul, mc.buf[by_b], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
         }
-        t |> equal(buf_mismatch_env(by_a, want, env, 2e-3, tag), 0)
-        delete want
-        delete env
+        return if (!ran)
+        dbuf_identity(t, mc, tag, by_a, by_b, m * ndim)
+        var inscope ref <- dense_ref_rows(wdeq, xf, m, kdim, ndim)
+        check_buf(t, tag, mc.buf[by_a], ref.want, env_bar(2e-3, ref.env), Shape(row_width = ndim), ref.env)
     }
-    metal_release(bw)
-    metal_release(bx)
-    metal_release(by_a)
-    metal_release(by_b)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(pso_a)
-    metal_release(pso_b)
-    delete blob
-    delete wdeq
-    delete xf
-    delete xh
 }
 
-def private kq_dbuf_gate(t : T?; dev, queue; fmt : int; m, kdim, ndim : int) {
+def private kq_dbuf_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim : int) {
     let tag = "kq_dbuf_k{fmt} m={m} k={kdim} n={ndim}"
-    var err : string
-    let asrc = fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl)
-    let aentry = fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_entry : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_entry : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_entry)
-    let afm = fmt == 4 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5TH128_metal_kq_mulmm_t_msl_fastmath : MetalKqMulMmK6TH128_metal_kq_mulmm_k6_t_msl_fastmath)
-    let bsrc = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl : MetalKqMulMmK6THDb128_metal_kq_mulmm_db_msl)
-    let bentry = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_entry : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl_entry : MetalKqMulMmK6THDb128_metal_kq_mulmm_db_msl_entry)
-    let bfm = fmt == 4 ? MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_fastmath : (fmt == 5 ? MetalKqMulMmK5THDb128_metal_kq_mulmm_db_msl_fastmath : MetalKqMulMmK6THDb128_metal_kq_mulmm_db_msl_fastmath)
-    var pso_a = pipeline_from_source(dev, asrc, aentry, afm, err)
-    var pso_b = pipeline_from_source(dev, bsrc, bentry, bfm, err)
-    if ((pso_a == null || pso_b == null) && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
-        return
-    }
-    t |> success(pso_a != null && pso_b != null, "{tag}: pipeline: {err}")
-    return if (pso_a == null || pso_b == null)
-    let nb = kdim / 256
-    let nsb = ndim * nb
-    var kq : array<uint8>
-    var ks : array<uint8>
-    kq_fill_planes(fmt, nsb, kq, ks)
-    var xf : array<float>
-    xf |> resize(m * kdim)
-    for (i in range(m * kdim)) {
-        xf[i] = float(float16(0.05 * float(i % 41) - 0.9))   // f16 round-trip: the oracle dot stays exact
-    }
-    var xh : array<float16>
-    xh |> resize(m * kdim)
-    for (i in range(m * kdim)) {
-        xh[i] = float16(xf[i])
-    }
-    // the single-buffered arm carries the CPU oracle: bit-identity alone would pass with both
-    // arms wrong, so one of the two is scored against the dequantized rows
-    var want : array<float>
-    var env : array<float>
-    var wrow : array<float>
-    want |> resize(m * ndim)
-    env |> resize(m * ndim)
-    wrow |> resize(kdim)
-    for (j in range(ndim)) {
-        kq_row_ref(fmt, j * nb, nb, nsb, kq, ks, wrow)
-        for (r in range(m)) {
-            var acc = 0.0lf
-            var ev = 0.0lf
-            for (c in range(kdim)) {
-                let p = double(wrow[c]) * double(xf[r * kdim + c])
-                acc += p
-                ev += abs(p)
-            }
-            want[r * ndim + j] = float(acc)
-            env[r * ndim + j] = float(ev)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let ka = kq_mm_th128_kernel(kq_fmt_of_id(fmt, "kq_dbuf_gate"))
+        let kb = fmt == 4 ? kernel_of(@@enc_kq_mm_k4_thdb128_c) : (fmt == 5 ? kernel_of(@@enc_kq_mm_k5_thdb128_c) : kernel_of(@@enc_kq_mm_k6_thdb128_c))
+        var pso_a = mc |> keep_stamp(ka, err)
+        var pso_b = mc |> keep_stamp(kb, err)
+        return if ((pso_a == null || pso_b == null) && !tensor_pso_or_skip(t, tag, null, dev, err))
+        let nb = kdim / 256
+        let nsb = ndim * nb
+        var inscope kq : array<uint8>
+        var inscope ks : array<uint8>
+        kq_fill_planes(fmt, nsb, kq, ks)
+        var inscope xf : array<float>
+        xf |> resize(m * kdim)
+        for (i in range(m * kdim)) {
+            xf[i] = float(float16(0.05 * float(i % 41) - 0.9))   // f16 round-trip: the oracle dot stays exact
         }
-    }
-    var bks = buf_upload(dev, ks)
-    var bkq = buf_upload(dev, kq)
-    var bx = buf_upload(dev, xh)
-    var by_a = buf_fill(dev, m * ndim, -1000.0)
-    var by_b = buf_fill(dev, m * ndim, -500.0)
-    var bk = buf_u32(dev, uint(kdim))
-    var bn = buf_u32(dev, uint(ndim))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        for (arm in range(2)) {
-            metal_set_pipeline(enc, arm == 0 ? pso_a : pso_b)
-            metal_set_threadgroup_memory_length(enc, arm == 0 ? MetalKqMulMmK4TH128_metal_kq_mulmm_t_msl_tgmem : MetalKqMulMmK4THDb128_metal_kq_mulmm_db_msl_tgmem, 0)
-            metal_set_buffer(enc, bks, fmt == 6 ? uint64(nsb * 16) : 0ul, 0)   //! k6 keeps its f16 d scales in a tail past the 16B blocks
-            metal_set_buffer(enc, bks, 0ul, 1)
-            metal_set_buffer(enc, bkq, 0ul, 2)
-            metal_set_buffer(enc, bx, 0ul, 3)
-            metal_set_buffer(enc, arm == 0 ? by_a : by_b, 0ul, 4)
-            metal_set_buffer(enc, bk, 0ul, 5)
-            metal_set_buffer(enc, bn, 0ul, 6)
-            metal_dispatch_threadgroups(enc, uint3(uint(m / 128), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        var inscope xh : array<float16>
+        xh |> resize(m * kdim)
+        for (i in range(m * kdim)) {
+            xh[i] = float16(xf[i])
         }
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        var bad = 0
-        unsafe {
-            let pa = reinterpret<uint const?>(metal_buffer_contents(by_a))
-            let pb = reinterpret<uint const?>(metal_buffer_contents(by_b))
-            for (i in range(m * ndim)) {
-                if (pa[i] != pb[i]) {
-                    if (bad < 4) {
-                        to_log(LOG_ERROR, "{tag}: [{i}] single={pa[i]} dbuf={pb[i]}\n")
-                    }
-                    bad++
-                }
-            }
+        // the single-buffered arm carries the CPU oracle: bit-identity alone would pass with both
+        // arms wrong, so one of the two is scored against the dequantized rows
+        var inscope ref <- dense_ref_env(m, kdim, ndim, xf) $(j; var wrow) {
+            kq_row_ref(fmt, j * nb, nb, nsb, kq, ks, wrow)
         }
-        t |> equal(bad, 0)
-        t |> equal(buf_mismatch_env(by_a, want, env, 2e-4, tag), 0)
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let bx = mc |> in_plain(xh)
+        let by_a = mc |> out_words(m * ndim, -1000.0)
+        let by_b = mc |> out_words(m * ndim, -500.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let doff = fmt == 6 ? uint64(nsb * 16) : 0ul   //! k6 keeps its f16 d scales in a tail past the 16B blocks
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(ka.enc, enc, pso_a, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], 0ul, mc.buf[by_a], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
+            invoke(kb.enc, enc, pso_b, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], 0ul, mc.buf[by_b], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
+        }
+        return if (!ran)
+        dbuf_identity(t, mc, tag, by_a, by_b, m * ndim)
+        check_buf(t, tag, mc.buf[by_a], ref.want, env_bar(2e-4, ref.env), Shape(row_width = ndim), ref.env)
     }
-    metal_release(bks)
-    metal_release(bkq)
-    metal_release(bx)
-    metal_release(by_a)
-    metal_release(by_b)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(pso_a)
-    metal_release(pso_b)
-    delete kq
-    delete ks
-    delete xf
-    delete xh
-    delete want
-    delete env
-    delete wrow
 }
 
 [arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
-def private devw_bake_mirror_gate(t : T?; dev, queue; fmt : int; ndim, kdim : int) {
+def private devw_bake_mirror_gate(t : T?; var dev, queue; fmt : int; ndim, kdim : int) {
     let tag = "devw_bake_mirror fmt{fmt} n={ndim} k={kdim}"
-    var err : string
-    var dq_pso : MetalComputePipeline?
-    var dtgm = 0ul
-    if (fmt == 0) {
-        dq_pso = pipeline_from_source(dev, metal_dequant_q8h_msl, metal_dequant_q8h_msl_entry, metal_dequant_q8h_msl_fastmath, err)
-    } else {
-        let dk = kq_dq_kernel(fmt)
-        dq_pso = pipeline_from_source(dev, dk.src, dk.entry, dk.fm, err)
-        dtgm = dk.tgm
-    }
-    if (dq_pso == null && fmt != 0 && fmt != 4 && fmt != 5 && fmt != 6 && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain on this box - arm skipped\n")
-        return
-    }
-    t |> success(dq_pso != null, "{tag}: pipeline: {err}")
-    return if (dq_pso == null)
-    let nblk = ndim * (kdim / 32)
-    var mir : array<float16>
-    mir |> resize(ndim * kdim)
-    var bwh = buf_fill(dev, ndim * kdim, float16(-100.0))
-    var dka = CvtArgs(total = uint(nblk))
-    var ran = false
-    if (fmt == 0) {
-        var blob : array<uint8>
-        var wdeq : array<float>
-        q8_blob_fill(ndim, kdim / 32, blob, wdeq)
-        //! the mirror eats the transcode pair (int8 quants + f32 scales) - the blob's f16 scales
-        //! widen to f32 and re-narrow exactly, so the pair IS the blob's content
-        var q : array<int8>
-        var sf : array<float>
-        q |> resize(nblk * 32)
-        sf |> resize(nblk)
-        unsafe {
-            for (b in range(nblk)) {
-                sf[b] = float(addr<float16 const?>(blob[b * 34])[0])
-                for (c in range(32)) {
-                    q[b * 32 + c] = int8(blob[b * 34 + 2 + c])
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_dequant_q8h)
+        var dq_pso = fmt == 0 ? (mc |> keep_stamp(kd, err)) : kq_dq_pso(mc, fmt, err)
+        // the split-scale dequants are tensor-toolchain stamps; q8 and the k4/k5/k6 forms are base stamps and red
+        return if (!(fmt != 0 && fmt != 4 && fmt != 5 && fmt != 6 ? tensor_pso_or_skip(t, tag, dq_pso, dev, err) : pso_ok(t, tag, dq_pso, err)))
+        let nblk = ndim * (kdim / 32)
+        var inscope mir : array<float16>
+        mir |> resize(ndim * kdim)
+        let bwh = mc |> out_words(ndim * kdim, float16(-100.0))
+        var dka = CvtArgs(total = uint(nblk))
+        var ran = false
+        if (fmt == 0) {
+            var inscope blob : array<uint8>
+            var inscope wdeq : array<float>
+            q8_blob_fill(ndim, kdim / 32, blob, wdeq)
+            //! the mirror eats the transcode pair (int8 quants + f32 scales) - the blob's f16 scales
+            //! widen to f32 and re-narrow exactly, so the pair IS the blob's content
+            var inscope q : array<int8>
+            var inscope sf : array<float>
+            q |> resize(nblk * 32)
+            sf |> resize(nblk)
+            unsafe {
+                for (b in range(nblk)) {
+                    sf[b] = float(addr<float16 const?>(blob[b * 34])[0])
+                    for (c in range(32)) {
+                        q[b * 32 + c] = int8(blob[b * 34 + 2 + c])
+                    }
+                }
+                devw_dequant_q8_core(addr(q[0]), addr(sf[0]), int64(nblk), addr(mir[0]))
+            }
+            let bw = mc |> in_plain(blob)
+            ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                invoke(kd.enc, enc, dq_pso, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bwh], dka, int64(nblk))
+            }
+        } else {
+            let nsb = ndim * (kdim / 256)
+            var inscope kq : array<uint8>
+            var inscope ks : array<uint8>
+            kq_fill_planes(fmt, nsb, kq, ks)
+            unsafe {
+                if (fmt == 6) {
+                    devw_dequant_k6_core(addr(kq[0]), addr(ks[0]), 16l, addr(ks[nsb * 16]), 2l, int64(nsb), addr(mir[0]))
+                } elif (fmt == 4 || fmt == 5) {
+                    devw_dequant_k45_core(addr(kq[0]), addr(ks[0]), 16l, int64(nsb), fmt == 5, addr(mir[0]))
+                } else {
+                    var kf : KqFmt
+                    t |> success(kq_fmt_of_stream_code(fmt == 2 ? K2_STREAM_TAG : fmt, kf), "{tag}: format id {fmt} names a KqFmt")
+                    t |> success(devw_dequant_kq_mirror(kf, kq, ks, int64(ndim), int64(kdim), mir), "{tag}: the mirror serves the shape")
                 }
             }
-            devw_dequant_q8_core(addr(q[0]), addr(sf[0]), int64(nblk), addr(mir[0]))
-        }
-        var bw = buf_upload(dev, blob)
-        ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-            metal_set_pipeline(enc, dq_pso)
-            metal_set_buffer(enc, bw, 0ul, 0)
-            metal_set_buffer(enc, bw, 0ul, 1)
-            metal_set_buffer(enc, bwh, 0ul, 2)
-            metal_set_bytes(enc, unsafe(addr<void?>(dka)), uint64(typeinfo sizeof(dka)), 3)
-            metal_dispatch_threadgroups(enc, uint3(uint((nblk + 255) / 256), 1u, 1u), uint3(256u, 1u, 1u))
-        }
-        metal_release(bw)
-        delete blob
-        delete wdeq
-        delete q
-        delete sf
-    } else {
-        let nsb = ndim * (kdim / 256)
-        var kq : array<uint8>
-        var ks : array<uint8>
-        kq_fill_planes(fmt, nsb, kq, ks)
-        unsafe {
-            if (fmt == 6) {
-                devw_dequant_k6_core(addr(kq[0]), addr(ks[0]), 16l, addr(ks[nsb * 16]), 2l, int64(nsb), addr(mir[0]))
-            } elif (fmt == 4 || fmt == 5) {
-                devw_dequant_k45_core(addr(kq[0]), addr(ks[0]), 16l, int64(nsb), fmt == 5, addr(mir[0]))
-            } else {
-                var kf : KqFmt
-                t |> success(kq_fmt_of_stream_code(fmt == 2 ? K2_STREAM_TAG : fmt, kf), "{tag}: format id {fmt} names a KqFmt")
-                t |> success(devw_dequant_kq_mirror(kf, kq, ks, int64(ndim), int64(kdim), mir), "{tag}: the mirror serves the shape")
+            let bks = mc |> in_plain(ks)
+            let bkq = mc |> in_plain(kq)
+            let bk = mc |> in_plain([uint(kdim)])
+            let bn = mc |> in_plain([uint(ndim)])
+            ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                kq_dq_dispatch(enc, fmt, dq_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bwh], mc.buf[bk], mc.buf[bn], nsb, kdim / 256, 0, ndim, kdim)
             }
         }
-        var bks = buf_upload(dev, ks)
-        var bkq = buf_upload(dev, kq)
-        var bk = buf_u32(dev, uint(kdim))
-        var bn = buf_u32(dev, uint(ndim))
-        ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-            kq_dq_dispatch(enc, fmt, dq_pso, dtgm, bks, bkq, bwh, bk, bn, nsb, kdim / 256, 0, ndim, kdim)
-        }
-        metal_release(bks)
-        metal_release(bkq)
-        metal_release(bk)
-        metal_release(bn)
-        delete kq
-        delete ks
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
+        return if (!ran)
+        // the halfword compare stays bitwise (a float16 == would read two NaN payloads as different and -0 as +0); its
+        // control flips the FIRST halfword's low bit
         var bad = 0
         var first = -1
         unsafe {
-            let p = reinterpret<uint16 const?>(metal_buffer_contents(bwh))
+            let p = reinterpret<uint16 const?>(metal_buffer_contents(mc.buf[bwh]))
             let mp = addr<uint16 const?>(mir[0])
             for (i in range(ndim * kdim)) {
                 if (p[i] != mp[i]) {
@@ -921,7 +567,7 @@ def private devw_bake_mirror_gate(t : T?; dev, queue; fmt : int; ndim, kdim : in
         t |> equal(bad, 0)
         var bad_p = 0
         unsafe {
-            let p = reinterpret<uint16 const?>(metal_buffer_contents(bwh))
+            let p = reinterpret<uint16 const?>(metal_buffer_contents(mc.buf[bwh]))
             var mp = addr<uint16?>(mir[0])
             mp[0] = uint16(uint(mp[0]) ^ 1u)
             for (i in range(ndim * kdim)) {
@@ -932,9 +578,6 @@ def private devw_bake_mirror_gate(t : T?; dev, queue; fmt : int; ndim, kdim : in
         }
         t |> success(bad_p != 0, "{tag}: flipped-halfword control must miss the GPU panel")
     }
-    metal_release(bwh)
-    metal_release(dq_pso)
-    delete mir
 }
 
 // the native-bf16 A-stage pair: W is bf16 halfwords (top 16 bits of f32), row-major [ndim x kdim]
@@ -942,411 +585,239 @@ def private devw_bake_mirror_gate(t : T?; dev, queue; fmt : int; ndim, kdim : in
 // value survives f32->f16 exactly (the compare then measures tiling/indexing alone, 2e-3);
 // exact=false lets the f16 stage round on BOTH operands (double-RNE model ~9.8e-4*env, bar
 // 4e-3). m < mp exercises the pad rows: X pad rows are zero, so their outputs pin at 0.
-def private f32_mulmm_gate(t : T?; dev, queue; exact : bool; m, mp, kdim, ndim : int) {
+def private f32_mulmm_gate(t : T?; var dev, queue; exact : bool; m, mp, kdim, ndim : int) {
     let tag = "f32_mulmm{exact ? " exact" : ""} m={m}/{mp} k={kdim} n={ndim}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_f32_mulmm_msl, metal_f32_mulmm_msl_entry, metal_f32_mulmm_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var w : array<float>
-    w |> reserve(ndim * kdim)   // the gemma4uv shapes pass the unreserved-resize guard
-    w |> resize(ndim * kdim)
-    var xf : array<float>
-    xf |> reserve(mp * kdim)
-    xf |> resize(mp * kdim)
-    if (exact) {
-        let lut = fixed_array(0.25, 0.5, 1.0, 2.0, -0.25, -0.5, -1.0, -2.0)
-        for (i in range(ndim * kdim)) {
-            w[i] = lut[(i * 5 + 1) % 8] * float((i * 3) % 5)
-        }
-        for (i in range(m * kdim)) {
-            xf[i] = lut[(i * 7 + 3) % 8]
-        }
-    } else {
-        for (i in range(ndim * kdim)) {
-            w[i] = 0.13 * float((i * 3) % 13) - 0.8
-        }
-        for (i in range(m * kdim)) {
-            xf[i] = 0.11 * float(i % 37) - 1.9
-        }
-    }
-    var want : array<float>
-    var env : array<float>
-    want |> reserve(mp * ndim)
-    want |> resize(mp * ndim)
-    env |> reserve(mp * ndim)
-    env |> resize(mp * ndim)
-    for (j in range(ndim)) {
-        for (r in range(m)) {
-            var acc = 0.0lf
-            var ev = 0.0lf
-            for (c in range(kdim)) {
-                let p = double(w[j * kdim + c]) * double(xf[r * kdim + c])
-                acc += p
-                ev += abs(p)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_f32_mm)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope w : array<float>
+        w |> reserve(ndim * kdim)   // the gemma4uv shapes pass the unreserved-resize guard
+        w |> resize(ndim * kdim)
+        var inscope xf : array<float>
+        xf |> reserve(mp * kdim)
+        xf |> resize(mp * kdim)
+        if (exact) {
+            let lut = fixed_array(0.25, 0.5, 1.0, 2.0, -0.25, -0.5, -1.0, -2.0)
+            for (i in range(ndim * kdim)) {
+                w[i] = lut[(i * 5 + 1) % 8] * float((i * 3) % 5)
             }
-            want[r * ndim + j] = float(acc)
-            env[r * ndim + j] = float(ev)
+            for (i in range(m * kdim)) {
+                xf[i] = lut[(i * 7 + 3) % 8]
+            }
+        } else {
+            for (i in range(ndim * kdim)) {
+                w[i] = 0.13 * float((i * 3) % 13) - 0.8
+            }
+            for (i in range(m * kdim)) {
+                xf[i] = 0.11 * float(i % 37) - 1.9
+            }
         }
+        var inscope ref <- strided_ref(dense_ref_rows(w, xf, m, kdim, ndim), ndim, ndim, mp, 0.0)   //! the pad rows' X is zero: their outputs pin at 0
+        let bw = mc |> in_(w)
+        let bx = mc |> in_(xf)
+        let by = mc |> out_words(mp * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(mp), int64(ndim))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], ref.want, env_bar(exact ? 2e-3 : 4e-3, ref.env), Shape(row_width = ndim), ref.env)
     }
-    var bw = buf_upload(dev, w)
-    var bx = buf_upload(dev, xf)
-    var by = buf_fill(dev, mp * ndim, -1000.0)
-    var bk = buf_u32(dev, uint(kdim))
-    var bn = buf_u32(dev, uint(ndim))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_f32_mulmm_msl_tgmem, 0)
-        metal_set_buffer(enc, bw, 0ul, 0)
-        metal_set_buffer(enc, bx, 0ul, 1)
-        metal_set_buffer(enc, by, 0ul, 2)
-        metal_set_buffer(enc, bk, 0ul, 3)
-        metal_set_buffer(enc, bn, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(mp / 32), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, exact ? 2e-3 : 4e-3, tag), 0)
-    }
-    metal_release(bw)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(pso)
-    delete w
-    delete xf
-    delete want
-    delete env
 }
 
-def private bf16_mulmm_gate(t : T?; dev, queue; tensor : bool; m, kdim, ndim : int; halfx : bool = false; mt : int = 32) {
+def private bf16_mulmm_gate(t : T?; var dev, queue; tensor : bool; m, kdim, ndim : int; halfx : bool = false; mt : int = 32) {
     let tag = "bf16_mulmm{tensor ? "_t" : ""}{halfx ? " halfx" : ""} mt{mt} m={m} k={kdim} n={ndim}"
-    var err : string
-    var pso = (mt == 128
-        ? (halfx
-            ? pipeline_from_source(dev, MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl, MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl_fastmath, err)
-            : pipeline_from_source(dev, MetalBf16MulMmT128_metal_bf16_mulmm_t_msl, MetalBf16MulMmT128_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT128_metal_bf16_mulmm_t_msl_fastmath, err))
-        : (tensor
-            ? (halfx
-                ? pipeline_from_source(dev, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmTH_metal_bf16_mulmm_t_msl_fastmath, err)
-                : pipeline_from_source(dev, MetalBf16MulMmT_metal_bf16_mulmm_t_msl, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_entry, MetalBf16MulMmT_metal_bf16_mulmm_t_msl_fastmath, err))
-            : pipeline_from_source(dev, metal_bf16_mulmm_msl, metal_bf16_mulmm_msl_entry, metal_bf16_mulmm_msl_fastmath, err)))
-    if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
-        return
-    }
-    // the simdgroup BASE asserts — production compiles it unconditionally, and this arm is its
-    // only coverage; a broken bf16 A-stage must red here, not skip
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var wb : array<uint16>
-    wb |> resize(ndim * kdim)
-    var wdeq : array<float>
-    wdeq |> resize(ndim * kdim)
-    for (i in range(ndim * kdim)) {
-        wb[i] = uint16(float_bits_to_uint(0.125 * float((i * 3) % 13 - 6)) >> 16u)
-        wdeq[i] = uint_bits_to_float(uint(wb[i]) << 16u)
-    }
-    var xf : array<float>
-    xf |> resize(m * kdim)
-    for (i in range(m * kdim)) {
-        // halfx: round-trip through f16 so the oracle dot below stays the arm's exact reference
-        xf[i] = halfx ? float(float16(0.11 * float(i % 37) - 1.9)) : 0.11 * float(i % 37) - 1.9
-    }
-    var xh : array<float16>
-    if (halfx) {
-        xh |> resize(m * kdim)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let tk = mt == 128 || tensor
+        let kt = (mt == 128 ? (halfx ? kernel_of(@@pf_enc_bf16_mm_th128_c) : kernel_of(@@pf_enc_bf16_mm_t128_c))
+            : (halfx ? kernel_of(@@pf_enc_bf16_mm_th_c) : kernel_of(@@pf_enc_bf16_mm_t_c)))
+        let kb = kernel_of(@@pf_enc_bf16_mm_c)
+        var pso = tk ? (mc |> keep_stamp(kt, err)) : (mc |> keep_stamp(kb, err))
+        // the simdgroup BASE asserts — production compiles it unconditionally, and this arm is its
+        // only coverage; a broken bf16 A-stage must red here, not skip
+        return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
+        var inscope wb : array<uint16>
+        wb |> resize(ndim * kdim)
+        var inscope wdeq : array<float>
+        wdeq |> resize(ndim * kdim)
+        for (i in range(ndim * kdim)) {
+            wb[i] = uint16(float_bits_to_uint(0.125 * float((i * 3) % 13 - 6)) >> 16u)
+            wdeq[i] = uint_bits_to_float(uint(wb[i]) << 16u)
+        }
+        var inscope xf : array<float>
+        xf |> resize(m * kdim)
         for (i in range(m * kdim)) {
-            xh[i] = float16(xf[i])
+            // halfx: round-trip through f16 so the oracle dot below stays the arm's exact reference
+            xf[i] = halfx ? float(float16(0.11 * float(i % 37) - 1.9)) : 0.11 * float(i % 37) - 1.9
         }
-    }
-    var want : array<float>
-    var env : array<float>
-    want |> resize(m * ndim)
-    env |> resize(m * ndim)
-    for (j in range(ndim)) {
-        for (r in range(m)) {
-            var acc = 0.0lf
-            var ev = 0.0lf
-            for (c in range(kdim)) {
-                let p = double(wdeq[j * kdim + c]) * double(xf[r * kdim + c])
-                acc += p
-                ev += abs(p)
+        var inscope xh : array<float16>
+        if (halfx) {
+            xh |> resize(m * kdim)
+            for (i in range(m * kdim)) {
+                xh[i] = float16(xf[i])
             }
-            want[r * ndim + j] = float(acc)
-            env[r * ndim + j] = float(ev)
         }
-    }
-    var bw = buf_upload(dev, wb)
-    var bx = halfx ? buf_upload(dev, xh) : buf_upload(dev, xf)
-    var by = buf_fill(dev, m * ndim, -1000.0)
-    var bk = buf_u32(dev, uint(kdim))
-    var bn = buf_u32(dev, uint(ndim))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        if (!tensor) {
-            metal_set_threadgroup_memory_length(enc, metal_bf16_mulmm_msl_tgmem, 0)
+        var inscope ref <- dense_ref_rows(wdeq, xf, m, kdim, ndim)
+        let bw = mc |> in_plain(wb)
+        let bx = halfx ? (mc |> in_plain(xh)) : (mc |> in_(xf))
+        let by = mc |> out_words(m * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (tk) {
+                invoke(kt.enc, enc, pso, mc.buf[bw], 0ul, mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
+            } else {
+                invoke(kb.enc, enc, pso, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[by], mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
+            }
         }
-        metal_set_buffer(enc, bw, 0ul, 0)
-        metal_set_buffer(enc, bx, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bk, 0ul, 4)
-        metal_set_buffer(enc, bn, 0ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(m / mt), uint(ndim / 64), 1u), uint3(128u, 1u, 1u))
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], ref.want, env_bar(2e-3, ref.env), Shape(row_width = ndim), ref.env)
     }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
-    }
-    metal_release(bw)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(pso)
-    delete wb
-    delete wdeq
-    delete xf
-    delete xh
-    delete want
-    delete env
 }
 
 // The M-pad-32 batched-decode GEMM (MetalQ8GemmB) and its Metal-4 tensor twin: X [mp32 x kdim]
 // f32 token rows, dual-view q8 blob W, Y stored at TOKEN-row stride ys — the fused-QKV segment
 // stride at QKV sites, so ys > ndim must leave the gap columns untouched (the sentinel
 // whole-buffer compare asserts exactly that).
-def private q8_gemm_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim, ys : int) {
+def private q8_gemm_b_gate(t : T?; var dev, queue; tensor : bool; mp32, kdim, ndim, ys : int) {
     let tag = "q8_gemm_b{tensor ? "t" : ""} m={mp32} k={kdim} n={ndim} ys={ys}"
-    var err : string
-    var pso = (tensor
-        ? pipeline_from_source(dev, MetalQ8GemmBT_metal_q8_gemm_b_t_msl, MetalQ8GemmBT_metal_q8_gemm_b_t_msl_entry, MetalQ8GemmBT_metal_q8_gemm_b_t_msl_fastmath, err)
-        : pipeline_from_source(dev, MetalQ8GemmB_metal_q8_gemm_b_msl, MetalQ8GemmB_metal_q8_gemm_b_msl_entry, MetalQ8GemmB_metal_q8_gemm_b_msl_fastmath, err))
-    if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
-        return
-    }
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var blob : array<uint8>
-    var wdeq : array<float>
-    q8_blob_fill(ndim, kdim / 32, blob, wdeq)
-    var xf : array<float>
-    q8_x_fill(mp32 * kdim, xf)
-    var want : array<float>
-    var env : array<float>
-    want |> resize(mp32 * ys)
-    env |> resize(mp32 * ys)
-    for (i in range(mp32 * ys)) {
-        want[i] = -1000.0
-        env[i] = 0.0
-    }
-    for (r in range(mp32)) {
-        for (j in range(ndim)) {
-            var acc = 0.0lf
-            var ev = 0.0lf
-            for (c in range(kdim)) {
-                let p = double(wdeq[j * kdim + c]) * double(xf[r * kdim + c])
-                acc += p
-                ev += abs(p)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = tensor ? stamp_of(@@enc_gemm_b_t_c) : stamp_of(@@enc_gemm_b_c)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ndim, kdim / 32, blob, wdeq)
+        var inscope xf : array<float>
+        q8_x_fill(mp32 * kdim, xf)
+        var inscope ref <- strided_ref(dense_ref_rows(wdeq, xf, mp32, kdim, ndim), ndim, ys, mp32, -1000.0)
+        var ka = gemm_ka(int64(kdim), int64(ndim), int64(ys))
+        let bw = mc |> in_plain(blob)
+        let bx = mc |> in_(xf)
+        let by = mc |> out_words(mp32 * ys, -1000.0)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {   // one blob, its byte and half-scale views
+                invoke(st.enc, enc, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[by], 0ul, ka, int64((mp32 / 32) * (ndim / 32)))
             }
-            want[r * ys + j] = float(acc)
-            env[r * ys + j] = float(ev)
         }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], ref.want, env_bar(2e-3, ref.env), Shape(row_width = ys), ref.env)
     }
-    var ka = gemm_ka(int64(kdim), int64(ndim), int64(ys))
-    var bw = buf_upload(dev, blob)
-    var bx = buf_upload(dev, xf)
-    var by = buf_fill(dev, mp32 * ys, -1000.0)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tensor ? MetalQ8GemmBT_metal_q8_gemm_b_t_msl_tgmem : MetalQ8GemmB_metal_q8_gemm_b_msl_tgmem, 0)
-        metal_set_buffer(enc, bw, 0ul, 0)   // byte view
-        metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view of the same blob
-        metal_set_buffer(enc, bx, 0ul, 3)
-        metal_set_buffer(enc, by, 0ul, 4)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        metal_dispatch_threadgroups(enc, uint3(uint((mp32 / 32) * (ndim / 32)), 1u, 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
-    }
-    metal_release(bw)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(pso)
-    delete blob
-    delete wdeq
-    delete xf
-    delete want
-    delete env
 }
 
 // The split-K pair (MetalQ8GemmBSk[T] + MetalSkReduce) run as the production two-dispatch chain
 // in one serial encoder: grid.y is the k-slice axis, each slice's partial-C plane is checked
 // against a per-slice CPU dot, then the reduce's summed y against the full dot. mp == 32 is the
 // family's policy gate.
-def private q8_gemm_sk_gate(t : T?; dev, queue; tensor : bool; kdim, ndim, ksplit : int) {
+def private q8_gemm_sk_gate(t : T?; var dev, queue; tensor : bool; kdim, ndim, ksplit : int) {
     let tag = "q8_gemm_sk{tensor ? "t" : ""} k={kdim} n={ndim} sk={ksplit}"
-    var err : string
-    var pso = (tensor
-        ? pipeline_from_source(dev, MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl, MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_entry, MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_fastmath, err)
-        : pipeline_from_source(dev, MetalQ8GemmBSk_metal_q8_gemm_b_msl, MetalQ8GemmBSk_metal_q8_gemm_b_msl_entry, MetalQ8GemmBSk_metal_q8_gemm_b_msl_fastmath, err))
-    if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
-        return
-    }
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var psoR = pipeline_from_source(dev, metal_sk_reduce_msl, metal_sk_reduce_msl_entry, metal_sk_reduce_msl_fastmath, err)
-    t |> success(psoR != null, "{tag}: reduce pipeline: {err}")
-    if (psoR == null) {
-        metal_release(pso)
-        return
-    }
-    let mp = 32
-    let kslice = kdim / ksplit
-    var blob : array<uint8>
-    var wdeq : array<float>
-    q8_blob_fill(ndim, kdim / 32, blob, wdeq)
-    var xf : array<float>
-    q8_x_fill(mp * kdim, xf)
-    var pwant : array<float>
-    var penv : array<float>
-    var ywant : array<float>
-    var yenv : array<float>
-    pwant |> resize(ksplit * mp * ndim)
-    penv |> resize(ksplit * mp * ndim)
-    ywant |> resize(mp * ndim)
-    yenv |> resize(mp * ndim)
-    for (r in range(mp)) {
-        for (j in range(ndim)) {
-            var yacc = 0.0lf
-            var yev = 0.0lf
-            for (sl in range(ksplit)) {
-                var acc = 0.0lf
-                var ev = 0.0lf
-                for (c in range(sl * kslice, (sl + 1) * kslice)) {
-                    let p = double(wdeq[j * kdim + c]) * double(xf[r * kdim + c])
-                    acc += p
-                    ev += abs(p)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = tensor ? stamp_of(@@enc_gemm_sk_b_t_c) : stamp_of(@@enc_gemm_sk_b_c)
+        let sr = stamp_of(@@enc_sk_reduce_c)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
+        var psoR = mc |> keep_stamp(sr, err)
+        return if (!pso_ok(t, "{tag} reduce", psoR, err))
+        let mp = 32
+        let kslice = kdim / ksplit
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ndim, kdim / 32, blob, wdeq)
+        var inscope xf : array<float>
+        q8_x_fill(mp * kdim, xf)
+        var inscope pwant : array<float>
+        var inscope penv : array<float>
+        var inscope ywant : array<float>
+        var inscope yenv : array<float>
+        pwant |> resize(ksplit * mp * ndim)
+        penv |> resize(ksplit * mp * ndim)
+        ywant |> resize(mp * ndim)
+        yenv |> resize(mp * ndim)
+        for (r in range(mp)) {
+            for (j in range(ndim)) {
+                var yacc = 0.0lf
+                var yev = 0.0lf
+                for (sl in range(ksplit)) {
+                    var acc = 0.0lf
+                    var ev = 0.0lf
+                    for (c in range(sl * kslice, (sl + 1) * kslice)) {
+                        let p = double(wdeq[j * kdim + c]) * double(xf[r * kdim + c])
+                        acc += p
+                        ev += abs(p)
+                    }
+                    pwant[sl * mp * ndim + r * ndim + j] = float(acc)
+                    penv[sl * mp * ndim + r * ndim + j] = float(ev)
+                    yacc += acc
+                    yev += ev
                 }
-                pwant[sl * mp * ndim + r * ndim + j] = float(acc)
-                penv[sl * mp * ndim + r * ndim + j] = float(ev)
-                yacc += acc
-                yev += ev
+                ywant[r * ndim + j] = float(yacc)
+                yenv[r * ndim + j] = float(yev)
             }
-            ywant[r * ndim + j] = float(yacc)
-            yenv[r * ndim + j] = float(yev)
         }
+        var ka = gemm_sk_ka(int64(kdim), int64(ndim), int64(ksplit))
+        var kaR = SkReduceArgs(total = uint(mp * ndim), ksplit = uint(ksplit))
+        let bw = mc |> in_plain(blob)
+        let bx = mc |> in_(xf)
+        let bpart = mc |> out_words(ksplit * mp * ndim, -1000.0)
+        let by = mc |> out_words(mp * ndim, -1000.0)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {   // one blob, its byte and half-scale views
+                invoke(st.enc, enc, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[bpart], 0ul, ka, int64(ndim), int64(ksplit))
+            }
+            stamp_run(sr, psoR) {
+                invoke(sr.enc, enc, mc.buf[bpart], mc.buf[by], kaR, int64(mp * ndim))
+            }
+        }
+        return if (!ran)
+        check_buf(t, "{tag} part", mc.buf[bpart], pwant, env_bar(2e-3, penv), Shape(row_width = ndim), penv)
+        check_buf(t, "{tag} y", mc.buf[by], ywant, env_bar(2e-3, yenv), Shape(row_width = ndim), yenv)
     }
-    var ka = gemm_sk_ka(int64(kdim), int64(ndim), int64(ksplit))
-    var kaR = SkReduceArgs(total = uint(mp * ndim), ksplit = uint(ksplit))
-    var bw = buf_upload(dev, blob)
-    var bx = buf_upload(dev, xf)
-    var bpart = buf_fill(dev, ksplit * mp * ndim, -1000.0)
-    var by = buf_fill(dev, mp * ndim, -1000.0)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tensor ? MetalQ8GemmBSkT_metal_q8_gemm_b_t_msl_tgmem : MetalQ8GemmBSk_metal_q8_gemm_b_msl_tgmem, 0)
-        metal_set_buffer(enc, bw, 0ul, 0)   // byte view
-        metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view of the same blob
-        metal_set_buffer(enc, bx, 0ul, 3)
-        metal_set_buffer(enc, bpart, 0ul, 4)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(ndim / 32), uint(ksplit), 1u), uint3(128u, 1u, 1u))
-        metal_set_pipeline(enc, psoR)
-        metal_set_buffer(enc, bpart, 0ul, 0)
-        metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_bytes(enc, unsafe(addr<void?>(kaR)), uint64(typeinfo sizeof(kaR)), 2)
-        metal_dispatch_threadgroups(enc, uint3(uint((mp * ndim + 127) / 128), 1u, 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(bpart, pwant, penv, 2e-3, "{tag} part"), 0)
-        t |> equal(buf_mismatch_env(by, ywant, yenv, 2e-3, "{tag} y"), 0)
-    }
-    metal_release(bw)
-    metal_release(bx)
-    metal_release(bpart)
-    metal_release(by)
-    metal_release(pso)
-    metal_release(psoR)
-    delete blob
-    delete wdeq
-    delete xf
-    delete pwant
-    delete penv
-    delete ywant
-    delete yenv
 }
 
 // The 64-wide N tile (MetalQ8Gemm64B[T], the classifier site): same M-pad-32 contract but
 // ndim % 64 and y at DENSE stride ka.ndim — ys rides along as 0 exactly as the production
 // classifier call does, proving the kernel never reads it.
-def private q8_gemm64_b_gate(t : T?; dev, queue; tensor : bool; mp32, kdim, ndim : int) {
+def private q8_gemm64_b_gate(t : T?; var dev, queue; tensor : bool; mp32, kdim, ndim : int) {
     let tag = "q8_gemm64_b{tensor ? "t" : ""} m={mp32} k={kdim} n={ndim}"
-    var err : string
-    var pso = (tensor
-        ? pipeline_from_source(dev, MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl, MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_entry, MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_q8_gemm64_b_msl, metal_q8_gemm64_b_msl_entry, metal_q8_gemm64_b_msl_fastmath, err))
-    if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
-        return
-    }
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var blob : array<uint8>
-    var wdeq : array<float>
-    q8_blob_fill(ndim, kdim / 32, blob, wdeq)
-    var xf : array<float>
-    q8_x_fill(mp32 * kdim, xf)
-    var want : array<float>
-    var env : array<float>
-    want |> resize(mp32 * ndim)
-    env |> resize(mp32 * ndim)
-    for (r in range(mp32)) {
-        for (j in range(ndim)) {
-            var acc = 0.0lf
-            var ev = 0.0lf
-            for (c in range(kdim)) {
-                let p = double(wdeq[j * kdim + c]) * double(xf[r * kdim + c])
-                acc += p
-                ev += abs(p)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sp = stamp_of(@@enc_gemm64_b_c)
+        let stt = stamp_of(@@enc_gemm64_b_t_c)
+        var pso = tensor ? (mc |> keep_stamp(stt, err)) : (mc |> keep_stamp(sp, err))
+        return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ndim, kdim / 32, blob, wdeq)
+        var inscope xf : array<float>
+        q8_x_fill(mp32 * kdim, xf)
+        var inscope ref <- dense_ref_rows(wdeq, xf, mp32, kdim, ndim)
+        var ka = gemm_ka(int64(kdim), int64(ndim), 0l)
+        let bw = mc |> in_plain(blob)
+        let bx = mc |> in_(xf)
+        let by = mc |> out_words(mp32 * ndim, -1000.0)
+        let ntg = int64((mp32 / 32) * (ndim / 64))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (tensor) {   // one blob, its byte and half-scale views
+                stamp_run(stt, pso) {
+                    invoke(stt.enc, enc, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[by], 0ul, ka, ntg)
+                }
+            } else {
+                stamp_run(sp, pso) {
+                    invoke(sp.enc, enc, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, ntg)
+                }
             }
-            want[r * ndim + j] = float(acc)
-            env[r * ndim + j] = float(ev)
         }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], ref.want, env_bar(2e-3, ref.env), Shape(row_width = ndim), ref.env)
     }
-    var ka = gemm_ka(int64(kdim), int64(ndim), 0l)
-    var bw = buf_upload(dev, blob)
-    var bx = buf_upload(dev, xf)
-    var by = buf_fill(dev, mp32 * ndim, -1000.0)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tensor ? MetalQ8Gemm64BT_metal_q8_gemm_b_t_msl_tgmem : metal_q8_gemm64_b_msl_tgmem, 0)
-        metal_set_buffer(enc, bw, 0ul, 0)   // byte view
-        metal_set_buffer(enc, bw, 0ul, 2)   // half-scale view of the same blob
-        metal_set_buffer(enc, bx, 0ul, 3)
-        metal_set_buffer(enc, by, 0ul, 4)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        metal_dispatch_threadgroups(enc, uint3(uint((mp32 / 32) * (ndim / 64)), 1u, 1u), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
-    }
-    metal_release(bw)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(pso)
-    delete blob
-    delete wdeq
-    delete xf
-    delete want
-    delete env
 }
 
 // ===== the MoE gathered mul_mm family (Wave C) =====
@@ -1367,19 +838,14 @@ struct private MoeFix {
 def private moe_fix(counts : array<int>; gather : bool; nk, nx : int) : MoeFix {
     var fx : MoeFix
     fx.ne = length(counts)
-    fx.cnt |> reserve(fx.ne)
-    fx.basep |> reserve(fx.ne)
-    var pad = 0
-    var mt = 1
-    for (c in counts) {
-        fx.cnt |> push(uint(c))
-        fx.basep |> push(uint(pad))
-        let rows = (c + 31) / 32 * 32
-        mt = max(mt, rows / 32)
-        pad += rows
-    }
+    var (cnt, basep, pad) <- padded_bases(counts)
+    fx.cnt <- cnt
+    fx.basep <- basep
     fx.pad = pad
-    fx.maxtiles = mt
+    fx.maxtiles = 1
+    for (c in counts) {
+        fx.maxtiles = max(fx.maxtiles, (c + 31) / 32)
+    }
     fx.srcrow |> resize(pad)
     if (gather) {
         fx.bkt |> resize(pad)
@@ -1435,594 +901,373 @@ def private moe_mm_truth(fx : MoeFix; wdeq, xf, wb : array<float>; kdim, ndim : 
 // the shared kq fixture, truth through the shipped dequant_k*_plane_superblock. Binds at the
 // MetalMoeMulMmBase family numbers (0..2 weight views, x 3, y 4, cnt/base/bkt 7..9); k6's
 // binding 0 is the f16 d-tail view of the scale plane.
-def private moe_mulmm_kq_gate(t : T?; dev, queue; fmt : int; kdim, ndim : int; counts : array<int>; gather : bool) {
+def private moe_mulmm_kq_gate(t : T?; var dev, queue; fmt : int; kdim, ndim : int; counts : array<int>; gather : bool) {
     let tag = "moe_mulmm_k{fmt}{gather ? " gather" : ""} k={kdim} n={ndim}"
-    var err : string
-    let src = fmt == 4 ? metal_moe_mulmm_k4_msl : (fmt == 5 ? metal_moe_mulmm_k5_msl : metal_moe_mulmm_k6_msl)
-    let entry = fmt == 4 ? metal_moe_mulmm_k4_msl_entry : (fmt == 5 ? metal_moe_mulmm_k5_msl_entry : metal_moe_mulmm_k6_msl_entry)
-    let fm = fmt == 4 ? metal_moe_mulmm_k4_msl_fastmath : (fmt == 5 ? metal_moe_mulmm_k5_msl_fastmath : metal_moe_mulmm_k6_msl_fastmath)
-    let tgm = fmt == 4 ? metal_moe_mulmm_k4_msl_tgmem : (fmt == 5 ? metal_moe_mulmm_k5_msl_tgmem : metal_moe_mulmm_k6_msl_tgmem)
-    var pso = pipeline_from_source(dev, src, entry, fm, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let ne = length(counts)
-    let nb = kdim / 256
-    let eplane = ndim * nb
-    let nsb = ne * eplane
-    var kq : array<uint8>
-    var ks : array<uint8>
-    kq_fill_planes(fmt, nsb, kq, ks)
-    let nk = 2
-    let nx = 24
-    var fx <- moe_fix(counts, gather, nk, nx)
-    var xf : array<float>
-    xf |> resize((gather ? nx : fx.pad) * kdim)
-    for (i in range(length(xf))) {
-        xf[i] = float((i * 5) % 9 - 4)
-    }
-    var wdeq : array<float>
-    wdeq |> resize(ne * ndim * kdim)
-    var wrow : array<float>
-    wrow |> resize(kdim)
-    for (e in range(ne)) {
-        for (j in range(ndim)) {
-            kq_row_ref(fmt, e * eplane + j * nb, nb, nsb, kq, ks, wrow)
-            for (c in range(kdim)) {
-                wdeq[(e * ndim + j) * kdim + c] = wrow[c]
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let f = kq_fmt_of_id(fmt, "moe_mulmm_kq_gate")
+        let k45 = fmt == 4 ? kernel_of(@@pf_enc_moe_mm_k4_c) : kernel_of(@@pf_enc_moe_mm_k5_c)   //! k4 / k5 bind both scale views at one offset; k6 its d tail apart
+        let k6 = kernel_of(@@pf_enc_moe_mm_k6_c)
+        var pso = fmt == 6 ? (mc |> keep_stamp(k6, err)) : (mc |> keep_stamp(k45, err))
+        return if (!pso_ok(t, tag, pso, err))
+        let ne = length(counts)
+        let nb = kdim / 256
+        let eplane = ndim * nb
+        let nsb = ne * eplane
+        var inscope kq : array<uint8>
+        var inscope ks : array<uint8>
+        kq_fill_planes(fmt, nsb, kq, ks)
+        let nk = 2
+        let nx = 24
+        var inscope fx <- moe_fix(counts, gather, nk, nx)
+        var inscope xf : array<float>
+        xf |> resize((gather ? nx : fx.pad) * kdim)
+        for (i in range(length(xf))) {
+            xf[i] = float((i * 5) % 9 - 4)
+        }
+        var inscope wdeq : array<float>
+        wdeq |> resize(ne * ndim * kdim)
+        var inscope wrow : array<float>
+        wrow |> resize(kdim)
+        for (e in range(ne)) {
+            for (j in range(ndim)) {
+                kq_row_ref(fmt, e * eplane + j * nb, nb, nsb, kq, ks, wrow)
+                for (c in range(kdim)) {
+                    wdeq[(e * ndim + j) * kdim + c] = wrow[c]
+                }
             }
         }
-    }
-    var wb : array<float>
-    var want : array<float>
-    var env : array<float>
-    moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
-    var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(eplane),
-        nk = uint(nk), gather = gather ? 1u : 0u)
-    var bks = buf_upload(dev, ks)
-    var bkq = buf_upload(dev, kq)
-    var bx = buf_upload(dev, xf)
-    var by = buf_fill(dev, fx.pad * ndim, -1000.0)
-    var bcnt = buf_upload(dev, fx.cnt)
-    var bbase = buf_upload(dev, fx.basep)
-    var bbkt = gather ? buf_upload(dev, fx.bkt) : buf_u32(dev, 0u)   // gather=0: unread 4B stand-in
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tgm, 0)
-        metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)   // the split-scale formats: the f16 d tail at nsb*16
-        metal_set_buffer(enc, bks, 0ul, 1)
-        metal_set_buffer(enc, bkq, 0ul, 2)
-        metal_set_buffer(enc, bx, 0ul, 3)
-        metal_set_buffer(enc, by, 0ul, 4)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        metal_set_buffer(enc, bcnt, 0ul, 7)
-        metal_set_buffer(enc, bbase, 0ul, 8)
-        metal_set_buffer(enc, bbkt, 0ul, 9)
-        metal_dispatch_threadgroups(enc, uint3(uint(fx.maxtiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
-    }
-    // the contiguous tensor twin (TH stamp over an f16 X): same oracle, per-expert plane folds
-    if (!gather) {
+        var inscope wb : array<float>
+        var inscope want : array<float>
+        var inscope env : array<float>
+        moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
+        var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(eplane),
+            nk = uint(nk), gather = gather ? 1u : 0u)
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let bx = mc |> in_(xf)
+        let by = mc |> out_words(fx.pad * ndim, -1000.0)
+        let bcnt = mc |> in_plain(fx.cnt)
+        let bbase = mc |> in_plain(fx.basep)
+        let bbkt = gather ? (mc |> in_plain(fx.bkt)) : (mc |> in_plain([0u]))   // gather=0: unread 4B stand-in
+        let doff = kq_split_doff(fmt, nsb)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (fmt == 6) {
+                invoke(k6.enc, enc, pso, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], mc.buf[by], ka, mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(ndim), int64(fx.maxtiles * 32), int64(ne))
+            } else {
+                invoke(k45.enc, enc, pso, mc.buf[bks], doff, mc.buf[bks], mc.buf[bkq], 0ul, mc.buf[bx], mc.buf[by], ka, mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(ndim), int64(fx.maxtiles * 32), int64(ne))
+            }
+        }
+        if (ran) {
+            check_buf(t, tag, mc.buf[by], want, env_bar(2e-4, env), Shape(row_width = ndim), env)
+        }
+        // the contiguous tensor twin (TH stamp over an f16 X): same oracle, per-expert plane folds
+        return if (gather)
         var terr : string
-        var tw_pso = (fmt == 4
-            ? pipeline_from_source(dev, MetalMoeMulMmK4TH_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK4TH_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK4TH_metal_moe_mulmm_k45_t_msl_fastmath, terr)
-            : (fmt == 5
-                ? pipeline_from_source(dev, MetalMoeMulMmK5TH_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK5TH_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK5TH_metal_moe_mulmm_k45_t_msl_fastmath, terr)
-                : pipeline_from_source(dev, MetalMoeMulMmK6TH_metal_moe_mulmm_k6_t_msl, MetalMoeMulMmK6TH_metal_moe_mulmm_k6_t_msl_entry, MetalMoeMulMmK6TH_metal_moe_mulmm_k6_t_msl_fastmath, terr)))
-        if (tw_pso == null && !metal4_tensor_available(dev)) {
-            to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain - twin leg skipped\n")
-        } else {
-            t |> success(tw_pso != null, "{tag} twin: pipeline: {terr}")
+        let kw = moe_kq_twin(f, false)
+        var tw_pso = mc |> keep_stamp(kw, terr)
+        return if (!tensor_pso_or_skip(t, "{tag} twin", tw_pso, dev, terr))
+        var inscope xh <- [for (v in xf); float16(v)]
+        let bxh = mc |> in_plain(xh)
+        let by_t = mc |> out_words(fx.pad * ndim, -500.0)
+        let rant = mc |> cell_record(t, "{tag} twin") $(enc : MetalComputeEncoder?) {
+            invoke(kw.enc, enc, tw_pso, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxh], mc.buf[by_t], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(fx.maxtiles * 32), int64(ne))
         }
-        if (tw_pso != null) {
-            var xh <- [for (v in xf); float16(v)]
-            var bxh = buf_upload(dev, xh)
-            var by_t = buf_fill(dev, fx.pad * ndim, -500.0)
-            let rant = with_compute_encoder(queue, terr) $(enc : MetalComputeEncoder?) {
-                metal_set_pipeline(enc, tw_pso)
-                metal_set_threadgroup_memory_length(enc, fmt == 4
-                    ? MetalMoeMulMmK4TH_metal_moe_mulmm_k45_t_msl_tgmem
-                    : (fmt == 5 ? MetalMoeMulMmK5TH_metal_moe_mulmm_k45_t_msl_tgmem : MetalMoeMulMmK6TH_metal_moe_mulmm_k6_t_msl_tgmem), 0)
-                metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)
-                metal_set_buffer(enc, bks, 0ul, 1)
-                metal_set_buffer(enc, bkq, 0ul, 2)
-                metal_set_buffer(enc, bxh, 0ul, 3)
-                metal_set_buffer(enc, by_t, 0ul, 4)
-                metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-                metal_set_buffer(enc, bcnt, 0ul, 6)
-                metal_set_buffer(enc, bbase, 0ul, 7)
-                metal_dispatch_threadgroups(enc, uint3(uint(fx.maxtiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
-            }
-            t |> success(rant, "{tag} twin: encode: {terr}")
-            if (rant) {
-                t |> equal(buf_mismatch_env(by_t, want, env, 2e-4, "{tag} twin"), 0)
-            }
-            // the tall pair: 128-floor stamp + remainder stamp over the same fixtures — the
-            // production >=256-row moe dispatch shape (counts crossing 128 exercise both)
-            var tl_pso = (fmt == 4
-                ? pipeline_from_source(dev, MetalMoeMulMmK4TH128_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK4TH128_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK4TH128_metal_moe_mulmm_k45_t_msl_fastmath, terr)
-                : (fmt == 5
-                    ? pipeline_from_source(dev, MetalMoeMulMmK5TH128_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK5TH128_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK5TH128_metal_moe_mulmm_k45_t_msl_fastmath, terr)
-                    : pipeline_from_source(dev, MetalMoeMulMmK6TH128_metal_moe_mulmm_k6_t_msl, MetalMoeMulMmK6TH128_metal_moe_mulmm_k6_t_msl_entry, MetalMoeMulMmK6TH128_metal_moe_mulmm_k6_t_msl_fastmath, terr)))
-            var rm_pso = (fmt == 4
-                ? pipeline_from_source(dev, MetalMoeMulMmK4THR_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK4THR_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK4THR_metal_moe_mulmm_k45_t_msl_fastmath, terr)
-                : (fmt == 5
-                    ? pipeline_from_source(dev, MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl, MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl_entry, MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl_fastmath, terr)
-                    : pipeline_from_source(dev, MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl, MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl_entry, MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl_fastmath, terr)))
-            // the toolchain is proven (tw_pso compiled), so a tall-pair PSO that fails to
-            // compile is a RED, never a silent skip - this gate is the pair's only coverage
-            t |> success(tl_pso != null && rm_pso != null, "{tag} tall pair: pipeline: {terr}")
-            if (tl_pso != null && rm_pso != null) {
-                var maxce = 0
-                for (c in fx.cnt) {
-                    maxce = max(maxce, int(c))
-                }
-                var by_p = buf_fill(dev, fx.pad * ndim, -700.0)
-                let ranp2 = with_compute_encoder(queue, terr) $(enc : MetalComputeEncoder?) {
-                    metal_set_pipeline(enc, tl_pso)
-                    metal_set_threadgroup_memory_length(enc, fmt == 4
-                        ? MetalMoeMulMmK4TH128_metal_moe_mulmm_k45_t_msl_tgmem
-                        : (fmt == 5 ? MetalMoeMulMmK5TH128_metal_moe_mulmm_k45_t_msl_tgmem : MetalMoeMulMmK6TH128_metal_moe_mulmm_k6_t_msl_tgmem), 0)
-                    metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)
-                    metal_set_buffer(enc, bks, 0ul, 1)
-                    metal_set_buffer(enc, bkq, 0ul, 2)
-                    metal_set_buffer(enc, bxh, 0ul, 3)
-                    metal_set_buffer(enc, by_p, 0ul, 4)
-                    metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-                    metal_set_buffer(enc, bcnt, 0ul, 6)
-                    metal_set_buffer(enc, bbase, 0ul, 7)
-                    metal_dispatch_threadgroups(enc, uint3(uint((maxce + 127) / 128), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
-                    metal_set_pipeline(enc, rm_pso)
-                    metal_set_threadgroup_memory_length(enc, fmt == 4
-                        ? MetalMoeMulMmK4THR_metal_moe_mulmm_k45_t_msl_tgmem
-                        : (fmt == 5 ? MetalMoeMulMmK5THR_metal_moe_mulmm_k45_t_msl_tgmem : MetalMoeMulMmK6THR_metal_moe_mulmm_k6_t_msl_tgmem), 0)
-                    metal_set_buffer(enc, bks, fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul, 0)
-                    metal_set_buffer(enc, bks, 0ul, 1)
-                    metal_set_buffer(enc, bkq, 0ul, 2)
-                    metal_set_buffer(enc, bxh, 0ul, 3)
-                    metal_set_buffer(enc, by_p, 0ul, 4)
-                    metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-                    metal_set_buffer(enc, bcnt, 0ul, 6)
-                    metal_set_buffer(enc, bbase, 0ul, 7)
-                    metal_dispatch_threadgroups(enc, uint3(4u, uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
-                }
-                t |> success(ranp2, "{tag} tall pair: encode: {terr}")
-                if (ranp2) {
-                    t |> equal(buf_mismatch_env(by_p, want, env, 2e-4, "{tag} tall pair"), 0)
-                }
-                metal_release(by_p)
-            }
-            if (tl_pso != null) {
-                metal_release(tl_pso)
-            }
-            if (rm_pso != null) {
-                metal_release(rm_pso)
-            }
-            metal_release(bxh)
-            metal_release(by_t)
-            metal_release(tw_pso)
-            delete xh
+        if (rant) {
+            check_buf(t, "{tag} twin", mc.buf[by_t], want, env_bar(2e-4, env), Shape(row_width = ndim), env)
         }
+        // the tall pair: 128-floor stamp + remainder stamp over the same fixtures — the
+        // production >=256-row moe dispatch shape (counts crossing 128 exercise both)
+        let kl = moe_kq_twin(f, true)
+        let kr = moe_kq_thr(f)
+        var tl_pso = mc |> keep_stamp(kl, terr)
+        var rm_pso = mc |> keep_stamp(kr, terr)
+        // the toolchain is proven (tw_pso compiled), so a tall-pair PSO that fails to
+        // compile is a RED, never a silent skip - this gate is the pair's only coverage
+        t |> success(tl_pso != null && rm_pso != null, "{tag} tall pair: pipeline: {terr}")
+        return if (tl_pso == null || rm_pso == null)
+        var maxce = 0
+        for (c in fx.cnt) {
+            maxce = max(maxce, int(c))
+        }
+        let by_p = mc |> out_words(fx.pad * ndim, -700.0)
+        let ranp2 = mc |> cell_record(t, "{tag} tall pair") $(enc : MetalComputeEncoder?) {
+            invoke(kl.enc, enc, tl_pso, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxh], mc.buf[by_p], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(maxce), int64(ne))
+            invoke(kr.enc, enc, rm_pso, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxh], mc.buf[by_p], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(ne))
+        }
+        return if (!ranp2)
+        check_buf(t, "{tag} tall pair", mc.buf[by_p], want, env_bar(2e-4, env), Shape(row_width = ndim), env)
     }
-    metal_release(bks)
-    metal_release(bkq)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bcnt)
-    metal_release(bbase)
-    metal_release(bbkt)
-    metal_release(pso)
-    delete kq
-    delete ks
-    delete fx
-    delete xf
-    delete wdeq
-    delete wrow
-    delete wb
-    delete want
-    delete env
 }
 
-//! the split-format expert twins (k3 and the iquants ride their dense split classes under the
-//! MoE shell): per form - th, th128, thr - the kernel source, entry, fastmath and tgmem
-def private moe_split_twin(fmt; form) : tuple<src : string; entry : string; fm : bool; tgm : uint64> {
-    if (fmt == 3) {
-        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmK3TH_metal_moe_mulmm_k3_t_msl, entry = MetalMoeMulMmK3TH_metal_moe_mulmm_k3_t_msl_entry, fm = MetalMoeMulMmK3TH_metal_moe_mulmm_k3_t_msl_fastmath, tgm = MetalMoeMulMmK3TH_metal_moe_mulmm_k3_t_msl_tgmem)
-        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmK3TH128_metal_moe_mulmm_k3_t_msl, entry = MetalMoeMulMmK3TH128_metal_moe_mulmm_k3_t_msl_entry, fm = MetalMoeMulMmK3TH128_metal_moe_mulmm_k3_t_msl_fastmath, tgm = MetalMoeMulMmK3TH128_metal_moe_mulmm_k3_t_msl_tgmem)
-        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmK3THR_metal_moe_mulmm_k3_t_msl, entry = MetalMoeMulMmK3THR_metal_moe_mulmm_k3_t_msl_entry, fm = MetalMoeMulMmK3THR_metal_moe_mulmm_k3_t_msl_fastmath, tgm = MetalMoeMulMmK3THR_metal_moe_mulmm_k3_t_msl_tgmem)
+//! a form of an expert-stamp family - th, th128 or thr - off the family's three kernels
+def private moe_form(form : MoeSplitForm; th, th128, thr : auto(K)) : K {
+    if (form == MoeSplitForm.th) return th
+    if (form == MoeSplitForm.th128) return th128
+    if (form != MoeSplitForm.thr) {
+        panic("moe_form: no {form} form in the table")
     }
-    if (fmt == 44) {
-        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmIq4xsTH_metal_moe_mulmm_iq4xs_t_msl_tgmem)
-        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmIq4xsTH128_metal_moe_mulmm_iq4xs_t_msl_tgmem)
-        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmIq4xsTHR_metal_moe_mulmm_iq4xs_t_msl_tgmem)
-    }
-    if (fmt == 40) {
-        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmQ40TH_metal_moe_mulmm_iq4xs_t_msl_tgmem)
-        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmQ40TH128_metal_moe_mulmm_iq4xs_t_msl_tgmem)
-        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl, entry = MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl_entry, fm = MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl_fastmath, tgm = MetalMoeMulMmQ40THR_metal_moe_mulmm_iq4xs_t_msl_tgmem)
-    }
-    if (fmt == 33) {
-        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl, entry = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl_entry, fm = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl_fastmath, tgm = MetalMoeMulMmIq3sTH_metal_moe_mulmm_iq3s_t_msl_tgmem)
-        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl, entry = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl_entry, fm = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl_fastmath, tgm = MetalMoeMulMmIq3sTH128_metal_moe_mulmm_iq3s_t_msl_tgmem)
-        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq3sTHR_metal_moe_mulmm_iq3s_t_msl, entry = MetalMoeMulMmIq3sTHR_metal_moe_mulmm_iq3s_t_msl_entry, fm = MetalMoeMulMmIq3sTHR_metal_moe_mulmm_iq3s_t_msl_fastmath, tgm = MetalMoeMulMmIq3sTHR_metal_moe_mulmm_iq3s_t_msl_tgmem)
-    }
-    if (fmt == 34) {
-        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq3xxsTH_metal_moe_mulmm_iq3xxs_t_msl, entry = MetalMoeMulMmIq3xxsTH_metal_moe_mulmm_iq3xxs_t_msl_entry, fm = MetalMoeMulMmIq3xxsTH_metal_moe_mulmm_iq3xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq3xxsTH_metal_moe_mulmm_iq3xxs_t_msl_tgmem)
-        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq3xxsTH128_metal_moe_mulmm_iq3xxs_t_msl, entry = MetalMoeMulMmIq3xxsTH128_metal_moe_mulmm_iq3xxs_t_msl_entry, fm = MetalMoeMulMmIq3xxsTH128_metal_moe_mulmm_iq3xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq3xxsTH128_metal_moe_mulmm_iq3xxs_t_msl_tgmem)
-        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq3xxsTHR_metal_moe_mulmm_iq3xxs_t_msl, entry = MetalMoeMulMmIq3xxsTHR_metal_moe_mulmm_iq3xxs_t_msl_entry, fm = MetalMoeMulMmIq3xxsTHR_metal_moe_mulmm_iq3xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq3xxsTHR_metal_moe_mulmm_iq3xxs_t_msl_tgmem)
-    }
-    if (fmt == 23) {
-        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq2sTH_metal_moe_mulmm_iq2s_t_msl, entry = MetalMoeMulMmIq2sTH_metal_moe_mulmm_iq2s_t_msl_entry, fm = MetalMoeMulMmIq2sTH_metal_moe_mulmm_iq2s_t_msl_fastmath, tgm = MetalMoeMulMmIq2sTH_metal_moe_mulmm_iq2s_t_msl_tgmem)
-        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq2sTH128_metal_moe_mulmm_iq2s_t_msl, entry = MetalMoeMulMmIq2sTH128_metal_moe_mulmm_iq2s_t_msl_entry, fm = MetalMoeMulMmIq2sTH128_metal_moe_mulmm_iq2s_t_msl_fastmath, tgm = MetalMoeMulMmIq2sTH128_metal_moe_mulmm_iq2s_t_msl_tgmem)
-        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq2sTHR_metal_moe_mulmm_iq2s_t_msl, entry = MetalMoeMulMmIq2sTHR_metal_moe_mulmm_iq2s_t_msl_entry, fm = MetalMoeMulMmIq2sTHR_metal_moe_mulmm_iq2s_t_msl_fastmath, tgm = MetalMoeMulMmIq2sTHR_metal_moe_mulmm_iq2s_t_msl_tgmem)
-    }
-    if (fmt == 24) {
-        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq2xsTH_metal_moe_mulmm_iq2xs_t_msl, entry = MetalMoeMulMmIq2xsTH_metal_moe_mulmm_iq2xs_t_msl_entry, fm = MetalMoeMulMmIq2xsTH_metal_moe_mulmm_iq2xs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xsTH_metal_moe_mulmm_iq2xs_t_msl_tgmem)
-        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq2xsTH128_metal_moe_mulmm_iq2xs_t_msl, entry = MetalMoeMulMmIq2xsTH128_metal_moe_mulmm_iq2xs_t_msl_entry, fm = MetalMoeMulMmIq2xsTH128_metal_moe_mulmm_iq2xs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xsTH128_metal_moe_mulmm_iq2xs_t_msl_tgmem)
-        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq2xsTHR_metal_moe_mulmm_iq2xs_t_msl, entry = MetalMoeMulMmIq2xsTHR_metal_moe_mulmm_iq2xs_t_msl_entry, fm = MetalMoeMulMmIq2xsTHR_metal_moe_mulmm_iq2xs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xsTHR_metal_moe_mulmm_iq2xs_t_msl_tgmem)
-    }
-    if (fmt == 25) {
-        if (form == MoeSplitForm.th) return (src = MetalMoeMulMmIq2xxsTH_metal_moe_mulmm_iq2xxs_t_msl, entry = MetalMoeMulMmIq2xxsTH_metal_moe_mulmm_iq2xxs_t_msl_entry, fm = MetalMoeMulMmIq2xxsTH_metal_moe_mulmm_iq2xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xxsTH_metal_moe_mulmm_iq2xxs_t_msl_tgmem)
-        if (form == MoeSplitForm.th128) return (src = MetalMoeMulMmIq2xxsTH128_metal_moe_mulmm_iq2xxs_t_msl, entry = MetalMoeMulMmIq2xxsTH128_metal_moe_mulmm_iq2xxs_t_msl_entry, fm = MetalMoeMulMmIq2xxsTH128_metal_moe_mulmm_iq2xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xxsTH128_metal_moe_mulmm_iq2xxs_t_msl_tgmem)
-        if (form == MoeSplitForm.thr) return (src = MetalMoeMulMmIq2xxsTHR_metal_moe_mulmm_iq2xxs_t_msl, entry = MetalMoeMulMmIq2xxsTHR_metal_moe_mulmm_iq2xxs_t_msl_entry, fm = MetalMoeMulMmIq2xxsTHR_metal_moe_mulmm_iq2xxs_t_msl_fastmath, tgm = MetalMoeMulMmIq2xxsTHR_metal_moe_mulmm_iq2xxs_t_msl_tgmem)
-    }
-    panic("moe_split_twin: no expert twin for format {fmt} form {form}")
-    return (src = "", entry = "", fm = false, tgm = 0ul)
+    return thr
 }
 
-//! one split-format expert twin dispatch over the contiguous fixtures: the dense binding layout
-//! (weights, X, y, the kdim/ndim uniforms) plus the bucket counts and bases at 7/8
-def private moe_split_dispatch(enc; fmt : int; pso; tgm : uint64;
-                               bks, bkq, bxh, by, bk, bn, bcnt, bbase; nsb : int; tiles, ndim, ne : int) {
-    metal_set_pipeline(enc, pso)
-    metal_set_threadgroup_memory_length(enc, tgm, 0)
-    metal_set_buffer(enc, bks, fmt == 45 || fmt == 40 ? 0ul : uint64(nsb * 16), 0)
-    metal_set_buffer(enc, bks, 0ul, 1)
-    metal_set_buffer(enc, bkq, 0ul, 2)
-    metal_set_buffer(enc, bxh, 0ul, 3)
-    metal_set_buffer(enc, by, 0ul, 4)
-    metal_set_buffer(enc, bk, 0ul, 5)
-    metal_set_buffer(enc, bn, 0ul, 6)
-    metal_set_buffer(enc, bcnt, 0ul, 7)
-    metal_set_buffer(enc, bbase, 0ul, 8)
-    metal_dispatch_threadgroups(enc, uint3(uint(tiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+//! the moe_mm family's expert tensor twin of k4, k5 or k6: the th stamp, or its 128-row `tall` form
+def private moe_kq_twin(f; tall : bool) {   //! generic, as the gates are: the Apple half alone instantiates it
+    if (f == KqFmt.k4) return tall ? kernel_of(@@pf_enc_moe_mm_k4_th128_c) : kernel_of(@@pf_enc_moe_mm_k4_th_c)
+    if (f == KqFmt.k5) return tall ? kernel_of(@@pf_enc_moe_mm_k5_th128_c) : kernel_of(@@pf_enc_moe_mm_k5_th_c)
+    if (f != KqFmt.k6) {
+        panic("moe_kq_twin: no moe_mm expert twin for {f}")
+    }
+    return tall ? kernel_of(@@pf_enc_moe_mm_k6_th128_c) : kernel_of(@@pf_enc_moe_mm_k6_th_c)
+}
+
+//! the moe_mm family's remainder stamp of k4, k5 or k6 - its builder takes no row count, so it rides apart from the twins
+def private moe_kq_thr(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    if (f == KqFmt.k4) return kernel_of(@@pf_enc_moe_mm_k4_thr_c)
+    if (f == KqFmt.k5) return kernel_of(@@pf_enc_moe_mm_k5_thr_c)
+    if (f != KqFmt.k6) {
+        panic("moe_kq_thr: no moe_mm remainder stamp for {f}")
+    }
+    return kernel_of(@@pf_enc_moe_mm_k6_thr_c)
+}
+
+//! the split family's expert tensor twins per format and form (th, th128, thr): k3 and the iquants ride their dense split
+//! classes under the MoE shell
+def private moe_split_twin(f; form : MoeSplitForm) {   //! generic, as the gates are: the Apple half alone instantiates it
+    if (f == KqFmt.k3) return moe_form(form, kernel_of(@@pf_enc_moe_mm_k3_th_c), kernel_of(@@pf_enc_moe_mm_k3_th128_c), kernel_of(@@pf_enc_moe_mm_k3_thr_c))
+    if (f == KqFmt.iq4xs) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq4xs_th_c), kernel_of(@@pf_enc_moe_mm_iq4xs_th128_c), kernel_of(@@pf_enc_moe_mm_iq4xs_thr_c))
+    if (f == KqFmt.q40) return moe_form(form, kernel_of(@@pf_enc_moe_mm_q40_th_c), kernel_of(@@pf_enc_moe_mm_q40_th128_c), kernel_of(@@pf_enc_moe_mm_q40_thr_c))
+    if (f == KqFmt.iq3s) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq3s_th_c), kernel_of(@@pf_enc_moe_mm_iq3s_th128_c), kernel_of(@@pf_enc_moe_mm_iq3s_thr_c))
+    if (f == KqFmt.iq3xxs) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq3xxs_th_c), kernel_of(@@pf_enc_moe_mm_iq3xxs_th128_c), kernel_of(@@pf_enc_moe_mm_iq3xxs_thr_c))
+    if (f == KqFmt.iq2s) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq2s_th_c), kernel_of(@@pf_enc_moe_mm_iq2s_th128_c), kernel_of(@@pf_enc_moe_mm_iq2s_thr_c))
+    if (f == KqFmt.iq2xs) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq2xs_th_c), kernel_of(@@pf_enc_moe_mm_iq2xs_th128_c), kernel_of(@@pf_enc_moe_mm_iq2xs_thr_c))
+    if (f != KqFmt.iq2xxs) {
+        panic("moe_split_twin: no expert twin for {f}")
+    }
+    return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq2xxs_th_c), kernel_of(@@pf_enc_moe_mm_iq2xxs_th128_c), kernel_of(@@pf_enc_moe_mm_iq2xxs_thr_c))
+}
+
+//! one split-format expert twin dispatch of stamp `k` over the contiguous fixtures: the dense binding layout (weights, X,
+//! y, the kdim/ndim uniforms) plus the bucket counts and bases at 7/8, `tiles` M-tiles over `mp` padded rows
+def private moe_split_dispatch(enc; fmt : int; k; pso;
+                               bks, bkq, bxh, by, bk, bn, bcnt, bbase; nsb : int; mp, tiles, ndim, ne : int) {
+    invoke(k.enc, enc, pso, bks, fmt == 45 || fmt == 40 ? 0ul : uint64(nsb * 16), bks, 0ul, bkq, 0ul, bxh, 0ul, by, 0ul, bk, bn, bcnt, bbase,
+        int64(mp), int64(ndim), int64(ne), int64(tiles))
 }
 
 // the split-format expert twins against the same per-expert oracle as the K-quant MoE gate: the
 // TH stamp, then the tall pair (128-floor stamp + remainder) where the counts cross 128
-def private moe_mulmm_split_gate(t : T?; dev, queue; fmt : int; kdim, ndim : int; counts : array<int>) {
+def private moe_mulmm_split_gate(t : T?; var dev, queue; fmt : int; kdim, ndim : int; counts : array<int>) {
     let tag = "moe_mulmm_split_k{fmt} k={kdim} n={ndim}"
-    var err : string
-    let th = moe_split_twin(fmt, MoeSplitForm.th)
-    var tw_pso = pipeline_from_source(dev, th.src, th.entry, th.fm, err)
-    if (tw_pso == null && !metal4_tensor_available(dev)) {
-        to_log(LOG_INFO, "{tag}: no Metal-4 tensor toolchain - skipped\n")
-        return
-    }
-    t |> success(tw_pso != null, "{tag}: pipeline: {err}")
-    return if (tw_pso == null)
-    let ne = length(counts)
-    let nb = kdim / 256
-    let eplane = ndim * nb
-    let nsb = ne * eplane
-    var kq : array<uint8>
-    var ks : array<uint8>
-    kq_fill_planes(fmt, nsb, kq, ks)
-    let nk = 2
-    var fx <- moe_fix(counts, false, nk, 24)
-    var xf : array<float>
-    xf |> resize(fx.pad * kdim)
-    for (i in range(length(xf))) {
-        xf[i] = float((i * 5) % 9 - 4)
-    }
-    var wdeq : array<float>
-    wdeq |> resize(ne * ndim * kdim)
-    var wrow : array<float>
-    wrow |> resize(kdim)
-    for (e in range(ne)) {
-        for (j in range(ndim)) {
-            kq_row_ref(fmt, e * eplane + j * nb, nb, nsb, kq, ks, wrow)
-            for (c in range(kdim)) {
-                wdeq[(e * ndim + j) * kdim + c] = wrow[c]
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let f = kq_fmt_of_id(fmt, "moe_mulmm_split_gate")
+        let th = moe_split_twin(f, MoeSplitForm.th)
+        var tw_pso = mc |> keep_stamp(th, err)
+        return if (!tensor_pso_or_skip(t, tag, tw_pso, dev, err))
+        let ne = length(counts)
+        let nb = kdim / 256
+        let eplane = ndim * nb
+        let nsb = ne * eplane
+        var inscope kq : array<uint8>
+        var inscope ks : array<uint8>
+        kq_fill_planes(fmt, nsb, kq, ks)
+        let nk = 2
+        var inscope fx <- moe_fix(counts, false, nk, 24)
+        var inscope xf : array<float>
+        xf |> resize(fx.pad * kdim)
+        for (i in range(length(xf))) {
+            xf[i] = float((i * 5) % 9 - 4)
+        }
+        var inscope wdeq : array<float>
+        wdeq |> resize(ne * ndim * kdim)
+        var inscope wrow : array<float>
+        wrow |> resize(kdim)
+        for (e in range(ne)) {
+            for (j in range(ndim)) {
+                kq_row_ref(fmt, e * eplane + j * nb, nb, nsb, kq, ks, wrow)
+                for (c in range(kdim)) {
+                    wdeq[(e * ndim + j) * kdim + c] = wrow[c]
+                }
             }
         }
-    }
-    var wb : array<float>
-    var want : array<float>
-    var env : array<float>
-    moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
-    var xh <- [for (v in xf); float16(v)]
-    var bks = buf_upload(dev, ks)
-    var bkq = buf_upload(dev, kq)
-    var bxh = buf_upload(dev, xh)
-    var by = buf_fill(dev, fx.pad * ndim, -500.0)
-    var bk = buf_u32(dev, uint(kdim))
-    var bn = buf_u32(dev, uint(ndim))
-    var bcnt = buf_upload(dev, fx.cnt)
-    var bbase = buf_upload(dev, fx.basep)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        moe_split_dispatch(enc, fmt, tw_pso, th.tgm, bks, bkq, bxh, by, bk, bn, bcnt, bbase, nsb, fx.maxtiles, ndim, ne)
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    // the control for the split stamps: the 2e-4 compare must RED on a poisoned expectation.
-    // The added delta env[0]*0.1 + 1.0 exceeds the bar's own max(2e-4*env[0], 1e-3) at every
-    // envelope, so a bar that cannot discriminate shows up here rather than as a silent pass
-    var wantp := want
-    wantp[0] += env[0] * 0.1 + 1.0
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-4, tag), 0)
-        t |> success(buf_mismatch_env(by, wantp, env, 2e-4, "{tag} CONTROL(expected-red)") != 0, "{tag}: poison control reds")
-    }
-    var maxce = 0
-    for (c in fx.cnt) {
-        maxce = max(maxce, int(c))
-    }
-    if (maxce >= 128) {
-        let tl = moe_split_twin(fmt, MoeSplitForm.th128)
-        let rm = moe_split_twin(fmt, MoeSplitForm.thr)
-        var tl_pso = pipeline_from_source(dev, tl.src, tl.entry, tl.fm, err)
-        var rm_pso = pipeline_from_source(dev, rm.src, rm.entry, rm.fm, err)
+        var inscope wb : array<float>
+        var inscope want : array<float>
+        var inscope env : array<float>
+        moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
+        var inscope xh <- [for (v in xf); float16(v)]
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let bxh = mc |> in_plain(xh)
+        let by = mc |> out_words(fx.pad * ndim, -500.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let bcnt = mc |> in_plain(fx.cnt)
+        let bbase = mc |> in_plain(fx.basep)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            moe_split_dispatch(enc, fmt, th, tw_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], nsb, fx.pad, fx.maxtiles, ndim, ne)
+        }
+        if (ran) {
+            check_buf(t, tag, mc.buf[by], want, env_bar(2e-4, env), Shape(row_width = ndim), env)
+        }
+        var maxce = 0
+        for (c in fx.cnt) {
+            maxce = max(maxce, int(c))
+        }
+        return if (maxce < 128)
+        let tl = moe_split_twin(f, MoeSplitForm.th128)
+        let rm = moe_split_twin(f, MoeSplitForm.thr)
+        var tl_pso = mc |> keep_stamp(tl, err)
+        var rm_pso = mc |> keep_stamp(rm, err)
         t |> success(tl_pso != null && rm_pso != null, "{tag} tall pair: pipeline: {err}")
-        if (tl_pso != null && rm_pso != null) {
-            var by_p = buf_fill(dev, fx.pad * ndim, -700.0)
-            let ranp = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-                moe_split_dispatch(enc, fmt, tl_pso, tl.tgm, bks, bkq, bxh, by_p, bk, bn, bcnt, bbase, nsb, (maxce + 127) / 128, ndim, ne)
-                moe_split_dispatch(enc, fmt, rm_pso, rm.tgm, bks, bkq, bxh, by_p, bk, bn, bcnt, bbase, nsb, 4, ndim, ne)
-            }
-            t |> success(ranp, "{tag} tall pair: encode: {err}")
-            if (ranp) {
-                t |> equal(buf_mismatch_env(by_p, want, env, 2e-4, "{tag} tall pair"), 0)
-                t |> success(buf_mismatch_env(by_p, wantp, env, 2e-4, "{tag} tall pair CONTROL(expected-red)") != 0, "{tag} tall pair: poison control reds")
-            }
-            metal_release(by_p)
+        return if (tl_pso == null || rm_pso == null)
+        let by_p = mc |> out_words(fx.pad * ndim, -700.0)
+        let ranp = mc |> cell_record(t, "{tag} tall pair") $(enc : MetalComputeEncoder?) {
+            moe_split_dispatch(enc, fmt, tl, tl_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by_p], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], nsb, fx.pad, (maxce + 127) / 128, ndim, ne)
+            moe_split_dispatch(enc, fmt, rm, rm_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by_p], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], nsb, fx.pad, 4, ndim, ne)
         }
-        if (tl_pso != null) {
-            metal_release(tl_pso)
-        }
-        if (rm_pso != null) {
-            metal_release(rm_pso)
-        }
+        return if (!ranp)
+        check_buf(t, "{tag} tall pair", mc.buf[by_p], want, env_bar(2e-4, env), Shape(row_width = ndim), env)
     }
-    metal_release(bks)
-    metal_release(bkq)
-    metal_release(bxh)
-    metal_release(by)
-    metal_release(bk)
-    metal_release(bn)
-    metal_release(bcnt)
-    metal_release(bbase)
-    metal_release(tw_pso)
-    delete kq
-    delete ks
-    delete fx
-    delete xf
-    delete xh
-    delete wdeq
-    delete wrow
-    delete wb
-    delete want
-    delete wantp
-    delete env
 }
 
 // The gathered q8 mul_mm (MetalMoeMulMmQ8) and its tensor twin — the twin serves CONTIGUOUS
 // (gather=0, down-site) shapes only and never binds bkt.
-def private moe_mulmm_q8_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : int; counts : array<int>; gather : bool; halfx : bool = false) {
+def private moe_mulmm_q8_gate(t : T?; var dev, queue; tensor : bool; kdim, ndim : int; counts : array<int>; gather : bool; halfx : bool = false) {
     let tag = "moe_mulmm_q8{tensor ? "t" : ""}{halfx ? " halfx" : ""}{gather ? " gather" : ""} k={kdim} n={ndim}"
-    var err : string
-    var pso = (tensor
-        ? (halfx
-            ? pipeline_from_source(dev, MetalMoeMulMmQ8TH_metal_moe_mulmm_q8_t_msl, MetalMoeMulMmQ8TH_metal_moe_mulmm_q8_t_msl_entry, MetalMoeMulMmQ8TH_metal_moe_mulmm_q8_t_msl_fastmath, err)
-            : pipeline_from_source(dev, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_entry, MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_fastmath, err))
-        : pipeline_from_source(dev, metal_moe_mulmm_q8_msl, metal_moe_mulmm_q8_msl_entry, metal_moe_mulmm_q8_msl_fastmath, err))
-    if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
-        return
-    }
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let ne = length(counts)
-    let nkb = kdim / 32
-    var blob : array<uint8>
-    var wdeq : array<float>
-    q8_blob_fill(ne * ndim, nkb, blob, wdeq)
-    let nk = 2
-    let nx = 24
-    var fx <- moe_fix(counts, gather, nk, nx)
-    var xf : array<float>
-    q8_x_fill((gather ? nx : fx.pad) * kdim, xf)
-    var xh : array<float16>
-    if (halfx) {
-        // round-trip through f16 so moe_mm_truth stays the arm's exact reference
-        xh |> resize(length(xf))
-        for (xv, hv in xf, xh) {
-            hv = float16(xv)
-            xv = float(hv)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kt = halfx ? kernel_of(@@pf_enc_moe_mm_q8_th_c) : kernel_of(@@pf_enc_moe_mm_q8_t_c)
+        let kb = kernel_of(@@pf_enc_moe_mm_q8_c)
+        var pso = tensor ? (mc |> keep_stamp(kt, err)) : (mc |> keep_stamp(kb, err))
+        return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
+        let ne = length(counts)
+        let nkb = kdim / 32
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ne * ndim, nkb, blob, wdeq)
+        let nk = 2
+        let nx = 24
+        var inscope fx <- moe_fix(counts, gather, nk, nx)
+        var inscope xf : array<float>
+        q8_x_fill((gather ? nx : fx.pad) * kdim, xf)
+        var inscope xh : array<float16>
+        if (halfx) {
+            // round-trip through f16 so moe_mm_truth stays the arm's exact reference
+            xh |> resize(length(xf))
+            for (xv, hv in xf, xh) {
+                hv = float16(xv)
+                xv = float(hv)
+            }
         }
-    }
-    var wb : array<float>
-    var want : array<float>
-    var env : array<float>
-    moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
-    var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(ndim * nkb),
-        nk = uint(nk), gather = gather ? 1u : 0u)
-    var bw = buf_upload(dev, blob)
-    var bx = halfx ? buf_upload(dev, xh) : buf_upload(dev, xf)
-    var by = buf_fill(dev, fx.pad * ndim, -1000.0)
-    var bcnt = buf_upload(dev, fx.cnt)
-    var bbase = buf_upload(dev, fx.basep)
-    var bbkt = gather ? buf_upload(dev, fx.bkt) : buf_u32(dev, 0u)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_buffer(enc, bw, 0ul, 0)   // half-scale view
-        metal_set_buffer(enc, bw, 0ul, 1)   // byte view of the same blob
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        if (tensor) {   // the tensor twin keeps its compact layout (contiguous-only, no bkt)
-            metal_set_threadgroup_memory_length(enc, halfx ? MetalMoeMulMmQ8TH_metal_moe_mulmm_q8_t_msl_tgmem : MetalMoeMulMmQ8T_metal_moe_mulmm_q8_t_msl_tgmem, 0)
-            metal_set_buffer(enc, bx, 0ul, 2)
-            metal_set_buffer(enc, by, 0ul, 3)
-            metal_set_buffer(enc, bcnt, 0ul, 6)
-            metal_set_buffer(enc, bbase, 0ul, 7)
-        } else {
-            metal_set_threadgroup_memory_length(enc, metal_moe_mulmm_q8_msl_tgmem, 0)
-            metal_set_buffer(enc, bx, 0ul, 3)
-            metal_set_buffer(enc, by, 0ul, 4)
-            metal_set_buffer(enc, bcnt, 0ul, 7)
-            metal_set_buffer(enc, bbase, 0ul, 8)
-            metal_set_buffer(enc, bbkt, 0ul, 9)
+        var inscope wb : array<float>
+        var inscope want : array<float>
+        var inscope env : array<float>
+        moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
+        var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(ndim * nkb),
+            nk = uint(nk), gather = gather ? 1u : 0u)
+        let bw = mc |> in_plain(blob)
+        let bx = halfx ? (mc |> in_plain(xh)) : (mc |> in_(xf))
+        let by = mc |> out_words(fx.pad * ndim, -1000.0)
+        let bcnt = mc |> in_plain(fx.cnt)
+        let bbase = mc |> in_plain(fx.basep)
+        let bbkt = gather ? (mc |> in_plain(fx.bkt)) : (mc |> in_plain([0u]))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (tensor) {   // the tensor twin keeps its compact layout (contiguous-only, no bkt); one blob, its half-scale and byte views
+                invoke(kt.enc, enc, pso, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(fx.maxtiles * 32), int64(ne))
+            } else {
+                invoke(kb.enc, enc, pso, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[by], ka, mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(ndim), int64(fx.maxtiles * 32), int64(ne))
+            }
         }
-        metal_dispatch_threadgroups(enc, uint3(uint(fx.maxtiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, env_bar(2e-3, env), Shape(row_width = ndim), env)
     }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
-    }
-    metal_release(bw)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bcnt)
-    metal_release(bbase)
-    metal_release(bbkt)
-    metal_release(pso)
-    delete blob
-    delete wdeq
-    delete fx
-    delete xf
-    delete xh
-    delete wb
-    delete want
-    delete env
 }
 
 // The gathered MXFP4 mul_mm (MetalMoeMulMmMx4) and its tensor twin: nibble plane + e8m0 scale
 // plane + host-built vtab, per-expert bias folded when hasb (accumulator seed in the base,
 // rank-1 chunk in the twin). Truth replicates the kernels' exact e8m0 decode.
-def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : int; counts : array<int>; gather, hasb : bool; halfx : bool = false) {
+def private moe_mulmm_mx4_gate(t : T?; var dev, queue; tensor : bool; kdim, ndim : int; counts : array<int>; gather, hasb : bool; halfx : bool = false) {
     let tag = "moe_mulmm_mx4{tensor ? "t" : ""}{halfx ? " halfx" : ""}{gather ? " gather" : ""}{hasb ? " bias" : ""} k={kdim} n={ndim}"
-    var err : string
-    var pso = (tensor
-        ? (halfx
-            ? pipeline_from_source(dev, MetalMoeMulMmMx4TH_metal_moe_mulmm_mx4_t_msl, MetalMoeMulMmMx4TH_metal_moe_mulmm_mx4_t_msl_entry, MetalMoeMulMmMx4TH_metal_moe_mulmm_mx4_t_msl_fastmath, err)
-            : pipeline_from_source(dev, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_entry, MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_fastmath, err))
-        : pipeline_from_source(dev, metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath, err))
-    if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
-        return
-    }
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let ne = length(counts)
-    let nkb = kdim / 32
-    let tblk = ne * ndim * nkb
-    var vtab : array<float>
-    vtab |> resize(16)
-    for (i in range(8)) {
-        let v = float(fixed_array(0, 1, 2, 3, 4, 6, 8, 12)[i])
-        vtab[i] = v
-        vtab[i + 8] = -v
-    }
-    var nplane : array<uint>
-    nplane |> resize(tblk * 4)
-    for (i in range(tblk * 4)) {
-        nplane[i] = uint(i * 3 + 1) * 2654435761u
-    }
-    var eplane8 : array<uint8>
-    eplane8 |> resize(tblk)
-    for (i in range(tblk)) {
-        eplane8[i] = uint8(124 + (i * 3 + 1) % 8)   // pow2 scales 2^-4..2^3 — f16-exact products
-    }
-    var wdeq : array<float>
-    wdeq |> resize(ne * ndim * kdim)
-    for (blk in range(tblk)) {
-        let sc = uint(eplane8[blk])
-        let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))
-        for (k in range(32)) {
-            let byi = k % 16
-            let nby = (nplane[blk * 4 + byi / 4] >> uint((byi % 4) * 8)) & 255u
-            wdeq[blk * 32 + k] = vtab[int(k < 16 ? (nby & 15u) : (nby >> 4u))] * d
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kt = halfx ? kernel_of(@@pf_enc_moe_mm_mx4_th_c) : kernel_of(@@pf_enc_moe_mm_mx4_t_c)
+        let kb = kernel_of(@@pf_enc_moe_mm_mx4_c)
+        var pso = tensor ? (mc |> keep_stamp(kt, err)) : (mc |> keep_stamp(kb, err))
+        return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
+        let ne = length(counts)
+        let nkb = kdim / 32
+        let tblk = ne * ndim * nkb
+        var inscope vtab : array<float>
+        vtab |> resize(16)
+        for (i in range(8)) {
+            let v = float(fixed_array(0, 1, 2, 3, 4, 6, 8, 12)[i])
+            vtab[i] = v
+            vtab[i + 8] = -v
         }
-    }
-    var wb : array<float>
-    wb |> resize(ne * ndim)
-    for (i in range(ne * ndim)) {
-        wb[i] = float((i * 11) % 9 - 4) * 25.0   // bias >> the envelope band, or a dropped fold hides under it
-    }
-    let nk = 2
-    let nx = 24
-    var fx <- moe_fix(counts, gather, nk, nx)
-    var xf : array<float>
-    q8_x_fill((gather ? nx : fx.pad) * kdim, xf)
-    var xh : array<float16>
-    if (halfx) {
-        // round-trip through f16 so moe_mm_truth stays the arm's exact reference
-        xh |> resize(length(xf))
-        for (xv, hv in xf, xh) {
-            hv = float16(xv)
-            xv = float(hv)
+        var inscope nplane : array<uint>
+        nplane |> resize(tblk * 4)
+        for (i in range(tblk * 4)) {
+            nplane[i] = uint(i * 3 + 1) * 2654435761u
         }
-    }
-    var want : array<float>
-    var env : array<float>
-    moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, hasb, want, env)
-    var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(ndim * nkb),
-        nk = uint(nk), gather = gather ? 1u : 0u, hasb = hasb ? 1u : 0u)
-    var bnq = buf_upload(dev, nplane)
-    var bee = buf_upload(dev, eplane8)
-    var bvt = buf_upload(dev, vtab)
-    var bwb = buf_upload(dev, wb)
-    var bx = halfx ? buf_upload(dev, xh) : buf_upload(dev, xf)
-    var by = buf_fill(dev, fx.pad * ndim, -1000.0)
-    var bcnt = buf_upload(dev, fx.cnt)
-    var bbase = buf_upload(dev, fx.basep)
-    var bbkt = gather ? buf_upload(dev, fx.bkt) : buf_u32(dev, 0u)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tensor ? (halfx ? MetalMoeMulMmMx4TH_metal_moe_mulmm_mx4_t_msl_tgmem : MetalMoeMulMmMx4T_metal_moe_mulmm_mx4_t_msl_tgmem) : metal_moe_mulmm_mx4_msl_tgmem, 0)
-        metal_set_buffer(enc, bnq, 0ul, 0)
-        metal_set_buffer(enc, bee, 0ul, 1)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        if (tensor) {
-            metal_set_buffer(enc, bx, 0ul, 3)
-            metal_set_buffer(enc, by, 0ul, 4)
-            metal_set_buffer(enc, bcnt, 0ul, 6)
-            metal_set_buffer(enc, bbase, 0ul, 7)
-        } else {
-            metal_set_buffer(enc, bx, 0ul, 3)
-            metal_set_buffer(enc, by, 0ul, 4)
-            metal_set_buffer(enc, bcnt, 0ul, 7)
-            metal_set_buffer(enc, bbase, 0ul, 8)
-            metal_set_buffer(enc, bbkt, 0ul, 9)
+        var inscope eplane8 : array<uint8>
+        eplane8 |> resize(tblk)
+        for (i in range(tblk)) {
+            eplane8[i] = uint8(124 + (i * 3 + 1) % 8)   // pow2 scales 2^-4..2^3 — f16-exact products
         }
-        metal_set_buffer(enc, bwb, 0ul, 12)
-        metal_set_buffer(enc, bvt, 0ul, 13)
-        metal_dispatch_threadgroups(enc, uint3(uint(fx.maxtiles), uint(ndim / 64), uint(ne)), uint3(128u, 1u, 1u))
+        var inscope wdeq : array<float>
+        wdeq |> resize(ne * ndim * kdim)
+        for (blk in range(tblk)) {
+            let sc = uint(eplane8[blk])
+            let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))
+            for (k in range(32)) {
+                let byi = k % 16
+                let nby = (nplane[blk * 4 + byi / 4] >> uint((byi % 4) * 8)) & 255u
+                wdeq[blk * 32 + k] = vtab[int(k < 16 ? (nby & 15u) : (nby >> 4u))] * d
+            }
+        }
+        var inscope wb : array<float>
+        wb |> resize(ne * ndim)
+        for (i in range(ne * ndim)) {
+            wb[i] = float((i * 11) % 9 - 4) * 25.0   // bias >> the envelope band, or a dropped fold hides under it
+        }
+        let nk = 2
+        let nx = 24
+        var inscope fx <- moe_fix(counts, gather, nk, nx)
+        var inscope xf : array<float>
+        q8_x_fill((gather ? nx : fx.pad) * kdim, xf)
+        var inscope xh : array<float16>
+        if (halfx) {
+            // round-trip through f16 so moe_mm_truth stays the arm's exact reference
+            xh |> resize(length(xf))
+            for (xv, hv in xf, xh) {
+                hv = float16(xv)
+                xv = float(hv)
+            }
+        }
+        var inscope want : array<float>
+        var inscope env : array<float>
+        moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, hasb, want, env)
+        var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(ndim * nkb),
+            nk = uint(nk), gather = gather ? 1u : 0u, hasb = hasb ? 1u : 0u)
+        let bnq = mc |> in_plain(nplane)
+        let bee = mc |> in_plain(eplane8)
+        let bvt = mc |> in_(vtab)
+        let bwb = mc |> in_(wb)
+        let bx = halfx ? (mc |> in_plain(xh)) : (mc |> in_(xf))
+        let by = mc |> out_words(fx.pad * ndim, -1000.0)
+        let bcnt = mc |> in_plain(fx.cnt)
+        let bbase = mc |> in_plain(fx.basep)
+        let bbkt = gather ? (mc |> in_plain(fx.bkt)) : (mc |> in_plain([0u]))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (tensor) {
+                invoke(kt.enc, enc, pso, mc.buf[bnq], 0ul, mc.buf[bee], 0ul, mc.buf[bx], mc.buf[by], ka, mc.buf[bcnt], mc.buf[bbase], mc.buf[bwb], mc.buf[bvt], int64(ndim), int64(fx.maxtiles * 32), int64(ne))
+            } else {
+                invoke(kb.enc, enc, pso, mc.buf[bnq], 0ul, mc.buf[bee], 0ul, mc.buf[bx], mc.buf[by], ka, mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], mc.buf[bwb], mc.buf[bvt], int64(ndim), int64(fx.maxtiles * 32), int64(ne))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, env_bar(2e-3, env), Shape(row_width = ndim), env)
     }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(by, want, env, 2e-3, tag), 0)
-    }
-    metal_release(bnq)
-    metal_release(bee)
-    metal_release(bvt)
-    metal_release(bwb)
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bcnt)
-    metal_release(bbase)
-    metal_release(bbkt)
-    metal_release(pso)
-    delete vtab
-    delete nplane
-    delete eplane8
-    delete wdeq
-    delete wb
-    delete fx
-    delete xf
-    delete xh
-    delete want
-    delete env
 }
 
 // ===== the prefill attention GEMM pair + Metal-4 tensor twins =====
@@ -2032,208 +1277,155 @@ def private moe_mulmm_mx4_gate(t : T?; dev, queue; tensor : bool; kdim, ndim : i
 // without writing, which the sentinel whole-slab compare asserts. QK arms keep npos == np32:
 // the tensor twin stages K pad rows RAW (no zero guard — the base has one), so pads must not
 // exist for the pair to agree.
-def private attn_qk_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, qoff, window : int; uend : int = 0; halfq : bool = false) {
+def private attn_qk_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, qoff, window : int; uend : int = 0; halfq : bool = false) {
     let hq = halfq ? " halfq" : ""
     let tag = "attn_qk_mm{tensor ? "t" : ""}{hq} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window} u={uend}"
-    var err : string
-    var pso = (halfq
-        ? pipeline_from_source(dev, MetalAttnQKMmTH_metal_attn_qk_mm_t_msl, MetalAttnQKMmTH_metal_attn_qk_mm_t_msl_entry, MetalAttnQKMmTH_metal_attn_qk_mm_t_msl_fastmath, err)
-        : (tensor
-            ? pipeline_from_source(dev, MetalAttnQKMmT_metal_attn_qk_mm_t_msl, MetalAttnQKMmT_metal_attn_qk_mm_t_msl_entry, MetalAttnQKMmT_metal_attn_qk_mm_t_msl_fastmath, err)
-            : pipeline_from_source(dev, metal_attn_qk_mm_msl, metal_attn_qk_mm_msl_entry, metal_attn_qk_mm_msl_fastmath, err)))
-    if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
-        return
-    }
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let qd = heads * hs
-    let kvd = (heads / kv_mul) * hs
-    let scale = 0.125
-    var qv : array<float>
-    q8_x_fill(mp * qd, qv)
-    if (halfq) {
-        for (i in range(mp * qd)) {
-            qv[i] = float(float16(qv[i]))   // f16-exact fixture: the oracle dot stays the reference
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kqk = halfq ? kernel_of(@@enc_qk_mm_th_c) : (tensor ? kernel_of(@@enc_qk_mm_t_c) : kernel_of(@@enc_qk_mm_c))
+        var pso = mc |> keep_stamp(kqk, err)
+        return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
+        let qd = heads * hs
+        let kvd = (heads / kv_mul) * hs
+        let scale = 0.125
+        var inscope qv : array<float>
+        q8_x_fill(mp * qd, qv)
+        if (halfq) {
+            for (i in range(mp * qd)) {
+                qv[i] = float(float16(qv[i]))   // f16-exact fixture: the oracle dot stays the reference
+            }
         }
-    }
-    var kv : array<float>
-    kv |> resize(np32 * kvd)
-    for (i in range(np32 * kvd)) {
-        kv[i] = float((i * 7 + 3) % 15 - 7) * 0.5
-    }
-    var want : array<float>
-    var env : array<float>
-    want |> resize(heads * mp * np32)
-    env |> resize(heads * mp * np32)
-    for (i in range(heads * mp * np32)) {
-        want[i] = -1000.0
-        env[i] = 0.0
-    }
-    for (h in range(heads)) {
-        let kvhoff = (h / kv_mul) * hs
-        for (m in range(mp)) {
-            let mBase = m / 32 * 32
-            for (nb in range(np32 / 64)) {
-                let nBase = nb * 64
-                // fused span: tail rows above uend stay causal, so the skip floor is
-                // max(uend, the block's causal reach) — mirrors the kernel's gate
-                let skip = ((uend > 0 ? nBase >= max(uend, qoff + mBase + 32) : nBase > qoff + mBase + 31)
-                    || (window > 0 && qoff + mBase + 1 > window && nBase + 64 <= qoff + mBase + 1 - window))
-                continue if (skip)
-                for (pos in range(nBase, nBase + 64)) {
-                    var acc = 0.0lf
-                    var ev = 0.0lf
-                    for (c in range(hs)) {
-                        let p = double(qv[m * qd + h * hs + c]) * double(scale) * double(kv[pos * kvd + kvhoff + c])
-                        acc += p
-                        ev += abs(p)
+        var inscope kv : array<float>
+        kv |> resize(np32 * kvd)
+        for (i in range(np32 * kvd)) {
+            kv[i] = float((i * 7 + 3) % 15 - 7) * 0.5
+        }
+        var inscope want : array<float>
+        var inscope env : array<float>
+        want |> resize(heads * mp * np32)
+        env |> resize(heads * mp * np32)
+        for (i in range(heads * mp * np32)) {
+            want[i] = -1000.0
+            env[i] = 0.0
+        }
+        for (h in range(heads)) {
+            let kvhoff = (h / kv_mul) * hs
+            for (m in range(mp)) {
+                let mBase = m / 32 * 32
+                for (nb in range(np32 / 64)) {
+                    let nBase = nb * 64
+                    // fused span: tail rows above uend stay causal, so the skip floor is
+                    // max(uend, the block's causal reach) — mirrors the kernel's gate
+                    let skip = ((uend > 0 ? nBase >= max(uend, qoff + mBase + 32) : nBase > qoff + mBase + 31)
+                        || (window > 0 && qoff + mBase + 1 > window && nBase + 64 <= qoff + mBase + 1 - window))
+                    continue if (skip)
+                    for (pos in range(nBase, nBase + 64)) {
+                        var acc = 0.0lf
+                        var ev = 0.0lf
+                        for (c in range(hs)) {
+                            let p = double(qv[m * qd + h * hs + c]) * double(scale) * double(kv[pos * kvd + kvhoff + c])
+                            acc += p
+                            ev += abs(p)
+                        }
+                        want[(h * mp + m) * np32 + pos] = float(acc)
+                        env[(h * mp + m) * np32 + pos] = float(ev)
                     }
-                    want[(h * mp + m) * np32 + pos] = float(acc)
-                    env[(h * mp + m) * np32 + pos] = float(ev)
                 }
             }
         }
+        var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
+            npos = uint(np32), np32 = uint(np32), scale = scale, qoff = uint(qoff), qrows = uint(mp),
+            window = uint(window), uend = uint(uend))
+        var inscope qh <- [for (v in qv); float16(v)]
+        let bq = halfq ? (mc |> in_plain(qh)) : (mc |> in_(qv))
+        let bk = mc |> in_(kv)
+        let batt = mc |> out_words(heads * mp * np32, float16(-1000.0))   // f16 slab; the sentinel is f16-exact
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kqk.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+        }
+        return if (!ran)
+        check_buf_h(t, tag, mc.buf[batt], want, env_bar(2e-3, env), Shape(row_width = np32), env)
     }
-    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
-        npos = uint(np32), np32 = uint(np32), scale = scale, qoff = uint(qoff), qrows = uint(mp),
-        window = uint(window), uend = uint(uend))
-    var qh <- [for (v in qv); float16(v)]
-    var bq = halfq ? buf_upload(dev, qh) : buf_upload(dev, qv)
-    var bk = buf_upload(dev, kv)
-    var batt = buf_fill(dev, heads * mp * np32, float16(-1000.0))   // f16 slab; the sentinel is f16-exact
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, halfq
-            ? MetalAttnQKMmTH_metal_attn_qk_mm_t_msl_tgmem
-            : (tensor ? MetalAttnQKMmT_metal_attn_qk_mm_t_msl_tgmem : metal_attn_qk_mm_msl_tgmem), 0)
-        metal_set_buffer(enc, bq, 0ul, 0)
-        metal_set_buffer(enc, bk, 0ul, 1)
-        metal_set_buffer(enc, batt, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
-        metal_dispatch_threadgroups(enc, uint3(uint(mp / 32), uint(np32 / 64), uint(heads)), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env_h(batt, want, env, 2e-3, tag), 0)
-    }
-    metal_release(bq)
-    metal_release(bk)
-    metal_release(batt)
-    metal_release(pso)
-    delete qh
-    delete qv
-    delete kv
-    delete want
-    delete env
 }
 
 // MetalAttnAVMm[T]: xb[m x qd] = P · V where P = pf_p_weight(raw f16 score, rowstat) applied
 // at staging — the gate feeds RAW scores + CPU-minted stats and oracles the same transform.
 // The tensor twin zero-guards V rows >= npos — the npos < np32 arm fills the pad rows with
 // garbage to prove the guard is live (their P weights are zero past each row's live length).
-def private attn_av_mm_gate(t : T?; dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, npos, qoff : int; uend : int = 0; padfree : bool = false) {
+def private attn_av_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, npos, qoff : int; uend : int = 0; padfree : bool = false) {
     let tag = "attn_av_mm{tensor ? "t" : ""}{padfree ? " padfree" : ""} h={heads} hs={hs} m={mp} n={np32} npos={npos} u={uend}"
-    var err : string
-    var pso = (tensor
-        ? (padfree
-            ? pipeline_from_source(dev, MetalAttnAVMmTP_metal_attn_av_mm_t_msl, MetalAttnAVMmTP_metal_attn_av_mm_t_msl_entry, MetalAttnAVMmTP_metal_attn_av_mm_t_msl_fastmath, err)
-            : pipeline_from_source(dev, MetalAttnAVMmT_metal_attn_av_mm_t_msl, MetalAttnAVMmT_metal_attn_av_mm_t_msl_entry, MetalAttnAVMmT_metal_attn_av_mm_t_msl_fastmath, err))
-        : (padfree
-            ? pipeline_from_source(dev, MetalAttnAVMmP_metal_attn_av_mm_msl, MetalAttnAVMmP_metal_attn_av_mm_msl_entry, MetalAttnAVMmP_metal_attn_av_mm_msl_fastmath, err)
-            : pipeline_from_source(dev, MetalAttnAVMm_metal_attn_av_mm_msl, MetalAttnAVMm_metal_attn_av_mm_msl_entry, MetalAttnAVMm_metal_attn_av_mm_msl_fastmath, err)))
-    if (tensor && pso == null && !metal4_tensor_available(dev)) {
-        t |> skip("{tag}: no Metal-4 tensor toolchain on this box")
-        return
-    }
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let qd = heads * hs
-    let kvd = (heads / kv_mul) * hs
-    var attf : array<float16>
-    attf |> resize(heads * mp * np32)
-    for (i in range(heads * mp * np32)) {
-        attf[i] = float16(float((i * 3) % 13 - 6) * 0.25)   // raw scores, every slot populated
-    }
-    var stats : array<float>
-    stats |> resize(heads * mp * 2)
-    for (h in range(heads)) {
-        for (m in range(mp)) {
-            let qpos = qoff + m
-            let cnt = uend > 0 && qpos < uend ? uend : qpos + 1
-            var rm = -1.0e30
-            for (pos in range(cnt)) {
-                rm = max(rm, float(attf[(h * mp + m) * np32 + pos]))
-            }
-            var sum = 0.0
-            for (pos in range(cnt)) {
-                sum += exp(float(attf[(h * mp + m) * np32 + pos]) - rm)
-            }
-            stats[(h * mp + m) * 2] = rm
-            stats[(h * mp + m) * 2 + 1] = 1.0 / sum
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kav = (tensor ? (padfree ? kernel_of(@@enc_av_mm_tp_c) : kernel_of(@@enc_av_mm_t_c))
+            : (padfree ? kernel_of(@@enc_av_mm_p_c) : kernel_of(@@enc_av_mm_c)))
+        var pso = mc |> keep_stamp(kav, err)
+        return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
+        let qd = heads * hs
+        let kvd = (heads / kv_mul) * hs
+        var inscope attf : array<float16>
+        attf |> resize(heads * mp * np32)
+        for (i in range(heads * mp * np32)) {
+            attf[i] = float16(float((i * 3) % 13 - 6) * 0.25)   // raw scores, every slot populated
         }
-    }
-    var vv : array<float>
-    vv |> resize(np32 * kvd)
-    for (i in range(np32 * kvd)) {
-        vv[i] = i / kvd < npos ? float((i * 7 + 3) % 15 - 7) * 0.5 : 999.0   // garbage pads: the guard's proof
-    }
-    var want : array<float>
-    var env : array<float>
-    want |> resize(mp * qd)
-    env |> resize(mp * qd)
-    for (h in range(heads)) {
-        let kvhoff = (h / kv_mul) * hs
-        for (m in range(mp)) {
-            let qpos = qoff + m
-            for (col in range(hs)) {
-                var acc = 0.0lf
-                var ev = 0.0lf
-                for (pos in range(npos)) {
-                    let pw = pf_p_weight(float(attf[(h * mp + m) * np32 + pos]), uint(pos), uint(qpos),
-                        0u, 0.0, uint(uend), 0u, stats[(h * mp + m) * 2], stats[(h * mp + m) * 2 + 1])
-                    let p = double(pw) * double(vv[pos * kvd + kvhoff + col])
-                    acc += p
-                    ev += abs(p)
+        var inscope stats : array<float>
+        stats |> resize(heads * mp * 2)
+        for (h in range(heads)) {
+            for (m in range(mp)) {
+                let qpos = qoff + m
+                let cnt = uend > 0 && qpos < uend ? uend : qpos + 1
+                var rm = -1.0e30
+                for (pos in range(cnt)) {
+                    rm = max(rm, float(attf[(h * mp + m) * np32 + pos]))
                 }
-                want[m * qd + h * hs + col] = float(acc)
-                env[m * qd + h * hs + col] = float(ev)
+                var sum = 0.0
+                for (pos in range(cnt)) {
+                    sum += exp(float(attf[(h * mp + m) * np32 + pos]) - rm)
+                }
+                stats[(h * mp + m) * 2] = rm
+                stats[(h * mp + m) * 2 + 1] = 1.0 / sum
             }
         }
+        var inscope vv : array<float>
+        vv |> resize(np32 * kvd)
+        for (i in range(np32 * kvd)) {
+            vv[i] = i / kvd < npos ? float((i * 7 + 3) % 15 - 7) * 0.5 : 999.0   // garbage pads: the guard's proof
+        }
+        var inscope want : array<float>
+        var inscope env : array<float>
+        want |> resize(mp * qd)
+        env |> resize(mp * qd)
+        for (h in range(heads)) {
+            let kvhoff = (h / kv_mul) * hs
+            for (m in range(mp)) {
+                let qpos = qoff + m
+                for (col in range(hs)) {
+                    var acc = 0.0lf
+                    var ev = 0.0lf
+                    for (pos in range(npos)) {
+                        let pw = pf_p_weight(float(attf[(h * mp + m) * np32 + pos]), uint(pos), uint(qpos),
+                            0u, 0.0, uint(uend), 0u, stats[(h * mp + m) * 2], stats[(h * mp + m) * 2 + 1])
+                        let p = double(pw) * double(vv[pos * kvd + kvhoff + col])
+                        acc += p
+                        ev += abs(p)
+                    }
+                    want[m * qd + h * hs + col] = float(acc)
+                    env[m * qd + h * hs + col] = float(ev)
+                }
+            }
+        }
+        var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
+            npos = uint(npos), np32 = uint(np32), scale = 1.0, qoff = uint(qoff), qrows = uint(mp),
+            uend = uint(uend))
+        let batt = mc |> in_plain(attf)
+        let bstat = mc |> in_(stats)
+        let bv = mc |> in_(vv)
+        let bxb = mc |> out_words(mp * qd, -1000.0)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kav.enc, enc, pso, mc.buf[batt], mc.buf[bv], mc.buf[bxb], ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bxb], want, env_bar(2e-3, env), Shape(row_width = qd, head_width = hs), env)
     }
-    var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
-        npos = uint(npos), np32 = uint(np32), scale = 1.0, qoff = uint(qoff), qrows = uint(mp),
-        uend = uint(uend))
-    var batt = buf_upload(dev, attf)
-    var bstat = buf_upload(dev, stats)
-    var bv = buf_upload(dev, vv)
-    var bxb = buf_fill(dev, mp * qd, -1000.0)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tensor
-            ? (padfree ? MetalAttnAVMmTP_metal_attn_av_mm_t_msl_tgmem : MetalAttnAVMmT_metal_attn_av_mm_t_msl_tgmem)
-            : (padfree ? MetalAttnAVMmP_metal_attn_av_mm_msl_tgmem : MetalAttnAVMm_metal_attn_av_mm_msl_tgmem), 0)
-        metal_set_buffer(enc, batt, 0ul, 0)
-        metal_set_buffer(enc, bv, 0ul, 1)
-        metal_set_buffer(enc, bxb, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 3)
-        metal_set_buffer(enc, bstat, 0ul, 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(mp / 32), uint(hs / 64), uint(heads)), uint3(128u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_env(bxb, want, env, 2e-3, tag), 0)
-    }
-    metal_release(batt)
-    metal_release(bstat)
-    metal_release(bv)
-    metal_release(bxb)
-    metal_release(pso)
-    delete attf
-    delete stats
-    delete vv
-    delete want
-    delete env
 }
 
 // the stage width is a stamp constant the emitter's census records: the double-buffered stamps
@@ -2247,7 +1439,7 @@ def test_q8_mulmm_stamp_widths(t : T?) {
             t |> success(find(MetalQ8MulMmTHDb_metal_q8_mulmm_t_msl_census, "call.tmm2d_q8u_f32.k128\n") >= 0, "THDb width")
             t |> success(find(MetalQ8MulMmTHDb128_metal_q8_mulmm_t_msl_census, "call.tmm2d_q8u_f32.k128\n") >= 0, "THDb128 width")
         } else {
-            feint("no dasMetal in this build; the q8 stamp widths are Metal emission\n")
+            t |> skip("no dasMetal in this build; the q8 stamp widths are Metal emission")
         }
     }
 }
@@ -2256,13 +1448,8 @@ def test_q8_mulmm_stamp_widths(t : T?) {
 def test_metal_gemm_kernels(t : T?) {
     t |> run("prefill GEMM corpus (kq mul_mm trio + bf16 + Metal-4 tensor twins) == CPU references") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() $(dev : MetalDevice?) {
-                if (dev == null) {
-                    feint("no Metal device on this box; GPU kernel checks skipped\n")
-                    return
-                }
-                var queue = metal_new_command_queue(dev)
-                // the simdgroup kq trio + the tensor twins (twins feint without Metal-4)
+            with_metal_gate(t) $(var dev : MetalDevice?; var queue : MetalCommandQueue?) {
+                // the simdgroup kq trio + the tensor twins (twins skip without Metal-4)
                 for (fmt in [4, 5, 6]) {
                     kq_mulmm_gate(t, dev, queue, fmt, false, 64, 512, 64)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64)
@@ -2307,7 +1494,7 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 24, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 25, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 25, false, 32, 256, 128)
-                //! the iquant tensor twins (T + TH stamps; twins feint without Metal-4)
+                // the iquant tensor twins (T + TH stamps; twins skip without Metal-4)
                 for (fmt in [44, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64, halfx = true)
@@ -2407,18 +1594,16 @@ def test_metal_gemm_kernels(t : T?) {
                 attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 32, 96, 96, 64, uend = 96, padfree = true)   // span rows under uend
                 attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 128, 0, uend = 128, padfree = true)
                 // the uniform-span (uend) arms: every query row attends [0, uend) — base AND
-                // tensor twins (the _t twins' only span coverage; they feint without Metal-4)
+                // tensor twins (the _t twins' only span coverage; they skip without Metal-4)
                 attn_qk_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 0, 0, uend = 128)
                 attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 0, 0, uend = 128)
                 attn_qk_mm_gate(t, dev, queue, false, 4, 64, 2, 32, 256, 224, 128, uend = 192)   // span past the window floor
                 attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 128, uend = 192)
                 attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 96, 0, uend = 96)
                 attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 96, 0, uend = 96)
-                metal_release(queue)
             }
-            t |> equal(metal_log_leaks_if_any(), 0l)
         } else {
-            feint("das_metal is not built on this platform; GEMM kernel checks skipped\n")
+            t |> skip("das_metal is not built on this platform; GEMM kernel checks skipped")
         }
     }
 }

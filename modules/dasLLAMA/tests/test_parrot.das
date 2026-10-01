@@ -3,7 +3,6 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require daslib/env_registry
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -161,34 +160,12 @@ let READ_LINE = "parrot: say 1 is read out"
 let DONE_LINE = "parrot: the text was read out"
 
 //! the window server and the model file, each absence registering its own loud skip
-def private ready(t : T?) : bool {
-    if (!has_window_server()) {
-        t |> skip("no window server (DISPLAY and WAYLAND_DISPLAY unset) - the example opens a window")
-        return false
-    }
-    return model_available(t, path_join(models_dir(), "pocket-tts-en-kq.gguf"))
-}
+def private ready(t : T?) : bool => example_ready(t, ["pocket-tts-en-kq.gguf"])
 
 //! the example's smoke rail: the clip cloned, the text said in the clone, read out to the end (the spawn's wall clock is the guard, not a frame cap)
-def private run_parrot(var out : string&) : int {
-    let prev_image = env_value_of("DASLLAMA_IMAGE")
-    set_env_variable("DASLLAMA_IMAGE", "0")   //! never mint a sidecar beside the stocked models
-    let root = get_das_root()
-    let argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/parrot/main.das", "--",
-                 "--models", models_dir(), "--smoke", "--clip", path_join(root, CLIP), "--text", SMOKE_TEXT]
-    let rc = run_and_capture(argv, out, 300.0)
-    set_env_variable("DASLLAMA_IMAGE", prev_image)
-    return rc
-}
+def private run_parrot(var out : string&) : int => run_example("parrot/main.das", ["--clip", path_join(get_das_root(), CLIP), "--text", SMOKE_TEXT], out)
 
-def private witness(out : string) : string {
-    var inscope lines <- split(out, "\n")
-    return join([for (line in lines); line; where find(line, "parrot:") >= 0], "\n")
-}
-
-def private tail_of(out : string) : string {
-    return slice(out, max(0, length(out) - 600))
-}
+def private witness(out : string) : string => example_witness(out, "parrot")
 
 //! the read-out line's two figures: "... is read out - S s of speech over P s of playback"
 def private read_out_figures(out : string) : tuple<speech : float; playback : float> {
@@ -211,7 +188,7 @@ def test_smoke_clones_and_says(t : T?) {
         var out = ""
         let rc = run_parrot(out)
         return if (skip_without_window(t, rc, out))
-        t |> equal(0, rc, "the smoke run exits clean: {tail_of(out)}")
+        t |> equal(0, rc, "the smoke run exits clean: {example_tail(out)}")
         t |> success(find(out, CLONED_LINE) >= 0, "the voice was cloned from the clip:\n{witness(out)}")
         t |> success(find(out, SAY_LINE) >= 0, "the text was said in the cloned voice:\n{witness(out)}")
         t |> success(find(out, READ_LINE) >= 0, "the say was read out:\n{witness(out)}")
@@ -228,6 +205,6 @@ def test_smoke_clones_and_says(t : T?) {
                      "--models", models_dir(), "--smoke", "--clip", "{root}/examples/dasLLAMA/parrot/models.json"]
         let rc = run_and_capture(argv, out, 60.0)
         t |> success(rc != 0, "a clip that does not decode is a refusal, not a run")
-        t |> success(find(out, "did not decode") >= 0, "and it says so by name:\n{tail_of(out)}")
+        t |> success(find(out, "did not decode") >= 0, "and it says so by name:\n{example_tail(out)}")
     }
 }

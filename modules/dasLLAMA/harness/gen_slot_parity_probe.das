@@ -83,8 +83,7 @@ def main {   // nolint:STYLE038 - flat probe ladder: one reference/gen pair per 
         print("SKIP: {genbe} not registered on this box\n")
         return
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         let mr = int64(q8q8_layout_gen())
         print("stamped layout mr = {mr}\n")
 

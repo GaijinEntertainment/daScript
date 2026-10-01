@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
-require dasllama/dasllama_math   // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_math   // with_dasllama_jobque + the runtime knob setters (engine-level, not re-exported)
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal on a per-row step
 require dasllama/dasllama_load   // load_model_: the engine load the batched row's scheduler streams need
 require dasllama/dasllama   // moe_gpu_drop_model: the hybrid cells serve both sides on the CPU lane under an armed tier
@@ -30,18 +30,6 @@ def private prompt_a() : array<int64> => [1l, 9038l, 2501l, 263l, 931l]
 def private prompt_b() : array<int64> => [1l, 306l, 763l]
 def private prompt_c() : array<int64> => [1l, 3439l, 278l, 1781l, 367l, 263l, 2217l]
 
-def private greedy_top(lg : array<float>; vocab : int64) : int64 {
-    var best = 0l
-    var bestv = lg[0]
-    for (i in range64(vocab)) {
-        if (lg[i] > bestv) {
-            bestv = lg[i]
-            best = i
-        }
-    }
-    return best
-}
-
 // one session's sequential greedy stream: continuation tokens, the logits after every step, and
 // clones of the final caches — the oracle a batched twin must reproduce
 struct private RefRun {
@@ -60,11 +48,11 @@ def private run_ref(tr : Model; kdt : KVDtype; prompt : array<int64>; nsteps, vo
     var r : RefRun
     r.lg |> reserve(nsteps * vocab)
     r.toks |> reserve(nsteps)
-    var cur = greedy_top(s.logits, vocab)
+    var cur = argmax_of(s.logits, vocab)
     for (_st in range64(nsteps)) {
         eval_(tr, s, [cur])
         r.lg |> push_from(s.logits)
-        cur = greedy_top(s.logits, vocab)
+        cur = argmax_of(s.logits, vocab)
         r.toks |> push(cur)
     }
     r.kc := s.key_cache
@@ -170,7 +158,7 @@ def private batch_vs_ref(t : T?; tr : Model; kdt : KVDtype; nsteps : int64; tol 
     eval_(tr, s2, p2)
     var ws <- create_batch_workspace_(tr)
     var sess <- [unsafe(addr(s0)), unsafe(addr(s1)), unsafe(addr(s2))]
-    var cur <- [greedy_top(s0.logits, vocab), greedy_top(s1.logits, vocab), greedy_top(s2.logits, vocab)]
+    var cur <- [argmax_of(s0.logits, vocab), argmax_of(s1.logits, vocab), argmax_of(s2.logits, vocab)]
     //! an exact bar (0) is one code path, so the batched side free-runs its own greedy and the tokens
     //! must match; a bar above 0 concedes rounding, so the batched side is FED the reference's tokens
     //! and only the logits are held to the bar - a near-tie flip cannot red a correct engine
@@ -189,7 +177,7 @@ def private batch_vs_ref(t : T?; tr : Model; kdt : KVDtype; nsteps : int64; tol 
             for (v in range64(vocab)) {
                 maxd = max(maxd, abs(sp.logits[v] - refs[i].lg[st * vocab + v]))
             }
-            let top = greedy_top(sp.logits, vocab)
+            let top = argmax_of(sp.logits, vocab)
             got[i][st] = top
             if (top != refs[i].toks[st]) {
                 tokens_ok = false
@@ -234,10 +222,7 @@ def private batch_vs_ref(t : T?; tr : Model; kdt : KVDtype; nsteps : int64; tol 
 }
 
 def private model_missing(t : T?) : bool {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return true
-    }
+    return true if (!jit_only(t))
     if (!stat(MODEL_PATH).is_valid) {
         t |> skip("stories15M.bin not present")
         return true
@@ -254,8 +239,7 @@ def test_batch_decode_fp32(t : T?) {
         var tr <- load_checkpoint(MODEL_PATH)
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             batch_vs_ref(t, tr, KVDtype.f32, 8l, 1.0e-6, "fp32")
         }
         set_fused_decode(prev_fused)
@@ -277,8 +261,7 @@ def test_batch_decode_q8(t : T?) {
         quantize_weights(tr)  // all 2D weights -> Q8_0, tr.quant = q8
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             batch_vs_ref(t, tr, KVDtype.f32, 8l, 1.0e-6, "q8")
         }
         set_fused_decode(prev_fused)
@@ -291,12 +274,8 @@ def test_batch_decode_q8(t : T?) {
 //! recurrent rows against per-session state, gated partial-rope attention rows; `ba_f32` names
 //! the beta/alpha arm the carrier takes (f32 rows on disk, or q8 planes)
 def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag, file : string; ba_f32 : bool) {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return
-    }
     let path = path_join(models_dir(), file)
-    if (!model_available(t, path)) return
+    return if (!jit_model_available(t, path))
     pin_kernel_backend("portable")   // same-dot parity — see test_batch_decode_q8
     var tr <- load_model_(path, QuantMode.q8)
     moe_gpu_drop_model()   //! the claim is one CPU lane, both sides: an armed tier would serve the reference rows on the device (and its whole-model driver's one region cannot hold three host-cached sessions prefilled back to back)
@@ -304,8 +283,7 @@ def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag, file : string; ba_f32 
     tr.config.seq_len = min(tr.config.seq_len, 64l)
     let prev_fused = get_fused_decode()
     set_fused_decode(false)
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         let c0 = batch_step_census()
         batch_vs_ref(t, tr, kdt, 8l, 1.0e-6, tag)
         let c1 = batch_step_census()
@@ -356,8 +334,7 @@ def test_batch_decode_f16_kv(t : T?) {
         quantize_weights(tr)
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             batch_vs_ref(t, tr, KVDtype.f16, 8l, 1.0e-6, "f16kv")
         }
         set_fused_decode(prev_fused)
@@ -369,10 +346,7 @@ def test_batch_decode_f16_kv(t : T?) {
 [test]
 def test_batch_decode_q8_kv(t : T?) {
     t |> run("batched decode == sequential under the q8_0 KV codec (needs SmolLM2-135M)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         // stories15M's head_size 48 is rejected by the q8_0 32-block check (by design) — this arm
         // runs the SmolLM2 GGUF carrier instead, same rail as test_fused_decode
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
@@ -384,8 +358,7 @@ def test_batch_decode_q8_kv(t : T?) {
         tr.config.seq_len = min(tr.config.seq_len, 64l)
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             batch_vs_ref(t, tr, KVDtype.q8_0, 8l, 1.0e-6, "q8_0kv")
         }
         set_fused_decode(prev_fused)
@@ -396,10 +369,7 @@ def test_batch_decode_q8_kv(t : T?) {
 [test]
 def test_batch_decode_tq4_kv(t : T?) {
     t |> run("batched decode == sequential under the tq4 KV codec (needs SmolLM2-135M)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         // stories15M's head_size 48 fails the tq4 pow2 check (by design) — SmolLM2 (head 64) carrier,
         // same rail as test_batch_decode_q8_kv. Parity, not quality: both paths rotate + quantize
         // through the same kernels, so batch == sequential holds at fp32 tolerance
@@ -412,8 +382,7 @@ def test_batch_decode_tq4_kv(t : T?) {
         tr.config.seq_len = min(tr.config.seq_len, 64l)
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             batch_vs_ref(t, tr, KVDtype.tq4, 8l, 1.0e-6, "tq4kv")
         }
         set_fused_decode(prev_fused)
@@ -432,8 +401,7 @@ def test_batch_decode_q4(t : T?) {
         //! one code path: the batched Q4_0 GEMM is the GEMV's dot_q4 run over the rows, so the bar is exact
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             let c0 = batch_step_census()
             batch_vs_ref(t, tr, KVDtype.f32, 6l, 0.0, "q4_0")
             let c1 = batch_step_census()
@@ -457,8 +425,7 @@ def test_batch_decode_step_census(t : T?) {
         let vocab = c.vocab_size
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var pa <- prompt_a()
             var pb <- prompt_b()
             var sa <- make_run_state(c)
@@ -468,8 +435,8 @@ def test_batch_decode_step_census(t : T?) {
             var ws <- create_batch_workspace_(tr)
             var both <- [unsafe(addr(sa)), unsafe(addr(sb))]
             var one <- [unsafe(addr(sa))]
-            let toks <- [greedy_top(sa.logits, vocab), greedy_top(sb.logits, vocab)]
-            let tok <- [greedy_top(sa.logits, vocab)]
+            let toks <- [argmax_of(sa.logits, vocab), argmax_of(sb.logits, vocab)]
+            let tok <- [argmax_of(sa.logits, vocab)]
             let c0 = batch_step_census()
             eval_batch_(tr, ws, both, toks)
             eval_batch_(tr, ws, both, toks)
@@ -493,10 +460,7 @@ def test_batch_decode_step_census(t : T?) {
 [test]
 def test_batch_decode_row_refuses_per_row(t : T?) {
     t |> run("the batched bench row refuses by name when a timed step ran its rows one at a time (needs SmolLM2-135M)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         // the scheduler's streams need a vocabulary (the stop-token walk), which the llama2.c checkpoint lacks
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!model_available(t, path)) return
@@ -506,8 +470,7 @@ def test_batch_decode_row_refuses_per_row(t : T?) {
         let prev_fused = get_fused_decode()
         let prev_rope = get_rope_table_mode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             let served = bench_tg_batched_rep(tr, 2l, 8l, 4l, 1l)
             t |> equal(served.why, "", "the CPU batched stack serves the row: {served.why}")
             t |> success(served.tps > 0.0lf, "... at a rate")
@@ -537,15 +500,14 @@ def test_batch_decode_b1_delegation(t : T?) {
         let vocab = c.vocab_size
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var p0 <- prompt_a()
             var ref <- run_ref(tr, KVDtype.f32, p0, 6l, vocab)
             var s <- make_run_state(c)
             eval_(tr, s, p0)
             var ws <- create_batch_workspace_(tr)
             var sess <- [unsafe(addr(s))]
-            var cur <- [greedy_top(s.logits, vocab)]
+            var cur <- [argmax_of(s.logits, vocab)]
             var maxd = 0.0
             var tokens_ok = true
             for (st in range64(6l)) {
@@ -553,7 +515,7 @@ def test_batch_decode_b1_delegation(t : T?) {
                 for (v in range64(vocab)) {
                     maxd = max(maxd, abs(s.logits[v] - ref.lg[st * vocab + v]))
                 }
-                cur[0] = greedy_top(s.logits, vocab)
+                cur[0] = argmax_of(s.logits, vocab)
                 if (cur[0] != ref.toks[st]) {
                     tokens_ok = false
                 }
@@ -590,8 +552,7 @@ def test_batch_decode_shrink(t : T?) {
         let nsteps = 6l   // 3 steps at B=3, then the middle row retires, 3 more at B=2
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var p0 <- prompt_a()
             var p1 <- prompt_b()
             var p2 <- prompt_c()
@@ -605,7 +566,7 @@ def test_batch_decode_shrink(t : T?) {
             eval_(tr, s2, p2)
             var ws <- create_batch_workspace_(tr)
             var sess <- [unsafe(addr(s0)), unsafe(addr(s1)), unsafe(addr(s2))]
-            var cur <- [greedy_top(s0.logits, vocab), greedy_top(s1.logits, vocab), greedy_top(s2.logits, vocab)]
+            var cur <- [argmax_of(s0.logits, vocab), argmax_of(s1.logits, vocab), argmax_of(s2.logits, vocab)]
             var live <- [0l, 1l, 2l]   // live[k] = which ref stream sess[k] follows
             var tokens_ok = true
             var maxd = 0.0
@@ -617,7 +578,7 @@ def test_batch_decode_shrink(t : T?) {
                     for (v in range64(vocab)) {
                         maxd = max(maxd, abs(sp.logits[v] - refs[ri].lg[st * vocab + v]))
                     }
-                    cur[k] = greedy_top(sp.logits, vocab)
+                    cur[k] = argmax_of(sp.logits, vocab)
                     if (cur[k] != refs[ri].toks[st]) {
                         tokens_ok = false
                     }
@@ -665,8 +626,7 @@ def test_batch_decode_tuned(t : T?) {
         quantize_weights(tr)
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             batch_vs_ref(t, tr, KVDtype.f32, 8l, 1.0e-3, "tuned")
         }
         set_fused_decode(prev_fused)

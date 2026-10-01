@@ -15,7 +15,7 @@ require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
 require math
-require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_math  // with_dasllama_jobque + the runtime knob setters (engine-level, not re-exported)
 
 // Flash prefill attention is online-softmax (NOT bit-exact vs classic — the FP sums reorder), so it
 // is gated on (a) the predicted next token matching classic on a confident prompt and (b) the full
@@ -43,8 +43,7 @@ def check_flash(t : T?; tr : Model; prompt : array<int64>; start_pos : int64; co
     let c = tr.config
     let n = long_length(prompt)
     let REL_TOL = 0.05
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         set_prefill_attn_mode(AttnPrefillMode.classic)
         var sc <- make_run_state(c)
         for (p in range64(start_pos)) {
@@ -82,10 +81,7 @@ def run_all(t : T?; tr : Model; tk : SpmTokenizer) {
 [test]
 def test_flash_fp32(t : T?) {
     t |> run("flash ~= classic, fp32 (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -101,10 +97,7 @@ def test_flash_fp32(t : T?) {
 [test]
 def test_flash_q8(t : T?) {
     t |> run("flash ~= classic, Q8 + forced sliding window (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return

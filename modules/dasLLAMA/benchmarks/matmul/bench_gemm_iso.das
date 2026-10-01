@@ -149,8 +149,7 @@ def bench_gemm_iso(b : B?) {
         to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
         return
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         // A/B the fork-pool restartHeaps opt-out: set DAS_FORK_SKIP_HEAP_RESET to skip it
         let skip_reset = g_env_harness.das_fork_skip_heap_reset
         if (skip_reset) {

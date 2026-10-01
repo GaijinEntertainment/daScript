@@ -8,12 +8,12 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed   // resident_then_cpu_feed, feed_steps_within
+require _resident_feed   // resident_ready, the ramps, resident_then_cpu_feed, feed_steps_within
 
 // The whole-model resident driver on a qwen2 (Qwen2.5-0.5B-Instruct-Q8_0 under DASLLAMA_GPU=1): the
 // q/k/v projection bias folds into the rope stage on the device. The forced-feed logits-tolerance
@@ -32,25 +32,15 @@ def private allow_cpu_prefill_intent() {
 let private LOGIT_BAR_REL = 0.06
 let private PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
 
-
 def private qwen2_forced_feed(t : T?; n : int64) {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return
-    }
     let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
-    if (!model_available(t, path)) return
-    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-        return
-    }
+    if (!resident_ready(t, path)) return
     var tr <- load_model_(path, QuantMode.q8)
     t |> success(tr.config.attn_qkv_bias, "the qwen2 carries the q/k/v projection bias the arm exists for")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the biased model (the load log names any decline)")
-    with_job_que() {
-        setup_dasllama_jobque_()
-        var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
-        var toks <- [for (i in range64(8l)); 2000l + (i * 53l) % 4000l]
+    with_dasllama_jobque() {
+        var prompt <- resident_prompt(n)
+        var toks <- resident_feed(8l)
         var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
         feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
         delete fed

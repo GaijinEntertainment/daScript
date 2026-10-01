@@ -19,6 +19,7 @@ require daslib/fio
 require daslib/rtti   // this_context().last_exception: a panic's text read back
 require strings   // find / rtrim over a panic's text
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
+require _resident_feed   // head_k_row_bytes
 
 // MTP/NextN self-speculative decode gates, on the qwen35-family -MTP- GGUFs (the files ship one
 // extra trunk-shaped draft block at layer index n_layers plus nextn.{eh_proj,enorm,hnorm,...}).
@@ -200,12 +201,8 @@ def private invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int
 [test]
 def test_mtp_loader(t : T?) {
     t |> run("MTP/NextN loader (Qwen3.5-0.8B-MTP Q8): nextn extras + spec-off trunk parity") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var tr <- load_gguf(path, QuantMode.q8)
         // block_count INCLUDES the draft block: n_layers stays the trunk count, nextn rides extra
         t |> equal(tr.config.n_layer_nextn, 1l)
@@ -225,12 +222,8 @@ def test_mtp_loader(t : T?) {
 [test]
 def test_mtp_output_invariance(t : T?) {
     t |> run("MTP self-spec greedy decode is output-invariant (Qwen3.5-0.8B-MTP Q8)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var tr <- load_model_(path, QuantMode.q8)   // load_model: the prose arm encodes in-test
         tr.config.seq_len = 2048l
         with_pinned_kernels() {
@@ -247,12 +240,8 @@ def test_mtp_output_invariance(t : T?) {
 [test]
 def test_mtp_q4_0(t : T?) {
     t |> run("MTP self-spec greedy decode rides the q4_0 requant tier (Qwen3.5-0.8B-MTP Q8 -> q4_0)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var tr <- load_model_(path, QuantMode.q4_0)
         tr.config.seq_len = 2048l
         with_pinned_kernels() {
@@ -265,12 +254,8 @@ def test_mtp_q4_0(t : T?) {
 [test]
 def test_mtp_reject_rollback(t : T?) {
     t |> run("MTP rollback: poisoned 2-row verify + restore replays plain decode exactly, and a forced-reject round through the engine's seam does too") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var tr <- load_model_(path, QuantMode.q8)   // the engine entry with the tokenizer, for the decoded streams below; load_gguf leaves it out
         tr.config.seq_len = 2048l
         with_pinned_kernels() {
@@ -331,14 +316,6 @@ def private probe_embed(t : Model; s : Session; npos, start_pos : int64) : bool 
 
 let private PROBE_SEAM = "mtp_seam_probe"   //! a fake decode override whose owner claims every model and whose seam seat is the probe
 let private PROBE_PREFILL = "mtp_prefill_probe"   //! a fake prefill override that serves every window without computing it
-
-//! the head's K row `row` of the session's cache as bytes
-def private head_k_row_bytes(tr : Model; var s : Session; row : int64) : array<uint8> {
-    let c = tr.config
-    let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, c.n_layers))
-    let kp = kv_layer_kbase(s, c.n_layers, c.seq_len)
-    return <- [for (i in range64(rowb)); unsafe(kp[row * rowb + i])]
-}
 
 //! every byte of the head's K row `row` set to 0xFF: a row the CPU seam rewrites moves off it, a row nothing wrote keeps it
 def private poison_head_k_row(tr : Model; var s : Session; row : int64) {
@@ -412,12 +389,8 @@ def private seam_row_kept(var tr : Model; serves, blob : bool) : bool {
 [test]
 def test_mtp_prefill_seam(t : T?) {
     t |> run("the continuation prefill's seam row (Qwen3.5-0.8B-MTP Q8): a seam seat that serves skips the CPU seam, a declined seat on a planar model falls to it, and a declined seat on a blob model warns and writes nothing") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var tr <- load_gguf(path, QuantMode.q8)
         tr.config.seq_len = 2048l
         t |> success(seam_row_kept(tr, true, false), "a seam seat that serves: the CPU seam never wrote the head's row {SEAM_PROMPT - 1l} (its poison stands)")
@@ -435,12 +408,8 @@ def test_mtp_prefill_seam(t : T?) {
 [test]
 def test_mtp_verify_window(t : T?) {
     t |> run("the CPU round's fail-closed exit (Qwen3.5-0.8B-MTP Q8): a prefill driver that serves the speculative verify window - the verify-window flag up while it runs, down outside the round - panics naming the driver") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var tr <- load_gguf(path, QuantMode.q8)
         tr.config.seq_len = 2048l
         moe_gpu_drop_model()   // the CPU round is the cell's subject: an armed driver whose mirror matches the session's codec would serve the verify itself, and no window opens
@@ -503,12 +472,8 @@ def private verify_window_panic(tr : Model) : string {
 [test]
 def test_mtp_invariance_27b(t : T?) {
     t |> run("MTP self-spec output-invariance (Qwen3.6-27B-MTP Q4_K_M, draft block at layer 64)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "Qwen3.6-27B-MTP-Q4_K_M.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var tr <- load_gguf(path, QuantMode.q8)
         t |> equal(tr.config.n_layer_nextn, 1l)
         t |> equal(tr.config.n_layers, 64l)
@@ -535,12 +500,8 @@ def test_mtp_invariance_27b(t : T?) {
 [test]
 def test_mtp_invariance_glm(t : T?) {
     t |> run("MTP self-spec output-invariance (GLM-4.5-Air Q4_K_M, non-recurrent reject path)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "glm45air/Q4_K_M/GLM-4.5-Air-Q4_K_M-00001-of-00002.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var tr <- load_model_(path, QuantMode.q8)   // load_model: this arm encodes its prompt in-test
         t |> equal(tr.config.n_layer_nextn, 1l)    // head ENABLED, not disabled over the table copies
         t |> equal(tr.config.n_layers, 46l)        // block_count 47 - nextn 1
@@ -593,10 +554,7 @@ def test_mtp_invariance_glm(t : T?) {
 [test]
 def test_mtp_invariance_flashnext(t : T?) {
     t |> run("MTP self-spec output-invariance (Qwen3.8-Flash-Next + split shared head, the wide-residual carry)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let path = path_join(models_dir(), "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf")
         let head = path_join(models_dir(), "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf")
         if (!model_available(t, path) || !model_available(t, head)) return

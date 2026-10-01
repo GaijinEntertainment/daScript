@@ -85,13 +85,7 @@ def test_gpu_marks_carry_ple_projection(t : T?) {
 [test]
 def test_gpu_model_swap(t : T?) {
     t |> run("a second model loaded after the first is deleted decodes its own weights (needs Qwen3-0.6B + SmolLM2-135M, DASLLAMA_GPU=1)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
-        if (!model_available(t, SWAP_MODEL_A) || !model_available(t, SWAP_MODEL_B)) {
-            return
-        }
+        return if (!jit_model_available(t, SWAP_MODEL_A) || !model_available(t, SWAP_MODEL_B))
         var a_first <- greedy_turn("A first", SWAP_MODEL_A, 8l)
         let armed = moe_gpu_installed_marks_armed() || moe_gpu_resident_active()
         if (!gpu_want_auto()) {

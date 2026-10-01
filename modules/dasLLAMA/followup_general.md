@@ -275,12 +275,7 @@
     (fill non-zero when hasbias=0), the neoxxhasbias confound in the rope-store quant mirrors,
     kq gemv weight reads past exactly-sized buffers (blocks MTL_SHADER_VALIDATION=1 runs), the
     copy_row gate's tg=64 vs production 256, the dead b4 pad-column clamp cell, the q8 region
-    fixture's sel collapsing to a k-slot function (routing untested, padding only), and the 12
-    prefill-file gates still on dump-less tag-less local compares. Also latent: the two rope
-    oracles index tcos/tsin at [0, hs/2) while sizing rot/2 - reads OOB and ropes the
-    pass-through tail the moment a cell pairs neox=false with rot < hs (the flat gate's
-    identity-pad pattern is the fix). Also: migrate the prefill file's tag-less mismatch trio
-    to the shared dumping compares (~25 call sites).
+    fixture's sel collapsing to a k-slot function (routing untested, padding only).
 
 20. **`vk_moe_would_accept` / resident probes vs the wg-cap decline.** The resident decline
     for an over-cap batched-attention class now lives in `vk_rdec_prepare` (live path only).
@@ -1463,17 +1458,20 @@
     on the K-quant path (the f32 dequant `read_linear` hands `linear_take_kq`, released per tensor
     but sized by the largest). The instrument is the resident set sampled per half second with the
     `--limit` one and two forms, and the das leak profiler on the run.
-132. **The format recipe's test ladders.** `tests/test_kquant.das` builds fixtures, transcodes,
-    dequants, dots, repacks and calls the stubs through the same `fmt == 4/5/6/40` chains in five
-    gates (28 arms for one format) and raises `_cyclomatic_complexity` / `_function_length` per
-    format; `harness/gen_tune_probe.das` repeats the shape (9 arms) and its test mode gates a hand
-    list of families separate from the tune-mode family array. Unquirked: per-format dispatch
-    helpers in one `_kq_fixtures.das` shared by the test and the harness (`kq_transcode_sb`,
-    `kq_dequant_sb`, `kq_dot`, `kq_repack`, `kq_gemv_gen`, `kq_tile_gen`), each a single ladder,
-    and one family array both probe modes walk. The Metal test ladders are the same shape as
-    nested ternaries (`kq_gemv_gate`, `kq_mvb_gate`, `kq_mulmm_gate` and the fixtures pick MSL
-    sources, entries, fastmath and tgmem names per format, an `else` that means k6): one
-    per-format record per kernel family, indexed by format.
+132. **The format recipe's remaining ladders.** `harness/gen_tune_probe.das` packs its synthetic
+    disk blocks through `pack_kq_disk_block`, a twelve-arm `fmt ==` chain beside the stamped
+    walks `tests/_kq_dot.das` already runs per `KqFmt`, and `synth_block`
+    (`tests/_kq_fixtures.das`) picks a format's synthetic block through a twelve-deep ternary
+    whose `else` means k6. The Metal gates still pick per format
+    by chain: in `tests/test_metal_gemv_kernels.das` `kq_gemv_gate` maps its variant to a format
+    id through a twelve-deep ternary whose `else` means k5, and `kq_gemv_stamp` /
+    `kq_mvb2_stamp` / `kq_mvb4_stamp` / `kq_mvb8_stamp` are `if` chains whose fallthrough is k6;
+    in `tests/test_metal_gemm_kernels.das` `kq_mm_stamp`, `kq_mm_th128_kernel` and
+    `kq_mm_tensor_kernel` are the same chains, `kq_dbuf_gate`'s `thdb128` twin and
+    `moe_mulmm_kq_gate`'s k4/k5/k6 trio are ternaries and `kq_dq_split` is a format list. A
+    format missing from a chain tests another format's kernel under its own tag. Unquirked: the
+    disk-block pack and the synthetic block a stamp over the format, and each Metal kernel pick a per-format record
+    indexed by format that reds on a format with no row.
 134. **The tune sidecar's identity lacks the generator hash.** A sidecar minted while a family's
     generator stubs declined records `"<fmt>q8_tile_gen" : "reference"`; staleness keys on the
     binary's mtime and the emitter is `.das`, so landing the emitter arm invalidates nothing and
@@ -1954,24 +1952,15 @@
    `ffn_down` at Q4_1 (GGUF type 3), and the loader stops at `type 3 not supported`; the reference
    build's Q4_0 carriers routinely mix one. Done = Q4_1 decoded to the q51-style per-32 (d, m) plane, or the
    loader names the tensor and the format it wants re-quantized to.
-188. **The bf16 panel scatter is written three times, and the harness's format ladders seven.** The
+188. **The bf16 panel scatter is written three times.** The
    folds left unapplied: the int8 walk inside `kq_batch_cell_gen` onto `bf16_walk` (the same
    control flow at one group and the tile's four tokens, and since the walk's `tile4` arm the
    same walk `kq_batch_cell_bf16` runs on a range shorter than the tile - it needs its own
    before/after pair);
-   `q8q8_bias_sums` onto `b32g_fill_bsums` under a scale argument; the two q8 batch kernels
-   (`q8q8_batch_kernel_neon_laneq_gen`, `q8q8_batch_kernel_s16_gen`) as one generic over the
-   scale plane, their `short` arm with them; the batch cells under them the same way -
-   `q8q8_batch_cell_gen` and `q8q8_batch_cell_s16_gen` read token for token alike but for the
-   scale plane's type and the stamps they call, as do `q8q8_batch_amx_cell_gen` and its s16
-   twin, and `q8q8_batch_cell_bf16_template` is the form (a `def template`, two
-   `[from_template]` stubs); the tile stubs' reference bodies `q8q8_tile_ref` and
-   `q8q8_tile_s16_ref` over one dot placeholder;
-   `q8q8_panel_gen` and its s16 twin over one row scatter shared with `kq_panel_rows_bf16`;
-   `q8_panel_gen_impl` as a unit kind of `panel_gen_impl`; `panel_quads`' unpack arms shared with
-   `emit_block_kqv2`'s; one `kq_family_registries(fmt)` ladder behind the harness's seven
-   (`kq_tile4_variants` the seventh); one `by_suffix(registry)` behind its seven
-   `*_variants_by_suffix`. Done = each fold applied and the
+   `q8q8_bias_sums` onto `b32g_fill_bsums` under a scale argument (the folded prologue emits
+   different IR, so it needs a before/after race too);
+   `q8q8_panel_gen` and its s16 twin over one row scatter shared with `kq_panel_rows_bf16` (a
+   shared reference body is left out of line in the panel stubs' clones - a race too). Done = each fold applied and the
    x64 emission rail and the AMX TEST gate green, or the fold refused in an architecture section.
 189. **A superblock family's bf16 crown passes no end-to-end confirm.** `confirm_winner` runs for
    the q8 family alone, so a k/iq family's `amx_bf16` crown is the one-lane race's verdict; on
@@ -1994,8 +1983,8 @@
    lanes-per-core regime, confirmed end to end on the 1B and 4B carriers.
 191. **The generated tier branches on format ids as literals.** The emitter reads `te.kq == 33`
    and the runtime ladders `fmt == 4` (`kq_layout_of`), and the bf16 panel code follows them
-   (`panel_is_grid`, `panel_scales`, `panel_quads`, `panel_ioff`, the panel stubs' ids, the
-   harness's `kq_tileforms` / `kq_arm_variant` / `kq_panel_variant`, and `kq_ref_row_dot`'s
+   (`kq_is_grid`, `panel_scales`, `panel_quads`, `panel_ioff`, the panel stubs' ids, and
+   `kq_ref_row_dot`'s
    ladder, which spells the id set of `kq_reads_packed_planes`), with `256l` and `32l`
    for the superblock and block widths; `REVIEW_KQ_FORMATS.md` wants the id resolved through
    `kq_fmt_of_id` and the widths by name. Done = the generated tier's ladders over `KqFmt`
@@ -2021,15 +2010,10 @@
 196. **Test and harness fixtures are written more than once.** The K-quant planes with their
    Q8_K activations: `build_planes` (`harness/token_block_race.das`), `build_pool` and the
    activation block under it (`harness/moe_kq_probe.das`), `build_kq_fixture`
-   (`harness/gen_tune_probe.das`), `build_kq_region` and `build_acts`
-   (`tests/test_prefill_cpu_kernels.das`). The bf16 envelope, 1e-2 of the image's largest
-   magnitude: `BF16_ENVELOPE` (`harness/token_block_race.das`), `BF16_ENVELOPE_REL` with
-   `bf16_envelope` (`harness/gen_tune_probe.das`), `cmp_bf16`
+   (`harness/gen_tune_probe.das`), beside `build_kq_region` (`tests/_kq_fixtures.das`). The
+   bf16 envelope, 1e-2 of the image's largest magnitude: `BF16_ENVELOPE_REL` with
+   `bf16_envelope` (`harness/_gen_probe_fixture.das`), the `BF16_ENVELOPE` bar
    (`tests/test_prefill_cpu_kernels.das`), `held_bf16` (`tests/test_q8q8_family.das`). The
-   f32 and f16-scale image builders of `tests/test_q8q8_family.das`: `gemv_image_q8` beside
-   `gemv_image_s16`, `tile4_image_q8` beside `tile4_image_s16`, each pair one body over the
-   scale plane's type. The mismatch dump of `harness/gen_tune_probe.das`, one eight-line block
-   at seven sites. The
    two-thread race: `walk_thread` with `walk_two_contexts` beside `plane_thread` with
    `xbf16_two_contexts` (`tests/test_prefill_cpu_kernels.das`), one start barrier, round loop and
    assert set under two round bodies. The server rig: `with_mtp_server`
@@ -2038,8 +2022,7 @@
    `with_*_server` rig of that folder. Elapsed seconds off `get_time_usec`:
    `tests/fio/popen_timeout_tree.das`, `seconds_since` (`utils/internal/preflight/main.das`),
    `now_seconds` (`utils/watchdog/watchdog.das`), all repo root. Done = one fixture module the
-   tests and the harness both require for the planes and the envelope, one image builder a
-   pair generic over the scale plane, one dump helper in the harness, one two-thread helper
+   tests and the harness both require for the planes and the envelope, one two-thread helper
    taking the round's body, the rigs' boot and ready poll in `_server_rig.das`, and an elapsed
    seconds builtin beside `get_time_usec` - each with the suites that read it green, or the fold
    refused by name.
@@ -2086,5 +2069,43 @@
    its harm is a kernel that pins a matmul backend. `performance/REVIEW.md`: three rules check
    which build timed a row, and the board-cell sentence binds no diff. The root `REVIEW.md` and
    `modules/REVIEW.md` do not say their subfolders carry checklists; `modules/dasLLVM/REVIEW.md`'s
-   two `[llvm_code]` rules are unbounded by folder and one names an example. Done = each reworded
+   two `[llvm_code]` rules are unbounded by folder and one names an example. `REVIEW_PLACEMENT.md`'s
+   two duplicate-code rules name no folder, while `REVIEW.md` routes to that checklist only on
+   `dasllama/` triggers, so a copy in `tests/` or `harness/` alone never fires them.
+   `REVIEW_HOT_PATH.md`'s `[cold_path]`-on-rig-functions rule needs a call-graph walk per changed
+   function and is broken across the rig folders unnoticed - a `REVIEW.das` gate.
+   `benchmarks/REVIEW.md`'s "adds or changes" triggers carry no materiality bar, so a mechanical
+   job-queue swap fires its `tune_gate`, report-line and `ATTRIBUTION SWEEP` rules on instruments
+   whose timed body never moved; it and `REVIEW_MEASUREMENT.md` define "board cell" and
+   "instrument" two ways each, both govern a board cell's corpus, both carry glossary blocks, and
+   the alternates rule reaches `harness/` alone, not a `performance/` instrument. `REVIEW_MEMORY.md`'s
+   team-lane rule packs a read duty and a write duty into one sentence and its function-global
+   rule leaves "serialized exe" undefined; `REVIEW_FACADE.md`'s `[EnvConfig]` rule carries two
+   sentences of why. The instruments those rules name and the code never met: `tune_kernels`' and
+   `gen_tune_probe`'s report lines print no reference verdict or bound, `kq_kernel_bench` and
+   `gemm_1core_probe` call no `tune_gate`, and `gemm_1core_probe`'s focus mode carries no
+   `ATTRIBUTION SWEEP` line. Done = each reworded
    under `skills/review_md.md`, one document at a time, or refused by name.
+202. **The NaN-safe compare rule has no gate.** `tests/REVIEW.md` binds a float compare against
+   a bar a diff adds or changes to read a NaN as outside it; nothing mechanical checks it, and the shape - a
+   bar test spelled `d > bar`, or a largest difference kept with `max(m, d)` - recurs across the
+   folder's files that predate the rule. Done = a `REVIEW.das` gate over `tests/` that fails on the
+   NaN-blind shapes in a compare against a bar, with a fixture of both spellings, and each file it
+   finds converted, or listed in this row with the reason.
+203. **`dot_q8q8_laneq4x4` rejects every variant on the M5 Max.** `harness/tune_kernels.das` races
+   its seven variants and all seven fail the tolerance gate, so the kernel is never tuned on that
+   box and keeps its default. Done = the failing element and its relative error read from one
+   run, and the variant or the gate fixed so at least one variant passes, or the kernel's race
+   dropped on arm64 with the reason here.
+204. **`daslib/clargs` skips an argument no flag matches.** A `[CommandLineArgs]` tool given a
+   mistyped or single-dash flag (`kq_kernel_bench.das -n 256`, where only `--n` exists) runs on
+   its defaults and says nothing. The same bench takes `--base-offset -64` and crashes on an
+   array index. Done = the generated parser rejects an unknown argument with the tool's usage
+   and a non-zero exit code (every in-tree `[CommandLineArgs]` tool re-checked for arguments it
+   passes through), and the bench refuses a negative base offset.
+206. **Lint skips every module whose name reads as a lint fixture.** `daslib/lint_config.das`'s
+   `is_lint_fixture_name` treats an underscore-led file name holding `fixture` as a lint-rule
+   fixture, so `tests/_kq_fixtures.das`, `tests/_vk_kq_fixtures.das` and the harness's
+   `_*_fixture.das` modules are never linted by the lanes; `--lint-fixtures` reaches them by hand.
+   Done = the fixture convention narrowed to the lint rules' own fixture folders, and those
+   modules linted clean in the lanes.

@@ -940,8 +940,7 @@ def main() : int {
         print("WARNING: run with -jit - interpreted timings do not reflect the engine\n")
     }
     apply_box_profile_runtime()
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         let t1 = (frames - 1l) / 2l + 1l
         let t2 = (t1 - 1l) / 2l + 1l
         if (a.dw) {

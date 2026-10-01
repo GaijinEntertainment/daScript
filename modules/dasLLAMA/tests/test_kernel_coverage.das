@@ -39,6 +39,7 @@ require daslib/fio  // the zoo paths
 require math  // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
 require strings
 require _model_tier
+require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal and vulkan static_if halves
 require _gpu_knobs   // nolint:STYLE030,LINT019 — gpu_knobs: the vulkan census's knob record, read inside the vulkan half
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
@@ -188,25 +189,6 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalDnGateSig"
 ]
 
-def private counting_prompt(start, last : int) : string {
-    return build_string() $(var w) {
-        for (i in range(start, last + 1)) {
-            w |> write(i)
-            w |> write(i < last ? ", " : ",")
-        }
-    }
-}
-
-def private greedy_top(lg : array<float>; vocab : int64) : int64 {
-    var best = 0l
-    for (v in range64(1l, vocab)) {
-        if (lg[v] > lg[best]) {
-            best = v
-        }
-    }
-    return best
-}
-
 [unused_argument(t, path, family, kdts, nbs)]   // off-Apple the gated body is empty
 def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs : array<int>) {
     // one model's coverage sweep: per KV codec — GPU prefill (the ~120-id counting prompt
@@ -237,12 +219,12 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
                 // every one of those kernels undispatched and the census blind to them
                 let p <- encode(tr, counting_prompt(1, 140), true, false)
                 eval_(tr, s, p)
-                var cur = greedy_top(s.logits, vocab)
+                var cur = argmax_of(s.logits, vocab)
                 for (_i in range(2)) {
                     var one <- [cur]
                     eval_(tr, s, one)
                     delete one
-                    cur = greedy_top(s.logits, vocab)
+                    cur = argmax_of(s.logits, vocab)
                 }
                 // continuation prefill (start_pos > 0) — the pf window-landing utilities only
                 // serve when a second window lands on an already-warm cache
@@ -260,7 +242,7 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
                         let pb <- encode(tr, counting_prompt(3 + i, 44 + i), true, false)
                         eval_(tr, ss[i], pb)
                         sess |> push(unsafe(addr(ss[i])))
-                        curs |> push(greedy_top(ss[i].logits, vocab))
+                        curs |> push(argmax_of(ss[i].logits, vocab))
                     }
                     var ws <- create_batch_workspace_(tr)
                     eval_batch_(tr, ws, sess, curs)
@@ -767,13 +749,7 @@ def private metal_census_blind_drain(t : T?; cov : table<string; int64>) {
 def test_metal_kernel_coverage(tst : T?) {
     tst |> run("Metal kernel coverage census: the small-model zoo across format/graph/batch/KV axes") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!arm_on(t, "coverage")) {
-                return
-            }
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
+            return if (!arm_on(t, "coverage") || !jit_only(t))
             var dev = metal_create_system_default_device()
             if (dev == null) {
                 feint("no Metal device; kernel coverage census skipped\n")
@@ -1002,12 +978,12 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
                 var s = make_run_state(tr.config, kdt, kdt)
                 let p <- encode(tr, counting_prompt(1, 40), true, false)
                 eval_(tr, s, p)
-                var cur = greedy_top(s.logits, vocab)
+                var cur = argmax_of(s.logits, vocab)
                 for (_i in range(2)) {
                     var one <- [cur]
                     eval_(tr, s, one)
                     delete one
-                    cur = greedy_top(s.logits, vocab)
+                    cur = argmax_of(s.logits, vocab)
                 }
                 var p2 <- encode(tr, counting_prompt(50, 90), false, false)
                 eval_(tr, s, p2)
@@ -1024,7 +1000,7 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
                     let pb <- encode(tr, counting_prompt(3 + i, 44 + i), true, false)
                     eval_(tr, ss[i], pb)
                     sess |> push(unsafe(addr(ss[i])))
-                    curs |> push(greedy_top(ss[i].logits, vocab))
+                    curs |> push(argmax_of(ss[i].logits, vocab))
                 }
                 var ws <- create_batch_workspace_(tr)
                 eval_batch_(tr, ws, sess, curs)

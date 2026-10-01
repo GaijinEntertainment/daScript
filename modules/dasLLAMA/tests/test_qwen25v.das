@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_qwen25v
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
@@ -31,26 +31,12 @@ let private TIER1_REL = 1e-2
 //! (zeroed-block class, >= 0.9) still reds
 let private TIER1_REL_GPU = 8e-2
 
+[cold_path]
 def private gate_encode(t : T?; tw : Qwen25vTower; var st : Qwen25vState; kind : string; w, h : int; logname : string; rel = TIER1_REL) : bool {
-    var o = OracleEncode()
-    let logpath = path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), logname)
-    if (!load_oracle_encode(logpath, o)) {
-        t |> skip("oracle dump {logname} not present/parseable - mint via qwen3vl-vision-oracle/mint_25o.sh")
-        return false
+    return oracle_gate(t, path_join(models_dir(), "qwen3vl-vision-oracle"), logname, "qwen3vl-vision-oracle/mint_25o.sh", kind, w, h,
+            "qwen25v tier-1 {kind} {w}x{h}", int(tw.proj_dim), TIER1_ABS, rel) $(planes : array<float>; var out : array<float>) : int64 {
+        return qwen25v_encode(tw, st, planes, int64(w), int64(h), out)
     }
-    let planes <- make_planes(kind, w, h)
-    var out : array<float>
-    var nout = 0l
-    with_job_que() {
-        setup_dasllama_jobque_()
-        nout = qwen25v_encode(tw, st, planes, int64(w), int64(h), out)
-    }
-    t |> equal(int(nout), o.npos, "{kind} {w}x{h} token count")
-    if (int(nout) != o.npos) {
-        return false
-    }
-    compare_encode(t, "qwen25v tier-1 {kind} {w}x{h}", out, int(tw.proj_dim), o, TIER1_ABS, rel)
-    return true
 }
 
 [test]
@@ -123,14 +109,12 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
         var n_dev = 0l
         set_vulkan_tower(false)
         let d0 = vulkan_tower_stats()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             n_cpu = qwen25v_encode(tw, st, planes, int64(w), int64(h), cpu)
         }
         let d1 = vulkan_tower_stats()
         set_vulkan_tower(true)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             n_dev = qwen25v_encode(tw, st, planes, int64(w), int64(h), dev)
         }
         let d2 = vulkan_tower_stats()
@@ -194,8 +178,7 @@ def private shallow_routing_cell(t : T?; mm, name, backend : string; wa : int64;
     invoke(set_on, true)
     let e0 = invoke(encodes)
     var ng = 0l
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         ng = qwen25v_encode(tw, sg, planes, 448l, 448l, og)
     }
     t |> equal(invoke(encodes) - e0, 1l, "shallow {name}: {backend}-served")
@@ -203,8 +186,7 @@ def private shallow_routing_cell(t : T?; mm, name, backend : string; wa : int64;
     var oc : array<float>
     invoke(set_on, false)
     var nc = 0l
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         nc = qwen25v_encode(tw, sc, planes, 448l, 448l, oc)
     }
     invoke(set_on, true)
@@ -217,8 +199,7 @@ def private shallow_routing_cell(t : T?; mm, name, backend : string; wa : int64;
         var sp = Qwen25vState()
         var op : array<float>
         let p0 = invoke(encodes)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             qwen25v_encode(twp, sp, planes, 448l, 448l, op)
         }
         t |> equal(invoke(encodes) - p0, 1l, "shallow {name} poison: {backend}-served")
@@ -330,8 +311,7 @@ def test_qwen25v_tier1_gpu(t : T?) {
             if (load_oracle_encode(path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), "encode25.cb448.log"), o)) {
                 let planes <- make_planes("cb", 448, 448)
                 var out : array<float>
-                with_job_que() {
-                    setup_dasllama_jobque_()
+                with_dasllama_jobque() {
                     qwen25v_encode(twp, stq, planes, 448l, 448l, out)
                 }
                 let ex = encode_excess(out, int(twp.proj_dim), o, TIER1_ABS, TIER1_REL_GPU)

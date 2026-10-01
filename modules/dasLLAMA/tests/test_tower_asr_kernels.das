@@ -10,15 +10,9 @@ require dasllama/dasllama_math
 require dasllama/dasllama_plane
 require daslib/jobque_boost
 require math
+require _compares   // nan_plane: the outputs' sentinel fill
 
 //! Model-free CPU units for the public tower, audio and TTS kernels the ASR and TTS paths run: every bar is an in-test fp64 reference over a seeded-LCG fixture, and every bar carries a must-EXCEED poison.
-struct KCase {
-    name : string
-    max_abs : double
-    max_ratio : double
-    bad : int
-}
-
 var private g_lcg = 0x2545F4914F6CDD1Dul
 
 [sideeffects]
@@ -39,89 +33,24 @@ def private fill(var a : array<float>; n : int64; scale : float) {
     }
 }
 
-def private score(name : string; got : array<float>; want : array<double>; env : array<double>;
-                  rel : double; floor : double) : KCase {
-    var res = KCase(name = name)
-    if (long_length(got) != long_length(want) || long_length(got) != long_length(env) || empty(got)) {
-        res.bad = 1000000
-        return res
+//! `got` within `rel` of each element's fp64 envelope `env`, floored at `floor`; the control moves the middle expected element
+//! by `delta`
+def private held_env(t : T?; name : string; got : array<float>; want : array<double>; env : array<double>; rel, floor, delta : double) {
+    check(t, name, got, want, Bar(kind = BarKind.envelope, rel = float(rel), abs_floor = float(floor), poison = float(delta), poison_at = length(want) / 2), FLAT_SHAPE, env)
+}
+
+//! `got` bit for bit `want`; the control moves the middle expected element by `delta`
+def private held_exact(t : T?; name : string; got : array<float>; want : array<float>; delta : float) {
+    check(t, name, got, want, Bar(exact = true, poison = delta, poison_at = length(want) / 2), FLAT_SHAPE)
+}
+
+//! `a` borrowed as the plane of its element type: `PlaneF` over floats, `PlaneU16` over bf16 words
+def private borrowed(a : array<auto(TT)>) {
+    static_if (typeinfo is_float(type<TT>)) {
+        return PlaneF(p = unsafe(addr<float const?>(a[0])), n = long_length(a))
+    } else {
+        return PlaneU16(p = unsafe(addr<uint16 const?>(a[0])), n = long_length(a))
     }
-    for (g, w, e in got, want, env) {
-        let d = abs(double(g) - w)
-        let bar = max(rel * e, floor)
-        res.max_abs = max(res.max_abs, d)
-        res.max_ratio = max(res.max_ratio, d / bar)
-        if (d > bar) {
-            res.bad++
-        }
-    }
-    return res
-}
-
-def private score_poison(name : string; got : array<float>; want : array<double>; env : array<double>;
-                         rel : double; floor : double; delta : double) : KCase {
-    var p := want
-    if (empty(p)) {
-        return KCase(name = name)
-    }
-    p[long_length(p) / 2l] += delta
-    return score(name, got, p, env, rel, floor)
-}
-
-def private score_exact(name : string; got : array<float>; want : array<float>) : KCase {
-    var res = KCase(name = name)
-    if (long_length(got) != long_length(want) || empty(got)) {
-        res.bad = 1000000
-        return res
-    }
-    for (g, w in got, want) {
-        res.max_abs = max(res.max_abs, abs(double(g) - double(w)))
-        if (g != w) {
-            res.bad++
-        }
-    }
-    return res
-}
-
-def private score_exact_poison(name : string; got : array<float>; want : array<float>; delta : float) : KCase {
-    var p := want
-    if (empty(p)) {
-        return KCase(name = name)
-    }
-    p[long_length(p) / 2l] += delta
-    return score_exact(name, got, p)
-}
-
-def private report(t : T?; r : KCase) {
-    to_log(LOG_INFO, "tower kernel {r.name}: max |kernel - reference| {r.max_abs}, worst ratio to the bar {r.max_ratio}, past the bar {r.bad}\n")
-    t |> equal(r.bad, 0, "{r.name}: elements past the bar")
-}
-
-def private report_poison(t : T?; r : KCase) {
-    to_log(LOG_INFO, "tower kernel POISON {r.name}: max diff {r.max_abs}, worst ratio to the bar {r.max_ratio}, past the bar {r.bad}\n")
-    t |> success(r.bad > 0, "{r.name}: the poisoned expectation must exceed the bar, {r.bad} elements did")
-}
-
-def private plane_f(a : array<float>) : PlaneF {
-    var p = PlaneF()
-    p.p = unsafe(addr<float const?>(a[0]))
-    p.n = long_length(a)
-    return p
-}
-
-def private plane_u16(a : array<uint16>) : PlaneU16 {
-    var p = PlaneU16()
-    p.p = unsafe(addr<uint16 const?>(a[0]))
-    p.n = long_length(a)
-    return p
-}
-
-def private to_bf16(x : float) : uint16 {
-    return uint16(unsafe(reinterpret<uint>(x)) >> 16u)
-}
-
-def private from_bf16(h : uint16) : float {
-    return unsafe(reinterpret<float>(uint(h) << 16u))
 }
 
 let MM_N = 128l
@@ -162,53 +91,43 @@ def private mm_bf16_fixture(var wq : array<uint16>; var wf : array<float>; var x
     fill(wf, MM_WOFF + MM_N * MM_D, 1.0)
     wq |> resize(long_length(wf))
     for (f, q in wf, wq) {
-        q = to_bf16(f)
-        f = from_bf16(q)
+        q = bf16_bits_truncated(f)
+        f = bf16_value(q)
     }
     fill(x, MM_T * MM_N, 1.0)
     for (v in x) {
-        v = from_bf16(to_bf16(v))
+        v = bf16_value(bf16_bits_truncated(v))
     }
 }
 
-def private mm_blob_run(var y : array<float>; blob : array<float>; x : array<float>) {
-    y |> resize(MM_T * MM_D)
+def private mm_blob_run(blob : array<float>; x : array<float>) : array<float> {
+    var y <- nan_plane(int(MM_T * MM_D))
     mm_blob_b(y, blob, MM_WOFF, x, MM_N, MM_D, MM_T)
+    return <- y
 }
 
-def private mm_blob_case(poison : bool) : KCase {
+def private mm_blob_case(t : T?) {
     var blob : array<float>
     var x : array<float>
     mm_fixture(blob, x)
     var want : array<double>
     var env : array<double>
     gemm_ref(blob, MM_WOFF, x, MM_N, MM_D, MM_T, want, env)
-    var y : array<float>
-    mm_blob_run(y, blob, x)
-    let nm = "mm_blob_b blob+woff"
-    if (poison) {
-        return score_poison(nm, y, want, env, MM_REL, MM_FLOOR, 0.05lf)
-    }
-    return score(nm, y, want, env, MM_REL, MM_FLOOR)
+    let y <- mm_blob_run(blob, x)
+    held_env(t, "mm_blob_b blob+woff", y, want, env, MM_REL, MM_FLOOR, 0.05lf)
 }
 
-def private mm_plane_case(poison : bool) : KCase {
+def private mm_plane_case(t : T?) {
     var blob : array<float>
     var x : array<float>
     mm_fixture(blob, x)
-    var y_arr : array<float>
-    var y_pl : array<float>
-    mm_blob_run(y_arr, blob, x)
-    y_pl |> resize(MM_T * MM_D)
-    mm_blob_b(y_pl, plane_f(blob), MM_WOFF, x, MM_N, MM_D, MM_T)
-    let nm = "mm_blob_b borrowed plane == owned blob"
-    if (poison) {
-        return score_exact_poison(nm, y_pl, y_arr, 1.0e-5)
-    }
-    return score_exact(nm, y_pl, y_arr)
+    let y_arr <- mm_blob_run(blob, x)
+    var y_pl <- nan_plane(int(MM_T * MM_D))
+    mm_blob_b(y_pl, borrowed(blob), MM_WOFF, x, MM_N, MM_D, MM_T)
+    held_exact(t, "mm_blob_b borrowed plane == owned blob", y_pl, y_arr, 1.0e-5)
 }
 
-def private mm_bf16_case(poison : bool) : KCase {
+def private mm_bf16_case(t : T?) {
     var wq : array<uint16>
     var wf : array<float>
     var x : array<float>
@@ -216,39 +135,28 @@ def private mm_bf16_case(poison : bool) : KCase {
     var want : array<double>
     var env : array<double>
     gemm_ref(wf, MM_WOFF, x, MM_N, MM_D, MM_T, want, env)
-    var y : array<float>
-    y |> resize(MM_T * MM_D)
-    mm_bf16_b(y, plane_u16(wq), MM_WOFF, x, MM_N, MM_D, MM_T)
-    let nm = "mm_bf16_b on bf16-exact operands"
-    if (poison) {
-        return score_poison(nm, y, want, env, MM_REL, MM_FLOOR, 0.05lf)
-    }
-    return score(nm, y, want, env, MM_REL, MM_FLOOR)
+    var y <- nan_plane(int(MM_T * MM_D))
+    mm_bf16_b(y, borrowed(wq), MM_WOFF, x, MM_N, MM_D, MM_T)
+    held_env(t, "mm_bf16_b on bf16-exact operands", y, want, env, MM_REL, MM_FLOOR, 0.05lf)
 }
 
-def private mm_route_case(bf16 : bool; poison : bool) : KCase {
+def private mm_route_case(t : T?; bf16 : bool) {
     var wq : array<uint16>
     var wf : array<float>
     var x : array<float>
     mm_bf16_fixture(wq, wf, x)
-    var want : array<float>
-    var got : array<float>
-    want |> resize(MM_T * MM_D)
-    got |> resize(MM_T * MM_D)
+    var want <- nan_plane(int(MM_T * MM_D))
+    var got <- nan_plane(int(MM_T * MM_D))
     if (bf16) {
-        mm_bf16_b(want, plane_u16(wq), MM_WOFF, x, MM_N, MM_D, MM_T)
+        mm_bf16_b(want, borrowed(wq), MM_WOFF, x, MM_N, MM_D, MM_T)
     } else {
-        mm_blob_b(want, plane_f(wf), MM_WOFF, x, MM_N, MM_D, MM_T)
+        mm_blob_b(want, borrowed(wf), MM_WOFF, x, MM_N, MM_D, MM_T)
     }
-    mm_plane_b(got, bf16, plane_u16(wq), plane_f(wf), MM_WOFF, x, MM_N, MM_D, MM_T)
-    let nm = "mm_plane_b bf16={bf16} routes to its wrapper"
-    if (poison) {
-        return score_exact_poison(nm, got, want, 1.0e-5)
-    }
-    return score_exact(nm, got, want)
+    mm_plane_b(got, bf16, borrowed(wq), borrowed(wf), MM_WOFF, x, MM_N, MM_D, MM_T)
+    held_exact(t, "mm_plane_b bf16={bf16} routes to its wrapper", got, want, 1.0e-5)
 }
 
-def private mm_pad_case(poison : bool) : KCase {
+def private mm_pad_case(t : T?) {
     lcg_seed(0x9AD0ul)
     var w : array<float>
     var x : array<float>
@@ -268,17 +176,11 @@ def private mm_pad_case(poison : bool) : KCase {
             xp[p * MM_NPAD + i] = x[p * MM_N + i]
         }
     }
-    var y_tight : array<float>
-    var y_pad : array<float>
-    y_tight |> resize(MM_T * MM_D)
-    y_pad |> resize(MM_T * MM_D)
+    var y_tight <- nan_plane(int(MM_T * MM_D))
+    var y_pad <- nan_plane(int(MM_T * MM_D))
     mm_blob_b(y_tight, w, 0l, x, MM_N, MM_D, MM_T)
     mm_blob_b(y_pad, wp, 0l, xp, MM_NPAD, MM_D, MM_T)
-    let nm = "mm_blob_b zero-padded width {MM_NPAD} == unpadded {MM_N}"
-    if (poison) {
-        return score_exact_poison(nm, y_pad, y_tight, 1.0e-5)
-    }
-    return score_exact(nm, y_pad, y_tight)
+    held_exact(t, "mm_blob_b zero-padded width {MM_NPAD} == unpadded {MM_N}", y_pad, y_tight, 1.0e-5)
 }
 
 let LN_DIM = 197l
@@ -320,8 +222,8 @@ def private ln_ref(x : array<float>; wb : array<float>; var want : array<double>
     }
 }
 
-def private ln_scalar_run(var out : array<float>; x : array<float>; wb : array<float>) {
-    out |> resize(LN_POS * LN_DIM)
+def private ln_scalar_run(x : array<float>; wb : array<float>) : array<float> {
+    var out <- nan_plane(int(LN_POS * LN_DIM))
     unsafe {
         var op = addr(out[0])
         let ip = addr<float const?>(x[0])
@@ -331,56 +233,41 @@ def private ln_scalar_run(var out : array<float>; x : array<float>; wb : array<f
             layernorm(op + p * LN_DIM, ip + p * LN_DIM, wp, bp, LN_DIM, LN_EPS)
         }
     }
+    return <- out
 }
 
-def private ln_scalar_case(poison : bool) : KCase {
+def private ln_scalar_case(t : T?) {
     var x : array<float>
     var wb : array<float>
     ln_fixture(x, wb)
     var want : array<double>
     var env : array<double>
     ln_ref(x, wb, want, env)
-    var out : array<float>
-    ln_scalar_run(out, x, wb)
-    let nm = "layernorm row form"
-    if (poison) {
-        return score_poison(nm, out, want, env, LN_REL, LN_FLOOR, 0.01lf)
-    }
-    return score(nm, out, want, env, LN_REL, LN_FLOOR)
+    let out <- ln_scalar_run(x, wb)
+    held_env(t, "layernorm row form", out, want, env, LN_REL, LN_FLOOR, 0.01lf)
 }
 
-def private ln_batch_case(poison : bool) : KCase {
+def private ln_batch_case(t : T?) {
     var x : array<float>
     var wb : array<float>
     ln_fixture(x, wb)
     var want : array<double>
     var env : array<double>
     ln_ref(x, wb, want, env)
-    var out : array<float>
-    out |> resize(LN_POS * LN_DIM)
+    var out <- nan_plane(int(LN_POS * LN_DIM))
     layernorm_batch(out, x, wb, LN_OFF, LN_OFF + LN_DIM, LN_DIM, LN_POS, LN_EPS)
-    let nm = "layernorm_batch blob+offsets"
-    if (poison) {
-        return score_poison(nm, out, want, env, LN_REL, LN_FLOOR, 0.01lf)
-    }
-    return score(nm, out, want, env, LN_REL, LN_FLOOR)
+    held_env(t, "layernorm_batch blob+offsets", out, want, env, LN_REL, LN_FLOOR, 0.01lf)
 }
 
-def private ln_plane_case(poison : bool) : KCase {
+def private ln_plane_case(t : T?) {
     var x : array<float>
     var wb : array<float>
     ln_fixture(x, wb)
-    var y_arr : array<float>
-    var y_pl : array<float>
-    y_arr |> resize(LN_POS * LN_DIM)
-    y_pl |> resize(LN_POS * LN_DIM)
+    var y_arr <- nan_plane(int(LN_POS * LN_DIM))
+    var y_pl <- nan_plane(int(LN_POS * LN_DIM))
     layernorm_batch(y_arr, x, wb, LN_OFF, LN_OFF + LN_DIM, LN_DIM, LN_POS, LN_EPS)
-    layernorm_batch(y_pl, x, plane_f(wb), LN_OFF, LN_OFF + LN_DIM, LN_DIM, LN_POS, LN_EPS)
-    let nm = "layernorm_batch borrowed plane == owned blob"
-    if (poison) {
-        return score_exact_poison(nm, y_pl, y_arr, 1.0e-5)
-    }
-    return score_exact(nm, y_pl, y_arr)
+    layernorm_batch(y_pl, x, borrowed(wb), LN_OFF, LN_OFF + LN_DIM, LN_DIM, LN_POS, LN_EPS)
+    held_exact(t, "layernorm_batch borrowed plane == owned blob", y_pl, y_arr, 1.0e-5)
 }
 
 let AB_D = 37l
@@ -405,24 +292,20 @@ def private ab_ref(y : array<float>; blob : array<float>) : array<float> {
     return <- want
 }
 
-def private add_bias_case(as_plane : bool; poison : bool) : KCase {
+def private add_bias_case(t : T?; as_plane : bool) {
     var y : array<float>
     var blob : array<float>
     ab_fixture(y, blob)
-    var want <- ab_ref(y, blob)
+    let want <- ab_ref(y, blob)
     if (as_plane) {
-        add_bias_rows(y, plane_f(blob), AB_OFF, AB_D, AB_POS)
+        add_bias_rows(y, borrowed(blob), AB_OFF, AB_D, AB_POS)
     } else {
         add_bias_rows(y, blob, AB_OFF, AB_D, AB_POS)
     }
-    let nm = "add_bias_rows plane={as_plane} d={AB_D} off the float4 block"
-    if (poison) {
-        return score_exact_poison(nm, y, want, 1.0e-5)
-    }
-    return score_exact(nm, y, want)
+    held_exact(t, "add_bias_rows plane={as_plane} d={AB_D} off the float4 block", y, want, 1.0e-5)
 }
 
-def private add_inplace_case(poison : bool) : KCase {
+def private add_inplace_case(t : T?) {
     lcg_seed(0xADD1ul)
     var x : array<float>
     var r : array<float>
@@ -434,11 +317,7 @@ def private add_inplace_case(poison : bool) : KCase {
         w = a + b
     }
     add_inplace_rows(x, r, AI_N)
-    let nm = "add_inplace_rows n={AI_N} off the float4 block"
-    if (poison) {
-        return score_exact_poison(nm, x, want, 1.0e-5)
-    }
-    return score_exact(nm, x, want)
+    held_exact(t, "add_inplace_rows n={AI_N} off the float4 block", x, want, 1.0e-5)
 }
 
 let GE_D = 64l
@@ -471,32 +350,24 @@ def private gelu_ref(x : array<float>; var want : array<double>; var env : array
     }
 }
 
-def private gelu_batch_case(poison : bool) : KCase {
+def private gelu_batch_case(t : T?) {
     var x : array<float>
     gelu_fixture(x)
     var want : array<double>
     var env : array<double>
     gelu_ref(x, want, env)
     gelu_erf_batch(x, GE_D, GE_POS)
-    let nm = "gelu_erf_batch vs the fp64 erf series"
-    if (poison) {
-        return score_poison(nm, x, want, env, GE_REL, GE_FLOOR, 0.001lf)
-    }
-    return score(nm, x, want, env, GE_REL, GE_FLOOR)
+    held_env(t, "gelu_erf_batch vs the fp64 erf series", x, want, env, GE_REL, GE_FLOOR, 0.001lf)
 }
 
-def private gelu_shape_case(poison : bool) : KCase {
+def private gelu_shape_case(t : T?) {
     var x : array<float>
     gelu_fixture(x)
     var flat : array<float>
     flat := x
     gelu_erf_batch(x, GE_D, GE_POS)
     gelu_erf(flat, GE_D * GE_POS)
-    let nm = "gelu_erf_batch == the whole-image gelu_erf"
-    if (poison) {
-        return score_exact_poison(nm, x, flat, 1.0e-5)
-    }
-    return score_exact(nm, x, flat)
+    held_exact(t, "gelu_erf_batch == the whole-image gelu_erf", x, flat, 1.0e-5)
 }
 
 let RP_POS = 17l
@@ -542,7 +413,7 @@ def private rope_ref(v : array<float>; ct : array<float>; st : array<float>;
     }
 }
 
-def private rope_case(poison : bool) : KCase {
+def private rope_case(t : T?) {
     lcg_seed(0x40BEul)
     var v : array<float>
     var ct : array<float>
@@ -553,14 +424,10 @@ def private rope_case(poison : bool) : KCase {
     var env : array<double>
     rope_ref(v, ct, st, want, env)
     rope_neox_tab_rows(v, RP_POS, RP_HEADS, RP_HS, ct, st)
-    let nm = "rope_neox_tab_rows one table row per token, shared by every head"
-    if (poison) {
-        return score_poison(nm, v, want, env, RP_REL, RP_FLOOR, 0.001lf)
-    }
-    return score(nm, v, want, env, RP_REL, RP_FLOOR)
+    held_env(t, "rope_neox_tab_rows one table row per token, shared by every head", v, want, env, RP_REL, RP_FLOOR, 0.001lf)
 }
 
-def private rope_row_index_case(live_row : int64; poison : bool) : KCase {
+def private rope_row_index_case(t : T?; live_row : int64) {
     lcg_seed(0x41BEul)
     var v : array<float>
     var ct : array<float>
@@ -586,20 +453,14 @@ def private rope_row_index_case(live_row : int64; poison : bool) : KCase {
         o++
     }
     let nm = "rope_neox_tab_rows: only token {live_row}'s table row rotates"
-    if (poison) {
-        return score_exact_poison(nm, got, want, 1.0e-5)
-    }
     var moved = false
     for (i in range64(d)) {
         if (v[live_row * d + i] != before[live_row * d + i]) {
             moved = true
         }
     }
-    var res = score_exact(nm, got, want)
-    if (!moved) {
-        res.bad += 1000000
-    }
-    return res
+    t |> success(moved, "{nm}: the live row itself must rotate")
+    held_exact(t, nm, got, want, 1.0e-5)
 }
 
 let AW_D = 32l
@@ -677,7 +538,7 @@ def private aw_ref(qq : array<float>; kk : array<float>; vv : array<float>; win 
     }
 }
 
-def private aw_case(poison : bool) : KCase {
+def private aw_case(t : T?) {
     var win <- aw_win()
     var qq : array<float>
     var kk : array<float>
@@ -686,16 +547,11 @@ def private aw_case(poison : bool) : KCase {
     var want : array<double>
     var env : array<double>
     aw_ref(qq, kk, vv, win, want, env)
-    var out : array<float>
+    var out <- nan_plane(length(qq))
     var hp : array<float>
     var att : array<float>
-    out |> resize(long_length(qq))
     attention_bidir_windows(out, qq, kk, vv, hp, att, win, AW_D, AW_HEADS, AW_SCALE)
-    let nm = "attention_bidir_windows vs an oracle attending strictly inside each ragged window"
-    if (poison) {
-        return score_poison(nm, out, want, env, AW_REL, AW_FLOOR, 0.05lf)
-    }
-    return score(nm, out, want, env, AW_REL, AW_FLOOR)
+    held_env(t, "attention_bidir_windows vs an oracle attending strictly inside each ragged window", out, want, env, AW_REL, AW_FLOOR, 0.05lf)
 }
 
 let IG_REL = 5.0e-6lf
@@ -751,21 +607,16 @@ def private interp_ref(src : array<float>; src_off : int64; sw : int64; sh : int
     }
 }
 
-def private interp_case(sw : int64; sh : int64; dw : int64; dh : int64; d : int64; src_off : int64;
-                        poison : bool) : KCase {
+def private interp_case(t : T?; sw : int64; sh : int64; dw : int64; dh : int64; d : int64; src_off : int64) {
     lcg_seed(0x1E40ul + uint64(dw * 131l + sh))
     var src : array<float>
     fill(src, src_off + sw * sh * d, 2.0)
     var want : array<double>
     var env : array<double>
     interp_ref(src, src_off, sw, sh, dw, dh, d, want, env)
-    var out : array<float>
-    interpolate_grid_bilinear_aa(out, plane_f(src), src_off, sw, sh, dw, dh, d)
-    let nm = "interpolate_grid_bilinear_aa {sw}x{sh} -> {dw}x{dh} d={d} at plane offset {src_off}"
-    if (poison) {
-        return score_poison(nm, out, want, env, IG_REL, IG_FLOOR, 0.01lf)
-    }
-    return score(nm, out, want, env, IG_REL, IG_FLOOR)
+    var out <- nan_plane(int(dw * dh * d))
+    interpolate_grid_bilinear_aa(out, borrowed(src), src_off, sw, sh, dw, dh, d)
+    held_env(t, "interpolate_grid_bilinear_aa {sw}x{sh} -> {dw}x{dh} d={d} at plane offset {src_off}", out, want, env, IG_REL, IG_FLOOR, 0.01lf)
 }
 
 let FFT_REL = 2.0e-6lf
@@ -796,7 +647,7 @@ def private dft_ref(reim : array<float>; n : int64; var want : array<double>; va
     }
 }
 
-def private fft_case(n : int64; poison : bool) : KCase {
+def private fft_case(t : T?; n : int64) {
     lcg_seed(0xFF70ul + uint64(n))
     var reim : array<float>
     fill(reim, 2l * n, 1.0)
@@ -807,14 +658,10 @@ def private fft_case(n : int64; poison : bool) : KCase {
     unsafe {
         fft_pow2_run(n, addr<int const?>(p.rev[0]), addr<float const?>(p.tw[0]), addr(reim[0]))
     }
-    let nm = "fft_pow2_run n={n} vs the fp64 O(n^2) DFT of the same forward convention"
-    if (poison) {
-        return score_poison(nm, reim, want, env, FFT_REL, FFT_FLOOR, 0.05lf)
-    }
-    return score(nm, reim, want, env, FFT_REL, FFT_FLOOR)
+    held_env(t, "fft_pow2_run n={n} vs the fp64 O(n^2) DFT of the same forward convention", reim, want, env, FFT_REL, FFT_FLOOR, 0.05lf)
 }
 
-def private fft_plan_tw_case(n : int64; poison : bool) : KCase {
+def private fft_plan_tw_case(t : T?; n : int64) {
     let p <- build_fft_plan(n)
     var want : array<double>
     var env : array<double>
@@ -827,11 +674,7 @@ def private fft_plan_tw_case(n : int64; poison : bool) : KCase {
         env[2l * k] = 1.0lf
         env[2l * k + 1l] = 1.0lf
     }
-    let nm = "build_fft_plan n={n} twiddles vs fp64 (cos, -sin)"
-    if (poison) {
-        return score_poison(nm, p.tw, want, env, FFT_REL, FFT_FLOOR, 0.001lf)
-    }
-    return score(nm, p.tw, want, env, FFT_REL, FFT_FLOOR)
+    held_env(t, "build_fft_plan n={n} twiddles vs fp64 (cos, -sin)", p.tw, want, env, FFT_REL, FFT_FLOOR, 0.001lf)
 }
 
 def private fft_plan_rev_bad(n : int64) : int {
@@ -864,7 +707,7 @@ def private fft_plan_refuses(n : int64) : bool {
     return tripped
 }
 
-def private dft_twiddle_case(poison : bool) : KCase {
+def private dft_twiddle_case(t : T?) {
     let n_bins = DFT_N / 2l + 1l
     let b <- build_dft_twiddles(DFT_N)
     var want : array<double>
@@ -881,11 +724,7 @@ def private dft_twiddle_case(poison : bool) : KCase {
             env[at + 1l] = 1.0lf
         }
     }
-    let nm = "build_dft_twiddles n={DFT_N} vs fp64 (cos, -sin) at (j*k) mod n"
-    if (poison) {
-        return score_poison(nm, b, want, env, FFT_REL, FFT_FLOOR, 0.001lf)
-    }
-    return score(nm, b, want, env, FFT_REL, FFT_FLOOR)
+    held_env(t, "build_dft_twiddles n={DFT_N} vs fp64 (cos, -sin) at (j*k) mod n", b, want, env, FFT_REL, FFT_FLOOR, 0.001lf)
 }
 
 let RS_C = 5l
@@ -943,22 +782,17 @@ def private rl_torch_ref(x : array<float>; scale : float; var want : array<doubl
     return t_out
 }
 
-def private resize_case(torch : bool; scale : float; poison : bool) : KCase {
+def private resize_case(t : T?; torch : bool; scale : float) {
     var x : array<float>
     rs_fixture(x, scale)
     var want : array<double>
     var env : array<double>
     let want_t = torch ? rl_torch_ref(x, scale, want, env) : rl_onnx_ref(x, scale, want, env)
-    var y : array<float>
+    var y <- nan_plane(int(RS_C * want_t))
     let got_t = resize_linear(torch, x, RS_C, RS_T, scale, y)
     let nm = torch ? "resize_linear_torch (align_corners false) scale={scale}" : "resize_linear (ONNX half-pixel) scale={scale}"
-    if (got_t != want_t) {
-        return KCase(name = nm, bad = 1000000)
-    }
-    if (poison) {
-        return score_poison(nm, y, want, env, RS_REL, RS_FLOOR, 0.001lf)
-    }
-    return score(nm, y, want, env, RS_REL, RS_FLOOR)
+    t |> equal(got_t, want_t, "{nm}: the output length")
+    held_env(t, nm, y, want, env, RS_REL, RS_FLOOR, 0.001lf)
 }
 
 let MP_BINS = 13l
@@ -1004,20 +838,16 @@ def private mp_ref(re : array<float>; im : array<float>; var want : array<double
     }
 }
 
-def private mp_case(poison : bool) : KCase {
+def private mp_case(t : T?) {
     var re : array<float>
     var im : array<float>
     mp_fixture(re, im)
     var want : array<double>
     var env : array<double>
     mp_ref(re, im, want, env)
-    var out : array<float>
+    var out <- nan_plane(int(2l * MP_BINS * MP_FRAMES))
     magnitude_phase(re, im, MP_BINS, MP_FRAMES, MP_EPS, out)
-    let nm = "magnitude_phase {MP_BINS}x{MP_FRAMES} with the zero-imaginary branch planted"
-    if (poison) {
-        return score_poison(nm, out, want, env, MP_REL, MP_FLOOR, 0.01lf)
-    }
-    return score(nm, out, want, env, MP_REL, MP_FLOOR)
+    held_env(t, "magnitude_phase {MP_BINS}x{MP_FRAMES} with the zero-imaginary branch planted", out, want, env, MP_REL, MP_FLOOR, 0.01lf)
 }
 
 let IS_REL = 4.0e-6lf
@@ -1055,7 +885,7 @@ def private istft_ref(wave0 : array<float>; n : int64; window : array<float>; k 
     }
 }
 
-def private istft_case(n : int64; k : int64; hop : int64; pad : int64; zeroed : bool; poison : bool) : KCase {
+def private istft_case(t : T?; n : int64; k : int64; hop : int64; pad : int64; zeroed : bool) {
     lcg_seed(0x157Ful + uint64(k * 97l + hop))
     var window : array<float>
     is_window(window, k, zeroed)
@@ -1067,125 +897,82 @@ def private istft_case(n : int64; k : int64; hop : int64; pad : int64; zeroed : 
     istft_ref(wave0, n, window, k, hop, pad, want, env)
     istft_envelope_divide(wave, n, window, k, hop, pad)
     let nm = "istft_envelope_divide n={n} k={k} hop={hop} pad={pad} zero-window={zeroed}"
-    if (poison) {
-        return score_poison(nm, wave, want, env, IS_REL, IS_FLOOR, 0.01lf)
-    }
-    return score(nm, wave, want, env, IS_REL, IS_FLOOR)
+    held_env(t, nm, wave, want, env, IS_REL, IS_FLOOR, 0.01lf)
 }
 
 [test]
 def test_tower_gemm_wrappers(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         t |> run("the wrappers against an fp64 GEMM, and the plane, per-tensor-flag and zero-padded forms against them") @(t : T?) {
-            report(t, mm_blob_case(false))
-            report(t, mm_bf16_case(false))
-            report(t, mm_plane_case(false))
-            report(t, mm_route_case(true, false))
-            report(t, mm_route_case(false, false))
-            report(t, mm_pad_case(false))
-        }
-        t |> run("the GEMM bars' must-red controls") @(t : T?) {
-            report_poison(t, mm_blob_case(true))
-            report_poison(t, mm_bf16_case(true))
-            report_poison(t, mm_plane_case(true))
-            report_poison(t, mm_route_case(true, true))
-            report_poison(t, mm_route_case(false, true))
-            report_poison(t, mm_pad_case(true))
+            mm_blob_case(t)
+            mm_bf16_case(t)
+            mm_plane_case(t)
+            mm_route_case(t, true)
+            mm_route_case(t, false)
+            mm_pad_case(t)
         }
     }
 }
 
 [test]
 def test_tower_layernorm(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         t |> run("layernorm and layernorm_batch against the fp64 population-variance form") @(t : T?) {
-            report(t, ln_scalar_case(false))
-            report(t, ln_batch_case(false))
-            report(t, ln_plane_case(false))
-        }
-        t |> run("the layernorm bars' must-red controls") @(t : T?) {
-            report_poison(t, ln_scalar_case(true))
-            report_poison(t, ln_batch_case(true))
-            report_poison(t, ln_plane_case(true))
+            ln_scalar_case(t)
+            ln_batch_case(t)
+            ln_plane_case(t)
         }
     }
 }
 
 [test]
 def test_tower_row_adds(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         t |> run("the bias and residual row adds against the scalar f32 loop") @(t : T?) {
-            report(t, add_bias_case(false, false))
-            report(t, add_bias_case(true, false))
-            report(t, add_inplace_case(false))
-        }
-        t |> run("the row adds' must-red controls") @(t : T?) {
-            report_poison(t, add_bias_case(false, true))
-            report_poison(t, add_bias_case(true, true))
-            report_poison(t, add_inplace_case(true))
+            add_bias_case(t, false)
+            add_bias_case(t, true)
+            add_inplace_case(t)
         }
     }
 }
 
 [test]
 def test_tower_gelu_erf_batch(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         t |> run("gelu_erf_batch against an fp64 erf series, and against its whole-image form") @(t : T?) {
-            report(t, gelu_batch_case(false))
-            report(t, gelu_shape_case(false))
-        }
-        t |> run("the gelu bars' must-red controls") @(t : T?) {
-            report_poison(t, gelu_batch_case(true))
-            report_poison(t, gelu_shape_case(true))
+            gelu_batch_case(t)
+            gelu_shape_case(t)
         }
     }
 }
 
 [test]
 def test_tower_rope_neox_tab_rows(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         t |> run("the full-head table rope against the fp64 rotation, and its per-row table index") @(t : T?) {
-            report(t, rope_case(false))
-            report(t, rope_row_index_case(0l, false))
-            report(t, rope_row_index_case(11l, false))
-        }
-        t |> run("the rope bars' must-red controls") @(t : T?) {
-            report_poison(t, rope_case(true))
-            report_poison(t, rope_row_index_case(11l, true))
+            rope_case(t)
+            rope_row_index_case(t, 0l)
+            rope_row_index_case(t, 11l)
         }
     }
 }
 
 [test]
 def test_tower_attention_windows(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         t |> run("attention_bidir_windows against an oracle that attends strictly inside each window") @(t : T?) {
-            report(t, aw_case(false))
-        }
-        t |> run("the window attention bar's must-red control") @(t : T?) {
-            report_poison(t, aw_case(true))
+            aw_case(t)
         }
     }
 }
 
 [test]
 def test_tower_interpolate_grid_aa(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         t |> run("the antialiased grid resample down and up, at a non-zero plane offset") @(t : T?) {
-            report(t, interp_case(48l, 48l, 14l, 14l, 8l, 0l, false))
-            report(t, interp_case(48l, 48l, 27l, 13l, 4l, 37l, false))
-            report(t, interp_case(4l, 4l, 9l, 9l, 3l, 11l, false))
-        }
-        t |> run("the resample bars' must-red controls") @(t : T?) {
-            report_poison(t, interp_case(48l, 48l, 14l, 14l, 8l, 0l, true))
-            report_poison(t, interp_case(4l, 4l, 9l, 9l, 3l, 11l, true))
+            interp_case(t, 48l, 48l, 14l, 14l, 8l, 0l)
+            interp_case(t, 48l, 48l, 27l, 13l, 4l, 37l)
+            interp_case(t, 4l, 4l, 9l, 9l, 3l, 11l)
         }
     }
 }
@@ -1195,60 +982,44 @@ def test_audio_fft_and_dft_tables(t : T?) {
     t |> run("the radix-2 plan's bit-reversal permutation and its twiddles") @(t : T?) {
         t |> equal(fft_plan_rev_bad(256l), 0, "build_fft_plan(256) rev is an involutive permutation with rev[1] = n/2")
         t |> equal(fft_plan_rev_bad(64l), 0, "build_fft_plan(64) rev is an involutive permutation with rev[1] = n/2")
-        report(t, fft_plan_tw_case(256l, false))
+        fft_plan_tw_case(t, 256l)
         t |> success(fft_plan_refuses(6l), "build_fft_plan refuses a non-power-of-2 size")
         t |> success(fft_plan_refuses(1l), "build_fft_plan refuses a size below 2")
     }
     t |> run("fft_pow2_run against an fp64 O(n^2) DFT of the same forward convention") @(t : T?) {
-        report(t, fft_case(64l, false))
-        report(t, fft_case(256l, false))
+        fft_case(t, 64l)
+        fft_case(t, 256l)
     }
     t |> run("the 400-point DFT twiddle matrix against fp64") @(t : T?) {
-        report(t, dft_twiddle_case(false))
-    }
-    t |> run("the FFT and DFT bars' must-red controls") @(t : T?) {
-        report_poison(t, fft_plan_tw_case(256l, true))
-        report_poison(t, fft_case(256l, true))
-        report_poison(t, dft_twiddle_case(true))
+        dft_twiddle_case(t)
     }
 }
 
 [test]
 def test_tts_linear_resamplers(t : T?) {
     t |> run("both interpolation conventions against an fp64 two-tap reference") @(t : T?) {
-        report(t, resize_case(false, 2.0, false))
-        report(t, resize_case(false, 1.5, false))
-        report(t, resize_case(false, 0.5, false))
-        report(t, resize_case(true, 2.0, false))
-        report(t, resize_case(true, 1.5, false))
-        report(t, resize_case(true, 0.5, false))
-    }
-    t |> run("the resampler bars' must-red controls") @(t : T?) {
-        report_poison(t, resize_case(false, 1.5, true))
-        report_poison(t, resize_case(true, 1.5, true))
+        resize_case(t, false, 2.0)
+        resize_case(t, false, 1.5)
+        resize_case(t, false, 0.5)
+        resize_case(t, true, 2.0)
+        resize_case(t, true, 1.5)
+        resize_case(t, true, 0.5)
     }
 }
 
 [test]
 def test_tts_magnitude_phase(t : T?) {
     t |> run("magnitude_phase against an fp64 reference, the zero-imaginary branch planted at both zero signs") @(t : T?) {
-        report(t, mp_case(false))
-    }
-    t |> run("the magnitude_phase bar's must-red control") @(t : T?) {
-        report_poison(t, mp_case(true))
+        mp_case(t)
     }
 }
 
 [test]
 def test_tts_istft_envelope(t : T?) {
     t |> run("the istft window-envelope divide against an fp64 envelope, and its zero-envelope guard") @(t : T?) {
-        report(t, istft_case(200l, 32l, 8l, 16l, false, false))
-        report(t, istft_case(137l, 24l, 7l, 9l, false, false))
-        report(t, istft_case(96l, 32l, 8l, 0l, false, false))
-        report(t, istft_case(200l, 32l, 8l, 16l, true, false))
-    }
-    t |> run("the envelope bars' must-red controls") @(t : T?) {
-        report_poison(t, istft_case(200l, 32l, 8l, 16l, false, true))
-        report_poison(t, istft_case(200l, 32l, 8l, 16l, true, true))
+        istft_case(t, 200l, 32l, 8l, 16l, false)
+        istft_case(t, 137l, 24l, 7l, 9l, false)
+        istft_case(t, 96l, 32l, 8l, 0l, false)
+        istft_case(t, 200l, 32l, 8l, 16l, true)
     }
 }

@@ -123,7 +123,9 @@ that a question answered for one backend has an obvious address in the other. Th
   with no per-head stamp; the block codecs keep the chunked per-(row, head) pair at head 64.
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
-  follows the class, never "the builder needs the driver module". Prefill's prefill-only classes are convergence debt, not precedent. Kernel twins - classes whose bodies differ only on one axis - carry that difference as a `@template_constant`, an overridden method the emitter splices flat, or a run-time value the builder passes.
+  follows the class, never "the builder needs the driver module". Each builder has a
+  `<builder>_pso(enc, pso, ...)` twin that encodes the same binds and grid through the pipeline it
+  is handed rather than the `pso =` global. Prefill's prefill-only classes are convergence debt, not precedent. Kernel twins - classes whose bodies differ only on one axis - carry that difference as a `@template_constant`, an overridden method the emitter splices flat, or a run-time value the builder passes.
   A per-format family stamp is `[metal_dispatch(stamp = "<family>:<fmt>:<form>")]` (`kq_mm`, `moe_mm`,
   `moe_mm_split`): the lens derives every string the long form spells, an explicit argument wins, and the
   threadgroup-memory global is always `<Class>_<kernel method>_msl_tgmem`. Hosts compile through
@@ -132,7 +134,7 @@ that a question answered for one backend has an obvious address in the other. Th
   into one table - so the lens's unread-param refusal (a `params=` name no `grid=`, `tg=`,
   `requires=` or `@span` reads) exempts stamp-derived params; a long-form class is refused.
 - **Ledgered kernel-binding asymmetries** - a REVIEW rule firing on one of these is expected, and
-  this entry is the sanction: a kernel gate under `tests/` builds its own pipeline from the stamp's MSL and binds by number (the gate proves the body, the driver's parity cells prove the builder); the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`)
+  this entry is the sanction: a Metal kernel gate under `tests/` builds its own pipeline from the stamp's MSL and dispatches it through the class's generated `enc_*` builder (its `_pso` twin where the pipeline global is private to its driver), so a gate proves the body and the builder's bind list together - it binds by number only where it dispatches a grid or a bind the builder cannot express, the site saying which; the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`)
   keep the pre-family compact kargs slots while their base classes bind the family numbers, so no
   shared bind path may span the two layouts; the MoE combine pair (`MetalMoeCombine` y/dim/nk at
   2/3/4, `MetalMoeReduce` at 3/4/5 under its gated `inv`) keeps each leaf's numbers; the in-engine moe mul_mm A/B race harnesses
