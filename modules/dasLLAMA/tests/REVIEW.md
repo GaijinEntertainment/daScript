@@ -60,8 +60,8 @@ instruction sets of the box's CPU do not carry - runs that cell on a box that ha
 that box in the PR body.** A reached cell run without the capability did not run what the
 capability selects.
 
-**A PR that adds or changes a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
-`_model_tier.das`) also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
+**A PR that adds a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
+`_model_tier.das`), or changes something such a cell's result depends on, also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
 stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when
 `run.das` accepts `--arm` for that suite - and names the box in the PR body.** A run without
 `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.

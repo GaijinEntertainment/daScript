@@ -26,6 +26,8 @@ or the lever value, already in use.
 A board cell is a run whose reading lands as a row of `../performance/records/<box>.json` or as a
 figure in `../PERF_LEDGER.md`.
 
+An instrument's timed body is the statements between its clock reads, and what they call.
+
 **A diff that changes a board cell's input corpus or the pinned reference build
 (`DEFAULT_REF_SHA` in `setup_lcpp_ref.das`, or anything else deciding which reference binary or
 environment the run measures) applies `../REVIEW_MEASUREMENT.md` too.**
