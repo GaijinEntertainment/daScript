@@ -2,7 +2,7 @@
 // is a field access never escapes its scope, so it is freed at scope exit. The load-bearing
 // property here: a pointer that DOES escape (returned, stored, aliased) must NOT be freed.
 // Each test ends with heap_collect(validate=true), which throws if a still-reachable object was
-// wrongly freed. (heap_collect needs `options gc`; see test_gc_escape_free_frees.das for the
+// wrongly freed. (heap_collect needs `options gc`; see ../escape_analysis/test_escape_free_frees.das for the
 // proof that the freeing itself happens without any GC.)
 options gen2
 options persistent_heap

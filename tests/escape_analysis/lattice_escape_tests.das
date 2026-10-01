@@ -1,6 +1,6 @@
 // Lattice escape analysis - SPEC tests for the unified alias-set + return-ownership model.
 //
-// Methodology (mirrors test_gc_escape_free_frees.das):
+// Methodology (mirrors test_escape_free_frees.das):
 //   * no `options gc` + `options no_optimization`: the escape-free static delete is the ONLY thing
 //     that can keep the heap flat across a non-escaping allocation loop (nothing else reclaims the
 //     garbage, and the allocation can't be elided). A control loop that escapes proves that.
