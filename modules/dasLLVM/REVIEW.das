@@ -31,10 +31,6 @@ var private SINK_CALLS <- {
 // each of the descriptor's other identifier-shaped quoted tokens names a module file.
 var private DESCRIPTOR_CATEGORY_TOKENS <- { "llvm", "Module_LLVM" }
 
-def private is_ident_byte(b : int) : bool {
-    return is_alnum(b) || b == '_'
-}
-
 def private ident_prefix(s : string) : string {
     var n = 0
     peek_data(s) $(d) {
@@ -43,24 +39,6 @@ def private ident_prefix(s : string) : string {
         }
     }
     return slice(s, 0, n)
-}
-
-// whole-word occurrence: `name` present with no identifier byte on either side
-def private contains_word(text : string; name : string) : bool {
-    var found = false
-    peek_data(text) $(d) {
-        let nl = length(name)
-        var from = 0
-        while (!found) {
-            let at = find(d, name, from)
-            break if (at < 0)
-            let okl = at == 0 || !is_ident_byte(int(d[at - 1]))
-            let okr = at + nl >= length(d) || !is_ident_byte(int(d[at + nl]))
-            found = okl && okr
-            from = at + 1
-        }
-    }
-    return found
 }
 
 // `name(` with no identifier byte in front, so `remove(` does not match `fs_remove(`
