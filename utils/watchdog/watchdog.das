@@ -292,13 +292,25 @@ struct public ResolvedConfig {
     cfg : WatchdogConfig = WatchdogConfig()
     error : string
 }
+def private cli_notifications_disabled(args : array<string>; configured : bool) : bool {
+    let raw = find_bool_flag_raw_value(args, "--no-notifications")
+    if (is_some(raw)) {
+        let value = unwrap(raw)
+        if (value == "true") return true
+        if (value == "false") return false
+    }
+    return configured
+}
+def private resolved_config_error(error : string; quiet : bool) : ResolvedConfig {
+    var result = ResolvedConfig(error = error)
+    result.cfg.no_notifications = quiet
+    return <- result
+}
 
 //! Flags over `watchdog.json` beside the program over layout discovery; the log, pid file, dumps
 //! and crash bundles then resolve against `state_dir`, every other path against `cwd`. Everything after the first `--` goes to the child verbatim (the config's
 //! `server_args` when there is no `--`). `error` carries the text of a fatal configuration.
 def public resolve_config(args : array<string>; program_dir : string) : ResolvedConfig {
-    let loaded = load_config(program_dir)
-    if (!empty(loaded.error)) return ResolvedConfig(error = loaded.error)
     var head : array<string>
     var tail : array<string>
     var past_separator = false
@@ -313,10 +325,15 @@ def public resolve_config(args : array<string>; program_dir : string) : Resolved
             head |> push(arg)
         }
     }
+    let loaded = load_config(program_dir)
+    if (!empty(loaded.error)) return resolved_config_error(loaded.error, cli_notifications_disabled(head, false))
+    let configured_quiet = loaded.js?["no_notifications"]
+    let quiet = cli_notifications_disabled(head,
+        configured_quiet != null && configured_quiet is _bool && (configured_quiet as _bool))
     var merged <- config_to_args(loaded.js, head, path_join(program_dir, CONFIG_NAME))
-    if (merged |> is_err) return ResolvedConfig(error = merged |> unwrap_err)
+    if (merged |> is_err) return resolved_config_error(merged |> unwrap_err, quiet)
     var parsed <- parse_args(type<WatchdogConfig>, merged |> move_unwrap)
-    if (parsed |> is_err) return ResolvedConfig(error = "watchdog: {parsed |> unwrap_err}")
+    if (parsed |> is_err) return resolved_config_error("watchdog: {parsed |> unwrap_err}", quiet)
     var cfg <- parsed |> move_unwrap
     if (past_separator) {
         cfg.server_args <- tail
@@ -329,7 +346,7 @@ def public resolve_config(args : array<string>; program_dir : string) : Resolved
     cfg.cwd = get_full_file_name(cfg.cwd)
     if (empty(cfg.program) && empty(cfg.script)) {
         let why = discover_target(cfg, cfg.cwd, program_dir)
-        if (!empty(why)) return ResolvedConfig(error = why)
+        if (!empty(why)) return <- ResolvedConfig(cfg <- cfg, error = why)
     }
     if (empty(cfg.name)) {
         cfg.name = !empty(cfg.program) ? stem(cfg.program) : base_name(cfg.cwd)
