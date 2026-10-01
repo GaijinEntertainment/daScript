@@ -4,7 +4,7 @@ options _jit_fast_math = true   // ggml-parity FP laxity — the CPU truth half 
 options _dasllama_internal = true
 
 require dasllama/dasllama   // the facade: arch [init] registrations + load_model's prepared-image (.dlim) cache
-require dasllama/dasllama_math   // setup_dasllama_jobque_ + pin_kernel_backend + parallel_argmax
+require dasllama/dasllama_math   // with_dasllama_jobque + pin_kernel_backend + parallel_argmax
 require daslib/jobque_boost
 require daslib/clargs
 require daslib/fio
@@ -69,10 +69,6 @@ def private stream_prompt(t : Model; i : int64) : array<int64> {
     return <- encode(t, text, true, false)
 }
 
-def private greedy_top(lg : array<float>; vocab : int64) : int64 {
-    return parallel_argmax(lg, vocab)
-}
-
 // greedy when `feeds` is empty (recording the fed token per stream per step into feeds_out);
 // replay otherwise. B == 1 runs the single-stream driver (forward), B > 1 the batch driver.
 // Returns the final-step logits, streams concatenated.
@@ -88,7 +84,7 @@ def private teacher_logits(t : Model; nb, nsteps : int64; feeds : array<int64>; 
         eval_(t, s, prompt)
         delete prompt
         for (st in range64(nsteps)) {
-            let tok = replay ? feeds[st] : greedy_top(s.logits, vocab)
+            let tok = replay ? feeds[st] : parallel_argmax(s.logits, vocab)
             if (!replay) {
                 feeds_out |> push(tok)
             }
@@ -118,7 +114,7 @@ def private teacher_logits(t : Model; nb, nsteps : int64; feeds : array<int64>; 
     }
     for (st in range64(nsteps)) {
         for (i in range64(nb)) {
-            cur[i] = replay ? feeds[st * nb + i] : greedy_top(ss[i].logits, vocab)
+            cur[i] = replay ? feeds[st * nb + i] : parallel_argmax(ss[i].logits, vocab)
             if (!replay) {
                 feeds_out |> push(cur[i])
             }
@@ -252,8 +248,7 @@ def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, the
         }
     }
     var rc = 0
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         for (tok in split(cfg.bs, ",")) {
             let nb = to_int64(tok, false)
             if (nb < 1l) {

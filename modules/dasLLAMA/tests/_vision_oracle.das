@@ -2,6 +2,7 @@
 //   - the per-token line parser for llama-mtmd-debug's MTMD_DEBUG_EMBEDDINGS block
 //   - the exact-value fixture generators (float-for-float against the llama-mtmd-debug dump)
 //   - the per-token compare, logging the maxdiff against an absolute + scale-relative bar
+//   - the dump gate the five tower tests run their encodes through
 
 options gen2
 options _dasllama_internal = true
@@ -14,6 +15,8 @@ require daslib/fio
 require strings
 require daslib/strings_boost
 require math
+require daslib/jobque_boost
+require dasllama/dasllama_math   // with_dasllama_jobque: the gate's encode runs in the engine's job queue
 
 struct OracleEncode {
     npos : int
@@ -192,4 +195,28 @@ def compare_encode(t : T?; tag : string; out : array<float>; d : int; o : Oracle
         t |> failure("{tag}: worst diff exceeds {abs_tol} + {rel_tol}*rms by {max_excess} (maxdiff {maxdiff} at tok {max_tok}) - got ({out[max_tok * d]}, {out[max_tok * d + 1]}, ...) want ({o.v0[max_tok]}, {o.v1[max_tok]}, ...)")
     }
     return maxdiff
+}
+
+//! the tier-1 dump gate: the dump `logname` under `dir` (a loud skip naming `mint` where it is absent or unparseable), the
+//! `kind` probe of `w` x `h` through `encode` inside the engine's job queue, its token count against the dump's, then
+//! `compare_encode` over rows of `row_width` under `tag` at the `abs_tol` / `rel_tol` bars; false where it skipped or the count missed
+def oracle_gate(t : T?; dir, logname, mint, kind : string; w, h : int; tag : string; row_width : int; abs_tol, rel_tol : float;
+                encode : block<(planes : array<float>; var out : array<float>) : int64>) : bool {
+    var o = OracleEncode()
+    if (!load_oracle_encode(path_join(dir, logname), o)) {
+        t |> skip("oracle dump {logname} not present/parseable - mint via {mint}")
+        return false
+    }
+    let planes <- make_planes(kind, w, h)
+    var out : array<float>
+    var nout = 0l
+    with_dasllama_jobque() {
+        nout = invoke(encode, planes, out)
+    }
+    t |> equal(int(nout), o.npos, "{kind} {w}x{h} token count")
+    if (int(nout) != o.npos) {
+        return false
+    }
+    compare_encode(t, tag, out, row_width, o, abs_tol, rel_tol)
+    return true
 }

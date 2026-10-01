@@ -30,27 +30,13 @@ let private TIER1_REL = 4e-3   // × token rms - f32 planes vs the f32 oracle: s
 let private TIER1_REL_GPU = 4e-2   // the Metal leg: measured 6.9e-3..2.3e-2 x rms on these dumps - the f32 mulmm stages f16 tiles over 27 high-variance LN blocks
 let private TIER1_REL_Q8 = 3.2e-1   // the q8 serving lane: measured 0.22-0.25 x rms on these dumps - 27 blocks of q8×q8 GEMMs incl. the padded down (deeper + higher-variance than gemma4v's 16); the caption floor is the product gate
 
+[cold_path]
 def private gate_encode(t : T?; tw : Gemma3vTower; var st : Gemma3vState; kind : string; logname : string; rel : float = TIER1_REL) : bool {
-    var o = OracleEncode()
-    let logpath = path_join(path_join(models_dir(), "gemma3-vision-oracle"), logname)
-    if (!load_oracle_encode(logpath, o)) {
-        t |> skip("oracle dump {logname} not present/parseable - mint via gemma3-vision-oracle/mint_gemma3.sh")
-        return false
-    }
     let px = int(tw.image_px)
-    let planes <- make_planes(kind, px, px)
-    var out : array<float>
-    var nout = 0l
-    with_job_que() {
-        setup_dasllama_jobque_()
-        nout = gemma3v_encode(tw, st, planes, tw.image_px, tw.image_px, out)
+    return oracle_gate(t, path_join(models_dir(), "gemma3-vision-oracle"), logname, "gemma3-vision-oracle/mint_gemma3.sh", kind, px, px,
+            "gemma3v tier-1{tw.q8 ? " q8" : ""} {kind}", int(tw.proj_dim), TIER1_ABS, rel) $(planes : array<float>; var out : array<float>) : int64 {
+        return gemma3v_encode(tw, st, planes, tw.image_px, tw.image_px, out)
     }
-    t |> equal(int(nout), o.npos, "{kind} {px}x{px} token count")
-    if (int(nout) != o.npos) {
-        return false
-    }
-    compare_encode(t, "gemma3v tier-1{tw.q8 ? " q8" : ""} {kind}", out, int(tw.proj_dim), o, TIER1_ABS, rel)
-    return true
 }
 
 [test]

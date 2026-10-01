@@ -8,7 +8,7 @@ require daslib/clargs
 require strings
 
 
-let OUTPUT_DIR = "{get_das_root()}/build/tests"
+let OUTPUT_DIR = test_temp_dir()
 let FIXTURE_DIR = "{get_das_root()}/tests/jit_tests"
 let SHARED_FIXTURE = "{get_das_root()}/tests-cpp/big/standalone_ctx/standalone_init_fixture.das"
 

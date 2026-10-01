@@ -89,12 +89,8 @@ def private parity_gen_ok(tr : Model; prompt, want : array<int64>; dn_chunked : 
 [test]
 def test_parity_tied_cls_q8_rows(t : T?) {
     t |> run("tied Q8 load: cls_q8 embedding rows bit-match the fp32 table") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var t32 <- load_gguf(path, QuantMode.fp32)
         var t8 <- load_gguf(path, QuantMode.q8)
         t |> success(!t32.cls_q8, "fp32 load keeps the fblob table")
@@ -125,12 +121,8 @@ def test_parity_tied_cls_q8_rows(t : T?) {
 [test]
 def test_parity_untied_emb_q8_rows(t : T?) {
     t |> run("untied Q8 load: emb_q8 embedding rows bit-match the fp32 table, no fp32 table kept") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "stories15M-Q8_0.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var t32 <- load_gguf(path, QuantMode.fp32)
         var t8 <- load_gguf(path, QuantMode.q8)
         t |> success(!t32.emb_q8 && t32.tok_emb_off >= 0l, "fp32 load keeps the fblob table")
@@ -238,10 +230,7 @@ def test_parity_specs(t : T?) {
     delete all
     for (file in files) {
         t |> run("pinned-greedy parity: {file}") @(t : T?) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
+            return if (!jit_only(t))
             var inscope spec <- spec_by_file(file)
             let path = path_join(models_dir(), spec.file)
             if (!model_available(t, path)) return
@@ -271,10 +260,7 @@ let GPTOSS_LONG_GEN <- [220l, 17395l, 11l, 220l, 17336l, 11l, 220l, 17773l, 11l,
 [test]
 def test_parity_gptoss_20b(t : T?) {
     t |> run("gpt-oss forward (gpt-oss-20b native-MXFP4 experts, sinks + YaRN + MoE biases; short + window-engaged)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         var inscope spec <- spec_by_file("gpt-oss-20b-mxfp4.gguf")
         let path = path_join(models_dir(), spec.file)
         if (!model_available(t, path)) return

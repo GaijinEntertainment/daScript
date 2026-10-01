@@ -91,7 +91,7 @@ binary/DLL locks while builds run, per-request crash isolation.
 Each subtool compiles under the module cache (`CodeOfPolicies.module_cache`),
 the same cache the `daslang` command line uses for its own script: a request
 re-parses the edited module and what follows it, and deserializes the rest. The
-cache is `.jitted_scripts/module_cache/` in the workspace root - subtools inherit
+cache is `.cache/daslang/module_cache/` in the workspace root - subtools inherit
 the supervisor's cwd - so a large module graph costs one cold compile per
 workspace, not one per keystroke.
 

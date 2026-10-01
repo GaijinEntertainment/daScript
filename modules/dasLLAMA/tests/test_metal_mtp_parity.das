@@ -19,6 +19,7 @@ require daslib/fio   // nolint:STYLE030,LINT019 — path_join, used only inside 
 require math
 require strings
 require _model_tier
+require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -33,44 +34,6 @@ def private allow_cpu_prefill_intent() {
 // first near-tie and prove nothing); counting prompts stay token-exact (spec free-run == plain
 // free-run). A plain-vs-plain control pins the harness at exactly zero. Skips cleanly without
 // the model, off-Apple, or with no Metal device; the large fixtures need DASLLAMA_PARITY_FULL.
-
-def private greedy_top(logits : array<float>; vocab : int64) : int64 {
-    var best = 0l
-    var bv = logits[0]
-    for (v in range64(vocab)) {
-        if (logits[v] > bv) {
-            bv = logits[v]
-            best = v
-        }
-    }
-    return best
-}
-
-// plain top-2 margin: the tie distance an argmax flip crossed
-def private top2_margin(a : array<float>; n : int64) : float {
-    var m1 = -3.4e38
-    var m2 = -3.4e38
-    for (i in range64(n)) {
-        let v = a[i]
-        if (v > m1) {
-            m2 = m1
-            m1 = v
-        } elif (v > m2) {
-            m2 = v
-        }
-    }
-    return m1 - m2
-}
-
-// "start, start+1, …, last," — the kernel-robust confident fixture family (test_parity.das)
-def private counting_prompt(start, last : int) : string {
-    return build_string() $(var w) {
-        for (i in range(start, last + 1)) {
-            w |> write(i)
-            w |> write(", ")
-        }
-    }
-}
 
 // two freeform prose openers - real text with the near-ties counting prompts are chosen to avoid
 let PROSE_A = "The old lighthouse keeper watched the storm roll in from the west, counting the seconds between each flash and the thunder that followed. By midnight the waves were breaking over the jetty and"
@@ -122,11 +85,11 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
             gpu_prefill_pair(trg, sa, sb, prompt)   // metal prefill: stashes mtp_h + warms the draft slab, seconds at 27B
             select_decode_override("metal")
             let before = metal_decode_stats().decodes
-            var tok = greedy_top(sa.logits, vocab)
+            var tok = argmax_of(sa.logits, vocab)
             var one <- [tok]
             eval_(trg, sa, one)   // the mirror-building step, both sessions (a spec round needs a live mirror)
             eval_(trg, sb, one)
-            tok = greedy_top(sa.logits, vocab)
+            tok = argmax_of(sa.logits, vocab)
             if (verify) {
                 set_metal_mtp_debug("reject")
                 set_mtp_depth(depth)
@@ -146,7 +109,7 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
                     st.off_min = min(st.off_min, off)
                 }
                 prev := sa.logits
-                if (greedy_top(sb.logits, vocab) != tok) {
+                if (argmax_of(sb.logits, vocab) != tok) {
                     st.flips++
                     st.flip_margin_max = max(st.flip_margin_max, top2_margin(sa.logits, vocab))
                 }
@@ -164,7 +127,7 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
                     eval_(trg, sb, one)
                 }
                 st.steps++
-                tok = greedy_top(sa.logits, vocab)
+                tok = argmax_of(sa.logits, vocab)
             }
             set_metal_mtp_debug("")
             set_mtp_depth(1l)
@@ -197,7 +160,7 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
             gpu_prefill_pair(trg, sa, sb, prompt)
             select_decode_override("metal")
             let before = metal_decode_stats().decodes
-            let t0 = greedy_top(sa.logits, vocab)
+            let t0 = argmax_of(sa.logits, vocab)
             var one <- [t0]
             eval_(trg, sa, one)
             eval_(trg, sb, one)
@@ -206,16 +169,16 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
                 set_seed_(sb, 4242)
                 sb.spec_params = unsafe(addr(sp))
             }
-            var tok = sampled ? sample_(sa, sp) : greedy_top(sa.logits, vocab)
+            var tok = sampled ? sample_(sa, sp) : argmax_of(sa.logits, vocab)
             for (_i in range64(n)) {
                 plain |> push(tok)
                 one[0] = tok
                 eval_(trg, sa, one)
-                tok = sampled ? sample_(sa, sp) : greedy_top(sa.logits, vocab)
+                tok = sampled ? sample_(sa, sp) : argmax_of(sa.logits, vocab)
             }
             // speculative: commit tok, plus every accepted draft of the round
             set_mtp_depth(depth)
-            tok = sampled ? sample_(sb, sp) : greedy_top(sb.logits, vocab)
+            tok = sampled ? sample_(sb, sp) : argmax_of(sb.logits, vocab)
             while (long_length(spec) < n) {
                 spec |> push(tok)
                 let a = mtp_spec_round(trg, sb, tok)
@@ -225,7 +188,7 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
                 if (sb.mtp_pre_drawn) {
                     parked++
                 }
-                tok = sampled ? sample_(sb, sp) : greedy_top(sb.logits, vocab)
+                tok = sampled ? sample_(sb, sp) : argmax_of(sb.logits, vocab)
             }
             sb.spec_params = null
             set_mtp_depth(1l)
@@ -312,18 +275,6 @@ struct RowStats {
     flip_margin_max : float
 }
 
-def private argmax_at(v : array<float>; off, n : int64) : int64 {
-    var best = 0l
-    var bv = v[off]
-    for (i in range64(1l, n)) {
-        if (v[off + i] > bv) {
-            bv = v[off + i]
-            best = i
-        }
-    }
-    return best
-}
-
 def private compare_row(plain, store : array<float>; soff, n : int64; var st : RowStats; tag : string; pos : int64; verbose : bool) {
     var mx = 0.0
     for (i in range64(n)) {
@@ -331,8 +282,8 @@ def private compare_row(plain, store : array<float>; soff, n : int64; var st : R
     }
     st.rows++
     st.max_abs = max(st.max_abs, mx)
-    let ap = argmax_at(plain, 0l, n)
-    let av = argmax_at(store, soff, n)
+    let ap = argmax_of(plain, 0l, n)
+    let av = argmax_of(store, soff, n)
     if (ap != av) {
         st.flips++
         let mg = top2_margin(plain, n)
@@ -360,12 +311,12 @@ def private vff_pair(tr, trg : Model; prompt : array<int64>; nrounds, nr : int64
             select_decode_override("metal")
             let before = metal_batch_decode_stats().steps
             var ws <- create_batch_workspace_(trg)
-            var tok = greedy_top(sa.logits, vocab)
+            var tok = argmax_of(sa.logits, vocab)
             var one <- [tok]
             eval_(trg, sa, one)   // mirror-building step on both
             eval_(trg, sb, one)
             finish_pending_step()   // the single-stream decode is one step deep - land before reading
-            tok = greedy_top(sa.logits, vocab)
+            tok = argmax_of(sa.logits, vocab)
             var pos = sb.n_past
             var toks : array<int64>
             var store : array<float>
@@ -386,7 +337,7 @@ def private vff_pair(tr, trg : Model; prompt : array<int64>; nrounds, nr : int64
                     for (v in range64(vocab)) {
                         store[i * vocab + v] = sa.logits[v]
                     }
-                    tok = greedy_top(sa.logits, vocab)
+                    tok = argmax_of(sa.logits, vocab)
                 }
                 // B: the same nr tokens as one same-slab verify; row i is the step on toks[i]
                 if (!verify_batch_step(trg, ws, sb, toks, pos, nr)) {
@@ -406,7 +357,7 @@ def private vff_pair(tr, trg : Model; prompt : array<int64>; nrounds, nr : int64
                     }
                     rowmax[i] = max(rowmax[i], rmx)
                     if (verbose) {
-                        to_log(LOG_INFO, "vff round pos={pos + i} row={i} maxd={rmx} plain_top={argmax_at(plain, 0l, vocab)} verify_top={argmax_at(sb.mtp_logits_b, i * vocab, vocab)} margin={top2_margin(plain, vocab)}\n")
+                        to_log(LOG_INFO, "vff round pos={pos + i} row={i} maxd={rmx} plain_top={argmax_of(plain, 0l, vocab)} verify_top={argmax_of(sb.mtp_logits_b, i * vocab, vocab)} margin={top2_margin(plain, vocab)}\n")
                     }
                     delete plain
                 }
@@ -454,7 +405,7 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
             cur |> reserve(nb)
             for (i in range64(nb)) {
                 sessb |> push(unsafe(addr(sb[i])))
-                cur |> push(greedy_top(sa[i].logits, vocab))
+                cur |> push(argmax_of(sa[i].logits, vocab))
             }
             var one <- [0l]
             // the reference for row 0's first step: which GPU side the truth sits with - the CPU on a planar
@@ -481,11 +432,11 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
                         mxs = max(mxs, abs(sc.logits[v] - sa[0].logits[v]))
                         mxb = max(mxb, abs(sc.logits[v] - sb[0].logits[v]))
                     }
-                    to_log(LOG_INFO, "metal dff cpu-ref B={nb}: cpu-vs-single maxd={mxs} cpu-vs-batch maxd={mxb} cpu top={greedy_top(sc.logits, vocab)} single top={greedy_top(sa[0].logits, vocab)} batch top={greedy_top(sb[0].logits, vocab)}\n")
+                    to_log(LOG_INFO, "metal dff cpu-ref B={nb}: cpu-vs-single maxd={mxs} cpu-vs-batch maxd={mxb} cpu top={argmax_of(sc.logits, vocab)} single top={argmax_of(sa[0].logits, vocab)} batch top={argmax_of(sb[0].logits, vocab)}\n")
                 }
                 for (i in range64(nb)) {
                     compare_row(sa[i].logits, sb[i].logits, 0l, vocab, st, "drow{i}", sb[i].n_past - 1l, verbose)
-                    cur[i] = greedy_top(sa[i].logits, vocab)
+                    cur[i] = argmax_of(sa[i].logits, vocab)
                 }
             }
             delete sc

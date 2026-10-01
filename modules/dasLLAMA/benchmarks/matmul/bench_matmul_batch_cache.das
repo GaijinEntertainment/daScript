@@ -188,8 +188,7 @@ def bench_matmul_batch_cache(b : B?) {
         to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
         return
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         cache_shape(b, "qo    2048x2048 ", 2048l, 2048l)    // 4.2 MB Q8 — fits L2
         cache_shape(b, "big16 2048x16000", 2048l, 16000l)   // 32 MB Q8 — exceeds L2
     }

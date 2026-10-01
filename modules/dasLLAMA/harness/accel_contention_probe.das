@@ -53,8 +53,7 @@ def main {
             print("metal device: {metal_device_name(dev)}\n")
         }
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         print("main threading_mode={accel_threading_mode()}\n")
         unsafe {
             var bp = addr(burst[0])

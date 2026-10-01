@@ -21,7 +21,7 @@ let CHAINS = 4          // independent accumulator chains (hide the 3-4 cycle MM
 def main() {   // nolint:STYLE038 — flat probe phases (gate, fill, run, report); no seam stands alone
     print("smmla probe: jit={jit_enabled()}\n")
     // pre-i8mm host rail: DAS_JIT_ARM64_FORCE_FEATURES=i8mm + this gate jits/links the DLL
-    // without executing SMMLA (which would SIGILL here); ship .jitted_scripts to the i8mm box
+    // without executing SMMLA (which would SIGILL here); ship .cache/daslang to the i8mm box
     // and run there with the same env — the cache key matches, no linker needed on the target
     if (g_env_harness.smmla_probe_compile_only) {
         print("compile-only: DLL linked, execution skipped (pre-i8mm host)\n")

@@ -6,7 +6,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_load
 require dasllama/dasllama_bench
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // llama2c_dir
@@ -43,8 +43,7 @@ def test_pp_rows_capacity(t : T?) {
             return
         }
         var tr <- load_checkpoint(MODEL_PATH)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             t |> success(!pp_row_panics(tr, 16l, 8l, true), "a session that fits runs the warmup")
             t |> success(pp_row_panics(tr, 4l, 8l, true), "the warmup prefill checks the cap before it writes")
             t |> success(pp_row_panics(tr, 4l, 8l, false), "a timed rep checks the cap before it writes")

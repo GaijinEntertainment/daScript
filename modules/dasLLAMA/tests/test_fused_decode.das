@@ -9,7 +9,7 @@ require _model_tier
 require daslib/jobque_boost
 require daslib/fio
 require math
-require dasllama/dasllama_math  // setup_dasllama_jobque_ + target_chunk_work + fused knob
+require dasllama/dasllama_math  // with_dasllama_jobque + target_chunk_work + fused knob
 require dasllama/dasllama_env
 
 // Fused decode chains (team_parallel_stages: qkv→attn→wo and w1/w3→w2 as ONE dispatch each) vs
@@ -23,36 +23,10 @@ let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let N_STEPS = 24
 let FUSED_CTX = 64l   //! the GGUF sessions' context: N_STEPS positions and room; a CPU f32 K/V at a file's whole context runs to tens of GB (77 on the 262144-position Qwen3-4B)
 
-def private argmax_of(s : Session; vocab : int64) : int64 {
-    var best = 0l
-    for (i in range64(1l, vocab)) {
-        if (s.logits[i] > s.logits[best]) {
-            best = i
-        }
-    }
-    return best
-}
-
-def private greedy_ids(tr : Model; var s : Session; var ids : array<int64>; var logits : array<float>) {
-    ids |> reserve(N_STEPS)
-    var token = 1l   // BOS
-    var pos = 0l
-    for (_i in range(N_STEPS)) {
-        forward(tr, s, token, pos)
-        pos++
-        token = argmax_of(s, tr.config.vocab_size)
-        ids |> push(token)
-    }
-    logits := s.logits
-}
-
 [test]
 def test_fused_decode_bit_exact(t : T?) {
     t |> run("fused stage chains == per-op dispatches, ids + logits bit-exact (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -61,8 +35,7 @@ def test_fused_decode_bit_exact(t : T?) {
         let c = tr.config
         quantize_weights(tr)  // fused chains are Q8-only
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()   // team mode on — the fused gate requires it
+        with_dasllama_jobque() {   // team mode on — the fused gate requires it
             set_target_chunk_work(1l)
             var ids_std : array<int64>
             var ids_fused : array<int64>
@@ -70,11 +43,11 @@ def test_fused_decode_bit_exact(t : T?) {
             var lg_fused : array<float>
             set_fused_decode(false)
             var s1 <- make_run_state(c)
-            greedy_ids(tr, s1, ids_std, lg_std)
+            greedy_ids(tr, s1, N_STEPS, ids_std, lg_std)
             delete s1
             set_fused_decode(true)
             var s2 <- make_run_state(c)
-            greedy_ids(tr, s2, ids_fused, lg_fused)
+            greedy_ids(tr, s2, N_STEPS, ids_fused, lg_fused)
             delete s2
             var id_bad = 0
             for (i in range(N_STEPS)) {
@@ -100,6 +73,7 @@ def test_fused_decode_bit_exact(t : T?) {
     }
 }
 
+[cold_path]
 def private fused_vs_std_bit_exact(t : T?; tr : Model) {
     let c = tr.config
     var ids_std : array<int64>
@@ -108,11 +82,11 @@ def private fused_vs_std_bit_exact(t : T?; tr : Model) {
     var lg_fused : array<float>
     set_fused_decode(false)
     var s1 <- make_run_state(c)
-    greedy_ids(tr, s1, ids_std, lg_std)
+    greedy_ids(tr, s1, N_STEPS, ids_std, lg_std)
     delete s1
     set_fused_decode(true)
     var s2 <- make_run_state(c)
-    greedy_ids(tr, s2, ids_fused, lg_fused)
+    greedy_ids(tr, s2, N_STEPS, ids_fused, lg_fused)
     delete s2
     var id_bad = 0
     for (i in range(N_STEPS)) {
@@ -151,10 +125,7 @@ def private fused_vs_std_bit_exact(t : T?; tr : Model) {
 [test]
 def test_fused_flash_deep_ctx(t : T?) {
     t |> run("flash-sliced fused chain: per-layer witness + structural logit bound (needs SmolLM2-135M)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
@@ -162,8 +133,7 @@ def test_fused_flash_deep_ctx(t : T?) {
         }
         let prev_backend = active_kernel_backend()
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             pin_kernel_backend("portable")
             var tr <- load_gguf(path, QuantMode.q8)
@@ -218,10 +188,7 @@ def test_fused_flash_deep_ctx(t : T?) {
 [test]
 def test_fused_flash_deep_ctx_q8(t : T?) {
     t |> run("flash-sliced fused chain under q8_0 KV: per-layer witness + structural logit bound (needs SmolLM2-135M)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
@@ -229,8 +196,7 @@ def test_fused_flash_deep_ctx_q8(t : T?) {
         }
         let prev_backend = active_kernel_backend()
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             pin_kernel_backend("portable")
             var tr <- load_gguf(path, QuantMode.q8)
@@ -285,14 +251,10 @@ def test_fused_flash_deep_ctx_q8(t : T?) {
 [test]
 def test_fused_decode_pre_post_norm(t : T?) {
     t |> run("fused chains bit-exact on pre/post-norm arches (needs the gemma ggufs)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let prev_backend = active_kernel_backend()
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             pin_kernel_backend("portable")   // the rows core every host shares (see the attn-chain twin)
             for (name in ["gemma-3-1b-it-Q8_0.gguf", "gemma-2-2b-it-Q8_0.gguf", "gemma-4-E2B-it-Q8_0.gguf"]) {
@@ -324,13 +286,9 @@ def test_fused_decode_pre_post_norm(t : T?) {
 [test]
 def test_fused_decode_kquant(t : T?) {
     t |> run("fused chains bit-exact on native K-quant layers (needs the kq ggufs)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             for (name in ["Qwen3-4B-Instruct-2507-Q5_K_M.gguf", "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"]) {
                 let path = path_join(models_dir(), name)
@@ -359,10 +317,7 @@ def test_fused_decode_kquant(t : T?) {
 [test]
 def test_fused_decode_moe_chain(t : T?) {
     t |> run("fused MoE expert chain bit-exact on gpt-oss (needs the gguf + DASLLAMA_PARITY_FULL)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!g_env_test.parity_full) {
             t |> skip("large-tier fixture (set DASLLAMA_PARITY_FULL=1)")
             return
@@ -373,8 +328,7 @@ def test_fused_decode_moe_chain(t : T?) {
             return
         }
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             var tr <- load_gguf(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, FUSED_CTX)
@@ -392,10 +346,7 @@ def test_fused_decode_moe_chain(t : T?) {
 [test]
 def test_fused_decode_attn_chain(t : T?) {
     t |> run("fused attention chain bit-exact on SmolLM2-135M (needs the gguf)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
@@ -403,8 +354,7 @@ def test_fused_decode_attn_chain(t : T?) {
         }
         let prev_backend = active_kernel_backend()
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             if (kernel_backend_has_rows()) {   // auto backend pass (skipped where auto has no rows core)
                 var tr <- load_gguf(path, QuantMode.q8)

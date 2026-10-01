@@ -63,8 +63,7 @@ def private mint_matches_eager_bake(t : T?; minted : Model; path : string) {
 
 def private load_cached_q8(path : string) : Model {
     var m = Model()
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         m <- load_model_cached(path, QuantMode.q8)   // nolint:PERF030,LINT019 -- the move must sit inside with_job_que; the target is fresh-empty, so nothing drops
     }
     return <- m
@@ -75,14 +74,8 @@ def test_vulkan_dry_bake(tst : T?) {
     tst |> run("SmolLM2 q8: dry bake collects a role-stamped plan and the image round-trips") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!family_on(t, "llama") || !arm_on(t, "vulkan")) return
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-            if (!model_available(t, path)) {
-                return
-            }
+            return if (!jit_model_available(t, path))
             // the converter's probed-config path: needs the tier armed (run.das --suite image-vulkan)
             apply_box_profile_runtime()
             let probed = dlim_config_current("q8")
@@ -132,14 +125,8 @@ def test_vulkan_inline_bake(tst : T?) {
     tst |> run("SmolLM2 q8: a cold cached load under the armed tier mints the vulkan lane ALONE - the twin streamed off the gguf inside the save, no planar file - and the trimmed lane drops the planar families") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!family_on(t, "llama") || !arm_on(t, "vulkan")) return
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-            if (!model_available(t, path)) {
-                return
-            }
+            return if (!jit_model_available(t, path))
             apply_box_profile_runtime()
             let probed = dlim_config_current("q8")
             if (!probed.vulkan_on) {

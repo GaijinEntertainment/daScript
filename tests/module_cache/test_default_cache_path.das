@@ -19,7 +19,7 @@ def aot_host_skips(t : T?) : bool {
 }
 
 //! the child shares dastest's cwd (argv[0] is a cwd-relative interpreter path), so the default
-//! cache lands in this tree's own .jitted_scripts/module_cache - the test removes what it wrote.
+//! cache lands in this tree's own .cache/daslang/module_cache - the test removes what it wrote.
 //! Commands stay unquoted: a leading quote breaks Windows _popen (cmd /c quote stripping)
 def run(cmd : string; var output : string&) : int {
     return unsafe(popen_timeout(cmd, 300.0, $(f) {
@@ -36,7 +36,7 @@ def run_reported(t : T?; phase : string; cmd : string; var out : string&; marker
     return report_child(t, phase, rc, out, marker)
 }
 
-let CACHE_DIR = ".jitted_scripts/module_cache"
+let CACHE_DIR = ".cache/daslang/module_cache"
 
 //! the stems carry the binary kind: the dynamic and the static suite run this file at once in
 //! one tree, and each counts only the cache files its own children wrote
@@ -445,7 +445,7 @@ def test_default_cache_evicts_to_the_limit(t : T?) {
     //! the children run inside the temp directory, so the default cache they prune is their own
     let enter = win ? "cd /d {tmp} && set \"DAS_MODULE_CACHE_LIMIT=1\"&&" : "cd {tmp} && DAS_MODULE_CACHE_LIMIT=1"
     let base = "{enter} {get_full_file_name(das_exe())} -dasroot {get_das_root()}"
-    let cacheDir = path_join(tmp, ".jitted_scripts/module_cache")
+    let cacheDir = path_join(tmp, ".cache/daslang/module_cache")
     let sizeBallast = "require daslib/strings_boost\nrequire daslib/fio\nrequire daslib/ast\n"
     for (stem in ["ev_a", "ev_b", "ev_c", "ev_d"]) {
         fwrite(path_join(tmp, "{stem}.das"), "options gen2\n{sizeBallast}[export]\ndef main \{\n    print(\"MARK_{stem}\\n\")\n\}\n")

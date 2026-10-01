@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — engine + arch registrations
 require dasllama/dasllama_mtp_gemma   // the subject: the gemma-4 assistant drafter loader + CPU oracle
-require dasllama/dasllama_math   // setup_dasllama_jobque_ - the CPU prefill needs the engine's own worker pool
+require dasllama/dasllama_math   // with_dasllama_jobque - the CPU prefill needs the engine's own worker pool
 require dasllama/dasllama_image   // nolint:STYLE030,LINT019 — load_model_cached is called in the das_metal half
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // the subject's GPU half: attach + one draft step
 require ?das_metal dasllama/dasllama_metal_common   // finish_pending_step - land the pipelined decode before reading its carry
@@ -17,6 +17,7 @@ require daslib/jobque_boost
 require daslib/fio
 require math
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
+require _scratch_dir   // scratch_path: the refusal fixtures' files
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -34,40 +35,6 @@ let private TARGET_LAYERS = 30l
 // 32-byte tensor start
 def private q8_bytes(n : int64) : int64 => ((n / 32l) * 34l + 31l) / 32l * 32l
 
-var private _tmp_dir : string
-var private _tmp_dir_inited = false
-
-def private fixture_path(name : string) : string {
-    if (!_tmp_dir_inited) {
-        let r = create_temp_directory_result("dasllama_gdraft")
-        if (!(r is value)) {   // "" would resolve to the CWD and defeat the hermetic goal
-            panic("could not create a temp dir for the drafter refusal fixtures: {unsafe(r.error)}")
-        }
-        _tmp_dir = unsafe(r.value)
-        _tmp_dir_inited = true
-    }
-    return path_join(_tmp_dir, name)
-}
-
-[finalize]
-def cleanup_temp_dir {
-    if (_tmp_dir_inited && !empty(_tmp_dir)) {
-        rmdir_rec(_tmp_dir)
-    }
-}
-
-def private greedy_top(logits : array<float>; vocab : int64) : int64 {
-    var best = 0l
-    var bv = logits[0]
-    for (v in range64(vocab)) {
-        if (logits[v] > bv) {
-            bv = logits[v]
-            best = v
-        }
-    }
-    return best
-}
-
 // ===== refusals (no model file needed) =====
 
 [test]
@@ -76,14 +43,14 @@ def test_gemma_drafter_refusals(t : T?) {
         return
     }
     t |> run("a missing path refuses with a reason instead of panicking") @(t : T?) {
-        var dr <- load_gemma_drafter(path_join(fixture_path("."), "no-such-drafter.gguf"))
+        var dr <- load_gemma_drafter(path_join(scratch_path("."), "no-such-drafter.gguf"))
         t |> success(!dr.ok, "ok is false")
         t |> success(!empty(dr.why), "why names the refusal: '{dr.why}'")
         t |> success(empty(dr.blob) && empty(dr.fblob), "a refused load carries no weights")
         delete dr
     }
     t |> run("a file with no GGUF magic refuses with a reason") @(t : T?) {
-        let p = fixture_path("junk.gguf")
+        let p = scratch_path("junk.gguf")
         fopen(p, "wb") $(f) {
             if (f != null) {
                 fwrite(f, "not a gguf file at all, but long enough to pass the length gate")
@@ -96,7 +63,7 @@ def test_gemma_drafter_refusals(t : T?) {
     }
     t |> run("gemma_drafter_sidecar never recurses onto a head, and refuses an absent sibling") @(t : T?) {
         t |> equal(gemma_drafter_sidecar(path_join(models_dir(), "mtp-gemma-4-26B-A4B-it-Q8_0.gguf")), "")
-        t |> equal(gemma_drafter_sidecar(path_join(fixture_path("."), "no-such-model-Q4_K_M.gguf")), "")
+        t |> equal(gemma_drafter_sidecar(path_join(scratch_path("."), "no-such-model-Q4_K_M.gguf")), "")
     }
 }
 
@@ -184,15 +151,10 @@ def test_gemma_drafter_cpu_step(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-cpu")) {
         return
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         t |> run("one CPU drafter step over the target's live K/V produces a finite token and hidden") @(t : T?) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let target = path_join(models_dir(), TARGET_FILE)
-            if (!model_available(t, target)) return
+            return if (!jit_model_available(t, target))
             let side = gemma_drafter_sidecar(target)
             if (empty(side)) {
                 t |> skip("no mtp-* drafter sidecar beside {TARGET_FILE}")
@@ -218,7 +180,7 @@ def test_gemma_drafter_cpu_step(t : T?) {
             eval_(tr, s, head)
             forward(tr, s, prompt[npos - 1l], npos - 1l)
             let anchor = npos   // the seed's own position = n_past: it ropes there and sees keys [0, npos)
-            let tgt_next = greedy_top(s.logits, tr.config.vocab_size)
+            let tgt_next = argmax_of(s.logits, tr.config.vocab_size)
             var h : array<float>
             gemma_target_hidden(tr, s, true, h)
             t |> success(all_finite(h) && long_length(h) == tr.config.dim, "the target hidden is {long_length(h)} finite floats")
@@ -250,20 +212,15 @@ def test_gemma_drafter_cpu_step(t : T?) {
 // the GPU drafter step against the CPU oracle on the served twin: same seed token, same carried
 // hidden, same anchor, so the two must agree on the argmax and sit within GPU-vs-CPU f32 noise
 [test]
-def test_gemma_drafter_gpu_step(t : T?) {   // nolint:STYLE038 - one fixture: load, prefill, step, compare, teardown
+def test_gemma_drafter_gpu_step(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-gpu")) {
         return
     }
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             t |> run("the GPU drafter step matches the CPU oracle (argmax, logits, h_next)") @(t : T?) {
-                if (!jit_enabled()) {
-                    t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                    return
-                }
                 let target = path_join(models_dir(), TARGET_FILE)
-                if (!model_available(t, target)) return
+                return if (!jit_model_available(t, target))
                 let side = gemma_drafter_sidecar(target)
                 if (empty(side)) {
                     t |> skip("no mtp-* drafter sidecar beside {TARGET_FILE}")
@@ -297,7 +254,7 @@ def test_gemma_drafter_gpu_step(t : T?) {   // nolint:STYLE038 - one fixture: lo
                 finish_pending_step()
                 t |> equal(s.mtp_h_pos1, s.n_past, "the decode carried the post-norm hidden for the drafter")
                 let anchor = s.n_past
-                let seed = greedy_top(s.logits, trg.config.vocab_size)
+                let seed = argmax_of(s.logits, trg.config.vocab_size)
                 var h := s.mtp_h
                 var dg = 0l
                 var hg : array<float>

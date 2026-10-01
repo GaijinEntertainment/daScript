@@ -82,6 +82,23 @@ When a `[test]` function calls helper functions that need assertions:
 Avoid naming local variables `t` in helpers - it shadows the test object parameter.
 Use `ii`, `idx`, `val`, `sptr` etc. instead.
 
+## Files a test writes
+
+A test writes only under `test_temp_dir()` (`dastest/testing_boost`) - a directory private to
+this run of the test file, removed when the run ends - or under a directory it makes with
+`create_temp_directory` (`daslib/fio`) and removes itself; never under `get_das_root()` or the
+working directory: two runs of one test file can overlap on one tree, and a fixed path is shared
+between them.
+
+```das
+let out = path_join(test_temp_dir(), "out.png")
+```
+
+A `new_thread` body or a job gets its own `test_temp_dir()` (`dastest/README.md`). Call it in the
+test, not in the thread, and hand the path over as a field of a struct pushed with `push_archive`
+and read back with `pop_archive` on a `Stream?` (`daslib/jobque_boost`) - a captured string still
+points into the test context's heap.
+
 ## Common test options
 
 - `options no_unused_function_arguments = false` - suppress warnings for test params

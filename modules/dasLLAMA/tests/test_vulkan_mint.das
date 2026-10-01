@@ -31,8 +31,7 @@ let private MINT_STEPS = 12
 
 def private load_cached_q8(path : string) : Model {
     var m = Model()
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         m <- load_model_cached(path, QuantMode.q8)   // nolint:PERF030,LINT019 -- the move must sit inside with_job_que; the target is fresh-empty, so nothing drops
     }
     return <- m
@@ -41,8 +40,7 @@ def private load_cached_q8(path : string) : Model {
 //! `MINT_STEPS` greedy tokens over a counting prompt, and the CPU embed row of one token: what the two lanes must agree on
 [cold_path]
 def private mint_witness(tr : Model; var ids : array<int64>; var row : array<float>) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         var s <- create_session(tr, KVDtype.f16)
         var prompt <- [for (i in range64(int64(MINT_PROMPT))); 1000l + i * 7l]
         delete ids
@@ -75,10 +73,7 @@ def private restore_lane_levers(l : LaneLevers) {
 
 //! the box facts every cell here skips on; "" = the cell runs
 def private mint_skip(t : T?; path : string) : bool {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return true
-    }
+    return true if (!jit_only(t))
     if (!g_env_engine.image) {
         t |> skip("the image rail is off (DASLLAMA_IMAGE=0) - the lane mint has nothing to write")
         return true

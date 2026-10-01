@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama
 require dasllama/dasllama_vision_io
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require daslib/jobque_boost
 require daslib/fio
 require daslib/strings_boost
@@ -71,8 +71,7 @@ def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn stor
         tt |> equal(img.height, 480, "cats fixture height")
         var m <- load_model_(dec)
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var tower0_encodes = 0l   // nolint:LINT002,LINT019 — read in the apple static_if half; the linux flavor sees it unused
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 set_metal_tower(true)
@@ -169,8 +168,7 @@ def test_vision_chat_e2b(t : T?) {
         let img <- load_image_rgb(cats)
         var m <- load_model_(dec, QuantMode.q8)   // E2B serves q8 (its PLE table rides the q8 rail - the fp32 expand has no PLE arm)
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             // a carrier with no vision arm is refused at create, by name
             var no_arm_tripped = false
             try {
@@ -230,8 +228,7 @@ def test_vision_chat_e2b_nothink(t : T?) {
         let img <- load_image_rgb(cats)
         var m <- load_model_(dec, QuantMode.q8)   // the planar rail: no .dlim beside the model
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var emb <- load_vision_embedder(mm)
             var chat <- create_chat_(m, emb, "", 640l)
             set_thinking_(chat, false)
@@ -278,8 +275,7 @@ def test_vision_chat_gemma3(t : T?) {
         let img <- load_image_rgb(cats)
         var m <- load_model_(dec, QuantMode.q8)
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var emb <- load_vision_embedder(mm)
             tt |> equal(vision_family(emb), "gemma3v", "the gemma-3 mmproj sniffs as gemma3v")
             tt |> equal(vision_align(emb), 56l, "56 px per soft token (patch 14 x merge 4)")
@@ -326,8 +322,7 @@ def test_vision_chat_gemma3_12b(t : T?) {
         let img <- load_image_rgb(cats)
         var m <- load_model_(dec)   // the Q4_K_M file picks its serving mode like the gemma-4 12B turn
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var emb <- load_vision_embedder(mm)
             tt |> equal(vision_family(emb), "gemma3v", "the 12B mmproj sniffs as gemma3v")
             tt |> equal(vision_proj_dim(emb), 3840l, "projection width matches the 12B decoder")
@@ -370,8 +365,7 @@ def test_vision_chat_omni(t : T?) {
         tt |> success(m.config.rope_sections.x + m.config.rope_sections.y + m.config.rope_sections.z > 0,
             "the decoder carries rope.dimension_sections ({m.config.rope_sections})")
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var emb <- load_vision_embedder(mm)
             tt |> equal(vision_family(emb), "qwen3v", "the Omni mmproj sniffs as qwen3v")
             tt |> equal(vision_proj_dim(emb), 2048l, "projection width matches the Omni decoder")
@@ -421,8 +415,7 @@ def test_vision_chat_deepstack(t : T?) {   // nolint:STYLE038 — one sequential
         var m <- load_model_(dec, QuantMode.q8)
         tt |> equal(m.config.n_deepstack, 3l, "the decoder carries n_deepstack_layers")
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var emb <- load_vision_embedder(mm)
             tt |> equal(vision_family(emb), "qwen3v", "the dense mmproj sniffs as qwen3v")
             tt |> equal(vision_proj_dim(emb), 2560l, "projection width matches the 4B decoder")
@@ -507,8 +500,7 @@ def test_vision_chat_rows_seam(t : T?) {
         let img <- load_image_rgb(cats)
         var m <- load_model_(dec, QuantMode.q8)
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var params = SamplingParams()
             params.temp = 0.0
             var emb <- load_vision_embedder(mm)
@@ -587,8 +579,7 @@ def test_vision_chat_qwen25o(t : T?) {
         tt |> equal(m.config.rope_sections, int4(16, 24, 24, 0), "the qwen2vl decoder's sections")
         tt |> success(!m.config.mrope_interleaved, "qwen2vl ropes the sections as contiguous ranges")
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var emb <- load_vision_embedder(mm)
             tt |> equal(vision_family(emb), "qwen25v", "the dual-tower Omni mmproj sniffs as qwen25v")
             tt |> equal(vision_proj_dim(emb), 2048l, "projection width matches the 3B decoder")
@@ -658,8 +649,7 @@ def test_omni_showcase(t : T?) {
         let img <- load_image_rgb(cats)
         var m <- load_model_(dec, QuantMode.q8)
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var emb <- load_vision_embedder(mm)
             var chat <- create_chat_(m, emb, "", 96l)
             var params = SamplingParams()

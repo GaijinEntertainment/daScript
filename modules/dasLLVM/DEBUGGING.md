@@ -20,7 +20,7 @@ instrument anything, compile in anything, and emit any metadata we want.
     `LLVMGetDefaultTargetTriple()` - `host_jit_triple()` is "" on MSVC hosts, it only
     disambiguates mingw arches);
   - lld-link gets `/DEBUG` -> a real PDB lands beside the jitted DLL in
-    `.jitted_scripts/`, auto-discovered by cdb/WinDbg/VS via the embedded path;
+    `.cache/daslang/`, auto-discovered by cdb/WinDbg/VS via the embedded path;
   - the in-process crash handler (`src/hal/crash_handler.cpp`) resolves jitted frames
     through that PDB with **function name + .das file:line** - `SymFromAddr` +
     `SymGetLineFromAddr64` were always called, they were just starved of data.

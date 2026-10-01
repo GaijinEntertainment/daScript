@@ -13,7 +13,7 @@ def private allow_cpu_prefill_intent() {
 require daslib/jobque_boost
 require daslib/fio
 require daslib/rtti   // this_context().last_exception - the refused loads' text
-require dasllama/dasllama_math  // setup_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_math  // with_dasllama_jobque (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // the deltanet chain and decode-step route pins
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 
@@ -32,27 +32,11 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 
 let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit|; the two forms measure ~0.015 of it apart
 
-def private argmax_of(v : array<float>) : int64 {
-    var best = -1e30
-    var bi = 0l
-    for (i in range64(long_length(v))) {
-        if (v[i] > best) {
-            best = v[i]
-            bi = i
-        }
-    }
-    return bi
-}
-
 [test]
 def test_deltanet_chunked_prefill(t : T?) {
     t |> run("deltanet chunked prefill == recurrent (Qwen3.5-0.8B, multi-chunk)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         var tr <- load_gguf(path, QuantMode.q8)
         if (tr.config.seq_len > 2048l) {   // KV RAM cap, same as the parity fixtures
             tr.config.seq_len = 2048l
@@ -68,8 +52,7 @@ def test_deltanet_chunked_prefill(t : T?) {
         let prev_dnd_route = moe_gpu_dnd_route()
         set_moe_gpu_dn_route(false)
         set_moe_gpu_dnd_route(false)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             let n = 150l
             var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
 
@@ -137,13 +120,6 @@ let private YARN_LCPP_HEAD = " young boy named Leo. Leo was a very curious and i
 def private fold_angle(pos, rot, j : int64; theta, ff : float) : double
     => double(pos) * (1.0lf / pow(double(theta), double(2l * j) / double(rot))) / double(ff)
 
-//! a logits array with one element pushed off by `by` - the control that a bar must red
-def private poisoned(v : array<float>; by : float) : array<float> {
-    var out := v
-    out[0] += by
-    return <- out
-}
-
 //! one load's rope-scaling outcome - the rejections and the linear / none kinds, cheap at the config stage
 def private load_outcome(path : string; o : RopeScalingOverride) : string {
     set_rope_scaling_override(o)
@@ -160,8 +136,7 @@ def private load_outcome(path : string; o : RopeScalingOverride) : string {
 
 def private greedy_text(tr : Model; steps : int) : string {
     var out = ""
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         var s = make_run_state(tr.config)
         var prompt <- encode_(tr, YARN_PROMPT, true, false)
         var ids <- generate(tr, s, prompt, length(prompt) + steps)
@@ -178,8 +153,7 @@ def private step_logits(tr : Model; tabled : bool) : array<float> {
     var out : array<float>
     let prev = get_rope_table_mode()
     set_rope_table_mode(tabled)
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         var s = make_run_state(tr.config)
         var prompt <- encode_(tr, YARN_PROMPT, true, false)
         let n = long_length(prompt)
@@ -196,12 +170,8 @@ def private step_logits(tr : Model; tabled : bool) : array<float> {
 [test]
 def test_deltanet_yarn_override(t : T?) {
     t |> run("the YaRN override on the partial-rotary 0.8B: the fold lands in the rope row, both rope paths take it, the plain load stays llama.cpp's") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
-        if (!model_available(t, path)) return
+        return if (!jit_model_available(t, path))
         let prev = rope_scaling_override()
         set_rope_scaling_override(RopeScalingOverride())
         var plain <- load_model_(path, QuantMode.q8)   // the engine entry with the tokenizer; load_gguf leaves it out
@@ -239,7 +209,7 @@ def test_deltanet_yarn_override(t : T?) {
         let row_bar = 2.0e-3
         let worst = max(logits_maxdiff(ct, want_c), logits_maxdiff(st, want_s))
         t |> success(worst < row_bar, "the decode rope row folds the divisors and the magnitude (maxdiff {worst})")
-        var ct_poison <- poisoned(want_c, 0.01)
+        var ct_poison <- poisoned_copy(want_c, 0, 0.01)
         t |> success(logits_maxdiff(ct, ct_poison) >= row_bar, "the row bar reds a +0.01 poison on one expected element ({logits_maxdiff(ct, ct_poison)})")
         var yarn_tab <- step_logits(yarn, true)
         var yarn_direct <- step_logits(yarn, false)
@@ -250,7 +220,7 @@ def test_deltanet_yarn_override(t : T?) {
         let a_plain = argmax_of(plain_step)
         to_log(LOG_INFO, "yarn step: table argmax {a_tab} '{piece_(yarn, a_tab)}' ({yarn_tab[a_tab]}), direct argmax {a_dir} '{piece_(yarn, a_dir)}' ({yarn_direct[a_dir]}), plain argmax {a_plain} '{piece_(yarn, a_plain)}' ({plain_step[a_plain]}); paths maxdiff {paths_diff}, fold maxdiff {logits_maxdiff(yarn_tab, plain_step)}, bar {bar}\n")
         t |> success(paths_diff <= bar, "the table and the direct rope paths of the attention agree under the fold (maxdiff {paths_diff}, bar {bar})")
-        var step_poison <- poisoned(yarn_direct, 2.0 * bar)
+        var step_poison <- poisoned_copy(yarn_direct, 0, 2.0 * bar)
         t |> success(logits_maxdiff(yarn_tab, step_poison) > bar, "the bar reds a step one element off by twice the bar ({logits_maxdiff(yarn_tab, step_poison)})")
         let fold_diff = logits_maxdiff(yarn_tab, plain_step)
         let noise = 10.0 * max(paths_diff, 1.0e-3)   //! a fold that did nothing leaves the two loads apart by the paths' own rounding alone
@@ -321,10 +291,7 @@ def private counting_release(state_lo : uint64; state_hi : uint64) {
 [test]
 def test_deltanet_owner_release(t : T?) {
     t |> run("the session's deltanet owner token releases its own state range on reset, rollback and delete") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let prev = moe_gpu_dn_state_hooks()
         set_moe_gpu_dn_state_hooks(prev.flush, prev.inval, @@counting_release)
         g_release_calls = 0
@@ -353,10 +320,7 @@ def test_deltanet_owner_release(t : T?) {
 [test]
 def test_deltanet_state_sizing(t : T?) {
     t |> run("deltanet session state at 27B geometry clears max_unreserved_size") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let c = big_deltanet_config(4l)
         var s <- make_run_state(c)
         t |> equal(long_length(s.dn_state), 48l * 48l * 128l * 128l)

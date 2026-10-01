@@ -8,7 +8,7 @@ require ../benchmarks/lcpp_bench.das   // parity_check — the board pregate's v
 require ../performance/model_specs.das   // spec_by_file — the table rows the pregate binds
 require dasllama/dasllama_common       // get_kquant_native — the mode the kq arm must restore
 require dasllama/dasllama_load          // load_model_ — the slice cell loads its own carrier
-require dasllama/dasllama_math          // setup_dasllama_jobque_ — the slice cell's queue (engine-level, not re-exported)
+require dasllama/dasllama_math          // with_dasllama_jobque — the slice cell's queue (engine-level, not re-exported)
 require dasllama/dasllama_gpu_resident  // moe_gpu_resident_active — the slice cell needs the driver armed
 require ?vulkan dasllama/dasllama_vulkan_prefill   // g_pf_ffn_slice — the slice's A/B arm
 require ?vulkan dasllama/dasllama_vulkan_common    // g_cm2_splitk — both arms under one k order
@@ -25,10 +25,7 @@ require _model_tier                    // models_dir + model_available (presence
 [test]
 def test_parity_pregate_ids_form(t : T?) {
     t |> run("the pinned-ids fixture passes; one flipped id fails; no evidence refuses") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         var inscope spec <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
         let path = path_join(models_dir(), spec.file)
         if (!model_available(t, path)) return
@@ -48,17 +45,13 @@ def test_parity_pregate_ids_form(t : T?) {
 [test]
 def test_fixture_gate(t : T?) {
     t |> run("the timed run's fixture gate passes the table's fixture, refuses a wrong opening, stands aside without evidence") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         var inscope spec <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
         let path = path_join(models_dir(), spec.file)
         if (!model_available(t, path)) return
         allow_cpu_prefill()
         var m <- load_model_(path, spec.parity.quant)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             t |> success(fixture_gate_check(m, spec), "the table's own fixture reproduces on the served model")
             var inscope wrong <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
             for (i in range(length(wrong.parity.gen))) {
@@ -76,10 +69,7 @@ def test_fixture_gate(t : T?) {
 [test]
 def test_parity_pregate_text_form(t : T?) {
     t |> run("a text-form fixture encodes through the model's tokenizer") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         var inscope spec <- spec_by_file("gemma-4-E2B-it-Q8_0.gguf")
         let path = path_join(models_dir(), spec.file)
         if (!model_available(t, path)) return
@@ -91,10 +81,7 @@ def test_parity_pregate_text_form(t : T?) {
 [test]
 def test_parity_pregate_kq_native(t : T?) {
     t |> run("a kq_native fixture loads native K-quant planes and reproduces") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         var inscope spec <- spec_by_file("Qwen3-4B-Instruct-2507-Q4_K_M.gguf")
         let path = path_join(models_dir(), spec.file)
         if (!model_available(t, path)) return
@@ -114,10 +101,7 @@ def test_parity_pregate_kq_native(t : T?) {
 def test_parity_last_layer_slice(t : T?) {
     t |> run("the last layer's 32-row FFN slice reproduces the whole window's logits bit for bit") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
+            return if (!jit_only(t))
             var inscope spec <- spec_by_file("Llama-3.2-1B-Instruct-Q8_0.gguf")
             let path = path_join(models_dir(), spec.file)
             if (!model_available(t, path)) return
@@ -139,8 +123,7 @@ def test_parity_last_layer_slice(t : T?) {
             var served_slice = false
             let splitk_before = g_cm2_splitk
             g_cm2_splitk = 1l
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 g_pf_ffn_slice = false
                 var s0 <- make_run_state(t8.config, KVDtype.f16, KVDtype.f16)
                 forward_prefill(t8, s0, prompt, plen, 0l)

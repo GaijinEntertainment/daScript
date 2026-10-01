@@ -5,11 +5,9 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_tts_blocks
-require dasllama/dasllama_math   // setup_dasllama_jobque_
-require dasllama/dasllama_math_default   // dot_kq, the K-quant leaf per row
-require dasllama/dasllama_convert   // kq_transcode_superblock, quantize_q8_k_into_ptr
-require dasllama/dasllama_gemm_schema   // kq_qsb / kq_ssb by format id
-require _q4k_disk
+require dasllama/dasllama_math   // with_dasllama_jobque
+require _kq_fixtures   // the salted k4 planes and the leaf per row: the Q8_K rows and the disk-order dot
+require _compares   // check / check_count at the dot-envelope bar
 require daslib/jobque_boost
 require daslib/defer
 require daslib/rtti   // this_context().last_exception: a refusal read as text
@@ -28,13 +26,6 @@ let FLOOR = 1.0e-6
 let T_ROWS = 2048l
 let STYLE = 32l
 let KQ_REL = 2.0e-4   //! the K-quant lane against its own leaf: the repacked tile sums the superblocks' scale products in its own order (the disk-order arm is bit-exact)
-
-struct BlockCase {
-    name : string
-    max_ratio : float
-    max_abs : float
-    bad : int
-}
 
 def private rand_fill(var r : TtsRng; var a : array<float>; n : int64; scale : float) {
     a |> resize(n)
@@ -96,26 +87,26 @@ def private envelope_conv(c : TtsConv1d) : TtsConv1d {
     return <- e
 }
 
-def private score_at(name : string; got, want, env : array<float>; bias_abs, rel : float) : BlockCase {
-    var res = BlockCase(name = name)
-    for (g, w, e in got, want, env) {
-        let d = abs(g - w)
-        let bar = max(rel * (e + bias_abs), FLOOR)
-        res.max_abs = max(res.max_abs, d)
-        res.max_ratio = max(res.max_ratio, d / bar)
-        if (d > bar) {
-            res.bad++
-        }
-    }
-    return res
+//! the dot-envelope bar: `rel` of the element's envelope `env`, floored at FLOOR; its control moves the last expected element
+//! by twice the bar there, just past it
+def private envelope_bar(rel : float; env : array<float>) : Bar {
+    let at = length(env) - 1
+    return Bar(kind = BarKind.envelope, rel = rel, abs_floor = FLOOR, poison = 2.0 * max(FLOOR, rel * env[at]), poison_at = at)
 }
 
-def private score(name : string; got, want, env : array<float>; bias_abs : float) : BlockCase {
-    return score_at(name, got, want, env, bias_abs, REL)
+//! the envelope with the bias's largest magnitude added to every element: what the dot-envelope bar scales
+def private biased(env : array<float>; bias_abs : float) : array<float> => [for (e in env); e + bias_abs]
+
+//! a case's compare at the dot-envelope bar `rel` over `env` plus `bias_abs`, with the bar's poisoned-expectation control
+def private check_envelope(t : T?; name : string; got, want, env : array<float>; bias_abs : float; rel : float = REL) {
+    var inscope env_b <- biased(env, bias_abs)
+    check(t, "tts blocks {name}", got, want, envelope_bar(rel, env_b), FLAT_SHAPE, env_b)
 }
 
-def private conv_case(name : string; cin, cout, k, stride, pad, dil : int64; transposed : bool;
-                      t_in : int64 = T_ROWS; poison_tap : int64 = -1l) : BlockCase {
+//! a rows conv against its channel-major twin; `poison_tap` >= 0 zeroes that tap of the rows form first, and the case then
+//! asserts elements past the bar instead - the input-poison control
+def private conv_case(t : T?; name : string; cin, cout, k, stride, pad, dil : int64; transposed : bool;
+                      t_in : int64 = T_ROWS; poison_tap : int64 = -1l) {
     var r = TtsRng()
     rng_seed(r, 0x5eedul + uint64(k * 100l + dil))
     var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, dil, transposed, true)
@@ -141,14 +132,17 @@ def private conv_case(name : string; cin, cout, k, stride, pad, dil : int64; tra
     let t_out = conv1d_out_len(cr, t_in)
     var inscope got : array<float>
     transpose_tc_strided(y_rows, t_out, cout, cr.cout_s, got)
-    var bias_abs = 0.0
-    for (b in c0.b) {
-        bias_abs = max(bias_abs, abs(b))
+    if (poison_tap < 0l) {
+        check_envelope(t, name, got, want, env, logits_maxabs(c0.b))
+        return
     }
-    return score(name, got, want, env, bias_abs)
+    var inscope env_b <- biased(env, logits_maxabs(c0.b))
+    let bad = check_count(got, want, envelope_bar(REL, env_b), env_b)
+    to_log(LOG_INFO, "tts blocks POISON {name}: {bad} elements past the bar\n")
+    t |> success(bad > 0, "{name}: the poisoned tap must put elements past the bar, {bad} did")
 }
 
-def private snake_case() : BlockCase {
+def private snake_case(tc : T?) {
     var r = TtsRng()
     rng_seed(r, 77ul)
     let c = 64l
@@ -171,10 +165,10 @@ def private snake_case() : BlockCase {
     for (i in range64(c * t)) {
         env[i] = abs(x_ct[i]) + 4.0   // |x| + 1/alpha's reach, the loose bound sin^2/alpha never exceeds
     }
-    return score("snake", got, x_ct, env, 0.0)
+    check_envelope(tc, "snake", got, x_ct, env, 0.0)
 }
 
-def private adain_case(c : int64) : BlockCase {
+def private adain_case(tc : T?; c : int64) {
     var r = TtsRng()
     rng_seed(r, 91ul + uint64(c))
     let t = T_ROWS
@@ -203,10 +197,10 @@ def private adain_case(c : int64) : BlockCase {
     for (i in range64(c * t)) {
         env[i] = abs(x_ct[i]) + 8.0   // the normalized value's scale plus the affine's reach
     }
-    return score("adain c={c}", got, x_ct, env, 0.0)
+    check_envelope(tc, "adain c={c}", got, x_ct, env, 0.0)
 }
 
-def private pad_and_polar_case() : BlockCase {
+def private pad_and_polar_case(tc : T?) {
     var r = TtsRng()
     rng_seed(r, 5ul)
     let c = 16l
@@ -226,7 +220,7 @@ def private pad_and_polar_case() : BlockCase {
     for (i in range(length(want))) {
         env[i] = 0.0
     }
-    var res = score("pad_reflect_left", got, want, env, 0.0)
+    check_envelope(tc, "pad_reflect_left", got, want, env, 0.0)
     // polar: rows of stride 32 carrying 2 * 11 columns
     let bins = 11l
     var inscope p_ct : array<float>
@@ -252,16 +246,12 @@ def private pad_and_polar_case() : BlockCase {
     for (i in range64(bins * t)) {
         env2[i] = 0.0
     }
-    let pr = score("polar re", re2, re, env2, 0.0)
-    let pi = score("polar im", im2, im, env2, 0.0)
-    res.bad += pr.bad + pi.bad
-    res.max_ratio = max(res.max_ratio, max(pr.max_ratio, pi.max_ratio))
-    res.max_abs = max(res.max_abs, max(pr.max_abs, pi.max_abs))
-    return res
+    check_envelope(tc, "polar re", re2, re, env2, 0.0)
+    check_envelope(tc, "polar im", im2, im, env2, 0.0)
 }
 
 // linear_rows on the tiled path (wt minted) against the same layer on the batched dot form.
-def private linear_case(nin, nout : int64) : BlockCase {
+def private linear_case(tc : T?; nin, nout : int64) {
     var r = TtsRng()
     rng_seed(r, 0xabcul + uint64(nin))
     let t = T_ROWS
@@ -279,20 +269,13 @@ def private linear_case(nin, nout : int64) : BlockCase {
     linear_prepare(l)
     var inscope got : array<float>
     linear_rows(l, x, t, got)
-    var bias_abs = 0.0
-    for (b in l.b) {
-        bias_abs = max(bias_abs, abs(b))
-    }
-    var res <- score("linear {nin}x{nout}", got, want, env, bias_abs)
-    if (empty(l.wt)) {
-        res.bad += 1000000   // the tiled path never engaged
-    }
-    return res
+    check_envelope(tc, "linear {nin}x{nout}", got, want, env, logits_maxabs(l.b))
+    tc |> success(!empty(l.wt), "linear {nin}x{nout}: the tiled path engaged")
 }
 
 // the residual block's upsampling pool (depthwise transposed k3 s2) and the nearest copy of its
 // shortcut, rows against channel-major
-def private pool_and_nearest_case() : BlockCase {
+def private pool_and_nearest_case(tc : T?) {
     var r = TtsRng()
     rng_seed(r, 0x7001ul)
     let c = 64l
@@ -318,11 +301,7 @@ def private pool_and_nearest_case() : BlockCase {
     let t_out = conv1d_out_len(pool, t)
     var inscope got : array<float>
     transpose_tc(y_rows, t_out, c, got)
-    var bias_abs = 0.0
-    for (b in pool.b) {
-        bias_abs = max(bias_abs, abs(b))
-    }
-    var res = score("pool convT depthwise", got, want, env, bias_abs)
+    check_envelope(tc, "pool convT depthwise", got, want, env, logits_maxabs(pool.b))
     var inscope want2 : array<float>
     resize_nearest(x_ct, c, t, 2l, want2)
     var inscope y2 : array<float>
@@ -334,16 +313,12 @@ def private pool_and_nearest_case() : BlockCase {
     for (i in range(length(want2))) {
         env2[i] = 0.0
     }
-    let near = score("nearest x2", got2, want2, env2, 0.0)
-    res.bad += near.bad
-    res.max_ratio = max(res.max_ratio, near.max_ratio)
-    res.max_abs = max(res.max_abs, near.max_abs)
-    return res
+    check_envelope(tc, "nearest x2", got2, want2, env2, 0.0)
 }
 
 // a conv and an AdaIN padded from 66 to 96 input channels against the unpadded pair on the same
 // rows: the padded columns stay zero and the real ones agree exactly
-def private pad_case() : BlockCase {
+def private pad_case(tc : T?) {
     var r = TtsRng()
     rng_seed(r, 0x9adul)
     let cin = 66l
@@ -373,7 +348,7 @@ def private pad_case() : BlockCase {
     for (i in range(length(y))) {
         env[i] = 0.0
     }
-    var res = score("padded conv", yp, y, env, 0.0)
+    check_envelope(tc, "padded conv", yp, y, env, 0.0)
     var a = TtsAdaIn()
     a.fc.nin = STYLE
     a.fc.nout = 2l * cin
@@ -405,15 +380,12 @@ def private pad_case() : BlockCase {
     for (i in range64(t * cin)) {
         env2[i] = 0.0
     }
-    let ad = score("padded adain", got, xa, env2, 0.0)
-    res.bad += ad.bad + pad_nonzero
-    res.max_ratio = max(res.max_ratio, ad.max_ratio)
-    res.max_abs = max(res.max_abs, ad.max_abs)
-    return res
+    check_envelope(tc, "padded adain", got, xa, env2, 0.0)
+    tc |> equal(pad_nonzero, 0, "padded adain: nonzero padded columns")
 }
 
 // attention_rows against a scalar per-head reference, at a token count off the 16-key pad.
-def private attention_case() : BlockCase {
+def private attention_case(tc : T?) {
     var r = TtsRng()
     rng_seed(r, 0x47ul)
     let t = 37l
@@ -464,13 +436,13 @@ def private attention_case() : BlockCase {
     }
     var inscope got : array<float>
     attention_rows(q, k, v, t, hidden, heads, got)
-    return score("attention", got, want, env, 0.0)
+    check_envelope(tc, "attention", got, want, env, 0.0)
 }
 
 let Q8_REL = 2.0e-2   // Q8_0 weights and per-32 activations: a few thousandths of the envelope, gated at 2%
 
 // The q8 rows lane of a conv against the channel-major f32 reference at the q8 bar.
-def private conv_case_q8(name : string; cin, cout, k, pad, dil : int64) : BlockCase {
+def private conv_case_q8(t : T?; name : string; cin, cout, k, pad, dil : int64) {
     var r = TtsRng()
     rng_seed(r, 0x9eedul + uint64(k * 100l + dil))
     var inscope c0 <- make_conv(r, cin, cout, k, 1l, pad, dil, false, true)
@@ -492,19 +464,12 @@ def private conv_case_q8(name : string; cin, cout, k, pad, dil : int64) : BlockC
     let t_out = conv1d_out_len(cq, t_in)
     var inscope got : array<float>
     transpose_tc_strided(y_rows, t_out, cout, cq.cout_s, got)
-    var bias_abs = 0.0
-    for (b in c0.b) {
-        bias_abs = max(bias_abs, abs(b))
-    }
-    var res = score_at(name, got, want, env, bias_abs, Q8_REL)
-    if (!cq.q8) {
-        res.bad += 1000000   // the q8 lane never minted
-    }
-    return res
+    check_envelope(t, name, got, want, env, logits_maxabs(c0.b), Q8_REL)
+    t |> success(cq.q8, "{name}: the q8 lane minted")
 }
 
 // linear_rows on the q8 lane against the dot form at the q8 bar.
-def private linear_case_q8(nin, nout : int64) : BlockCase {
+def private linear_case_q8(tc : T?; nin, nout : int64) {
     var r = TtsRng()
     rng_seed(r, 0xdbcul + uint64(nin))
     let t = T_ROWS
@@ -523,107 +488,63 @@ def private linear_case_q8(nin, nout : int64) : BlockCase {
     linear_prepare(lq, true, true, select_matmul_backend_for_load_())
     var inscope got : array<float>
     linear_rows(lq, x, t, got)
-    var bias_abs = 0.0
-    for (b in l.b) {
-        bias_abs = max(bias_abs, abs(b))
-    }
-    var res = score_at("linear q8 {nin}x{nout}", got, want, env, bias_abs, Q8_REL)
-    if (!lq.q8) {
-        res.bad += 1000000
-    }
-    return res
+    check_envelope(tc, "linear q8 {nin}x{nout}", got, want, env, logits_maxabs(l.b), Q8_REL)
+    tc |> success(lq.q8, "linear q8 {nin}x{nout}: the q8 lane minted")
 }
 
 // ===== the K-quant lane against the leaf per row =====
 
-//! [rows][n] of Q4_K planes as the GGUF transcoder writes them: the one superblock everywhere, its nibbles salted per row
-def private build_q4k_planes(var kq : array<uint8>; var ks : array<uint8>; rows, n : int64; seed : uint) {
-    let nsb = n / 256l
-    let qsb = kq_qsb(4)
-    let ssb = kq_ssb(4)
-    var inscope blk <- q4k_disk_superblock()
-    kq |> resize(rows * nsb * qsb)
-    ks |> resize(rows * nsb * ssb)
-    for (r in range64(rows)) {
-        for (s in range64(nsb)) {
-            kq_transcode_superblock(KqFmt.k4, blk, 0l, kq, (r * nsb + s) * qsb, ks, (r * nsb + s) * ssb)
-        }
-        var st = seed + uint(r) * 0x85EBCA6Bu
-        for (i in range64(nsb * qsb)) {
-            st = st * 1664525u + 1013904223u
-            kq[r * nsb * qsb + i] = uint8(uint(kq[r * nsb * qsb + i]) ^ (st >> 16u))
-        }
-    }
-}
-
 //! the leaf the lane applies per row: the row requantized to the Q8_K form, the k4 dot_kq over the disk-order planes, then the bias
 def private kq_leaf_rows(kq, ks : array<uint8>; x : array<float>; t, nin, nout : int64; b : array<float>; var want : array<float>) {
     let nsb = nin / 256l
-    let qsb = kq_qsb(4)
-    let ssb = kq_ssb(4)
-    var xq : array<int8>
-    var xs : array<float>
-    var xbs : array<int>
-    xq |> resize(nin)
-    xs |> resize(nsb)
-    xbs |> resize(nin / 16l)
+    var inscope a <- q8k_acts(x, t, nin)
     want |> resize(t * nout)
-    unsafe {
-        for (p in range64(t)) {
-            quantize_q8_k_into_ptr(addr<float const?>(x[p * nin]), nin, addr(xq[0]), addr(xs[0]), addr(xbs[0]), 0l, 0l, 0l)
-            for (o in range64(nout)) {
-                let d = dot_kq(addr<uint8 const?>(kq[o * nsb * qsb]), addr<uint8 const?>(ks[o * nsb * ssb]),
-                    addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), nin, KqTag_k4())
-                want[p * nout + o] = d + b[o]
-            }
+    for (p in range64(t)) {
+        for (o in range64(nout)) {
+            want[p * nout + o] = kq_row_dot(4, kq, ks, o, nsb, a.xq, a.xs, a.xbs, p * nin, p * nsb, p * (nin / 16l), nin) + b[o]
         }
     }
 }
 
 // linear_rows (the batched kq GEMM where the backend carries the tile, the GEMV per row otherwise)
 // and linear_rows_decode (the GEMV) on the K-quant lane against the leaf per row; `repack` false
-// holds the planes in disk order - the portable arm every tier without kq kernels runs; `poison`
-// adds a fixed value to one expected element, which the bar must see
-def private linear_case_kq(nin, nout : int64; decode, repack : bool; poison : bool = false) : BlockCase {
+// holds the planes in disk order - the portable arm every tier without kq kernels runs; the
+// control adds a fixed value to the middle expected element, which the bar must see
+def private linear_case_kq(t : T?; nin, nout : int64; decode, repack : bool) {
     var r = TtsRng()
     rng_seed(r, 0xebcul + uint64(nin))
-    let t = decode ? 1l : T_ROWS
+    let nt = decode ? 1l : T_ROWS
     var l = TtsLinear(nin = nin, nout = nout)
     rand_fill(r, l.b, nout, 0.5)
     var kq : array<uint8>
     var ks : array<uint8>
-    build_q4k_planes(kq, ks, nout, nin, 0x51ED270Bu)
+    build_kq_region(4, kq, ks, nout, nin, 0x51ED270Bu)
     var inscope x : array<float>
-    rand_fill(r, x, t * nin, 2.0)
+    rand_fill(r, x, nt * nin, 2.0)
     var inscope want : array<float>
-    kq_leaf_rows(kq, ks, x, t, nin, nout, l.b, want)
-    if (poison) {
-        want[length(want) / 2] += 4.0   // a fixed value: the outputs run to a few thousand, so a quarter would hide inside the relative bar
-    }
+    kq_leaf_rows(kq, ks, x, nt, nin, nout, l.b, want)
     linear_take_kq(l, 4, kq, ks, repack)   // the planes move into the layer
     var inscope got : array<float>
     if (decode) {
         linear_rows_decode(l, x, got)
     } else {
-        linear_rows(l, x, t, got)
+        linear_rows(l, x, nt, got)
     }
     var inscope env : array<float>
-    env |> resize(t * nout)
-    for (i in range64(t * nout)) {
+    env |> resize(nt * nout)
+    for (i in range64(nt * nout)) {
         env[i] = abs(want[i]) + 1.0
     }
-    let name = "linear kq {nin}x{nout} {decode ? "decode" : "rows"}{repack ? "" : " disk-order"}{poison ? " poisoned" : ""}"
-    var res = score_at(name, got, want, env, 0.0, KQ_REL)
-    if (l.kq_fmt != 4 || !empty(l.w) || (repack && kernel_backend_has_kq() != l.kq_repacked)) {
-        res.bad += 1000000   // the kq lane never engaged, or the repack did not follow the backend
-    }
-    return res
+    let name = "linear kq {nin}x{nout} {decode ? "decode" : "rows"}{repack ? "" : " disk-order"}"
+    let engaged = l.kq_fmt == 4 && empty(l.w) && !(repack && kernel_backend_has_kq() != l.kq_repacked)
+    //! the control's value is fixed: the outputs run to a few thousand, so a quarter would hide inside the relative bar
+    let bar = Bar(kind = BarKind.envelope, rel = KQ_REL, abs_floor = FLOOR, poison = 4.0, poison_at = length(want) / 2)
+    check(t, "tts blocks {name}", got, want, bar, Shape(row_width = int(nout)), env)
+    t |> success(engaged, "{name}: the kq lane engaged, and the repack followed the backend")
 }
 
-// a width the 256-superblock does not divide is refused by name: a case with one bad element
-// when the panic text is not the layer's, none when it is
-def private kq_width_refusal() : BlockCase {
-    var res = BlockCase(name = "linear kq width refusal")
+//! a width the 256-superblock does not divide is refused by name
+def private kq_width_refusal(t : T?) {
     var why = "no panic"
     try {
         var l = TtsLinear(nin = 100l, nout = 8l)
@@ -633,16 +554,12 @@ def private kq_width_refusal() : BlockCase {
     } recover {
         why = this_context().last_exception |> rtrim
     }
-    if (why |> find("needs nin on 256") < 0) {
-        res.bad = 1
-        res.name = "linear kq width refusal - got '{why}'"
-    }
-    return res
+    t |> success(why |> find("needs nin on 256") >= 0, "linear kq width refusal: the layer's panic, got '{why}'")
 }
 
 // 66 input channels padded to 96 quantize per 32, so the padded conv reaches the q8 lane: the
 // padded rows form against the unpadded channel-major reference at the q8 bar.
-def private pad_case_q8() : BlockCase {
+def private pad_case_q8(tc : T?) {
     var r = TtsRng()
     rng_seed(r, 0x9ad8ul)
     let cin = 66l
@@ -676,20 +593,13 @@ def private pad_case_q8() : BlockCase {
     let t_out = conv1d_out_len(cp, t)
     var inscope got : array<float>
     transpose_tc_strided(y_rows, t_out, cout, cp.cout_s, got)
-    var bias_abs = 0.0
-    for (b in c0.b) {
-        bias_abs = max(bias_abs, abs(b))
-    }
-    var res = score_at("padded conv q8", got, want, env, bias_abs, Q8_REL)
-    if (!cp.q8) {
-        res.bad += 1000000   // the padded width never reached the q8 lane
-    }
-    return res
+    check_envelope(tc, "padded conv q8", got, want, env, logits_maxabs(c0.b), Q8_REL)
+    tc |> success(cp.q8, "padded conv q8: the padded width reached the q8 lane")
 }
 
 // the residual branch's arm: adain_rows_into writing a copy must land exactly where adain_rows
 // lands in place
-def private adain_into_case(c : int64) : BlockCase {
+def private adain_into_case(tc : T?; c : int64) {
     var r = TtsRng()
     rng_seed(r, 0xa17ul + uint64(c))
     let t = T_ROWS
@@ -708,18 +618,7 @@ def private adain_into_case(c : int64) : BlockCase {
     adain_rows(a, inplace, t, c, style, 1.0e-5)
     var inscope dst : array<float>
     adain_rows_into(a, src, dst, t, c, style, 1.0e-5)
-    var res = BlockCase(name = "adain_rows_into c={c}")
-    if (length(dst) != length(inplace)) {
-        res.bad += 1000000
-        return res
-    }
-    for (x, y in dst, inplace) {
-        res.max_abs = max(res.max_abs, abs(x - y))
-        if (x != y) {
-            res.bad++
-        }
-    }
-    return res
+    check_exact(tc, "tts blocks adain_rows_into c={c}", dst, inplace)
 }
 
 //! one `layernorm_rows_into` arm: `off` elements of the copy apart from `layernorm_rows` in place, and whether the source kept its bits
@@ -761,7 +660,7 @@ def private layernorm_into_case(c : int64; poison_at : int64 = -1l) : LnIntoCase
 }
 
 // layernorm_rows against layernorm_channels, the same affine on both
-def private layernorm_case() : BlockCase {
+def private layernorm_case(tc : T?) {
     var r = TtsRng()
     rng_seed(r, 0x1a1ul)
     let c = 64l
@@ -782,11 +681,11 @@ def private layernorm_case() : BlockCase {
     for (i in range64(c * t)) {
         env[i] = abs(x_ct[i]) + 4.0   // the normalized value's scale plus the affine's reach
     }
-    return score("layernorm_rows", got, x_ct, env, 0.0)
+    check_envelope(tc, "layernorm_rows", got, x_ct, env, 0.0)
 }
 
 // ada_layernorm_rows against layernorm_channels plus the fc(style) affine applied per channel
-def private ada_layernorm_case() : BlockCase {
+def private ada_layernorm_case(tc : T?) {
     var r = TtsRng()
     rng_seed(r, 0x1a2ul)
     let c = 64l
@@ -822,11 +721,11 @@ def private ada_layernorm_case() : BlockCase {
     for (i in range64(c * t)) {
         env[i] = abs(x_ct[i]) + 4.0
     }
-    return score("ada_layernorm_rows", got, x_ct, env, 0.0)
+    check_envelope(tc, "ada_layernorm_rows", got, x_ct, env, 0.0)
 }
 
 // align_expand_rows against align_expand_channels: both write [C][F], so they agree exactly
-def private align_expand_case() : BlockCase {
+def private align_expand_case(tc : T?) {
     var r = TtsRng()
     rng_seed(r, 0x1a3ul)
     let c = 64l
@@ -843,15 +742,15 @@ def private align_expand_case() : BlockCase {
     var inscope want : array<float>
     var inscope got : array<float>
     let frames = align_expand_channels(x_ct, c, t, dur, want)
-    if (align_expand_rows(x_rows, t, c, dur, got) != frames) {
-        return BlockCase(name = "align_expand_rows", bad = 1000000)
-    }
+    let got_frames = align_expand_rows(x_rows, t, c, dur, got)
+    tc |> equal(got_frames, frames, "align_expand_rows: the rows form's frame count")
+    return if (got_frames != frames)
     var inscope env : array<float>
     env |> resize(c * frames)
     for (v in env) {
         v = 0.0
     }
-    return score("align_expand_rows", got, want, env, 0.0)
+    check_envelope(tc, "align_expand_rows", got, want, env, 0.0)
 }
 
 // ===== split invariance: one dispatch lane against as many as the box gives =====
@@ -1026,78 +925,65 @@ def private split_linear_case(nin, nout : int64; axis : SplitAxis) : SplitCase {
     return split_diff("linear_rows {nin}x{nout} @ {axis_name(axis)}", one, many)
 }
 
-def private report(t : T?; r : BlockCase) {
-    to_log(LOG_INFO, "tts blocks {r.name}: max |rows - ref| {r.max_abs}, worst ratio to the bar {r.max_ratio}, over the bar {r.bad}\n")
-    t |> equal(r.bad, 0, "{r.name}: elements past the dot-envelope bar")
-}
-
-// the must-red half: a poisoned kernel has to EXCEED the bar, or the bar proves nothing
-def private report_poison(t : T?; r : BlockCase) {
-    to_log(LOG_INFO, "tts blocks POISON {r.name}: max |rows - ref| {r.max_abs}, worst ratio to the bar {r.max_ratio}, over the bar {r.bad}\n")
-    t |> success(r.bad > 0, "{r.name}: the poisoned tap must put elements past the bar, {r.bad} did")
-}
-
 def private report_split(t : T?; r : SplitCase) {
     t |> equal(r.diffs, 0, "{r.name}: elements differing between one dispatch lane and many")
 }
 
 [test]
 def test_rows_convs(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         t |> run("forward convs at the generator's taps") @(t : T?) {
-            report(t, conv_case("conv k3 d1", 64l, 64l, 3l, 1l, 1l, 1l, false))
-            report(t, conv_case("conv k7 d3", 64l, 64l, 7l, 1l, 9l, 3l, false))
-            report(t, conv_case("conv k11 d5", 64l, 64l, 11l, 1l, 25l, 5l, false))
-            report(t, conv_case("conv k7 wide-in", 128l, 64l, 7l, 1l, 3l, 1l, false))
+            conv_case(t, "conv k3 d1", 64l, 64l, 3l, 1l, 1l, 1l, false)
+            conv_case(t, "conv k7 d3", 64l, 64l, 7l, 1l, 9l, 3l, false)
+            conv_case(t, "conv k11 d5", 64l, 64l, 11l, 1l, 25l, 5l, false)
+            conv_case(t, "conv k7 wide-in", 128l, 64l, 7l, 1l, 3l, 1l, false)
         }
         t |> run("the padded served width (conv_post's 22 columns)") @(t : T?) {
-            report(t, conv_case("conv_post k7 cout22", 64l, 22l, 7l, 1l, 3l, 1l, false))
+            conv_case(t, "conv_post k7 cout22", 64l, 22l, 7l, 1l, 3l, 1l, false)
         }
         t |> run("the strided noise convs over stacked tap rows") @(t : T?) {
-            report(t, conv_case("noise conv k20 s10", 22l, 128l, 20l, 10l, 5l, 1l, false))
-            report(t, conv_case("noise conv k12 s6", 22l, 64l, 12l, 6l, 3l, 1l, false))
+            conv_case(t, "noise conv k20 s10", 22l, 128l, 20l, 10l, 5l, 1l, false)
+            conv_case(t, "noise conv k12 s6", 22l, 64l, 12l, 6l, 3l, 1l, false)
             // k*cin*4 bytes x t_out past the 4 MB stack budget: the chunk loop runs more than once
-            report(t, conv_case("noise conv k20 s10 wide-in", 256l, 64l, 20l, 10l, 5l, 1l, false, 4l * T_ROWS))
+            conv_case(t, "noise conv k20 s10 wide-in", 256l, 64l, 20l, 10l, 5l, 1l, false, 4l * T_ROWS)
         }
         t |> run("transposed upsamplers") @(t : T?) {
-            report(t, conv_case("convT k20 s10", 64l, 32l, 20l, 10l, 5l, 1l, true))
-            report(t, conv_case("convT k12 s6", 64l, 32l, 12l, 6l, 3l, 1l, true))
+            conv_case(t, "convT k20 s10", 64l, 32l, 20l, 10l, 5l, 1l, true)
+            conv_case(t, "convT k12 s6", 64l, 32l, 12l, 6l, 3l, 1l, true)
         }
         t |> run("linear_rows on the tile") @(t : T?) {
-            report(t, linear_case(96l, 64l))
-            report(t, linear_case(768l, 3072l))
+            linear_case(t, 96l, 64l)
+            linear_case(t, 768l, 3072l)
         }
         t |> run("attention_rows against the scalar heads") @(t : T?) {
-            report(t, attention_case())
+            attention_case(t)
         }
         t |> run("the q8 lane against the f32 reference") @(t : T?) {
-            report(t, conv_case_q8("conv q8 k3 d1", 128l, 128l, 3l, 1l, 1l))
-            report(t, conv_case_q8("conv q8 k7 d3", 128l, 128l, 7l, 9l, 3l))
-            report(t, conv_case_q8("conv q8 k11 d5", 256l, 256l, 11l, 25l, 5l))
-            report(t, linear_case_q8(768l, 768l))
+            conv_case_q8(t, "conv q8 k3 d1", 128l, 128l, 3l, 1l, 1l)
+            conv_case_q8(t, "conv q8 k7 d3", 128l, 128l, 7l, 9l, 3l)
+            conv_case_q8(t, "conv q8 k11 d5", 256l, 256l, 11l, 25l, 5l)
+            linear_case_q8(t, 768l, 768l)
         }
         t |> run("the K-quant lane against the leaf per row - both arms, and a width off the float4 bias") @(t : T?) {
-            report(t, linear_case_kq(512l, 96l, false, true))
-            report(t, linear_case_kq(768l, 64l, true, true))
-            report(t, linear_case_kq(512l, 96l, false, false))
-            report(t, linear_case_kq(768l, 64l, true, false))
-            report(t, linear_case_kq(256l, 6l, true, true))   // nout off 4: the bias tail past the last float4
-            report_poison(t, linear_case_kq(512l, 96l, false, true, true))
-            report(t, kq_width_refusal())
+            linear_case_kq(t, 512l, 96l, false, true)
+            linear_case_kq(t, 768l, 64l, true, true)
+            linear_case_kq(t, 512l, 96l, false, false)
+            linear_case_kq(t, 768l, 64l, true, false)
+            linear_case_kq(t, 256l, 6l, true, true)   // nout off 4: the bias tail past the last float4
+            kq_width_refusal(t)
         }
         t |> run("snake, adain, pad, polar") @(t : T?) {
-            report(t, snake_case())
-            report(t, adain_case(64l))
-            report(t, adain_case(66l))   // the decoder's concat widths sit off the lane
-            report(t, adain_into_case(64l))
-            report(t, adain_into_case(66l))
-            report(t, pad_and_polar_case())
+            snake_case(t)
+            adain_case(t, 64l)
+            adain_case(t, 66l)   // the decoder's concat widths sit off the lane
+            adain_into_case(t, 64l)
+            adain_into_case(t, 66l)
+            pad_and_polar_case(t)
         }
         t |> run("the norms and the duration expansion against their channel-major twins") @(t : T?) {
-            report(t, layernorm_case())
-            report(t, ada_layernorm_case())
-            report(t, align_expand_case())
+            layernorm_case(t)
+            ada_layernorm_case(t)
+            align_expand_case(t)
         }
         t |> run("layernorm_rows_into at 64 and 66 channels: bit for bit layernorm_rows in place on a copy, the source untouched") @(t : T?) {
             for (c in fixed_array(64l, 66l)) {
@@ -1110,15 +996,15 @@ def test_rows_convs(t : T?) {
             t |> success(poisoned.off >= 64, "the control: one moved source element moves its row of the copy off the in-place rows ({poisoned.off} elements)")
         }
         t |> run("the residual block's pool and nearest shortcut") @(t : T?) {
-            report(t, pool_and_nearest_case())
+            pool_and_nearest_case(t)
         }
         t |> run("an input width padded to the q8 lane") @(t : T?) {
-            report(t, pad_case())
-            report(t, pad_case_q8())
+            pad_case(t)
+            pad_case_q8(t)
         }
         t |> run("the dot-envelope bar's must-red control") @(t : T?) {
-            report_poison(t, conv_case("conv k3 d1 tap0 zeroed", 64l, 64l, 3l, 1l, 1l, 1l, false, T_ROWS, 0l))
-            report_poison(t, conv_case("conv k7 d3 tap3 zeroed", 64l, 64l, 7l, 1l, 9l, 3l, false, T_ROWS, 3l))
+            conv_case(t, "conv k3 d1 tap0 zeroed", 64l, 64l, 3l, 1l, 1l, 1l, false, T_ROWS, 0l)
+            conv_case(t, "conv k7 d3 tap3 zeroed", 64l, 64l, 7l, 1l, 9l, 3l, false, T_ROWS, 3l)
         }
     }
 }
@@ -1171,8 +1057,7 @@ def test_conv1d_dims_of(t : T?) {
 // the only axis that reaches the AdaIN column stats and the bare lanes_for_work sites.
 [test]
 def test_rows_split_invariance(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         split_arms(t, SplitAxis.lane_cap)
         split_arms(t, SplitAxis.worker_limit)
     }
@@ -1195,46 +1080,24 @@ def private catt_fixture(var r : TtsRng; n, t : int64; var kc : TtsKvCache; var 
 }
 
 // the rows form against the double-precision reference over the same cache: an absolute bar,
-// since the softmax bounds every output by the values' magnitude
-def private catt_case(name : string; n, t, context : int64; seed : uint64) : BlockCase {
+// since the softmax bounds every output by the values' magnitude; the bar's control moves the
+// reference by twice the bar on one element
+def private catt_case(t : T?; name : string; n, nt, context : int64; seed : uint64) {
     var r = TtsRng()
     rng_seed(r, seed)
     var inscope kc = TtsKvCache()
     var inscope q : array<float>
-    catt_fixture(r, n, t, kc, q)
+    catt_fixture(r, n, nt, kc, q)
     var inscope want : array<float>
     var inscope got : array<float>
-    attention_causal_ref(q, t, CATT_HIDDEN, context, kc, want)
-    attention_causal_rows(q, t, CATT_HIDDEN, context, kc, got)
-    var inscope env : array<float>
-    env |> resize(length(want))
-    for (e in env) {
-        e = 1.0
-    }
-    return score_at(name, got, want, env, 0.0, CATT_BAR)
+    attention_causal_ref(q, nt, CATT_HIDDEN, context, kc, want)
+    attention_causal_rows(q, nt, CATT_HIDDEN, context, kc, got)
+    var inscope env <- plane_of(length(want), 1.0)
+    let bar = Bar(kind = BarKind.envelope, rel = CATT_BAR, abs_floor = FLOOR, poison = 2.0 * CATT_BAR, poison_at = 7)
+    check(t, "causal attention {name}", got, want, bar, Shape(row_width = int(CATT_HIDDEN)), env)
 }
 
 let CATT_BAR = 1.0e-5
-
-// the control of the causal-attention bar: the reference moved by twice the bar on one element
-def private catt_poison_case(name : string; seed : uint64) : BlockCase {
-    var r = TtsRng()
-    rng_seed(r, seed)
-    var inscope kc = TtsKvCache()
-    var inscope q : array<float>
-    catt_fixture(r, 40l, 40l, kc, q)
-    var inscope want : array<float>
-    var inscope got : array<float>
-    attention_causal_ref(q, 40l, CATT_HIDDEN, 0l, kc, want)
-    attention_causal_rows(q, 40l, CATT_HIDDEN, 0l, kc, got)
-    want[7] += 2.0 * CATT_BAR
-    var inscope env : array<float>
-    env |> resize(length(want))
-    for (e in env) {
-        e = 1.0
-    }
-    return score_at(name, got, want, env, 0.0, CATT_BAR)
-}
 
 // the same fixture under a pinned split leg: the rows form must not move with the lanes
 def private catt_split_case(name : string; n, t : int64; axis : SplitAxis) : SplitCase {
@@ -1256,16 +1119,15 @@ def private catt_split_case(name : string; n, t : int64; axis : SplitAxis) : Spl
 
 [test]
 def test_causal_attention(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
-        for (c in [catt_case("prompt 40 of 40, full", 40l, 40l, 0l, 11ul), catt_case("decode step at 41", 41l, 1l, 0l, 12ul),
-                   catt_case("prompt 300 of 300, window 250", 300l, 300l, 250l, 13ul), catt_case("decode at 301, window 250", 301l, 1l, 250l, 14ul),
-                   catt_case("17 new rows over 90, window 64", 90l, 17l, 64l, 15ul),
-                   catt_case("prompt 700 of 700, window 250: three query blocks", 700l, 700l, 250l, 17ul),
-                   catt_case("prompt 600 of 600, full: the window is the whole prefix", 600l, 600l, 0l, 18ul),
-                   catt_case("300 new rows over 900, window 100", 900l, 300l, 100l, 19ul)]) {
-            t |> success(c.bad == 0, "{c.name}: {c.bad} over the bar, max |diff| {c.max_abs}")
-        }
+    with_dasllama_jobque() {
+        catt_case(t, "prompt 40 of 40, full", 40l, 40l, 0l, 11ul)
+        catt_case(t, "decode step at 41", 41l, 1l, 0l, 12ul)
+        catt_case(t, "prompt 300 of 300, window 250", 300l, 300l, 250l, 13ul)
+        catt_case(t, "decode at 301, window 250", 301l, 1l, 250l, 14ul)
+        catt_case(t, "17 new rows over 90, window 64", 90l, 17l, 64l, 15ul)
+        catt_case(t, "prompt 700 of 700, window 250: three query blocks", 700l, 700l, 250l, 17ul)
+        catt_case(t, "prompt 600 of 600, full: the window is the whole prefix", 600l, 600l, 0l, 18ul)
+        catt_case(t, "300 new rows over 900, window 100", 900l, 300l, 100l, 19ul)
         // a grown cache answers as the cache it grew from
         {
             var rg = TtsRng()
@@ -1289,8 +1151,6 @@ def test_causal_attention(t : T?) {
             kv_cache_append(kc, k, k, 150l, CATT_HIDDEN)
             t |> equal(int(kc.n), 180, "the grown cache takes rows the old capacity refused")
         }
-        let poison = catt_poison_case("prompt 40, one expected element poisoned", 11ul)
-        t |> success(poison.bad > 0, "{poison.name}: the bar must red a poisoned expectation ({poison.bad} over)")
         // a window that admits one key is the value row itself
         var r = TtsRng()
         rng_seed(r, 16ul)
@@ -1326,8 +1186,7 @@ def test_causal_attention(t : T?) {
 
 [test]
 def test_elu_and_layer_scale(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         var r = TtsRng()
         rng_seed(r, 21ul)
         var inscope x : array<float>
@@ -1391,8 +1250,7 @@ def test_elu_and_layer_scale(t : T?) {
 // the two elementwise kernels that dispatch, bit-equal on both axes that move the split
 [test]
 def test_elementwise_split_invariance(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         var r = TtsRng()
         rng_seed(r, 23ul)
         for (axis in [SplitAxis.lane_cap, SplitAxis.worker_limit]) {
@@ -1705,8 +1563,7 @@ def test_source_windows(t : T?) {
         t |> success(tripped, "a five-frame window on a carry reset for two panics")
     }
     t |> run("the harmonic source in frame windows equals the whole run, and so does its mix under both row splits") @(t : T?) {
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             sine_window_arm(t, false)
             sine_window_arm(t, true)
         }

@@ -40,8 +40,7 @@ def main {
         if (!tune_gate()) {
             panic("census: tune_gate refused")
         }
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             measure_one(tr, 512l)   //! warm
             metal_kernel_coverage_reset()
             measure_one(tr, 512l)   //! the counted forward

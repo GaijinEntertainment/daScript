@@ -40,8 +40,7 @@ def main() {
     set_asr_fp32(true)
     var mf <- load_asr_model(model_path)
     set_asr_fp32(false)
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         print("Q8FP\t{fp_of(mq, samples)}\n")
         print("F32FP\t{fp_of(mf, samples)}\n")
     }

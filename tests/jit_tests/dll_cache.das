@@ -10,7 +10,7 @@ require daslib/fio
 require strings
 require dastest/testing_boost
 
-let OUTPUT_DIR = "{get_das_root()}/build/tests"
+let OUTPUT_DIR = test_temp_dir()
 let PROBE_PATH = "{OUTPUT_DIR}/dll_cache_probe.das"
 
 def write_probe(table_value : int) : bool {
@@ -78,7 +78,7 @@ def test_dll_cache(t : T?) {
     t |> equal(write_probe(1), true)
     let ns = compile_probe()
     t |> equal(empty(ns), false)
-    let subdir = ".jitted_scripts/{ns}"
+    let subdir = ".cache/daslang/{ns}"
     clear_subdir(subdir)
 
     // compile 1: cache miss, one DLL appears
@@ -99,6 +99,7 @@ def test_dll_cache(t : T?) {
     let dlls3 <- list_dlls(subdir)
     t |> equal(length(dlls3), 1)
     t |> equal(dlls3[0] != first_dll, true)
+    rmdir_rec(subdir)
 }
 
 [test]

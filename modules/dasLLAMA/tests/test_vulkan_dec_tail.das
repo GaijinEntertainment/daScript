@@ -6,7 +6,6 @@ module test_vulkan_dec_tail
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
-require dasllama/dasllama_convert
 require dasllama/dasllama_rope
 require dasllama/dasllama_common   // MoeGate, select_decode_override
 require dasllama/dasllama_blocks   // registers the vulkan_moe_span decode override at init
@@ -16,7 +15,9 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // vk_span_reset: the span rec
 require daslib/f16_cvt
 require math
 require _vk_kq_fixtures
+require _kq_fixtures   // q8_roundtrip: the feeds and requants the device quantizes, through the engine's quantizers
 require _compares
+require _attn_oracle   // attn_row_oracle: the block reference's softmax rows
 
 //! The per-op tier's decode attention block and the decode FFN tail against a CPU reference:
 //! two attention quads (layers A and B), one expert stack pair, two positions, in both acts
@@ -38,6 +39,8 @@ let private ATTN_SCALE = 0.125   // 1 / sqrt(HS)
 let private STRIDE = 1_000_000l  // plane offsets, far apart
 let private ABS_BAR = 2.0e-3     // the reference mirrors every device rounding: rows agree to ~1e-4 of their max
 let private REL_BAR = 1.0e-3
+//! a row's bar: within REL_BAR of the reference row's max, floored at ABS_BAR; the control moves element 0 by 1 + 2 x that max
+let private ROW_BAR = Bar(kind = BarKind.rel_of_max, rel = REL_BAR, abs_floor = ABS_BAR, poison = 2.0, poison_of_max = true, poison_abs = 1.0, poison_at = 0)
 
 def private fill_row(var x : array<float>; n : int64; phase : float) {
     x |> resize(n)
@@ -65,42 +68,23 @@ def private gemv_ref(w : array<float>; rows, n : int64; x : array<float>; var y 
     }
 }
 
-// the device's feed: rms-normed, then quantized in the plane's acts form (Q8_0 for q8 planes,
-// Q8_K for K-quant ones) and dequantized - what the GEMVs read
-def private feed_ref(x : array<float>; wn : array<float>; fmt : int; var xd : array<float>; var xq : array<int8>; var xs : array<float>) {
+//! the device's feed: rms-normed, then quantized in the plane's acts form (Q8_0 for q8 planes, Q8_K for K-quant ones)
+def private feed_ref(x : array<float>; wn : array<float>; fmt : int) : Q8Round {
     var xb : array<float>
     xb |> resize(N)
     rmsnorm(xb, x, wn, N, EPS)
-    xq |> resize(N)
-    xd |> resize(N)
-    if (fmt == 0) {
-        xs |> resize(N / 32l)
-        quantize_q8_0_into(xb, N, xq, xs, 0l, 0l)
-        for (i in range64(N)) {
-            xd[i] = float(xq[i]) * xs[i / 32l]
-        }
-    } else {
-        var xbs : array<int>
-        xs |> resize(N / 256l)
-        xbs |> resize(N / 16l)
-        quantize_q8_k_into(xb, N, xq, xs, xbs, 0l, 0l, 0l)
-        for (i in range64(N)) {
-            xd[i] = float(xq[i]) * xs[i / 256l]
-        }
-    }
+    return <- q8_roundtrip(xb, N, fmt != 0)
 }
 
 // the device rope's two pairings: neox rotates (j, j + half), the classic form (2j, 2j + 1)
 def private rope_ref(var v : array<float>; nheads : int64; cossin : array<float>; neox : bool) {
-    let half = HS / 2l
-    for (h in range64(nheads)) {
-        for (j in range64(half)) {
-            let e0 = neox ? h * HS + j : h * HS + 2l * j
-            let e1 = neox ? e0 + half : e0 + 1l
-            let a0 = v[e0]
-            let a1 = v[e1]
-            v[e0] = a0 * cossin[j] - a1 * cossin[half + j]
-            v[e1] = a0 * cossin[half + j] + a1 * cossin[j]
+    unsafe {
+        let cosrow = addr<float const?>(cossin[0])
+        let sinrow = addr<float const?>(cossin[HS / 2l])
+        if (neox) {
+            rope_scaled_neox_tab(addr<float?>(v[0]), HS, nheads * HS, cosrow, sinrow)
+        } else {
+            rope_scaled_tab(addr<float?>(v[0]), HS, nheads * HS, cosrow, sinrow)
         }
     }
 }
@@ -108,42 +92,15 @@ def private rope_ref(var v : array<float>; nheads : int64; cossin : array<float>
 // one head group's decode attention over the f16 mirror rows [0, cnt)
 def private attn_ref(q : array<float>; kmir, vmir : array<float>; cnt : int64; var y : array<float>) {
     y |> resize(QD)
-    var sc : array<float>
-    sc |> resize(cnt)
     for (h in range64(NH)) {
-        let kvh = h / KVM
-        var m = -3.0e38
-        for (p in range64(cnt)) {
-            var s = 0.0
-            for (d in range64(HS)) {
-                s += q[h * HS + d] * kmir[p * KVD + kvh * HS + d]
-            }
-            sc[p] = s * ATTN_SCALE
-            m = max(m, sc[p])
-        }
-        var den = 0.0
-        for (p in range64(cnt)) {
-            sc[p] = exp(sc[p] - m)
-            den += sc[p]
-        }
-        for (c in range64(HS)) {
-            var acc = 0.0
-            for (p in range64(cnt)) {
-                acc += sc[p] * vmir[p * KVD + kvh * HS + c]
-            }
-            y[h * HS + c] = acc / den
-        }
+        attn_row_oracle(q, int(h * HS), kmir, 0, vmir, 0, int(KVD), int(h), int(HS), int(KVM), int(cnt), ATTN_SCALE, y, int(h * HS))
     }
 }
 
-def private check_row(t : T?; tag : string; gpu, refv : array<float>) {
-    let mr = logits_maxabs(refv)
-    let rel_bar = REL_BAR * mr
-    let bad = count_bad(gpu, refv, ABS_BAR, rel_bar)
-    let md = logits_maxdiff(gpu, refv)
-    to_log(LOG_INFO, "{tag}: {bad} of {length(refv)} off the reference (maxdiff {md}, maxref {mr}, rel bar {rel_bar})\n")
-    t |> success(mr > 0.0, "{tag}: the reference is non-trivial")
-    t |> success(bad == 0, "{tag}: matches the CPU reference ({bad} of {length(refv)} off, maxdiff {md} vs abs {ABS_BAR} / rel {rel_bar})")
+//! `got` against a non-trivial reference row at ROW_BAR
+def private held_row(t : T?; tag : string; got, want : array<float>) {
+    t |> success(logits_maxabs(want) > 0.0, "{tag}: the reference is non-trivial")
+    check(t, tag, got, want, ROW_BAR, FLAT_SHAPE)
 }
 
 struct private Quad {
@@ -280,16 +237,13 @@ def private shexp_up(t : T?; var sh : Shexp; base : int64) : bool {
 
 // the block's reference for one position: the feed, q/k/v, rope, the mirror row, attention, wo
 def private block_ref(var q : Quad; x : array<float>; pos : int64; cossin : array<float>; var xb2 : array<float>; var kraw : array<float>) {
-    var xd : array<float>
-    var xq : array<int8>
-    var xs : array<float>
-    feed_ref(x, q.norm, q.fmt, xd, xq, xs)
+    let feed <- feed_ref(x, q.norm, q.fmt)
     var qr : array<float>
     var kr : array<float>
     var vr : array<float>
-    gemv_ref(q.wq, QD, N, xd, qr)
-    gemv_ref(q.wk, KVD, N, xd, kr)
-    gemv_ref(q.wv, KVD, N, xd, vr)
+    gemv_ref(q.wq, QD, N, feed.deq, qr)
+    gemv_ref(q.wk, KVD, N, feed.deq, kr)
+    gemv_ref(q.wv, KVD, N, feed.deq, vr)
     kraw := kr
     if (!empty(q.bq)) {
         for (i in range64(QD)) {
@@ -309,25 +263,8 @@ def private block_ref(var q : Quad; x : array<float>; pos : int64; cossin : arra
     var y : array<float>
     attn_ref(qr, q.kmir, q.vmir, pos + 1l, y)
     // the device requantizes the attention row in the wo plane's form before the wo GEMV
-    var yq : array<int8>
-    var ys : array<float>
-    yq |> resize(QD)
-    if (q.fmt == 0) {
-        ys |> resize(QD / 32l)
-        quantize_q8_0_into(y, QD, yq, ys, 0l, 0l)
-        for (i in range64(QD)) {
-            y[i] = float(yq[i]) * ys[i / 32l]
-        }
-    } else {
-        var ybs : array<int>
-        ys |> resize(QD / 256l)
-        ybs |> resize(QD / 16l)
-        quantize_q8_k_into(y, QD, yq, ys, ybs, 0l, 0l, 0l)
-        for (i in range64(QD)) {
-            y[i] = float(yq[i]) * ys[i / 256l]
-        }
-    }
-    gemv_ref(q.wo, N, QD, y, xb2)
+    let yr <- q8_roundtrip(y, QD, q.fmt != 0)
+    gemv_ref(q.wo, N, QD, yr.deq, xb2)
 }
 
 // the decode FFN's gathered activation image: the one quantized row, k times
@@ -359,49 +296,38 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
     xb2 |> resize(N)
     kout |> resize(KVD)
     vout |> resize(KVD)
-    var xd : array<float>
-    var xq : array<int8>
-    var xs : array<float>
-    feed_ref(x, qa.norm, qa.fmt, xd, xq, xs)
-    matmul_moe_gpu_attn_dec(xb2, kout, vout, qa.woq, qa.wok, qa.wov, qa.woo, qa.fmt, qa.fmt, qa.fmt, qa.fmt, xq, xs, cossin, null, null,
+    var feed <- feed_ref(x, qa.norm, qa.fmt)
+    matmul_moe_gpu_attn_dec(xb2, kout, vout, qa.woq, qa.wok, qa.wov, qa.woo, qa.fmt, qa.fmt, qa.fmt, qa.fmt, feed.xq, feed.xs, cossin, null, null,
         bias_ptr(qa.bq), bias_ptr(qa.bk), bias_ptr(qa.bv), pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qa.neox, false)
     var xb2_ref : array<float>
     var kraw_ref : array<float>
     block_ref(qa, x, pos, cossin, xb2_ref, kraw_ref)
-    check_row(t, "{tag} pos {pos} layer A wo row", xb2, xb2_ref)
-    check_row(t, "{tag} pos {pos} layer A raw k row", kout, kraw_ref)
+    held_row(t, "{tag} pos {pos} layer A wo row", xb2, xb2_ref)
+    held_row(t, "{tag} pos {pos} layer A raw k row", kout, kraw_ref)
     // the host residual, then the tail: FFN A + combine + layer B's feed on the device
     for (i in range64(N)) {
         x[i] += xb2[i]
     }
     var x1_ref := x
-    var fd : array<float>
-    var gxq1 : array<int8>
-    var gxs1 : array<float>
-    feed_ref(x, f.norm, 1, fd, gxq1, gxs1)
+    let ffeed <- feed_ref(x, f.norm, 1)
     var gxq : array<int8>
     var gxs : array<float>
-    k_copies(gxq1, gxs1, gxq, gxs)
+    k_copies(ffeed.xq, ffeed.xs, gxq, gxs)
     matmul_moe_gpu_ffn_tail(f.offs1, f.offs3, f.offs2, K, gxq, gxs, N, NFE, K, 1, 1, 3, false, f.rw, x, qb.woq, qb.fmt,
         unsafe(addr<float const?>(qb.norm[0])), EPS)
     t |> success(moe_gpu_ffn_tail_pending(), "{tag} pos {pos}: the tail is pending until layer B's attention collects it")
     let pair <- [0l, 1l]   // the tail arm routes slot j to expert j
-    ffn_ref_sel(f, fd, pair, f.rw, x1_ref)
+    ffn_ref_sel(f, ffeed.deq, pair, f.rw, x1_ref)
     // layer B on the block: its feed came from the tail; the host acts are ignored
-    matmul_moe_gpu_attn_dec(xb2, kout, vout, qb.woq, qb.wok, qb.wov, qb.woo, qb.fmt, qb.fmt, qb.fmt, qb.fmt, xq, xs, cossin, null, null,
+    matmul_moe_gpu_attn_dec(xb2, kout, vout, qb.woq, qb.wok, qb.wov, qb.woo, qb.fmt, qb.fmt, qb.fmt, qb.fmt, feed.xq, feed.xs, cossin, null, null,
         bias_ptr(qb.bq), bias_ptr(qb.bk), bias_ptr(qb.bv), pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qb.neox, false)
     t |> success(!moe_gpu_ffn_tail_pending(), "{tag} pos {pos}: layer B's attention collected the tail")
-    check_row(t, "{tag} pos {pos} residual row after FFN A (the tail's combine)", x, x1_ref)
+    held_row(t, "{tag} pos {pos} residual row after FFN A (the tail's combine)", x, x1_ref)
     var xb2b_ref : array<float>
     var krawb_ref : array<float>
     block_ref(qb, x, pos, cossin, xb2b_ref, krawb_ref)
-    check_row(t, "{tag} pos {pos} layer B wo row (fed by the tail)", xb2, xb2b_ref)
-    check_row(t, "{tag} pos {pos} layer B raw k row", kout, krawb_ref)
-    if (pos == 0l) {
-        var poison := xb2   // the bar's control: one element pushed past both bars must red
-        poison[0] += 1.0 + 2.0 * logits_maxabs(xb2b_ref)
-        t |> success(count_bad(poison, xb2b_ref, ABS_BAR, REL_BAR * logits_maxabs(xb2b_ref)) == 1, "{tag}: the bars catch a poisoned element")
-    }
+    held_row(t, "{tag} pos {pos} layer B wo row (fed by the tail)", xb2, xb2b_ref)
+    held_row(t, "{tag} pos {pos} layer B raw k row", kout, krawb_ref)
 }
 
 //! two layers whose q planes sit at ONE offset in two format planes (a mixed-format file's shape): the block keys a layer by
@@ -419,12 +345,17 @@ def private collide_cell(t : T?; f : Ffn; base : int64; tag : string) : bool {
     matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
     t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
         "{tag}: both layers serve position 0")
+    two_positions(t, qa, qb, f, gen, tag)
+    return true
+}
+
+//! positions 0 and 1 through both layers, then both mirrors holding [0, 2) under claim `gen`
+def private two_positions(t : T?; var qa : Quad; var qb : Quad; f : Ffn; gen : int64; tag : string) {
     for (pos in range64(2)) {
         token_cell(t, qa, qb, f, pos, tag)
     }
     t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 2l, gen) == DAT_SERVE,
         "{tag}: both mirrors hold [0, 2) after two positions")
-    return true
 }
 
 // one quad pair in one plane format through two positions; false = no device
@@ -442,11 +373,7 @@ def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; ne
     matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
     t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
         "{tag}: both layers serve position 0 after the empty hydrate")
-    for (pos in range64(2)) {
-        token_cell(t, qa, qb, f, pos, tag)
-    }
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 2l, gen) == DAT_SERVE,
-        "{tag}: both mirrors hold [0, 2) after two positions")
+    two_positions(t, qa, qb, f, gen, tag)
     // the hydrate arms: a fresh claim empties both mirrors; A refills from f32 rows, B from f16 rows
     let gen2 = moe_gpu_attn_dec_claim(true)
     t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen2) == DAT_HYDRATE, "{tag}: a fresh claim empties the mirrors - position 2 asks for a hydrate")
@@ -497,21 +424,12 @@ def private ffn_ref_sel(f : Ffn; fd : array<float>; idx : array<int64>; w : arra
         for (i in range64(NFE)) {
             hrow[i] = silu(gg[i]) * u[i]
         }
-        var hq : array<int8>
-        var hsc : array<float>
-        var hbs : array<int>
-        hq |> resize(NFE)
-        hsc |> resize(NFE / 256l)
-        hbs |> resize(NFE / 16l)
-        quantize_q8_k_into(hrow, NFE, hq, hsc, hbs, 0l, 0l, 0l)
-        for (i in range64(NFE)) {
-            hrow[i] = float(hq[i]) * hsc[i / 256l]
-        }
+        let hr <- q8_roundtrip(hrow, NFE, true)
         for (i in range64(N * NFE)) {
             wsl[i] = f.w2[e * ege + i]
         }
         var d : array<float>
-        gemv_ref(wsl, N, NFE, hrow, d)
+        gemv_ref(wsl, N, NFE, hr.deq, d)
         for (i in range64(N)) {
             acc[i] += w[j] * d[i]
         }
@@ -521,54 +439,100 @@ def private ffn_ref_sel(f : Ffn; fd : array<float>; idx : array<int64>; w : arra
     }
 }
 
-// one span layer's reference: the block, the residual, the router on the FFN-normed row (f32),
-// the host select (softmax, top-k, renorm), the routed FFN on the requantized feed
-def private span_layer_ref(var q : Quad; f : Ffn; router : array<float>; li : int64; var x : array<float>; pos : int64; cossin : array<float>; var kraw : array<float>) {
+//! a span layer's route: the FFN-normed row (f32) and the host select's slots and weights (softmax, top-k, renorm)
+struct private SpanRoute {
+    xb : array<float>
+    idx : array<int64>
+    w : array<float>
+}
+
+//! one span layer's block and residual onto `x`, then its route off the router's logits
+def private span_route(var q : Quad; f : Ffn; router : array<float>; li : int64; var x : array<float>; pos : int64; cossin : array<float>; var kraw : array<float>) : SpanRoute {
     var xb2 : array<float>
     block_ref(q, x, pos, cossin, xb2, kraw)
     for (i in range64(N)) {
         x[i] += xb2[i]
     }
-    var xb : array<float>
-    xb |> resize(N)
-    rmsnorm(xb, x, f.norm, N, EPS)
+    var r : SpanRoute
+    r.xb |> resize(N)
+    rmsnorm(r.xb, x, f.norm, N, EPS)
     var lg : array<float>
     lg |> resize(NE)
     for (e in range64(NE)) {
         var acc = 0.0
         for (i in range64(N)) {
-            acc += router[(li * NE + e) * N + i] * xb[i]
+            acc += router[(li * NE + e) * N + i] * r.xb[i]
         }
         lg[e] = acc
     }
-    var idx : array<int64>
-    var w : array<float>
-    idx |> resize(K)
-    w |> resize(K)
+    r.idx |> resize(K)
+    r.w |> resize(K)
     unsafe {
-        moe_select_core(MoeGate.softmax, NE, K, true, 1.0, addr(lg[0]), addr(idx[0]), addr(w[0]), 0l)
+        moe_select_core(MoeGate.softmax, NE, K, true, 1.0, addr(lg[0]), addr(r.idx[0]), addr(r.w[0]), 0l)
     }
-    var fd : array<float>
-    var gxq1 : array<int8>
-    var gxs1 : array<float>
-    feed_ref(x, f.norm, 1, fd, gxq1, gxs1)
-    ffn_ref_sel(f, fd, idx, w, x)
+    return <- r
 }
 
-// the span's planes: router rows (2 layers x NE x N), the [A | B] attention norms, the FFN norm twice
-def private span_planes(qa, qb : Quad; f : Ffn; var router : array<float>; var att_norms : array<float>; var ffn_norms : array<float>) {
-    router |> resize(2l * NE * N)
+//! one span layer's reference: the block, the residual, the route, the routed FFN on the requantized feed
+def private span_layer_ref(var q : Quad; f : Ffn; router : array<float>; li : int64; var x : array<float>; pos : int64; cossin : array<float>; var kraw : array<float>) {
+    let r <- span_route(q, f, router, li, x, pos, cossin, kraw)
+    let fd <- feed_ref(x, f.norm, 1)
+    ffn_ref_sel(f, fd.deq, r.idx, r.w, x)
+}
+
+//! the span's planes: router rows (2 layers x NE x N), the [A | B] attention norms, the FFN norm twice
+struct private SpanPlanes {
+    router : array<float>
+    att_norms : array<float>
+    ffn_norms : array<float>
+}
+
+def private span_planes(qa, qb : Quad; f : Ffn) : SpanPlanes {
+    var sp : SpanPlanes
+    sp.router |> resize(2l * NE * N)
     for (i in range64(2l * NE * N)) {
-        router[i] = 0.02 * sin(float(i) * 0.61 + 0.3) + 0.01 * cos(float(i / N) * 2.1)
+        sp.router[i] = 0.02 * sin(float(i) * 0.61 + 0.3) + 0.01 * cos(float(i / N) * 2.1)
     }
-    att_norms |> resize(2l * N)
-    ffn_norms |> resize(2l * N)
+    sp.att_norms |> resize(2l * N)
+    sp.ffn_norms |> resize(2l * N)
     for (i in range64(N)) {
-        att_norms[i] = qa.norm[i]
-        att_norms[N + i] = qb.norm[i]
-        ffn_norms[i] = f.norm[i]
-        ffn_norms[N + i] = f.norm[i]
+        sp.att_norms[i] = qa.norm[i]
+        sp.att_norms[N + i] = qb.norm[i]
+        sp.ffn_norms[i] = f.norm[i]
+        sp.ffn_norms[N + i] = f.norm[i]
     }
+    return <- sp
+}
+
+//! A span position's rows: the device residual row after both layers, and its input, which the caller's reference advances.
+struct private SpanRows {
+    x : array<float>
+    x_ref : array<float>
+}
+
+//! one position through the device span: the rope row at `pos`, the patterned input row, layer A's feed, the per-token pointers,
+//! the dispatch; the raw k rows land in `kout`
+def private span_position(var a : MoeSpanDec; qa : Quad; sp : SpanPlanes; var cossin : array<float>; pos : int64; var kout, vout : array<float>) : SpanRows {
+    var no_freqs : array<float>
+    build_rope_row_packed(cossin, 0l, pos, HS, 10000.0, 1.0, 1.0, no_freqs)
+    var rows : SpanRows
+    fill_row(rows.x, N, 0.5 + 0.7 * float(pos))
+    rows.x_ref := rows.x
+    var feed <- feed_ref(rows.x, qa.norm, 1)
+    unsafe {
+        a.pos = pos
+        a.router = addr<float const?>(sp.router[0])
+        a.att_norm = addr<float const?>(sp.att_norms[0])
+        a.ffn_norm = addr<float const?>(sp.ffn_norms[0])
+        a.xq = addr<int8 const?>(feed.xq[0])
+        a.xs = addr<float const?>(feed.xs[0])
+        a.cossin = addr<float const?>(cossin[0])
+        a.x = addr(rows.x[0])
+        a.kout = addr(kout[0])
+        a.vout = addr(vout[0])
+    }
+    matmul_moe_gpu_span_dec(a)
+    return <- rows
 }
 
 // the span's per-model arguments over the two quads and the shared expert pair (both layers
@@ -603,63 +567,27 @@ def private span_args_sh(qa, qb : Quad; f : Ffn; sh : Shexp; gated : bool) : Moe
 //! same f32 normed row, then the shared FFN on the Q8_0 feed (its hidden row requantized Q8_0 as
 //! the q8 down GEMV reads it) scaled by sigmoid(gate) - or by one, ungated - onto the residual
 def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<float>; li : int64; var x : array<float>; pos : int64; cossin : array<float>; var kraw : array<float>; gated : bool) {
-    var xb2 : array<float>
-    block_ref(q, x, pos, cossin, xb2, kraw)
-    for (i in range64(N)) {
-        x[i] += xb2[i]
-    }
-    var xb : array<float>
-    xb |> resize(N)
-    rmsnorm(xb, x, f.norm, N, EPS)
-    var lg : array<float>
-    lg |> resize(NE)
-    for (e in range64(NE)) {
-        var acc = 0.0
-        for (i in range64(N)) {
-            acc += router[(li * NE + e) * N + i] * xb[i]
-        }
-        lg[e] = acc
-    }
+    let r <- span_route(q, f, router, li, x, pos, cossin, kraw)
     var gl = 0.0
     for (i in range64(N)) {
-        gl += sh.gate[li * N + i] * xb[i]
+        gl += sh.gate[li * N + i] * r.xb[i]
     }
     let g = gated ? 1.0 / (1.0 + exp(-gl)) : 1.0
-    var idx : array<int64>
-    var w : array<float>
-    idx |> resize(K)
-    w |> resize(K)
-    unsafe {
-        moe_select_core(MoeGate.softmax, NE, K, true, 1.0, addr(lg[0]), addr(idx[0]), addr(w[0]), 0l)
-    }
-    var fd : array<float>
-    var gxq1 : array<int8>
-    var gxs1 : array<float>
-    feed_ref(x, f.norm, 1, fd, gxq1, gxs1)
-    var fd0 : array<float>
-    var xq0 : array<int8>
-    var xs0 : array<float>
-    feed_ref(x, f.norm, 0, fd0, xq0, xs0)
-    ffn_ref_sel(f, fd, idx, w, x)
+    let fd <- feed_ref(x, f.norm, 1)
+    let fd0 <- feed_ref(x, f.norm, 0)
+    ffn_ref_sel(f, fd.deq, r.idx, r.w, x)
     var gg : array<float>
     var u : array<float>
-    gemv_ref(sh.w1, NFE, N, fd0, gg)
-    gemv_ref(sh.w3, NFE, N, fd0, u)
+    gemv_ref(sh.w1, NFE, N, fd0.deq, gg)
+    gemv_ref(sh.w3, NFE, N, fd0.deq, u)
     var hrow : array<float>
     hrow |> resize(NFE)
     for (i in range64(NFE)) {
         hrow[i] = silu(gg[i]) * u[i]
     }
-    var hq : array<int8>
-    var hsc : array<float>
-    hq |> resize(NFE)
-    hsc |> resize(NFE / 32l)
-    quantize_q8_0_into(hrow, NFE, hq, hsc, 0l, 0l)
-    for (i in range64(NFE)) {
-        hrow[i] = float(hq[i]) * hsc[i / 32l]
-    }
+    let hr <- q8_roundtrip(hrow, NFE, false)
     var d : array<float>
-    gemv_ref(sh.w2, N, NFE, hrow, d)
+    gemv_ref(sh.w2, N, NFE, hr.deq, d)
     for (i in range64(N)) {
         x[i] += g * d[i]
     }
@@ -706,55 +634,23 @@ def test_vulkan_dec_span(t : T?) {
         matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
         t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
             "dec span: both layers serve position 0")
-        var router : array<float>
-        var att_norms : array<float>
-        var ffn_norms : array<float>
-        span_planes(qa, qb, f, router, att_norms, ffn_norms)
+        var sp <- span_planes(qa, qb, f)
         var a <- span_args(qa, qb, f)
         var kout : array<float>
         var vout : array<float>
         kout |> resize(2l * KVD)
         vout |> resize(2l * KVD)
-        var no_freqs : array<float>
         var cossin : array<float>
         cossin |> resize(HS)
         for (pos in range64(2)) {
-            build_rope_row_packed(cossin, 0l, pos, HS, 10000.0, 1.0, 1.0, no_freqs)
-            var x : array<float>
-            fill_row(x, N, 0.5 + 0.7 * float(pos))
-            var x_ref := x
-            var xd : array<float>
-            var xq : array<int8>
-            var xs : array<float>
-            feed_ref(x, qa.norm, 1, xd, xq, xs)
-            unsafe {
-                a.pos = pos
-                a.router = addr<float const?>(router[0])
-                a.att_norm = addr<float const?>(att_norms[0])
-                a.ffn_norm = addr<float const?>(ffn_norms[0])
-                a.xq = addr<int8 const?>(xq[0])
-                a.xs = addr<float const?>(xs[0])
-                a.cossin = addr<float const?>(cossin[0])
-                a.x = addr(x[0])
-                a.kout = addr(kout[0])
-                a.vout = addr(vout[0])
-            }
-            matmul_moe_gpu_span_dec(a)
+            var rows <- span_position(a, qa, sp, cossin, pos, kout, vout)
             var kraw_a : array<float>
             var kraw_b : array<float>
-            span_layer_ref(qa, f, router, 0l, x_ref, pos, cossin, kraw_a)
-            span_layer_ref(qb, f, router, 1l, x_ref, pos, cossin, kraw_b)
-            var ka : array<float>
-            var kb : array<float>
-            ka |> resize(KVD)
-            kb |> resize(KVD)
-            for (i in range64(KVD)) {
-                ka[i] = kout[i]
-                kb[i] = kout[KVD + i]
-            }
-            check_row(t, "span pos {pos} layer A raw k row", ka, kraw_a)
-            check_row(t, "span pos {pos} layer B raw k row", kb, kraw_b)
-            check_row(t, "span pos {pos} residual row after both layers", x, x_ref)
+            span_layer_ref(qa, f, sp.router, 0l, rows.x_ref, pos, cossin, kraw_a)
+            span_layer_ref(qb, f, sp.router, 1l, rows.x_ref, pos, cossin, kraw_b)
+            held_row(t, "span pos {pos} layer A raw k row", copy_span(kout, 0l, KVD), kraw_a)
+            held_row(t, "span pos {pos} layer B raw k row", copy_span(kout, KVD, KVD), kraw_b)
+            held_row(t, "span pos {pos} residual row after both layers", rows.x, rows.x_ref)
         }
         t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 2l, gen) == DAT_SERVE,
             "dec span: both mirrors hold [0, 2) after two positions")
@@ -771,7 +667,7 @@ def test_vulkan_dec_span(t : T?) {
 //! the span with a gated shared expert: the routed slots plus sigmoid(gate) times the shared down
 //! row in one combine, the shared feed off the same normed row, one submit per position
 [test]
-def test_vulkan_dec_span_shexp(t : T?) {   // nolint:STYLE038 — one span cell: the fixture, the hooks, two positions and the two controls, in the plain span cell's shape
+def test_vulkan_dec_span_shexp(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         vk_span_reset()   //! the span records once per model: this cell is the second model in the process
         install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
@@ -790,11 +686,7 @@ def test_vulkan_dec_span_shexp(t : T?) {   // nolint:STYLE038 — one span cell:
         var qb : Quad
         t |> success(quad_up(qa, 1, 110l * STRIDE, 51l, 0.4, true, false), "dec span shexp: layer A's quad uploaded")
         t |> success(quad_up(qb, 1, 120l * STRIDE, 63l, 0.8, true, false), "dec span shexp: layer B's quad uploaded")
-        var router : array<float>
-        var att_norms : array<float>
-        var ffn_norms : array<float>
-        span_planes(qa, qb, f, router, att_norms, ffn_norms)
-        var no_freqs : array<float>
+        var sp <- span_planes(qa, qb, f)
         var cossin : array<float>
         cossin |> resize(HS)
         for (gated in fixed_array(true, false)) {
@@ -810,45 +702,22 @@ def test_vulkan_dec_span_shexp(t : T?) {   // nolint:STYLE038 — one span cell:
             var vout : array<float>
             kout |> resize(2l * KVD)
             vout |> resize(2l * KVD)
+            a.shgate = unsafe(addr<float const?>(sh.gate[0]))
             for (pos in range64(2)) {
-                build_rope_row_packed(cossin, 0l, pos, HS, 10000.0, 1.0, 1.0, no_freqs)
-                var x : array<float>
-                fill_row(x, N, 0.5 + 0.7 * float(pos))
-                var x_ref := x
-                var xd : array<float>
-                var xq : array<int8>
-                var xs : array<float>
-                feed_ref(x, qa.norm, 1, xd, xq, xs)
-                unsafe {
-                    a.pos = pos
-                    a.router = addr<float const?>(router[0])
-                    a.shgate = addr<float const?>(sh.gate[0])
-                    a.att_norm = addr<float const?>(att_norms[0])
-                    a.ffn_norm = addr<float const?>(ffn_norms[0])
-                    a.xq = addr<int8 const?>(xq[0])
-                    a.xs = addr<float const?>(xs[0])
-                    a.cossin = addr<float const?>(cossin[0])
-                    a.x = addr(x[0])
-                    a.kout = addr(kout[0])
-                    a.vout = addr(vout[0])
-                }
-                matmul_moe_gpu_span_dec(a)
+                var rows <- span_position(a, qa, sp, cossin, pos, kout, vout)
                 var kraw_a : array<float>
                 var kraw_b : array<float>
-                span_layer_ref_sh(qa, f, sh, router, 0l, x_ref, pos, cossin, kraw_a, gated)
-                span_layer_ref_sh(qb, f, sh, router, 1l, x_ref, pos, cossin, kraw_b, gated)
-                check_row(t, "span shexp ({tag}) pos {pos} residual row after both layers", x, x_ref)
+                span_layer_ref_sh(qa, f, sh, sp.router, 0l, rows.x_ref, pos, cossin, kraw_a, gated)
+                span_layer_ref_sh(qb, f, sh, sp.router, 1l, rows.x_ref, pos, cossin, kraw_b, gated)
+                held_row(t, "span shexp ({tag}) pos {pos} residual row after both layers", rows.x, rows.x_ref)
                 if (pos == 0l) {
-                    var poison := x
-                    poison[0] += 1.0 + 2.0 * logits_maxabs(x_ref)
-                    t |> success(count_bad(poison, x_ref, ABS_BAR, REL_BAR * logits_maxabs(x_ref)) == 1, "span shexp ({tag}): the bars catch a poisoned element")
                     var x_no : array<float>
                     fill_row(x_no, N, 0.5)
                     var ka : array<float>
                     var kb : array<float>
-                    span_layer_ref(qa, f, router, 0l, x_no, 0l, cossin, ka)
-                    span_layer_ref(qb, f, router, 1l, x_no, 0l, cossin, kb)
-                    t |> success(count_bad(x, x_no, ABS_BAR, REL_BAR * logits_maxabs(x_no)) > 0, "span shexp ({tag}): the reference without the shared expert misses the device row")
+                    span_layer_ref(qa, f, sp.router, 0l, x_no, 0l, cossin, ka)
+                    span_layer_ref(qb, f, sp.router, 1l, x_no, 0l, cossin, kb)
+                    t |> success(check_count(rows.x, x_no, ROW_BAR) > 0, "span shexp ({tag}): the reference without the shared expert misses the device row")
                 }
             }
         }

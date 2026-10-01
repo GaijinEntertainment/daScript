@@ -67,20 +67,7 @@ def parity_full_mode() : bool {
 // only arm blocks whose name matches a token run. The skip is LOUD (t |> skip) so a filtered
 // run can never masquerade as full coverage. Unset/empty = every arm runs. Drive through
 // modules/dasLLAMA/tests/run.das — see modules/dasLLAMA/tests/CLAUDE.md.
-def arm_on(t : T?; name : string) : bool {
-    let filter = g_env_test.test_arms
-    if (empty(filter)) {
-        return true
-    }
-    for (tok in split(filter, ",")) {
-        let tk = strip(tok)   // "arm12, batch" — the comma-adjacent space must not defeat the match
-        if (!empty(tk) && find(name, tk) >= 0) {
-            return true
-        }
-    }
-    t |> skip("arm '{name}' filtered out (DASLLAMA_TEST_ARMS={filter})")
-    return false
-}
+def arm_on(t : T?; name : string) : bool => filter_on(t, g_env_test.test_arms, "DASLLAMA_TEST_ARMS", "arm", name, false)
 
 // Family filter for the model-loading suites: DASLLAMA_TEST_FAMILY = comma-separated family
 // tokens (llama, qwen2, qwen3, phi3, gemma, ultravox, whisper, voxtral) matched EXACTLY — not
@@ -88,17 +75,21 @@ def arm_on(t : T?; name : string) : bool {
 // listed family run; model-free blocks (kernel units, the image mechanics arm) carry no tag and
 // always run. Loud-skip contract identical to arm_on. Drive through run.das --family — the
 // profiling cadence gate: a llama-format round re-verifies the llama family only.
-def family_on(t : T?; name : string) : bool {
-    let filter = g_env_test.test_family
+def family_on(t : T?; name : string) : bool => filter_on(t, g_env_test.test_family, "DASLLAMA_TEST_FAMILY", "family", name, true)
+
+//! true when `filter` (the comma list `env` holds) is empty or one of its stripped tokens matches `name` - equal to it
+//! when `exact`, a substring of it otherwise; else the cell has registered the loud skip naming `what`
+def private filter_on(t : T?; filter, env, what, name : string; exact : bool) : bool {
     if (empty(filter)) {
         return true
     }
     for (tok in split(filter, ",")) {
-        if (strip(tok) == name) {
+        let tk = strip(tok)   // "arm12, batch" — the comma-adjacent space must not defeat the match
+        if (exact ? tk == name : (!empty(tk) && find(name, tk) >= 0)) {
             return true
         }
     }
-    t |> skip("family '{name}' filtered out (DASLLAMA_TEST_FAMILY={filter})")
+    t |> skip("{what} '{name}' filtered out ({env}={filter})")
     return false
 }
 
@@ -114,6 +105,20 @@ def eyeball_text(m : Model; ids : array<int64>) : string => eyeball_str(decode_(
 def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
     to_log(LOG_INFO, "{tag} CPU text: {eyeball_text(m, cpu_ids)}\n")
     to_log(LOG_INFO, "{tag} GPU text: {eyeball_text(m, gpu_ids)}\n")
+}
+
+//! `steps` greedy decode steps through `s` from BOS at position 0: each step's pick into `ids`, the last step's logits into `logits`
+def greedy_ids(tr : Model; var s : Session; steps : int; var ids : array<int64>; var logits : array<float>) {
+    ids |> reserve(steps)
+    var token = 1l   // BOS
+    var pos = 0l
+    for (_i in range(steps)) {
+        forward(tr, s, token, pos)
+        pos++
+        token = argmax(s, tr.config.vocab_size)
+        ids |> push(token)
+    }
+    logits := s.logits
 }
 
 //! `a`'s root mean square, accumulated in double; 0 for an empty row
@@ -287,4 +292,9 @@ def model_available(t : T?; path : string) : bool {
         return false
     }
     return true
+}
+
+//! true under the JIT with the model at `path` stocked; else the cell has registered the loud skip and its caller returns
+def jit_model_available(t : T?; path : string) : bool {
+    return jit_only(t) && model_available(t, path)
 }

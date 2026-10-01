@@ -5,7 +5,7 @@ options _jit_fast_math = true   // production prefill config (prefill_perf parit
 options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
-require dasllama/dasllama_math  // setup_dasllama_jobque_ + apply_box_profile_runtime
+require dasllama/dasllama_math  // with_dasllama_jobque + apply_box_profile_runtime
 require daslib/tune             // [tune_policy]: the confirm arm measures WHAT THE MANIFEST SAYS — never self-tune
 require llvm/daslib/llvm_tune   // the framework the annotation forwards to, and the visibility the auto-policy pass needs
 require daslib/jobque_boost
@@ -49,8 +49,7 @@ def main {
     let c = t.config
     var s = make_run_state(c)
     let prompt <- [for (i in range64(PP_TOKENS)); 1000l + (i % 5000l)]
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         forward_prefill(t, s, prompt, 8l, 0l)   // warmup: JIT + first-touch paging
         var best = 0.0lf
         for (_r in range(PP_REPS)) {

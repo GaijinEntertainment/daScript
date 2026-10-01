@@ -30,6 +30,7 @@ IF ((NOT DAS_LIVE_HOST_INCLUDED) AND ((NOT ${DAS_LIVE_HOST_DISABLED}) OR (NOT DE
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLiveHost
         FILES_MATCHING PATTERN "*.das"
         PATTERN "_aot_generated" EXCLUDE
+        PATTERN ".cache" EXCLUDE
         PATTERN "jitted_scripts" EXCLUDE
     )
 

@@ -7,7 +7,7 @@ require strings
 
 require dastest/testing_boost
 
-let OUTPUT_DIR = "{get_das_root()}/build/tests"
+let OUTPUT_DIR = test_temp_dir()
 let SCRIPT_PATH = "{OUTPUT_DIR}/jit_exe_test_hello.das"
 let EXE_PATH = "{OUTPUT_DIR}/jit_exe_test_hello"
 let GLOBAL_INIT_SCRIPT = "{OUTPUT_DIR}/jit_exe_test_global_init.das"

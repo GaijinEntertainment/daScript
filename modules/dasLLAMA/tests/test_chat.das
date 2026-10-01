@@ -180,10 +180,7 @@ def test_chat_llama3(t : T?) {
 [test]
 def test_chat_end_to_end(t : T?) {
     t |> run("respond() streams a reply, stops on a stop token, records stats + transcript") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
@@ -930,10 +927,7 @@ def test_chat_pending_cleared_on_consume(t : T?) {
 [test]
 def test_chat_render_seam(t : T?) {
     t |> run("render_assistant == add_assistant evals; renderer chat holds no KV (needs SmolLM2-135M)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")

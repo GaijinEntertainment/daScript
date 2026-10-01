@@ -288,7 +288,7 @@ def test_save_png(t : T?) {
     t |> run("save as PNG and load back") <| @(tt : T?) {
         var img : Image
         img.load(test_image_path("test.png"))
-        let out_path = test_image_path("_test_out.png")
+        let out_path = path_join(test_temp_dir(), "_test_out.png")
         let (ok, error) = img.save(out_path)
         tt |> success(ok, "save ok: {error}")
         var img2 : Image
@@ -305,7 +305,7 @@ def test_save_bmp(t : T?) {
     t |> run("save as BMP and load back") <| @(tt : T?) {
         var img : Image
         img.load(test_image_path("test.png"))
-        let out_path = test_image_path("_test_out.bmp")
+        let out_path = path_join(test_temp_dir(), "_test_out.bmp")
         let (ok, error) = img.save(out_path)
         tt |> success(ok, "save ok: {error}")
         var img2 : Image
@@ -321,7 +321,7 @@ def test_save_tga(t : T?) {
     t |> run("save as TGA and load back") <| @(tt : T?) {
         var img : Image
         img.load(test_image_path("test.png"))
-        let out_path = test_image_path("_test_out.tga")
+        let out_path = path_join(test_temp_dir(), "_test_out.tga")
         let (ok, error) = img.save(out_path)
         tt |> success(ok, "save ok: {error}")
         var img2 : Image
@@ -337,7 +337,7 @@ def test_save_jpg(t : T?) {
     t |> run("save as JPG with default quality") <| @(tt : T?) {
         var img : Image
         img.load(test_image_path("test.png"), 3)
-        let out_path = test_image_path("_test_out.jpg")
+        let out_path = path_join(test_temp_dir(), "_test_out.jpg")
         let (ok, error) = img.save(out_path)
         tt |> success(ok, "save ok: {error}")
         var img2 : Image
@@ -352,7 +352,7 @@ def test_save_jpg(t : T?) {
 def test_save_invalid_image(t : T?) {
     t |> run("save invalid image returns error") <| @(tt : T?) {
         var img : Image
-        let (ok, error) = img.save(test_image_path("_test_out.png"))
+        let (ok, error) = img.save(path_join(test_temp_dir(), "_test_out.png"))
         tt |> success(!ok, "should fail")
         tt |> success(!empty(error), "error not empty")
     }
@@ -764,7 +764,7 @@ def test_save_load_pixel_roundtrip(t : T?) {
     t |> run("save PNG then load back preserves pixels") <| @(tt : T?) {
         var img : Image
         img.load(test_image_path("test.png"))
-        let out_path = test_image_path("_test_roundtrip.png")
+        let out_path = path_join(test_temp_dir(), "_test_roundtrip.png")
         img.save(out_path)
         var img2 : Image
         img2.load(out_path)
@@ -841,7 +841,7 @@ def test_save_hdr(t : T?) {
     t |> run("save as HDR and load back") <| @(tt : T?) {
         var img : Image
         img.load_hdr(test_image_path("test.hdr"), 4)
-        let out_path = test_image_path("_test_out.hdr")
+        let out_path = path_join(test_temp_dir(), "_test_out.hdr")
         let (ok, error) = img.save(out_path)
         tt |> success(ok, "save ok: {error}")
         var img2 : Image
@@ -859,8 +859,8 @@ def test_save_jpg_quality(t : T?) {
     t |> run("save JPG with explicit quality") <| @(tt : T?) {
         var img : Image
         img.load(test_image_path("test.png"), 3)
-        let out_low = test_image_path("_test_q10.jpg")
-        let out_high = test_image_path("_test_q100.jpg")
+        let out_low = path_join(test_temp_dir(), "_test_q10.jpg")
+        let out_high = path_join(test_temp_dir(), "_test_q100.jpg")
         let (ok1, err1) = img.save(out_low, 10)
         tt |> success(ok1, "save q10 ok: {err1}")
         let (ok2, err2) = img.save(out_high, 100)

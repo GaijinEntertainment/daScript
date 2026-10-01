@@ -5,7 +5,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
-require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
 require daslib/jobque_boost
 require daslib/clargs
 require math
@@ -59,10 +59,6 @@ def private build_prompt(n : int64; seed : int64) : array<int64> {
     return <- [for (i in range64(n)); 1000l + ((i * 17l + seed * 131l) % 5000l)]
 }
 
-def private greedy_top(s : Session; vocab : int64) : int64 {
-    return parallel_argmax(s.logits, vocab)   // team-scanned; bit-identical to the serial loop
-}
-
 [export]
 def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one timed cell per prompt bucket
     if (!jit_enabled()) {
@@ -100,8 +96,7 @@ def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one 
         params.top_k = int64(cfg.topk)
         params.temp = 0.8
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         if (cfg.team) {
             set_jobque_team_mode(true)
             print("team dispatch: on\n")
@@ -132,12 +127,12 @@ def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one 
             let t0 = ref_time_ticks()
             eval_(t, s, prompt)
             forward(t, s, prompt[plen - 1l], plen - 1l)
-            var tok = cfg.topk > 0 ? sample_(s, params) : greedy_top(s, c.vocab_size)
+            var tok = cfg.topk > 0 ? sample_(s, params) : argmax(s, c.vocab_size)
             let ttft_us = get_time_usec(t0)
             let t1 = ref_time_ticks()
             for (i in range64(ngen - 1l)) {
                 forward(t, s, tok, plen + i)
-                tok = cfg.topk > 0 ? sample_(s, params) : greedy_top(s, c.vocab_size)
+                tok = cfg.topk > 0 ? sample_(s, params) : argmax(s, c.vocab_size)
             }
             let emit_us = get_time_usec(t1)
             ttft_ms |> push(double(ttft_us) / 1000.0lf)

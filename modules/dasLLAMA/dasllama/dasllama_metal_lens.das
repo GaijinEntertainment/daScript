@@ -55,6 +55,17 @@ def public clear_metal_requires_hook {
     g_metal_requires_hooked = false
 }
 
+//! the installed `requires=` hook and whether it is armed - what a cell captures before it installs its own and restores after
+def public metal_requires_hook : tuple<hook : function<(msg : string) : void>; hooked : bool> {
+    return (hook = g_metal_requires_hook, hooked = g_metal_requires_hooked)
+}
+
+//! puts back a state `metal_requires_hook` captured
+def public restore_metal_requires_hook(saved : tuple<hook : function<(msg : string) : void>; hooked : bool>) {
+    g_metal_requires_hook = saved.hook
+    g_metal_requires_hooked = saved.hooked
+}
+
 def public metal_requires_failed(msg : string) {
     if (g_metal_requires_hooked) {
         invoke(g_metal_requires_hook, msg)
@@ -274,7 +285,7 @@ def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var 
 // derived <Class>_<method>_msl (msl_shader.das's msl_global_name is the rule). The emitter hangs
 // _entry/_fastmath/_census/_tgmem off exactly this stem, so a derivation that assumes the
 // un-named spelling asks for a global a named kernel never created.
-def private msl_global_of(fn : Function?) : string {
+def public msl_global_of(fn : Function?) : string {
     for (ann in fn.annotations) {
         if (ann.annotation.name == "metal_kernel") {
             let named = find_arg(ann.arguments, "name") ?as tString ?? ""
@@ -331,6 +342,19 @@ def private stamp_spec(family, fmt, form : string) : StampSpec {
         }
     }
     return <- s
+}
+
+//! the builder a [metal_dispatch] annotation generates and the pipeline global it reads: its `name =` and `pso =`, else
+//! the ones its `stamp =` family derives; empty where neither names one
+def public metal_dispatch_names(args : AnnotationArgumentList) : tuple<builder : string; pso : string> {
+    let named = find_arg(args, "name") ?as tString ?? ""
+    let pso = find_arg(args, "pso") ?as tString ?? ""
+    let parts <- split(find_arg(args, "stamp") ?as tString ?? "", ":")
+    var spec : StampSpec
+    if (length(parts) == 3) {
+        spec <- stamp_spec(strip(parts[0]), strip(parts[1]), strip(parts[2]))
+    }
+    return (builder = empty(named) ? spec.name : named, pso = empty(pso) ? spec.pso : pso)
 }
 
 [structure_macro(name = metal_dispatch)]
@@ -611,6 +635,7 @@ class MetalDispatch : AstStructureAnnotation {
                 body |> push(mk_requires_check(at, fn_name, strip(lr[0]), to_int(strip(lr[1]))))
             }
         }
+        let pipe_at = length(body)
         body |> push(mk_kn_pipeline(at, pso))
         if (!empty(tgmem)) {
             body |> push(mk_kn_tgmem(at, tgmem))
@@ -677,16 +702,36 @@ class MetalDispatch : AstStructureAnnotation {
                 }
             }
         }
+        //! `<name>_pso(enc, pso, ...)`: the same encode through a caller's pipeline, for a gate that cannot seat the global
+        var body_pso : array<ExpressionPtr>
+        body_pso |> reserve(length(body))
+        for (e, i in body, count()) {
+            body_pso |> push(i == pipe_at ? mk_kn_pipeline(at, "pso") : clone_expression(e))
+        }
+        var fn_pso = new Function(at = at, atDecl = at, name := "{fn_name}_pso",
+            flags = FunctionFlags.generated,
+            result = new TypeDecl(at = at, baseType = Type.tVoid))
+        for (a, i in fn.arguments, count()) {
+            fn_pso.arguments |> emplace_new <| clone_variable(a)
+            if (i == 0) {
+                fn_pso.arguments |> emplace_new <| new Variable(at = at, name := "pso", _type = const_t(qmacro_type(type<MetalComputePipeline?>)))
+            }
+        }
         fn.body = make_expression_block(body)
         fn.body |> force_at(at)
+        fn_pso.body = make_expression_block(body_pso)
+        fn_pso.body |> force_at(at)
         // dump = true drops the generated flag + exports, so ast_dump shows the builder for the
         // byte-identity proof against its hand-written twin; remove after the proof.
         if (find_arg(args, "dump") ?as tBool ?? false) {
             fn.flags = FunctionFlags.exports
+            fn_pso.flags = FunctionFlags.exports
         }
-        if (!(compiling_module() |> add_function(fn))) {
-            errors := "[metal_dispatch]: failed to add generated function '{fn_name}'"
-            return false
+        for (f in [fn, fn_pso]) {
+            if (!(compiling_module() |> add_function(f))) {
+                errors := "[metal_dispatch]: failed to add generated function '{f.name}'"
+                return false
+            }
         }
         return true
     }

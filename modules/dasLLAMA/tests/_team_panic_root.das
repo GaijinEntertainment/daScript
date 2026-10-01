@@ -10,8 +10,7 @@ require daslib/jobque_boost
 
 [export]
 def main() {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         maybe_parallel_for(0, 4096, 4) $(rb, re) {
             if (rb >= 0 && re > rb) {
                 panic("TEAM_PANIC at chunk {rb}")

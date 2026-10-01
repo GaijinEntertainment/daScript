@@ -169,8 +169,10 @@ builder by its name - in that driver's row of the role table in
 (`register_*("metal", ...)` or `register_*("vulkan", ...)`, a family hook a tower driver registers
 aside); a `dasllama/dasllama_gpu_tier.das` seat Metal fills; a function one backend exports with
 no counterpart under the other backend's prefix - the same name after the prefix, the same role -
-called by code outside that backend's files; a `[metal_dispatch]` or `[vk_dispatch]` argument or
-field annotation the other lens lacks; or a decode or prefill behavior only one backend's drivers
+called by code outside that backend's files; a kind of generated function (such as a `set_*`
+setter) that one backend's dispatch macro (`[metal_dispatch]` or `[vk_dispatch]`) generates for
+every kernel class and the other does not; a `[metal_dispatch]` or `[vk_dispatch]` argument or field annotation the
+other lens lacks; or a decode or prefill behavior only one backend's drivers
 provide - lands its own entry in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, the closed
 asymmetry list, in the same change, even when the list already carries one of the same class.**
 One backend serving the same path faster or slower is not such a change.
@@ -180,7 +182,8 @@ ships GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a f
 both, for each of the three that the changed call serves - or names both compares in the PR
 body: its emitted kernels byte-identical before and after (the `*_msl` globals or the AIR,
 Metal's compiled shader IR, they build into; the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes) and
-the host's stamp and dispatch selection unchanged on every input.** Such a change is anything the
+the host's stamp, dispatch selection and every bind argument (buffer, offset, kargs value)
+unchanged on every input.** Such a change is anything the
 call executes or that selects what it executes - a driver, a kernel class it dispatches, that
 class's builder, a servability gate, a race that picks which kernel serves, a forwarder default,
 a weight-region or residency path, the tier forwarders and the Vulkan tier-dispatch seams

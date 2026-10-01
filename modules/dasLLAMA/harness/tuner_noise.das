@@ -106,6 +106,13 @@ def noise_floor_pct() : double {
     return g_floor_pct
 }
 
+//! The win margin, in percent: a seat needs this over the fallback or the incumbent, in race and re-race.
+let TUNE_WIN_MARGIN_PCT = 3.0lf
+
+//! The margin a move of a seat must clear this run: TUNE_WIN_MARGIN_PCT, or the noise floor when
+//! that is higher - a noisier run demands a wider win.
+def win_margin_pct() : double => max(TUNE_WIN_MARGIN_PCT, noise_floor_pct())
+
 //! Probe the box. True = keep measuring; the verdict line prints either way, so drift is
 //! visible across a run and across history. Over the note threshold stamps `noise: noisy`; over
 //! the hard ceiling refuses (False - the caller exits nonzero, nothing written) unless

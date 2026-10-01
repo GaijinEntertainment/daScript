@@ -96,8 +96,27 @@ def das_requires(path : string) : array<string> {
     return <- out
 }
 
-def private is_ident_byte(b : int) : bool {
+//! True for a byte that can sit inside a daslang identifier: `[A-Za-z0-9_]`.
+def is_ident_byte(b : int) : bool {
     return is_alnum(b) || b == '_'
+}
+
+//! True when `word` appears in `text` as a whole identifier - no identifier byte on either side.
+def contains_word(text : string; word : string) : bool {
+    var hit = false
+    peek_data(text) $(d) {
+        let w = length(word)
+        var from = 0
+        while (!hit) {
+            let at = find(d, word, from)
+            break if (at < 0)
+            let before_ok = at == 0 || !is_ident_byte(int(d[at - 1]))
+            let after_ok = at + w >= length(d) || !is_ident_byte(int(d[at + w]))
+            hit = before_ok && after_ok
+            from = at + w
+        }
+    }
+    return hit
 }
 
 def private to_lower_byte(b : int) : int {

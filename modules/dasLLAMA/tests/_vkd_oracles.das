@@ -12,7 +12,7 @@ require math   // tanh, exp: the activation oracles' closed forms
 require daslib/shader_lingua_franca
 require daslib/math_bits   // uint_bits_to_float: the mx4 oracle builds the E8M0 scale from its bits as the decode does
 require vulkan   // VkCommandBuffer: the cell harness's record block
-require daslib/linq   // count: the bucket bounds, the harness's written planes
+require daslib/linq   // count: the bucket bounds
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_convert   // quantize_q8_0_into, quantize_q8_k_into: the requant oracle
 require dasllama/dasllama_math
@@ -22,6 +22,7 @@ require dasllama/dasllama_vulkan_decode   // RDEC_MIR_SLACK_ROWS: the flash fixt
 require dasllama/dasllama_vulkan_common   // upload_region_at: the sentinel fills
 require _compares   // NAN_SENTINEL_BITS
 require _attn_oracle public
+require _kernel_oracles public   // act_mul_ref: the gated activation the Metal cells read too
 
 //! the flash tiles' shadow planes carry sixteen zero rows past the last position: the KHR tile's last key step loads a whole 16-row fragment
 let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad their shadows the rows the driver's mirrors carry past their planes
@@ -89,23 +90,39 @@ def staged(mapped : void?; byte_off : int64; n : int; elem : auto(TT)) : array<T
     return <- a
 }
 
-//! One kernel cell's device planes: each plane's buffer, bytes and hazard bit (0 for a plane the kernels only read), the
-//! element base and live run it was declared with, and - after `cell_record` - its host offset in the readback staging.
+//! One kernel cell's device planes: each plane's buffer, bytes, hazard bit and sentinel word, whether the kernels write it,
+//! the element base and live run it was declared with, and - after `cell_record` - its host offset in the readback staging.
+//! Every verb takes a trailing `bit`: 0 (the default) numbers the written planes one bit each and leaves a read plane
+//! bitless; a nonzero `bit` names the plane's hazard bit, for a cell whose planes share bits - a cell names every bit or none.
 struct CellPlanes {
     dev : array<uint64>
     bytes : array<int64>
     hazard_bit : array<uint>
+    written : array<bool>
+    fill : array<uint>
     base : array<int>
     run : array<int>
     host_off : array<int64>
     host : HostBuf
+    auto_bits : int
+    named_bits : bool
 }
 
-def private add_plane(var cp : CellPlanes; dev : uint64; bytes : int64; written : bool; base, run : int) : int {
-    let nw = count(cp.hazard_bit, $(b) => b != 0u)
+def private add_plane(var cp : CellPlanes; dev : uint64; bytes : int64; written : bool; base, run : int; bit : uint; fill : uint = NAN_SENTINEL_BITS) : int {
+    var hb = bit
+    if (bit != 0u) {
+        assert(cp.auto_bits == 0, "CellPlanes: a cell names every hazard bit or none")
+        cp.named_bits = true
+    } elif (written) {
+        assert(!cp.named_bits, "CellPlanes: a cell that names hazard bits names every written plane's")
+        hb = 1u << uint(cp.auto_bits)
+        cp.auto_bits++
+    }
     cp.dev |> push(dev)
     cp.bytes |> push(bytes)
-    cp.hazard_bit |> push(written ? 1u << uint(nw) : 0u)
+    cp.hazard_bit |> push(hb)
+    cp.written |> push(written)
+    cp.fill |> push(fill)
     cp.base |> push(base)
     cp.run |> push(run)
     cp.host_off |> push(-1l)
@@ -113,26 +130,33 @@ def private add_plane(var cp : CellPlanes; dev : uint64; bytes : int64; written 
 }
 
 //! a plane the kernels only read: `a` behind `base` poisoned slots and followed by `slack` more
-def in_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0) : int {
-    return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, false, base, length(a))
+def in_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0; bit : uint = 0u) : int {
+    return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, false, base, length(a), bit)
 }
 
 //! a plane the kernels only read, `a` uploaded as it is - ids, words, halves
-def in_plain(var cp : CellPlanes; a : array<auto(TT)>) : int {
-    return cp |> add_plane(dev_upload(a), long_length(a) * int64(typeinfo sizeof(type<TT>)), false, 0, length(a))
+def in_plain(var cp : CellPlanes; a : array<auto(TT)>; bit : uint = 0u) : int {
+    return cp |> add_plane(dev_upload(a), long_length(a) * int64(typeinfo sizeof(type<TT>)), false, 0, length(a), bit)
 }
 
 //! a plane the kernels write: `n` floats behind `base` slots and `slack` more, the whole plane under the NaN sentinel
-def out_(var cp : CellPlanes; n : int; base : int = 0; slack : int = 0) : int {
+def out_(var cp : CellPlanes; n : int; base : int = 0; slack : int = 0; bit : uint = 0u) : int {
     let bytes = int64(base + n + slack) * 4l
     let dev = make_device_buf(bytes)
     nan_sentinel_upload(dev, bytes)
-    return cp |> add_plane(dev, bytes, true, base, n)
+    return cp |> add_plane(dev, bytes, true, base, n, bit)
+}
+
+//! a plane the kernels write that is not floats: `bytes` under the sentinel `word` - a NaN in both halves for f16, -128 bytes for Q8_0 quants
+def out_words(var cp : CellPlanes; bytes : int64; word : uint; bit : uint = 0u) : int {
+    let dev = make_device_buf(bytes)
+    fill_upload(dev, 0l, bytes, word)
+    return cp |> add_plane(dev, bytes, true, 0, int(bytes / 4l), bit, word)
 }
 
 //! a plane the kernels read and write in place: `a` as `in_` lays it, read back as `out_`
-def io_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0) : int {
-    return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, true, base, length(a))
+def io_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0; bit : uint = 0u) : int {
+    return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, true, base, length(a), bit)
 }
 
 //! one `CellPlanes` column - `dev`, `bytes` or `hazard_bit` - at the planes `idx` (a fixed array of plane ids in binding order): a descriptor set's argument
@@ -157,7 +181,7 @@ def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h :
     var bits = 0u
     var total = 0l
     for (p in range(length(cp.dev))) {
-        continue if (cp.hazard_bit[p] == 0u)
+        continue if (!cp.written[p])
         cp.host_off[p] = total
         devs |> push(cp.dev[p])
         sizes |> push(cp.bytes[p])
@@ -187,9 +211,20 @@ def plane_whole(cp : CellPlanes; p : int) : array<float> {
     return <- staged(cp.host.mapped, cp.host_off[p], int(cp.bytes[p] / 4l), type<float>)
 }
 
-//! the NaN sentinel over written plane `p` again, before a dispatch that must write it anew
+//! `n` elements of `TT` of plane `p` as `cell_record` staged it, `at` elements past its base: `plane_as(cp, p, type<uint16>, n)`
+[unused_argument(elem)]
+def plane_as(cp : CellPlanes; p : int; elem : auto(TT); n : int; at : int = 0) : array<TT -const> {
+    return <- staged(cp.host.mapped, cp.host_off[p] + int64(cp.base[p]) * 4l + int64(at) * int64(typeinfo sizeof(type<TT>)), n, type<TT -const>)
+}
+
+//! the plane's sentinel over written plane `p` again, before a dispatch that must write it anew
 def plane_refill(cp : CellPlanes; p : int) {
-    nan_sentinel_upload(cp.dev[p], cp.bytes[p])
+    fill_upload(cp.dev[p], 0l, cp.bytes[p], cp.fill[p])
+}
+
+//! `a` over plane `p` from its base, between two `cell_record`s: a rerun's poisoned or rescaled input
+def plane_upload(cp : CellPlanes; p : int; a : array<auto(TT)>) {
+    upload_region_at(cp.dev[p], int64(cp.base[p]) * 4l, unsafe(addr<uint8 const?>(a[0])), long_length(a) * int64(typeinfo sizeof(type<TT>)))
 }
 
 //! a kernel cell's planes for the length of `blk`, every buffer and the staging released after it
@@ -891,12 +926,6 @@ def k3f16_gemm_oracle(wq : array<uint>; wsu : array<uint>; xf : array<uint>;
         let q3 = float(((qby >> ((g % 4) * 2)) & 3) - (((hby >> g) & 1) == 0 ? 4 : 0))
         return float(float16(dv * sc * q3))
     }
-}
-
-// the one activation formula (act_mul_sel's shape) — definitional, kept in sync by the arm bars
-def act_mul_ref(v, u : float; gelu : bool) : float {
-    return (gelu ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
-        : (v / (1.0 + exp(-v))) * u)
 }
 
 //! the same over the kernels' act code (ACT_OAI = gpt-oss's clamped swiglu)

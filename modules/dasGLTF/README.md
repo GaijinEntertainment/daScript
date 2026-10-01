@@ -196,7 +196,7 @@ bin/daslang -no-module-cache modules/dasGLTF/tools/convert.das -- \
 
 Explicit input files can follow the options. `--self-contained` produces
 `.das_glb`; `--force` rewrites assets; `--cache DIR` changes the texture cache.
-The default cache is `.jitted_scripts/assets/textures`, relative to the working
+The default cache is `.cache/daslang/assets/textures`, relative to the working
 directory. Repeated conversion checks asset keys and leaves unchanged outputs
 alone. `asset-build.json` records the converted catalog and can be included in
 application build fingerprints. Conversion never rewrites the source glTF files.

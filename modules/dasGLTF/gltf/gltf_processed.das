@@ -23,7 +23,7 @@ struct ProcessingProfile {
     //! Controls which optional vertex streams and storage encodings survive preprocessing.
     keep_uv1, keep_color : bool //! Preserve secondary UVs and vertex colors when true.
     compress_storage : bool = true //! Encode triangle geometry with meshoptimizer when true.
-    texture_cache : string = ".jitted_scripts/assets/textures" //! Directory for content-addressed block textures; empty disables cache I/O.
+    texture_cache : string = ".cache/daslang/assets/textures" //! Directory for content-addressed block textures; empty disables cache I/O.
 }
 struct ProcessedPrimitive {
     //! Portable packed geometry for one primitive, optionally meshoptimizer-encoded.

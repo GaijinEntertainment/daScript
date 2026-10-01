@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
-require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work
+require dasllama/dasllama_math   // with_dasllama_jobque + target_chunk_work
 require daslib/jobque_boost
 require daslib/fio
 
@@ -239,16 +239,6 @@ def private mk_prompt(n : int64) : array<int64> {
     return <- [for (i in range64(n)); 2l + i % 40l]
 }
 
-def private argmax_of(s : Session; vocab : int64) : int64 {
-    var best = 0l
-    for (i in range64(1l, vocab)) {
-        if (s.logits[i] > s.logits[best]) {
-            best = i
-        }
-    }
-    return best
-}
-
 def private logits_equal(a : Session; b : Session; vocab : int64) : bool {
     for (i in range64(vocab)) {
         if (a.logits[i] != b.logits[i]) {
@@ -291,10 +281,7 @@ def private cache_rows_equal(var sf : Session; var sp : Session; c : Config; npo
 [test]
 def test_kv_paged_decode(t : T?) {
     t |> run("interleaved paged sessions == flat, bit-exact under fragmentation (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -303,8 +290,7 @@ def test_kv_paged_decode(t : T?) {
         let c = tr.config
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             // two paged sessions interleave allocations on ONE pool (P=16), so their pages
             // FRAGMENT: [0,2,4] vs [1,3,5]. Each decodes a deterministic token stream and must
@@ -349,10 +335,7 @@ def test_kv_paged_decode(t : T?) {
 [test]
 def test_kv_paged_q8(t : T?) {
     t |> run("paged q8_0 sessions == flat q8_0, bit-exact under fragmentation (needs SmolLM2-135M)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         // q8_0 needs a head_size-64 carrier (stories15M's 48 is rejected by the 32-block check)
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
         if (!stat(path).is_valid) {
@@ -365,8 +348,7 @@ def test_kv_paged_q8(t : T?) {
         }
         let c = tr.config
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             // two q8 paged sessions interleave on ONE pool (P=16): fragmented BYTE-strided runs
             var pool <- create_kv_pool_(c, 16l, KVDtype.q8_0, KVDtype.q8_0)
@@ -408,10 +390,7 @@ def test_kv_paged_q8(t : T?) {
 [test]
 def test_kv_paged_prefill(t : T?) {
     t |> run("paged prefill == flat prefill: logits and cache rows bit-exact (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -420,8 +399,7 @@ def test_kv_paged_prefill(t : T?) {
         let c = tr.config
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             // 21 tokens straddles pages at P=8 (2 full + 1 partial)
             var prompt <- [for (i in range(21)); int64(i % 50 + 2)]
@@ -434,7 +412,7 @@ def test_kv_paged_prefill(t : T?) {
             t |> success(logits_equal(sp, sf, c.vocab_size), "prefill logits bit-exact")
             t |> success(cache_rows_equal(sf, sp, c, n), "prefill cache rows byte-equal flat")
             // decode a few more on top of the paged prefill, against the flat reference
-            var tok = argmax_of(sf, c.vocab_size)
+            var tok = argmax(sf, c.vocab_size)
             var bad = 0
             for (i in range64(8l)) {
                 forward(tr, sp, tok, n + i)
@@ -442,7 +420,7 @@ def test_kv_paged_prefill(t : T?) {
                 if (!logits_equal(sp, sf, c.vocab_size)) {
                     bad ++
                 }
-                tok = argmax_of(sf, c.vocab_size)
+                tok = argmax(sf, c.vocab_size)
             }
             t |> equal(0, bad)
             release_kv_pages_(sp)
@@ -457,12 +435,9 @@ def test_kv_paged_prefill(t : T?) {
 }
 
 [test]
-def test_kv_paged_eval_batch(t : T?) {   // nolint:STYLE038 — flat 3-session paged/flat A/B setup + explicit per-object teardown
+def test_kv_paged_eval_batch(t : T?) {
     t |> run("paged eval_batch == flat eval_batch, ragged depths on one pool (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -471,8 +446,7 @@ def test_kv_paged_eval_batch(t : T?) {   // nolint:STYLE038 — flat 3-session p
         let c = tr.config
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             // ragged depths: 1, 2 and 3 pages at P=8; q0 crosses a page boundary MID-batch-decode
             // (kv_ensure growth inside eval_batch), and the sequential prefills interleave the

@@ -1,14 +1,18 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget
-options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
+options _function_length = 0        // per-kernel gates: fixture + builder dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_kv_codec  // quantize/cvt q8kv + tq4kv rows — the codec fixtures + their dequant truth
 require ?das_metal dasllama/dasllama_metal_kernels  // the sq_attn family (Apple builds)
+require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
-require ?das_metal _metal_kernel_common   // shared buf helpers + eyeball-dump compares
+require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell
+require _attn_oracle
+require _compares   // Bar: the cells' bar
+require _kernel_oracles   // attn_q_val / attn_q_row: the query rows the decode cells read too
 require math
 
 // The single-query attention codec twins (f32 / q8_0 / tq4, single-tg + split-K + comb) vs a
@@ -17,7 +21,7 @@ require math
 // DEQUANTIZED values (cvt_*_to_f32) — exactly the numbers the kernel's stream dequant loads,
 // so only reduction-order noise separates the sides (the shared 2e-3 bar). Covers per twin:
 // sinks, softcap, the sliding window + chlo chunk skip. test_metal_decode_kernels owns the f16
-// twins these mirror. Off-Apple (or with no Metal device) every check feints cleanly.
+// twins these mirror. Without das_metal in the build, or with no Metal device, every check skips.
 
 let HS = 64                             // head_size == threads per group
 let N_HEADS = 4
@@ -27,70 +31,19 @@ let QD = N_HEADS * HS
 let NBLK = KV_DIM / 32                  // q8/tq4 blocks per KV row
 let CHUNK = 64                          // the split-K chunk height the part kernels hardcode
 
-// synthetic pre-quant K/V and q rows
+let private BAR_ATTN = Bar(rel = 2e-3, poison_scaled = true)   //! reduction-order noise against the dequant truth; the poisoned last element moves 0.5 of its magnitude floored at 1
+
+// synthetic pre-quant K/V rows
 def private kv_val(j, d : int) : float => float((j * 7 + d * 3) % 9 - 4) * 0.25 + 0.03 * float((j + d) % 5)
 
-def private q_val(i : int) : float => float((i * 5) % 11 - 5) * 0.125
-
-// causal single-query attention over dequantized K/V planes for one head; kvbase/qbase place
-// the row inside batch-shared planes; window > 0 masks rows below cnt - window; sink > -1e30
-// folds an attention sink into max and denominator
-def private attn_oracle(kdeq, vdeq : array<float>; kvbase : int; q : array<float>; qbase, h, cnt : int;
-                        scale, softcap, sink : float; window : int) : array<float> {
-    let khoff = (h / KV_MUL) * HS
-    let wstart = window > 0 && cnt > window ? cnt - window : 0
-    var sc : array<float>
-    sc |> resize(cnt)
-    for (j in range(cnt)) {
-        if (j < wstart) {
-            sc[j] = -3.0e38
-            continue
-        }
-        var s = 0.0
-        for (d in range(HS)) {
-            s += q[qbase + h * HS + d] * kdeq[kvbase + j * KV_DIM + khoff + d]
-        }
-        let raw = s * scale
-        sc[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(raw * 2.0 / softcap))) : raw
-    }
-    var mm = -3.0e38
-    for (j in range(cnt)) {
-        mm = max(mm, sc[j])
-    }
-    mm = max(mm, sink)
-    var tot = 0.0
-    for (j in range(cnt)) {
-        sc[j] = exp(sc[j] - mm)
-        tot += sc[j]
-    }
-    if (sink > -1.0e30) {
-        tot += exp(max(sink - mm, -80.0))
-    }
-    var out : array<float>
-    out |> resize(HS)
-    for (d in range(HS)) {
-        var acc = 0.0
-        for (j in range(cnt)) {
-            acc += sc[j] * vdeq[kvbase + j * KV_DIM + khoff + d]
-        }
-        out[d] = acc / tot
-    }
-    delete sc
-    return <- out
-}
-
+//! every head's attention row into want[obase + h * HS]: kvbase/qbase place the row inside batch-shared planes; window > 0 starts the keys at cnt - window
 def private oracle_all(kdeq, vdeq : array<float>; kvbase : int; q : array<float>; qbase, cnt : int;
-                       scale, softcap, sink : float; window : int) : array<float> {
-    var want : array<float>
-    want |> resize(QD)
+                       scale, softcap : float; hass : bool; sink : float; window : int; var want : array<float>; obase : int) {
+    let wstart = window > 0 && cnt > window ? cnt - window : 0
     for (h in range(N_HEADS)) {
-        var col <- attn_oracle(kdeq, vdeq, kvbase, q, qbase, h, cnt, scale, softcap, sink, window)
-        for (d in range(HS)) {
-            want[h * HS + d] = col[d]
-        }
-        delete col
+        attn_row_oracle(q, qbase + h * HS, kdeq, kvbase, vdeq, kvbase, KV_DIM, h, HS, KV_MUL, cnt, scale, want, obase + h * HS,
+            wstart, softcap, hass, sink)
     }
-    return <- want
 }
 
 // Build one codec's K or V fixture: the pre-quant floats, the quantized slab bytes (empty for
@@ -124,176 +77,119 @@ def private codec_rows(codec : string; seed, cnt : int; var slab : array<uint8>;
     delete raw
 }
 
-def private q_rows : array<float> {
-    var q : array<float>
-    q |> resize(QD)
-    for (i in range(QD)) {
-        q[i] = q_val(i)
-    }
-    return <- q
-}
-
 // the single-threadgroup codec twins: one dispatch, the whole context in one pass
-def private sq_codec_single_gate(t : T?; dev, queue; codec : string; cnt : int; softcap : float; hass : bool) {
+def private sq_codec_single_gate(t : T?; var dev, queue; codec : string; cnt : int; softcap : float; hass : bool) {
     let tag = "sq_attn_{codec} cnt={cnt} softcap={softcap} sink={hass}"
-    var err : string
-    let src = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl : MetalSqAttnTq4_metal_sq_attn_msl)
-    let entry = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl_entry : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl_entry : MetalSqAttnTq4_metal_sq_attn_msl_entry)
-    let fm = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl_fastmath : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl_fastmath : MetalSqAttnTq4_metal_sq_attn_msl_fastmath)
-    let tgm = codec == "f32" ? MetalSqAttnF32_metal_sq_attn_msl_tgmem : (codec == "q8" ? MetalSqAttnQ8_metal_sq_attn_msl_tgmem : MetalSqAttnTq4_metal_sq_attn_msl_tgmem)
-    var pso = pipeline_from_source(dev, src, entry, fm, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var kslab : array<uint8>
-    var vslab : array<uint8>
-    var kdeq : array<float>
-    var vdeq : array<float>
-    codec_rows(codec, 1, cnt, kslab, kdeq)
-    codec_rows(codec, 2, cnt, vslab, vdeq)
-    var q <- q_rows()
-    if (softcap > 0.0) {
-        // softcap must be OBSERVABLE: at the base fixture's |raw| <= 0.07 the tanh is identity
-        // to 1e-8 and the arm passes with the branch deleted. x300 puts |raw| ~ 21, moving the
-        // compared output by 1.4e-2 (measured) against the shared 2e-3 bar.
-        for (qv in q) {
-            qv *= 300.0
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let quant = codec != "f32"
+        let sp = stamp_of(@@enc_attn32_c)
+        let sq = codec == "q8" ? stamp_of(@@enc_attn_q8_c) : stamp_of(@@enc_attn_tq4_c)
+        var pso = quant ? (mc |> keep_stamp(sq, err)) : (mc |> keep_stamp(sp, err))
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope kslab : array<uint8>
+        var inscope vslab : array<uint8>
+        var inscope kdeq : array<float>
+        var inscope vdeq : array<float>
+        codec_rows(codec, 1, cnt, kslab, kdeq)
+        codec_rows(codec, 2, cnt, vslab, vdeq)
+        var inscope q <- attn_q_row(QD)
+        if (softcap > 0.0) {
+            // softcap must be OBSERVABLE: at the base fixture's |raw| <= 0.07 the tanh is identity
+            // to 1e-8 and the arm passes with the branch deleted. x300 puts |raw| ~ 21, moving the
+            // compared output by 1.4e-2 (measured) against the shared 2e-3 bar.
+            for (qv in q) {
+                qv *= 300.0
+            }
         }
-    }
-    let sink_v = 0.375
-    let scale = 1.0 / sqrt(float(HS))
-    var want <- oracle_all(kdeq, vdeq, 0, q, 0, cnt, scale, softcap, hass ? sink_v : -3.0e38, 0)
-    var bk = codec == "f32" ? buf_upload(dev, kdeq) : buf_upload(dev, kslab)
-    var bv = codec == "f32" ? buf_upload(dev, vdeq) : buf_upload(dev, vslab)
-    var bq = buf_upload(dev, q)
-    var by = buf_fill(dev, QD, -1000.0)
-    var bsink = buf_fill(dev, N_HEADS, sink_v)
-    var ka = SqAttnArgs(cnt = uint(cnt), kstride = uint(codec == "f32" ? KV_DIM : NBLK),
-        nheads = uint(N_HEADS), kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale,
-        softcap = softcap, hass = hass ? 1u : 0u)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tgm, 0)
-        if (codec == "f32") {
-            metal_set_buffer(enc, bk, 0ul, 0)
-            metal_set_buffer(enc, bv, 0ul, 1)
-            metal_set_buffer(enc, bq, 0ul, 2)
-            metal_set_buffer(enc, by, 0ul, 3)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
-        } else {
-            metal_set_buffer(enc, bk, 0ul, 0)
-            metal_set_buffer(enc, bk, 0ul, 1)
-            metal_set_buffer(enc, bv, 0ul, 2)
-            metal_set_buffer(enc, bv, 0ul, 3)
-            metal_set_buffer(enc, bq, 0ul, 4)
-            metal_set_buffer(enc, by, 0ul, 5)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 6)
+        let sink_v = 0.375
+        let scale = 1.0 / sqrt(float(HS))
+        var inscope want : array<float>
+        want |> resize(QD)
+        oracle_all(kdeq, vdeq, 0, q, 0, cnt, scale, softcap, hass, sink_v, 0, want, 0)
+        let bk = codec == "f32" ? (mc |> in_(kdeq)) : (mc |> in_plain(kslab))
+        let bv = codec == "f32" ? (mc |> in_(vdeq)) : (mc |> in_plain(vslab))
+        let bq = mc |> in_(q)
+        let by = mc |> out_words(QD, -1000.0)
+        let bsink = mc |> in_(plane_of(N_HEADS, sink_v))
+        var ka = SqAttnArgs(cnt = uint(cnt), kstride = uint(codec == "f32" ? KV_DIM : NBLK),
+            nheads = uint(N_HEADS), kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale,
+            softcap = softcap, hass = hass ? 1u : 0u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (k, v, qp, y, s) = (mc.buf[bk], mc.buf[bv], mc.buf[bq], mc.buf[by], mc.buf[bsink])
+            if (quant) {
+                stamp_run(sq, pso) {
+                    invoke(sq.enc, enc, k, 0ul, k, v, 0ul, v, qp, y, ka, s, int64(N_HEADS), int64(HS))
+                }
+            } else {
+                stamp_run(sp, pso) {
+                    invoke(sp.enc, enc, k, 0ul, v, 0ul, qp, y, ka, s, int64(N_HEADS), int64(HS))
+                }
+            }
         }
-        metal_set_buffer(enc, bsink, 0ul, 20)
-        metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS), 1u, 1u), uint3(uint(HS), 1u, 1u))
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_ATTN, Shape(row_width = HS))
     }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_bars(by, want, 2e-3, 0.0, tag), 0)
-    }
-    metal_release(bk)
-    metal_release(bv)
-    metal_release(bq)
-    metal_release(by)
-    metal_release(bsink)
-    metal_release(pso)
-    delete kslab
-    delete vslab
-    delete kdeq
-    delete vdeq
-    delete q
-    delete want
 }
 
 // the split-K pair: codec part kernel writes unnormalized chunk partials, the dtype-agnostic
 // comb rescales across chunks; window > 0 also exercises the chunk mask + the chlo skip
-def private sq_codec_part_gate(t : T?; dev, queue; codec : string; cnt, window : int) {
+def private sq_codec_part_gate(t : T?; var dev, queue; codec : string; cnt, window : int) {
     let tag = "sq_attn_part_{codec} cnt={cnt} window={window}"
-    var err : string
-    let src = codec == "f32" ? MetalSqAttnPartF32_metal_sq_attn_part_msl : (codec == "q8" ? MetalSqAttnPartQ8_metal_sq_attn_part_msl : MetalSqAttnPartTq4_metal_sq_attn_part_msl)
-    let entry = codec == "f32" ? MetalSqAttnPartF32_metal_sq_attn_part_msl_entry : (codec == "q8" ? MetalSqAttnPartQ8_metal_sq_attn_part_msl_entry : MetalSqAttnPartTq4_metal_sq_attn_part_msl_entry)
-    let fm = codec == "f32" ? MetalSqAttnPartF32_metal_sq_attn_part_msl_fastmath : (codec == "q8" ? MetalSqAttnPartQ8_metal_sq_attn_part_msl_fastmath : MetalSqAttnPartTq4_metal_sq_attn_part_msl_fastmath)
-    let tgm = codec == "f32" ? MetalSqAttnPartF32_metal_sq_attn_part_msl_tgmem : (codec == "q8" ? MetalSqAttnPartQ8_metal_sq_attn_part_msl_tgmem : MetalSqAttnPartTq4_metal_sq_attn_part_msl_tgmem)
-    var pso_p = pipeline_from_source(dev, src, entry, fm, err)
-    t |> success(pso_p != null, "{tag}: part pipeline: {err}")
-    var pso_c = pipeline_from_source(dev, MetalSqAttnComb_metal_sq_attn_comb_msl, MetalSqAttnComb_metal_sq_attn_comb_msl_entry, MetalSqAttnComb_metal_sq_attn_comb_msl_fastmath, err)
-    t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
-    if (pso_p == null || pso_c == null) {
-        metal_release(pso_p)
-        metal_release(pso_c)
-        return
-    }
-    var kslab : array<uint8>
-    var vslab : array<uint8>
-    var kdeq : array<float>
-    var vdeq : array<float>
-    codec_rows(codec, 1, cnt, kslab, kdeq)
-    codec_rows(codec, 2, cnt, vslab, vdeq)
-    var q <- q_rows()
-    let scale = 1.0 / sqrt(float(HS))
-    let nchunks = (cnt + CHUNK - 1) / CHUNK
-    let wstart = window > 0 && cnt > window ? cnt - window : 0
-    let chlo = wstart / CHUNK
-    var want <- oracle_all(kdeq, vdeq, 0, q, 0, cnt, scale, 0.0, -3.0e38, window)
-    var bk = codec == "f32" ? buf_upload(dev, kdeq) : buf_upload(dev, kslab)
-    var bv = codec == "f32" ? buf_upload(dev, vdeq) : buf_upload(dev, vslab)
-    var bq = buf_upload(dev, q)
-    var bpart = buf_fill(dev, N_HEADS * nchunks * (HS + 2), -1000.0)
-    var by = buf_fill(dev, QD, -1000.0)
-    var bsink = buf_fill(dev, N_HEADS, 0.0)
-    var kap = SqAttnPartArgs(cnt = uint(cnt), kstride = uint(codec == "f32" ? KV_DIM : NBLK),
-        nheads = uint(N_HEADS), kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale,
-        nchunks = uint(nchunks), softcap = 0.0, window = uint(window))
-    var kac = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
-        chlo = uint(chlo), hass = 0u)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso_p)
-        metal_set_threadgroup_memory_length(enc, tgm, 0)
-        if (codec == "f32") {
-            metal_set_buffer(enc, bk, 0ul, 0)
-            metal_set_buffer(enc, bv, 0ul, 1)
-            metal_set_buffer(enc, bq, 0ul, 2)
-            metal_set_buffer(enc, bpart, 0ul, 3)
-            metal_set_bytes(enc, unsafe(addr<void?>(kap)), uint64(typeinfo sizeof(kap)), 4)
-        } else {
-            metal_set_buffer(enc, bk, 0ul, 0)
-            metal_set_buffer(enc, bk, 0ul, 1)
-            metal_set_buffer(enc, bv, 0ul, 2)
-            metal_set_buffer(enc, bv, 0ul, 3)
-            metal_set_buffer(enc, bq, 0ul, 4)
-            metal_set_buffer(enc, bpart, 0ul, 5)
-            metal_set_bytes(enc, unsafe(addr<void?>(kap)), uint64(typeinfo sizeof(kap)), 6)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let quant = codec != "f32"
+        let sp = stamp_of(@@enc_attnp32_c)
+        let sq = codec == "q8" ? stamp_of(@@enc_attnp_q8_c) : stamp_of(@@enc_attnp_tq4_c)
+        let sc = stamp_of(@@enc_attncomb_c)
+        var pso_p = quant ? (mc |> keep_stamp(sq, err)) : (mc |> keep_stamp(sp, err))
+        let part_ok = pso_ok(t, "{tag} part", pso_p, err)
+        var pso_c = mc |> keep_stamp(sc, err)
+        return if (!pso_ok(t, "{tag} comb", pso_c, err) || !part_ok)
+        var inscope kslab : array<uint8>
+        var inscope vslab : array<uint8>
+        var inscope kdeq : array<float>
+        var inscope vdeq : array<float>
+        codec_rows(codec, 1, cnt, kslab, kdeq)
+        codec_rows(codec, 2, cnt, vslab, vdeq)
+        var inscope q <- attn_q_row(QD)
+        let scale = 1.0 / sqrt(float(HS))
+        let nchunks = (cnt + CHUNK - 1) / CHUNK
+        let wstart = window > 0 && cnt > window ? cnt - window : 0
+        let chlo = wstart / CHUNK
+        var inscope want : array<float>
+        want |> resize(QD)
+        oracle_all(kdeq, vdeq, 0, q, 0, cnt, scale, 0.0, false, 0.0, window, want, 0)
+        let bk = codec == "f32" ? (mc |> in_(kdeq)) : (mc |> in_plain(kslab))
+        let bv = codec == "f32" ? (mc |> in_(vdeq)) : (mc |> in_plain(vslab))
+        let bq = mc |> in_(q)
+        let bpart = mc |> out_words(N_HEADS * nchunks * (HS + 2), -1000.0)
+        let by = mc |> out_words(QD, -1000.0)
+        let bsink = mc |> in_(plane_of(N_HEADS, 0.0))
+        var kap = SqAttnPartArgs(cnt = uint(cnt), kstride = uint(codec == "f32" ? KV_DIM : NBLK),
+            nheads = uint(N_HEADS), kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale,
+            nchunks = uint(nchunks), softcap = 0.0, window = uint(window))
+        var kac = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
+            chlo = uint(chlo), hass = 0u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (k, v, qp, p) = (mc.buf[bk], mc.buf[bv], mc.buf[bq], mc.buf[bpart])
+            let ntg = int64(N_HEADS * nchunks)
+            if (quant) {
+                stamp_run(sq, pso_p) {
+                    invoke(sq.enc, enc, k, 0ul, k, v, 0ul, v, qp, p, kap, ntg, int64(HS))
+                }
+            } else {
+                stamp_run(sp, pso_p) {
+                    invoke(sp.enc, enc, k, 0ul, v, 0ul, qp, p, kap, ntg, int64(HS))
+                }
+            }
+            stamp_run(sc, pso_c) {
+                invoke(sc.enc, enc, p, mc.buf[by], kac, mc.buf[bsink], int64(N_HEADS), int64(HS))
+            }
         }
-        metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS * nchunks), 1u, 1u), uint3(uint(HS), 1u, 1u))
-        metal_set_pipeline(enc, pso_c)
-        metal_set_buffer(enc, bpart, 0ul, 0)
-        metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 2)
-        metal_set_buffer(enc, bsink, 0ul, 20)
-        metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS), 1u, 1u), uint3(uint(HS), 1u, 1u))
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_ATTN, Shape(row_width = HS))
     }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_bars(by, want, 2e-3, 0.0, tag), 0)
-    }
-    metal_release(bk)
-    metal_release(bv)
-    metal_release(bq)
-    metal_release(bpart)
-    metal_release(by)
-    metal_release(bsink)
-    metal_release(pso_p)
-    metal_release(pso_c)
-    delete kslab
-    delete vslab
-    delete kdeq
-    delete vdeq
-    delete q
-    delete want
 }
 
 // ===== the batched twins: row-table arenas, ragged depths, one dispatch =====
@@ -345,7 +241,7 @@ def private build_batch_fix(codec : string; cnts : array<int>; qstride : int; va
     fx.vdeq |> resize(total * KV_DIM)
     fx.q |> resize(nb2 * qstride)
     for (i in range(nb2 * qstride)) {
-        fx.q[i] = q_val(i % (QD + 13))
+        fx.q[i] = attn_q_val(i % (QD + 13))
     }
     var raw : array<float>
     raw |> resize(KV_DIM)
@@ -412,176 +308,128 @@ def private build_batch_fix(codec : string; cnts : array<int>; qstride : int; va
     delete raw
 }
 
-def private batch_want(fx : BatchAttnFix; cnts : array<int>; qstride : int; scale, softcap, sink : float; window : int) : array<float> {
+def private batch_want(fx : BatchAttnFix; cnts : array<int>; qstride : int; scale, softcap : float; hass : bool; sink : float; window : int) : array<float> {
     let nb2 = length(cnts)
     var want : array<float>
     want |> resize(nb2 * QD)
     for (r in range(nb2)) {
-        var row <- oracle_all(fx.kdeq, fx.vdeq, fx.roff[r], fx.q, r * qstride, cnts[r], scale, softcap, sink, window)
-        for (i in range(QD)) {
-            want[r * QD + i] = row[i]
-        }
-        delete row
+        oracle_all(fx.kdeq, fx.vdeq, fx.roff[r], fx.q, r * qstride, cnts[r], scale, softcap, hass, sink, window, want, r * QD)
     }
     return <- want
 }
 
-def private sq_b_gate(t : T?; dev, queue; codec : string; cnts : array<int>; softcap : float; hass : bool) {
-    let tag = "sq_attn_b_{codec} B={length(cnts)} softcap={softcap} sink={hass}"
-    var err : string
-    let src = codec == "f16" ? MetalSqAttnBF16_metal_sq_attn_b_msl : (codec == "f32" ? MetalSqAttnBF32_metal_sq_attn_b_msl : (codec == "q8" ? MetalSqAttnBQ8_metal_sq_attn_b_msl : MetalSqAttnBTq4_metal_sq_attn_b_msl))
-    let entry = codec == "f16" ? MetalSqAttnBF16_metal_sq_attn_b_msl_entry : (codec == "f32" ? MetalSqAttnBF32_metal_sq_attn_b_msl_entry : (codec == "q8" ? MetalSqAttnBQ8_metal_sq_attn_b_msl_entry : MetalSqAttnBTq4_metal_sq_attn_b_msl_entry))
-    let fm = codec == "f16" ? MetalSqAttnBF16_metal_sq_attn_b_msl_fastmath : (codec == "f32" ? MetalSqAttnBF32_metal_sq_attn_b_msl_fastmath : (codec == "q8" ? MetalSqAttnBQ8_metal_sq_attn_b_msl_fastmath : MetalSqAttnBTq4_metal_sq_attn_b_msl_fastmath))
-    let tgm = codec == "f16" ? MetalSqAttnBF16_metal_sq_attn_b_msl_tgmem : (codec == "f32" ? MetalSqAttnBF32_metal_sq_attn_b_msl_tgmem : (codec == "q8" ? MetalSqAttnBQ8_metal_sq_attn_b_msl_tgmem : MetalSqAttnBTq4_metal_sq_attn_b_msl_tgmem))
-    var pso = pipeline_from_source(dev, src, entry, fm, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let nb2 = length(cnts)
-    let qstride = QD + 37
-    let quant = codec == "q8" || codec == "tq4"
-    var fx : BatchAttnFix
-    build_batch_fix(codec, cnts, qstride, fx)
-    if (softcap > 0.0) {
-        // same x300 amplitude boost as the single gate — softcap under the base fixture is identity
-        for (qv in fx.q) {
-            qv *= 300.0
-        }
+//! the fixture's K and V arenas as the cell's two read planes: the codec's slab bytes, halves or floats
+def private kv_planes(var mc; codec : string; fx : BatchAttnFix) : int2 {
+    if (codec == "q8" || codec == "tq4") {
+        return int2(mc |> in_plain(fx.kslab), mc |> in_plain(fx.vslab))
+    } elif (codec == "f16") {
+        return int2(mc |> in_plain(fx.kh), mc |> in_plain(fx.vh))
     }
-    let sink_v = 0.375
-    let scale = 1.0 / sqrt(float(HS))
-    var want <- batch_want(fx, cnts, qstride, scale, softcap, hass ? sink_v : -3.0e38, 0)
-    var bk = quant ? buf_upload(dev, fx.kslab) : (codec == "f16" ? buf_upload(dev, fx.kh) : buf_upload(dev, fx.kf))
-    var bv = quant ? buf_upload(dev, fx.vslab) : (codec == "f16" ? buf_upload(dev, fx.vh) : buf_upload(dev, fx.vf))
-    var bq = buf_upload(dev, fx.q)
-    var by = buf_fill(dev, nb2 * QD, -1000.0)
-    var brt = buf_upload(dev, fx.rt)
-    var bsink = buf_fill(dev, N_HEADS, sink_v)
-    var ka = SqAttnBArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(N_HEADS),
-        kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, qstride = uint(qstride),
-        softcap = softcap, hass = hass ? 1u : 0u)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, tgm, 0)
-        if (quant) {
-            metal_set_buffer(enc, bk, 0ul, 0)
-            metal_set_buffer(enc, bk, 0ul, 1)
-            metal_set_buffer(enc, bv, 0ul, 2)
-            metal_set_buffer(enc, bv, 0ul, 3)
-            metal_set_buffer(enc, bq, 0ul, 4)
-            metal_set_buffer(enc, by, 0ul, 5)
-            metal_set_buffer(enc, brt, 0ul, 6)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 7)
-        } else {
-            metal_set_buffer(enc, bk, 0ul, 0)
-            metal_set_buffer(enc, bv, 0ul, 1)
-            metal_set_buffer(enc, bq, 0ul, 2)
-            metal_set_buffer(enc, by, 0ul, 3)
-            metal_set_buffer(enc, brt, 0ul, 4)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-        }
-        metal_set_buffer(enc, bsink, 0ul, 20)
-        metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS * nb2), 1u, 1u), uint3(uint(HS), 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_bars(by, want, 2e-3, 0.0, tag), 0)
-    }
-    metal_release(bk)
-    metal_release(bv)
-    metal_release(bq)
-    metal_release(by)
-    metal_release(brt)
-    metal_release(bsink)
-    metal_release(pso)
-    delete fx
-    delete want
+    return int2(mc |> in_(fx.kf), mc |> in_(fx.vf))
 }
 
-def private sq_partb_gate(t : T?; dev, queue; codec : string; cnts : array<int>; window : int; hass : bool) {
-    let tag = "sq_attn_part_b_{codec} B={length(cnts)} window={window} sink={hass}"
-    var err : string
-    let src = codec == "f16" ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl : (codec == "f32" ? MetalSqAttnPartBF32_metal_sq_attn_part_b_msl : (codec == "q8" ? MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl : MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl))
-    let entry = codec == "f16" ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_entry : (codec == "f32" ? MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_entry : (codec == "q8" ? MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_entry : MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_entry))
-    let fm = codec == "f16" ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_fastmath : (codec == "f32" ? MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_fastmath : (codec == "q8" ? MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_fastmath : MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_fastmath))
-    let tgm = codec == "f16" ? MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem : (codec == "f32" ? MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem : (codec == "q8" ? MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem : MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem))
-    var pso_p = pipeline_from_source(dev, src, entry, fm, err)
-    t |> success(pso_p != null, "{tag}: part pipeline: {err}")
-    var pso_c = pipeline_from_source(dev, MetalSqAttnCombB_metal_sq_attn_comb_msl, MetalSqAttnCombB_metal_sq_attn_comb_msl_entry, MetalSqAttnCombB_metal_sq_attn_comb_msl_fastmath, err)
-    t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
-    if (pso_p == null || pso_c == null) {
-        metal_release(pso_p)
-        metal_release(pso_c)
-        return
-    }
-    let nb2 = length(cnts)
-    let qstride = QD + 37
-    let quant = codec == "q8" || codec == "tq4"
-    var fx : BatchAttnFix
-    build_batch_fix(codec, cnts, qstride, fx)
-    var cmax = 0
-    for (c in cnts) {
-        cmax = max(cmax, c)
-    }
-    let nchmax = (cmax + CHUNK - 1) / CHUNK
-    let sink_v = 0.375
-    let scale = 1.0 / sqrt(float(HS))
-    var want <- batch_want(fx, cnts, qstride, scale, 0.0, hass ? sink_v : -3.0e38, window)
-    var bk = quant ? buf_upload(dev, fx.kslab) : (codec == "f16" ? buf_upload(dev, fx.kh) : buf_upload(dev, fx.kf))
-    var bv = quant ? buf_upload(dev, fx.vslab) : (codec == "f16" ? buf_upload(dev, fx.vh) : buf_upload(dev, fx.vf))
-    var bq = buf_upload(dev, fx.q)
-    var bpart = buf_fill(dev, nb2 * N_HEADS * nchmax * (HS + 2), -1000.0)
-    var by = buf_fill(dev, nb2 * QD, -1000.0)
-    var brt = buf_upload(dev, fx.rt)
-    var bsink = buf_fill(dev, N_HEADS, sink_v)
-    var kap = SqAttnPartBArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(N_HEADS),
-        kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, qstride = uint(qstride),
-        nchmax = uint(nchmax), softcap = 0.0, window = uint(window))
-    var kac = SqAttnCombArgs(nch = uint(nchmax), nheads = uint(N_HEADS), hs = uint(HS),
-        window = uint(window), hass = hass ? 1u : 0u)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso_p)
-        metal_set_threadgroup_memory_length(enc, tgm, 0)
-        if (quant) {
-            metal_set_buffer(enc, bk, 0ul, 0)
-            metal_set_buffer(enc, bk, 0ul, 1)
-            metal_set_buffer(enc, bv, 0ul, 2)
-            metal_set_buffer(enc, bv, 0ul, 3)
-            metal_set_buffer(enc, bq, 0ul, 4)
-            metal_set_buffer(enc, bpart, 0ul, 5)
-            metal_set_buffer(enc, brt, 0ul, 6)
-            metal_set_bytes(enc, unsafe(addr<void?>(kap)), uint64(typeinfo sizeof(kap)), 7)
-        } else {
-            metal_set_buffer(enc, bk, 0ul, 0)
-            metal_set_buffer(enc, bv, 0ul, 1)
-            metal_set_buffer(enc, bq, 0ul, 2)
-            metal_set_buffer(enc, bpart, 0ul, 3)
-            metal_set_buffer(enc, brt, 0ul, 4)
-            metal_set_bytes(enc, unsafe(addr<void?>(kap)), uint64(typeinfo sizeof(kap)), 5)
+def private sq_b_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; softcap : float; hass : bool) {
+    let tag = "sq_attn_b_{codec} B={length(cnts)} softcap={softcap} sink={hass}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let quant = codec == "q8" || codec == "tq4"
+        let sp = codec == "f16" ? stamp_of(@@enc_attnb16_c) : stamp_of(@@enc_attnb32_c)
+        let sq = codec == "q8" ? stamp_of(@@enc_attnb_q8_c) : stamp_of(@@enc_attnb_tq4_c)
+        var pso = quant ? (mc |> keep_stamp(sq, err)) : (mc |> keep_stamp(sp, err))
+        return if (!pso_ok(t, tag, pso, err))
+        let nb2 = length(cnts)
+        let qstride = QD + 37
+        var inscope fx : BatchAttnFix
+        build_batch_fix(codec, cnts, qstride, fx)
+        if (softcap > 0.0) {
+            // same x300 amplitude boost as the single gate — softcap under the base fixture is identity
+            for (qv in fx.q) {
+                qv *= 300.0
+            }
         }
-        metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS * nchmax * nb2), 1u, 1u), uint3(uint(HS), 1u, 1u))
-        metal_set_pipeline(enc, pso_c)
-        metal_set_buffer(enc, bpart, 0ul, 0)
-        metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 2)
-        metal_set_buffer(enc, brt, 0ul, 3)
-        metal_set_buffer(enc, bsink, 0ul, 20)
-        metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS * nb2), 1u, 1u), uint3(uint(HS), 1u, 1u))
+        let sink_v = 0.375
+        let scale = 1.0 / sqrt(float(HS))
+        var inscope want <- batch_want(fx, cnts, qstride, scale, softcap, hass, sink_v, 0)
+        let kv = mc |> kv_planes(codec, fx)
+        let bq = mc |> in_(fx.q)
+        let by = mc |> out_words(nb2 * QD, -1000.0)
+        let brt = mc |> in_plain(fx.rt)
+        let bsink = mc |> in_(plane_of(N_HEADS, sink_v))
+        var ka = SqAttnBArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(N_HEADS),
+            kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, qstride = uint(qstride),
+            softcap = softcap, hass = hass ? 1u : 0u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (k, v, q, y, rt, s) = (mc.buf[kv.x], mc.buf[kv.y], mc.buf[bq], mc.buf[by], mc.buf[brt], mc.buf[bsink])
+            let wgs = int64(N_HEADS * nb2)
+            if (quant) {
+                stamp_run(sq, pso) {
+                    invoke(sq.enc, enc, k, k, v, v, q, y, rt, 0ul, ka, s, wgs, int64(HS))
+                }
+            } else {
+                stamp_run(sp, pso) {
+                    invoke(sp.enc, enc, k, v, q, y, rt, 0ul, ka, s, wgs, int64(HS))
+                }
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_ATTN, Shape(row_width = QD, head_width = HS))
     }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_bars(by, want, 2e-3, 0.0, tag), 0)
+}
+
+def private sq_partb_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; window : int; hass : bool) {
+    let tag = "sq_attn_part_b_{codec} B={length(cnts)} window={window} sink={hass}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let quant = codec == "q8" || codec == "tq4"
+        let sp = codec == "f16" ? stamp_of(@@enc_attnpb16_c) : stamp_of(@@enc_attnpb32_c)
+        let sq = codec == "q8" ? stamp_of(@@enc_attnpb_q8_c) : stamp_of(@@enc_attnpb_tq4_c)
+        let sc = stamp_of(@@enc_attn_comb_b)
+        var pso_p = quant ? (mc |> keep_stamp(sq, err)) : (mc |> keep_stamp(sp, err))
+        let part_ok = pso_ok(t, "{tag} part", pso_p, err)
+        var pso_c = mc |> keep_stamp(sc, err)
+        return if (!pso_ok(t, "{tag} comb", pso_c, err) || !part_ok)
+        let nb2 = length(cnts)
+        let qstride = QD + 37
+        var inscope fx : BatchAttnFix
+        build_batch_fix(codec, cnts, qstride, fx)
+        var cmax = 0
+        for (c in cnts) {
+            cmax = max(cmax, c)
+        }
+        let nchmax = (cmax + CHUNK - 1) / CHUNK
+        let sink_v = 0.375
+        let scale = 1.0 / sqrt(float(HS))
+        var inscope want <- batch_want(fx, cnts, qstride, scale, 0.0, hass, sink_v, window)
+        let kv = mc |> kv_planes(codec, fx)
+        let bq = mc |> in_(fx.q)
+        let bpart = mc |> out_words(nb2 * N_HEADS * nchmax * (HS + 2), -1000.0)
+        let by = mc |> out_words(nb2 * QD, -1000.0)
+        let brt = mc |> in_plain(fx.rt)
+        let bsink = mc |> in_(plane_of(N_HEADS, sink_v))
+        var kap = SqAttnPartBArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(N_HEADS),
+            kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, qstride = uint(qstride),
+            nchmax = uint(nchmax), softcap = 0.0, window = uint(window))
+        var kac = SqAttnCombArgs(nch = uint(nchmax), nheads = uint(N_HEADS), hs = uint(HS),
+            window = uint(window), hass = hass ? 1u : 0u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (k, v, q, p, rt) = (mc.buf[kv.x], mc.buf[kv.y], mc.buf[bq], mc.buf[bpart], mc.buf[brt])
+            let wgs = int64(N_HEADS * nchmax * nb2)
+            if (quant) {
+                stamp_run(sq, pso_p) {
+                    invoke(sq.enc, enc, k, k, v, v, q, p, rt, 0ul, kap, wgs, int64(HS))
+                }
+            } else {
+                stamp_run(sp, pso_p) {
+                    invoke(sp.enc, enc, k, v, q, p, rt, 0ul, kap, wgs, int64(HS))
+                }
+            }
+            stamp_run(sc, pso_c) {
+                invoke(sc.enc, enc, p, mc.buf[by], kac, rt, 0ul, mc.buf[bsink], int64(N_HEADS * nb2), int64(HS))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_ATTN, Shape(row_width = QD, head_width = HS))
     }
-    metal_release(bk)
-    metal_release(bv)
-    metal_release(bq)
-    metal_release(bpart)
-    metal_release(by)
-    metal_release(brt)
-    metal_release(bsink)
-    metal_release(pso_p)
-    metal_release(pso_c)
-    delete fx
-    delete want
 }
 
 // ===== the fused single-pass "D" family (hs == 128): part + parallel cross-slice comb =====
@@ -592,135 +440,66 @@ let private D_HS = 128
 let private D_NHEADS = 2
 let private D_KVMUL = 2
 
-def private attn_oracle_d(kdeq, vdeq : array<float>; kvbase : int; q : array<float>; qbase, h, cnt, hs : int; scale : float) : array<float> {
-    let khoff = (h / D_KVMUL) * hs
-    var sc : array<float>
-    sc |> resize(cnt)
-    var mm = -3.0e38
-    for (j in range(cnt)) {
-        var s = 0.0
-        for (d in range(hs)) {
-            s += q[qbase + h * hs + d] * kdeq[kvbase + j * KV_DIM + khoff + d]
-        }
-        sc[j] = s * scale
-        mm = max(mm, sc[j])
-    }
-    var tot = 0.0
-    for (j in range(cnt)) {
-        sc[j] = exp(sc[j] - mm)
-        tot += sc[j]
-    }
-    var out : array<float>
-    out |> resize(hs)
-    for (d in range(hs)) {
-        var acc = 0.0
-        for (j in range(cnt)) {
-            acc += sc[j] * vdeq[kvbase + j * KV_DIM + khoff + d]
-        }
-        out[d] = acc / tot
-    }
-    delete sc
-    return <- out
-}
-
-def private sq_d_gate(t : T?; dev, queue; codec : string; cnts : array<int>; nsgs : int; hs : int = D_HS) {
+def private sq_d_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; nsgs : int; hs : int = D_HS) {
     let nheads = D_NHEADS * (D_HS / hs)   //! a narrower head keeps the fixture's kv_dim and qd: more heads, the same slab
     let tag = "sq_attn_d_{codec} B={length(cnts)} nsgs={nsgs} hs={hs}"
-    var err : string
-    let src = codec == "f16" ? MetalSqAttnDF16_metal_sq_attn_d_msl : (codec == "f32" ? MetalSqAttnDF32_metal_sq_attn_d_msl : (codec == "q8" ? MetalSqAttnDQ8_metal_sq_attn_d_msl : MetalSqAttnDTq4_metal_sq_attn_d_msl))
-    let entry = codec == "f16" ? MetalSqAttnDF16_metal_sq_attn_d_msl_entry : (codec == "f32" ? MetalSqAttnDF32_metal_sq_attn_d_msl_entry : (codec == "q8" ? MetalSqAttnDQ8_metal_sq_attn_d_msl_entry : MetalSqAttnDTq4_metal_sq_attn_d_msl_entry))
-    let fm = codec == "f16" ? MetalSqAttnDF16_metal_sq_attn_d_msl_fastmath : (codec == "f32" ? MetalSqAttnDF32_metal_sq_attn_d_msl_fastmath : (codec == "q8" ? MetalSqAttnDQ8_metal_sq_attn_d_msl_fastmath : MetalSqAttnDTq4_metal_sq_attn_d_msl_fastmath))
-    let tgm = codec == "f16" ? MetalSqAttnDF16_metal_sq_attn_d_msl_tgmem : (codec == "f32" ? MetalSqAttnDF32_metal_sq_attn_d_msl_tgmem : (codec == "q8" ? MetalSqAttnDQ8_metal_sq_attn_d_msl_tgmem : MetalSqAttnDTq4_metal_sq_attn_d_msl_tgmem))
-    var pso_d = pipeline_from_source(dev, src, entry, fm, err)
-    t |> success(pso_d != null, "{tag}: part pipeline: {err}")
-    var pso_c = pipeline_from_source(dev, metal_sq_attn_comb_d_msl, metal_sq_attn_comb_d_msl_entry, metal_sq_attn_comb_d_msl_fastmath, err)
-    t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
-    if (pso_d == null || pso_c == null) {
-        metal_release(pso_d)
-        metal_release(pso_c)
-        return
-    }
-    let nb2 = length(cnts)
-    let qstride = QD + 36                   // q reads through a float4 view — keep the stride % 4
-    let quant = codec == "q8" || codec == "tq4"
-    var fx : BatchAttnFix
-    build_batch_fix(codec, cnts, qstride, fx)
-    let scale = 1.0 / sqrt(float(hs))
-    var want : array<float>
-    want |> resize(nb2 * QD)
-    for (r in range(nb2)) {
-        for (h in range(nheads)) {
-            var col <- attn_oracle_d(fx.kdeq, fx.vdeq, fx.roff[r], fx.q, r * qstride, h, cnts[r], hs, scale)
-            for (d in range(hs)) {
-                want[r * QD + h * hs + d] = col[d]
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let quant = codec == "q8" || codec == "tq4"
+        let sp = codec == "f16" ? stamp_of(@@enc_attnd16_c) : stamp_of(@@enc_attnd32_c)
+        let sq = codec == "q8" ? stamp_of(@@enc_attnd_q8_c) : stamp_of(@@enc_attnd_tq4_c)
+        let sc = stamp_of(@@enc_attncombd_c)
+        var pso_d = quant ? (mc |> keep_stamp(sq, err)) : (mc |> keep_stamp(sp, err))
+        let part_ok = pso_ok(t, "{tag} part", pso_d, err)
+        var pso_c = mc |> keep_stamp(sc, err)
+        return if (!pso_ok(t, "{tag} comb", pso_c, err) || !part_ok)
+        let nb2 = length(cnts)
+        let qstride = QD + 36                   // q reads through a float4 view — keep the stride % 4
+        var inscope fx : BatchAttnFix
+        build_batch_fix(codec, cnts, qstride, fx)
+        let scale = 1.0 / sqrt(float(hs))
+        var inscope want : array<float>
+        want |> resize(nb2 * QD)
+        for (r in range(nb2)) {
+            for (h in range(nheads)) {
+                attn_row_oracle(fx.q, r * qstride + h * hs, fx.kdeq, fx.roff[r], fx.vdeq, fx.roff[r], KV_DIM, h, hs, D_KVMUL, cnts[r], scale,
+                    want, r * QD + h * hs)
             }
-            delete col
         }
-    }
-    var bk = quant ? buf_upload(dev, fx.kslab) : (codec == "f16" ? buf_upload(dev, fx.kh) : buf_upload(dev, fx.kf))
-    var bv = quant ? buf_upload(dev, fx.vslab) : (codec == "f16" ? buf_upload(dev, fx.vh) : buf_upload(dev, fx.vf))
-    var bq = buf_upload(dev, fx.q)
-    var bpart = buf_fill(dev, nb2 * nheads * nsgs * (hs + 4), -1000.0)
-    var by = buf_fill(dev, nb2 * QD, -1000.0)
-    var brt = buf_upload(dev, fx.rt)
-    var kad = SqAttnDArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(nheads),
-        kv_mul = uint(D_KVMUL), hs = uint(hs), scale = scale, qstride = uint(qstride), nsgs = uint(nsgs))
-    var kac = SqAttnCombDArgs(nchmax = uint(nsgs), nheads = uint(nheads), hs = uint(hs))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso_d)
-        metal_set_threadgroup_memory_length(enc, tgm, 0)
-        if (quant) {
-            metal_set_buffer(enc, bk, 0ul, 0)
-            metal_set_buffer(enc, bk, 0ul, 1)
-            metal_set_buffer(enc, bv, 0ul, 2)
-            metal_set_buffer(enc, bv, 0ul, 3)
-            metal_set_buffer(enc, bq, 0ul, 4)
-            metal_set_buffer(enc, bpart, 0ul, 5)
-            metal_set_buffer(enc, brt, 0ul, 6)
-            metal_set_bytes(enc, unsafe(addr<void?>(kad)), uint64(typeinfo sizeof(kad)), 7)
-        } else {
-            metal_set_buffer(enc, bk, 0ul, 0)
-            metal_set_buffer(enc, bv, 0ul, 1)
-            metal_set_buffer(enc, bq, 0ul, 2)
-            metal_set_buffer(enc, bpart, 0ul, 3)
-            metal_set_buffer(enc, brt, 0ul, 4)
-            metal_set_bytes(enc, unsafe(addr<void?>(kad)), uint64(typeinfo sizeof(kad)), 5)
+        let kv = mc |> kv_planes(codec, fx)
+        let bq = mc |> in_(fx.q)
+        let bpart = mc |> out_words(nb2 * nheads * nsgs * (hs + 4), -1000.0)
+        let by = mc |> out_words(nb2 * QD, -1000.0)
+        let brt = mc |> in_plain(fx.rt)
+        var kad = SqAttnDArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(nheads),
+            kv_mul = uint(D_KVMUL), hs = uint(hs), scale = scale, qstride = uint(qstride), nsgs = uint(nsgs))
+        var kac = SqAttnCombDArgs(nchmax = uint(nsgs), nheads = uint(nheads), hs = uint(hs))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (k, v, q, p, rt) = (mc.buf[kv.x], mc.buf[kv.y], mc.buf[bq], mc.buf[bpart], mc.buf[brt])
+            let (nh, ns, nr) = (int64(nheads), int64(nsgs), int64(nb2))
+            if (quant) {
+                stamp_run(sq, pso_d) {
+                    invoke(sq.enc, enc, k, k, v, v, q, p, rt, kad, nh, ns, nr)
+                }
+            } else {
+                stamp_run(sp, pso_d) {
+                    invoke(sp.enc, enc, k, v, q, p, rt, kad, nh, ns, nr)
+                }
+            }
+            stamp_run(sc, pso_c) {
+                invoke(sc.enc, enc, p, mc.buf[by], rt, kac, nh, nr)
+            }
         }
-        metal_dispatch_threadgroups(enc, uint3(uint(nheads), uint((nsgs + 3) / 4), uint(nb2)), uint3(128u, 1u, 1u))
-        metal_set_pipeline(enc, pso_c)
-        metal_set_threadgroup_memory_length(enc, metal_sq_attn_comb_d_msl_tgmem, 0)
-        metal_set_buffer(enc, bpart, 0ul, 0)
-        metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_buffer(enc, brt, 0ul, 2)
-        metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 3)
-        metal_dispatch_threadgroups(enc, uint3(uint(nheads), uint(nb2), 1u), uint3(128u, 1u, 1u))
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_ATTN, Shape(row_width = QD, head_width = hs))
     }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_bars(by, want, 2e-3, 0.0, tag), 0)
-    }
-    metal_release(bk)
-    metal_release(bv)
-    metal_release(bq)
-    metal_release(bpart)
-    metal_release(by)
-    metal_release(brt)
-    metal_release(pso_d)
-    metal_release(pso_c)
-    delete fx
-    delete want
 }
 
 [test]
 def test_metal_attn_codec_kernels(t : T?) {
     t |> run("sq_attn codec twins (f32/q8/tq4, single + split-K) == CPU attention over the dequant truth") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() $(dev : MetalDevice?) {
-                if (dev == null) {
-                    feint("no Metal device on this box; GPU kernel checks skipped\n")
-                    return
-                }
-                var queue = metal_new_command_queue(dev)
+            with_metal_gate(t) $(var dev : MetalDevice?; var queue : MetalCommandQueue?) {
                 sq_codec_single_gate(t, dev, queue, "f32", 40, 0.0, false)
                 sq_codec_single_gate(t, dev, queue, "f32", 40, 0.0, true)
                 sq_codec_single_gate(t, dev, queue, "q8", 40, 0.0, false)
@@ -755,11 +534,9 @@ def test_metal_attn_codec_kernels(t : T?) {
                 sq_d_gate(t, dev, queue, "f32", [40, 130], 5, 64)
                 sq_d_gate(t, dev, queue, "q8", [21, 64, 200], 3)
                 sq_d_gate(t, dev, queue, "tq4", [30, 100], 2)
-                metal_release(queue)
             }
-            t |> equal(metal_log_leaks_if_any(), 0l)
         } else {
-            feint("das_metal is not built on this platform; attention codec kernel checks skipped\n")
+            t |> skip("das_metal is not built on this platform; attention codec kernel checks skipped")
         }
     }
 }

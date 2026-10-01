@@ -37,8 +37,7 @@ def main {
         if (!tune_gate()) {   // never measure on fallback winners
             panic("msweep: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
         }
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             measure_one(tr, 512l, 1)   // warm: JIT + blob upload + first graphs
             let p0 = metal_prefill_stats()
             for (npos in [512l, 384l, 256l, 192l, 160l, 128l, 96l, 64l]) {

@@ -41,10 +41,10 @@ body.stand-page { color-scheme: light; }
     }
 }
 
-/* One colour per lane, read by every lane-marked element: chips, tags, legend, lines, bands, markers, tooltip keys. */
-.stand .lane--interp, .stand .tag--interp, .stand .legend--interp, .stand .series--interp, .stand .band--interp, .stand .marker--interp, .stand .tt-key--interp { --lane: var(--interp); }
-.stand .lane--jit, .stand .tag--jit, .stand .legend--jit, .stand .series--jit, .stand .band--jit, .stand .marker--jit, .stand .tt-key--jit { --lane: var(--jit); }
-.stand .lane--aot, .stand .tag--aot, .stand .legend--aot, .stand .series--aot, .stand .band--aot, .stand .marker--aot, .stand .tt-key--aot { --lane: var(--aot); }
+/* One colour per lane, read by every lane-marked element. */
+.stand .lane--interp, .stand .tag--interp, .stand .legend--interp, .stand .series--interp, .stand .band--interp, .stand .baseline--interp, .stand .marker--interp, .stand .tt-key--interp { --lane: var(--interp); }
+.stand .lane--jit, .stand .tag--jit, .stand .legend--jit, .stand .series--jit, .stand .band--jit, .stand .baseline--jit, .stand .marker--jit, .stand .tt-key--jit { --lane: var(--jit); }
+.stand .lane--aot, .stand .tag--aot, .stand .legend--aot, .stand .series--aot, .stand .band--aot, .stand .baseline--aot, .stand .marker--aot, .stand .tt-key--aot { --lane: var(--aot); }
 
 /* The standalone page's frame; an embedding page brings its own. */
 body.stand-page { margin: 0; }
@@ -83,6 +83,18 @@ body.stand-page {
     border-radius: 999px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 13px;
 }
 .stand .chip.is-on { background: var(--chip-on); color: var(--ink); border-color: transparent; font-weight: 600; }
+.stand .filters__label { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.stand .search input {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; width: 240px; max-width: 100%;
+}
+.stand .delta { font: 600 12px/1.4 var(--stand-mono); padding: 0 6px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
+.stand .delta--slower { color: var(--critical); border-color: var(--critical); }
+.stand .delta--faster { color: var(--good-text); border-color: var(--good); }
+.stand .movers li { flex-wrap: nowrap; }
+.stand .movers .arm-link { font: 12px/1.4 var(--stand-mono); word-break: break-all; text-decoration: none; }
+.stand .movers .arm-link:hover { text-decoration: underline; }
+.stand .movers .chip { margin-top: 8px; }
 .stand .lane { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 8px; }
 .stand .lane input { accent-color: var(--lane, var(--ink-2)); }
 
@@ -126,6 +138,7 @@ body.stand-page {
 .stand .chart-card { padding: 10px 12px 6px; }
 .stand .chart-card__head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .stand .chart-card__title { font-size: 13px; font-weight: 600; word-break: break-all; }
+.stand .chart-card__deltas { margin-left: auto; display: flex; gap: 4px; align-items: baseline; }
 .stand .chart-card__title .file { color: var(--muted); font-weight: 400; }
 .stand .legend { display: flex; gap: 12px; font-size: 12px; color: var(--ink-2); margin: 4px 0 0; }
 .stand .legend span::before { content: ""; display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; border-radius: 1px; background: var(--lane, var(--muted)); }
@@ -135,6 +148,7 @@ body.stand-page {
 .stand svg.chart .axis-line { stroke: var(--axis); stroke-width: 1; }
 .stand svg.chart .series { fill: none; stroke: var(--lane); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .stand svg.chart .band { fill: var(--lane); opacity: 0.10; }
+.stand svg.chart .baseline { stroke: var(--lane); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.85; }
 .stand svg.chart .end-label { fill: var(--ink-2); font-weight: 600; }
 .stand svg.chart .crosshair { stroke: var(--axis); stroke-width: 1; }
 .stand svg.chart .marker { fill: var(--lane); stroke: var(--surface); stroke-width: 2; }

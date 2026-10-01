@@ -39,7 +39,7 @@ The gate scans the module registry of its own program, so only modules its
 ## 2. The default module-cache path {#default-module-cache-path}
 
 `ModuleFileCache::defaultPath` (`module_builtin_ast_serialize.cpp`) returns
-`.jitted_scripts/module_cache/<stem>-<hash>.dascache` - relative, so the cache follows the
+`.cache/daslang/module_cache/<stem>-<hash>.dascache` - relative, so the cache follows the
 current directory, and it sits beside the JIT DLL cache. `<stem>` is the script's file name
 without its extension. `<hash>` is the first 8 hex digits of a 64-bit hash over the normalized
 script path, the running executable's mtime and size (the host resolves its own path through the

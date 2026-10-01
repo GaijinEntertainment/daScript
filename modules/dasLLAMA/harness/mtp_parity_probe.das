@@ -5,16 +5,16 @@ options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_common
-require dasllama/dasllama_math   // parallel_argmax + setup_dasllama_jobque_
+require dasllama/dasllama_math   // parallel_argmax + with_dasllama_jobque
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail
 require dasllama/dasllama_tokenizer
 require ?das_metal dasllama/dasllama_metal_common   // finish_pending_step — land the one-deep pipelined step before reading logits
 require ?das_metal dasllama/dasllama_metal_decode   // the metal spec-eval override registration
 require ?das_metal dasllama/dasllama_metal_prefill
-require ../performance/profile_common.das   // apply_box_profile_runtime
+require ../performance/profile_common.das   // apply_box_profile_runtime, load_corpus
+require ../tests/_compares.das   // top2_margin: the tie distance an argmax flip crossed
 require daslib/jobque_boost
 require daslib/module_path
-require daslib/strings_boost
 require daslib/clargs
 require daslib/fio
 require math
@@ -97,22 +97,6 @@ struct Rec {
     off : int64
 }
 
-// plain top-2 margin: top1 - top2 of the plain logits (the tie distance an argmax flip crossed)
-def private top2_margin(a : array<float>; n : int64) : float {
-    var m1 = -3.4e38
-    var m2 = -3.4e38
-    for (i in range64(n)) {
-        let v = a[i]
-        if (v > m1) {
-            m2 = m1
-            m1 = v
-        } elif (v > m2) {
-            m2 = v
-        }
-    }
-    return m1 - m2
-}
-
 def private argmax_store(store : array<float>; off, n : int64) : int64 {
     var best = 0l
     var bv = store[off]
@@ -170,22 +154,6 @@ def private report(st : RowStats; tag : string) {
     if (st.flips > 0l) {
         print("{tag}:   flips crossed a plain top-2 margin of at most {st.flip_margin_max:.4f} (mean {st.flip_margin_sum / double(st.flips):.4f})\n")
     }
-}
-
-def private load_corpus(path : string) : array<string> {
-    var texts : array<string>
-    fopen(path, "rb") $(f) {
-        if (f == null) {
-            panic("can't open prompt corpus {path}")
-        }
-        for (p in split(fread(f), "%%")) {
-            let tp = strip(p)
-            if (!empty(tp) && !starts_with(tp, "#")) {
-                texts |> push(clone_string(tp))
-            }
-        }
-    }
-    return <- texts
 }
 
 // the metal decode is one-deep pipelined: land the in-flight step so s.logits is this step's
@@ -383,8 +351,7 @@ def main() {
     set_mtp_spec(true)                   // before load — the prefill warms the draft head
     let tk <- load_tokenizer_auto(cfg.model)
     print("loading {cfg.model}\n")
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         var t <- load_model_cached(cfg.model, cfg.quant)
         if (!t.metal_blob) {
             panic("mtp_parity_probe: the mapped flavor is not metal_blob - the probe targets the metal verify")

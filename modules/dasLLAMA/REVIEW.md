@@ -196,7 +196,8 @@ apart from the ad-hoc profiling an engine file may not carry.
 
 **A diff that adds an override, or changes what one does - a value it now clamps or ignores
 included - without the announce is a defect.** An announce is the line the run prints where the
-override changes the outcome. An override is an environment knob, an exported runtime setter, or
+override changes the outcome. An override is an environment knob, a runtime setter the facade
+(`dasllama/dasllama.das`) exports, a command-line flag of a dasLLAMA tool, or
 an on-disk state file - one a run writes or a user places, never data a build ships - that moves
 a gate, policy, or threshold off its default and so changes which code the run takes or what it
 writes, reads, mints, or computes. A measured time, the run's own duration, or a different
@@ -268,3 +269,8 @@ caller returns silently changes the lane of the next model the process loads.
 there in the same change.** The `features` fingerprint saved with every sidecar is this box's
 pass/fail over that list, so a name outside it is never recorded and a box adopting a shipped
 profile re-runs the tuning the profile was meant to save.
+
+**A diff that names a `[tune]` family's generated `<fn>_variants()` registry in a file under
+`dasllama/` puts that reference inside a `static_if (typeinfo module_exists(llvm_tune))` branch
+whose other branch compiles without it.** The tune framework generates those registries only when
+dasLLVM is built, so a build without it - the doc lane - fails to compile the engine module.

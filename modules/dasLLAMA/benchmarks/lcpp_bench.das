@@ -13,7 +13,7 @@ require dasllama/dasllama   // --npl: set_gpu_resident_regions before the load, 
 require ?vulkan dasllama/dasllama_vulkan_decode   // nolint:STYLE030,LINT019 — DASLLAMA_VK_NROW_BISECT: the N-row command's bisect knob, read in the vulkan half
 require ?vulkan dasllama/dasllama_vulkan_tower   // nolint:STYLE030,LINT019 — the image cell's engage witness, read in the vulkan half
 require ?vulkan dasllama/dasllama_vulkan_asr_dec   // nolint:STYLE030,LINT019 — the --asr rows' decoder-half witness, read in the vulkan half
-require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
+require dasllama/dasllama_math   // with_dasllama_jobque + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail the rows load on
 require dasllama/dasllama_load   // --parity: load_model_ — the planar rail the parity fixtures were frozen on
 require dasllama/dasllama_tokenizer   // the tg-real row needs REAL tokens (see Lever.real)
@@ -475,8 +475,7 @@ def private asr_cell_main(model, json_path : string; reps, threads : int; gpu, a
     var found = false
     var all_ok = true
     var jsonModels : array<BenchModel>
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         //! the regime line printed by main is the INTENT; this is the que that actually spawned
         print("live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         for (spec in asr_catalog()) {
@@ -611,8 +610,7 @@ def private image_cell_main(model, mmproj, image, prompt, json_path : string; re
     }
     let ask = empty(prompt) ? image_turn_prompt() : prompt
     var jsonModels : array<BenchModel>
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         //! the regime line printed by main is the INTENT; this is the que that actually spawned
         print("live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         var m <- load_model_cached(model, QuantMode.q8)
@@ -1211,8 +1209,7 @@ def parity_check(model : string; spec : ModelSpec) : bool {
     let prev_dn = get_deltanet_prefill_mode()
     set_deltanet_prefill_mode(DnPrefillMode.recurrent)
     var ok = false
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         // text-form evidence encodes through the loaded model's own tokenizer (load_model_
         // carries it), the same flags the test loop uses (add_special on, parse_special off)
         var prompt <- (empty(spec.parity.prompt_text) ? clone_to_move(spec.parity.prompt)
@@ -1287,23 +1284,6 @@ def private bench_fixture_gate(var t : Model; spec : ModelSpec; fmt : OutFmt) : 
 //! the table's own spec and a deliberately wrong one.
 def fixture_gate_check(var t : Model; spec : ModelSpec) : bool {
     return bench_fixture_gate(t, spec, OutFmt.txt)
-}
-
-// Prompt corpus: segments separated by lines of two percent signs, '#' segments skipped.
-def private load_corpus(path : string) : array<string> {
-    var texts : array<string>
-    fopen(path, "rb") $(f) {
-        if (f == null) {
-            panic("lcpp_bench: can't open prompt corpus {path}")
-        }
-        for (p in split(fread(f), "%%")) {
-            let tp = strip(p)
-            if (!empty(tp) && !starts_with(tp, "#")) {
-                texts |> push(clone_string(tp))
-            }
-        }
-    }
-    return <- texts
 }
 
 // progress line — stdout in txt mode, stderr when stdout carries the md table / json records
@@ -1591,8 +1571,7 @@ def main() : int {
     var mdRows : array<array<string>>
     var jsonModels : array<BenchModel>
     var no_rows = false   // a model that produced no row ends the run non-zero, below the que scope
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         //! the regime line above prints the INTENT; this is the que that actually spawned
         say(fmt, "live: {get_dispatch_lanes()} dispatch lanes ({get_total_hw_jobs()} workers)\n")
         for (mpath in model_list) {

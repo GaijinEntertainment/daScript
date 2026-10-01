@@ -17,10 +17,6 @@ let private FACADE_FILES = [FACADE, "modules/dasLLAMA/dasllama/dasllama_tts.das"
 let private TUTORIAL_DIR = "tutorials/dasLLAMA"
 let private RST_DIR = "doc/source/reference/tutorials"
 
-def private is_ident_byte(b : int) : bool {
-    return is_alnum(b) || b == '_'
-}
-
 // leading identifier run of `s` ("" when s starts with a non-ident byte)
 def private ident_prefix(s : string) : string {
     var n = 0
@@ -54,26 +50,6 @@ def private ident_suffix(s : string) : string {
         }
     }
     return slice(s, n)
-}
-
-// whole-word occurrence: `name` present with no identifier byte on either side
-def private contains_word(text : string; name : string) : bool {
-    var found = false
-    peek_data(text) $(d) {
-        let nl = length(name)
-        var from = 0
-        while (!found) {
-            let at = find(d, name, from)
-            if (at < 0) {
-                break
-            }
-            let okl = at == 0 || !is_ident_byte(int(d[at - 1]))
-            let okr = at + nl >= length(d) || !is_ident_byte(int(d[at + nl]))
-            found = okl && okr
-            from = at + 1
-        }
-    }
-    return found
 }
 
 def private word_in_any(texts : array<string>; name : string) : bool {
@@ -1495,7 +1471,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0x373e2b3fc67219feul
+let private GEMM_GEN_STAMP_HASH = 0x81db69026507ad94ul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {
@@ -1511,7 +1487,7 @@ def private check_gemm_gen_stamp {
     }
     if (h != GEMM_GEN_STAMP_HASH) {
         gate_finding(GEMM_GEN_FILES[0],
-            "the generated GEMM tier's generator sources changed (dasllama_gemm_gen.das, dasllama_gemm_schema.das - ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers): a generator's text is outside the JIT cache key, so `.jitted_scripts` serves the kernels the old text emitted - bump LLVM_JIT_CODEGEN_VERSION in modules/dasLLVM/daslib/llvm_jit_plan.das unless the emitted code is the same for every perm (the bump moves LLVM_JIT_EMITTER_HASH, which tests-cpp/small/test_jit_emitter_pin.cpp prints), then re-stamp GEMM_GEN_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das")
+            "the generated GEMM tier's generator sources changed (dasllama_gemm_gen.das, dasllama_gemm_schema.das - ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers): a generator's text is outside the JIT cache key, so `.cache/daslang` serves the kernels the old text emitted - bump LLVM_JIT_CODEGEN_VERSION in modules/dasLLVM/daslib/llvm_jit_plan.das unless the emitted code is the same for every perm (the bump moves LLVM_JIT_EMITTER_HASH, which tests-cpp/small/test_jit_emitter_pin.cpp prints), then re-stamp GEMM_GEN_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das")
     }
 }
 

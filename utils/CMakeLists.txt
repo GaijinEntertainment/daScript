@@ -384,7 +384,7 @@ add_custom_target(jit_cache_all_tests
     COMMAND ${UTIL_BIN_DIR}/jit.exe ${PROJECT_SOURCE_DIR}/tests --parallel 0 $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3> --exclude gc --exclude dasHV --exclude dasPUGIXML --exclude dasSQLITE --exclude sql_conformance --exclude stbimage --exclude dasGLTF --exclude live_host --exclude audio --exclude strudel --exclude strudel_device --exclude minfft
     DEPENDS jit_exe
     WORKING_DIRECTORY ${UTIL_BIN_DIR}
-    COMMENT "JIT-compiling tests/ into the .jitted_scripts cache"
+    COMMENT "JIT-compiling tests/ into the .cache/daslang folder"
 )
 
 SET(DAS_UTILS_TO_TEST

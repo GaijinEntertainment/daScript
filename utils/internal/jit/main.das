@@ -25,7 +25,7 @@ struct JitToolArgs {
 
     @clarg_short = "o"
     @clarg_name = "output"
-    @clarg_doc = "Output path. Empty keeps the default content-hashed .jitted_scripts/<ns>/ naming (dll mode) or appends .exe (exe mode)."
+    @clarg_doc = "Output path. Empty keeps the default content-hashed .cache/daslang/<ns>/ naming (dll mode) or appends .exe (exe mode)."
     output : string
 
     @clarg_name = "lib-output-dir"
@@ -349,7 +349,7 @@ def jit_compile_one(input : string; tool : JitToolArgs; jit : JitCliOptions) : b
                         let suffix = tool.aot_object ? ".o" : (tool.exe ? ".exe" : shared_ext)
                         to_log(LOG_INFO, "jit: wrote {target} for {input} -> {out_path}{suffix}\n")
                     } else {
-                        to_log(LOG_INFO, "jit: wrote {target} for {input} under .jitted_scripts/{ns}/\n")
+                        to_log(LOG_INFO, "jit: wrote {target} for {input} under .cache/daslang/{ns}/\n")
                     }
                 }
             }

@@ -64,13 +64,14 @@ def template dot_q8q8_f16s_template(wq : int8 const ?; ws : uint16 const ?; xq :
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), tuned(fallback = "vec16")]
 def dot_q8q8_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
-def wscale_f32(ws : float const?; bi : int64) : float {
+//! a Q8 block's weight scale off either scale plane: the f32 plane as is, the wscale_f16 halfword plane widened
+def wscale(ws : float const?; bi : int64) : float {
     unsafe {
         return ws[bi]
     }
 }
 
-def wscale_f16(ws : uint16 const?; bi : int64) : float {
+def wscale(ws : uint16 const?; bi : int64) : float {
     unsafe {
         return f16_to_f32(uint(ws[bi]))
     }
@@ -97,17 +98,17 @@ def template dot_q8q8_idot4x4_template(wq : int8 const ?; ws : float const ?; xq
             a2 = idot4(a2, wv[v + 5l], xv[v + 5l])
             var a3 = idot4(wv[v + 6l], xv[v + 6l])
             a3 = idot4(a3, wv[v + 7l], xv[v + 7l])
-            f0 += float(a0.x + a0.y + a0.z + a0.w) * WSCALE(ws, bi + 0l) * xs[bi + 0l]
-            f1 += float(a1.x + a1.y + a1.z + a1.w) * WSCALE(ws, bi + 1l) * xs[bi + 1l]
-            f2 += float(a2.x + a2.y + a2.z + a2.w) * WSCALE(ws, bi + 2l) * xs[bi + 2l]
-            f3 += float(a3.x + a3.y + a3.z + a3.w) * WSCALE(ws, bi + 3l) * xs[bi + 3l]
+            f0 += float(a0.x + a0.y + a0.z + a0.w) * wscale(ws, bi + 0l) * xs[bi + 0l]
+            f1 += float(a1.x + a1.y + a1.z + a1.w) * wscale(ws, bi + 1l) * xs[bi + 1l]
+            f2 += float(a2.x + a2.y + a2.z + a2.w) * wscale(ws, bi + 2l) * xs[bi + 2l]
+            f3 += float(a3.x + a3.y + a3.z + a3.w) * wscale(ws, bi + 3l) * xs[bi + 3l]
             bi += 4l
         }
         while (bi < nb) {
             let v = bi * 2l
             var a0 = idot4(wv[v], xv[v])
             a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
-            f0 += float(a0.x + a0.y + a0.z + a0.w) * WSCALE(ws, bi) * xs[bi]
+            f0 += float(a0.x + a0.y + a0.z + a0.w) * wscale(ws, bi) * xs[bi]
             bi++
         }
     }
@@ -117,10 +118,10 @@ def template dot_q8q8_idot4x4_template(wq : int8 const ?; ws : float const ?; xq
 //! The 4-accumulator idot4 GEMV dot (4 blocks/iter, 2 idot4/block, per-block hsum into 4 rotating
 //! float accs): plain-das byte16 loads + the idot4 builtin — one SDOT per call on arm64 JIT, ~1.35x the
 //! autovectorized dot_q8q8. noinline: inlined into its kernel stamps' batch row loop it runs 9% slower on the M5.
-[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs, noinline), from_template(src = "dot_q8q8_idot4x4_template", WSCALE = "wscale_f32")]
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs, noinline), from_template(src = "dot_q8q8_idot4x4_template")]
 def dot_q8q8_idot4x4(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
-[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs, noinline), from_template(src = "dot_q8q8_idot4x4_template", WSCALE = "wscale_f16")]
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs, noinline), from_template(src = "dot_q8q8_idot4x4_template")]
 def dot_q8q8_idot4x4_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
 [hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs)]
@@ -138,8 +139,8 @@ def template dot_q8q8_idot4_ps_template(wq : int8 const ?; ws : float const ?; x
             a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
             var a1 = idot4(wv[v + 2l], xv[v + 2l])
             a1 = idot4(a1, wv[v + 3l], xv[v + 3l])
-            let s0 = WSCALE(ws, bi) * xs[bi]
-            let s1 = WSCALE(ws, bi + 1l) * xs[bi + 1l]
+            let s0 = wscale(ws, bi) * xs[bi]
+            let s1 = wscale(ws, bi + 1l) * xs[bi + 1l]
             f0 += float4(a0) * float4(s0, s0, s0, s0)
             f1 += float4(a1) * float4(s1, s1, s1, s1)
             bi += 2l
@@ -148,7 +149,7 @@ def template dot_q8q8_idot4_ps_template(wq : int8 const ?; ws : float const ?; x
             let v = bi * 2l
             var a0 = idot4(wv[v], xv[v])
             a0 = idot4(a0, wv[v + 1l], xv[v + 1l])
-            let s0 = WSCALE(ws, bi) * xs[bi]
+            let s0 = wscale(ws, bi) * xs[bi]
             f0 += float4(a0) * float4(s0, s0, s0, s0)
             bi++
         }
@@ -160,10 +161,10 @@ def template dot_q8q8_idot4_ps_template(wq : int8 const ?; ws : float const ?; x
 //! The vector-epilogue idot4 dot: per 32-block one idot4 pair, then float4 accumulate under the block's
 //! scale - no horizontal sum until the row ends, two rotating float4 accumulators. The wasm SIMD128 form
 //! (dot_q8q8_idot4x4's per-block hsum is four lane extracts there).
-[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), from_template(src = "dot_q8q8_idot4_ps_template", WSCALE = "wscale_f32")]
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), from_template(src = "dot_q8q8_idot4_ps_template")]
 def dot_q8q8_idot4_ps(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
-[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), from_template(src = "dot_q8q8_idot4_ps_template", WSCALE = "wscale_f16")]
+[hint(unsafe_range_check, noalias = wq, noalias = xq, noalias = ws, noalias = xs), from_template(src = "dot_q8q8_idot4_ps_template")]
 def dot_q8q8_idot4_ps_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {}
 
 //! a def, not a module global: team lanes run no global initializers, and the fold below is a

@@ -6,24 +6,19 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default  // registers the portable Q8·Q8 backend (the matmul_q8q8 wrappers dispatch to it)
 require dasllama/dasllama_convert
 require daslib/jobque_boost
+require _compares   // row_fill
 
 // The batched (prefill) GEMM must be BIT-FOR-BIT identical to running the per-token matmul
 // ntok times — same dots, only the loop order changes. We verify both the single-thread and
 // the threaded branch (the one real prefill hits) for fp32 and Q8·Q8.
 
-def fillf(var a : array<float>; cnt : int64) {
-    a |> resize(cnt)
-    for (i in range64(cnt)) {
-        a[i] = float((i * 7l) % 13l) * 0.1 - 0.6
-    }
-}
+//! `cnt` floats of the file's fill: (i * 7) % 13 scaled by 0.1, less 0.6
+def private fillf(cnt : int64) : array<float> => row_fill(int(cnt), 7, 0, 0.1, 0.6, 13)
 
 // fp32: Y [ntok x d] from matmul_batch == ntok× matmul, element for element.
 def check_fp32(t : T?; n, d, ntok : int64) {
-    var w : array<float>
-    var x : array<float>
-    fillf(w, n * d)
-    fillf(x, ntok * n)
+    let w <- fillf(n * d)
+    let x <- fillf(ntok * n)
     var yref : array<float>
     yref |> resize(ntok * d)
     var xt : array<float>
@@ -50,10 +45,8 @@ def check_fp32(t : T?; n, d, ntok : int64) {
 // Q8·Q8: same, with weights quantized once and the activation quantized per token.
 def check_q8(t : T?; n, d, ntok : int64) {
     let nb = n / 32l
-    var w : array<float>
-    var x : array<float>
-    fillf(w, n * d)
-    fillf(x, ntok * n)
+    let w <- fillf(n * d)
+    let x <- fillf(ntok * n)
     let qt <- quantize_q8_0(w, n * d)
     var xq_all : array<int8>
     var xs_all : array<float>
@@ -95,8 +88,7 @@ def check_q8(t : T?; n, d, ntok : int64) {
 
 [test]
 def test_matmul_batch(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         t |> run("fp32 single 64x5 ntok=4") @(t : T?) {
             check_fp32(t, 64l, 5l, 4l)
         }

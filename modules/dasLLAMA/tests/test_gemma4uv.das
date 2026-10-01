@@ -25,32 +25,13 @@ require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown â
 // fixture); 2e-4 leaves 10x headroom while staying far under any structural failure
 let TIER1_TOL = 2e-4
 
+[cold_path]
 def private gate_encode(t : T?; emb : Gemma4uvEmbedder; var st : Gemma4uvState;
                         kind : string; w, h : int; logname : string; gpu_ladder : bool = false) : bool {
-    var o = OracleEncode()
-    let logpath = path_join(path_join(models_dir(), "gemma4-vision-oracle"), logname)
-    if (!load_oracle_encode(logpath, o)) {
-        t |> skip("oracle dump {logname} not present/parseable - mint via gemma4-vision-oracle/mint.sh")
-        return false
+    return oracle_gate(t, path_join(models_dir(), "gemma4-vision-oracle"), logname, "gemma4-vision-oracle/mint.sh", kind, w, h,
+            "gemma4uv tier-1{gpu_ladder ? " GPU" : ""} {kind} {w}x{h}", int(emb.proj_dim), TIER1_TOL, gpu_ladder ? 4e-3 : 0.0) $(planes : array<float>; var out : array<float>) : int64 {
+        return gemma4uv_encode(emb, st, planes, int64(w), int64(h), out)
     }
-    let planes <- make_planes(kind, w, h)
-    var out : array<float>
-    var npos = 0l
-    with_job_que() {
-        setup_dasllama_jobque_()
-        npos = gemma4uv_encode(emb, st, planes, int64(w), int64(h), out)
-    }
-    t |> equal(int(npos), o.npos, "{kind} {w}x{h} token count")
-    if (int(npos) != o.npos) {
-        return false
-    }
-    let d = int(emb.proj_dim)
-    if (gpu_ladder) {
-        compare_encode(t, "gemma4uv tier-1 GPU {kind} {w}x{h}", out, d, o, TIER1_TOL, 4e-3)
-        return true
-    }
-    compare_encode(t, "gemma4uv tier-1 {kind} {w}x{h}", out, d, o, TIER1_TOL, 0.0)
-    return true
 }
 
 [test]

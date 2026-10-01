@@ -16,8 +16,8 @@ module _gemma_resident shared public
 
 require dasllama/dasllama_lint public
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration (gemma3)
-require dasllama/dasllama   // create_session, moe_gpu_drop_model
+require dasllama/dasllama_common   // Model, Session, forward_prefill, forward
+require dasllama/dasllama   // create_session, moe_gpu_drop_model; its umbrella fires each arch [init] registration (gemma3)
 
 //! the rig's context: the resident mirror's cap and every session's KV cache - a model max of 131072 would take an
 //! 8 GB mirror on a 4B and a 30 GB CPU cache on the 26B for prompts of 600
@@ -31,12 +31,12 @@ def private gemma_rig_init() {
 require math
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode, where the module exists
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate, arm_on, live_maxabs, SUPPRESSED_LOGIT
-require _resident_feed public   // resident_then_cpu_feed, feed_steps_within, argmax_of, feed_logits
+require _resident_feed public   // resident_ready, load_resident, resident_then_cpu_feed, feed_steps_within, feed_logits
 
 //! the logits bar, a fraction of the step's max live |logit|. gemma-3-1b's logits move with the activation rounding itself: the CPU
 //! chain's OWN prefill kernel and decode kernel land 0.06-0.10 of the max logit apart on the same
@@ -79,20 +79,9 @@ def private prose_tokens(tr : Model; count : int64) : array<int64> {
 
 //! the fixture loaded on the armed driver, or an empty model (`n_layers` 0) after the skip that says why
 def private gemma_model(t : T?; file : string) : Model {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return <- Model()
-    }
     let path = path_join(models_dir(), file)
-    if (!model_available(t, path)) return <- Model()
-    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-        return <- Model()
-    }
-    let route0 = gpu_want_resident()
-    set_gpu_resident_route(true)   //! the whole-model driver's arm, whatever lever an earlier cell or the environment left
-    var tr <- load_model_(path, QuantMode.q8)
-    set_gpu_resident_route(route0)
+    if (!resident_ready(t, path)) return <- Model()
+    var tr <- load_resident(path)
     if (!moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
         t |> skip("the residency plan does not fit this card ({gpu_resident_decline_()}) - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")
         delete tr
@@ -105,19 +94,21 @@ def private gemma_model(t : T?; file : string) : Model {
     return <- tr
 }
 
-//! `gemma_model`'s empty answer: the cell skipped, and said why
-def private no_model(tr : Model) : bool => tr.config.n_layers == 0l
+//! the gemma cell's rig: the fixture on the armed driver (or the cell skipped, saying why), `body` inside the engine's job queue, the model deleted after
+def private with_gemma_rig(t : T?; file : string; body : block<(tr : Model) : void>) {
+    var tr <- gemma_model(t, file)
+    if (tr.config.n_layers > 0l) {
+        with_dasllama_jobque() {
+            invoke(body, tr)
+        }
+    }
+    delete tr
+}
 
 //! prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
 //! prefill logits and every step's within the bar, the one-step-off control past it.
 def gemma_forced_feed(t : T?; n : int64; file : string) {
-    var tr <- gemma_model(t, file)
-    if (no_model(tr)) {
-        delete tr
-        return
-    }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_gemma_rig(t, file) $(tr) {
         var ids <- prose_tokens(tr, n + 8l)
         var prompt <- [for (i in range64(n)); ids[i]]
         var toks <- [for (i in range64(n, n + 8l)); ids[i]]
@@ -128,7 +119,6 @@ def gemma_forced_feed(t : T?; n : int64; file : string) {
         delete prompt
         delete toks
     }
-    delete tr
 }
 
 //! the same tokens through the window chain at once and through the token command one at a time,
@@ -136,15 +126,9 @@ def gemma_forced_feed(t : T?; n : int64; file : string) {
 //! arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on
 //! this model by rounding alone
 def prefill_vs_decode(t : T?; n : int64; file : string) {
-    var tr <- gemma_model(t, file)
-    if (no_model(tr)) {
-        delete tr
-        return
-    }
-    let RESIDENT = 0
-    let CPU = 1
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_gemma_rig(t, file) $(tr) {
+        let RESIDENT = 0
+        let CPU = 1
         var toks <- prose_tokens(tr, n + 4l)
         var window_prompt <- [for (i in range64(n)); toks[i]]
         var window_steps <- [for (i in range64(n, n + 4l)); toks[i]]
@@ -195,7 +179,6 @@ def prefill_vs_decode(t : T?; n : int64; file : string) {
         delete token_prompt
         delete token_steps
     }
-    delete tr
 }
 
 // log-softmax of `target` over the live logits (a pinned id at -1e30 drops out of the sum on its own)
@@ -247,13 +230,7 @@ def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps
 //! margins read 0.6 to 16 on this text), so a maxdiff bar on a single position measures the model, not the driver;
 //! a routed model's near-tie flips move whole positions, so its slack is wider.
 def ppl_compare(t : T?; n, steps : int64; file : string; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
-    var tr <- gemma_model(t, file)
-    if (no_model(tr)) {
-        delete tr
-        return
-    }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_gemma_rig(t, file) $(tr) {
         var ids <- prose_tokens(tr, n + steps + 1l)
         var sg <- create_session(tr, mirror_kv_dtype())
         let served0 = moe_gpu_resident_prefills()
@@ -276,5 +253,4 @@ def ppl_compare(t : T?; n, steps : int64; file : string; hits_slack : int64 = 3l
         t |> success(c.off_hits + hits_slack < c.hits, "control: the one-position-off targets hit {c.off_hits}, under the hits bar's reach ({c.hits} - {hits_slack})")
         delete ids
     }
-    delete tr
 }

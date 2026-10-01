@@ -820,7 +820,7 @@ typedef enum das_bool_policy {
     DAS_POLICY_AUTO_INLINE_FUNCTIONS,            // Heuristic best-effort inlining of plain calls and operator sites of small same-module [inline]-shaped functions (default ON; silent declines; optimized builds only; cross-module inlining stays the explicit [inline] contract)
     DAS_POLICY_DISABLE_TEMP_STRING_RECLAIM,      // Disable the temp-string reclaim pass (fresh-string call results riding the 1-slot dispose queue)
     DAS_POLICY_JIT_ENABLED,                      // Enable JIT compilation of [jit] functions. The flag alone is not enough: the host must also register the "just_in_time" extra module (see das_fileaccess_add_extra_module) so the LLVM JIT backend is compiled in
-    DAS_POLICY_JIT_DLL_MODE                      // With JIT: cache generated code as per-script DLLs under <dasroot>/.jitted_scripts (default: on). Off = codegen in-memory every run, no cache writes. The cache path needs a DLL build of daslang; a static-linked host always codegens in-memory regardless of this flag
+    DAS_POLICY_JIT_DLL_MODE                      // With JIT: cache generated code as per-script DLLs under .cache/daslang/ in the working directory (default: on). Off = codegen in-memory every run, no cache writes. The cache path needs a DLL build of daslang; a static-linked host always codegens in-memory regardless of this flag
 } das_bool_policy;
 
 // Integer policy fields (stack size, heap limits).

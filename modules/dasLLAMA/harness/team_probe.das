@@ -170,8 +170,7 @@ def main {
     if (!jit_enabled()) {
         print("WARNING: interpreted run - numbers are meaningless for the fastpath A/B; use -jit\n")
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         let lanes = get_dispatch_lanes()
         print("team_probe: {lanes} lanes (workers + caller), backend '{active_kernel_backend()}'\n")
         print("=== 1+2: empty-body team dispatch ===\n")

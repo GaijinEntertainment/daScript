@@ -760,7 +760,7 @@ static void print_help() {
     tout << "  -project_root <path> - project root (parent of modules/, default: script's dir)\n";
     tout << "  -load_module <path> - directly load a single dynamic-module folder (the one containing .das_module); repeatable. Shadows same-basename entries from dasroot/project_root.\n";
     tout << "  -module-cache <path> - AST module cache: read when present, refreshed when a compile diverges; pays on every reload.\n"
-            "                        Default ON (silent) at .jitted_scripts/module_cache/<script>-<hash>.dascache\n"
+            "                        Default ON (silent) at .cache/daslang/module_cache/<script>-<hash>.dascache\n"
             "  -no-module-cache     - no AST module cache at all\n";
     tout << "  -dasroot <path>    - override DAS_ROOT\n";
     tout << "  -cwd               - change working directory to script's folder\n";

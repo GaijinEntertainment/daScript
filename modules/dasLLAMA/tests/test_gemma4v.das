@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_gemma4v
 require dasllama/dasllama_vision_embedder   // vision_exec_fmt through the carrier
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require daslib/jobque_boost
 require daslib/fio
 require math
@@ -31,26 +31,12 @@ let private TIER1_REL_GPU = 8e-3   // the Metal leg: 112 f16-staged GEMM tiles o
 let private TIER1_REL_Q8 = 1.2e-1   // the q8 serving lane: measured 3.1e-2..6.8e-2 (≈9% of rms) on these dumps - 16 blocks of q8×q8 GEMMs; the caption floor is the product gate
 let private KNOCKOUT_FLOOR = 1e-3   // the clamp knockout must miss the oracle by at least this (the armed tower holds 1e-3)
 
+[cold_path]
 def private gate_encode(t : T?; tw : Gemma4vTower; var st : Gemma4vState; kind : string; w, h : int; logname : string; rel : float = TIER1_REL) : bool {
-    var o = OracleEncode()
-    let logpath = path_join(path_join(models_dir(), "gemma4-vision-oracle"), logname)
-    if (!load_oracle_encode(logpath, o)) {
-        t |> skip("oracle dump {logname} not present/parseable - mint via its gemma4-vision-oracle mint script")
-        return false
+    return oracle_gate(t, path_join(models_dir(), "gemma4-vision-oracle"), logname, "its gemma4-vision-oracle mint script", kind, w, h,
+            "gemma4v tier-1{tw.q8 ? " q8" : ""} {kind} {w}x{h}", int(tw.proj_dim), TIER1_ABS, rel) $(planes : array<float>; var out : array<float>) : int64 {
+        return gemma4v_encode(tw, st, planes, int64(w), int64(h), out)
     }
-    let planes <- make_planes(kind, w, h)
-    var out : array<float>
-    var nout = 0l
-    with_job_que() {
-        setup_dasllama_jobque_()
-        nout = gemma4v_encode(tw, st, planes, int64(w), int64(h), out)
-    }
-    t |> equal(int(nout), o.npos, "{kind} {w}x{h} token count")
-    if (int(nout) != o.npos) {
-        return false
-    }
-    compare_encode(t, "gemma4v tier-1{tw.q8 ? " q8" : ""} {kind} {w}x{h}", out, int(tw.proj_dim), o, TIER1_ABS, rel)
-    return true
 }
 
 [test]
@@ -203,8 +189,7 @@ def test_gemma4v_clamps_bind(t : T?) {
         var st = Gemma4vState()
         let planes <- make_planes("cb", 336, 336)
         var out : array<float>
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             gemma4v_encode(tw, st, planes, 336l, 336l, out)
         }
         var maxdiff = 0.0
@@ -229,8 +214,7 @@ def test_gemma4v_clamps_bind(t : T?) {
         mint_gemma4v_tower(stgq, twq)
         var stq = Gemma4vState()
         var outq : array<float>
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             gemma4v_encode(twq, stq, planes, 336l, 336l, outq)
         }
         var maxdiffq = 0.0
@@ -260,8 +244,7 @@ def test_gemma4v_std_guard(t : T?) {
         var plain : array<float>
         var neutral : array<float>
         var biased : array<float>
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var inscope stg0 <- stage_gemma4v_tower(mm)
             tt |> success(!stg0.t.has_std, "E2B carries no std pair - the arm is synthesized below")
             var tw0 = Gemma4vTower()

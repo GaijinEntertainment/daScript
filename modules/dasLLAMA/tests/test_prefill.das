@@ -16,7 +16,7 @@ require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
 require daslib/linq   // sequence_equal: the logits rows and the codec-encoded KV byte blobs compare element for element (byte equality IS bit-exactness for a same-dtype pair)
-require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_math  // with_dasllama_jobque + the runtime knob setters (engine-level, not re-exported)
 
 // forward_prefill / forward_batch must be BIT-FOR-BIT identical to calling forward() once per
 // position: same last-position logits AND same KV cache — both for a from-scratch prompt and for a
@@ -30,8 +30,7 @@ let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
 def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillMode) {
     let c = tr.config
     let n = long_length(prompt)
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         set_prefill_attn_mode(mode)
         var sr <- make_run_state(c)
         for (p in range64(n)) {
@@ -52,8 +51,7 @@ def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillM
 def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64; mode : AttnPrefillMode) {
     let c = tr.config
     let n = long_length(prompt)
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         set_prefill_attn_mode(mode)
         var sr <- make_run_state(c)
         for (p in range64(n)) {
@@ -76,10 +74,7 @@ def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64;
 [test]
 def test_prefill_fp32(t : T?) {
     t |> run("prefill == Nx forward, fp32 (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -99,10 +94,7 @@ def test_prefill_fp32(t : T?) {
 [test]
 def test_prefill_q8(t : T?) {
     t |> run("prefill == Nx forward, Q8 (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -130,10 +122,7 @@ def test_prefill_q8(t : T?) {
 [test]
 def test_prefill_q4_batched(t : T?) {
     t |> run("q4_0 prefill rides the batched stack and matches (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return

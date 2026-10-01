@@ -330,7 +330,7 @@ Compilation policies
      - Enable JIT compilation (see *Enabling JIT* below)
    * - ``DAS_POLICY_JIT_DLL_MODE``
      - With JIT: cache generated code as per-script DLLs under
-       ``<dasroot>/.jitted_scripts`` (default: on); off = in-memory codegen
+       ``.cache/daslang/`` in the working directory (default: on); off = in-memory codegen
        every run, no cache writes.  The cache path needs a DLL build of
        daslang — a static-linked host always codegens in-memory regardless
        of this flag

@@ -8,7 +8,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require _model_tier
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 
 // The CPU-prefill tripwire — this file deliberately never calls allow_cpu_prefill()
 // (test_attn_span arms it in [init], which is why this cell cannot live there): on a
@@ -33,8 +33,7 @@ def test_cpu_prefill_tripwire(t : T?) {
         var rows : array<float>
         rows |> reserve(NROWS * tr.config.dim)
         rows |> resize(NROWS * tr.config.dim)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var s <- make_run_state(tr.config)
             var span_tripped = false
             try {

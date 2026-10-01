@@ -100,6 +100,12 @@ an entry matches a compiled census key, and that it matches no dispatched one - 
 derives each field's access and generates the builder - makes at compile time, or any
 `test_lens_*` / `test_vkd_lens_*` cell that holds one, is a defect.**
 
+**Weakening any refusal the manual-dispatch census in `dasllama/dasllama_metal_lens.das` makes in a
+module whose name starts with `dasllama` and contains `metal` - a direct
+`metal_dispatch_threadgroups` call, an `@ssbo` field with no `@role`, a function binding
+`kn_kargs` on fewer paths than it calls `kn_dispatch` - is a defect; a module that adds
+`options _metal_manual_dispatch = true` weakens it.**
+
 **A diff that adds a refusal to the `[metal_dispatch]` / `[vk_dispatch]` lens lands the cell that
 holds it in the same change** - a `test_lens_*` cell in
 `modules/dasLLAMA/tests/test_metal_misc_kernels.das` for Metal, a `test_vkd_lens_*` cell in
@@ -120,10 +126,11 @@ template gate drops it for that stamp - in ascending order; fields sharing a bin
 entry, a number nothing keeps gets none.** The setter checks only how many arguments it got,
 never which field each position carries.
 
-**A hand-written encode or descriptor-set helper, or a hand-rolled bind list on a dispatch, that a
-diff adds anywhere - a buffer or kargs field bound by literal number instead of through the builder
-the `[metal_dispatch]` / `[vk_dispatch]` lens generates for that class - whose PR body does not
-state why the generated builder cannot serve that site is a defect.** A body that only picks,
+**A diff that adds a hand-written encode or descriptor-set helper, or a hand-rolled bind list on a
+dispatch - a buffer or kargs field bound by literal number instead of through the builder the
+`[metal_dispatch]` / `[vk_dispatch]` lens generates for that class; code the diff only moves or
+renames is not added - says why the generated builder cannot serve that site, in a comment at
+the site or in the PR body.** A body that only picks,
 defaults or composes generated builders binds nothing; an ordered argument list into a generated
 `set_*` setter restates no binding number and is not one.
 

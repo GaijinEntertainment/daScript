@@ -17,7 +17,7 @@ require math
 require dasllama/dasllama_env
 require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
 
-let MODULE_CACHE = ".jitted_scripts/module_cache/dastest.dascache"
+let MODULE_CACHE = ".cache/daslang/module_cache/dastest.dascache"
 
 [CommandLineArgs]
 struct RunArgs {
@@ -102,6 +102,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_bench_records_schema.das",
                     "modules/dasLLAMA/tests/test_box_ident.das",
                     "modules/dasLLAMA/tests/test_box_profile.das",
+                    "modules/dasLLAMA/tests/test_compares.das",
                     "modules/dasLLAMA/tests/test_mtp_snapshot.das",
                     "modules/dasLLAMA/tests/test_mtp_sampled_walk.das",
                     "modules/dasLLAMA/tests/test_dasllama_lint_contracts.das",
@@ -295,7 +296,7 @@ def area_tests(area : string) : array<string> {
                     "test_vulkan_tts_kernels.das", "test_vulkan_tts_pocket_kernels.das", "test_vulkan_tts_source_kernels.das" ]
     } elif (area == "infra") {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das", "test_bench_rows.das",
-                    "test_box_ident.das", "test_box_profile.das", "test_dasllama_lint_contracts.das",
+                    "test_box_ident.das", "test_box_profile.das", "test_compares.das", "test_dasllama_lint_contracts.das",
                     "test_dasllama_lint_escape.das", "test_dlim_wipe.das", "test_env_registry.das",
                     "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_fat_hook_umbrella.das", "test_fat_start.das", "test_gen_records_args.das",
                     "test_model_specs.das", "test_program_roots.das", "test_run_suites.das", "test_run_summary.das",
@@ -405,8 +406,10 @@ def areas_for_path(path : string) : array<string> {
                 return <- ["vision"]
             } elif (name == "_tower_twin.das") {
                 return <- ["audio", "vision"]
-            } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das") {
+            } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das" || name == "_kernel_oracles.das") {
                 return <- ["llm"]
+            } elif (name == "_kq_fixtures.das") {
+                return <- ["llm", "tts"]   //! the K-quant lane cell of test_tts_blocks reads its planes
             }
             return <- clone_to_move(AREAS)
         }

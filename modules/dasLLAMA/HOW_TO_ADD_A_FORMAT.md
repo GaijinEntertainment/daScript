@@ -204,9 +204,13 @@ per-32 twin took.
   scale header (`[16 sc x mr][mr x f16 d][mr x f16 dmin]`, k2's field list) so `load_f16_vec_at`
   serves d and dmin as vectors; the repack and both grp readers move in one bit-exact step.
 - `dasllama_math_gen.das`: `<fmt>q8_layout_gen` (the layout companion), `<fmt>_grp_row_dot`
-  (the scalar grp reference = the stubs' body and the repack oracle), `<fmt>q8_gemv_gen` +
+  (the scalar grp reference = the stubs' body and the repack oracle) with its `KqTag_<fmt>`
+  overload of `grp_row_dot` - `tests/_kq_dot.das` stamps that family over every `KqFmt` member,
+  so a format without one fails the compile - `<fmt>q8_gemv_gen` (body
+  `kq_gemv_ref(..., KqTag_<fmt>())`, which walks rows through that overload) +
   `<fmt>q8_tile_gen` with the `[tune_perm]` grid copied from q40's and
-  `tune(gen = "dasllama_gemm_gen::<fmt>_tile", ...)`, `kq_layout_of` (`repack_kq_gen` /
+  `tune(gen = "dasllama_gemm_gen::<fmt>_tile", ...)`, the format's `KqTag_<fmt>` overloads of
+  `kq_gemv_gen` and `kq_tile_gen` (the same stamp binds them), `kq_layout_of` (`repack_kq_gen` /
   `repack_kq_bake` route through `repack_kq_grp` and need no arm), `kq_kernel_gen` (two ladders), `kq_batch_cell_gen` (`packed` + tile +
   tail ladders - a packed format with no arm here dereferences a null scale plane inside the k6
   tile under the JIT, a panel format with no arm silently decodes as k6), `kq_batch_kernel_gen`
@@ -220,11 +224,13 @@ per-32 twin took.
   tile stub's reference body.
 - `dasllama_math.das`: the `KernelBackend.kq_rows_<fmt>` slot, its `g_kq_rows_<fmt>` global,
   the activation copy, `kq_rows_fn`, the null-guard, the bake arm in `active_kq_layout_mr`.
-- `dasllama_gemm_gen.das`: `register_llvm_code_generator` for `<fmt>_gemv`, `<fmt>_tile` and
-  `<fmt>_tile4` (`kq_tile4_gen_impl(gc, <id>)`).
-  Until the emitter arm exists, register generators that return `false` - a declined generator
-  IS the framework's fallback, so the stubs are the cheapest way to have a real family; the
-  `[tune]` family must exist before the emitter does because the loader's kq dispatch, the layout
+- `dasllama_gemm_gen.das`: nothing to register - `register_dasllama_gemm_generators` walks
+  `KqFmt` and registers `<fmt>_gemv`, `<fmt>_tile`, `<fmt>_tile4` and `<fmt>_panel` for every
+  member with a schema id, each generator reading its format off its own key.
+  Until the emitter arm exists, leave the format out of `panel_supported`: its gemv, tile and
+  tile4 generators then decline and its panel is a bare return - a declined generator IS the
+  framework's fallback, so the stubs are the cheapest way to have a real family; the `[tune]`
+  family must exist before the emitter does because the loader's kq dispatch, the layout
   companion and the tuner's completeness check all resolve it by name.
 - The AMX bf16 leg (`ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile`): q40's grid carries two
   `amx_bf16` rows, and a family that copies them owes the leg's companions. In
@@ -233,26 +239,30 @@ per-32 twin took.
   their `tune_companion` rows (`kq_tileform`, `kq_amx_cfg`, `kq_witness`, `<fmt>_panel`), and
   the format's `KqTag_<fmt>` overload of `kq_tileform`, `kq_amx_arm` and `kq_panel_gen` - a
   `KqFmt` member without one fails the compile. In `dasllama_gemm_gen.das`: the format's
-  arm in `panel_supported`, `panel_scales`, `panel_quads` and `panel_ioff`, and the
-  `<fmt>_panel` generator with its registration. In `harness/gen_tune_probe.das`: the arms of
-  `kq_tileforms`, `kq_arm_variant` and `kq_panel_variant`. In
+  arm in `panel_supported`, `panel_scales`, `panel_quads` and `panel_ioff` (the `<fmt>_panel`
+  generator registers with the format). In
   `harness/gen_x64_emission_probe.das` and `gen_x64_emission_check.sh`: the panel registry and
   its gate row. A format whose panel is not written yet leaves the two rows out of its grid.
+- `dasllama_math_gen.das`: the format's `kq_registries` overload, returning every registry of
+  its family (tile, tile4, gemv by suffix, panel, the tileform and arm companions). The tuner
+  walk, the TEST gate and `benchmarks/matmul/kq_kernel_bench.das` read the family from it - a
+  format whose tile registry is non-empty is in the TEST gate and the tune rail. Leave the tile
+  registry empty until the emitter arm lands: the shared layout companion generates for any
+  perm `perm_declines` admits, so a declined tile runs the reference body over planes repacked
+  at the companion's `mr` and reads `maxdiff nan`.
 - `harness/gen_tune_probe.das`: `pack_kq_disk_block`, `repack_kq_grp_fmt`, `build_kq_fixture`
-  (block size, transcode, the yref oracle), `kq_tile_variants`, `kq_tile4_variants` (the TEST
-  gate stops on a family with no arm there), `kq_gemv_variants_by_suffix`,
-  `kq_layout_mrs`, `run_kq_tile`'s `packed`, `kq_tile_entry`, the family list; and the
+  (block size, transcode, the yref oracle), `b32_layout_mrs`; and the
   `<fmt>q8_tile4_gen_variants()` term in `harness/gen_x64_emission_probe.das`, so the emission
-  rail dumps the companion. Without this
-  the scope's completeness check demands a sidecar entry the tuner never writes, and every
-  start re-tunes. Keep a stub family out of the probe's TEST list until its emitter arm lands:
-  the shared layout companion generates for any perm `perm_declines` admits, so a declined tile
-  runs the reference body over planes repacked at the companion's `mr` and reads `maxdiff nan`
-  (the tune-mode list is fine - the race gates each perm and mints "reference").
-- `tests/test_kquant.das`: add the format to every gate's ladder and to the `[4, 5, 6, 40]`
-  lists (`followup_general.md` item 132). The gates: dot vs the fp64 plane-dequant oracle,
-  portable GEMV rows, repack at mr 4/8/16 (dots and row dequants bit-exact), 4-token tile vs
-  per-token GEMVs, groupn (disk + grp slices), batch groupn.
+  rail dumps the companion. Without these the scope's completeness check demands a sidecar
+  entry the tuner never writes, and every start re-tunes.
+- `tests/test_kquant.das`: add the format's schema id to `KQ_IDS`, its synthetic block to
+  `synth_block` (`tests/_kq_fixtures.das` - a ternary whose `else` reads k6's block, so a
+  format missing there gates k6's bytes; `followup_general.md` item 132), and a `plane_row` cell
+  to `test_kq_transcode_planes`. The gates walk `KQ_IDS` and reach the format through
+  `kq_fmt_of_id` and `tests/_kq_dot.das`'s `kq_fmt_stamp` calls (`dot_kq`, `kq_gemv_rt`,
+  `kq_tile_rt`, `kq_grp_row_dot_rt`), so none needs a per-format arm: dot vs the fp64
+  plane-dequant oracle, portable GEMV rows, repack at mr 4/8/16 (dots and row dequants
+  bit-exact), 4-token tile vs per-token GEMVs, groupn (disk + grp slices), batch groupn.
 
 A per-32 format's CPU kernels are ONE body over the format tag (`dasllama_math.das`): the
 three expanded-row kernel shapes - `b32_batch_kernel`, `b32_groupn_kernel`,
@@ -268,7 +278,8 @@ grp<mr> pair `expand_<fmt>_grp_row` / `gather_<fmt>_grp_scales`. Around them: th
 `matmul_<fmt>q8_*` wrappers, `active_<fmt>_layout_mr` / `set_bake_<fmt>_repack` /
 `active_repack_<fmt>`, the `repack_grp(..., KqTag_<fmt>)` overload (`repack_columns` at colw 4 +
 `repack_fields` with a verbatim scale unit), the panic overloads of `dot_kq` / `kq_gemv_gen` /
-`kq_tile_gen` on the tag (the stamp binds every member), the `mm_at_<fmt>_groupn` /
+`kq_tile_gen` on the tag and the tag in the tag list of `tests/_kq_dot.das`'s panic `grp_row_dot`
+(the stamps bind every member), the `mm_at_<fmt>_groupn` /
 `mm_b_<fmt>_pre` / `mm_b_<fmt>_groupn` routers in `dasllama_common.das`, and the gates in
 `tests/test_kquant.das` twinning q51's (plane unpack, dot vs fp64, groupn / batch /
 batch-groupn bit-match, the grp expand twins at mr 4/8, the GPU gather off grp planes) plus the
@@ -279,7 +290,7 @@ groupn / batch / batch-groupn slots - the slots are ONE body over the tag (`b32g
 layout, the tile and GEMV stamps, the scalar tail dot, and whether the fold reads the per-32
 activation sums), so a per-32 format writes its leaves and eight one-line overloads; in
 `dasllama_gemm_gen.das` a `TileEmit` flag, a block body (iq4nl32's is the mx4 nibble+LUT dots -
-`emit_lut_nibble_dots`, shared - under an f16 d fold, `emit_lut_block_fold`, shared), the
+`emit_lut_nibble_dots`, shared - under an f16 d fold, `emit_block_fold`, shared), the
 `emit_one_block` arm, the `nibblePlane` set in `setup_tile_emit`, and the `b32_gemv_gen_impl` /
 `b32_tile_gen_impl` walks parameterized on the block strides; then the registration rows, the
 probe's per-32 family (`b32_tune_family` over `KqFmt.q51` and `KqFmt.iq4nl32` - the fixture
@@ -294,8 +305,8 @@ same arc, and never read a first end-to-end wall time as a load-time regression.
 
 ## 5. The JIT emitter - `dasllama_gemm_gen.das`
 
-`kq_tile_gen_impl(gc, fmt)` / `kq_gemv_gen_impl(gc, fmt)` are one emitter specialized on `fmt`
-at generation time: the group walk, the slice/loop machinery (`emit_slice`) and the store
+`kq_tile_gen` / `kq_gemv_gen` are one emitter specialized on the format their key names
+(`kq_gen_fmt`) at generation time: the group walk, the slice/loop machinery (`emit_slice`) and the store
 epilogue are format-agnostic; only the block body and the primitives `setup_tile_emit` wires
 differ. IQ4_XS took:
 
@@ -312,11 +323,11 @@ differ. IQ4_XS took:
 2. `emit_one_block`: `te.kq == 44` routes to the new body ahead of the `te.kq != 0` arm.
 3. `setup_tile_emit(te, gc, p, needMx4 = fmt == 44)`: the mx4 primitive wiring is reused as
    is; the LUT bake picks `iq4nl_lut()` over the e2m1 table on `te.kq == 44`.
-4. The two stubs become `=> kq_gemv_gen_impl(gc, 44)` / `kq_tile_gen_impl(gc, 44)`.
+4. `panel_supported` admits 44, so the registered generators emit instead of declining.
 5. No `perm_declines` change: the tbl1 rail already sits on every sdot perm (it is the mx4
    companion's), and pshufb is implied by the x64 tiers.
 
-After ANY emitter change, `rm -rf .jitted_scripts` (or bump `LLVM_JIT_CODEGEN_VERSION`) before
+After ANY emitter change, `rm -rf .cache/daslang` (or bump `LLVM_JIT_CODEGEN_VERSION`) before
 trusting a probe or bench: the registered generators run at codegen time and their bodies do not
 fold into the cached DLL's hash, so a cache hit executes the OLD stamps with no signal - the
 same numbers across every edit, the `DLL cache hit` line the only tell. A sidecar minted while the
@@ -536,11 +547,14 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    in every one of those arms; the split formats bind it at `doff`, and copying their arm reads
    the scale plane's tail as the d row.
 5. **Tests:** `dequant_iq4xs_plane_superblock_at` (`dasllama_convert.das`, the split-layout
-   twin the CPU row now calls), fixtures at fmt 44 in `tests/_metal_kernel_common.das`, the
-   ladders + calls in `test_metal_gemv_kernels.das` (GEMV, B2/B4/B8) and
-   `test_metal_gemm_kernels.das` (mul_mm, base form) - the ladders are nested ternaries whose
-   `else` means k6, so a format missing from any one of them tests k6's kernel under the new
-   tag (`followup_general.md` item 132). Gate proof: a one-byte codebook mutation turns the
+   twin the CPU row now calls), fixtures at fmt 44 in `tests/_metal_kernel_common.das`
+   (`kq_fill_planes`, `kq_row_ref`), then the format's arm in every per-format stamp picker
+   and its calls: `kq_gemv_stamp` and `kq_mvb2_stamp` / `kq_mvb4_stamp` / `kq_mvb8_stamp` plus
+   `kq_gemv_gate`'s variant-to-id ternary in `test_metal_gemv_kernels.das` (GEMV, B2/B4/B8),
+   `kq_mm_stamp` / `kq_mm_tensor_kernel` in `test_metal_gemm_kernels.das` (mul_mm, base
+   form). The pickers are `if` chains whose fallthrough is k6 (the ternary's `else` is k5), so a
+   format missing from any one of them tests another format's kernel under the new tag
+   (`followup_general.md` item 132). Gate proof: a one-byte codebook mutation turns the
    format's cells red.
 
 A per-32 expert format on Metal takes q51's shape, not the kq one - no scale rebake, both planes

@@ -8,12 +8,12 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed   // resident_then_cpu_feed, feed_steps_within, tile_arm_tag
+require _resident_feed   // resident_ready, the levers, the ramps, resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal and its served rep
 
 // The whole-model resident driver on the llama family (`DASLLAMA_GPU=1`): the NORM rope (adjacent pairs),
@@ -36,17 +36,8 @@ let private PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by
 
 //! the carrier's path past its gate - the JIT, the armed tier and the file; "" where the cell already registered its skip
 def private llama_model_path(t : T?; file : string) : string {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return ""
-    }
     let path = path_join(models_dir(), file)
-    if (!model_available(t, path)) return ""
-    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-        return ""
-    }
-    return path
+    return resident_ready(t, path) ? path : ""
 }
 
 //! `file` through the resident chain and the CPU chain over an `n`-token prompt and eight steps
@@ -58,10 +49,9 @@ def private llama_forced_feed(t : T?; file : string; n : int64) {
     t |> success(!tr.config.attn_qkv_bias && !tr.config.rope_neox, "the llama arm: no q/k/v bias, the NORM rope")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
     t |> equal(get_jobque_spin_in_force(), get_jobque_spin_gpu_us(), "the armed driver put the GPU-served spin window in force")
-    with_job_que() {
-        setup_dasllama_jobque_()
-        var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
-        var toks <- [for (i in range64(8l)); 2000l + (i * 53l) % 4000l]
+    with_dasllama_jobque() {
+        var prompt <- resident_prompt(n)
+        var toks <- resident_feed(8l)
         var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
             var passes <- gpu_cpu_passes_()
             t |> equal(length(passes), 0, "the device served every call of the resident run: {passes}")
@@ -101,12 +91,12 @@ def test_gpu_resident_llama_batched_row(t : T?) {
     t |> run("bench_tg_batched_rep: the refusal past the homed streams, then one served rep") @(t : T?) {
         let path = llama_model_path(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
         if (empty(path)) return
+        let levers = resident_levers()
         set_gpu_resident_regions_(2l)
         var tr <- load_model_(path, QuantMode.q8)
-        set_gpu_resident_regions_(1l)
+        restore_resident_levers(levers)
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             let homes = gpu_device_sessions()
             t |> success(homes >= 2l, "the armed driver homes two streams ({homes})")
             let over_home = homes + 1l

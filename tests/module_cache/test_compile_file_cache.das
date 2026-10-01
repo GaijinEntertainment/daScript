@@ -58,7 +58,7 @@ def test_compile_file_module_cache(t : T?) {
     fwrite(rootFile, "options gen2\nrequire mc_cf_leaf\n[export]\ndef main \{\n    print(\"\{leaf()\}\\n\")\n\}\n")
     let enter = get_platform_name() == "windows" ? "cd /d {tmp} &&" : "cd {tmp} &&"
     let drv = "{enter} {get_full_file_name(das_exe())} -dasroot {root} {root}/tests/module_cache/_fixtures/mc_cf_drv.das -- {rootFile}"
-    let cacheDir = path_join(tmp, ".jitted_scripts/module_cache")
+    let cacheDir = path_join(tmp, ".cache/daslang/module_cache")
     var cold : string
     var coldOk = run_child_reported(t, "cold", "{drv} cache", cold, "MC_CF_COMPILED")
     coldOk = coldOk && !served(cold, leafFile) && !served(cold, rootFile)

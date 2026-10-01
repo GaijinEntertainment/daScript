@@ -7,7 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
 require dasllama/dasllama_prefix
-require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work
+require dasllama/dasllama_math   // with_dasllama_jobque + target_chunk_work
 require daslib/jobque_boost
 require daslib/fio
 require daslib/linq
@@ -140,16 +140,6 @@ def test_prefix_verify_tokens(t : T?) {
 
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
-def private argmax_of(s : Session; vocab : int64) : int64 {
-    var best = 0l
-    for (i in range64(1l, vocab)) {
-        if (s.logits[i] > s.logits[best]) {
-            best = i
-        }
-    }
-    return best
-}
-
 def private logits_match(s : Session; all : array<float>; snap, vocab : int64) : bool {
     for (i in range64(vocab)) {
         if (s.logits[i] != all[snap * vocab + i]) {
@@ -162,10 +152,7 @@ def private logits_match(s : Session; all : array<float>; snap, vocab : int64) :
 [test]
 def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/divergent phases share one pool + cache and one flat teardown
     t |> run("attached pages + tail eval == cold prefill, bit-exact (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -175,8 +162,7 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
         let saved_mode = get_prefill_attn_mode()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             // classic prefill is bit-exact under ANY chunking (test_prefill's contract), so the
             // warm tail eval must reproduce the cold single-shot prefill byte for byte
@@ -193,13 +179,13 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
             var cold_toks : array<int64>
             var one : array<int64>
             one |> resize(1)
-            var tok = argmax_of(cold, c.vocab_size)
+            var tok = argmax(cold, c.vocab_size)
             for (_i in range64(nsteps)) {
                 cold_toks |> push(tok)
                 one[0] = tok
                 eval_(tr, cold, one)
                 cold_all |> push_from(cold.logits)
-                tok = argmax_of(cold, c.vocab_size)
+                tok = argmax(cold, c.vocab_size)
             }
             // donate: full evaled history = prompt + sampled tokens, floor(29/8) = 3 pages
             var full <- concat(prompt, cold_toks)
@@ -217,7 +203,7 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
             var tail <- [for (j in range64(16l, np)); prompt[j]]
             eval_(tr, warm, tail)
             t |> success(logits_match(warm, cold_all, 0l, c.vocab_size), "post-prefill logits bit-exact")
-            var wtok = argmax_of(warm, c.vocab_size)
+            var wtok = argmax(warm, c.vocab_size)
             var bad = 0
             for (i in range64(nsteps)) {
                 if (wtok != cold_toks[i]) {
@@ -228,7 +214,7 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
                 if (!logits_match(warm, cold_all, 1l + i, c.vocab_size)) {
                     bad ++
                 }
-                wtok = argmax_of(warm, c.vocab_size)
+                wtok = argmax(warm, c.vocab_size)
             }
             t |> equal(0, bad)
             // DIVERGENT suffix: same 16-token prefix, different tail — warm attach == its own cold
