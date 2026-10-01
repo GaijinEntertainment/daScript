@@ -33,7 +33,9 @@ def with_tls_fixture_mode(t : T?; mode : string; run : block<(root : string; dns
             if (length(ports) >= 2) { invoke(run, root, to_int(ports[0]), to_int(ports[1])) }
             else { t |> failure("invalid TLS fixture ready record") }
             fwrite("{root}/release", "done")
-            t |> equal(unsafe(process_wait(process, 10.0)), 0)
+            let exit_code = unsafe(process_wait(process, 10.0))
+            unsafe(process_drain(process) $(line) { diagnostics += "{line}\n" })
+            t |> equal(exit_code, 0, diagnostics)
         }
     }
     let removed = rmdir_rec_result(root)

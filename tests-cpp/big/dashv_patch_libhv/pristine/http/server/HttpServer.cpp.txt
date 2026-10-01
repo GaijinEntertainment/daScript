@@ -1,0 +1,4 @@
+    // stop all loops
+    for (auto& loop : privdata->loops) {
+        loop->stop();
+    }

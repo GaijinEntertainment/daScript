@@ -80,5 +80,12 @@ if(rc EQUAL 0 OR at_usage EQUAL -1)
     fail("a run with no source dir succeeds, or fails without its usage: ${log}")
 endif()
 
+
+file(READ "${fresh}/http/server/HttpServer.cpp" shutdown)
+string(FIND "${shutdown}" "loop->queueInLoop([loop]() { loop->stop(); });" queued_stop)
+if(queued_stop EQUAL -1)
+    fail("HTTP server shutdown must dispatch stop on the loop owner")
+endif()
+
 file(REMOVE_RECURSE "${WORK_DIR}")
 message(STATUS "test_patch_libhv: all cases passed")

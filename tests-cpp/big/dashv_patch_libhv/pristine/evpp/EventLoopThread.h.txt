@@ -1,0 +1,2 @@
+        long loop_tid = loop_->tid();
+        loop_->stop();
