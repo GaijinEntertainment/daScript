@@ -1762,7 +1762,7 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMPositionBuilderAtEnd(g_builder, guard_end)
         }
         // lookup intrinsics first
-        var intrin_call = lookup_intinsic(g_ctx, g_builder, types, expr, [for (x in expr.arguments); getE(x)])
+        var intrin_call = has_intrinsic(expr) ? lookup_intinsic(g_ctx, g_builder, types, expr, [for (x in expr.arguments); getE(x)]) : null
         if (intrin_call != null) {
             setE(expr, intrin_call)
             return
