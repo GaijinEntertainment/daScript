@@ -15,7 +15,6 @@ def with_tls_fixture_mode(t : T?; mode : string; run : block<(root : string; dns
     let suffix = get_platform_name() == "windows" ? ".exe" : ""
     let executable = "{dir_name(get_host_binary())}/hv_tls_fixture{suffix}"
     var arguments <- [executable, root]
-    if (!empty(mode)) { arguments |> push(mode) }
     with_process(arguments) $(var process) {
         let started = ref_time_ticks()
         var diagnostics : string
@@ -29,6 +28,14 @@ def with_tls_fixture_mode(t : T?; mode : string; run : block<(root : string; dns
             let status = unsafe(process_poll(process))
             t |> failure("TLS fixture did not start: {executable}; exit/status={status}; {diagnostics}")
         } else {
+            if (mode == "clients") {
+                // Set trust before either CRT initializes; Debug/Release CRT env caches differ.
+                with_process([executable, root, "clients"], "", ["SSL_CERT_FILE={root}/ca.pem"]) $(var client) {
+                    let client_exit = unsafe(process_wait(client, 15.0))
+                    unsafe(process_drain(client) $(line) { diagnostics += "{line}\n" })
+                    t |> equal(client_exit, 0, diagnostics)
+                }
+            }
             let ports <- split(fread("{root}/ready"), "\n")
             if (length(ports) >= 2) { invoke(run, root, to_int(ports[0]), to_int(ports[1])) }
             else { t |> failure("invalid TLS fixture ready record") }
