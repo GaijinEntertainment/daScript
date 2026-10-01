@@ -14,7 +14,7 @@ require _scheduler_rig   // the device-mode scheduler cell: make_req, drain, tok
 require math
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed; gpu_cpu_passes_
 require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_resident_active
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, where the module exists
@@ -102,7 +102,7 @@ def private regions_ready(t : T?; file : string) : bool => resident_ready(t, pat
 def private with_regions_rig(t : T?; file : string; body : block<(tr : Model) : void>) {
     if (!regions_ready(t, file)) return
     var tr <- load_two_regions(t, file)
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         invoke(body, tr)
     }
     delete tr
@@ -380,7 +380,7 @@ def cell_regions_fuse_bisect(t : T?; file : string) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             var pa <- prompt_a()
             var fa <- feed_a()
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 vk_fuse_bisect_pin(0l)
                 var tr0 <- load_two_regions(t, file)
                 var base <- logits_alone(tr0, pa, fa)
@@ -839,7 +839,7 @@ def cell_passes_with_their_rows(t : T?; file : string) {
         set_gpu_ctx_max(CAPPED_RIG_CTX)
         var tr <- load_two_regions(t, file)
         set_gpu_ctx_max(REGIONS_RIG_CTX)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             t |> equal(gpu_device_session_ctx(), CAPPED_RIG_CTX, "the regions armed at the capped context")
             var head <- prose_ids(CAPPED_RIG_CTX - 96l, 0l)
             var tail <- prose_ids(200l, 9l)
@@ -950,7 +950,7 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
         split_forms_pin(split_forms)
         var tr <- load_regions(t, file, 3l)
         restore_resident_levers(levers)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var pa <- prompt_a()
             var pb <- prompt_b()
             var pc <- prompt_c()

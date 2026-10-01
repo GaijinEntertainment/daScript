@@ -187,7 +187,7 @@ def private check_engaged_witness(t : T?) {
 [test, unused_argument(t)]  // off-Apple the feint arm never reads t
 def test_accel_float_batch(t : T?) {
     static_if (typeinfo builtin_module_exists(das_accelerate)) {
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             t_accel_pin_floor()  // tiny test shapes must engage, not fall through
             t_accel_set_f16(false)  // pin: env DASLLAMA_ACCEL_F16 must not leak into the sgemm arms
             t |> run("fp32 batch vs portable (tolerance)") @(t : T?) {

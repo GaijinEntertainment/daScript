@@ -13,7 +13,7 @@ def private allow_cpu_prefill_intent() {
 require daslib/jobque_boost
 require daslib/fio
 require daslib/rtti   // this_context().last_exception - the refused loads' text
-require dasllama/dasllama_math  // with_dasllama_jobque (the engine-standard jobque config)
+require dasllama/dasllama_math  // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // the deltanet chain and decode-step route pins
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 
@@ -52,7 +52,7 @@ def test_deltanet_chunked_prefill(t : T?) {
         let prev_dnd_route = moe_gpu_dnd_route()
         set_moe_gpu_dn_route(false)
         set_moe_gpu_dnd_route(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             let n = 150l
             var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
 
@@ -136,7 +136,7 @@ def private load_outcome(path : string; o : RopeScalingOverride) : string {
 
 def private greedy_text(tr : Model; steps : int) : string {
     var out = ""
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var s = make_run_state(tr.config)
         var prompt <- encode_(tr, YARN_PROMPT, true, false)
         var ids <- generate(tr, s, prompt, length(prompt) + steps)
@@ -153,7 +153,7 @@ def private step_logits(tr : Model; tabled : bool) : array<float> {
     var out : array<float>
     let prev = get_rope_table_mode()
     set_rope_table_mode(tabled)
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var s = make_run_state(tr.config)
         var prompt <- encode_(tr, YARN_PROMPT, true, false)
         let n = long_length(prompt)

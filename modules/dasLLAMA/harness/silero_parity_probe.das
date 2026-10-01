@@ -21,7 +21,7 @@ def main() {
     let wav_path = args[length(args) - 1]
     let samples <- load_audio_16k_mono(wav_path)
     print("SAMPLES\t{length(samples)}\n")
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var m <- load_vad_model(model_path)
         let probs <- vad_probs(m, samples)
         for (i, p in range(length(probs)), probs) {

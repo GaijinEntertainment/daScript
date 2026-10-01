@@ -7,7 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
 require dasllama/dasllama_prefix
-require dasllama/dasllama_math   // with_dasllama_jobque + target_chunk_work
+require dasllama/dasllama_math   // with_dasllama_jobque_ + target_chunk_work
 require daslib/jobque_boost
 require daslib/fio
 require daslib/linq
@@ -162,7 +162,7 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
         let saved_mode = get_prefill_attn_mode()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             // classic prefill is bit-exact under ANY chunking (test_prefill's contract), so the
             // warm tail eval must reproduce the cold single-shot prefill byte for byte

@@ -20,7 +20,7 @@ def main() {
     let model_path = args[length(args) - 2]
     let wav_path = args[length(args) - 1]
     let samples <- load_audio_16k_mono(wav_path)
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var m <- load_vad_model(model_path)
         let segs <- find_speech_timestamps(m, samples, default_vad_opts())
         for (s in segs) {

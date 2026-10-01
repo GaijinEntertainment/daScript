@@ -328,8 +328,9 @@ def setup_dasllama_jobque_() {
     set_current_thread_priority(clamp(g_env_engine.caller_prio, -2, 2))
 }
 
-//! `blk` inside a fresh `with_job_que` the engine has configured (`setup_dasllama_jobque_` first)
-def with_dasllama_jobque(blk : block<void>) {
+//! `blk` inside a fresh `with_job_que` the engine has configured (`setup_dasllama_jobque_` first).
+//! Engine spelling of `with_dasllama_jobque`.
+def with_dasllama_jobque_(blk : block<void>) {
     with_job_que() {
         setup_dasllama_jobque_()
         invoke(blk)

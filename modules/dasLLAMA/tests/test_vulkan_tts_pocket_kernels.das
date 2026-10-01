@@ -53,7 +53,7 @@ def test_vkt_pk_rows(t0 : T?) {
             let want <- [for (e in range(nwin)); src[(PR_SR0 + e / PR_WIDTH) * PR_SS + PR_SC + e % PR_WIDTH]]
             var want_e := want
             want_e |> push(0.0)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 elu_rows(want_e, int64(nwin + 1))
             }
             want_e |> resize(nwin)
@@ -112,7 +112,7 @@ def test_vkt_pk_row_scale(t0 : T?) {
             let x <- row_fill(n, 41, 7, 0.05, 2.1)
             let scale <- row_fill(RS_C, 29, 3, 0.03, 1.2)
             var want := x
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 layer_scale_rows(want, int64(RS_T), int64(RS_C), scale)
             }
             with_cell_planes() $(var cp : CellPlanes) {
@@ -189,7 +189,7 @@ def private pk_attn_wants(var kc : TtsKvCache; q : array<float>) : PkAttnOut {
     let vr <- row_fill(PA_T * d, 53, 11, 0.04, 1.9)
     let qdec <- [for (e in range(d)); q[PA_DEC_POS * d + e]]
     var out : PkAttnOut
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         kv_cache_init(kc, int64(PA_HEADS), int64(PA_DH), int64(PA_CAP))
         kv_cache_append(kc, kr, vr, int64(PA_T), int64(d))
         attention_causal_rows(q, int64(PA_T), int64(d), 0l, kc, out.a)
@@ -347,7 +347,7 @@ def private pk_gemv_wants(f : PkGemvFix) : PkGemvRows {
     let nout = PG_NOUT
     var d_plain : array<float>
     var d_norm : array<float>
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         linear_vec(f.lin, f.x, d_plain)
         var xn := f.x
         layernorm_rows(xn, 1l, int64(nin), f.norm, PG_EPS)
@@ -585,7 +585,7 @@ def test_vkt_pk_gemv_fused(t0 : T?) {
             var qkv_row : array<float>
             var dp : array<float>
             var dn : array<float>
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 layernorm_rows(xn, 1l, int64(d), f.norm, PG_EPS)
                 linear_vec(f.qkv, xn, qkv_row)
                 linear_vec(f.sq, f.x, dp)

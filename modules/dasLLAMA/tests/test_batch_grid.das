@@ -95,7 +95,7 @@ def private check_shape(t : T?; n, d, ntok, tb : int64) {
 
 [test]
 def test_batch_grid_bit_exact(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         restore_grid_knobs()
         t |> run("starved 64x64, ragged token tail (33 = 8 tiles + 1)") @(t : T?) {
             check_shape(t, 64l, 64l, 33l, 128l)

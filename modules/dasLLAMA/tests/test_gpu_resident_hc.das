@@ -8,7 +8,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require dasllama/dasllama_env   // g_env_vulkan.vk_kv32: the f32 mirror passes the f16 sessions as codec
@@ -151,7 +151,7 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
         clear_mtp_head_path()
         t |> success(!mtp_head_path_pin().set, "the head pin is cleared for the process after the load")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk and its head (the load log names any decline)")
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             let tape_before = moe_pick_tape_mode()
             var prompt <- resident_prompt(HC_PROMPT)
             var r <- hc_round(t, tr, prompt)
@@ -209,7 +209,7 @@ def test_gpu_resident_hc_mtp_draft(t : T?) {
         t |> success(!mtp_head_path_pin().set, "the head pin is cleared for the process after the load")
         t |> equal(tr.config.n_layer_nextn, 1l, "the split head attached")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk and its head (the load log names any decline)")
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             let tape_before = moe_pick_tape_mode()
             var prompt <- resident_prompt(HC_PROMPT)
             var s <- create_session(tr, mirror_kv_dtype())
@@ -270,7 +270,7 @@ def test_gpu_resident_hc(t : T?) {
         var tr <- load_model_(path, QuantMode.q8)
         t |> success(tr.config.hyper_conn && tr.config.n_expert > 0l && tr.config.dn_z_sigmoid, "the carrier is the hyper-connection MoE with the sigmoid out-gate the chain exists for")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on it (the load log names any decline)")
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var prompt <- resident_prompt(HC_PROMPT)
             var toks <- resident_feed(6l)
             let served0 = moe_gpu_resident_prefills()

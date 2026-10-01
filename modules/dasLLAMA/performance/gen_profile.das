@@ -12,7 +12,7 @@ options _dasllama_internal = true
 //   bin/daslang -jit modules/dasLLAMA/performance/gen_profile.das -- -t small
 
 require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
-require dasllama/dasllama_math          // with_dasllama_jobque + apply_box_profile_runtime knobs (engine-level, not re-exported)
+require dasllama/dasllama_math          // with_dasllama_jobque_ + apply_box_profile_runtime knobs (engine-level, not re-exported)
 require dasllama/dasllama_tune          // box_profile_path (the applied per-box manifest, recorded in the platform block)
 require daslib/tune                     // [tune_policy] - inert without dasLLVM
 require llvm/daslib/llvm_tune           // log_tune_status — the box tunes itself before measuring
@@ -71,7 +71,7 @@ def private measure(var t : Model; prefill_ctx, emission_ctx : int) : tuple<pref
     var s <- make_run_state(t.config, KVDtype.f16, KVDtype.f16)
     var pf = 0.0lf
     var em = 0.0lf
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var warm <- build_prompt(8l)
         for (p in range64(8l)) {
             forward(t, s, warm[p], p)
@@ -183,7 +183,7 @@ def main() {
     // above, but probe the ACTUAL lane count, record it (not the advisory flag), and warn on mismatch
     // (an explicit DAS_JOBQUE_THREADS still redirects the run).
     var lanes = 0
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         lanes = get_dispatch_lanes()
     }
     prof.platform.threads = lanes

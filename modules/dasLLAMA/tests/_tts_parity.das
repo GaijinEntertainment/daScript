@@ -13,7 +13,7 @@ require dasllama/dasllama_pocket
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_tts   // nolint:STYLE029,LINT019 — the facade synthesis, read only inside the Apple half
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require ?das_metal dasllama/dasllama_metal_tower
 require ?vulkan dasllama/dasllama_vulkan_tower   // nolint:STYLE030,LINT019 — the Vulkan tower knob, read only inside the GPU half
 require ?vulkan dasllama/dasllama_vulkan_tts   // nolint:STYLE030,LINT019 — the Vulkan TTS driver's counters, read only inside the GPU half
@@ -104,7 +104,7 @@ def gpu_declines() : table<string; int64> {
 
 //! `body` on a set-up job queue, every GPU knob put back after as the cell found them
 def with_gpu_cell(body : block<() : void>) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         with_gpu_knobs(body)
     }
 }
@@ -634,7 +634,7 @@ def speech_level(pcm : array<float>) : tuple<finite : bool; peak : float; rms : 
 //! a facade cell: the model (and the front-end packs under `gate_on_packs`) gated, loaded on a job queue, caps at 24 kHz with `n_voices` voices, then `body`
 def facade_smoke(t : T?; path : string; gate_on_packs : bool; n_voices : int; body : block<(var m : TtsModel; c : TtsCaps) : void>) {
     return if (gate_on_packs ? tts_data_missing(t, path) : !model_available(t, path))
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var inscope m <- load_tts_model(path)
         var inscope c <- caps(m)
         t |> equal(c.sample_rate, 24000)
@@ -652,7 +652,7 @@ def tts_parity(t : T?; rig : TtsParityRig) {
         t |> skip("{rig.oracle_dir} not stocked")
         return
     }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var inscope stg <- stage_styletts2(rig.gguf, false)   // the bars are the f32 lane's; minted in memory, no .dlim baked
         var inscope m = StyleTts2Model()
         mint_styletts2(stg, m)

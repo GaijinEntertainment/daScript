@@ -78,8 +78,7 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let c = tr.config
         let vocab = c.vocab_size
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
             var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
             gpu_prefill_pair(trg, sa, sb, prompt)   // metal prefill: stashes mtp_h + warms the draft slab, seconds at 27B
@@ -153,8 +152,7 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
         let c = tr.config
         let vocab = c.vocab_size
         var sp = SAMPLED_PARAMS
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
             var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
             gpu_prefill_pair(trg, sa, sb, prompt)
@@ -303,8 +301,7 @@ def private vff_pair(tr, trg : Model; prompt : array<int64>; nrounds, nr : int64
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let c = tr.config
         let vocab = c.vocab_size
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
             var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
             gpu_prefill_pair(trg, sa, sb, prompt)
@@ -384,8 +381,7 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
         let c = trg.config
         let vocab = c.vocab_size
         let nb = long_length(prompts)
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var sa : array<Session>
             var sb : array<Session>
             sa |> reserve(nb)

@@ -59,7 +59,7 @@ def private slot_swap_cycle(path : string) : SwapResult {
     want.auto_tier = true
     set_gpu_tier_want_(want)
     moe_gpu_tier_arm_()
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var tr <- load_model_(path, QuantMode.q8)
         r.armed0 = moe_gpu_resident_active()
         if (r.armed0) {

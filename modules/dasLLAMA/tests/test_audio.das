@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require daslib/defer
@@ -156,7 +156,7 @@ def test_ultravox_tower(t : T?) {
             var enc <- make_encoder_state(tw)
             with_gpu_knobs() {
                 set_every_gpu_tower(false)
-                with_dasllama_jobque() {
+                with_dasllama_jobque_() {
                     audio_encode(tw, enc, mel)
                 }
             }
@@ -200,7 +200,7 @@ def test_voxtral_tower(t : T?) {
             var enc <- make_encoder_state(tw)
             with_gpu_knobs() {
                 set_every_gpu_tower(false)
-                with_dasllama_jobque() {
+                with_dasllama_jobque_() {
                     audio_encode(tw, enc, mel)
                 }
             }
@@ -350,7 +350,7 @@ def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto
         var dev_fresh : array<float>
         set_vulkan_tower(true)
         let e0 = vulkan_tower_stats().encodes
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             invoke(encode, enc, st, head, dev_head)
             invoke(encode, enc, st, samples, dev_again)
             vulkan_tower_shutdown()
@@ -368,7 +368,7 @@ def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto
         var stp = ST()
         var poisoned : array<float>
         let p0 = vulkan_tower_stats().encodes
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             invoke(encode, encp, stp, samples, poisoned)
         }
         t |> success(vulkan_tower_stats().encodes > p0, "{tag} poison: device-served (encodes delta)")
@@ -636,7 +636,7 @@ def test_encoder_blocks_gpu(tst : T?) {
             set_metal_tower(false)
             var cpu_out : array<float>
             let s0 = metal_tower_stats()
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 audio_encode(tw, enc, mel)
                 cpu_out := enc.out
                 set_metal_tower(true)
@@ -666,7 +666,7 @@ def test_encoder_blocks_gpu(tst : T?) {
             set_metal_tower(false)
             var cpu_out : array<float>
             let s0 = metal_tower_stats()
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 audio_encode(tw, enc, mel)
                 cpu_out := enc.out
                 set_metal_tower(true)
@@ -718,7 +718,7 @@ def test_encoder_oracle(t : T?) {
         var enc <- make_encoder_state(tw)
         with_gpu_knobs() {
             set_every_gpu_tower(false)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 audio_encode(tw, enc, mel)
             }
         }

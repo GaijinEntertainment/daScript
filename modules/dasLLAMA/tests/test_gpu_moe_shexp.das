@@ -13,7 +13,7 @@ def private allow_cpu_prefill_intent() {
 }
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: the route lever kept the whole-model driver off the twin
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto / moe_gpu_shexp_on_gpu / set_moe_gpu_shexp_route / set_gpu_resident_route
 require dasllama/dasllama_blocks   // shexp_gpu_prefill_layers: the device arm's engage witness
@@ -65,7 +65,7 @@ def private shexp_forced_feed(t : T?; n : int64) {
         delete tr
         return
     }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var prompt <- resident_prompt(n)
         var toks <- resident_feed(FED_STEPS)
         set_moe_gpu_shexp_route(true)

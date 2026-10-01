@@ -8,7 +8,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
@@ -49,7 +49,7 @@ def private llama_forced_feed(t : T?; file : string; n : int64) {
     t |> success(!tr.config.attn_qkv_bias && !tr.config.rope_neox, "the llama arm: no q/k/v bias, the NORM rope")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
     t |> equal(get_jobque_spin_in_force(), get_jobque_spin_gpu_us(), "the armed driver put the GPU-served spin window in force")
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var prompt <- resident_prompt(n)
         var toks <- resident_feed(8l)
         var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
@@ -96,7 +96,7 @@ def test_gpu_resident_llama_batched_row(t : T?) {
         var tr <- load_model_(path, QuantMode.q8)
         restore_resident_levers(levers)
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             let homes = gpu_device_sessions()
             t |> success(homes >= 2l, "the armed driver homes two streams ({homes})")
             let over_home = homes + 1l

@@ -4,7 +4,7 @@ options _jit_fast_math = true   // ggml-parity FP laxity — matches how the ups
 options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
-require dasllama/dasllama_math   // with_dasllama_jobque + apply_box_profile_runtime (engine-level, not re-exported)
+require dasllama/dasllama_math   // with_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail, without the full facade's compile weight
 require ?das_accelerate dasllama/dasllama_math_accelerate   // the --accel leg; Apple-only C++ module
 require ../performance/profile_common.das   // profile_threads + affinity_on — the standing per-box methodology
@@ -110,7 +110,7 @@ def main() : int {   // nolint:STYLE038 — flat profiler driver: arg/env/tier h
         return 1
     }
     print("loading {cfg.model}\n")
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var t <- load_model_cached(cfg.model, cfg.quant)
         t.config.seq_len = min(t.config.seq_len, depth + ngen + 8l)   // cap the KV allocation
         let c = t.config

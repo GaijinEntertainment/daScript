@@ -16,7 +16,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
@@ -149,7 +149,7 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
     }
     let layers = tr.config.n_layers
     let windows = (n + PF_WINDOW_ROWS - 1l) / PF_WINDOW_ROWS
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var prompt <- resident_prompt(n)
         var toks <- resident_feed(FED_STEPS)
         let sched0 = census("moe_sched_cls_spv")

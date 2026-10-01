@@ -42,8 +42,7 @@ def test_sampling_greedy_matches_oracle(t : T?) {
         let pv = get_act_vec()
         set_act_vec(false)
         var got : array<int64>
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var s = create_session(m, KVDtype.f32)   // frozen f32 oracle — the facade default is f16
             generate(m, s, GEMMA2_PROMPT, SamplingParams(), long_length(GEMMA2_GEN)) $(id, piece) {
                 got |> push(id)
@@ -388,8 +387,7 @@ def test_sampling_deterministic(t : T?) {
         let n = 16l
         var a : array<int64>
         var b : array<int64>
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var s1 = create_session(m)
             set_seed(s1, 12345)
             generate(m, s1, GEMMA2_PROMPT, params, n) $(id, piece) {

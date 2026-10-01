@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_common
-require dasllama/dasllama_math   // parallel_argmax + with_dasllama_jobque
+require dasllama/dasllama_math   // parallel_argmax + with_dasllama_jobque_
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail
 require dasllama/dasllama_tokenizer
 require ?das_metal dasllama/dasllama_metal_common   // finish_pending_step — land the one-deep pipelined step before reading logits
@@ -351,7 +351,7 @@ def main() {
     set_mtp_spec(true)                   // before load — the prefill warms the draft head
     let tk <- load_tokenizer_auto(cfg.model)
     print("loading {cfg.model}\n")
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var t <- load_model_cached(cfg.model, cfg.quant)
         if (!t.metal_blob) {
             panic("mtp_parity_probe: the mapped flavor is not metal_blob - the probe targets the metal verify")

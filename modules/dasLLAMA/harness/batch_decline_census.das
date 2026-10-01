@@ -12,7 +12,7 @@ options _dasllama_internal = true
 require dasllama/dasllama_transformer   // umbrella: every arch [init] registration
 require dasllama/dasllama_image   // load_model_cached: the .dlim rail the rows load on
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row and its refusal
-require dasllama/dasllama_math    // with_dasllama_jobque + set_metal_mode
+require dasllama/dasllama_math    // with_dasllama_jobque_ + set_metal_mode
 require dasllama/dasllama_common  // batch_step_census, allow_cpu_prefill
 require ?das_metal dasllama/dasllama_metal_common   // metal_batch_decode_declines + declines_line
 require daslib/jobque_boost
@@ -68,7 +68,7 @@ def main() : int {
     let npl = int64(cfg.npl)
     let kv = cfg.kv
     set_metal_mode(MetalMode.when_available)
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         for (path in cfg.models) {
             var t <- load_model_cached(path, QuantMode.q8)
             t.config.seq_len = min(t.config.seq_len, int64(cfg.ctx))

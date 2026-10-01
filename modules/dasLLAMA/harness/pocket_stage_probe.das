@@ -158,7 +158,7 @@ def main() : int {
         panic("pocket_stage_probe: tune_gate refused - point DAS_TUNE_MANIFEST at a complete sidecar")
     }
     var rc = 0
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var inscope m <- load_pocket(cfg.model)
         var inscope sc = PocketScratch()
         let frames = frames_arm(m, cfg, sc)

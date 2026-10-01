@@ -38,7 +38,7 @@ def main {
         if (!tune_gate()) {
             panic("p0: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
         }
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             measure_one(tr, 512l, 1)   //! warm: JIT + blob upload + first graphs
             let npos = 512l
             //! "nofuse" matches no skip family: every kernel encodes with full math, so this arm

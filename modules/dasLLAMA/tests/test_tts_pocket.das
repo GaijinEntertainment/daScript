@@ -11,7 +11,7 @@ require dasllama/dasllama_tts
 require dasllama/dasllama_audio_io
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama   // moe_gpu_drop_model: the LLM tier's model drop between two syntheses
 require daslib/jobque_boost
 require daslib/defer   // defer() { reset_pocket_q8() } - a lane pin never outlives its cell
@@ -981,7 +981,7 @@ def test_pocket_kq_file(t : T?) {
     }
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var inscope sc = PocketScratch()
         defer() {
             reset_pocket_q8()
@@ -1155,7 +1155,7 @@ def private language_cells(t : T?; L : PocketLang) {
 
 [test]
 def test_pocket_languages(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         for (L in LANGS) {
             language_cells(t, L)
         }
@@ -1244,7 +1244,7 @@ def test_pocket_no_encoder(t : T?) {
     if (!model_available(t, path)) {
         return
     }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> success(!tts_needs_packs(path), "a Pocket file needs no packs")
         var inscope m <- load_tts_model(path)
         var inscope c <- caps(m)
@@ -1299,7 +1299,7 @@ def test_pocket_quiet_floor(t : T?) {
     if (!model_available(t, path)) {
         return
     }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         defer() {
             reset_pocket_q8()
         }
@@ -1340,7 +1340,7 @@ def test_pocket_long_chunk(t : T?) {
     if (!model_available(t, path)) {
         return
     }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var inscope m <- load_tts_model(path)
         let text = build_string() $(w) {
             for (i in range(230)) {
@@ -1384,7 +1384,7 @@ def test_pocket_prepared_prompt_transfer(t : T?) {
     let sender_path = path_join(models_dir(), "pocket-tts-en-kq.gguf")
     let receiver_path = path_join(models_dir(), "pocket-tts-en-stuart-kq.gguf")
     if (!model_available(t, sender_path) || !model_available(t, receiver_path)) { return }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var serialized = ""
         {
             var inscope sender <- load_tts_model(sender_path)

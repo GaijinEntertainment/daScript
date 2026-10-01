@@ -13,7 +13,7 @@ require dasllama/dasllama_audio
 require dasllama/dasllama_tower
 require dasllama/dasllama_common   // KVDtype — the oracle cells pin the f32 parity rail
 require dasllama/dasllama_gguf
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require daslib/defer
@@ -283,7 +283,7 @@ def test_qwen3a_tower(t : T?) {
             t |> equal(mel.n_len, 1101l, "effective mel frames (11 s)")
             var enc <- make_encoder_state(tw.core)
             var cs = Qwen3aConvState()
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 let win <- qwen3a_mel_window(mel, 0l)
                 t |> equal(win.n_len, 800l, "window 0 padded frames")
                 qwen3a_encode(tw, enc, cs, win)
@@ -317,7 +317,7 @@ def test_parakeet_oracle(t : T?) {
         t |> equal(m.pk.n_vocab, 1024l, "vocab")
         t |> equal(m.pk.n_layer, 24l, "layers")
         t |> equal(m.pk.durations[4], 4, "tdt durations")
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var inscope s <- create_session(m)
             var inscope segs <- session_segs(m, s, samples)
             // parakeet-cli -ng -ps (CPU, f32 self-convert): 33 tokens, these exact ends
@@ -368,7 +368,7 @@ def test_parakeet_v3_oracle(t : T?) {
         t |> equal(length(c.languages), 25, "25 languages")
         t |> equal(m.pk.n_vocab, 8192l, "vocab")
         t |> equal(m.pk.q8, !parakeet_gpu_serves(), "default load follows the lane policy - q8 unless the Metal driver serves")
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var inscope s <- create_session(m, "de")   // any of the 25; parakeet has no conditioning
             var inscope segs <- session_segs(m, s, samples)
             //! parakeet-cli -ng -ps (CPU, f32 self-convert) gives these 38 tokens; either lane stays id-exact on jfk
@@ -396,7 +396,7 @@ def test_whisper_transcribe_oracle(t : T?) {
             return
         }
         var w <- load_whisper_model(model_path)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var inscope s <- create_session(w)
             var inscope segs : array<TranscribeSegment>
             transcribe(w, s, samples) $(seg) {
@@ -559,7 +559,7 @@ def test_whisper_vulkan_twin(t : T?) {
                     set_asr_tower_fp32(false)
                     var inscope m <- mint_asr_whisper(model_path)
                     tt |> success(m.whisper.enc.q8, "the served mint is q8")
-                    with_dasllama_jobque() {
+                    with_dasllama_jobque_() {
                         set_vulkan_tower(false)
                         let d0 = vulkan_tower_stats()
                         var inscope cpu_segs <- transcribe_segs(m, samples)
@@ -608,7 +608,7 @@ def test_whisper_vulkan_wdec(t : T?) {
                     set_asr_tower_fp32(false)
                     var inscope m <- mint_asr_whisper(model_path)
                     tt |> success(m.whisper.dq8, "the served mint carries the q8 decoder")
-                    with_dasllama_jobque() {
+                    with_dasllama_jobque_() {
                         set_vulkan_wdec(false)
                         let d0 = vulkan_wdec_stats()
                         var inscope cpu_segs <- transcribe_segs(m, samples)
@@ -657,7 +657,7 @@ def test_whisper_vulkan_stem_flush(t : T?) {
                 set_asr_fp32(false)
                 set_asr_tower_fp32(false)
                 var inscope m <- mint_asr_whisper(model_path)
-                with_dasllama_jobque() {
+                with_dasllama_jobque_() {
                     set_vulkan_tower(false)
                     var inscope cpu_segs <- transcribe_segs(m, samples)
                     set_vulkan_tower(true)
@@ -715,7 +715,7 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
                 var cpu_logits : array<float>
                 var cpu_moved : array<float>
                 var dev_logits : array<float>
-                with_dasllama_jobque() {
+                with_dasllama_jobque_() {
                     set_vulkan_wdec(false)
                     var inscope sc <- create_session(m)
                     transcribe(m, sc, samples) $(_seg) {}
@@ -765,7 +765,7 @@ def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrS
             set_asr_fp32(false)
             set_asr_tower_fp32(false)
             var inscope m <- mint_asr_whisper(model_path)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 var inscope s <- create_session(m)
                 invoke(body, m, s, samples)
             }
@@ -863,7 +863,7 @@ def private wdec_f32_declines(tt : T?; name, model_path : string; samples : arra
         let tag = "{name} jfk f32 decoder"
         var inscope mf <- mint_whisper(model_path, false, false, -1l)
         tt |> success(!mf.dq8, "{tag}: the mint carries the f32 decoder")
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             let f0 = vulkan_wdec_stats()
             var inscope sf <- create_session(mf)
             var n_segs = 0
@@ -898,7 +898,7 @@ def test_whisper_q8_gate(t : T?) {
             set_asr_fp32(false)
             t |> success(m.whisper.enc.q8, "default load is q8")
             t |> success(!mf.whisper.enc.q8, "knob forces fp32")
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 var inscope segs <- transcribe_segs(m, samples)
                 var inscope fsegs <- transcribe_segs(mf, samples)
                 to_log(LOG_INFO, "whisper-tiny q8 jfk eyeball: '{segs[0].text}'\n")
@@ -941,7 +941,7 @@ def test_whisper_tower_fp32_knob(t : T?) {
         t |> success(mm.whisper.dq8, "tower knob leaves the decoder q8")
         t |> equal(asr_exec_fmt(mm), "f32/q8", "exec fmt stamps the halves")
         var inscope m <- load_asr_model(model_path)   // the q8/q8 default = the transcript truth
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var inscope segs <- transcribe_segs(m, samples)
             var inscope msegs <- transcribe_segs(mm, samples)
             t |> equal(length(segs), length(msegs), "segment count")
@@ -1023,7 +1023,7 @@ def test_whisper_crowned_word_level(t : T?) {
             var inscope m <- load_asr_model(model_path)
             let s0 = metal_tower_stats()
             let w0 = metal_wdec_stats()
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 var inscope s <- create_session(m)
                 var text_default = ""
                 transcribe(m, s, samples) $(seg) {
@@ -1108,7 +1108,7 @@ def test_canary_qwen_oracle(t : T?) {
         t |> success(!c.translate && c.timestamps == AsrTimestamps.none && !c.streaming, "no translate / timestamps / streaming")
         t |> equal(m.cenc.n_layer, 32l, "FastConformer-32")
         t |> equal(m.cenc.proj_dim, 2048l, "projects to the Qwen3 hidden width")
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             // Frozen NeMo SALM greedy ids (harness/canary_qwen_expected.tsv); trailing 151645 = text EOS
             check_canary_clip(t, m, path_join(corpus_dir(), "jfk.wav"),
                 [3036, 773, 847, 12357, 8877, 2548, 537, 1128, 697, 3146, 646, 653, 369, 498, 2548,
@@ -1150,7 +1150,7 @@ def test_gemma4a_audio_oracle(t : T?) {
             return
         }
         set_asr_kv(KVDtype.f32)   // the frozen mtmd-prefix ids are the f32 parity rail; below every skip
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var inscope s <- create_session(m, "en")
             var inscope segs <- session_segs(m, s, samples)
             t |> equal(length(segs), 1, "one segment")
@@ -1222,7 +1222,7 @@ def test_qwen3omni_audio_oracle(t : T?) {
         let c <- caps(m)
         t |> success(empty(c.languages) && !c.translate && c.timestamps == AsrTimestamps.none && !c.streaming,
             "detects language internally, no translate / timestamps / streaming")
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             // frozen llama-mtmd-cli --temp 0 --jinja greedy ids (trailing 151645 = <|im_end|> EOG)
             check_q3omni_clip(t, m, path_join(corpus_dir(), "jfk.wav"),
                 [3036, 773, 11, 847, 12357, 8877, 11, 2548, 537, 1128, 697, 3146, 646, 653, 369,

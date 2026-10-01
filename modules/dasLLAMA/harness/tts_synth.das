@@ -76,7 +76,7 @@ def main() : int {
     if (args.q8 || args.f32) {
         set_tts_q8(args.q8)
     }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         set_asr_prof(args.prof)
         var inscope m <- load_tts_model(args.model)
         var n = 0

@@ -13,8 +13,7 @@ require daslib/jobque_boost
 
 [export]
 def main() {
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         for (_round in range(3)) {
             maybe_parallel_for(0, 4096, 4) $(rb, re) {
                 if (rb > re) {

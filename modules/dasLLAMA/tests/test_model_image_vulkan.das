@@ -63,7 +63,7 @@ def private mint_matches_eager_bake(t : T?; minted : Model; path : string) {
 
 def private load_cached_q8(path : string) : Model {
     var m = Model()
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         m <- load_model_cached(path, QuantMode.q8)   // nolint:PERF030,LINT019 -- the move must sit inside with_job_que; the target is fresh-empty, so nothing drops
     }
     return <- m

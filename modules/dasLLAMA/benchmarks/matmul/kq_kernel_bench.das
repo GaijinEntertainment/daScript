@@ -613,7 +613,7 @@ def main : int {
     }
     var rows = 0
     if (cfg.team) {
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             let chunks = matmul_chunks_gemv(cfg.d, 1, int64(cfg.n) * int64(cfg.d))
             print("# team: {get_total_hw_jobs() + 1} lanes, the engine's splitter gives {chunks} chunks of {cfg.d / chunks} rows\n")
             rows = run_formats(cfg, fs)

@@ -8,7 +8,7 @@ options _dasllama_internal = true
 // before their speculative acceptance rates can be compared.
 require dasllama/dasllama_transformer   // nolint:STYLE029,LINT019 — umbrella fires each arch [init] registration; on a host without dasMetal only dasllama_common's symbols remain, the das_metal half reaches the generation API it re-exports
 require dasllama/dasllama_common
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_image   // load_model_cached - the .dlim rail
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_chat   // create_chat_renderer_ / set_thinking_ / add_user_ / render_turn_
@@ -82,7 +82,7 @@ def main() {
     apply_box_profile_runtime()
     set_metal_mode(MetalMode.required)
     let tk <- load_tokenizer_auto(cfg.model)
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var t <- load_model_cached(cfg.model, QuantMode.q8)
         t.config.seq_len = min(t.config.seq_len, 2048l)
         var cs <- create_chat_renderer_(t, "", 0l)

@@ -27,7 +27,7 @@ def private pin_shaping_baseline() {
 [test]
 def test_gpu_served_spin_window(t : T?) {
     //! the resident driver's arm and drop move the pool between the CPU and the GPU-served spin windows
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> equal(get_jobque_spin_in_force_(), get_jobque_spin_us_(), "nothing served: the CPU window")
         set_dispatch_gpu_served(true)
         t |> equal(get_jobque_spin_in_force_(), get_jobque_spin_gpu_us_(), "served: the GPU window")

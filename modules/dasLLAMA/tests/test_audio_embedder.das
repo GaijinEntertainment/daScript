@@ -134,8 +134,7 @@ def test_audio_rows_on_a_plain_chat(t : T?) {
         var m <- load_model_(dec, QuantMode.q8)   // the planar rail: no .dlim beside the model
         m.config.seq_len = min(m.config.seq_len, 2048l)
         let dim = m.config.dim
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var inscope stg <- stage_gemma4a_encoder(mm)   // stage + mint: the encoder in memory, no .dlim
             var inscope e = AudioEmbedder(kind = AudioKind.gemma4a)
             mint_gemma4a_encoder(stg, e.gemma4a)
@@ -213,8 +212,7 @@ def test_audio_rows_need_an_audio_arm(t : T?) {
         }
         allow_cpu_prefill()
         let m <- load_model_(smol, QuantMode.q8)   // the planar rail: no .dlim beside the model
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var chat <- create_chat(m, "", 8l)
             var rows : array<float>
             rows |> resize(int(m.config.dim))

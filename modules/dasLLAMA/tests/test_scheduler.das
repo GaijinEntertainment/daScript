@@ -113,8 +113,7 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
             t |> skip("{DN_MODEL_PATH} not present")
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_model_(DN_MODEL_PATH, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, 256l)
             let prev_dnd_route = moe_gpu_dnd_route()
@@ -178,8 +177,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             var prompt <- encode(m, "Once upon a time", true, false)
             var none : array<int64>
@@ -266,8 +264,7 @@ def test_scheduler_chunk_sizes(t : T?) {
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             // classic prefill is bit-exact under ANY chunking (test_prefill's contract) — the same
             // pin as test_chat's render-seam case, so every chunk size must yield ONE stream
@@ -313,8 +310,7 @@ def test_scheduler_batching(t : T?) {
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             // the batch worker mirrors the std decode path — pin the fused chain off so the solo
             // generate() references share its numerics (test_batch_decode's contract)
@@ -382,8 +378,7 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             // classic prefill: the warm run re-chunks the prompt (tail-only), and only classic is
             // bit-exact under re-chunking — the same pin as the chunk-size arm above
@@ -496,8 +491,7 @@ def test_scheduler_evict_and_context_length(t : T?) {
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(64l)
             let prev_fused = get_fused_decode()
             set_fused_decode(false)
@@ -564,8 +558,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
         set_act_vec(false)
         let prev_dn = get_deltanet_prefill_mode()
         set_deltanet_prefill_mode(DnPrefillMode.recurrent)
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, 512l)
             var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
@@ -680,8 +673,7 @@ def test_scheduler_mtp_resident_picks(t : T?) {
             t |> skip("the scheduler's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, 512l)
             t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid (the load log names any decline)")
@@ -730,8 +722,7 @@ def test_scheduler_paged_sampled(t : T?) {
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             let saved_mode = get_prefill_attn_mode()
             set_prefill_attn_mode(AttnPrefillMode.classic)   // the warm run re-chunks (tail-only)
@@ -812,8 +803,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             // classic prefill: the splice necessarily moves the eval boundaries, and only classic
             // is bit-exact under re-chunking — the same pin as the chunk-size arm above
@@ -904,8 +894,7 @@ def test_scheduler_device_mode_switch(t : T?) {
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             var prompt <- encode(m, "The quick brown fox", true, false)
             var none : array<int64>
@@ -927,8 +916,7 @@ def test_scheduler_device_mode_switch(t : T?) {
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             var prompt <- encode(m, "The quick brown fox", true, false)
             var sch <- create_scheduler(m, 1l, 4l, 64l)
@@ -968,8 +956,7 @@ def test_scheduler_media_validation(t : T?) {
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             var prompt <- encode(m, "The quick brown fox", true, false)
             let greedy = SamplingParams()
@@ -1072,8 +1059,7 @@ def test_scheduler_mrope(t : T?) {
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             m.config.rope_sections = int4(12, 10, 10, 0)   // stamp: the toy is not an mrope arch (rotary 64 -> half 32)
             m.config.mrope_interleaved = true
@@ -1142,8 +1128,7 @@ def test_scheduler_mrope_validation(t : T?) {
         if (model_missing(t)) {
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             var prompt <- encode(m, "The quick brown fox", true, false)
             let greedy = SamplingParams()
