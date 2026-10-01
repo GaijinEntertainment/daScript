@@ -1160,3 +1160,13 @@ def test_request_stop_uses_the_stop_file(t : T?) {
         t |> success(cleanup is value && cleanup as value, "temp dir removed")
     }
 }
+
+[test]
+def headless_notification_flag_is_owned_by_watchdog(t : T?) {
+    let resolved <- resolve_config(["--program", das_exe(), "--no-notifications", "--", "child-argument"], getcwd())
+    t |> equal(resolved.error, "")
+    t |> success(resolved.cfg.no_notifications)
+    let command <- child_command(resolved.cfg)
+    t |> success(find_index(command, "--no-notifications") < 0)
+    t |> equal(command[length(command) - 1], "child-argument")
+}

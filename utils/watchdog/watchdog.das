@@ -93,6 +93,8 @@ struct public WatchdogConfig {
     jit_dir : string = ".cache/daslang"
     @clarg_doc = "Do not collect crash bundles"
     no_crash_bundle : bool
+    @clarg_doc = "Disable desktop notifications for headless or automated sessions"
+    no_notifications : bool
     @clarg_doc = "Show a status icon in the notification area, where a desktop can reach one"
     tray : bool
     @clarg_doc = "Page the tray icon opens; defaults to the health URL's origin"
@@ -461,8 +463,8 @@ var private g_tray : WatchdogTray?
 //! Through the tray icon while it is up; otherwise Windows: a PowerShell balloon; macOS:
 //! Notification Center via osascript; Linux: notify-send. A platform with none of those gets
 //! nothing - the same never-fatal contract everywhere.
-def public notify(title, message : string; error : bool) {
-    if (!notifications_enabled || (g_tray != null && g_tray->notify(title, message))) return
+def public notify(title, message : string; error : bool; enabled : bool = true) {
+    if (!enabled || !notifications_enabled || (g_tray != null && g_tray->notify(title, message))) return
     let plat = get_platform_name()
     if (plat == "windows") {
         let icon = error ? "Error" : "Info"
@@ -1392,7 +1394,7 @@ class public Supervisor {
         child = unsafe(spawn_process(command, cfg.cwd, child_env))
         if (child == null) {
             log->emit("spawn_failed", JV((error = "could not start {command[0]}")))
-            notify("{cfg.name} watchdog", "Could not start child: {command[0]}", true)
+            notify("{cfg.name} watchdog", "Could not start child: {command[0]}", true, !cfg.no_notifications)
             return false
         }
         child_pid = unsafe(process_pid(child))
@@ -1460,7 +1462,7 @@ class public Supervisor {
     def private poll_health(t : float) {
         if (cfg.no_health) {
             if (recovery_pending && t - started_at >= min(cfg.stable_seconds, 10.0)) {
-                notify("{cfg.name} recovered", "Process is running (pid {child_pid})", false)
+                notify("{cfg.name} recovered", "Process is running (pid {child_pid})", false, !cfg.no_notifications)
                 log->emit("recovered", JV((pid = child_pid)))
                 recovery_pending = false
             }
@@ -1497,7 +1499,7 @@ class public Supervisor {
             next_heartbeat = t + HEALTH_HEARTBEAT_SECONDS
         }
         if (healthy && recovery_pending) {
-            notify("{cfg.name} recovered", "Server is healthy (pid {child_pid})", false)
+            notify("{cfg.name} recovered", "Server is healthy (pid {child_pid})", false, !cfg.no_notifications)
             log->emit("recovered", JV((pid = child_pid)))
             recovery_pending = false
         }
@@ -1579,7 +1581,7 @@ class public Supervisor {
         if (!empty(bundle)) {
             body += "\nBundle: {bundle}"
         }
-        notify("{cfg.name} crashed", body, true)
+        notify("{cfg.name} crashed", body, true, !cfg.no_notifications)
         recovery_pending = true
         restart_at = now() + delay
         capturing = false
@@ -1780,7 +1782,7 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
     var resolved <- resolve_config(args, program_dir)
     if (!empty(resolved.error)) {
         print("{resolved.error}\n")
-        notify("watchdog not started", resolved.error, true)
+        notify("watchdog not started", resolved.error, true, !resolved.cfg.no_notifications)
         exit_code = 2
         return null
     }
@@ -1794,7 +1796,7 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
         let error = install_windows_local_dumps(child_exe_name, cfg.dump_dir, cfg.dump_count)
         if (!empty(error)) {
             log->emit("wer_install_failed", JV((executable = child_exe_name, dump_dir = cfg.dump_dir, error = error)))
-            notify("{cfg.name} dump setup failed", "Run the LocalDumps install from an elevated terminal: {error}", true)
+            notify("{cfg.name} dump setup failed", "Run the LocalDumps install from an elevated terminal: {error}", true, !cfg.no_notifications)
             exit_code = 2
             return null
         }
@@ -1812,7 +1814,7 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
         let reason = policy.dump_type < 0 ? "not configured" : "unsafe dump type {policy.dump_type}"
         log->emit("wer_not_ready", JV((executable = child_exe_name, dump_dir = cfg.dump_dir, reason = reason)))
         if (cfg.require_dumps) {
-            notify("{cfg.name} watchdog not started", "WER normal minidumps are {reason}; run --install-local-dumps elevated", true)
+            notify("{cfg.name} watchdog not started", "WER normal minidumps are {reason}; run --install-local-dumps elevated", true, !cfg.no_notifications)
             exit_code = 2
             return null
         }
@@ -1833,7 +1835,7 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
             log->emit("watchdog_already_running", JV((pid = prior, pid_file = cfg.pid_file)))
             let why = "watchdog: {cfg.name} is already supervised by pid {prior} (per {cfg.pid_file}). Stop it first, or delete the pid file if it is stale."
             print("{why}\n")
-            notify("{cfg.name} watchdog not started", why, true)
+            notify("{cfg.name} watchdog not started", why, true, !cfg.no_notifications)
             exit_code = 2
             return null
         }
