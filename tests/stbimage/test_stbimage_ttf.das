@@ -148,7 +148,7 @@ def test_render_text_color(t : T?) {
 def test_font_bitmap_save(t : T?) {
     t |> run("font bitmap can be saved as PNG via Image API") <| @(tt : T?) {
         var font <- load_ttf(font_path())
-        let path = "{get_das_root()}/tests/stbimage/_test_ttf_atlas.png"
+        let path = path_join(test_temp_dir(), "_test_ttf_atlas.png")
         let (ok, err) = font.bitmap.save(path)
         tt |> success(ok, "save succeeded: {err}")
         // clean up

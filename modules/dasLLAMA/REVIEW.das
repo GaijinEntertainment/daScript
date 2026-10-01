@@ -17,10 +17,6 @@ let private FACADE_FILES = [FACADE, "modules/dasLLAMA/dasllama/dasllama_tts.das"
 let private TUTORIAL_DIR = "tutorials/dasLLAMA"
 let private RST_DIR = "doc/source/reference/tutorials"
 
-def private is_ident_byte(b : int) : bool {
-    return is_alnum(b) || b == '_'
-}
-
 // leading identifier run of `s` ("" when s starts with a non-ident byte)
 def private ident_prefix(s : string) : string {
     var n = 0
@@ -54,26 +50,6 @@ def private ident_suffix(s : string) : string {
         }
     }
     return slice(s, n)
-}
-
-// whole-word occurrence: `name` present with no identifier byte on either side
-def private contains_word(text : string; name : string) : bool {
-    var found = false
-    peek_data(text) $(d) {
-        let nl = length(name)
-        var from = 0
-        while (!found) {
-            let at = find(d, name, from)
-            if (at < 0) {
-                break
-            }
-            let okl = at == 0 || !is_ident_byte(int(d[at - 1]))
-            let okr = at + nl >= length(d) || !is_ident_byte(int(d[at + nl]))
-            found = okl && okr
-            from = at + 1
-        }
-    }
-    return found
 }
 
 def private word_in_any(texts : array<string>; name : string) : bool {

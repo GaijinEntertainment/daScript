@@ -25,6 +25,19 @@ def test_findings_accumulate_and_reset(t : T?) {
 }
 
 [test]
+def test_ident_bytes_and_whole_words(t : T?) {
+    t |> success(is_ident_byte('a') && is_ident_byte('Z') && is_ident_byte('7') && is_ident_byte('_'))
+    t |> success(!is_ident_byte('.') && !is_ident_byte(' ') && !is_ident_byte('('))
+    t |> success(contains_word("remove(out)", "out"))
+    t |> success(contains_word("out", "out"))
+    t |> success(contains_word("about + out", "out"), "a later whole occurrence counts after a partial one")
+    t |> success(!contains_word("about", "out"))
+    t |> success(!contains_word("outer", "out"))
+    t |> success(!contains_word("out_dir", "out"))
+    t |> success(!contains_word("abc", ""), "an empty word matches nothing and returns")
+}
+
+[test]
 def test_kebab_case(t : T?) {
     t |> success(is_kebab_case("like-this"))
     t |> success(is_kebab_case("aot"))

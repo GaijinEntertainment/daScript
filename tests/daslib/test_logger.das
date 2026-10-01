@@ -11,7 +11,7 @@ require daslib/strings_boost
 require strings
 
 def temp_log_path() : string {
-    return path_join(get_das_root(), "_test_log_{ref_time_ticks()}.log")
+    return path_join(test_temp_dir(), "_test_log_{ref_time_ticks()}.log")
 }
 
 // Read the file, split on newlines, drop the trailing empty line.

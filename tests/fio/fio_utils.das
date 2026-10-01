@@ -38,7 +38,7 @@ def test_fexist(t : T?) {
 [test]
 def test_fread_path(t : T?) {
     t |> run("read file by path") @(t : T?) {
-        let tmp = "{get_das_root()}/_test_fread_path.tmp"
+        let tmp = path_join(test_temp_dir(), "_test_fread_path.tmp")
         fopen(tmp, "wb") $(f) {
             fwrite(f, "hello world")
         }
@@ -51,7 +51,7 @@ def test_fread_path(t : T?) {
         t |> success(empty(content), "expected empty string for missing file")
     }
     t |> run("UTF-8 Windows path round-trips through file IO") @(t : T?) {
-        let tmp = "{get_das_root()}/_test_unicode-Привет.tmp"
+        let tmp = path_join(test_temp_dir(), "_test_unicode-Привет.tmp")
         let content = "Unicode path contents"
         t |> success(fwrite(tmp, content), "fwrite should accept a UTF-8 path")
         t |> success(fexist(tmp), "fexist should accept a UTF-8 path")
@@ -63,7 +63,7 @@ def test_fread_path(t : T?) {
 [test]
 def test_fwrite_path(t : T?) {
     t |> run("write file by path") @(t : T?) {
-        let tmp = "{get_das_root()}/_test_fwrite_path.tmp"
+        let tmp = path_join(test_temp_dir(), "_test_fwrite_path.tmp")
         let ok = fwrite(tmp, "test content")
         t |> success(ok, "fwrite should return true")
         t |> success(fexist(tmp), "file should exist after fwrite")
@@ -76,7 +76,7 @@ def test_fwrite_path(t : T?) {
 [test]
 def test_rmdir(t : T?) {
     t |> run("remove empty directory") @(t : T?) {
-        let tmp = "{get_das_root()}/_test_rmdir_empty"
+        let tmp = path_join(test_temp_dir(), "_test_rmdir_empty")
         mkdir(tmp)
         t |> success(fexist(tmp), "directory should exist after mkdir")
         t |> success(rmdir(tmp), "rmdir should succeed on empty dir")
@@ -87,7 +87,7 @@ def test_rmdir(t : T?) {
 [test]
 def test_rmdir_rec(t : T?) {
     t |> run("remove directory tree") @(t : T?) {
-        let base = "{get_das_root()}/_test_rmdir_rec"
+        let base = path_join(test_temp_dir(), "_test_rmdir_rec")
         let sub = "{base}/sub"
         mkdir(base)
         mkdir(sub)

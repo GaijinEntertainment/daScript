@@ -4,6 +4,8 @@
 
 Every `.das` file in this directory tree is listed below, grouped by subdirectory. Files marked **expect** use `expect` directives and are expected to produce specific compile errors. Helper/module files that are not standalone tests are marked *(helper)*.
 
+**Files a test writes:** the extended checks run the daslang sweep and the daslang_static sweep in one parallel group on one tree, so two runs of the same test file can overlap. A test writes only under `test_temp_dir()` (`dastest/testing_boost`), a directory private to its run and removed when the run ends, or under its own `create_temp_directory` (`daslib/fio`). `REVIEW.das` (this folder) is the gate: it finds a write call in a test file - fio's file and directory calls, a writing `fopen`, `stbi_write_*`, an image `save` - whose path is built from `get_das_root()` directly, through a helper that returns such a path, or through a variable or field bound to one, and a writing `fopen` of a relative literal path. A call to any other function hands back its own value, whatever its arguments name. It reads the files dastest runs as tests (no `_`-prefixed file or directory on the path); `--root <dir>` points it at another folder, which `dastest/test_tests_review_gate.das` uses to run it over `dastest/_tests_gate_fixture/`. One test names a path under the tree on purpose: `jit_tests/dll_cache.das` checks the default JIT DLL cache, which content-addresses and cleans its DLLs only at its default home, `.jitted_scripts/<namespace>/` - a pinned `jit_output_path` turns both off. Its probe script sits under `test_temp_dir()`, so the namespace (a hash of the script's path) is private to the run, and the test removes that directory when it ends.
+
 **Naming convention for expected-failure tests:** Files that are expected to *fail compilation* use one of three filename prefixes: `failed_`, `cant_`, or `invalid_`. Tools that need to skip files with no compilable AST (e.g. `--ser` serialization passes) should filter on these three prefixes.
 
 ## live_host/
@@ -301,6 +303,9 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | _fixture_fail.das | *(helper)* Failing test fixture | |
 | _fixture_pass.das | *(helper)* Passing test fixture | |
 | _fixture_skip.das | *(helper)* Skipped test fixture | |
+| _tests_gate_fixture/writes.das | *(helper)* Every write shape `tests/REVIEW.das` reports | |
+| _tests_gate_fixture/clean.das | *(helper)* Reads, temp-dir writes and look-alikes `tests/REVIEW.das` must not report | |
+| test_tests_review_gate.das | `tests/REVIEW.das` over the fixture - exactly the expected findings, none from the clean file | |
 | test_json_output.das | dastest JSON output - `--json-file` report format, suite results, pass/fail/skip counts | |
 | test_dasfmt_exclude_mask.das | das-fmt `--exclude-mask` - masked build-dir files are excluded (separator-normalized) and reported; unmasked verify stays red | |
 

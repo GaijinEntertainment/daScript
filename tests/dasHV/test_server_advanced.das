@@ -91,7 +91,7 @@ def with_advanced_test_server(blk : block<(base_url : string) : void>) {
                 var server = new AdvancedTestServer()
                 server->init(0)
                 let port = server->bound_port()
-                let static_root = "{get_das_root()}/tests/_dasHV/_static_test_{port}"
+                let static_root = path_join(test_temp_dir(), "_static_test_{port}")
                 server.static_dir = static_root
                 STATIC(server.server, "/static", static_root)
                 var bound_to = -1

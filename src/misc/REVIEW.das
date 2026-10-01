@@ -12,10 +12,6 @@ let private NETWORK_CPP = "src/misc/network.cpp"
 let private ERROR_SOURCE = "last_socket_error"
 let private WOULD_BLOCK_SOURCE = "socket_would_block"
 
-def private is_ident_byte(b : int) : bool {
-    return is_alnum(b) || b == '_'
-}
-
 // Byte offset of the first whole-word occurrence of `tok` in `line`; -1 when absent.
 def private token_index(line : string; tok : string) : int {
     var at = -1

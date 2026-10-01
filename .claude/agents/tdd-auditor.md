@@ -48,6 +48,10 @@ the run with a checked-out base file in place.
   to its pre-mutation state. NEVER end your run with a mutation in place - if a tool error
   or timeout interrupts a control, restoring the tree is your first action before anything
   else.
+- A control that hangs is stopped by a time limit on the run you start (`timeout`, dastest's
+  `--timeout`) or by the PID of the process you started - never by image name
+  (`taskkill /IM daslang.exe`, `pkill daslang`): that kills every daslang on the machine,
+  other sessions' included.
 - Never mutate a test file to change a verdict. The mutation goes in the code under test;
   the test is the instrument.
 - A rejection branch's instrument is a reliably-failing fixture (a `failed_*`/`cant_*`/`invalid_*`
