@@ -3,3 +3,5 @@
     uint32_t            retry_delay;    // unit: ms
 
     void ParseUrl();
+
+    static char         s_date[32];

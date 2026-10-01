@@ -15,3 +15,5 @@ void HttpMessage::AddCookie(const HttpCookie& cookie) {
 
     // cookies
     const char* cookie_field = "Cookie";
+
+char HttpMessage::s_date[32] = {0};

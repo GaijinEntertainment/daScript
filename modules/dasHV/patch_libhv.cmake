@@ -103,3 +103,5 @@ include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_logging.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_cookies.cmake)
 
 include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_shutdown.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_date.cmake)

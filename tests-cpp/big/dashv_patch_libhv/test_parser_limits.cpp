@@ -4,6 +4,9 @@
 #include <hv/WebSocketParser.h>
 #include <hv/wsdef.h>
 #include <memory>
+#include <atomic>
+#include <thread>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -150,4 +153,29 @@ TEST_CASE("HTTP request Cookie remains raw without duplicate serialization") {
     initially_empty.headers["Cookie"] = "";
     initially_empty.AddCookie(added);
     CHECK(initially_empty.GetHeader("Cookie") == "c=four");
+}
+
+TEST_CASE("HTTP Date cache is isolated between serving threads") {
+    const char * first = "Mon, 01 Jan 2024 00:00:01 GMT";
+    const char * second = "Mon, 01 Jan 2024 00:00:02 GMT";
+    std::atomic<int> phase{0};
+    std::string responses[2];
+    std::thread one([&]() {
+        std::strcpy(HttpMessage::s_date, first);
+        phase.store(1, std::memory_order_release);
+        while (phase.load(std::memory_order_acquire) != 2) std::this_thread::yield();
+        HttpResponse response;
+        responses[0] = response.Dump(true, false);
+    });
+    std::thread two([&]() {
+        while (phase.load(std::memory_order_acquire) != 1) std::this_thread::yield();
+        std::strcpy(HttpMessage::s_date, second);
+        phase.store(2, std::memory_order_release);
+        HttpResponse response;
+        responses[1] = response.Dump(true, false);
+    });
+    one.join(); two.join();
+    CHECK(responses[0].find(std::string("Date: ") + first) != std::string::npos);
+    CHECK(responses[1].find(std::string("Date: ") + second) != std::string::npos);
+    HttpMessage::s_date[0] = '\0';
 }
