@@ -9,7 +9,7 @@ module _tts_kernel_oracles shared public
 
 require dasllama/dasllama_lint public
 require math
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_tts_blocks
 require daslib/jobque_boost
 
@@ -56,7 +56,7 @@ def tts_src_fixture(torch : bool; up, frames : int) : TtsSrcFixture {
     lin.b := f.lin_b
     var cr = SineSourceCarry()
     var sines : array<float>
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         sine_carry_reset(cr, int64(TTS_SRC_NH), int64(f.nlow))
         f.rows = sine_source(cfg, f.f0, int64(frames), f.nu, 0l, int64(f.nlow), cr, f.noise, 0l, sines)
         linear_rows(lin, sines, int64(f.n), f.want_har)

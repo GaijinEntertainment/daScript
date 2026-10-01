@@ -3,7 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/clargs
 require math
@@ -97,7 +97,7 @@ def main() {   // nolint:STYLE038 — flat probe driver: args, load, prefill, sl
     let c = t.config
     print("config: dim={c.dim} layers={c.n_layers} heads={c.n_heads}/{c.n_kv_heads} qk_norm={c.qk_norm}\n")
     var s <- make_run_state(c)   // f32 codec: the cache holds the exact values the probe reads
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         let prompt <- [for (i in range64(p)); 1000l + (i % 5000l)]
         forward_prefill(t, s, prompt, p, 0l)
     }

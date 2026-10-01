@@ -55,8 +55,7 @@ def private greedy_steps(tr : Model; var s : Session; n : int) : array<int64> {
 // stages and the blob twin for GPU stages — sessions are geometry-bound, one session spans both.
 def private continuation(trp, trd : Model; prompt : array<int64>; n_gen : int; kdt : KVDtype) : array<int64> {
     var got : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(trp.config, kdt, kdt)
         eval_(trp, s, prompt)
         got <- greedy_steps(trd, s, n_gen)
@@ -134,8 +133,7 @@ def private single_step_gate(t : T?; tr, trg : Model; prompt : array<int64>; kdt
         var sa = make_run_state(c, kdt, kdt)
         var sb = make_run_state(c, kdt, kdt)
         var served = 0l
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             eval_(tr, sa, prompt)
             eval_(tr, sb, prompt)
             let tok = argmax_of(sa.logits, vocab)
@@ -171,8 +169,7 @@ def private single_step_gate(t : T?; tr, trg : Model; prompt : array<int64>; kdt
 // session's logical rows gather through MULTIPLE physical runs), then n greedy steps on it
 def private paged_greedy(tr, trg : Model; prompt : array<int64>; page_rows : int64; n : int; gpu : bool) : array<int64> {
     var got : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var pool <- create_kv_pool_(tr.config, page_rows, KVDtype.f16, KVDtype.f16)
         var sa <- make_run_state_paged(tr.config, pool)
         var sb <- make_run_state_paged(tr.config, pool)
@@ -202,8 +199,7 @@ def private paged_greedy(tr, trg : Model; prompt : array<int64>; page_rows : int
 // different prompt, GPU decode again: stale mirror rows past the rewind would poison the tokens
 def private rewind_greedy(tr, trg : Model; prompt, prompt2 : array<int64>; n : int) : array<int64> {
     var got : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
         select_decode_override("metal")
         eval_(tr, s, prompt)                    // CPU prefill (the planar model)
@@ -230,8 +226,7 @@ def private batch_greedy(tr, trg : Model; prompts : array<array<int64>>; nsteps 
     let nb = length(prompts)
     var got : array<array<int64>>
     got |> resize(nb)
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var ss : array<Session>
         ss |> reserve(nb)
         for (i in range(nb)) {
@@ -310,8 +305,7 @@ def private batch_step_gate(t : T?; tr, trg : Model; nb : int; kdt : KVDtype; to
         var sa : array<Session>
         var sb : array<Session>
         var served = 0l
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             sa |> reserve(nb)
             sb |> reserve(nb)
             for (i in range(nb)) {
@@ -389,8 +383,7 @@ def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps
         let c = tr.config
         let vocab = c.vocab_size
         let nb = length(prompts)
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var sa : array<Session>
             var sb : array<Session>
             sa |> reserve(nb)
@@ -455,8 +448,7 @@ def private paged_batch_greedy(tr, trg : Model; prompts : array<array<int64>>; p
     let nb = length(prompts)
     var got : array<array<int64>>
     got |> resize(nb)
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var pool <- create_kv_pool_(c, page_rows, KVDtype.f16, KVDtype.f16)
         var ss : array<Session>
         ss |> reserve(nb)
@@ -884,8 +876,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
             if (arm_on(t, "arm5-rewind")) {
                 var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 var rewind_cpu : array<int64>
-                with_job_que() {
-                    setup_dasllama_jobque()
+                with_dasllama_jobque() {
                     eval_(tr, sc, prompt2)
                     rewind_cpu <- greedy_steps(tr, sc, 16)   // nolint:PERF030,LINT019 - fresh empty target, declared outside the job-que block only to outlive it; the metal half is cut off-Apple
                 }
@@ -899,8 +890,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
             // arm 6: session churn under a tiny LRU cap — retired sessions' mirrors evict
             if (arm_on(t, "arm6-churn")) {
                 set_metal_decode_mirror_cap_mb(1)
-                with_job_que() {
-                    setup_dasllama_jobque()
+                with_dasllama_jobque() {
                     select_decode_override("metal")
                     for (_i in range(3)) {
                         var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
@@ -1097,8 +1087,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                     var tr70 <- blob_twin(t, path70, 256l)
                     var p70 <- encode(tr70, counting_prompt(1, 12), true, false)
                     var s70 = make_run_state(tr70.config, KVDtype.f16, KVDtype.f16)
-                    with_job_que() {
-                        setup_dasllama_jobque()
+                    with_dasllama_jobque() {
                         select_prefill_override("metal")   // blob models have no CPU prefill
                         eval_(tr70, s70, p70)
                         select_prefill_override("")
@@ -1117,8 +1106,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
 
             // arm 15: the greedy chain stands down for a decode sampled at temp > 0 and rides for a greedy one
             if (arm_on(t, "arm15-spec-hint")) {
-                with_job_que() {
-                    setup_dasllama_jobque()
+                with_dasllama_jobque() {
                     let prev_spec = metal_decode_spec_mode()
                     set_metal_decode_speculate(-1)   // the claim needs the adaptive default, whatever an earlier arm left
                     select_prefill_override("metal")   // the blob twin has no CPU prefill
@@ -1173,8 +1161,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
 // logits each step — near-tie flips can't red it, weight corruption can't hide from it
 def private forced_maxd_pair(tr, trg : Model; prompt : array<int64>; nsteps : int) : float {
     var maxd = 0.0
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var sa = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
         var sb = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
         eval_(tr, sa, prompt)
@@ -1205,8 +1192,7 @@ def private forced_maxd_pair(tr, trg : Model; prompt : array<int64>; nsteps : in
 // uploads claim g_regions entries the decode drivers later look up as cat3 CONCATS
 def private foreign_gpu_prefill(tr, trg : Model) {   // nolint:LINT012,LINT019 — both read by the das_metal arm below
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
             let p <- encode(tr, counting_prompt(3, 44), true, false)
             select_prefill_override("metal")

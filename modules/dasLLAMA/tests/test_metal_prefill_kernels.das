@@ -276,7 +276,7 @@ def private tower_flash_kvhc_gate(t : T?; var dev, queue) {
         let scale = 1.0 / sqrt(float(hs))
         var inscope hp : array<float>
         var inscope att : array<float>
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             attention_bidir(want, qv, kv, vv, hp, att, int64(np), int64(qd), int64(heads), scale)
         }
         let bq = mc |> in_(qv)
@@ -339,7 +339,7 @@ def private tower_win_gate(t : T?; var dev, queue) {
         let win_lo <- [for (w in wlo); int64(w)]
         var inscope hp : array<float>
         var inscope att : array<float>
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             attention_bidir_windows(want, qv, kv, vv, hp, att, win_lo, int64(qd), int64(heads), scale)
         }
         let bq = mc |> in_(qv)
@@ -1474,7 +1474,7 @@ def private st2_attn_gate(t : T?; var dev, queue; nrows : int) {
         var inscope k <- f16_fill(nrows * d, 5, 0.03, -0.6)
         var inscope vv <- f16_fill(nrows * d, 3, 0.05, -1.1)
         var inscope want : array<float>
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             attention_rows(q, k, vv, int64(nrows), int64(d), int64(heads), want)
         }
         let pq = mc |> in_(q)
@@ -1697,7 +1697,7 @@ def private pk_attn_gate(t : T?; var dev, queue; ctx, n_old : int) {
         kv_cache_init(kc, int64(heads), int64(hs), int64(n))
         kv_cache_append(kc, k, vv, int64(n), int64(d))
         var inscope want : array<float>
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             attention_causal_rows(qn, int64(tt), int64(d), int64(ctx), kc, want)
         }
         let ka = PkAttnArgs(t = uint(tt), qs = uint(qs), qcol = uint(qcol), d = uint(d), pos0 = uint(n_old), ctx = uint(ctx))

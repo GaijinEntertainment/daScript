@@ -8,7 +8,7 @@ require strings
 require daslib/strings_boost
 require daslib/clargs
 require math
-require dasllama/dasllama_math  // with_dasllama_jobque + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_math  // with_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 require dasllama/dasllama_layout  // convert_model_to_metal_blob — the blob-flavor transform
 require dasllama/dasllama_tokenizer   // load_tokenizer_auto — the GEN_TEXT eyeball line
 require dasllama/dasllama_env
@@ -132,7 +132,7 @@ def main : int {
     print_gen_receipt(cfg.ngl)
     var s = make_run_state(t.config, cfg.kv, cfg.kv)
     var rc = 0
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         // A/B rail: force the 2-D batch chunk grid (0 = 1-D, 1 = fine, 2 = aligned) — the
         // knob-on GEN_IDS gate; parity stays raw-defaults otherwise
         if (is_some(g_env_harness.batch_grid_2d)) {

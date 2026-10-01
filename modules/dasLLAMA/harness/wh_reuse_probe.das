@@ -102,7 +102,7 @@ def main() : int {
     set_asr_fp32(fp32)
     var m <- load_asr_model(model_path)
     print("model={model_path} q8={m.whisper.enc.q8} short={short_run}\n")
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         let ja = fresh_fp(m, jfk)
         if (short_run) {
             // jfk x2 on one session (long clips skipped — turbo-sized smoke)

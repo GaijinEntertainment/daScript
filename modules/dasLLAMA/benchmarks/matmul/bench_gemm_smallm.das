@@ -518,7 +518,7 @@ def main() : int {
         // times the wrong (hand) backend
         select_matmul_backend_for_load_()
     }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         print("backend={active_kernel_backend()} lanes={get_dispatch_lanes()} TB={get_q8_token_block()} oversplit={get_q8_batch_chunks_per_job()} grain={get_matmul_min_chunk_rows()} grid2d={get_batch_grid_2d()}\n")
         let tt = a.tt > 0 ? int64(a.tt) : 138l
         if (a.tb) {

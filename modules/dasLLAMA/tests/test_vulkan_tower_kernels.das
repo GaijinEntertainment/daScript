@@ -1368,7 +1368,7 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
             var hp : array<float>
             var attsc : array<float>
             att_ref |> resize(rows * dc)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 attention_bidir(att_ref, q, k, v, hp, attsc, int64(rows), int64(dc), int64(PAT_HEADS), scale)
             }
             // the bar: `approx`'s 2e-3 covers the tile's f16 staging of the padded Q panel and of the softmax rows (P) that the
@@ -1473,14 +1473,14 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             var hpp : array<float>
             var attsc : array<float>
             att_ref |> resize(rows * dc)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 attention_bidir_windows(att_ref, q, k, v, hpp, attsc, win_lo, int64(dc), int64(WIN_HEADS), scale)
             }
             check_rows(t, "tower_win_attn over {nslot} windows, one ragged, vs attention_bidir_windows", att_dev, att_ref, BAR_APPROX, dc, WIN_HS)
             // the leak control: the same rows attended in full differ on the first row, so the windows' walls are the class's doing
             var full_ref : array<float>
             full_ref |> resize(rows * dc)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 attention_bidir(full_ref, q, k, v, hpp, attsc, int64(rows), int64(dc), int64(WIN_HEADS), scale)
             }
             let moved = logits_maxdiff(copy_span(full_ref, 0, dc), copy_span(att_dev, 0, dc))

@@ -291,7 +291,7 @@ def test_vkt_attn(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            with_dasllama_jobque() {   //! attention_rows threads its heads
+            with_dasllama_jobque_() {   //! attention_rows threads its heads
                 attn_arm(t, 37, 4, 64)
                 attn_arm(t, 130, 2, 128)
                 attn_arm(t, 512, 2, 64)   //! the staged score row full: every invocation scores two keys
@@ -524,7 +524,7 @@ def private adain_fixture() : AdainFixture {
     f.aoff = put_run(f.slab, alpha, 4)
     f.slab |> push_from(poison_plane(5))
     let n = AD_T * c
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         linear_vec(a.fc, style, f.style_fc)
         adain_rows_into(a, f.x, f.want_leaky, int64(AD_T), int64(c), style, AD_EPS)
     }

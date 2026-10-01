@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_gemma4v
 require dasllama/dasllama_vision_embedder   // vision_exec_fmt through the carrier
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require math
@@ -189,7 +189,7 @@ def test_gemma4v_clamps_bind(t : T?) {
         var st = Gemma4vState()
         let planes <- make_planes("cb", 336, 336)
         var out : array<float>
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             gemma4v_encode(tw, st, planes, 336l, 336l, out)
         }
         var maxdiff = 0.0
@@ -214,7 +214,7 @@ def test_gemma4v_clamps_bind(t : T?) {
         mint_gemma4v_tower(stgq, twq)
         var stq = Gemma4vState()
         var outq : array<float>
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             gemma4v_encode(twq, stq, planes, 336l, 336l, outq)
         }
         var maxdiffq = 0.0
@@ -244,7 +244,7 @@ def test_gemma4v_std_guard(t : T?) {
         var plain : array<float>
         var neutral : array<float>
         var biased : array<float>
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var inscope stg0 <- stage_gemma4v_tower(mm)
             tt |> success(!stg0.t.has_std, "E2B carries no std pair - the arm is synthesized below")
             var tw0 = Gemma4vTower()

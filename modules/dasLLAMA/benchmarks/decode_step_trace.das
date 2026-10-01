@@ -4,7 +4,7 @@ options _jit_fast_math = true   // ggml-parity FP laxity — the CPU prefill/sam
 options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
-require dasllama/dasllama_math   // with_dasllama_jobque + pin_kernel_backend
+require dasllama/dasllama_math   // with_dasllama_jobque_ + pin_kernel_backend
 require dasllama/dasllama_layout   // convert_model_to_metal_blob — the blob-flavor transform
 require ?das_metal dasllama/dasllama_metal_decode   // GPU driver half, Apple builds only
 require daslib/jobque_boost
@@ -89,7 +89,7 @@ def private run_trace(cfg) {   // untyped param = generic — non-Apple builds n
     print("active backend: {active_kernel_backend()}  kv: {cfg.kv}  spec: {cfg.spec}\n")
     set_metal_decode_speculate(cfg.spec)
     var s <- make_run_state(c, cfg.kv, cfg.kv)
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         // warmup: JIT both paths + first-touch the resident weight regions
         let warm <- build_prompt(8l)
         for (wp in range64(8l)) {

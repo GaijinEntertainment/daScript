@@ -30,21 +30,19 @@ updates, in the same change, every checked-in number under `modules/dasLLAMA/` c
 replaced row, or makes that citation name the replaced row's `sha` (a row with no `sha`: the
 checkout its provenance names).**
 
-**A diff that writes a run row carrying a `sha` to `records/<box>.json` stamps it with the build
-that timed every cell of the row - re-mint otherwise.**
-
 **A diff that writes a run row carrying a `sha` to `records/<box>.json` names, in the PR body, for
 each box it writes, the commit the timing exe was built at and when it was built** - the bench
 stamps the HEAD checked out when it runs, not the exe's build, so the diff alone cannot show which
 build timed the row.
 
 **A `das` row (a run row whose `engine` is `das`) carrying a `sha` is timed by the released
-`lcpp_bench` exe (`../benchmarks/lcpp_bench.das` built by `daspkg release`) built at that `sha` -
-re-mint otherwise.**
+`lcpp_bench` exe (`../benchmarks/lcpp_bench.das` built by `daspkg release`) built at that `sha`,
+every cell of it by a binary of that build - re-mint otherwise.**
 
 **A reference-engine row (a run row whose `engine` is not `das`) carrying a `sha` carries the
-standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`) - both flavors that script
-builds, `clean-cpu` and `stock`, are the pinned checkout - re-mint otherwise.**
+standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`), and every cell of it is
+timed by a binary built from that pinned checkout, in either flavor `setup_lcpp_ref.das` builds
+(`clean-cpu`, `stock`) - re-mint otherwise.**
 
 **A row whose cells two exes timed - a flat cell and a batched cell from two binaries of one
 build - names both exes in its `cmd`.**
@@ -60,10 +58,9 @@ profile under this folder whose version pin is missing, or differs from `DASLLAM
 profile. For a sidecar with an `engine_sha`, read the value at that commit; a `defaults/`
 profile compares against the branch under review.
 
-**A diff that writes a row to `records/<box>.json` mints that row from a board cell.** A board
-cell is one `gen_bench_records.das` spawns, or a manual `../benchmarks/lcpp_bench.das` cell
-its `../PROFILE.md` section documents. A timing taken any other way settles its own decision
-in the report where it was taken.
+**A diff that writes a row to `records/<box>.json` mints that row from a run
+`gen_bench_records.das` spawns, or from the `../benchmarks/lcpp_bench.das` command a
+`../PROFILE.md` section documents, run by hand.**
 
 **Only the reference cells of `gen_bench_records.das` - the cells that time, over a board
 workload, a program this repository does not build - write a reference-engine row into
@@ -136,8 +133,8 @@ ships.
 
 **A convert, a bench, or a tune-state write reached from `fetch_models.das --fetch` is a
 defect - `--fetch` downloads only.** Each has its own home: a conversion recipe runs
-under `--convert`, a timing runs in a board cell (`gen_bench_records.das` or a
-`../benchmarks/lcpp_bench.das` cell), and a tune sidecar is written under a `--tune` run.
+under `--convert`, a timing runs under `gen_bench_records.das` or a
+`../benchmarks/lcpp_bench.das` cell, and a tune sidecar is written under a `--tune` run.
 
 **A diff that adds a row or a `companions` entry, or changes a `bytes`, `sha256` or `recipe`
 value, in `model_specs.das` or `profile_common.das` records its settling evidence in the PR

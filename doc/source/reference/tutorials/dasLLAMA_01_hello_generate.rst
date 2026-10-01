@@ -85,6 +85,20 @@ worker spin window.
        }
    }
 
+``with_dasllama_jobque()`` does both in one call — it opens the queue, runs
+``setup_dasllama_jobque()`` inside it, then runs its block. The chat tutorial
+uses that form:
+
+.. code-block:: das
+
+   with_dasllama_jobque() {
+       var s = create_session(m)
+       generate(m, s, ids, SamplingParams(), 48l) $(_id, piece) {
+           print(piece)
+           return true
+       }
+   }
+
 Stats
 =====
 

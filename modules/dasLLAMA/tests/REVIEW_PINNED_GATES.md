@@ -52,9 +52,11 @@ The pinned set, one entry a line, each with what it must keep holding:
   against the f32 lane's.
 
 **A diff that changes the contract a pinned test cell holds fixed - what its asserts hold, an
-axis gained or lost - updates that cell's entry in the pinned set in the same change.** An axis
-is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's order;
-a new input row on an axis the cell already asserts is not an axis gained.
+axis gained or lost - updates that cell's entry in the pinned set in the same change; a diff
+adding a cell to a file the pinned set lists adds to that file's entry each axis the cell asserts
+that the entry does not name.**
+An axis is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's
+order; a new input row on an axis the cell already asserts is not an axis gained.
 
 **A diff that removes a pinned test cell's assert, loosens its bound, drops its input, or drops a
 `run.das` suite listing that reaches it is a defect - keep the cell's asserts and fix the code

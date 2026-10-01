@@ -91,7 +91,7 @@ def main {
         if (!tune_gate()) {   // never measure on fallback winners
             panic("image_turn_probe: tune_gate refused - point DAS_TUNE_MANIFEST at a complete sidecar")
         }
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             measure_tokens(tr, 1)   // warm: JIT + first touch + schedule compile
             for (arm in ["", "gemm", "attn", "ew", "nongemm"]) {
                 set_metal_prefill_skip(arm)

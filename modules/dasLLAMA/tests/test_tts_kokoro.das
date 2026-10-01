@@ -9,7 +9,7 @@ require dasllama/dasllama_unicode   // cpt_to_utf8: building a phoneme the vocab
 require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_styletts2   // the model driven straight from a phoneme string, to hold a synthesis against
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require strings
@@ -176,7 +176,7 @@ def test_kokoro_dialects(t : T?) {
         if (tts_data_missing(t, gguf_path())) {
             return
         }
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var inscope m <- load_tts_model(gguf_path())
             let line = "The doctor barked orders at the water tower."
             let ps_us = strip(tts_phonemize(m, line, "en-us"))
@@ -226,7 +226,7 @@ def test_kokoro_voice_refusals(t : T?) {
         if (tts_data_missing(t, gguf_path())) {
             return
         }
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var inscope m <- load_tts_model(gguf_path())
             var inscope c <- caps(m)
             t |> success(find_index(m.model.voice_names, "jf_alpha") >= 0, "the model carries the Japanese pack")

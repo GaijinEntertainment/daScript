@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
-require dasllama/dasllama_math   // with_dasllama_jobque + target_chunk_work
+require dasllama/dasllama_math   // with_dasllama_jobque_ + target_chunk_work
 require daslib/jobque_boost
 require daslib/fio
 
@@ -290,7 +290,7 @@ def test_kv_paged_decode(t : T?) {
         let c = tr.config
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             // two paged sessions interleave allocations on ONE pool (P=16), so their pages
             // FRAGMENT: [0,2,4] vs [1,3,5]. Each decodes a deterministic token stream and must
@@ -348,7 +348,7 @@ def test_kv_paged_q8(t : T?) {
         }
         let c = tr.config
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             // two q8 paged sessions interleave on ONE pool (P=16): fragmented BYTE-strided runs
             var pool <- create_kv_pool_(c, 16l, KVDtype.q8_0, KVDtype.q8_0)
@@ -399,7 +399,7 @@ def test_kv_paged_prefill(t : T?) {
         let c = tr.config
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             // 21 tokens straddles pages at P=8 (2 full + 1 partial)
             var prompt <- [for (i in range(21)); int64(i % 50 + 2)]
@@ -446,7 +446,7 @@ def test_kv_paged_eval_batch(t : T?) {
         let c = tr.config
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             // ragged depths: 1, 2 and 3 pages at P=8; q0 crosses a page boundary MID-batch-decode
             // (kv_ensure growth inside eval_batch), and the sequential prefills interleave the

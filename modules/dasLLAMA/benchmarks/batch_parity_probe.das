@@ -4,7 +4,7 @@ options _jit_fast_math = true   // ggml-parity FP laxity — the CPU truth half 
 options _dasllama_internal = true
 
 require dasllama/dasllama   // the facade: arch [init] registrations + load_model's prepared-image (.dlim) cache
-require dasllama/dasllama_math   // with_dasllama_jobque + pin_kernel_backend + parallel_argmax
+require dasllama/dasllama_math   // with_dasllama_jobque_ + pin_kernel_backend + parallel_argmax
 require daslib/jobque_boost
 require daslib/clargs
 require daslib/fio
@@ -248,7 +248,7 @@ def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, the
         }
     }
     var rc = 0
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         for (tok in split(cfg.bs, ",")) {
             let nb = to_int64(tok, false)
             if (nb < 1l) {

@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_tts_blocks
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require _kq_fixtures   // the salted k4 planes and the leaf per row: the Q8_K rows and the disk-order dot
 require _compares   // check / check_count at the dot-envelope bar
 require daslib/jobque_boost
@@ -931,7 +931,7 @@ def private report_split(t : T?; r : SplitCase) {
 
 [test]
 def test_rows_convs(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> run("forward convs at the generator's taps") @(t : T?) {
             conv_case(t, "conv k3 d1", 64l, 64l, 3l, 1l, 1l, 1l, false)
             conv_case(t, "conv k7 d3", 64l, 64l, 7l, 1l, 9l, 3l, false)
@@ -1057,7 +1057,7 @@ def test_conv1d_dims_of(t : T?) {
 // the only axis that reaches the AdaIN column stats and the bare lanes_for_work sites.
 [test]
 def test_rows_split_invariance(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         split_arms(t, SplitAxis.lane_cap)
         split_arms(t, SplitAxis.worker_limit)
     }
@@ -1119,7 +1119,7 @@ def private catt_split_case(name : string; n, t : int64; axis : SplitAxis) : Spl
 
 [test]
 def test_causal_attention(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         catt_case(t, "prompt 40 of 40, full", 40l, 40l, 0l, 11ul)
         catt_case(t, "decode step at 41", 41l, 1l, 0l, 12ul)
         catt_case(t, "prompt 300 of 300, window 250", 300l, 300l, 250l, 13ul)
@@ -1186,7 +1186,7 @@ def test_causal_attention(t : T?) {
 
 [test]
 def test_elu_and_layer_scale(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var r = TtsRng()
         rng_seed(r, 21ul)
         var inscope x : array<float>
@@ -1250,7 +1250,7 @@ def test_elu_and_layer_scale(t : T?) {
 // the two elementwise kernels that dispatch, bit-equal on both axes that move the split
 [test]
 def test_elementwise_split_invariance(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var r = TtsRng()
         rng_seed(r, 23ul)
         for (axis in [SplitAxis.lane_cap, SplitAxis.worker_limit]) {
@@ -1563,7 +1563,7 @@ def test_source_windows(t : T?) {
         t |> success(tripped, "a five-frame window on a carry reset for two panics")
     }
     t |> run("the harmonic source in frame windows equals the whole run, and so does its mix under both row splits") @(t : T?) {
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             sine_window_arm(t, false)
             sine_window_arm(t, true)
         }

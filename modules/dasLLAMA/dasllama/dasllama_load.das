@@ -1642,7 +1642,7 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
         return <- load_gguf_impl(path, mode)
     }
     var t = Model()
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t <- load_gguf_impl(path, mode)
     }
     return <- t
@@ -1656,7 +1656,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
                         blk : block<(m : GGUFMeta; bytes : array<uint8>) : bool>) : bool {
     if (!is_job_que_available()) {
         var okj = false
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             okj = load_gguf_streaming(path, mode, t, jobs, want_blob, blk)
         }
         return okj

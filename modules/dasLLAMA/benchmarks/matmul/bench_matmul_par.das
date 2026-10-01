@@ -5,7 +5,7 @@ options _dasllama_internal = true
 require dastest/testing_boost
 require matmul_variants
 require dasllama/dasllama_convert
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require math
 
@@ -48,7 +48,7 @@ def bench_matmul_par(b : B?) {   // nolint:STYLE038 — flat bench driver: one c
     fill(wf, 768 * 288)
     yf |> resize(768)
 
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         let N = get_total_hw_jobs()
         // threshold sweep: single vs par-N at proj (288), ffn (768), classifier (32000)
         b |> run("proj 288   single") {

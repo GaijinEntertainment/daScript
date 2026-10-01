@@ -80,7 +80,7 @@ def private time_cell(name : string; gflop : double; blk : block<() : void>) {
 
 [export]
 def main {   // nolint:STYLE038 — one flat cell ladder A->G; the cells share pools and read in sequence
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         pin_kernel_backend("arm64-gen")
         if (!kernel_backend_has_kq_batch() || !kernel_backend_has_kq_batch_groupn()) {
             panic("moe_kq_probe: no kq batch slots on this backend - zero result rows")

@@ -2,7 +2,6 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
 require dasllama/dasllama
-require daslib/jobque_boost
 require daslib/fio
 require strings
 
@@ -53,8 +52,8 @@ def main() {
     var m <- load_model(path, QuantMode.q8)
     allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
 
-    with_job_que() {
-        setup_dasllama_jobque()
+    // with_dasllama_jobque() is tutorial 01's with_job_que() + setup_dasllama_jobque() in one call.
+    with_dasllama_jobque() {
 
         // ──────────────────────────────────────────────────────────────────────
         // Section 1 — A conversation in three calls

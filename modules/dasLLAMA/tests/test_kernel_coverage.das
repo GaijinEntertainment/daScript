@@ -210,8 +210,7 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
         let vocab = tr.config.vocab_size
         select_prefill_override("metal")
         select_decode_override("metal")
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             for (kdt in kdts) {
                 var s = make_run_state(tr.config, kdt, kdt)
                 // >= 256 rows: the half-X convert (CVT_MIN_ROWS), the tall M-tile stamps and
@@ -337,8 +336,7 @@ def private cov_tower_gemma3v(t : T?) {
             }
             var out : array<float>
             let prev_flash = get_metal_tower_flash()
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 gemma3v_encode(tw, st, planes, 896l, 896l, out)
                 set_metal_tower_flash(false)
                 var out2 : array<float>
@@ -363,8 +361,7 @@ def private cov_tower_gemma3v(t : T?) {
             reset_gemma3v_q8()
             var stt = Gemma3vState()
             var outt : array<float>
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 gemma3v_encode(twt, stt, planes, 896l, 896l, outt)
             }
             unpin_metal_tensor_crowns()
@@ -396,8 +393,7 @@ def private cov_tower_qwen25v(t : T?) {
                 planes[i] = sin(float(i) * 0.019) * 0.5 + 0.5
             }
             var out : array<float>
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 qwen25v_encode(tw, st, planes, 112l, 112l, out)
             }
             delete out
@@ -427,8 +423,7 @@ def private cov_tower_qwen3v(t : T?) {
                 planes[i] = sin(float(i) * 0.023) * 0.5 + 0.5
             }
             var out : array<float>
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 qwen3v_encode(tw, st, planes, 96l, 96l, out)
             }
             delete out
@@ -453,8 +448,7 @@ def private cov_tower_gemma4a(t : T?; samples : array<float>) {
             reset_gemma4a_q8()
             var gst = Gemma4aState()
             var grows : array<float>
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 gemma4a_encode_all(genc, gst, samples, grows)
             }
             delete grows
@@ -474,8 +468,7 @@ def private cov_tower_canary(t : T?; samples : array<float>) {
             var inscope cenc = CanaryEncoder()
             mint_canary_encoder(cstg, cenc)
             var cst = CanaryState()
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 canary_log_mel(cenc, samples, cst)
                 canary_encode(cenc, cst)
             }
@@ -494,8 +487,7 @@ def private cov_tower_parakeet(t : T?; samples : array<float>) {
             var inscope pm = ParakeetModel()
             mint_parakeet_model(pstg, pm, false)
             var pst = ParakeetState()
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 parakeet_log_mel(samples, pm, pst)
                 parakeet_encode(pm, pst)
             }
@@ -522,8 +514,7 @@ def private cov_tower_gemma4v(t : T?) {
                 planes[i] = sin(float(i) * 0.017) * 0.5 + 0.5
             }
             var out : array<float>
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 gemma4v_encode(tw, st, planes, 96l, 96l, out)
             }
             delete out
@@ -550,8 +541,7 @@ def private cov_tower(t : T?) {
             var inscope w = WhisperModel()
             var inscope stg <- stage_whisper_model(wpath, false, true)
             mint_whisper_model(stg, w, false, true)
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 var ws <- create_session(w)
                 transcribe(w, ws, samples) $(_seg) {
                     pass
@@ -569,8 +559,7 @@ def private cov_tower(t : T?) {
                 mel.data[i] = sin(float(i) * 0.0137) * 0.8
             }
             var aenc <- make_encoder_state(atw)
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 audio_encode(atw, aenc, mel)
             }
             delete aenc
@@ -585,8 +574,7 @@ def private cov_tower(t : T?) {
             var qenc <- make_encoder_state(qtw.core)
             var qcs = Qwen3aConvState()
             var qrows : array<float>
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 var qmel <- log_mel_qwen3a(samples, qtw.core.n_mel)
                 qwen3a_encode_all(qtw, qenc, qcs, qmel, qrows)
                 delete qmel
@@ -628,8 +616,7 @@ def private cov_tower_styletts2(t : T?) {
             var inscope noise = TtsNoise()
             var tm = TtsTimings()
             var inscope sc = St2Scratch()
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 styletts2_synthesize(m, ids, style, 1.0, noise, 0x5eedul, null, tm, sc)
             }
         }
@@ -651,8 +638,7 @@ def private cov_tower_pocket(t : T?) {
             }
             var inscope wave : array<float>
             var tm = TtsTimings()
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 pocket_decode_latents(m, lat, frames, sc, wave)
                 pocket_speak(m, "The census row speaks one short line.", m.default_voice, m.default_temperature, 1ul, tm, sc)
                 let kq = path_join(models_dir(), "pocket-tts-en-kq.gguf")   //! the small form: its head's q8 linears take the q8 stamps
@@ -680,8 +666,7 @@ def private cov_tower_gemma4uv(t : T?) {
                 planes[i] = sin(float(i) * 0.013) * 0.7
             }
             var out : array<float>
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 gemma4uv_encode(emb, st, planes, 96l, 96l, out)
             }
             delete out
@@ -971,8 +956,7 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
         var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let vocab = tr.config.vocab_size
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             // an f32 session rides the per-op rails; an f16 one (the armed mirror codec) the whole-model driver
             for (kdt in [KVDtype.f32, KVDtype.f16]) {
                 var s = make_run_state(tr.config, kdt, kdt)

@@ -7,7 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_qwen3v
 require dasllama/dasllama_image   // image_path_for - the baked-tag sniff cell locates the q8 .dlim
 require dasllama/dasllama_vision_embedder   // load_vision_embedder - the sniff cell routes the baked tag
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
@@ -132,7 +132,7 @@ def test_qwen3v_tier1(t : T?) {
             mint_qwen3v_tower(pst, ptw)
             let planes <- make_planes("gray", 448, 448)
             var pout : array<float>
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
             }
             let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL)
@@ -211,7 +211,7 @@ def test_qwen3v_tier1_metal(t : T?) {
                 mint_qwen3v_tower(pst, ptw)
                 let planes <- make_planes("gray", 448, 448)
                 var pout : array<float>
-                with_dasllama_jobque() {
+                with_dasllama_jobque_() {
                     qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
                 }
                 let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), po, TIER1_ABS, TIER1_REL_GPU)
@@ -353,7 +353,7 @@ def test_qwen3v_tier1_q8(t : T?) {
             mint_qwen3v_tower(pst, ptw)
             let planes <- make_planes("gray", 448, 448)
             var pout : array<float>
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
             }
             let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL_Q8)
@@ -462,7 +462,7 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
             mint_qwen3v_tower(pst, ptw)
             let planes <- make_planes("cb", 448, 448)
             var pout : array<float>
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
             }
             let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL_Q8_DS)

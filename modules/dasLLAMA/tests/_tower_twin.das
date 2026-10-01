@@ -11,7 +11,7 @@ module _tower_twin shared public
 
 require dasllama/dasllama_lint public
 require dastest/testing_boost public
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join: the twin cells' jfk.wav, inside the GPU arms alone
@@ -196,7 +196,7 @@ def twin_poison(tt : T?; r : TwinResult; zero_block : int64; twp : auto(TW); var
 //! `encode` over a tower and its state on a set-up job queue; the encode's token count
 def private queued_encode(tw : auto(TW); var st : auto(ST); var out : array<float>; encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) : int64 {
     var n = 0l
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         n = invoke(encode, tw, st, out)
     }
     return n
@@ -278,7 +278,7 @@ def exact_lane_declines(tt : T?; tag : string; expected_len : int64; one_seat : 
         let x0 = vulkan_tower_stats()
         let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
         var n = 0l
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             n = invoke(encode)
         }
         let x1 = vulkan_tower_stats()

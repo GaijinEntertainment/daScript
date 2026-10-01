@@ -3,6 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `CLAUDE.md`.
 
+**Subfolders of this repository carry their own `REVIEW.md` checklists - a diff applies the
+`REVIEW.md` of every folder between this one and each file it changes.**
+
 **Removing or weakening `REVIEW.das`'s check that no two git-tracked `.das` files declare the
 same `shared` module name is a defect.**
 

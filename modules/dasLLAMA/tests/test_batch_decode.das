@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
-require dasllama/dasllama_math   // with_dasllama_jobque + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_math   // with_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal on a per-row step
 require dasllama/dasllama_load   // load_model_: the engine load the batched row's scheduler streams need
 require dasllama/dasllama   // moe_gpu_drop_model: the hybrid cells serve both sides on the CPU lane under an armed tier
@@ -239,7 +239,7 @@ def test_batch_decode_fp32(t : T?) {
         var tr <- load_checkpoint(MODEL_PATH)
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             batch_vs_ref(t, tr, KVDtype.f32, 8l, 1.0e-6, "fp32")
         }
         set_fused_decode(prev_fused)
@@ -261,7 +261,7 @@ def test_batch_decode_q8(t : T?) {
         quantize_weights(tr)  // all 2D weights -> Q8_0, tr.quant = q8
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             batch_vs_ref(t, tr, KVDtype.f32, 8l, 1.0e-6, "q8")
         }
         set_fused_decode(prev_fused)
@@ -283,7 +283,7 @@ def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag, file : string; ba_f32 
     tr.config.seq_len = min(tr.config.seq_len, 64l)
     let prev_fused = get_fused_decode()
     set_fused_decode(false)
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         let c0 = batch_step_census()
         batch_vs_ref(t, tr, kdt, 8l, 1.0e-6, tag)
         let c1 = batch_step_census()
@@ -334,7 +334,7 @@ def test_batch_decode_f16_kv(t : T?) {
         quantize_weights(tr)
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             batch_vs_ref(t, tr, KVDtype.f16, 8l, 1.0e-6, "f16kv")
         }
         set_fused_decode(prev_fused)
@@ -358,7 +358,7 @@ def test_batch_decode_q8_kv(t : T?) {
         tr.config.seq_len = min(tr.config.seq_len, 64l)
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             batch_vs_ref(t, tr, KVDtype.q8_0, 8l, 1.0e-6, "q8_0kv")
         }
         set_fused_decode(prev_fused)
@@ -382,7 +382,7 @@ def test_batch_decode_tq4_kv(t : T?) {
         tr.config.seq_len = min(tr.config.seq_len, 64l)
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             batch_vs_ref(t, tr, KVDtype.tq4, 8l, 1.0e-6, "tq4kv")
         }
         set_fused_decode(prev_fused)
@@ -401,7 +401,7 @@ def test_batch_decode_q4(t : T?) {
         //! one code path: the batched Q4_0 GEMM is the GEMV's dot_q4 run over the rows, so the bar is exact
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             let c0 = batch_step_census()
             batch_vs_ref(t, tr, KVDtype.f32, 6l, 0.0, "q4_0")
             let c1 = batch_step_census()
@@ -425,7 +425,7 @@ def test_batch_decode_step_census(t : T?) {
         let vocab = c.vocab_size
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var pa <- prompt_a()
             var pb <- prompt_b()
             var sa <- make_run_state(c)
@@ -470,7 +470,7 @@ def test_batch_decode_row_refuses_per_row(t : T?) {
         let prev_fused = get_fused_decode()
         let prev_rope = get_rope_table_mode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             let served = bench_tg_batched_rep(tr, 2l, 8l, 4l, 1l)
             t |> equal(served.why, "", "the CPU batched stack serves the row: {served.why}")
             t |> success(served.tps > 0.0lf, "... at a rate")
@@ -500,7 +500,7 @@ def test_batch_decode_b1_delegation(t : T?) {
         let vocab = c.vocab_size
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var p0 <- prompt_a()
             var ref <- run_ref(tr, KVDtype.f32, p0, 6l, vocab)
             var s <- make_run_state(c)
@@ -552,7 +552,7 @@ def test_batch_decode_shrink(t : T?) {
         let nsteps = 6l   // 3 steps at B=3, then the middle row retires, 3 more at B=2
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var p0 <- prompt_a()
             var p1 <- prompt_b()
             var p2 <- prompt_c()
@@ -626,7 +626,7 @@ def test_batch_decode_tuned(t : T?) {
         quantize_weights(tr)
         let prev_fused = get_fused_decode()
         set_fused_decode(false)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             batch_vs_ref(t, tr, KVDtype.f32, 8l, 1.0e-3, "tuned")
         }
         set_fused_decode(prev_fused)

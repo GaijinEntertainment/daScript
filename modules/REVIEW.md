@@ -7,6 +7,9 @@ Module subfolders also carry checklists. A module's bindings and script library 
 that module's checklist even when placed outside its folder; tests follow its tests
 checklist when one exists.
 
+**Module folders under this folder carry their own `REVIEW.md` checklists - a diff applies the
+`REVIEW.md` of every folder between this one and each file it changes.**
+
 **A diff that changes GPU kernel code applies `REVIEW_SHADER_EMITTERS.md` (beside this file)
 together with its own folder's checklist.** GPU kernel code is a function carrying
 `[metal_kernel]`, `[spirv_kernel]` or an annotation whose name ends in `_shader` from `dasSpirv`,

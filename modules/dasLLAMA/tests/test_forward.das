@@ -9,7 +9,7 @@ require _model_tier
 require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math  // with_dasllama_jobque + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_math  // with_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 
 // End-to-end oracle: needs llama2.c's stories15M.bin + tokenizer.bin (gitignored, 60MB).
 // Skips cleanly when absent (e.g. in CI), so it's a real regression locally and a no-op elsewhere.
@@ -37,7 +37,7 @@ def test_forward_end_to_end(t : T?) {
         // full forward + greedy decode, token-for-token (threads the classifier)
         let prev_act = get_act_vec()
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
@@ -65,7 +65,7 @@ def test_forward_q8(t : T?) {
         // Q8 is effectively lossless at greedy decode on stories15M: still token-for-token.
         let prev_act = get_act_vec()
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
@@ -94,7 +94,7 @@ def test_forward_q8_pooled(t : T?) {
         // classifier parallel_for so a stale/misreset pooled fork would corrupt the stream.
         let prev_act = get_act_vec()
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
@@ -123,7 +123,7 @@ def test_forward_q4(t : T?) {
         // loss hasn't flipped an argmax yet over the 12-token ORACLE prefix, so it still matches.
         let prev_act = get_act_vec()
         set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var s <- make_run_state(c)
             let bos_only <- encode(tk, "", true, false)
             let ids <- generate(tr, s, bos_only, length(ORACLE))
@@ -149,7 +149,7 @@ def test_forward_threaded_decode_attention(t : T?) {
         var s_thr <- make_run_state(c)
         var s_inl <- make_run_state(c)
         let prev_thr = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             // same token sequence through both sessions; heads write disjoint att/xb slices, so the
             // threaded head loop must be BIT-exact vs inline — any diff is a race, not a tolerance
             set_target_chunk_work(1l)   // always thread (every attention work count >= 2 lanes)

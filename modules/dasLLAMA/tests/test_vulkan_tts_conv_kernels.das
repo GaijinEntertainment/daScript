@@ -72,7 +72,7 @@ def private conv_ref(var c : TtsConv1d; x : array<float>; tin : int) : array<flo
     conv1d_prepare(c)
     var y_ct : array<float>
     var y : array<float>
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         conv1d(c, x, int64(tin), y_ct)
     }
     transpose_ct(y_ct, c.cout, conv1d_out_len(c, int64(tin)), y)
@@ -235,7 +235,7 @@ def private gates_ref(l : TtsLstm; x : array<float>; gstride : int) : array<floa
     lin.w := l.w_ih
     lin.b := l.b
     var g : array<float>
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         linear_rows(lin, x, int64(LSTM_T), g)
     }
     let g4 = 4 * int(l.hidden)
@@ -257,7 +257,7 @@ def private bilstm_ref(fwd, bwd : TtsLstm; x : array<float>) : array<float> {
     bl.fwd := fwd
     bl.bwd := bwd
     var y : array<float>
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         bilstm(bl, x, int64(LSTM_T), y)
     }
     delete bl
@@ -389,7 +389,7 @@ def private pool_dw_arm(t : T?) {
         t |> equal(tout, PD_TOUT, "{tag}: the output length")
         var x <- row_fill(PD_TIN * PD_C, 41, 7, 0.05, 2.1)
         var want : array<float>
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             conv1d_rows_transposed_depthwise(c, x, int64(PD_TIN), want)
         }
         var wn <- pool_slab(c)

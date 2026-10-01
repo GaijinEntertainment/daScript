@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_vad
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require math
 require _model_tier
@@ -40,7 +40,7 @@ def test_vad_forward_lcg(t : T?) {
         let expected = [0.01383990, 0.02051842, 0.01915139, 0.01694492, 0.01415426,
                         0.01128137, 0.01160875, 0.01086920, 0.00850144, 0.02220330]
         let sig <- lcg_signal(10 * 512)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var m <- load_vad_model(vad_bin_path())
             let probs <- vad_probs(m, sig)
             t |> success(length(probs) == 10, "10 chunks -> 10 probs")
@@ -63,7 +63,7 @@ def test_vad_segments_jfk(t : T?) {
         // silero get_speech_timestamps defaults, sample indices (harness/silero_segment_oracle.py)
         let exp_start = [5152l, 52256l, 86048l, 130592l]
         let exp_end   = [36320l, 71136l, 122848l, 169952l]
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var m <- load_vad_model(vad_bin_path())
             let probs <- vad_probs(m, samples)
             // decoder-robust smoke checks (exact per-frame values are gated by the LCG test);
