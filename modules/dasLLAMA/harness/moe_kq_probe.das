@@ -5,6 +5,8 @@ options _dasllama_internal = true
 
 require llvm/daslib/llvm_tune
 require ../performance/profile_common.das   // tune_gate — the standing pre-measure stack
+require _race_fixture                       // time_rounds - the warmup-dropped round loop
+require ../tests/_kq_fixtures.das          // build_q4k_block - the synthetic Q4_K superblock the pool transcodes
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_gen
@@ -12,9 +14,9 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_repack
 require dasllama/dasllama_gemm_schema
 require daslib/jobque_boost
-require daslib/f16_cvt
 require math
 
+// Each cell times REPS rounds after one untimed warmup round.
 // ATTRIBUTION SWEEP: attributes the MoE CPU pp gap across kernel shape (dense vs narrow D),
 // per-expert M, the groupn walk, routing skew, and the 32-row sub-region split - the cells
 // behind ARCHITECTURE_RUNTIME.md's moe-region-split numbers (620 vs 3929 GFLOP/s on zipf k4).
@@ -31,35 +33,6 @@ let CNT = 32l
 let MB = 512l
 let NSETS_D = 32l
 let REPS = 5
-
-let SYNTH_SC <- [63, 21, 37, 5, 48, 17, 60, 33]
-let SYNTH_MN <- [1, 62, 19, 44, 7, 58, 25, 36]
-let SYNTH_D = 0.5
-let SYNTH_DMIN = 0.25
-
-def private q4_pat(k : int) : int => (k * 7 + 3) % 16
-
-def private build_q4k_block() : array<uint8> {
-    var blkb : array<uint8>
-    blkb |> resize(144)
-    let dbits = f32_to_f16(SYNTH_D)
-    let mbits = f32_to_f16(SYNTH_DMIN)
-    blkb[0] = uint8(dbits & 0xFF)
-    blkb[1] = uint8(dbits >> 8u)
-    blkb[2] = uint8(mbits & 0xFF)
-    blkb[3] = uint8(mbits >> 8u)
-    for (j in range(4)) {
-        blkb[4 + j] = uint8((SYNTH_SC[j] & 63) | (((SYNTH_SC[j + 4] >> 4) & 3) << 6))
-        blkb[8 + j] = uint8((SYNTH_MN[j] & 63) | (((SYNTH_MN[j + 4] >> 4) & 3) << 6))
-        blkb[12 + j] = uint8((SYNTH_SC[j + 4] & 15) | ((SYNTH_MN[j + 4] & 15) << 4))
-    }
-    for (js in range(4)) {
-        for (l in range(32)) {
-            blkb[16 + 32 * js + l] = uint8(q4_pat(64 * js + l) | (q4_pat(64 * js + 32 + l) << 4))
-        }
-    }
-    return <- blkb
-}
 
 // per-region planes: transcode the synthetic superblock everywhere, xor-noise the quants,
 // then the per-region grp repack (the per-expert-slice shape the load path produces)
@@ -91,13 +64,13 @@ def private build_pool(nregions, d : int64; var kq : array<uint8>; var ks : arra
 }
 
 def private time_cell(name : string; gflop : double; blk : block<() : void>) {
-    invoke(blk)   // warmup
+    let us <- time_rounds(1, REPS, 1) $(_i : int) {
+        invoke(blk)
+    }
     var best = 1e30lf
     var sum = 0.0lf
-    for (_rep in range(REPS)) {
-        let t0 = ref_time_ticks()
-        invoke(blk)
-        let ms = double(get_time_usec(t0)) / 1000.0lf
+    for (u in us[0]) {
+        let ms = double(u) / 1000.0lf
         sum += ms
         best = min(best, ms)
     }
@@ -107,8 +80,7 @@ def private time_cell(name : string; gflop : double; blk : block<() : void>) {
 
 [export]
 def main {   // nolint:STYLE038 — one flat cell ladder A->G; the cells share pools and read in sequence
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         pin_kernel_backend("arm64-gen")
         if (!kernel_backend_has_kq_batch() || !kernel_backend_has_kq_batch_groupn()) {
             panic("moe_kq_probe: no kq batch slots on this backend - zero result rows")

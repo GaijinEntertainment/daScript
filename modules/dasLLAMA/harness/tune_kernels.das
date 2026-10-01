@@ -30,6 +30,7 @@ require tuner_cli               // the shared tuner CLI
 require tuner_noise             // the noise gate + the measured floor, shared with the other half
 require daslib/aarch64_neon // sdot4_laneq (referenced by the cloned laneq template bodies)
 require daslib/f16_cvt           // f16 references + the cloned f16-kernel template bodies
+require daslib/math_bits         // uint64_bits_to_double - REL_INF
 require math                     // mad (referenced by the cloned template bodies)
 require daslib/json
 require daslib/json_boost
@@ -145,7 +146,6 @@ let FINAL_ROUNDS = 15              // rounds over the finalists only
 let VALIDATE_ROUNDS = 10           // rounds of winner vs fallback per changed kernel
 var private ROUNDS = SCREEN_ROUNDS + FINAL_ROUNDS
 let MAX_FINALISTS = 8              // the best candidate and its twins, capped
-let WIN_MARGIN_PCT = 3.0lf         // a seat needs this over the fallback, in race and re-race
 let VALIDATE_PLAN_ALLOWANCE = 10   // progress-plan slots for the re-races (the count is not known up front)
 // a timed window the size of an OS timer tick reads jitter as a verdict; tens of ms read the
 // kernel, so the warm pass scales each row's reps (REPS_BASE units) up to ~TARGET_WINDOW_US
@@ -208,21 +208,8 @@ def reps_of(i : int) : int {
 
 // the previous sidecar's "kernels" section, read raw (a stale sidecar still names the seats)
 def private load_incumbents() {
-    let text = fread(tune_manifest_path())
-    return if (empty(text))
-    var jerr = ""
-    var doc = read_json(text, jerr)
-    if (doc != null && doc is _object) {
-        var ks = doc?["kernels"]
-        if (ks != null && ks is _object) {
-            for (k, v in keys(ks as _object), values(ks as _object)) {
-                if (v != null && v is _string) {
-                    g_incumbent[k] = clone_string(v as _string)
-                }
-            }
-        }
-    }
-    delete_json(doc)
+    delete g_incumbent
+    g_incumbent <- read_incumbents(tune_manifest_path())
     if (!empty(g_incumbent)) {
         tune_detail("incumbents: {length(g_incumbent)} seats from the previous sidecar\n")
     }
@@ -294,13 +281,6 @@ def private row_median(i : int) : double {
     return (length(g_samples) > i && !empty(g_samples[i])) ? tune_median(g_samples[i]) : 0.0lf
 }
 
-def private row_of(names : array<string>; suffix : string) : int {
-    for (i, nm in count(), names) {
-        return i if (nm == suffix)
-    }
-    return -1
-}
-
 // after the screen: the finalists are the rows whose screen median beats the shipped fallback
 // by the margin AND sit within that band of the best such row — the best and its twins, the
 // whole tie set, so the tie-break below sees the same rows every mint — plus the fallback
@@ -308,9 +288,9 @@ def private row_of(names : array<string>; suffix : string) : int {
 def private pick_finalists(names : array<string>; ok : array<bool>) {
     g_screened = true
     g_finalist |> resize(length(names))
-    let bi = row_of(names, shipped_fallback(g_cur_kernel))
+    let bi = find_index(names, shipped_fallback(g_cur_kernel))
     let base = (bi >= 0 && ok[bi]) ? row_median(bi) : -1.0lf
-    let cut = base > 0.0lf ? base * (1.0lf - WIN_MARGIN_PCT / 100.0lf) : 1.0e30lf
+    let cut = base > 0.0lf ? base * (1.0lf - TUNE_WIN_MARGIN_PCT / 100.0lf) : 1.0e30lf
     var cands : array<tuple<double; int>>
     for (i in range(length(names))) {
         if (ok[i] && i != bi) {
@@ -324,7 +304,7 @@ def private pick_finalists(names : array<string>; ok : array<bool>) {
         return a._0 < b._0
     }
     if (!empty(cands)) {
-        let band = cands[0]._0 * (1.0lf + WIN_MARGIN_PCT / 100.0lf)
+        let band = cands[0]._0 * (1.0lf + TUNE_WIN_MARGIN_PCT / 100.0lf)
         for (k in range(min(length(cands), MAX_FINALISTS))) {
             if (cands[k]._0 <= band) {
                 g_finalist[cands[k]._1] = true
@@ -392,7 +372,7 @@ def private shipped_fallback(kernel : string) : string {
 // winner) if it is tied, else the shipped baseline, else the first tied row in grid order
 def private tie_break(names : array<string>; med : array<double>; ok : array<bool>; bi, winner : int; need : double) : int {
     let cut = med[winner] * (1.0lf + need / 100.0lf)
-    let inc = row_of(names, g_incumbent?[g_cur_kernel] ?? "")
+    let inc = find_index(names, g_incumbent?[g_cur_kernel] ?? "")
     if (inc >= 0 && row_races(ok, inc) && med[inc] <= cut) {
         return inc
     }
@@ -452,7 +432,7 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
     for (i in range(length(names))) {
         med[i] = (length(g_samples) > i && !empty(g_samples[i])) ? tune_median(g_samples[i]) : best[i]
     }
-    let bi = row_of(names, baseline)
+    let bi = find_index(names, baseline)
     let base = (bi >= 0 && ok[bi]) ? med[bi] : -1.0lf
     // the seat is decided among the finalists only - a row that left after the screen has
     // five samples against twenty and is not comparable
@@ -462,7 +442,7 @@ def report(kernel : string; names : array<string>; best : array<double>; ok : ar
             winner = i
         }
     }
-    let need = max(WIN_MARGIN_PCT, noise_floor_pct())
+    let need = win_margin_pct()
     if (winner >= 0) {
         winner = tie_break(names, med, ok, bi, winner, need)
     } elif (bi >= 0 && ok[bi]) {
@@ -519,7 +499,7 @@ def private record_kernel(kernel : string; names : array<string>; med, best : ar
     g_results |> emplace(KernelResult(kernel = kernel, winner = wname, fallback = baseline))
     g_race[kernel] = race_row(names, med, best, ok, wname, baseline, noise_floor_pct(), margin)
     if (wname != baseline) {
-        g_validate_pair[kernel] = (row_of(names, wname), row_of(names, baseline))
+        g_validate_pair[kernel] = (find_index(names, wname), find_index(names, baseline))
         g_validate_med[kernel] = med[winner]
     }
 }
@@ -592,7 +572,7 @@ def private demote(kernel, why : string) {
 // longer clears the final floor goes back to the fallback before anything is written
 def private demote_below_floor() {
     let floor = noise_floor_pct()
-    return if (floor <= WIN_MARGIN_PCT)
+    return if (floor <= TUNE_WIN_MARGIN_PCT)
     for (r in g_results) {
         continue if (empty(r.winner) || r.winner == r.fallback || !key_exists(g_race, r.kernel))
         var row = g_race[r.kernel]
@@ -633,9 +613,74 @@ def private run_validation(benches : array<tuple<string; function<() : string>>>
     delete changed
 }
 
-def reset(var d : array<float>; d0 : array<float>) {
-    for (di, d0i in d, d0) {
-        di = d0i
+//! the rows one kernel's race hands report(): each variant's name, gate verdict and best time
+struct private RaceRows {
+    names : array<string>
+    ok : array<bool>
+    best : array<double>
+}
+
+//! One kernel's race over its variant registry `vs`. `gate(i)` decides each row's correctness
+//! once, in registry order; then the warm pass and ROUNDS measured rounds visit the racing rows,
+//! the order rotated every pass so each row occupies every slot - `before(i)` untimed, `window(i)`
+//! timed and recorded - with `round_end()` closing each pass.
+def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; before : block<(i : int) : void>;
+                          window : block<(i : int) : void>; round_end : block<() : void>) : RaceRows {
+    let nv = length(vs)
+    var rows : RaceRows
+    rows.names |> resize(nv)
+    rows.ok |> resize(nv)
+    rows.best |> resize(nv)
+    for (i in range(nv)) {
+        rows.names[i] = vs[i]._0
+        rows.best[i] = 1.0e30lf
+        rows.ok[i] = invoke(gate, i)
+    }
+    for (tpass in range(ROUNDS + 1)) {
+        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
+        round_begin(round, rows.names, rows.ok)
+        for (slot in range(nv)) {
+            let i = (slot + tpass) % nv
+            continue if (!rows.ok[i] || !row_races(rows.ok, i))
+            invoke(before, i)
+            let t0 = ref_time_ticks()
+            invoke(window, i)
+            record_sample(round, i, double(get_time_usec(t0)), rows.best)
+        }
+        invoke(round_end)
+    }
+    return <- rows
+}
+
+def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; window : block<(i : int) : void>;
+                          round_end : block<() : void>) : RaceRows {
+    return <- race_variants(vs, gate, $(_i : int) {}, window, round_end)
+}
+
+def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; window : block<(i : int) : void>) : RaceRows {
+    return <- race_variants(vs, gate, $(_i : int) {}, window, $ {})
+}
+
+def private report(kernel : string; rows : RaceRows) : string {
+    return report(kernel, rows.names, rows.best, rows.ok)
+}
+
+//! the relative error an f64-reference gate holds a variant's output to (TOL)
+def private rel_err(got, want : double) : double {
+    return abs(got - want) / (abs(want) + 1.0lf)
+}
+
+let REL_INF = uint64_bits_to_double(0x7ff0000000000000ul)   //! a NaN error reads as +infinity: it fails the bar and no later finite error replaces it
+
+//! the running worst of `maxrel` and `rel`, a NaN `rel` sticky as +infinity
+def private worst_rel(maxrel, rel : double) : double {
+    return is_nan(rel) ? REL_INF : max(maxrel, rel)
+}
+
+//! a use of a race's accumulated result, so the timed calls are not dead code
+def private keep_live(sink : float) {
+    if (sink == 12345.678f) {
+        print("")
     }
 }
 
@@ -673,55 +718,32 @@ def bench_dot() : string {
     var op = unsafe(addr(o[0]))
 
     let vs <- dot_template_variants()
-    let nv = length(vs)
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         var exact = true
         for (r in range64(8l)) {   // spot rows vs the reference dot
             let rp = unsafe(wp + r * N)
             let got = double(f(rp, xp, N))
             let want = ref_dot(rp, xp, N)
-            if (abs(got - want) / (abs(want) + 1.0lf) > TOL) {
+            if (rel_err(got, want) > TOL) {
                 exact = false
             }
         }
-        ok[i] = exact
-        best[i] = 1.0e30lf
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i) / REPS_BASE)) {   // whole walks: the window is sized in walks
-                unsafe {
-                    for (r in range64(DOT_WALK_ROWS)) {
-                        op[r] = f(wp + r * N, xp, N)
-                    }
+        return exact
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i) / REPS_BASE)) {   // whole walks: the window is sized in walks
+            unsafe {
+                for (r in range64(DOT_WALK_ROWS)) {
+                    op[r] = f(wp + r * N, xp, N)
                 }
             }
-            sink += unsafe(op[0])
-            record_sample(round, i, double(get_time_usec(t0)), best)
         }
-    }
-    if (sink == 12345.678f) {
-        print("")   // keep sink live
-    }
-    return report("dot", names, best, ok)
+        sink += unsafe(op[0])
+    })
+    keep_live(sink)
+    return report("dot", race)
 }
 
 // ===== binary in-place: (var d, s)->void — add / mul / copy =====
@@ -730,7 +752,6 @@ def bench_dot() : string {
 
 def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
                  d0 : array<float>; s : array<float>; ref_elem : function<(a : float; b : float) : double>) : string {
-    let nv = length(vs)
     // both streams on pinned, distinct-offset bases: the same set geometry on every race, every
     // run, every box - a per-process allocator roll once read the fallback row 23% slow here
     var inscope db : array<float>
@@ -741,15 +762,8 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
         unsafe(sp[j]) = s[j]
     }
 
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         reset_stream(dp, d0)
         let f = vs[i]._1
         invoke(f, dp, sp, N)
@@ -757,35 +771,22 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
         for (j in range64(N)) {
             let want = ref_elem(d0[j], s[j])
             let got = double(unsafe(dp[j]))
-            let rel = abs(got - want) / (abs(want) + 1.0lf)
-            if (rel > maxrel) {
-                maxrel = rel
-            }
+            let rel = rel_err(got, want)
+            maxrel = worst_rel(maxrel, rel)
         }
-        ok[i] = maxrel <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            reset_stream(dp, d0)
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, dp, sp, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return maxrel <= TOL
+    }, $(_i : int) {
+        reset_stream(dp, d0)
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, dp, sp, N)
         }
+    }, $ {
         sink += unsafe(dp[0])
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report(kernel, names, best, ok)
+    return report(kernel, race)
 }
 
 // add / mul / copy share the (var d, s) signature - one bench, per-kernel data + reference
@@ -830,10 +831,40 @@ def bench_copy_floats() : string {
 
 // ===== axpy: (var d, s, scale)->void =====
 
+//! An axpy-shaped race (d += 0.5 x source over N elements), `d` reset to `d0` before every window:
+//! `sp` is the source plane the variants read, `s_at(j)` its element j as the reference reads it.
+def private bench_axpy_rows(kernel : string; vs : array<auto>; var d : array<float>; d0 : array<float>;
+                            sp : auto; s_at : block<(j : int64) : double>) : string {
+    let scale = 0.5f
+    var dp = unsafe(addr(d[0]))
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
+        reset_stream(dp, d0)
+        let f = vs[i]._1
+        invoke(f, dp, sp, scale, N)
+        var maxrel = 0.0lf
+        for (j in range64(N)) {
+            let want = double(d0[j]) + double(scale) * invoke(s_at, j)
+            let rel = rel_err(double(d[j]), want)
+            maxrel = worst_rel(maxrel, rel)
+        }
+        return maxrel <= TOL
+    }, $(_i : int) {
+        reset_stream(dp, d0)
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, dp, sp, scale, N)
+        }
+    }, $ {
+        sink += d[0]
+    })
+    tune_detail("  checksum {sink}\n")
+    return report(kernel, race)
+}
+
 def bench_axpy() : string {
     let vs <- axpy_template_variants()
-    let nv = length(vs)
-    let scale = 0.5f
     var inscope d0 : array<float>
     var inscope s : array<float>
     var inscope d : array<float>
@@ -844,53 +875,9 @@ def bench_axpy() : string {
         d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
         s[i] = cos(float(i) * 0.03f)
     }
-    var dp = unsafe(addr(d[0]))
-    let sp = unsafe(addr(s[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
-        reset(d, d0)
-        let f = vs[i]._1
-        invoke(f, dp, sp, scale, N)
-        var maxrel = 0.0lf
-        for (j in range64(N)) {
-            let want = double(d0[j]) + double(scale) * double(s[j])
-            let rel = abs(double(d[j]) - want) / (abs(want) + 1.0lf)
-            if (rel > maxrel) {
-                maxrel = rel
-            }
-        }
-        ok[i] = maxrel <= TOL
+    return bench_axpy_rows("axpy", vs, d, d0, unsafe(addr(s[0]))) $(j : int64) {
+        return double(s[j])
     }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            reset(d, d0)
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, dp, sp, scale, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
-        }
-        sink += d[0]
-    }
-    tune_detail("  checksum {sink}\n")
-    return report("axpy", names, best, ok)
 }
 
 // ===== f16 codec kernels: dot_f16 / axpy_f16 / cvt_f32_to_f16 / cvt_f16_to_f32 =====
@@ -914,48 +901,23 @@ def bench_dot_f16() : string {
     }
 
     let vs <- dot_f16_template_variants()
-    let nv = length(vs)
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         let got = double(f(pa, pb, N))
-        ok[i] = abs(got - want) / (abs(want) + 1.0lf) <= TOL
-        best[i] = 1.0e30lf
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                sink += f(pa, pb, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return rel_err(got, want) <= TOL
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            sink += f(pa, pb, N)
         }
-    }
-    if (sink == 12345.678f) {
-        print("")   // keep sink live
-    }
-    return report("dot_f16", names, best, ok)
+    })
+    keep_live(sink)
+    return report("dot_f16", race)
 }
 
 def bench_axpy_f16() : string {
     let vs <- axpy_f16_template_variants()
-    let nv = length(vs)
-    let scale = 0.5f
     var inscope d0 : array<float>
     var inscope s : array<uint16>
     var inscope d : array<float>
@@ -966,58 +928,13 @@ def bench_axpy_f16() : string {
         d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
         s[i] = uint16(f32_to_f16(cos(float(i) * 0.03f)))
     }
-    var dp = unsafe(addr(d[0]))
-    let sp = unsafe(addr(s[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
-        reset(d, d0)
-        let f = vs[i]._1
-        invoke(f, dp, sp, scale, N)
-        var maxrel = 0.0lf
-        for (j in range64(N)) {
-            let want = double(d0[j]) + double(scale) * double(f16_to_f32(uint(s[j])))
-            let rel = abs(double(d[j]) - want) / (abs(want) + 1.0lf)
-            if (rel > maxrel) {
-                maxrel = rel
-            }
-        }
-        ok[i] = maxrel <= TOL
+    return bench_axpy_rows("axpy_f16", vs, d, d0, unsafe(addr(s[0]))) $(j : int64) {
+        return double(f16_to_f32(uint(s[j])))
     }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            reset(d, d0)
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, dp, sp, scale, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
-        }
-        sink += d[0]
-    }
-    tune_detail("  checksum {sink}\n")
-    return report("axpy_f16", names, best, ok)
 }
 
 def bench_cvt_f32_to_f16() : string {
     let vs <- cvt_f32_to_f16_template_variants()
-    let nv = length(vs)
     var inscope s : array<float>
     var inscope d : array<uint16>
     s |> resize(N)
@@ -1029,47 +946,25 @@ def bench_cvt_f32_to_f16() : string {
     s[13] = -1.0e6f
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(s[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         invoke(f, dp, sp, N)
         var exact = true
         for (j in range64(N)) {
             exact &&= uint(d[j]) == f32_to_f16(clamp(s[j], -65504.0, 65504.0))
         }
-        ok[i] = exact
-    }
-
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, dp, sp, N)   // pure overwrite — no reset needed
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return exact
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, dp, sp, N)   // pure overwrite — no reset needed
         }
-    }
-    return report("cvt_f32_to_f16", names, best, ok)
+    })
+    return report("cvt_f32_to_f16", race)
 }
 
 def bench_cvt_f16_to_f32() : string {
     let vs <- cvt_f16_to_f32_template_variants()
-    let nv = length(vs)
     var inscope s : array<uint16>
     var inscope d : array<float>
     s |> resize(N)
@@ -1079,49 +974,27 @@ def bench_cvt_f16_to_f32() : string {
     }
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(s[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         invoke(f, dp, sp, N)
         var exact = true
         for (j in range64(N)) {
             exact &&= d[j] == f16_to_f32(uint(s[j]))
         }
-        ok[i] = exact
-    }
-
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, dp, sp, N)   // pure overwrite — no reset needed
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return exact
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, dp, sp, N)   // pure overwrite — no reset needed
         }
-    }
-    return report("cvt_f16_to_f32", names, best, ok)
+    })
+    return report("cvt_f16_to_f32", race)
 }
 
 // ===== scale: (var d, scale)->void =====
 
 def bench_scale() : string {
     let vs <- scale_inplace_template_variants()
-    let nv = length(vs)
     let scale = 1.0001f   // near 1.0 so scale^REPS stays in normal float range with per-block reset
     var inscope d0 : array<float>
     var inscope d : array<float>
@@ -1131,51 +1004,30 @@ def bench_scale() : string {
         d0[i] = 0.5f + 0.3f * sin(float(i) * 0.05f)
     }
     var dp = unsafe(addr(d[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
-        reset(d, d0)
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
+        reset_stream(dp, d0)
         let f = vs[i]._1
         invoke(f, dp, scale, N)
         var maxrel = 0.0lf
         for (j in range64(N)) {
             let want = double(d0[j]) * double(scale)
-            let rel = abs(double(d[j]) - want) / (abs(want) + 1.0lf)
-            if (rel > maxrel) {
-                maxrel = rel
-            }
+            let rel = rel_err(double(d[j]), want)
+            maxrel = worst_rel(maxrel, rel)
         }
-        ok[i] = maxrel <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            reset(d, d0)
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, dp, scale, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return maxrel <= TOL
+    }, $(_i : int) {
+        reset_stream(dp, d0)
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, dp, scale, N)
         }
+    }, $ {
         sink += d[0]
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report("scale_inplace", names, best, ok)
+    return report("scale_inplace", race)
 }
 
 // ===== softmax: (var x, size) in-place — reset before each timing block; repeated softmax of a
@@ -1183,7 +1035,6 @@ def bench_scale() : string {
 
 def bench_softmax() : string {
     let vs <- softmax_template_variants()
-    let nv = length(vs)
     var inscope d0 : array<float>
     var inscope d : array<float>
     d0 |> resize(N)
@@ -1207,57 +1058,35 @@ def bench_softmax() : string {
     for (i in range64(N)) {
         want[i] /= wsum
     }
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
-        reset(d, d0)
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
+        reset_stream(dp, d0)
         let f = vs[i]._1
         invoke(f, dp, N)
         var maxrel = 0.0lf
         for (j in range64(N)) {
-            let rel = abs(double(d[j]) - want[j]) / (abs(want[j]) + 1.0lf)
-            if (rel > maxrel) {
-                maxrel = rel
-            }
+            let rel = rel_err(double(d[j]), want[j])
+            maxrel = worst_rel(maxrel, rel)
         }
-        ok[i] = maxrel <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            reset(d, d0)
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, dp, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return maxrel <= TOL
+    }, $(_i : int) {
+        reset_stream(dp, d0)
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, dp, N)
         }
+    }, $ {
         sink += d[0]
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report("softmax", names, best, ok)
+    return report("softmax", race)
 }
 
 // ===== rmsnorm: (var o, x, weight, size, eps) out-of-place — repeatable, no reset needed.
 
 def bench_rmsnorm() : string {
     let vs <- rmsnorm_template_variants()
-    let nv = length(vs)
     let eps = 1.0e-5f
     var inscope x : array<float>
     var inscope w : array<float>
@@ -1276,49 +1105,27 @@ def bench_rmsnorm() : string {
         ss += double(unsafe(xp[i])) * double(unsafe(xp[i]))
     }
     ss = 1.0lf / sqrt(ss / double(N) + double(eps))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         invoke(f, op, xp, wp, N, eps)
         var maxrel = 0.0lf
         for (j in range64(N)) {
             let want = double(unsafe(wp[j])) * double(unsafe(xp[j])) * ss
-            let rel = abs(double(unsafe(op[j])) - want) / (abs(want) + 1.0lf)
-            if (rel > maxrel) {
-                maxrel = rel
-            }
+            let rel = rel_err(double(unsafe(op[j])), want)
+            maxrel = worst_rel(maxrel, rel)
         }
-        ok[i] = maxrel <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, op, xp, wp, N, eps)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return maxrel <= TOL
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, op, xp, wp, N, eps)
         }
+    }, $ {
         sink += o[0]
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report("rmsnorm", names, best, ok)
+    return report("rmsnorm", race)
 }
 
 // ===== dot_q4 / dot_q8q8: quantized dots, repeatable (no mutation). References run in f64 on the
@@ -1326,7 +1133,6 @@ def bench_rmsnorm() : string {
 
 def bench_dot_q4() : string {
     let vs <- dot_q4_template_variants()
-    let nv = length(vs)
     var inscope wf : array<float>
     var inscope x : array<float>
     wf |> resize(N)
@@ -1346,42 +1152,19 @@ def bench_dot_q4() : string {
     let wqp = unsafe(addr(qt.q[0]))
     let wsp = unsafe(addr(qt.scales[0]))
     let xp = unsafe(addr(x[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         let got = double(f(wqp, wsp, xp, N))
-        ok[i] = abs(got - want) / (abs(want) + 1.0lf) <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                sink += f(wqp, wsp, xp, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return rel_err(got, want) <= TOL
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            sink += f(wqp, wsp, xp, N)
         }
-    }
-    if (sink == 12345.678f) {
-        print("")   // keep sink live
-    }
-    return report("dot_q4", names, best, ok)
+    })
+    keep_live(sink)
+    return report("dot_q4", race)
 }
 
 // the q8 weight image a composite walks: DOT_WALK_ROWS rows quantized from the analytic fill
@@ -1392,13 +1175,7 @@ def private build_q8_walk(var wqi : array<int8>; var wsi : array<float>; nb : in
         for (i in range64(N)) {
             wrow[i] = sin(float(r * N + i) * 0.1f)
         }
-        var inscope qt <- quantize_q8_0(wrow, N)
-        for (i in range64(N)) {
-            wqi[r * N + i] = qt.q[i]
-        }
-        for (bi in range64(nb)) {
-            wsi[r * nb + bi] = qt.scales[bi]
-        }
+        quantize_q8_0_into(wrow, N, wqi, wsi, r * N, r * nb)
     }
     delete wrow
 }
@@ -1407,7 +1184,6 @@ def private build_q8_walk(var wqi : array<int8>; var wsi : array<float>; nb : in
 // sized past L2 — see bench_dot's rationale.
 def bench_dot_q8q8() : string {
     let vs <- dot_q8q8_template_variants()
-    let nv = length(vs)
     let nb = N / 32l
     var inscope wqi : array<int8>
     var inscope wsi : array<float>
@@ -1427,16 +1203,8 @@ def bench_dot_q8q8() : string {
     var inscope o : array<float>
     o |> resize(DOT_WALK_ROWS)
     var op = unsafe(addr(o[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         var exact = true
         for (r in range64(8l)) {   // spot rows vs the exact int block sums
@@ -1449,39 +1217,24 @@ def bench_dot_q8q8() : string {
                 want += double(iacc) * double(wsi[r * nb + bi]) * double(xq.scales[bi])
             }
             let got = double(f(unsafe(wqp + r * N), unsafe(wsp + r * nb), xqp, xsp, N))
-            if (abs(got - want) / (abs(want) + 1.0lf) > TOL) {
+            if (rel_err(got, want) > TOL) {
                 exact = false
             }
         }
-        ok[i] = exact
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i) / REPS_BASE)) {   // whole walks: the window is sized in walks
-                unsafe {
-                    for (r in range64(DOT_WALK_ROWS)) {
-                        op[r] = f(wqp + r * N, wsp + r * nb, xqp, xsp, N)
-                    }
+        return exact
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i) / REPS_BASE)) {   // whole walks: the window is sized in walks
+            unsafe {
+                for (r in range64(DOT_WALK_ROWS)) {
+                    op[r] = f(wqp + r * N, wsp + r * nb, xqp, xsp, N)
                 }
             }
-            sink += unsafe(op[0])
-            record_sample(round, i, double(get_time_usec(t0)), best)
         }
-    }
-    if (sink == 12345.678f) {
-        print("")   // keep sink live
-    }
-    return report("dot_q8q8", names, best, ok)
+        sink += unsafe(op[0])
+    })
+    keep_live(sink)
+    return report("dot_q8q8", race)
 }
 
 // ===== q8_0 KV-codec kernels: dot_q8kv / dot_q8q8kv / axpy_q8kv / cvt_q8kv_to_f32 /
@@ -1539,42 +1292,19 @@ def bench_dot_q8kv() : string {
     let pb = unsafe(addr(row[0]))
 
     let vs <- dot_q8kv_template_variants()
-    let nv = length(vs)
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         let got = double(f(pa, pb, N))
-        ok[i] = abs(got - want) / (abs(want) + 1.0lf) <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                sink += f(pa, pb, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return rel_err(got, want) <= TOL
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            sink += f(pa, pb, N)
         }
-    }
-    if (sink == 12345.678f) {
-        print("")   // keep sink live
-    }
-    return report("dot_q8kv", names, best, ok)
+    })
+    keep_live(sink)
+    return report("dot_q8kv", race)
 }
 
 def bench_dot_q8q8kv() : string {
@@ -1604,48 +1334,23 @@ def bench_dot_q8q8kv() : string {
     let pb = unsafe(addr(row[0]))
 
     let vs <- dot_q8q8kv_template_variants()
-    let nv = length(vs)
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         let got = double(f(qp, sp, pb, N))
-        ok[i] = abs(got - want) / (abs(want) + 1.0lf) <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                sink += f(qp, sp, pb, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return rel_err(got, want) <= TOL
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            sink += f(qp, sp, pb, N)
         }
-    }
-    if (sink == 12345.678f) {
-        print("")   // keep sink live
-    }
-    return report("dot_q8q8kv", names, best, ok)
+    })
+    keep_live(sink)
+    return report("dot_q8q8kv", race)
 }
 
 def bench_axpy_q8kv() : string {
     let vs <- axpy_q8kv_template_variants()
-    let nv = length(vs)
-    let scale = 0.5f
     var inscope d0 : array<float>
     var inscope wf : array<float>
     var inscope row : array<uint8>
@@ -1658,58 +1363,13 @@ def bench_axpy_q8kv() : string {
         wf[i] = cos(float(i) * 0.03f)
     }
     build_q8kv_row(wf, N, row)
-    var dp = unsafe(addr(d[0]))
-    let sp = unsafe(addr(row[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
-        reset(d, d0)
-        let f = vs[i]._1
-        invoke(f, dp, sp, scale, N)
-        var maxrel = 0.0lf
-        for (j in range64(N)) {
-            let want = double(d0[j]) + double(scale) * q8kv_elem(row, j)
-            let rel = abs(double(d[j]) - want) / (abs(want) + 1.0lf)
-            if (rel > maxrel) {
-                maxrel = rel
-            }
-        }
-        ok[i] = maxrel <= TOL
+    return bench_axpy_rows("axpy_q8kv", vs, d, d0, unsafe(addr(row[0]))) $(j : int64) {
+        return q8kv_elem(row, j)
     }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            reset(d, d0)
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, dp, sp, scale, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
-        }
-        sink += d[0]
-    }
-    tune_detail("  checksum {sink}\n")
-    return report("axpy_q8kv", names, best, ok)
 }
 
 def bench_cvt_q8kv_to_f32() : string {
     let vs <- cvt_q8kv_to_f32_template_variants()
-    let nv = length(vs)
     var inscope wf : array<float>
     var inscope row : array<uint8>
     var inscope d : array<float>
@@ -1721,16 +1381,8 @@ def bench_cvt_q8kv_to_f32() : string {
     build_q8kv_row(wf, N, row)
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(row[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         for (j in range64(N)) {
             d[j] = -1.0e30f
         }
@@ -1740,34 +1392,21 @@ def bench_cvt_q8kv_to_f32() : string {
         for (j in range64(N)) {
             exact &&= double(d[j]) == q8kv_elem(row, j)   // float(q)*f16(d) is exact in f32
         }
-        ok[i] = exact
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, dp, sp, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return exact
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, dp, sp, N)
         }
+    }, $ {
         sink += d[0]
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report("cvt_q8kv_to_f32", names, best, ok)
+    return report("cvt_q8kv_to_f32", race)
 }
 
 def bench_quantize_q8kv_row() : string {
     let vs <- quantize_q8kv_row_template_variants()
-    let nv = length(vs)
     var inscope src : array<float>
     var inscope ref_row : array<uint8>
     var inscope d : array<uint8>
@@ -1779,16 +1418,8 @@ def bench_quantize_q8kv_row() : string {
     d |> resize(length(ref_row))
     var dp = unsafe(addr(d[0]))
     let sp = unsafe(addr(src[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         for (b in d) {
             b = uint8(0xA5)
         }
@@ -1798,29 +1429,17 @@ def bench_quantize_q8kv_row() : string {
         for (dj, rj in d, ref_row) {
             exact &&= dj == rj
         }
-        ok[i] = exact
-    }
-
-    var sink = 0
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, dp, sp, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return exact
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, dp, sp, N)
         }
+    }, $ {
         sink += int(d[0])
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report("quantize_q8kv_row", names, best, ok)
+    return report("quantize_q8kv_row", race)
 }
 
 // ===== dot_mx4q8: native-MXFP4 weight planes (deterministic nibbles + E8M0 bytes) vs Q8 activation.
@@ -1829,7 +1448,6 @@ def bench_quantize_q8kv_row() : string {
 
 def bench_dot_mx4q8() : string {
     let vs <- dot_mx4q8_template_variants()
-    let nv = length(vs)
     let nb = N / 32l
     var inscope wn : array<uint8>
     var inscope we : array<uint8>
@@ -1864,42 +1482,19 @@ def bench_dot_mx4q8() : string {
     let wep = unsafe(addr(we[0]))
     let xqp = unsafe(addr(xq.q[0]))
     let xsp = unsafe(addr(xq.scales[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         let got = double(f(lutp, wnp, wep, xqp, xsp, N))
-        ok[i] = abs(got - want) / (abs(want) + 1.0lf) <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                sink += f(lutp, wnp, wep, xqp, xsp, N)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return rel_err(got, want) <= TOL
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            sink += f(lutp, wnp, wep, xqp, xsp, N)
         }
-    }
-    if (sink == 12345.678f) {
-        print("")   // keep sink live
-    }
-    return report("dot_mx4q8", names, best, ok)
+    })
+    keep_live(sink)
+    return report("dot_mx4q8", race)
 }
 
 // ===== quantize_q8_0_into_ptr: EXACT gate — every variant must produce byte-identical quants and
@@ -1910,7 +1505,6 @@ def bench_dot_mx4q8() : string {
 // sized past L2, writing through the qoff/soff image contract. See bench_dot's rationale.
 def bench_quantize() : string {
     let vs <- quantize_q8_0_into_ptr_template_variants()
-    let nv = length(vs)
     let npos = DOT_WALK_ROWS / 2l   // 4096 rows × 16 KB = 64 MB read + 17 MB written per walk
     let nb = N / 32l
     var inscope src : array<float>
@@ -1931,16 +1525,8 @@ def bench_quantize() : string {
     let srcp = unsafe(addr<float const?>(src[0]))
     var qp = unsafe(addr(qdst[0]))
     var sp = unsafe(addr(sdst[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         invoke(f, srcp, N, qp, sp, 0l, 0l)
         var exact = true
@@ -1954,38 +1540,25 @@ def bench_quantize() : string {
                 exact = false
             }
         }
-        ok[i] = exact
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
+        return exact
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i) / REPS_BASE)) {   // whole walks: the window is sized in walks
+            for (p in range64(npos)) {
+                invoke(f, unsafe(srcp + p * N), N, qp, sp, p * N, p * nb)
             }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i) / REPS_BASE)) {   // whole walks: the window is sized in walks
-                for (p in range64(npos)) {
-                    invoke(f, unsafe(srcp + p * N), N, qp, sp, p * N, p * nb)
-                }
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
         }
+    }, $ {
         sink += sdst[0]
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report("quantize_q8_0_into_ptr", names, best, ok)
+    return report("quantize_q8_0_into_ptr", race)
 }
 
 // quantize + per-16 block sums (the K-quant activation pass): quants/scales must be byte-identical
 // to quantize_q8_0, sums exactly the integer sums of those quants.
 def bench_quantize_bs() : string {
     let vs <- quantize_q8_0_bs_into_ptr_template_variants()
-    let nv = length(vs)
     var inscope src : array<float>
     src |> resize(N)
     for (i in range64(N)) {
@@ -2011,16 +1584,8 @@ def bench_quantize_bs() : string {
     var qp = unsafe(addr(qdst[0]))
     var sp = unsafe(addr(sdst[0]))
     var bp = unsafe(addr(bdst[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         invoke(f, srcp, N, qp, sp, bp, 0l, 0l, 0l)
         var exact = true
@@ -2039,36 +1604,23 @@ def bench_quantize_bs() : string {
                 exact = false
             }
         }
-        ok[i] = exact
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, srcp, N, qp, sp, bp, 0l, 0l, 0l)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return exact
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, srcp, N, qp, sp, bp, 0l, 0l, 0l)
         }
+    }, $ {
         sink += sdst[0]
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report("quantize_q8_0_bs_into_ptr", names, best, ok)
+    return report("quantize_q8_0_bs_into_ptr", race)
 }
 
 // ===== rope_scaled_neox_tab: in-place rotation, norm-preserving — timing runs without reset.
 
 def bench_rope_tab() : string {
     let vs <- rope_scaled_neox_tab_template_variants()
-    let nv = length(vs)
     let head_size = 64l
     let half = head_size / 2l
     var inscope v0 : array<float>
@@ -2090,17 +1642,9 @@ def bench_rope_tab() : string {
     var vp = unsafe(addr(v[0]))
     let cp = unsafe(addr(cosr[0]))
     let sp = unsafe(addr(sinr[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
-        reset(v, v0)
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
+        reset_stream(vp, v0)
         let f = vs[i]._1
         invoke(f, vp, head_size, N, cp, sp)
         var maxrel = 0.0lf
@@ -2113,35 +1657,24 @@ def bench_rope_tab() : string {
                 let ws = double(sinr[j])
                 let want0 = a * wc - b * ws
                 let want1 = a * ws + b * wc
-                let r0 = abs(double(v[base + j]) - want0) / (abs(want0) + 1.0lf)
-                let r1 = abs(double(v[base + j + half]) - want1) / (abs(want1) + 1.0lf)
-                maxrel = max(maxrel, max(r0, r1))
+                let r0 = rel_err(double(v[base + j]), want0)
+                let r1 = rel_err(double(v[base + j + half]), want1)
+                maxrel = worst_rel(worst_rel(maxrel, r0), r1)
             }
         }
-        ok[i] = maxrel <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            reset(v, v0)
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, vp, head_size, N, cp, sp)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return maxrel <= TOL
+    }, $(_i : int) {
+        reset_stream(vp, v0)
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, vp, head_size, N, cp, sp)
         }
+    }, $ {
         sink += v[0]
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report("rope_scaled_neox_tab", names, best, ok)
+    return report("rope_scaled_neox_tab", race)
 }
 
 // ===== gemm_f32_uk_4x16: one 4×16 tile over K, C += A·B — reset C per round; over REPS the
@@ -2149,7 +1682,6 @@ def bench_rope_tab() : string {
 
 def bench_gemm_tile() : string {
     let vs <- gemm_f32_uk_4x16_template_variants()
-    let nv = length(vs)
     let K = 256l
     let NN = 16l   // C/B row stride == tile width, so the 4×16 tile is the whole C
     var inscope a : array<float>
@@ -2166,16 +1698,8 @@ def bench_gemm_tile() : string {
             bp[i] = cos(float(i) * 0.07f)
         }
     }
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         for (j in range64(4l * NN)) {
             unsafe(cp[j]) = 0.0f
         }
@@ -2188,50 +1712,36 @@ def bench_gemm_tile() : string {
                 for (kk in range64(K)) {
                     want += double(unsafe(ap[r * K + kk])) * double(unsafe(bp[kk * NN + col]))
                 }
-                let rel = abs(double(unsafe(cp[r * NN + col])) - want) / (abs(want) + 1.0lf)
-                if (rel > maxrel) {
-                    maxrel = rel
-                }
+                let rel = rel_err(double(unsafe(cp[r * NN + col])), want)
+                maxrel = worst_rel(maxrel, rel)
             }
         }
-        ok[i] = maxrel <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            for (j in range64(4l * NN)) {
-                c[j] = 0.0f
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, cp, ap, bp, 0l, 0l, K, NN)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return maxrel <= TOL
+    }, $(_i : int) {
+        for (j in range64(4l * NN)) {
+            c[j] = 0.0f
         }
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, cp, ap, bp, 0l, 0l, K, NN)
+        }
+    }, $ {
         sink += c[0]
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report("gemm_f32_uk_4x16", names, best, ok)
+    return report("gemm_f32_uk_4x16", race)
 }
 
 // ===== dot_q8q8_laneq4x4: arm64+JIT only (the repack backend must be registered so the pin lands
 // and the intrinsic lowers to hardware SDOT). Runs LAST — the pin sticks until process exit.
 
-def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backend pin, gate and race are one coupled sequence
+def bench_laneq4x4() : string {
     if (get_architecture_name() != "arm64" || !jit_enabled()) {
         tune_detail("--- dot_q8q8_laneq4x4 ---\n  skipped (needs arm64 + -jit: lane-indexed SDOT + the repack backend)\n")
         return ""
     }
     let vs <- dot_q8q8_laneq4x4_template_variants()
-    let nv = length(vs)
     let n = N
     let nb = n / 32l
     let d = 4l     // one interleaved 4-row group
@@ -2274,16 +1784,8 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
     let sgp = unsafe(addr(wq.scales[0]))
     let xqp = unsafe(addr(xq[0]))
     let xsp = unsafe(addr(xs[0]))
-
-    var inscope names : array<string>
-    var inscope ok : array<bool>
-    var inscope best : array<double>
-    names |> resize(nv)
-    ok |> resize(nv)
-    best |> resize(nv)
-    for (i in range(nv)) {
-        names[i] = vs[i]._0
-        best[i] = 1.0e30lf
+    var sink = 0.0f
+    var inscope race <- race_variants(vs, $(i : int) : bool {
         let f = vs[i]._1
         invoke(f, yp, wgp, sgp, xqp, xsp, n, d, 0l, 0l)
         var maxrel = 0.0lf
@@ -2298,35 +1800,21 @@ def bench_laneq4x4() : string { // nolint:STYLE038 — one bench: fixture, backe
                     want += double(iacc) * double(refs[r * nb + bi]) * double(xs[t * nb + bi])
                 }
                 let got = double(y[t * d + r])
-                let rel = abs(got - want) / (abs(want) + 1.0lf)
-                if (rel > maxrel) {
-                    maxrel = rel
-                }
+                let rel = rel_err(got, want)
+                maxrel = worst_rel(maxrel, rel)
             }
         }
-        ok[i] = maxrel <= TOL
-    }
-
-    var sink = 0.0f
-    for (tpass in range(ROUNDS + 1)) {
-        let round = tpass - 1   // pass 0 warms every valid row; measured rounds start at 0
-        round_begin(round, names, ok)
-        for (slot in range(nv)) {
-            let i = (slot + tpass) % nv   // rotate order so every row occupies every slot
-            if (!ok[i] || !row_races(ok, i)) {
-                continue
-            }
-            let f = vs[i]._1
-            let t0 = ref_time_ticks()
-            for (_rep in range(reps_of(i))) {
-                invoke(f, yp, wgp, sgp, xqp, xsp, n, d, 0l, 0l)
-            }
-            record_sample(round, i, double(get_time_usec(t0)), best)
+        return maxrel <= TOL
+    }, $(i : int) {
+        let f = vs[i]._1
+        for (_rep in range(reps_of(i))) {
+            invoke(f, yp, wgp, sgp, xqp, xsp, n, d, 0l, 0l)
         }
+    }, $ {
         sink += y[0]
-    }
+    })
     tune_detail("  checksum {sink}\n")
-    return report("dot_q8q8_laneq4x4", names, best, ok)
+    return report("dot_q8q8_laneq4x4", race)
 }
 
 let CONFIRM_TG_MARGIN = 1.005lf
@@ -2354,20 +1842,9 @@ def private confirm_serving_crown(crown : string; var wins : array<string>) {
 }
 
 def private confirm_decode_model() : string {
-    let envm = g_env_harness.confirm_iq2xxs
-    if (!empty(envm)) {
-        print("confirm: DASLLAMA_CONFIRM_IQ2XXS={envm} - the operator pins the crown-confirm vehicle\n")
-        return envm
+    return pick_vehicle(g_env_harness.confirm_iq2xxs, "DASLLAMA_CONFIRM_IQ2XXS", "crown-confirm vehicle") $(_md, name : string) {
+        return find(name, "IQ2_XXS") >= 0 && ends_with(name, ".gguf") && find(name, "mmproj") < 0
     }
-    let md = models_dir_resolved()
-    var best = ""
-    dir(md) $(name : string) {
-        return if (find(name, "IQ2_XXS") < 0 || !ends_with(name, ".gguf") || find(name, "mmproj") >= 0)
-        if (empty(best) || name < best) {
-            best = name
-        }
-    }
-    return empty(best) ? "" : "{md}{best}"
 }
 
 //! the margin depth 2 must beat depth 1 by on the chat corpus to be minted
@@ -2401,21 +1878,10 @@ def private confirm_mtp_depth_assistant(wins : array<string>) {
 }
 
 def private confirm_assistant_model() : string {
-    let envm = g_env_harness.confirm_mtp_gemma
-    if (!empty(envm)) {
-        print("confirm: DASLLAMA_CONFIRM_MTP_GEMMA={envm} - the operator pins the assistant-depth vehicle\n")
-        return envm
+    return pick_vehicle(g_env_harness.confirm_mtp_gemma, "DASLLAMA_CONFIRM_MTP_GEMMA", "assistant-depth vehicle") $(md, name : string) {
+        return ((name |> starts_with("gemma-4")) && ends_with(name, ".gguf") && find(name, "mmproj") < 0
+            && !empty(gemma_drafter_sidecar("{md}{name}")))
     }
-    let md = models_dir_resolved()
-    var best = ""
-    dir(md) $(name : string) {
-        return if (!(name |> starts_with("gemma-4")) || !ends_with(name, ".gguf") || find(name, "mmproj") >= 0
-            || empty(gemma_drafter_sidecar("{md}{name}")))
-        if (empty(best) || name < best) {
-            best = name
-        }
-    }
-    return empty(best) ? "" : "{md}{best}"
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
@@ -2464,31 +1930,16 @@ def private confirm_tg_run(model : string; wins : array<string>; extra : string;
         remove(tmpo)
     }
     remove(tmpm)
-    for (ln in split(outp, "\n")) {
-        let ix = find(ln, tag)
-        if (ix >= 0) {
-            let rest = slice(ln, ix + length(tag))
-            let sp = find(rest, " ")
-            return try_to_double(sp > 0 ? slice(rest, 0, sp) : rest) ?? 0.0lf
-        }
+    if (find(outp, tag) >= 0) {
+        return try_to_double(value_after(outp, tag)) ?? 0.0lf
     }
     print("confirm arm ({empty(extra) ? "base" : extra}{bench_args}): no '{tag}' line - child output tail:\n")
-    var lns <- split(outp, "\n")
-    let n = length(lns)
-    for (i in range(max(0, n - 5), n)) {
-        if (!empty(lns[i])) {
-            print("confirm:   | {lns[i]}\n")
-        }
-    }
-    delete lns
+    print_child_tail(outp, 5)
     return 0.0lf
 }
 
 // fallback: the tuner rail drives this half explicitly (DAS_TUNE_MODE=tune) — the auto
 // policy must not fire a nested tuner off this program's own missing per-app sidecar
-//! Exit code of a `--tune-only` half whose filter matched nothing here: the wrapper fails the mint
-//! only when BOTH halves report it (a filter naming one half's family is not a typo).
-let TUNE_ONLY_NO_MATCH = 3
 
 [export, tune_policy(missing = "fallback")]
 def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail; the noise probes are its checkpoints
@@ -2536,7 +1987,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     let affinity_desc = (affinity_inherited
         ? "DAS_JOBQUE_AFFINITY={unwrap(g_env_core.jobque_affinity)}"
         : (get_platform_name() == "darwin" ? "QoS USER_INTERACTIVE (macOS has no core mask)" : "hard CPU0 (tuner default)"))
-    tune_detail("kernel tuner: N={N}, ~{int(TARGET_WINDOW_US / 1000.0lf)} ms windows, {SCREEN_ROUNDS} screening rounds over the grid, {FINAL_ROUNDS} rounds over the finalists (the best candidate + its twins, up to {MAX_FINALISTS}, + fallback), win margin {WIN_MARGIN_PCT:0.1f}%, validation {VALIDATE_ROUNDS} rounds winner vs fallback, measurement affinity {affinity_desc}\n\n")
+    tune_detail("kernel tuner: N={N}, ~{int(TARGET_WINDOW_US / 1000.0lf)} ms windows, {SCREEN_ROUNDS} screening rounds over the grid, {FINAL_ROUNDS} rounds over the finalists (the best candidate + its twins, up to {MAX_FINALISTS}, + fallback), win margin {TUNE_WIN_MARGIN_PCT:0.1f}%, validation {VALIDATE_ROUNDS} rounds winner vs fallback, measurement affinity {affinity_desc}\n\n")
     // the probes bracket the measurement window; only a busy box refuses (the hard ceiling),
     // anything quieter is stamped and raced - the margin rule is what keeps weather out
     if (!noise_gate("start")) {
@@ -2668,7 +2119,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
             print("{fread(ppath)}\n")
         }
     } else {
-        print("FAILED to write {ppath} - if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n")
+        print(mint_write_failure(ppath))
     }
     delete winners
     return wrote ? 0 : 1

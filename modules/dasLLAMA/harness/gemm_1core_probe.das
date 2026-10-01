@@ -39,40 +39,52 @@ struct Cand {
     repacked : bool
 }
 
-def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,STYLE038 — one rig: fixtures, the correctness gate and the interleaved timing rounds share every buffer
+//! one shape's q8 planes: the n x d weight, one token's activation row, and that row broadcast to ntok tokens
+struct Q8Shape {
+    q : array<int8>
+    s : array<float>
+    xq : array<int8>
+    xs : array<float>
+    xqb : array<int8>
+    xsb : array<float>
+}
+
+def build_shape(n, d, ntok : int64) : Q8Shape {
+    var sh : Q8Shape
     let nb = n / 32l
     var w : array<float>
     fillf(w, n * d)
     let qt <- quantize_q8_0(w, n * d)
-    var q : array<int8>
-    var s : array<float>
-    q |> resize(n * d)
-    s |> resize(d * nb)
+    sh.q |> resize(n * d)
+    sh.s |> resize(d * nb)
     for (i in range64(n * d)) {
-        q[i] = qt.q[i]
+        sh.q[i] = qt.q[i]
     }
     for (i in range64(d * nb)) {
-        s[i] = qt.scales[i]
+        sh.s[i] = qt.scales[i]
     }
     var x : array<float>
     fillf(x, n)
-    var xq : array<int8>
-    var xs : array<float>
-    xq |> resize(n)
-    xs |> resize(nb)
-    quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
-    var xqb : array<int8>
-    var xsb : array<float>
-    xqb |> resize(NTOK * n)
-    xsb |> resize(NTOK * nb)
-    for (tk in range64(NTOK)) {
+    sh.xq |> resize(n)
+    sh.xs |> resize(nb)
+    quantize_q8_0_into(x, n, sh.xq, sh.xs, 0l, 0l)
+    sh.xqb |> resize(ntok * n)
+    sh.xsb |> resize(ntok * nb)
+    for (tk in range64(ntok)) {
         for (i in range64(n)) {
-            xqb[int(tk * n + i)] = xq[int(i)]
+            sh.xqb[int(tk * n + i)] = sh.xq[int(i)]
         }
         for (i in range64(nb)) {
-            xsb[int(tk * nb + i)] = xs[int(i)]
+            sh.xsb[int(tk * nb + i)] = sh.xs[int(i)]
         }
     }
+    delete w
+    delete x
+    return <- sh
+}
+
+def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,STYLE038 — one rig: fixtures, the correctness gate and the interleaved timing rounds share every buffer
+    var sh <- build_shape(n, d, NTOK)
 
     // every backend registered on THIS host (x64 and arm64 tiers register platform-gated),
     // portable first (it is the correctness reference below)
@@ -95,8 +107,8 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,
     sr |> resize(nc)
     for (ci in range(nc)) {
         if (cands[ci].repacked) {
-            qr[ci] := q
-            sr[ci] := s
+            qr[ci] := sh.q
+            sr[ci] := sh.s
             select_kernel_backend(cands[ci].name)
             repack_q8q8_weight(qr[ci], sr[ci], 0l, n, d)
         }
@@ -109,15 +121,15 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,
 
     // correctness gate: every backend within 1e-3 of portable on the same data
     select_kernel_backend("portable")
-    matmul_q8q8_batch(yref, q, s, xqb, xsb, n, d, NTOK)
+    matmul_q8q8_batch(yref, sh.q, sh.s, sh.xqb, sh.xsb, n, d, NTOK)
     var ok : array<bool>
     ok |> resize(nc)
     for (ci in range(nc)) {
         select_kernel_backend(cands[ci].name)
         if (cands[ci].repacked) {
-            matmul_q8q8_batch(y, qr[ci], sr[ci], xqb, xsb, n, d, NTOK)
+            matmul_q8q8_batch(y, qr[ci], sr[ci], sh.xqb, sh.xsb, n, d, NTOK)
         } else {
-            matmul_q8q8_batch(y, q, s, xqb, xsb, n, d, NTOK)
+            matmul_q8q8_batch(y, sh.q, sh.s, sh.xqb, sh.xsb, n, d, NTOK)
         }
         let md = logits_maxdiff(yref, y)
         ok[ci] = md < 1.0e-3
@@ -144,9 +156,9 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,
             let t0 = ref_time_ticks()
             for (_rep in range(reps)) {
                 if (cands[ci].repacked) {
-                    matmul_q8q8_batch(y, qr[ci], sr[ci], xqb, xsb, n, d, NTOK)
+                    matmul_q8q8_batch(y, qr[ci], sr[ci], sh.xqb, sh.xsb, n, d, NTOK)
                 } else {
-                    matmul_q8q8_batch(y, q, s, xqb, xsb, n, d, NTOK)
+                    matmul_q8q8_batch(y, sh.q, sh.s, sh.xqb, sh.xsb, n, d, NTOK)
                 }
             }
             let us = double(get_time_usec(t0))
@@ -156,9 +168,9 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,
             let t1 = ref_time_ticks()
             for (_rep in range(gemv_reps)) {
                 if (cands[ci].repacked) {
-                    matmul_q8q8(y, qr[ci], sr[ci], xq, xs, n, d)
+                    matmul_q8q8(y, qr[ci], sr[ci], sh.xq, sh.xs, n, d)
                 } else {
-                    matmul_q8q8(y, q, s, xq, xs, n, d)
+                    matmul_q8q8(y, sh.q, sh.s, sh.xq, sh.xs, n, d)
                 }
             }
             let usv = double(get_time_usec(t1))
@@ -180,16 +192,9 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,
         print("  {cands[ci].name}: batch {gmacs} GMAC/s  ({best[ci]} us best-of-{ROUNDS})   gemv {gmacsv} GMAC/s  ({bestv[ci]} us, x{gemv_reps})\n")
     }
 
-    delete w
-    delete q
-    delete s
+    delete sh
     delete qr
     delete sr
-    delete x
-    delete xq
-    delete xs
-    delete xqb
-    delete xsb
     delete y
     delete yref
 }
@@ -203,42 +208,10 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,
 //                                   from DAS_JOBQUE_THREADS; B minus A at each K = the scheduler's bill
 
 def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) {   // nolint:STYLE037,STYLE038 — one calibrated window: splitting it separates the calibration from the loop it sizes
-    let nb = n / 32l
-    var w : array<float>
-    fillf(w, n * d)
-    let qt <- quantize_q8_0(w, n * d)
-    var q : array<int8>
-    var s : array<float>
-    q |> resize(n * d)
-    s |> resize(d * nb)
-    for (i in range64(n * d)) {
-        q[i] = qt.q[i]
-    }
-    for (i in range64(d * nb)) {
-        s[i] = qt.scales[i]
-    }
+    var sh <- build_shape(n, d, ntok)
     select_kernel_backend(be)
     if (kernel_backend_needs_repack(be)) {
-        repack_q8q8_weight(q, s, 0l, n, d)
-    }
-    var x : array<float>
-    fillf(x, n)
-    var xq : array<int8>
-    var xs : array<float>
-    xq |> resize(n)
-    xs |> resize(nb)
-    quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
-    var xqb : array<int8>
-    var xsb : array<float>
-    xqb |> resize(ntok * n)
-    xsb |> resize(ntok * nb)
-    for (tk in range64(ntok)) {
-        for (i in range64(n)) {
-            xqb[int(tk * n + i)] = xq[int(i)]
-        }
-        for (i in range64(nb)) {
-            xsb[int(tk * nb + i)] = xs[int(i)]
-        }
+        repack_q8q8_weight(sh.q, sh.s, 0l, n, d)
     }
     var y : array<float>
     y |> resize(ntok * d)
@@ -261,7 +234,7 @@ def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) 
     // calibrate the measurement window: ~6s single-config so K concurrent processes overlap (rung A);
     // ~1.5s per window when interleaving configs (dispatch tax still ≪ window)
     let t0 = ref_time_ticks()
-    matmul_q8q8_batch(y, q, s, xqb, xsb, n, d, ntok)
+    matmul_q8q8_batch(y, sh.q, sh.s, sh.xqb, sh.xsb, n, d, ntok)
     let one_us = double(get_time_usec(t0))
     let window_us = ncand > 1 ? 1.5e6lf : 6.0e6lf
     var reps = int(window_us / max(one_us, 100.0lf))
@@ -279,7 +252,7 @@ def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) 
             set_q8_batch_chunks_per_job(chunk_cands[ci])
             let t1 = ref_time_ticks()
             for (_rep in range(reps)) {
-                matmul_q8q8_batch(y, q, s, xqb, xsb, n, d, ntok)
+                matmul_q8q8_batch(y, sh.q, sh.s, sh.xqb, sh.xsb, n, d, ntok)
             }
             let us = double(get_time_usec(t1))
             if (us < bestv[ci]) {
@@ -314,8 +287,7 @@ def focus_main {
     ntok = g_env_harness.focus_ntok ?? ntok
     if (g_env_harness.focus_forked) {
         set_target_chunk_work(1l)   // always parallel — every call goes through parallel_for
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             if (is_some(g_env_harness.das_jobque_join_spin)) {
                 let join_spin = unwrap(g_env_harness.das_jobque_join_spin)   // poll LEVEL 0..100 (ggml denomination), not µs
                 set_jobque_join_spin(join_spin)

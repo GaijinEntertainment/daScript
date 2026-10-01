@@ -16,8 +16,8 @@ require ?das_metal metal/das_metal_boost  // device probe + metal_live_object_co
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require math   // nolint:STYLE030,LINT019 - used only inside the Apple static_if half
-require strings
 require _model_tier
+require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the Apple static_if halves
 
 // The (weights x wscale x kv-dtype x path) SUPPORT MATRIX for the Metal drivers (format-matrix
 // arc W0). Each cell asserts ENGAGE (steps served on the GPU) or DECLINE with the EXPECTED
@@ -64,37 +64,6 @@ require _model_tier
 // + CSR-gathered mul_mm prefill; gemma4's parallel-dense form; gpt-oss mx4 experts + sinks +
 // softmax_weight + biases + swiglu_oai. qwen2moe (sigmoid shexp) parked. deltanet = wave D.
 
-def private counting_prompt(start, last : int) : string {
-    return build_string() $(var w) {
-        for (i in range(start, last + 1)) {
-            w |> write(i)
-            w |> write(i < last ? ", " : ",")
-        }
-    }
-}
-
-def private greedy_top(lg : array<float>; vocab : int64) : int64 {
-    var best = 0l
-    for (v in range64(1l, vocab)) {
-        if (lg[v] > lg[best]) {
-            best = v
-        }
-    }
-    return best
-}
-
-// greedy over one stream's slice of a concatenated multi-stream logits array (the B=4
-// forced cells' eyeball rail)
-def private greedy_top_at(lg : array<float>; base, vocab : int64) : int64 {
-    var best = 0l
-    for (v in range64(1l, vocab)) {
-        if (lg[base + v] > lg[base + best]) {
-            best = v
-        }
-    }
-    return best
-}
-
 [unused_argument(t, tr, kdt, tag, exp_pf, exp_dec, exp_bat)]   // off-Apple the gated body is empty
 def private matrix_cell(t : T?; tr : Model; kdt : KVDtype; tag : string;
                         exp_pf, exp_dec, exp_bat : string) {
@@ -120,13 +89,13 @@ def private matrix_cell(t : T?; tr : Model; kdt : KVDtype; tag : string;
             set_metal_prefill_min_npos(1l)
             eval_(tr, sa, pa)   // the prefill cell
             eval_(tr, sb, pb)
-            var cura = greedy_top(sa.logits, vocab)
-            let curb = greedy_top(sb.logits, vocab)
+            var cura = argmax_of(sa.logits, vocab)
+            let curb = argmax_of(sb.logits, vocab)
             for (_i in range(2)) {   // the single-stream decode cell
                 var one <- [cura]
                 eval_(tr, sa, one)
                 delete one
-                cura = greedy_top(sa.logits, vocab)
+                cura = argmax_of(sa.logits, vocab)
             }
             var ws <- create_batch_workspace_(tr)   // the batched decode cell
             var sess : array<Session?>
@@ -184,7 +153,7 @@ def private dim_ladder_batch_cell(t : T?; tr : Model; nb : int; tag : string) {
                 let p <- encode(tr, counting_prompt(1 + i, 14 + i), true, false)
                 eval_(tr, ss[i], p)
                 sess |> push(unsafe(addr(ss[i])))
-                cur |> push(greedy_top(ss[i].logits, vocab))
+                cur |> push(argmax_of(ss[i].logits, vocab))
             }
             set_metal_prefill_min_npos(64l)
             select_prefill_override("")
@@ -236,7 +205,7 @@ def private split_generate(trp, trd : Model; prompt : array<int64>; steps : int)
     }
     var s = make_run_state(trp.config, KVDtype.f16, KVDtype.f16)
     eval_(trp, s, prompt)
-    var token = greedy_top(s.logits, trp.config.vocab_size)
+    var token = argmax_of(s.logits, trp.config.vocab_size)
     while (long_length(ids) < int64(steps)) {
         break if (token == 1l)   // BOS delimits sequences (generate's stop)
         ids |> push(token)
@@ -244,7 +213,7 @@ def private split_generate(trp, trd : Model; prompt : array<int64>; steps : int)
         var one <- [token]
         eval_(trd, s, one)
         delete one
-        token = greedy_top(s.logits, trp.config.vocab_size)
+        token = argmax_of(s.logits, trp.config.vocab_size)
     }
     delete s
     return <- ids
@@ -255,14 +224,8 @@ def test_metal_support_matrix(t : T?) {
     t |> run("Metal support matrix: weights x wscale x kv x path engage/decline (Llama-3.2-1B)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
-            if (!model_available(t, path)) {
-                return
-            }
+            return if (!jit_model_available(t, path))
             var dev = metal_create_system_default_device()
             if (dev == null) {
                 feint("no Metal device; support matrix skipped\n")
@@ -393,7 +356,7 @@ def test_metal_support_matrix(t : T?) {
                     var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                     let pr <- encode(tr, counting_prompt(1, 12), true, false)
                     eval_(tr, s, pr)
-                    var one <- [greedy_top(s.logits, tr.config.vocab_size)]
+                    var one <- [argmax_of(s.logits, tr.config.vocab_size)]
                     eval_(tr, s, one)
                     delete one
                     delete s
@@ -407,7 +370,7 @@ def test_metal_support_matrix(t : T?) {
                     var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
                     let pr <- encode(trg, counting_prompt(1, 12), true, false)
                     eval_(trg, s, pr)
-                    var one <- [greedy_top(s.logits, trg.config.vocab_size)]
+                    var one <- [argmax_of(s.logits, trg.config.vocab_size)]
                     eval_(trg, s, one)
                     delete one
                     delete s
@@ -423,7 +386,7 @@ def test_metal_support_matrix(t : T?) {
                     var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
                     let pr <- encode(trg, counting_prompt(1, 12), true, false)
                     eval_(trg, s, pr)
-                    var one <- [greedy_top(s.logits, trg.config.vocab_size)]
+                    var one <- [argmax_of(s.logits, trg.config.vocab_size)]
                     eval_(trg, s, one)
                     delete one
                     delete s
@@ -491,7 +454,7 @@ def test_metal_support_matrix(t : T?) {
                     t |> success(metal_prefill_stats().prefills - pf0 > 0l,
                         "required: kq prefill serves on the GPU (M2.3 mul_mm twins)")
                     let de0 = metal_decode_stats().decodes
-                    var one <- [greedy_top(sa.logits, trkg.config.vocab_size)]
+                    var one <- [argmax_of(sa.logits, trkg.config.vocab_size)]
                     eval_(trkg, sa, one)
                     t |> success(metal_decode_stats().decodes - de0 > 0l,
                         "required: kq single-stream decode serves on the GPU")
@@ -501,7 +464,7 @@ def test_metal_support_matrix(t : T?) {
                         sess |> push(addr(sa))
                         sess |> push(addr(sb))
                     }
-                    var cur <- [greedy_top(sa.logits, trkg.config.vocab_size), greedy_top(sb.logits, trkg.config.vocab_size)]
+                    var cur <- [argmax_of(sa.logits, trkg.config.vocab_size), argmax_of(sb.logits, trkg.config.vocab_size)]
                     let ba0 = metal_batch_decode_stats().steps
                     eval_batch_(trkg, ws, sess, cur)
                     t |> success(metal_batch_decode_stats().steps - ba0 > 0l,
@@ -628,8 +591,8 @@ def private cont_logits_cell(t : T?; tr, trg : Model; tag : string; tol : float)
             for (i in range64(vocab)) {
                 d = max(d, abs(sb.logits[i] - sc.logits[i]))
             }
-            cpk = greedy_top(sc.logits, vocab)
-            gpk = greedy_top(sb.logits, vocab)
+            cpk = argmax_of(sc.logits, vocab)
+            gpk = argmax_of(sb.logits, vocab)
             delete sb
             delete sc
         }
@@ -743,8 +706,8 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
                 set_metal_prefill_min_npos(1l)
                 eval_(trg, sa, pa)
                 eval_(trg, sb, pb)
-                let cura = greedy_top(sa.logits, vocab)
-                let curb = greedy_top(sb.logits, vocab)
+                let cura = argmax_of(sa.logits, vocab)
+                let curb = argmax_of(sb.logits, vocab)
                 // the control: twin sessions through the single-row GPU step, one token each
                 var sa2 = make_run_state(c, kdt, kdt)
                 var sb2 = make_run_state(c, kdt, kdt)
@@ -771,7 +734,7 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
                     bmaxd = max(bmaxd, abs(sa.logits[i] - sa2.logits[i]))
                     bmaxd = max(bmaxd, abs(sb.logits[i] - sb2.logits[i]))
                 }
-                to_log(LOG_INFO, "{tag} batched step kv={kdt}: single-row next '{eyeball_str(piece_(tr, greedy_top(sa2.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sb2.logits, vocab)))}' vs batched next '{eyeball_str(piece_(tr, greedy_top(sa.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sb.logits, vocab)))}' (maxd {bmaxd})\n")
+                to_log(LOG_INFO, "{tag} batched step kv={kdt}: single-row next '{eyeball_str(piece_(tr, argmax_of(sa2.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sb2.logits, vocab)))}' vs batched next '{eyeball_str(piece_(tr, argmax_of(sa.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sb.logits, vocab)))}' (maxd {bmaxd})\n")
                 t |> success(bmaxd <= 2.0, "{tag} kv={kdt}: batched-step logits within 2.0 of the single-row GPU step, both rows (maxd {bmaxd})")
                 var xmaxd = 0.0   //! the control: row A against row B lands outside the bar, so a step that bound one row's slice to the other would red
                 for (i in range64(vocab)) {
@@ -946,12 +909,12 @@ def private qwen2moe_row(t : T?; path : string) {
             set_metal_prefill_min_npos(1l)
             eval_(trg, sa, pa)
             eval_(trg, sb, pb)
-            var cura = greedy_top(sa.logits, vocab)
+            var cura = argmax_of(sa.logits, vocab)
             for (_i in range(2)) {
                 var one <- [cura]
                 eval_(trg, sa, one)
                 delete one
-                cura = greedy_top(sa.logits, vocab)
+                cura = argmax_of(sa.logits, vocab)
             }
             // the batch cell: the CPU batched stack on the PLANAR model is the control (the driver
             // declines the planar model by name), the blob twin's step must read within the bar of it
@@ -965,7 +928,7 @@ def private qwen2moe_row(t : T?; path : string) {
                 sess |> push(addr(sc))
                 sess |> push(addr(sd))
             }
-            var cur <- [greedy_top(sc.logits, vocab), greedy_top(sd.logits, vocab)]
+            var cur <- [argmax_of(sc.logits, vocab), argmax_of(sd.logits, vocab)]
             eval_batch_(tr, ws, sess, cur)
             var sg = make_run_state(c, KVDtype.f16, KVDtype.f16)
             var sh = make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -985,7 +948,7 @@ def private qwen2moe_row(t : T?; path : string) {
                 bmaxd = max(bmaxd, abs(sg.logits[i] - sc.logits[i]))
                 bmaxd = max(bmaxd, abs(sh.logits[i] - sd.logits[i]))
             }
-            to_log(LOG_INFO, "qwen2moe batched step: CPU next '{eyeball_str(piece_(tr, greedy_top(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, greedy_top(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sh.logits, vocab)))}' (maxd {bmaxd})\n")
+            to_log(LOG_INFO, "qwen2moe batched step: CPU next '{eyeball_str(piece_(tr, argmax_of(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, argmax_of(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sh.logits, vocab)))}' (maxd {bmaxd})\n")
             t |> success(bmaxd <= 8.0, "qwen2moe: batched-step logits within 8.0 of the CPU batched stack, both rows (maxd {bmaxd})")
             var xmaxd = 0.0   //! the control: row A against row B lands outside the bar
             for (i in range64(vocab)) {
@@ -1094,14 +1057,14 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             t |> success(select_decode_override("metal"), "{tag}: decode override registered")
             set_metal_prefill_min_npos(1l)
             eval_(trg, sa, pa)
-            var cura = greedy_top(sa.logits, vocab)
+            var cura = argmax_of(sa.logits, vocab)
             var picks : array<int64>
             for (_i in range(2)) {
                 picks |> push(cura)
                 var one <- [cura]
                 eval_(trg, sa, one)
                 delete one
-                cura = greedy_top(sa.logits, vocab)
+                cura = argmax_of(sa.logits, vocab)
             }
             // the batch cell: the CPU batched stack on the PLANAR model is the control, the
             // blob twin's batched step through the driver (PLE rows, Q-only shared-KV layers,
@@ -1120,8 +1083,8 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             for (i in range64(vocab)) {
                 ssmaxd = max(ssmaxd, abs(sc.logits[i] - sa.logits[i]))
             }
-            let cpu_next = greedy_top(sc.logits, vocab)
-            let gpu_next = greedy_top(sa.logits, vocab)
+            let cpu_next = argmax_of(sc.logits, vocab)
+            let gpu_next = argmax_of(sa.logits, vocab)
             to_log(LOG_INFO, "{tag} single-stream forced-step: CPU next '{eyeball_str(piece_(tr, cpu_next))}' vs GPU next '{eyeball_str(piece_(tr, gpu_next))}' (maxd {ssmaxd})\n")
             t |> success(ssmaxd <= 8.0, "{tag}: single-stream forced-step logits within 8.0 (maxd {ssmaxd})")
             delete picks
@@ -1135,7 +1098,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 sess |> push(addr(sc))
                 sess |> push(addr(sd))
             }
-            var cur <- [greedy_top(sc.logits, vocab), greedy_top(sd.logits, vocab)]
+            var cur <- [argmax_of(sc.logits, vocab), argmax_of(sd.logits, vocab)]
             eval_batch_(tr, ws, sess, cur)
             // the driver: the same two rows on the blob twin, one batched step
             var sg = make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -1156,7 +1119,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 bmaxd = max(bmaxd, abs(sg.logits[i] - sc.logits[i]))
                 bmaxd = max(bmaxd, abs(sh.logits[i] - sd.logits[i]))
             }
-            to_log(LOG_INFO, "{tag} batched step: CPU next '{eyeball_str(piece_(tr, greedy_top(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, greedy_top(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, greedy_top(sh.logits, vocab)))}' (maxd {bmaxd})\n")
+            to_log(LOG_INFO, "{tag} batched step: CPU next '{eyeball_str(piece_(tr, argmax_of(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, argmax_of(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sh.logits, vocab)))}' (maxd {bmaxd})\n")
             t |> success(bmaxd <= 8.0, "{tag}: batched-step logits within 8.0 of the CPU batched stack, both rows (maxd {bmaxd})")
             var xmaxd = 0.0   //! the control: row A against row B lands outside the bar
             for (i in range64(vocab)) {
@@ -1260,7 +1223,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             var s = make_run_state(c, KVDtype.f16, KVDtype.f16)
             eval_(tr, s, prompt)
             lg0 := s.logits
-            t0 = greedy_top(s.logits, vocab)
+            t0 = argmax_of(s.logits, vocab)
             var one <- [t0]
             eval_(tr, s, one)
             delete one
@@ -1287,14 +1250,14 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             for (v in range64(vocab)) {
                 mpf = max(mpf, abs(lg0[v] - s.logits[v]))
             }
-            gpk0 = greedy_top(s.logits, vocab)
+            gpk0 = argmax_of(s.logits, vocab)
             var one <- [t0]
             eval_(trg, s, one)
             delete one
             for (v in range64(vocab)) {
                 m1 = max(m1, abs(lg1[v] - s.logits[v]))
             }
-            gpk1 = greedy_top(s.logits, vocab)
+            gpk1 = argmax_of(s.logits, vocab)
             served = (metal_prefill_stats().prefills - pf0) + (metal_decode_stats().decodes - d0)
             set_metal_prefill_min_npos(64l)
             select_prefill_override("")
@@ -1304,7 +1267,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         t |> success(served == 2l, "{tag}: GPU prefill + forced step both served ({served}/2)")
         t |> success(mpf <= tol_pf, "{tag}: post-prefill logits within {tol_pf} of the CPU truth (measured {mpf})")
         t |> success(m1 <= tol_step, "{tag}: one forced step within {tol_step} of the CPU truth (measured {m1})")
-        to_log(LOG_INFO, "{tag} tolerance cells: post-prefill maxd={mpf} (tol {tol_pf}), forced step maxd={m1} (tol {tol_step}); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, greedy_top(lg1, vocab)))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
+        to_log(LOG_INFO, "{tag} tolerance cells: post-prefill maxd={mpf} (tol {tol_pf}), forced step maxd={m1} (tol {tol_step}); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, argmax_of(lg1, vocab)))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
         delete lg0
         delete lg1
         delete prompt
@@ -1341,7 +1304,7 @@ def private gptoss_row(t : T?; path : string) {
             var s = make_run_state(c, KVDtype.f16, KVDtype.f16)
             eval_(tr, s, prompt)
             lg0 := s.logits
-            t0 = greedy_top(s.logits, vocab)
+            t0 = argmax_of(s.logits, vocab)
             var one <- [t0]
             eval_(tr, s, one)
             delete one
@@ -1368,14 +1331,14 @@ def private gptoss_row(t : T?; path : string) {
             for (v in range64(vocab)) {
                 mpf = max(mpf, abs(lg0[v] - s.logits[v]))
             }
-            gpk0 = greedy_top(s.logits, vocab)
+            gpk0 = argmax_of(s.logits, vocab)
             var one <- [t0]
             eval_(trg, s, one)
             delete one
             for (v in range64(vocab)) {
                 m1 = max(m1, abs(lg1[v] - s.logits[v]))
             }
-            gpk1 = greedy_top(s.logits, vocab)
+            gpk1 = argmax_of(s.logits, vocab)
             served = (metal_prefill_stats().prefills - pf0) + (metal_decode_stats().decodes - d0)
             set_metal_prefill_min_npos(64l)
             select_prefill_override("")
@@ -1385,7 +1348,7 @@ def private gptoss_row(t : T?; path : string) {
         t |> success(served == 2l, "gptoss-20b: GPU prefill + forced step both served ({served}/2)")
         t |> success(mpf <= 2.0, "gptoss-20b: post-prefill logits within 2.0 of the CPU truth (measured {mpf})")
         t |> success(m1 <= 4.0, "gptoss-20b: one forced step within 4.0 of the CPU truth (measured {m1})")
-        to_log(LOG_INFO, "gptoss-20b tolerance cells: post-prefill maxd={mpf} (tol 2), forced step maxd={m1} (tol 4); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, greedy_top(lg1, vocab)))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
+        to_log(LOG_INFO, "gptoss-20b tolerance cells: post-prefill maxd={mpf} (tol 2), forced step maxd={m1} (tol 4); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, argmax_of(lg1, vocab)))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
         delete lg0
         delete lg1
         delete prompt
@@ -1465,13 +1428,13 @@ def private batch_pair_steps(trp, trd : Model; pa, pb : array<int64>; nsteps : i
         sess |> push(addr(sa))
         sess |> push(addr(sb))
     }
-    var cur <- [greedy_top(sa.logits, vocab), greedy_top(sb.logits, vocab)]
+    var cur <- [argmax_of(sa.logits, vocab), argmax_of(sb.logits, vocab)]
     for (_i in range(nsteps)) {
         out |> push(cur[0])
         out |> push(cur[1])
         eval_batch_(trd, ws, sess, cur)
-        cur[0] = greedy_top(sa.logits, vocab)
-        cur[1] = greedy_top(sb.logits, vocab)
+        cur[0] = argmax_of(sa.logits, vocab)
+        cur[1] = argmax_of(sb.logits, vocab)
     }
     out |> push(cur[0])
     out |> push(cur[1])
@@ -1603,8 +1566,8 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
             }
             let vocab = tr.config.vocab_size
             for (s4 in range64(4l)) {
-                b4c |> push(greedy_top_at(cpu_bl, s4 * vocab, vocab))
-                b4g |> push(greedy_top_at(gpu_bl, s4 * vocab, vocab))
+                b4c |> push(argmax_of(cpu_bl, s4 * vocab, vocab))
+                b4g |> push(argmax_of(gpu_bl, s4 * vocab, vocab))
             }
             delete cpu_bl
             delete gpu_bl
@@ -1700,7 +1663,7 @@ def private gemma4_hetero_row(t : T?; path : string) {
             let df0 = metal_decode_stats().decodes
             select_decode_override("metal")
             for (q in range64(long_length(prompt) - 1l, long_length(cpu_ids))) {
-                gpu_picks |> push(greedy_top(sb.logits, vocab))
+                gpu_picks |> push(argmax_of(sb.logits, vocab))
                 for (a, b in sa.logits, sb.logits) {
                     fmaxd = max(fmaxd, abs(a - b))
                 }
@@ -1771,10 +1734,7 @@ def private gemma4_hetero_row(t : T?; path : string) {
 def test_metal_family_matrix(t : T?) {
     t |> run("Metal family matrix: per-family needs derivation + path cells") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
+            return if (!jit_only(t))
             var dev = metal_create_system_default_device()
             if (dev == null) {
                 feint("no Metal device; family matrix skipped\n")

@@ -293,8 +293,15 @@ the device-free rail unit; the serving vulkan census runs on the PC box.
 
 The `kernels` suite (test_metal_{prefill,decode,rope,gemv,misc,attn,gemm}_kernels - model-less
 per-class CPU-oracle units covering the FULL metal kernel census, ~2-3 min) takes one arm
-token, `kernels` (`--suite kernels --arm kernels`), which runs every cell. The
-hand-bound-gate sync obligation is `REVIEW_KERNEL_CELLS.md`'s. The misc file also
+token, `kernels` (`--suite kernels --arm kernels`), which runs every cell. A gate dispatches
+through the builder `[metal_dispatch]` generates for its class: `stamp_of(@@<builder>)` gives the
+pipeline compiled from that class's kernel source, a seat into the pipeline global the builder
+reads, and the builder, so a bind or grid change to the class reaches the gate by construction.
+A class whose pipeline global is private to `dasllama_metal_prefill` compiles through
+`kernel_of(@@<builder>)` (the pipeline, tgmem, and the builder's `_pso` form, which takes the
+pipeline as its second argument) and dispatches through that form. Only a gate that dispatches a
+grid or bind the builder cannot express binds by number, the reason at the site. The hand-bound-gate sync
+obligation is `REVIEW_KERNEL_CELLS.md`'s. The misc file also
 carries `test_lens_tgmem_gate` - not a CPU-oracle unit: it spawns two `daslang -compile-only`
 child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` class with
 `@workgroup` members and no `tgmem=`, twin fixture as the must-compile control; its siblings
@@ -330,14 +337,20 @@ modulated x with the SiLU out, the gated residual, the SiLU over the slab vector
 the bare q8 dot rides the decode GEMV) against
 an fp64 oracle with x, y and the latent row bound at offsets. The census row is one Pocket
 codec pass over synthetic latents and one spoken line on the f16 file, then one spoken line on
-the kq file so the q8 GEMV stamps count (`cov_tower_pocket`). Shared fixtures - the buffer
-helpers of `metal/das_metal_boost`, re-exported, the mismatch compares that dump both sides, the
+the kq file so the q8 GEMV stamps count (`cov_tower_pocket`). Shared fixtures - the `MetalCell`
+record (the Vulkan `CellPlanes` verbs: `in_` / `in_plain` / `out_` / `out_words` / `io_`, `plane_run` /
+`plane_as` / `plane_upload` / `plane_refill`, `cell_record`, `with_metal_cell`), `queue_record`
+(`cell_record` over a bare queue), `check_buf` (a
+readback and `_compares.check` in one), the device shell `with_metal_gate`, `stamp_of` /
+`kernel_of` / `keep_stamp` / `stamp_run` (a builder's pipeline, kept in the cell and seated for
+one dispatch, or handed to the builder's `_pso` form), `pso_stamp` / `stamp_tgmem` (a pipeline from ONE kernel stem), `kq_split_doff`
+(a split-scale format's d-tail offset), `tensor_pso_or_skip`, `env_bar` /
+`lead_poisoned` (the GEMV and GEMM cells' bars with their controls), `check_hx_narrow`, the buffer
+helpers of `metal/das_metal_boost`, re-exported, the
 kq plane and q8 blob builders, the 64-lane dispatch and the fp64 scalars - live in
 `_metal_kernel_common.das`; the StyleTTS2 cells' f16-lattice fills (`f16_at`, `f16_fill`), the source
 fixture and CPU chain, the long cumsum's laws and the STFT, inverse STFT and concat forms live in the
-backend-free `_tts_kernel_oracles.das`, which the Vulkan TTS cells read too.
-`test_metal_prefill_kernels.das` keeps its tag-less mismatch compares local - a same-arity twin would
-collide with the shared tagged one. `_mtl_toy.das`
+backend-free `_tts_kernel_oracles.das`, which the Vulkan TTS cells read too. `_mtl_toy.das`
 is the `[metal_dispatch]` multi-kernel (kernel=) fixture; its gate in the misc file
 dispatches through the GENERATED builders (kn_ rail), not hand binds.
 
@@ -473,15 +486,36 @@ input); `test_vkt_pk_rope` the rows rope (`TtsPkRope`) on the
 k span of 23 rows x 384 at column 128, two 64-wide heads at position 37, the tables from
 `build_rope_tabs`, against `rope_rows` at the approx bar (the q and v spans bit for bit untouched);
 every written-only output under a NaN fill, every compare with its poisoned element.
-The four `test_vulkan_tts_*` files share one cell harness: `_vkd_oracles.das`'s `CellPlanes` declares a
-cell's planes (`in_`, `in_plain`, `out_` under the NaN sentinel, `io_` in place, each at an element base
-between poisoned slots), `cls_set` binds a class over them, and `cell_record` records the dispatches -
-the cell itself computing each workgroup count - then stages every written plane back; `_compares.das`'s
-`check_rows` holds a compare to its `Bar` (exact, or relative with an absolute floor), logs the measured
-max difference with its row, head and column, and runs the poisoned-element control. The in-test forms
+The four `test_vulkan_tts_*` files and `test_vulkan_tower_kernels.das` share one cell harness:
+`_vkd_oracles.das`'s `CellPlanes` declares a cell's planes (`in_`, `in_plain`, `out_` under the NaN
+sentinel, `out_words` under a word sentinel of the cell's choosing, `io_` in place, each at an element
+base between poisoned slots; a hazard bit a written plane each, or the bits the cell names when its planes
+share one), `cls_set` binds a class over them, and `cell_record` records the dispatches - the cell itself
+computing each workgroup count - then stages every written plane back, read as floats (`plane_run`) or
+typed (`plane_as`); `plane_upload` and `plane_refill` re-lay a plane between two records; `_compares.das`'s
+`check_rows` - `check` at a row and head width - holds a compare to its `Bar` (exact, relative with an
+absolute floor, relative to the expectation's largest magnitude, or per element against an envelope or a
+bar array; a NaN or a length difference is always off), logs the measured max difference with its row,
+head and column and the bar there, and runs the poisoned-element control; `check_count` is its count
+alone, what a control that poisons the kernel's input asserts above 0. The in-test forms
 the cells share with the Metal gate, and the CPU re-derivations of engine loops the engine keeps
 private (the ALBERT embedding sum, the duration sigmoid sums), live in `_tts_kernel_oracles.das`, which
-requires no device module.
+requires no device module. The kernel cells' other shared references - the engine's table rope by its
+pairing (`rope_tab_ref`: the partial form whenever the rotated span is short of the head, else NEOX or
+interleaved), the gated activation (`act_mul_ref`, which `_vkd_oracles.das` re-exports), dense GEMM rows
+accumulated in double with their envelope (`dense_ref_env`) and the Q8_0 requant block check
+(`q8_blocks_off`) - live in the backend-free `_kernel_oracles.das`, and gemma4a's windowed RPE attention
+(`g4a_attn_oracle`) beside the softmax row in `_attn_oracle.das`. The CPU kernel cells' K-quant and q8
+inputs - the synthetic disk superblocks every element of which a gate knows by formula (`synth_block`), the
+hash-patterned ones, the per-row salted plane regions (`build_kq_region`), the Q8_K activation rows
+(`build_q8k_acts`) and a row through the engine's Q8_0 or Q8_K quantizer with the dequantized row a GEMV
+reads (`q8_roundtrip`, the Vulkan dec-tail references' feeds) - live in the root-free `_kq_fixtures.das`,
+which re-exports `_kq_dot.das`; a builder moves there byte for byte, so no cell's input changes.
+`_kq_dot.das` also carries the run-time-format kernel calls a cell walks every format through -
+`kq_gemv_rt`, `kq_tile_rt` and `kq_grp_row_dot_rt`, each a `kq_fmt_stamp` over the engine's tag family
+(`kq_gemv_gen`, `kq_tile_gen`, `grp_row_dot`) - so a gate holds one call where it held a ladder of fourteen; the
+grp row dot is a kernel under test there, never a gate's expected value. The one overload it adds is the panic
+`grp_row_dot` of the formats with no superblock grp planes.
 
 `test_vulkan_tower_kernels.das` - model-free (a Vulkan device, else skips): the vision and audio towers'
 kernel classes against their CPU oracles - the bidirectional flash tiles (h64 and the padded h128
@@ -623,8 +657,9 @@ arm runs through the classes file's tile ladders (`cell_arm_set` / `cell_arm_enc
 handed in, the activation plane and the device buffers built once - with the arms asked for and the
 format's oracle passed in), which dispatches two workgroups past its schedule over sentinel map
 words (`SCHED_NONE`), the device-written schedules' upper-bound shape, and every arm's rows still
-match; the q8 fmt-0 cells (`q8_planes` for their planes) and the q51 cell run the same loop over
-their own arm lists;
+match; each per-format cell is one row of `fmt_tile_rows` (its K, quant words a unit, scale-row form, seeds,
+arms, oracle and the sibling codebook's control) through `fmt_tile_cell`, and the q8 fmt-0 cells
+(`q8_tile_cell`, `q8_planes` for their planes) run the same loop at one arm each;
 `test_vkd_dec_combine_pair` holds the decode span's two combine classes - the routed sum, and the routed
 sum with the shared expert's row gated and ungated - to the CPU sum at a width off the workgroup
 grid, with the gate's move and a poisoned element as its controls;
@@ -1486,6 +1521,20 @@ the `max_unreserved_size` guard that must not panic.
 `test_from_template.das` - model-free: the `[from_template]` stamp (`dasllama/dasllama_tune`) - a
 placeholder call renames to the annotation's target per stub, and the stub's signature types the
 clone so one template stamps both plane overloads.
+`test_kernel_backend.das` - model-free: the kernel-backend registry - the portable backend
+registered at `[init]` with a row-major default active (`test_portable_backend_always_registered`),
+select / pin / for-load pick a registered backend and an unknown name changes nothing
+(`test_select_and_pin`), a restored seat keeps the pin it found and leaves none where there was
+none (`test_seat_restores_the_pin`), `with_kernel_backend` runs its block under the pin, puts the
+seat back, refuses an unknown backend without running the block, and leaves an earlier pin
+standing after a block on another backend (`test_with_kernel_backend`), an unavailable backend
+skipped by for-load select and refused by pin (`test_backend_availability_predicate`), and the
+batch pin overriding the batch slots, surviving re-select and refusing a repack donor on a
+row-major active backend (`test_batch_backend_pin`). `test_kq_registries` walks every `KqFmt`
+through `kq_registries`: a format carries all eight registries or none, each family's tile, gemv
+and panel registries open on the reference row, q8 carries none, and no format's tile, tile4,
+gemv or panel row is another format's; it skips on a build without dasLLVM, where
+`dasllama_math_gen` and its `[tune]` registries are not mounted.
 `test_kqformat.das` - model-free: the per-format descriptor row (`kq_desc`: disk bytes equal the
 ggml block bytes of the type, ids round-trip, `kq_fmt_of_id` refuses an id no format carries),
 `kq_bytes_per_weight` as the stride table's arithmetic on every superblock format, the
@@ -1509,6 +1558,21 @@ return - the stamped tile reads a bf16 panel over 32 tokens, and `test_prefill_c
 reaches it through the batch kernel.
 `test_softmax.das` - model-free: `softmax`, `parallel_argmax` (the FIRST maximum on ties, the
 empty row a no-op) and `hlse`.
+`test_compares.das` - model-free: the suites' shared compares (`_compares.das`, and `count_bad`
+of `_vk_kq_fixtures.das`) over hand-built rows - a NaN on either side reads as an infinite
+`logits_maxdiff` wherever it sits, `maxdiff_at` lands on it, `logits_maxabs` scales no bar over
+it, rows of two lengths read infinite, `mismatch_exact` counts every element past the shorter
+row's end, and `mismatch_rel` and `count_bad` count a NaN as off; each with equal rows and a
+finite difference as its controls. `check` runs on a probe handle whose failed asserts are counted:
+each bar kind (`rel_of_larger`, `exact`, `rel_of_max`, `envelope` and `per_element`, a float and a
+double expectation) passes rows inside it and reds one element past it, a NaN on either side and a
+length difference red at any bar, the poisoned-expectation control reds a bar too loose to see it
+(at the last element or a chosen one, and an empty compare that has none), `check_count` counts a
+NaN on either side, a finite miss and each element of a length difference off and equal rows 0 while
+asserting nothing, and `check_rows` is `check` over rows and heads; `check_exact` does the same over bytes and words; the host helpers
+(`plane_of`, `poisoned_copy`, the generic `copy_span`, `argmax_of`, `opaque`, `jit_only`) and the
+`Sweep` tally (lengths, misses, NaN, poison legs inside a loose bar, inert elements) each against
+hand-counted results.
 `test_deltanet.das` - stocked suite; model-free cells: the deltanet session-state sizing at 27B
 geometry through `make_run_state` (S state + widened-conv history past the guard); model-gated:
 the chunked-vs-recurrent prefill equivalence probe on Qwen3.5-0.8B, in the forced-feed
@@ -1657,8 +1721,9 @@ against the clean CPU chain must EXCEED the bar); quad content stays off the dee
 the Metal rung. Skips without the mmproj, without a Vulkan device under `DASLLAMA_GPU=1`, and on a
 build with das_metal, where the Metal driver owns the tower hooks.
 `_vision_oracle.das` is the shared dump parser / fixture generator / per-token compare /
-over-bar scorer (the must-EXCEED half of a poison leg) all vision tier-1 tests use (the
-`quad` generator and the q1/q2/q3 quarter-offset probe fields live here).
+over-bar scorer (the must-EXCEED half of a poison leg) / dump gate (`oracle_gate`: the dump, the
+encode, the token count, the compare) all vision tier-1 tests use (the `quad` generator and the
+q1/q2/q3 quarter-offset probe fields live here).
 `test_audio_embedder.das` - stocked suite; model-free cells: the `AudioEmbedder` carrier's own
 arms - the no-audio refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on
 the E2B mmproj, carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft
@@ -1873,7 +1938,8 @@ uncapped length (half the stream the control).
 `test_tts_blocks.das` - model-free: the block home's two layouts against each other - every
 rows form (token-major [T][C]) held to its channel-major twin at the dot-envelope bar (a
 tolerance times the sum of |w|*|x| feeding each output, with a zeroed-tap poison leg that must
-EXCEED it), the q8 lane at its own 2% bar, the padded input width on both lanes, the
+EXCEED it, and on every compare `_compares`' poisoned-expectation control - one expected element
+moved just past the bar, which must red), the q8 lane at its own 2% bar, the padded input width on both lanes, the
 multi-chunk stacked-tap loop, `adain_rows_into` against `adain_rows`, `layernorm_rows_into`
 bit for bit against `layernorm_rows` in place on a copy with the source untouched (control: a
 moved source element moves its output row), the norms and the
@@ -2004,8 +2070,9 @@ tails, positions 0/1/7/37/512 (4096 on the factored partial forms), two thetas, 
 arms, the `rope_freqs` divisor on the full and the partial (`_part`, table and direct) forms, and
 `yarn_rope_freqs`'s band against the NTK-by-parts formula spelled out in fp64 (full frequency
 under the band, the factor above it, the ramp between, a shifted-band poison past the bar)
-- the bar is one rotation's f32 accumulation plus the f32 angle's own rounding, each with an
-added-value poison that must exceed it. The `_tab` forms also ride a tight twin bar against the
+- the bar is one rotation's f32 accumulation plus the f32 angle's own rounding, each compare a
+`_compares` `check` that logs its largest difference by head and dim, with an added-value poison
+that must exceed the bar. The `_tab` forms also ride a tight twin bar against the
 un-tabled forms (loose only by the cross-compilation-unit cos/sin ulp drift), the `_part` forms
 are bit-exact against a full apply over the gathered rotated prefix with the un-rotated dims
 proven to pass through, and `rope_apply` is bit-exact against the leaf its `neox` flag names,

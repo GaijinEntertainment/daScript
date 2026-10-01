@@ -16,8 +16,8 @@ require daslib/f16_cvt  // f16 KV row decode in the tolerance gate (Apple half o
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join/stat, used only inside the das_metal static_if halves
 require math
-require strings
 require _model_tier
+require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
 
 // End-to-end gates for the dasMetal whole-decode override (emission arc P2): greedy continuation
 // of a confident counting prompt, GPU-resident decode vs the CPU control ON THE SAME BINARY — the
@@ -29,39 +29,19 @@ require _model_tier
 // rewind (n_past = 0 reuse) arm, and the leak gate. Skips cleanly without the model, off-Apple,
 // or with no Metal device.
 
-// "start, start+1, …, last," — the kernel-robust confident fixture family (test_parity.das)
-def private counting_prompt(start, last : int) : string {
-    return build_string() $(var w) {
-        for (i in range(start, last + 1)) {
-            w |> write(i)
-            w |> write(i < last ? ", " : ",")
-        }
-    }
-}
-
-def private greedy_top(lg : array<float>; vocab : int64) : int64 {
-    var best = 0l
-    for (v in range64(1l, vocab)) {
-        if (lg[v] > lg[best]) {
-            best = v
-        }
-    }
-    return best
-}
-
 // n greedy steps from the session's current state (the prompt is already evaluated); the decode
 // path is whatever override is active when called
 def private greedy_steps(tr : Model; var s : Session; n : int) : array<int64> {
     let vocab = tr.config.vocab_size
     var ids : array<int64>
     ids |> reserve(n)
-    var cur = greedy_top(s.logits, vocab)
+    var cur = argmax_of(s.logits, vocab)
     for (_i in range(n)) {
         ids |> push(cur)
         var one <- [cur]
         eval_(tr, s, one)
         delete one
-        cur = greedy_top(s.logits, vocab)
+        cur = argmax_of(s.logits, vocab)
     }
     return <- ids
 }
@@ -158,7 +138,7 @@ def private single_step_gate(t : T?; tr, trg : Model; prompt : array<int64>; kdt
             setup_dasllama_jobque()
             eval_(tr, sa, prompt)
             eval_(tr, sb, prompt)
-            let tok = greedy_top(sa.logits, vocab)
+            let tok = argmax_of(sa.logits, vocab)
             var one <- [tok]
             select_decode_override("")
             eval_(tr, sa, one)          // the CPU control step
@@ -264,7 +244,7 @@ def private batch_greedy(tr, trg : Model; prompts : array<array<int64>>; nsteps 
         var live : array<int>
         for (i in range(nb)) {
             sess |> push(unsafe(addr(ss[i])))
-            cur |> push(greedy_top(ss[i].logits, vocab))
+            cur |> push(argmax_of(ss[i].logits, vocab))
             live |> push(i)
         }
         select_decode_override(gpu ? "metal" : "")
@@ -274,12 +254,12 @@ def private batch_greedy(tr, trg : Model; prompts : array<array<int64>>; nsteps 
                     var sp = sess[k]
                     forward(gpu ? trg : tr, *sp, cur[k], sp.n_past)
                     sp.n_past++
-                    cur[k] = greedy_top(sp.logits, vocab)
+                    cur[k] = argmax_of(sp.logits, vocab)
                 }
             } else {
                 eval_batch_(gpu ? trg : tr, ws, sess, cur)
                 for (k in range(length(sess))) {
-                    cur[k] = greedy_top(sess[k].logits, vocab)
+                    cur[k] = argmax_of(sess[k].logits, vocab)
                 }
             }
             for (k in range(length(sess))) {
@@ -351,7 +331,7 @@ def private batch_step_gate(t : T?; tr, trg : Model; nb : int; kdt : KVDtype; to
                     sessa |> push(addr(sa[i]))
                     sessb |> push(addr(sb[i]))
                 }
-                cur |> push(greedy_top(sa[i].logits, vocab))
+                cur |> push(argmax_of(sa[i].logits, vocab))
             }
             select_decode_override("")
             eval_batch_(tr, wsa, sessa, cur)          // the CPU control step
@@ -426,7 +406,7 @@ def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps
             var cur : array<int64>
             for (i in range(nb)) {
                 sessb |> push(unsafe(addr(sb[i])))
-                cur |> push(greedy_top(sa[i].logits, vocab))
+                cur |> push(argmax_of(sa[i].logits, vocab))
             }
             select_decode_override("metal")
             let d0 = metal_decode_stats().decodes
@@ -438,7 +418,7 @@ def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps
                         mx = max(mx, abs(a - b))
                     }
                     st.maxd = max(st.maxd, mx)
-                    if (greedy_top(sb[i].logits, vocab) != cur[i]) {
+                    if (argmax_of(sb[i].logits, vocab) != cur[i]) {
                         st.flips++
                     }
                 }
@@ -448,7 +428,7 @@ def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps
                 }
                 eval_batch_(trg, ws, sessb, cur)
                 for (i in range(nb)) {
-                    cur[i] = greedy_top(sa[i].logits, vocab)
+                    cur[i] = argmax_of(sa[i].logits, vocab)
                 }
                 st.steps++
             }
@@ -505,13 +485,13 @@ def private paged_batch_greedy(tr, trg : Model; prompts : array<array<int64>>; p
         var cur : array<int64>
         for (i in range(nb)) {
             sess |> push(unsafe(addr(ss[i])))
-            cur |> push(greedy_top(ss[i].logits, vocab))
+            cur |> push(argmax_of(ss[i].logits, vocab))
         }
         select_decode_override(gpu ? "metal" : "")
         for (_st in range(nsteps)) {
             eval_batch_(gpu ? trg : tr, ws, sess, cur)
             for (k in range(nb)) {
-                cur[k] = greedy_top(ss[k].logits, vocab)
+                cur[k] = argmax_of(ss[k].logits, vocab)
                 got[k] |> push(cur[k])
             }
         }
@@ -536,13 +516,7 @@ def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm l
     t |> run("GPU batched decode == CPU batch control, greedy streams (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
-            if (!arm_on(t, "batch")) {
-                return
-            }
+            return if (!jit_only(t) || !arm_on(t, "batch"))
             let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
             if (!model_available(t, path)) {
                 return
@@ -812,14 +786,8 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
     t |> run("GPU-resident decode == CPU control, greedy continuations (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
-            if (!model_available(t, path)) {
-                return
-            }
+            return if (!jit_model_available(t, path))
             let prior_wscale = get_wscale_f16()             // process-wide knobs — restored below
             let prior_backend = active_kernel_backend()     // (every exit path runs the restore)
             set_wscale_f16(false)       // the resident path reads the f32 scale plane (declines on s16)
@@ -1214,7 +1182,7 @@ def private forced_maxd_pair(tr, trg : Model; prompt : array<int64>; nsteps : in
         select_decode_override("metal")
         let vocab = tr.config.vocab_size
         for (_i in range(nsteps)) {
-            let tok = greedy_top(sa.logits, vocab)
+            let tok = argmax_of(sa.logits, vocab)
             for (a, b in sa.logits, sb.logits) {
                 maxd = max(maxd, abs(a - b))
             }
@@ -1267,14 +1235,8 @@ def test_metal_prefill_poison(t : T?) {
             if (!arm_on(t, "arm14-poison")) {
                 return
             }
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
-            if (!model_available(t, path)) {
-                return
-            }
+            return if (!jit_model_available(t, path))
             let prior_wscale = get_wscale_f16()
             let prior_backend = active_kernel_backend()
             set_wscale_f16(false)

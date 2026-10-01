@@ -30,8 +30,6 @@ binding order and push-constant layout were verified by hand against the class d
 The `REVIEW.das` gate `check_race_bind_numbers` cannot read those arms, so nothing but the PR
 statement catches a mis-numbered bind before the arm's figure ranks the kernels.
 
-**Weakening the manual-dispatch census in `dasllama/dasllama_metal_lens.das` is a defect.**
-
 **A diff that adds race or knockout code inside the engine (`dasllama/`) puts it in the file that
 owns the kernel family it races, or for a knockout, the file that owns the stage whose cost it
 removes.**

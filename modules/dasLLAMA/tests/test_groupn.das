@@ -7,6 +7,7 @@ require dasllama/dasllama_math_default        // portable backend + dot_mx4q8_sc
 require dasllama/dasllama_math_aarch64_neon   // arm64 backends (registered under arm64 + JIT only)
 require dasllama/dasllama_convert               // quantize_q8_0 (deterministic Q8 fixtures)
 require math
+require _kq_fixtures   // ref_dot_q8_f64, ref_plane: the fp64 rows and their bars
 
 // Region-list (groupN) GEMVs — the MoE decode dispatch fuse: N same-shape [d x n] projections in
 // one dispatch, offs packing (weight, activation) element-offset pairs. Every q8 row carries TWO
@@ -41,52 +42,50 @@ def private slice_f(src : array<float>; off, n : int64) : array<float> {
     return <- [for (i in range64(off, off + n)); src[i]]
 }
 
-//! The independent fp64 truth for one q8 row; `env` is the same sum on block magnitudes, the envelope the bar derives from. Layout-free, so repacked and row-major backends judge alike.
-def private ref_dot_q8_f64(wq : array<int8>; ws : array<float>; woff : int64;
-                           xq : array<int8>; xs : array<float>; xoff : int64; n : int64) : tuple<dot : double; env : double> {
-    var res : tuple<dot : double; env : double>
-    for (bi in range64(n / 32l)) {
-        var iacc = 0
-        for (k in range64(32l)) {
-            iacc += int(wq[woff + bi * 32l + k]) * int(xq[xoff + bi * 32l + k])
-        }
-        let term = double(iacc) * double(ws[woff / 32l + bi]) * double(xs[xoff / 32l + bi])
-        res.dot += term
-        res.env += abs(term)
+//! the NREG q8 weight regions [D x N], quantized
+def private q8_weights() : Q8Tensor {
+    var inscope wf : array<float>
+    wf |> resize(NREG * D * N)
+    for (i in range64(NREG * D * N)) {
+        wf[i] = sin(float(i) * 0.11f)
     }
-    return res
+    return <- quantize_q8_0(wf, NREG * D * N)
+}
+
+//! the two activation rows, quantized
+def private q8_rows() : Q8Tensor {
+    var inscope xf : array<float>
+    xf |> resize(2l * N)
+    for (i in range64(2l * N)) {
+        xf[i] = cos(float(i) * 0.07f)
+    }
+    return <- quantize_q8_0(xf, 2l * N)
+}
+
+//! the NREG mx4 weight regions: nibble bytes and e8m0 scales
+def private mx4_weights(var wn0 : array<uint8>; var we0 : array<uint8>) {
+    wn0 |> resize(NREG * D * N / 2l)
+    we0 |> resize(NREG * D * N / 32l)
+    for (i in range64(NREG * D * N / 2l)) {
+        wn0[i] = uint8((i * 137l + 71l) & 255l)
+    }
+    for (i in range64(NREG * D * N / 32l)) {
+        we0[i] = uint8(120l + (i * 7l) % 16l)
+    }
 }
 
 [test]
 def test_q8q8_groupn(t : T?) {
     t |> run("q8 groupN == per-region GEMV under every backend (repack where needed)") @(t : T?) {
         // one blob of NREG regions [D x N] + 2 activation rows, all deterministic
-        var wf : array<float>
-        var xf : array<float>
-        wf |> resize(int(NREG * D * N))
-        xf |> resize(int(2l * N))
-        for (i in range(int(NREG * D * N))) {
-            wf[i] = sin(float(i) * 0.11f)
-        }
-        for (i in range(int(2l * N))) {
-            xf[i] = cos(float(i) * 0.07f)
-        }
-        let wq0 <- quantize_q8_0(wf, NREG * D * N)
-        let xq <- quantize_q8_0(xf, 2l * N)
+        let wq0 <- q8_weights()
+        let xq <- q8_rows()
         var offs <- build_offs()
         //! reference and bar built once off the row-major quants - a repack only permutes the same weights, so both are backend-free
         var refy : array<float>
         var refbar : array<float>
-        refy |> resize(int(NREG * D))
-        refbar |> resize(int(NREG * D))
-        for (r in range64(NREG)) {
-            for (row in range64(D)) {
-                let rf = ref_dot_q8_f64(wq0.q, wq0.scales, r * D * N + row * N, xq.q, xq.scales, offs[r * 2l + 1l], N)
-                refy[r * D + row] = float(rf.dot)
-                refbar[r * D + row] = REF_ULP_PER_BLOCK * float(N / 32l) * max(float(rf.env), 1.0)
-            }
-        }
-        let saved = active_kernel_backend()
+        ref_plane(refy, refbar, 0l, NREG, D, N / 32l, REF_ULP_PER_BLOCK) $(r, row) => ref_dot_q8_f64(wq0.q, wq0.scales, r * D * N + row * N, xq.q, xq.scales, offs[r * 2l + 1l], N)
+        let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)
             // per-backend weight copy: repack backends read their interleaved layout
@@ -124,38 +123,18 @@ def test_q8q8_groupn(t : T?) {
             t |> success(abs(y[0] - (refy[0] + REF_POISON)) > refbar[0],
                 "poison control: row 0 expectation + {REF_POISON} must exceed bar {refbar[0]} (backend {name})")
         }
-        clear_kernel_backend_pin()
-        if (saved != "") {
-            select_kernel_backend(saved)
-        }
+        restore_kernel_backend(seat)
     }
 }
 
 [test]
-def test_groupn_bias_fold(t : T?) {   // nolint:STYLE038 — flat fixture build + per-backend q8/mx4 A/B sweep
+def test_groupn_bias_fold(t : T?) {
     t |> run("biased groupN == unbiased + add-after, q8 and mx4, every backend") @(t : T?) {
-        var wf : array<float>
-        var xf : array<float>
-        wf |> resize(int(NREG * D * N))
-        xf |> resize(int(2l * N))
-        for (i in range(int(NREG * D * N))) {
-            wf[i] = sin(float(i) * 0.11f)
-        }
-        for (i in range(int(2l * N))) {
-            xf[i] = cos(float(i) * 0.07f)
-        }
-        let wq0 <- quantize_q8_0(wf, NREG * D * N)
-        let xq <- quantize_q8_0(xf, 2l * N)
+        let wq0 <- q8_weights()
+        let xq <- q8_rows()
         var wn0 : array<uint8>
         var we0 : array<uint8>
-        wn0 |> resize(int(NREG * D * N / 2l))
-        we0 |> resize(int(NREG * D * N / 32l))
-        for (i in range(int(NREG * D * N / 2l))) {
-            wn0[i] = uint8((i * 137 + 71) & 0xff)
-        }
-        for (i in range(int(NREG * D * N / 32l))) {
-            we0[i] = uint8(120 + (i * 7) % 16)
-        }
+        mx4_weights(wn0, we0)
         // one bias vector per region, in a shared "fblob"-style buffer at per-region offsets
         var bias : array<float>
         var boffs : array<int64>
@@ -168,7 +147,7 @@ def test_groupn_bias_fold(t : T?) {   // nolint:STYLE038 — flat fixture build 
             boffs[r] = r * D
         }
         var offs <- build_offs()
-        let saved = active_kernel_backend()
+        let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)
             var wq : array<int8>
@@ -212,10 +191,7 @@ def test_groupn_bias_fold(t : T?) {   // nolint:STYLE038 — flat fixture build 
                 t |> equal(y[i], want[i])
             }
         }
-        clear_kernel_backend_pin()
-        if (saved != "") {
-            select_kernel_backend(saved)
-        }
+        restore_kernel_backend(seat)
     }
 }
 
@@ -224,22 +200,10 @@ def test_mx4q8_groupn(t : T?) {
     t |> run("mx4 groupN == per-region GEMV under every backend (repack where needed)") @(t : T?) {
         var wn0 : array<uint8>
         var we0 : array<uint8>
-        wn0 |> resize(int(NREG * D * N / 2l))
-        we0 |> resize(int(NREG * D * N / 32l))
-        for (i in range(int(NREG * D * N / 2l))) {
-            wn0[i] = uint8((i * 137 + 71) & 0xff)
-        }
-        for (i in range(int(NREG * D * N / 32l))) {
-            we0[i] = uint8(120 + (i * 7) % 16)
-        }
-        var xf : array<float>
-        xf |> resize(int(2l * N))
-        for (i in range(int(2l * N))) {
-            xf[i] = cos(float(i) * 0.07f)
-        }
-        let xq <- quantize_q8_0(xf, 2l * N)
+        mx4_weights(wn0, we0)
+        let xq <- q8_rows()
         var offs <- build_offs()
-        let saved = active_kernel_backend()
+        let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)
             var wn : array<uint8>
@@ -272,9 +236,6 @@ def test_mx4q8_groupn(t : T?) {
                 close(t, y[i], want[i], "mx4 row {i} (backend {name})")
             }
         }
-        clear_kernel_backend_pin()
-        if (saved != "") {
-            select_kernel_backend(saved)
-        }
+        restore_kernel_backend(seat)
     }
 }

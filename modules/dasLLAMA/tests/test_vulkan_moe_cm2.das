@@ -148,19 +148,10 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
                 matmul_moe_gpu_ffn_combined_xf(gout, offs1, offs3, offs2, nreg, x, w, inv, n, nfe, nk, npos, 1, 1, 3, false)
                 ref_chain(w1, w3, w2, x, inv, w, expert_of_row, n, nfe, npos, k, refv)
             }
-            let mr = logits_maxabs(refv)
-            let rel_bar = 4e-3 * mr
-            let bad = count_bad(gout, refv, 2e-2, rel_bar)
-            let md = logits_maxdiff(gout, refv)
-            to_log(LOG_INFO, "{tag} win {win}: {bad} of {npos * n} off the reference (maxdiff {md}, maxref {mr}, rel bar {rel_bar})\n")
-            t |> success(mr > 0.0, "{tag} win {win}: the reference is non-trivial")
-            t |> success(bad == 0, "{tag} win {win}: cm2 expert chain matches the CPU reference ({bad} of {npos * n} off, maxdiff {md} vs abs 2e-2 / rel {rel_bar})")
-            if (win == 0) {
-                var poison := gout   // the bar's control: one element pushed past both bars must red
-                poison[0] += 1.0 + 2.0 * mr
-                t |> success(count_bad(poison, refv, 2e-2, rel_bar) > 0, "{tag}: the chain bar reds a poisoned element")
-                delete poison
-            }
+            t |> success(logits_maxabs(refv) > 0.0, "{tag} win {win}: the reference is non-trivial")
+            //! within 4e-3 of the reference's max, floored at 2e-2; the control moves element 0 by 1 + 2 x that max
+            let bar = Bar(kind = BarKind.rel_of_max, rel = 4e-3, abs_floor = 2e-2, poison = 2.0, poison_of_max = true, poison_abs = 1.0, poison_at = 0)
+            check(t, "{tag} win {win}: cm2 expert chain", gout, refv, bar, Shape(row_width = int(n)))
         }
         delete wg
         delete refv

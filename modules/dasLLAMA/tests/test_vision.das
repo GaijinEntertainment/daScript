@@ -9,6 +9,7 @@ require daslib/math_bits
 require daslib/fio
 require stbimage
 require math
+require _scratch_dir   // scratch_path: the file-form round-trip's files
 
 // Tier-0 vision preprocessing gates — model-free, bit-exact against the mtmd oracle
 // (`llama-mtmd-debug -p preproc`, CPU). The fnv1a64 pins and probe values come from the dumps
@@ -221,30 +222,6 @@ def count_byte_diffs(a, b : array<uint8>) : int {
     return n
 }
 
-// per-process temp dir for the file-form round-trip — writing fixtures into the worktree
-// would leave untracked state, and a shared path races parallel dastest runs
-var private _tmp_dir : string
-var private _tmp_dir_inited = false
-
-def private tmp_path(name : string) : string {
-    if (!_tmp_dir_inited) {
-        let r = create_temp_directory_result("dasllama_vision_io")
-        if (!(r is value)) {
-            panic("could not create temp dir for the vision io test: {unsafe(r.error)}")
-        }
-        _tmp_dir = unsafe(r.value)
-        _tmp_dir_inited = true
-    }
-    return path_join(_tmp_dir, name)
-}
-
-[finalize]
-def cleanup_temp_dir {
-    if (_tmp_dir_inited && !empty(_tmp_dir)) {
-        rmdir_rec(_tmp_dir)
-    }
-}
-
 [test]
 def test_vision_normalize3_channels(t : T?) {
     t |> run("per-channel CLIP normalize picks mean/std by channel, not by a shared scalar") @(t : T?) {
@@ -284,7 +261,7 @@ def test_vision_io_roundtrip(t : T?) {
     }
     t |> run("dump_image_png writes a file load_image_rgb reads back") @(t : T?) {
         let src <- make_fixture("gray", 32, 20)
-        let path = tmp_path("roundtrip.png")
+        let path = scratch_path("roundtrip.png")
         t |> success(dump_image_png(src, path), "png written")
         let back <- load_image_rgb(path)
         t |> equal(back.width, 32)
@@ -293,7 +270,7 @@ def test_vision_io_roundtrip(t : T?) {
     }
     t |> run("write_image_ppm round-trips header and bytes") @(t : T?) {
         let src <- make_fixture("cb", 9, 5)
-        let path = tmp_path("probe.ppm")
+        let path = scratch_path("probe.ppm")
         t |> success(write_image_ppm(src, path), "ppm written")
         var inscope bytes : array<uint8>
         fopen(path, "rb") $(f) {
@@ -311,7 +288,7 @@ def test_vision_io_roundtrip(t : T?) {
             }
         }
         let empty_img = VisionImage()
-        t |> success(!write_image_ppm(empty_img, tmp_path("empty.ppm")), "a zero-size image refuses to write")
+        t |> success(!write_image_ppm(empty_img, scratch_path("empty.ppm")), "a zero-size image refuses to write")
     }
 }
 
@@ -326,7 +303,7 @@ def test_vision_io_guards(t : T?) {
         let bad <- load_image_rgb(garbage)
         t |> equal(bad.width, 0)
         t |> equal(bad.height, 0)
-        let missing <- load_image_rgb(tmp_path("no_such_file.png"))
+        let missing <- load_image_rgb(scratch_path("no_such_file.png"))
         t |> equal(missing.width, 0)
         t |> equal(missing.height, 0)
     }
@@ -346,7 +323,7 @@ def test_vision_io_guards(t : T?) {
     }
     t |> run("max_pixels refuses an oversized image from the header alone") @(t : T?) {
         let src <- make_fixture("gray", 32, 20)
-        let path = tmp_path("cap.png")
+        let path = scratch_path("cap.png")
         t |> success(dump_image_png(src, path), "png written")
         let refused <- load_image_rgb(path, 100l)   // 640 px > 100: the info probe declines
         t |> equal(refused.width, 0)

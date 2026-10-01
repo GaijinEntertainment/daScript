@@ -3,7 +3,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_par
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require daslib/jobque_boost
 require daslib/fio
 require strings
@@ -73,8 +73,7 @@ def test_team_job_panic_exits_nonzero(t : T?) {
 
 [test]
 def test_configured_queue_is_silent(t : T?) {
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         let before = get_disp_count()
         maybe_parallel_for(0, 4096, 4) $(rb, re) {
             if (rb > re) {

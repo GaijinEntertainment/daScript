@@ -86,8 +86,7 @@ def bench_matmul_batch(b : B?) {
         to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
         return
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         bench_batch_shape(b, "qo  2048x2048", 2048l, 2048l)
         bench_batch_shape(b, "w13 2048x5632", 2048l, 5632l)
     }

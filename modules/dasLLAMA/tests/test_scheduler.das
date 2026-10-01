@@ -27,10 +27,7 @@ require _model_tier
 let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
 def private model_missing(t : T?) : bool {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return true
-    }
+    return true if (!jit_only(t))
     if (!stat(MODEL_PATH).is_valid) {
         t |> skip("{MODEL_PATH} not present")
         return true
@@ -111,10 +108,7 @@ def private text_of(pieces : array<string>) : string {
 [test]
 def test_scheduler_batching_deltanet_gpu(t : T?) {
     t |> run("two interleaved deltanet streams on the GPU tier match their solo references (needs Qwen3.5-0.8B-Q8_0, DASLLAMA_GPU=1)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(DN_MODEL_PATH).is_valid) {
             t |> skip("{DN_MODEL_PATH} not present")
             return
@@ -556,10 +550,7 @@ let MTP_MODEL_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
 [test]
 def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per test: the greedy and the sampled leg run against that model inside the same jobque scope
     t |> run("scheduler mtp: self-spec greedy and sampled streams == plain scheduler, chunked prefill + paged (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MTP_MODEL_PATH).is_valid) {
             t |> skip("{MTP_MODEL_PATH} not present")
             return
@@ -676,10 +667,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
 [test]
 def test_scheduler_mtp_resident_picks(t : T?) {
     t |> run("scheduler mtp under the resident driver: every tick of a greedy stream asks a pick - the device verify lands picks alone and sample_ consumes each - the stream token for token the plain scheduler's on the same device rail, every round's verify served on the device (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MTP_MODEL_PATH).is_valid) {
             t |> skip("{MTP_MODEL_PATH} not present")
             return

@@ -21,8 +21,7 @@ def main() {
     let model_path = args[length(args) - 2]
     let wav_path = args[length(args) - 1]
     let samples <- load_audio_16k_mono(wav_path)
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         var m <- load_vad_model(model_path)
         var it : VadIter
         vad_iter_reset(it, default_vad_opts())

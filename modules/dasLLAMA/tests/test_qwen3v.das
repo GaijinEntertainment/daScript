@@ -7,7 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_qwen3v
 require dasllama/dasllama_image   // image_path_for - the baked-tag sniff cell locates the q8 .dlim
 require dasllama/dasllama_vision_embedder   // load_vision_embedder - the sniff cell routes the baked tag
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
@@ -62,27 +62,13 @@ let private TIER1_REL_Q8 = 5.2e-1
 // proves the served slices still carry their signal
 let private TIER1_REL_Q8_DS = 6.5e-1
 
+[cold_path]
 def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : string; w, h : int; logname : string;
                         rel : float = TIER1_REL) : bool {
-    var o = OracleEncode()
-    let logpath = path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), logname)
-    if (!load_oracle_encode(logpath, o)) {
-        t |> skip("oracle dump {logname} not present/parseable - mint via qwen3vl-vision-oracle/mint.sh (encode.*) / mint_4b.sh (encode4b.*)")
-        return false
+    return oracle_gate(t, path_join(models_dir(), "qwen3vl-vision-oracle"), logname, "qwen3vl-vision-oracle/mint.sh (encode.*) / mint_4b.sh (encode4b.*)", kind, w, h,
+            "qwen3v tier-1 {kind} {w}x{h}", int(qwen3v_row_width(tw)), TIER1_ABS, rel) $(planes : array<float>; var out : array<float>) : int64 {
+        return qwen3v_encode(tw, st, planes, int64(w), int64(h), out)
     }
-    let planes <- make_planes(kind, w, h)
-    var out : array<float>
-    var nout = 0l
-    with_job_que() {
-        setup_dasllama_jobque_()
-        nout = qwen3v_encode(tw, st, planes, int64(w), int64(h), out)
-    }
-    t |> equal(int(nout), o.npos, "{kind} {w}x{h} token count")
-    if (int(nout) != o.npos) {
-        return false
-    }
-    compare_encode(t, "qwen3v tier-1 {kind} {w}x{h}", out, int(qwen3v_row_width(tw)), o, TIER1_ABS, rel)
-    return true
 }
 
 [test]
@@ -146,8 +132,7 @@ def test_qwen3v_tier1(t : T?) {
             mint_qwen3v_tower(pst, ptw)
             let planes <- make_planes("gray", 448, 448)
             var pout : array<float>
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
             }
             let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL)
@@ -164,7 +149,7 @@ def test_qwen3v_tier1(t : T?) {
 // The Metal tower arm: the SAME fixtures and bars, tower pinned ON — the GPU chain's parity
 // gate, with engage evidence (encode/block counter deltas), never "the model ran".
 [test]
-def test_qwen3v_tier1_metal(t : T?) {   // nolint:STYLE038 — one flat gate ladder + its poison leg, honest shape
+def test_qwen3v_tier1_metal(t : T?) {
     t |> run("tier-1 on the Metal tower (Omni-30B narrow + 4B deepstack)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
@@ -226,8 +211,7 @@ def test_qwen3v_tier1_metal(t : T?) {   // nolint:STYLE038 — one flat gate lad
                 mint_qwen3v_tower(pst, ptw)
                 let planes <- make_planes("gray", 448, 448)
                 var pout : array<float>
-                with_job_que() {
-                    setup_dasllama_jobque_()
+                with_dasllama_jobque() {
                     qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
                 }
                 let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), po, TIER1_ABS, TIER1_REL_GPU)
@@ -369,8 +353,7 @@ def test_qwen3v_tier1_q8(t : T?) {
             mint_qwen3v_tower(pst, ptw)
             let planes <- make_planes("gray", 448, 448)
             var pout : array<float>
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
             }
             let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL_Q8)
@@ -479,8 +462,7 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
             mint_qwen3v_tower(pst, ptw)
             let planes <- make_planes("cb", 448, 448)
             var pout : array<float>
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 qwen3v_encode(ptw, st, planes, 448l, 448l, pout)
             }
             let excess = encode_excess(pout, int(qwen3v_row_width(ptw)), o, TIER1_ABS, TIER1_REL_Q8_DS)

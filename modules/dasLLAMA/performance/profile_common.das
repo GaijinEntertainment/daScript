@@ -309,6 +309,23 @@ struct PlatformInfo {
     @optional tune : string
 }
 
+//! a prompt corpus file's prompts: segments separated by lines of two percent signs, stripped, the empty and '#' ones skipped
+def load_corpus(path : string) : array<string> {
+    var texts : array<string>
+    fopen(path, "rb") $(f) {
+        if (f == null) {
+            panic("can't open prompt corpus {path}")
+        }
+        for (p in split(fread(f), "%%")) {
+            let tp = strip(p)
+            if (!empty(tp) && !starts_with(tp, "#")) {
+                texts |> push(clone_string(tp))
+            }
+        }
+    }
+    return <- texts
+}
+
 //! Run a child STREAMING: every line it emits (stdout+stderr, merged by popen_argv) prints to OUR
 //! stdout the moment it arrives — the visibility contract: stdout alone tells how far the process
 //! is and what it does, at every stage, without waiting for the child to exit. A rolling tail is

@@ -328,6 +328,14 @@ def setup_dasllama_jobque_() {
     set_current_thread_priority(clamp(g_env_engine.caller_prio, -2, 2))
 }
 
+//! `blk` inside a fresh `with_job_que` the engine has configured (`setup_dasllama_jobque_` first)
+def with_dasllama_jobque(blk : block<void>) {
+    with_job_que() {
+        setup_dasllama_jobque_()
+        invoke(blk)
+    }
+}
+
 [init, arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def dasllama_jobque_threads_cap() {
     if (get_running_platform_name() == "emscripten") {   // a browser's core count can be a fingerprint cap of 2: the runtime's floor and cap size the pool there
@@ -2036,6 +2044,39 @@ def clear_kernel_backend_pin() {
 //! The pinned backend's name, "" when none is pinned.
 def kernel_backend_pin() : string => g_backend_pin
 
+//! The active backend and its pin as a caller found them - what `restore_kernel_backend` puts back.
+struct KernelBackendSeat {
+    active : string
+    pin : string
+}
+
+def kernel_backend_seat() : KernelBackendSeat => KernelBackendSeat(active = active_kernel_backend(), pin = kernel_backend_pin())
+
+//! Put the backend and its pin back as `seat` recorded them: a caller that pinned for its own work leaves the pin an earlier
+//! caller set, and no pin where none was.
+def restore_kernel_backend(seat : KernelBackendSeat) {
+    clear_kernel_backend_pin()
+    if (!empty(seat.pin)) {
+        pin_kernel_backend(seat.pin)
+    }
+    select_kernel_backend(seat.active)
+}
+
+//! Run `blk` with backend `name` pinned, then put back the backend and pin the caller had. A pin that does not take (an
+//! unknown or unavailable backend) runs nothing, logs the refusal and returns false.
+def with_kernel_backend(name : string; blk : block<() : void>) : bool {
+    let seat = kernel_backend_seat()
+    pin_kernel_backend(name)
+    if (kernel_backend_pin() != name || active_kernel_backend() != name) {
+        to_log(LOG_WARNING, "dasLLAMA: with_kernel_backend('{name}') - the pin did not take; the block does not run\n")
+        restore_kernel_backend(seat)
+        return false
+    }
+    invoke(blk)
+    restore_kernel_backend(seat)
+    return true
+}
+
 //! Pin the BATCH-shaped kernel slots (prefill GEMM + mx4 batch) to backend `name`, keeping the
 //! active backend's GEMV slots — the hybrid for boxes where decode/prefill prefer different backends.
 //! Survives later reselection; `""` clears it. Layout-incompatible/unknown donor warns and no-ops.
@@ -2418,14 +2459,10 @@ def e8m0_half(e : uint) : float {
     return unsafe(reinterpret<float>(bits))
 }
 
-//! Fill a 16-byte LUT with the MXFP4 e2m1 magnitudes DOUBLED (nibble -> ±{0,.5,1,1.5,2,3,4,6}×2,
-//! OCP MX spec) as int8 — the table `tbl16_lo`/`tbl16_hi` and the scalar
-//! kernels index; the halved E8M0 scale (e8m0_half) compensates.
+//! Fill a 16-byte LUT with the MXFP4 codebook (`mx4_lut`) — the table `tbl16_lo`/`tbl16_hi` and the
+//! scalar kernels index.
 def mxfp4_fill_lut(var lut : int8[16]) {
-    let kv = fixed_array(0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12)
-    for (i in range(16)) {
-        lut[i] = int8(kv[i])
-    }
+    lut = mx4_lut()
 }
 
 //! MXFP4·Q8 GEMV: y = W·x with W native 4-bit — `wn` packed nibbles [d x n/2 bytes] + `we` raw E8M0

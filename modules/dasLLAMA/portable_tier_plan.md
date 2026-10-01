@@ -111,7 +111,7 @@ lengths with tails against fp64 accumulation references.
 
 **(b) `test_q8q8_family.das`.** The crown family (`q8q8_tile_gen` `dasllama_math_gen.das:1222`,
 `q8q8_gemv_gen` `:107`, the mx4 and s16 companions `:124, :145, :1153, :1170`) has its
-tile-vs-gemv-vs-reference parity only in hand-run probes (`harness/gen_parity_probe.das:110,131`,
+tile-vs-gemv-vs-reference parity only in hand-run probes (`harness/gen_parity_probe.das` over `harness/_gen_probe_fixture.das`,
 `harness/gen_slot_parity_probe.das`). Promote them into the suite with the ladder the 13 kq
 families already have, and cover what has no gate at all: the whole s16 (`wscale_f16`) arm
 (`dot_q8q8_f16s` `dasllama_math_default.das:64`, `q8q8_rows_kernel_s16` `:320`,

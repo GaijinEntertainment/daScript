@@ -11,6 +11,7 @@ require daslib/fio
 require dasllama/dasllama_unicode   // utf8_to_cpts: the inventory sweep reads codepoints
 require _tts_corpus
 require _tts_corpus_gb
+require _scratch_dir   // scratch_path: the version-refusal fixture's file
 require _model_tier   // models_dir(): tts_g2p.bin and tts_postag.bin live in the model store
 require daslib/rtti   // this_context().last_exception: the American-only pack's British refusal is read as text
 
@@ -212,30 +213,6 @@ def test_pieces_and_stems(t : T?) {
     }
 }
 
-// per-process temp dir for the version-refusal fixture — writing it into the worktree would
-// leave untracked state, and a shared path races parallel dastest runs
-var private _tmp_dir : string
-var private _tmp_dir_inited = false
-
-def private tmp_path(name : string) : string {
-    if (!_tmp_dir_inited) {
-        let r = create_temp_directory_result("dasllama_tts_g2p")
-        if (!(r is value)) {
-            panic("could not create temp dir for the g2p version test: {unsafe(r.error)}")
-        }
-        _tmp_dir = unsafe(r.value)
-        _tmp_dir_inited = true
-    }
-    return path_join(_tmp_dir, name)
-}
-
-[finalize]
-def cleanup_temp_dir {
-    if (_tmp_dir_inited && !empty(_tmp_dir)) {
-        rmdir_rec(_tmp_dir)
-    }
-}
-
 //! a pack header carrying the magic and `version`, and nothing else
 def private write_pack_header(path : string; version : int) {
     let f = fopen(path, "wb")
@@ -292,11 +269,11 @@ def test_us_only_pack(t : T?) {
             return
         }
         tt |> equal(g2p_pack_path(models_dir()), g2p_path(), "both packs beside the models: the full pack wins")
-        let only_us = tmp_path("packs_us")
+        let only_us = scratch_path("packs_us")
         mkdir(only_us)
         write_pack_header(path_join(only_us, "tts_g2p_en_us.bin"), 2)   // the path rule stats, it never reads
         tt |> equal(g2p_pack_path(only_us), path_join(only_us, "tts_g2p_en_us.bin"), "the American twin serves alone")
-        let none = tmp_path("packs_none")
+        let none = scratch_path("packs_none")
         mkdir(none)
         var refused = ""
         try {
@@ -322,7 +299,7 @@ def test_missing_pack(t : T?) {
         t |> success(refused, "loading a missing g2p pack panics rather than phonemizing from zeros")
     }
     t |> run("a pack from before the British tier panics by version") @(t : T?) {
-        let old = tmp_path("v1_tts_g2p.bin")
+        let old = scratch_path("v1_tts_g2p.bin")
         write_pack_header(old, 1)
         var refused = false
         try {

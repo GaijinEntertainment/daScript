@@ -6,10 +6,13 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default        // registers the "portable" backend at [init]
 require dasllama/dasllama_math_aarch64_neon   // registers "arm64-sdot" on arm64+jit
 require ?llvm dasllama/dasllama_math_gen
+require dasllama/dasllama_kqformat            // KqFmt + kq_fmt_stamp: the registry cell walks every format
+require daslib/enum_trait                     // for (f in type<KqFmt>)
 
 // The kernel-backend registry must self-populate at [init]: the portable Q8·Q8 backend is always
 // registered (the fallback everywhere), and one is auto-activated as the row-major default. A repack
 // backend (arm64-gen / x64-gen) is only activated by select_matmul_backend_for_load_. No model file needed.
+// test_kq_registries reads the [tune] registries of dasllama_math_gen and skips on a build without dasLLVM.
 
 def private registered(name : string) : bool {
     for (n in kernel_backend_names()) {
@@ -56,6 +59,149 @@ def test_select_and_pin(t : T?) {
         if (saved != "") {
             select_kernel_backend(saved)
         }
+    }
+}
+
+[test]
+def test_seat_restores_the_pin(t : T?) {
+    t |> run("a restored seat keeps the pin it found, and no pin where there was none") @(t : T?) {
+        let found = kernel_backend_seat()
+        clear_kernel_backend_pin()
+        let unpinned = kernel_backend_seat()
+        t |> equal(unpinned.pin, "", "control: no pin recorded where none is set")
+        pin_kernel_backend("portable")
+        restore_kernel_backend(unpinned)
+        t |> equal(kernel_backend_pin(), "", "a seat with no pin clears the cell's own")
+        t |> equal(active_kernel_backend(), unpinned.active, "and the backend it found is active again")
+        pin_kernel_backend("portable")
+        let pinned = kernel_backend_seat()
+        clear_kernel_backend_pin()
+        select_matmul_backend_for_load_()
+        restore_kernel_backend(pinned)
+        t |> equal(kernel_backend_pin(), "portable", "a pin set before the cell survives its restore")
+        t |> equal(active_kernel_backend(), "portable", "and its backend is active")
+        restore_kernel_backend(found)
+    }
+}
+
+//! An available registered backend other than `not`, "" when the build registers none.
+def private other_available(not : string) : string {
+    for (n in kernel_backend_names()) {
+        return n if (n != not && kernel_backend_available_(n))
+    }
+    return ""
+}
+
+[test]
+def test_with_kernel_backend(t : T?) {
+    t |> run("with_kernel_backend runs its block under the pin, puts the seat back, and refuses a pin that does not take") @(t : T?) {
+        let found = kernel_backend_seat()
+        clear_kernel_backend_pin()
+        let unpinned = kernel_backend_seat()
+        var inside = ""
+        var inside_pin = ""
+        let took = with_kernel_backend("portable") $ {
+            inside = active_kernel_backend()
+            inside_pin = kernel_backend_pin()
+        }
+        t |> success(took, "the pin took")
+        t |> equal(inside, "portable", "the block ran on the pinned backend")
+        t |> equal(inside_pin, "portable", "and under its pin")
+        t |> equal(kernel_backend_pin(), "", "no pin after the block where there was none")
+        t |> equal(active_kernel_backend(), unpinned.active, "and the backend it found is active again")
+        var ran = false
+        let refused = !with_kernel_backend("no-such-backend") $ {
+            ran = true
+        }
+        t |> success(refused && !ran, "an unknown backend is refused and its block does not run")
+        t |> equal(active_kernel_backend(), unpinned.active, "a refusal leaves the backend it found")
+        pin_kernel_backend("portable")
+        let other = other_available("portable")
+        if (other != "") {
+            var other_inside = ""
+            let other_took = with_kernel_backend(other) $ {
+                other_inside = active_kernel_backend()
+            }
+            t |> success(other_took, "the pin on {other} took over an earlier pin")
+            t |> equal(other_inside, other, "the block ran on {other}")
+            t |> equal(kernel_backend_pin(), "portable", "the earlier pin survives the block")
+            t |> equal(active_kernel_backend(), "portable", "and its backend is active")
+        } else {
+            to_log(LOG_WARNING, "test_with_kernel_backend: no second available backend on this build - the earlier-pin arm is not exercised\n")
+        }
+        restore_kernel_backend(found)
+    }
+}
+
+//! the first row two formats share, as "<fmt> carries <other>'s row"; "" when every row is its format's own
+def private crossed_row(rows : array<auto(R)>) : string {
+    for (i in range(length(rows))) {
+        for (j in range(i)) {
+            return "{rows[i].fmt} carries {rows[j].fmt}'s row {j}" if (rows[i].fn == rows[j].fn && rows[i].fmt != rows[j].fmt)
+        }
+    }
+    return ""
+}
+
+[test]
+def test_kq_registries(t : T?) {
+    static_if (typeinfo module_exists(dasllama_math_gen)) {
+        t |> run("kq_registries: a kq family's eight registries are all present with the reference row first, or all absent") @(t : T?) {
+            var families = 0
+            for (kf in type<KqFmt>) {
+                kq_fmt_stamp(kf) $(F) {
+                    let r <- kq_registries(F)
+                    let lens = fixed_array(length(r.tile), length(r.tile4), length(r.gemv), length(r.layout),
+                        length(r.tileform), length(r.amx_cfg), length(r.witness), length(r.panel))
+                    var present = 0
+                    for (l in lens) {
+                        present += l > 0 ? 1 : 0
+                    }
+                    t |> success(present == 0 || present == 8, "{kf}: all eight registries or none (lengths {lens})")
+                    if (present == 8) {
+                        families++
+                        t |> equal(r.tile[0]._0, "reference", "{kf}: the tile registry's first row is the reference body")
+                        t |> equal(r.gemv[0]._0, "reference", "{kf}: the gemv registry's first row is the reference body")
+                        t |> equal(r.panel[0]._0, "reference", "{kf}: the panel registry's first row is the reference body")
+                    }
+                }
+            }
+            t |> success(families > 0, "at least one format carries a kq family ({families})")
+            let q8 <- kq_registries(KqTag_q8())
+            t |> equal(length(q8.tile), 0, "control: q8 has no kq family (its tile family is the q8q8 one)")
+        }
+        t |> run("kq_registries: every format's kernel rows are its own - no row is another format's") @(t : T?) {
+            var tiles : array<tuple<fmt : KqFmt; fn : KqTileGenFn>>
+            var gemvs : array<tuple<fmt : KqFmt; fn : MatmulKqRowsFn>>
+            var panels : array<tuple<fmt : KqFmt; fn : KqPanelGenFn>>
+            for (kf in type<KqFmt>) {
+                kq_fmt_stamp(kf) $(F) {
+                    let r <- kq_registries(F)
+                    let again <- kq_registries(F)
+                    if (!empty(r.tile)) {
+                        t |> success(r.tile[0]._1 == again.tile[0]._1, "control: {kf}'s tile row compares equal to itself")
+                    }
+                    for (row in r.tile) {
+                        tiles |> push((fmt = kf, fn = row._1))
+                    }
+                    for (row in r.tile4) {
+                        tiles |> push((fmt = kf, fn = row._1))
+                    }
+                    for (row in r.gemv) {
+                        gemvs |> push((fmt = kf, fn = row._1))
+                    }
+                    for (row in r.panel) {
+                        panels |> push((fmt = kf, fn = row._1))
+                    }
+                }
+            }
+            t |> success(!empty(tiles) && !empty(gemvs) && !empty(panels), "the walk collected rows of every kind")
+            t |> equal(crossed_row(tiles), "", "no format's tile or tile4 row is another format's")
+            t |> equal(crossed_row(gemvs), "", "no format's gemv row is another format's")
+            t |> equal(crossed_row(panels), "", "no format's panel row is another format's")
+        }
+    } else {
+        t |> skip("dasllama_math_gen is not mounted (no dasLLVM) - no [tune] registries to read")
     }
 }
 

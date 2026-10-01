@@ -14,7 +14,7 @@ def private allow_cpu_prefill_intent() {
 require daslib/jobque_boost
 require daslib/fio
 require math
-require dasllama/dasllama_math   // setup_dasllama_jobque_ + set_prefill_attn_mode
+require dasllama/dasllama_math   // with_dasllama_jobque + set_prefill_attn_mode
 require dasllama/dasllama_load   // quantize_weights_q4: the q4_0 requant leg
 
 // The non-causal image span (eval_embd_/forward_prefill_embd non_causal=true): every query of
@@ -150,8 +150,7 @@ def test_attn_span(t : T?) {
         let dim = tr.config.dim
         let embd_a <- make_embd(dim, 0)
         let embd_b <- make_embd(dim, 1)   // differs ONLY in the last row
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_prefill_attn_mode(AttnPrefillMode.classic)
             // the mask direction: causal position 0 is blind to the last row; the span sees it
             let causal_a <- span_prefill(tr, embd_a, false)
@@ -231,8 +230,7 @@ def test_mrope_span(t : T?) {
         tr.config.mrope_interleaved = true   // the qwen3vl proxy walk
         let dim = tr.config.dim
         let embd_a <- make_embd(dim, 0)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_prefill_attn_mode(AttnPrefillMode.classic)
             // span [7,29) = 22 rows = an 11x2 grid; position advance = max(11,2) = 11
             let lg_fused <- mrope_turn_logits(tr, embd_a, true, 11l, 2l)
@@ -273,8 +271,7 @@ def test_attn_span_fused(t : T?) {
         var tr <- load_checkpoint(MODEL_PATH)
         let dim = tr.config.dim
         let embd_a <- make_embd(dim, 0)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             // the fused single eval must leave the SAME cache as the three-eval splice: a decode
             // step at NPOS attends every cached row, so its logits are the whole-cache witness
             set_prefill_attn_mode(AttnPrefillMode.classic)
@@ -323,8 +320,7 @@ def test_attn_span_guards(t : T?) {   // nolint:STYLE038 — one sequential guar
         var tr <- load_checkpoint(MODEL_PATH)
         let dim = tr.config.dim
         let embd_a <- make_embd(dim, 0)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             // the span-bounds panic: a direct forward_prefill_embd caller with an inverted span
             var tripped = false
             var s1 <- make_run_state(tr.config)
@@ -486,8 +482,7 @@ def test_deepstack_rail(t : T?) {
         var tr <- load_checkpoint(MODEL_PATH)
         tr.config.n_deepstack = 3l   // stamp: the toy is not a deepstack arch
         let dim = tr.config.dim
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             let narrow <- make_embd(dim, 0)
             let wide0 <- make_wide_embd(dim, 3l, 0)
             let wide <- make_wide_embd(dim, 3l, 1)

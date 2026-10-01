@@ -10,8 +10,8 @@ A definition home of the per-format quantities is `dasllama/dasllama_kqformat.da
 (`dasllama/dasllama_gemm_schema.das`), or the pins of `tests/test_kqformat.das`.
 
 **A diff that adds or changes a function in `dasllama/` that turns a kernel/IR format id - the
-int a generated kernel takes as its format parameter - into a `KqFmt` or any per-format number
-with a mapping of its own is a defect - resolve the id through `kq_fmt_of_id`
+int a generated kernel takes as its format parameter - into a `KqFmt` or any per-format value or
+predicate with a mapping of its own is a defect - resolve the id through `kq_fmt_of_id`
 (`dasllama/dasllama_kqformat.das`): the panicking overload `kq_fmt_of_id(id, what)`, the `bool`
 overload whose false branch panics, or a per-format accessor that takes the id (`kq_qsb` /
 `kq_ssb`).**

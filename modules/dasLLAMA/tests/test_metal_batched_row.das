@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama   // nolint:STYLE030,LINT019 - the public facade, reached inside the das_metal halves
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require _metal_blob_twin   // blob_twin - the blob-flavor carrier every Metal serving cell loads
 require dasllama/dasllama_batch   // nolint:STYLE030,LINT019 - batch_step_census, inside the das_metal halves
 require dasllama/dasllama_bench   // nolint:STYLE030,LINT019 - bench_tg_batched_rep, inside the das_metal halves
@@ -34,17 +34,12 @@ def test_metal_batched_row_llama(t : T?) {
     t |> run("the batched row serves host-cached streams through the batched driver (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
-            if (!model_available(t, path)) return
+            return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 t |> equal(gpu_device_sessions(), 0l, "no whole-model driver homes a stream: the row's streams are host-cached")
                 let census0 = batch_step_census()
                 let steps0 = metal_batch_decode_stats().steps
@@ -69,17 +64,12 @@ def test_metal_batched_row_eseries(t : T?) {
     t |> run("the batched row serves an E-series carrier through the batched driver's PLE rows form (gemma-4-E2B Q8)") <| @(t : T?) {
         if (!family_on(t, "gemma")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
-            if (!model_available(t, path)) return
+            return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 let census0 = batch_step_census()
                 let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l)
                 t |> equal(served.why, "", "the row is served: {served.why}")
@@ -101,17 +91,12 @@ def test_metal_batched_row_shexp(t : T?) {
     t |> run("the batched row serves a shared-expert MoE through the batched driver's rows site (Qwen1.5-MoE-A2.7B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen2moe")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf")
-            if (!model_available(t, path)) return
+            return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 let census0 = batch_step_census()
                 let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l)
                 t |> equal(served.why, "", "the row is served: {served.why}")
@@ -133,17 +118,12 @@ def test_metal_batched_row_nextn_plain(t : T?) {
     t |> run("the plain batched row serves a NextN-headed model with GPU logits, each row's post-norm hidden landing as its stream's carry (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-            if (!model_available(t, path)) return
+            return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 let prev_spec = get_mtp_spec()
                 set_mtp_spec(false)
                 let census0 = batch_step_census()
@@ -190,17 +170,12 @@ def test_metal_batched_row_mtp(t : T?) {
     t |> run("the batched row serves self-speculative streams through one joint verify a tick (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-            if (!model_available(t, path)) return
+            return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 let prev_spec = get_mtp_spec()
                 set_mtp_spec(true)
                 let census0 = batch_step_census()
@@ -225,17 +200,12 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
     t |> run("three self-speculative streams verified together emit what each emits alone (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-            if (!model_available(t, path)) return
+            return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 512l)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 let prev_spec = get_mtp_spec()
                 set_mtp_spec(true)
                 var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
@@ -292,17 +262,12 @@ def test_metal_batched_row_mtp_joint_staggered(t : T?) {
     t |> run("a joint verify whose streams sit at different depths across a 64-row chunk boundary emits what each stream emits alone (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-            if (!model_available(t, path)) return
+            return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 1024l)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 let prev_spec = get_mtp_spec()
                 set_mtp_spec(true)
                 //! group 0 is shallow, the LAST group deep: the round's chunk count and its attention form must follow the deepest row, not the first group's
@@ -359,17 +324,12 @@ def test_metal_batched_row_deltanet(t : T?) {
     t |> run("the batched row serves a deltanet hybrid through the batched driver's recurrent rows form (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
-            if (!model_available(t, path)) return
+            return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 let census0 = batch_step_census()
                 let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l)
                 t |> equal(served.why, "", "the row is served: {served.why}")
@@ -419,17 +379,12 @@ def test_metal_paged_deltanet(t : T?) {
     t |> run("paged sessions on a deltanet hybrid emit what flat sessions emit - the recurrent layers own no K/V rows (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
-            if (!model_available(t, path)) return
+            return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 512l)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 for (nst in [1l, 2l]) {
                     let steps0 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
                     var flat <- served_tokens(tr, nst, 0l, PAGED_NEW)
@@ -471,17 +426,12 @@ def test_metal_batched_row_pre_encode(t : T?) {
     t |> run("four greedy streams emit the same tokens whether each batched step is encoded at its call or pre-encoded under the step before it (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
-            if (!model_available(t, path)) return
+            return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_job_que() {
-                setup_dasllama_jobque_()
+            with_dasllama_jobque() {
                 let prior_pre = metal_batch_pre_enabled()
                 if (!env_is_set("DASLLAMA_METAL_BATCH_PRE")) {
                     t |> success(!prior_pre, "the pre-encode rail ships off")

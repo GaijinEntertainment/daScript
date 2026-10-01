@@ -19,25 +19,13 @@ require _model_tier
 
 def private synth_id(i : int64) : int64 => 1000l + ((i * 17l + 131l) % 5000l)
 
-def private greedy_step(tr : Model; s : Session) : int64 {
-    var best = 0l
-    var bv = s.logits[0]
-    for (v in range64(tr.config.vocab_size)) {
-        if (s.logits[v] > bv) {
-            bv = s.logits[v]
-            best = v
-        }
-    }
-    return best
-}
-
 def private run_ids(tr : Model; var s : Session; plen, ngen : int64; var ids : array<int64>) {
     let prompt <- [for (i in range64(plen)); synth_id(i)]
     forward_prefill(tr, s, prompt, plen, 0l)
     ids |> reserve(ngen)
     var pos = plen
     for (_g in range64(ngen)) {
-        let best = greedy_step(tr, s)
+        let best = argmax(s, tr.config.vocab_size)
         ids |> push(best)
         forward(tr, s, best, pos)
         pos++
@@ -71,8 +59,7 @@ def private slot_swap_cycle(path : string) : SwapResult {
     want.auto_tier = true
     set_gpu_tier_want_(want)
     moe_gpu_tier_arm_()
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         var tr <- load_model_(path, QuantMode.q8)
         r.armed0 = moe_gpu_resident_active()
         if (r.armed0) {
@@ -91,7 +78,7 @@ def private slot_swap_cycle(path : string) : SwapResult {
             var pos = plen + 16l
             var a2 : array<int64>
             for (_g in range64(16l)) {
-                let best = greedy_step(tr, sa)
+                let best = argmax(sa, tr.config.vocab_size)
                 a2 |> push(best)
                 forward(tr, sa, best, pos)
                 pos++

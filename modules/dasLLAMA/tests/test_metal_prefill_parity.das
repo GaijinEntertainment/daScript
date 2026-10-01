@@ -15,9 +15,9 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — g_env_metal.resid
 require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
-require strings
 require math   // nolint:STYLE030,LINT019 - min/max inside the das_metal halves
 require _model_tier
+require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
 
 // End-to-end gate for the dasMetal whole-prefill override (Phase 6): greedy continuation of a
 // confident counting prompt, GPU-resident prefill vs the CPU control ON THE SAME BINARY — decode
@@ -26,15 +26,7 @@ require _model_tier
 // family test_parity.das established (high-entropy prompts flip on genuine near-ties, which are
 // not bugs). Skips cleanly without the model, off-Apple, or with no Metal device.
 
-// "1, 2, …, 120," — long enough to engage the resident path with margin (~300 llama-3 BPE tokens)
-def private counting_prompt() : string {
-    return build_string() $(var w) {
-        for (i in range(1, 121)) {
-            w |> write(i)
-            w |> write(i < 120 ? ", " : ",")
-        }
-    }
-}
+let private COUNT_TO = 120   //! "1, 2, …, 120," — long enough to engage the resident path with margin (~300 llama-3 BPE tokens)
 
 // chunked prompt-to-continuation: eval chunk 1, eval chunk 2 (start_pos > 0 on the second),
 // then n greedy steps — the M2.5 continuation arm's control/GPU shape (probe-proven)
@@ -386,14 +378,8 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
     t |> run("GPU-resident prefill == CPU control, 40-token greedy continuation (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!jit_enabled()) {
-                t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-                return
-            }
             let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
-            if (!model_available(t, path)) {
-                return
-            }
+            return if (!jit_model_available(t, path))
             let prior_wscale = get_wscale_f16()             // process-wide knobs — restored below
             let prior_backend = active_kernel_backend()     // (both exit paths run through the restore)
             set_wscale_f16(false)       // the resident path reads the f32 scale plane (declines on s16)
@@ -402,7 +388,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
             if (tr.config.seq_len > 2048l) {
                 tr.config.seq_len = 2048l
             }
-            let prompt <- encode(tr, counting_prompt(), true, false)
+            let prompt <- encode(tr, counting_prompt(COUNT_TO), true, false)
             var trg <- blob_twin(t, path, 2048l)
             if (arm_on(t, "base")) {
                 // the legacy quantized-GEMM arm is GONE: the drivers are blob-only mul_mm
@@ -516,7 +502,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         trs.config.seq_len = 2048l
                     }
                     var trsg <- blob_twin(t, spath, 2048l)
-                    let sprompt <- encode(trs, counting_prompt(), true, false)
+                    let sprompt <- encode(trs, counting_prompt(COUNT_TO), true, false)
                     t |> success(select_prefill_override("metal"), "override registered (mm-tail smol)")
                     //! the peel-count arithmetic below assumes every layer's FFN rides the mm path
                     set_metal_prefill_lastrow(false)

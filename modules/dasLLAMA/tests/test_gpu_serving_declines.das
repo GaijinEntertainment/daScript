@@ -11,7 +11,7 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require strings
 require daslib/strings_boost
-require daslib/rtti   // this_context().last_exception: a panic's text read back
+require _compares   // panic_text_of: a panic's text read back
 require daslib/enum_trait   // the format-set drift guard walks the whole KqFmt enum
 
 [unused_argument(rows)]
@@ -636,17 +636,6 @@ def test_land_pick(t : T?) {
         delete s
         t |> success(round_refuses_pick(), "the CPU round's opening refuses a session whose landed pick nobody sampled")
     }
-}
-
-//! `body` run with any panic's text caught: "" where none fired
-def private panic_text_of(body : block<void>) : string {
-    var why = ""
-    try {
-        invoke(body)
-    } recover {
-        why = this_context().last_exception |> rtrim
-    }
-    return why
 }
 
 let private ROUND_SEATS = "mtp_round_probe"   //! a fake decode override claiming every model, with a draft, a verify and a rollback seat

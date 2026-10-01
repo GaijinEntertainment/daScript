@@ -1045,14 +1045,24 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
     var kq : array<uint8> const?
     var ks : array<uint8> const?
     kq_planes_of(t, fmt, kq, ks)
+    let plane_sb = long_length(*ks) / (16l + kq_scale_d_tail(fmt))
+    return (buf = plane_buffer(dev, unsafe(addr<void?>((*ks)[0])), uint64(long_length(*ks)), t.image_map != null),
+            soff = uint64(sb0 * 16l),
+            doff = uint64(kq_scale_doff(fmt, plane_sb, sb0)))
+}
+
+//! A superblock's packed d-tail bytes in a kq format's split scale plane: 0 for the compact formats (k4/k5/q40/iq4nl -
+//! one 16B block, no tail), 4 for k2 (d and dmin), 2 for every other format.
+def private kq_scale_d_tail(fmt : KqFmt) : int64 {
     let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl
-    let tail = compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
-    unsafe {
-        let plane_sb = long_length(*ks) / (16l + tail)
-        return (buf = plane_buffer(dev, addr<void?>((*ks)[0]), uint64(long_length(*ks)), t.image_map != null),
-                soff = uint64(sb0 * 16l),
-                doff = compact ? 0ul : uint64(plane_sb * 16l + sb0 * tail))
-    }
+    return compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
+}
+
+//! The d-tail bind offset of superblock `sb0` in a split scale plane of `nsb_total` superblocks - 0 for the compact formats.
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
+def kq_scale_doff(fmt : KqFmt; nsb_total, sb0 : int64) : int64 {
+    let tail = kq_scale_d_tail(fmt)
+    return tail == 0l ? 0l : nsb_total * 16l + sb0 * tail
 }
 
 //! One q51 tensor's plane pair bind: quant plane (20B/block, uint-viewable) at (off/32)*20 and

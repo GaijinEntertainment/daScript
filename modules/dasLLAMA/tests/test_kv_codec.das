@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
-require dasllama/dasllama_math   // setup_dasllama_jobque_ + target_chunk_work + fused knob
+require dasllama/dasllama_math   // with_dasllama_jobque + target_chunk_work + fused knob
 require dasllama/dasllama_kv_codec   // the codec kernel families under unit test
 require dasllama/dasllama_convert    // cvt_f32_to_f16/cvt_f16_to_f32 — the generic f16 rows
 require daslib/f16_cvt
@@ -614,36 +614,10 @@ def test_kv_codec_f16(t : T?) {
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let N_STEPS = 24
 
-def private argmax_of(s : Session; vocab : int64) : int64 {
-    var best = 0l
-    for (i in range64(1l, vocab)) {
-        if (s.logits[i] > s.logits[best]) {
-            best = i
-        }
-    }
-    return best
-}
-
-def private greedy_ids(tr : Model; var s : Session; var ids : array<int64>; var logits : array<float>) {
-    ids |> reserve(N_STEPS)
-    var token = 1l   // BOS
-    var pos = 0l
-    for (_i in range(N_STEPS)) {
-        forward(tr, s, token, pos)
-        pos++
-        token = argmax_of(s, tr.config.vocab_size)
-        ids |> push(token)
-    }
-    logits := s.logits
-}
-
 [test]
 def test_kv_f16_decode(t : T?) {
     t |> run("f16 KV: greedy trajectory matches f32, fused==std bit-exact under f16 (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -652,8 +626,7 @@ def test_kv_f16_decode(t : T?) {
         let c = tr.config
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             var ids32 : array<int64>
             var ids16 : array<int64>
@@ -663,14 +636,14 @@ def test_kv_f16_decode(t : T?) {
             var lg16f : array<float>
             set_fused_decode(false)
             var s32 <- make_run_state(c)
-            greedy_ids(tr, s32, ids32, lg32)
+            greedy_ids(tr, s32, N_STEPS, ids32, lg32)
             delete s32
             var s16 <- make_run_state(c, KVDtype.f16, KVDtype.f16)
-            greedy_ids(tr, s16, ids16, lg16)
+            greedy_ids(tr, s16, N_STEPS, ids16, lg16)
             delete s16
             set_fused_decode(true)
             var s16f <- make_run_state(c, KVDtype.f16, KVDtype.f16)
-            greedy_ids(tr, s16f, ids16f, lg16f)
+            greedy_ids(tr, s16f, N_STEPS, ids16f, lg16f)
             delete s16f
             // f16 vs f32: same greedy trajectory (the real gate) + a structural logit backstop —
             // on a Q8 model a ~1e-3 attention diff can cross int8 requant boundaries and amplify
@@ -717,10 +690,7 @@ def test_kv_f16_decode(t : T?) {
 [test]
 def test_kv_f16_prefill_vs_decode(t : T?) {
     t |> run("f16 KV: prefill == per-token decode, logits bit-exact (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -730,8 +700,7 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
         let prev_mode = get_prefill_attn_mode()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             set_prefill_attn_mode(AttnPrefillMode.classic)
             var prompt <- [for (i in range(16)); int64(i % 50 + 2)]
@@ -779,10 +748,7 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
 let GGUF_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
 def private gguf_missing(t : T?) : bool {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return true
-    }
+    return true if (!jit_only(t))
     if (!stat(GGUF_PATH).is_valid) {
         t |> skip("{GGUF_PATH} not present")
         return true
@@ -816,8 +782,7 @@ def test_kv_q8_decode(t : T?) {
         }
         let prev_backend = active_kernel_backend()
         let prev_thresh = get_target_chunk_work()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             pin_kernel_backend("portable")   // the rows core every host shares — the fused gate needs one
             var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
@@ -868,8 +833,7 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
         }
         let prev_thresh = get_target_chunk_work()
         let prev_mode = get_prefill_attn_mode()
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             set_target_chunk_work(1l)
             set_prefill_attn_mode(AttnPrefillMode.classic)
             var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
@@ -951,10 +915,7 @@ def test_kv_store_row_roundtrip(t : T?) {
 [test]
 def test_kv_capacity_tripwire(t : T?) {
     t |> run("eval past config seq_len panics - never a silent write past the cache (needs stories15M.bin)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
+        return if (!jit_only(t))
         if (!stat(MODEL_PATH).is_valid) {
             t |> skip("stories15M.bin not present")
             return
@@ -965,8 +926,7 @@ def test_kv_capacity_tripwire(t : T?) {
         // heap with no diagnostic, so the tripwire must fire BEFORE the first store
         tr.config.seq_len = 8l
         quantize_weights(tr)
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             var toks <- [for (_i in range(16)); 1l]
             var s <- make_run_state(tr.config)
             var tripped = false

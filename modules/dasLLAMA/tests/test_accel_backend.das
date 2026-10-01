@@ -7,6 +7,7 @@ require daslib/jobque_boost
 require daslib/math_bits
 require math
 require ?das_accelerate dasllama/dasllama_math_accelerate
+require _compares
 
 // The "+AMX" float-batch override (Accelerate sgemm — AMX on M1-M3, SME on M4+) vs the portable
 // fp32/bf16 batch matmuls on deterministic data. sgemm accumulates f32 in coprocessor order —
@@ -30,6 +31,24 @@ def private max_rel_err(a, b : array<float>) : float {
         m = max(m, abs(va - vb) / max(1.0, abs(va)))
     }
     return m
+}
+
+//! `acc` inside `bar` of `ref`, relative to ref's magnitude floored at 1; a NaN on either side is outside
+def private rel_ok(ref, acc, bar : float) : bool => abs(ref - acc) / max(1.0, abs(ref)) < bar
+
+//! the tolerance verdict: the max difference logged at its token and row, the last element poisoned by an added 0.5
+def private check_rel(t : T?; tag : string; yref, yacc : array<float>; bar : float) {
+    var bad = 0
+    for (vr, va in yref, yacc) {
+        if (!rel_ok(vr, va, bar)) {
+            bad++
+        }
+    }
+    let mi = maxdiff_at(yacc, yref)
+    to_log(LOG_INFO, "{tag}: max |acc - ref| {abs(yacc[mi] - yref[mi])} at token {mi / D} row {mi % D}\n")
+    t |> success(bad == 0, "{tag}: every element within {bar} of the portable form ({bad} of {length(yref)} off)")
+    let n = length(yref) - 1
+    t |> success(!rel_ok(yref[n] + 0.5, yacc[n], bar), "{tag}: the bar reds a poisoned element")
 }
 
 // static_if shims: every driver symbol reference lives behind builtin_module_exists so the
@@ -88,10 +107,10 @@ def private ref_and_accel(ntok : int; run_mm : block<(var y : array<float>) : vo
     return <- res
 }
 
-def private check_fp32(t : T?; ntok : int; expect_exact : bool; f16_lane : bool = false) {
-    var w : array<float>
-    w |> resize(D * N)
-    fill01(w, 3u)
+//! The float batch over f32 weights `w` (matmul_batch) or bf16 words (matmul_bf16_batch), portable against armed: bit-exact
+//! under `expect_exact`, else within the tolerance. `f16_lane` routes the accelerate half through the BNNS f16 lane (weights
+//! bf16->f16 exact, activations f32->f16 rounded, f32 accumulate) — one x rounding step, so a looser envelope.
+def private check_batch(t : T?; w : array<auto(WT)>; ntok : int; expect_exact : bool; f16_lane : bool) {
     var x : array<float>
     x |> resize(ntok * N)
     fill01(x, 7u)
@@ -101,9 +120,17 @@ def private check_fp32(t : T?; ntok : int; expect_exact : bool; f16_lane : bool 
         return
     }
     let r <- ref_and_accel(ntok) $(var y) {
-        matmul_batch(y, w, 0l, x, int64(N), int64(D), int64(ntok))
+        static_if (typeinfo is_float(type<WT>)) {
+            matmul_batch(y, w, 0l, x, int64(N), int64(D), int64(ntok))
+        } else {
+            matmul_bf16_batch(y, w, 0l, x, int64(N), int64(D), int64(ntok))
+        }
     }
-    if (f16_lane) {
+    static_if (typeinfo is_float(type<WT>)) {
+        if (f16_lane) {
+            t_accel_set_f16(false)
+        }
+    } else {
         t_accel_set_f16(false)
     }
     if (expect_exact) {
@@ -111,36 +138,24 @@ def private check_fp32(t : T?; ntok : int; expect_exact : bool; f16_lane : bool 
             t |> equal(va, vb)
         }
     } else {
-        t |> success(max_rel_err(r.yref, r.yacc) < (f16_lane ? 1e-2 : 1e-4))
+        let kind = typeinfo is_float(type<WT>) ? "fp32" : "bf16"
+        check_rel(t, "{kind} batch ntok {ntok}{f16_lane ? " f16 lane" : ""}", r.yref, r.yacc, f16_lane ? 1e-2 : 1e-4)
     }
 }
 
-// f16_lane routes the accelerate half through the BNNS f16 lane (weights bf16->f16 exact,
-// activations f32->f16 rounded, f32 accumulate) — one x rounding step, so a looser envelope.
+def private check_fp32(t : T?; ntok : int; expect_exact : bool; f16_lane : bool = false) {
+    var w : array<float>
+    w |> resize(D * N)
+    fill01(w, 3u)
+    check_batch(t, w, ntok, expect_exact, f16_lane)
+}
+
 def private check_bf16(t : T?; ntok : int; f16_lane : bool) {
-    var wbf : array<uint16>
-    wbf |> resize(D * N)
-    {
-        var w : array<float>
-        w |> resize(D * N)
-        fill01(w, 3u)
-        for (dst, src in wbf, w) {
-            dst = uint16(uint(float_bits_to_int(src)) >> 16u)
-        }
-    }
-    var x : array<float>
-    x |> resize(ntok * N)
-    fill01(x, 7u)
-    if (f16_lane && !t_accel_set_f16(true)) {
-        to_log(LOG_WARNING, "BNNS probe failed on this OS - f16 lane arm feints\n")
-        t |> success(true)
-        return
-    }
-    let r <- ref_and_accel(ntok) $(var y) {
-        matmul_bf16_batch(y, wbf, 0l, x, int64(N), int64(D), int64(ntok))
-    }
-    t_accel_set_f16(false)
-    t |> success(max_rel_err(r.yref, r.yacc) < (f16_lane ? 1e-2 : 1e-4))
+    var w : array<float>
+    w |> resize(D * N)
+    fill01(w, 3u)
+    let wbf <- [for (v in w); bf16_bits_truncated(v)]
+    check_batch(t, wbf, ntok, false, f16_lane)
 }
 
 // the counter a driver reads to tell an armed run that served from one that fell through
@@ -172,8 +187,7 @@ def private check_engaged_witness(t : T?) {
 [test, unused_argument(t)]  // off-Apple the feint arm never reads t
 def test_accel_float_batch(t : T?) {
     static_if (typeinfo builtin_module_exists(das_accelerate)) {
-        with_job_que() {
-            setup_dasllama_jobque_()
+        with_dasllama_jobque() {
             t_accel_pin_floor()  // tiny test shapes must engage, not fall through
             t_accel_set_f16(false)  // pin: env DASLLAMA_ACCEL_F16 must not leak into the sgemm arms
             t |> run("fp32 batch vs portable (tolerance)") @(t : T?) {

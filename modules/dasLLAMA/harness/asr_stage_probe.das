@@ -115,9 +115,7 @@ def main() : int {
     var m <- empty(cfg.mmproj) ? load_asr_model(cfg.model) : load_asr_model(cfg.model, cfg.mmproj)
     let samples <- load_audio_16k_mono(cfg.wav)
     let reps = cfg.reps > 0 ? cfg.reps : 1
-    with_job_que() {
-        setup_dasllama_jobque_()   // the engine dispatch standard — bare with_job_que profiles the
-                                   // ~10us/job fifo fork/join instead of the shipped team dispatch
+    with_dasllama_jobque() {
         run_once(m, samples, cfg.lang)     // warmup, unprofiled
         if (!empty(cfg.trace)) {
             jobque_trace_start(1 << 21)   // encoder chunks are coarse — a couple of reps fit easily

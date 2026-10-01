@@ -11,7 +11,7 @@ options _dasllama_internal = true
 // no speculative arm and llama-cli re-wraps a raw prompt as a chat turn, which is why the server.
 require dasllama/dasllama_transformer   // nolint:STYLE029,LINT019 — umbrella fires each arch [init] registration; on a host without dasMetal only dasllama_common's symbols remain, the das_metal half reaches the generation API it re-exports
 require dasllama/dasllama_common
-require dasllama/dasllama_math   // setup_dasllama_jobque_
+require dasllama/dasllama_math   // with_dasllama_jobque
 require dasllama/dasllama_image   // load_model_cached - the .dlim rail
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_chat   // create_chat_renderer_ / set_thinking_ / add_user_ / render_turn_
@@ -20,7 +20,7 @@ require dasllama/dasllama_gguf   // gguf_is_assistant
 require ?das_metal dasllama/dasllama_metal_common   // finish_pending_step
 require ?das_metal dasllama/dasllama_metal_decode
 require ?das_metal dasllama/dasllama_metal_prefill
-require ../performance/profile_common.das   // apply_box_profile_runtime
+require ../performance/profile_common.das   // apply_box_profile_runtime, load_corpus
 require dashv/dashv_boost   // GET / POST against the reference server
 require daslib/jobque_boost
 require daslib/json_boost
@@ -88,22 +88,6 @@ struct Args {
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
     help : bool
-}
-
-def private load_corpus(path : string) : array<string> {
-    var texts : array<string>
-    fopen(path, "rb") $(f) {
-        if (f == null) {
-            panic("mtp_ruler: can't open prompt corpus {path}")
-        }
-        for (p in split(fread(f), "%%")) {
-            let tp = strip(p)
-            if (!empty(tp) && !starts_with(tp, "#")) {
-                texts |> push(clone_string(tp))
-            }
-        }
-    }
-    return <- texts
 }
 
 //! stdout of a shell command, "" when it fails to start
@@ -185,8 +169,7 @@ def private greedy_text(t : Model; tk : Tokenizer; ids : array<int64>; ngen : in
 //! plus our greedy continuation of it, the control the reference's text is checked against.
 def private render_prompts(model : string; texts : array<string>; ngen : int; gpu : bool; var rendered : array<string>; var ours : array<string>) {   // nolint:LINT012,LINT019 — gpu is read in the das_metal half
     let tk <- load_tokenizer_auto(model)
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         var t <- load_model_cached(model, QuantMode.q8)
         t.config.seq_len = min(t.config.seq_len, 2048l)
         static_if (typeinfo builtin_module_exists(das_metal)) {

@@ -16,13 +16,13 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // setup_dasllama_jobque_ (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require dasllama/dasllama_kqformat
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed public   // resident_then_cpu_feed, feed_steps_within, tile_arm_tag
+require _resident_feed public   // resident_ready, load_resident, resident_prompt, resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -130,20 +130,9 @@ def private device_has_expert_tiles() : bool {
 //! prefill logits and every step's within the bar, the one-step-off control past it, the routed
 //! block's census growing by the MoE layer count per window and per step
 def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
-    if (!jit_enabled()) {
-        t |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-        return
-    }
     let path = path_join(models_dir(), fx.file)
-    if (!model_available(t, path)) return
-    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-        return
-    }
-    let route0 = gpu_want_resident()
-    set_gpu_resident_route(true)   //! the whole-model driver's arm, whatever lever an earlier cell left
-    var tr <- load_model_(path, QuantMode.q8)
-    set_gpu_resident_route(route0)
+    if (!resident_ready(t, path)) return
+    var tr <- load_resident(path)
     t |> success(tr.config.n_expert > 0l && (tr.config.n_ff_shexp > 0l) == fx.shexp, "the fixture routes experts {fx.shexp ? "beside" : "with no"} shared expert")
     if (fx.window > 0l) {
         t |> equal(tr.config.sliding_window, fx.window, "the fixture's sliding layers attend {fx.window} keys")
@@ -160,10 +149,9 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
     }
     let layers = tr.config.n_layers
     let windows = (n + PF_WINDOW_ROWS - 1l) / PF_WINDOW_ROWS
-    with_job_que() {
-        setup_dasllama_jobque_()
-        var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
-        var toks <- [for (i in range64(FED_STEPS)); 2000l + (i * 53l) % 4000l]
+    with_dasllama_jobque() {
+        var prompt <- resident_prompt(n)
+        var toks <- resident_feed(FED_STEPS)
         let sched0 = census("moe_sched_cls_spv")
         let rows0 = census("topk_rows_cls_spv")
         let topk0 = census("topk_cls_spv")

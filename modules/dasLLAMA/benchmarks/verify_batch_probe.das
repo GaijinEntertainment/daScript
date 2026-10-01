@@ -4,13 +4,12 @@ options _jit_fast_math = true   // ggml-parity FP laxity — matches how the ups
 options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
-require dasllama/dasllama_math   // setup_dasllama_jobque_ + apply_box_profile_runtime (engine-level, not re-exported)
+require dasllama/dasllama_math   // with_dasllama_jobque + apply_box_profile_runtime (engine-level, not re-exported)
 require dasllama/dasllama_image   // load_model_cached — the .dlim rail, without the full facade's compile weight
 require dasllama/dasllama_tokenizer
 require ../performance/profile_common.das   // profile_threads + affinity_on — the standing per-box methodology
 require daslib/jobque_boost
 require daslib/module_path
-require daslib/strings_boost
 require daslib/clargs
 require daslib/fio
 require math
@@ -59,22 +58,6 @@ struct Args {
 
 let WARM_STEPS = 6l
 
-def private load_corpus(path : string) : array<string> {
-    var texts : array<string>
-    fopen(path, "rb") $(f) {
-        if (f == null) {
-            panic("can't open prompt corpus {path}")
-        }
-        for (p in split(fread(f), "%%")) {
-            let tp = strip(p)
-            if (!empty(tp) && !starts_with(tp, "#")) {
-                texts |> push(clone_string(tp))
-            }
-        }
-    }
-    return <- texts
-}
-
 [export]
 def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one A/B cell per batch size
     allow_cpu_prefill()   // CPU-protocol probe by intent — disarm the Metal-build tripwire
@@ -117,8 +100,7 @@ def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one 
     set_mtp_spec(false)   // the draft head must not ride along — this probe times the trunk alone
     var tk <- load_tokenizer_auto(cfg.model)
     print("loading {cfg.model}\n")
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         var t <- load_model_cached(cfg.model, cfg.quant)
         // one long real-token stream: routing on a MoE is content-dependent, so synthetic ids
         // would understate the union cost the batched arms are here to expose

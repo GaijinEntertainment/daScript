@@ -1,6 +1,6 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget
-options _function_length = 0        // per-kernel gates: hand-bound buffers/uniforms + dispatch + oracle compare, one flat run each
+options _function_length = 0        // per-kernel gates: fixture + builder dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 options _dasllama_internal = true
 
@@ -9,11 +9,13 @@ require dasllama/dasllama_math
 require dasllama/dasllama_tower     // layernorm + the shipped gelu flavors + the gemma4v pieces — the tower oracles
 require dasllama/dasllama_rope      // build_rope_tabs_rows — the rope2d gate's tables
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
+require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
-require ?das_metal _metal_kernel_common   // shared buf helpers + eyeball-dump compares
+require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell
 require _attn_oracle
+require _compares   // Bar: the cells' bars
 require ?das_metal _mtl_toy               // the [metal_dispatch] multi-kernel fixture
-require ?das_metal dasllama/dasllama_metal_lens   // set_metal_requires_hook - the requires= tripwire observer
+require ?das_metal dasllama/dasllama_metal_lens   // the requires= tripwire observer: captured, set, restored
 require daslib/f16_cvt              // f32_to_f16 — packing the synthetic scale planes
 require math
 require daslib/fio                  // the lens tgmem gate's spawned compiles
@@ -25,455 +27,358 @@ require daslib/strings_boost
 // ties), the q8/k6 embed gathers (pow2 scales -> bit-exact), the fused add+rms family (simd_sum
 // reassociates -> the shared 1e-4 bar), per-head QK-norm in both its in-place and V-fusion
 // binding shapes, geglu, and the logit suppress/softcap pins. Outputs sit in sentinel-padded
-// buffers compared WHOLE, so a write outside the target span is a red. Off-Apple (or with no
-// Metal device) every check feints cleanly.
+// buffers compared WHOLE, so a write outside the target span is a red. Without das_metal in the
+// build, or with no Metal device, every check skips.
 
 let private EPS = 1.0e-5
+let private BAR_BITS = Bar(exact = true, poison_scaled = true)   //! bit-exact; the poisoned last element moves 0.5 of its magnitude floored at 1, so no magnitude absorbs it
+let private BAR_TIGHT = Bar(rel = 1e-4, poison_scaled = true)   //! the shared 1e-4 bar: simd_sum reassociation and the device transcendentals
 
-def private copy_row_gate(t : T?; dev, queue; n : int) {
+def private copy_row_gate(t : T?; var dev, queue; n : int) {
     let tag = "copy_row n={n}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_copy_row_msl, metal_copy_row_msl_entry, metal_copy_row_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var src : array<float>
-    src |> resize(n)
-    for (i in range(n)) {
-        src[i] = 0.13 * float(i % 51) - 3.1
-    }
-    var want : array<float>
-    want |> resize(n + 16)
-    for (i in range(n + 16)) {
-        want[i] = i < n ? src[i] : -1000.0   // the guard must leave the pad untouched
-    }
-    var bs = buf_upload(dev, src)
-    var bd = buf_fill(dev, n + 16, -1000.0)
-    var bn = buf_u32(dev, uint(n))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, n) $(enc) {
-        metal_set_buffer(enc, bs, 0ul, 0)
-        metal_set_buffer(enc, bd, 0ul, 1)
-        metal_set_buffer(enc, bn, 0ul, 2)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bd, want, tag), 0)
-    }
-    metal_release(bs)
-    metal_release(bd)
-    metal_release(bn)
-    metal_release(pso)
-    delete src
-    delete want
-}
-
-def private argmax_gate(t : T?; dev, queue; n, hi1, hi2 : int) {
-    let tag = "argmax n={n} ties at {hi1},{hi2}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_argmax_msl, metal_argmax_msl_entry, metal_argmax_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var lg : array<float>
-    lg |> resize(n)
-    for (i in range(n)) {
-        lg[i] = 0.07 * float(i % 89) - 5.0
-    }
-    lg[hi1] = 9.5   // exact tie — the LOWER index must win (the CPU sampler's rule)
-    lg[hi2] = 9.5
-    var blg = buf_upload(dev, lg)
-    var btok = buf_fill(dev, 1, 0xFFFFFFFFu)
-    var bn = buf_u32(dev, uint(n))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_argmax_msl_tgmem, 0)
-        metal_set_buffer(enc, blg, 0ul, 0)
-        metal_set_buffer(enc, btok, 0ul, 1)
-        metal_set_buffer(enc, bn, 0ul, 2)
-        metal_dispatch_threadgroups(enc, uint3(1u, 1u, 1u), uint3(1024u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        var want : array<uint>
-        want |> resize(1)
-        want[0] = uint(min(hi1, hi2))
-        t |> equal(buf_mismatch_exact(btok, want, tag), 0)
-        delete want
-    }
-    metal_release(blg)
-    metal_release(btok)
-    metal_release(bn)
-    metal_release(pso)
-    delete lg
-}
-
-def private argmax_rows_gate(t : T?; dev, queue; nrows, n : int) {
-    let tag = "argmax_rows nrows={nrows} n={n}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_argmax_rows_msl, metal_argmax_rows_msl_entry, metal_argmax_rows_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var lg : array<float>
-    lg |> resize(nrows * n)
-    var want : array<uint>
-    want |> resize(nrows)
-    for (r in range(nrows)) {
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_copy_row)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope src : array<float>
+        src |> resize(n)
         for (i in range(n)) {
-            lg[r * n + i] = 0.07 * float((i + 3 * r) % 89) - 5.0
+            src[i] = 0.13 * float(i % 51) - 3.1
         }
-        let hi = (r * 37 + 11) % n
-        lg[r * n + hi] = 9.5
-        if (r % 2 == 1) {   // an exact tie at a HIGHER index - the lower one keeps the row (the CPU sampler's rule)
-            lg[r * n + min(hi + 5, n - 1)] = 9.5
+        var inscope want : array<float>
+        want |> resize(n + 16)
+        for (i in range(n + 16)) {
+            want[i] = i < n ? src[i] : -1000.0   // the guard must leave the pad untouched
         }
-        want[r] = uint(hi)
+        let bs = mc |> in_(src)
+        let bd = mc |> out_words(n + 16, -1000.0)
+        let bn = mc |> in_plain([uint(n)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bs], 0ul, mc.buf[bd], 0ul, mc.buf[bn], int64(n))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bd], want, BAR_BITS, FLAT_SHAPE)
     }
-    var blg = buf_upload(dev, lg)
-    var btok = buf_fill(dev, nrows, 0xFFFFFFFFu)
-    var bn = buf_u32(dev, uint(n))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_argmax_rows_msl_tgmem, 0)
-        metal_set_buffer(enc, blg, 0ul, 0)
-        metal_set_buffer(enc, btok, 0ul, 1)
-        metal_set_buffer(enc, bn, 0ul, 2)
-        metal_dispatch_threadgroups(enc, uint3(uint(nrows), 1u, 1u), uint3(1024u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_exact(btok, want, tag), 0)
-    }
-    metal_release(blg)
-    metal_release(btok)
-    metal_release(bn)
-    metal_release(pso)
-    delete lg
-    delete want
 }
 
-def private embed_q8_gate(t : T?; dev, queue; dim, vocab, tok : int) {
+def private argmax_gate(t : T?; var dev, queue; n, hi1, hi2 : int) {
+    let tag = "argmax n={n} ties at {hi1},{hi2}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_argmax)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope lg : array<float>
+        lg |> resize(n)
+        for (i in range(n)) {
+            lg[i] = 0.07 * float(i % 89) - 5.0
+        }
+        lg[hi1] = 9.5   // exact tie — the LOWER index must win (the CPU sampler's rule)
+        lg[hi2] = 9.5
+        let blg = mc |> in_(lg)
+        let btok = mc |> out_words(1, 0xFFFFFFFFu)
+        let bn = mc |> in_plain([uint(n)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[blg], mc.buf[btok], mc.buf[bn])
+            }
+        }
+        return if (!ran)
+        check_buf_exact(t, tag, mc.buf[btok], [uint(min(hi1, hi2))])
+    }
+}
+
+def private argmax_rows_gate(t : T?; var dev, queue; nrows, n : int) {
+    let tag = "argmax_rows nrows={nrows} n={n}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_argmax_rows)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope lg : array<float>
+        lg |> resize(nrows * n)
+        var inscope want : array<uint>
+        want |> resize(nrows)
+        for (r in range(nrows)) {
+            for (i in range(n)) {
+                lg[r * n + i] = 0.07 * float((i + 3 * r) % 89) - 5.0
+            }
+            let hi = (r * 37 + 11) % n
+            lg[r * n + hi] = 9.5
+            if (r % 2 == 1) {   // an exact tie at a HIGHER index - the lower one keeps the row (the CPU sampler's rule)
+                lg[r * n + min(hi + 5, n - 1)] = 9.5
+            }
+            want[r] = uint(hi)
+        }
+        let blg = mc |> in_(lg)
+        let btok = mc |> out_words(nrows, 0xFFFFFFFFu)
+        let bn = mc |> in_plain([uint(n)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[blg], mc.buf[btok], mc.buf[bn], int64(nrows))
+            }
+        }
+        return if (!ran)
+        check_buf_exact(t, tag, mc.buf[btok], want)
+    }
+}
+
+def private embed_q8_gate(t : T?; var dev, queue; dim, vocab, tok : int) {
     let tag = "embed_q8 dim={dim} vocab={vocab} tok={tok}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_embed_q8_msl, metal_embed_q8_msl_entry, metal_embed_q8_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let escale = 2.0
-    var blob : array<uint8>
-    var wdeq : array<float>
-    q8_blob_fill(vocab, dim / 32, blob, wdeq, 256)
-    var want : array<float>
-    want |> resize(dim)
-    for (i in range(dim)) {
-        want[i] = wdeq[tok * dim + i] * escale
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_embed_c)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let escale = 2.0
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(vocab, dim / 32, blob, wdeq, 256)
+        var inscope want : array<float>
+        want |> resize(dim)
+        for (i in range(dim)) {
+            want[i] = wdeq[tok * dim + i] * escale
+        }
+        let bblob = mc |> in_plain(blob)
+        let btok = mc |> in_plain([uint(tok)])
+        let bxo = mc |> out_words(dim, -1000.0)
+        let bdim = mc |> in_plain([uint(dim)])
+        let besc = mc |> in_plain([escale])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {   // one blob, its byte and half-scale views
+                invoke(st.enc, enc, mc.buf[bblob], 0ul, mc.buf[bblob], mc.buf[btok], 0ul, mc.buf[bxo], 0ul, mc.buf[bdim], mc.buf[besc], int64(dim))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bxo], want, BAR_BITS, FLAT_SHAPE)
     }
-    var bblob = buf_upload(dev, blob)
-    var btok = buf_fill(dev, 1, uint(tok))
-    var bxo = buf_fill(dev, dim, -1000.0)
-    var bdim = buf_u32(dev, uint(dim))
-    var besc = buf_f32(dev, escale)
-    let ran = dispatch_64_lanes(t, queue, tag, pso, dim) $(enc) {
-        metal_set_buffer(enc, bblob, 0ul, 0)
-        metal_set_buffer(enc, bblob, 0ul, 1)
-        metal_set_buffer(enc, btok, 0ul, 2)
-        metal_set_buffer(enc, bxo, 0ul, 3)
-        metal_set_buffer(enc, bdim, 0ul, 4)
-        metal_set_buffer(enc, besc, 0ul, 5)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bxo, want, tag), 0)
-    }
-    metal_release(bblob)
-    metal_release(btok)
-    metal_release(bxo)
-    metal_release(bdim)
-    metal_release(besc)
-    metal_release(pso)
-    delete blob
-    delete wdeq
-    delete want
 }
 
-def private embed_k6_gate(t : T?; dev, queue; dim, vocab, tok : int) {
+def private embed_k6_gate(t : T?; var dev, queue; dim, vocab, tok : int) {
     let tag = "embed_k6 dim={dim} vocab={vocab} tok={tok}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_embed_k6_msl, metal_embed_k6_msl_entry, metal_embed_k6_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let nb = dim / 256
-    let nsb = vocab * nb
-    let escale = 2.0
-    var kq : array<uint8>
-    var ks : array<uint8>
-    kq_fill_planes(6, nsb, kq, ks)
-    var want : array<float>
-    want |> resize(dim)
-    kq_row_ref(6, tok * nb, nb, nsb, kq, ks, want)
-    for (i in range(dim)) {
-        want[i] *= escale
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_embed_k6_c)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let nb = dim / 256
+        let nsb = vocab * nb
+        let escale = 2.0
+        var inscope kq : array<uint8>
+        var inscope ks : array<uint8>
+        kq_fill_planes(6, nsb, kq, ks)
+        var inscope want : array<float>
+        want |> resize(dim)
+        kq_row_ref(6, tok * nb, nb, nsb, kq, ks, want)
+        for (i in range(dim)) {
+            want[i] *= escale
+        }
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let btok = mc |> in_plain([uint(tok)])
+        let bxo = mc |> out_words(dim, -1000.0)
+        let bdim = mc |> in_plain([uint(dim)])
+        let besc = mc |> in_plain([escale])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bks], kq_split_doff(6, nsb), mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[btok], mc.buf[bxo], mc.buf[bdim], mc.buf[besc], int64(dim))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bxo], want, BAR_BITS, FLAT_SHAPE)
     }
-    var bks = buf_upload(dev, ks)
-    var bkq = buf_upload(dev, kq)
-    var btok = buf_fill(dev, 1, uint(tok))
-    var bxo = buf_fill(dev, dim, -1000.0)
-    var bdim = buf_u32(dev, uint(dim))
-    var besc = buf_f32(dev, escale)
-    let ran = dispatch_64_lanes(t, queue, tag, pso, dim) $(enc) {
-        metal_set_buffer(enc, bks, uint64(nsb * 16), 0)   // the f16 d tail
-        metal_set_buffer(enc, bks, 0ul, 1)
-        metal_set_buffer(enc, bkq, 0ul, 2)
-        metal_set_buffer(enc, btok, 0ul, 3)
-        metal_set_buffer(enc, bxo, 0ul, 4)
-        metal_set_buffer(enc, bdim, 0ul, 5)
-        metal_set_buffer(enc, besc, 0ul, 6)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bxo, want, tag), 0)
-    }
-    metal_release(bks)
-    metal_release(bkq)
-    metal_release(btok)
-    metal_release(bxo)
-    metal_release(bdim)
-    metal_release(besc)
-    metal_release(pso)
-    delete kq
-    delete ks
-    delete want
 }
 
 // the fused add+rms family: sequential CPU mirror, simd_sum reassociation under the 1e-4 bar
-def private add_rms_gate(t : T?; dev, queue; batched : bool; dim, nrows : int; ascale : float) {
+def private add_rms_gate(t : T?; var dev, queue; batched : bool; dim, nrows : int; ascale : float) {
     let tag = "add_rms{batched ? "_b" : ""} dim={dim} rows={nrows} ascale={ascale}"
-    var err : string
-    var pso = pipeline_from_source(dev, MetalAddRms_metal_add_rms_msl, MetalAddRms_metal_add_rms_msl_entry, MetalAddRms_metal_add_rms_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let total = nrows * dim
-    var xv : array<float>
-    var av : array<float>
-    var w : array<float>
-    xv |> resize(total)
-    av |> resize(total)
-    w |> resize(dim)
-    for (i in range(total)) {
-        xv[i] = 0.11 * float(i % 43) - 2.3
-        av[i] = 0.07 * float(i % 31) - 1.1
-    }
-    for (i in range(dim)) {
-        w[i] = 0.5 + 0.04 * float(i % 13)
-    }
-    var want_x : array<float>
-    var want_y : array<float>
-    want_x |> resize(total)
-    want_y |> resize(total)
-    for (i in range(total)) {
-        want_x[i] = (xv[i] + av[i]) * ascale
-    }
-    unsafe {
-        for (r in range(nrows)) {
-            rmsnorm(addr(want_y[r * dim]), addr<float const?>(want_x[r * dim]), addr<float const?>(w[0]), int64(dim), EPS)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let s1 = stamp_of(@@enc_addrms_c)
+        let sb = stamp_of(@@enc_add_rms_b_c)
+        var pso = mc |> keep_stamp(s1, err)   //! the single-row and batched builders dispatch the one MetalAddRms kernel
+        return if (!pso_ok(t, tag, pso, err))
+        let total = nrows * dim
+        var inscope xv : array<float>
+        var inscope av : array<float>
+        var inscope w : array<float>
+        xv |> resize(total)
+        av |> resize(total)
+        w |> resize(dim)
+        for (i in range(total)) {
+            xv[i] = 0.11 * float(i % 43) - 2.3
+            av[i] = 0.07 * float(i % 31) - 1.1
         }
+        for (i in range(dim)) {
+            w[i] = 0.5 + 0.04 * float(i % 13)
+        }
+        var inscope want_x : array<float>
+        var inscope want_y : array<float>
+        want_x |> resize(total)
+        want_y |> resize(total)
+        for (i in range(total)) {
+            want_x[i] = (xv[i] + av[i]) * ascale
+        }
+        unsafe {
+            for (r in range(nrows)) {
+                rmsnorm(addr(want_y[r * dim]), addr<float const?>(want_x[r * dim]), addr<float const?>(w[0]), int64(dim), EPS)
+            }
+        }
+        let bx = mc |> io_(xv)
+        let ba = mc |> in_(av)
+        let bw = mc |> in_(w)
+        let by = mc |> out_words(total, -1000.0)
+        let bdim = mc |> in_plain([uint(dim)])
+        let beps = mc |> in_plain([EPS])
+        let basc = mc |> in_plain([ascale])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (x, a, w1, y, d, e, s) = (mc.buf[bx], mc.buf[ba], mc.buf[bw], mc.buf[by], mc.buf[bdim], mc.buf[beps], mc.buf[basc])
+            if (batched) {
+                stamp_run(sb, pso) {
+                    invoke(sb.enc, enc, x, a, w1, y, d, e, s, int64(nrows))
+                }
+            } else {   // the single-row builder's one threadgroup: nrows is 1 on every unbatched arm
+                stamp_run(s1, pso) {
+                    invoke(s1.enc, enc, x, a, w1, y, d, e, s)
+                }
+            }
+        }
+        return if (!ran)
+        check_buf(t, "{tag} x", mc.buf[bx], want_x, BAR_TIGHT, Shape(row_width = dim))
+        check_buf(t, "{tag} y", mc.buf[by], want_y, BAR_TIGHT, Shape(row_width = dim))
     }
-    var bx = buf_upload(dev, xv)
-    var ba = buf_upload(dev, av)
-    var bw = buf_upload(dev, w)
-    var by = buf_fill(dev, total, -1000.0)
-    var bdim = buf_u32(dev, uint(dim))
-    var beps = buf_f32(dev, EPS)
-    var basc = buf_f32(dev, ascale)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, MetalAddRms_metal_add_rms_msl_tgmem, 0)
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, ba, 0ul, 1)
-        metal_set_buffer(enc, bw, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bdim, 0ul, 4)
-        metal_set_buffer(enc, beps, 0ul, 5)
-        metal_set_buffer(enc, basc, 0ul, 6)
-        metal_dispatch_threadgroups(enc, uint3(uint(nrows), 1u, 1u), uint3(1024u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bx, want_x, "{tag} x"), 0)
-        t |> equal(buf_mismatch_approx(by, want_y, "{tag} y"), 0)
-    }
-    metal_release(bx)
-    metal_release(ba)
-    metal_release(bw)
-    metal_release(by)
-    metal_release(bdim)
-    metal_release(beps)
-    metal_release(basc)
-    metal_release(pso)
-    delete xv
-    delete av
-    delete w
-    delete want_x
-    delete want_y
 }
 
-def private pre_add_rms_gate(t : T?; dev, queue; dim : int) {
+def private pre_add_rms_gate(t : T?; var dev, queue; dim : int) {
     let tag = "pre_add_rms dim={dim}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_pre_add_rms_msl, metal_pre_add_rms_msl_entry, metal_pre_add_rms_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var xv : array<float>
-    var av : array<float>
-    var wpa : array<float>
-    var wffn : array<float>
-    xv |> resize(dim)
-    av |> resize(dim)
-    wpa |> resize(dim)
-    wffn |> resize(dim)
-    for (i in range(dim)) {
-        xv[i] = 0.09 * float(i % 41) - 1.9
-        av[i] = 0.13 * float(i % 37) - 2.1
-        wpa[i] = 0.4 + 0.05 * float(i % 11)
-        wffn[i] = 0.6 + 0.03 * float(i % 17)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_preaddrms_c)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope xv : array<float>
+        var inscope av : array<float>
+        var inscope wpa : array<float>
+        var inscope wffn : array<float>
+        xv |> resize(dim)
+        av |> resize(dim)
+        wpa |> resize(dim)
+        wffn |> resize(dim)
+        for (i in range(dim)) {
+            xv[i] = 0.09 * float(i % 41) - 1.9
+            av[i] = 0.13 * float(i % 37) - 2.1
+            wpa[i] = 0.4 + 0.05 * float(i % 11)
+            wffn[i] = 0.6 + 0.03 * float(i % 17)
+        }
+        var inscope want_x : array<float>
+        var inscope want_y : array<float>
+        want_x |> resize(dim)
+        want_y |> resize(dim)
+        rmsnorm(want_x, av, wpa, int64(dim), EPS)
+        for (i in range(dim)) {
+            want_x[i] = xv[i] + want_x[i]
+        }
+        rmsnorm(want_y, want_x, wffn, int64(dim), EPS)
+        let bx = mc |> io_(xv)
+        let ba = mc |> in_(av)
+        let bwpa = mc |> in_(wpa)
+        let bwffn = mc |> in_(wffn)
+        let by = mc |> out_words(dim, -1000.0)
+        let bdim = mc |> in_plain([uint(dim)])
+        let beps = mc |> in_plain([EPS])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[ba], mc.buf[bwpa], mc.buf[bwffn], mc.buf[by], mc.buf[bdim], mc.buf[beps])
+            }
+        }
+        return if (!ran)
+        check_buf(t, "{tag} x", mc.buf[bx], want_x, BAR_TIGHT, FLAT_SHAPE)
+        check_buf(t, "{tag} y", mc.buf[by], want_y, BAR_TIGHT, FLAT_SHAPE)
     }
-    var want_x : array<float>
-    var want_y : array<float>
-    want_x |> resize(dim)
-    want_y |> resize(dim)
-    rmsnorm(want_x, av, wpa, int64(dim), EPS)
-    for (i in range(dim)) {
-        want_x[i] = xv[i] + want_x[i]
-    }
-    rmsnorm(want_y, want_x, wffn, int64(dim), EPS)
-    var bx = buf_upload(dev, xv)
-    var ba = buf_upload(dev, av)
-    var bwpa = buf_upload(dev, wpa)
-    var bwffn = buf_upload(dev, wffn)
-    var by = buf_fill(dev, dim, -1000.0)
-    var bdim = buf_u32(dev, uint(dim))
-    var beps = buf_f32(dev, EPS)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_pre_add_rms_msl_tgmem, 0)
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, ba, 0ul, 1)
-        metal_set_buffer(enc, bwpa, 0ul, 2)
-        metal_set_buffer(enc, bwffn, 0ul, 3)
-        metal_set_buffer(enc, by, 0ul, 4)
-        metal_set_buffer(enc, bdim, 0ul, 5)
-        metal_set_buffer(enc, beps, 0ul, 6)
-        metal_dispatch_threadgroups(enc, uint3(1u, 1u, 1u), uint3(1024u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bx, want_x, "{tag} x"), 0)
-        t |> equal(buf_mismatch_approx(by, want_y, "{tag} y"), 0)
-    }
-    metal_release(bx)
-    metal_release(ba)
-    metal_release(bwpa)
-    metal_release(bwffn)
-    metal_release(by)
-    metal_release(bdim)
-    metal_release(beps)
-    metal_release(pso)
-    delete xv
-    delete av
-    delete wpa
-    delete wffn
-    delete want_x
-    delete want_y
 }
 
 // per-head QK-norm: vfusion=false is the in-place decode shape (soffe == koffe), vfusion=true
 // the no-wv form (reads the pre-norm K slice, writes the v segment)
-def private qk_norm_gate(t : T?; dev, queue; hs, nq, nk, nrows : int; vfusion : bool) {
+def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusion : bool) {
     let tag = "qk_norm hs={hs} nq={nq} nk={nk} rows={nrows} vfusion={vfusion}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_qk_norm_msl, metal_qk_norm_msl_entry, metal_qk_norm_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let qd = nq * hs
-    let kvd = nk * hs
-    let rstride = qd + 2 * kvd
-    let soffe = qd                          // K region read base
-    let koffe = vfusion ? qd + kvd : qd     // write base: v segment under fusion, in-place otherwise
-    var xv : array<float>
-    var w : array<float>
-    xv |> resize(nrows * rstride)
-    w |> resize(2 * hs)
-    for (i in range(nrows * rstride)) {
-        xv[i] = 0.11 * float(i % 47) - 2.5
-    }
-    for (i in range(2 * hs)) {
-        w[i] = 0.5 + 0.04 * float(i % 19)
-    }
-    var want := xv
-    for (r in range(nrows)) {
-        for (tg2 in range(nq + nk)) {
-            let isK = tg2 >= nq
-            let h = isK ? tg2 - nq : tg2
-            let rbase = r * rstride + (isK ? soffe : 0) + h * hs
-            let wbase = r * rstride + (isK ? koffe : 0) + h * hs
-            unsafe {
-                rmsnorm(addr(want[wbase]), addr<float const?>(xv[rbase]), addr<float const?>(w[isK ? hs : 0]), int64(hs), EPS)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_qk_norm)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let qd = nq * hs
+        let kvd = nk * hs
+        let rstride = qd + 2 * kvd
+        let soffe = qd                          // K region read base
+        let koffe = vfusion ? qd + kvd : qd     // write base: v segment under fusion, in-place otherwise
+        var inscope xv : array<float>
+        var inscope w : array<float>
+        xv |> resize(nrows * rstride)
+        w |> resize(2 * hs)
+        for (i in range(nrows * rstride)) {
+            xv[i] = 0.11 * float(i % 47) - 2.5
+        }
+        for (i in range(2 * hs)) {
+            w[i] = 0.5 + 0.04 * float(i % 19)
+        }
+        var inscope want := xv
+        for (r in range(nrows)) {
+            for (tg2 in range(nq + nk)) {
+                let isK = tg2 >= nq
+                let h = isK ? tg2 - nq : tg2
+                let rbase = r * rstride + (isK ? soffe : 0) + h * hs
+                let wbase = r * rstride + (isK ? koffe : 0) + h * hs
+                unsafe {
+                    rmsnorm(addr(want[wbase]), addr<float const?>(xv[rbase]), addr<float const?>(w[isK ? hs : 0]), int64(hs), EPS)
+                }
             }
         }
+        let bx = mc |> io_(xv)
+        let bw = mc |> in_(w)
+        var ka = QkNormArgs(nq = uint(nq), koffe = uint(koffe), rstride = uint(rstride), hs = uint(hs),
+            woffe = uint(hs), eps = EPS, soffe = uint(soffe))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], 0ul, mc.buf[bw], ka, int64(nq + nk), int64(nrows), int64(hs))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_TIGHT, Shape(row_width = rstride, head_width = hs))
     }
-    var bx = buf_upload(dev, xv)
-    var bw = buf_upload(dev, w)
-    var ka = QkNormArgs(nq = uint(nq), koffe = uint(koffe), rstride = uint(rstride), hs = uint(hs),
-        woffe = uint(hs), eps = EPS, soffe = uint(soffe))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_qk_norm_msl_tgmem, 0)
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, bw, 0ul, 1)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
-        metal_dispatch_threadgroups(enc, uint3(uint(nq + nk), uint(nrows), 1u), uint3(uint(hs), 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bx, want, tag), 0)
-    }
-    metal_release(bx)
-    metal_release(bw)
-    metal_release(pso)
-    delete xv
-    delete w
-    delete want
 }
 
-//! one in-place two-input activation stamp (g, u, total at slots 0-2) against `oracle`, which rewrites `want` - a copy of g - from g and u
-def private ew2_act_gate(t : T?; dev, queue; name, msl, entry : string; fastmath : bool; total : int;
+//! one in-place two-input activation stamp `st` (a `stamp_of` of its g, u, total builder) against `oracle`, which rewrites `want` - a copy of g - from g and u
+def private ew2_act_gate(t : T?; var dev, queue; name : string; st; total : int;
                          oracle : block<(var want : array<float>; g, u : array<float>) : void>) {
     let tag = "{name} total={total}"
-    var err : string
-    var pso = pipeline_from_source(dev, msl, entry, fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var g : array<float>
-    var u : array<float>
-    g |> resize(total)
-    u |> resize(total)
-    for (i in range(total)) {
-        g[i] = 0.21 * float(i % 43) - 4.3
-        u[i] = 0.17 * float(i % 23) - 1.9
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope g : array<float>
+        var inscope u : array<float>
+        g |> resize(total)
+        u |> resize(total)
+        for (i in range(total)) {
+            g[i] = 0.21 * float(i % 43) - 4.3
+            u[i] = 0.17 * float(i % 23) - 1.9
+        }
+        var inscope want := g
+        invoke(oracle, want, g, u)
+        let bg = mc |> io_(g)
+        let bu = mc |> in_(u)
+        let btot = mc |> in_plain([uint(total)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bg], 0ul, mc.buf[bu], 0ul, mc.buf[btot], int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bg], want, BAR_TIGHT, FLAT_SHAPE)
     }
-    var want := g
-    invoke(oracle, want, g, u)
-    var bg = buf_upload(dev, g)
-    var bu = buf_upload(dev, u)
-    var btot = buf_u32(dev, uint(total))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bg, 0ul, 0)
-        metal_set_buffer(enc, bu, 0ul, 1)
-        metal_set_buffer(enc, btot, 0ul, 2)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bg, want, tag), 0)
-    }
-    metal_release(bg)
-    metal_release(bu)
-    metal_release(btot)
-    metal_release(pso)
-    delete g
-    delete u
-    delete want
 }
 
 // ===== the gemma4v tower primitives =====
@@ -483,310 +388,240 @@ def private ew2_act_gate(t : T?; dev, queue; name, msl, entry : string; fastmath
 let private CLAMP_IN = 0    // the record's input pair (imin, imax)
 let private CLAMP_OUT = 1   // its output pair (omin, omax)
 
-def private clamp_gate(t : T?; dev, queue; total : int; side : int; inplace : bool) {
+def private clamp_gate(t : T?; var dev, queue; total : int; side : int; inplace : bool) {
     let tag = "clamp total={total} {side == CLAMP_IN ? "in" : "out"} inplace={inplace}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_clamp_msl, metal_clamp_msl_entry, metal_clamp_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var src : array<float>
-    src |> resize(total)
-    for (i in range(total)) {
-        src[i] = 0.37 * float(i % 97) - 17.0   // -17 .. 18.5
-    }
-    // a record like the tower's: imin imax omin omax active, sitting past some junk floats
-    let rec <- [0.0, 0.0, 0.0, -6.0, 5.0, -2.5, 9.25, 1.0]
-    let lo = side == CLAMP_IN ? rec[3] : rec[5]
-    let hi = side == CLAMP_IN ? rec[4] : rec[6]
-    var want : array<float>
-    want |> resize(total + 16)
-    for (i in range(total + 16)) {
-        want[i] = i < total ? clamp(src[i], lo, hi) : -1000.0
-    }
-    var bs = buf_upload(dev, src)
-    var bd = inplace ? bs : buf_fill(dev, total + 16, -1000.0)
-    var brec = buf_upload(dev, rec)
-    var bside = buf_u32(dev, uint(side))
-    var btot = buf_u32(dev, uint(total))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bs, 0ul, 0)
-        metal_set_buffer(enc, bd, 0ul, 1)
-        metal_set_buffer(enc, brec, 12ul, 2)   // the record starts 3 floats in
-        metal_set_buffer(enc, bside, 0ul, 3)
-        metal_set_buffer(enc, btot, 0ul, 4)
-    }
-    if (ran) {
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_clamp)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope src : array<float>
+        src |> resize(total)
+        for (i in range(total)) {
+            src[i] = 0.37 * float(i % 97) - 17.0   // -17 .. 18.5
+        }
+        // a record like the tower's: imin imax omin omax active, sitting past some junk floats
+        var inscope rec <- [0.0, 0.0, 0.0, -6.0, 5.0, -2.5, 9.25, 1.0]
+        let lo = side == CLAMP_IN ? rec[3] : rec[5]
+        let hi = side == CLAMP_IN ? rec[4] : rec[6]
+        var inscope want : array<float>
+        want |> resize(total + 16)
+        for (i in range(total + 16)) {
+            want[i] = i < total ? clamp(src[i], lo, hi) : -1000.0
+        }
         if (inplace) {
             want |> resize(total)
         }
-        t |> equal(buf_mismatch_exact(bd, want, tag), 0)
+        let bs = mc |> io_(src)
+        let bd = inplace ? bs : (mc |> out_words(total + 16, -1000.0))
+        let brec = mc |> in_(rec)
+        let bside = mc |> in_plain([uint(side)])
+        let btot = mc |> in_plain([uint(total)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {   // the record starts 3 floats in
+                invoke(st.enc, enc, mc.buf[bs], 0ul, mc.buf[bd], 0ul, mc.buf[brec], 12ul, mc.buf[bside], mc.buf[btot], int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bd], want, BAR_BITS, FLAT_SHAPE)
     }
-    metal_release(bs)
-    if (!inplace) {
-        metal_release(bd)
-    }
-    metal_release(brec)
-    metal_release(bside)
-    metal_release(btot)
-    metal_release(pso)
-    delete src
-    delete want
 }
 
 // head restride (gemma3v): token-major rows repack [npos x n_head*hs_src] -> [npos x n_head*hs_dst]
 // with dst lanes past hs_src zeroed; exact both directions, the pad sentinel untouched.
-def private head_restride_gate(t : T?; dev, queue; npos, n_head, hs_src, hs_dst : int) {
+def private head_restride_gate(t : T?; var dev, queue; npos, n_head, hs_src, hs_dst : int) {
     let total = npos * n_head * hs_dst
     let tag = "head_restride npos={npos} heads={n_head} {hs_src}->{hs_dst}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_head_restride_msl, metal_head_restride_msl_entry, metal_head_restride_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var src : array<float>
-    src |> resize(npos * n_head * hs_src)
-    for (i in range(length(src))) {
-        src[i] = 0.31 * float(i % 89) - 13.0
-    }
-    var want : array<float>
-    want |> resize(total + 16)
-    for (i in range(total + 16)) {
-        if (i >= total) {
-            want[i] = -1000.0   // the pad sentinel
-        } else {
-            let lane = i % hs_dst
-            let hp = i / hs_dst
-            want[i] = lane < hs_src ? src[hp * hs_src + lane] : 0.0
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_head_restride)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope src : array<float>
+        src |> resize(npos * n_head * hs_src)
+        for (i in range(length(src))) {
+            src[i] = 0.31 * float(i % 89) - 13.0
         }
+        var inscope want : array<float>
+        want |> resize(total + 16)
+        for (i in range(total + 16)) {
+            if (i >= total) {
+                want[i] = -1000.0   // the pad sentinel
+            } else {
+                let lane = i % hs_dst
+                let hp = i / hs_dst
+                want[i] = lane < hs_src ? src[hp * hs_src + lane] : 0.0
+            }
+        }
+        let bs = mc |> in_(src)
+        let bd = mc |> out_words(total + 16, -1000.0)
+        let bsrc_hs = mc |> in_plain([uint(hs_src)])
+        let bdst_hs = mc |> in_plain([uint(hs_dst)])
+        let btot = mc |> in_plain([uint(total)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bs], 0ul, mc.buf[bd], 0ul, mc.buf[bsrc_hs], mc.buf[bdst_hs], mc.buf[btot], int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bd], want, BAR_BITS, Shape(row_width = hs_dst))
     }
-    var bs = buf_upload(dev, src)
-    var bd = buf_fill(dev, total + 16, -1000.0)
-    var bsrc_hs = buf_u32(dev, uint(hs_src))
-    var bdst_hs = buf_u32(dev, uint(hs_dst))
-    var btot = buf_u32(dev, uint(total))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bs, 0ul, 0)
-        metal_set_buffer(enc, bd, 0ul, 1)
-        metal_set_buffer(enc, bsrc_hs, 0ul, 2)
-        metal_set_buffer(enc, bdst_hs, 0ul, 3)
-        metal_set_buffer(enc, btot, 0ul, 4)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bd, want, tag), 0)
-    }
-    metal_release(bs)
-    metal_release(bd)
-    metal_release(bsrc_hs)
-    metal_release(bdst_hs)
-    metal_release(btot)
-    metal_release(pso)
-    delete src
-    delete want
 }
 
 // two-axis NEOX rope over token-major rows vs the CPU rope_neox_2d_rows on the same tables (the
 // kernel reads the four tables packed per row as [cx|sx|cy|sy]); approx bar (fma ordering).
-def private rope2d_gate(t : T?; dev, queue; npos, n_head, hs : int) {
+def private rope2d_gate(t : T?; var dev, queue; npos, n_head, hs : int) {
     let d = n_head * hs
     let pairs = hs / 4   // rotated pairs per axis, one packed table row
     let tag = "rope2d npos={npos} heads={n_head} hs={hs}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_rope2d_msl, metal_rope2d_msl_entry, metal_rope2d_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var pos_x : array<int64>
-    var pos_y : array<int64>
-    pos_x |> resize(npos)
-    pos_y |> resize(npos)
-    for (i in range(npos)) {
-        pos_x[i] = int64(i % 7)
-        pos_y[i] = int64(i / 7)
-    }
-    var cx, sx, cy, sy : array<float>
-    var no_ff : array<float>
-    build_rope_tabs_rows(cx, sx, 100.0, 1.0, 1.0, no_ff, false, pos_x, int64(npos), int64(hs / 2))
-    build_rope_tabs_rows(cy, sy, 100.0, 1.0, 1.0, no_ff, false, pos_y, int64(npos), int64(hs / 2))
-    var x : array<float>
-    x |> resize(npos * d)
-    for (i in range(npos * d)) {
-        x[i] = 0.13 * float(i % 29) - 1.7
-    }
-    var want := x
-    rope_neox_2d_rows(want, int64(npos), int64(n_head), int64(hs), cx, sx, cy, sy)
-    var tabs : array<float>
-    tabs |> resize(npos * 4 * pairs)
-    for (r in range(npos)) {
-        for (j in range(pairs)) {
-            tabs[r * 4 * pairs + j] = cx[r * pairs + j]
-            tabs[r * 4 * pairs + pairs + j] = sx[r * pairs + j]
-            tabs[r * 4 * pairs + 2 * pairs + j] = cy[r * pairs + j]
-            tabs[r * 4 * pairs + 3 * pairs + j] = sy[r * pairs + j]
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_rope2d)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope pos_x : array<int64>
+        var inscope pos_y : array<int64>
+        pos_x |> resize(npos)
+        pos_y |> resize(npos)
+        for (i in range(npos)) {
+            pos_x[i] = int64(i % 7)
+            pos_y[i] = int64(i / 7)
         }
+        var inscope cx, sx, cy, sy : array<float>
+        var inscope no_ff : array<float>
+        build_rope_tabs_rows(cx, sx, 100.0, 1.0, 1.0, no_ff, false, pos_x, int64(npos), int64(hs / 2))
+        build_rope_tabs_rows(cy, sy, 100.0, 1.0, 1.0, no_ff, false, pos_y, int64(npos), int64(hs / 2))
+        var inscope x : array<float>
+        x |> resize(npos * d)
+        for (i in range(npos * d)) {
+            x[i] = 0.13 * float(i % 29) - 1.7
+        }
+        var inscope want := x
+        rope_neox_2d_rows(want, int64(npos), int64(n_head), int64(hs), cx, sx, cy, sy)
+        var inscope tabs : array<float>
+        tabs |> resize(npos * 4 * pairs)
+        for (r in range(npos)) {
+            for (j in range(pairs)) {
+                tabs[r * 4 * pairs + j] = cx[r * pairs + j]
+                tabs[r * 4 * pairs + pairs + j] = sx[r * pairs + j]
+                tabs[r * 4 * pairs + 2 * pairs + j] = cy[r * pairs + j]
+                tabs[r * 4 * pairs + 3 * pairs + j] = sy[r * pairs + j]
+            }
+        }
+        let total = npos * n_head * pairs
+        let bx = mc |> io_(x)
+        let btabs = mc |> in_(tabs)
+        let bd = mc |> in_plain([uint(d)])
+        let bpairs = mc |> in_plain([uint(pairs)])
+        let btot = mc |> in_plain([uint(total)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[btabs], mc.buf[bd], mc.buf[bpairs], mc.buf[btot], int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_TIGHT, Shape(row_width = d, head_width = hs))
     }
-    let total = npos * n_head * pairs
-    var bx = buf_upload(dev, x)
-    var btabs = buf_upload(dev, tabs)
-    var bd = buf_u32(dev, uint(d))
-    var bpairs = buf_u32(dev, uint(pairs))
-    var btot = buf_u32(dev, uint(total))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, btabs, 0ul, 1)
-        metal_set_buffer(enc, bd, 0ul, 2)
-        metal_set_buffer(enc, bpairs, 0ul, 3)
-        metal_set_buffer(enc, btot, 0ul, 4)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bx, want, tag), 0)
-    }
-    metal_release(bx)
-    metal_release(btabs)
-    metal_release(bd)
-    metal_release(bpairs)
-    metal_release(btot)
-    metal_release(pso)
-    delete x
-    delete want
-    delete tabs
 }
 
 // LayerNorm w+b vs the shipped CPU layernorm (dasllama_audio) — the tower/embedder norm.
 // The bias fixture keeps |b| >= 0.1 so a bias-blind kernel cannot pass.
-def private layernorm_gate(t : T?; dev, queue; dim, nrows : int; eps : float; inplace : bool) {
+def private layernorm_gate(t : T?; var dev, queue; dim, nrows : int; eps : float; inplace : bool) {
     let tag = "layernorm dim={dim} nrows={nrows} eps={eps} inplace={inplace}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_layernorm_msl, metal_layernorm_msl_entry, metal_layernorm_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var x : array<float>
-    var w : array<float>
-    var b : array<float>
-    x |> resize(nrows * dim)
-    w |> resize(dim)
-    b |> resize(dim)
-    for (i in range(nrows * dim)) {
-        x[i] = 0.23 * float(i % 31) - 3.1
-    }
-    if (nrows > 0 && dim > 0) {
-        for (i in range(dim)) {   // one constant row exercises the zero-variance eps path
-            x[(nrows - 1) * dim + i] = 1.75
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_ln)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope x : array<float>
+        var inscope w : array<float>
+        var inscope b : array<float>
+        x |> resize(nrows * dim)
+        w |> resize(dim)
+        b |> resize(dim)
+        for (i in range(nrows * dim)) {
+            x[i] = 0.23 * float(i % 31) - 3.1
         }
-    }
-    for (i in range(dim)) {
-        w[i] = 0.5 + 0.04 * float(i % 13)
-        b[i] = -0.7 + 0.05 * float(i % 17)
-    }
-    var want : array<float>
-    want |> resize(nrows * dim)
-    unsafe {
-        for (r in range(nrows)) {
-            layernorm(addr(want[r * dim]), addr < float const? >(x[r * dim]),
-                addr < float const? >(w[0]), addr < float const? >(b[0]), int64(dim), eps)
+        if (nrows > 0 && dim > 0) {
+            for (i in range(dim)) {   // one constant row exercises the zero-variance eps path
+                x[(nrows - 1) * dim + i] = 1.75
+            }
         }
+        for (i in range(dim)) {
+            w[i] = 0.5 + 0.04 * float(i % 13)
+            b[i] = -0.7 + 0.05 * float(i % 17)
+        }
+        var inscope want : array<float>
+        want |> resize(nrows * dim)
+        unsafe {
+            for (r in range(nrows)) {
+                layernorm(addr(want[r * dim]), addr < float const? >(x[r * dim]),
+                    addr < float const? >(w[0]), addr < float const? >(b[0]), int64(dim), eps)
+            }
+        }
+        let bx = mc |> io_(x)
+        let bw = mc |> in_(w)
+        let bb = mc |> in_(b)
+        let by = inplace ? bx : (mc |> out_(nrows * dim))
+        let bdim = mc |> in_plain([uint(dim)])
+        let beps = mc |> in_plain([eps])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bw], 0ul, mc.buf[bb], 0ul, mc.buf[by], 0ul, mc.buf[bdim], mc.buf[beps], int64(nrows))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_TIGHT, Shape(row_width = dim))
     }
-    var bx = buf_upload(dev, x)
-    var bw = buf_upload(dev, w)
-    var bb = buf_upload(dev, b)
-    var by = inplace ? bx : buf_fill(dev, nrows * dim, 0.0)
-    var bdim = buf_u32(dev, uint(dim))
-    var beps = buf_f32(dev, eps)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_layernorm_msl_tgmem, 0)
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, bw, 0ul, 1)
-        metal_set_buffer(enc, bb, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_buffer(enc, bdim, 0ul, 4)
-        metal_set_buffer(enc, beps, 0ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(nrows), 1u, 1u), uint3(256u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_approx(by, want, tag), 0)
-    }
-    metal_release(bx)
-    metal_release(bw)
-    metal_release(bb)
-    if (!inplace) {
-        metal_release(by)
-    }
-    metal_release(bdim)
-    metal_release(beps)
-    metal_release(pso)
-    delete x
-    delete w
-    delete b
-    delete want
 }
 
 // The two FORM-MATCHED tower GELUs vs their shipped CPU flavors on the same fixture. The LUT
 // flavor runs the CPU's own clamps + f16 round-trips in kernel (bar = one f16 ulp at the range
 // edge, tie flips only); the erf flavor's A&S polynomial sits within ~1e-5 of the CPU's
 // double-precision erf. Saturation/NaN probes ride the tail slots of every arm.
-def private gelu_flavor_gate(t : T?; dev, queue; total : int; lut : bool) {
+def private gelu_flavor_gate(t : T?; var dev, queue; total : int; lut : bool) {
     let tag = "gelu_{lut ? "lut" : "erf"} total={total}"
-    var err : string
-    var pso = (lut
-        ? pipeline_from_source(dev, MetalGeluLut_metal_ew1_msl, MetalGeluLut_metal_ew1_msl_entry, MetalGeluLut_metal_ew1_msl_fastmath, err)
-        : pipeline_from_source(dev, MetalGeluErf_metal_ew1_msl, MetalGeluErf_metal_ew1_msl_entry, MetalGeluErf_metal_ew1_msl_fastmath, err))
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var g : array<float>
-    g |> resize(total)
-    for (i in range(total)) {
-        g[i] = 0.21 * float(i % 43) - 4.3
-    }
-    if (total >= 8) {   // the saturation + zero probes ride the tail slots
-        g[total - 1] = 50.0
-        g[total - 2] = -50.0
-        g[total - 3] = 100.0
-        g[total - 4] = -100.0
-        g[total - 5] = 0.0
-        g[total - 6] = 1e-30
-        g[total - 7] = -1e-30
-    }
-    var want := g
-    if (lut) {
-        gelu_tanh_lut(want, int64(total))
-    } else {
-        gelu_erf(want, int64(total))
-    }
-    var bg = buf_upload(dev, g)
-    var btot = buf_u32(dev, uint(total))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bg, 0ul, 0)
-        metal_set_buffer(enc, btot, 0ul, 1)
-    }
-    if (ran && total >= 8) {
-        var back : array<float>
-        back |> resize(total)
-        unsafe {
-            memcpy(addr(back[0]), metal_buffer_contents(bg), total * 4)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = lut ? stamp_of(@@enc_gelu_lut) : stamp_of(@@enc_gelu_erf)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope g : array<float>
+        g |> resize(total)
+        for (i in range(total)) {
+            g[i] = 0.21 * float(i % 43) - 4.3
         }
-        var maxd = 0.0
-        for (bv, wv in back, want) {
-            maxd = max(maxd, abs(bv - wv))
+        if (total >= 8) {   // the saturation + zero probes ride the tail slots
+            g[total - 1] = 50.0
+            g[total - 2] = -50.0
+            g[total - 3] = 100.0
+            g[total - 4] = -100.0
+            g[total - 5] = 0.0
+            g[total - 6] = 1e-30
+            g[total - 7] = -1e-30
         }
-        to_log(LOG_INFO, "{tag}: max |gpu - cpu flavor| = {maxd}\n")
-        // LUT: one f16 ulp at |g|~10 (RNE tie flips between the tanh and exp-identity evals);
-        // erf: two ~1.5e-7-accurate erf approximations (NR double vs A&S f32) plus f32 eval noise
-        t |> success(maxd <= (lut ? 1e-2 : 1e-5), "{tag}: form-matched inside the flavor bar")
-        t |> success(back[total - 1] == 50.0 && back[total - 3] == 100.0, "{tag}: positive saturation exact")
-        t |> success(back[total - 2] == 0.0 && back[total - 4] == 0.0, "{tag}: negative saturation exact")
-        var nan_found = false
-        for (v in back) {
-            if (v != v) {
-                nan_found = true
+        var inscope want := g
+        if (lut) {
+            gelu_tanh_lut(want, int64(total))
+        } else {
+            gelu_erf(want, int64(total))
+        }
+        let bg = mc |> io_(g)
+        let btot = mc |> in_plain([uint(total)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bg], 0ul, mc.buf[btot], int64(total))
             }
         }
-        t |> success(!nan_found, "{tag}: no NaN anywhere")
-        delete back
+        return if (!ran || total < 8)
+        // LUT: one f16 ulp at |g|~10 (RNE tie flips between the tanh and exp-identity evals);
+        // erf: two ~1.5e-7-accurate erf approximations (NR double vs A&S f32) plus f32 eval noise
+        check_buf(t, "{tag}: form-matched inside the flavor bar", mc.buf[bg], want, Bar(abs_floor = lut ? 1e-2 : 1e-5), FLAT_SHAPE)
+        var inscope back <- mc |> plane_run(bg)
+        t |> success(back[total - 1] == 50.0 && back[total - 3] == 100.0, "{tag}: positive saturation exact")
+        t |> success(back[total - 2] == 0.0 && back[total - 4] == 0.0, "{tag}: negative saturation exact")
+        t |> success(nan_count(back) == 0, "{tag}: no NaN anywhere")
     }
-    metal_release(bg)
-    metal_release(btot)
-    metal_release(pso)
-    delete g
-    delete want
 }
 
 // The form-delta cell: the analytic tanh-GELU vs the two shipped CPU flavors — the measured
@@ -824,1051 +659,810 @@ def private gelu_form_delta(t : T?) {
 
 //! The HX twin's compare: `bh` holds the RNE narrow of each value the same thread stored to `bf`, the sentinel past `live`.
 //! `weighted` off: a ones vector against the weightless CPU norm (gemma4uv's idiom); `hx`: MetalRmsNormHX, its f16 twin the RNE narrow of the f32 store.
-def private rms_gate(t : T?; dev, queue; dim, nrows : int; eps : float; weighted, hx : bool) {
+def private rms_gate(t : T?; var dev, queue; dim, nrows : int; eps : float; weighted, hx : bool) {
     let tag = "rms{hx ? "_hx" : ""}{weighted ? "" : "_weightless"} dim={dim} nrows={nrows}"
-    var err : string
-    var pso = (hx
-        ? pipeline_from_source(dev, MetalRmsNormHX_metal_rmsnorm_msl, MetalRmsNormHX_metal_rmsnorm_msl_entry, MetalRmsNormHX_metal_rmsnorm_msl_fastmath, err)
-        : pipeline_from_source(dev, MetalRmsNorm_metal_rmsnorm_msl, MetalRmsNorm_metal_rmsnorm_msl_entry, MetalRmsNorm_metal_rmsnorm_msl_fastmath, err))
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var x : array<float>
-    var w : array<float>
-    x |> resize(nrows * dim)
-    w |> resize(dim)
-    for (i in range(nrows * dim)) {
-        x[i] = 0.19 * float(i % 37) - 2.9
-    }
-    for (i in range(dim)) {
-        w[i] = weighted ? 0.5 + 0.01 * float(i % 7) : 1.0
-    }
-    var want := x
-    if (weighted) {
-        unsafe {
-            for (r in range(nrows)) {
-                rmsnorm(addr(want[r * dim]), addr<float const?>(x[r * dim]), addr<float const?>(w[0]), int64(dim), eps)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sh = stamp_of(@@pf_enc_rms_hx)
+        let sp = stamp_of(@@pf_enc_rms)   //! the rows form: one 256-lane threadgroup a row
+        var pso = hx ? (mc |> keep_stamp(sh, err)) : (mc |> keep_stamp(sp, err))
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope x : array<float>
+        var inscope w : array<float>
+        x |> resize(nrows * dim)
+        w |> resize(dim)
+        for (i in range(nrows * dim)) {
+            x[i] = 0.19 * float(i % 37) - 2.9
+        }
+        for (i in range(dim)) {
+            w[i] = weighted ? 0.5 + 0.01 * float(i % 7) : 1.0
+        }
+        var inscope want := x
+        if (weighted) {
+            unsafe {
+                for (r in range(nrows)) {
+                    rmsnorm(addr(want[r * dim]), addr<float const?>(x[r * dim]), addr<float const?>(w[0]), int64(dim), eps)
+                }
+            }
+        } else {
+            rms_rows_weightless(want, int64(dim), int64(nrows), eps)
+        }
+        let bx = mc |> in_(x)
+        let bw = mc |> in_(w)
+        let by = mc |> out_(nrows * dim)
+        let byh = mc |> out_words(nrows * dim, float16(-1000.0))
+        let bdim = mc |> in_plain([uint(dim)])
+        let beps = mc |> in_plain([eps])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (px, pw, py, pd, pe) = (mc.buf[bx], mc.buf[bw], mc.buf[by], mc.buf[bdim], mc.buf[beps])
+            if (hx) {
+                stamp_run(sh, pso) {
+                    invoke(sh.enc, enc, px, 0ul, pw, py, pd, pe, mc.buf[byh], int64(nrows))
+                }
+            } else {
+                stamp_run(sp, pso) {
+                    invoke(sp.enc, enc, px, 0ul, pw, py, pd, pe, int64(nrows))
+                }
             }
         }
-    } else {
-        rms_rows_weightless(want, int64(dim), int64(nrows), eps)
-    }
-    var bx = buf_upload(dev, x)
-    var bw = buf_upload(dev, w)
-    var by = buf_fill(dev, nrows * dim, 0.0)
-    var byh = buf_fill(dev, nrows * dim, float16(-1000.0))
-    var bdim = buf_u32(dev, uint(dim))
-    var beps = buf_f32(dev, eps)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, hx ? MetalRmsNormHX_metal_rmsnorm_msl_tgmem : MetalRmsNorm_metal_rmsnorm_msl_tgmem, 0)
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, bw, 0ul, 1)
-        metal_set_buffer(enc, by, 0ul, 2)
-        metal_set_buffer(enc, bdim, 0ul, 3)
-        metal_set_buffer(enc, beps, 0ul, 4)
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_TIGHT, Shape(row_width = dim))
         if (hx) {
-            metal_set_buffer(enc, byh, 0ul, 5)
-        }
-        metal_dispatch_threadgroups(enc, uint3(uint(nrows), 1u, 1u), uint3(256u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_approx(by, want, tag), 0)
-        if (hx) {
-            t |> equal(hx_narrow_mismatch(byh, by, nrows * dim, nrows * dim, tag), 0)
+            check_hx_narrow(t, "{tag} hx", mc.buf[byh], mc.buf[by], nrows * dim, nrows * dim)
         }
     }
-    metal_release(bx)
-    metal_release(bw)
-    metal_release(by)
-    metal_release(byh)
-    metal_release(bdim)
-    metal_release(beps)
-    metal_release(pso)
-    delete x
-    delete w
-    delete want
 }
 
 //! HX: g the base combine, gh its RNE narrow; TOTB: a launch over the padded bound writes nothing past totb[0] * row_elems; unbounded is HX at rows == bound_rows.
-def private ew2_hx_gate(t : T?; dev, queue; geglu, hx, bounded : bool; rows, row_elems, bound_rows : int) {
+def private ew2_hx_gate(t : T?; var dev, queue; geglu, hx, bounded : bool; rows, row_elems, bound_rows : int) {
     let tag = "{geglu ? "geglu" : "swiglu"}{hx ? "_hx" : ""}{bounded ? "_b" : ""} rows={rows} elems={row_elems} bound={bound_rows}"
-    var err : string
-    var pso : MetalComputePipeline?
-    if (!bounded) {
-        pso = (geglu
-            ? pipeline_from_source(dev, MetalGegluHX_metal_ew2_msl, MetalGegluHX_metal_ew2_msl_entry, MetalGegluHX_metal_ew2_msl_fastmath, err)
-            : pipeline_from_source(dev, MetalSwigluHX_metal_ew2_msl, MetalSwigluHX_metal_ew2_msl_entry, MetalSwigluHX_metal_ew2_msl_fastmath, err))
-    } elif (geglu && hx) {
-        pso = pipeline_from_source(dev, MetalGegluHXB_metal_ew2_msl, MetalGegluHXB_metal_ew2_msl_entry, MetalGegluHXB_metal_ew2_msl_fastmath, err)
-    } elif (geglu) {
-        pso = pipeline_from_source(dev, MetalGegluB_metal_ew2_msl, MetalGegluB_metal_ew2_msl_entry, MetalGegluB_metal_ew2_msl_fastmath, err)
-    } elif (hx) {
-        pso = pipeline_from_source(dev, MetalSwigluHXB_metal_ew2_msl, MetalSwigluHXB_metal_ew2_msl_entry, MetalSwigluHXB_metal_ew2_msl_fastmath, err)
-    } else {
-        pso = pipeline_from_source(dev, MetalSwigluB_metal_ew2_msl, MetalSwigluB_metal_ew2_msl_entry, MetalSwigluB_metal_ew2_msl_fastmath, err)
-    }
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let total = bound_rows * row_elems
-    let live = rows * row_elems
-    var sg : array<float>
-    var su : array<float>
-    sg |> resize(total)
-    su |> resize(total)
-    for (k in range(total)) {
-        sg[k] = 0.21 * float(k % 43) - 4.3
-        su[k] = 0.31 * float(k % 17) - 2.5
-    }
-    var want := sg
-    if (geglu) {
-        geglu(want, su, int64(live))   // the tanh form; the GPU's exp identity agrees inside the approx bar
-    } else {
-        swiglu(want, su, int64(live))
-    }
-    var bsg = buf_upload(dev, sg)
-    var bsu = buf_upload(dev, su)
-    var btot = buf_u32(dev, uint(total))
-    var bgh = buf_fill(dev, total, float16(-1000.0))
-    var totv : array<uint>
-    totv |> push(0xFFFFFFFFu)   // the row count sits at the bind offset, past a poison word - the basep[ne] shape
-    totv |> push(uint(rows))
-    var btb = buf_upload(dev, totv)
-    var btm = buf_u32(dev, uint(row_elems))
-    // explicit slots: gh binds at 4 (slot 3 is the gated-out ascale — sequential binding
-    // would land the twin one slot short, silently)
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bsg, 0ul, 0)
-        metal_set_buffer(enc, bsu, 0ul, 1)
-        metal_set_buffer(enc, btot, 0ul, 2)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let shx = geglu ? stamp_of(@@enc_geglu_hx) : stamp_of(@@enc_swiglu_hx)   //! the unbounded arms are the HX twins
+        let shb = geglu ? stamp_of(@@enc_geglu_hxb) : stamp_of(@@enc_swiglu_hxb)
+        let sb = geglu ? stamp_of(@@enc_geglu_b) : stamp_of(@@enc_swiglu_b)
+        var pso = !bounded ? (mc |> keep_stamp(shx, err)) : (hx ? (mc |> keep_stamp(shb, err)) : (mc |> keep_stamp(sb, err)))
+        return if (!pso_ok(t, tag, pso, err))
+        let total = bound_rows * row_elems
+        let live = rows * row_elems
+        var inscope sg : array<float>
+        var inscope su : array<float>
+        sg |> resize(total)
+        su |> resize(total)
+        for (k in range(total)) {
+            sg[k] = 0.21 * float(k % 43) - 4.3
+            su[k] = 0.31 * float(k % 17) - 2.5
+        }
+        var inscope want := sg
+        if (geglu) {
+            geglu(want, su, int64(live))   // the tanh form; the GPU's exp identity agrees inside the approx bar
+        } else {
+            swiglu(want, su, int64(live))
+        }
+        let bsg = mc |> io_(sg)
+        let bsu = mc |> in_(su)
+        let btot = mc |> in_plain([uint(total)])
+        let bgh = mc |> out_words(total, float16(-1000.0))
+        // the row count sits at the bind offset, past a poison word - the basep[ne] shape
+        let btb = mc |> in_plain([0xFFFFFFFFu, uint(rows)])
+        let btm = mc |> in_plain([uint(row_elems)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (g, u, tot, gh, tb, tm) = (mc.buf[bsg], mc.buf[bsu], mc.buf[btot], mc.buf[bgh], mc.buf[btb], mc.buf[btm])
+            if (!bounded) {
+                stamp_run(shx, pso) {
+                    invoke(shx.enc, enc, g, 0ul, u, 0ul, tot, gh, int64(total))
+                }
+            } elif (hx) {   // the bound row count sits one word into its plane
+                stamp_run(shb, pso) {
+                    invoke(shb.enc, enc, g, 0ul, u, 0ul, tot, gh, tb, 4ul, tm, int64(total))
+                }
+            } else {
+                stamp_run(sb, pso) {
+                    invoke(sb.enc, enc, g, 0ul, u, 0ul, tot, tb, 4ul, tm, int64(total))
+                }
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bsg], want, lead_poisoned(BAR_TIGHT, want), Shape(row_width = row_elems))
         if (hx) {
-            metal_set_buffer(enc, bgh, 0ul, 4)
-        }
-        if (bounded) {
-            metal_set_buffer(enc, btb, 4ul, 5)
-            metal_set_buffer(enc, btm, 0ul, 6)
+            check_hx_narrow(t, "{tag} hx", mc.buf[bgh], mc.buf[bsg], total, live)
         }
     }
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bsg, want, tag), 0)
-        // the control: the approx compare must RED on a poisoned expectation - an added
-        // abs(want[0])*0.1 + 1.0, past buf_mismatch_approx's 1e-4*max(1, |v|) band at any
-        // magnitude, so the bar is known to discriminate on this arm
-        var wantp := want
-        wantp[0] += abs(want[0]) * 0.1 + 1.0
-        t |> success(buf_mismatch_approx(bsg, wantp, "{tag} CONTROL(expected-red)") != 0, "{tag}: poison control reds")
-        delete wantp
-        if (hx) {
-            t |> equal(hx_narrow_mismatch(bgh, bsg, total, live, tag), 0)
-        }
-    }
-    metal_release(bsg)
-    metal_release(bsu)
-    metal_release(btot)
-    metal_release(bgh)
-    metal_release(btb)
-    metal_release(btm)
-    metal_release(pso)
-    delete sg
-    delete su
-    delete want
-    delete totv
 }
 
 // The gemma4uv 2-axis position add — bit-EXACT vs the CPU's (row + ex) + ey order; the
 // split-exponent fixture makes any reassociation visible, the non-square grid any axis swap.
-def private pos_add_gate(t : T?; dev, queue; npos, dim, ncols, pos_entries : int) {
+def private pos_add_gate(t : T?; var dev, queue; npos, dim, ncols, pos_entries : int) {
     let tag = "posadd2d npos={npos} ncols={ncols}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_posadd2d_msl, metal_posadd2d_msl_entry, metal_posadd2d_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let total = npos * dim
-    var x : array<float>
-    var tbl : array<float>
-    x |> resize(total)
-    tbl |> resize(2 * pos_entries * dim)
-    for (i in range(total)) {
-        x[i] = 1.0e3 + 0.37 * float(i % 29)          // large exponent
-    }
-    for (i in range(pos_entries * dim)) {
-        tbl[i] = 1.0e-3 * float(i % 41 + 1)          // x-table rows: tiny exponent
-        tbl[pos_entries * dim + i] = 9.0e2 + 0.21 * float(i % 19)   // y-table rows: large again
-    }
-    var want : array<float>
-    want |> resize(total)
-    for (p in range(npos)) {
-        for (i in range(dim)) {
-            let ex = tbl[(p % ncols) * dim + i]
-            let ey = tbl[(pos_entries + p / ncols) * dim + i]
-            want[p * dim + i] = (x[p * dim + i] + ex) + ey
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_posadd2d)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let total = npos * dim
+        var inscope x : array<float>
+        var inscope tbl : array<float>
+        x |> resize(total)
+        tbl |> resize(2 * pos_entries * dim)
+        for (i in range(total)) {
+            x[i] = 1.0e3 + 0.37 * float(i % 29)          // large exponent
         }
+        for (i in range(pos_entries * dim)) {
+            tbl[i] = 1.0e-3 * float(i % 41 + 1)          // x-table rows: tiny exponent
+            tbl[pos_entries * dim + i] = 9.0e2 + 0.21 * float(i % 19)   // y-table rows: large again
+        }
+        var inscope want : array<float>
+        want |> resize(total)
+        for (p in range(npos)) {
+            for (i in range(dim)) {
+                let ex = tbl[(p % ncols) * dim + i]
+                let ey = tbl[(pos_entries + p / ncols) * dim + i]
+                want[p * dim + i] = (x[p * dim + i] + ex) + ey
+            }
+        }
+        let bx = mc |> io_(x)
+        let btbl = mc |> in_(tbl)
+        let bdim = mc |> in_plain([uint(dim)])
+        let bcols = mc |> in_plain([uint(ncols)])
+        let bpe = mc |> in_plain([uint(pos_entries)])
+        let btot = mc |> in_plain([uint(total)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[btbl], 0ul, mc.buf[bdim], mc.buf[bcols], mc.buf[bpe], mc.buf[btot], int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_BITS, Shape(row_width = dim))
     }
-    var bx = buf_upload(dev, x)
-    var btbl = buf_upload(dev, tbl)
-    var bdim = buf_u32(dev, uint(dim))
-    var bcols = buf_u32(dev, uint(ncols))
-    var bpe = buf_u32(dev, uint(pos_entries))
-    var btot = buf_u32(dev, uint(total))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, btbl, 0ul, 1)
-        metal_set_buffer(enc, bdim, 0ul, 2)
-        metal_set_buffer(enc, bcols, 0ul, 3)
-        metal_set_buffer(enc, bpe, 0ul, 4)
-        metal_set_buffer(enc, btot, 0ul, 5)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bx, want, tag), 0)
-    }
-    metal_release(bx)
-    metal_release(btbl)
-    metal_release(bdim)
-    metal_release(bcols)
-    metal_release(bpe)
-    metal_release(btot)
-    metal_release(pso)
-    delete x
-    delete tbl
-    delete want
 }
 
 // The whisper cross-KV shuffles — pure scatter (+ one multiply for kx), bit-EXACT vs the CPU
 // walk. The offset leg writes the SECOND layer slot and proves the first stays untouched.
 // Negative controls recorded 2026-08-16: dropped kscale in the kx oracle and swapped t/j in
 // the vx oracle each redded with dumps (the kx mismatch ratio was exactly kscale).
-def private cross_kx_gate(t : T?; dev, queue; ta, dim, hh : int; off_layer : bool) {
+def private cross_kx_gate(t : T?; var dev, queue; ta, dim, hh : int; off_layer : bool) {
     let tag = "cross_kx ta={ta} dim={dim} hh={hh} off={off_layer}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_cross_kx_msl, metal_cross_kx_msl_entry, metal_cross_kx_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let hs = dim / hh
-    let total = ta * dim
-    let kscale = 1.0 / sqrt(sqrt(float(hs)))
-    var src : array<float>
-    src |> resize(total)
-    for (i in range(total)) {
-        src[i] = 0.25 * float(i % 97) - 3.0
-    }
-    let sentinel = -777.0
-    var want : array<float>
-    want |> resize(2 * total)
-    for (i in range(2 * total)) {
-        want[i] = sentinel
-    }
-    let base = off_layer ? total : 0
-    for (h in range(hh)) {
-        for (j in range(hs)) {
-            for (tt in range(ta)) {
-                want[base + (h * hs + j) * ta + tt] = src[tt * dim + h * hs + j] * kscale
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_cross_kx)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hs = dim / hh
+        let total = ta * dim
+        let kscale = 1.0 / sqrt(sqrt(float(hs)))
+        var inscope src : array<float>
+        src |> resize(total)
+        for (i in range(total)) {
+            src[i] = 0.25 * float(i % 97) - 3.0
+        }
+        let sentinel = -777.0
+        var inscope want : array<float>
+        want |> resize(2 * total)
+        for (i in range(2 * total)) {
+            want[i] = sentinel
+        }
+        let base = off_layer ? total : 0
+        for (h in range(hh)) {
+            for (j in range(hs)) {
+                for (tt in range(ta)) {
+                    want[base + (h * hs + j) * ta + tt] = src[tt * dim + h * hs + j] * kscale
+                }
             }
         }
+        let bsrc = mc |> in_(src)
+        let bkx = mc |> out_words(2 * total, sentinel)
+        let bdim = mc |> in_plain([uint(dim)])
+        let bhs = mc |> in_plain([uint(hs)])
+        let bta = mc |> in_plain([uint(ta)])
+        let bks = mc |> in_plain([kscale])
+        let btot = mc |> in_plain([uint(total)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bsrc], mc.buf[bkx], uint64(base * 4), mc.buf[bdim], mc.buf[bhs], mc.buf[bta], mc.buf[bks], mc.buf[btot], int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bkx], want, BAR_BITS, Shape(row_width = ta))
     }
-    var bsrc = buf_upload(dev, src)
-    var bkx = buf_fill(dev, 2 * total, sentinel)
-    var bdim = buf_u32(dev, uint(dim))
-    var bhs = buf_u32(dev, uint(hs))
-    var bta = buf_u32(dev, uint(ta))
-    var bks = buf_f32(dev, kscale)
-    var btot = buf_u32(dev, uint(total))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bsrc, 0ul, 0)
-        metal_set_buffer(enc, bkx, uint64(base * 4), 1)
-        metal_set_buffer(enc, bdim, 0ul, 2)
-        metal_set_buffer(enc, bhs, 0ul, 3)
-        metal_set_buffer(enc, bta, 0ul, 4)
-        metal_set_buffer(enc, bks, 0ul, 5)
-        metal_set_buffer(enc, btot, 0ul, 6)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bkx, want, tag), 0)
-    }
-    metal_release(bsrc)
-    metal_release(bkx)
-    metal_release(bdim)
-    metal_release(bhs)
-    metal_release(bta)
-    metal_release(bks)
-    metal_release(btot)
-    metal_release(pso)
-    delete src
-    delete want
 }
 
 // The Vx form doubles as the KV APPEND: the offset leg writes n rows at t0 into a wider
 // tstride slab (sentinel-checked whole), the bias leg folds a per-column bias, and soff picks
 // a column block out of a fused-QKV row (src bound at a byte offset with the fused row stride).
-def private cross_vx_gate(t : T?; dev, queue; ta, dim, hh : int; t0, tstride : int; hasb : bool; soff_cols : int = 0; src_stride : int = 0) {
+def private cross_vx_gate(t : T?; var dev, queue; ta, dim, hh : int; t0, tstride : int; hasb : bool; soff_cols : int = 0; src_stride : int = 0) {
     let tag = "cross_vx ta={ta} dim={dim} hh={hh} t0={t0} hasb={hasb} soff={soff_cols}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_cross_vx_msl, metal_cross_vx_msl_entry, metal_cross_vx_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let hs = dim / hh
-    let sstride = src_stride > 0 ? src_stride : dim
-    let total = ta * dim
-    let sentinel = -555.0
-    var src : array<float>
-    src |> resize(ta * sstride)
-    for (i in range(ta * sstride)) {
-        src[i] = 0.5 * float(i % 89) - 11.0
-    }
-    var bias : array<float>
-    bias |> resize(dim)
-    for (i in range(dim)) {
-        bias[i] = 0.125 * float(i % 13) - 0.5
-    }
-    let slab = hh * tstride * hs
-    var want : array<float>
-    want |> resize(slab)
-    for (i in range(slab)) {
-        want[i] = sentinel
-    }
-    for (h in range(hh)) {
-        for (tt in range(ta)) {
-            for (j in range(hs)) {
-                let v = src[tt * sstride + soff_cols + h * hs + j] + (hasb ? bias[h * hs + j] : 0.0)
-                want[h * tstride * hs + (t0 + tt) * hs + j] = v
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_cross_vx)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hs = dim / hh
+        let sstride = src_stride > 0 ? src_stride : dim
+        let total = ta * dim
+        let sentinel = -555.0
+        var inscope src : array<float>
+        src |> resize(ta * sstride)
+        for (i in range(ta * sstride)) {
+            src[i] = 0.5 * float(i % 89) - 11.0
+        }
+        var inscope bias : array<float>
+        bias |> resize(dim)
+        for (i in range(dim)) {
+            bias[i] = 0.125 * float(i % 13) - 0.5
+        }
+        let slab = hh * tstride * hs
+        var inscope want : array<float>
+        want |> resize(slab)
+        for (i in range(slab)) {
+            want[i] = sentinel
+        }
+        for (h in range(hh)) {
+            for (tt in range(ta)) {
+                for (j in range(hs)) {
+                    let v = src[tt * sstride + soff_cols + h * hs + j] + (hasb ? bias[h * hs + j] : 0.0)
+                    want[h * tstride * hs + (t0 + tt) * hs + j] = v
+                }
             }
         }
+        let bsrc = mc |> in_(src)
+        let bvx = mc |> out_words(slab, sentinel)
+        let bb = mc |> in_(bias)
+        let bdim = mc |> in_plain([uint(sstride)])
+        let bhs = mc |> in_plain([uint(hs)])
+        let bta = mc |> in_plain([uint(ta)])
+        let bt0 = mc |> in_plain([uint(t0)])
+        let bts = mc |> in_plain([uint(tstride)])
+        let bhb = mc |> in_plain([hasb ? 1u : 0u])
+        let btot = mc |> in_plain([uint(total)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bsrc], uint64(soff_cols * 4), mc.buf[bvx], 0ul, mc.buf[bb], 0ul, mc.buf[bdim], mc.buf[bhs], mc.buf[bta],
+                    mc.buf[bt0], mc.buf[bts], mc.buf[bhb], mc.buf[btot], int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bvx], want, BAR_BITS, Shape(row_width = hs))
     }
-    var bsrc = buf_upload(dev, src)
-    var bvx = buf_fill(dev, slab, sentinel)
-    var bb = buf_upload(dev, bias)
-    var bdim = buf_u32(dev, uint(sstride))
-    var bhs = buf_u32(dev, uint(hs))
-    var bta = buf_u32(dev, uint(ta))
-    var bt0 = buf_u32(dev, uint(t0))
-    var bts = buf_u32(dev, uint(tstride))
-    var bhb = buf_u32(dev, hasb ? 1u : 0u)
-    var btot = buf_u32(dev, uint(total))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bsrc, uint64(soff_cols * 4), 0)
-        metal_set_buffer(enc, bvx, 0ul, 1)
-        metal_set_buffer(enc, bb, 0ul, 2)
-        metal_set_buffer(enc, bdim, 0ul, 3)
-        metal_set_buffer(enc, bhs, 0ul, 4)
-        metal_set_buffer(enc, bta, 0ul, 5)
-        metal_set_buffer(enc, bt0, 0ul, 6)
-        metal_set_buffer(enc, bts, 0ul, 7)
-        metal_set_buffer(enc, bhb, 0ul, 8)
-        metal_set_buffer(enc, btot, 0ul, 9)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bvx, want, tag), 0)
-    }
-    metal_release(bsrc)
-    metal_release(bvx)
-    metal_release(bb)
-    metal_release(bdim)
-    metal_release(bhs)
-    metal_release(bta)
-    metal_release(bt0)
-    metal_release(bts)
-    metal_release(bhb)
-    metal_release(btot)
-    metal_release(pso)
-    delete src
-    delete bias
-    delete want
 }
 
 // The chunked twin pair vs the SAME oracle: Part writes per-chunk (m, s, y) partials, Comb
 // merges by log-sum-exp — the pair must land on the single-pass answer (1e-4, exp reassoc).
 // Negative control recorded 2026-08-16: an off-by-one oracle len redded all three cells.
-def private wdec_attn_pc_gate(t : T?; dev, queue; n, dim, hh, tstride, len0 : int; causal : bool) {
+def private wdec_attn_pc_gate(t : T?; var dev, queue; n, dim, hh, tstride, len0 : int; causal : bool) {
     let tag = "wdec_attn_pc n={n} dim={dim} hh={hh} len0={len0} causal={causal}"
-    var err : string
-    var pp = pipeline_from_source(dev, metal_wdec_attn_part_msl, metal_wdec_attn_part_msl_entry, metal_wdec_attn_part_msl_fastmath, err)
-    t |> success(pp != null, "{tag}: part pipeline: {err}")
-    return if (pp == null)
-    var pc = pipeline_from_source(dev, metal_wdec_attn_comb_msl, metal_wdec_attn_comb_msl_entry, metal_wdec_attn_comb_msl_fastmath, err)
-    t |> success(pc != null, "{tag}: comb pipeline: {err}")
-    if (pc == null) {
-        metal_release(pp)
-        return
-    }
-    let hs = dim / hh
-    let scale = 1.0 / sqrt(float(hs))
-    let maxlen = causal ? len0 + n - 1 : len0
-    let nch = (maxlen + 255) / 256
-    var q : array<float>
-    var qb : array<float>
-    var kvh : array<uint16>
-    var vvh : array<uint16>
-    var kv : array<float>
-    var vv : array<float>
-    q |> resize(n * dim)
-    qb |> resize(dim)
-    kvh |> resize(hh * tstride * hs)
-    vvh |> resize(hh * tstride * hs)
-    kv |> resize(hh * tstride * hs)
-    vv |> resize(hh * tstride * hs)
-    for (i in range(n * dim)) {
-        q[i] = 0.11 * float(i % 37) - 1.7
-    }
-    for (i in range(dim)) {
-        qb[i] = 0.07 * float(i % 11) - 0.3
-    }
-    for (i in range(hh * tstride * hs)) {
-        kvh[i] = uint16(f32_to_f16(0.09 * float(i % 41) - 1.9))
-        vvh[i] = uint16(f32_to_f16(0.13 * float(i % 29) - 1.1))
-        kv[i] = f16_to_f32(uint(kvh[i]))
-        vv[i] = f16_to_f32(uint(vvh[i]))
-    }
-    // the oracle over [hh][tstride][hs] planes (head h at h * tstride * hs, key stride hs), the q bias folded into the query rows as the kernel folds it
-    var qq : array<float>
-    qq |> resize(n * dim)
-    for (i in range(n * dim)) {
-        qq[i] = q[i] + qb[i % dim]
-    }
-    var want : array<float>
-    want |> resize(n * dim)
-    for (h in range(hh)) {
-        for (r in range(n)) {
-            attn_row_oracle(qq, r * dim + h * hs, kv, h * tstride * hs, vv, h * tstride * hs, hs, 0, hs, 1,
-                causal ? len0 + r : len0, scale, want, r * dim + h * hs)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sp = stamp_of(@@enc_wdec_attn_part)
+        let sc = stamp_of(@@enc_wdec_attn_comb)
+        var pp = mc |> keep_stamp(sp, err)
+        return if (!pso_ok(t, "{tag} part", pp, err))
+        var pc = mc |> keep_stamp(sc, err)
+        return if (!pso_ok(t, "{tag} comb", pc, err))
+        let hs = dim / hh
+        let scale = 1.0 / sqrt(float(hs))
+        let maxlen = causal ? len0 + n - 1 : len0
+        let nch = (maxlen + 255) / 256
+        var inscope q : array<float>
+        var inscope qb : array<float>
+        var inscope kvh : array<uint16>
+        var inscope vvh : array<uint16>
+        var inscope kv : array<float>
+        var inscope vv : array<float>
+        q |> resize(n * dim)
+        qb |> resize(dim)
+        kvh |> resize(hh * tstride * hs)
+        vvh |> resize(hh * tstride * hs)
+        kv |> resize(hh * tstride * hs)
+        vv |> resize(hh * tstride * hs)
+        for (i in range(n * dim)) {
+            q[i] = 0.11 * float(i % 37) - 1.7
         }
+        for (i in range(dim)) {
+            qb[i] = 0.07 * float(i % 11) - 0.3
+        }
+        for (i in range(hh * tstride * hs)) {
+            kvh[i] = uint16(f32_to_f16(0.09 * float(i % 41) - 1.9))
+            vvh[i] = uint16(f32_to_f16(0.13 * float(i % 29) - 1.1))
+            kv[i] = f16_to_f32(uint(kvh[i]))
+            vv[i] = f16_to_f32(uint(vvh[i]))
+        }
+        // the oracle over [hh][tstride][hs] planes (head h at h * tstride * hs, key stride hs), the q bias folded into the query rows as the kernel folds it
+        var inscope qq : array<float>
+        qq |> resize(n * dim)
+        for (i in range(n * dim)) {
+            qq[i] = q[i] + qb[i % dim]
+        }
+        var inscope want : array<float>
+        want |> resize(n * dim)
+        for (h in range(hh)) {
+            for (r in range(n)) {
+                attn_row_oracle(qq, r * dim + h * hs, kv, h * tstride * hs, vv, h * tstride * hs, hs, 0, hs, 1,
+                    causal ? len0 + r : len0, scale, want, r * dim + h * hs)
+            }
+        }
+        let bq = mc |> in_(q)
+        let bk = mc |> in_plain(kvh)
+        let bv = mc |> in_plain(vvh)
+        let bqb = mc |> in_(qb)
+        let bpms = mc |> out_words(nch * hh * n * 2, -888.0)
+        let bpy = mc |> out_words(nch * hh * n * hs, -888.0)
+        let by = mc |> out_words(n * dim, -444.0)
+        let bdim = mc |> in_plain([uint(dim)])
+        let bhs = mc |> in_plain([uint(hs)])
+        let bts = mc |> in_plain([uint(tstride)])
+        let blen = mc |> in_plain([uint(len0)])
+        let bca = mc |> in_plain([causal ? 1u : 0u])
+        let bsc = mc |> in_plain([scale])
+        let bhh = mc |> in_plain([uint(hh)])
+        let bn = mc |> in_plain([uint(n)])
+        let bnch = mc |> in_plain([uint(nch)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (pms, py, dm, hsb, hhb, nb) = (mc.buf[bpms], mc.buf[bpy], mc.buf[bdim], mc.buf[bhs], mc.buf[bhh], mc.buf[bn])
+            stamp_run(sp, pp) {
+                invoke(sp.enc, enc, mc.buf[bq], mc.buf[bk], 0ul, mc.buf[bv], 0ul, pms, py, mc.buf[bqb], 0ul, dm, hsb, mc.buf[bts], mc.buf[blen],
+                    mc.buf[bca], mc.buf[bsc], hhb, nb, int64(hh), int64(n), int64(nch))
+            }
+            metal_memory_barrier(enc)
+            stamp_run(sc, pc) {
+                invoke(sc.enc, enc, pms, py, mc.buf[by], dm, hsb, mc.buf[bnch], hhb, nb, int64(hh), int64(n))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_TIGHT, Shape(row_width = dim, head_width = hs))
     }
-    var bq = buf_upload(dev, q)
-    var bk = buf_upload(dev, kvh)
-    var bv = buf_upload(dev, vvh)
-    var bqb = buf_upload(dev, qb)
-    var bpms = buf_fill(dev, nch * hh * n * 2, -888.0)
-    var bpy = buf_fill(dev, nch * hh * n * hs, -888.0)
-    var by = buf_fill(dev, n * dim, -444.0)
-    var bdim = buf_u32(dev, uint(dim))
-    var bhs = buf_u32(dev, uint(hs))
-    var bts = buf_u32(dev, uint(tstride))
-    var blen = buf_u32(dev, uint(len0))
-    var bca = buf_u32(dev, causal ? 1u : 0u)
-    var bsc = buf_f32(dev, scale)
-    var bhh = buf_u32(dev, uint(hh))
-    var bn = buf_u32(dev, uint(n))
-    var bnch = buf_u32(dev, uint(nch))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pp)
-        metal_set_threadgroup_memory_length(enc, metal_wdec_attn_part_msl_tgmem, 0)
-        metal_set_buffer(enc, bq, 0ul, 0)
-        metal_set_buffer(enc, bk, 0ul, 1)
-        metal_set_buffer(enc, bv, 0ul, 2)
-        metal_set_buffer(enc, bpms, 0ul, 3)
-        metal_set_buffer(enc, bpy, 0ul, 4)
-        metal_set_buffer(enc, bqb, 0ul, 5)
-        metal_set_buffer(enc, bdim, 0ul, 6)
-        metal_set_buffer(enc, bhs, 0ul, 7)
-        metal_set_buffer(enc, bts, 0ul, 8)
-        metal_set_buffer(enc, blen, 0ul, 9)
-        metal_set_buffer(enc, bca, 0ul, 10)
-        metal_set_buffer(enc, bsc, 0ul, 11)
-        metal_set_buffer(enc, bhh, 0ul, 12)
-        metal_set_buffer(enc, bn, 0ul, 13)
-        metal_dispatch_threadgroups(enc, uint3(uint(hh), uint(n), uint(nch)), uint3(128u, 1u, 1u))
-        metal_memory_barrier(enc)
-        metal_set_pipeline(enc, pc)
-        metal_set_buffer(enc, bpms, 0ul, 0)
-        metal_set_buffer(enc, bpy, 0ul, 1)
-        metal_set_buffer(enc, by, 0ul, 2)
-        metal_set_buffer(enc, bdim, 0ul, 3)
-        metal_set_buffer(enc, bhs, 0ul, 4)
-        metal_set_buffer(enc, bnch, 0ul, 5)
-        metal_set_buffer(enc, bhh, 0ul, 6)
-        metal_set_buffer(enc, bn, 0ul, 7)
-        metal_dispatch_threadgroups(enc, uint3(uint(hh), uint(n), 1u), uint3(64u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_approx(by, want, tag), 0)
-    }
-    metal_release(bq)
-    metal_release(bk)
-    metal_release(bv)
-    metal_release(bqb)
-    metal_release(bpms)
-    metal_release(bpy)
-    metal_release(by)
-    metal_release(bdim)
-    metal_release(bhs)
-    metal_release(bts)
-    metal_release(blen)
-    metal_release(bca)
-    metal_release(bsc)
-    metal_release(bhh)
-    metal_release(bn)
-    metal_release(bnch)
-    metal_release(pp)
-    metal_release(pc)
-    delete q
-    delete qb
-    delete kvh
-    delete vvh
-    delete kv
-    delete vv
-    delete qq
-    delete want
 }
 
 //! In place on x: x += y + b[i % dim] (y at slot 1, the rest one up), or x = gelu_lut(x + b[i % dim]) against the CPU LUT form over a fixture spanning its clamp.
-def private bias_rows_gate(t : T?; dev, queue; nrows, dim : int; gelu : bool) {
+def private bias_rows_gate(t : T?; var dev, queue; nrows, dim : int; gelu : bool) {
     let tag = "bias_{gelu ? "gelu_lut" : "add_res"} nrows={nrows} dim={dim}"
-    var err : string
-    var pso = (gelu
-        ? pipeline_from_source(dev, metal_bias_gelu_lut_msl, metal_bias_gelu_lut_msl_entry, metal_bias_gelu_lut_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_bias_add_res_msl, metal_bias_add_res_msl_entry, metal_bias_add_res_msl_fastmath, err))
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let total = nrows * dim
-    var x : array<float>
-    var y : array<float>
-    var b : array<float>
-    x |> resize(total)
-    y |> resize(total)
-    b |> resize(dim)
-    for (i in range(total)) {
-        x[i] = gelu ? 0.02 * float(i % 512) - 5.0 : 0.3 * float(i % 23) - 2.0
-        y[i] = 0.17 * float(i % 31) - 1.0
-    }
-    for (i in range(dim)) {
-        b[i] = gelu ? 0.03 * float(i % 17) - 0.25 : 0.05 * float(i % 7) - 0.1
-    }
-    var want : array<float>
-    want |> resize(total)
-    for (i in range(total)) {
-        want[i] = gelu ? x[i] + b[i % dim] : x[i] + (y[i] + b[i % dim])
-    }
-    if (gelu) {
-        gelu_tanh_lut(want, int64(total))   // the CPU LUT form — the form-matched oracle
-    }
-    let s = gelu ? 0 : 1
-    var bx = buf_upload(dev, x)
-    var by = buf_upload(dev, y)
-    var bb = buf_upload(dev, b)
-    var bdim = buf_u32(dev, uint(dim))
-    var btot = buf_u32(dev, uint(total))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bx, 0ul, 0)
-        if (!gelu) {
-            metal_set_buffer(enc, by, 0ul, 1)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sg = stamp_of(@@enc_bias_gelu_lut)
+        let sr = stamp_of(@@enc_bias_add_res)
+        var pso = gelu ? (mc |> keep_stamp(sg, err)) : (mc |> keep_stamp(sr, err))
+        return if (!pso_ok(t, tag, pso, err))
+        let total = nrows * dim
+        var inscope x : array<float>
+        var inscope y : array<float>
+        var inscope b : array<float>
+        x |> resize(total)
+        y |> resize(total)
+        b |> resize(dim)
+        for (i in range(total)) {
+            x[i] = gelu ? 0.02 * float(i % 512) - 5.0 : 0.3 * float(i % 23) - 2.0
+            y[i] = 0.17 * float(i % 31) - 1.0
         }
-        metal_set_buffer(enc, bb, 0ul, 1 + s)
-        metal_set_buffer(enc, bdim, 0ul, 2 + s)
-        metal_set_buffer(enc, btot, 0ul, 3 + s)
+        for (i in range(dim)) {
+            b[i] = gelu ? 0.03 * float(i % 17) - 0.25 : 0.05 * float(i % 7) - 0.1
+        }
+        var inscope want : array<float>
+        want |> resize(total)
+        for (i in range(total)) {
+            want[i] = gelu ? x[i] + b[i % dim] : x[i] + (y[i] + b[i % dim])
+        }
+        if (gelu) {
+            gelu_tanh_lut(want, int64(total))   // the CPU LUT form — the form-matched oracle
+        }
+        let bx = mc |> io_(x)
+        let by = mc |> in_(y)
+        let bb = mc |> in_(b)
+        let bdim = mc |> in_plain([uint(dim)])
+        let btot = mc |> in_plain([uint(total)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (gelu) {
+                stamp_run(sg, pso) {
+                    invoke(sg.enc, enc, mc.buf[bx], 0ul, mc.buf[bb], 0ul, mc.buf[bdim], mc.buf[btot], int64(total))
+                }
+            } else {
+                stamp_run(sr, pso) {
+                    invoke(sr.enc, enc, mc.buf[bx], mc.buf[by], mc.buf[bb], 0ul, mc.buf[bdim], mc.buf[btot], int64(total))
+                }
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_TIGHT, Shape(row_width = dim))
     }
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bx, want, tag), 0)
-    }
-    metal_release(bx)
-    metal_release(by)
-    metal_release(bb)
-    metal_release(bdim)
-    metal_release(btot)
-    metal_release(pso)
-    delete x
-    delete y
-    delete b
-    delete want
 }
 
 //! The conv-frontend im2col against the CPU walk - a bit-exact scatter with the "same"-pad zero edges, both source
 //! layouts (chmajor mel, row-major y1) and both strides: k=3 on the shared stamps (conv1 on CHMAJOR, conv2 row-major),
 //! the panel padded to the GEMM's 32 lattice with zeros; a poisoned source element must red the panel.
-def private im2col3_gate(t : T?; dev, queue; rows, nch, srclen, stride : int; chmajor : bool) {
+def private im2col3_gate(t : T?; var dev, queue; rows, nch, srclen, stride : int; chmajor : bool) {
     let tag = "im2col3 rows={rows} nch={nch} stride={stride} chmajor={chmajor}"
-    var err : string
-    var pso = (chmajor
-        ? pipeline_from_source(dev, metal_st2_im2col_cm_msl, metal_st2_im2col_cm_msl_entry, metal_st2_im2col_cm_msl_fastmath, err)
-        : pipeline_from_source(dev, metal_st2_im2col_msl, metal_st2_im2col_msl_entry, metal_st2_im2col_msl_fastmath, err))
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let kdim = (3 * nch + 31) / 32 * 32
-    let mp = (rows + 31) / 32 * 32
-    let total = mp * kdim
-    var src : array<float>
-    src |> resize(srclen * nch)
-    for (i in range(srclen * nch)) {
-        src[i] = 0.21 * float(i % 53) - 4.0
-    }
-    var want : array<float>
-    want |> resize(total)
-    for (i in range(rows)) {
-        for (dk in range(3)) {
-            let sp = i * stride + dk - 1
-            for (c in range(nch)) {
-                want[i * kdim + dk * nch + c] = (sp >= 0 && sp < srclen
-                    ? (chmajor ? src[c * srclen + sp] : src[sp * nch + c])
-                    : 0.0)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = chmajor ? stamp_of(@@enc_st2_im2col_cm) : stamp_of(@@enc_st2_im2col)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let kdim = (3 * nch + 31) / 32 * 32
+        let mp = (rows + 31) / 32 * 32
+        let total = mp * kdim
+        var inscope src : array<float>
+        src |> resize(srclen * nch)
+        for (i in range(srclen * nch)) {
+            src[i] = 0.21 * float(i % 53) - 4.0
+        }
+        var inscope want : array<float>
+        want |> resize(total)
+        for (i in range(rows)) {
+            for (dk in range(3)) {
+                let sp = i * stride + dk - 1
+                for (c in range(nch)) {
+                    want[i * kdim + dk * nch + c] = (sp >= 0 && sp < srclen
+                        ? (chmajor ? src[c * srclen + sp] : src[sp * nch + c])
+                        : 0.0)
+                }
             }
         }
-    }
-    let ka = St2ConvArgs(cin = uint(nch), k = 3u, stride = uint(stride), pad_l = 1u, dil = 1u, t_in = uint(srclen), r0 = 0u, rows = uint(rows), xs = uint(nch))
-    var bsrc = buf_upload(dev, src)
-    var bcol = buf_fill(dev, total, -333.0)
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bsrc, 0ul, 0)
-        metal_set_buffer(enc, bcol, 0ul, 1)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bcol, want, tag), 0)
+        var ka = St2ConvArgs(cin = uint(nch), k = 3u, stride = uint(stride), pad_l = 1u, dil = 1u, t_in = uint(srclen), r0 = 0u, rows = uint(rows), xs = uint(nch))
+        let bsrc = mc |> in_(src)
+        let bcol = mc |> out_words(total, -333.0)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bsrc], mc.buf[bcol], ka, int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bcol], want, BAR_BITS, Shape(row_width = kdim))
         src[0] += 2.0   // row 0's centre tap reads it, on both layouts
-        var bsrc2 = buf_upload(dev, src)
-        var bcol2 = buf_fill(dev, total, -333.0)
-        let ran2 = dispatch_64_lanes(t, queue, "{tag} poison", pso, total) $(enc) {
-            metal_set_buffer(enc, bsrc2, 0ul, 0)
-            metal_set_buffer(enc, bcol2, 0ul, 1)
-            metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 2)
+        mc |> plane_upload(bsrc, src)
+        mc |> plane_refill(bcol)
+        let ran2 = mc |> cell_record(t, "{tag} poison") $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bsrc], mc.buf[bcol], ka, int64(total))
+            }
         }
         if (ran2) {
-            t |> success(buf_mismatch_exact(bcol2, want, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned source element reds the panel")
+            var inscope poisoned_panel <- mc |> plane_run(bcol)
+            t |> success(mismatch_exact(poisoned_panel, want) > 0, "{tag}: a poisoned source element reds the panel")
         }
-        metal_release(bsrc2)
-        metal_release(bcol2)
     }
-    metal_release(bsrc)
-    metal_release(bcol)
-    metal_release(pso)
-    delete src
-    delete want
 }
 
 // The 2D conv im2col (k=3 s=2 p=1) vs the CPU conv2d_s2 walk — bit-exact scatter with the
 // zero pad edges, the K pad (kd > cin*9) and the strided source (sstride > cin, the padded
 // GEMM rows). Negative control recorded 2026-08-16: dropping the -1 pad shift redded every cell.
-def private im2col2d_gate(t : T?; dev, queue; iw, ih, cin, kd, sstride : int) {
+def private im2col2d_gate(t : T?; var dev, queue; iw, ih, cin, kd, sstride : int) {
     let tag = "im2col2d iw={iw} ih={ih} cin={cin} kd={kd} ss={sstride}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_im2col2d_msl, metal_im2col2d_msl_entry, metal_im2col2d_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let ow = (iw - 1) / 2 + 1
-    let oh = (ih - 1) / 2 + 1
-    let rows = oh * ow
-    let total = rows * kd
-    var src : array<float>
-    src |> resize(ih * iw * sstride)
-    for (i in range(ih * iw * sstride)) {
-        src[i] = 0.31 * float(i % 47) - 6.0
-    }
-    var want : array<float>
-    want |> resize(total)
-    for (oy in range(oh)) {
-        for (ox in range(ow)) {
-            let r = oy * ow + ox
-            for (k in range(kd)) {
-                var v = 0.0
-                if (k < cin * 9) {
-                    let ic = k / 9
-                    let kh = (k % 9) / 3
-                    let kw = k % 3
-                    let iy = oy * 2 + kh - 1
-                    let ix = ox * 2 + kw - 1
-                    if (iy >= 0 && iy < ih && ix >= 0 && ix < iw) {
-                        v = src[(iy * iw + ix) * sstride + ic]
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_im2col2d)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let ow = (iw - 1) / 2 + 1
+        let oh = (ih - 1) / 2 + 1
+        let rows = oh * ow
+        let total = rows * kd
+        var inscope src : array<float>
+        src |> resize(ih * iw * sstride)
+        for (i in range(ih * iw * sstride)) {
+            src[i] = 0.31 * float(i % 47) - 6.0
+        }
+        var inscope want : array<float>
+        want |> resize(total)
+        for (oy in range(oh)) {
+            for (ox in range(ow)) {
+                let r = oy * ow + ox
+                for (k in range(kd)) {
+                    var v = 0.0
+                    if (k < cin * 9) {
+                        let ic = k / 9
+                        let kh = (k % 9) / 3
+                        let kw = k % 3
+                        let iy = oy * 2 + kh - 1
+                        let ix = ox * 2 + kw - 1
+                        if (iy >= 0 && iy < ih && ix >= 0 && ix < iw) {
+                            v = src[(iy * iw + ix) * sstride + ic]
+                        }
                     }
+                    want[r * kd + k] = v
                 }
-                want[r * kd + k] = v
             }
         }
+        let bsrc = mc |> in_(src)
+        let bcol = mc |> out_words(total, -222.0)
+        let biw = mc |> in_plain([uint(iw)])
+        let bih = mc |> in_plain([uint(ih)])
+        let bcin = mc |> in_plain([uint(cin)])
+        let bow = mc |> in_plain([uint(ow)])
+        let bkd = mc |> in_plain([uint(kd)])
+        let bss = mc |> in_plain([uint(sstride)])
+        let btot = mc |> in_plain([uint(total)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bsrc], 0ul, mc.buf[bcol], mc.buf[biw], mc.buf[bih], mc.buf[bcin], mc.buf[bow], mc.buf[bkd], mc.buf[bss],
+                    mc.buf[btot], int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bcol], want, BAR_BITS, Shape(row_width = kd))
     }
-    var bsrc = buf_upload(dev, src)
-    var bcol = buf_fill(dev, total, -222.0)
-    var biw = buf_u32(dev, uint(iw))
-    var bih = buf_u32(dev, uint(ih))
-    var bcin = buf_u32(dev, uint(cin))
-    var bow = buf_u32(dev, uint(ow))
-    var bkd = buf_u32(dev, uint(kd))
-    var bss = buf_u32(dev, uint(sstride))
-    var btot = buf_u32(dev, uint(total))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bsrc, 0ul, 0)
-        metal_set_buffer(enc, bcol, 0ul, 1)
-        metal_set_buffer(enc, biw, 0ul, 2)
-        metal_set_buffer(enc, bih, 0ul, 3)
-        metal_set_buffer(enc, bcin, 0ul, 4)
-        metal_set_buffer(enc, bow, 0ul, 5)
-        metal_set_buffer(enc, bkd, 0ul, 6)
-        metal_set_buffer(enc, bss, 0ul, 7)
-        metal_set_buffer(enc, btot, 0ul, 8)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bcol, want, tag), 0)
-    }
-    metal_release(bsrc)
-    metal_release(bcol)
-    metal_release(biw)
-    metal_release(bih)
-    metal_release(bcin)
-    metal_release(bow)
-    metal_release(bkd)
-    metal_release(bss)
-    metal_release(btot)
-    metal_release(pso)
-    delete src
-    delete want
 }
 
-def private suppress_row_gate(t : T?; dev, queue; total, nids : int) {
+def private suppress_row_gate(t : T?; var dev, queue; total, nids : int) {
     let tag = "suppress_row total={total} nids={nids}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_suppress_row_msl, metal_suppress_row_msl_entry, metal_suppress_row_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var xv : array<float>
-    xv |> resize(total)
-    for (i in range(total)) {
-        xv[i] = 0.19 * float(i % 53) - 4.9
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_suppress_row)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope xv : array<float>
+        xv |> resize(total)
+        for (i in range(total)) {
+            xv[i] = 0.19 * float(i % 53) - 4.9
+        }
+        var inscope ids : array<uint>
+        ids |> resize(nids)
+        for (i in range(nids)) {
+            ids[i] = uint((i * 37 + 5) % total)
+        }
+        var inscope want := xv
+        for (i in range(nids)) {
+            want[int(ids[i])] = -1.0e30
+        }
+        let bx = mc |> io_(xv)
+        let bids = mc |> in_plain(ids)
+        let bn = mc |> in_plain([uint(nids)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], 0ul, mc.buf[bids], mc.buf[bn], int64(nids))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_BITS, FLAT_SHAPE)
     }
-    var ids : array<uint>
-    ids |> resize(nids)
-    for (i in range(nids)) {
-        ids[i] = uint((i * 37 + 5) % total)
-    }
-    var want := xv
-    for (i in range(nids)) {
-        want[int(ids[i])] = -1.0e30
-    }
-    var bx = buf_upload(dev, xv)
-    var bids = buf_upload(dev, ids)
-    var bn = buf_u32(dev, uint(nids))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, nids) $(enc) {
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, bids, 0ul, 1)
-        metal_set_buffer(enc, bn, 0ul, 2)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bx, want, tag), 0)
-    }
-    metal_release(bx)
-    metal_release(bids)
-    metal_release(bn)
-    metal_release(pso)
-    delete xv
-    delete ids
-    delete want
 }
 
-def private softcap_row_gate(t : T?; dev, queue; total : int; cap : float) {
+def private softcap_row_gate(t : T?; var dev, queue; total : int; cap : float) {
     let tag = "softcap_row total={total} cap={cap}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_softcap_row_msl, metal_softcap_row_msl_entry, metal_softcap_row_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var xv : array<float>
-    xv |> resize(total)
-    for (i in range(total)) {
-        xv[i] = 0.31 * float(i % 61) - 9.2   // spans well past +-cap so the saturation arms run
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_softcap_row)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope xv : array<float>
+        xv |> resize(total)
+        for (i in range(total)) {
+            xv[i] = 0.31 * float(i % 61) - 9.2   // spans well past +-cap so the saturation arms run
+        }
+        var inscope want : array<float>
+        want |> resize(total)
+        for (i in range(total)) {
+            want[i] = cap * tanh(xv[i] / cap)    // softcap4's scalar reference
+        }
+        let bx = mc |> io_(xv)
+        let btot = mc |> in_plain([uint(total)])
+        let bcap = mc |> in_plain([cap])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], 0ul, mc.buf[btot], mc.buf[bcap], int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_TIGHT, FLAT_SHAPE)
     }
-    var want : array<float>
-    want |> resize(total)
-    for (i in range(total)) {
-        want[i] = cap * tanh(xv[i] / cap)    // softcap4's scalar reference
-    }
-    var bx = buf_upload(dev, xv)
-    var btot = buf_u32(dev, uint(total))
-    var bcap = buf_f32(dev, cap)
-    let ran = dispatch_64_lanes(t, queue, tag, pso, total) $(enc) {
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, btot, 0ul, 1)
-        metal_set_buffer(enc, bcap, 0ul, 2)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bx, want, tag), 0)
-    }
-    metal_release(bx)
-    metal_release(btot)
-    metal_release(bcap)
-    metal_release(pso)
-    delete xv
-    delete want
 }
 
 // ===== the hyper-connection mixer + the n-gram side input (qwen4exp) =====
 
-//! the compare's control: the same want with one element moved past the bar must red the compare
-def private poisoned(want : array<float>; at : int) : array<float> {
-    var p := want
-    p[at] += 0.5
-    return <- p
-}
-
-//! one element of a float buffer - the in-place witnesses read the moved element back
-def private buf_at(buf; i : int) : float {
-    unsafe {
-        let p = reinterpret<float const?>(metal_buffer_contents(buf))
-        return p[i]
-    }
+//! the hyper-connection cells' bar at `rel`: its control moves element `at` by 0.5 - past the bar at these magnitudes
+def private hc_bar(bar : Bar; at : int) : Bar {
+    var b = bar
+    b.poison = 0.5
+    b.poison_scaled = false
+    b.poison_at = at
+    return b
 }
 
 // the grouped norm over nrows wide rows: stream c of every row normalizes over dim and scales by gamma row c
-def private hc_norm_gate(t : T?; dev, queue; dim, hc, nrows : int) {
+def private hc_norm_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
     let tag = "hc_norm dim={dim} hc={hc} nrows={nrows}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_hc_norm_msl, metal_hc_norm_msl_entry, metal_hc_norm_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let hcd = hc * dim
-    let rows = nrows * hc
-    var x : array<float>
-    var w : array<float>
-    var want : array<float>
-    x |> resize(rows * dim)
-    w |> resize(hcd)
-    want |> resize(rows * dim)
-    for (i in range(rows * dim)) {
-        x[i] = 0.23 * float(i % 41) - 3.1 + 0.7 * float(i / dim)
-    }
-    for (i in range(hcd)) {
-        w[i] = 0.4 + 0.02 * float(i % 11) + 0.1 * float(i / dim)
-    }
-    unsafe {
-        for (r in range(rows)) {
-            rmsnorm(addr(want[r * dim]), addr<float const?>(x[r * dim]), addr<float const?>(w[(r % hc) * dim]), int64(dim), EPS)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_hc_norm)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        let rows = nrows * hc
+        var inscope x : array<float>
+        var inscope w : array<float>
+        var inscope want : array<float>
+        x |> resize(rows * dim)
+        w |> resize(hcd)
+        want |> resize(rows * dim)
+        for (i in range(rows * dim)) {
+            x[i] = 0.23 * float(i % 41) - 3.1 + 0.7 * float(i / dim)
         }
+        for (i in range(hcd)) {
+            w[i] = 0.4 + 0.02 * float(i % 11) + 0.1 * float(i / dim)
+        }
+        unsafe {
+            for (r in range(rows)) {
+                rmsnorm(addr(want[r * dim]), addr<float const?>(x[r * dim]), addr<float const?>(w[(r % hc) * dim]), int64(dim), EPS)
+            }
+        }
+        let bx = mc |> in_(x)
+        let bw = mc |> in_(w)
+        let by = mc |> out_words(rows * dim, -1000.0)
+        let bdim = mc |> in_plain([uint(dim)])
+        let beps = mc |> in_plain([EPS])
+        let bhc = mc |> in_plain([uint(hc)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bw], mc.buf[by], mc.buf[bdim], mc.buf[beps], mc.buf[bhc], int64(rows))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, hc_bar(BAR_TIGHT, (rows - 1) * dim + 3), Shape(row_width = hcd, head_width = dim))
     }
-    var bx = buf_upload(dev, x)
-    var bw = buf_upload(dev, w)
-    var by = buf_fill(dev, rows * dim, -1000.0)
-    var bdim = buf_u32(dev, uint(dim))
-    var beps = buf_f32(dev, EPS)
-    var bhc = buf_u32(dev, uint(hc))
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_hc_norm_msl_tgmem, 0)
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, bw, 0ul, 1)
-        metal_set_buffer(enc, by, 0ul, 2)
-        metal_set_buffer(enc, bdim, 0ul, 3)
-        metal_set_buffer(enc, beps, 0ul, 4)
-        metal_set_buffer(enc, bhc, 0ul, 5)
-        metal_dispatch_threadgroups(enc, uint3(uint(rows), 1u, 1u), uint3(1024u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_approx(by, want, tag), 0)
-        t |> success(buf_mismatch_approx(by, poisoned(want, (rows - 1) * dim + 3), "{tag} control") > 0, "{tag}: the poisoned want must miss")
-    }
-    metal_release(bx)
-    metal_release(bw)
-    metal_release(by)
-    metal_release(bdim)
-    metal_release(beps)
-    metal_release(bhc)
-    metal_release(pso)
-    delete x
-    delete w
-    delete want
 }
 
 // the wide residual rows from the embed rows: every stream of row p reads row p
-def private hc_init_gate(t : T?; dev, queue; dim, hc, nrows : int) {
+def private hc_init_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
     let tag = "hc_init dim={dim} hc={hc} nrows={nrows}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_hc_init_msl, metal_hc_init_msl_entry, metal_hc_init_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let hcd = hc * dim
-    var x : array<float>
-    var want : array<float>
-    x |> resize(nrows * dim)
-    want |> resize(nrows * hcd)
-    for (i in range(nrows * dim)) {
-        x[i] = 0.13 * float(i % 59) - 3.7
-    }
-    for (p in range(nrows)) {
-        for (c in range(hc)) {
-            for (i in range(dim)) {
-                want[(p * hc + c) * dim + i] = x[p * dim + i]
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_hc_init)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        var inscope x : array<float>
+        var inscope want : array<float>
+        x |> resize(nrows * dim)
+        want |> resize(nrows * hcd)
+        for (i in range(nrows * dim)) {
+            x[i] = 0.13 * float(i % 59) - 3.7
+        }
+        for (p in range(nrows)) {
+            for (c in range(hc)) {
+                for (i in range(dim)) {
+                    want[(p * hc + c) * dim + i] = x[p * dim + i]
+                }
             }
         }
+        let bx = mc |> in_(x)
+        let bres = mc |> out_words(nrows * hcd, -1000.0)
+        let bdim = mc |> in_plain([uint(dim)])
+        let bhc = mc |> in_plain([uint(hc)])
+        let btot = mc |> in_plain([uint(nrows * hcd)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bres], mc.buf[bdim], mc.buf[bhc], mc.buf[btot], int64(nrows * hcd))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bres], want, hc_bar(BAR_EXACT, nrows * hcd - 1), Shape(row_width = hcd, head_width = dim))
     }
-    var bx = buf_upload(dev, x)
-    var bres = buf_fill(dev, nrows * hcd, -1000.0)
-    var bdim = buf_u32(dev, uint(dim))
-    var bhc = buf_u32(dev, uint(hc))
-    var btot = buf_u32(dev, uint(nrows * hcd))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, nrows * hcd) $(enc) {
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, bres, 0ul, 1)
-        metal_set_buffer(enc, bdim, 0ul, 2)
-        metal_set_buffer(enc, bhc, 0ul, 3)
-        metal_set_buffer(enc, btot, 0ul, 4)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bres, want, tag), 0)
-        t |> success(buf_mismatch_exact(bres, poisoned(want, nrows * hcd - 1), "{tag} control") > 0, "{tag}: the poisoned want must miss")
-    }
-    metal_release(bx)
-    metal_release(bres)
-    metal_release(bdim)
-    metal_release(bhc)
-    metal_release(btot)
-    metal_release(pso)
-    delete x
-    delete want
 }
 
 // the mixer's gate input in place: lo = silu(lo / hc)
-def private hc_lo_gate(t : T?; dev, queue; lr, hc : int) {
+def private hc_lo_gate(t : T?; var dev, queue; lr, hc : int) {
     let tag = "hc_lo lr={lr} hc={hc}"
-    var err : string
-    var pso = pipeline_from_source(dev, MetalHcLo_metal_ew1_msl, MetalHcLo_metal_ew1_msl_entry, MetalHcLo_metal_ew1_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    var x : array<float>
-    var want : array<float>
-    x |> resize(lr)
-    want |> resize(lr)
-    for (i in range(lr)) {
-        x[i] = 0.37 * float(i % 29) - 5.0
-        want[i] = float(silu_d(double(x[i]) / double(hc)))
-    }
-    x[0] = 2.0   //! the in-place witness: silu(2 / hc) is not 2
-    want[0] = float(silu_d(2.0lf / double(hc)))
-    var bx = buf_upload(dev, x)
-    var btot = buf_u32(dev, uint(lr))
-    var bhc = buf_u32(dev, uint(hc))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, lr) $(enc) {
-        metal_set_buffer(enc, bx, 0ul, 0)
-        metal_set_buffer(enc, btot, 0ul, 1)
-        metal_set_buffer(enc, bhc, 0ul, 2)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bx, want, tag), 0)
-        let g0 = buf_at(bx, 0)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_hc_lo)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope x : array<float>
+        var inscope want : array<float>
+        x |> resize(lr)
+        want |> resize(lr)
+        for (i in range(lr)) {
+            x[i] = 0.37 * float(i % 29) - 5.0
+            want[i] = float(silu_d(double(x[i]) / double(hc)))
+        }
+        x[0] = 2.0   //! the in-place witness: silu(2 / hc) is not 2
+        want[0] = float(silu_d(2.0lf / double(hc)))
+        let bx = mc |> io_(x)
+        let btot = mc |> in_plain([uint(lr)])
+        let bhc = mc |> in_plain([uint(hc)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], 0ul, mc.buf[btot], mc.buf[bhc], int64(lr))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, hc_bar(BAR_TIGHT, 1), FLAT_SHAPE)
+        let g0 = (mc |> plane_run(bx))[0]
         t |> success(abs(g0 - 2.0) > 1.0, "{tag}: the row moved off its input at [0] ({g0})")
-        t |> success(buf_mismatch_approx(bx, poisoned(want, 1), "{tag} control") > 0, "{tag}: the poisoned want must miss")
     }
-    metal_release(bx)
-    metal_release(btot)
-    metal_release(bhc)
-    metal_release(pso)
-    delete x
-    delete want
 }
 
 // the mixer's collapse over nrows wide rows: y[p][i] = the stream mean of xn[p][c][i] * σ(gate[p][c][i])
-def private hc_mix_gate(t : T?; dev, queue; dim, hc, nrows : int) {
+def private hc_mix_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
     let tag = "hc_mix dim={dim} hc={hc} nrows={nrows}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_hc_mix_msl, metal_hc_mix_msl_entry, metal_hc_mix_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let hcd = hc * dim
-    var xn : array<float>
-    var gt : array<float>
-    var want : array<float>
-    xn |> resize(nrows * hcd)
-    gt |> resize(nrows * hcd)
-    want |> resize(nrows * dim)
-    for (i in range(nrows * hcd)) {
-        xn[i] = 0.11 * float(i % 43) - 2.2
-        gt[i] = 0.29 * float(i % 31) - 4.3
-    }
-    for (p in range(nrows)) {
-        for (i in range(dim)) {
-            var acc = 0.0lf
-            for (c in range(hc)) {
-                acc += double(xn[(p * hc + c) * dim + i]) * sigmoid_d(double(gt[(p * hc + c) * dim + i]))
-            }
-            want[p * dim + i] = float(acc / double(hc))
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_hc_mix)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        var inscope xn : array<float>
+        var inscope gt : array<float>
+        var inscope want : array<float>
+        xn |> resize(nrows * hcd)
+        gt |> resize(nrows * hcd)
+        want |> resize(nrows * dim)
+        for (i in range(nrows * hcd)) {
+            xn[i] = 0.11 * float(i % 43) - 2.2
+            gt[i] = 0.29 * float(i % 31) - 4.3
         }
+        for (p in range(nrows)) {
+            for (i in range(dim)) {
+                var acc = 0.0lf
+                for (c in range(hc)) {
+                    acc += double(xn[(p * hc + c) * dim + i]) * sigmoid_d(double(gt[(p * hc + c) * dim + i]))
+                }
+                want[p * dim + i] = float(acc / double(hc))
+            }
+        }
+        let bxn = mc |> in_(xn)
+        let bgt = mc |> in_(gt)
+        let by = mc |> out_words(nrows * dim, -1000.0)
+        let bdim = mc |> in_plain([uint(dim)])
+        let bhc = mc |> in_plain([uint(hc)])
+        let bnr = mc |> in_plain([uint(nrows)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bxn], mc.buf[bgt], mc.buf[by], mc.buf[bdim], mc.buf[bhc], mc.buf[bnr], int64(nrows * dim))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, hc_bar(BAR_TIGHT, nrows * dim - 1), Shape(row_width = dim))
     }
-    var bxn = buf_upload(dev, xn)
-    var bgt = buf_upload(dev, gt)
-    var by = buf_fill(dev, nrows * dim, -1000.0)
-    var bdim = buf_u32(dev, uint(dim))
-    var bhc = buf_u32(dev, uint(hc))
-    var bnr = buf_u32(dev, uint(nrows))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, nrows * dim) $(enc) {
-        metal_set_buffer(enc, bxn, 0ul, 0)
-        metal_set_buffer(enc, bgt, 0ul, 1)
-        metal_set_buffer(enc, by, 0ul, 2)
-        metal_set_buffer(enc, bdim, 0ul, 3)
-        metal_set_buffer(enc, bhc, 0ul, 4)
-        metal_set_buffer(enc, bnr, 0ul, 5)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_approx(by, want, tag), 0)
-        t |> success(buf_mismatch_approx(by, poisoned(want, nrows * dim - 1), "{tag} control") > 0, "{tag}: the poisoned want must miss")
-    }
-    metal_release(bxn)
-    metal_release(bgt)
-    metal_release(by)
-    metal_release(bdim)
-    metal_release(bhc)
-    metal_release(bnr)
-    metal_release(pso)
-    delete xn
-    delete gt
-    delete want
 }
 
 // the scatter in place over nrows rows: res[p][c] += o[p] * 2 σ(inj[p][c] / hc); row 0's stream 1 carries a zero logit (the plain add)
-def private hc_combine_gate(t : T?; dev, queue; dim, hc, nrows : int) {
+def private hc_combine_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
     let tag = "hc_combine dim={dim} hc={hc} nrows={nrows}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_hc_combine_msl, metal_hc_combine_msl_entry, metal_hc_combine_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let hcd = hc * dim
-    var res : array<float>
-    var o : array<float>
-    var inj : array<float>
-    var want : array<float>
-    res |> resize(nrows * hcd)
-    o |> resize(nrows * dim)
-    inj |> resize(nrows * hc)
-    want |> resize(nrows * hcd)
-    for (i in range(nrows * hcd)) {
-        res[i] = 0.17 * float(i % 37) - 3.0
-    }
-    for (i in range(nrows * dim)) {
-        o[i] = 0.5 + 0.13 * float(i % 23)   //! positive: every stream moves off its input
-    }
-    for (j in range(nrows * hc)) {
-        inj[j] = j == 1 ? 0.0 : 1.7 * float(j % hc) - 2.6 + 0.3 * float(j / hc)
-    }
-    for (p in range(nrows)) {
-        for (c in range(hc)) {
-            let wgt = 2.0lf * sigmoid_d(double(inj[p * hc + c]) / double(hc))
-            for (i in range(dim)) {
-                let k = (p * hc + c) * dim + i
-                want[k] = float(double(res[k]) + double(o[p * dim + i]) * wgt)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_hc_combine)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        var inscope res : array<float>
+        var inscope o : array<float>
+        var inscope inj : array<float>
+        var inscope want : array<float>
+        res |> resize(nrows * hcd)
+        o |> resize(nrows * dim)
+        inj |> resize(nrows * hc)
+        want |> resize(nrows * hcd)
+        for (i in range(nrows * hcd)) {
+            res[i] = 0.17 * float(i % 37) - 3.0
+        }
+        for (i in range(nrows * dim)) {
+            o[i] = 0.5 + 0.13 * float(i % 23)   //! positive: every stream moves off its input
+        }
+        for (j in range(nrows * hc)) {
+            inj[j] = j == 1 ? 0.0 : 1.7 * float(j % hc) - 2.6 + 0.3 * float(j / hc)
+        }
+        for (p in range(nrows)) {
+            for (c in range(hc)) {
+                let wgt = 2.0lf * sigmoid_d(double(inj[p * hc + c]) / double(hc))
+                for (i in range(dim)) {
+                    let k = (p * hc + c) * dim + i
+                    want[k] = float(double(res[k]) + double(o[p * dim + i]) * wgt)
+                }
             }
         }
-    }
-    var bres = buf_upload(dev, res)
-    var bo = buf_upload(dev, o)
-    var binj = buf_upload(dev, inj)
-    var bdim = buf_u32(dev, uint(dim))
-    var bhc = buf_u32(dev, uint(hc))
-    var bnr = buf_u32(dev, uint(nrows))
-    let ran = dispatch_64_lanes(t, queue, tag, pso, nrows * hcd) $(enc) {
-        metal_set_buffer(enc, bres, 0ul, 0)
-        metal_set_buffer(enc, bo, 0ul, 1)
-        metal_set_buffer(enc, binj, 0ul, 2)
-        metal_set_buffer(enc, bdim, 0ul, 3)
-        metal_set_buffer(enc, bhc, 0ul, 4)
-        metal_set_buffer(enc, bnr, 0ul, 5)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bres, want, tag), 0)
-        let g1 = buf_at(bres, dim)
+        let bres = mc |> io_(res)
+        let bo = mc |> in_(o)
+        let binj = mc |> in_(inj)
+        let bdim = mc |> in_plain([uint(dim)])
+        let bhc = mc |> in_plain([uint(hc)])
+        let bnr = mc |> in_plain([uint(nrows)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bres], mc.buf[bo], mc.buf[binj], mc.buf[bdim], mc.buf[bhc], mc.buf[bnr], int64(nrows * hcd))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bres], want, hc_bar(BAR_TIGHT, nrows * hcd - 1), Shape(row_width = hcd, head_width = dim))
+        let g1 = (mc |> plane_run(bres))[dim]
         t |> success(abs(g1 - res[dim]) > 0.4, "{tag}: stream 1 moved off its input at [0] ({g1} from {res[dim]})")
-        t |> success(buf_mismatch_approx(bres, poisoned(want, nrows * hcd - 1), "{tag} control") > 0, "{tag}: the poisoned want must miss")
     }
-    metal_release(bres)
-    metal_release(bo)
-    metal_release(binj)
-    metal_release(bdim)
-    metal_release(bhc)
-    metal_release(bnr)
-    metal_release(pso)
-    delete res
-    delete o
-    delete inj
-    delete want
 }
 
 // one (row, stream) a threadgroup: the normed key . normed query gate (signed sqrt, σ) scales the value
@@ -1876,135 +1470,107 @@ def private hc_combine_gate(t : T?; dev, queue; dim, hc, nrows : int) {
 // decode form (direct = 0) at ring slot (pos0 + p) % rows, the window form (direct = 1) at panel row p -
 // the destination bound at a row offset; row 0's stream 0 dot is positive, stream 1's negative,
 // stream 2's key is zero (the sign-free arm, g = 1/2)
-def private ple_gate_gate(t : T?; dev, queue; dim, hc, rows, pos0, roff_rows, nrows : int; direct : bool) {
+def private ple_gate_gate(t : T?; var dev, queue; dim, hc, rows, pos0, roff_rows, nrows : int; direct : bool) {
     let tag = "ple_gate dim={dim} hc={hc} pos0={pos0} roff_rows={roff_rows} nrows={nrows} direct={direct}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_ple_gate_msl, metal_ple_gate_msl_entry, metal_ple_gate_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let hcd = hc * dim
-    let dst_rows = direct ? nrows : rows   //! the panel holds the window's rows, the ring `rows` slots
-    var res : array<float>
-    var key : array<float>
-    var val : array<float>
-    var wk : array<float>
-    var wq : array<float>
-    var wc : array<float>
-    res |> resize(nrows * hcd)
-    key |> resize(nrows * hcd)
-    val |> resize(nrows * dim)
-    wk |> resize(hcd)
-    wq |> resize(hcd)
-    wc |> resize(hcd)
-    for (i in range(nrows * hcd)) {
-        res[i] = 0.21 * float(i % 47) - 4.0
-    }
-    for (i in range(hcd)) {
-        wk[i] = 0.7 + 0.01 * float(i % 13)
-        wq[i] = 0.9 + 0.02 * float(i % 7)
-        wc[i] = 0.5 + 0.03 * float(i % 5)
-    }
-    for (p in range(nrows)) {
-        for (c in range(hc)) {
-            for (i in range(dim)) {
-                let k = (p * hc + c) * dim + i
-                let r = res[k]
-                key[k] = c == 0 ? r + 0.3 : (c == 1 ? -r : (c == 2 ? 0.0 : 0.05 * float((i + p) % 9) - 0.2))
-            }
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_ple_gate)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        let dst_rows = direct ? nrows : rows   //! the panel holds the window's rows, the ring `rows` slots
+        var inscope res : array<float>
+        var inscope key : array<float>
+        var inscope val : array<float>
+        var inscope wk : array<float>
+        var inscope wq : array<float>
+        var inscope wc : array<float>
+        res |> resize(nrows * hcd)
+        key |> resize(nrows * hcd)
+        val |> resize(nrows * dim)
+        wk |> resize(hcd)
+        wq |> resize(hcd)
+        wc |> resize(hcd)
+        for (i in range(nrows * hcd)) {
+            res[i] = 0.21 * float(i % 47) - 4.0
         }
-    }
-    for (i in range(nrows * dim)) {
-        val[i] = 0.31 * float(i % 19) - 2.7
-    }
-    // the oracle: ple_apply_row's gate half in plain code, a row at a time
-    var gwant : array<float>
-    var kn : array<float>
-    var qn : array<float>
-    gwant |> resize(nrows * hcd)
-    kn |> resize(nrows * hcd)
-    qn |> resize(nrows * hcd)
-    var dst_want : array<float>
-    dst_want |> resize((roff_rows + dst_rows) * hcd)
-    for (i in range((roff_rows + dst_rows) * hcd)) {
-        dst_want[i] = -1000.0
-    }
-    var gates : float[8]
-    unsafe {
+        for (i in range(hcd)) {
+            wk[i] = 0.7 + 0.01 * float(i % 13)
+            wq[i] = 0.9 + 0.02 * float(i % 7)
+            wc[i] = 0.5 + 0.03 * float(i % 5)
+        }
         for (p in range(nrows)) {
-            let slot = direct ? p : (pos0 + p) % rows
             for (c in range(hc)) {
-                let b = (p * hc + c) * dim
-                rmsnorm(addr(kn[b]), addr<float const?>(key[b]), addr<float const?>(wk[c * dim]), int64(dim), EPS)
-                rmsnorm(addr(qn[b]), addr<float const?>(res[b]), addr<float const?>(wq[c * dim]), int64(dim), EPS)
-                var s = 0.0lf
                 for (i in range(dim)) {
-                    s += double(kn[b + i]) * double(qn[b + i])
+                    let k = (p * hc + c) * dim + i
+                    let r = res[k]
+                    key[k] = c == 0 ? r + 0.3 : (c == 1 ? -r : (c == 2 ? 0.0 : 0.05 * float((i + p) % 9) - 0.2))
                 }
-                s /= sqrt(double(dim))
-                let mag = sqrt(max(abs(s), 1.0e-6lf))
-                let sg = s > 0.0lf ? mag : (s < 0.0lf ? -mag : 0.0lf)
-                let g = sigmoid_d(sg)
-                if (p == 0) {
-                    gates[c] = float(g)
-                }
-                for (i in range(dim)) {
-                    gwant[b + i] = float(double(val[p * dim + i]) * g)
-                }
-                rmsnorm(addr(dst_want[(roff_rows + slot) * hcd + c * dim]), addr<float const?>(gwant[b]), addr<float const?>(wc[c * dim]), int64(dim), EPS)
             }
         }
-    }
-    t |> success(gates[0] > 0.5 && gates[1] < 0.5 && abs(gates[2] - 0.5) < 1.0e-6, "{tag}: the fixture reaches all three sign arms ({gates[0]}, {gates[1]}, {gates[2]})")
-    var bres = buf_upload(dev, res)
-    var bkey = buf_upload(dev, key)
-    var bval = buf_upload(dev, val)
-    var bwk = buf_upload(dev, wk)
-    var bwq = buf_upload(dev, wq)
-    var bwc = buf_upload(dev, wc)
-    var bg = buf_fill(dev, nrows * hcd, -1000.0)
-    var bdst = buf_fill(dev, (roff_rows + dst_rows) * hcd, -1000.0)
-    var ka = PleGateArgs(dim = uint(dim), hc = uint(hc), eps = EPS, pos0 = uint(pos0), rows = uint(rows), direct = direct ? 1u : 0u)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, metal_ple_gate_msl_tgmem, 0)
-        metal_set_buffer(enc, bres, 0ul, 0)
-        metal_set_buffer(enc, bkey, 0ul, 1)
-        metal_set_buffer(enc, bval, 0ul, 2)
-        metal_set_buffer(enc, bwk, 0ul, 3)
-        metal_set_buffer(enc, bwq, 0ul, 4)
-        metal_set_buffer(enc, bwc, 0ul, 5)
-        metal_set_buffer(enc, bg, 0ul, 6)
-        metal_set_buffer(enc, bdst, uint64(roff_rows * hcd * 4), 7)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 8)
-        metal_dispatch_threadgroups(enc, uint3(uint(nrows * hc), 1u, 1u), uint3(1024u, 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bg, gwant, tag), 0)
-        t |> equal(buf_mismatch_approx(bdst, dst_want, "{tag} dst"), 0)   //! the whole destination: the written rows, every other row at the sentinel
-        t |> success(buf_mismatch_approx(bg, poisoned(gwant, 2 * dim + 1), "{tag} control") > 0, "{tag}: the poisoned gated want must miss")
+        for (i in range(nrows * dim)) {
+            val[i] = 0.31 * float(i % 19) - 2.7
+        }
+        // the oracle: ple_apply_row's gate half in plain code, a row at a time
+        var inscope gwant : array<float>
+        var inscope kn : array<float>
+        var inscope qn : array<float>
+        gwant |> resize(nrows * hcd)
+        kn |> resize(nrows * hcd)
+        qn |> resize(nrows * hcd)
+        var inscope dst_want : array<float>
+        dst_want |> resize((roff_rows + dst_rows) * hcd)
+        for (i in range((roff_rows + dst_rows) * hcd)) {
+            dst_want[i] = -1000.0
+        }
+        var gates : float[8]
+        unsafe {
+            for (p in range(nrows)) {
+                let slot = direct ? p : (pos0 + p) % rows
+                for (c in range(hc)) {
+                    let b = (p * hc + c) * dim
+                    rmsnorm(addr(kn[b]), addr<float const?>(key[b]), addr<float const?>(wk[c * dim]), int64(dim), EPS)
+                    rmsnorm(addr(qn[b]), addr<float const?>(res[b]), addr<float const?>(wq[c * dim]), int64(dim), EPS)
+                    var s = 0.0lf
+                    for (i in range(dim)) {
+                        s += double(kn[b + i]) * double(qn[b + i])
+                    }
+                    s /= sqrt(double(dim))
+                    let mag = sqrt(max(abs(s), 1.0e-6lf))
+                    let sg = s > 0.0lf ? mag : (s < 0.0lf ? -mag : 0.0lf)
+                    let g = sigmoid_d(sg)
+                    if (p == 0) {
+                        gates[c] = float(g)
+                    }
+                    for (i in range(dim)) {
+                        gwant[b + i] = float(double(val[p * dim + i]) * g)
+                    }
+                    rmsnorm(addr(dst_want[(roff_rows + slot) * hcd + c * dim]), addr<float const?>(gwant[b]), addr<float const?>(wc[c * dim]), int64(dim), EPS)
+                }
+            }
+        }
+        t |> success(gates[0] > 0.5 && gates[1] < 0.5 && abs(gates[2] - 0.5) < 1.0e-6, "{tag}: the fixture reaches all three sign arms ({gates[0]}, {gates[1]}, {gates[2]})")
+        let bres = mc |> in_(res)
+        let bkey = mc |> in_(key)
+        let bval = mc |> in_(val)
+        let bwk = mc |> in_(wk)
+        let bwq = mc |> in_(wq)
+        let bwc = mc |> in_(wc)
+        let bg = mc |> out_words(nrows * hcd, -1000.0)
+        let bdst = mc |> out_words((roff_rows + dst_rows) * hcd, -1000.0)
+        var ka = PleGateArgs(dim = uint(dim), hc = uint(hc), eps = EPS, pos0 = uint(pos0), rows = uint(rows), direct = direct ? 1u : 0u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bres], 0ul, mc.buf[bkey], 0ul, mc.buf[bval], 0ul, mc.buf[bwk], mc.buf[bwq], mc.buf[bwc], mc.buf[bg], 0ul,
+                    mc.buf[bdst], uint64(roff_rows * hcd * 4), ka, int64(nrows * hc))
+            }
+        }
+        return if (!ran)
         let slot0 = direct ? 0 : pos0 % rows
-        t |> success(buf_mismatch_approx(bdst, poisoned(dst_want, (roff_rows + slot0) * hcd + 5), "{tag} dst control") > 0, "{tag}: the poisoned destination want must miss")
+        let rows_shape = Shape(row_width = hcd, head_width = dim)
+        check_buf(t, tag, mc.buf[bg], gwant, hc_bar(BAR_TIGHT, 2 * dim + 1), rows_shape)
+        check_buf(t, "{tag} dst", mc.buf[bdst], dst_want, hc_bar(BAR_TIGHT, (roff_rows + slot0) * hcd + 5), rows_shape)   //! the whole destination: the written rows, every other row at the sentinel
     }
-    metal_release(bres)
-    metal_release(bkey)
-    metal_release(bval)
-    metal_release(bwk)
-    metal_release(bwq)
-    metal_release(bwc)
-    metal_release(bg)
-    metal_release(bdst)
-    metal_release(pso)
-    delete res
-    delete key
-    delete val
-    delete wk
-    delete wq
-    delete wc
-    delete gwant
-    delete kn
-    delete qn
-    delete dst_want
 }
 
 // the dilated causal conv over the conv-input rows + the residual add in place over nrows rows:
@@ -2012,105 +1578,92 @@ def private ple_gate_gate(t : T?; dev, queue; dim, hc, rows, pos0, roff_rows, nr
 // newest wins), zero where nothing wrote, so a tap before the sequence reads zero; the window form
 // (direct = 1) reads positions pos0.. from the panel, the decode form (direct = 0, nrows 1) reads every
 // tap from the ring - pos0 picks the live-tap regime (one, some, all; wrapped past rows)
-def private ple_conv_gate(t : T?; dev, queue; dim, hc, kern, dil, rows, pos0, nrows : int; direct : bool) {
+def private ple_conv_gate(t : T?; var dev, queue; dim, hc, kern, dil, rows, pos0, nrows : int; direct : bool) {
     let tag = "ple_conv dim={dim} hc={hc} kern={kern} dil={dil} rows={rows} pos0={pos0} nrows={nrows} direct={direct}"
-    var err : string
-    var pso = pipeline_from_source(dev, metal_ple_conv_msl, metal_ple_conv_msl_entry, metal_ple_conv_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: pipeline: {err}")
-    return if (pso == null)
-    let hcd = hc * dim
-    let roff_rows = 2
-    let coff_rows = 1
-    var res : array<float>
-    var gated : array<float>
-    var w : array<float>
-    var ring : array<float>
-    var panel : array<float>
-    res |> resize(nrows * hcd)
-    gated |> resize(nrows * hcd)
-    w |> resize(hcd * kern)
-    ring |> resize((roff_rows + rows) * hcd)
-    panel |> resize((coff_rows + nrows) * hcd)
-    for (i in range(nrows * hcd)) {
-        res[i] = 0.19 * float(i % 53) - 5.0
-        gated[i] = 0.7 + 0.07 * float(i % 17)   //! positive: the add moves every element off its input
-    }
-    for (i in range(hcd * kern)) {
-        w[i] = 0.23 * float(i % 29) - 3.2
-    }
-    for (i in range((roff_rows + rows) * hcd)) {
-        ring[i] = i < roff_rows * hcd ? -1000.0 : 0.0   //! rows under the offset carry the sentinel, the ring itself is zero-filled
-    }
-    for (i in range((coff_rows + nrows) * hcd)) {
-        panel[i] = i < coff_rows * hcd ? -1000.0 : 0.0
-    }
-    // the rows the ring holds: every position before the window (direct), or every position through the row (decode)
-    let ring_end = direct ? pos0 : pos0 + nrows
-    for (p in range(ring_end)) {   // the driver's order: every position lands at its slot, the newest wins
-        let rb = (roff_rows + p % rows) * hcd
-        for (i in range(hcd)) {
-            ring[rb + i] = 0.11 * float((i + 7 * p) % 31) - 1.6
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_ple_conv)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        let roff_rows = 2
+        let coff_rows = 1
+        var inscope res : array<float>
+        var inscope gated : array<float>
+        var inscope w : array<float>
+        var inscope ring : array<float>
+        var inscope panel : array<float>
+        res |> resize(nrows * hcd)
+        gated |> resize(nrows * hcd)
+        w |> resize(hcd * kern)
+        ring |> resize((roff_rows + rows) * hcd)
+        panel |> resize((coff_rows + nrows) * hcd)
+        for (i in range(nrows * hcd)) {
+            res[i] = 0.19 * float(i % 53) - 5.0
+            gated[i] = 0.7 + 0.07 * float(i % 17)   //! positive: the add moves every element off its input
         }
-    }
-    if (direct) {
-        for (p in range(nrows)) {
+        for (i in range(hcd * kern)) {
+            w[i] = 0.23 * float(i % 29) - 3.2
+        }
+        for (i in range((roff_rows + rows) * hcd)) {
+            ring[i] = i < roff_rows * hcd ? -1000.0 : 0.0   //! rows under the offset carry the sentinel, the ring itself is zero-filled
+        }
+        for (i in range((coff_rows + nrows) * hcd)) {
+            panel[i] = i < coff_rows * hcd ? -1000.0 : 0.0
+        }
+        // the rows the ring holds: every position before the window (direct), or every position through the row (decode)
+        let ring_end = direct ? pos0 : pos0 + nrows
+        for (p in range(ring_end)) {   // the driver's order: every position lands at its slot, the newest wins
+            let rb = (roff_rows + p % rows) * hcd
             for (i in range(hcd)) {
-                panel[(coff_rows + p) * hcd + i] = 0.11 * float((i + 7 * (pos0 + p)) % 31) - 1.6
+                ring[rb + i] = 0.11 * float((i + 7 * p) % 31) - 1.6
             }
         }
-    }
-    var want : array<float>
-    want |> resize(nrows * hcd)
-    for (p in range(nrows)) {
-        let pos = pos0 + p
-        for (chn in range(hcd)) {
-            var acc = 0.0lf
-            for (k in range(kern)) {
-                let src = pos - (kern - 1 - k) * dil
-                if (src < 0) {
-                    continue
+        if (direct) {
+            for (p in range(nrows)) {
+                for (i in range(hcd)) {
+                    panel[(coff_rows + p) * hcd + i] = 0.11 * float((i + 7 * (pos0 + p)) % 31) - 1.6
                 }
-                let v = (direct && src >= pos0) ? panel[(coff_rows + src - pos0) * hcd + chn] : ring[(roff_rows + src % rows) * hcd + chn]
-                acc += double(w[chn * kern + k]) * double(v)
             }
-            want[p * hcd + chn] = float(double(res[p * hcd + chn]) + double(gated[p * hcd + chn]) + silu_d(acc))
         }
-    }
-    var bres = buf_upload(dev, res)
-    var bg = buf_upload(dev, gated)
-    var bring = buf_upload(dev, ring)
-    var bpanel = buf_upload(dev, panel)
-    var bw = buf_upload(dev, w)
-    var ka = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(kern), dil = uint(dil), rows = uint(rows),
-        pos0 = uint(pos0), nrows = uint(nrows), direct = direct ? 1u : 0u)
-    let ran = dispatch_64_lanes(t, queue, tag, pso, nrows * hcd) $(enc) {
-        metal_set_buffer(enc, bres, 0ul, 0)
-        metal_set_buffer(enc, bg, 0ul, 1)
-        metal_set_buffer(enc, bpanel, uint64(coff_rows * hcd * 4), 2)
-        metal_set_buffer(enc, bring, uint64(roff_rows * hcd * 4), 3)
-        metal_set_buffer(enc, bw, 0ul, 4)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 5)
-    }
-    if (ran) {
-        t |> equal(buf_mismatch_approx(bres, want, tag), 0)
-        let g0 = buf_at(bres, 0)
+        var inscope want : array<float>
+        want |> resize(nrows * hcd)
+        for (p in range(nrows)) {
+            let pos = pos0 + p
+            for (chn in range(hcd)) {
+                var acc = 0.0lf
+                for (k in range(kern)) {
+                    let src = pos - (kern - 1 - k) * dil
+                    if (src < 0) {
+                        continue
+                    }
+                    let v = (direct && src >= pos0) ? panel[(coff_rows + src - pos0) * hcd + chn] : ring[(roff_rows + src % rows) * hcd + chn]
+                    acc += double(w[chn * kern + k]) * double(v)
+                }
+                want[p * hcd + chn] = float(double(res[p * hcd + chn]) + double(gated[p * hcd + chn]) + silu_d(acc))
+            }
+        }
+        let bres = mc |> io_(res)
+        let bg = mc |> in_(gated)
+        let bring = mc |> in_(ring)
+        let bpanel = mc |> in_(panel)
+        let bw = mc |> in_(w)
+        var ka = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(kern), dil = uint(dil), rows = uint(rows),
+            pos0 = uint(pos0), nrows = uint(nrows), direct = direct ? 1u : 0u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bres], 0ul, mc.buf[bg], 0ul, mc.buf[bpanel], uint64(coff_rows * hcd * 4), mc.buf[bring], uint64(roff_rows * hcd * 4),
+                    mc.buf[bw], ka, int64(nrows * hcd))
+            }
+        }
+        return if (!ran)
+        let rows_shape = Shape(row_width = hcd, head_width = dim)
+        check_buf(t, tag, mc.buf[bres], want, hc_bar(BAR_TIGHT, nrows * hcd / 2), rows_shape)
+        let g0 = (mc |> plane_run(bres))[0]
         t |> success(abs(g0 - res[0]) > 0.5, "{tag}: the row moved off its input at [0] ({g0} from {res[0]})")
-        t |> success(buf_mismatch_approx(bres, poisoned(want, nrows * hcd / 2), "{tag} control") > 0, "{tag}: the poisoned want must miss")
-        t |> equal(buf_mismatch_exact(bring, ring, "{tag} ring"), 0)   //! the conv reads the ring and the panel and writes neither
-        t |> equal(buf_mismatch_exact(bpanel, panel, "{tag} panel"), 0)
+        check_buf(t, "{tag} ring", mc.buf[bring], ring, BAR_BITS, rows_shape)   //! the conv reads the ring and the panel and writes neither
+        check_buf(t, "{tag} panel", mc.buf[bpanel], panel, BAR_BITS, rows_shape)
     }
-    metal_release(bres)
-    metal_release(bg)
-    metal_release(bring)
-    metal_release(bpanel)
-    metal_release(bw)
-    metal_release(pso)
-    delete res
-    delete gated
-    delete w
-    delete ring
-    delete panel
-    delete want
 }
 
 // The [metal_dispatch] multi-kernel mechanism, end to end: MtlToy's two kernel= instances
@@ -2124,79 +1677,67 @@ def private record_toy_trip(msg : string) {
     g_toy_trips |> push(msg)
 }
 
-def private mtl_toy_lens_gate(t : T?; dev, queue; n : int) {
+def private mtl_toy_lens_gate(t : T?; var dev, queue; n : int) {
     let tag = "mtl_toy multi-kernel n={n}"
     var err : string
-    g_mtl_toy_scale_pso = pipeline_from_source(dev, mtl_toy_scale_msl, mtl_toy_scale_msl_entry, mtl_toy_scale_msl_fastmath, err)
+    g_mtl_toy_scale_pso = pso_stamp(dev, mtl_toy_scale_msl, err)
     t |> success(g_mtl_toy_scale_pso != null, "{tag}: scale pipeline: {err}")
-    g_mtl_toy_shift_pso = pipeline_from_source(dev, mtl_toy_shift_msl, mtl_toy_shift_msl_entry, mtl_toy_shift_msl_fastmath, err)
+    g_mtl_toy_shift_pso = pso_stamp(dev, mtl_toy_shift_msl, err)
     t |> success(g_mtl_toy_shift_pso != null, "{tag}: shift pipeline: {err}")
-    if (g_mtl_toy_scale_pso == null || g_mtl_toy_shift_pso == null) {
-        metal_release(g_mtl_toy_scale_pso)   // release-null is a no-op; the survivor must not leak
-        metal_release(g_mtl_toy_shift_pso)
-        g_mtl_toy_scale_pso = null
-        g_mtl_toy_shift_pso = null
-        return
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        // the builders dispatch on the fixture's global PSO slots: the cell releases them and nulls the slots after
+        mc |> keep_pso(g_mtl_toy_scale_pso)
+        mc |> keep_pso(g_mtl_toy_shift_pso)
+        return if (g_mtl_toy_scale_pso == null || g_mtl_toy_shift_pso == null)
+        let gain = 0.5
+        var inscope xv : array<float>
+        xv |> resize(n)
+        for (i in range(n)) {
+            xv[i] = 0.11 * float(i % 73) - 4.2
+        }
+        var inscope want : array<float>
+        want |> resize(n + 16)
+        for (i in range(n + 16)) {
+            want[i] = i < n ? xv[i] * gain + gain : -1000.0   // the ka.n guard must leave the pad untouched
+        }
+        let bxs = mc |> in_(xv)
+        let bys = mc |> out_words(n + 16, -1000.0)
+        var ka = MtToyArgs(n = uint(n), gain = gain)
+        let saved_hook = metal_requires_hook()
+        set_metal_requires_hook(@@record_toy_trip)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            enc_mtl_toy_scale(enc, mc.buf[bxs], mc.buf[bys], ka, int64(n))
+            enc_mtl_toy_shift(enc, mc.buf[bxs], mc.buf[bys], ka, int64(n))
+        }
+        if (ran) {
+            check_buf(t, tag, mc.buf[bys], want, BAR_BITS, FLAT_SHAPE)
+        }
+        // the requires= tripwire: n % 8 (params) on scale, ka.n % 8 (kargs) on shift - an aligned n
+        // passes silently, n + 4 trips both with the builder's name and the broken contract
+        t |> equal(length(g_toy_trips), 0, "{tag}: aligned dispatches raise no requires trip")
+        var kbad = MtToyArgs(n = uint(n + 4), gain = gain)
+        let ran_bad = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
+            enc_mtl_toy_scale(enc, mc.buf[bxs], mc.buf[bys], kbad, int64(n + 4))
+            enc_mtl_toy_shift(enc, mc.buf[bxs], mc.buf[bys], kbad, int64(n + 4))
+        }
+        t |> success(ran_bad, "{tag}: misaligned encode still runs under the hook: {err}")
+        t |> equal(length(g_toy_trips), 2, "{tag}: both misaligned dispatches trip requires=")
+        if (length(g_toy_trips) == 2) {
+            t |> equal(g_toy_trips[0], "enc_mtl_toy_scale: n % 8 != 0")
+            t |> equal(g_toy_trips[1], "enc_mtl_toy_shift: ka.n % 8 != 0")
+        }
+        restore_metal_requires_hook(saved_hook)
+        delete g_toy_trips
     }
-    let gain = 0.5
-    var xv : array<float>
-    xv |> resize(n)
-    for (i in range(n)) {
-        xv[i] = 0.11 * float(i % 73) - 4.2
-    }
-    var want : array<float>
-    want |> resize(n + 16)
-    for (i in range(n + 16)) {
-        want[i] = i < n ? xv[i] * gain + gain : -1000.0   // the ka.n guard must leave the pad untouched
-    }
-    var bxs = buf_upload(dev, xv)
-    var bys = buf_fill(dev, n + 16, -1000.0)
-    var ka = MtToyArgs(n = uint(n), gain = gain)
-    set_metal_requires_hook(@@record_toy_trip)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        enc_mtl_toy_scale(enc, bxs, bys, ka, int64(n))
-        enc_mtl_toy_shift(enc, bxs, bys, ka, int64(n))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        t |> equal(buf_mismatch_exact(bys, want, tag), 0)
-    }
-    // the requires= tripwire: n % 8 (params) on scale, ka.n % 8 (kargs) on shift - an aligned n
-    // passes silently, n + 4 trips both with the builder's name and the broken contract
-    t |> equal(length(g_toy_trips), 0, "{tag}: aligned dispatches raise no requires trip")
-    var kbad = MtToyArgs(n = uint(n + 4), gain = gain)
-    let ran_bad = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        enc_mtl_toy_scale(enc, bxs, bys, kbad, int64(n + 4))
-        enc_mtl_toy_shift(enc, bxs, bys, kbad, int64(n + 4))
-    }
-    t |> success(ran_bad, "{tag}: misaligned encode still runs under the hook: {err}")
-    t |> equal(length(g_toy_trips), 2, "{tag}: both misaligned dispatches trip requires=")
-    if (length(g_toy_trips) == 2) {
-        t |> equal(g_toy_trips[0], "enc_mtl_toy_scale: n % 8 != 0")
-        t |> equal(g_toy_trips[1], "enc_mtl_toy_shift: ka.n % 8 != 0")
-    }
-    clear_metal_requires_hook()
-    delete g_toy_trips
-    metal_release(bxs)
-    metal_release(bys)
-    metal_release(g_mtl_toy_scale_pso)
-    metal_release(g_mtl_toy_shift_pso)
     g_mtl_toy_scale_pso = null
     g_mtl_toy_shift_pso = null
-    delete xv
-    delete want
 }
 
 [test]
 def test_metal_misc_kernels(t : T?) {
     t |> run("decode elementwise/misc kernels == direct CPU oracles") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() $(dev : MetalDevice?) {
-                if (dev == null) {
-                    feint("no Metal device on this box; GPU kernel checks skipped\n")
-                    return
-                }
-                var queue = metal_new_command_queue(dev)
+            with_metal_gate(t) $(var dev : MetalDevice?; var queue : MetalCommandQueue?) {
                 copy_row_gate(t, dev, queue, 1000)
                 argmax_gate(t, dev, queue, 5000, 4321, 1234)    // exact tie — lower index wins
                 argmax_gate(t, dev, queue, 700, 0, 699)         // winner at index 0
@@ -2212,7 +1753,7 @@ def test_metal_misc_kernels(t : T?) {
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, true)      // the no-wv V-fusion shape
                 qk_norm_gate(t, dev, queue, 128, 2, 1, 1, false)
                 // the tanh-form CPU geglu; the GPU's exp identity agrees inside the approx bar
-                ew2_act_gate(t, dev, queue, "geglu", MetalGeglu_metal_ew2_msl, MetalGeglu_metal_ew2_msl_entry, MetalGeglu_metal_ew2_msl_fastmath, 800) $(var want : array<float>; g, u : array<float>) {
+                ew2_act_gate(t, dev, queue, "geglu", stamp_of(@@enc_geglu), 800) $(var want : array<float>; g, u : array<float>) {
                     geglu(want, u, int64(length(g)))
                 }
 
@@ -2246,10 +1787,10 @@ def test_metal_misc_kernels(t : T?) {
                 clamp_gate(t, dev, queue, 1000, CLAMP_IN, false)    // separate dst, %64 tail
                 clamp_gate(t, dev, queue, 1000, CLAMP_OUT, true)    // in place
                 // the CPU's f16-table GEGLU-quick: the kernel's binary16 round trips land on its table values, so the approx bar (one f16 ulp of form slack)
-                ew2_act_gate(t, dev, queue, "geglu_quick", MetalGegluQuick_metal_ew2_msl, MetalGegluQuick_metal_ew2_msl_entry, MetalGegluQuick_metal_ew2_msl_fastmath, 3072 * 3) $(var want : array<float>; g, u : array<float>) {
+                ew2_act_gate(t, dev, queue, "geglu_quick", stamp_of(@@enc_geglu_quick), 3072 * 3) $(var want : array<float>; g, u : array<float>) {
                     geglu_quick_lut_rows(want, g, u, 3072l, 3l)   // the E2B ffn width
                 }
-                ew2_act_gate(t, dev, queue, "geglu_quick", MetalGegluQuick_metal_ew2_msl, MetalGegluQuick_metal_ew2_msl_entry, MetalGegluQuick_metal_ew2_msl_fastmath, 100) $(var want : array<float>; g, u : array<float>) {
+                ew2_act_gate(t, dev, queue, "geglu_quick", stamp_of(@@enc_geglu_quick), 100) $(var want : array<float>; g, u : array<float>) {
                     geglu_quick_lut_rows(want, g, u, 100l, 1l)    // %64 tail
                 }
                 rope2d_gate(t, dev, queue, 36, 12, 64)         // the E2B 96x96 grid shape (6x6 patches)
@@ -2297,11 +1838,9 @@ def test_metal_misc_kernels(t : T?) {
                 ple_conv_gate(t, dev, queue, 100, 3, 4, 3, 10, 0, 14, true)     // the window form from position 0: taps before the sequence and inside the panel
                 ple_conv_gate(t, dev, queue, 100, 3, 4, 3, 10, 23, 6, true)     // a later window: taps in the ring (wrapped) and in the panel
                 mtl_toy_lens_gate(t, dev, queue, 1000)      // n%64 != 0 — the tail workgroup's guard
-                metal_release(queue)
             }
-            t |> equal(metal_log_leaks_if_any(), 0l)
         } else {
-            feint("das_metal is not built on this platform; misc kernel checks skipped\n")
+            t |> skip("das_metal is not built on this platform; misc kernel checks skipped")
         }
     }
 }

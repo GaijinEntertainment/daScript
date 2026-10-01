@@ -220,9 +220,12 @@ carrier above `LARGE_TIER_BYTES` (`_model_tier.das`) is a defect.** The batched 
 their parity on small models, through pins; a cell whose two sides both run on the device
 streams nothing beside the device's bytes, and the tier does not bind it.
 
-**A cell never sets an environment-read knob - one the running config reads once, at context
-init - in a process that has already read it; it sets the knob in the environment of the child
-it spawns.** A set after that process starts is invisible to a config already read.
+**A cell never changes an environment-read knob - one the running config reads once, at context
+init - for its own process once that process has read it; it passes the value to a child it
+spawns, either as the spawn's environment argument or, for a spawn that inherits the parent's
+environment, by setting the knob right before the spawn and restoring the previous value right
+after (unsetting it if it was unset).** A set after that process starts is invisible to a config
+already read.
 
 **A cell whose claim depends on an environment-read knob its own process has already read names
 that knob's value in the text a red prints - the cell label or the assert.**
@@ -234,6 +237,14 @@ bound.** A bound nothing has exceeded where it is applied is not known to discri
 **A control for a bound assert in a cell that is not a kernel-unit cell changes an input the
 computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled - and
 re-runs the compare; a value added to the output after the fact is not one.**
+
+**A float compare against a bar that a diff adds, changes, moves or extracts into a helper reads a
+NaN in the output, the reference, or their difference as outside the bar: it passes on
+`d <= bar`, counts a miss on `!(d <= bar)`, and any largest difference it keeps reads a NaN
+element as infinite - or it routes through `_compares.das`' `check`, `check_count` or
+`sweep_check`, which do.** `d > bar` is false on a NaN, and a running `max` drops a NaN that a
+later finite element follows, so an output holding one, or a NaN sentinel the kernel never
+overwrote, passes.
 
 **A family that gains a live thinking or tool format ships its recognition tests in the same
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's

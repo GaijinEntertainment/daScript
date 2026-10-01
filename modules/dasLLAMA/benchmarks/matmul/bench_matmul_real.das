@@ -7,7 +7,7 @@ require matmul_variants
 require dasllama/dasllama_convert
 require daslib/jobque_boost
 require math
-require dasllama/dasllama_math  // setup_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_math  // with_dasllama_jobque + the runtime knob setters (engine-level, not re-exported)
 
 // Re-measure the parallel-vs-single threshold and the job-splitting granularity on the REAL
 // TinyLlama-1.1B matmul shapes, with the current FAST job manager (cond-var waiter + fork pool).
@@ -160,8 +160,7 @@ def bench_matmul_real(b : B?) {
         to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
         return
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         let hw = int64(get_total_hw_jobs())
         bench_qkv(b, hw)
         bench_shape(b, "kv  256x2048 ", 2048l, 256l, hw)     // 0.52M — currently SINGLE

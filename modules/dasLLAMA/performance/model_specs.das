@@ -244,11 +244,14 @@ def private ev_gemma3_4b() : ParityEvidence {
 
 //! "1, 2, …, N," — the counting prompt the long text-form fixtures encode in-model (byte-identical
 //! to the oracle run's input).
-def counting_prompt(n : int) : string {
+def counting_prompt(n : int) : string => counting_prompt(1, n)
+
+//! "start, start+1, …, last," — the kernel-robust confident prompt family the parity suites encode
+def counting_prompt(start, last : int) : string {
     return build_string() $(var w) {
-        for (i in range(1, n + 1)) {
+        for (i in range(start, last + 1)) {
             w |> write(i)
-            w |> write(i < n ? ", " : ",")
+            w |> write(i < last ? ", " : ",")
         }
     }
 }

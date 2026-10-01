@@ -486,6 +486,10 @@ def iq3s4_lut() : int8[16] => fixed_array<int8>(-15, -13, -11, -9, -7, -5, -3, -
 //! iq3s4_lut's main-context copy (tests, oracles, the emitter's constant bake).
 let IQ3S4_LUT = iq3s4_lut()
 
+//! The MXFP4 nibble codebook: the e2m1 values DOUBLED (nibble -> +-{0, .5, 1, 1.5, 2, 3, 4, 6} x 2, OCP MX
+//! spec) as int8; the halved E8M0 scale (`e8m0_half`) compensates the doubling.
+def mx4_lut() : int8[16] => fixed_array<int8>(0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12)
+
 //! The iq3s4 index of one signed odd IQ3_S weight value.
 def iq3s4_index(v : int) : int => (v + 15) / 2
 

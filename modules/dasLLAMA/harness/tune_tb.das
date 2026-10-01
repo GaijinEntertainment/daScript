@@ -171,8 +171,7 @@ def main {
         print("skipped: interpreted - the gen repack backend (the only TB consumer) registers under -jit only\n")
         return
     }
-    with_job_que() {
-        setup_dasllama_jobque_()
+    with_dasllama_jobque() {
         let need_repack = select_matmul_backend_for_load_()
         print("active backend: {active_kernel_backend()} (needs_repack={need_repack})\n")
         let repack_backend = get_architecture_name() == "arm64" ? "arm64-gen" : "x64-gen"

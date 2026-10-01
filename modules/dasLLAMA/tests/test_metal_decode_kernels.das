@@ -5,8 +5,12 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode kernel set (Apple builds)
+require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
-require ?das_metal _metal_kernel_common
+require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell
+require _attn_oracle
+require _compares   // Bar: the cells' bar
+require _kernel_oracles   // attn_q_row: the query row the codec cells read too
 require math
 
 // The single-query attention kernels vs a direct CPU oracle on synthetic data — the model-less
@@ -26,194 +30,114 @@ let KV_DIM = (N_HEADS / KV_MUL) * HS
 let QD = N_HEADS * HS
 let CHUNK = 64                          // the split-K chunk height the part kernels hardcode
 
+let private BAR_ATTN = Bar(rel = 2e-3, poison_scaled = true)   //! reduction-order noise against the f16-exact fixture; the poisoned last element moves 0.5 of its magnitude floored at 1
 
 // K/V hold f16-exact small values so the oracle sees the same numbers the kernel loads
 def private kv_at(j, d : int) : float => float((j * 7 + d * 3) % 9 - 4) * 0.25
 
-def private q_at(i : int) : float => float((i * 5) % 11 - 5) * 0.125
-
-// causal single-query attention for one (head, context) at the test shape. `window` > 0 masks
-// rows below cnt - window; `sink` > -1e30 folds an attention sink into max and denominator.
-def private attn_oracle(h, cnt : int; scale, softcap, sink : float; window : int) : array<float> {
-    let khoff = (h / KV_MUL) * HS
+//! every head's attention row at the test shape, K and V both the one slab the gates bind twice; `window` > 0 starts the keys at cnt - window
+def private oracle_all(cnt : int; scale, softcap : float; hass : bool; sink : float; window : int) : array<float> {
     let wstart = window > 0 && cnt > window ? cnt - window : 0
-    var sc : array<float>
-    sc |> resize(cnt)
+    var inscope kv : array<float>
+    kv |> resize(cnt * KV_DIM)
     for (j in range(cnt)) {
-        if (j < wstart) {
-            sc[j] = -3.0e38
-            continue
+        for (d in range(KV_DIM)) {
+            kv[j * KV_DIM + d] = kv_at(j, d)
         }
-        var s = 0.0
-        for (d in range(HS)) {
-            s += q_at(h * HS + d) * kv_at(j, khoff + d)
-        }
-        let raw = s * scale
-        sc[j] = softcap > 0.0 ? softcap * (1.0 - 2.0 / (1.0 + exp(raw * 2.0 / softcap))) : raw
     }
-    var mm = -3.0e38
-    for (j in range(cnt)) {
-        mm = max(mm, sc[j])
-    }
-    mm = max(mm, sink)
-    var tot = 0.0
-    for (j in range(cnt)) {
-        sc[j] = exp(sc[j] - mm)
-        tot += sc[j]
-    }
-    if (sink > -1.0e30) {
-        tot += exp(max(sink - mm, -80.0))
-    }
-    var out : array<float>
-    out |> resize(HS)
-    for (d in range(HS)) {
-        var acc = 0.0
-        for (j in range(cnt)) {
-            acc += sc[j] * kv_at(j, khoff + d)
-        }
-        out[d] = acc / tot
-    }
-    return <- out
-}
-
-def private oracle_all(cnt : int; scale, softcap, sink : float; window : int) : array<float> {
+    var inscope q <- attn_q_row(QD)
     var want : array<float>
     want |> resize(QD)
     for (h in range(N_HEADS)) {
-        var col <- attn_oracle(h, cnt, scale, softcap, sink, window)
-        for (d in range(HS)) {
-            want[h * HS + d] = col[d]
-        }
-        delete col
+        attn_row_oracle(q, h * HS, kv, 0, kv, 0, KV_DIM, h, HS, KV_MUL, cnt, scale, want, h * HS, wstart, softcap, hass, sink)
     }
     return <- want
 }
 
 // the single-threadgroup form: one dispatch, the whole context in one pass
-def private sq_single_gate(t : T?; dev, queue; tag : string; cnt : int; softcap : float; hass : bool) {
-    var err : string
-    var pso = pipeline_from_source(dev, MetalSqAttnF16_metal_sq_attn_msl, MetalSqAttnF16_metal_sq_attn_msl_entry, MetalSqAttnF16_metal_sq_attn_msl_fastmath, err)
-    t |> success(pso != null, "{tag}: sq_attn16 pipeline: {err}")
-    return if (pso == null)
-    let scale = 1.0 / sqrt(float(HS))
-    let sink_v = 0.375
-    let kc <- kv_f16(cnt)
-    let q <- q_f32()
-    var bk = buf_upload(dev, kc)
-    var bv = buf_upload(dev, kc)            // V reads the same slab — the oracle mirrors that
-    var bq = buf_upload(dev, q)
-    var by = buf_fill(dev, QD, -1000.0)
-    var bsink = buf_fill(dev, N_HEADS, sink_v)
-    var ka = SqAttnArgs(cnt = uint(cnt), kstride = uint(KV_DIM), nheads = uint(N_HEADS),
-        kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, softcap = softcap,
-        hass = hass ? 1u : 0u)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso)
-        metal_set_threadgroup_memory_length(enc, MetalSqAttnF16_metal_sq_attn_msl_tgmem, 0)
-        metal_set_buffer(enc, bk, 0ul, 0)
-        metal_set_buffer(enc, bv, 0ul, 1)
-        metal_set_buffer(enc, bq, 0ul, 2)
-        metal_set_buffer(enc, by, 0ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(ka)), uint64(typeinfo sizeof(ka)), 4)
-        metal_set_buffer(enc, bsink, 0ul, 20)
-        metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS), 1u, 1u), uint3(uint(HS), 1u, 1u))
+def private sq_single_gate(t : T?; var dev, queue; tag : string; cnt : int; softcap : float; hass : bool) {
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_attn16_c)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, "{tag} sq_attn16", pso, err))
+        let scale = 1.0 / sqrt(float(HS))
+        let sink_v = 0.375
+        var inscope kc <- kv_f16(cnt)
+        let bk = mc |> in_plain(kc)
+        let bv = mc |> in_plain(kc)            // V reads the same slab — the oracle mirrors that
+        let bq = mc |> in_(attn_q_row(QD))
+        let by = mc |> out_words(QD, -1000.0)
+        let bsink = mc |> in_(plane_of(N_HEADS, sink_v))
+        var ka = SqAttnArgs(cnt = uint(cnt), kstride = uint(KV_DIM), nheads = uint(N_HEADS),
+            kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, softcap = softcap,
+            hass = hass ? 1u : 0u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bk], 0ul, mc.buf[bv], 0ul, mc.buf[bq], mc.buf[by], ka, mc.buf[bsink], int64(N_HEADS), int64(HS))
+            }
+        }
+        return if (!ran)
+        var inscope want <- oracle_all(cnt, scale, softcap, hass, sink_v, 0)
+        check_buf(t, "decode {tag}", mc.buf[by], want, BAR_ATTN, Shape(row_width = HS))
     }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        var want <- oracle_all(cnt, scale, softcap, hass ? sink_v : -3.0e38, 0)
-        t |> equal(buf_mismatch_bars(by, want, 2e-3, 0.0, "decode"), 0)
-        delete want
-    }
-    release_all([bk, bv, bq, by, bsink])
-    metal_release(pso)
 }
 
 // the split-K pair: one threadgroup per (head, chunk) writes an unnormalized partial, the comb
 // kernel rescales across chunks. `window` > 0 also exercises the chunk mask + the chlo skip.
-def private sq_part_gate(t : T?; dev, queue; tag : string; cnt, window : int) {
-    var err : string
-    var pso_p = pipeline_from_source(dev, MetalSqAttnPartF16_metal_sq_attn_part_msl, MetalSqAttnPartF16_metal_sq_attn_part_msl_entry, MetalSqAttnPartF16_metal_sq_attn_part_msl_fastmath, err)
-    t |> success(pso_p != null, "{tag}: part16 pipeline: {err}")
-    var pso_c = pipeline_from_source(dev, MetalSqAttnComb_metal_sq_attn_comb_msl, MetalSqAttnComb_metal_sq_attn_comb_msl_entry, MetalSqAttnComb_metal_sq_attn_comb_msl_fastmath, err)
-    t |> success(pso_c != null, "{tag}: comb pipeline: {err}")
-    if (pso_p == null || pso_c == null) {
-        metal_release(pso_p)
-        metal_release(pso_c)
-        return
+def private sq_part_gate(t : T?; var dev, queue; tag : string; cnt, window : int) {
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sp = stamp_of(@@enc_attnp16_c)
+        let sc = stamp_of(@@enc_attncomb_c)
+        var pso_p = mc |> keep_stamp(sp, err)
+        let part_ok = pso_ok(t, "{tag} part16", pso_p, err)
+        var pso_c = mc |> keep_stamp(sc, err)
+        return if (!pso_ok(t, "{tag} comb", pso_c, err) || !part_ok)
+        let scale = 1.0 / sqrt(float(HS))
+        let nchunks = (cnt + CHUNK - 1) / CHUNK
+        let wstart = window > 0 && cnt > window ? cnt - window : 0
+        let chlo = wstart / CHUNK             // the driver's first live chunk
+        var inscope kc <- kv_f16(cnt)
+        let bk = mc |> in_plain(kc)
+        let bv = mc |> in_plain(kc)
+        let bq = mc |> in_(attn_q_row(QD))
+        let bpart = mc |> out_words(N_HEADS * nchunks * (HS + 2), -1000.0)
+        let by = mc |> out_words(QD, -1000.0)
+        let bsink = mc |> in_(plane_of(N_HEADS, 0.0))
+        var kap = SqAttnPartArgs(cnt = uint(cnt), kstride = uint(KV_DIM), nheads = uint(N_HEADS),
+            kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, nchunks = uint(nchunks),
+            softcap = 0.0, window = uint(window))
+        var kac = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
+            chlo = uint(chlo), hass = 0u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(sp, pso_p) {
+                invoke(sp.enc, enc, mc.buf[bk], 0ul, mc.buf[bv], 0ul, mc.buf[bq], mc.buf[bpart], kap, int64(N_HEADS * nchunks), int64(HS))
+            }
+            stamp_run(sc, pso_c) {
+                invoke(sc.enc, enc, mc.buf[bpart], mc.buf[by], kac, mc.buf[bsink], int64(N_HEADS), int64(HS))
+            }
+        }
+        return if (!ran)
+        var inscope want <- oracle_all(cnt, scale, 0.0, false, 0.0, window)
+        check_buf(t, "decode {tag}", mc.buf[by], want, BAR_ATTN, Shape(row_width = HS))
     }
-    let scale = 1.0 / sqrt(float(HS))
-    let nchunks = (cnt + CHUNK - 1) / CHUNK
-    let wstart = window > 0 && cnt > window ? cnt - window : 0
-    let chlo = wstart / CHUNK             // the driver's first live chunk
-    let kc <- kv_f16(cnt)
-    let q <- q_f32()
-    var bk = buf_upload(dev, kc)
-    var bv = buf_upload(dev, kc)
-    var bq = buf_upload(dev, q)
-    var bpart = buf_fill(dev, N_HEADS * nchunks * (HS + 2), -1000.0)
-    var by = buf_fill(dev, QD, -1000.0)
-    var bsink = buf_fill(dev, N_HEADS, 0.0)
-    var kap = SqAttnPartArgs(cnt = uint(cnt), kstride = uint(KV_DIM), nheads = uint(N_HEADS),
-        kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, nchunks = uint(nchunks),
-        softcap = 0.0, window = uint(window))
-    var kac = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
-        chlo = uint(chlo), hass = 0u)
-    let ran = with_compute_encoder(queue, err) $(enc : MetalComputeEncoder?) {
-        metal_set_pipeline(enc, pso_p)
-        metal_set_threadgroup_memory_length(enc, MetalSqAttnPartF16_metal_sq_attn_part_msl_tgmem, 0)
-        metal_set_buffer(enc, bk, 0ul, 0)
-        metal_set_buffer(enc, bv, 0ul, 1)
-        metal_set_buffer(enc, bq, 0ul, 2)
-        metal_set_buffer(enc, bpart, 0ul, 3)
-        metal_set_bytes(enc, unsafe(addr<void?>(kap)), uint64(typeinfo sizeof(kap)), 4)
-        metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS * nchunks), 1u, 1u), uint3(uint(HS), 1u, 1u))
-        metal_set_pipeline(enc, pso_c)
-        metal_set_buffer(enc, bpart, 0ul, 0)
-        metal_set_buffer(enc, by, 0ul, 1)
-        metal_set_bytes(enc, unsafe(addr<void?>(kac)), uint64(typeinfo sizeof(kac)), 2)
-        metal_set_buffer(enc, bsink, 0ul, 20)
-        metal_dispatch_threadgroups(enc, uint3(uint(N_HEADS), 1u, 1u), uint3(uint(HS), 1u, 1u))
-    }
-    t |> success(ran, "{tag}: encode: {err}")
-    if (ran) {
-        var want <- oracle_all(cnt, scale, 0.0, -3.0e38, window)
-        t |> equal(buf_mismatch_bars(by, want, 2e-3, 0.0, "decode"), 0)
-        delete want
-    }
-    release_all([bk, bv, bq, bpart, by, bsink])
-    metal_release(pso_p)
-    metal_release(pso_c)
 }
 
 [test]
 def test_metal_sq_attn_kernels(t : T?) {
     t |> run("single-query attention kernels == CPU attention oracle (sinks, softcap, split-K, window)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_metal_device() $(dev : MetalDevice?) {
-                if (dev == null) {
-                    feint("no Metal device on this box; GPU kernel checks skipped\n")
-                    return
-                }
-                var queue = metal_new_command_queue(dev)
+            with_metal_gate(t) $(var dev : MetalDevice?; var queue : MetalCommandQueue?) {
                 sq_single_gate(t, dev, queue, "plain", 40, 0.0, false)
                 sq_single_gate(t, dev, queue, "softcap", 40, 30.0, false)
                 sq_single_gate(t, dev, queue, "sink", 40, 0.0, true)
                 sq_part_gate(t, dev, queue, "splitk", 100, 0)
                 sq_part_gate(t, dev, queue, "window", 100, 48)
-                metal_release(queue)
             }
-            assert_no_metal_leaks()
         } else {
-            feint("das_metal is not built on this platform; attention kernel checks skipped\n")
+            t |> skip("das_metal is not built on this platform; attention kernel checks skipped")
         }
-    }
-}
-
-// ===== synthetic inputs + buffer plumbing =====
-
-def private release_all(handles : array<auto(TT)>) {
-    for (h in handles) {
-        metal_release(h)
     }
 }
 
@@ -227,13 +151,3 @@ def private kv_f16(cnt : int) : array<float16> {
     }
     return <- kv
 }
-
-def private q_f32 : array<float> {
-    var q : array<float>
-    q |> resize(QD)
-    for (i in range(QD)) {
-        q[i] = q_at(i)
-    }
-    return <- q
-}
-
