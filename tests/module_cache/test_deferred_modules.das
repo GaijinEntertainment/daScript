@@ -261,6 +261,18 @@ def arms_guards_and_caches(t : T?; fx : Fixture) {
         t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the require asks for the row:\n{out}")
         t |> success(find(out, "[module] loading every deferred module (") >= 0, "the failed load brings the rest in:\n{out}")
         t |> success(find(out, "error[20605]: missing prerequisite '{UNIT_TEST_MODULE}'") >= 0, "the require fails with the missing-module error:\n{out}")
+        var disabled = ""
+        let modules = path_join(get_das_root(), "modules")
+        dir(modules) $(name) {
+            if (name != UNIT_TEST_FOLDER && fexist(path_join(path_join(modules, name), ".das_module"))) {
+                disabled += " --disable-module \"{name}\""
+            }
+        }
+        let empty_rc = run_child(child_cmd(fx, fx.uses, disabled), out)
+        t |> success(empty_rc != 0 && find(out, "LENGTH") < 0, "missing artifact still rejects execution with no other deferred rows")
+        t |> success(find(out, "[module] require {UNIT_TEST_MODULE}: loading the deferred {UNIT_TEST_CLASS}") >= 0, "the isolated child requests its deferred module:\n{out}")
+        t |> success(find(out, "error[20605]: missing prerequisite '{UNIT_TEST_MODULE}'") >= 0, "the isolated child reports the missing module:\n{out}")
+        t |> success(find(out, "[module] loading every deferred module (0)") >= 0, "empty fallback attempts remain visible:\n{out}")
         remove_result(fx.utManifest)
     }
     t |> run("a module cache written by an eager start serves a lazy start, and -log-compile-time shows the reads and the timeline") @(t : T?) {

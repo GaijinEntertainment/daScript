@@ -2544,7 +2544,7 @@ namespace das {
         lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
         vector<DeferredDynamicModule> all;
         all.swap(g_deferred_dynamic_modules);
-        if ( trace_module_load() && !all.empty() ) {
+        if ( trace_module_load() ) {
             LOG(LogLevel::info) << "[module] loading every deferred module (" << all.size() << ")\n";
         }
         for ( auto & dm : all ) {
