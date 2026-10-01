@@ -103,7 +103,7 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
 		INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config $<CONFIG> --prefix ${DAS_HV_DIR}/hv/$<CONFIG>
 	)
-	ExternalProject_Add_StepDependencies(LIBHV patch ${DAS_HV_DIR}/patch_libhv.cmake ${DAS_HV_DIR}/patch_libhv_limits.cmake ${DAS_HV_DIR}/patch_libhv_upgrade.cmake ${DAS_HV_DIR}/patch_libhv_tls.cmake ${DAS_HV_DIR}/patch_libhv_pipeline.cmake ${DAS_HV_DIR}/patch_libhv_logging.cmake)
+	ExternalProject_Add_StepDependencies(LIBHV patch ${DAS_HV_DIR}/patch_libhv.cmake ${DAS_HV_DIR}/patch_libhv_limits.cmake ${DAS_HV_DIR}/patch_libhv_upgrade.cmake ${DAS_HV_DIR}/patch_libhv_tls.cmake ${DAS_HV_DIR}/patch_libhv_pipeline.cmake ${DAS_HV_DIR}/patch_libhv_logging.cmake ${DAS_HV_DIR}/patch_libhv_cookies.cmake)
     set(HV_PATCHED_PUBLIC_HEADERS)
     foreach(header AsyncHttpClient.h HttpParser.h HttpMessage.h WebSocketParser.h WebSocketServer.h HttpResponseWriter.h HttpService.h)
         list(APPEND HV_PATCHED_PUBLIC_HEADERS "${DAS_HV_DIR}/hv/$<CONFIG>/include/hv/${header}")

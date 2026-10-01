@@ -99,3 +99,5 @@ include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_tls.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_pipeline.cmake)
 
 include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_logging.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_cookies.cmake)

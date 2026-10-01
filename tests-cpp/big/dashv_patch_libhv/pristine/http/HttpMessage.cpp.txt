@@ -6,3 +6,12 @@
 #include "hurl.h"
 
 void HttpRequest::ParseUrl() {
+
+                hlogi("Cookie Unrecognized key '%s'", key.c_str());
+
+void HttpMessage::AddCookie(const HttpCookie& cookie) {
+    cookies.push_back(cookie);
+}
+
+    // cookies
+    const char* cookie_field = "Cookie";

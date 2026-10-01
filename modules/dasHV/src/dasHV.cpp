@@ -1398,8 +1398,9 @@ void das_httpm_each_header ( HttpMessage * msg, const TBlock<void,const char *,c
     for ( auto & kv : msg->headers ) {
         das_invoke<void>::invoke<const char *,const char *>(context,at,block,kv.first.c_str(),kv.second.c_str());
     }
-    // libhv stores cookies separately from headers — emit them too,
-    // matching DumpHeaders() which serialises Set-Cookie / Cookie lines.
+    // Parsed HTTP/1 requests retain the raw Cookie field. Other messages
+    // store cookies separately; emit those as DumpHeaders() does.
+    if (msg->type == HTTP_REQUEST && msg->headers.find("Cookie") != msg->headers.end()) return;
     const char * cookie_field = msg->type == HTTP_RESPONSE ? "Set-Cookie" : "Cookie";
     for ( auto & cookie : msg->cookies ) {
         auto dumped = cookie.dump();

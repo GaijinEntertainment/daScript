@@ -125,3 +125,29 @@ TEST_CASE("WebSocket data opener cannot replace an unfinished message") {
     CHECK(parser.message == "first");
     CHECK(delivered == 0);
 }
+
+TEST_CASE("HTTP request Cookie remains raw without duplicate serialization") {
+    std::unique_ptr<HttpParser> parser(HttpParser::New(HTTP_SERVER, HTTP_V1));
+    HttpRequest request;
+    parser->InitRequest(&request);
+    std::string wire = "GET / HTTP/1.1\r\nHost: localhost\r\nCookie: a=one; a=two\r\nCookie: b=three\r\n\r\n";
+    parser->FeedRecvData(wire.data(), wire.size());
+    REQUIRE(parser->GetError() == 0);
+    CHECK(request.GetHeader("Cookie") == "a=one; a=two; b=three");
+    CHECK(request.GetCookie("b").value == "three");
+    HttpCookie added;
+    added.name = "c";
+    added.value = "four";
+    request.AddCookie(added);
+    std::string headers;
+    request.DumpHeaders(headers);
+    const auto first = headers.find("Cookie: ");
+    REQUIRE(first != std::string::npos);
+    CHECK(headers.find("Cookie: ", first + 1) == std::string::npos);
+    CHECK(headers.find("Cookie: a=one; a=two; b=three; c=four\r\n") != std::string::npos);
+    CHECK(request.GetCookie("c").value == "four");
+    HttpRequest initially_empty;
+    initially_empty.headers["Cookie"] = "";
+    initially_empty.AddCookie(added);
+    CHECK(initially_empty.GetHeader("Cookie") == "c=four");
+}
