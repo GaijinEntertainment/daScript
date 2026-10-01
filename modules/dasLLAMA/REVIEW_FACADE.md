@@ -13,5 +13,4 @@ or in a file `dasllama/dasllama.das` reaches through `public` requires only, add
 file to `REVIEW.das`'s `FACADE_FILES` in the same change.**
 
 **A NEW `[EnvConfig]` area struct is rendered by `env_markdown()` in the same change.** A struct
-the renderer never emits is absent from `ENVIRONMENT.md` and every test; one it emits but the
-registry does not, `tests/test_env_registry.das` catches.
+the renderer never emits is absent from `ENVIRONMENT.md` and every test.

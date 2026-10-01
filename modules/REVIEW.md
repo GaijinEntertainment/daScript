@@ -2,6 +2,9 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
 
+**Module folders under this folder carry their own `REVIEW.md` checklists - a diff applies the
+`REVIEW.md` of every folder between this one and each file it changes.**
+
 **A diff that changes GPU kernel code applies `REVIEW_SHADER_EMITTERS.md` (beside this file)
 together with its own folder's checklist.** GPU kernel code is a function carrying
 `[metal_kernel]`, `[spirv_kernel]` or an annotation whose name ends in `_shader` from `dasSpirv`,

@@ -52,10 +52,10 @@ there.
 
 - **A change that alters the machine code emitted for a function without changing any input the
   JIT cache keys fold bumps `LLVM_JIT_CODEGEN_VERSION` (`daslib/llvm_jit_plan.das`)** - IR
-  generation, target-machine setup, a `[llvm_code]` generator body, or the call ABI the generated
-  code binds: function signatures, the name scheme, the prologue, the externs the install phase
-  binds. The folded inputs are what `jit_dll_basename` (`daslib/llvm_jit_plan.das`) and the
-  split-partition key in `run_jit` (`daslib/llvm_jit_run.das`) fold; a key that does not change
+  generation, target-machine setup, the body of a `[llvm_code]` generator under this module, or
+  the call ABI the generated code binds: function signatures, the name scheme, the prologue, the
+  externs the install phase binds. The folded inputs are what `jit_dll_basename`
+  (`daslib/llvm_jit_plan.das`) and the split-partition key in `run_jit` (`daslib/llvm_jit_run.das`) fold; a key that does not change
   serves the old machine code back.
 
 - **A diff that adds an input only the backend reads - an annotation, or an annotation argument,
@@ -66,7 +66,7 @@ there.
   afterwards still serves the old machine code back.
 
 - **A diff that adds a `require` line naming a `[llvm_code]` generator module outside this
-  module - a package's, dasLLAMA's - to `daslib/llvm_user_modules.das` is a defect; the package
+  module to `daslib/llvm_user_modules.das` is a defect; that module's package
   joins the `llvm_code_generator` group from its own descriptor instead.** The wiring module
   names no package, so a build that does not carry the package registers nothing and compiles
   unchanged; the generators this module ships stay named.
@@ -188,11 +188,10 @@ there.
 
 - **A diff that changes the machine code an emitter the interpreter has a twin for produces -
   a das body, or the builtin the interpreter calls: every `build_vector_*` in
-  `daslib/llvm_jit_intrin.das`, every `[llvm_code]` generator - its body, which of its arms a
-  call selects, or the feature set its output is lowered under - ships a cell comparing the
-  emitted result with the interpreted result
-  over the operand range that emitter serves (every vector width for a vector emitter, the full
-  int8 lattice for a dot), added in the same change when no cell covers that range.** An IR-shape
+  `daslib/llvm_jit_intrin.das`, every `[llvm_code]` generator under this module - its body,
+  which of its arms a call selects, or the feature set its output is lowered under - ships a cell
+  comparing the emitted result with the interpreted result over the operand range that emitter
+  serves (every vector width for a vector emitter, the full int8 lattice for a dot), added in the same change when no cell covers that range.** An IR-shape
   test names the instruction and never a number.
 
 - **A cell comparing a float emitter's emitted and interpreted results also asserts both answer

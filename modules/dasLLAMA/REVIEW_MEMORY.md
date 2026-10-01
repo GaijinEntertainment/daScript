@@ -11,7 +11,8 @@ image's patches, a clip's frames), or how many regions one buffer is split into 
 cache's device copy, one region per request served at once; an MoE dispatch's expert regions).
 A shape is one setting of the scaling counts.
 
-**A function-typed module global that a job (a forked context) invokes or a serialized exe calls
+**A function-typed module global that a job (a forked context) invokes or a serialized exe - an
+exe that restores its built program, globals included, from a saved image at startup - calls
 is set by an `[init]` that re-establishes it when it reads null - never by a declaration
 initializer alone.** A serialized exe and a forked context restore globals as data, so a
 declaration initializer alone arrives null and dies at the first invoke while every `-jit` gate
@@ -21,9 +22,12 @@ stays green.
 `team_parallel_for_indexed` / `team_parallel_stages` body (`daslib/jobque_boost.das`, repo
 root) or from a `maybe_parallel_for*` body (`dasllama/dasllama_par.das`), which can dispatch onto
 those same lanes - is a `def` returning it, never a module global with a declaration initializer
-(`let` or `var`), and nothing reachable from such a body writes or resizes a module global -
-write into a buffer the dispatching caller sizes and passes in instead.** A pooled lane's globals are not
-its own: a read comes back zero, a resize trips on a stale array.
+(`let` or `var`).** A pooled lane's globals are not its own: a read comes back zero.
+
+**Nothing reachable from a `team_parallel_for` / `team_parallel_for_indexed` /
+`team_parallel_stages` or `maybe_parallel_for*` body writes or resizes a module global - write
+into a buffer the dispatching caller sizes and passes in instead.** A pooled lane's globals are
+not its own: a resize trips on a stale array.
 
 **A buffer in `dasllama/` whose element count grows with a count the model file sets is declared
 `@exact_size` (`@scratch @exact_size` when the buffer is `@scratch`), and every `resize` of it
