@@ -5,7 +5,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration; requiring dasllama_common directly would drop them
-require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require daslib/jobque_boost
 require daslib/clargs
 require math
@@ -96,7 +96,7 @@ def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one 
         params.top_k = int64(cfg.topk)
         params.temp = 0.8
     }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         if (cfg.team) {
             set_jobque_team_mode(true)
             print("team dispatch: on\n")

@@ -96,17 +96,8 @@ for a media or speech model).**
 in the kernel's file, and that file's charter line names the condition that selects the
 branch.**
 
-**Logic or a named constant two files in one folder both use lands once - in a file both already
-require, or in a new file both require when they share none - never as a second copy.** Two
-spellings drift apart on the first edit to one. A restatement the language or the test contract
-forces - an enum-and-int pair of one predicate, a test's CPU oracle of the arithmetic - is not a
-copy.
-
 **Code two tower families both need that names no family type - compute, stage/read, or load
 orchestration - lands in `dasllama/dasllama_tower.das`.**
-
-**A piece that two folders both need, neither containing the other, lands in the folder that owns
-the concern, and the other folder requires it - never a copy in each.**
 
 **No signature in `dasllama/dasllama_tower.das` takes a type that
 `dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file declares - the

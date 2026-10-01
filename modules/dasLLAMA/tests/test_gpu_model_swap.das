@@ -25,8 +25,7 @@ def private greedy_turn(tag : string; path : string; n_tokens : int64) : array<i
     var pieces : array<string>
     var m <- load_model_(path, QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, 256l)
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s <- make_run_state(m.config)
         var prompt <- encode(m, "Once upon a time, in a small village", true, false)
         generate(m, s, prompt, SamplingParams(), n_tokens) $(id, piece) {

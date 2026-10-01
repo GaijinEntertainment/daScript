@@ -180,7 +180,7 @@ def private race(sh : Shape) : int {
 [export]
 def main() : int {
     var t : RaceTally
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         let active = active_kernel_backend()
         let pin = kernel_backend_pin()
         let knob = get_q8_token_block()

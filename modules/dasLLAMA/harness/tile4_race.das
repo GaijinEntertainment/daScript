@@ -269,7 +269,7 @@ def private race(sh : Shape; mr : int64) : int {
 [export]
 def main() : int {
     var t : RaceTally
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         let mr = int64(q8q8_layout_gen())
         if (q8q8_tileform_gen() <= 0 || mr != 16l || q8q8_wbias_gen() != 0) {
             print("tile4_race: this box's q8 stamp is no amx bf16 tile (tile form {q8q8_tileform_gen()}, mr {mr}, wbias {q8q8_wbias_gen()}) - the candidates read that stamp's plane - no row\n")

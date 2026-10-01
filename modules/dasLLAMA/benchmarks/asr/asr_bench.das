@@ -55,7 +55,7 @@ struct BenchArgs {
 }
 
 [export]
-def main() : int {   // nolint:STYLE038 — flat CLI ladder then the measurement protocol; every seam here is a single-caller helper
+def main() : int {
     var r <- parse_args(type<BenchArgs>)
     if (r |> is_err) {
         print("error: {r |> unwrap_err}\n\n")
@@ -106,10 +106,9 @@ def main() : int {   // nolint:STYLE038 — flat CLI ladder then the measurement
     print("LOAD\t{model_name}\t{load_ms}\n")
 
     var rc = 0
-    with_job_que() {
-        // pooled forks + team dispatch + spin window — without it every kernel dispatch pays
-        // the ~10us/job fifo fork/join (2-7x on the jfk encoder stages)
-        setup_dasllama_jobque()
+    // pooled forks + team dispatch + spin window — without it every kernel dispatch pays
+    // the ~10us/job fifo fork/join (2-7x on the jfk encoder stages)
+    with_dasllama_jobque() {
         for (path in cfg.wav) {
             var samples <- load_audio_16k_mono(path)
             if (empty(samples)) {

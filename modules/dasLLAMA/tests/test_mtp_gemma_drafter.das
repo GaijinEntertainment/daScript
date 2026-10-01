@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — engine + arch registrations
 require dasllama/dasllama_mtp_gemma   // the subject: the gemma-4 assistant drafter loader + CPU oracle
-require dasllama/dasllama_math   // with_dasllama_jobque - the CPU prefill needs the engine's own worker pool
+require dasllama/dasllama_math   // with_dasllama_jobque_ - the CPU prefill needs the engine's own worker pool
 require dasllama/dasllama_image   // nolint:STYLE030,LINT019 — load_model_cached is called in the das_metal half
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // the subject's GPU half: attach + one draft step
 require ?das_metal dasllama/dasllama_metal_common   // finish_pending_step - land the pipelined decode before reading its carry
@@ -151,7 +151,7 @@ def test_gemma_drafter_cpu_step(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-cpu")) {
         return
     }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> run("one CPU drafter step over the target's live K/V produces a finite token and hidden") @(t : T?) {
             let target = path_join(models_dir(), TARGET_FILE)
             return if (!jit_model_available(t, target))
@@ -217,7 +217,7 @@ def test_gemma_drafter_gpu_step(t : T?) {
         return
     }
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             t |> run("the GPU drafter step matches the CPU oracle (argmax, logits, h_next)") @(t : T?) {
                 let target = path_join(models_dir(), TARGET_FILE)
                 return if (!jit_model_available(t, target))

@@ -284,7 +284,7 @@ def private q8q8_wrapper_gate(t : T?; n : int64; d : int64 = 64l; ntok_override 
 
 [test]
 def test_q8q8_tile_gemv_reference(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         for (n in WIDTHS) {
             t |> run("q8q8 stamped tile vs GEMV vs fp64 dequant, n={n}") @(t : T?) {
                 q8q8_stamped_gate(t, n)
@@ -498,7 +498,7 @@ def private s16_wrapper_gate(t : T?; n : int64; ntok_override : int64 = 0l) {
 
 [test]
 def test_q8q8_wscale_f16(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         for (n in WIDTHS) {
             t |> run("wscale_f16 dot/rows/groupN kernels vs their f32 twins and fp64, n={n}") @(t : T?) {
                 s16_kernel_gate(t, n)
@@ -641,7 +641,7 @@ def private group3_gate(t : T?; n : int64) {
 
 [test]
 def test_q8q8_group3(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         for (n in WIDTHS) {
             t |> run("matmul_q8q8_group3 (f32 and s16) vs three independent GEMVs and fp64, n={n}") @(t : T?) {
                 group3_gate(t, n)
@@ -688,7 +688,7 @@ def private q8_f32x_gate(t : T?; n : int64) {
 
 [test]
 def test_q8_f32_activation(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         for (n in WIDTHS) {
             t |> run("matmul_q8 / dot_q8 vs fp64 dequant, n={n}") @(t : T?) {
                 q8_f32x_gate(t, n)
@@ -821,7 +821,7 @@ def private mx4_batch_gate(t : T?; n : int64) {
 
 [test]
 def test_mx4q8_batch_family(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         for (n in WIDTHS) {
             t |> run("mx4 batch / batch groupN vs per-token GEMVs, the scalar leaf and fp64, n={n}") @(t : T?) {
                 mx4_batch_gate(t, n)

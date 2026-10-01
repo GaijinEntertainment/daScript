@@ -67,8 +67,7 @@ def private with_pinned_kernels(body : block) {
 // continuation).
 def private gen_plain(tr : Model; prompt : array<int64>; total : int) : array<int64> {
     var out : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(tr.config)
         out <- generate(tr, s, prompt, total)
         delete s
@@ -79,8 +78,7 @@ def private gen_plain(tr : Model; prompt : array<int64>; total : int) : array<in
 // Depth-1 self-spec greedy over one fresh session; accept telemetry lands in nd/na.
 def private gen_spec(tr : Model; prompt : array<int64>; total : int; var nd, na : int64&) : array<int64> {
     var out : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(tr.config)
         out <- generate_mtp_greedy(tr, s, prompt, int64(total), nd, na)
         delete s
@@ -93,8 +91,7 @@ def private gen_spec(tr : Model; prompt : array<int64>; total : int; var nd, na 
 // calling the engine from the [test] run-lambda's interpreted frame overflows its 16K das stack.
 def private specoff_gen_ok(tr : Model; prompt, want : array<int64>) : bool {
     var ok = false
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(tr.config)
         let ids <- generate(tr, s, prompt, length(prompt) + length(want))
         let echo = length(prompt) - 1
@@ -111,8 +108,7 @@ def private specoff_gen_ok(tr : Model; prompt, want : array<int64>) : bool {
 //! specoff_gen_ok: a T? param keeps the helper off the JIT, and the engine chain overflows the interpreter stack
 def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<int64>) : array<int64> {
     var got : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         let np = long_length(MTP_PROMPT)
         // plain-decode reference (echo convention: ids[np-1] is the first generated token)
         var s1 = make_run_state(tr.config)
@@ -154,8 +150,7 @@ struct private RejectRound {
 [cold_path]
 def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
     var out : RejectRound
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         let np = long_length(MTP_PROMPT)
         var s1 = make_run_state(tr.config)
         let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))
@@ -340,8 +335,7 @@ def private all_poisoned(row : array<uint8>) : bool {
 [cold_path]
 def private seam_row_kept(var tr : Model; serves, blob : bool) : bool {
     var kept = false
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         let spec0 = get_mtp_spec()
         set_mtp_spec(true)
         var s = make_run_state(tr.config)
@@ -434,8 +428,7 @@ var private g_probe_window_after = false
 [cold_path]
 def private verify_window_panic(tr : Model) : string {
     var why = ""
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         let np = long_length(MTP_PROMPT)
         let spec0 = get_mtp_spec()
         set_mtp_spec(true)

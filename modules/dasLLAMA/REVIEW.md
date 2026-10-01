@@ -162,8 +162,10 @@ spelling missing from `DEVICE_CREATION_CALLS` weakens it.**
 
 **A diff that makes any choice in `dasllama/` because one candidate measured faster - a constant
 set to a value, a formula that gains or drops a term and a predicate that picks among kernel
-variants computing the same result included - takes the winner from a race that timed every candidate interleaved in one process with one script, and
-puts that race's rows, each naming its candidate, in the PR body or the change's dated
+variants computing the same result included - takes the winner from a race that timed every
+candidate interleaved in one process with one script, each candidate selectable in that script at
+the diff's tip by a flag or argument, never by editing the source between runs, and puts that
+race's rows, each naming its candidate, in the PR body or the change's dated
 `PERF_LEDGER.md` row.** Timings taken in two processes or at two commits also differ by everything
 else that changed between the runs, so they cannot pick a candidate.
 
@@ -175,8 +177,18 @@ shape, is a defect - call that twin instead.** A site that must stay f32 for ano
 ledgered on its file's charter line (the line, in the companion `ARCHITECTURE.md#file-charters`
 routes to, that says what the file holds); a comment at the call site does not discharge this.
 
-**A caller never re-checks a guard its callee checks - drop the caller's copy.** An edit to either
-copy leaves the caller testing a condition the callee no longer applies.
+**A caller never re-checks a guard its callee checks - drop the caller's copy, or, where the
+caller's check also gates its own work, compute the decision once and pass it to the callee.**
+An edit to either copy leaves the caller testing a condition the callee no longer applies.
+
+**Logic or a named constant that two files in one folder both use, and that neither the language
+nor the test contract forces them to restate (an enum-and-int pair of one predicate, a test's CPU
+oracle of the arithmetic), lands once - in a file both already require, or in a new file both
+require when they share none - never as a second copy.** Two spellings drift apart on the first
+edit to one.
+
+**A piece that two folders both need, neither containing the other, lands in the folder that owns
+the concern, and the other folder requires it - never a copy in each.**
 
 **A boot-path prompt (code that runs at startup, before the first request) that reads stdin
 without first proving both stdin and stdout are terminals is a defect - emit the question as

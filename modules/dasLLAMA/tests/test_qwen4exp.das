@@ -230,7 +230,7 @@ def test_hc_mixer_batched(t : T?) {
         hc_fixture(m)
         var inline_leg <- hc_batch_run(m)
         var threaded <- HcBatch()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             delete threaded
             threaded <- hc_batch_run(m)
         }

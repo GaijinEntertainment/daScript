@@ -73,8 +73,7 @@ def main {
     set_prefill_attn_mode(AttnPrefillMode.classic)
     let prev_act = get_act_vec()
     set_act_vec(false)
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         gen_and_compare(tr, GPTOSS_PROMPT, GPTOSS_GEN, "short (counting)")
         let long_prompt <- encode(tr, counting_prompt(), true, false)
         gen_and_compare(tr, long_prompt, GPTOSS_LONG_GEN, "window-engaged (449 tok)")

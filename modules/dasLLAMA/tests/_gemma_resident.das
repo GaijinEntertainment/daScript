@@ -31,7 +31,7 @@ def private gemma_rig_init() {
 require math
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // with_dasllama_jobque (the engine-standard jobque config)
+require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode, where the module exists
@@ -98,7 +98,7 @@ def private gemma_model(t : T?; file : string) : Model {
 def private with_gemma_rig(t : T?; file : string; body : block<(tr : Model) : void>) {
     var tr <- gemma_model(t, file)
     if (tr.config.n_layers > 0l) {
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             invoke(body, tr)
         }
     }

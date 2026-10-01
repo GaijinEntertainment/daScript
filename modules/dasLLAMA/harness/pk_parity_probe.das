@@ -64,7 +64,7 @@ def main() {
     let wav_path = args[length(args) - 1]
     let samples <- load_audio_16k_mono(wav_path)
     print("SAMPLES\t{length(samples)}\n")
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var half : array<float>
         half |> resize(length(samples) * 2 / 3)
         for (i in range(length(half))) {

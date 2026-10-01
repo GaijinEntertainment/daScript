@@ -330,7 +330,7 @@ def private dasllama_type_stanza(f : FILE const?; lab : string; tname : string; 
 def document_module_dasllama(_root : string) {
     var mod = find_module("dasllama")
     var groups <- array<DocGroup>(
-        group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|caps)$%%),
+        group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|with_dasllama_jobque|caps)$%%),
         group_by_regex("Prefix cache", mod, %regex~(create_prefix_cache|prefix_attach|prefix_insert|prefix_release|prefix_held_groups|prefix_chain_list)$%%),
         group_by_regex("Tokenizer", mod, %regex~(encode|decode|piece)$%%),
         group_by_regex("Evaluation and sampling", mod, %regex~(eval|eval_embd|eval_embd_span|eval_embd_span_mrope|eval_batch|sample|set_seed|stats)$%%),

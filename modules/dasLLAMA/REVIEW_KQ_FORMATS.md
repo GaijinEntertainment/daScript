@@ -9,12 +9,12 @@ A definition home of the per-format quantities is `dasllama/dasllama_kqformat.da
 (`dasllama/dasllama_gguf.das`), `Q8_BLOCK_ELEMS` / `Q8_QPB` / `Q8_SPB`
 (`dasllama/dasllama_gemm_schema.das`), or the pins of `tests/test_kqformat.das`.
 
-**A diff that adds or changes a function in `dasllama/` that turns a kernel/IR format id - the
-int a generated kernel takes as its format parameter - into a `KqFmt` or any per-format value or
-predicate with a mapping of its own is a defect - resolve the id through `kq_fmt_of_id`
-(`dasllama/dasllama_kqformat.das`): the panicking overload `kq_fmt_of_id(id, what)`, the `bool`
-overload whose false branch panics, or a per-format accessor that takes the id (`kq_qsb` /
-`kq_ssb`).**
+**A diff that adds or changes a function in `dasllama/` that maps a kernel/IR format id - the int
+a generated kernel takes as its format parameter - to a `KqFmt`, a per-format value or predicate,
+or a choice among per-format functions through its own table or branch is a defect - resolve the
+id through `kq_fmt_of_id` (`dasllama/dasllama_kqformat.das`): the panicking overload
+`kq_fmt_of_id(id, what)`, the `bool` overload whose false branch panics, or a per-format accessor
+that takes the id (`kq_qsb` / `kq_ssb`).**
 
 **A literal that stands for a per-format quantity of a `KqFmt` member - the value a `kq_desc`
 column, that member's `ggml_type_bytes` entry or a named per-format constant defines for it -

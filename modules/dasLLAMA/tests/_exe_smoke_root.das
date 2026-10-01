@@ -19,8 +19,7 @@ def main {
     }
     var m <- load_model_(path, QuantMode.q8)   //! the internal loader: the image rail is not the subject, and the facade would mint a .dlim beside the stocked model
     allow_cpu_prefill()
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s <- create_session(m)
         var prompt <- encode(m, "Once upon a time", true)
         let params = SamplingParams()

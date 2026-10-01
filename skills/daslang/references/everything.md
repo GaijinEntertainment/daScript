@@ -3128,6 +3128,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `load_model` - Load a model AND its tokenizer from a GGUF file — architecture and tokenizer backend are auto-selected from metadata; `mode` picks the weight quantization.
 - `release_kv_pages` - Return `session`'s KV pages to its pool (no-op on flat sessions).
 - `setup_dasllama_jobque` - Configure the job queue for dasLLAMA's fork/join matmul dispatch: pooled fork contexts, batched dispatch, the worker spin-before-park window (`jobque_spin_us`; 0 disables).
+- `with_dasllama_jobque` - Run `blk` inside a fresh `with_job_que()` that `setup_dasllama_jobque()` has configured — the one-call form of the pair.
 
 ### Prefix cache
 

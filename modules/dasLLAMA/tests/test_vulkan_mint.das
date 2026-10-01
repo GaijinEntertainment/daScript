@@ -31,7 +31,7 @@ let private MINT_STEPS = 12
 
 def private load_cached_q8(path : string) : Model {
     var m = Model()
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         m <- load_model_cached(path, QuantMode.q8)   // nolint:PERF030,LINT019 -- the move must sit inside with_job_que; the target is fresh-empty, so nothing drops
     }
     return <- m
@@ -40,7 +40,7 @@ def private load_cached_q8(path : string) : Model {
 //! `MINT_STEPS` greedy tokens over a counting prompt, and the CPU embed row of one token: what the two lanes must agree on
 [cold_path]
 def private mint_witness(tr : Model; var ids : array<int64>; var row : array<float>) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var s <- create_session(tr, KVDtype.f16)
         var prompt <- [for (i in range64(int64(MINT_PROMPT))); 1000l + i * 7l]
         delete ids

@@ -9,7 +9,7 @@ require _model_tier
 require daslib/jobque_boost
 require daslib/fio
 require math
-require dasllama/dasllama_math  // with_dasllama_jobque + target_chunk_work + fused knob
+require dasllama/dasllama_math  // with_dasllama_jobque_ + target_chunk_work + fused knob
 require dasllama/dasllama_env
 
 // Fused decode chains (team_parallel_stages: qkv→attn→wo and w1/w3→w2 as ONE dispatch each) vs
@@ -35,7 +35,7 @@ def test_fused_decode_bit_exact(t : T?) {
         let c = tr.config
         quantize_weights(tr)  // fused chains are Q8-only
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {   // team mode on — the fused gate requires it
+        with_dasllama_jobque_() {   // team mode on — the fused gate requires it
             set_target_chunk_work(1l)
             var ids_std : array<int64>
             var ids_fused : array<int64>
@@ -133,7 +133,7 @@ def test_fused_flash_deep_ctx(t : T?) {
         }
         let prev_backend = active_kernel_backend()
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             pin_kernel_backend("portable")
             var tr <- load_gguf(path, QuantMode.q8)
@@ -196,7 +196,7 @@ def test_fused_flash_deep_ctx_q8(t : T?) {
         }
         let prev_backend = active_kernel_backend()
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             pin_kernel_backend("portable")
             var tr <- load_gguf(path, QuantMode.q8)
@@ -254,7 +254,7 @@ def test_fused_decode_pre_post_norm(t : T?) {
         return if (!jit_only(t))
         let prev_backend = active_kernel_backend()
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             pin_kernel_backend("portable")   // the rows core every host shares (see the attn-chain twin)
             for (name in ["gemma-3-1b-it-Q8_0.gguf", "gemma-2-2b-it-Q8_0.gguf", "gemma-4-E2B-it-Q8_0.gguf"]) {
@@ -288,7 +288,7 @@ def test_fused_decode_kquant(t : T?) {
     t |> run("fused chains bit-exact on native K-quant layers (needs the kq ggufs)") @(t : T?) {
         return if (!jit_only(t))
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             for (name in ["Qwen3-4B-Instruct-2507-Q5_K_M.gguf", "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"]) {
                 let path = path_join(models_dir(), name)
@@ -328,7 +328,7 @@ def test_fused_decode_moe_chain(t : T?) {
             return
         }
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             var tr <- load_gguf(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, FUSED_CTX)
@@ -354,7 +354,7 @@ def test_fused_decode_attn_chain(t : T?) {
         }
         let prev_backend = active_kernel_backend()
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             if (kernel_backend_has_rows()) {   // auto backend pass (skipped where auto has no rows core)
                 var tr <- load_gguf(path, QuantMode.q8)

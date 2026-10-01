@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
-require dasllama/dasllama_math   // with_dasllama_jobque + target_chunk_work + fused knob
+require dasllama/dasllama_math   // with_dasllama_jobque_ + target_chunk_work + fused knob
 require dasllama/dasllama_kv_codec   // the codec kernel families under unit test
 require dasllama/dasllama_convert    // cvt_f32_to_f16/cvt_f16_to_f32 — the generic f16 rows
 require daslib/f16_cvt
@@ -626,7 +626,7 @@ def test_kv_f16_decode(t : T?) {
         let c = tr.config
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             var ids32 : array<int64>
             var ids16 : array<int64>
@@ -700,7 +700,7 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
         quantize_weights(tr)
         let prev_thresh = get_target_chunk_work()
         let prev_mode = get_prefill_attn_mode()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             set_prefill_attn_mode(AttnPrefillMode.classic)
             var prompt <- [for (i in range(16)); int64(i % 50 + 2)]
@@ -782,7 +782,7 @@ def test_kv_q8_decode(t : T?) {
         }
         let prev_backend = active_kernel_backend()
         let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             pin_kernel_backend("portable")   // the rows core every host shares — the fused gate needs one
             var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
@@ -833,7 +833,7 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
         }
         let prev_thresh = get_target_chunk_work()
         let prev_mode = get_prefill_attn_mode()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             set_target_chunk_work(1l)
             set_prefill_attn_mode(AttnPrefillMode.classic)
             var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
@@ -926,7 +926,7 @@ def test_kv_capacity_tripwire(t : T?) {
         // heap with no diagnostic, so the tripwire must fire BEFORE the first store
         tr.config.seq_len = 8l
         quantize_weights(tr)
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var toks <- [for (_i in range(16)); 1l]
             var s <- make_run_state(tr.config)
             var tripped = false

@@ -370,7 +370,7 @@ def private slots_gate(t : T?; tag : string; ntok, d : int64; rounds : int; walk
     var first = -1l
     var dispatched = 0l
     var slots = 0
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         slots = get_dispatch_slot_bound()
         set_single_thread_(true)
         nan_fill(want)

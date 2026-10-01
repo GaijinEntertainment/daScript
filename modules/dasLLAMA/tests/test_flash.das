@@ -15,7 +15,7 @@ require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
 require math
-require dasllama/dasllama_math  // with_dasllama_jobque + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_math  // with_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 
 // Flash prefill attention is online-softmax (NOT bit-exact vs classic — the FP sums reorder), so it
 // is gated on (a) the predicted next token matching classic on a confident prompt and (b) the full
@@ -43,7 +43,7 @@ def check_flash(t : T?; tr : Model; prompt : array<int64>; start_pos : int64; co
     let c = tr.config
     let n = long_length(prompt)
     let REL_TOL = 0.05
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         set_prefill_attn_mode(AttnPrefillMode.classic)
         var sc <- make_run_state(c)
         for (p in range64(start_pos)) {

@@ -61,8 +61,7 @@ def private parity_gen_ok(tr : Model; prompt, want : array<int64>; dn_chunked : 
     // in), not the (default) chunked — same reasoning again; chunked gets its own explicit arms.
     let prev_dn = get_deltanet_prefill_mode()
     set_deltanet_prefill_mode(dn_chunked ? DnPrefillMode.chunked : DnPrefillMode.recurrent)
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(tr.config)
         let ids <- generate(tr, s, prompt, length(prompt) + n_gen)
         // generate echoes prompt[1..] then the continuation, so the first generated token is at

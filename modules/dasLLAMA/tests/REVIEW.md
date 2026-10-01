@@ -54,13 +54,14 @@ change reaches a test when it alters anything the
 test's result depends on - the test file, a shared helper, engine code it exercises, an in-tree
 fixture or corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
-**A PR whose change reaches a cell that skips on a hardware or build capability the box may
-lack - a device, a module the build may omit, a kernel the instruction sets of the box's CPU do
-not carry - runs that cell on a box that has it, and names that box in the PR body.** A reached
-cell that skipped was not run.
+**A PR whose change reaches a cell that skips on, or picks its tolerance or its code path by, a
+hardware or build capability the box may lack - a device, a module the build may omit, a kernel the
+instruction sets of the box's CPU do not carry - runs that cell on a box that has it, and names
+that box in the PR body.** A reached cell run without the capability did not run what the
+capability selects.
 
-**A PR that adds or changes a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
-`_model_tier.das`) also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
+**A PR that adds a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
+`_model_tier.das`), or changes something such a cell's result depends on, also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
 stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when
 `run.das` accepts `--arm` for that suite - and names the box in the PR body.** A run without
 `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
@@ -98,9 +99,12 @@ suite, its skip condition, or what it claims - a shape, a length, a format or a 
 sweeps, or a tolerance it holds - corrects or adds, in the same change, the `CLAUDE.md` entry of
 every test file running the cell, counts and skip clauses included.** A file's entry is the
 clause that describes the file, named with or without its `.das` suffix; a `{a,b}` shorthand or
-a suite roster needs no update. An entry may describe a class of cells in one clause - the cells
-of one helper, the arms of one name pattern (`mtp-ff-<tag>`) - when that clause's counts and skip
-clauses hold for every cell in the class.
+a suite roster needs no update, and an input row that adds no new shape, length, format or lane
+changes no claim.
+
+**A `CLAUDE.md` entry that describes a class of cells in one clause - the cells of one helper,
+the arms of one name pattern (`mtp-ff-<tag>`) - keeps that clause's counts and skip clauses true
+for every cell in the class.**
 
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm filter
@@ -125,9 +129,8 @@ behind sends its reader to a flag that no longer does what the text says.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
 returns without asserting - whatever the reason - registers `t |> skip` there, and one whose
-claim needs a capability the box may lack (a device, a window server, an audio device, a module
-the build omits, a stocked model, a stocked fixture - an oracle dump, a clip, a front-end pack)
-registers that skip on the fact before it asserts, never a bare return and never a failure;
+claim needs something the box provides and may lack - anything the cell neither creates nor
+sets - registers that skip on the fact before it asserts, never a bare return and never a failure;
 `feint` is a print, not a skip.
 
 **A cell's skip condition, and any condition that picks a cell's assert or bar by something

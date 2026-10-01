@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama   // nolint:STYLE030,LINT019 - the public facade, reached inside the das_metal halves
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require _metal_blob_twin   // blob_twin - the blob-flavor carrier every Metal serving cell loads
 require dasllama/dasllama_batch   // nolint:STYLE030,LINT019 - batch_step_census, inside the das_metal halves
 require dasllama/dasllama_bench   // nolint:STYLE030,LINT019 - bench_tg_batched_rep, inside the das_metal halves
@@ -39,7 +39,7 @@ def test_metal_batched_row_llama(t : T?) {
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 t |> equal(gpu_device_sessions(), 0l, "no whole-model driver homes a stream: the row's streams are host-cached")
                 let census0 = batch_step_census()
                 let steps0 = metal_batch_decode_stats().steps
@@ -69,7 +69,7 @@ def test_metal_batched_row_eseries(t : T?) {
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 let census0 = batch_step_census()
                 let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l)
                 t |> equal(served.why, "", "the row is served: {served.why}")
@@ -96,7 +96,7 @@ def test_metal_batched_row_shexp(t : T?) {
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 let census0 = batch_step_census()
                 let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l)
                 t |> equal(served.why, "", "the row is served: {served.why}")
@@ -123,7 +123,7 @@ def test_metal_batched_row_nextn_plain(t : T?) {
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 let prev_spec = get_mtp_spec()
                 set_mtp_spec(false)
                 let census0 = batch_step_census()
@@ -175,7 +175,7 @@ def test_metal_batched_row_mtp(t : T?) {
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 let prev_spec = get_mtp_spec()
                 set_mtp_spec(true)
                 let census0 = batch_step_census()
@@ -205,7 +205,7 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 512l)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 let prev_spec = get_mtp_spec()
                 set_mtp_spec(true)
                 var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
@@ -267,7 +267,7 @@ def test_metal_batched_row_mtp_joint_staggered(t : T?) {
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 1024l)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 let prev_spec = get_mtp_spec()
                 set_mtp_spec(true)
                 //! group 0 is shallow, the LAST group deep: the round's chunk count and its attention form must follow the deepest row, not the first group's
@@ -329,7 +329,7 @@ def test_metal_batched_row_deltanet(t : T?) {
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 let census0 = batch_step_census()
                 let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l)
                 t |> equal(served.why, "", "the row is served: {served.why}")
@@ -384,7 +384,7 @@ def test_metal_paged_deltanet(t : T?) {
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 512l)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 for (nst in [1l, 2l]) {
                     let steps0 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
                     var flat <- served_tokens(tr, nst, 0l, PAGED_NEW)
@@ -431,7 +431,7 @@ def test_metal_batched_row_pre_encode(t : T?) {
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 let prior_pre = metal_batch_pre_enabled()
                 if (!env_is_set("DASLLAMA_METAL_BATCH_PRE")) {
                     t |> success(!prior_pre, "the pre-encode rail ships off")

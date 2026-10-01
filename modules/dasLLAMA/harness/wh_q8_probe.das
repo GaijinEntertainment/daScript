@@ -43,7 +43,7 @@ def main() {
     var mf <- load_asr_model(model_path)
     set_asr_fp32(false)
     print("q8={mq.whisper.enc.q8} fp32-pin={!mf.whisper.enc.q8}\n")
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         let tq <- collect(mq, samples)
         let tf <- collect(mf, samples)
         // timestamps (>= tok_beg) flip on near-tie segment splits — compare word streams

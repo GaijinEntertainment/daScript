@@ -14,6 +14,7 @@ options _dasllama_internal = true
 //! in ``with_job_que()`` from ``daslib/jobque_boost`` so the kernels can thread. Call
 //! ``setup_dasllama_jobque()`` inside it, before the first ``load_model``, ``generate`` or ``eval``:
 //! the engine panics on a queue nobody configured, because a bare queue runs ~200x slower.
+//! ``with_dasllama_jobque()`` does both in one call.
 //! Declare ``options stack = 524288``: the forward chain outgrows the 16K default, and a required
 //! module cannot raise the program's stack for you. See ``examples/dasLLAMA/run.das`` and
 //! ``chat.das`` for the canonical shape.
@@ -52,6 +53,12 @@ def setup_dasllama_jobque() {
     //! Call INSIDE ``with_job_que()``, before the first ``generate``/``eval``. The fork-context pool is PER CONTEXT:
     //! a ``new_thread`` body that runs inference calls this again, or every parallel kernel clones the whole program (90x slower).
     setup_dasllama_jobque_()
+}
+
+def with_dasllama_jobque(blk : block<void>) {
+    //! Run ``blk`` inside a fresh ``with_job_que()`` that ``setup_dasllama_jobque()`` has configured — the one-call form of the pair.
+    //! The queue lives for the block only; a program that keeps its own queue calls ``setup_dasllama_jobque()`` inside it instead.
+    with_dasllama_jobque_(blk)
 }
 
 def load_model(path : string; mode : QuantMode = QuantMode.fp32) : Model {

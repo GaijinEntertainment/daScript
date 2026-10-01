@@ -190,8 +190,7 @@ def test_chat_end_to_end(t : T?) {
         m.config.seq_len = min(m.config.seq_len, 512l)
         var reply = ""
         var ntok = 0l
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var c = create_chat(m, "", 24l)   // no system prompt, short budget
             add_user(c, "Say hello in one short sentence.")
             reply = respond(m, c, SamplingParams()) $(piece) {   // greedy
@@ -407,8 +406,7 @@ def test_chat_gemma4_instruct_text_turn(t : T?) {
         }
         var m <- load_capped(path)
         allow_cpu_prefill()
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var c = create_chat(m, "", 64l)
             set_thinking(c, false)
             add_user(c, "What is 2+2? Answer with just the number.")
@@ -893,8 +891,7 @@ def test_chat_pending_cleared_on_consume(t : T?) {
             t |> skip("{path} not present")
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped(path)
             var c = create_chat(m, "", 4l)   // max_new=4 — the state machine is under test, not the reply
             add_user(c, "Count to three.")
@@ -933,8 +930,7 @@ def test_chat_render_seam(t : T?) {
             t |> skip("{path} not present")
             return
         }
-        with_job_que() {
-            setup_dasllama_jobque()
+        with_dasllama_jobque() {
             var m <- load_capped(path)
             moe_gpu_drop_model()   // one lane: under DASLLAMA_GPU=1 the two paths would split between the device prefill and the CPU continuation
             // classic prefill is bit-exact under ANY chunking (test_prefill's contract), so a

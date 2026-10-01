@@ -902,7 +902,7 @@ def private istft_case(t : T?; n : int64; k : int64; hop : int64; pad : int64; z
 
 [test]
 def test_tower_gemm_wrappers(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> run("the wrappers against an fp64 GEMM, and the plane, per-tensor-flag and zero-padded forms against them") @(t : T?) {
             mm_blob_case(t)
             mm_bf16_case(t)
@@ -916,7 +916,7 @@ def test_tower_gemm_wrappers(t : T?) {
 
 [test]
 def test_tower_layernorm(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> run("layernorm and layernorm_batch against the fp64 population-variance form") @(t : T?) {
             ln_scalar_case(t)
             ln_batch_case(t)
@@ -927,7 +927,7 @@ def test_tower_layernorm(t : T?) {
 
 [test]
 def test_tower_row_adds(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> run("the bias and residual row adds against the scalar f32 loop") @(t : T?) {
             add_bias_case(t, false)
             add_bias_case(t, true)
@@ -938,7 +938,7 @@ def test_tower_row_adds(t : T?) {
 
 [test]
 def test_tower_gelu_erf_batch(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> run("gelu_erf_batch against an fp64 erf series, and against its whole-image form") @(t : T?) {
             gelu_batch_case(t)
             gelu_shape_case(t)
@@ -948,7 +948,7 @@ def test_tower_gelu_erf_batch(t : T?) {
 
 [test]
 def test_tower_rope_neox_tab_rows(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> run("the full-head table rope against the fp64 rotation, and its per-row table index") @(t : T?) {
             rope_case(t)
             rope_row_index_case(t, 0l)
@@ -959,7 +959,7 @@ def test_tower_rope_neox_tab_rows(t : T?) {
 
 [test]
 def test_tower_attention_windows(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> run("attention_bidir_windows against an oracle that attends strictly inside each window") @(t : T?) {
             aw_case(t)
         }
@@ -968,7 +968,7 @@ def test_tower_attention_windows(t : T?) {
 
 [test]
 def test_tower_interpolate_grid_aa(t : T?) {
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         t |> run("the antialiased grid resample down and up, at a non-zero plane offset") @(t : T?) {
             interp_case(t, 48l, 48l, 14l, 14l, 8l, 0l)
             interp_case(t, 48l, 48l, 27l, 13l, 4l, 37l)

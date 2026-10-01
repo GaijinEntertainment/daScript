@@ -16,7 +16,7 @@ require strings
 require daslib/strings_boost
 require math
 require daslib/jobque_boost
-require dasllama/dasllama_math   // with_dasllama_jobque: the gate's encode runs in the engine's job queue
+require dasllama/dasllama_math   // with_dasllama_jobque_: the gate's encode runs in the engine's job queue
 
 struct OracleEncode {
     npos : int
@@ -210,7 +210,7 @@ def oracle_gate(t : T?; dir, logname, mint, kind : string; w, h : int; tag : str
     let planes <- make_planes(kind, w, h)
     var out : array<float>
     var nout = 0l
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         nout = invoke(encode, planes, out)
     }
     t |> equal(int(nout), o.npos, "{kind} {w}x{h} token count")

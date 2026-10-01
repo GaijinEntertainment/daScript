@@ -30,7 +30,7 @@ def main {
     for (i in range64(2048l)) {
         toks |> push(100l + i % 5000l)
     }
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         bench(tr, toks, KVDtype.f16)
         bench(tr, toks, KVDtype.q8_0)
         bench(tr, toks, KVDtype.tq4)

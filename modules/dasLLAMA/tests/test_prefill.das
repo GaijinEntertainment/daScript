@@ -16,7 +16,7 @@ require dasllama/dasllama_spm
 require daslib/jobque_boost
 require daslib/fio
 require daslib/linq   // sequence_equal: the logits rows and the codec-encoded KV byte blobs compare element for element (byte equality IS bit-exactness for a same-dtype pair)
-require dasllama/dasllama_math  // with_dasllama_jobque + the runtime knob setters (engine-level, not re-exported)
+require dasllama/dasllama_math  // with_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
 
 // forward_prefill / forward_batch must be BIT-FOR-BIT identical to calling forward() once per
 // position: same last-position logits AND same KV cache — both for a from-scratch prompt and for a
@@ -30,7 +30,7 @@ let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
 def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillMode) {
     let c = tr.config
     let n = long_length(prompt)
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         set_prefill_attn_mode(mode)
         var sr <- make_run_state(c)
         for (p in range64(n)) {
@@ -51,7 +51,7 @@ def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillM
 def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64; mode : AttnPrefillMode) {
     let c = tr.config
     let n = long_length(prompt)
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         set_prefill_attn_mode(mode)
         var sr <- make_run_state(c)
         for (p in range64(n)) {

@@ -2053,39 +2053,14 @@
    stream a one-row decode step reads, as the four-row step reads its tile4's. Done = the row
    spelled `pf`, its GEMV prefetch in the x64 emission rail and raced on an avx512 box (the class
    profiles re-exported where a crown moves), or the row deleted.
-201. **Checklist defects the AMX short-batch audit round named.** `REVIEW.md`: the caller/callee
-   guard rule's fix ("drop the caller's copy") is wrong where the caller's check also gates its
-   own work - the fix is one decision computed once and passed down; its measured-choice rule
-   admits a script in the tree whose arms are hand-swapped sources - it wants every arm
-   selectable at the tip. `REVIEW_MEASUREMENT.md`: the pair rule binds a commit message or PR
-   body and lets a pair in a checked-in document escape. `REVIEW_KQ_FORMATS.md`: the literal-id
-   rule covers an id mapped to a number and not an id mapped to a per-format function.
-   `REVIEW_DOCS.md`: the row-number rule does not say whether a number used and dropped inside one
-   branch counts. `tests/REVIEW.md`: the capability rule fires on a cell that skips and not on one
-   whose bar or route a capability selects without skipping; the skip-fact list stands in for
-   the property; the sweep rule does not say whether an input row counts.
-   `tests/REVIEW_PINNED_GATES.md`: a new cell in a pinned file has no rule naming its axis.
-   `harness/REVIEW.md`: the race-placement rule's trigger covers every unbenched kernel where
-   its harm is a kernel that pins a matmul backend. `performance/REVIEW.md`: three rules check
-   which build timed a row, and the board-cell sentence binds no diff. The root `REVIEW.md` and
-   `modules/REVIEW.md` do not say their subfolders carry checklists; `modules/dasLLVM/REVIEW.md`'s
-   two `[llvm_code]` rules are unbounded by folder and one names an example. `REVIEW_PLACEMENT.md`'s
-   two duplicate-code rules name no folder, while `REVIEW.md` routes to that checklist only on
-   `dasllama/` triggers, so a copy in `tests/` or `harness/` alone never fires them.
-   `REVIEW_HOT_PATH.md`'s `[cold_path]`-on-rig-functions rule needs a call-graph walk per changed
-   function and is broken across the rig folders unnoticed - a `REVIEW.das` gate.
-   `benchmarks/REVIEW.md`'s "adds or changes" triggers carry no materiality bar, so a mechanical
-   job-queue swap fires its `tune_gate`, report-line and `ATTRIBUTION SWEEP` rules on instruments
-   whose timed body never moved; it and `REVIEW_MEASUREMENT.md` define "board cell" and
-   "instrument" two ways each, both govern a board cell's corpus, both carry glossary blocks, and
-   the alternates rule reaches `harness/` alone, not a `performance/` instrument. `REVIEW_MEMORY.md`'s
-   team-lane rule packs a read duty and a write duty into one sentence and its function-global
-   rule leaves "serialized exe" undefined; `REVIEW_FACADE.md`'s `[EnvConfig]` rule carries two
-   sentences of why. The instruments those rules name and the code never met: `tune_kernels`' and
-   `gen_tune_probe`'s report lines print no reference verdict or bound, `kq_kernel_bench` and
-   `gemm_1core_probe` call no `tune_gate`, and `gemm_1core_probe`'s focus mode carries no
-   `ATTRIBUTION SWEEP` line. Done = each reworded
-   under `skills/review_md.md`, one document at a time, or refused by name.
+201. **Checklist defects the AMX short-batch audit round named.** `REVIEW_HOT_PATH.md`'s
+   `[cold_path]`-on-rig-functions rule needs a call-graph walk per changed function and is broken
+   across the rig folders unnoticed - a `REVIEW.das` gate. Instruments `benchmarks/REVIEW.md`'s
+   report-line, `tune_gate` and `ATTRIBUTION SWEEP` rules name and the code never met:
+   `tune_kernels`' and `gen_tune_probe`'s report lines print no reference verdict or bound,
+   `kq_kernel_bench` and `gemm_1core_probe` call no `tune_gate`, and `gemm_1core_probe`'s focus
+   mode carries no `ATTRIBUTION SWEEP` line. Done = the gate lands, and each named instrument meets
+   the rule or the rule is refused by name.
 202. **The NaN-safe compare rule has no gate.** `tests/REVIEW.md` binds a float compare against
    a bar a diff adds or changes to read a NaN as outside it; nothing mechanical checks it, and the shape - a
    bar test spelled `d > bar`, or a largest difference kept with `max(m, d)` - recurs across the

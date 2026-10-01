@@ -10,7 +10,7 @@ options _dasllama_internal = true
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_common
 require dasllama/dasllama_batch   // eval_batch_ + create_batch_workspace_
-require dasllama/dasllama_math   // with_dasllama_jobque
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_image   // load_model_cached - the .dlim rail
 require dasllama/dasllama_tokenizer
 require ?das_metal dasllama/dasllama_metal_common   // finish_pending_step
@@ -239,7 +239,7 @@ def main() : int {
     }
     let tk <- load_tokenizer_auto(cfg.model)
     var measured = 0
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var t <- load_model_cached(cfg.model, QuantMode.q8)
         t.config.seq_len = min(t.config.seq_len, 512l)
         var prompt <- encode(tk, "The old lighthouse keeper watched the storm roll in from the west, counting the seconds between each flash and the thunder that followed, while the village below slept through it.", false)

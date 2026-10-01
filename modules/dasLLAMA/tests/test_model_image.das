@@ -611,8 +611,7 @@ def test_image_mechanics(t : T?) {
 // in this process with identical knobs, so determinism is per-run, not per-fixture)
 def private gen_ids(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {
     var out : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(tr.config)
         var ids <- generate(tr, s, prompt, length(prompt) + n_gen)
         out <- ids
@@ -742,8 +741,7 @@ def private counting_ids(tr : Model) : array<int64> {
 def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>; tag : string) : float {
     var maxd = 0.0
     var picks : array<int64>   // the GPU's greedy would-be choice per teach position — eyeball rail
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var sa = make_run_state(tc.config)
         var sb = make_run_state(tg.config)
         eval_(tc, sa, prompt)
@@ -1072,7 +1070,7 @@ def test_kitten_image(t : T?) {
     let path = path_join(models_dir(), "kitten-nano.gguf")
     t |> run("kitten-nano: the staged read, the mapped image and the in-memory mint agree on both lanes") @(t : T?) {
         return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !jit_model_available(t, path))
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             for (q8 in [false, true]) {
                 let lane = q8 ? "q8" : "f32"
                 let r = kitten_image_roundtrip(path, q8)
@@ -1095,7 +1093,7 @@ def test_kitten_image(t : T?) {
     }
     t |> run("kitten-nano: the image loads by its own path, the family data riding its meta") @(t : T?) {
         return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !jit_model_available(t, path))
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var inscope from_gguf <- load_styletts2(path)   // bakes the q8 sibling when it is not there yet
             let img = image_path_for(path, ST2_IMAGE_TAG_Q8)
             t |> success(stat(img).is_valid, "the q8 lane's image is on disk: {img}")
@@ -1188,8 +1186,7 @@ def private whisper_transcribe_text(path : string; samples : array<float>; cache
         mint_whisper_model(stg, w)
     }
     var text = ""
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s <- create_session(w)
         transcribe(w, s, samples) $(seg) {
             text += seg.text
@@ -1349,8 +1346,7 @@ def test_whisper_metal_tower(tst : T?) {
             }
             mint_whisper_model(stgz, wpz)
             var z_text = ""
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 var sz <- create_session(wpz)
                 transcribe(wpz, sz, samples) $(seg) {
                     z_text += seg.text
@@ -1367,8 +1363,7 @@ def test_whisper_metal_tower(tst : T?) {
             t |> success(w8.enc.q8, "the q8 flavor is on the q8 rail")
             let sq0 = metal_tower_stats()
             var q8_text = ""
-            with_job_que() {
-                setup_dasllama_jobque()
+            with_dasllama_jobque() {
                 var s8 <- create_session(w8)
                 transcribe(w8, s8, samples) $(seg) {
                     q8_text += seg.text
@@ -1385,8 +1380,7 @@ def test_whisper_metal_tower(tst : T?) {
             set_metal_mode(MetalMode.required)
             var tripped = false
             try {
-                with_job_que() {
-                    setup_dasllama_jobque()
+                with_dasllama_jobque() {
                     var s9 <- create_session(w8)
                     transcribe(w8, s9, samples) $(seg) {
                         pass
@@ -1424,8 +1418,7 @@ def test_whisper_metal_tower(tst : T?) {
 
 def private wdec_transcribe(w : WhisperModel; samples : array<float>) : string {
     var text = ""
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s <- create_session(w)
         transcribe(w, s, samples) $(seg) {
             text += seg.text
@@ -1492,8 +1485,7 @@ def test_whisper_metal_cross_kv(tst : T?) {
             set_metal_mode(MetalMode.required)
             var tripped = false
             try {
-                with_job_que() {
-                    setup_dasllama_jobque()
+                with_dasllama_jobque() {
                     var s9 <- create_session(wf)
                     transcribe(wf, s9, samples) $(seg) {
                         pass
@@ -1582,7 +1574,7 @@ def test_parakeet_tower_metal(tst : T?) {
             var enc_rel_l2 = 0.0
             var poison_rel_l2 = 0.0
             var rows_gpu = 0l
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 var inscope m = AsrModel(kind = AsrKind.parakeet)
                 var inscope stg <- stage_parakeet_model(path, false)
                 mint_parakeet_model(stg, m.pk, false)
@@ -1669,7 +1661,7 @@ def test_parakeet_tower_q8_decline(tst : T?) {
             var text = ""
             var enc_delta = 0l
             var dec_delta = 0l
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 var inscope m = AsrModel(kind = AsrKind.parakeet)
                 var inscope stg <- stage_parakeet_model(path, true)
                 mint_parakeet_model(stg, m.pk, true)
@@ -1705,8 +1697,7 @@ def private parakeet_transcribe_text(path : string; samples : array<float>; cach
         mint_parakeet_model(stg, m.pk, cached_lane_q8)
     }
     var text = ""
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s <- create_session(m, "en")
         text = transcribe(m, s, samples)
         delete s
@@ -2150,7 +2141,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
         var q8_text = ""
         var f32_text = ""
         var lang = ""
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             // decoder off-rail (REVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
             set_gemma4a_q8(true)
@@ -2197,7 +2188,7 @@ def test_gemma4a_tower_metal(t : T?) {
             var enc_delta = 0l
             var blk_delta = 0l
             var enc_rel_l2 = 0.0
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
                 set_gemma4a_q8(false)
@@ -2266,7 +2257,7 @@ def test_canary_tower_metal(t : T?) {
             var enc_rel_l2 = 0.0
             var poison_rel_l2 = 0.0
             var rows_gpu = 0l
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
                 set_canary_enc_q8(false)
@@ -2350,7 +2341,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
         var inscope encf <- make_encoder_state(twf.core)
         var inscope csq = Qwen3aConvState()
         var inscope csf = Qwen3aConvState()
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             var inscope win <- qwen3a_mel_window(mel, 0l)
             qwen3a_encode(twq, encq, csq, win)
             var inscope winf <- qwen3a_mel_window(mel, 0l)
@@ -2384,7 +2375,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
         var q8_text = ""
         var f32_text = ""
         var lang = ""
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             // decoder off-rail (REVIEW: suites load decoders with load_model_) — loaded ONCE; only the tower flips rails
             var dec <- load_model_(dec_path, QuantMode.q8)
             dec.config.seq_len = min(dec.config.seq_len, 8192l)
@@ -2436,7 +2427,7 @@ def test_qwen3a_metal_tower(tst : T?) {
             var blk_delta = 0l
             var conv_delta = 0l
             var enc_rel_l2 = 0.0
-            with_dasllama_jobque() {
+            with_dasllama_jobque_() {
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
                 set_qwen3a_q8(false)

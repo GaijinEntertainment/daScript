@@ -4,7 +4,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_tower   // the shared encoder-tower pieces under test
-require dasllama/dasllama_math    // with_dasllama_jobque
+require dasllama/dasllama_math    // with_dasllama_jobque_
 require dasllama/dasllama_rope    // build_rope_tabs_rows — the 2-axis rope's table source
 require dasllama/dasllama_plane
 require daslib/jobque_boost
@@ -273,7 +273,7 @@ def test_attention_bidir(t : T?) {
         var out : array<float>
         out |> resize(tt * d)
         var hp, att : array<float>
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             for (scale in [0.5, 1.0]) {
                 attention_bidir(out, qq, kk, vv, hp, att, tt, d, n_head, scale)
                 let ref <- attention_ref(qq, kk, vv, tt, d, n_head, scale)

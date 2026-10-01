@@ -287,7 +287,7 @@ def focus_main {
     ntok = g_env_harness.focus_ntok ?? ntok
     if (g_env_harness.focus_forked) {
         set_target_chunk_work(1l)   // always parallel — every call goes through parallel_for
-        with_dasllama_jobque() {
+        with_dasllama_jobque_() {
             if (is_some(g_env_harness.das_jobque_join_spin)) {
                 let join_spin = unwrap(g_env_harness.das_jobque_join_spin)   // poll LEVEL 0..100 (ggml denomination), not µs
                 set_jobque_join_spin(join_spin)

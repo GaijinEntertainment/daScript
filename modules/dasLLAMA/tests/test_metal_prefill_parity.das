@@ -32,8 +32,7 @@ let private COUNT_TO = 120   //! "1, 2, …, 120," — long enough to engage the
 // then n greedy steps — the M2.5 continuation arm's control/GPU shape (probe-proven)
 def private chunked_greedy(trp, trd : Model; c1, c2 : array<int64>; kdt : KVDtype; nsteps : int) : array<int64> {
     var ids : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(trp.config, kdt, kdt)
         eval_(trp, s, c1)
         eval_(trp, s, c2)
@@ -66,8 +65,7 @@ def private chunked_greedy(trp, trd : Model; c1, c2 : array<int64>; kdt : KVDtyp
 // stays meaningful), then n greedy steps on trd — CPU control and GPU run share it verbatim
 def private span_greedy(trp, trd : Model; head, tail : array<int64>; kdt : KVDtype; nsteps : int) : array<int64> {
     var ids : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(trp.config, kdt, kdt)
         eval_(trp, s, head)
         let ntail = long_length(tail)
@@ -106,8 +104,7 @@ def private span_greedy(trp, trd : Model; head, tail : array<int64>; kdt : KVDty
 // steps on trd — CPU control and GPU run share it verbatim
 def private span_fused_greedy(trp, trd : Model; head, media, tail : array<int64>; kdt : KVDtype; nsteps : int) : array<int64> {
     var ids : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(trp.config, kdt, kdt)
         let nh = long_length(head)
         let nm = long_length(media)
@@ -148,8 +145,7 @@ def private span_fused_greedy(trp, trd : Model; head, media, tail : array<int64>
 // on ONE backend, where the per-row math is identical and any mask defect is the whole diff
 def private span_fused_prefill_logits(trp : Model; head, media, tail : array<int64>; kdt : KVDtype) : array<float> {
     var lg : array<float>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(trp.config, kdt, kdt)
         let nh = long_length(head)
         let nm = long_length(media)
@@ -177,8 +173,7 @@ def private span_fused_prefill_logits(trp : Model; head, media, tail : array<int
 def private span_mrope_greedy(trp, trd : Model; head, media, tail : array<int64>; grid : int2;
                               kdt : KVDtype; nsteps : int) : array<int64> {
     var ids : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(trp.config, kdt, kdt)
         let nh = long_length(head)
         let nm = long_length(media)
@@ -220,8 +215,7 @@ def private span_mrope_greedy(trp, trd : Model; head, media, tail : array<int64>
 def private span_mrope_prefill_logits(trp : Model; head, media, tail : array<int64>; grid : int2;
                                       kdt : KVDtype) : array<float> {
     var lg : array<float>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(trp.config, kdt, kdt)
         let nh = long_length(head)
         let nm = long_length(media)
@@ -249,8 +243,7 @@ def private span_mrope_prefill_logits(trp : Model; head, media, tail : array<int
 // share it verbatim
 def private span_ds_greedy(trp, trd : Model; head, media, tail : array<int64>; kdt : KVDtype; nsteps : int) : array<int64> {
     var ids : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(trp.config, kdt, kdt)
         let dim = trp.config.dim
         let nds = trp.config.n_deepstack
@@ -303,8 +296,7 @@ def private span_ds_greedy(trp, trd : Model; head, media, tail : array<int64>; k
 def private span_ds_prefill_logits(trp : Model; head, media, tail : array<int64>; kdt : KVDtype;
                                    with_tails : bool) : array<float> {
     var lg : array<float>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(trp.config, kdt, kdt)
         let dim = trp.config.dim
         let nds = trp.config.n_deepstack
@@ -343,8 +335,7 @@ def private span_ds_prefill_logits(trp : Model; head, media, tail : array<int64>
 // model = the shared CPU decode both runs ride, preserving the prefill-isolation property).
 def private continuation(trp, trd : Model; prompt : array<int64>; n_gen : int) : array<int64> {
     var got : array<int64>
-    with_job_que() {
-        setup_dasllama_jobque()
+    with_dasllama_jobque() {
         var s = make_run_state(trp.config)
         eval_(trp, s, prompt)
         let vocab = trp.config.vocab_size
@@ -1024,8 +1015,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 for (kdt in [KVDtype.q8_0, KVDtype.tq4]) {
                     var cpuq : array<int64>
                     var gpuq : array<int64>
-                    with_job_que() {
-                        setup_dasllama_jobque()
+                    with_dasllama_jobque() {
                         var sa = make_run_state(trq.config, kdt, kdt)
                         let ids <- generate(trq, sa, prompt, length(prompt) + 24)
                         cpuq := ids

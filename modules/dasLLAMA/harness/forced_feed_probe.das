@@ -82,7 +82,7 @@ def main() : int {
         }
     }
     let prompt <- encode(tr.tok, text, true, false)
-    with_dasllama_jobque() {
+    with_dasllama_jobque_() {
         var sc = make_run_state(tr.config, kdt, kdt)
         var sg = make_run_state(trg.config, kdt, kdt)
         eval_(tr, sc, prompt)
