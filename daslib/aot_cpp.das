@@ -2153,7 +2153,7 @@ class public CppAot : AstVisitor {
     def override preVisitExprOp2(var that : ExprOp2?) {
         if (!noBracket(that)) write(*ss, "(");
         if (needsOrderedOperands(that)) {
-            write(*ss, "[&](auto && __lr) \{ return ");
+            write(*ss, "das_ordered2([&](auto && __lr_left, auto && __lr_right) \{ return ");
             if (isOpPolicy2(that)) {
                 assume pt = opPolicyBase(that);
                 if (policyResultNeedCast(pt, that._type)) {
@@ -2163,17 +2163,17 @@ class public CppAot : AstVisitor {
                 }
                 outPolicy(pt);
                 write(*ss, "::{opPolicyName(that)}(");
-                writeOrderedPolicyArg(pt, that.left._type, "__lr.left");
+                writeOrderedPolicyArg(pt, that.left._type, "__lr_left");
                 write(*ss, ",");
-                writeOrderedPolicyArg(pt, that.right._type, "__lr.right");
+                writeOrderedPolicyArg(pt, that.right._type, "__lr_right");
                 write(*ss, ",*__context__,nullptr)");
                 if (policyResultNeedCast(pt, that._type)) {
                     write(*ss, ")");
                 }
             } else {
-                write(*ss, "(__lr.left {plainOp2Text(that)} __lr.right)");
+                write(*ss, "(__lr_left {plainOp2Text(that)} __lr_right)");
             }
-            write(*ss, "; \}(das_ordered2\{ ");
+            write(*ss, "; \}, [&]() \{ return ");
             return ;
         }
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
@@ -2216,7 +2216,7 @@ class public CppAot : AstVisitor {
     }
     def override preVisitExprOp2Right(that : ExprOp2?; right : ExpressionPtr) {
         if (needsOrderedOperands(that)) {
-            write(*ss, ", ");
+            write(*ss, "; \}, [&]() \{ return ");
             return ;
         }
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
@@ -2251,7 +2251,7 @@ class public CppAot : AstVisitor {
     }
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
         if (needsOrderedOperands(that)) {
-            write(*ss, " \})");
+            write(*ss, "; \})");
             if (!noBracket(that)) {
                 write(*ss, ")");
             }

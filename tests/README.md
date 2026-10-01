@@ -45,8 +45,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_variant_alias_aot.das | AOT variant-alias codegen (#3269) - delete of handled variant alias, builtin push of a variant element | |
 | test_int64_ptr_index.das | AOT raw-pointer indexing by int64/uint64 (#3391) - at/safe_at through non-var (`T * const`), var (`T *`), and const-pointee pointers | |
 | test_range64_ctor_args.das | AOT most-vexing-parse - a for-source of constructor-style casts only (`range64(int64(a), int64(b))`) must emit a variable, not a function declaration | |
-| test_op2_operand_order_emit.das | AOT binary-op operand sequencing - impure-operand ops wrap in `das_ordered2` (braced init = left-to-right), pure and short-circuit ops don't | |
-| _ordered_op2_fixture.das | *(helper)* the op2 shapes the sequencing test emits - impure policy/plain/xor, pure, `&&`/`\|\|` | |
+| test_op2_operand_order.das | binary-op operand order at run time - impure operands run left-to-right, `&&`/`\|\|` skip the right side, a post-decrement operand yields the old value | |
 | test_struct_order.das | AOT structure emission order - an outer struct embeds a later-declared inner whose function-typed field names the outer in its signature; a signature is not a by-value dependency, so the topological sort must still place the inner first | |
 
 ## apply/
