@@ -44,9 +44,21 @@ likewise believes the marker its program prints, not the exit code.
 
 ### 2.1 Reading the numbers
 
-The stand publishes the series and leaves the judgement to a person. Nothing decides what counts
-as a regression: `benchctl compare --old-commit <a> --new-commit <b>` answers that on demand, with
-a Welch test over the samples, for whichever two commits are actually in question.
+The viewer marks what moved last night; a person decides what it means. A series moved when its
+latest point differs from the median of its previous five points (three at least; a series has
+a point only on the nights it ran, so five points can span more than five nights) by more than the
+threshold the page picks (5, 10 or 25%, default 10%) and by more than twice its noise - the
+largest of the night's own spread, the baseline points' median spread, and their median scatter
+around that median. Both bars read the change as the badge prints it, `|latest / median - 1|`, so
+a slower and a faster move of the same percentage are judged alike. The median keeps one disturbed
+night from becoming the baseline, and the noise bar keeps a jittery arm from being flagged every
+night. The "last night" cards list the largest moves, one row per arm; each moved arm's chart
+carries its delta and a dashed line at the baseline. Whether two commits really differ is
+`benchctl compare --old-commit <a> --new-commit <b>`: a Welch test over the samples, for
+whichever two commits are actually in question.
+
+The page's filters - name, moved/slower/faster/failing, threshold, sort, range, lanes, group -
+live in its query string, so a link reopens the same view.
 
 ### 2.2 Exit codes
 
@@ -59,7 +71,8 @@ not run the suite (the driver's way to record a failed build) and exits 1.
 `zen4` runs the night; `dasweb-1` (the daslang.io origin) only serves it. On zen4, cron runs
 `~/bench-stand/nightly.sh` at 03:00 box time over `~/bench-stand/{src,runs,site,logs}`: the script
 resets `src` to `origin/master`, builds `daslang`, the module libraries the benchmarks require
-(SQLITE, PUGIXML, Audio, Minfft, Terminal, UnitTest, LLVM) and `test_aot_bench` (Release:
+(SQLITE, PUGIXML, Audio, Minfft, Terminal, UnitTest, LLVM, HV - `compile/utils.das` compiles
+`utils/watchdog`, which requires dasHV) and `test_aot_bench` (Release:
 RelWithDebInfo arms the C++ allocation tracker, whose exit-time report costs the run time), writes
 `meta.json`, then runs `benchctl run` - or `run --failed` after a red build, so the night is recorded
 either way - then `report`, copies the viewer files from this folder's `site/`, writes `status.json`,

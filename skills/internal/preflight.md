@@ -68,7 +68,7 @@ working-tree copy.
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes, the vecmath backend battery and `tests/language` under node, + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed | the doc gates |
-| `playground-e2e.yml` | only if `site/**` / `web/examples/ui/**` changed | Playwright on the web playground |
+| `playground-e2e.yml` | `pull_request` and a non-`master` branch push, each touching `site/**`, `web/examples/ui/**`, `utils/internal/bench-stand/site/**`, or the workflow file itself; `workflow_dispatch` | `playwright`: the `site/tests/playground` suite except the specs tagged `@wasm` (`nightly_playground.yml` runs those), against a staged `_site` - section below |
 | `dasweb-verify-browser.yml` | `pull_request` touching `utils/internal/dasweb-verify/browser/**`, `web/examples/ui/samples/data.json`, or the workflow file itself; `workflow_dispatch` | `node_test`: `node --test` in `utils/internal/dasweb-verify/browser` - section below |
 | `dasllama_server_release.yml` | `release: prereleased`, `workflow_dispatch` (`publish` input), and a branch push editing a non-`.md` file the workflow's `paths:` filter names (the workflow itself, what the bundle carries, `ci/packaging/**`) | four cells (linux x86_64 on ubuntu-22.04, linux arm64 on ubuntu-22.04-arm, darwin arm64, windows x64): daslang with the release modules, `daspkg release --fat x86-avx2 \| arm-neon` of `utils/dasllama-server`, the smoke run from a copy with a fresh HOME (write-protected off Windows), the `dasllama` archive, `.deb` + `.rpm` (linux) and pip wheel with their smokes; a release or a `publish` dispatch uploads the archives to the rolling `dasllama-server` release, and a release also uploads every asset to the daslang release being cut; then, on a release event only, `pypi_route` + `publish_pypi` by tag shape, and `publish_manifests` - section below |
 | `release.yml` | `release: prereleased` and `workflow_dispatch` (build + smoke; publishes nothing) | four cells (linux x86_64, linux arm64, darwin26 arm64, windows x86_64): build, the test suite under `-jit`, bundle + smoke, `.deb` / `.rpm` / pip wheel, sha256 per asset, the `.rpm` and wheel smokes, upload; then `pypi_route` + `publish_pypi` by tag shape - section below |
@@ -377,3 +377,16 @@ browser run against the deployed daslang.io is `nightly_playground.yml`.
 | CI step | Local mirror |
 |---|---|
 | Install runner dependencies + Unit tests | `npm ci && node --test` in `utils/internal/dasweb-verify/browser` |
+
+## playground-e2e.yml
+
+`playwright` (ubuntu-latest, node 20): stages `_site` from `site/` and the playground UI with no
+WASM artifacts, serves it on port 8765, and runs the suite with `--grep-invert '@wasm'`. The
+nightly page's spec routes `/bench/` to the viewer under `utils/internal/bench-stand/site/`,
+which is why that folder is a trigger path.
+
+| CI step | Local mirror |
+|---|---|
+| Install Python build deps + Stage _site (no WASM) | from the repo root, `pip install markdown`, then the "Stage _site (no WASM)" step's script (unix shell) |
+| Serve _site and run tests | from the repo root, `python -m http.server 8765 --directory _site`; then in `site/tests/playground`, `npm ci`, `npx playwright install chromium`, `npx playwright test --grep-invert '@wasm'` (the config's base URL is port 8765). `performance-page`, `examples-phone` and `nightly-page` also run against `--directory site` with no staging |
+| Upload Playwright report on failure | none - runner-side plumbing; locally the `list` reporter prints to the console, and `CI=1` also writes the html report to `site/tests/playground/playwright-report/` (and turns on CI's 2 retries and 2 workers) |

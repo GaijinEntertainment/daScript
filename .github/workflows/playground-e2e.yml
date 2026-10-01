@@ -10,12 +10,14 @@ on:
     paths:
       - 'site/**'
       - 'web/examples/ui/**'
+      - 'utils/internal/bench-stand/site/**'
       - '.github/workflows/playground-e2e.yml'
   push:
     branches-ignore: [master]
     paths:
       - 'site/**'
       - 'web/examples/ui/**'
+      - 'utils/internal/bench-stand/site/**'
       - '.github/workflows/playground-e2e.yml'
   workflow_dispatch:
 

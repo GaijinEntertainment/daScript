@@ -150,7 +150,7 @@
                 </div>
                 <div>
                     <dt>the verdict</dt>
-                    <dd>The stand publishes the series and leaves the judgement to a person. The record behind each night carries the commit, the machine, the build, and every file's exit and log tail; <code>benchctl compare</code> answers whether two commits differ, with a Welch test over the samples.</dd>
+                    <dd>The page marks an arm as moved when last night differs from the median of its previous five runs by more than the chosen threshold and twice the arm's own noise, as <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript/blob/master/utils/internal/bench-stand/README.md#21-reading-the-numbers">the stand's README</a> defines it; what the move means is left to a person. The record behind each night carries the commit, the machine, the build, and every file's exit and log tail; <code>benchctl compare</code> answers whether two commits differ, with a Welch test over the samples.</dd>
                 </div>
             </dl>
             <p class="forge-p forge-p--wide">The whole stand is <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript/tree/master/utils/internal/bench-stand">utils/internal/bench-stand</a> in the repository: the runner, the report, and this viewer. A new benchmark joins the night by living under <code>benchmarks/</code>.</p>
