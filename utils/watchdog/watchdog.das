@@ -90,7 +90,7 @@ struct public WatchdogConfig {
     @clarg_doc = "Crash bundles kept"
     crash_bundles : int = 10
     @clarg_doc = "JIT artifact cache copied into each crash bundle"
-    jit_dir : string = ".jitted_scripts"
+    jit_dir : string = ".cache/daslang"
     @clarg_doc = "Do not collect crash bundles"
     no_crash_bundle : bool
     @clarg_doc = "Show a status icon in the notification area, where a desktop can reach one"
@@ -861,7 +861,7 @@ def public collect_crash_bundle(cfg : WatchdogConfig; command : array<string>; c
         for (dll in resolved) {
             let rel = relative_result(dll, cfg.jit_dir)
             if (!(rel is value)) continue
-            let target_dir = path_join(path_join(bundle, "jitted_scripts"), dir_name(rel as value))
+            let target_dir = path_join(path_join(bundle, "cache"), dir_name(rel as value))
             for (suffix in JIT_ARTIFACT_SUFFIXES) {
                 let source = replace_extension(dll, suffix)
                 if (!fexist(source)) continue

@@ -12,7 +12,7 @@
 #   LCPP_TBO   test-backend-ops (default: $HOME/Work/llama.cpp/build-clean-cpu/bin/Release/test-backend-ops.exe)
 #   NTOK       prefill tokens (default 512; 0 = decode rows only)
 #   KL_MODULE_CACHE  a -module-cache path for the bench start (the AST cache: a cold dasLLAMA compile is
-#              minutes; keep it outside .jitted_scripts, which measurement scripts wipe)
+#              minutes; keep it outside .cache/daslang, which measurement scripts wipe)
 #   ROUNDS     interleaved rounds per row (default 5)
 #   TEAM       lanes for the decode rows: the bench dispatches the GEMV the engine's way (--team,
 #              DAS_JOBQUE_THREADS=N) and the reference runs GGML_BENCH_THREADS=N. Default: the box's

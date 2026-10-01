@@ -143,12 +143,12 @@ The host installs the cache before `compileDaScript` and finishes it after `simu
 default path, the quiet flag and the verdict are host decisions (`utils/daslang/main.cpp`). A test compiling
 in-process sees none of them. Each case therefore spawns the daslang binary dastest itself runs
 under (`argv[0]`): the default-path case on scripts it writes to a temp directory, asserting on
-the child's stdout and on the files under `.jitted_scripts/module_cache/` in the cwd; the
+the child's stdout and on the files under `.cache/daslang/module_cache/` in the cwd; the
 explicit-cache cases on a driver under `_fixtures/` with `-module-cache` pointed into a temp
 directory, asserting on the child's stdout; the manifest case on a project root under a temp
 directory, asserting on the scan trace. Each removes what it wrote under its own directory,
 with one ledgered write outside it: the default-path case's child writes the default cache,
-which is `.jitted_scripts/module_cache/` under the cwd it shares with dastest by definition,
+which is `.cache/daslang/module_cache/` under the cwd it shares with dastest by definition,
 and the test removes what that child wrote before it returns. The manifest sidecars every
 child's module scan warms beside the tree's descriptors - `.das_module.manifest` from the
 dynamic-module build, `.das_module.static.manifest` from `daslang_static` - are the scan's,

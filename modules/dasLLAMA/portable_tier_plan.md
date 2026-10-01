@@ -320,7 +320,7 @@ Accelerate driver's TU stays out wherever `das_accelerate` is not built (its C++
 binding by symbol), and the AOT type tables need a 512 MB initial heap on top of the web build's
 embeds. The artifact is 60 MB - 35 MB of code, 24 MB of data (about 10 MB of embedded `.das`,
 the rest the AOT type tables). It was 306 MB before the web build's embed step learned to
-exclude build residue: `_aot_generated/` C++ and `.jitted_scripts/` caches sit inside the
+exclude build residue: `_aot_generated/` C++ and `.cache/daslang/` caches sit inside the
 embedded source trees in a working checkout and outweighed the sources twenty to one; the
 playground's `daslang_static` carried the same 95 MB. Next: wasmtime (no JS host), the browser
 page, ASR and TTS examples.

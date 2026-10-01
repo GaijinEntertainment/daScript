@@ -38,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x49201d6909236657ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x5b97e146ab9f2bebul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -71,7 +71,7 @@ def private reopen_and_gc_dll(var dll : DLLHandle?&; output_path : string; funcs
     dll = get_dll_by_path(output_path)
     // linked ok but unloadable = eaten between the two; the panic text carries the diagnosis
     if (dll.handle == null) {
-        panic("LLVM JIT: {output_path}.dll linked but cannot be loaded back - the file is missing or unreadable. On Windows check antivirus quarantine and exclude the .jitted_scripts directory from real-time scanning.\n")
+        panic("LLVM JIT: {output_path}.dll linked but cannot be loaded back - the file is missing or unreadable. On Windows check antivirus quarantine and exclude the .cache/daslang directory from real-time scanning.\n")
     }
     let (missing, disabling) = get_dll_missing(funcs, disabled, dll, uids)
     if (!(missing |> empty()) || !(disabling |> empty())) {

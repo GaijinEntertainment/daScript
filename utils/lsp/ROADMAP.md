@@ -32,7 +32,7 @@ subtool pattern, `utils/mcp/tools/common.das`):
 - **Cost**: every request pays a compile, but under the module cache
   (`CodeOfPolicies.module_cache`, set by both subtools) only the edited module and the
   modules after it are parsed - the rest deserialize from
-  `.jitted_scripts/module_cache/` in the workspace root, the cwd every subtool inherits
+  `.cache/daslang/module_cache/` in the workspace root, the cwd every subtool inherits
   from the supervisor. Diagnostics are debounced; navigation is on-demand.
 
 A validate is debounced per URI: a newer edit before the timer fires restarts it, so

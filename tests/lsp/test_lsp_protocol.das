@@ -776,7 +776,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
     }
     t |> run("the validated file's record sits in the workspace's module cache") @(t : T?) {
         var records = 0
-        fio::dir(".jitted_scripts/module_cache") $(name) {
+        fio::dir(".cache/daslang/module_cache") $(name) {
             if (name |> starts_with("_fixture_clean-") && name |> ends_with(".dascache")) {
                 records++
             }

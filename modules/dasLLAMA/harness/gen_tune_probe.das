@@ -1866,7 +1866,7 @@ def main : int {
     // pre-i8mm mint rail (the slice J no-linker-on-target recipe): the JIT has already
     // linked + installed the full grid DLL by the time main runs — this gate skips
     // EXECUTION only (forced smmla variants would SIGILL on a dotprod-only host). Ship
-    // .jitted_scripts to the i8mm box and run there with the same env minus this one —
+    // .cache/daslang to the i8mm box and run there with the same env minus this one —
     // the cache key matches, dlopen, no linker needed on the target.
     if (g_env_harness.gen_tune_compile_only) {
         var vs <- q8q8_tile_gen_variants()

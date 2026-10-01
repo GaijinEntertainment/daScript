@@ -3762,7 +3762,7 @@ namespace das {
 #endif
 
 #if !DAS_NO_FILEIO
-    static const char * MODULE_CACHE_DEFAULT_DIR = ".jitted_scripts/module_cache/";
+    static const char * MODULE_CACHE_DEFAULT_DIR = ".cache/daslang/module_cache/";
 
     // DAS_MODULE_CACHE_LIMIT, megabytes: 4096 unless set, 0 = no eviction; garbage keeps the default
     static uint64_t moduleCacheLimitBytes () {
@@ -3874,7 +3874,7 @@ namespace das {
         }
         char hex[17];
         snprintf(hex, sizeof(hex), "%016llx", (unsigned long long) hash_blockz64((const uint8_t *) key.c_str()));
-        return string(".jitted_scripts/module_cache/") + stem + "-" + string(hex, 8) + ".dascache";
+        return string(".cache/daslang/module_cache/") + stem + "-" + string(hex, 8) + ".dascache";
     }
 
     string ModuleFileCache::embeddedHostOptions ( const CodeOfPolicies & policies ) {

@@ -127,10 +127,11 @@ add_link_options("SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../daslib@dasli
 add_link_options("SHELL:--exclude-file */daslib/spoof.das")
 add_link_options("SHELL:--exclude-file */daslib/linked_list.das")
 # Build residue inside the embedded source trees is not source: the AOT emitter's C++ under
-# _aot_generated/ and the JIT's .jitted_scripts/ caches land beside the .das files in a
+# _aot_generated/ and the JIT's .cache/daslang/ caches land beside the .das files in a
 # working checkout and outweigh them twenty to one (daslib: 3.6 MB of .das against 50 MB of
 # generated C++ and 45 MB of cache). Every embedded tree in this scope carries the exclusion.
 add_link_options("SHELL:--exclude-file */_aot_generated/*")
+add_link_options("SHELL:--exclude-file */.cache/*")
 add_link_options("SHELL:--exclude-file */.jitted_scripts/*")
 add_link_options("SHELL:--exclude-file */_llvm_aot_generated/*")
 # embed dastest runner so the playground's Test button can invoke
