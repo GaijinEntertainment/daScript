@@ -161,7 +161,7 @@ TEST_CASE("HTTP Date cache is isolated between serving threads") {
     std::atomic<int> phase{0};
     std::string responses[2];
     std::thread one([&]() {
-        std::strcpy(HttpMessage::s_date, first);
+        std::strcpy(HttpMessage::date_cache(), first);
         phase.store(1, std::memory_order_release);
         while (phase.load(std::memory_order_acquire) != 2) std::this_thread::yield();
         HttpResponse response;
@@ -169,7 +169,7 @@ TEST_CASE("HTTP Date cache is isolated between serving threads") {
     });
     std::thread two([&]() {
         while (phase.load(std::memory_order_acquire) != 1) std::this_thread::yield();
-        std::strcpy(HttpMessage::s_date, second);
+        std::strcpy(HttpMessage::date_cache(), second);
         phase.store(2, std::memory_order_release);
         HttpResponse response;
         responses[1] = response.Dump(true, false);
@@ -177,5 +177,5 @@ TEST_CASE("HTTP Date cache is isolated between serving threads") {
     one.join(); two.join();
     CHECK(responses[0].find(std::string("Date: ") + first) != std::string::npos);
     CHECK(responses[1].find(std::string("Date: ") + second) != std::string::npos);
-    HttpMessage::s_date[0] = '\0';
+    HttpMessage::date_cache()[0] = '\0';
 }

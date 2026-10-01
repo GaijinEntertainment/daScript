@@ -2,3 +2,5 @@
     for (auto& loop : privdata->loops) {
         loop->stop();
     }
+
+            gmtime_fmt(hloop_now(hevent_loop(timer)), HttpMessage::s_date);
