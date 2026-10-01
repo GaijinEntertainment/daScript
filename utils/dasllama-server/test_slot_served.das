@@ -5,6 +5,8 @@ options persistent_heap
 require dastest/testing_boost public
 require main                                            // the program root: vulkan_serving_want (sibling by bare name)
 require openai_server                                   // ModelSlot + the served strings (sibling by bare name)
+require serving_knobs                                   // gpu_ctx_asked_whole
+require dasllama/dasllama                               // the pins the residency ask sets
 require strings
 
 // Model-free unit coverage for how a slot says it is served: every arm of `served` and `served_note`,
@@ -100,6 +102,22 @@ def test_slot_wants_device_kv(t : T?) {
         t |> equal(region_clamped_ctx(131072l, 4l, 49926l), 49926l, "a model context past the slot is clamped to it")
         t |> equal(region_clamped_ctx(2048l, 4l, 49926l), 2048l, "a shorter one is kept")
         t |> equal(region_clamped_ctx(131072l, 0l, 0l), 131072l, "no slots armed: the model's own context stands")
+    }
+    t |> run("an explicit context is asked whole of the whole-model driver; none asked leaves the plan to shorten the model's own") @(t : T?) {
+        t |> success(gpu_ctx_asked_whole(131072l), "--ctx 131072 is the shape the operator asked for: the driver holds it a stream or declines")
+        t |> success(gpu_ctx_asked_whole(2048l), "a short one as much as a long one")
+        t |> success(!gpu_ctx_asked_whole(0l), "no --ctx: the model's own context, shortened to the card's room")
+    }
+    t |> run("the residency ask pins the context and its strictness for the loads that follow") @(t : T?) {
+        let pins0 = gpu_ctx_pins()
+        gpu_residency_ask(4l, 131072l)
+        t |> equal(gpu_ctx_pins().ctx_max, 131072l, "the context asked")
+        t |> success(gpu_ctx_pins().strict, "asked whole")
+        gpu_residency_ask(1l, 0l)
+        t |> equal(gpu_ctx_pins().ctx_max, 0l, "no context asked: no pin")
+        t |> success(!gpu_ctx_pins().strict, "nothing to hold whole")
+        gpu_residency_ask(1l, pins0.ctx_max)   //! one region, the file's own ask (no cell of this file loads a model)
+        set_gpu_ctx_strict(pins0.strict)
     }
 }
 

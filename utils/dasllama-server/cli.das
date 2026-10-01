@@ -94,6 +94,7 @@ def private arm_rig(c : CommonArgs; cfg : CliConfig; sampler : SamplerArgs; defa
     if (armed) {
         set_gpu_resident_regions(1l)   // one conversation at a time: one device-home region
         set_gpu_ctx_max(ctx)
+        set_gpu_ctx_strict(gpu_ctx_asked_whole(ctx))   // the server's meaning: an explicit context is served whole
     }
     return Rig(gpu = gpu, vulkan_armed = armed, ctx = ctx,
                quant = pick_quant(c.quant, TOOL), kv = pick_kv_dtype(c.kv_dtype, TOOL),

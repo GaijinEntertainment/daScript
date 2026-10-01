@@ -154,7 +154,7 @@ def private tile_cell_arms(t : T?; tag : string; fmt : int; var f : TileFixture;
         }
         tile_fixture_upload(f)
         let d = TILE_CELL_D
-        var host = make_host_buf(f.y_bytes, true, [cached = true])
+        let host = make_host_buf(f.y_bytes, true, [cached = true])
         y_ref |> resize(f.rows * d)
         let tail = 2
         for (arm in arms) {
@@ -166,18 +166,16 @@ def private tile_cell_arms(t : T?; tag : string; fmt : int; var f : TileFixture;
             for (w in range(wgs, wgs + tail)) {
                 sched[8 + w] = SCHED_NONE
             }
-            unsafe {
-                nan_sentinel_upload(f.yd, f.y_bytes)
-                let sc_bytes = int64(2 * 4 + wgs + tail) * 4l
-                let scd = make_device_buf(sc_bytes)
-                upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-                var sc = cell_arm_set(arm, fmt, fixed_array(f.wqd, f.wsd, scd, f.xfd, f.yd),
-                    fixed_array(f.wq_bytes, f.ws_bytes, sc_bytes, f.xf_bytes, f.y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u))
-                var pc = BatchArgs(n = uint(f.n), d = uint(d), map_off = uint(2 * 4))
-                cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    cell_arm_enc(arm, fmt, raw2, h2, sc, pc, int64(wgs + tail))
-                    cmd_copy_planes(raw2, h2, fixed_array(f.yd), host, fixed_array(f.y_bytes), 16u)
-                }
+            nan_sentinel_upload(f.yd, f.y_bytes)
+            let sc_bytes = int64(2 * 4 + wgs + tail) * 4l
+            let scd = make_device_buf(sc_bytes)
+            upload_region_at(scd, 0l, unsafe(addr<uint8 const?>(sched[0])), sc_bytes)
+            var sc = cell_arm_set(arm, fmt, fixed_array(f.wqd, f.wsd, scd, f.xfd, f.yd),
+                fixed_array(f.wq_bytes, f.ws_bytes, sc_bytes, f.xf_bytes, f.y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u))
+            var pc = BatchArgs(n = uint(f.n), d = uint(d), map_off = uint(2 * 4))
+            cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                cell_arm_enc(arm, fmt, raw2, h2, sc, pc, int64(wgs + tail))
+                cmd_copy_planes(raw2, h2, fixed_array(f.yd), host, fixed_array(f.y_bytes), 16u)
             }
             var y_cls <- staged(host.mapped, 0l, f.rows * d, type<float>)
             invoke(oracle, f.wqh, f.wsh, f.xfh, sched, 2, f.n, d, y_ref)
@@ -287,8 +285,10 @@ def private fmt_tile_planes(row : FmtTile; var wqh, wsh : array<uint>) {
             }
         }
         if (row.form == ScaleForm.iq4nl32_d) {
+            delete wsh
             wsh <- iq4nl32_scale_words(units, 0.0002)
         } elif (row.form == ScaleForm.mx4_e8m0) {
+            delete wsh
             wsh <- mx4_scale_words(units)
         }
     }
@@ -309,7 +309,7 @@ def private fmt_tile_cell(t : T?; fmt : KqFmt) {
         var wsuh : array<uint>
         fmt_tile_planes(rows[at], wqh, wsuh)
         var f <- tile_fixture(rows[at].n, rows[at].blk_k, wqh, wsuh, 3u, rows[at].xf_add)
-        var arms <- rows[at].per32 ? [ARM_CM2_S, ARM_CM2_E, ARM_KHR] : tile_arms_all()
+        let arms <- rows[at].per32 ? [ARM_CM2_S, ARM_CM2_E, ARM_KHR] : tile_arms_all()
         let name = "{fmt}"
         var y_ref <- tile_cell_arms(t, name, int(fmt), f, arms, rows[at].oracle)
         if (!empty(y_ref) && rows[at].control != null) {
@@ -401,7 +401,6 @@ def private q8_sdot4_planes(units, wq_words, ws_words : int; ws_bytes : int64; x
 //! rows a region at `wblk1` units apart: the planes uploaded, the y plane under the sentinel, `rec` sets the class over
 //! [w, ws, schedule, xq, xs, y] and encodes it at the map's workgroups; the rows come back with the schedule
 def private sdot4_tile_run(n, d, cnt0, cnt1, tile, wblk1 : int; p : Sdot4Planes; rec) : tuple<y : array<float>; sched : array<uint>> {
-    var y : array<float>
     var sr <- two_region_sched(cnt0, cnt1, wblk1, tile, (d + tile - 1) / tile, 0)
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let rows = cnt0 + cnt1
@@ -414,7 +413,7 @@ def private sdot4_tile_run(n, d, cnt0, cnt1, tile, wblk1 : int; p : Sdot4Planes;
         let xqd = make_device_buf(xq_bytes)
         let xsd = make_device_buf(xs_bytes)
         let yd2 = make_device_buf(y_bytes)
-        var host = make_host_buf(y_bytes, true, [cached = true])
+        let host = make_host_buf(y_bytes, true, [cached = true])
         let sc_bytes = long_length(sr.words) * 4l
         let scd = make_device_buf(sc_bytes)
         unsafe {
@@ -430,10 +429,14 @@ def private sdot4_tile_run(n, d, cnt0, cnt1, tile, wblk1 : int; p : Sdot4Planes;
                 raw2, h2, int64(sr.wgs))
             cmd_copy_planes(raw2, h2, fixed_array(yd2), host, fixed_array(y_bytes), 32u)
         }
-        y <- staged(host.mapped, 0l, rows * d, type<float>)
+        var y <- staged(host.mapped, 0l, rows * d, type<float>)
+        var sched <- sr.words
+        return <- (y = y, sched = sched)
+    } else {
+        var y : array<float>
+        var sched <- sr.words
+        return <- (y = y, sched = sched)
     }
-    var sched <- sr.words
-    return <- (y = y, sched = sched)
 }
 
 // The model-less Vulkan kernel-unit suite ([vk_dispatch] bring-up): a class kernel dispatched
@@ -474,10 +477,8 @@ def test_vkd_class_dispatch(t0 : T?) {
             // device: SSBOs + the generated set/encoder, one submit, readback
             let xdev = make_device_buf(bytes)
             let ydev = make_device_buf(bytes)
-            var host = make_host_buf(bytes, true, [cached = true])
-            unsafe {
-                upload_region_at(xdev, 0l, addr<uint8 const?>(xs[0]), bytes)
-            }
+            let host = make_host_buf(bytes, true, [cached = true])
+            upload_region_at(xdev, 0l, unsafe(addr<uint8 const?>(xs[0])), bytes)
             var s = set_vkd_toy(fixed_array(xdev, ydev), fixed_array(bytes, bytes), fixed_array(1u, 2u))
             var pc = VtArgs(n = uint(n), gain = 2.5)
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -754,7 +755,7 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int; khr : bool = f
             let yd = make_device_buf(y_bytes)
             let yd2 = make_device_buf(y_bytes)
             let pd = make_device_buf(part_bytes)
-            var host = make_host_buf(2l * y_bytes, true, [cached = true])
+            let host = make_host_buf(2l * y_bytes, true, [cached = true])
             nan_sentinel_upload(yd, y_bytes, 0l)
             nan_sentinel_upload(yd2, y_bytes, 0l)
             unsafe {
@@ -941,7 +942,7 @@ def test_vkd_direct_decode(t0 : T?) {
             let wqd = make_device_buf(wq_bytes)
             let wsd = make_device_buf(ws_bytes)
             let yd = make_device_buf(y_bytes)
-            var host = make_host_buf(y_bytes, true, [cached = true])
+            let host = make_host_buf(y_bytes, true, [cached = true])
             unsafe {
                 upload_region_at(wqd, 0l, addr<uint8 const?>(k.wq[0].qs[0]), wq_bytes)
                 upload_region_at(wsd, 0l, addr<uint8 const?>(k.ws[0]), ws_bytes)
@@ -1108,8 +1109,6 @@ def private ar_fixture(n, dim : int) : tuple<x : array<float>; a : array<float>;
 //! place, y under the -999.25 sentinel - a GPU-vs-GPU compare is vacuous-prone, two dead kernels leave two matching zeroed
 //! planes, and no real computation lands the sentinel; y and x come back
 def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : array<float>; x : array<float>> {
-    var y_out : array<float>
-    var x_out : array<float>
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let n = length(x)
         let bytes = int64(n) * 4l
@@ -1118,7 +1117,7 @@ def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : arra
         let ad = make_device_buf(bytes)
         let wd = make_device_buf(wbytes)
         let yd = make_device_buf(bytes)
-        var host = make_host_buf(bytes, true, [cached = true])
+        let host = make_host_buf(bytes, true, [cached = true])
         var ysent <- [for (_ in range(n)); -999.25]
         unsafe {
             upload_region_at(yd, 0l, addr<uint8 const?>(ysent[0]), bytes)
@@ -1132,12 +1131,16 @@ def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : arra
             enc_cls_ar(raw, h, s, args, int64(nrows))
             cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(bytes), 8u | 1u)
         }
-        y_out <- staged(host.mapped, 0l, n, type<float>)
+        var y_out <- staged(host.mapped, 0l, n, type<float>)
         vkd_read_back(xd, host, bytes)
-        x_out <- staged(host.mapped, 0l, n, type<float>)
+        var x_out <- staged(host.mapped, 0l, n, type<float>)
         delete ysent
+        return <- (y = y_out, x = x_out)
+    } else {
+        var y_out : array<float>
+        var x_out : array<float>
+        return <- (y = y_out, x = x_out)
     }
-    return <- (y = y_out, x = x_out)
 }
 
 //! the classifier epilogue's rows form: `rows` logits rows through one dispatch of `rows` (the whole plane), or a
@@ -1260,10 +1263,8 @@ def private cls_argmax_run(y : array<float>; vocab, rows : int64) : array<uint> 
         let pmd = make_device_buf(pbytes)
         let pid = make_device_buf(pbytes)
         let pd = make_device_buf(rows * 4l)
-        var host = make_host_buf(rows * 4l, true, [cached = true])
-        unsafe {
-            upload_region_at(yd, 0l, addr<uint8 const?>(y[0]), bytes)
-        }
+        let host = make_host_buf(rows * 4l, true, [cached = true])
+        upload_region_at(yd, 0l, unsafe(addr<uint8 const?>(y[0])), bytes)
         nan_sentinel_upload(pmd, pbytes)   //! the partials the second pass reads: an unwritten slot must be a sentinel, not a stale max
         nan_sentinel_upload(pid, pbytes)
         nan_sentinel_upload(pd, rows * 4l)
@@ -1655,7 +1656,7 @@ def private per32_gemv_cell(t : T?; fmt : KqFmt; ns : array<int>; wq_words : int
                     let ys_bytes = int64(d) * 4l
                     let ysd = make_device_buf(ys_bytes)
                     let swd = make_device_buf(8l)
-                    var host = make_host_buf(ys_bytes, true, [cached = true])
+                    let host = make_host_buf(ys_bytes, true, [cached = true])
                     unsafe {
                         upload_region_at(swd, 0l, addr<uint8 const?>(wgt[0]), 8l)
                     }
@@ -1821,7 +1822,7 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
             let yd = make_device_buf(y_bytes)
             let oqd = make_device_buf(oq_bytes)
             let osd = make_device_buf(os_bytes)
-            var host = make_host_buf(oq_bytes + os_bytes + y_bytes, true, [cached = true])
+            let host = make_host_buf(oq_bytes + os_bytes + y_bytes, true, [cached = true])
             unsafe {
                 upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
                 upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
@@ -2116,7 +2117,7 @@ def test_vkd_act_family(t0 : T?) {
                 let swd = make_device_buf(si_bytes)
                 let rod = make_device_buf(ro_bytes)
                 let ac2 = make_device_buf(ac_bytes)
-                var hosta = make_host_buf(ac_bytes, true, [cached = true])
+                let hosta = make_host_buf(ac_bytes, true, [cached = true])
                 unsafe {
                     upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
                     upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
@@ -2683,14 +2684,12 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             let part_bytes = y0_bytes * int64(nsplit)
             let pd = make_device_buf(part_bytes)
             let yd_s = make_device_buf(y0_bytes)
-            var host_s = make_host_buf(y0_bytes, true, [cached = true])
+            let host_s = make_host_buf(y0_bytes, true, [cached = true])
             nan_sentinel_upload(pd, part_bytes)
             nan_sentinel_upload(yd_s, y0_bytes)
             let ssc_bytes = int64(4 + swgs) * 4l
             let sscd = make_device_buf(ssc_bytes)
-            unsafe {
-                upload_region_at(sscd, 0l, addr<uint8 const?>(ssched[0]), ssc_bytes)
-            }
+            upload_region_at(sscd, 0l, unsafe(addr<uint8 const?>(ssched[0])), ssc_bytes)
             var scs = set_q8_batch_khr_cls(fixed_array(f.wqd, f.wsd, sscd, f.xfd, pd),
                 fixed_array(f.wq_bytes, f.ws_bytes, ssc_bytes, f.xf_bytes, part_bytes), fixed_array(1u, 2u, 0u, 4u, 8u))
             var srd = set_splitk_reduce_cls(fixed_array(pd, yd_s), fixed_array(part_bytes, y0_bytes), fixed_array(8u, 16u))
@@ -2756,7 +2755,7 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
             q8_planes(n, 17u, 991u, wqh, wsh)
             var f <- tile_fixture(n, 32, wqh, wsh, 3u, 5u)
             tile_fixture_upload(f)   // no arm loop here: the pair dispatches the toy stamps itself
-            var host = make_host_buf(f.y_bytes, true, [cached = true])
+            let host = make_host_buf(f.y_bytes, true, [cached = true])
             var sr <- two_region_sched(TILE_CELL_ROWS0, TILE_CELL_ROWS1, d * (n / 32), 256, (d + 127) / 128, 0)
             let wgs = sr.wgs
             var sched <- sr.words
@@ -3075,16 +3074,14 @@ def test_vkd_cm2l_split(t0 : T?) {
 
 //! a decode attention dispatch's token meta: one row of `cnt` keys from mirror row 0; the host buffer's handle
 def private da_tok(cnt : int) : uint64 {
-    var buf = 0ul
     static_if (typeinfo builtin_module_exists(vulkan)) {
         var tokb = make_host_buf(TOK_META_BYTES, true)
-        unsafe {
-            var tm = reinterpret<TokMeta?>(tokb.mapped)
-            *tm = TokMeta(cnt = uint(cnt))   // every field written, the pads included: a host buffer is not zeroed
-        }
-        buf = tokb.buf
+        var tm = unsafe(reinterpret<TokMeta?>(tokb.mapped))
+        *tm = TokMeta(cnt = uint(cnt))   // every field written, the pads included: a host buffer is not zeroed
+        return tokb.buf
+    } else {
+        return 0ul
     }
-    return buf
 }
 
 //! one decode attention dispatch: `yd` under the sentinel, `rec` sets and encodes the class over a fresh `da_tok` at `cnt` keys,
@@ -3141,7 +3138,7 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
         let partd = make_device_buf(p_bytes)
         let aqd = make_device_buf(int64(qdim))
         let asd = make_device_buf(s_bytes)
-        var host = make_host_buf(q_bytes * 2l, true, [cached = true])
+        let host = make_host_buf(q_bytes * 2l, true, [cached = true])
         verify(ensure_da_attn_cls() && (!slab2 || ensure_da_attn_g2_cls()), "the decode attention class rail must engage on a live device")
         unsafe {
             upload_region_at(qd, 0l, addr<uint8 const?>(qh[0]), q_bytes)
@@ -3317,6 +3314,7 @@ def test_vkd_da_attn(t0 : T?) {
             t |> success(bad == 0, "da_attn matches the CPU oracle ({bad} of {nheads * hs} off)")
             // the softcap arm (gemma-2): a cap the scaled scores overrun, the kernel's exp form against the oracle's
             let cap = 4.0
+            delete y_cls
             y_cls <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw3 : VkCommandBuffer; var h3 : VkHaz) {
                 var sc2 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tok, yd2, yd2, yd2),
                     fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, q_bytes, q_bytes, q_bytes),
@@ -3340,6 +3338,7 @@ def test_vkd_da_attn(t0 : T?) {
             let partd = make_device_buf(p_bytes)
             nan_sentinel_upload(partd, int64(cnt_off) * 4l)
             upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
+            delete y_cls
             y_cls <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw4 : VkCommandBuffer; var h4 : VkHaz) {
                 var sc4 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tok, partd, yd2, yd2),
                     fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, p_bytes, q_bytes, q_bytes),
@@ -3383,11 +3382,10 @@ def test_vkd_da_attn(t0 : T?) {
             }
             t |> success(mismatch_approx(y_sink, y_free) > 0, "sink control: the sink moves the oracle's own output ({mismatch_approx(y_sink, y_free)} of {nheads * hs})")
             for (split in fixed_array(1, nsplit)) {
-                unsafe {
-                    upload_region_at(sinkd, 0l, addr<uint8 const?>(sinkh[0]), sink_bytes)
-                }
+                upload_region_at(sinkd, 0l, unsafe(addr<uint8 const?>(sinkh[0])), sink_bytes)
                 nan_sentinel_upload(partd, int64(cnt_off) * 4l)
                 upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
+                delete y_cls
                 y_cls <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw5 : VkCommandBuffer; var h5 : VkHaz) {
                     var sc5 = set_da_attn_sink_cls(fixed_array(qd, kd, vd, yd2, tok, partd, yd2, yd2, sinkd),
                         fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, p_bytes, q_bytes, q_bytes, sink_bytes),
@@ -3431,6 +3429,7 @@ def test_vkd_da_attn(t0 : T?) {
                     }
                     nan_sentinel_upload(partd, int64(cnt_off) * 4l)
                     upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
+                    delete y_cls
                     y_cls <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw6 : VkCommandBuffer; var h6 : VkHaz) {
                         var sc6 = set_da_attn_f16_sink_cls(fixed_array(qd, kd16, vd16, yd2, tok, partd, yd2, yd2, sinkd),
                             fixed_array(q_bytes, m16_bytes, m16_bytes, q_bytes, TOK_META_BYTES, p_bytes, q_bytes, q_bytes, sink_bytes),
@@ -3653,7 +3652,7 @@ def test_vkd_at_attn(t0 : T?) {
                 let kdev = make_device_buf(m_bytes)
                 let vdev = make_device_buf(m_bytes)
                 let yd2 = make_device_buf(q_bytes)
-                var host = make_host_buf(q_bytes, true, [cached = true])
+                let host = make_host_buf(q_bytes, true, [cached = true])
                 let wgs = nheads * ((rows + 7) / 8)
                 unsafe {
                     upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
@@ -3987,7 +3986,7 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
         let vhdev = make_device_buf(sh_bytes)
         let yd = make_device_buf(o_bytes)
         let yh16 = make_device_buf(o16_bytes)
-        var host = make_host_buf(o_bytes + o16_bytes, true, [cached = true])
+        let host = make_host_buf(o_bytes + o16_bytes, true, [cached = true])
         nan_sentinel_upload(yd, o_bytes)
         nan_sentinel_upload(yh16, o16_bytes)
         unsafe {
@@ -4206,7 +4205,7 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
         let kdev = make_device_buf(k_bytes)
         let vdev = make_device_buf(v_bytes)
         let yd2 = make_device_buf(q_bytes)
-        var host = make_host_buf(q_bytes, true, [cached = true])
+        let host = make_host_buf(q_bytes, true, [cached = true])
         unsafe {
             upload_region_at(qdev, 0l, addr<uint8 const?>(f.qh[0]), q_bytes)
             if (f16) {
@@ -4708,7 +4707,7 @@ def test_vkd_mx4_gemv(t0 : T?) {
 //! the fused mx4 gate + up + act + requant on one fixture: the gate stack's rows then the up stack's in one plane, the slots'
 //! regions on both, a six-expert bias plane and the slots' experts; the fused dispatch against the oracle (the bias added before
 //! the clamped swiglu), then the split path - two GEMVs and the biased requant - byte for byte
-def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {   // nolint:STYLE037 — one linear fixture: the planes, the fused dispatch, the oracle bars, the split path's byte compare
+def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let n = 2880   //! gpt-oss's routed width: 90 blocks a row
         let nb = n / 32
@@ -4780,7 +4779,7 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {   // nolint:ST
         let osd = make_device_buf(os_bytes)
         let oq2d = make_device_buf(oq_bytes)
         let os2d = make_device_buf(os_bytes)
-        var host = make_host_buf(2l * (oq_bytes + os_bytes) + y_bytes, true, [cached = true])
+        let host = make_host_buf(2l * (oq_bytes + os_bytes) + y_bytes, true, [cached = true])
         unsafe {
             upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
             upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
@@ -4935,7 +4934,7 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
     let xsd = make_device_buf(xs_bytes)
     let oqd = make_device_buf(oq_bytes)
     let osd = make_device_buf(os_bytes)
-    var host = make_host_buf(oq_bytes + os_bytes, true, [cached = true])
+    let host = make_host_buf(oq_bytes + os_bytes, true, [cached = true])
     unsafe {
         upload_region_at(gqd, 0l, addr<uint8 const?>(gqh[0]), wq_bytes)
         upload_region_at(gsd, 0l, addr<uint8 const?>(gsh[0]), ws_bytes)
@@ -5039,7 +5038,7 @@ def private q8_gemv_pleact_run(t; n, d : int) {
     let gd = make_device_buf(g_bytes)
     let sd = make_device_buf(s_bytes)
     let yd = make_device_buf(y_bytes)
-    var host = make_host_buf(y_bytes, true, [cached = true])
+    let host = make_host_buf(y_bytes, true, [cached = true])
     unsafe {
         upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
         upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
@@ -5191,7 +5190,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     let cntd = make_device_buf(16l)
     var zeros : array<uint>
     zeros |> resize(4)
-    var host = make_host_buf(r_bytes + oq_bytes + os_bytes + 16l, true, [cached = true])
+    let host = make_host_buf(r_bytes + oq_bytes + os_bytes + 16l, true, [cached = true])
     let eps = 1.0e-6
     unsafe {
         upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
@@ -5354,7 +5353,7 @@ def private q8_gemv_ar_twin_run(t; n, d : int; pre_on : bool; ascale : float) {
     var zeros : array<uint>
     zeros |> resize(4)
     let leg_bytes = r_bytes + oq_bytes + os_bytes
-    var host = make_host_buf(leg_bytes * 2l, true, [cached = true])
+    let host = make_host_buf(leg_bytes * 2l, true, [cached = true])
     let eps = 1.0e-6
     unsafe {
         upload_region_at(wqd, 0l, addr<uint8 const?>(fx.wqh[0]), wq_bytes)
@@ -6019,11 +6018,9 @@ def test_vkd_cvt_family(t0 : T?) {
                 let srcd = make_device_buf(src_bytes)
                 let qd2 = make_device_buf(q_bytes)
                 let sd2 = make_device_buf(s_bytes)
-                var host = make_host_buf(q_bytes + s_bytes, true, [cached = true])
+                let host = make_host_buf(q_bytes + s_bytes, true, [cached = true])
                 let wgs = (nblk * 8 + 255) / 256
-                unsafe {
-                    upload_region_at(srcd, 0l, addr<uint8 const?>(srch[0]), src_bytes)
-                }
+                upload_region_at(srcd, 0l, unsafe(addr<uint8 const?>(srch[0])), src_bytes)
                 var sc = set_rq_cls(fixed_array(srcd, qd2, sd2),
                     fixed_array(src_bytes, q_bytes, s_bytes),
                     fixed_array(1u, 4u, 8u))
@@ -6574,7 +6571,7 @@ def test_vkd_at_prep(t0 : T?) {
             let qp2 = make_device_buf(qp_bytes)
             let g2 = make_device_buf(qp_bytes)
             let kp2 = make_device_buf(kp_bytes)
-            var host = make_host_buf(2l * qp_bytes + kp_bytes, true, [cached = true])
+            let host = make_host_buf(2l * qp_bytes + kp_bytes, true, [cached = true])
             unsafe {
                 upload_region_at(srcqd, 0l, addr<uint8 const?>(srcqh[0]), srcq_bytes)
                 upload_region_at(srckd, 0l, addr<uint8 const?>(srckh[0]), srck_bytes)
@@ -7298,7 +7295,7 @@ def test_vkd_dn_family(t0 : T?) {
                 let srcd = make_device_buf(src_bytes)
                 let smd = make_device_buf(sm_bytes)
                 let od2 = make_device_buf(out_bytes)
-                var host = make_host_buf(out_bytes, true, [cached = true])
+                let host = make_host_buf(out_bytes, true, [cached = true])
                 unsafe {
                     upload_region_at(srcd, 0l, addr<uint8 const?>(srch[0]), src_bytes)
                     upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
@@ -8112,13 +8109,13 @@ def private dn_ba_cell(t : T?; tag : string; dim, nvh, npos, woff : int; poison_
                 want[(e < nvh ? ob_b : ob_g) + p * ostride + e % nvh] = acc
             }
         }
-        let w_bytes = int64(length(wh16)) * 2l
-        let x_bytes = int64(length(xh)) * 4l
+        let w_bytes = long_length(wh16) * 2l
+        let x_bytes = long_length(xh) * 4l
         let o_bytes = int64(out_n) * 4l
         let wd = make_device_buf(w_bytes)
         let xd = make_device_buf(x_bytes)
         let od = make_device_buf(o_bytes)
-        var host = make_host_buf(o_bytes, true, [cached = true])
+        let host = make_host_buf(o_bytes, true, [cached = true])
         let wgs = dn_ba_wgs(int64(npos), int64(nvh))
         nan_sentinel_upload(od, o_bytes)
         unsafe {
@@ -8398,7 +8395,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             let wd = make_device_buf(w_bytes)
             let xd = make_device_buf(x_bytes)
             let od = make_device_buf(o_bytes)
-            var host = make_host_buf(o_bytes, true, [cached = true])
+            let host = make_host_buf(o_bytes, true, [cached = true])
             nan_sentinel_upload(od, o_bytes)
             unsafe {
                 upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
@@ -8466,9 +8463,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             let wn_bytes = int64(length(wnh)) * 4l
             let wnd = make_device_buf(wn_bytes)
             nan_sentinel_upload(od, o_bytes)
-            unsafe {
-                upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
-            }
+            upload_region_at(wnd, 0l, unsafe(addr<uint8 const?>(wnh[0])), wn_bytes)
             var sc3 = set_router_gemv_f16_cls(fixed_array(wd, xd, od, wnd), fixed_array(w_bytes, x_bytes, o_bytes, wn_bytes), fixed_array(0u, 1u, 2u, 4u))
             var pc3 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), norm_on = 1u, nwoff = uint(nwoff), eps = eps)
             cmd_one_shot() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
@@ -9138,7 +9133,7 @@ def test_vkd_hot_combine(t0 : T?) {
             let wd = make_device_buf(w_bytes)
             let dd = make_device_buf(d_bytes)
             let a0d = make_device_buf(x_bytes)
-            var host = make_host_buf(x_bytes * 2l, true, [cached = true])
+            let host = make_host_buf(x_bytes * 2l, true, [cached = true])
             unsafe {
                 upload_region_at(ad, 0l, addr<uint8 const?>(miss[0]), x_bytes)
                 upload_region_at(a0d, 0l, addr<uint8 const?>(miss[0]), x_bytes)
@@ -9241,7 +9236,7 @@ def test_vkd_dec_combine_pair(t0 : T?) {
             let od = make_device_buf(x_bytes)
             let osd = make_device_buf(x_bytes)
             let oud = make_device_buf(x_bytes)
-            var host = make_host_buf(x_bytes * 3l, true, [cached = true])
+            let host = make_host_buf(x_bytes * 3l, true, [cached = true])
             unsafe {
                 upload_region_at(xd, 0l, addr<uint8 const?>(xin[0]), x_bytes)
                 upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), w_bytes)
@@ -9381,7 +9376,7 @@ def test_vkd_ar_rq_fused(t0 : T?) {
                 sent_split[i] = -999.25
                 sent_fused[i] = -777.5
             }
-            var host = make_host_buf((q_bytes + s_bytes) * 2l + row_bytes * 2l, true, [cached = true])
+            let host = make_host_buf((q_bytes + s_bytes) * 2l + row_bytes * 2l, true, [cached = true])
             unsafe {
                 upload_region_at(x_split, 0l, addr<uint8 const?>(xh[0]), row_bytes)
                 upload_region_at(x_fused, 0l, addr<uint8 const?>(xh[0]), row_bytes)
@@ -9582,7 +9577,7 @@ def test_vkd_ar_f16_fused(t0 : T?) {
                 sent_split[i] = float16(-999.25)
                 sent_fused[i] = float16(-777.5)
             }
-            var host = make_host_buf(h_bytes * 2l + row_bytes * 2l, true, [cached = true])
+            let host = make_host_buf(h_bytes * 2l + row_bytes * 2l, true, [cached = true])
             unsafe {
                 upload_region_at(x_split, 0l, addr<uint8 const?>(xh[0]), row_bytes)
                 upload_region_at(x_fused, 0l, addr<uint8 const?>(xh[0]), row_bytes)
@@ -9709,7 +9704,7 @@ def private moe_router_arm(t : T?; ner : int) {
         let wd = make_device_buf(w_bytes)
         let xd = make_device_buf(x_bytes)
         let ld = make_device_buf(l_bytes)
-        var host = make_host_buf(l_bytes, true, [cached = true])
+        let host = make_host_buf(l_bytes, true, [cached = true])
         unsafe {
             upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
             upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
@@ -9850,7 +9845,7 @@ def private moe_sched_arm(t : T?) {
         for (f in fill) {
             f = MR_SENT
         }
-        var host = make_host_buf(2l * i_bytes + 3l * s_bytes, true, [cached = true])
+        let host = make_host_buf(2l * i_bytes + 3l * s_bytes, true, [cached = true])
         unsafe {
             upload_region_at(idxd, 0l, addr<uint8 const?>(idx[0]), i_bytes)
             nan_sentinel_upload(invd, i_bytes)
@@ -10275,9 +10270,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
             let os_bytes = int64(nblk) * 4l
             let oqd = make_device_buf(oq_bytes)
             let osd = make_device_buf(os_bytes)
-            unsafe {
-                upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
-            }
+            upload_region_at(xd, 0l, unsafe(addr<uint8 const?>(xs[0])), x_bytes)
             nan_sentinel_upload(oqd, oq_bytes)
             nan_sentinel_upload(osd, os_bytes)
             var scq = set_cls_ar_comb_g4_rq(fixed_array(xd, shd, wnd, oqd, sid, swd, rod, osd),

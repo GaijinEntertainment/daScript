@@ -334,8 +334,9 @@ typedef RdecSetHcFn = function<(hc : int64; lr : int64; n_sites : int64; norm_ro
 //! The n-gram side input before layer `l`'s attention mixer: the key [hc_dim x ind] and value [dim x ind] q8 planes' blocks, the
 //! conv ring's rows, taps and dilation, the three norm rows [3 x hc x dim] (key, query, conv input) and the taps [hc_dim x kern].
 typedef RdecSetNgramFn = function<(l : int64; ind : int64; nrows : int64; kern : int64; dil : int64; bkey : int64; bval : int64; norm_rows : array<float>; conv_taps : array<float>) : bool>
-//! The routed experts of every MoE layer serve on the host: the token command splits at each routed block, landing the mixed row
-//! and the router logits and taking the routed sum back (`RdecTokenSplitFn`); set after the prepare, before the MoE prepare and the layers' registration.
+//! Some routed layers' experts serve on the host (every one on a hyper-connection model, the first in layer order on a plain MoE): the token
+//! command splits at each such block, landing the mixed row and the router logits and taking the routed sum back (`RdecTokenSplitFn`);
+//! set after the prepare, before the MoE prepare and the layers' registration.
 typedef RdecSetHostExpertsFn = function<(on : bool) : void>
 //! The host's routed sum for layer `l`: the FFN-mixed row `xb` [dim] and the router logits [ner] in, the weighted expert sum into `acc` [dim].
 typedef RdecHostExpertsFn = function<(l : int64; xb : float const?; logits : float const?; var acc : float?) : void>
@@ -383,7 +384,8 @@ var g_rdec_ngram_ring = @@rdec_unset_ngram_ring
 var g_rdec_prefill_hc = @@rdec_unset_prefill_hc
 var g_rdec_hc_installed = false
 
-//! Install the resident driver's hyper-connection seats - separately, so a tier without them declines a hyper-connection model by name.
+//! Install the resident driver's split seats - separately, so a tier without them declines a hyper-connection model, and a plain MoE's
+//! host-layer form, by name.
 def public install_moe_gpu_resident_hc(set_hc : RdecSetHcFn; set_ngram : RdecSetNgramFn; set_host_experts : RdecSetHostExpertsFn; token_split : RdecTokenSplitFn;
                                        ngram_ring : RdecNgramRingFn; prefill_hc : RdecPrefillHcFn) {
     g_rdec_set_hc = set_hc
@@ -398,6 +400,25 @@ def public install_moe_gpu_resident_hc(set_hc : RdecSetHcFn; set_ngram : RdecSet
 def public rdec_ngram_ring(var host : float?; up : bool) { invoke(g_rdec_ngram_ring, host, up) }
 def public rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; side : array<float>; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     invoke(g_rdec_prefill_hc, x_batch, cos_batch, side, npos, pos0, logits, experts)
+}
+
+[unused_argument(l, xb, logits, acc, row0, nrows)]
+def private rdec_unset_host_rows(l : int64; xb : float const?; logits : float const?; var acc : float?; row0, nrows : int64) {
+}
+
+var g_rdec_host_rows = @@rdec_unset_host_rows
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
+def public set_rdec_host_rows(fn : RdecHostExpertsRowsFn) {
+    g_rdec_host_rows = fn
+}
+
+def public clear_rdec_host_rows() {
+    g_rdec_host_rows = @@rdec_unset_host_rows
+}
+
+def public rdec_host_rows(l : int64; xb : float const?; logits : float const?; var acc : float?; row0, nrows : int64) {
+    invoke(g_rdec_host_rows, l, xb, logits, acc, row0, nrows)
 }
 
 def public rdec_hc_installed() : bool => g_rdec_hc_installed
@@ -2433,6 +2454,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_rdec_prefill_hc == null) {
         g_rdec_prefill_hc = @@rdec_unset_prefill_hc
+    }
+    if (g_rdec_host_rows == null) {
+        g_rdec_host_rows = @@rdec_unset_host_rows
     }
     if (g_rdec_hot_layer == null) {
         g_rdec_hot_layer = @@rdec_unset_hot_layer

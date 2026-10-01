@@ -32,7 +32,11 @@ the room that is left after the weights, as long as that context clears the armi
 built-in 4096 positions, `DASLLAMA_GPU_MIN_CTX` where set, and the caller's own context pin
 (`set_gpu_ctx_max`, `DASLLAMA_GPU_CTX_MAX`; `resident_pinned_seq_cap` reads it first and announces
 it once per walk, not for a prediction of the plan) where that sits under either, since a caller that
-pinned its context named the shape it serves (`resident_arm_floor`). The eighth held back is for
+pinned its context named the shape it serves (`resident_arm_floor`); a pin asked whole
+(`set_gpu_ctx_strict`, `DASLLAMA_GPU_CTX_STRICT`, the server's `--ctx`) is the floor whatever its size.
+Where the asked mirror leaves no room for every plane, a plain MoE moves routed layers' experts to the
+host (`resident_plan_host_layers`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`) and a dense model declines
+naming the context it would fit at; a mirror under the asked context says why (`resident_ctx_shortened_say`). The eighth held back is for
 fragmentation: a mirror sized to the last byte fails on a heap the previous model fragmented
 (`resident_plan_pick`). The pin is what lets a
 four-stream bench row home a 12B at 648 positions a region on a 16 GB card, where the binding

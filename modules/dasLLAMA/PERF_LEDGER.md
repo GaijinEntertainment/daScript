@@ -11,6 +11,50 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-01) - a plain MoE the card does not hold whole, with its context asked whole
+  (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, `set_gpu_ctx_strict` / the server's `--ctx`): the first routed
+  layers' experts on the host through the split token command and the cut window chain, the mirror whole
+  - the form wins the long prompt by 5.7x and loses decode by a third to the per-op rails
+  (direction-grade), so it arms only where the context was asked.** zen2 (Ryzen 16 threads, RTX 5060 Ti 16 GB on a PCIe 4.0 x8 link, the
+  desktop holding 4.6 GB of the card), Qwen3-30B-A3B-Instruct-2507 Q4_K_M (17.3 GB, 48 routed layers of
+  128 experts, 8 picked; the plan puts the first 28 layers' experts on the host beside a 32768-position
+  f16 mirror, no pool fits), `bin/Release/daslang.exe -jit modules/dasLLAMA/benchmarks/lcpp_bench.das --
+  -m <file> --ngl 0 -p <P> -n <N> -r 1 -t 16 --for-debug-purposes` under `DASLLAMA_ALLOW_UNTUNED=1
+  DASLLAMA_GPU=1 DAS_JOBQUE_THREADS=16` (`DAS_TUNE_POLICY`, `DASLLAMA_COOPMAT` unset; the second row adds
+  `DASLLAMA_GPU_CTX_MAX=32768 DASLLAMA_GPU_CTX_STRICT=1`, the pin the form arms under, the first
+  `DASLLAMA_GPU_RESIDENT=0`), one rep, one process a row - a second load of a model in one process is barred,
+  so the two forms cannot race interleaved - direction-grade across the rows and in every sentence below
+  that sets one row against the other:
+
+  | form | pp512 | tg128 | pp8192 | tg64 after 8192 |
+  | :--- | ---: | ---: | ---: | ---: |
+  | the per-op rails (`DASLLAMA_GPU_RESIDENT=0`: master's shape for this file) | 398.14 | 64.03 | 93.39 | 64.52 |
+  | the whole-model driver, 28 of 48 layers' experts on the host, the mirror on device | 517.88 (290.36 with the first window's one-time cost inside the pass) | 41.81 | 533.97 | 47.79 |
+
+  The per-op rails' decode does not slow with the position (64.0 at 640, 64.5 at 8192, direction-grade); the
+  host-layer form's token is 24 ms against 15.6 (direction-grade) - the 28 fence round-trips a token, the cost
+  the hyper-connection carrier pays too - so it keeps the per-op rails' place for an unasked context and
+  takes the asked one, where an 8192-token prompt costs 15 s against 88 s (direction-grade). Its prefill is
+  flat with the length: a 512-row window records in 0.85-0.90 s and submits in 0.07-0.09 s whatever the
+  position (the same command and environment as the second row with `DASLLAMA_GPU_PROF=1` added, its
+  `vk_rdpf` lines; pp2048 reads 551.5 there), and the first window of a process pays 0.45 s once (the host
+  callback's scratch, the host combine's pipelines) - a pp512 pass that includes it reads 290. The form's
+  landings are small beside the planes: the decode's `hx_host`, `hacc_host` and `hacc_dev` hold `dim*4*nb`
+  bytes each and `hlog_host` `ner*4*nb` (2048 x 4 x 1 = 8 KB and 128 x 4 = 512 B here), the prefill's
+  `pf_hx_host`, `pf_hacc_host` and `pf_hacc_dev` `np*dim*4` each and `pf_hlog_host` `np*ner*4` (4 MB and
+  256 KB at the 512-row window), `pf_ident_dev` and `pf_ones_dev` `np*4` (2 KB), the decode's `ones_dev`
+  `MAX_ROUTED_SLOTS*4`; the pool over the host layers takes one slot's gate, up and down planes per hosted
+  layer per slot (`resident_hot_slot_bytes_host_layers`), none here. The same file on this card at the bench's shape
+  before this change: the whole-model driver declined (17.3 GB of weights past the room) and the per-op
+  rails served, which is the first row. Parity: `test_gpu_resident_moe.das`'s `test_gpu_resident_moe_host_layers`
+  (this file at 32768 asked whole, 27-28 layers hosted, one and two windows) and
+  `test_gpu_resident_moe_ctx_strict` (Qwen3.6-35B-A3B UD-IQ2_XXS at 131072 asked whole: 10 of 40 layers
+  hosted, the region 131072 positions, two windows) pass on this box, run as `bin/Release/daslang.exe -jit
+  dastest/dastest.das -- --test modules/dasLLAMA/tests/test_gpu_resident_moe.das` under `DASLLAMA_GPU=1
+  DASLLAMA_PARITY_FULL=1 DAS_JOBQUE_THREADS=8`; the file's one-window hybrid and no-shared-expert cells
+  red on the cm2e census floor on this card (117 of 120, 134 of 144) exactly as on master run through
+  this binary (`followup_vulkan.md` row 132's reading), unchanged by this entry.
+
 - **MEASURED (2026-10-01) - the NextN head on the hyper-connection chain
   (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`, `#hc-verify-rows`): the round loses on this form while
   the pool's hits sit near 40% on real text, and the real-text token is 45 ms against the synthetic

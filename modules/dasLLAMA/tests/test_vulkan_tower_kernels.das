@@ -39,7 +39,7 @@ let private TOWER_SCALE = 0.125
 let private F16_SENTINEL_BITS = 0x7e007e00u   //! the f16 outputs' fill: a NaN in both halves, where the f32 word's low half would read as a legitimate zero pad
 let private I8_SENTINEL_BITS = 0x80808080u    //! the Q8_0 quant outputs' fill: -128 in every byte, a value the requant never produces (|q| <= 127)
 
-def private fa_bidir_arm(t : T?; khr : bool; hs : int) {   // nolint:STYLE038 — one arm: the fixture, both stamps, the oracle and its controls
+def private fa_bidir_arm(t : T?; khr : bool; hs : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = "{khr ? "fa_khr" : "fa_cm2"} h{hs} bidir"
         let nheads = TOWER_NHEADS
@@ -62,8 +62,6 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {   // nolint:STYLE038 �
             vh[i] = TOWER_SENTINEL
         }
         let sh_bytes = int64(kpad * qd) * 2l
-        var y : array<float>
-        var yc : array<float>
         with_cell_planes() $(var cp : CellPlanes) {
             let qp = cp |> in_(qh)
             let kp = cp |> in_(kh)
@@ -89,30 +87,30 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {   // nolint:STYLE038 �
                 fa_stamp_enc(khr, int64(hs), false, false, false, false, raw, h, sfa, pcf, wgs, true)
                 fa_stamp_enc(khr, int64(hs), false, false, false, false, raw, h, sfc, pcf, wgs)
             }
-            y <- cp |> plane_run(yp)
-            yc <- cp |> plane_run(ycp)
-        }
-        var y_ref : array<float>
-        y_ref |> resize(rows * qd)
-        for (hh in range(nheads)) {
-            for (r in range(rows)) {
-                attn_row_oracle(qh, r * qd + hh * hs, kh, 0, vh, 0, qd, hh, hs, 1, rows, TOWER_SCALE, y_ref, r * qd + hh * hs)
+            var y <- cp |> plane_run(yp)
+            var yc <- cp |> plane_run(ycp)
+            var y_ref : array<float>
+            y_ref |> resize(rows * qd)
+            for (hh in range(nheads)) {
+                for (r in range(rows)) {
+                    attn_row_oracle(qh, r * qd + hh * hs, kh, 0, vh, 0, qd, hh, hs, 1, rows, TOWER_SCALE, y_ref, r * qd + hh * hs)
+                }
             }
+            // `approx` covers the tile's f16 Q and P staging and the coopmat's reassociated sums; K and V are f16 on both sides
+            check_rows(t, "{tag} every query row attending every key vs the CPU oracle", y, y_ref, Bar(rel = APPROX_REL, poison = 1.5), qd, hs)
+            t |> success(logits_maxabs(y) < TOWER_SENTINEL * 0.01, "{tag}: the slack rows past kvlen stayed masked (max |o| {logits_maxabs(y)})")
+            // the causal twin on the same planes: row 0 sees one key there and every key here, so its output moves
+            let moved = logits_maxdiff(copy_span(y, 0, qd), copy_span(yc, 0, qd))
+            t |> success(moved > 0.1, "{tag} control: the causal twin's first row differs (maxdiff {moved})")
+            // ... while the last row sees every key on both stamps: its head rows agree to the bar
+            t |> success(mismatch_approx(copy_span(y, (rows - 1) * qd, qd), copy_span(yc, (rows - 1) * qd, qd)) == 0, "{tag} control: the last query row agrees with the causal twin (every key on both)")
+            delete y
+            delete yc
+            delete y_ref
         }
-        // `approx` covers the tile's f16 Q and P staging and the coopmat's reassociated sums; K and V are f16 on both sides
-        check_rows(t, "{tag} every query row attending every key vs the CPU oracle", y, y_ref, Bar(rel = APPROX_REL, poison = 1.5), qd, hs)
-        t |> success(logits_maxabs(y) < TOWER_SENTINEL * 0.01, "{tag}: the slack rows past kvlen stayed masked (max |o| {logits_maxabs(y)})")
-        // the causal twin on the same planes: row 0 sees one key there and every key here, so its output moves
-        let moved = logits_maxdiff(copy_span(y, 0, qd), copy_span(yc, 0, qd))
-        t |> success(moved > 0.1, "{tag} control: the causal twin's first row differs (maxdiff {moved})")
-        // ... while the last row sees every key on both stamps: its head rows agree to the bar
-        t |> success(mismatch_approx(copy_span(y, (rows - 1) * qd, qd), copy_span(yc, (rows - 1) * qd, qd)) == 0, "{tag} control: the last query row agrees with the causal twin (every key on both)")
         delete qh
         delete kh
         delete vh
-        delete y
-        delete yc
-        delete y_ref
     }
 }
 
@@ -387,10 +385,10 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             var x <- row_fill(nd, 41, 7, 0.05, 2.1)
             var y <- row_fill(nd, 17, 3, 0.04, 1.9)
             var q <- row_fill(nd, 29, 11, 0.06, 2.8)
-            var g <- row_fill(nff, 13, 5, 0.09, 4.0)
-            var u <- row_fill(nff, 23, 9, 0.07, 3.3)
+            let g <- row_fill(nff, 13, 5, 0.09, 4.0)
+            let u <- row_fill(nff, 23, 9, 0.07, 3.3)
             var wn <- row_fill(2 * d, 7, 1, 0.01, -0.6)   // two weight rows: the pre-norm's at 0, the post-norm's at d - both near 1
-            var tabs <- row_fill(rows * 4 * pairs, 31, 2, 0.02, 0.97)   // per row [cx | sx | cy | sy]: any values serve the oracle, which applies the same tables
+            let tabs <- row_fill(rows * 4 * pairs, 31, 2, 0.02, 0.97)   // per row [cx | sx | cy | sy]: any values serve the oracle, which applies the same tables
             let lo = -1.25
             let hi = 1.5
             let lo2 = -0.75
@@ -594,12 +592,12 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let hs = d / ROWS_HEADS
             let nd = rows * d
             var s <- row_fill(nd, 23, 5, 0.09, 6.0)   // silu's rows: both tails
-            var glu_pw_rows <- row_fill(rows * 2 * d, 31, 7, 0.05, 2.5)
-            var q <- row_fill(nd, 41, 3, 0.03, 1.1)
-            var k <- row_fill(nd, 17, 11, 0.04, 1.3)
-            var v <- row_fill(nd, 29, 13, 0.05, 1.7)
-            var rpe <- row_fill((G4A_PAST + 1) * d, 13, 2, 0.02, 0.9)
-            var wn <- row_fill(hs + d * 5, 7, 1, 0.01, 0.4)
+            let glu_pw_rows <- row_fill(rows * 2 * d, 31, 7, 0.05, 2.5)
+            let q <- row_fill(nd, 41, 3, 0.03, 1.1)
+            let k <- row_fill(nd, 17, 11, 0.04, 1.3)
+            let v <- row_fill(nd, 29, 13, 0.05, 1.7)
+            let rpe <- row_fill((G4A_PAST + 1) * d, 13, 2, 0.02, 0.9)
+            let wn <- row_fill(hs + d * 5, 7, 1, 0.01, 0.4)
             with_cell_planes() $(var cp : CellPlanes) {
                 let sp = cp |> io_(s)
                 let hp = cp |> in_(glu_pw_rows)
@@ -728,12 +726,11 @@ def test_vkt_tower_fastconformer(t0 : T?) {
             let rows = ROWS_N
             let nd = rows * d
             let glu_out <- row_fill(nd, 31, 7, 0.06, 2.5)
-            var wn <- row_fill(2 * d + d * CN_CONV_KERNEL + 2 * d, 7, 1, 0.01, 0.3)
+            let wn <- row_fill(2 * d + d * CN_CONV_KERNEL + 2 * d, 7, 1, 0.01, 0.3)
             let taps_off = 2 * d
             let bnw_off = taps_off + d * CN_CONV_KERNEL
             let bnb_off = bnw_off + d
             let kpad = (CN_CONV_KERNEL - 1) / 2
-            var c_dev : array<float>
             with_cell_planes() $(var cp : CellPlanes) {
                 let gp = cp |> in_(glu_out, 0, kpad * d)   // the rows past npos carry garbage: a tap past the source's end the bound lets through reads it
                 let cpl = cp |> out_(nd)
@@ -744,24 +741,24 @@ def test_vkt_tower_fastconformer(t0 : T?) {
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_cn_dw_cls(raw, h, s_dw, pa_dw, int64((nd + 255) / 256))
                 }
-                c_dev <- cp |> plane_run(cpl)
-            }
-            var c_ref : array<float>
-            c_ref |> resize(nd)
-            for (r in range(rows)) {
-                for (c in range(d)) {
-                    var acc = 0.0
-                    for (kk in range(CN_CONV_KERNEL)) {
-                        let src = r + kk - kpad
-                        if (src >= 0 && src < rows) {
-                            acc += wn[taps_off + c * CN_CONV_KERNEL + kk] * glu_out[src * d + c]
+                let c_dev <- cp |> plane_run(cpl)
+                var c_ref : array<float>
+                c_ref |> resize(nd)
+                for (r in range(rows)) {
+                    for (c in range(d)) {
+                        var acc = 0.0
+                        for (kk in range(CN_CONV_KERNEL)) {
+                            let src = r + kk - kpad
+                            if (src >= 0 && src < rows) {
+                                acc += wn[taps_off + c * CN_CONV_KERNEL + kk] * glu_out[src * d + c]
+                            }
                         }
+                        let bv = acc * wn[bnw_off + c] + wn[bnb_off + c]
+                        c_ref[r * d + c] = bv * (1.0 / (1.0 + exp(-bv)))
                     }
-                    let bv = acc * wn[bnw_off + c] + wn[bnb_off + c]
-                    c_ref[r * d + c] = bv * (1.0 / (1.0 + exp(-bv)))
                 }
+                check_rows(t, "tower_cn_dw centered taps, folded BatchNorm and silu vs the CPU loop", c_dev, c_ref, BAR_APPROX, d)
             }
-            check_rows(t, "tower_cn_dw centered taps, folded BatchNorm and silu vs the CPU loop", c_dev, c_ref, BAR_APPROX, d)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -789,8 +786,8 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
             var x <- row_fill(nd, 41, 7, 0.05, 2.1)
             var y <- row_fill(nd, 17, 3, 0.04, 1.9)
             var g <- row_fill(nd, 13, 5, 0.3, 14.0)   // wide enough to reach both tails of the GELU (past +-10)
-            var q <- row_fill(rows * d_compact, 29, 11, 0.06, 2.8)
-            var qkv <- row_fill(rows * 3 * d_compact, 37, 5, 0.05, 2.2)   // a fused [q | k | v] row: the rope runs on its k slot in place
+            let q <- row_fill(rows * d_compact, 29, 11, 0.06, 2.8)
+            let qkv <- row_fill(rows * 3 * d_compact, 37, 5, 0.05, 2.2)   // a fused [q | k | v] row: the rope runs on its k slot in place
             let half = LN_HS / 2
             var cos_t <- row_fill(rows * half, 31, 2, 0.02, 0.97)
             var sin_t <- row_fill(rows * half, 19, 4, 0.03, 0.55)
@@ -976,8 +973,8 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let d_padded = ROWS_HEADS * LN_HSP
             var x <- row_fill(nd, 41, 7, 0.05, 2.1)
             var y <- row_fill(nd, 17, 3, 0.04, 1.9)
-            var g <- row_fill(nd, 13, 5, 0.3, 14.0)
-            var q <- row_fill(rows * d_compact, 29, 11, 0.06, 2.8)
+            let g <- row_fill(nd, 13, 5, 0.3, 14.0)
+            let q <- row_fill(rows * d_compact, 29, 11, 0.06, 2.8)
             var wn <- row_fill(4 * d, 7, 1, 0.01, -0.6)   // ln w at 0, ln b at d, the bias at 2d (the q bias reads its first d_compact entries), the next ln w at 3d
             let bxh = int64(nd) * 2l
             with_cell_planes() $(var cp : CellPlanes) {
@@ -1180,9 +1177,9 @@ def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over
             let p0 = WD_P0
             let scale = 1.0 / sqrt(float(hs))
             let kscale = 1.0 / sqrt(sqrt(float(hs)))
-            var src <- row_fill(rows * dim, 31, 5, 0.05, 2.3)         // the batch's fused [q | k | v] rows
-            var hist <- row_fill(p0 * dim, 23, 7, 0.04, 1.7)          // the positions before the batch, the same row shape
-            var wn <- row_fill(2 * d, 11, 3, 0.02, 0.9)               // the q bias row at 0, the v bias row at d
+            let src <- row_fill(rows * dim, 31, 5, 0.05, 2.3)         // the batch's fused [q | k | v] rows
+            let hist <- row_fill(p0 * dim, 23, 7, 0.04, 1.7)          // the positions before the batch, the same row shape
+            let wn <- row_fill(2 * d, 11, 3, 0.02, 0.9)               // the q bias row at 0, the v bias row at d
             let bkv = int64(heads * tstride * hs) * 2l
             let nch = (tstride + int(WDEC_CHUNK) - 1) / int(WDEC_CHUNK)
             with_cell_planes() $(var cp : CellPlanes) {
@@ -1310,7 +1307,7 @@ def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over
 let private PAT_HEADS = 16   //! the SigLIP head count: sixteen 72-wide heads through the padded 128 route
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
-def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded route end to end: the fixture, the command buffer, the oracle and its controls
+def test_vkt_tower_padded_attn(t0 : T?) {
     t0 |> run("the padded attention route (pad, the h128 bidirectional tile, unpad) == attention_bidir at 72-wide heads") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
@@ -1336,7 +1333,6 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
                 v[i] = f16r(v[i])
             }
             let bph = int64(rows_pad * dp) * 2l
-            var att_dev : array<float>
             with_cell_planes() $(var cp : CellPlanes) {
                 let qp = cp |> in_(q)
                 let kp = cp |> in_(k)
@@ -1362,18 +1358,18 @@ def test_vkt_tower_padded_attn(t0 : T?) {   // nolint:STYLE038 — the padded ro
                     fa_stamp_enc(khr, int64(LN_HSP), false, false, false, false, raw, h, s_fa, pa_fa, fa_stamp_wgs(khr, int64(PAT_HEADS), int64(rows)), true)
                     enc_tower_hunpad_cls(raw, h, s_un, pa_rs, wg_rs)
                 }
-                att_dev <- cp |> plane_run(attp)
+                let att_dev <- cp |> plane_run(attp)
+                var att_ref : array<float>
+                var hp : array<float>
+                var attsc : array<float>
+                att_ref |> resize(rows * dc)
+                with_dasllama_jobque_() {
+                    attention_bidir(att_ref, q, k, v, hp, attsc, int64(rows), int64(dc), int64(PAT_HEADS), scale)
+                }
+                // the bar: `approx`'s 2e-3 covers the tile's f16 staging of the padded Q panel and of the softmax rows (P) that the
+                // f32 oracle keeps in f32, and the coopmat's reassociated sums; K and V are rounded to f16 on both sides
+                check_rows(t, "the padded route over {PAT_HEADS} heads of {LN_HS} vs attention_bidir", att_dev, att_ref, BAR_APPROX, dc, LN_HS)
             }
-            var att_ref : array<float>
-            var hp : array<float>
-            var attsc : array<float>
-            att_ref |> resize(rows * dc)
-            with_dasllama_jobque_() {
-                attention_bidir(att_ref, q, k, v, hp, attsc, int64(rows), int64(dc), int64(PAT_HEADS), scale)
-            }
-            // the bar: `approx`'s 2e-3 covers the tile's f16 staging of the padded Q panel and of the softmax rows (P) that the
-            // f32 oracle keeps in f32, and the coopmat's reassociated sums; K and V are rounded to f16 on both sides
-            check_rows(t, "the padded route over {PAT_HEADS} heads of {LN_HS} vs attention_bidir", att_dev, att_ref, BAR_APPROX, dc, LN_HS)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -1424,12 +1420,6 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             var wn <- row_fill(4 * d, 7, 1, 0.01, -0.6)   // rows: the o bias at 0, the rms weight at d, the gate bias at 2d, the up bias at 3d
             var rex : array<uint>
             rex |> resize(nrows)   // the row map: every row the one expert, so the bias rows are the layer's
-            var att_dev : array<float>
-            var x_dev : array<float>
-            var xb_dev : array<float>
-            var gh_dev : array<uint16>
-            var x0_dev : array<float>
-            var xb0_dev : array<uint>
             with_cell_planes() $(var cp : CellPlanes) {
                 let qp = cp |> in_(q)
                 let kp = cp |> in_(k)
@@ -1461,48 +1451,48 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                     enc_tower_post_add_rms_cls(raw, h, s_post0, pa_post0, int64(nrows))
                     enc_tower_post_add_rms_cls(raw, h, s_post, pa_post, int64(nrows))
                 }
-                att_dev <- cp |> plane_run(attp)
-                x_dev <- cp |> plane_run(xp)
-                xb_dev <- cp |> plane_run(xbp)
-                gh_dev <- cp |> plane_as(gated_h16p, type<uint16>, nd)
-                x0_dev <- cp |> plane_run(x0p)
-                xb0_dev <- cp |> plane_as(xb0p, type<uint>, nd)
+                let att_dev <- cp |> plane_run(attp)
+                let x_dev <- cp |> plane_run(xp)
+                let xb_dev <- cp |> plane_run(xbp)
+                let gh_dev <- cp |> plane_as(gated_h16p, type<uint16>, nd)
+                let x0_dev <- cp |> plane_run(x0p)
+                let xb0_dev <- cp |> plane_as(xb0p, type<uint>, nd)
+                let g_dev <- [for (hv in gh_dev); f16_to_f32(uint(hv))]
+                var att_ref : array<float>
+                var hpp : array<float>
+                var attsc : array<float>
+                att_ref |> resize(rows * dc)
+                with_dasllama_jobque_() {
+                    attention_bidir_windows(att_ref, q, k, v, hpp, attsc, win_lo, int64(dc), int64(WIN_HEADS), scale)
+                }
+                check_rows(t, "tower_win_attn over {nslot} windows, one ragged, vs attention_bidir_windows", att_dev, att_ref, BAR_APPROX, dc, WIN_HS)
+                // the leak control: the same rows attended in full differ on the first row, so the windows' walls are the class's doing
+                var full_ref : array<float>
+                full_ref |> resize(rows * dc)
+                with_dasllama_jobque_() {
+                    attention_bidir(full_ref, q, k, v, hpp, attsc, int64(rows), int64(dc), int64(WIN_HEADS), scale)
+                }
+                let moved = logits_maxdiff(copy_span(full_ref, 0, dc), copy_span(att_dev, 0, dc))
+                t |> success(moved > 0.01, "tower_win_attn control: full attention over the same rows lands elsewhere (maxdiff {moved})")
+                var x_ref := x
+                var yb := y
+                add_bias_rows(yb, wn, 0l, int64(d), int64(nrows))
+                add_inplace_rows(x_ref, yb, int64(nd))
+                check_rows(t, "tower_post_add_rms x += y + b", x_dev, x_ref, BAR_APPROX, d)
+                var xb_ref : array<float>
+                xb_ref |> resize(nd)
+                let wplane = PlaneF(p = unsafe(addr<float const?>(wn[0])), n = int64(4 * d))
+                rms_rows(xb_ref, x_ref, wplane, int64(d), int64(d), int64(nrows), ROWS_EPS)
+                check_rows(t, "tower_post_add_rms the next weighted rms over the updated rows", xb_dev, xb_ref, BAR_APPROX, d)
+                check_rows(t, "tower_post_add_rms ln_on = 0 the seam alone lands the same x", x0_dev, x_ref, BAR_APPROX, d)
+                t |> equal(count(xb0_dev, $(w) => w == NAN_SENTINEL_BITS), nd, "tower_post_add_rms ln_on = 0: the rms output stays untouched (every word the sentinel)")
+                var g_ref := g
+                var u_ref := u
+                add_bias_rows(g_ref, wn, int64(2 * d), int64(d), int64(nrows))
+                add_bias_rows(u_ref, wn, int64(3 * d), int64(d), int64(nrows))
+                swiglu(g_ref, u_ref, int64(nd))
+                check_rows(t, "actf16_b (the gated hidden) silu(g + bg) . (u + bu) as halves vs the CPU form", g_dev, g_ref, BAR_APPROX, d)
             }
-            let g_dev <- [for (hv in gh_dev); f16_to_f32(uint(hv))]
-            var att_ref : array<float>
-            var hpp : array<float>
-            var attsc : array<float>
-            att_ref |> resize(rows * dc)
-            with_dasllama_jobque_() {
-                attention_bidir_windows(att_ref, q, k, v, hpp, attsc, win_lo, int64(dc), int64(WIN_HEADS), scale)
-            }
-            check_rows(t, "tower_win_attn over {nslot} windows, one ragged, vs attention_bidir_windows", att_dev, att_ref, BAR_APPROX, dc, WIN_HS)
-            // the leak control: the same rows attended in full differ on the first row, so the windows' walls are the class's doing
-            var full_ref : array<float>
-            full_ref |> resize(rows * dc)
-            with_dasllama_jobque_() {
-                attention_bidir(full_ref, q, k, v, hpp, attsc, int64(rows), int64(dc), int64(WIN_HEADS), scale)
-            }
-            let moved = logits_maxdiff(copy_span(full_ref, 0, dc), copy_span(att_dev, 0, dc))
-            t |> success(moved > 0.01, "tower_win_attn control: full attention over the same rows lands elsewhere (maxdiff {moved})")
-            var x_ref := x
-            var yb := y
-            add_bias_rows(yb, wn, 0l, int64(d), int64(nrows))
-            add_inplace_rows(x_ref, yb, int64(nd))
-            check_rows(t, "tower_post_add_rms x += y + b", x_dev, x_ref, BAR_APPROX, d)
-            var xb_ref : array<float>
-            xb_ref |> resize(nd)
-            let wplane = PlaneF(p = unsafe(addr<float const?>(wn[0])), n = int64(4 * d))
-            rms_rows(xb_ref, x_ref, wplane, int64(d), int64(d), int64(nrows), ROWS_EPS)
-            check_rows(t, "tower_post_add_rms the next weighted rms over the updated rows", xb_dev, xb_ref, BAR_APPROX, d)
-            check_rows(t, "tower_post_add_rms ln_on = 0 the seam alone lands the same x", x0_dev, x_ref, BAR_APPROX, d)
-            t |> equal(count(xb0_dev, $(w) => w == NAN_SENTINEL_BITS), nd, "tower_post_add_rms ln_on = 0: the rms output stays untouched (every word the sentinel)")
-            var g_ref := g
-            var u_ref := u
-            add_bias_rows(g_ref, wn, int64(2 * d), int64(d), int64(nrows))
-            add_bias_rows(u_ref, wn, int64(3 * d), int64(d), int64(nrows))
-            swiglu(g_ref, u_ref, int64(nd))
-            check_rows(t, "actf16_b (the gated hidden) silu(g + bg) . (u + bu) as halves vs the CPU form", g_dev, g_ref, BAR_APPROX, d)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -1559,24 +1549,13 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
             let fs_w = 4
             let fs_c = 5
             let add_n = 4 * d
-            var src <- row_fill(n_src, 31, 5, 0.07, 3.3)
-            var mel1 <- row_fill(nch1 * len1, 23, 7, 0.09, 2.0)
-            var cv2 <- row_fill(len1 * nch2, 19, 3, 0.08, 2.2)
-            var y3 <- row_fill(FM_CHUNKS * 16 * q3_tok * q3_nch, 11, 2, 0.06, 2.9)
-            var fs_src <- row_fill(fs_t * fs_w * fs_c, 13, 9, 0.05, 1.5)
+            let src <- row_fill(n_src, 31, 5, 0.07, 3.3)
+            let mel1 <- row_fill(nch1 * len1, 23, 7, 0.09, 2.0)
+            let cv2 <- row_fill(len1 * nch2, 19, 3, 0.08, 2.2)
+            let y3 <- row_fill(FM_CHUNKS * 16 * q3_tok * q3_nch, 11, 2, 0.06, 2.9)
+            let fs_src <- row_fill(fs_t * fs_w * fs_c, 13, 9, 0.05, 1.5)
             var x <- row_fill(nd, 41, 7, 0.05, 2.1)
-            var wn <- row_fill((3 + q3_tok) * d, 7, 1, 0.01, -0.6)   // the panel's bias row at 0, the add plane at d, the finish's bias at 2d and its tok position rows at 3d, the ln weight at 0
-            var col_dev : array<uint16>
-            var col1_dev : array<uint16>
-            var col2_dev : array<uint16>
-            var feat_dev : array<uint16>
-            var fs_dev : array<float>
-            var gq_dev : array<uint16>
-            var gp_dev : array<uint16>
-            var cvt_dev : array<uint16>
-            var add_dev : array<float>
-            var fin_dev : array<float>
-            var ln_dev : array<float>
+            let wn <- row_fill((3 + q3_tok) * d, 7, 1, 0.01, -0.6)   // the panel's bias row at 0, the add plane at d, the finish's bias at 2d and its tok position rows at 3d, the ln weight at 0
             with_cell_planes() $(var cp : CellPlanes) {
                 let srcp = cp |> in_(src)
                 let colp = cp |> out_words(int64(n_col) * 2l, F16_SENTINEL_BITS)
@@ -1637,150 +1616,150 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                     enc_tower_bias_act_cls(raw, h, s_fin, pa_fin_p, int64((nd / 4 + 255) / 256))
                     enc_tower_ln_relu_cls(raw, h, s_ln, pa_ln, int64((rows + 255) / 256))
                 }
-                col_dev <- cp |> plane_as(colp, type<uint16>, n_col)
-                col1_dev <- cp |> plane_as(col1p, type<uint16>, len1 * kdp1)
-                col2_dev <- cp |> plane_as(col2p, type<uint16>, rows2 * kdp2)
-                feat_dev <- cp |> plane_as(featp, type<uint16>, q3_pos * q3_feat)
-                fs_dev <- cp |> plane_run(fsop)
-                gq_dev <- cp |> plane_as(gqp, type<uint16>, rows * hs)
-                gp_dev <- cp |> plane_as(gpp, type<uint16>, rows * hs)
-                cvt_dev <- cp |> plane_as(cvtp, type<uint16>, nd)
-                add_dev <- cp |> plane_run(addp)
-                fin_dev <- cp |> plane_run(finp)
-                ln_dev <- cp |> plane_run(lnp)
-            }
-            var col_want : array<float>
-            col_want |> resize(n_col)
-            for (gid in range(n_col)) {
-                let r = gid / FM_KDP
-                let k = gid % FM_KDP
-                var v = 0.0
-                if (k < FM_CIN * 9) {
-                    let ci = r / (FM_OH * FM_OW)
-                    let rr = r % (FM_OH * FM_OW)
-                    let iy = (rr / FM_OW) * 2 + (k % 9) / 3 - 1
-                    let ix = (rr % FM_OW) * 2 + k % 3 - 1
-                    if (iy >= 0 && iy < FM_IH && ix >= 0 && ix < FM_IW) {
-                        v = src[ci * chunk_in + (iy * FM_IW + ix) * FM_CIN + k / 9]
+                let col_dev <- cp |> plane_as(colp, type<uint16>, n_col)
+                let col1_dev <- cp |> plane_as(col1p, type<uint16>, len1 * kdp1)
+                let col2_dev <- cp |> plane_as(col2p, type<uint16>, rows2 * kdp2)
+                let feat_dev <- cp |> plane_as(featp, type<uint16>, q3_pos * q3_feat)
+                let fs_dev <- cp |> plane_run(fsop)
+                let gq_dev <- cp |> plane_as(gqp, type<uint16>, rows * hs)
+                let gp_dev <- cp |> plane_as(gpp, type<uint16>, rows * hs)
+                let cvt_dev <- cp |> plane_as(cvtp, type<uint16>, nd)
+                let add_dev <- cp |> plane_run(addp)
+                let fin_dev <- cp |> plane_run(finp)
+                let ln_dev <- cp |> plane_run(lnp)
+                var col_want : array<float>
+                col_want |> resize(n_col)
+                for (gid in range(n_col)) {
+                    let r = gid / FM_KDP
+                    let k = gid % FM_KDP
+                    var v = 0.0
+                    if (k < FM_CIN * 9) {
+                        let ci = r / (FM_OH * FM_OW)
+                        let rr = r % (FM_OH * FM_OW)
+                        let iy = (rr / FM_OW) * 2 + (k % 9) / 3 - 1
+                        let ix = (rr % FM_OW) * 2 + k % 3 - 1
+                        if (iy >= 0 && iy < FM_IH && ix >= 0 && ix < FM_IW) {
+                            v = src[ci * chunk_in + (iy * FM_IW + ix) * FM_CIN + k / 9]
+                        }
+                    }
+                    col_want[gid] = v
+                }
+                let bad_im = halves_off(col_dev, col_want)
+                t |> success(bad_im == 0, "tower_im2col: the k3 s2 p1 columns over two chunks, the pad and the zero tail, bit for bit ({bad_im} of {n_col} off)")
+                let live_im = find_index_if(col_want, $(v) => v != 0.0)
+                t |> success(uint(col_dev[live_im]) != f32_to_f16(col_want[live_im] + 0.5), "tower_im2col: the bar reds a poisoned element")
+                var col1_want : array<float>
+                col1_want |> resize(len1 * kdp1)
+                for (gid in range(len1 * kdp1)) {
+                    let i = gid / kdp1
+                    let k = gid % kdp1
+                    var v = 0.0
+                    if (k < 3 * nch1) {
+                        let sp = i + k / nch1 - 1
+                        if (sp >= 0 && sp < len1) {
+                            v = mel1[(k % nch1) * len1 + sp]
+                        }
+                    }
+                    col1_want[gid] = v
+                }
+                var col2_want : array<float>
+                col2_want |> resize(rows2 * kdp2)
+                for (gid in range(rows2 * kdp2)) {
+                    let i = gid / kdp2
+                    let k = gid % kdp2
+                    let sp = i * 2 + k / nch2 - 1
+                    col2_want[gid] = k < 3 * nch2 && sp >= 0 && sp < len1 ? cv2[sp * nch2 + k % nch2] : 0.0
+                }
+                let bad_im1 = halves_off(col1_dev, col1_want)
+                let bad_im2 = halves_off(col2_dev, col2_want)
+                t |> success(bad_im1 == 0, "the stem's im2col (tts_im2col16, channel-major, stride 1): the mel's k3 columns with the zero pad and tail, bit for bit ({bad_im1} of {len1 * kdp1} off)")
+                t |> success(bad_im2 == 0, "the stem's im2col (tts_im2col16, row-major, stride 2): the conv output's k3 columns at every second position and the zero pad columns, bit for bit ({bad_im2} of {rows2 * kdp2} off)")
+                let live_im1 = find_index_if(col1_want, $(v) => v != 0.0)
+                t |> success(uint(col1_dev[live_im1]) != f32_to_f16(col1_want[live_im1] + 0.5), "the stem's im2col (channel-major): the bar reds a poisoned element")
+                let live_im2 = find_index_if(col2_want, $(v) => v != 0.0)
+                t |> success(uint(col2_dev[live_im2]) != f32_to_f16(col2_want[live_im2] + 0.5), "the stem's im2col (row-major, stride 2): the bar reds a poisoned element")
+                var feat_want : array<float>
+                feat_want |> resize(q3_pos * q3_feat)
+                for (gid in range(q3_pos * q3_feat)) {
+                    let row = gid / q3_feat
+                    let j = gid % q3_feat
+                    feat_want[gid] = y3[(row / q3_tok) * (16 * q3_tok * q3_nch) + ((j % 16) * q3_tok + row % q3_tok) * q3_nch + j / 16]
+                }
+                let bad_sh = halves_off(feat_dev, feat_want)
+                t |> success(bad_sh == 0, "tower_q3a_shuffle: the feature rows off the third conv stage, bit for bit ({bad_sh} of {q3_pos * q3_feat} off)")
+                let live_sh = find_index_if(feat_want, $(v) => v != 0.0)
+                t |> success(uint(feat_dev[live_sh]) != f32_to_f16(feat_want[live_sh] + 0.5), "tower_q3a_shuffle: the bar reds a poisoned element")
+                var fs_want : array<float>
+                fs_want |> resize(fs_t * fs_w * fs_c)
+                for (gid in range(fs_t * fs_w * fs_c)) {
+                    let tt = gid / (fs_w * fs_c)
+                    let rem = gid % (fs_w * fs_c)
+                    fs_want[gid] = fs_src[(tt * fs_w + rem % fs_w) * fs_c + rem / fs_w]
+                }
+                check_rows(t, "tower_feat_shuffle [time][ch][freq] rows off the [time][freq][ch] image", fs_dev, fs_want, BAR_EXACT, fs_w * fs_c)
+                var gq_want : array<float>
+                var gp_want : array<float>
+                gq_want |> resize(rows * hs)
+                gp_want |> resize(rows * hs)
+                for (r in range(rows)) {
+                    for (n in range(hs)) {
+                        gp_want[r * hs + n] = x[r * d + second_head_base + n]
+                        gq_want[r * hs + n] = x[r * d + second_head_base + n] + wn[second_head_base + n]
                     }
                 }
-                col_want[gid] = v
-            }
-            let bad_im = halves_off(col_dev, col_want)
-            t |> success(bad_im == 0, "tower_im2col: the k3 s2 p1 columns over two chunks, the pad and the zero tail, bit for bit ({bad_im} of {n_col} off)")
-            let live_im = find_index_if(col_want, $(v) => v != 0.0)
-            t |> success(uint(col_dev[live_im]) != f32_to_f16(col_want[live_im] + 0.5), "tower_im2col: the bar reds a poisoned element")
-            var col1_want : array<float>
-            col1_want |> resize(len1 * kdp1)
-            for (gid in range(len1 * kdp1)) {
-                let i = gid / kdp1
-                let k = gid % kdp1
-                var v = 0.0
-                if (k < 3 * nch1) {
-                    let sp = i + k / nch1 - 1
-                    if (sp >= 0 && sp < len1) {
-                        v = mel1[(k % nch1) * len1 + sp]
+                let bad_gq = halves_off(gq_dev, gq_want)
+                let bad_gp = halves_off(gp_dev, gp_want)
+                t |> success(bad_gq == 0, "tower_hpad16_b restride at one head (the canary panel): the head's rows plus the bias row as halves, bit for bit ({bad_gq} of {rows * hs} off)")
+                t |> success(bad_gp == 0, "tower_hpad16 restride at one head (the canary panel): the head's rows as halves, bit for bit ({bad_gp} of {rows * hs} off)")
+                t |> success(uint(gq_dev[0]) != f32_to_f16(gq_want[0] + 0.5) && halves_off(gp_dev, gq_want) > rows * hs / 2, "the one-head restride: the bar reds a poisoned element, and the plain arm misses the biased rows")
+                var cvt_want : array<float>
+                cvt_want |> resize(nd)
+                var clamped = 0
+                for (i in range(nd)) {
+                    cvt_want[i] = clamp(x[i], -1.5, 1.5)
+                    if (cvt_want[i] != x[i]) {
+                        clamped++
                     }
                 }
-                col1_want[gid] = v
-            }
-            var col2_want : array<float>
-            col2_want |> resize(rows2 * kdp2)
-            for (gid in range(rows2 * kdp2)) {
-                let i = gid / kdp2
-                let k = gid % kdp2
-                let sp = i * 2 + k / nch2 - 1
-                col2_want[gid] = k < 3 * nch2 && sp >= 0 && sp < len1 ? cv2[sp * nch2 + k % nch2] : 0.0
-            }
-            let bad_im1 = halves_off(col1_dev, col1_want)
-            let bad_im2 = halves_off(col2_dev, col2_want)
-            t |> success(bad_im1 == 0, "the stem's im2col (tts_im2col16, channel-major, stride 1): the mel's k3 columns with the zero pad and tail, bit for bit ({bad_im1} of {len1 * kdp1} off)")
-            t |> success(bad_im2 == 0, "the stem's im2col (tts_im2col16, row-major, stride 2): the conv output's k3 columns at every second position and the zero pad columns, bit for bit ({bad_im2} of {rows2 * kdp2} off)")
-            let live_im1 = find_index_if(col1_want, $(v) => v != 0.0)
-            t |> success(uint(col1_dev[live_im1]) != f32_to_f16(col1_want[live_im1] + 0.5), "the stem's im2col (channel-major): the bar reds a poisoned element")
-            let live_im2 = find_index_if(col2_want, $(v) => v != 0.0)
-            t |> success(uint(col2_dev[live_im2]) != f32_to_f16(col2_want[live_im2] + 0.5), "the stem's im2col (row-major, stride 2): the bar reds a poisoned element")
-            var feat_want : array<float>
-            feat_want |> resize(q3_pos * q3_feat)
-            for (gid in range(q3_pos * q3_feat)) {
-                let row = gid / q3_feat
-                let j = gid % q3_feat
-                feat_want[gid] = y3[(row / q3_tok) * (16 * q3_tok * q3_nch) + ((j % 16) * q3_tok + row % q3_tok) * q3_nch + j / 16]
-            }
-            let bad_sh = halves_off(feat_dev, feat_want)
-            t |> success(bad_sh == 0, "tower_q3a_shuffle: the feature rows off the third conv stage, bit for bit ({bad_sh} of {q3_pos * q3_feat} off)")
-            let live_sh = find_index_if(feat_want, $(v) => v != 0.0)
-            t |> success(uint(feat_dev[live_sh]) != f32_to_f16(feat_want[live_sh] + 0.5), "tower_q3a_shuffle: the bar reds a poisoned element")
-            var fs_want : array<float>
-            fs_want |> resize(fs_t * fs_w * fs_c)
-            for (gid in range(fs_t * fs_w * fs_c)) {
-                let tt = gid / (fs_w * fs_c)
-                let rem = gid % (fs_w * fs_c)
-                fs_want[gid] = fs_src[(tt * fs_w + rem % fs_w) * fs_c + rem / fs_w]
-            }
-            check_rows(t, "tower_feat_shuffle [time][ch][freq] rows off the [time][freq][ch] image", fs_dev, fs_want, BAR_EXACT, fs_w * fs_c)
-            var gq_want : array<float>
-            var gp_want : array<float>
-            gq_want |> resize(rows * hs)
-            gp_want |> resize(rows * hs)
-            for (r in range(rows)) {
-                for (n in range(hs)) {
-                    gp_want[r * hs + n] = x[r * d + second_head_base + n]
-                    gq_want[r * hs + n] = x[r * d + second_head_base + n] + wn[second_head_base + n]
+                let bad_cvt = halves_off(cvt_dev, cvt_want)
+                t |> success(bad_cvt == 0 && clamped > nd / 8, "tower_clamp_cvt: the clamped rows as halves, bit for bit ({bad_cvt} of {nd} off, {clamped} elements clamped)")
+                t |> success(uint(cvt_dev[0]) != f32_to_f16(cvt_want[0] + 0.5), "tower_clamp_cvt: the bar reds a poisoned element")
+                var add_want := x
+                for (i in range(add_n)) {
+                    add_want[i] = x[i] + wn[d + i]
                 }
-            }
-            let bad_gq = halves_off(gq_dev, gq_want)
-            let bad_gp = halves_off(gp_dev, gp_want)
-            t |> success(bad_gq == 0, "tower_hpad16_b restride at one head (the canary panel): the head's rows plus the bias row as halves, bit for bit ({bad_gq} of {rows * hs} off)")
-            t |> success(bad_gp == 0, "tower_hpad16 restride at one head (the canary panel): the head's rows as halves, bit for bit ({bad_gp} of {rows * hs} off)")
-            t |> success(uint(gq_dev[0]) != f32_to_f16(gq_want[0] + 0.5) && halves_off(gp_dev, gq_want) > rows * hs / 2, "the one-head restride: the bar reds a poisoned element, and the plain arm misses the biased rows")
-            var cvt_want : array<float>
-            cvt_want |> resize(nd)
-            var clamped = 0
-            for (i in range(nd)) {
-                cvt_want[i] = clamp(x[i], -1.5, 1.5)
-                if (cvt_want[i] != x[i]) {
-                    clamped++
+                check_rows(t, "tower_bias_act as the plane add (d = nelem): the plane added element for element and nothing past it touched", add_dev, add_want, BAR_EXACT, d)
+                t |> success(add_dev[0] != x[0], "tower_bias_act as the plane add control: the rows moved off x")
+                var fin_want : array<float>
+                fin_want |> resize(nd)
+                for (gid in range(nd)) {
+                    let e = gid % d
+                    fin_want[gid] = x[gid] + wn[2 * d + e] + wn[3 * d + ((gid / d) % q3_tok) * d + e]
                 }
-            }
-            let bad_cvt = halves_off(cvt_dev, cvt_want)
-            t |> success(bad_cvt == 0 && clamped > nd / 8, "tower_clamp_cvt: the clamped rows as halves, bit for bit ({bad_cvt} of {nd} off, {clamped} elements clamped)")
-            t |> success(uint(cvt_dev[0]) != f32_to_f16(cvt_want[0] + 0.5), "tower_clamp_cvt: the bar reds a poisoned element")
-            var add_want := x
-            for (i in range(add_n)) {
-                add_want[i] = x[i] + wn[d + i]
-            }
-            check_rows(t, "tower_bias_act as the plane add (d = nelem): the plane added element for element and nothing past it touched", add_dev, add_want, BAR_EXACT, d)
-            t |> success(add_dev[0] != x[0], "tower_bias_act as the plane add control: the rows moved off x")
-            var fin_want : array<float>
-            fin_want |> resize(nd)
-            for (gid in range(nd)) {
-                let e = gid % d
-                fin_want[gid] = x[gid] + wn[2 * d + e] + wn[3 * d + ((gid / d) % q3_tok) * d + e]
-            }
-            check_rows(t, "tower_bias_act twice as the q3a finish: the conv_out bias and the per-chunk position rows added", fin_dev, fin_want, BAR_APPROX, d)
-            t |> success(!approx(fin_dev[d], x[d]), "tower_bias_act as the q3a finish control: the rows moved off x")
-            var ln_want : array<float>
-            ln_want |> resize(nd)
-            for (r in range(rows)) {
-                var mean = 0.0lf
-                for (c in range(d)) {
-                    mean += double(x[r * d + c])
+                check_rows(t, "tower_bias_act twice as the q3a finish: the conv_out bias and the per-chunk position rows added", fin_dev, fin_want, BAR_APPROX, d)
+                t |> success(!approx(fin_dev[d], x[d]), "tower_bias_act as the q3a finish control: the rows moved off x")
+                var ln_want : array<float>
+                ln_want |> resize(nd)
+                for (r in range(rows)) {
+                    var mean = 0.0lf
+                    for (c in range(d)) {
+                        mean += double(x[r * d + c])
+                    }
+                    mean /= double(d)
+                    var vv = 0.0lf
+                    for (c in range(d)) {
+                        let dv = double(x[r * d + c]) - mean
+                        vv += dv * dv
+                    }
+                    let inv = 1.0lf / sqrt(vv / double(d) + double(ROWS_EPS))
+                    for (c in range(d)) {
+                        ln_want[r * d + c] = max(float((double(x[r * d + c]) - mean) * inv) * wn[c], 0.0)
+                    }
                 }
-                mean /= double(d)
-                var vv = 0.0lf
-                for (c in range(d)) {
-                    let dv = double(x[r * d + c]) - mean
-                    vv += dv * dv
-                }
-                let inv = 1.0lf / sqrt(vv / double(d) + double(ROWS_EPS))
-                for (c in range(d)) {
-                    ln_want[r * d + c] = max(float((double(x[r * d + c]) - mean) * inv) * wn[c], 0.0)
-                }
+                check_rows(t, "tower_ln_relu channel LayerNorm then ReLU vs the CPU loop", ln_dev, ln_want, BAR_APPROX, d)
+                let live_ln = find_index_if(ln_want, $(v) => v != 0.0)
+                t |> success(ln_dev[live_ln] != x[live_ln], "tower_ln_relu control: a live element moved off x")
             }
-            check_rows(t, "tower_ln_relu channel LayerNorm then ReLU vs the CPU loop", ln_dev, ln_want, BAR_APPROX, d)
-            let live_ln = find_index_if(ln_want, $(v) => v != 0.0)
-            t |> success(ln_dev[live_ln] != x[live_ln], "tower_ln_relu control: a live element moved off x")
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -1816,7 +1795,7 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             let tt = ROWS_N
             let ww = 2 * tt - 1
             let n_rel = ww * REL_D
-            var xw <- row_fill(MEL_NLEN * MEL_NFFT, 37, 5, 0.03, 1.4)
+            let xw <- row_fill(MEL_NLEN * MEL_NFFT, 37, 5, 0.03, 1.4)
             let tw <- build_dft_twiddles(int64(MEL_NFFT))
             var pw <- row_fill(n_pw, 17, 3, 0.02, -0.9)
             for (v in pw) {
@@ -1829,19 +1808,10 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
             for (v in fil) {
                 v = abs(v) * 0.1
             }
-            var mel_in <- row_fill(n_norm, 29, 11, 0.07, 2.4)
+            let mel_in <- row_fill(n_norm, 29, 11, 0.07, 2.4)
             let dw_x <- row_fill(dw_in, 23, 9, 0.06, 2.7)
-            var dw_w <- row_fill(DW_CH * 9 + DW_CH, 7, 2, 0.05, 0.9)   // the taps at 0, the bias row at ch x 9
+            let dw_w <- row_fill(DW_CH * 9 + DW_CH, 7, 2, 0.05, 0.9)   // the taps at 0, the bias row at ch x 9
             let dw_lanes = (dw_out + 255) / 256 * 256   // the dispatch's lanes: the output past dw_out keeps the sentinel
-            var mag_dev : array<float>
-            var pow_dev : array<float>
-            var g4a_dev : array<float>
-            var cn_dev : array<float>
-            var wh_dev : array<float>
-            var norm_dev : array<float>
-            var dw_dev : array<float>
-            var dw_idle : array<uint>
-            var rel_dev : array<float>
             with_cell_planes() $(var cp : CellPlanes) {
                 let xwp = cp |> in_(xw)
                 let twp = cp |> in_(tw)
@@ -1886,115 +1856,115 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                     enc_tower_dw_conv_cls(raw, h, s_dw, pa_dw, int64((dw_out + 255) / 256))
                     enc_tower_rel_sincos_cls(raw, h, s_rel, pa_rel, int64((n_rel + 255) / 256))
                 }
-                mag_dev <- cp |> plane_run(magp)
-                pow_dev <- cp |> plane_run(powp)
-                g4a_dev <- cp |> plane_run(g4ap)
-                cn_dev <- cp |> plane_run(cnp)
-                wh_dev <- cp |> plane_run(whp)
-                norm_dev <- cp |> plane_run(normp)
-                dw_dev <- cp |> plane_run(dwyp)
-                dw_idle <- cp |> plane_as(dwyp, type<uint>, dw_lanes - dw_out, dw_out)
-                rel_dev <- cp |> plane_run(relp)
-            }
-            var mag_want : array<float>
-            var pow_want : array<float>
-            mag_want |> resize(n_pw)
-            pow_want |> resize(n_pw)
-            for (gid in range(n_pw)) {
-                let frame = gid / MEL_NBINS
-                let b = gid % MEL_NBINS
-                var re = 0.0lf
-                var im = 0.0lf
-                for (k in range(MEL_NFFT)) {
-                    re += double(xw[frame * MEL_NFFT + k]) * double(tw[k * 2 * MEL_NBINS + 2 * b])
-                    im += double(xw[frame * MEL_NFFT + k]) * double(tw[k * 2 * MEL_NBINS + 2 * b + 1])
+                let mag_dev <- cp |> plane_run(magp)
+                let pow_dev <- cp |> plane_run(powp)
+                let g4a_dev <- cp |> plane_run(g4ap)
+                let cn_dev <- cp |> plane_run(cnp)
+                let wh_dev <- cp |> plane_run(whp)
+                let norm_dev <- cp |> plane_run(normp)
+                let dw_dev <- cp |> plane_run(dwyp)
+                let dw_idle <- cp |> plane_as(dwyp, type<uint>, dw_lanes - dw_out, dw_out)
+                let rel_dev <- cp |> plane_run(relp)
+                var mag_want : array<float>
+                var pow_want : array<float>
+                mag_want |> resize(n_pw)
+                pow_want |> resize(n_pw)
+                for (gid in range(n_pw)) {
+                    let frame = gid / MEL_NBINS
+                    let b = gid % MEL_NBINS
+                    var re = 0.0lf
+                    var im = 0.0lf
+                    for (k in range(MEL_NFFT)) {
+                        re += double(xw[frame * MEL_NFFT + k]) * double(tw[k * 2 * MEL_NBINS + 2 * b])
+                        im += double(xw[frame * MEL_NFFT + k]) * double(tw[k * 2 * MEL_NBINS + 2 * b + 1])
+                    }
+                    pow_want[gid] = float(re * re + im * im)
+                    mag_want[gid] = float(sqrt(re * re + im * im))
                 }
-                pow_want[gid] = float(re * re + im * im)
-                mag_want[gid] = float(sqrt(re * re + im * im))
-            }
-            check_rows(t, "tower_spec_dft (magnitude) frames' spectra vs the double DFT", mag_dev, mag_want, BAR_APPROX, MEL_NBINS)
-            check_rows(t, "tower_spec_dft (power) vs re^2 + im^2", pow_dev, pow_want, BAR_APPROX, MEL_NBINS)
-            t |> success(!approx(pow_dev[1], mag_want[1]), "tower_spec_dft control: the power arm is not the magnitude")
-            var g4a_want : array<float>
-            var cn_want : array<float>
-            var wh_want : array<float>
-            g4a_want |> resize(n_mel)
-            cn_want |> resize(n_mel)
-            wh_want |> resize(n_mel)
-            for (frame in range(MEL_NLEN)) {
+                check_rows(t, "tower_spec_dft (magnitude) frames' spectra vs the double DFT", mag_dev, mag_want, BAR_APPROX, MEL_NBINS)
+                check_rows(t, "tower_spec_dft (power) vs re^2 + im^2", pow_dev, pow_want, BAR_APPROX, MEL_NBINS)
+                t |> success(!approx(pow_dev[1], mag_want[1]), "tower_spec_dft control: the power arm is not the magnitude")
+                var g4a_want : array<float>
+                var cn_want : array<float>
+                var wh_want : array<float>
+                g4a_want |> resize(n_mel)
+                cn_want |> resize(n_mel)
+                wh_want |> resize(n_mel)
+                for (frame in range(MEL_NLEN)) {
+                    for (j in range(MEL_NMEL)) {
+                        var sum = 0.0lf
+                        for (k in range(MEL_NBINS)) {
+                            sum += double(pw[frame * MEL_NBINS + k]) * double(fil[j * MEL_NBINS + k])
+                        }
+                        g4a_want[frame * MEL_NMEL + j] = float(log(max(sum, double(MEL_MAX_FLOOR_G4A))))
+                        cn_want[frame * MEL_NMEL + j] = float(log(sum + double(MEL_FLOOR_24)))
+                        wh_want[j * MEL_NLEN + frame] = float(log(max(sum, double(MEL_FLOOR_24))) * double(MEL_LOG10_E))
+                    }
+                }
+                check_rows(t, "tower_mel_log (frame-major, max floor) vs the gemma4a form", g4a_dev, g4a_want, BAR_APPROX, MEL_NMEL)
+                check_rows(t, "tower_mel_log (frame-major, added floor) vs the canary form", cn_dev, cn_want, BAR_APPROX, MEL_NMEL)
+                check_rows(t, "tower_mel_log (mel-major, log10) vs the whisper preprocessors' form", wh_dev, wh_want, BAR_APPROX, MEL_NLEN)
+                t |> success(approx(g4a_dev[0], log(MEL_MAX_FLOOR_G4A)) && cn_dev[0] < g4a_dev[0] - 1.0, "tower_mel_log: the quiet frame floors on the max arm and reads under the floor on the add arm")
+                var norm_want : array<float>
+                norm_want |> resize(n_norm)
                 for (j in range(MEL_NMEL)) {
                     var sum = 0.0lf
-                    for (k in range(MEL_NBINS)) {
-                        sum += double(pw[frame * MEL_NBINS + k]) * double(fil[j * MEL_NBINS + k])
+                    for (i in range(NORM_VALID)) {
+                        sum += double(mel_in[i * MEL_NMEL + j])
                     }
-                    g4a_want[frame * MEL_NMEL + j] = float(log(max(sum, double(MEL_MAX_FLOOR_G4A))))
-                    cn_want[frame * MEL_NMEL + j] = float(log(sum + double(MEL_FLOOR_24)))
-                    wh_want[j * MEL_NLEN + frame] = float(log(max(sum, double(MEL_FLOOR_24))) * double(MEL_LOG10_E))
+                    let mean = sum / double(NORM_VALID)
+                    var sq = 0.0lf
+                    for (i in range(NORM_VALID)) {
+                        let dv = double(mel_in[i * MEL_NMEL + j]) - mean
+                        sq += dv * dv
+                    }
+                    let denom = sqrt(sq / double(NORM_VALID - 1)) + 1e-5lf
+                    for (i in range(NORM_NLEN)) {
+                        norm_want[i * MEL_NMEL + j] = i < NORM_VALID ? float((double(mel_in[i * MEL_NMEL + j]) - mean) / denom) : 0.0
+                    }
                 }
-            }
-            check_rows(t, "tower_mel_log (frame-major, max floor) vs the gemma4a form", g4a_dev, g4a_want, BAR_APPROX, MEL_NMEL)
-            check_rows(t, "tower_mel_log (frame-major, added floor) vs the canary form", cn_dev, cn_want, BAR_APPROX, MEL_NMEL)
-            check_rows(t, "tower_mel_log (mel-major, log10) vs the whisper preprocessors' form", wh_dev, wh_want, BAR_APPROX, MEL_NLEN)
-            t |> success(approx(g4a_dev[0], log(MEL_MAX_FLOOR_G4A)) && cn_dev[0] < g4a_dev[0] - 1.0, "tower_mel_log: the quiet frame floors on the max arm and reads under the floor on the add arm")
-            var norm_want : array<float>
-            norm_want |> resize(n_norm)
-            for (j in range(MEL_NMEL)) {
-                var sum = 0.0lf
-                for (i in range(NORM_VALID)) {
-                    sum += double(mel_in[i * MEL_NMEL + j])
-                }
-                let mean = sum / double(NORM_VALID)
-                var sq = 0.0lf
-                for (i in range(NORM_VALID)) {
-                    let dv = double(mel_in[i * MEL_NMEL + j]) - mean
-                    sq += dv * dv
-                }
-                let denom = sqrt(sq / double(NORM_VALID - 1)) + 1e-5lf
-                for (i in range(NORM_NLEN)) {
-                    norm_want[i * MEL_NMEL + j] = i < NORM_VALID ? float((double(mel_in[i * MEL_NMEL + j]) - mean) / denom) : 0.0
-                }
-            }
-            check_rows(t, "tower_mel_norm column statistics over the valid frames and the zero tail vs the CPU loop", norm_dev, norm_want, BAR_APPROX, MEL_NMEL)
-            let tail_off = count(subarray(norm_dev, range(NORM_VALID * MEL_NMEL, n_norm)), $(v) => v != 0.0)
-            t |> success(tail_off == 0 && norm_dev[0] != mel_in[0], "tower_mel_norm: the tail is exact zeros ({tail_off} tail words live) and the rows moved off the input")
-            var dw_want : array<float>
-            dw_want |> resize(dw_out)
-            for (gid in range(dw_out)) {
-                let c = gid % DW_CH
-                let o = gid / DW_CH
-                var acc = double(dw_w[DW_CH * 9 + c])
-                for (kh in range(3)) {
-                    for (kw in range(3)) {
-                        let iy = (o / FM_OW) * 2 + kh - 1
-                        let ix = (o % FM_OW) * 2 + kw - 1
-                        if (iy >= 0 && iy < FM_IH && ix >= 0 && ix < FM_IW) {
-                            acc += double(dw_w[c * 9 + kh * 3 + kw]) * double(dw_x[(iy * FM_IW + ix) * DW_CH + c])
+                check_rows(t, "tower_mel_norm column statistics over the valid frames and the zero tail vs the CPU loop", norm_dev, norm_want, BAR_APPROX, MEL_NMEL)
+                let tail_off = count(subarray(norm_dev, range(NORM_VALID * MEL_NMEL, n_norm)), $(v) => v != 0.0)
+                t |> success(tail_off == 0 && norm_dev[0] != mel_in[0], "tower_mel_norm: the tail is exact zeros ({tail_off} tail words live) and the rows moved off the input")
+                var dw_want : array<float>
+                dw_want |> resize(dw_out)
+                for (gid in range(dw_out)) {
+                    let c = gid % DW_CH
+                    let o = gid / DW_CH
+                    var acc = double(dw_w[DW_CH * 9 + c])
+                    for (kh in range(3)) {
+                        for (kw in range(3)) {
+                            let iy = (o / FM_OW) * 2 + kh - 1
+                            let ix = (o % FM_OW) * 2 + kw - 1
+                            if (iy >= 0 && iy < FM_IH && ix >= 0 && ix < FM_IW) {
+                                acc += double(dw_w[c * 9 + kh * 3 + kw]) * double(dw_x[(iy * FM_IW + ix) * DW_CH + c])
+                            }
                         }
                     }
+                    dw_want[gid] = float(acc)
                 }
-                dw_want[gid] = float(acc)
-            }
-            check_rows(t, "tower_dw_conv k3 s2 p1 depthwise taps with the bias vs the CPU form", dw_dev, dw_want, BAR_APPROX, DW_CH)
-            t |> equal(count(dw_idle, $(w) => w == NAN_SENTINEL_BITS), dw_lanes - dw_out, "tower_dw_conv: the idle lanes past the output write nothing (every word past it the sentinel)")
-            var rel_want : array<float>
-            rel_want |> resize(n_rel)
-            for (w in range(ww)) {
-                let rel = double(tt - 1 - w)
+                check_rows(t, "tower_dw_conv k3 s2 p1 depthwise taps with the bias vs the CPU form", dw_dev, dw_want, BAR_APPROX, DW_CH)
+                t |> equal(count(dw_idle, $(w) => w == NAN_SENTINEL_BITS), dw_lanes - dw_out, "tower_dw_conv: the idle lanes past the output write nothing (every word past it the sentinel)")
+                var rel_want : array<float>
+                rel_want |> resize(n_rel)
+                for (w in range(ww)) {
+                    let rel = double(tt - 1 - w)
+                    for (k in range(REL_D / 2)) {
+                        let freq = exp(-(double(k * 2) * log(10000.0lf) / double(REL_D)))
+                        let theta = float(freq * rel)
+                        rel_want[w * REL_D + 2 * k] = sin(theta)
+                        rel_want[w * REL_D + 2 * k + 1] = cos(theta)
+                    }
+                }
+                check_rows(t, "tower_rel_sincos table vs the CPU loop", rel_dev, rel_want, BAR_APPROX, REL_D)
+                var zero_row_off = 0
                 for (k in range(REL_D / 2)) {
-                    let freq = exp(-(double(k * 2) * log(10000.0lf) / double(REL_D)))
-                    let theta = float(freq * rel)
-                    rel_want[w * REL_D + 2 * k] = sin(theta)
-                    rel_want[w * REL_D + 2 * k + 1] = cos(theta)
+                    if (rel_dev[(tt - 1) * REL_D + 2 * k] != 0.0 || rel_dev[(tt - 1) * REL_D + 2 * k + 1] != 1.0) {
+                        zero_row_off++
+                    }
                 }
+                t |> success(zero_row_off == 0, "tower_rel_sincos: the rel 0 row is exactly (0, 1) ({zero_row_off} of the zero row off)")
             }
-            check_rows(t, "tower_rel_sincos table vs the CPU loop", rel_dev, rel_want, BAR_APPROX, REL_D)
-            var zero_row_off = 0
-            for (k in range(REL_D / 2)) {
-                if (rel_dev[(tt - 1) * REL_D + 2 * k] != 0.0 || rel_dev[(tt - 1) * REL_D + 2 * k + 1] != 1.0) {
-                    zero_row_off++
-                }
-            }
-            t |> success(zero_row_off == 0, "tower_rel_sincos: the rel 0 row is exactly (0, 1) ({zero_row_off} of the zero row off)")
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -2018,7 +1988,7 @@ def private cn_rel_plane(q, posl, wn : array<float>; rows, ww, d, hs, hoff, bvof
 }
 
 [test]
-def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {   // nolint:STYLE038 — one flat gate over the two stamps: the fixture, one command buffer, the oracle and its controls
+def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {
     t0 |> run("the rel-plane FastConformer attention (both head widths) over CPU-built planes == the CPU loop") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tower_cn_attn_r64_cls() || !ensure_tower_cn_attn_r_cls()) {
@@ -2032,19 +2002,14 @@ def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {   // nolint:STYLE038 — one fla
             let hs2 = d / heads2
             let nd = rows * d
             let ww = 2 * rows - 1
-            let nr = rows * ww
-            var q <- row_fill(nd, 41, 3, 0.03, 1.1)
-            var k <- row_fill(nd, 17, 11, 0.04, 1.3)
-            var v <- row_fill(nd, 29, 13, 0.05, 1.7)
+            let q <- row_fill(nd, 41, 3, 0.03, 1.1)
+            let k <- row_fill(nd, 17, 11, 0.04, 1.3)
+            let v <- row_fill(nd, 29, 13, 0.05, 1.7)
             let posl <- row_fill(ww * d, 13, 2, 0.02, 0.9)
-            var wn <- row_fill(2 * d, 7, 1, 0.01, 0.3)   // bias_u at 0, bias_v at d
+            let wn <- row_fill(2 * d, 7, 1, 0.01, 0.3)   // bias_u at 0, bias_v at d
             let wg = int64((rows + 63) / 64)
             let ao_rows = int(wg) * 64   // a row a lane: the idle lanes' rows past `rows` keep the sentinel
             let nidle = (ao_rows - rows) * d
-            var ao_dev : array<float>
-            var ao2_dev : array<float>
-            var ao_idle : array<uint>
-            var ao2_idle : array<uint>
             with_cell_planes() $(var cp : CellPlanes) {
                 let qp = cp |> in_(q)
                 let kp = cp |> in_(k)
@@ -2068,24 +2033,24 @@ def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {   // nolint:STYLE038 — one fla
                         enc_tower_cn_attn_r_cls(raw, h, sets[ROWS_HEADS + hh], pa, wg)
                     }
                 }
-                ao_dev <- cp |> plane_run(aop)
-                ao2_dev <- cp |> plane_run(ao2p)
-                ao_idle <- cp |> plane_as(aop, type<uint>, nidle, nd)
-                ao2_idle <- cp |> plane_as(ao2p, type<uint>, nidle, nd)
+                let ao_dev <- cp |> plane_run(aop)
+                let ao2_dev <- cp |> plane_run(ao2p)
+                let ao_idle <- cp |> plane_as(aop, type<uint>, nidle, nd)
+                let ao2_idle <- cp |> plane_as(ao2p, type<uint>, nidle, nd)
+                t |> success(ao_rows > rows, "the dispatch carries idle lanes past the live rows ({ao_rows - rows} of {ao_rows})")
+                t |> equal(count(ao_idle, $(w) => w == NAN_SENTINEL_BITS) + count(ao2_idle, $(w) => w == NAN_SENTINEL_BITS), 2 * (ao_rows - rows) * d, "tower_cn_attn_r: the idle lanes write nothing past the live rows on both stamps (every word the sentinel)")
+                let ao_ref <- cn_attn_ref(q, k, v, posl, wn, rows, d, ROWS_HEADS, hs, 0, d)
+                let ao2_ref <- cn_attn_ref(q, k, v, posl, wn, rows, d, heads2, hs2, 0, d)
+                check_rows(t, "tower_cn_attn_r64 rel-plane attention over four 64-wide heads vs the CPU loop", ao_dev, ao_ref, BAR_APPROX, d, hs)
+                check_rows(t, "tower_cn_attn_r rel-plane attention over two 128-wide heads vs the CPU loop", ao2_dev, ao2_ref, BAR_APPROX, d, hs2)
+                let k_scaled <- scaled_copy(k, 1.5)
+                let posl_scaled <- scaled_copy(posl, 1.5)
+                let ctl_k <- cn_attn_ref(q, k_scaled, v, posl, wn, rows, d, ROWS_HEADS, hs, 0, d)
+                let ctl_p <- cn_attn_ref(q, k, v, posl_scaled, wn, rows, d, heads2, hs2, 0, d)
+                let moved_k = mismatch_approx(ao_dev, ctl_k)
+                let moved_p = mismatch_approx(ao2_dev, ctl_p)
+                t |> success(moved_k > nd / 4 && moved_p > nd / 4, "tower_cn_attn_r controls: scaled keys ({moved_k} moved) and a scaled rel table ({moved_p} moved) land the oracle elsewhere")
             }
-            t |> success(ao_rows > rows, "the dispatch carries idle lanes past the live rows ({ao_rows - rows} of {ao_rows})")
-            t |> equal(count(ao_idle, $(w) => w == NAN_SENTINEL_BITS) + count(ao2_idle, $(w) => w == NAN_SENTINEL_BITS), 2 * (ao_rows - rows) * d, "tower_cn_attn_r: the idle lanes write nothing past the live rows on both stamps (every word the sentinel)")
-            let ao_ref <- cn_attn_ref(q, k, v, posl, wn, rows, d, ROWS_HEADS, hs, 0, d)
-            let ao2_ref <- cn_attn_ref(q, k, v, posl, wn, rows, d, heads2, hs2, 0, d)
-            check_rows(t, "tower_cn_attn_r64 rel-plane attention over four 64-wide heads vs the CPU loop", ao_dev, ao_ref, BAR_APPROX, d, hs)
-            check_rows(t, "tower_cn_attn_r rel-plane attention over two 128-wide heads vs the CPU loop", ao2_dev, ao2_ref, BAR_APPROX, d, hs2)
-            let k_scaled <- scaled_copy(k, 1.5)
-            let posl_scaled <- scaled_copy(posl, 1.5)
-            let ctl_k <- cn_attn_ref(q, k_scaled, v, posl, wn, rows, d, ROWS_HEADS, hs, 0, d)
-            let ctl_p <- cn_attn_ref(q, k, v, posl_scaled, wn, rows, d, heads2, hs2, 0, d)
-            let moved_k = mismatch_approx(ao_dev, ctl_k)
-            let moved_p = mismatch_approx(ao2_dev, ctl_p)
-            t |> success(moved_k > nd / 4 && moved_p > nd / 4, "tower_cn_attn_r controls: scaled keys ({moved_k} moved) and a scaled rel table ({moved_p} moved) land the oracle elsewhere")
         } else {
             t |> skip("dasVulkan not present")
         }

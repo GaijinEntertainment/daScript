@@ -2633,6 +2633,7 @@ struct RDec {
     moe_gub_bytes, moe_db_bytes : int64
     moe_eidx_dev : uint64         //! the decode's k picks' experts (the biased act and combine's row map)
     moe_ident_dev : uint64        //! 0..MAX_ROUTED_SLOTS-1: the decode combine's identity slot map
+    ones_dev : uint64             //! MAX_ROUTED_SLOTS ones: the host-summed row's weight in a host layer's combine (one slot, the identity map)
     moe_dlog_dev : uint64         //! the decode's logits row (ner floats)
     moe_dw_dev : uint64           //! the decode's k routing weights
     moe_meta1_dev, moe_meta3_dev, moe_meta2_dev : uint64   //! the decode GEMVs' slot regions, written by the top-k
@@ -2698,9 +2699,9 @@ struct RDec {
     ple_bkey, ple_bval : int64
     s_ple_rq, s_ple_key, s_ple_val, s_ple_gate, s_ple_conv : VkDescriptorSet
     m_ple_key, m_ple_val : HostBuf
-    //! the routed experts on the host (`vk_rdec_set_host_experts`): the token command splits at every routed block
+    //! some routed layers' experts on the host (`vk_rdec_set_host_experts`; a layer registered with no expert blocks): the token command splits at every such block
     experts_host : bool
-    nseg : int64                  //! the segments a token takes: the routed layers plus one
+    nseg : int64                  //! the segments a token takes: the host layers plus one
     cmd_seg : array<VkCommandBuffer>   //! [regions x nseg], recorded once per region
     seg_recorded : array<bool>
     seg_layer : array<int64>      //! the routed layer a segment ends on (the last segment ends on none: -1)
@@ -2728,6 +2729,7 @@ struct RDec {
     pf_plekey, pf_pleval : uint64     //! [np x hc x dim], [np x dim] the side projections
     pf_plegated, pf_hpanel : uint64   //! [np x hc x dim] the gated value rows, the normed gated rows the conv reads inside the window
     pf_hacc_dev : uint64              //! [np x dim] the host's routed sums, copied in-cmd
+    pf_ident_dev, pf_ones_dev : uint64   //! [np] 0..np-1 and [np] ones: a host layer's combine reads its row at the identity map under a weight of one
     pf_hx_host, pf_hlog_host, pf_hacc_host : HostBuf   //! the landings a routed layer's host step reads and writes: the FFN-mixed rows [np x dim], the router logits [np x ner], the sums [np x dim]
     pf_seg : array<VkCommandBuffer>   //! the window's segments: the routed layers plus one
     pf_hc_meta0 : int                 //! the first of the mixer GEMMs' meta slots in pf_meta: two a site (down, up), then the head's two, then the side key and value

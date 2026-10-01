@@ -4,7 +4,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require daslib/jobque_boost
-require daslib/math_bits
+require daslib/math_bits   // nolint:STYLE030,LINT019 — used only inside the das_accelerate static_if half
 require math
 require ?das_accelerate dasllama/dasllama_math_accelerate
 require _compares
