@@ -1,7 +1,13 @@
 "use strict";
 
 const LANES = ["interp", "jit", "aot"];
-const state = { data: null, status: null, runWindow: 90, lanes: new Set(LANES), group: "" };
+const RANGES = [[30, "30 runs"], [90, "90 runs"], [0, "all"]];
+const SHOWS = [["all", "all"], ["slower", "slower"], ["faster", "faster"], ["moved", "moved"], ["failing", "failing"]];
+const THRESHOLDS = [[0.05, "5%"], [0.10, "10%"], [0.25, "25%"]];
+const SORTS = [["name", "name"], ["change", "change"]];
+const BASELINE_RUNS = 5, MIN_BASELINE = 3, NOISE_FACTOR = 2, MOVERS_SHOWN = 8;
+const DEFAULTS = { runWindow: 90, group: "", query: "", show: "all", threshold: 0.10, sort: "name" };
+const state = { data: null, status: null, lanes: new Set(LANES), ...DEFAULTS };
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, cls, text) => {
@@ -31,13 +37,76 @@ const BASE = new URL(".", document.currentScript.src).href;
 const recordUrl = (run) => BASE + "runs/" + encodeURIComponent(run.id) + ".json";
 const anchorId = (id) => "b-" + id.replace(/[^A-Za-z0-9_-]/g, "_");
 
+function median(xs) {
+    const s = [...xs].sort((a, b) => a - b);
+    const m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+// what a move is: ../README.md, "2.1 Reading the numbers"
+function computeChanges() {
+    const d = state.data;
+    for (const s of d.series) {
+        s.change = null;
+        const i = s.runs.indexOf(d.latest);
+        if (i < MIN_BASELINE) continue;
+        const from = Math.max(0, i - BASELINE_RUNS);
+        const prev = s.ns.slice(from, i);
+        const base = median(prev);
+        if (!(base > 0) || !(s.ns[i] > 0)) continue;
+        const noise = Math.max(s.spread[i], median(s.spread.slice(from, i)), median(prev.map((v) => Math.abs(v / base - 1))));
+        s.change = { ratio: s.ns[i] / base, base, noise, fromRun: s.runs[from] };
+    }
+}
+
+const changeSize = (change) => (change ? Math.abs(change.ratio - 1) : 0);
+function verdict(change) {
+    const size = changeSize(change);
+    if (size <= state.threshold || size <= NOISE_FACTOR * change.noise) return null;
+    return change.ratio > 1 ? "slower" : "faster";
+}
+function fmtDelta(ratio) {
+    if (ratio >= 2) return ratio.toFixed(1) + "x";
+    const p = (ratio - 1) * 100;
+    return (p >= 0 ? "+" : "−") + Math.abs(p).toFixed(Math.abs(p) >= 10 ? 0 : 1) + "%";
+}
+function deltaBadge(change, lane) {
+    const b = el("span", "delta delta--" + (change.ratio > 1 ? "slower" : "faster"), fmtDelta(change.ratio));
+    b.title = lane + ": " + fmtNs(change.base * change.ratio) + " against a median of " + fmtNs(change.base) + " over its previous runs (noise " + (change.noise * 100).toFixed(1) + "%)";
+    return b;
+}
+
+function readUrl() {
+    const p = new URLSearchParams(location.search);
+    const num = (k) => (p.has(k) ? Number(p.get(k)) : NaN);
+    state.query = p.get("q") || "";
+    if (SHOWS.some(([v]) => v === p.get("show"))) state.show = p.get("show");
+    if (SORTS.some(([v]) => v === p.get("sort"))) state.sort = p.get("sort");
+    if (THRESHOLDS.some(([v]) => v * 100 === num("thr"))) state.threshold = num("thr") / 100;
+    if (RANGES.some(([v]) => v === num("range"))) state.runWindow = num("range");
+    if (p.has("lanes")) state.lanes = new Set(p.get("lanes").split(",").filter((l) => LANES.includes(l)));
+    state.group = p.get("group") || "";
+}
+function writeUrl() {
+    const p = new URLSearchParams();
+    if (state.query) p.set("q", state.query);
+    if (state.show !== DEFAULTS.show) p.set("show", state.show);
+    if (state.threshold !== DEFAULTS.threshold) p.set("thr", String(Math.round(state.threshold * 100)));
+    if (state.sort !== DEFAULTS.sort) p.set("sort", state.sort);
+    if (state.group) p.set("group", state.group);
+    if (state.runWindow !== DEFAULTS.runWindow) p.set("range", String(state.runWindow));
+    if (state.lanes.size !== LANES.length) p.set("lanes", LANES.filter((l) => state.lanes.has(l)).join(","));
+    const qs = p.toString();
+    history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
+}
+
 async function load() {
     const [dataRes, statusRes] = await Promise.allSettled([
         fetch(BASE + "data.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject(new Error("data.json " + r.status)))),
         fetch(BASE + "status.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
     ]);
     state.status = statusRes.status === "fulfilled" ? statusRes.value : null;
-    if (dataRes.status === "fulfilled") state.data = dataRes.value;
+    if (dataRes.status === "fulfilled") { state.data = dataRes.value; computeChanges(); }
     else $("#stand").replaceChildren(el("p", "notice notice--error", "No data.json yet: the stand has not published a report (" + dataRes.reason.message + ")."));
     renderStatus();
     if (state.data) renderAll();
@@ -66,26 +135,54 @@ function renderStatus() {
 }
 
 function wireFilters() {
-    document.querySelectorAll(".chip[data-range]").forEach((b) => b.addEventListener("click", () => {
-        document.querySelectorAll(".chip[data-range]").forEach((x) => x.classList.remove("is-on"));
-        b.classList.add("is-on");
-        state.runWindow = Number(b.dataset.range);
-        renderAll();
-    }));
     document.querySelectorAll("input[data-lane]").forEach((c) => c.addEventListener("change", () => {
         if (c.checked) state.lanes.add(c.dataset.lane); else state.lanes.delete(c.dataset.lane);
+        writeUrl();
         renderAll();
     }));
-    $("#group").addEventListener("change", (e) => { state.group = e.target.value; renderSeries(); });
+    $("#group").addEventListener("change", (e) => { state.group = e.target.value; writeUrl(); renderNightAndSeries(); });
+    let queryTimer = 0;
+    $("#query").addEventListener("input", (e) => {
+        clearTimeout(queryTimer);
+        queryTimer = setTimeout(() => { state.query = e.target.value.trim(); writeUrl(); renderSeries(); }, 200);
+    });
+}
+
+function chipGroup(key, label, options, current, pick) {
+    const g = el("div", "filters__group");
+    g.setAttribute("role", "group"); g.setAttribute("aria-label", label);
+    g.dataset.filter = key;
+    g.append(el("span", "filters__label", label));
+    for (const [value, text] of options) {
+        const b = el("button", "chip" + (value === current ? " is-on" : ""), text);
+        b.type = "button";
+        b.dataset.value = String(value);
+        b.addEventListener("click", () => { syncChips(key, value); pick(value); writeUrl(); });
+        g.append(b);
+    }
+    return g;
+}
+function syncChips(key, value) {
+    document.querySelectorAll(`[data-filter="${key}"] .chip`).forEach((b) => b.classList.toggle("is-on", b.dataset.value === String(value)));
 }
 
 function fillGroups() {
     const sel = $("#group");
-    const keep = sel.value;
+    if (!state.data.groups.includes(state.group)) state.group = "";
     sel.replaceChildren(el("option", null, "all groups"));
     sel.firstChild.value = "";
     for (const g of state.data.groups) { const o = el("option", null, g); o.value = g; sel.append(o); }
-    sel.value = state.data.groups.includes(keep) ? keep : "";
+    sel.value = state.group;
+}
+
+function revealArm(id) {
+    state.query = id; state.show = "all"; state.group = "";
+    $("#query").value = id; $("#group").value = "";
+    syncChips("show", "all");
+    writeUrl();
+    renderNightAndSeries();
+    const card = document.getElementById(anchorId(id));
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function header(title, count, sub) {
@@ -133,7 +230,55 @@ function renderNight() {
     for (const f of run.skipped) { const line = el("div"); line.append("skipped ", el("code", null, f.path), " (" + f.lane + "): " + f.message); notes.append(line); }
     card.append(notes, rec);
 
-    box.append(card);
+    box.append(card, ...moversCards());
+}
+
+function moversCards() {
+    const d = state.data;
+    const moved = { slower: new Map(), faster: new Map() };
+    for (const s of d.series) {
+        if (!state.lanes.has(s.lane) || (state.group && s.group !== state.group)) continue;
+        const v = verdict(s.change);
+        if (!v) continue;
+        if (!moved[v].has(s.id)) moved[v].set(s.id, []);
+        moved[v].get(s.id).push(s);
+    }
+    const sub = "vs median of its previous " + BASELINE_RUNS + " runs, beyond " + Math.round(state.threshold * 100) + "% and the noise";
+    const card = (title, byArm, show) => {
+        const rows = [...byArm].map(([id, lanes]) => ({ id, lanes, size: Math.max(...lanes.map((s) => changeSize(s.change))) }));
+        rows.sort((a, b) => b.size - a.size);
+        const c = el("div", "card movers");
+        c.append(header(title, rows.length, sub));
+        c.append(list(rows.slice(0, MOVERS_SHOWN), (row) => {
+            const li = el("li");
+            row.lanes.sort((a, b) => LANES.indexOf(a.lane) - LANES.indexOf(b.lane));
+            for (const s of row.lanes) li.append(deltaBadge(s.change, s.lane), el("span", "tag tag--" + s.lane, s.lane));
+            const a = el("a", "arm-link", row.id);
+            a.href = "#" + anchorId(row.id);
+            a.addEventListener("click", (e) => { e.preventDefault(); revealArm(row.id); });
+            li.append(a);
+            return li;
+        }, "nothing"));
+        if (rows.length > MOVERS_SHOWN) {
+            const all = el("button", "chip", "show all " + rows.length);
+            all.type = "button";
+            all.addEventListener("click", () => {
+                state.show = show; state.sort = "change";
+                syncChips("show", show); syncChips("sort", "change");
+                writeUrl();
+                renderSeries();
+                $("#series").scrollIntoView({ behavior: "smooth" });
+            });
+            c.append(all);
+        }
+        return c;
+    };
+    return [card("Slower", moved.slower, "slower"), card("Faster", moved.faster, "faster")];
+}
+
+function renderNightAndSeries() {
+    renderNight();
+    renderSeries();
 }
 
 const W = 420, H = 150, PAD = { l: 44, r: 54, t: 10, b: 22 };
@@ -184,6 +329,10 @@ function drawChart(lines, runIdx, failedRuns, label, fmt) {
         for (const p of pts) band += (band ? "L" : "M") + xOf.get(p.r).toFixed(1) + "," + yOf(p.v * (1 + p.s)).toFixed(1);
         for (let i = pts.length - 1; i >= 0; i--) band += "L" + xOf.get(pts[i].r).toFixed(1) + "," + yOf(pts[i].v).toFixed(1);
         svg.append(svgEl("path", { class: "band band--" + ln.lane, d: band + "Z" }));
+        const ch = ln.change;
+        if (verdict(ch) && xOf.has(ch.fromRun) && xOf.has(state.data.latest)) {
+            svg.append(svgEl("line", { class: "baseline baseline--" + ln.lane, x1: xOf.get(ch.fromRun), x2: xOf.get(state.data.latest), y1: yOf(ch.base), y2: yOf(ch.base) }));
+        }
         let d = "", prev = -2;
         for (const p of pts) {
             const at = runIdx.indexOf(p.r);
@@ -255,6 +404,12 @@ function chartCard(id, file, lines, runIdx, failedRuns) {
     const ttl = el("div", "chart-card__title");
     ttl.append(el("span", "file", file + " "), id.slice(file.length + 1));
     head.append(ttl);
+    const moved = lines.filter((ln) => verdict(ln.change));
+    if (moved.length) {
+        const deltas = el("div", "chart-card__deltas");
+        for (const ln of moved) deltas.append(el("span", "tag tag--" + ln.lane, ln.lane), deltaBadge(ln.change, ln.lane));
+        head.append(deltas);
+    }
     card.append(head, drawChart(lines, runIdx, failedRuns, id));
     if (lines.length > 1) {
         const lg = el("div", "legend");
@@ -308,40 +463,61 @@ function renderSeries() {
     const d = state.data;
     const runIdx = visibleRunIndices();
     const visible = new Set(runIdx);
+    const failKey = (lane, file) => lane + "\t" + file;
     const failedBy = new Map();
     d.runs.forEach((run, ri) => {
         for (const f of run.failures) {
-            const key = f.lane + "\t" + f.path.replace(/\.das$/, "");
+            const key = failKey(f.lane, f.path.replace(/\.das$/, ""));
             if (!failedBy.has(key)) failedBy.set(key, new Set());
             failedBy.get(key).add(ri);
         }
     });
+    const terms = state.query.toLowerCase().split(/\s+/).filter(Boolean);
     const arms = new Map();
     for (const s of d.series) {
         if (!state.lanes.has(s.lane) || (state.group && s.group !== state.group) || !s.runs.some((r) => visible.has(r))) continue;
+        if (terms.length && !terms.every((t) => s.id.toLowerCase().includes(t))) continue;
         if (!arms.has(s.id)) arms.set(s.id, { group: s.group, file: s.file, lines: [] });
         const arm = arms.get(s.id);
-        arm.lines.push({ lane: s.lane, points: s.runs.map((r, i) => ({ r, v: s.ns[i], s: s.spread[i] })) });
+        arm.lines.push({ lane: s.lane, change: s.change, points: s.runs.map((r, i) => ({ r, v: s.ns[i], s: s.spread[i] })) });
     }
+    const failedRunsOf = (arm) => new Set(arm.lines.flatMap((ln) => [...(failedBy.get(failKey(ln.lane, arm.file)) || [])]));
+    const isMoved = (arm) => arm.lines.some((ln) => verdict(ln.change));
+    const keep = {
+        all: () => true,
+        slower: (arm) => arm.lines.some((ln) => verdict(ln.change) === "slower"),
+        faster: (arm) => arm.lines.some((ln) => verdict(ln.change) === "faster"),
+        moved: isMoved,
+        failing: (arm) => failedRunsOf(arm).has(d.latest),
+    }[state.show];
+    for (const [id, arm] of arms) if (!keep(arm)) arms.delete(id);
     $("#series-count").textContent = arms.size + " of " + new Set(d.series.map((s) => s.id)).size + " arms";
     if (!arms.size) { box.append(el("p", "notice", "Nothing matches the filters.")); return; }
+    const card = ([id, arm]) => {
+        arm.lines.sort((a, b) => LANES.indexOf(a.lane) - LANES.indexOf(b.lane));
+        return chartCard(id, arm.file, arm.lines, runIdx, failedRunsOf(arm));
+    };
+    const section = (title, sub, cards) => {
+        const grid = el("div", "grid");
+        grid.append(...cards);
+        const sec = el("div", "group");
+        sec.append(header(title, undefined, sub), grid);
+        box.append(sec);
+    };
+    if (state.sort === "change") {
+        const largestChange = (arm) => Math.max(0, ...arm.lines.map((ln) => changeSize(ln.change)));
+        const entries = [...arms.entries()].sort((a, b) => (isMoved(b[1]) - isMoved(a[1])) || (largestChange(b[1]) - largestChange(a[1])));
+        section("by change", "moved arms first, then the largest change against each arm's previous " + BASELINE_RUNS + " runs", entries.map(card));
+        return;
+    }
+    // the aggregate reads "all arms" of its group, so a name or move filter drops it
+    const narrowed = terms.length > 0 || state.show !== "all";
     const byGroup = new Map();
     for (const [id, arm] of arms) { if (!byGroup.has(arm.group)) byGroup.set(arm.group, []); byGroup.get(arm.group).push([id, arm]); }
     for (const [group, entries] of [...byGroup.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-        const section = el("div", "group");
-        const h = el("h3");
-        h.append(group, el("span", "muted", entries.length + " arms"));
-        const grid = el("div", "grid");
-        const agg = aggregateCard(group, entries, runIdx);
-        if (agg) grid.append(agg);
-        for (const [id, arm] of entries.sort((a, b) => a[0].localeCompare(b[0]))) {
-            arm.lines.sort((a, b) => LANES.indexOf(a.lane) - LANES.indexOf(b.lane));
-            const failedRuns = new Set();
-            for (const ln of arm.lines) for (const ri of failedBy.get(ln.lane + "\t" + arm.file) || []) failedRuns.add(ri);
-            grid.append(chartCard(id, arm.file, arm.lines, runIdx, failedRuns));
-        }
-        section.append(h, grid);
-        box.append(section);
+        const agg = narrowed ? null : aggregateCard(group, entries, runIdx);
+        const cards = entries.sort((a, b) => a[0].localeCompare(b[0])).map(card);
+        section(group, entries.length + " arms", agg ? [agg, ...cards] : cards);
     }
 }
 
@@ -389,19 +565,21 @@ function mountSkeleton() {
     const root = $("#stand");
     const filters = el("section", "filters");
     filters.setAttribute("aria-label", "filters");
-    const range = el("div", "filters__group");
-    range.setAttribute("role", "group"); range.setAttribute("aria-label", "range");
-    for (const [n, label, on] of [[30, "30 runs", false], [90, "90 runs", true], [0, "all", false]]) {
-        const b = el("button", "chip" + (on ? " is-on" : ""), label);
-        b.dataset.range = String(n);
-        range.append(b);
-    }
+    const search = el("label", "search");
+    const q = el("input");
+    q.id = "query"; q.type = "search"; q.placeholder = "filter by name"; q.value = state.query;
+    q.setAttribute("aria-label", "filter by name");
+    search.append(q);
+    const show = chipGroup("show", "show", SHOWS, state.show, (v) => { state.show = v; renderSeries(); });
+    const thr = chipGroup("threshold", "beyond", THRESHOLDS, state.threshold, (v) => { state.threshold = v; renderNightAndSeries(); });
+    const sort = chipGroup("sort", "sort", SORTS, state.sort, (v) => { state.sort = v; renderSeries(); });
+    const range = chipGroup("range", "range", RANGES, state.runWindow, (v) => { state.runWindow = v; renderAll(); });
     const lanes = el("div", "filters__group");
     lanes.setAttribute("role", "group"); lanes.setAttribute("aria-label", "lanes");
     for (const lane of LANES) {
         const lb = el("label", "lane lane--" + lane);
         const cb = el("input");
-        cb.type = "checkbox"; cb.dataset.lane = lane; cb.checked = true;
+        cb.type = "checkbox"; cb.dataset.lane = lane; cb.checked = state.lanes.has(lane);
         lb.append(cb, " " + lane);
         lanes.append(lb);
     }
@@ -409,7 +587,7 @@ function mountSkeleton() {
     const sel = el("select");
     sel.id = "group";
     group.append(sel);
-    filters.append(range, lanes, group);
+    filters.append(search, show, thr, sort, range, lanes, group);
     const night = el("section", "night");
     night.id = "night"; night.setAttribute("aria-label", "latest night");
     const series = el("section", "section");
@@ -432,6 +610,7 @@ function mountSkeleton() {
     root.replaceChildren(filters, night, series, runs, generated, tooltip);
 }
 
+readUrl();
 mountSkeleton();
 wireFilters();
 load();
