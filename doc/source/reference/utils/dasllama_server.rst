@@ -260,7 +260,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--ctx``
      -
      - *model*
-     - Context-length cap in tokens (default: the model's trained ``context_length``)
+     - Context length in tokens, served whole: the whole-model GPU driver holds it for every stream or declines to the per-op rails, and the load log names the room. Default: the model's trained ``context_length``, shortened to what the card holds (the log says by how much and why)
    * - ``--max-tokens``
      -
      - ``16384``

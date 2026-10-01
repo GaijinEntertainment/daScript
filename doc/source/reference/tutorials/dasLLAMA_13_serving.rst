@@ -183,7 +183,12 @@ session.
 
 We size this before the load. ``set_gpu_resident_regions`` says how many
 streams we serve, and ``set_gpu_ctx_max`` caps the positions one region
-holds. After the load we ask what we got: ``gpu_device_sessions`` answers the
+holds. ``set_gpu_ctx_strict`` turns that cap into the context *asked*: the
+driver holds it for every region or declines - a MoE the card does not hold
+beside it moves routed layers' experts to the host first - instead of quietly
+shortening the mirror, and the load log says which happened; the server sets
+it for every explicit ``--ctx``. ``gpu_ctx_pins`` reads both pins back, so a
+rig restores what it found. After the load we ask what we got: ``gpu_device_sessions`` answers the
 region count (0 on a CPU box, under the per-op rails, and on Metal),
 ``gpu_resident_decline`` says why the driver does not serve,
 ``gpu_device_session_ctx`` answers the positions per region,
@@ -197,8 +202,12 @@ whose speculative round a server leaves off):
 .. code-block:: das
 
    set_gpu_resident_regions(4l)
+   let pins = gpu_ctx_pins()
    set_gpu_ctx_max(8192l)
+   set_gpu_ctx_strict(false)   // a cap; true asks for the 8192 whole
    // ... load_model runs here ...
+   set_gpu_ctx_max(pins.ctx_max)
+   set_gpu_ctx_strict(pins.strict)
    let regions = gpu_device_sessions()
    if (regions == 0l) {
        print("no device-home sessions here: {gpu_resident_decline()}\n")

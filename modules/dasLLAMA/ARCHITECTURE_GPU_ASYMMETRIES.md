@@ -24,10 +24,16 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   stacks never fit a discrete card beside its other planes, so the Vulkan whole-model driver cuts its
   command at every routed block and the host sums the experts between the segments; Metal serves the
   same model whole from unified memory and its drivers split nothing.
-- **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, the tier's four
-  hot seats, `DASLLAMA_GPU_HEAT`): where the routed experts live on the host, the Vulkan driver keeps
-  the hottest ones in per-layer device slots and serves their picks there; Metal has every expert
-  resident, so nothing is hot or cold.
+- **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, the tier's four hot
+  seats, `DASLLAMA_GPU_HEAT`): where routed experts live on the host the Vulkan driver keeps the hottest in
+  per-layer device slots; Metal has every expert resident, so nothing is hot or cold.
+- **A plain MoE's host-layer form is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`,
+  `#hc-window-chain`, the host-rows seat): a plain MoE a discrete card does not hold whole beside a context
+  asked whole moves its first routed layers' experts to the host, the token command and the window cut at
+  those layers; Metal holds the model whole from unified memory and cuts nothing.
+- **The strict context pin is read by the Vulkan plan alone** (`set_gpu_ctx_strict`,
+  `DASLLAMA_GPU_CTX_STRICT`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`): Metal's mirror is the
+  model's own context in unified memory, so no plan shortens it and the pin has nothing to hold.
 - **The NextN head on the hyper-connection chain is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`,
   `#hc-verify-rows`): the Vulkan driver runs a routed head as one more chain layer, its experts summed
   on the host, and verifies two rows through the split command; Metal's batch rail runs the same head

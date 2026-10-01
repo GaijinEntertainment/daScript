@@ -91,7 +91,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the deltanet step class rail declined on this device - resident driver declines, the per-op rails serve\n")
         return false
     }
-    g_rd_experts_host = false   //! a model's own choice, set again after this prepare where its routed experts stay on the host
+    g_rd_has_host_layers = false
     // all-or-nothing: pre-flight every prefill-attention class pf_setup may pick for this head size
     // (the fa tile with its cap stamp at 256, the h128 twin, the chunked pair - a capped or gated
     // layer falls through the ladder) so a declined kernel declines residency PRE-upload
@@ -496,12 +496,11 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
 
 let private MOE_MAX_EXPERTS = 256l   //! the select kernels' one-workgroup reach: one thread per expert
 
-var private g_rd_experts_host = false   //! the loaded model's routed experts serve on the host (`vk_rdec_set_host_experts`): the router alone runs on the device and the host selects and sums
+var private g_rd_has_host_layers = false   //! some of the loaded model's routed layers serve their experts on the host (`vk_rdec_set_host_experts`): there the router alone runs on the device and the host selects and sums
 
-//! The routed experts of every MoE layer stay on the host: set after the prepare and before the MoE prepare (which then
-//! reaches past the select kernels' expert count) and the layers' registration (which then binds no expert planes).
+//! call after the prepare, before the MoE prepare (it then allocates the host sums' landings) and before the layers register (a host layer: `be1 < 0`)
 def vk_rdec_set_host_experts(on : bool) {
-    g_rd_experts_host = on
+    g_rd_has_host_layers = on
     if (g_rd != null) {
         g_rd.experts_host = on
     }
@@ -511,7 +510,7 @@ def vk_rdec_set_host_experts(on : bool) {
 def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_gelu, act_oai : bool; wscale : float; router : array<float>; dscale : array<float>;
                         rbias : array<float>; gbias : array<float>; ubias : array<float>; dbias : array<float>) : bool {
     let ner = ne + (nsh > 0l && sh_gated ? 1l : 0l)
-    let reach = (g_rd_experts_host || ne <= MOE_MAX_EXPERTS) && k <= MAX_ROUTED_SLOTS && nfe % 32l == 0l
+    let reach = (g_rd_has_host_layers || ne <= MOE_MAX_EXPERTS) && k <= MAX_ROUTED_SLOTS && nfe % 32l == 0l
     if (g_gpu != null && g_gpu.dry) {
         return reach   //! the reach IS the plan decision; everything below is device state
     }
@@ -613,6 +612,20 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
         staged_upload(r.moe_ident_dev, 0l, MAX_ROUTED_SLOTS * 4l)
     }
     let nb = r.nb
+    if (g_rd_has_host_layers) {
+        r.ones_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
+        unsafe {
+            var mp = reinterpret<float?>(g_gpu.staging.mapped)
+            for (i in range64(MAX_ROUTED_SLOTS)) {
+                mp[i] = 1.0
+            }
+            staged_upload(r.ones_dev, 0l, MAX_ROUTED_SLOTS * 4l)
+        }
+        r.hacc_dev = make_device_buf(dim * 4l * nb)
+        r.hx_host = make_host_buf(dim * 4l * nb, false, [cached = true])
+        r.hlog_host = make_host_buf(r.ner * 4l * nb, false, [cached = true])
+        r.hacc_host = make_host_buf(dim * 4l * nb, false, [cached = true])
+    }
     r.moe_dlog_dev = make_device_buf(r.ner * 4l * nb)
     r.moe_dw_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
     r.moe_meta1_dev = make_device_buf(META_BYTES)
@@ -632,10 +645,20 @@ def private rd_moe_sets(var L : RLayer) {
     let nb = g_rd.nb
     let nfe = g_rd.nfe
     let k = g_rd.k
-    if (g_rd.experts_host) {
+    if (g_rd.experts_host && L.be1 < 0l) {
         L.experts_host = true
         L.s_router = set_router_gemv_cls(fixed_array(g_rd.router_dev, g_rd.xb_dev, g_rd.moe_dlog_dev, g_rd.norms_dev),
             fixed_array(g_rd.router_bytes, dim * 4l * nb, g_rd.ner * 4l * nb, g_rd.norms_bytes), fixed_array(0u, VHZ_XB, VHZ_MRT, 0u))
+        if (!g_rd.hc) {
+            verify(!L.moe_g4, "vk decode: a gemma-4 routed block has no host form")
+            verify(ensure_cls_ar_comb(), "vk decode: a host layer's combine-folded residual class rail must engage on a live device")
+            let rows_bytes = dim * 4l * nb
+            let slots_bytes = MAX_ROUTED_SLOTS * 4l
+            L.s_addr_next = set_cls_ar_comb(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
+                    g_rd.moe_ident_dev, g_rd.ones_dev, g_rd.hacc_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev),
+                fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, rows_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes),
+                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, 0u, VHZ_MDN, VHZ_MRT, 0u, 0u))
+        }
         return
     }
     let pe1 = arena_planes(L.fe1, L.be1)
@@ -730,7 +753,7 @@ def private rd_ensure_comb_sets {
     let edn_bytes = nb * g_rd.k * dim * 4l
     for (l in range64(nl)) {
         var L & = unsafe(g_rd.layers[l])
-        continue if (!L.moe)
+        continue if (!L.moe || L.experts_host)   // a host layer's combine writes the float row: the next head requants it
         let fn = rd_next_feed(l)
         L.comb_rq = vk_fuse_on() && fn.fmt == int(KqFmt.q8) && !fn.storex && (L.moe_g4 ? ensure_cls_ar_comb_g4_rq() : ensure_cls_ar_comb_rq())
         continue if (!L.comb_rq)
@@ -1215,7 +1238,9 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
     r.s_hc_comb_a = set_hc_comb_cls(fixed_array(r.hcres_dev, r.xb2_dev, r.hcinj_dev, r.dummy, r.dummy),
         fixed_array(hcd * 4l * nb, dim * 4l * nb, hc * 4l * nb, 256l, 256l), fixed_array(VHZ_X, VHZ_XB2, VHZ_MRT, 0u, 0u))
     if (r.moe) {   //! the FFN seam's scatter on a routed model reads the routed sum and the gate logit off the router row
-        r.hacc_dev = make_device_buf(dim * 4l * nb)
+        if (r.hacc_dev == 0ul) {
+            r.hacc_dev = make_device_buf(dim * 4l * nb)
+        }
         r.s_hc_comb_f = set_hc_comb_cls(fixed_array(r.hcres_dev, r.ffnout_dev, r.hcinj_dev, r.hacc_dev, r.moe_dlog_dev),
             fixed_array(hcd * 4l * nb, dim * 4l * nb, hc * 4l * nb, dim * 4l * nb, r.ner * 4l * nb), fixed_array(VHZ_X, VHZ_FFO, VHZ_MRT, VHZ_MDN, VHZ_MRT))
     } else {
@@ -1245,28 +1270,30 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
         S.s_up = rd_hc_gemv_set(S.bup, S.m_up, r.hcloq_dev, r.hclos_dev, lr, VHZ_HQ, r.hcgate_dev, hcd, VHZ_UP)
     }
     if (r.experts_host) {
-        r.hx_host = make_host_buf(dim * 4l * nb, false, [cached = true])
-        r.hlog_host = make_host_buf(r.ner * 4l * nb, false, [cached = true])
-        r.hacc_host = make_host_buf(dim * 4l * nb, false, [cached = true])
-        r.nseg = 1l
-        r.seg_layer |> clear()
-        for (l in range64(long_length(r.layers))) {
-            if (r.layers[l].moe && r.layers[l].experts_host) {
-                r.seg_layer |> push(l)
-                r.nseg++
-            }
-        }
-        r.seg_layer |> push(-1l)
-        r.cmd_seg |> clear()
-        r.cmd_seg |> reserve(r.regions * r.nseg)
-        for (_i in range64(r.regions * r.nseg)) {
-            r.cmd_seg |> push(alloc_cmd())
-        }
-        r.seg_recorded |> clear()
-        r.seg_recorded |> resize(r.regions)
+        rd_host_segments_setup(r)
     }
     rd_invalidate_token()
     return true
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
+def private rd_host_segments_setup(var r : RDec) {
+    r.nseg = 1l
+    r.seg_layer |> clear()
+    for (l in range64(long_length(r.layers))) {
+        if (r.layers[l].moe && r.layers[l].experts_host) {
+            r.seg_layer |> push(l)
+            r.nseg++
+        }
+    }
+    r.seg_layer |> push(-1l)
+    r.cmd_seg |> clear()
+    r.cmd_seg |> reserve(r.regions * r.nseg)
+    for (_i in range64(r.regions * r.nseg)) {
+        r.cmd_seg |> push(alloc_cmd())
+    }
+    r.seg_recorded |> clear()
+    r.seg_recorded |> resize(r.regions)
 }
 
 //! The n-gram side input's planes (`RdecSetNgramFn`): the key and value q8 arena blocks, the conv ring a region, the norm rows
@@ -1462,7 +1489,7 @@ def vk_rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; 
     if (g_gpu != null && g_gpu.dry) {
         return at
     }
-    assert(g_rd != null && g_rd.hc && g_rd.experts_host && g_rd.moe, "vk_rdec_hot_layer: after the hyper-connection planes")
+    assert(g_rd != null && g_rd.experts_host && g_rd.moe, "vk_rdec_hot_layer: after the MoE prepare of a model with host layers")
     assert(g_rd.hot_slots == 0l || g_rd.hot_slots == slots, "vk_rdec_hot_layer: one slot count serves every layer")
     let dim = g_rd.dim
     let nb = g_rd.nb
@@ -1728,8 +1755,18 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
-def private rd_record_hc_segments {
-    rd_record_hc_segments_n(1l, false, g_rd.cmd_seg, g_rd.region * g_rd.nseg)
+def private rd_record_segments {
+    if (g_rd.nseg == 0l) {
+        rd_host_segments_setup(*g_rd)
+    }
+    let seg0 = g_rd.region * g_rd.nseg
+    if (g_rd.hc) {
+        rd_record_hc_segments_n(1l, false, g_rd.cmd_seg, seg0)
+    } else {
+        rd_fill_gemv_regions_all()
+        rd_encode_token(g_rd.cmd_seg[seg0], 1l, rd_split_pieces(), false, seg0)
+        g_rdq_n = g_pfq_n
+    }
     g_rd.seg_recorded[g_rd.region] = true
 }
 
@@ -1775,10 +1812,10 @@ def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows
 //! The split token (`RdecTokenSplitFn`); `side` is the n-gram side input's gathered row, empty on a model without one.
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def vk_rdec_token_split(x : array<float>; cossin : array<float>; side : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
-    assert(g_rd != null && g_rd.ready && g_rd.hc && g_rd.experts_host, "vk_rdec_token_split before the hyper-connection planes")
+    assert(g_rd != null && g_rd.ready && g_rd.experts_host, "vk_rdec_token_split on a model with no host layers")
     rd_carry_sync()
-    if (!g_rd.seg_recorded[g_rd.region]) {
-        rd_record_hc_segments()
+    if (g_rd.nseg == 0l || !g_rd.seg_recorded[g_rd.region]) {
+        rd_record_segments()
     }
     let ts0 = ref_time_ticks()
     let prof = vk_prof()
@@ -2617,20 +2654,26 @@ def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
             slots = uint(g_rd.k), pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
             routed_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), sum_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
     }
+    if (L.experts_host) {   // the host's sum lands as one row of weight one, the expert bias already in it
+        return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
+            slots = 1u, lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u, dbias_on = 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
+    }
     return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
         slots = uint(g_rd.k), lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u,
         dbias_on = g_rd.exps_bias ? 1u : 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
 }
 
 //! every form stamps its dispatches into the recorder's working list; the caller moves it into the form's own slot
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
-def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64; verify : bool = false) {
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
+def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit : int64; verify : bool = false; split_seg_base : int64 = -1l) {
     let dim = g_rd.dim
     let nlfin = rd_norm_final()   // rms_final offset in the norms buffer
     let one = nrows == 1l
     let nr = uint(nrows)
     let nrow_bx = (one || verify) ? 0 : g_rd_nrow_bisect   // the bisect knob reaches the N-row command alone
     let ncols = (nrow_bx & NROW_BX_NCOL1) != 0 ? 1u : nr
+    var raw : VkCommandBuffer = first_seg_raw
+    var seg = 0l
     unsafe {
         let rf : VkCommandBufferResetFlags
         vk_check(vkResetCommandBuffer(raw, rf), null)
@@ -2715,6 +2758,28 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64; verify
             if (has_dense_triple(L)) {
                 rd_encode_ffn(raw, h, L, l, nxt, nrows, ncols, nrow_bx)
             }
+            if (L.moe && L.experts_host) {
+                verify(one && split_seg_base >= 0l, "vk decode: a host layer takes the one-row split command alone")
+                var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
+                    norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = 1u)
+                enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
+                rd_ts(raw, "m:router")
+                vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
+                cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l)
+                cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l)
+                vk_check(vkEndCommandBuffer(raw), null)
+                seg++
+                raw = g_rd.cmd_seg[split_seg_base + seg]
+                vk_check(vkResetCommandBuffer(raw, rf), null)
+                vk_check(vkBeginCommandBuffer(raw, begin), null)
+                h = VkHaz()
+                rd_encode_routed_sum(raw, h, l, 1l)
+                var pc14h = rd_ar_comb_args(L, l, nxt)
+                enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
+                rd_ts(raw, "m:ar2")
+                xq_ready = false
+                continue
+            }
             if (L.moe) {
                 rd_encode_moe(raw, h, L, l, nrows)
             }
@@ -2775,6 +2840,7 @@ def private rd_encode_token(raw : VkCommandBuffer; nrows, nsplit : int64; verify
         pfq_end(raw)
         vk_check(vkEndCommandBuffer(raw), null)
     }
+    verify(split_seg_base < 0l || seg + 1l == g_rd.nseg, "vk decode: the split command's segments must be the host layers plus one")
 }
 
 def private rd_encode_tail(raw : VkCommandBuffer; var h : VkHaz; nrows : int64; ncols : uint; verify, xq_ready : bool) {
@@ -3011,6 +3077,7 @@ def rd_carry_sync {
 [hot_path]   // the per-token resident submit — no goo between the memcpys and the fence
 def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
+    assert(!g_rd.experts_host, "vk_rdec_token on a model with host layers: the split command serves it")
     rd_carry_sync()
     if (!g_rd.tok_recorded[g_rd.region]) {
         rd_record_token()
@@ -3121,7 +3188,7 @@ def private rd_n_decline(why : string) : int64 {
 }
 
 //! the rows the N-row command steps at once on the armed model; 0 where a layer or the tail has no N-row form
-[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def vk_rdec_token_n_rows : int64 {
     if (g_rd == null || !g_rd.ready) return 0l
     if (!gemv_cls_has_n(g_rd.cls_fmt_marker)) return rd_n_decline("the classifier's format has no N-column GEMV leaf")
@@ -3131,6 +3198,7 @@ def vk_rdec_token_n_rows : int64 {
             if (has_dense_triple(L) && !(gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return rd_n_decline("a recurrent layer's FFN weight format with no N-column GEMV leaf")
             continue
         }
+        if (L.moe && L.experts_host && !g_rd.hc) return rd_n_decline("a routed layer whose experts serve on the host (the split command steps a row at a time)")
         if (L.moe && !rd_routed_slots_fit(g_rd.nb, g_rd.k)) return rd_n_decline("more routed slots than the block's slot planes hold")
         if (L.moe && L.ple) return rd_n_decline("a per-layer-embedding layer with a routed block")
         if (!(gemv_cls_has_n(L.fq) && (L.kv_shared || (gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)))) && gemv_cls_has_n(L.fo))
@@ -3206,7 +3274,7 @@ def private rd_ensure_n_sets {
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def private rd_record_n_form(raw : VkCommandBuffer; nrows, nsplit : int64; form : RdForm) {
+def private rd_record_n_form(var raw : VkCommandBuffer; nrows, nsplit : int64; form : RdForm) {
     var one : RdqStamps
     rd_take_stamps(one, g_rdq_n)
     rd_encode_token(raw, nrows, nsplit)
@@ -3494,11 +3562,11 @@ def private rd_ensure_v_rail : bool {
     return leaves || rd_v_decline("a head plane's format (eh_proj {g_rd.head_eh_fmt}, q {L.fq}, k {L.fk}, v {L.fv}) has no N-column GEMV leaf on this device")
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   // per speculative round, reached through the tier's registered seat
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]   // per speculative round, reached through the tier's registered seat
 def vk_rdec_verify_rows : int64 {
     if (g_rd == null || !g_rd.ready) return 0l
     if (g_rd.v_rail == NRail.unasked) {
-        g_rd.v_rail = (g_rd.hc ? rd_ensure_hc_v_rail() : rd_ensure_v_rail()) ? NRail.built : NRail.declined
+        g_rd.v_rail = (g_rd.hc ? rd_ensure_hc_v_rail() : (g_rd.experts_host ? rd_v_decline("a routed layer's experts serve on the host, and the split one-row command has no verify form") : rd_ensure_v_rail())) ? NRail.built : NRail.declined
     }
     return g_rd.v_rail == NRail.built ? g_rd.verify_rows : 0l
 }

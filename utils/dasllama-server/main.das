@@ -111,7 +111,7 @@ struct ServerArgs {
     @clarg_doc = "Long-lived asynchronous ASR worker threads (default 1; 2 permits two parallel transcriptions)"
     asr_workers : int
 
-    @clarg_doc = "Context-length cap in tokens (default: the model's trained context_length)"
+    @clarg_doc = "Context length in tokens, served whole: the whole-model GPU driver holds it for every stream or declines to the per-op rails (the load log names the room). Default: the model's trained context_length, shortened to what the card holds"
     ctx : int
 
     @clarg_doc = "Default reply token budget when a request omits max_tokens (default 16384; clamped to ctx per request)"

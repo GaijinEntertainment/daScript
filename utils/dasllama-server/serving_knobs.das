@@ -222,6 +222,10 @@ def gpu_detail_dn(k : GpuKnobs) : bool
 def gpu_detail_attn(k : GpuKnobs) : bool
     => k.attn_set ? k.attn : true
 
+//! an explicit context - the server's --ctx, a load body's ctx, the CLI's --ctx - is asked whole of the whole-model driver; none leaves the plan to shorten the model's own
+[arch(at = "README.md#gpu-key")]
+def gpu_ctx_asked_whole(ctx : int64) : bool => ctx > 0l
+
 [arch(at = "README.md#gpu-key")]
 def vulkan_serving_want(k : GpuKnobs) : GpuTierWant
     => GpuTierWant(resident = true,

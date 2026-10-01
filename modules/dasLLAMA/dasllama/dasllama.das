@@ -685,6 +685,19 @@ def set_gpu_ctx_max(n : int64) {
     set_gpu_ctx_max_(n)
 }
 
+def gpu_ctx_pins() : tuple<ctx_max : int64; strict : bool> {
+    //! The in-process context pins as set (``set_gpu_ctx_max``, ``set_gpu_ctx_strict``), apart from the
+    //! environment's knobs: a fixture reads them before it pins and puts them back after its load.
+    return gpu_ctx_pins_()
+}
+
+def set_gpu_ctx_strict(on : bool) {
+    //! The ``set_gpu_ctx_max`` pin is the context asked, not a cap, for the models loaded next: a K/V
+    //! mirror the card cannot hold at it declines the whole-model GPU driver instead of shortening the
+    //! context, and the per-op rails serve the asked context (DASLLAMA_GPU_CTX_STRICT in the environment).
+    set_gpu_ctx_strict_(on)
+}
+
 def gpu_resident_decline() : string {
     //! Why the whole-model GPU driver does not serve the model loaded last: its decline reason (with
     //! the remedy where one exists), or why it was never attempted. Empty when it serves.
@@ -692,9 +705,9 @@ def gpu_resident_decline() : string {
 }
 
 def gpu_resident_experts_host() : bool {
-    //! Whether the whole-model driver serving the model loaded last sums its routed experts on the
-    //! host (a hyper-connection MoE the card does not hold whole) - the form whose speculative
-    //! round does not pay, so a server slot leaves the round off unless asked.
+    //! Whether the whole-model driver serving the model loaded last sums some routed layers' experts
+    //! on the host (a hyper-connection MoE, or a plain MoE the card does not hold whole) - the form
+    //! whose speculative round does not pay, so a server slot leaves the round off unless asked.
     return gpu_resident_experts_host_()
 }
 

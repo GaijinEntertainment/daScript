@@ -93,7 +93,7 @@ struct CommonArgs {
     @clarg_doc = "vulkan: resident-weight VRAM cap override in MB (default: query the device)"
     gpu_vram_mb : int
 
-    @clarg_doc = "Context-length cap in tokens (default: the model's trained context_length)"
+    @clarg_doc = "Context length in tokens, served whole: the whole-model GPU driver holds it for every stream or declines to the per-op rails (the load log names the room). Default: the model's trained context_length, shortened to what the card holds"
     ctx : int
 
     @clarg_doc = "RoPE scaling override: yarn | linear | none (default: the model file's own rope.scaling keys; none drops them, a file's per-pair factor tensors stay). The Qwen families publish the YaRN recipe and enable it as a setting, for long conversations only: --rope-scaling yarn --rope-scale 4; no other vendor validates it, and a non-Qwen file logs a warning"
