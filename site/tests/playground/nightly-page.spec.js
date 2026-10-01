@@ -67,6 +67,17 @@ test('the stand page at /bench/ renders from the same script', async ({ page }) 
     expect(errors).toEqual([]);
 });
 
+test('hovering a chart shows the night and each lane value in the tooltip', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await serveViewer(page, SAMPLE);
+    await page.goto('/nightly.html');
+    await page.locator('#stand .chart-card:not(.chart-card--agg) svg .hit').hover();
+    await expect(page.locator('#tooltip')).toBeVisible();
+    await expect(page.locator('#tooltip .tt-val')).toHaveText('2.30 ns');
+    expect(errors).toEqual([]);
+});
+
 // the pages the e2e lane stages (playground-e2e.yml); the rest carry the same hand-written menu
 test('every staged page carrying the performance menu links the nightly page', async ({ page }) => {
     for (const url of ['/', '/performance.html', '/downloads.html', '/examples.html', '/nightly.html', '/playground/']) {

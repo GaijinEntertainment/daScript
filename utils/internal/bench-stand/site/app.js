@@ -197,11 +197,11 @@ function drawChart(lines, runIdx, failedRuns, label, fmt) {
         lbl.textContent = fmt(last.v);
         svg.append(lbl);
     }
-    attachHover(svg, lines, runIdx, failedRuns, xOf, yOf);
+    attachHover(svg, lines, runIdx, failedRuns, xOf, yOf, fmt);
     return svg;
 }
 
-function attachHover(svg, lines, runIdx, failedRuns, xOf, yOf) {
+function attachHover(svg, lines, runIdx, failedRuns, xOf, yOf, fmt) {
     const runs = state.data.runs;
     const cross = svgEl("line", { class: "crosshair", x1: 0, x2: 0, y1: PAD.t, y2: H - PAD.b, visibility: "hidden" });
     const markers = lines.map((ln) => svgEl("circle", { class: "marker marker--" + ln.lane, r: 4, visibility: "hidden" }));
