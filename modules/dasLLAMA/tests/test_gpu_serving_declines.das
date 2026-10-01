@@ -479,6 +479,39 @@ def test_resident_arm_floor(t : T?) {
         t |> equal(512l, resident_arm_floor(1024l, 512l), "a pin under the env floor wins over it too")
         t |> equal(256l, resident_arm_floor(0l, 64l), "a pin under 256 reads 256")
     }
+    t |> run("a strict pin is the floor whatever its size: the mirror holds the context asked or the driver declines") @(t : T?) {
+        t |> equal(131072l, resident_arm_floor(0l, 131072l, true), "a strict pin over the built-in floor raises the floor to the pin")
+        t |> equal(131072l, resident_arm_floor(1024l, 131072l, true), "... over the env floor too")
+        t |> equal(648l, resident_arm_floor(0l, 648l, true), "a strict pin under the floor is the floor, as a plain pin is")
+        t |> equal(256l, resident_arm_floor(0l, 64l, true), "a strict pin under 256 reads 256")
+        t |> equal(4096l, resident_arm_floor(0l, 0l, true), "strict with no pin asks nothing: the built-in floor")
+        t |> equal(4096l, resident_arm_floor(0l, 131072l, false), "control: the same pin, not strict, leaves the floor alone")
+    }
+    t |> run("a plain MoE the card does not hold whole moves its first routed layers' experts to the host: the fewest that make the rest fit") @(t : T?) {
+        var need <- [for (_i in range(6)); 100l]
+        t |> equal(0l, resident_host_layers_fit(need, 600l), "every layer's experts fit: none to the host")
+        t |> equal(1l, resident_host_layers_fit(need, 599l), "one byte short: the first layer goes")
+        t |> equal(3l, resident_host_layers_fit(need, 300l), "half the room: half the layers")
+        t |> equal(6l, resident_host_layers_fit(need, 0l), "no room: every layer")
+        t |> equal(-1l, resident_host_layers_fit(need, -1l), "the dense planes alone pass the card: no count makes it fit")
+        var uneven <- [for (i in range(3)); 100l * int64(i + 1)]
+        t |> equal(1l, resident_host_layers_fit(uneven, 500l), "the first layers go first whatever their size: 200 + 300 fit after 100 leaves")
+        delete need
+        delete uneven
+    }
+    t |> run("the hot expert pool yields to a context asked whole: the mirror's floor is the plan's context, not 32768") @(t : T?) {
+        t |> equal(131072l, resident_hot_floor_ctx(131072l, true), "a strict 131072 keeps every position before a slot is counted")
+        t |> equal(32768l, resident_hot_floor_ctx(131072l, false), "unasked, the pool keeps the 32768 floor and takes the rest")
+        t |> equal(8192l, resident_hot_floor_ctx(8192l, false), "a plan under the floor keeps its own context either way")
+        t |> equal(8192l, resident_hot_floor_ctx(8192l, true), "a strict context under the built-in floor is the pool's floor too")
+    }
+    t |> run("the binding range over the regions bounds a strict context too, and a strict context past it is a decline, not a shorter mirror") @(t : T?) {
+        t |> equal(resident_region_ctx(131072l, 196608l, 4l), 49152l, "four regions share one binding's 196608 positions: 49152 each, under the 131072 asked")
+        t |> equal(resident_region_ctx(131072l, 196608l, 1l), 131072l, "one region holds the ask")
+        t |> success(resident_region_ctx_declines(131072l, 49152l, true), "asked whole, the 49152 a region holds is a decline")
+        t |> success(!resident_region_ctx_declines(131072l, 49152l, false), "unasked, the plan takes the 49152 and says so")
+        t |> success(!resident_region_ctx_declines(131072l, 131072l, true), "a region that holds the ask declines nothing")
+    }
 }
 
 [test]

@@ -162,7 +162,8 @@ that a question answered for one backend has an obvious address in the other. Th
   (the mixer sites' planes, the n-gram side input's, the host-experts switch and the split token command,
   `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`), its hot expert pool seats `install_moe_gpu_resident_hot` (a routed
   layer's slots, an expert's planes into a slot, a step's hits, a verify's rows' hits; a tier without them serves every routed expert on the
-  host, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`), its mirror-region seat `install_moe_gpu_resident_regions`
+  host, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`), the host-rows seat `set_rdec_host_rows` a plain MoE's cut prefill window asks
+  for the host's routed sums (the driver installs the chain's callback at the arm, the no-op at the drop), its mirror-region seat `install_moe_gpu_resident_regions`
   (`rdec_select_region` names the region every mirror address and the next token command resolve against; a tier
   without it serves one region), its N-row batch seat `install_moe_gpu_resident_batch` (the N-row token command beside
   the resident driver: `rows` answers how many rows it steps at once on the armed model, 0 = none; `rdec_token_n` steps

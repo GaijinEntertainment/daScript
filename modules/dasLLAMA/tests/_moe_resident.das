@@ -36,6 +36,8 @@ struct MoeFixture {
     shexp : bool
     bar_rel : float
     window : int64 = 0l
+    expect_host_layers : bool = false   //! the card does not hold the experts whole: the driver arms with some routed layers' experts on the host
+    strict_ctx : int64 = 0l      //! > 0: the load pins this context whole (`set_gpu_ctx_max` + `set_gpu_ctx_strict`), and the armed region holds it
 }
 
 //! the logits bar as a fraction of the step's max |logit|: the routed chain's CPU-vs-device noise class (test_gpu_moe_shexp.das's
@@ -126,28 +128,52 @@ def private device_has_expert_tiles() : bool {
     }
 }
 
-//! prefill `n` tokens + the fed steps on the resident driver, then the same on the all-CPU chain; the
-//! prefill logits and every step's within the bar, the one-step-off control past it, the routed
-//! block's census growing by the MoE layer count per window and per step
-def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
-    let path = path_join(models_dir(), fx.file)
-    if (!resident_ready(t, path)) return
-    var tr <- load_resident(path)
+//! the driver's admission of the fixture and the host-layer count it armed, against the fixture's expectation;
+//! -1 where the cell ends here - a skip the box earns, or the red that names the load log
+def private moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
     t |> success(tr.config.n_expert > 0l && (tr.config.n_ff_shexp > 0l) == fx.shexp, "the fixture routes experts {fx.shexp ? "beside" : "with no"} shared expert")
     if (fx.window > 0l) {
         t |> equal(tr.config.sliding_window, fx.window, "the fixture's sliding layers attend {fx.window} keys")
     }
     if (!device_has_expert_tiles()) {
         t |> skip("the device has no tile family for the expert pieces (cm2, or KHR at subgroup 32) - the whole-model driver declines a MoE by design")
-        delete tr
-        return
+        return -1l
+    }
+    if (fx.expect_host_layers && !moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
+        t |> skip("the card holds neither the mirror asked whole ({fx.strict_ctx}) nor the dense planes beside it - the host-layer form needs a larger card (the load log names the room)")
+        return -1l
     }
     t |> success(moe_gpu_resident_active(), "the whole-model driver took {fx.file} (a decline names its reason in the load log: the plan, a seat, a plane's format)")
-    if (!moe_gpu_resident_active()) {
+    return -1l if (!moe_gpu_resident_active())
+    let host_layers = gpu_resident_host_layers()
+    if (fx.expect_host_layers && host_layers == 0l) {
+        t |> skip("the card holds every expert stack beside the {fx.strict_ctx}-position mirror - the host-layer form needs a smaller card")
+        return -1l
+    }
+    if (fx.expect_host_layers) {
+        t |> success(host_layers < tr.config.n_layers, "the card does not hold the experts whole: the first {host_layers} of {tr.config.n_layers} routed layers' experts serve on the host, the rest on the device")
+    } else {
+        t |> equal(host_layers, 0l, "every expert on the device (the cell pins ctx_max {fx.strict_ctx} and strict {fx.strict_ctx > 0l}; DASLLAMA_GPU_CTX_MAX / DASLLAMA_GPU_CTX_STRICT in the environment override the pins)")
+    }
+    if (fx.strict_ctx > 0l) {
+        t |> equal(gpu_device_session_ctx(), fx.strict_ctx, "the context asked whole is the region's: the experts yielded, not the mirror")
+    }
+    return host_layers
+}
+
+//! prefill `n` tokens + the fed steps on the resident driver, then the same on the all-CPU chain; the
+//! prefill logits and every step's within the bar, the one-step-off control past it, the routed
+//! block's census growing by the MoE layer count per window and per step
+def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
+    let path = path_join(models_dir(), fx.file)
+    if (!resident_ready(t, path)) return
+    var tr <- load_resident(path, 1l, fx.strict_ctx)   //! one region: the context asked whole is the region's
+    let host_layers = moe_fixture_admitted(t, tr, fx)
+    if (host_layers < 0l) {
         delete tr
         return
     }
-    let layers = tr.config.n_layers
+    let device_routed_layers = tr.config.n_layers - host_layers   // a host layer runs its router alone
     let windows = (n + PF_WINDOW_ROWS - 1l) / PF_WINDOW_ROWS
     with_dasllama_jobque() {
         var prompt <- resident_prompt(n)
@@ -159,18 +185,18 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
         let e0 = column_census(ecol.col)
         let un0 = unsplit_tokens()
         var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
-        if (attn_nsplit() > 1l && unsplit_want(n) != UNSPLIT_UNDECIDED) {   //! a split device records the unsplit twin: it serves the steps under RD_UNSPLIT_POS and none past it
+        if (attn_nsplit() > 1l && unsplit_want(n) != UNSPLIT_UNDECIDED && host_layers == 0l) {   //! a split device records the unsplit twin: it serves the steps under RD_UNSPLIT_POS and none past it
             t |> equal(unsplit_tokens() - un0, unsplit_want(n), "the token command's unsplit twin served {unsplit_want(n)} of the {FED_STEPS} steps after {n} rows")
         }
         if (sched0 != NO_CENSUS) {
-            t |> equal(census("moe_sched_cls_spv") - sched0, layers * windows, "the device bucket schedule ran once per MoE layer per window ({windows} windows)")
-            t |> equal(census("topk_rows_cls_spv") - rows0, layers * windows, "the window's per-row select ran once per MoE layer per window")
+            t |> equal(census("moe_sched_cls_spv") - sched0, device_routed_layers * windows, "the device bucket schedule ran once per device-routed layer per window ({device_routed_layers} layers, {windows} windows)")
+            t |> equal(census("topk_rows_cls_spv") - rows0, device_routed_layers * windows, "the window's per-row select ran once per device-routed layer per window")
             //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer per recorded form (a split device records the unsplit twin too)
             let topk = census("topk_cls_spv") - topk0
-            t |> success(topk >= layers && topk % layers == 0l, "the token command recorded a top-k per MoE layer ({topk} over {layers} layers)")
+            t |> success(topk >= device_routed_layers && topk % device_routed_layers == 0l, "the token command recorded a top-k per device-routed layer ({topk} over {device_routed_layers} layers)")
             let edelta = column_census(ecol.col) - e0
-            let ewant = 3l * ecol.per_plane * layers * windows
-            t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the {ecol.col} column at least {ecol.per_plane} a plane per MoE layer per window ({edelta} over a floor of {ewant})")
+            let ewant = 3l * ecol.per_plane * device_routed_layers * windows
+            t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the {ecol.col} column at least {ecol.per_plane} a plane per device-routed layer per window ({edelta} over a floor of {ewant})")
         }
         }
         feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, fx.bar_rel)

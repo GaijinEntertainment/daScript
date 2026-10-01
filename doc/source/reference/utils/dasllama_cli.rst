@@ -119,7 +119,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - ``--gpu-vram-mb``
      - vulkan: resident-weight VRAM cap override in MB (default: query the device)
    * - ``--ctx``
-     - Context-length cap in tokens (default: the model's trained ``context_length``)
+     - Context length in tokens, served whole: the whole-model GPU driver holds it or declines to the per-op rails, and the load log names the room. Default: the model's trained ``context_length``, shortened to what the card holds
    * - ``--rope-scaling``
      - RoPE scaling override: ``yarn`` | ``linear`` | ``none`` (default: the model file's own ``rope.scaling`` keys; ``none`` drops them, a file's per-pair factor tensors stay). The Qwen families publish the YaRN recipe and enable it as a setting, for long conversations only: ``--rope-scaling yarn --rope-scale 4``; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane
    * - ``--rope-scale``

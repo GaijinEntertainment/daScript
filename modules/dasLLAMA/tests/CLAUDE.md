@@ -931,7 +931,14 @@ the OS's room where the OS answers. `test_resident_hot_slots` is the hot expert 
 context where they do not, never past the room a mirror at its floor leaves, a count asked served from
 that room, no pool under four slots or on a plan past its room; its second subtest holds the pool's
 share of the plan (`resident_hot_fit`): the chain's scratch is taken off the room before the slots are
-counted and charged only with a pool, a first plan's cap holds the count. `test_resident_region_ctx` is a mirror region's share of its
+counted and charged only with a pool, a first plan's cap holds the count. `test_resident_arm_floor` is the
+arming floor (`resident_arm_floor`): the built-in 4096, the env floor, a pin under either as the floor, and a
+pin asked whole (`strict`) as the floor whatever its size; its host-layers subtest holds the count a plain MoE's
+plan moves to the host (`resident_host_layers_fit`: the fewest first layers whose expert stacks leave for the
+rest to fit, -1 where none makes it fit), the pool's floor yielding to a strict pin (`resident_hot_floor_ctx`),
+and the binding range over the regions bounding a strict context too (`resident_region_ctx`: four regions on one
+binding's 196608 positions hold 49152 each, under the 131072 asked, which the plan declines rather than shortens).
+`test_resident_region_ctx` is a mirror region's share of its
 side's one binding: the whole of it at one region, a quarter at four, the session's own context
 where that is shorter, and one region for a count under one. `test_mtp_seat_owner` holds the
 speculative round's seat ownership on a Model shell under two fake decode overrides: with the
@@ -1332,12 +1339,26 @@ unsplit twin served every step of the one-window cell and none of the two-window
 fixture is the Qwen3.6-35B-A3B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block
 after the deltanet head, at the same two lengths; the third is the Qwen3-30B-A3B UD-IQ2_XXS,
 the MoE with no shared expert (the residual step with its add partner off, the FFN-norm requant
-skipped), at the same two lengths; all three are large-tier (`DASLLAMA_PARITY_FULL=1`), and the
+skipped), at the same two lengths; all five fixtures are large-tier (`DASLLAMA_PARITY_FULL=1`), and the
 cells skip without the file, the armed tier, or a device with neither the cm2 tile family nor KHR
 cooperative matrices at subgroup 32 (the expert pieces' two tiles; the driver declines a MoE there
 by design); on a device with either the driver's admission of the fixture is
 asserted, a decline is a red that sends the reader to the load log. Every cell pins the resident
-route on for its load (`set_gpu_resident_route`) and restores the lever after.
+route on, one region, and the context pins (`set_gpu_ctx_max` / `set_gpu_ctx_strict`, at their default for
+the fixtures with no asked context) for its load and restores the levers after through their getters, and
+every cell asserts the host-layer count `gpu_resident_host_layers` reads - zero where the card holds the
+experts whole, the red naming the environment knobs that override the pins. Two fixtures take the
+host-layer form: `test_gpu_resident_moe_host_layers` on the 17 GB Qwen3-30B-A3B Q4_K_M with 32768
+positions asked whole, which a 16 GB card does not hold beside every expert, so the plan moves the first
+routed layers' experts to the host (the cell asserts not all did; it skips on a card that holds every stack,
+and on one too small for the mirror and the dense planes, by `moe_gpu_resident_memory_decline`)
+and the split token command and the cut window chain run against the CPU at both lengths, the two-window
+cell pinning the window (`assert_pf_window`); `test_gpu_resident_moe_ctx_strict` on the Qwen3.6-35B
+UD-IQ2_XXS hybrid with the context asked whole (`set_gpu_ctx_max(131072)` + `set_gpu_ctx_strict`, the
+pins read first and put back after the load), asserting the armed region holds exactly that context
+and experts yielded to it. The census witnesses count the device's routed blocks (the layers less the
+host ones), and the unsplit-twin witness is skipped under host layers (the split command records the
+split form alone).
 `test_gpu_resident_gptoss.das` - stocked suite, `-jit` only; the same rig on gpt-oss-20b (the pinned
 upstream `gpt-oss-20b-mxfp4.gguf`, large-tier): the native-MXFP4 routed stacks on the mx4 expert
 rail, the biased router's softmax over its four picks, the gate / up / down bias rows at the act and

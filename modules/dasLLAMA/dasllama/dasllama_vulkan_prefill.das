@@ -353,7 +353,7 @@ def private pf_roles_per_layer(L : RLayer) : int64 {
         n += 4l   //! the per-layer-embedding branch: the residual + requant, the gate GEMM, the act, the proj GEMM
     }
     if (L.moe) {
-        n += PF_MOE_ROLES - (has_dense_triple(L) ? 0l : 4l) + (L.moe_g4 ? 2l : 0l)   //! the gemma-4 block stamps its router norm and its routed-feed norm
+        n += (L.experts_host ? 1l : PF_MOE_ROLES) - (has_dense_triple(L) ? 0l : 4l) + (L.moe_g4 ? 2l : 0l)   //! the gemma-4 block stamps its router norm and its routed-feed norm; a host layer stamps its router alone
     }
     return n
 }
@@ -397,17 +397,43 @@ def private pf_moe_setup {
     let nfe = g_rd.nfe
     let nk = np * g_rd.k
     g_rd.pf_nk = nk
+    var any_dev = false
+    for (L in g_rd.layers) {
+        any_dev = any_dev || (L.moe && !L.experts_host)
+    }
     if (g_rd.experts_host) {
-        verify(ensure_router_gemm_cls(), "vk prefill: the router class rail must engage on a live device")
+        verify(ensure_router_gemm_cls() && (g_rd.hc || ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b()), "vk prefill: the router and host-combine class rails must engage on a live device")
         g_rd.pf_mlog = make_device_buf(np * g_rd.ner * 4l)
-        return
+        if (g_rd.pf_hacc_dev == 0ul) {
+            g_rd.pf_hacc_dev = make_device_buf(np * dim * 4l)
+            g_rd.pf_hx_host = make_host_buf(np * dim * 4l, false, [cached = true])
+            g_rd.pf_hlog_host = make_host_buf(np * g_rd.ner * 4l, false, [cached = true])
+            g_rd.pf_hacc_host = make_host_buf(np * dim * 4l, false, [cached = true])
+        }
+        g_rd.pf_ident_dev = make_device_buf(np * 4l)
+        g_rd.pf_ones_dev = make_device_buf(np * 4l)
+        unsafe {
+            var mp = reinterpret<uint?>(g_gpu.staging.mapped)
+            for (i in range64(np)) {
+                mp[i] = uint(i)
+            }
+            staged_upload(g_rd.pf_ident_dev, 0l, np * 4l)
+            var fp = reinterpret<float?>(g_gpu.staging.mapped)
+            for (i in range64(np)) {
+                fp[i] = 1.0
+            }
+            staged_upload(g_rd.pf_ones_dev, 0l, np * 4l)
+        }
+        return if (!any_dev)
     }
     verify(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_gather_f16_cls()
         && ensure_actf16_cls() && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b() && (!g_rd.exps_bias || ensure_actf16_b_cls()),
         "vk prefill: the MoE block's class rails must engage on a live device")
     let bounds = pf_moe_bounds(nk)
     assert((PF_MOE_MAP_OFF + max(bounds.gu + bounds.mgu, bounds.dn + bounds.mdn)) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan tier: the MoE block's schedule exceeds its plane")
-    g_rd.pf_mlog = make_device_buf(np * g_rd.ner * 4l)
+    if (!g_rd.experts_host) {
+        g_rd.pf_mlog = make_device_buf(np * g_rd.ner * 4l)
+    }
     g_rd.pf_midx = make_device_buf(nk * 4l)
     g_rd.pf_mw = make_device_buf(nk * 4l)
     g_rd.pf_minv = make_device_buf(nk * 4l)
@@ -423,7 +449,7 @@ def private pf_moe_setup {
     g_rd.pf_midx_host = make_host_buf(nk * 4l, false, [cached = true])
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
 def private pf_moe_layer_sets(l : int64) {
     var L & = unsafe(g_rd.layers[l])
     let np = g_rd.pf_np
@@ -440,6 +466,15 @@ def private pf_moe_layer_sets(l : int64) {
     L.pf_router_set = set_router_gemm_cls(fixed_array(g_rd.router_dev, g_rd.pf_xb, g_rd.pf_mlog),
         fixed_array(g_rd.router_bytes, np * dim * 4l, np * ner * 4l), fixed_array(0u, VHZ_XB, VHZ_MRT))
     if (L.experts_host) {
+        if (!g_rd.hc) {
+            verify(!L.moe_g4, "vk prefill: a host layer takes the plain combine")
+            L.pf_arcomb_set = set_cls_ar_comb(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev, g_rd.pf_mlog, g_rd.moe_db_dev, g_rd.pf_ident_dev),
+                fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, np * 4l, np * 4l, np * dim * 4l, np * ner * 4l, g_rd.moe_db_bytes, np * 4l),
+                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, 0u, VHZ_MDN, VHZ_MRT, 0u, 0u))
+            L.pf_arcomb_f16_set = set_cls_ar_comb_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev, g_rd.pf_mlog, g_rd.moe_db_dev, g_rd.pf_ident_dev),
+                fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l, np * 4l, np * 4l, np * dim * 4l, np * ner * 4l, g_rd.moe_db_bytes, np * 4l),
+                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, 0u, VHZ_MDN, VHZ_MRT, 0u, 0u))
+        }
         return
     }
     let pe1 = arena_planes(L.fe1, L.be1)
@@ -500,22 +535,18 @@ def private pf_moe_layer_sets(l : int64) {
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT, 0u, VHZ_MRT))
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
-def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
+def private pf_moe_router(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim
-    let ne = g_rd.ne   // nolint:LINT021 — the push words take the int64 geometry narrowed
-    let k = g_rd.k
-    let nfe = g_rd.nfe
     let ner = g_rd.ner
-    let nk = wlen * k
-    let bar = int(l * PF_ROLES) + 8   //! the layer's add+rms set: x -> xb under a push-named norm row, the add off
+    let addrms_set = int(l * PF_ROLES) + 8
     if (L.moe_g4) {   //! the router's input: a weightless rms of x under the router scale over sqrt(dim)
         var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ascale = 1.0)
-        enc_cls_ar(raw, h, g_rd.pf_sets[bar], pcn, wlen)
+        enc_cls_ar(raw, h, g_rd.pf_sets[addrms_set], pcn, wlen)
         pfq_ts(raw)
     }
-    if (pf_f16g_on()) {
+    if (pf_f16g_on() && !L.experts_host) {
         var pcc = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
         enc_f16cvt_cls(raw, h, L.pf_router_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
         pf_f16g_enc(raw, h, L.pf_f16g_router_set, L.pf_f16g_router_red_set, dim, ner, wlen, L.router_slot * ner * dim, 0l)
@@ -524,13 +555,26 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
         enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ner + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
     }
     pfq_ts(raw)
-    var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = uint(ner), wscale = g_rd.wscale,
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
+def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
+    var L & = unsafe(g_rd.layers[l])
+    let dim = g_rd.dim   // nolint:LINT021 — the push words take the int64 geometry narrowed
+    let ne = g_rd.ne   // nolint:LINT021 — the push words take the int64 geometry narrowed
+    let k = g_rd.k
+    let nfe = g_rd.nfe
+    let ner = uint(g_rd.ner)
+    let nk = wlen * k
+    let addrms_set = int(l * PF_ROLES) + 8
+    pf_moe_router(raw, h, l, wlen)
+    var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = ner, wscale = g_rd.wscale,
         dsoff = L.moe_g4 ? uint(L.router_slot * ne) : NO_DSCALE, rbias_on = g_rd.router_bias ? 1u : 0u, rboff = uint(L.router_slot * ne))
     enc_topk_rows_cls(raw, h, L.pf_topk_set, pct, wlen)
     pfq_ts(raw)
     if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm, the rows the gather reads
         var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
-        enc_cls_ar(raw, h, g_rd.pf_sets[bar], pcn, wlen)
+        enc_cls_ar(raw, h, g_rd.pf_sets[addrms_set], pcn, wlen)
         pfq_ts(raw)
     }
     let bounds = pf_moe_bounds(nk)
@@ -601,6 +645,7 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
         pp.wqb, pp.wsb, np * ple, np * (ple / 32l) * 4l, np * dim * 4l, VHZ_HQ, VHZ_FFO, ple, dim, g_rd.layers[l].bpp, wlen, false)
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
 def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim
@@ -1389,10 +1434,12 @@ def private pf_hc_setup {
     g_rd.pf_hclo = make_device_buf(np * lr * 4l)
     g_rd.pf_hcup = make_device_buf(np * hcd * 4l)
     g_rd.pf_hcinj = make_device_buf(np * hc * 4l)
-    g_rd.pf_hacc_dev = make_device_buf(np * dim * 4l)
-    g_rd.pf_hx_host = make_host_buf(np * dim * 4l, false, [cached = true])
-    g_rd.pf_hlog_host = make_host_buf(np * ner * 4l, false, [cached = true])
-    g_rd.pf_hacc_host = make_host_buf(np * dim * 4l, false, [cached = true])
+    if (g_rd.pf_hacc_dev == 0ul) {
+        g_rd.pf_hacc_dev = make_device_buf(np * dim * 4l)
+        g_rd.pf_hx_host = make_host_buf(np * dim * 4l, false, [cached = true])
+        g_rd.pf_hlog_host = make_host_buf(np * ner * 4l, false, [cached = true])
+        g_rd.pf_hacc_host = make_host_buf(np * dim * 4l, false, [cached = true])
+    }
     let n_sites = long_length(g_rd.hc_sites)
     g_rd.pf_hc_meta0 = length(g_rd.pf_meta)
     g_rd.pf_meta |> reserve(long_length(g_rd.pf_meta) + n_sites * 2l + 2l)
@@ -1843,7 +1890,7 @@ def private pf_ffn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
         p2.wqb, p2.wsb, hqn, hsn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, ffn_rows, dn6, 0l, ffn_row0)
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
 def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; emb_scale : float;
                    cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk prefill before prepare/set_cls")
@@ -1948,7 +1995,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
             enc_cls_ar(raw, h, g_rd.pf_sets[bp + 0], pc_pro, wlen)   // prologue norm
             pfq_ts(raw)
-            let overlap = g_env_vulkan.vk_overlap && !vk_prof()
+            let overlap = g_env_vulkan.vk_overlap && !vk_prof() && !g_rd.experts_host
             let fuse_arq = g_env_vulkan.vk_fuse
             var nextb = 1l
             var cstep = 1l
@@ -2007,7 +2054,21 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 if (has_dense_triple(g_rd.layers[l])) {
                     pf_ffn_block(raw, h, l, b, wlen, ffn_row0, gu6, dn6, dnk)
                 }
-                if (moe) {
+                if (moe && g_rd.layers[l].experts_host) {
+                    pf_moe_router(raw, h, l, wlen)
+                    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
+                    cmd_copy_whole(raw, g_rd.pf_xb, g_rd.pf_hx_host.buf, wlen * dim * 4l)
+                    cmd_copy_whole(raw, g_rd.pf_mlog, g_rd.pf_hlog_host.buf, wlen * g_rd.ner * 4l)
+                    vk_check(vkEndCommandBuffer(raw), null)
+                    submit_wait(raw)
+                    rdec_host_rows(l, reinterpret<float const?>(g_rd.pf_hx_host.mapped), reinterpret<float const?>(g_rd.pf_hlog_host.mapped),
+                        reinterpret<float?>(g_rd.pf_hacc_host.mapped), 0l, wlen)
+                    vk_check(vkResetCommandBuffer(raw, rf), null)
+                    vk_check(vkBeginCommandBuffer(raw, begin), null)
+                    h = VkHaz()
+                    vhz_dep(raw, h, 0u, VHZ_MDN, true)
+                    cmd_copy_whole(raw, g_rd.pf_hacc_host.buf, g_rd.pf_hacc_dev, wlen * dim * 4l)
+                } elif (moe) {
                     pf_moe_block(raw, h, l, wlen)
                 }
                 let nxt = l + 1l < g_rd.n_layers ? rd_norm_off(l + 1l, RD_NORM_ATT) : nlfin
@@ -2150,9 +2211,15 @@ def private pf_prof_report(npos : int64) {
     var ndn = 0l
     var nmoe = 0l
     var ndnm = 0l
+    var nhost = 0l
     var qi = 3u
     for (L in g_rd.layers) {
         let n = pf_roles_per_layer(L)
+        if (L.moe && L.experts_host) {   // the router alone of the routed block: its stamps would misalign the device layers' roles
+            nhost++
+            qi += uint(n)
+            continue
+        }
         for (s in range64(n)) {
             if (L.recurrent && L.moe) {
                 dnm[s] += pfq_us(qi + uint(s))
@@ -2199,6 +2266,9 @@ def private pf_prof_report(npos : int64) {
     for (L in g_rd.layers) {
         has_shexp ||= L.moe && has_dense_triple(L)
         has_g4 ||= L.moe_g4
+    }
+    if (nhost > 0l) {
+        to_log(LOG_INFO, "vk_rdpf gpu: {nhost} host layers left out of the role table (the router alone, the experts summed on the host between the submits)\n")
     }
     if (nmoe > 0l) {
         //! an MoE layer's stamps: the attention roles (the qkn one shifts them by one), ar1, rq_f, then the tail

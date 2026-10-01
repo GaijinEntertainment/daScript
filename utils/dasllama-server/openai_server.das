@@ -274,13 +274,13 @@ def private uninstall_slot_marks() {
 var private g_gpu_ask_streams = 0l
 var private g_gpu_ask_ctx = 0l
 
-//! Ask the whole-model GPU driver for a K/V region per stream and at most `ctx` positions in one (0 = the model's own),
-//! for the load or the rearm that follows. `add_model` stamps the ask on its slot.
+//! before the load or rearm: a K/V region per stream of `ctx` positions, asked whole when `ctx` > 0; 0 = the model's own, shortened to the card's room
 def gpu_residency_ask(streams, ctx : int64) {
     g_gpu_ask_streams = streams
     g_gpu_ask_ctx = ctx
     set_gpu_resident_regions(streams)
     set_gpu_ctx_max(ctx)
+    set_gpu_ctx_strict(gpu_ctx_asked_whole(ctx))
 }
 
 //! a stream's context is its region's where the driver armed any: a request never runs past the rows the card holds for it

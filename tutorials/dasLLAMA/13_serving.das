@@ -238,7 +238,11 @@ def section_gpu_slots(m : Model) {
 // DEVICE-HOME session (create_device_session) lives in one region and has no
 // host cache at all. Two calls before load_model size this:
 // set_gpu_resident_regions says how many streams we serve, set_gpu_ctx_max caps
-// the positions one region holds.
+// the positions one region holds. set_gpu_ctx_strict makes that cap the context
+// ASKED: the driver holds it for every region or declines (a MoE moves the experts
+// the card cannot hold to the host first) instead of quietly shortening it; the
+// load log says which. gpu_ctx_pins reads both pins back, so a rig puts them
+// where it found them.
 //
 // After the load, gpu_device_sessions answers how many regions the driver armed
 // (0 on a CPU box, under the per-op rails, and on Metal). gpu_resident_decline
@@ -311,8 +315,12 @@ def main() {
         return
     }
     set_gpu_resident_regions(STREAMS)   // section 5: a K/V region per stream, asked for before the load
+    let pins = gpu_ctx_pins()      // whatever an earlier run of this process pinned
     set_gpu_ctx_max(8192l)         // and at most this many positions in a region
+    set_gpu_ctx_strict(false)      // a cap, not a demand: a card short of room shortens it and says so
     var m <- load_model(path, QuantMode.q8)
+    set_gpu_ctx_max(pins.ctx_max)   // the pins back, for whoever loads next in this process
+    set_gpu_ctx_strict(pins.strict)
     allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     with_job_que() {
         setup_dasllama_jobque()

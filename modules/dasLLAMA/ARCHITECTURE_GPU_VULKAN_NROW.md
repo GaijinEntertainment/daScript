@@ -18,8 +18,9 @@ rows - one a region, or the speculative verify's rows where a NextN model asks m
 MoE, per-layer-embedding, shared-KV and recurrent layers and a gated q, and none where a layer or
 the tail has no N-row form - a dense plane in a per-32 expert format (q51, iq4nl32, mx4: the formats
 with no N-column leaf, every kq leaf having one), a routed block beside a per-layer-embedding
-branch, or more routed slots than the block's slot planes hold - and logs the reason once per
-armed model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`)
+branch, more routed slots than the block's slot planes hold, or a routed layer whose experts serve on
+the host on a plain MoE (the one-row split command serves it, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`) -
+and logs the reason once per armed model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`)
 runs once over the rows' logits planes, `ClsEpiArgs.rows` planes `vocab` apart, the id a row's
 own; the one-row command and the prefill's tail pass one row. The pins matter on the one-row
 path alone: the batch driver's host tail pins the suppressed ids again on every row after the
