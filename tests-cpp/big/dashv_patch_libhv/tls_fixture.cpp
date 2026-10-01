@@ -74,7 +74,7 @@ static bool save_key(const std::string & path, EVP_PKEY * value) {
     Bio encoded(BIO_new(BIO_s_mem()), BIO_free);
     return encoded && PEM_write_bio_PrivateKey(encoded.get(), value, nullptr, nullptr, 0, nullptr, nullptr) == 1 && save_pem(path, encoded.get());
 }
-static int start(hv::HttpServer & server, const std::string & cert, const std::string & key_file) {
+static int prepare_tls(hv::HttpServer & server, const std::string & cert, const std::string & key_file) {
     hssl_ctx_opt_t options{};
     options.crt_file = cert.c_str(); options.key_file = key_file.c_str(); options.endpoint = HSSL_SERVER;
     if (server.newSslCtx(&options) != 0) return -1;
@@ -86,7 +86,6 @@ static int start(hv::HttpServer & server, const std::string & cert, const std::s
     server.setThreadNum(1);
     server.setPort(0, 0);
     server.setListenFD(-1, fd);
-    if (server.start() != 0) return -1;
     return port;
 }
 static bool sync_reply(hv::HttpClient & client, const std::string & url, const std::string & body) {
@@ -184,11 +183,12 @@ int main(int argc, char ** argv) {
     plaintext_port = sockaddr_port(&plain_address);
     plaintext_server.setListenFD(plain_fd, -1);
     plaintext_server.setThreadNum(1);
-    if (plaintext_server.start() != 0) return 11;
     hv::HttpServer dns_server(&routes), ip_server(&routes);
-    dns_port = start(dns_server, root + "/dns.pem", root + "/key.pem");
-    ip_port = start(ip_server, root + "/ip.pem", root + "/key.pem");
+    dns_port = prepare_tls(dns_server, root + "/dns.pem", root + "/key.pem");
+    ip_port = prepare_tls(ip_server, root + "/ip.pem", root + "/key.pem");
     if (dns_port <= 0 || ip_port <= 0) return 6;
+    // Publish every captured port before any handler thread can read it.
+    if (plaintext_server.start() != 0 || dns_server.start() != 0 || ip_server.start() != 0) return 11;
     FILE * ready = fopen((root + "/ready.tmp").c_str(), "wb");
     if (!ready) return 7;
     fprintf(ready, "%d\n%d\n", dns_port, ip_port); fclose(ready);
