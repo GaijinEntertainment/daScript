@@ -1101,7 +1101,7 @@ def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host
         LLVMDisposeMessage(mod_triple)
         LLVMDisposeTargetData(dl)
         let error : string?
-        let file = artifact_path(out_path, JitArtifact.object)
+        let file = get_platform_name() == "windows" ? "{out_path}.obj" : artifact_path(out_path, JitArtifact.object)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         let failed = LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
         if (failed != 0) {
