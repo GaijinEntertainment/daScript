@@ -48,3 +48,37 @@ def test_extern_registrar_reparse(t : T?) {
     var err : string
     rmdir_rec(tmp, err)
 }
+
+//! a module compiled between two registrars is served: dasbind's proxies are not part of its hash,
+//! so the later registrar's proxies do not fail it and the cache is not rewritten
+[test]
+def test_extern_between_registrars_served(t : T?) {
+    if (typeinfo sizeof(type<void?>) != 8) {
+        t |> skip("a 32-bit host builds no extern binder, so nothing registers at compile time")
+        return
+    }
+    var terr : string
+    let tmp = create_temp_directory("das_mc_extern2", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let root = get_das_root()
+    let fixtures = "{root}/tests/module_cache/_fixtures"
+    for (name in ["mc_extern_lib.das", "mc_extern_dep.das", "mc_extern2_drv.das"]) {
+        fwrite(path_join(tmp, name), fread(path_join(fixtures, name)))
+    }
+    let drv = path_join(tmp, "mc_extern2_drv.das")
+    let cmd = "{trace_prefix()}\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc.bin\" \"{drv}\""
+    var cold : string
+    t |> success(run_child_reported(t, "cold", cmd, cold, "EXTERN2_DRV=8"), "cold run")
+    var warm : string
+    var warmOk = run_child_reported(t, "warm", cmd, warm, "deser: partial - 2 module(s) reparsed in place, rest from cache")
+    if (find(warm, "cumulative hash") >= 0 || find(warm, "ser: wrote") >= 0) {
+        t |> failure("the warm run failed the middle module on dasbind's hash and rewrote the cache:\n{warm}")
+        warmOk = false
+    }
+    t |> success(warmOk && find(warm, "EXTERN2_DRV=8") >= 0, "warm run serves the module between the registrars")
+    var err : string
+    rmdir_rec(tmp, err)
+}

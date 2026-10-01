@@ -67,6 +67,130 @@ namespace das {
         });
     }
 
+    static void hashExpressionText ( HashBuilder & hb, const ExpressionPtr & expr ) {
+        hb.update(expr != nullptr);
+        if ( expr ) {
+            TextWriter wr;
+            wr << *expr;
+            hb.updateString(wr.str());
+        }
+    }
+
+    static uint64_t functionContentHash ( const Function * fn ) {
+        HashBuilder hb;
+        hb.updateString(fn->getMangledName());
+        hb.updateString(fn->result ? fn->result->getMangledName() : string());
+        for ( const auto & arg : fn->arguments ) {
+            hb.updateString(arg->name);
+            hashExpressionText(hb, arg->init);
+        }
+        hb.update(fn->sideEffectFlags);
+        const bool traits[] = {
+            fn->policyBased, fn->callBased, fn->interopFn, fn->copyOnReturn, fn->moveOnReturn,
+            fn->unsafeOperation, fn->unsafeDeref, fn->noAot, fn->privateFunction, fn->firstArgReturnType,
+            fn->noPointerCast, fn->isTypeConstructor, fn->safeImplicit, fn->mustInline, fn->deprecated,
+            fn->aliasCMRES, fn->neverAliasCMRES, fn->propertyFunction, fn->jitOnly, fn->requestNoJit,
+            fn->jitContextAndLineInfo, fn->nodiscard, fn->captureString, fn->unsafeWhenNotCloneArray,
+            fn->neverInline, fn->tempStringResult, fn->needCallerStackFrame, fn->nttp,
+        };
+        hb.updateString((const char *)traits, sizeof(traits));
+        return hb.getHash();
+    }
+
+    static uint64_t annotationContentHash ( Annotation * ann ) {
+        HashBuilder hb;
+        hb.updateString(ann->name);
+        if ( ann->rtti_isHandledTypeAnnotation() ) {
+            auto ta = static_cast<TypeAnnotation *>(ann);
+            das_set<Structure *> dep;
+            das_set<Annotation *> adep;
+            hb.update(ta->getOwnSemanticHash(hb, dep, adep));
+            hb.update(uint64_t(ta->getSizeOf()));
+            hb.update(uint64_t(ta->getAlignOf()));
+            const bool traits[] = {
+                ta->canMove(), ta->canCopy(), ta->canClone(), ta->isPod(), ta->isRawPod(), ta->isRefType(),
+                ta->hasNonTrivialCtor(), ta->hasNonTrivialDtor(), ta->hasNonTrivialCopy(),
+                ta->canBePlacedInContainer(), ta->isLocal(), ta->needInScope(), ta->canNew(), ta->canDelete(),
+                ta->needDelete(), ta->canDeletePtr(), ta->isIterable(), ta->isShareable(), ta->isSmart(),
+                ta->avoidNullPtr(), ta->isYetAnotherVectorTemplate(),
+            };
+            hb.updateString((const char *)traits, sizeof(traits));
+        }
+        return hb.getHash();
+    }
+
+    static uint64_t builtinModuleShape ( Module * m ) {
+        HashBuilder hb;
+        hb.update(uint64_t(m->functions.each().size()));
+        hb.update(uint64_t(m->generics.each().size()));
+        hb.update(uint64_t(m->globals.each().size()));
+        hb.update(uint64_t(m->enumerations.each().size()));
+        hb.update(uint64_t(m->structures.each().size()));
+        hb.update(uint64_t(m->aliasTypes.each().size()));
+        hb.update(uint64_t(m->handleTypes.size()));
+        return hb.getHash();
+    }
+
+    static bool isDasbindProxy ( const Function * fn ) {
+        // every proxy carries userScenario - checked first so the name comparison runs only for the few functions that have it
+        return fn->userScenario && fn->name.compare(0, 11, "__dasbind__") == 0;
+    }
+
+    static uint64_t builtinModuleHash ( Module * m ) {
+        uint64_t total = 0;
+        m->functions.foreach([&](const FunctionPtr & fn) {
+            if ( fn->builtIn && !isDasbindProxy(fn) ) total += functionContentHash(fn);
+        });
+        m->generics.foreach([&](const FunctionPtr & fn) {
+            if ( fn->builtIn ) total += functionContentHash(fn);
+        });
+        m->globals.foreach([&](const VariablePtr & var) {
+            HashBuilder hb;
+            hb.updateString(var->name);
+            hb.updateString(var->type ? var->type->getMangledName() : string());
+            hashExpressionText(hb, var->init);
+            const bool traits[] = { var->private_variable, var->global_shared, var->do_not_delete, var->bitfield_constant };
+            hb.updateString((const char *)traits, sizeof(traits));
+            total += hb.getHash();
+        });
+        m->enumerations.foreach([&](const EnumerationPtr & en) {
+            HashBuilder hb;
+            hb.updateString(en->getMangledName());
+            hb.update(en->baseType);
+            for ( const auto & e : en->list ) {
+                hb.updateString(e.name);
+                hashExpressionText(hb, e.value);
+            }
+            total += hb.getHash();
+        });
+        m->structures.foreach([&](const StructurePtr & st) {
+            HashBuilder hb;
+            das_set<Structure *> dep;
+            das_set<Annotation *> adep;
+            total += st->getOwnSemanticHash(hb, dep, adep);
+        });
+        m->aliasTypes.foreach([&](const TypeDeclPtr & at) {
+            HashBuilder hb;
+            hb.updateString(at->alias);
+            hb.updateString(at->getMangledName());
+            total += hb.getHash();
+        });
+        for ( const auto & kv : m->handleTypes ) {
+            total += annotationContentHash(kv.second);
+        }
+        return total;
+    }
+
+    uint64_t AstSerializer::builtinHash ( Module * m ) {
+        auto shape = builtinModuleShape(m);
+        auto & entry = builtinHashes[m];
+        if ( entry.first != shape ) {
+            entry = { shape, builtinModuleHash(m) };
+        }
+        return entry.second;
+    }
+
+
     AstSerializer::~AstSerializer () {
         for ( auto fileInfo : deleteUponFinish ) {
             if ( doNotDelete.count(fileInfo) == 0 ) {
@@ -3340,7 +3464,6 @@ namespace das {
             ser.failed = true;
             return;
         }
-        ser.builtinHashDrift = false;   // per-record flavor bit, read by the resume path
         ser.clearNodeIds();             // numbering restarts with every program, on both sides
 
         DAS_SER_PROFILE(ser, "Program");
@@ -3418,7 +3541,8 @@ namespace das {
                 *this << m->name;
 
                 if ( m->builtIn && !m->promoted ) {
-                    *this << m->cumulativeHash;
+                    uint64_t moduleHash = builtinHash(m);
+                    *this << moduleHash;
                     continue;
                 }
 
@@ -3461,7 +3585,7 @@ namespace das {
                     // answers null, and the deref was a SIGSEGV (recoverable throw now;
                     // the resume reparses the record in place)
                     SERIALIZER_VERIFYF(m != nullptr, "builtin module '%s' not found", name.c_str());
-                    uint64_t savedHash = 0, moduleHash = m->cumulativeHash;
+                    uint64_t savedHash = 0, moduleHash = builtinHash(m);
                     *this << savedHash;
 
                     if ( moduleHash != savedHash ) {
@@ -3469,7 +3593,6 @@ namespace das {
                             LOG(LogLevel::warning) << "das: serialize: cumulative hash for module '" << m->name
                                                    << "' differs" << " (" << moduleHash << " vs " << savedHash << ") ";
                         }
-                        ser.builtinHashDrift = true;    // per-process-deterministic drift, not damage
                         program->failToCompile = true;
                         return;
                     }

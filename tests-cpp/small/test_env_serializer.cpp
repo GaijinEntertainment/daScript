@@ -176,6 +176,42 @@ TEST_CASE("env serializer: non-debugger program keeps serializers installed") {
     }
 }
 
+TEST_CASE("env serializer: a changed builtin module is not served from the cache") {
+    auto & env = *daScriptEnvironment::getBound();
+    EnvSerializerGuard envGuard;
+    warmUp("/tests-cpp/small/test_env_serializer.das");
+    SerializationStorageVector storage;
+    {
+        TextWriter logs;
+        ModuleGroup libGroup;
+        AstSerializer writer(&storage, true);
+        env.serializer_write = &writer;
+        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup);
+        env.serializer_write = nullptr;
+        writer.moduleLibrary = nullptr;
+        REQUIRE(program != nullptr);
+        REQUIRE_FALSE(program->failed());
+    }
+    auto builtin = Module::require("$");
+    addConstant(*builtin, "test_env_serializer_drift", 1);
+    {
+        TextWriter logs;
+        ModuleGroup libGroup;
+        AstSerializer reader(&storage, false);
+        env.serializer_read = &reader;
+        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup);
+        env.serializer_read = nullptr;
+        reader.moduleLibrary = nullptr;
+        REQUIRE(program != nullptr);
+        REQUIRE_FALSE(program->failed());
+        CHECK(reader.resumedModules != 0);
+        CHECK(reader.resumedCorrupt != 0);
+    }
+    auto drift = builtin->findVariable("test_env_serializer_drift");
+    builtin->globals.remove(drift->name);
+    for ( gc_node * node : { (gc_node *)drift->init->type, (gc_node *)drift->init, (gc_node *)drift->type, (gc_node *)drift } ) gc_free_now(node);
+}
+
 // Compiling daslib/debug installs the debug agent on its own thread (dap), whose
 // context eval races with the still-compiling main thread under TSan. That's
 // pre-existing debugger threading, not the serializer rail under test — skip
