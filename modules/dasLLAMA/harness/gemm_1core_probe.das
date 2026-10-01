@@ -83,7 +83,7 @@ def build_shape(n, d, ntok : int64) : Q8Shape {
     return <- sh
 }
 
-def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,STYLE038 — one rig: fixtures, the correctness gate and the interleaved timing rounds share every buffer
+def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE038 — one rig: fixtures, the correctness gate and the interleaved timing rounds share every buffer
     var sh <- build_shape(n, d, NTOK)
 
     // every backend registered on THIS host (x64 and arm64 tiers register platform-gated),
@@ -207,7 +207,7 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE037,
 //   DASLLAMA_FOCUS_FORKED=1       — rung B: one process, threshold 0 (always parallel_for), workers
 //                                   from DAS_JOBQUE_THREADS; B minus A at each K = the scheduler's bill
 
-def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) {   // nolint:STYLE037,STYLE038 — one calibrated window: splitting it separates the calibration from the loop it sizes
+def focus_bench(be : string; shape : string; n, d, ntok : int64; forked : bool) {
     var sh <- build_shape(n, d, ntok)
     select_kernel_backend(be)
     if (kernel_backend_needs_repack(be)) {
