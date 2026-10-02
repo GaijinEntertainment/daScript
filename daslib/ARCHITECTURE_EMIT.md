@@ -27,9 +27,10 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   moves with it), elaborated `struct X`, double parens around `das_iterator` sources
   (most vexing parse), non-const value loop variables (`first()`/`next()` write into it).
 - **Sequenced binary operands**: any op2 whose operands are not both side-effect-free is
-  emitted through `das_ordered2{ L, R }` plus an immediately-invoked lambda. The struct and
-  its member names live in `include/daScript/simulate/aot.h` and move with the emitter's
-  `__lr.left`/`__lr.right` spellings.
+  emitted as `das_ordered2([&](auto && __lr_left, auto && __lr_right) { return op; },
+  [&]() { return L; }, [&]() { return R; })`. The function lives in
+  `include/daScript/simulate/aot.h` and moves with the emitter's `__lr_left`/`__lr_right`
+  spellings.
 - **Stack-frame `new`/ascend**: per-block storage declared once, the USE site
   re-initializes per evaluation (memset for `new`, whole-value overwrite for ascend) -
   dropping the reinit reuses the previous iteration's value.

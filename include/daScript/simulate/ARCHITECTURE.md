@@ -127,13 +127,14 @@ correctness required it, and the alternative that was rejected.
   the odd bit of `trunc(y)` shifted to bit 31, anded with x. `pow_est` is the same without the
   xor, which is `GLSLstd450.Pow` - undefined for a negative base, as GLSL leaves it.
 
-- **`das_ordered2`** (`aot.h`) - a two-member aggregate the AOT emitter wraps around any
-  binary op whose operands are not both side-effect-free, because braced aggregate init is
-  the C++ construct that guarantees left-to-right evaluation; a plain call argument list or
-  binary operator is unsequenced, and the interpreter and JIT both evaluate left-then-right.
+- **`das_ordered2`** (`aot.h`) - a function the AOT emitter wraps around any binary op whose
+  operands are not both side-effect-free. It takes the op and one thunk per operand, and runs
+  the thunks in two declarations, which C++ sequences left-to-right; a plain call argument
+  list or binary operator is unsequenced, and the interpreter and JIT both evaluate
+  left-then-right. Not a braced aggregate init: that is sequenced too, but MSVC x86 (19.40 to
+  19.44, /O1 or /O2) fails with C1001 on it when an impure operand sits in a loop.
   Optimized builds flatten the wrapper to nothing; an unoptimized AOT build pays a copy of
-  both operand values
-  plus an immediately-invoked lambda frame per wrapped op. Ops whose policy operands need a
+  both operand values plus three lambda frames per wrapped op. Ops whose policy operands need a
   ref cast decline the wrapper and keep the plain unordered emission. Rejected alternative:
   hoisting operands to named temporaries in the emitter, which needs statement-position
   rewriting the textual visitor cannot do inside an expression.

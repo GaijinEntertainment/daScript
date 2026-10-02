@@ -6,6 +6,10 @@ require UnitTest
 [test]
 def test_scalar_crt_twins(t : T?) {
     t |> run("switched scalar builtins are the CRT exactly") @@(t : T?) {
+        // windows x86 keeps the vecmath exp, exp2, log2 and pow (sim_policy.h)
+        if (get_platform_name() == "windows" && get_architecture_name() == "x86") {
+            return
+        }
         var y = 0.05f
         while (y < 20.) {
             t |> equal(exp(y), crt_expf(y), "exp({y})")
