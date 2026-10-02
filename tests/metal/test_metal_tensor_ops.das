@@ -809,6 +809,41 @@ def private devab_replay(var o : TmmDevabKernels?; natural : bool) : array<float
     return <- clone_to_move(o.oc)
 }
 
+//! the whole-tile CPU replay OVERWRITES its scratch - the one tmm2d form that takes no begin
+[test]
+def test_tmm2d_tile_tg_replay(t : T?) {
+    t |> run("tmm2d_tile_tg: the CPU replay is the tile product, the scratch's old contents gone") @(t : T?) {
+        var ta : float16[256]
+        var tb : float16[512]
+        var so : float[128]
+        for (i in range(256)) {
+            ta[i] = float16(float(i % 7 - 3))
+        }
+        for (i in range(512)) {
+            tb[i] = float16(float(i % 9 - 4))
+        }
+        for (v in so) {
+            v = 1000.0
+        }
+        gl_LocalInvocationID = uint3(0u, 0u, 0u)
+        tmm2d_tile_tg(ta, tb, so, 8u, 16u, 2u, 32u)
+        var bad = 0
+        var stale = 0
+        for (r in range(M)) {
+            for (j in range(N)) {
+                var want = 0.0
+                for (k in range(32)) {
+                    want += float(ta[r * 32 + k]) * float(tb[j * 32 + k])
+                }
+                bad += so[r * N + j] != want ? 1 : 0
+                stale += so[r * N + j] == want + 1000.0 ? 1 : 0
+            }
+        }
+        t |> equal(bad, 0, "every element is the product alone")
+        t |> equal(stale, 0, "none carries the scratch's old value")
+    }
+}
+
 def private diff_count(a, b : array<float>) : int {
     var bad = 0
     for (x, y in a, b) {

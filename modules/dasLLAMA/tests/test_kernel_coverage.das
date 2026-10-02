@@ -189,7 +189,7 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalDnGateSig",
     // the device attention pair's 128-row stamps: they serve a window whose padded row count is a
     // multiple of 128, and the census prompt pads to 608 rows, which the 32-row stamps take. Their
-    // coverage is attn_qk_dev_gate and attn_dev_pair_gate in test_metal_gemm_kernels.das and the
+    // coverage is attn_qk_mm_gate's pair arms and attn_dev_pair_gate in test_metal_gemm_kernels.das and the
     // attn-dev arm's 384-row continuation in test_metal_prefill_parity.das
     "MetalAttnQKDev128", "MetalAttnAVDev128"
 ]

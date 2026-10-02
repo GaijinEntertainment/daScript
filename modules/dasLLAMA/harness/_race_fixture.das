@@ -4,7 +4,7 @@ options _dasllama_internal = true
 
 module _race_fixture shared public
 
-//! The timing-race scaffold the harness races share: the interleaved round loop, the unwritten-output
+//! The timing-race scaffold the harness races share: the operand fill, the interleaved round loop, the unwritten-output
 //! poison, the held-to-a-reference compare and its wording, the per-arm statistics, and the refusal
 //! tally that decides the exit code.
 
@@ -17,6 +17,18 @@ typedef Held = tuple<diff : float; bound : float; ok : bool>
 struct RaceTally {
     rows : int
     bad : int
+}
+
+//! `count` operands off an LCG seeded by `salt`: (u - 0.5) x amp + bias, u on [0, 1) in 2^-16 steps; `stir` joins the step's increment
+def race_fill(count, salt : int; amp, bias : float; stir : uint = 0u) : array<float> {
+    var xa : array<float>
+    xa |> resize(count)
+    var st = uint(salt) * 2654435761u + 12345u
+    for (i in range(count)) {
+        st = st * 1664525u + 1013904223u + stir
+        xa[i] = (float(int((st >> 9u) & 0xffffu)) / 65536.0 - 0.5) * amp + bias
+    }
+    return <- xa
 }
 
 //! `y` refilled with the NaN sentinel before an arm's walk

@@ -219,6 +219,48 @@ def test_rope_neox_2d_rows(t : T?) {
 }
 
 [test]
+def test_rel_pos_table(t : T?) {
+    t |> run("Transformer-XL rel-position table against an fp64 reference; the zero row exact; a poisoned expectation misses") @(t : T?) {
+        let d = 64l
+        let tt = 37l
+        let ww = 2l * tt - 1l
+        var pos_emb <- [1.0, 2.0, 3.0]
+        rel_pos_table(pos_emb, d, tt, ww)
+        t |> equal(length(pos_emb), int(ww * d), "grown to ww x d")
+        var want : array<double>
+        want |> resize(ww * d)
+        for (w in range64(ww)) {
+            for (k in range64(d / 2l)) {
+                let theta = double(tt - 1l - w) / pow(10000.0lf, double(2l * k) / double(d))
+                want[w * d + 2l * k] = sin(theta)
+                want[w * d + 2l * k + 1l] = cos(theta)
+            }
+        }
+        let bar = 4e-6lf   //! the f32 angle's rounding at |rel| < 37 plus one f32 sin/cos ulp
+        t |> equal(rel_pos_off(pos_emb, want, bar), 0, "every element within {bar} of the fp64 reference")
+        let zero = (tt - 1l) * d
+        var zero_ok = true
+        for (k in range64(d / 2l)) {
+            zero_ok = zero_ok && pos_emb[zero + 2l * k] == 0.0 && pos_emb[zero + 2l * k + 1l] == 1.0
+        }
+        t |> success(zero_ok, "row tt - 1 is relative position 0: (0, 1) pairs")
+        var shifted : array<float>
+        rel_pos_table(shifted, d, tt + 1l, ww)
+        let off = rel_pos_off(shifted, want, bar)
+        t |> success(off > 0, "the control: the table of one frame more lands {off} elements outside the bar")
+    }
+}
+
+//! the elements of `got` not within `bar` of `want`, a NaN among them
+def private rel_pos_off(got : array<float>; want : array<double>; bar : double) : int {
+    var off = 0
+    for (g, w in got, want) {
+        off += abs(double(g) - w) <= bar ? 0 : 1
+    }
+    return off
+}
+
+[test]
 def test_avg_pool2d_rows(t : T?) {
     t |> run("3x3 stride-3 mean over a token-major grid, ragged edge dropped") @(t : T?) {
         // 7x3 grid (one ragged column), d = 2: channel 0 = gx, channel 1 = gy

@@ -1276,21 +1276,28 @@ def private moe_mulmm_mx4_gate(t : T?; var dev, queue; tensor : bool; kdim, ndim
 // blocks — blocks fully above the causal diagonal (or fully outside the sliding window) exit
 // without writing, which the sentinel whole-slab compare asserts. QK arms keep npos == np32:
 // the tensor twin stages K pad rows RAW (no zero guard — the base has one), so pads must not
-// exist for the pair to agree.
-def private attn_qk_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, qoff, window : int; uend : int = 0; halfq : bool = false) {
-    let hq = halfq ? " halfq" : ""
-    let tag = "attn_qk_mm{tensor ? "t" : ""}{hq} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window} u={uend}"
+// exist for the pair to agree. `pair_mt` (32 or 128) names the device pair's stamp of that tile
+// height instead - MetalAttnQKDev[128] on the Q twin and the scaled K twin; its operands are
+// f16-exact, so the device differs by the half accumulate and the half store, 2^-11 of a
+// magnitude each, under the bar's 2e-3 of the envelope.
+def private attn_qk_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, qoff, window : int;
+                            uend : int = 0; halfq : bool = false; pair_mt : int = 0) {
+    let pair = pair_mt > 0
+    let mt = pair ? pair_mt : 32
+    let form = pair ? "_dev mt={mt}" : "_mm{tensor ? "t" : ""}{halfq ? " halfq" : ""}"
+    let tag = "attn_qk{form} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window} u={uend}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let kqk = halfq ? kernel_of(@@enc_qk_mm_th_c) : (tensor ? kernel_of(@@enc_qk_mm_t_c) : kernel_of(@@enc_qk_mm_c))
+        let kqk = (pair_mt == 128 ? kernel_of(@@enc_qk_dev128_c) : pair ? kernel_of(@@enc_qk_dev_c)
+            : halfq ? kernel_of(@@enc_qk_mm_th_c) : tensor ? kernel_of(@@enc_qk_mm_t_c) : kernel_of(@@enc_qk_mm_c))
         var pso = mc |> keep_stamp(kqk, err)
-        return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
+        return if (!(tensor || pair ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
         let qd = heads * hs
         let kvd = (heads / kv_mul) * hs
         let scale = 0.125
         var inscope qv : array<float>
         q8_x_fill(mp * qd, qv)
-        if (halfq) {
+        if (halfq || pair) {
             for (i in range(mp * qd)) {
                 qv[i] = float(float16(qv[i]))   // f16-exact fixture: the oracle dot stays the reference
             }
@@ -1311,12 +1318,12 @@ def private attn_qk_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv
         for (h in range(heads)) {
             let kvhoff = (h / kv_mul) * hs
             for (m in range(mp)) {
-                let mBase = m / 32 * 32
+                let mBase = m / mt * mt
                 for (nb in range(np32 / 64)) {
                     let nBase = nb * 64
                     // fused span: tail rows above uend stay causal, so the skip floor is
                     // max(uend, the block's causal reach) — mirrors the kernel's gate
-                    let skip = ((uend > 0 ? nBase >= max(uend, qoff + mBase + 32) : nBase > qoff + mBase + 31)
+                    let skip = ((uend > 0 ? nBase >= max(uend, qoff + mBase + mt) : nBase > qoff + mBase + mt - 1)
                         || (window > 0 && qoff + mBase + 1 > window && nBase + 64 <= qoff + mBase + 1 - window))
                     continue if (skip)
                     for (pos in range(nBase, nBase + 64)) {
@@ -1337,8 +1344,9 @@ def private attn_qk_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv
             npos = uint(np32), np32 = uint(np32), scale = scale, qoff = uint(qoff), qrows = uint(mp),
             window = uint(window), uend = uint(uend))
         var inscope qh <- [for (v in qv); float16(v)]
-        let bq = halfq ? (mc |> in_plain(qh)) : (mc |> in_(qv))
-        let bk = mc |> in_(kv)
+        var inscope kh <- [for (v in kv); float16(v * scale)]   // k x scale is f16-exact here: the K twin's own values
+        let bq = halfq || pair ? (mc |> in_plain(qh)) : (mc |> in_(qv))
+        let bk = pair ? (mc |> in_plain(kh)) : (mc |> in_(kv))
         let batt = mc |> out_words(heads * mp * np32, float16(-1000.0))   // f16 slab; the sentinel is f16-exact
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             invoke(kqk.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
@@ -1425,75 +1433,6 @@ def private attn_av_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bxb], want, env_bar(2e-3, env), Shape(row_width = qd, head_width = hs), env)
-    }
-}
-
-//! MetalAttnQKDev[128] on the Q twin and the scaled K twin; oracle: the staged gate's, tile height in the skip; the sentinel holds skipped blocks unwritten.
-//! The bar: the operands are f16-exact, so the device differs by the half accumulate and the half store - 2^-11 of a magnitude each, under 2e-3 of the envelope
-def private attn_qk_dev_gate(t : T?; var dev, queue; mt, heads, hs, kv_mul, mp, np32, qoff, window : int; uend : int = 0) {
-    let tag = "attn_qk_dev mt={mt} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window} u={uend}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let kqk = mt == 128 ? kernel_of(@@enc_qk_dev128_c) : kernel_of(@@enc_qk_dev_c)
-        var pso = mc |> keep_stamp(kqk, err)
-        return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
-        let qd = heads * hs
-        let kvd = (heads / kv_mul) * hs
-        let scale = 0.125
-        var inscope qv : array<float>
-        q8_x_fill(mp * qd, qv)
-        for (i in range(mp * qd)) {
-            qv[i] = float(float16(qv[i]))   // f16-exact fixture: the oracle dot stays the reference
-        }
-        var inscope kv : array<float>
-        kv |> resize(np32 * kvd)
-        for (i in range(np32 * kvd)) {
-            kv[i] = float((i * 7 + 3) % 15 - 7) * 0.5
-        }
-        var inscope want : array<float>
-        var inscope env : array<float>
-        want |> resize(heads * mp * np32)
-        env |> resize(heads * mp * np32)
-        for (i in range(heads * mp * np32)) {
-            want[i] = -1000.0
-            env[i] = 0.0
-        }
-        for (h in range(heads)) {
-            let kvhoff = (h / kv_mul) * hs
-            for (m in range(mp)) {
-                let mBase = m / mt * mt
-                for (nb in range(np32 / 64)) {
-                    let nBase = nb * 64
-                    let skip = ((uend > 0 ? nBase >= max(uend, qoff + mBase + mt) : nBase > qoff + mBase + mt - 1)
-                        || (window > 0 && qoff + mBase + 1 > window && nBase + 64 <= qoff + mBase + 1 - window))
-                    continue if (skip)
-                    for (pos in range(nBase, nBase + 64)) {
-                        var acc = 0.0lf
-                        var ev = 0.0lf
-                        for (c in range(hs)) {
-                            let p = double(qv[m * qd + h * hs + c]) * double(scale) * double(kv[pos * kvd + kvhoff + c])
-                            acc += p
-                            ev += abs(p)
-                        }
-                        want[(h * mp + m) * np32 + pos] = float(acc)
-                        env[(h * mp + m) * np32 + pos] = float(ev)
-                    }
-                }
-            }
-        }
-        var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
-            npos = uint(np32), np32 = uint(np32), scale = scale, qoff = uint(qoff), qrows = uint(mp),
-            window = uint(window), uend = uint(uend))
-        var inscope qh <- [for (v in qv); float16(v)]
-        var inscope kh <- [for (v in kv); float16(v * scale)]   // k x scale is f16-exact here: the K twin's own values
-        let bq = mc |> in_plain(qh)
-        let bk = mc |> in_plain(kh)
-        let batt = mc |> out_words(heads * mp * np32, float16(-1000.0))
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            invoke(kqk.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
-        }
-        return if (!ran)
-        check_buf_h(t, tag, mc.buf[batt], want, env_bar(2e-3, env), Shape(row_width = np32), env)
     }
 }
 
@@ -1803,12 +1742,12 @@ def test_metal_gemm_kernels(t : T?) {
                 attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 96, 0, uend = 96)
                 // the device pair: both tile heights, continuation, window skip, GQA, uniform span, V pads, softcap, sinks
                 kv_twin_gate(t, dev, queue)
-                attn_qk_dev_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 0, 0)
-                attn_qk_dev_gate(t, dev, queue, 128, 4, 64, 2, 128, 256, 128, 0)
-                attn_qk_dev_gate(t, dev, queue, 32, 4, 64, 2, 32, 256, 224, 128)
-                attn_qk_dev_gate(t, dev, queue, 128, 2, 128, 1, 128, 384, 256, 192)
-                attn_qk_dev_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 0, 0, uend = 128)
-                attn_qk_dev_gate(t, dev, queue, 32, 4, 64, 2, 32, 256, 224, 128, uend = 192)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 0, 0, pair_mt = 32)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 128, 256, 128, 0, pair_mt = 128)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 128, pair_mt = 32)
+                attn_qk_mm_gate(t, dev, queue, true, 2, 128, 1, 128, 384, 256, 192, pair_mt = 128)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 0, 0, uend = 128, pair_mt = 32)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 128, uend = 192, pair_mt = 32)
                 attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 128, 64, 0)
                 attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 96, 32, 0)        // V pads past npos
                 attn_dev_pair_gate(t, dev, queue, 128, 4, 64, 2, 128, 256, 256, 128, 0)

@@ -350,7 +350,6 @@ struct ParakeetState {
     pos_tt : int64              //!< the frame count `pos_emb` holds the table of (0 = none), at width `pos_d`, requantized when `pos_q8`
     pos_d : int64
     pos_q8 : bool
-    pos_freq : array<double>
     posq : array<int8>
     poss : array<float>
     posl : array<float>
@@ -376,22 +375,6 @@ struct ParakeetState {
     pred : ParakeetPredState = ParakeetPredState()
 }
 
-// grow-only, reserve-exact (resize alone rounds the backing alloc up to pow2 — 2x waste
-// on the multi-MB encoder scratch)
-def private pk_ensure(@scratch var a : array<float>; n : int64) {
-    if (long_length(a) < n) {
-        a |> reserve(n)
-        a |> resize(n)
-    }
-}
-
-def private pk_ensure(@scratch var a : array<int8>; n : int64) {
-    if (long_length(a) < n) {
-        a |> reserve(n)
-        a |> resize(n)
-    }
-}
-
 // mm_blob_b with the q8 route: activation image (xq, xs) pre-quantized by the caller
 // (asr_requant_rows_q8) so q/k/v and repeat consumers share one requant.
 def private pk_mm(m : ParakeetModel; var y : array<float>; woff : int64; x : array<float>;
@@ -407,16 +390,9 @@ def private pk_mm(m : ParakeetModel; var y : array<float>; woff : int64; x : arr
 def private pk_mm_rq(m : ParakeetModel; var y : array<float>; woff : int64; x : array<float>;
                      var xq : array<int8>; var xs : array<float>; n, d, npos : int64) {
     if (m.q8) {
-        pk_requant(x, n, npos, xq, xs)
+        requant_rows_q8_sized(x, n, npos, xq, xs)
     }
     pk_mm(m, y, woff, x, xq, xs, n, d, npos)
-}
-
-def private pk_requant(x : array<float>; n, npos : int64; @scratch @exact_size var xq : array<int8>; @scratch @exact_size var xs : array<float>) {
-    let need = npos * n
-    pk_ensure(xq, need)
-    pk_ensure(xs, need / 32l)
-    asr_requant_rows_q8(x, n, npos, xq, xs)
 }
 
 // conv taps arrive [ch][3][3] (dw, torch) / [cout][9] (c0, im2col order) / [ch][k]
@@ -813,7 +789,7 @@ def parakeet_exec_fmt(p : ParakeetModel) : string {
 [hot_path]
 def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : ParakeetState) {
     let n_in = long_length(samples)
-    pk_ensure(st.pre, n_in)
+    ensure_length(st.pre, n_in)
     for (i in range(int(n_in))) {
         st.pre[i] = samples[i]
     }
@@ -824,7 +800,7 @@ def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : Par
     }
     let pad = m.n_fft / 2l
     let n_padded = n_in + 2l * pad
-    pk_ensure(st.padded, n_padded)
+    ensure_length(st.padded, n_padded)
     for (i in range(int(pad))) {   // zero head pad (scratch is reused, not fresh)
         st.padded[i] = 0.0
     }
@@ -838,7 +814,7 @@ def parakeet_log_mel(samples : array<float> | #; m : ParakeetModel; var st : Par
     st.mel.n_mel = m.n_mel
     st.mel.n_len = (n_padded - m.n_fft) / PARAKEET_HOP + 1l
     st.mel.n_len_org = st.mel.n_len
-    pk_ensure(st.mel.data, st.mel.n_len * m.n_mel)
+    ensure_length(st.mel.data, st.mel.n_len * m.n_mel)
 
     let n_fft = m.n_fft
     let n_bins = n_fft / 2l + 1l
@@ -915,7 +891,7 @@ def private pk_conv2d_c1_s2_relu(var out : array<float>; x : array<float>; blob 
                                  w_off, b_off : int64; iw, ih, cout : int64) {
     let ow = conv_s2_out(iw)
     let oh = conv_s2_out(ih)
-    pk_ensure(out, oh * ow * cout)
+    ensure_length(out, oh * ow * cout)
     unsafe {
         var op = addr(out[0])
         let xp = addr<float const?>(x[0])
@@ -1000,7 +976,7 @@ def private pk_conv2d_dw_s2(var out : array<float>; x : array<float>; blob : Pla
     let oy_end = (ih - 2l) / 2l + 1l   // last oy with iy=2*oy+1 in bounds, exclusive
     let ox_end = (iw - 2l) / 2l + 1l
     let rs = iw * ch
-    pk_ensure(out, oh * ow * ch)
+    ensure_length(out, oh * ow * ch)
     unsafe {
         var op = addr(out[0])
         let xp = addr<float const?>(x[0])
@@ -1112,21 +1088,9 @@ def parakeet_pos_table(m : ParakeetModel; var st : ParakeetState; tt : int64) {
     let d = m.n_state
     return if (st.pos_tt == tt && st.pos_d == d && (st.pos_q8 || !m.q8))
     let ww = 2l * tt - 1l
-    pk_ensure(st.pos_emb, ww * d)
-    ensure_length(st.pos_freq, d / 2l)
-    for (k in range64(d / 2l)) {
-        st.pos_freq[k] = exp(-(double(k * 2l) * log(10000.0lf) / double(d)))
-    }
-    for (w in range64(ww)) {
-        let rel = double(tt - 1l - w)
-        for (k in range64(d / 2l)) {
-            let theta = float(st.pos_freq[k] * rel)
-            st.pos_emb[w * d + 2l * k] = sin(theta)
-            st.pos_emb[w * d + 2l * k + 1l] = cos(theta)
-        }
-    }
+    rel_pos_table(st.pos_emb, d, tt, ww)
     if (m.q8) {
-        pk_requant(st.pos_emb, d, ww, st.posq, st.poss)
+        requant_rows_q8_sized(st.pos_emb, d, ww, st.posq, st.poss)
     }
     st.pos_tt = tt
     st.pos_d = d
@@ -1156,7 +1120,7 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     pk_conv2d_dw_s2(st.y2, st.y0, m.blob, m.c2_w, m.c2_b, w1, t1, nch)
     let w2 = conv_s2_out(w1)
     let t2 = conv_s2_out(t1)
-    pk_ensure(st.y3, t2 * w2 * nch)
+    ensure_length(st.y3, t2 * w2 * nch)
     pk_scan("y0", st.y0, t1 * w1 * nch)
     pk_scan("y2", st.y2, t2 * w2 * nch)
     pk_mm_rq(m, st.y3, m.c3_w, st.y2, st.xqi, st.xsi, nch, nch, t2 * w2)   // 1x1 conv = per-position channel mix
@@ -1164,7 +1128,7 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
     pk_conv2d_dw_s2(st.y5, st.y3, m.blob, m.c5_w, m.c5_b, w2, t2, nch)
     let w3 = conv_s2_out(w2)
     let t3 = conv_s2_out(t2)
-    pk_ensure(st.y6, t3 * w3 * nch)
+    ensure_length(st.y6, t3 * w3 * nch)
     pk_mm_rq(m, st.y6, m.c6_w, st.y5, st.xqi, st.xsi, nch, nch, t3 * w3)
     pk_bias_relu(st.y6, m.blob, m.c6_b, nch, t3 * w3)
 
@@ -1174,9 +1138,9 @@ def parakeet_encode(m : ParakeetModel; var st : ParakeetState) : int64 {
         panic("dasLLAMA parakeet: {tt} encoder frames crosses the local-attention switch - clip audio to under ~10.9 minutes")
     }
     let feat = w3 * nch
-    pk_ensure(st.xf, tt * feat)
+    ensure_length(st.xf, tt * feat)
     pk_xf_permute(st.xf, st.y6, tt, w3, nch)
-    pk_ensure(st.x, tt * d)
+    ensure_length(st.x, tt * d)
     pk_scan("y6", st.y6, t3 * w3 * nch)
     pk_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
     add_bias_rows(st.x, m.blob, m.pre_b, d, tt)
@@ -1268,24 +1232,24 @@ def private pk_blocks_cpu(m : ParakeetModel; var st : ParakeetState; tt, ww, n_r
     var tp = ref_time_ticks()
 
     // scratch
-    pk_ensure(st.xb, tt * d)
-    pk_ensure(st.h, tt * 4l * d)
-    pk_ensure(st.qq, tt * d)
-    pk_ensure(st.kk, tt * d)
-    pk_ensure(st.vv, tt * d)
-    pk_ensure(st.posl, ww * d)
-    pk_ensure(st.quh, tt * dh)
-    pk_ensure(st.quh2, tt * dh)
-    pk_ensure(st.vh, tt * dh)
-    pk_ensure(st.kth, dh * tt)
+    ensure_length(st.xb, tt * d)
+    ensure_length(st.h, tt * 4l * d)
+    ensure_length(st.qq, tt * d)
+    ensure_length(st.kk, tt * d)
+    ensure_length(st.vv, tt * d)
+    ensure_length(st.posl, ww * d)
+    ensure_length(st.quh, tt * dh)
+    ensure_length(st.quh2, tt * dh)
+    ensure_length(st.vh, tt * dh)
+    ensure_length(st.kth, dh * tt)
     //! per-job B-row slabs: job li owns slab li; 4-aligned row groups stay bit-exact
     let atn_jobs = min(int64(lanes_for_work(tt * dh * (2l * tt + ww), 0)),
         (tt + PK_ATN_BLOCK - 1l) / PK_ATN_BLOCK)
-    pk_ensure(st.scores, atn_jobs * PK_ATN_BLOCK * tt)
-    pk_ensure(st.relm, atn_jobs * PK_ATN_BLOCK * ww)
-    pk_ensure(st.oh, atn_jobs * PK_ATN_BLOCK * dh)
-    pk_ensure(st.post, dh * ww)
-    pk_ensure(st.ao, tt * d)
+    ensure_length(st.scores, atn_jobs * PK_ATN_BLOCK * tt)
+    ensure_length(st.relm, atn_jobs * PK_ATN_BLOCK * ww)
+    ensure_length(st.oh, atn_jobs * PK_ATN_BLOCK * dh)
+    ensure_length(st.post, dh * ww)
+    ensure_length(st.ao, tt * d)
     let scale = 1.0 / sqrt(float(dh))
 
     for (l in range64(m.n_layer)) {
@@ -1320,7 +1284,7 @@ def private pk_blocks_cpu(m : ParakeetModel; var st : ParakeetState; tt, ww, n_r
         asr_prof_add("pk.attn_proj.ln", tq)
         tq = ref_time_ticks()
         if (m.q8) {   // q/k/v share the post-LN activation: one requant, three GEMMs
-            pk_requant(st.xb, d, tt, st.xqi, st.xsi)
+            requant_rows_q8_sized(st.xb, d, tt, st.xqi, st.xsi)
         }
         asr_prof_add("pk.attn_proj.rq", tq)
         tq = ref_time_ticks()
@@ -1559,11 +1523,11 @@ def private pk_blocks_cpu(m : ParakeetModel; var st : ParakeetState; tt, ww, n_r
 // the scratch fields are written before every read)
 def private pk_pred_reset(m : ParakeetModel; var s : ParakeetPredState) {
     let pd = m.n_pred_dim
-    pk_ensure(s.h, m.n_pred_layers * pd)
-    pk_ensure(s.c, m.n_pred_layers * pd)
-    pk_ensure(s.pred, pd)
-    pk_ensure(s.gates, 4l * pd)
-    pk_ensure(s.xin, pd)
+    ensure_length(s.h, m.n_pred_layers * pd)
+    ensure_length(s.c, m.n_pred_layers * pd)
+    ensure_length(s.pred, pd)
+    ensure_length(s.gates, 4l * pd)
+    ensure_length(s.xin, pd)
     for (i in range64(m.n_pred_layers * pd)) {
         s.h[i] = 0.0
         s.c[i] = 0.0
@@ -1865,13 +1829,13 @@ def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : in
 
     // precompute the joint's encoder projection for every frame [T × pred_dim]
     let ts_encp = ref_time_ticks()
-    pk_ensure(st.encp, n_frames * pd)
+    ensure_length(st.encp, n_frames * pd)
     pk_mm_rq(m, st.encp, m.joint_enc_w, st.x, st.xqi, st.xsi, d, pd, n_frames)
     add_bias_rows(st.encp, m.blob, m.joint_enc_b, pd, n_frames)
     asr_prof_add("pk.dec.encp", ts_encp)
 
     pk_pred_reset(m, st.pred)
-    pk_ensure(st.logits, pk_joint_blocks(n_logits) * PK_JOINT_BLOCK)   // whole blocks: the joint writes zeros past the last logit
+    ensure_length(st.logits, pk_joint_blocks(n_logits) * PK_JOINT_BLOCK)   // whole blocks: the joint writes zeros past the last logit
     pk_joint_cols(m, st, st.logits, pd, n_logits)
 
     var t = 0l

@@ -17,6 +17,7 @@ require dasllama/dasllama_metal_common
 require dasllama/dasllama_gpu_math
 require dasllama/dasllama_metal_kernels  // the shared kq decode helpers (grid tables, ksign7) for the tensor twins
 require dasllama/dasllama_metal_lens
+require dasllama/dasllama_tower
 require dasllama/dasllama_load   // register_devw_kq_mirror: the image bake's CPU twin of the split-scale dequant passes
 
 // Phase-6 dasMetal: the full-GPU-resident prefill kernel set — everything between the GEMMs:
@@ -2760,8 +2761,7 @@ class MetalAttnQK {
         let qi0 = gl_WorkGroupID.x * 32u
         let j0 = gl_WorkGroupID.y * 32u
         let h = gl_WorkGroupID.z
-        if ((ka.uend > 0u ? j0 >= max(ka.uend, ka.qoff + qi0 + 32u) : j0 > ka.qoff + qi0 + 31u) ||
-                (ka.window > 0u && ka.qoff + qi0 + 1u > ka.window && j0 + 32u <= ka.qoff + qi0 + 1u - ka.window)) {
+        if (pf_qk_skip(ka.uend, ka.window, ka.qoff + qi0, 32u, j0, 32u)) {
             return
         }
         let lid = gl_LocalInvocationID.x
@@ -2822,31 +2822,49 @@ class MetalAttnQK {
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-attn-slab")]
 def pf_p_weight(sr : float; jglob, qpos, window : uint; softcap : float; uend, ulo : uint; m, inv : float) : float {
     let cnt = (uend > 0u && qpos >= ulo && qpos < uend) ? uend : qpos + 1u
-    let jlo = window > 0u && qpos + 1u > window ? qpos + 1u - window : 0u
-    if (jglob < jlo || jglob >= cnt) {
+    if (jglob < pf_av_lo(window, qpos) || jglob >= cnt) {
         return 0.0
     }
     let tv = softcap > 0.0 ? softcap_exp(sr, softcap) : sr
     return exp(tv - m) * inv
 }
 
-[metal_dispatch(name = "enc_rowstat", pso = "g_pf_pso_rowstat", tgmem = "metal_attn_rowstat_msl_tgmem", tg = 128, grid = "npos, heads", params = "npos : int64, heads : int64")]
-class MetalAttnRowstat {
-    @ssbo @binding = 0 @role = "read" att : array<float16>   //!< [n_heads x qrows x np32] RAW scores, f16 slab
+//! the first key an AV tile whose query rows start at global position `t0` reduces over - a row's own first key at `t0` its position
+def pf_av_lo(window, t0 : uint) : uint {
+    return window > 0u && t0 + 1u > window ? t0 + 1u - window : 0u
+}
+
+//! one past the last key an AV tile of `mt` query rows starting at `t0` reduces over - live rows only
+def pf_av_hi(uend, ulo, npos, t0, mt : uint) : uint {
+    let creach = t0 + mt
+    return min(uend > 0u && t0 < uend && creach > ulo ? max(uend, creach) : creach, npos)
+}
+
+//! A QK tile of `mt` query rows from global position `t0` over the `kw` keys from `k0` has no live score:
+//! its keys sit past the rows' causal reach (the uniform span's end where one is set) or under their window.
+def pf_qk_skip(uend, window, t0, mt, k0, kw : uint) : bool {
+    return (uend > 0u ? k0 >= max(uend, t0 + mt) : k0 > t0 + mt - 1u) || k0 + kw <= pf_av_lo(window, t0)
+}
+
+//! A score row's softmax statistics, a threadgroup a (row, head). The staged stamp leaves the raw slab and writes
+//! (rowmax, 1/sum); the WRITE_P stamp overwrites the slab with exp(s - rowmax) and writes 1/sum alone.
+[ |> template_struct_instance]
+class template MetalAttnRowT {
+    @ssbo @binding = 0 att : array<float16>                 //!< [n_heads x qrows x np32] raw scores; exp(s - rowmax) out under WRITE_P
     @uniform @binding = 1 ka : AttnArgs
-    @ssbo @binding = 2 @role = "write" stat : array<float>  //!< [n_heads x qrows x 2]: rowmax, 1/sum
+    @ssbo @binding = 2 @role = "write" stat : array<float>  //!< [n_heads x qrows x 2] rowmax, 1/sum; [n_heads x qrows] 1/sum under WRITE_P
     @ssbo @binding = 20 @role = "weight" @default = g_one sink : array<float> //!< [nheads]; null = identity
     @workgroup red : float[4]
+    @template_constant WRITE_P : bool = false
 
-    [metal_kernel(name="metal_attn_rowstat_msl")]
-    def metal_attn_rowstat {
+    def attn_row_body {
         let qi = gl_WorkGroupID.x
         let h = gl_WorkGroupID.y
         let lid = gl_LocalInvocationID.x
         let nthreads = gl_WorkGroupSize.x
         let qpos = ka.qoff + qi
         let cnt = (ka.uend > 0u && qpos >= ka.ulo && qpos < ka.uend) ? ka.uend : qpos + 1u
-        let jlo = ka.window > 0u && ka.qoff + qi + 1u > ka.window ? ka.qoff + qi + 1u - ka.window : 0u
+        let jlo = pf_av_lo(ka.window, qpos)
         let rowbase = (h * ka.qrows + qi) * ka.np32
         var m = -1.0e30
         var j = jlo + lid
@@ -2858,11 +2876,28 @@ class MetalAttnRowstat {
         let mm = tg_max_all(m, red)
         let rowmax = ka.hass != 0u ? max(mm, sink[h]) : mm
         var sum = 0.0
-        j = jlo + lid
-        while (j < cnt) {
-            let sr = float(att[rowbase + j])
-            sum += exp((ka.softcap > 0.0 ? softcap_exp(sr, ka.softcap) : sr) - rowmax)
-            j += nthreads
+        static_if (WRITE_P) {
+            //! the row's 128-row AV tile reduces over this span, and a 32-row tile over a part of it
+            let t0 = ka.qoff + (qi / 128u) * 128u
+            let hi = pf_av_hi(ka.uend, ka.ulo, ka.npos, t0, 128u)
+            j = pf_av_lo(ka.window, t0) + lid
+            while (j < hi) {
+                var e = 0.0
+                if (j >= jlo && j < cnt) {
+                    let sr = float(att[rowbase + j])
+                    e = exp((ka.softcap > 0.0 ? softcap_exp(sr, ka.softcap) : sr) - rowmax)
+                    sum += e
+                }
+                att[rowbase + j] = float16(e)
+                j += nthreads
+            }
+        } else {
+            j = jlo + lid
+            while (j < cnt) {
+                let sr = float(att[rowbase + j])
+                sum += exp((ka.softcap > 0.0 ? softcap_exp(sr, ka.softcap) : sr) - rowmax)
+                j += nthreads
+            }
         }
         barrier()
         var tot = tg_sum_all(sum, red)
@@ -2870,9 +2905,31 @@ class MetalAttnRowstat {
             if (ka.hass != 0u) {
                 tot += exp(max(sink[h] - rowmax, -80.0))
             }
-            stat[(h * ka.qrows + qi) * 2u] = rowmax
-            stat[(h * ka.qrows + qi) * 2u + 1u] = 1.0 / tot
+            static_if (WRITE_P) {
+                stat[h * ka.qrows + qi] = 1.0 / tot
+            } else {
+                stat[(h * ka.qrows + qi) * 2u] = rowmax
+                stat[(h * ka.qrows + qi) * 2u + 1u] = 1.0 / tot
+            }
         }
+    }
+}
+
+[metal_dispatch(name = "enc_rowstat", pso = "g_pf_pso_rowstat", tgmem = "metal_attn_rowstat_msl_tgmem", tg = 128, grid = "npos, heads", params = "npos : int64, heads : int64")]
+class MetalAttnRowstat : MetalAttnRowT {
+    [metal_kernel(name="metal_attn_rowstat_msl")]
+    def metal_attn_rowstat {
+        attn_row_body()
+    }
+}
+
+[metal_dispatch(name = "enc_attn_pexp", pso = "g_pf_pso_pexp", tgmem = "metal_attn_pexp_msl_tgmem", tg = 128, grid = "npos, heads", params = "npos : int64, heads : int64")]
+class MetalAttnPExp : MetalAttnRowT {
+    override WRITE_P = true
+
+    [metal_kernel(name="metal_attn_pexp_msl")]
+    def metal_attn_pexp {
+        attn_row_body()
     }
 }
 
@@ -2894,8 +2951,7 @@ class MetalAttnAV {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let kvhoff = (h / ka.kv_mul) * ka.head_size
-        let creach = ka.qoff + qi0 + 32u
-        let jlimit = min(ka.uend > 0u && ka.qoff + qi0 < ka.uend && creach > ka.ulo ? max(ka.uend, creach) : creach, ka.np32)
+        let jlimit = pf_av_hi(ka.uend, ka.ulo, ka.np32, ka.qoff + qi0, 32u)
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
         var c00 : simdgroup_float8x8
@@ -2957,8 +3013,7 @@ class template MetalAttnQKMmTensorT {
     def metal_attn_qk_mm_t {
         let mBase = gl_WorkGroupID.x * 32u
         let nBase = gl_WorkGroupID.y * 64u
-        if ((ka.uend > 0u ? nBase >= max(ka.uend, ka.qoff + mBase + 32u) : nBase > ka.qoff + mBase + 31u) ||
-                (ka.window > 0u && ka.qoff + mBase + 1u > ka.window && nBase + 64u <= ka.qoff + mBase + 1u - ka.window)) {
+        if (pf_qk_skip(ka.uend, ka.window, ka.qoff + mBase, 32u, nBase, 64u)) {
             return
         }
         let h = gl_WorkGroupID.z
@@ -3013,8 +3068,7 @@ class MetalAttnQKMm : MetalMmTileBase {
     def metal_attn_qk_mm {
         let mBase = gl_WorkGroupID.x * 32u  //! query rows
         let nBase = gl_WorkGroupID.y * 64u  //! key rows
-        if ((ka.uend > 0u ? nBase >= max(ka.uend, ka.qoff + mBase + 32u) : nBase > ka.qoff + mBase + 31u) ||
-                (ka.window > 0u && ka.qoff + mBase + 1u > ka.window && nBase + 64u <= ka.qoff + mBase + 1u - ka.window)) {
+        if (pf_qk_skip(ka.uend, ka.window, ka.qoff + mBase, 32u, nBase, 64u)) {
             return
         }
         let lid = gl_LocalInvocationID.x
@@ -3104,8 +3158,7 @@ class template MetalAttnAVMmTensorT {
         let h = gl_WorkGroupID.z
         let kvhoff = (h / ka.kv_mul) * ka.head_size
         let lid = gl_LocalInvocationID.x
-        let creach = ka.qoff + mBase + 32u
-        let klimit = min(ka.uend > 0u && ka.qoff + mBase < ka.uend && creach > ka.ulo ? max(ka.uend, creach) : creach, ka.np32)
+        let klimit = pf_av_hi(ka.uend, ka.ulo, ka.np32, ka.qoff + mBase, 32u)
         var acc : float[2048]
         var cp = unsafe(addr(xb[mBase * ka.qd + h * ka.head_size + vBase]))
         tmm2d_tg_begin_nt(acc, 32u, 64u, 4u, 64u)
@@ -3190,8 +3243,7 @@ class template MetalAttnAVMmSgT : MetalMmTileBase {
         let bB = (sg / 2u) * 128u
         var ma : simdgroup_half8x8[4]
         var mb : simdgroup_half8x8[2]
-        let creach = ka.qoff + mBase + 32u
-        let klimit = min(ka.uend > 0u && ka.qoff + mBase < ka.uend && creach > ka.ulo ? max(ka.uend, creach) : creach, ka.np32)
+        let klimit = pf_av_hi(ka.uend, ka.ulo, ka.np32, ka.qoff + mBase, 32u)
         //! head_size % 64 != 0 (the towers' 96 pad): this thread's 16-col V run may sit past the
         //! head - zero it (loop-invariant, hoists) and clamp the address off the buffer tail
         let vok = vBase + vc16 < ka.head_size
@@ -3286,8 +3338,7 @@ class template MetalAttnQKDevT {
     def metal_attn_qk_dev {
         let mBase = gl_WorkGroupID.x * MT
         let nBase = gl_WorkGroupID.y * 64u
-        if ((ka.uend > 0u ? nBase >= max(ka.uend, ka.qoff + mBase + MT) : nBase > ka.qoff + mBase + MT - 1u) ||
-                (ka.window > 0u && ka.qoff + mBase + 1u > ka.window && nBase + 64u <= ka.qoff + mBase + 1u - ka.window)) {
+        if (pf_qk_skip(ka.uend, ka.window, ka.qoff + mBase, MT, nBase, 64u)) {
             return
         }
         let h = gl_WorkGroupID.z
@@ -3307,70 +3358,6 @@ class MetalAttnQKDev : MetalAttnQKDevT {
 [metal_dispatch(name = "enc_qk_dev128_c", pso = "g_pf_pso_qk_dev128", tg = 128, grid = "mp/128, nk64/64, heads", params = "mp : int64, nk64 : int64, heads : int64", requires = "mp % 128, nk64 % 64")]
 class MetalAttnQKDev128 : MetalAttnQKDevT {
     override MT = 128u
-}
-
-//! the first key an AV tile whose query rows start at global position `t0` reduces over
-def pf_av_lo(window, t0 : uint) : uint {
-    return window > 0u && t0 + 1u > window ? t0 + 1u - window : 0u
-}
-
-//! one past the last key an AV tile of `mt` query rows starting at `t0` reduces over - live rows only
-def pf_av_hi(uend, ulo, npos, t0, mt : uint) : uint {
-    let creach = t0 + mt
-    return min(uend > 0u && t0 < uend && creach > ulo ? max(uend, creach) : creach, npos)
-}
-
-[metal_dispatch(name = "enc_attn_pexp", pso = "g_pf_pso_pexp", tgmem = "metal_attn_pexp_msl_tgmem", tg = 128, grid = "npos, heads", params = "npos : int64, heads : int64")]
-class MetalAttnPExp {
-    @ssbo @binding = 0 att : array<float16>                 //!< [n_heads x qrows x np32] raw scores in, exp(s - rowmax) out
-    @uniform @binding = 1 ka : AttnArgs
-    @ssbo @binding = 2 @role = "write" stat : array<float>  //!< [n_heads x qrows] 1/sum
-    @ssbo @binding = 20 @role = "weight" @default = g_one sink : array<float> //!< [nheads]; null = identity
-    @workgroup red : float[4]
-
-    [metal_kernel(name="metal_attn_pexp_msl")]
-    def metal_attn_pexp {
-        let qi = gl_WorkGroupID.x
-        let h = gl_WorkGroupID.y
-        let lid = gl_LocalInvocationID.x
-        let nthreads = gl_WorkGroupSize.x
-        let qpos = ka.qoff + qi
-        let cnt = (ka.uend > 0u && qpos >= ka.ulo && qpos < ka.uend) ? ka.uend : qpos + 1u
-        let jlo = ka.window > 0u && qpos + 1u > ka.window ? qpos + 1u - ka.window : 0u
-        let rowbase = (h * ka.qrows + qi) * ka.np32
-        var m = -1.0e30
-        var j = jlo + lid
-        while (j < cnt) {
-            let sr = float(att[rowbase + j])
-            m = max(m, ka.softcap > 0.0 ? softcap_exp(sr, ka.softcap) : sr)
-            j += nthreads
-        }
-        let mm = tg_max_all(m, red)
-        let rowmax = ka.hass != 0u ? max(mm, sink[h]) : mm
-        //! the row's 128-row AV tile reduces over this span, and a 32-row tile over a part of it
-        let t0 = ka.qoff + (qi / 128u) * 128u
-        let hi = pf_av_hi(ka.uend, ka.ulo, ka.npos, t0, 128u)
-        var sum = 0.0
-        j = pf_av_lo(ka.window, t0) + lid
-        while (j < hi) {
-            var e = 0.0
-            if (j >= jlo && j < cnt) {
-                let sr = float(att[rowbase + j])
-                e = exp((ka.softcap > 0.0 ? softcap_exp(sr, ka.softcap) : sr) - rowmax)
-                sum += e
-            }
-            att[rowbase + j] = float16(e)
-            j += nthreads
-        }
-        barrier()
-        var tot = tg_sum_all(sum, red)
-        if (lid == 0u) {
-            if (ka.hass != 0u) {
-                tot += exp(max(sink[h] - rowmax, -80.0))
-            }
-            stat[h * ka.qrows + qi] = 1.0 / tot
-        }
-    }
 }
 
 [ |> template_struct_instance]
@@ -3785,114 +3772,215 @@ def fc_attn_args(d, hs, npos : int64) : FcAttnArgs {
         nkp = (np + 63u) / 64u * 64u, ww = ww, wwpad = (ww + 63u) / 64u * 64u, scale = 1.0 / sqrt(float(hs)))
 }
 
-//! One head's operands for the three attention GEMMs, packed contiguous and zero-padded: (Q+u)
-//! and (Q+v) [mp x hs], K_h [nkp x hs], V_hᵀ [hs x nkp], the projected rel table pos_h [wwpad x hs].
-//! One thread per (row, j) over the tallest panel; u/v biases read off the blob.
-[metal_dispatch(name = "enc_fc_pack", pso = "g_pf_pso_fc_pack", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalFcPack {
+//! The rel-pos attention's operands off the compact rows, zeros in every pad row, one thread an element of the tallest panel.
+//! The per-head stamp packs head `h` contiguous for the tile GEMMs, V transposed; the ALLHEADS stamp keeps the compact
+//! row layout the device pair reads, as halves, the scale folded into K and the rel table.
+[ |> template_struct_instance]
+class template MetalFcOperandsT {
     @ssbo @binding = 0 @role = "read" q : array<float>      //!< [npos x d] compact
     @ssbo @binding = 1 @role = "read" k : array<float>      //!< [npos x d] compact
     @ssbo @binding = 2 @role = "read" v : array<float>      //!< [npos x d] compact
     @ssbo @binding = 3 @role = "read" posl : array<float>   //!< [ww x d] the layer's projected rel table
     @ssbo @binding = 4 @role = "weight" @off = "buoff" bu : array<float>   //!< [d] bias_u (content)
     @ssbo @binding = 5 @role = "weight" @off = "bvoff" bv : array<float>   //!< [d] bias_v (rel)
-    @ssbo @binding = 6 @role = "write" qu : array<float>    //!< [mp x hs]
-    @ssbo @binding = 7 @role = "write" qv : array<float>    //!< [mp x hs]
-    @ssbo @binding = 8 @role = "write" kh : array<float>    //!< [nkp x hs]
-    @ssbo @binding = 9 @role = "write" vt : array<float>    //!< [hs x nkp]
-    @ssbo @binding = 10 @role = "write" ph : array<float>   //!< [wwpad x hs]
+    @ssbo @binding = 6 @role = "write" qu : array<OT>       //!< [mp x width]
+    @ssbo @binding = 7 @role = "write" qv : array<OT>       //!< [mp x width]
+    @ssbo @binding = 8 @role = "write" kh : array<OT>       //!< [nkp x width]
+    @ssbo @binding = 9 @role = "write" vo : array<OT>       //!< V_hᵀ [hs x nkp]; V [nkp x d] under ALLHEADS
+    @ssbo @binding = 10 @role = "write" ph : array<OT>      //!< [wwpad x width]
     @uniform @binding = 11 ka : FcAttnArgs
-    @uniform @binding = 12 h : uint                         //!< the head this dispatch packs
+    @uniform @binding = 12 @template_gate = "!ALLHEADS" h : uint   //!< the head this dispatch packs
+    @template_constant ALLHEADS : bool = false
 
-    [metal_kernel(name="metal_fc_pack_msl")]
-    def metal_fc_pack {
+    def width : uint {
+        static_if (ALLHEADS) {
+            return ka.d
+        } else {
+            return ka.hs
+        }
+    }
+
+    def column(j : uint) : uint {
+        static_if (ALLHEADS) {
+            return j
+        } else {
+            return h * ka.hs + j
+        }
+    }
+
+    def v_slot(gid, r, j : uint) : uint {
+        static_if (ALLHEADS) {
+            return gid
+        } else {
+            return j * ka.nkp + r
+        }
+    }
+
+    def scored(x : float) : float {
+        static_if (ALLHEADS) {
+            return x * ka.scale
+        } else {
+            return x
+        }
+    }
+
+    def fc_operands_body {
         let gid = gl_GlobalInvocationID.x
-        let hs = ka.hs
-        if (gid >= ka.wwpad * hs) {   //! the grid guard: the tallest panel's extent
+        let w = width()
+        if (gid >= ka.wwpad * w) {   //! the grid guard: the tallest panel's extent
             return
         }
-        let r = gid / hs
-        let j = gid % hs
-        let c = h * hs + j
+        let r = gid / w
+        let j = gid % w
+        let c = column(j)
+        let src = r * ka.d + c
+        let vs = v_slot(gid, r, j)
         if (r < ka.npos) {
-            let qval = q[r * ka.d + c]
-            qu[gid] = qval + bu[c]
-            qv[gid] = qval + bv[c]
-            kh[gid] = k[r * ka.d + c]
-            vt[j * ka.nkp + r] = v[r * ka.d + c]
+            let qval = q[src]
+            qu[gid] = OT(qval + bu[c])   // nolint:PERF020 — the half stamp narrows here; on the f32 stamp the cast is the identity
+            qv[gid] = OT(qval + bv[c])   // nolint:PERF020 — same narrowing
+            kh[gid] = OT(scored(k[src]))   // nolint:PERF020 — same narrowing
+            vo[vs] = OT(v[src])   // nolint:PERF020 — same narrowing
         } else {
             if (r < ka.mp) {
-                qu[gid] = 0.0
-                qv[gid] = 0.0
+                qu[gid] = OT(0.0)   // nolint:PERF020 — same narrowing
+                qv[gid] = OT(0.0)   // nolint:PERF020 — same narrowing
             }
             if (r < ka.nkp) {
-                kh[gid] = 0.0
-                vt[j * ka.nkp + r] = 0.0
+                kh[gid] = OT(0.0)   // nolint:PERF020 — same narrowing
+                vo[vs] = OT(0.0)   // nolint:PERF020 — same narrowing
             }
         }
         if (r < ka.ww) {
-            ph[gid] = posl[r * ka.d + c]
+            ph[gid] = OT(scored(posl[src]))   // nolint:PERF020 — same narrowing
         } else {
-            ph[gid] = 0.0
+            ph[gid] = OT(0.0)   // nolint:PERF020 — same narrowing
         }
     }
 }
 
-//! The rel-pos softmax row: p[k] = softmax_k((sc[q][k] + sr[q][npos-1-q+k]) * scale) over the
-//! live keys, zeros in the key pad and in every pad row - one threadgroup per padded row, the
-//! max and the sum reduced across the simdgroups.
-[metal_dispatch(name = "enc_fc_softmax", pso = "g_pf_pso_fc_softmax", tgmem = "metal_fc_softmax_msl_tgmem", tg = 256, grid = "mp", params = "mp : int64")]
-class MetalFcSoftmax : MetalTgReduceBase {
-    @ssbo @binding = 0 @role = "read" sc : array<float>     //!< [mp x nkp] content scores (Q+u)·K_hᵀ
-    @ssbo @binding = 1 @role = "read" sr : array<float>     //!< [mp x wwpad] rel scores (Q+v)·pos_hᵀ
-    @ssbo @binding = 2 @role = "readwrite" p : array<float> //!< [mp x nkp] the probability rows (the exp pass writes, the normalize pass scales in place)
-    @uniform @binding = 3 ka : FcAttnArgs
+[metal_dispatch(name = "enc_fc_pack", pso = "g_pf_pso_fc_pack", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalFcPack : MetalFcOperandsT {
+    typedef OT = float
 
-    [metal_kernel(name="metal_fc_softmax_msl")]
-    def metal_fc_softmax {
+    [metal_kernel(name="metal_fc_pack_msl")]
+    def metal_fc_pack {
+        fc_operands_body()
+    }
+}
+
+[metal_dispatch(name = "enc_fc_twin", pso = "g_pf_pso_fc_twin", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalFcTwin : MetalFcOperandsT {
+    typedef OT = float16
+    override ALLHEADS = true
+
+    [metal_kernel(name="metal_fc_twin_msl")]
+    def metal_fc_twin {
+        fc_operands_body()
+    }
+}
+
+//! The rel-pos softmax row over the live keys, the rel score joining the content score at the CPU form's shift (npos - 1 - q + k).
+//! The per-head stamp writes p = softmax((sc + sr) * scale), zeros in the key pad and in every pad row. The DEV stamp, a threadgroup
+//! a (row, head), leaves exp(s - max) in the content slab and 1/sum in the stat plane (0 for a pad row) - the pair the device AV reads.
+[ |> template_struct_instance]
+class template MetalFcRowT : MetalTgReduceBase {
+    @ssbo @binding = 0 sc : array<ST>                       //!< [heads x mp x nkp] content scores; exp(s - max) out under DEV
+    @ssbo @binding = 1 @role = "read" sr : array<ST>        //!< [heads x mp x wwpad] rel scores
+    @ssbo @binding = 2 @role = "readwrite" @template_gate = "!DEV" p : array<float>   //!< [mp x nkp] the probability rows (the exp pass writes, the normalize pass scales in place)
+    @ssbo @binding = 2 @role = "write" @template_gate = DEV stat : array<float>       //!< [heads x mp] 1/sum
+    @uniform @binding = 3 ka : FcAttnArgs
+    @template_constant DEV : bool = false
+
+    def score(ci, ri : uint) : float {
+        static_if (DEV) {
+            return float(sc[ci]) + float(sr[ri])
+        } else {
+            return (sc[ci] + sr[ri]) * ka.scale
+        }
+    }
+
+    def fc_row_body {
         let r = gl_WorkGroupID.x
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
         let nkp = ka.nkp
-        let prow = r * nkp
+        let row = gl_WorkGroupID.y * ka.mp + r   //! the per-head stamp's grid has one y
+        let crow = row * nkp
         if (r >= ka.npos) {
-            var z = lid
-            while (z < nkp) {
-                p[prow + z] = 0.0
-                z += nt
+            static_if (DEV) {
+                if (lid == 0u) {
+                    stat[row] = 0.0
+                }
+            } else {
+                var z = lid
+                while (z < nkp) {
+                    p[crow + z] = 0.0
+                    z += nt
+                }
             }
             return
         }
-        let crow = r * nkp
-        let rrow = r * ka.wwpad + (ka.npos - 1u - r)
+        let rrow = row * ka.wwpad + (ka.npos - 1u - r)
         var m = -3.0e38
         var k = lid
         while (k < ka.npos) {
-            m = max(m, (sc[crow + k] + sr[rrow + k]) * ka.scale)
+            m = max(m, score(crow + k, rrow + k))
             k += nt
         }
         let mx = tg_max(m)
         var l = 0.0
         k = lid
         while (k < ka.npos) {
-            let e = exp((sc[crow + k] + sr[rrow + k]) * ka.scale - mx)
-            p[prow + k] = e
+            let e = exp(score(crow + k, rrow + k) - mx)
+            static_if (DEV) {
+                sc[crow + k] = float16(e)
+            } else {
+                p[crow + k] = e
+            }
             l += e
             k += nt
         }
         barrier()
         let tot = tg_sum(l)
-        let inv = 1.0 / tot
-        k = lid
-        while (k < ka.npos) {
-            p[prow + k] *= inv
-            k += nt
+        static_if (DEV) {
+            if (lid == 0u) {
+                stat[row] = 1.0 / tot
+            }
+        } else {
+            let inv = 1.0 / tot
+            k = lid
+            while (k < ka.npos) {
+                p[crow + k] *= inv
+                k += nt
+            }
+            k = ka.npos + lid
+            while (k < nkp) {
+                p[crow + k] = 0.0
+                k += nt
+            }
         }
-        k = ka.npos + lid
-        while (k < nkp) {
-            p[prow + k] = 0.0
-            k += nt
-        }
+    }
+}
+
+[metal_dispatch(name = "enc_fc_softmax", pso = "g_pf_pso_fc_softmax", tgmem = "metal_fc_softmax_msl_tgmem", tg = 256, grid = "mp", params = "mp : int64")]
+class MetalFcSoftmax : MetalFcRowT {
+    typedef ST = float
+
+    [metal_kernel(name="metal_fc_softmax_msl")]
+    def metal_fc_softmax {
+        fc_row_body()
+    }
+}
+
+[metal_dispatch(name = "enc_fc_pexp", pso = "g_pf_pso_fc_pexp", tgmem = "metal_fc_pexp_msl_tgmem", tg = 256, grid = "mp, heads", params = "mp : int64, heads : int64")]
+class MetalFcPExp : MetalFcRowT {
+    typedef ST = float16
+    override DEV = true
+
+    [metal_kernel(name="metal_fc_pexp_msl")]
+    def metal_fc_pexp {
+        fc_row_body()
     }
 }
 
@@ -3918,104 +4006,6 @@ class MetalFcUnpack {
         let c = gid % ka.d
         let hs = ka.hs
         ao[gid] = oh[((c / hs) * ka.mp + r) * hs + c % hs]
-    }
-}
-
-//! The all-heads form's operands as halves in the compact row layout the device pair reads:
-//! (Q+u) and (Q+v) [mp x d], K and V [nkp x d], the projected rel table [wwpad x d], the scale
-//! folded into K and the rel table, zeros in every pad row. One thread an element of the tallest panel.
-[metal_dispatch(name = "enc_fc_twin", pso = "g_pf_pso_fc_twin", tg = 256, grid = "total/256", params = "total : int64")]
-class MetalFcTwin {
-    @ssbo @binding = 0 @role = "read" q : array<float>      //!< [mp x d] compact
-    @ssbo @binding = 1 @role = "read" k : array<float>      //!< [mp x d] compact
-    @ssbo @binding = 2 @role = "read" v : array<float>      //!< [mp x d] compact
-    @ssbo @binding = 3 @role = "read" posl : array<float>   //!< [ww x d] the layer's projected rel table
-    @ssbo @binding = 4 @role = "weight" @off = "buoff" bu : array<float>   //!< [d] bias_u (content)
-    @ssbo @binding = 5 @role = "weight" @off = "bvoff" bv : array<float>   //!< [d] bias_v (rel)
-    @ssbo @binding = 6 @role = "write" quh : array<float16>  //!< [mp x d]
-    @ssbo @binding = 7 @role = "write" qvh : array<float16>  //!< [mp x d]
-    @ssbo @binding = 8 @role = "write" kh : array<float16>   //!< [nkp x d], x scale
-    @ssbo @binding = 9 @role = "write" vh : array<float16>   //!< [nkp x d]
-    @ssbo @binding = 10 @role = "write" ph : array<float16>  //!< [wwpad x d], x scale
-    @uniform @binding = 11 ka : FcAttnArgs
-
-    [metal_kernel(name="metal_fc_twin_msl")]
-    def metal_fc_twin {
-        let gid = gl_GlobalInvocationID.x
-        let d = ka.d
-        if (gid >= ka.wwpad * d) {   //! the grid guard: the tallest panel's extent
-            return
-        }
-        let r = gid / d
-        let c = gid % d
-        if (r < ka.npos) {
-            let qval = q[gid]
-            quh[gid] = float16(qval + bu[c])
-            qvh[gid] = float16(qval + bv[c])
-            kh[gid] = float16(k[gid] * ka.scale)
-            vh[gid] = float16(v[gid])
-        } else {
-            if (r < ka.mp) {
-                quh[gid] = float16(0.0)
-                qvh[gid] = float16(0.0)
-            }
-            if (r < ka.nkp) {
-                kh[gid] = float16(0.0)
-                vh[gid] = float16(0.0)
-            }
-        }
-        if (r < ka.ww) {
-            ph[gid] = float16(posl[gid] * ka.scale)
-        } else {
-            ph[gid] = float16(0.0)
-        }
-    }
-}
-
-//! The all-heads rel-pos softmax row, a threadgroup a (row, head): the rel score joins the content score at
-//! the CPU form's shift (npos - 1 - q + k); the content slab is left holding exp(s - max) over the live keys,
-//! the stat plane the row's reciprocal sum - the pair the device AV reads. A pad row's stat is 0, so its output row is.
-[metal_dispatch(name = "enc_fc_pexp", pso = "g_pf_pso_fc_pexp", tgmem = "metal_fc_pexp_msl_tgmem", tg = 256, grid = "mp, heads", params = "mp : int64, heads : int64")]
-class MetalFcPExp : MetalTgReduceBase {
-    @ssbo @binding = 0 @role = "readwrite" att : array<float16>   //!< [heads x mp x nkp] content scores in, exp(s - max) out
-    @ssbo @binding = 1 @role = "read" sr : array<float16>   //!< [heads x mp x wwpad] rel scores
-    @ssbo @binding = 2 @role = "write" stat : array<float>  //!< [heads x mp] 1/sum
-    @uniform @binding = 3 ka : FcAttnArgs
-
-    [metal_kernel(name="metal_fc_pexp_msl")]
-    def metal_fc_pexp {
-        let r = gl_WorkGroupID.x
-        let lid = gl_LocalInvocationID.x
-        let nt = gl_WorkGroupSize.x
-        let row = gl_WorkGroupID.y * ka.mp + r
-        if (r >= ka.npos) {
-            if (lid == 0u) {
-                stat[row] = 0.0
-            }
-            return
-        }
-        let crow = row * ka.nkp
-        let rrow = row * ka.wwpad + (ka.npos - 1u - r)
-        var m = -3.0e38
-        var k = lid
-        while (k < ka.npos) {
-            m = max(m, float(att[crow + k]) + float(sr[rrow + k]))
-            k += nt
-        }
-        let mx = tg_max(m)
-        var l = 0.0
-        k = lid
-        while (k < ka.npos) {
-            let e = exp(float(att[crow + k]) + float(sr[rrow + k]) - mx)
-            att[crow + k] = float16(e)
-            l += e
-            k += nt
-        }
-        barrier()
-        let tot = tg_sum(l)
-        if (lid == 0u) {
-            stat[row] = 1.0 / tot
-        }
     }
 }
 
@@ -4094,8 +4084,8 @@ struct PkFrontArgs {
 }
 
 def pk_front_args(iw, ih, ch : int64) : PkFrontArgs {
-    let ow = uint((iw + 1l) / 2l)
-    let oh = uint((ih + 1l) / 2l)
+    let ow = uint(conv_s2_out(iw))
+    let oh = uint(conv_s2_out(ih))
     return PkFrontArgs(iw = uint(iw), ih = uint(ih), ow = ow, oh = oh, ch = uint(ch), total = oh * ow * uint(ch))
 }
 
@@ -4527,8 +4517,7 @@ struct private DevwResEntry {
 def private pf_devw_key(base : uint64; off : uint64; fmt : int) : uint64 {
     return (base + off) * 8ul + uint64(fmt)
 }
-var private g_pf_devw_res : table<uint64; DevwResEntry>   //!< RESIDENT dev-W panels, key = blob ptr + site offset (in-buffer, so globally unique) — filled once, read every forward
-var private g_pf_router_wh : table<uint64; MetalBuffer?>   //!< a routed layer's router rows as halves, key = the rows' region buffer; a megabyte a layer, outside the dev-W budget
+var private g_pf_devw_res : table<uint64; DevwResEntry>   //!< RESIDENT half panels - the dev-W sites, and a routed layer's router rows uncharged - key = blob ptr + site offset (in-buffer, so globally unique), filled once, read every forward
 var private g_pf_devw_res_bytes : uint64   //!< runtime-OWNED bytes only — baked planes are file-backed and free
 var private g_pf_devw_res_full = false   //!< budget exhausted once — later sites stay on scratch, warned once
 var private @scratch g_pf_devw_seeded : table<uint64; bool>   //!< baked-table seeding, once per mapped plane
@@ -5397,7 +5386,9 @@ def pf_enc_hmm(enc : MetalComputeEncoder?; bwh, bxh, by : MetalBuffer?; yoff : u
     }
 }
 
-def private pf_devw_resident_panel(key : uint64; bytes : uint64; var fresh : bool&) : DevwResEntry {
+//! The resident half panel under `key`, made on a first ask (`fresh`: the caller fills it). `charged` panels count
+//! against the dev-W budget and are refused past it; an uncharged one - a megabyte of router rows - is not.
+def private pf_devw_resident_panel(key : uint64; bytes : uint64; var fresh : bool&; charged : bool = true) : DevwResEntry {
     fresh = false
     if (key_exists(g_pf_devw_res, key)) {
         if (g_pf_devw_res[key].bytes == bytes) {   // nolint:PERF026 — key_exists-guarded read, never inserts
@@ -5405,10 +5396,10 @@ def private pf_devw_resident_panel(key : uint64; bytes : uint64; var fresh : boo
         }
         return DevwResEntry()   //! a hit must cover the request - a size mismatch is a foreign key
     }
-    if (g_pf_env_devw_res_bytes == 0ul) {
+    if (charged && g_pf_env_devw_res_bytes == 0ul) {
         return DevwResEntry()
     }
-    if (g_pf_devw_res_bytes + bytes > g_pf_env_devw_res_bytes) {
+    if (charged && g_pf_devw_res_bytes + bytes > g_pf_env_devw_res_bytes) {
         if (!g_pf_devw_res_full) {
             g_pf_devw_res_full = true
             to_log(LOG_WARNING, "dasLLAMA metal prefill: devw-resident budget exhausted at {int64(g_pf_devw_res_bytes) / 1048576l} MB - later sites stay on the scratch route\n")   // nolint:PERF028,PERF026 — one-shot fill arm
@@ -5422,9 +5413,16 @@ def private pf_devw_resident_panel(key : uint64; bytes : uint64; var fresh : boo
     residency_note(bwh)
     var e = DevwResEntry(buf = bwh, boff = 0ul, owned = true, bytes = bytes)
     g_pf_devw_res[key] = e   // nolint:PERF026 — one-shot fill arm, 4 inserts per layer per process
-    g_pf_devw_res_bytes += bytes
+    g_pf_devw_res_bytes += charged ? bytes : 0ul
     fresh = true
     return e
+}
+
+//! The tests' rail to the resident panel registry: one ask for `bytes` under `key` on the driver's device, and the bytes charged after it.
+def public metal_prefill_resident_ask(key, bytes : uint64; charged : bool) : tuple<got : bool; fresh : bool; charged_bytes : uint64> {
+    var fresh = false
+    let e = pf_devw_resident_panel(key, bytes, fresh, charged)
+    return (got = e.buf != null, fresh = fresh, charged_bytes = g_pf_devw_res_bytes)
 }
 
 def private pf_devw_res_release {
@@ -5434,11 +5432,6 @@ def private pf_devw_res_release {
         }
     }
     g_pf_devw_res |> clear()
-    for (b in values(g_pf_router_wh)) {
-        metal_release(b)
-        b = null   //! a handle value must not be finalized by the table's clear
-    }
-    g_pf_router_wh |> clear()
     g_pf_devw_res_bytes = 0ul
     g_pf_devw_res_full = false
     delete g_pf_devw_seeded
@@ -6071,23 +6064,20 @@ def private pf_held(form : string) : bool => key_exists(g_pf_held, form)
 //! The window's router logits as one half x half GEMM: the layer's router rows as a resident half
 //! panel, the routed rows' half twin. false = no twin, no tile for the expert count, or no room
 //! for the panel - the slab GEMV serves.
-def private pf_enc_router_mm(enc : MetalComputeEncoder?; bw_rt, bxh, blg, bdim, bne : MetalBuffer?; ne, dim, mp : int64) : bool {
+def private pf_enc_router_mm(enc : MetalComputeEncoder?; bw_rt, bxh, blg, bdim, bne : MetalBuffer?; wkey : uint64; ne, dim, mp : int64) : bool {
     if (pf_held("router_mm") || bxh == null || !pf_hmm_ready() || ne % 64l != 0l) {
         return false
     }
-    let key = intptr(bw_rt)
-    var bwh = g_pf_router_wh?[key] ?? null
-    if (bwh == null) {
-        bwh = metal_new_buffer(g_dev, uint64(ne * dim * 2l))
-        if (bwh == null) {
-            return false
-        }
-        residency_note(bwh)
-        g_pf_router_wh[key] = bwh   // nolint:PERF026 — once a routed layer a weights epoch
-        var cka = CvtArgs(total = uint(ne * dim))
-        enc_cvt_half(enc, bw_rt, bwh, cka, ne * dim)
+    var fresh = false
+    let e = pf_devw_resident_panel(wkey, uint64(ne * dim * 2l), fresh, false)
+    if (e.buf == null) {
+        return false
     }
-    pf_enc_hmm(enc, bwh, bxh, blg, 0ul, bdim, bne, mp, ne, ne, dim)
+    if (fresh) {
+        var cka = CvtArgs(total = uint(ne * dim))
+        enc_cvt_half(enc, bw_rt, e.buf, cka, ne * dim)
+    }
+    pf_enc_hmm(enc, e.buf, bxh, blg, 0ul, bdim, bne, mp, ne, ne, dim)
     return true
 }
 
@@ -6096,8 +6086,9 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
                              bx, blg, bsel, bcnt, bbase, bbkt, binv, bdim, bne, bnk, bgm, brb, bhasb, btot, bnp : MetalBuffer?; npos : int64;
                              bxh : MetalBuffer? = null; mp : int64 = 0l) {
     let c = t.config
-    var bw_rt = upload_region(unsafe(addr < void? >(t.fblob[t.router_off + l * c.n_expert * c.dim])), uint64(c.n_expert * c.dim * 4l))
-    if (c.moe_router_bias || !pf_enc_router_mm(enc, bw_rt, bxh, blg, bdim, bne, c.n_expert, c.dim, mp)) {
+    let rows_at = unsafe(addr<void?>(t.fblob[t.router_off + l * c.n_expert * c.dim]))
+    var bw_rt = upload_region(rows_at, uint64(c.n_expert * c.dim * 4l))
+    if (c.moe_router_bias || !pf_enc_router_mm(enc, bw_rt, bxh, blg, bdim, bne, pf_devw_key(intptr(rows_at), 0ul, 0), c.n_expert, c.dim, mp)) {
         enc_moe_router_b(enc, bw_rt, bx, blg, bdim, bne, bdim, brb, bhasb, bnp, c.n_expert, npos)   //! bxs = bdim: per-position x stride = dim
     }
     return if (g_pf_skip == "moe_only_router")   //! attribution: router GEMV alone, no select/CSR
@@ -8186,13 +8177,8 @@ var private g_pf_env_capture = true
 var private g_pf_env_ncb = 0   //!< 0 = unset, fall back to the layer-derived default
 
 //! the registered override: the driver, and the pool's spin window follows a window it served
-def private metal_prefill_served(t : Model; var s : Session; npos, start_pos : int64) : bool {
-    let ok = metal_prefill_forward(t, s, npos, start_pos)
-    if (ok) {
-        metal_note_served()
-    }
-    return ok
-}
+def private metal_prefill_served(t : Model; var s : Session; npos, start_pos : int64) : bool
+    => metal_served(metal_prefill_forward(t, s, npos, start_pos))
 
 [init]
 def dasllama_metal_prefill_register() {
@@ -8727,7 +8713,7 @@ def private race_attn_pair(dev : MetalDevice?; queue : MetalCommandQueue?) : arr
 //! the staged attention trio against the device pair on a continuation window: 512 queries on
 //! 1536 rows of context, GQA, the pair's K/V twin pass inside its own window
 [arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-attn-device")]
-def private race_attn_dev(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {   // nolint:STYLE038 — one-shot A/B race harness; buffers + PSOs stay live to the release tail
+def private race_attn_dev(dev : MetalDevice?; queue : MetalCommandQueue?) : MetalTensorRaceResult {
     var res = MetalTensorRaceResult(family = "attn_dev", winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
     let heads = 8
     let hs = 128
@@ -8765,59 +8751,15 @@ def private race_attn_dev(dev : MetalDevice?; queue : MetalCommandQueue?) : Meta
             npos = uint(nk), np32 = uint(nk), scale = 0.125, qoff = uint(qoff), qrows = uint(mp),
             window = 0u, softcap = 0.0, hass = 0u)
         var tka = KvTwinArgs(total = uint(nk * kvd), scale = rka.scale)
-        let tg = uint3(128u, 1u, 1u)
-        let rows = uint3(uint(mp), uint(heads), 1u)
         race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
-            kn_pipeline(enc, psos[0])
-            kn_tgmem(enc, MetalAttnQKMmTH_metal_attn_qk_mm_t_msl_tgmem, 0)
-            kn_buffer(enc, bqh, 0ul, 0)
-            kn_buffer(enc, bkk, 0ul, 1)
-            kn_buffer(enc, batt_b, 0ul, 2)
-            kn_kargs(enc, rka, 3)
-            kn_dispatch(enc, uint3(uint(mp / 32), uint(nk / 64), uint(heads)), tg)
-            kn_pipeline(enc, psos[1])
-            kn_tgmem(enc, metal_attn_rowstat_msl_tgmem, 0)
-            kn_buffer(enc, batt_b, 0ul, 0)
-            kn_kargs(enc, rka, 1)
-            kn_buffer(enc, bstat_b, 0ul, 2)
-            kn_buffer(enc, bsink, 0ul, 20)
-            kn_dispatch(enc, rows, tg)
-            kn_pipeline(enc, psos[2])
-            kn_tgmem(enc, MetalAttnAVMmP_metal_attn_av_mm_msl_tgmem, 0)
-            kn_buffer(enc, batt_b, 0ul, 0)
-            kn_buffer(enc, bkk, 0ul, 1)
-            kn_buffer(enc, bxb_b, 0ul, 2)
-            kn_kargs(enc, rka, 3)
-            kn_buffer(enc, bstat_b, 0ul, 4)
-            kn_dispatch(enc, uint3(uint(mp / 32), uint(hs / 64), uint(heads)), tg)
+            enc_qk_mm_th_c_pso(enc, psos[0], bqh, bkk, batt_b, rka, int64(mp), int64(nk), int64(heads))
+            enc_rowstat_pso(enc, psos[1], batt_b, rka, bstat_b, bsink, int64(mp), int64(heads))
+            enc_av_mm_p_c_pso(enc, psos[2], batt_b, bkk, bxb_b, rka, bstat_b, int64(mp), int64(heads), int64(hs))
         }, $(enc) {
-            kn_pipeline(enc, psos[3])
-            kn_buffer(enc, bkk, 0ul, 0)
-            kn_buffer(enc, bkk, 0ul, 1)
-            kn_buffer(enc, bkh, 0ul, 2)
-            kn_buffer(enc, bvh, 0ul, 3)
-            kn_kargs(enc, tka, 4)
-            kn_dispatch(enc, uint3(uint(nk * kvd / 256), 1u, 1u), uint3(256u, 1u, 1u))
-            kn_pipeline(enc, psos[4])
-            kn_buffer(enc, bqh, 0ul, 0)
-            kn_buffer(enc, bkh, 0ul, 1)
-            kn_buffer(enc, batt_t, 0ul, 2)
-            kn_kargs(enc, rka, 3)
-            kn_dispatch(enc, uint3(uint(mp / 128), uint(nk / 64), uint(heads)), tg)
-            kn_pipeline(enc, psos[5])
-            kn_tgmem(enc, metal_attn_pexp_msl_tgmem, 0)
-            kn_buffer(enc, batt_t, 0ul, 0)
-            kn_kargs(enc, rka, 1)
-            kn_buffer(enc, bstat_t, 0ul, 2)
-            kn_buffer(enc, bsink, 0ul, 20)
-            kn_dispatch(enc, rows, tg)
-            kn_pipeline(enc, psos[6])
-            kn_buffer(enc, batt_t, 0ul, 0)
-            kn_buffer(enc, bvh, 0ul, 1)
-            kn_buffer(enc, bxb_t, 0ul, 2)
-            kn_kargs(enc, rka, 3)
-            kn_buffer(enc, bstat_t, 0ul, 4)
-            kn_dispatch(enc, uint3(uint(mp / 128), uint(hs / 64), uint(heads)), tg)
+            enc_kv_twin_pso(enc, psos[3], bkk, bkk, bkh, bvh, tka, int64(nk * kvd))
+            enc_qk_dev128_c_pso(enc, psos[4], bqh, bkh, batt_t, rka, int64(mp), int64(nk), int64(heads))
+            enc_attn_pexp_pso(enc, psos[5], batt_t, rka, bstat_t, bsink, int64(mp), int64(heads))
+            enc_av_dev128_c_pso(enc, psos[6], batt_t, bvh, bxb_t, rka, bstat_t, int64(mp), int64(heads), int64(hs))
         })
         kq_race_verdict(res, bxb_b, bxb_t, mp * qd)
         release_handles(bqh, bkk, bkh, bvh, batt_b, batt_t)

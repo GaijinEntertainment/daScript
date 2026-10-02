@@ -1946,6 +1946,24 @@ def private spawn_lens_call(tag, body : string) : tuple<rc : int; out : string> 
     return spawn_lens_compile(tag, src)
 }
 
+//! device-free: a driver's forward answer through `metal_served` - only a served one opens the GPU-served spin window
+[test]
+def test_metal_served(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let was = get_dispatch_gpu_served()
+        set_dispatch_gpu_served(false)
+        t |> success(!metal_served(false), "a declined forward passes through as declined")
+        t |> success(!get_dispatch_gpu_served(), "and leaves the pool on the CPU window")
+        t |> success(metal_served(true), "a served forward passes through as served")
+        t |> success(get_dispatch_gpu_served(), "and opens the GPU-served window")
+        t |> success(!metal_served(false), "a later decline still passes through")
+        t |> success(get_dispatch_gpu_served(), "and the window stays until the next weights load")
+        set_dispatch_gpu_served(was)
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
+    }
+}
+
 [test]
 def test_lens_tgmem_gate(t : T?) {
     t |> run("[metal_dispatch] on @workgroup state refuses to compile without tgmem=") @(t : T?) {

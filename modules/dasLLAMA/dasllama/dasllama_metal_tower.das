@@ -106,8 +106,8 @@ def private tw_decline(why : MetalTowerDecline) : bool {
 def metal_tower_shutdown {
     residency_reset()   // the set references pooled buffers the drain below releases
     release_handle(g_tw_ones)
-    q3a_wpad_drop()
-    fc_twin_drop()
+    st2_slab_free(g_tw_q3a_wpad)
+    st2_slab_free(g_tw_fc_twin)
     st2_slab_drop()
     pool_drain(g_tw_pool)
     g_tw_failed = false
@@ -578,6 +578,36 @@ def private metal_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos 
     return true
 }
 
+let private TW_SET_MAX = 32
+
+//! Pooled scratch taken one buffer at a time and released as one, each buffer's size kept beside it.
+struct private TwBufSet {
+    bufs : MetalBuffer? [TW_SET_MAX]
+    sizes : uint64 [TW_SET_MAX]
+    n : int
+}
+
+def private tw_take(var s : TwBufSet; bytes : uint64) : MetalBuffer? {
+    assert(s.n < TW_SET_MAX)
+    var b = pool_acquire_pinned(g_tw_pool, g_dev, bytes)
+    if (b != null) {
+        s.bufs[s.n] = b
+        s.sizes[s.n] = bytes
+        s.n++
+    }
+    return b
+}
+
+def private tw_release(var s : TwBufSet) {
+    for (i in range(s.n)) {
+        pool_release(g_tw_pool, s.bufs[i], s.sizes[i])
+    }
+    s.n = 0
+}
+
+//! The slab key of a device buffer built from `plane`: it stands while the plane's base address and length do.
+def private tw_plane_key(plane : PlaneF) : uint64 => hash_combine64(intptr(plane_at(plane, 0l)), uint64(length(plane)))
+
 let private FC_MAX_HEADS = 16   //!< the per-head uniform seats; the shape gate holds n_head to it
 
 //! The FastConformer driver's shared GPU context (canary and parakeet) - g4a's shape with the rel table in place of the windowed RPE, and no clamp records.
@@ -606,23 +636,12 @@ struct private FcGpuCtx : TwGpuCtx {
     u_nkp : MetalBuffer?
     u_wwpad : MetalBuffer?
     bytes_head : uint64
-    bytes_kh : uint64
-    bytes_ph : uint64
-    bytes_sc : uint64
-    bytes_sr : uint64
-    bytes_oh : uint64
     bwh : MetalBuffer?      //!< the blob's halfword twin, where the half tensor GEMM serves
     bxh : MetalBuffer?      //!< its activation panel
-    bytes_xh : uint64
     f16w : bool
     dev : FcDevPlanes       //!< the all-heads attention's scratch, in the per-head scratch's place where it serves
     dev_on : bool
-    bytes_qh : uint64
-    bytes_kvh : uint64
-    bytes_pth : uint64
-    bytes_sch : uint64
-    bytes_srh : uint64
-    bytes_stat : uint64
+    scratch : TwBufSet
 }
 
 let private FC_DEV_SLAB_MAX_BYTES = 268435456ul   //!< the all-heads score slabs' ceiling (about three minutes of audio at eight heads); past it the per-head loop's reused scratch serves
@@ -643,54 +662,34 @@ def metal_tower_fc_dev_encodes() : int64 => g_tw_fc_dev_encodes
 
 //! the all-heads attention's planes where the device pair serves and its score slabs fit; false leaves the context on the per-head scratch
 def private fc_dev_attach(var c : FcGpuCtx; d : int64) : bool {
-    c.bytes_sch = uint64(c.n_head * c.mp * c.nkp * 2l)
-    c.bytes_srh = uint64(c.n_head * c.mp * c.wwpad * 2l)
-    if (!g_tw_fc_dev || !pf_fc_dev_ready() || c.bytes_sch + c.bytes_srh > FC_DEV_SLAB_MAX_BYTES) {
+    let bytes_sch = uint64(c.n_head * c.mp * c.nkp * 2l)
+    let bytes_srh = uint64(c.n_head * c.mp * c.wwpad * 2l)
+    if (!g_tw_fc_dev || !pf_fc_dev_ready() || bytes_sch + bytes_srh > FC_DEV_SLAB_MAX_BYTES) {
         return false
     }
-    c.bytes_qh = uint64(c.mp * d * 2l)
-    c.bytes_kvh = uint64(c.nkp * d * 2l)
-    c.bytes_pth = uint64(c.wwpad * d * 2l)
-    c.bytes_stat = uint64(c.n_head * c.mp * 4l)
-    c.dev = FcDevPlanes(
-        quh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_qh), qvh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_qh),
-        kh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_kvh), vh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_kvh),
-        ph = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pth), sc = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_sch),
-        sr = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_srh), stat = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_stat))
+    let bytes_qh = uint64(c.mp * d * 2l)
+    let bytes_kvh = uint64(c.nkp * d * 2l)
+    c.dev.quh = tw_take(c.scratch, bytes_qh)
+    c.dev.qvh = tw_take(c.scratch, bytes_qh)
+    c.dev.kh = tw_take(c.scratch, bytes_kvh)
+    c.dev.vh = tw_take(c.scratch, bytes_kvh)
+    c.dev.ph = tw_take(c.scratch, uint64(c.wwpad * d * 2l))
+    c.dev.sc = tw_take(c.scratch, bytes_sch)
+    c.dev.sr = tw_take(c.scratch, bytes_srh)
+    c.dev.stat = tw_take(c.scratch, uint64(c.n_head * c.mp * 4l))
     return true
 }
 
-def private fc_dev_release(var c : FcGpuCtx) {
-    pool_release(g_tw_pool, c.dev.quh, c.bytes_qh)
-    pool_release(g_tw_pool, c.dev.qvh, c.bytes_qh)
-    pool_release(g_tw_pool, c.dev.kh, c.bytes_kvh)
-    pool_release(g_tw_pool, c.dev.vh, c.bytes_kvh)
-    pool_release(g_tw_pool, c.dev.ph, c.bytes_pth)
-    pool_release(g_tw_pool, c.dev.sc, c.bytes_sch)
-    pool_release(g_tw_pool, c.dev.sr, c.bytes_srh)
-    pool_release(g_tw_pool, c.dev.stat, c.bytes_stat)
-}
-
-var private g_tw_fc_twin : MetalBuffer?   //!< the served blob's halfword twin, resident until the weights drop
-var private g_tw_fc_twin_key : uint64
-var private g_tw_fc_twin_len : int64
-
-def private fc_twin_drop {
-    release_handle(g_tw_fc_twin)
-    g_tw_fc_twin_key = 0ul
-    g_tw_fc_twin_len = 0l
-}
+var private g_tw_fc_twin : St2SlabBase   //!< the served blob's halfword twin, resident until the weights drop
 
 //! The blob's halfword twin on the device, converted there once a blob: the halves the f16-staged
 //! tile stamp rounds a tile at a time. Null where the buffer or the convert fails.
 [arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private fc_twin_attach(blob : PlaneF; bblob : MetalBuffer?) : MetalBuffer? {
-    let base = intptr(plane_at(blob, 0l))
+    let key = tw_plane_key(blob)
+    return g_tw_fc_twin.buf if (st2_slab_current(g_tw_fc_twin, key))
+    st2_slab_free(g_tw_fc_twin)
     let blen = length(blob)
-    if (g_tw_fc_twin != null && base == g_tw_fc_twin_key && blen == g_tw_fc_twin_len) {
-        return g_tw_fc_twin
-    }
-    fc_twin_drop()
     var twin = metal_new_buffer(g_dev, uint64(blen) * 2ul)
     if (twin == null) {
         return null
@@ -704,9 +703,8 @@ def private fc_twin_attach(blob : PlaneF; bblob : MetalBuffer?) : MetalBuffer? {
         release_handle(twin)
         return null
     }
-    g_tw_fc_twin = twin
-    g_tw_fc_twin_key = base
-    g_tw_fc_twin_len = blen
+    g_tw_fc_twin.buf = twin
+    g_tw_fc_twin.key = key
     return twin
 }
 
@@ -722,7 +720,7 @@ def private fc_ctx_make(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk : int6
         nkp = round_up(npos, 64l), wwpad = round_up(ww, 64l))
     tw_ctx_make(c, unsafe(reinterpret<void?>(plane_at(blob, 0l))), uint64(length(blob) * 4l), mapped,
         npos, d, n_ff, eps, 0.5, uint64(c.wwp * d * 4l))
-    c.bposl = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
+    c.bposl = tw_take(c.scratch, c.bytes_pos)
     upload_rows_padded(c.bpos, unsafe(addr<void?>(pos_emb[0])), ww, c.wwp, d)   // the sinusoidal rel table, zero-padded to the GEMM's row floor
     c.u_nk = uniform_u32(uint(nk))
     c.u_np = uniform_u32(uint(npos))
@@ -730,20 +728,17 @@ def private fc_ctx_make(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk : int6
     c.dev_on = fc_dev_attach(c, d)
     if (!c.dev_on) {
         c.bytes_head = uint64(c.mp * dh * 4l)
-        c.bytes_kh = uint64(c.nkp * dh * 4l)
-        c.bytes_ph = uint64(c.wwpad * dh * 4l)
-        c.bytes_sc = uint64(c.mp * c.nkp * 4l)
-        c.bytes_sr = uint64(c.mp * c.wwpad * 4l)
-        c.bytes_oh = uint64(n_head * c.mp * dh * 4l)
-        c.bqu = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_head)
-        c.bqv = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_head)
-        c.bkh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_kh)
-        c.bvt = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_kh)
-        c.bph = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_ph)
-        c.bsc = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_sc)
-        c.bsr = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_sr)
-        c.bp = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_sc)
-        c.boh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_oh)
+        let bytes_kh = uint64(c.nkp * dh * 4l)
+        let bytes_sc = uint64(c.mp * c.nkp * 4l)
+        c.bqu = tw_take(c.scratch, c.bytes_head)
+        c.bqv = tw_take(c.scratch, c.bytes_head)
+        c.bkh = tw_take(c.scratch, bytes_kh)
+        c.bvt = tw_take(c.scratch, bytes_kh)
+        c.bph = tw_take(c.scratch, uint64(c.wwpad * dh * 4l))
+        c.bsc = tw_take(c.scratch, bytes_sc)
+        c.bsr = tw_take(c.scratch, uint64(c.mp * c.wwpad * 4l))
+        c.bp = tw_take(c.scratch, bytes_sc)
+        c.boh = tw_take(c.scratch, uint64(n_head * c.mp * dh * 4l))
         for (h in range64(n_head)) {
             c.u_heads[h] = uniform_u32(uint(h))
         }
@@ -753,32 +748,17 @@ def private fc_ctx_make(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk : int6
     }
     if (g_tw_env_tower_f16 && pf_hmm_ready()) {
         c.bwh = fc_twin_attach(blob, c.bblob)
-        c.bytes_xh = uint64(max(c.mp * max(n_ff, 2l * d), c.wwp * d) * 2l)
-        c.bxh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_xh)
+        c.bxh = tw_take(c.scratch, uint64(max(c.mp * max(n_ff, 2l * d), c.wwp * d) * 2l))
         c.f16w = c.bwh != null && c.bxh != null
     }
     return <- c
 }
 
 def private fc_ctx_release(var c : FcGpuCtx) {
-    if (c.bxh != null) {
-        pool_release(g_tw_pool, c.bxh, c.bytes_xh)
-    }
-    pool_release(g_tw_pool, c.bposl, c.bytes_pos)
     pool_release(g_upool, c.u_nk, 4ul)
     pool_release(g_upool, c.u_np, 4ul)
-    if (c.dev_on) {
-        fc_dev_release(c)
-    } else {
-        pool_release(g_tw_pool, c.bqu, c.bytes_head)
-        pool_release(g_tw_pool, c.bqv, c.bytes_head)
-        pool_release(g_tw_pool, c.bkh, c.bytes_kh)
-        pool_release(g_tw_pool, c.bvt, c.bytes_kh)
-        pool_release(g_tw_pool, c.bph, c.bytes_ph)
-        pool_release(g_tw_pool, c.bsc, c.bytes_sc)
-        pool_release(g_tw_pool, c.bsr, c.bytes_sr)
-        pool_release(g_tw_pool, c.bp, c.bytes_sc)
-        pool_release(g_tw_pool, c.boh, c.bytes_oh)
+    tw_release(c.scratch)
+    if (!c.dev_on) {
         for (h in range64(c.n_head)) {
             pool_release(g_upool, c.u_heads[h], 4ul)
         }
@@ -890,13 +870,21 @@ def private tw_readback(c : TwGpuCtx; ran : bool; var x : array<float>; d, n_lay
     return true
 }
 
-//! `tw_readback` for the FastConformer chain, each route's engage counted
-def private fc_readback(c : FcGpuCtx; ran : bool; var x : array<float>; d, n_layer : int64) : bool {
+//! The FastConformer chain's one command buffer as `encode` records it, then the readback into `x` with each route's engage counted and the context released; false, declined, where the command buffer failed.
+def private fc_submit(var c : FcGpuCtx; var x : array<float>; d, n_layer : int64; encode : block<(enc : MetalComputeEncoder?) : void>) : bool {
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        invoke(encode, enc)
+    }
+    if (ran) {
+        ensure_length(x, c.npos * d)
+    }
     let served = tw_readback(c, ran, x, d, n_layer, c.f16w)
     if (served && c.dev_on) {
         g_tw_fc_dev_encodes++
     }
-    return served
+    fc_ctx_release(c)
+    return served || tw_decline(MetalTowerDecline.gpu_error)
 }
 
 //! The FastConformer chain from the shape gate on - context, upload, the block loop over the
@@ -913,18 +901,11 @@ def private fc_run(blob : PlaneF; mapped : bool; d, n_ff, n_head, nk, n_layer : 
     residency_flush()   //! pin/commit before the first submission (the post-CPU-front slack)
     var c <- fc_ctx_make(blob, mapped, d, n_ff, n_head, nk, eps, pos_emb, npos, ww, tap_major)
     upload_rows_padded(c.bx, unsafe(addr(x[0])), npos, c.mp, d)
-    var err = ""
-    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+    return fc_submit(c, x, d, n_layer) $(enc) {
         for (l in range64(n_layer)) {
             fc_block(enc, c, invoke(layer, l), d, n_ff)
         }
     }
-    let served = fc_readback(c, ran, x, d, n_layer)
-    fc_ctx_release(c)
-    if (!served) {
-        return tw_decline(MetalTowerDecline.gpu_error)
-    }
-    return true
 }
 
 //! The canary FastConformer block loop as ONE command buffer on the f32 blob; the subsample front, mel and final proj stay CPU.
@@ -989,7 +970,7 @@ def set_metal_parakeet_front(on : bool) : bool {
 //! buffer off the mel, the CPU chain's stages in its order. Answers the frame count, or -1 with nothing counted
 //! where the front cannot serve: the CPU front runs then, and the block seat answers for itself.
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
-def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : int64 {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : int64 {
     if (!g_tw_env_tower || !g_tw_pk_front || t.q8) {
         return -1l
     }
@@ -1021,16 +1002,14 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     let bytes_mel = uint64(n_len * t.n_mel * 4l)
     let bytes_y2 = uint64(mp2 * nch * 4l)
     let bytes_y5 = uint64(mp3 * nch * 4l)
-    let bytes_xf = uint64(c.mp * feat * 4l)
-    let bytes_fxh = uint64(max(mp2 * nch, c.mp * feat) * 2l)
-    var bmel = pool_acquire_pinned(g_tw_pool, g_dev, bytes_mel)
-    var by0 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y0)
-    var by2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y2)
-    var by3 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y2)
-    var by5 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y5)
-    var by6 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y5)
-    var bxf = pool_acquire_pinned(g_tw_pool, g_dev, bytes_xf)
-    var bfxh = c.f16w ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_fxh) : null
+    var bmel = tw_take(c.scratch, bytes_mel)
+    var by0 = tw_take(c.scratch, bytes_y0)
+    var by2 = tw_take(c.scratch, bytes_y2)
+    var by3 = tw_take(c.scratch, bytes_y2)
+    var by5 = tw_take(c.scratch, bytes_y5)
+    var by6 = tw_take(c.scratch, bytes_y5)
+    var bxf = tw_take(c.scratch, uint64(c.mp * feat * 4l))
+    var bfxh = c.f16w ? tw_take(c.scratch, uint64(max(mp2 * nch, c.mp * feat) * 2l)) : null
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(st.mel.data[0]), bytes_mel)
         //! the depthwise convs write their live rows alone, and the GEMM behind each reads the row pad: zero it, the buffers are pooled
@@ -1043,8 +1022,7 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     var u_tot3 = uniform_u32(uint(rows3 * nch))
     var axf = PkFrontArgs(ow = a5.ow, oh = a5.oh, ch = a5.ch, total = uint(c.mp * feat))
     let f16w = c.f16w && bfxh != null
-    var err = ""
-    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+    let served = fc_submit(c, st.x, d, t.n_layer) $(enc) {
         enc_pk_conv0(enc, bmel, by0, c.bblob, uint64(t.c0_w * 4l), c.bblob, uint64(t.c0_b * 4l), a0, int64(a0.total))
         enc_pk_dw2d(enc, by0, by2, c.bblob, uint64(t.c2_w * 4l), c.bblob, uint64(t.c2_b * 4l), a2, int64(a2.total))
         tw_mm(enc, f16w, false, c.bwh, c.bblob, t.c3_w, by2, bfxh, by3, 0ul, u_nch, u_nch, mp2, nch, nch, true)
@@ -1059,27 +1037,11 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
             fc_block(enc, c, pk_fc_layer(pk_layer_offsets(t, l)), d, 4l * d)
         }
     }
-    if (ran) {
-        ensure_length(st.x, tt * d)
-    }
-    let served = fc_readback(c, ran, st.x, d, t.n_layer)
-    pool_release(g_tw_pool, bmel, bytes_mel)
-    pool_release(g_tw_pool, by0, bytes_y0)
-    pool_release(g_tw_pool, by2, bytes_y2)
-    pool_release(g_tw_pool, by3, bytes_y2)
-    pool_release(g_tw_pool, by5, bytes_y5)
-    pool_release(g_tw_pool, by6, bytes_y5)
-    pool_release(g_tw_pool, bxf, bytes_xf)
-    if (bfxh != null) {
-        pool_release(g_tw_pool, bfxh, bytes_fxh)
-    }
     pool_release(g_upool, u_nch, 4ul)
     pool_release(g_upool, u_feat, 4ul)
     pool_release(g_upool, u_tot2, 4ul)
     pool_release(g_upool, u_tot3, 4ul)
-    fc_ctx_release(c)
     if (!served) {
-        tw_decline(MetalTowerDecline.gpu_error)
         return -1l
     }
     g_tower_convs++
@@ -2132,28 +2094,23 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
 // The qwen3a conv frontend needs PADDED weights for the tile GEMM (n_ch=480 fails ndim%64,
 // conv1's kdim=9 fails %32): a driver-owned buffer minted once per tower — out-channels
 // padded to ncp=pad64(n_ch), conv1's K padded to 32, biases padded with zeros.
-var private g_tw_q3a_wpad : MetalBuffer?
-var private g_tw_q3a_key = 0ul
-var private g_tw_q3a_len = 0l
+var private g_tw_q3a_wpad : St2SlabBase
 
 [cold_path]
 def private q3a_wpad_attach(t : Qwen3aTower) : bool {
-    let base = intptr(plane_at(t.cblob, 0l))
-    let blen = length(t.cblob)
-    if (g_tw_q3a_wpad != null && base == g_tw_q3a_key && blen == g_tw_q3a_len) {
-        return true
-    }
-    release_handle(g_tw_q3a_wpad)
+    let key = tw_plane_key(t.cblob)
+    return true if (st2_slab_current(g_tw_q3a_wpad, key))
+    st2_slab_free(g_tw_q3a_wpad)
     let nch = t.n_ch
     let ncp = round_up(nch, 64l)
     let k2 = 9l * nch
     let total = ncp * 32l + 2l * ncp * k2 + 3l * ncp
-    g_tw_q3a_wpad = metal_new_buffer(g_dev, uint64(total * 4l))
-    if (g_tw_q3a_wpad == null) {
+    var wpad = metal_new_buffer(g_dev, uint64(total * 4l))
+    if (wpad == null) {
         return false
     }
     unsafe {
-        var p = reinterpret<float?>(metal_buffer_contents(g_tw_q3a_wpad))
+        var p = reinterpret<float?>(metal_buffer_contents(wpad))
         for (i in range64(total)) {
             p[i] = 0.0
         }
@@ -2177,8 +2134,8 @@ def private q3a_wpad_attach(t : Qwen3aTower) : bool {
             p[o4 + 2l * ncp + oc] = t.cblob[t.c3_b_off + oc]
         }
     }
-    g_tw_q3a_key = base
-    g_tw_q3a_len = blen
+    g_tw_q3a_wpad.buf = wpad
+    g_tw_q3a_wpad.key = key
     return true
 }
 
@@ -2187,8 +2144,8 @@ def private q3a_stage(enc : MetalComputeEncoder?; bsrc : MetalBuffer?; soff : ui
                       u_iw, u_ih, u_cin, u_ow, u_kd, u_ss, u_ti, u_kdim, u_ncp, u_tm : MetalBuffer?;
                       ti, tm, mp, ncp : int64; woff, boff : uint64) {
     enc_im2col2d(enc, bsrc, soff, bcol, u_iw, u_ih, u_cin, u_ow, u_kd, u_ss, u_ti, ti)
-    enc_f32_mm(enc, g_tw_q3a_wpad, woff, bcol, bout, yoff, u_kdim, u_ncp, mp, ncp)
-    enc_add_bias_rows(enc, bout, yoff, g_tw_q3a_wpad, boff, u_ncp, u_tm, tm)
+    enc_f32_mm(enc, g_tw_q3a_wpad.buf, woff, bcol, bout, yoff, u_kdim, u_ncp, mp, ncp)
+    enc_add_bias_rows(enc, bout, yoff, g_tw_q3a_wpad.buf, boff, u_ncp, u_tm, tm)
     enc_gelu_erf(enc, bout, yoff, u_tm, tm)
 }
 
@@ -2407,7 +2364,6 @@ let private ST2_CHUNK_ROWS = 4096l
 let private ST2_POST_WIDTH = 64l   //!< conv_post's row stride on the driver: its cout padded to the GEMM lattice
 let private ST2_MAX_STAGES = 8l    //!< bounds the distinct uniform values an encode binds (six a stage, eight more)
 let private ST2_MAX_UNIFORMS = 96
-let private ST2_MAX_BUFS = 32
 let private ST2_JOIN = 0.70710678118654752   //!< the AdaIN residual blocks' join: (out + shortcut) / sqrt 2
 let private ST2_LSTM_MAX_HIDDEN = 256l       //!< the recurrence kernel's lanes: four a unit, 1024 a threadgroup
 
@@ -2767,9 +2723,7 @@ def private st2_slab_drop {
 }
 
 struct private St2GpuCtx {
-    bufs : MetalBuffer? [ST2_MAX_BUFS]
-    bsizes : uint64 [ST2_MAX_BUFS]
-    n_bufs : int
+    rows : TwBufSet
     us_v : uint [ST2_MAX_UNIFORMS]     //!< the value-keyed uniforms (a float's by its bits): a value binds once an encode
     us_b : MetalBuffer? [ST2_MAX_UNIFORMS]
     n_us : int
@@ -2800,19 +2754,13 @@ def private st2_ctx_make(var c : St2GpuCtx; var slab : MetalBuffer?; h_floats, s
 def private st2_rows_buf(var c : St2GpuCtx; rows, width : int64) : MetalBuffer? {
     let mp = round_up(rows, 32l)
     let bytes = uint64(mp * width * 4l)
-    assert(c.n_bufs < ST2_MAX_BUFS)
-    var b = pool_acquire_pinned(g_tw_pool, g_dev, bytes)
+    var b = tw_take(c.rows, bytes)
     zero_rows(b, rows, mp, width)
-    c.bufs[c.n_bufs] = b
-    c.bsizes[c.n_bufs] = bytes
-    c.n_bufs++
     return b
 }
 
 def private st2_ctx_release(var c : St2GpuCtx) {
-    for (i in range(c.n_bufs)) {
-        pool_release(g_tw_pool, c.bufs[i], c.bsizes[i])
-    }
+    tw_release(c.rows)
     pool_release(g_tw_pool, c.bh, c.bytes_h)
     pool_release(g_tw_pool, c.bstats, c.bytes_stats)
     pool_release(g_tw_pool, c.bcols, c.bytes_cols)
@@ -4564,16 +4512,10 @@ def private metal_styletts2_driver : St2GpuDriver {
         gen = @@metal_styletts2_generator)
 }
 
-def private q3a_wpad_drop {
-    release_handle(g_tw_q3a_wpad)
-    g_tw_q3a_key = 0ul
-    g_tw_q3a_len = 0l
-}
-
 //! The q3a pad, the FastConformer twin and the StyleTTS2 slabs key on host plane addresses, which a weights-epoch drop makes lie.
 def private tw_weights_drop {
-    q3a_wpad_drop()
-    fc_twin_drop()
+    st2_slab_free(g_tw_q3a_wpad)
+    st2_slab_free(g_tw_fc_twin)
     st2_slab_drop()
 }
 

@@ -11,6 +11,26 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-01) - the attention and router races on the stamps that ship, and the bytes
+  the folded snapshot holds.** M5 Max, `bin/daslang -jit modules/dasLLAMA/harness/router_race.das`
+  and `.../attn_depth_race.das`, one process each, no flags; both harnesses dispatch the engine's
+  own stamps through their generated builders, where they timed hand-written copies before.
+  - `router_race` (2048 positions x 256 experts over 2048, best of its rounds): the slab GEMV
+    (`MetalMoeRouterB`) 0.647 ms, off the double dot by 8.1e-7 of 4.24; the half tensor GEMM
+    (`MetalHalfMulMmTH128`) 0.0485 ms, x13.3, off by 1.39e-3.
+  - `attn_depth_race` (2048 queries at 8192 rows of context, 16 heads of 256 over 2 KV heads,
+    cumulative stages): QK 6.25 ms staged against 3.02 device; + softmax 7.85 against 5.37; + AV
+    19.84 against 8.06; + the K/V twin pass 19.85 against 8.12 - x2.44. Against the attention
+    computed in double from the f32 operands the staged trio is off by 7.4e-7 and the device pair
+    by 7.0e-7 of 8.2e-4. The lab copies read 23.1 against 8.2 ms on the same shape (the device
+    attention pair's entry below, direction-grade: another commit).
+  - A speculative session's rollback snapshot (`Session.mtp_snap`) holds the conv history, the
+    recurrent state and the n-gram ring: `(long_length(dn_conv_state) + long_length(dn_state) +
+    ple_hist_rows x hc_dim) x 4` bytes a session, sized on the first CPU-rail snapshot - 151 MB of
+    state at a 27B hybrid's geometry (48 recurrent layers x 32 heads x 128 x 192), the ring
+    `((ple_conv_kernel - 1) x ple_ngram_size + 1) x hc_count x dim` floats on a hyper-connection
+    carrier and nothing elsewhere. The conv and state buffers were the session's before; the ring
+    is the addition.
 - **MEASURED (2026-10-01) - a plain MoE the card does not hold whole, with its context asked whole
   (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, `set_gpu_ctx_strict` / the server's `--ctx`): the first routed
   layers' experts on the host through the split token command and the cut window chain, the mirror whole
@@ -226,7 +246,7 @@ what it costs today and what the fix would change.
   481 / 504 / 521 ms - 19% slower from the third walk on. Under the GPU-served window (500 us;
   13-16% CPU) the four walks read 365 / 388 / 415 / 421 / 468, 361 / 380 / 400 / 417 / 440, 359 /
   379 / 399 / 418 / 438, 362 / 382 / 409 / 429 / 452. The Metal overrides now report a served
-  forward (`metal_note_served`). The server, cold prompts, one stream, MTP on, before -> after
+  forward (`metal_served`). The server, cold prompts, one stream, MTP on, before -> after
   (direction-grade, the client series of the checkpoint entry above): 3k 4820 -> 4959 tok/s, 9k
   4224 -> 4574; decode 138 / 111 -> 137 / 113. mlx-lm 0.32.0's server on the same series: 4480 /
   4217, decode 110 / 105 (external). A later request of a long series still creeps
@@ -249,10 +269,8 @@ what it costs today and what the fix would change.
   95 (in_proj_qkv 41, z 25, out 25, shared expert 31, attention projections ~38); reduce 12,
   activation 11, gather 8, count 7, bucket 5; the attention trio 11.
   - **The router as a half GEMM** (`pf_enc_router_mm`; `harness/router_race.das`, 2048 x 256 over
-    2048): the slab GEMV 0.647 ms, a tensor GEMM over f32 operands 0.087, over halves 0.048 -
-    x13.4. The f32-operand tensor form is no more exact than the half one (off the double dot by
-    2.9e-3 against 1.4e-3 of 4.2; the GEMV 8e-7): matmul2d rounds its operands either way. The
-    window 428 -> 402 ms.
+    2048): the slab GEMV 0.647 ms, the tensor GEMM over halves 0.048 - x13.4, off the double dot
+    by 1.4e-3 of 4.2 against the GEMV's 8e-7. The window 428 -> 402 ms.
   - **The scan** (`harness/dn_scan_race.das`, a layer at 2048 tokens, thirty dispatches a command
     buffer). mlx-lm's scan kernel raced beside ours on its own layout (external; an arm the harness
     does not keep): 1.05 ms on half rows, 1.81 on f32. Ours as it stood:

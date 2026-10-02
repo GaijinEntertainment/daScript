@@ -320,7 +320,13 @@ child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` cl
 `@workgroup` members and no `tgmem=`, twin fixture as the must-compile control; its siblings
 `test_lens_requires_gate`, `test_lens_params_gate` (a `params=` name no `grid=`, `tg=`,
 `requires=` or `@span` reads is refused; one only a `requires=` item reads compiles),
-`test_lens_stamp_gate` and `test_lens_call_macro_gates` spawn the same way. The StyleTTS2
+`test_lens_stamp_gate` and `test_lens_call_macro_gates` spawn the same way. Two cells need no
+kernel: the misc file's `test_metal_served` (a driver's forward answer through `metal_served`: a
+decline passes through and leaves the pool's spin window, a served one opens it, a later decline
+keeps it) and the prefill file's `test_resident_panel_charge` (the resident panel registry on the
+driver's device: an uncharged ask makes its panel and charges nothing, the same key answers again,
+another size under it is refused, a charged ask counts its bytes exactly when the budget serves it,
+and a shutdown drops the registry). The StyleTTS2
 chain's kernel cells (the prefill file): the gathering conv GEMM on a forward conv (40
 channels - the k-run tail past the taps, dilation 3 with pads off both ends, 45 rows padded to
 64) and a stride-6 transposed one, each direction's own stamp, on both precisions - the f16-staged one on f16-exact operands (every
@@ -874,7 +880,8 @@ only with `DASLLAMA_VK_KV32=1`: its sessions are f32, and without the f32 mirror
 to the CPU rails as `codec`.
 `test_mtp_snapshot.das` - model-free: the speculative round's deltanet rollback sizes its two
 snapshot buffers on a bare session carrying a 27B-class recurrent state (151 MB, past the
-`max_unreserved_size` guard) and restores the state from them.
+`max_unreserved_size` guard) and restores the state from them, the n-gram window and the ring
+row a rejected draft wrote among it.
 `test_mtp_sampled_walk.das` - model-free: the speculative round's sampled accept walk
 (sample-and-match) over a bare 8-token session against plain sampled decode of the same rows -
 every draft accepted plus the parked bonus draw, the first miss, RNG state equality (one draw
@@ -2065,7 +2072,9 @@ oracle's spectrum and decoder output; the end-to-end waveform difference is logg
 F0 phase drift the file header explains).
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
-each against an in-test reference.
+each against an in-test reference; `rel_pos_table` against an fp64 sin/cos reference, its
+relative-position-0 row exactly (0, 1) pairs, the table of one frame more as the control that
+must miss the bar.
 `test_tower_asr_kernels.das` - model-free: the public tower / audio / TTS kernels with no CPU
 unit of their own, each against an in-test fp64 reference over a procedural seeded-LCG fixture
 and each bar carrying its own must-EXCEED poison arm - the padded-width GEMM wrappers

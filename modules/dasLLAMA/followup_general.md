@@ -1224,7 +1224,7 @@
    snapshots the deltanet state before the two-row verify and, on a reject, restores it and runs a
    plain forward to re-advance it past row 0 - 0.24 step per round at 82% acceptance (the same
    ledger entry). Done = the verify's recurrent layers run the per-token core at npos 2 and copy
-   each layer's state slice AFTER row 0 into the snapshot buffers (`mtp_snap_pos = pos + 1`), so a
+   each layer's state slice AFTER row 0 into the snapshot buffers (`mtp_snap.pos = pos + 1`), so a
    reject restores that snapshot and takes row 0's logits and hidden the verify already produced -
    the non-recurrent reject path's shape - with `test_mtp_reject_rollback` as the gate.
 106. **The server's boot-arming entry points: degrade on bad config everywhere, and a gate.**
@@ -1869,12 +1869,12 @@
     reads, in row order, so within one batch no row reads a later row's slot; but slot `pos + p`
     aliases position `pos + p - rows`, the oldest tap of the conv at `pos + p - 1`. At depth 1 the
     rejected row's slot is one no later conv reads; at depth 2 and past, a rejected row `p >= a + 2`
-    clobbers a slot the conv at the next real token (`pos + a + 1`) still reads, and
-    `mtp_state_snapshot` saves the window (`ple_prev`) but not the ring rows. The Metal verify takes
-    the prefill's panel form and commits the accepted rows alone (`commit_ple_rows`). Done = the CPU
-    round snapshots the k ring rows its verify overwrites and restores them on a reject (k x hc_dim
-    floats, `mtp_snap_ple` beside the window), or takes the panel form; a depth-2 forced-reject
-    leg on the Flash-Next counting fixture in `test_mtp.das` (the depth-1 leg cannot see it).
+    clobbers a slot the conv at the next real token (`pos + a + 1`) still reads.
+    `mtp_state_snapshot` saves the whole ring beside the window and `mtp_state_restore` puts both
+    back (`test_mtp_snapshot.das` holds the round trip); the Metal verify takes the prefill's panel
+    form and commits the accepted rows alone (`commit_ple_rows`). Done = every reject path of the
+    CPU round at depth 2 and past goes through that restore, held by a depth-2 forced-reject leg on
+    the Flash-Next counting fixture in `test_mtp.das` (the depth-1 leg cannot see it).
 
 178. **A CPU verify of two rows costs two decode steps on Flash-Next.** `ffn_moe_prefill` takes the
     per-position GEMV route under `ATTN_NARROW_NPOS`, which took the verify from 77 to 67 ms, and the

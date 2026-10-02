@@ -826,7 +826,7 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             t |> success(!hit, "the forced reject rejected the draft")
             t |> equal(moe_gpu_resident_verifies(), verifies0 + 1l, "the rejected round's verify ran on the device")
             t |> equal(moe_gpu_resident_rollbacks(), rollbacks0 + 1l, "the reject rolled back on the device")
-            t |> equal(long_length(s.mtp_snap_conv), 0l, "the round took no snapshot: its buffers were never sized")
+            t |> equal(long_length(s.mtp_snap.conv), 0l, "the round took no snapshot: its buffers were never sized")
             t |> equal(s.n_past, pos + 1l, "the reject committed the token alone")
             t |> equal(moe_gpu_resident_rows(s), pos + 1l, "the rollback cut the region's rows to the token's")
             t |> equal(moe_gpu_resident_head_rows(s), pos, "the region holds {pos} head rows after the reject: row {pos} held the rejected draft's input, and the next draft rewrites it")

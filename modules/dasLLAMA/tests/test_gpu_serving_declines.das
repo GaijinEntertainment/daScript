@@ -809,8 +809,8 @@ def test_mtp_verify_snapshot(t : T?) {
         t |> success(empty(why), "the round completed ({why})")
         t |> success(hit, "the fake verify's row-0 pick is the draft: the round accepted")
         t |> equal(s.n_past, 3l, "an accept commits the token and the draft")
-        t |> equal(long_length(s.mtp_snap_conv), ROUND_CONV, "recurrent, no rollback seat: the CPU snapshot ran before the seat - its conv buffer sized to the history")
-        t |> equal(long_length(s.mtp_snap_state), ROUND_STATE, "... and its state buffer to the state")
+        t |> equal(long_length(s.mtp_snap.conv), ROUND_CONV, "recurrent, no rollback seat: the CPU snapshot ran before the seat - its conv buffer sized to the history")
+        t |> equal(long_length(s.mtp_snap.state), ROUND_STATE, "... and its state buffer to the state")
         t |> equal(g_round_verify_calls, 1l, "the verify seat served")
         delete s
         delete m
@@ -818,7 +818,7 @@ def test_mtp_verify_snapshot(t : T?) {
         var ps <- round_session()
         let why_plain = round_under(ROUND_SEATS_NO_ROLLBACK, ps, plain, hit)
         t |> success(empty(why_plain) && hit, "the non-recurrent round completed and accepted ({why_plain})")
-        t |> equal(long_length(ps.mtp_snap_conv), 0l, "non-recurrent: no snapshot - nothing to restore")
+        t |> equal(long_length(ps.mtp_snap.conv), 0l, "non-recurrent: no snapshot - nothing to restore")
         round_seats_arm(5l, 7l, true)
         let why_reject = round_under(ROUND_SEATS_NO_ROLLBACK, ps, plain, hit)
         t |> success(empty(why_reject) && !hit, "the non-recurrent reject completed ({why_reject})")
@@ -832,7 +832,7 @@ def test_mtp_verify_snapshot(t : T?) {
         let why_rolled = round_under(ROUND_SEATS, rs, rm, hit)
         t |> success(empty(why_rolled) && !hit, "the recurrent reject through a serving rollback seat completed ({why_rolled})")
         t |> equal(g_round_rollback_calls, 1l, "the rollback seat served the reject")
-        t |> equal(long_length(rs.mtp_snap_conv), 0l, "a rollback seat behind the verify seat: no snapshot was taken")
+        t |> equal(long_length(rs.mtp_snap.conv), 0l, "a rollback seat behind the verify seat: no snapshot was taken")
         t |> equal(rs.n_past, 2l, "the reject commits the token alone")
         t |> equal(rs.mtp_h_pos1, 2l, "the carry's watermark sits at the token's row")
         t |> equal(rs.mtp_h[0], 0.25, "the carry re-seeds from the verify's row-0 hidden")

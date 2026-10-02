@@ -10017,6 +10017,9 @@ class MetalDnL2Norm {
     }
 }
 
+//! the gated delta rule's decay for a head's `a` = -exp(A_log) and its raw gate plus dt_bias
+def dn_decay(a, g : float) : float => exp(a * softplus(g))
+
 [ |> template_struct_instance]
 class template MetalDnScanT {
     @template_constant PREP : bool = false   //! braw / graw hold beta and the decay (MetalDnPrep wrote them), not the raw projections
@@ -10064,8 +10067,7 @@ class template MetalDnScanT {
             var dec = graw[(ka.row + p) * nvh + h]
             var beta = braw[(ka.row + p) * nvh + h]
             static_if (!PREP) {
-                let gr = dec + dt_h
-                dec = exp(a_h * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
+                dec = dn_decay(a_h, dec + dt_h)
                 beta = sigmoid_f32(beta)
             }
             let cb = (ka.row + p) * cd
@@ -10143,8 +10145,7 @@ class MetalDnPrep {
         }
         let h = gid % ka.nvh
         let i = ka.row * ka.nvh + gid
-        let gr = graw[i] + dtb[h]
-        graw[i] = exp(aa[h] * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
+        graw[i] = dn_decay(aa[h], graw[i] + dtb[h])
         braw[i] = sigmoid_f32(braw[i])
     }
 }

@@ -64,11 +64,7 @@ def test_prefix_accounting(t : T?) {
         release_kv_pages_(w2)
         prefix_release_(cache, pool)
         t |> equal(long_length(pool.free_groups), pool.capacity_groups)   // accounting to baseline
-        var live = 0
-        for (g in range64(pool.capacity_groups)) {
-            live += pool.refcnt[g]
-        }
-        t |> equal(0, live)
+        t |> equal(0, live_refs(pool))
         delete other
         delete toks12
         delete toks
