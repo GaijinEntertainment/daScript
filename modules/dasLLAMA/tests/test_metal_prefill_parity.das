@@ -16,6 +16,7 @@ require ?das_metal metal/das_metal_boost  // metal_live_object_count for the lea
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require math   // nolint:STYLE030,LINT019 - min/max inside the das_metal halves
+require daslib/strings_boost   // split / join: the crown list a cell narrows
 require _model_tier
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
 
@@ -32,6 +33,13 @@ let private ATTN_DEV_COUNT_TO = 260   //! past 684 llama-3 BPE tokens
 let private ATTN_DEV_W1 = 300         //! pads to 320 query rows: off the 128-row stamps
 let private ATTN_DEV_W2 = 384         //! a whole number of 128-row tiles
 let private ATTN_DEV_BAR = 0.004      //! of the row's largest logit: the two forms round P apart, one before the 1/sum and one after (reads 5e-4, one token off 0.8)
+
+//! the comma list `crowns` with `drop`'s names left out
+def private crowns_without(crowns : string; drop : array<string>) : string {
+    var inscope parts <- split(crowns, ",")
+    var inscope kept <- [for (c in parts); c; where find_index(drop, c) < 0]
+    return join(kept, ",")
+}
 
 //! the last row's logits after two prefill windows on one session
 def private two_window_logits(trp : Model; w1, w2 : array<int64>) : array<float> {
@@ -883,15 +891,24 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     // - pinned off with them; its coverage is the kernels-suite devw arm.
                     // Tall M-tiles split at 128-row floors - fused vs splice rows land on
                     // different tile mixes, the same form-swap class - pinned off with them.
+                    // The crowned attention forms are that class too: the tensor QK reads a half Q
+                    // twin, and the device pair serves, from the half panel's row floor up, so the
+                    // witness runs with the attention crowns off - the greedy legs above ran under
+                    // the box's own, and the device pair's coverage is the attn-dev arm.
                     set_metal_prefill_mm_tail(false)
                     set_metal_prefill_half_x(false)
                     set_metal_prefill_dev_w(false)
                     set_metal_prefill_tall(false)
+                    let box_crowns = get_metal_tensor_crowns()
+                    set_metal_tensor_crowns(crowns_without(box_crowns, ["attn_qkmm", "attn_dev"]))
+                    metal_prefill_shutdown()
                     var lg_fused <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
                     set_span_fuse(false)
                     set_metal_prefill_min_npos(1l)   // the splice's short head/tail ride the GPU too
                     let pfsp0 = metal_prefill_stats().prefills
                     var lg_splice <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
+                    set_metal_tensor_crowns(box_crowns)
+                    metal_prefill_shutdown()
                     set_metal_prefill_mm_tail(true)
                     set_metal_prefill_half_x(true)
                     set_metal_prefill_dev_w(true)
