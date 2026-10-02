@@ -285,20 +285,9 @@ def private cn_mm(m : CanaryEncoder; var y : array<float>; woff : int64; x : arr
 def private cn_mm_rq(m : CanaryEncoder; var y : array<float>; woff : int64; x : array<float>;
                      var xq : array<int8>; var xs : array<float>; n, d, npos : int64) {
     if (m.q8) {
-        cn_requant(x, n, npos, xq, xs)
+        requant_rows_q8_sized(x, n, npos, xq, xs)
     }
     cn_mm(m, y, woff, x, xq, xs, n, d, npos)
-}
-
-def private cn_requant(x : array<float>; n, npos : int64; @scratch @exact_size var xq : array<int8>; @scratch @exact_size var xs : array<float>) {
-    let need = npos * n   // minutes-long clips: tens of MB
-    if (long_length(xq) < need) {
-        xq |> reserve(need)
-        xq |> resize(need)
-        xs |> reserve(need / 32l)
-        xs |> resize(need / 32l)
-    }
-    asr_requant_rows_q8(x, n, npos, xq, xs)
 }
 
 // ===== bin container =====
@@ -907,18 +896,9 @@ def private cn_front_cpu(m : CanaryEncoder; var st : CanaryState) : int64 {
 //! the device)
 def canary_pos_table(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) {
     let d = m.d_model
-    ensure_length(st.pos_emb, ww * d)
-    for (w in range64(ww)) {
-        let rel = double(tt - 1l - w)
-        for (k in range64(d / 2l)) {
-            let freq = exp(-(double(k * 2l) * log(10000.0lf) / double(d)))
-            let theta = float(freq * rel)
-            st.pos_emb[w * d + 2l * k] = sin(theta)
-            st.pos_emb[w * d + 2l * k + 1l] = cos(theta)
-        }
-    }
+    rel_pos_table(st.pos_emb, d, tt, ww)
     if (m.q8) {
-        cn_requant(st.pos_emb, d, ww, st.posq, st.poss)
+        requant_rows_q8_sized(st.pos_emb, d, ww, st.posq, st.poss)
     }
 }
 
@@ -1030,7 +1010,7 @@ def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int6
         // rel-pos self-attention (Transformer-XL u/v biases) — one requant feeds q/k/v
         layernorm_batch(st.xb, st.x, m.blob, lo.nat_w, lo.nat_b, d, tt, m.eps)
         if (m.q8) {
-            cn_requant(st.xb, d, tt, st.xqi, st.xsi)
+            requant_rows_q8_sized(st.xb, d, tt, st.xqi, st.xsi)
         }
         cn_mm(m, st.qq, lo.q_w, st.xb, st.xqi, st.xsi, d, d, tt); add_bias_rows(st.qq, m.blob, lo.q_b, d, tt)
         cn_mm(m, st.kk, lo.k_w, st.xb, st.xqi, st.xsi, d, d, tt); add_bias_rows(st.kk, m.blob, lo.k_b, d, tt)

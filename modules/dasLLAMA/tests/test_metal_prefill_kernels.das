@@ -394,79 +394,77 @@ def private fc_fixture(dev; np : int = 24) : FcFixture {
 
 def private fc_args(dev; f : FcFixture) => fc_attn_args(int64(f.d), int64(f.hs), int64(f.np))
 
-//! the mismatches of the first length(want) floats of `buf` against `want` at `bar_ok`'s rel and floor - a poisoned input's rerun must have some
-def private buf_mismatches(buf; want : array<float>; rel, abs_floor : float; tag : string) : int {
+//! the mismatches of the first length(want) floats of `buf` - halves widened to float under `half` - against `want` at `bar_ok`'s rel and floor - a poisoned input's rerun must have some
+def private buf_mismatches(buf; want : array<float>; rel, abs_floor : float; tag : string; half : bool = false) : int {
+    if (half) {
+        var inscope halves <- buf_download(buf, length(want), type<float16>)
+        var inscope widened <- [for (h in halves); float(h)]
+        return mismatch_rel(tag, widened, want, rel, abs_floor)
+    }
     var inscope got <- buf_download(buf, length(want), type<float>)
     return mismatch_rel(tag, got, want, rel, abs_floor)
 }
 
 //! `buf_mismatches` over plane `p` of `mc`
-def private rerun_mismatches(mc; p : int; want : array<float>; rel, abs_floor : float; tag : string) : int => buf_mismatches(mc.buf[p], want, rel, abs_floor, tag)
+def private rerun_mismatches(mc; p : int; want : array<float>; rel, abs_floor : float; tag : string; half : bool = false) : int => buf_mismatches(mc.buf[p], want, rel, abs_floor, tag, half)
 
 let private BAR_ZERO = Bar(rel = 0.0)   //! a copy's bar: no difference at all, a NaN off
 
-def private fc_pack_gate(t : T?; var dev, queue) {
-    let tag = "fc_pack"
+//! The operand stamps against the host's five panels at no difference at all: the per-head f32 pack (head 1, V transposed)
+//! a copy, and under `half` the all-heads half operands the RNE narrow of the same f32 sum or product - one add or one
+//! multiply a value, so the device rounds as the host does. One poisoned input per rerun, each panel its own control.
+def private fc_operands_gate(t : T?; var dev, queue; half : bool) {
+    let tag = half ? "fc_twin" : "fc_pack"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let kp = kernel_of(@@enc_fc_pack)
-        var pso = mc |> keep_stamp(kp, err)
+        let kpack = kernel_of(@@enc_fc_pack)
+        let ktwin = kernel_of(@@enc_fc_twin)
+        var pso = half ? (mc |> keep_stamp(ktwin, err)) : (mc |> keep_stamp(kpack, err))
         return if (!pso_ok(t, tag, pso, err))
         let f = fc_fixture(dev)
         let h = 1
+        let w = half ? f.d : f.hs
         var inscope(qv, kv, vv) <- f16_qkv_rows(f.np * f.d)
-        var inscope pl : array<float>
-        pl |> resize(f.ww * f.d)
-        for (i in range(f.ww * f.d)) {
-            pl[i] = float(float16(0.03 * float((i * 11) % 29) - 0.4))
-        }
-        var inscope bu : array<float>
-        var inscope bvv : array<float>
-        bu |> resize(f.d)
-        bvv |> resize(f.d)
-        for (i in range(f.d)) {
-            bu[i] = float(float16(0.02 * float(i % 19) - 0.15))
-            bvv[i] = float(float16(0.015 * float((i * 3) % 23) - 0.11))
-        }
+        var inscope pl <- [for (i in range(f.ww * f.d)); float(float16(0.03 * float((i * 11) % 29) - 0.4))]
+        var inscope bu <- [for (i in range(f.d)); float(float16(0.02 * float(i % 19) - 0.15))]
+        var inscope bvv <- [for (i in range(f.d)); float(float16(0.015 * float((i * 3) % 23) - 0.11))]
+        var ka = fc_args(dev, f)
         //! the oracle's five panels: the resize's zeros are the expected pad rows
-        var inscope wqu : array<float>
-        var inscope wqv : array<float>
-        var inscope wkh : array<float>
-        var inscope wvt : array<float>
-        var inscope wph : array<float>
-        wqu |> resize(f.mp * f.hs)
-        wqv |> resize(f.mp * f.hs)
-        wkh |> resize(f.nkp * f.hs)
-        wvt |> resize(f.hs * f.nkp)
-        wph |> resize(f.wwpad * f.hs)
+        var inscope want : array<array<float>>
+        for (rows in [f.mp, f.mp, f.nkp, f.nkp, f.wwpad]) {
+            var panel : array<float>
+            panel |> resize(rows * w)
+            want |> emplace(panel)
+        }
         for (r in range(f.np)) {
-            for (j in range(f.hs)) {
-                let c = h * f.hs + j
-                wqu[r * f.hs + j] = qv[r * f.d + c] + bu[c]
-                wqv[r * f.hs + j] = qv[r * f.d + c] + bvv[c]
-                wkh[r * f.hs + j] = kv[r * f.d + c]
-                wvt[j * f.nkp + r] = vv[r * f.d + c]
+            for (j in range(w)) {
+                let c = half ? j : h * f.hs + j
+                let s = r * f.d + c
+                let i = r * w + j
+                want[0][i] = half ? float(float16(qv[s] + bu[c])) : qv[s] + bu[c]
+                want[1][i] = half ? float(float16(qv[s] + bvv[c])) : qv[s] + bvv[c]
+                want[2][i] = half ? float(float16(kv[s] * ka.scale)) : kv[s]
+                want[3][half ? i : j * f.nkp + r] = half ? float(float16(vv[s])) : vv[s]
             }
         }
         for (r in range(f.ww)) {
-            for (j in range(f.hs)) {
-                wph[r * f.hs + j] = pl[r * f.d + h * f.hs + j]
+            for (j in range(w)) {
+                let s = r * f.d + (half ? j : h * f.hs + j)
+                want[4][r * w + j] = half ? float(float16(pl[s] * ka.scale)) : pl[s]
             }
         }
+        let names = half ? fixed_array("Q+u", "Q+v", "K", "V", "pos") : fixed_array("Q+u", "Q+v", "K_h", "V_hT", "pos_h")
+        let poisons = fixed_array("bias_u", "bias_v", "K", "V", "pos")
+        let inputs = fixed_array("content bias", "rel bias", "K element", "V element", "rel-table element")
         let bq = mc |> in_(qv)
         let bk = mc |> in_(kv)
         let bv = mc |> in_(vv)
         let bpl = mc |> in_(pl)
         let bbu = mc |> in_(bu)
         let bbv = mc |> in_(bvv)
-        let bqu = mc |> out_words(f.mp * f.hs, -1.0e30)
-        let bqv = mc |> out_words(f.mp * f.hs, -1.0e30)
-        let bkh = mc |> out_words(f.nkp * f.hs, -1.0e30)
-        let bvt = mc |> out_words(f.hs * f.nkp, -1.0e30)
-        let bph = mc |> out_words(f.wwpad * f.hs, -1.0e30)
-        let bu_h = mc |> in_plain([uint(h)])
-        var ka = fc_args(dev, f)
-        let total = f.wwpad * f.hs
+        var inscope outs <- [for (p in range(5)); half ? (mc |> out_words(length(want[p]), float16(-77.0))) : (mc |> out_words(length(want[p]), -1.0e30))]
+        let bu_h = half ? -1 : (mc |> in_plain([uint(h)]))
+        let total = f.wwpad * w
         // one poisoned input per rerun, the previous one's clean plane back first: each compare has its own control
         for (leg in range(6)) {
             if (leg == 1) {
@@ -485,95 +483,125 @@ def private fc_pack_gate(t : T?; var dev, queue) {
                 mc |> plane_upload(bpl, poisoned_copy(pl, 11 * f.d + h * f.hs + 3, 2.0))
             }
             let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-                invoke(kp.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[bv], mc.buf[bpl], mc.buf[bbu], 0ul, mc.buf[bbv], 0ul,
-                    mc.buf[bqu], mc.buf[bqv], mc.buf[bkh], mc.buf[bvt], mc.buf[bph], ka, mc.buf[bu_h], int64(total))
+                if (half) {
+                    invoke(ktwin.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[bv], mc.buf[bpl], mc.buf[bbu], 0ul, mc.buf[bbv], 0ul,
+                        mc.buf[outs[0]], mc.buf[outs[1]], mc.buf[outs[2]], mc.buf[outs[3]], mc.buf[outs[4]], ka, int64(total))
+                } else {
+                    invoke(kpack.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[bv], mc.buf[bpl], mc.buf[bbu], 0ul, mc.buf[bbv], 0ul,
+                        mc.buf[outs[0]], mc.buf[outs[1]], mc.buf[outs[2]], mc.buf[outs[3]], mc.buf[outs[4]], ka, mc.buf[bu_h], int64(total))
+                }
             }
             if (leg == 0) {
                 return if (!ran)
-                check_buf(t, "{tag} Q+u", mc.buf[bqu], wqu, BAR_ZERO, Shape(row_width = f.hs))
-                check_buf(t, "{tag} Q+v", mc.buf[bqv], wqv, BAR_ZERO, Shape(row_width = f.hs))
-                check_buf(t, "{tag} K_h", mc.buf[bkh], wkh, BAR_ZERO, Shape(row_width = f.hs))
-                check_buf(t, "{tag} V_hT", mc.buf[bvt], wvt, BAR_ZERO, Shape(row_width = f.nkp))
-                check_buf(t, "{tag} pos_h", mc.buf[bph], wph, BAR_ZERO, Shape(row_width = f.hs))
-            } elif (!ran) {
-                continue
-            } elif (leg == 1) {
-                t |> success(mc |> rerun_mismatches(bqu, wqu, 0.0, 0.0, "{tag} bias_u poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned content bias reds the Q+u panel")
-            } elif (leg == 2) {
-                t |> success(mc |> rerun_mismatches(bqv, wqv, 0.0, 0.0, "{tag} bias_v poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned rel bias reds the Q+v panel")
-            } elif (leg == 3) {
-                t |> success(mc |> rerun_mismatches(bkh, wkh, 0.0, 0.0, "{tag} K poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned K element reds the K_h panel")
-            } elif (leg == 4) {
-                t |> success(mc |> rerun_mismatches(bvt, wvt, 0.0, 0.0, "{tag} V poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned V element reds the V_hT panel")
-            } else {
-                t |> success(mc |> rerun_mismatches(bph, wph, 0.0, 0.0, "{tag} pos poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned rel-table element reds the pos_h panel")
+                for (p in range(5)) {
+                    if (half) {
+                        check_buf_h(t, "{tag} {names[p]}", mc.buf[outs[p]], want[p], BAR_ZERO, Shape(row_width = f.d, head_width = f.hs))
+                    } else {
+                        check_buf(t, "{tag} {names[p]}", mc.buf[outs[p]], want[p], BAR_ZERO, Shape(row_width = p == 3 ? f.nkp : f.hs))
+                    }
+                }
+            } elif (ran) {
+                let p = leg - 1
+                t |> success(mc |> rerun_mismatches(outs[p], want[p], 0.0, 0.0, "{tag} {poisons[p]} poison (MUST mismatch)", half) > 0,
+                    "{tag}: a poisoned {inputs[p]} reds the {names[p]} panel")
             }
         }
     }
 }
 
 //! np = 24 keeps every live key in simdgroup 0; np = 300 fills every simdgroup and strides each lane twice.
-//! Bar: the kernel sums f32 in a lane-then-simdgroup tree (error under 16 ulp of the sum) with the
+//! The per-head softmax's bar: the kernel sums f32 in a lane-then-simdgroup tree (error under 16 ulp of the sum) with the
 //! fast-math exp (2 ulp per term), the oracle sums in double - 1e-5 relative is ~10x that budget,
 //! 1e-6 absolute covers the probabilities under 0.1 where the relative bar tightens past it.
-def private fc_softmax_gate(t : T?; var dev, queue; np : int) {
-    let tag = "fc_softmax np{np}"
+//! The `pexp` stamp's bars, over two heads: a weight is the half of a fast-math exp (2 ulp of f32), which can land on the
+//! neighbouring half - one half step is 1e-3 relative, 1e-7 absolute covers the subnormal weights; a stat is one over an f32
+//! lane-then-simdgroup sum against the oracle's double sum, 1e-5 relative as the per-head softmax's.
+def private fc_row_gate(t : T?; var dev, queue; np : int; pexp : bool) {
+    let tag = pexp ? "fc_pexp np{np}" : "fc_softmax np{np}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let ks = kernel_of(@@enc_fc_softmax)
-        var pso = mc |> keep_stamp(ks, err)
+        let ksoft = kernel_of(@@enc_fc_softmax)
+        let kpexp = kernel_of(@@enc_fc_pexp)
+        var pso = pexp ? (mc |> keep_stamp(kpexp, err)) : (mc |> keep_stamp(ksoft, err))
         return if (!pso_ok(t, tag, pso, err))
         let f = fc_fixture(dev, np)
-        var inscope sc : array<float>
-        var inscope sr : array<float>
-        sc |> resize(f.mp * f.nkp)
-        sr |> resize(f.mp * f.wwpad)
-        for (i in range(f.mp * f.nkp)) {
-            sc[i] = float(float16(0.9 * float((i * 7) % 31) - 12.0))
-        }
-        for (i in range(f.mp * f.wwpad)) {
-            sr[i] = float(float16(0.7 * float((i * 5) % 37) - 11.0))
-        }
+        let heads = pexp ? f.heads : 1
+        var inscope sc <- [for (i in range(heads * f.mp * f.nkp));
+            float(float16(pexp ? 0.25 * float((i * 7) % 31) - 3.5 : 0.9 * float((i * 7) % 31) - 12.0))]
+        var inscope sr <- [for (i in range(heads * f.mp * f.wwpad));
+            float(float16(pexp ? 0.2 * float((i * 5) % 37) - 3.3 : 0.7 * float((i * 5) % 37) - 11.0))]
         var ka = fc_args(dev, f)
+        let scale = pexp ? 1.0 : ka.scale
+        //! the per-head stamp's pad rows and pad columns are the resize's zeros; the `pexp` stamp's keep the scores they held,
+        //! and a pad row's stat is 0 (the resize's zeros)
         var inscope want : array<float>
-        want |> resize(f.mp * f.nkp)   //! the resize's zeros are the expected pad rows and pad columns
-        for (r in range(f.np)) {
-            let base = f.np - 1 - r
-            var mx = -3.0e38
-            for (k in range(f.np)) {
-                mx = max(mx, (sc[r * f.nkp + k] + sr[r * f.wwpad + base + k]) * ka.scale)
-            }
-            var tot = 0.0lf
-            for (k in range(f.np)) {
-                let e = exp((sc[r * f.nkp + k] + sr[r * f.wwpad + base + k]) * ka.scale - mx)
-                want[r * f.nkp + k] = e
-                tot += double(e)
-            }
-            for (k in range(f.np)) {
-                want[r * f.nkp + k] = float(double(want[r * f.nkp + k]) / tot)
+        if (pexp) {
+            want := sc
+        } else {
+            want |> resize(f.mp * f.nkp)
+        }
+        var inscope wstat : array<float>
+        wstat |> resize(heads * f.mp)
+        for (h in range(heads)) {
+            for (r in range(f.np)) {
+                let crow = (h * f.mp + r) * f.nkp
+                let rrow = (h * f.mp + r) * f.wwpad + f.np - 1 - r
+                var mx = -3.0e38
+                for (k in range(f.np)) {
+                    mx = max(mx, (sc[crow + k] + sr[rrow + k]) * scale)
+                }
+                var tot = 0.0lf
+                for (k in range(f.np)) {
+                    let e = exp((sc[crow + k] + sr[rrow + k]) * scale - mx)
+                    want[crow + k] = pexp ? float(float16(e)) : e
+                    tot += double(e)
+                }
+                if (pexp) {
+                    wstat[h * f.mp + r] = float(1.0lf / tot)
+                } else {
+                    for (k in range(f.np)) {
+                        want[crow + k] = float(double(want[crow + k]) / tot)
+                    }
+                }
             }
         }
-        let bsc = mc |> in_(sc)
-        let bp = mc |> out_words(f.mp * f.nkp, -1.0e30)
-        let bsr = mc |> in_(sr)
+        var inscope sc16 <- [for (v in sc); float16(v)]
+        var inscope sr16 <- [for (v in sr); float16(v)]
+        let bsc = pexp ? (mc |> in_plain(sc16)) : (mc |> in_(sc))
+        let bsr = pexp ? (mc |> in_plain(sr16)) : (mc |> in_(sr))
+        let bout = mc |> out_words(pexp ? heads * f.mp : f.mp * f.nkp, -1.0e30)
         for (leg in range(2)) {
             if (leg == 1) {
-                sr[3 * f.wwpad + (f.np - 1 - 3) + 7] += 6.0
-                mc |> plane_upload(bsr, sr)
+                let at = ((heads - 1) * f.mp + 3) * f.wwpad + (f.np - 1 - 3) + 7
+                if (pexp) {
+                    mc |> plane_upload(bsc, sc16)
+                    sr16[at] = float16(float(sr16[at]) + 6.0)
+                    mc |> plane_upload(bsr, sr16)
+                } else {
+                    sr[at] += 6.0
+                    mc |> plane_upload(bsr, sr)
+                }
             }
             let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-                invoke(ks.enc, enc, pso, mc.buf[bsc], mc.buf[bsr], mc.buf[bp], ka, int64(f.mp))
+                if (pexp) {
+                    invoke(kpexp.enc, enc, pso, mc.buf[bsc], mc.buf[bsr], mc.buf[bout], ka, int64(f.mp), int64(heads))
+                } else {
+                    invoke(ksoft.enc, enc, pso, mc.buf[bsc], mc.buf[bsr], mc.buf[bout], ka, int64(f.mp))
+                }
             }
             return if (!ran)
-            if (leg == 0) {
-                check_buf(t, tag, mc.buf[bp], want, Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true), Shape(row_width = f.nkp))
+            if (leg == 0 && pexp) {
+                check_buf_h(t, "{tag} weights", mc.buf[bsc], want, Bar(rel = 1.2e-3, abs_floor = 1e-7, poison_scaled = true), Shape(row_width = f.nkp))
+                check_buf(t, "{tag} stat", mc.buf[bout], wstat, Bar(rel = 1e-5, abs_floor = 1e-7, poison_scaled = true), Shape(row_width = f.mp))
+            } elif (leg == 0) {
+                check_buf(t, tag, mc.buf[bout], want, Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true), Shape(row_width = f.nkp))
+            } elif (pexp) {
+                t |> success(mc |> rerun_mismatches(bsc, want, 1.2e-3, 1e-7, "{tag} rel-score poison (MUST mismatch)", true) > 0,
+                    "{tag}: a poisoned rel score reds the weights")
+                t |> success(mc |> rerun_mismatches(bout, wstat, 1e-5, 1e-7, "{tag} rel-score poison (MUST mismatch)") > 0,
+                    "{tag}: a poisoned rel score reds the stat")
             } else {
-                t |> success(mc |> rerun_mismatches(bp, want, 1e-5, 1e-6, "{tag} rel-score poison (MUST mismatch)") > 0,
+                t |> success(mc |> rerun_mismatches(bout, want, 1e-5, 1e-6, "{tag} rel-score poison (MUST mismatch)") > 0,
                     "{tag}: a poisoned rel score reds the bars")
             }
         }
@@ -618,173 +646,6 @@ def private fc_unpack_gate(t : T?; var dev, queue) {
             } else {
                 t |> success(mc |> rerun_mismatches(bao, want, 0.0, 0.0, "{tag} poison (MUST mismatch)") > 0,
                     "{tag}: a poisoned AV element reds the compare")
-            }
-        }
-    }
-}
-
-//! `buf_mismatches` over a buffer of halves, each widened to float
-def private half_mismatches(buf; want : array<float>; rel, abs_floor : float; tag : string) : int {
-    var inscope halves <- buf_download(buf, length(want), type<float16>)
-    var inscope got <- [for (h in halves); float(h)]
-    return mismatch_rel(tag, got, want, rel, abs_floor)
-}
-
-//! The all-heads form's half operands against the RNE narrow of the same f32 sum or product - one add or one
-//! multiply a value, so the device rounds as the host does and the bar is no difference at all.
-def private fc_twin_gate(t : T?; var dev, queue) {
-    let tag = "fc_twin"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let kp = kernel_of(@@enc_fc_twin)
-        var pso = mc |> keep_stamp(kp, err)
-        return if (!pso_ok(t, tag, pso, err))
-        let f = fc_fixture(dev)
-        var inscope(qv, kv, vv) <- f16_qkv_rows(f.np * f.d)
-        var inscope pl <- [for (i in range(f.ww * f.d)); float(float16(0.03 * float((i * 11) % 29) - 0.4))]
-        var inscope bu <- [for (i in range(f.d)); float(float16(0.02 * float(i % 19) - 0.15))]
-        var inscope bvv <- [for (i in range(f.d)); float(float16(0.015 * float((i * 3) % 23) - 0.11))]
-        var ka = fc_args(dev, f)
-        //! the oracle's five panels: the resize's zeros are the expected pad rows
-        var inscope wqu : array<float>
-        var inscope wqv : array<float>
-        var inscope wkh : array<float>
-        var inscope wvh : array<float>
-        var inscope wph : array<float>
-        wqu |> resize(f.mp * f.d)
-        wqv |> resize(f.mp * f.d)
-        wkh |> resize(f.nkp * f.d)
-        wvh |> resize(f.nkp * f.d)
-        wph |> resize(f.wwpad * f.d)
-        for (i in range(f.np * f.d)) {
-            let c = i % f.d
-            wqu[i] = float(float16(qv[i] + bu[c]))
-            wqv[i] = float(float16(qv[i] + bvv[c]))
-            wkh[i] = float(float16(kv[i] * ka.scale))
-            wvh[i] = float(float16(vv[i]))
-        }
-        for (i in range(f.ww * f.d)) {
-            wph[i] = float(float16(pl[i] * ka.scale))
-        }
-        let bq = mc |> in_(qv)
-        let bk = mc |> in_(kv)
-        let bv = mc |> in_(vv)
-        let bpl = mc |> in_(pl)
-        let bbu = mc |> in_(bu)
-        let bbv = mc |> in_(bvv)
-        let bqu = mc |> out_words(f.mp * f.d, float16(-77.0))
-        let bqv = mc |> out_words(f.mp * f.d, float16(-77.0))
-        let bkh = mc |> out_words(f.nkp * f.d, float16(-77.0))
-        let bvh = mc |> out_words(f.nkp * f.d, float16(-77.0))
-        let bph = mc |> out_words(f.wwpad * f.d, float16(-77.0))
-        let total = f.wwpad * f.d
-        // one poisoned input per rerun, the previous one's clean plane back first: each compare has its own control
-        for (leg in range(6)) {
-            if (leg == 1) {
-                mc |> plane_upload(bbu, poisoned_copy(bu, f.hs + 5, 2.0))
-            } elif (leg == 2) {
-                mc |> plane_upload(bbu, bu)
-                mc |> plane_upload(bbv, poisoned_copy(bvv, f.hs + 9, 2.0))
-            } elif (leg == 3) {
-                mc |> plane_upload(bbv, bvv)
-                mc |> plane_upload(bk, poisoned_copy(kv, 3 * f.d + f.hs + 1, 2.0))
-            } elif (leg == 4) {
-                mc |> plane_upload(bk, kv)
-                mc |> plane_upload(bv, poisoned_copy(vv, 5 * f.d + f.hs + 2, 2.0))
-            } elif (leg == 5) {
-                mc |> plane_upload(bv, vv)
-                mc |> plane_upload(bpl, poisoned_copy(pl, 11 * f.d + f.hs + 3, 2.0))
-            }
-            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-                invoke(kp.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[bv], mc.buf[bpl], mc.buf[bbu], 0ul, mc.buf[bbv], 0ul,
-                    mc.buf[bqu], mc.buf[bqv], mc.buf[bkh], mc.buf[bvh], mc.buf[bph], ka, int64(total))
-            }
-            if (leg == 0) {
-                return if (!ran)
-                check_buf_h(t, "{tag} Q+u", mc.buf[bqu], wqu, BAR_ZERO, Shape(row_width = f.d, head_width = f.hs))
-                check_buf_h(t, "{tag} Q+v", mc.buf[bqv], wqv, BAR_ZERO, Shape(row_width = f.d, head_width = f.hs))
-                check_buf_h(t, "{tag} K", mc.buf[bkh], wkh, BAR_ZERO, Shape(row_width = f.d, head_width = f.hs))
-                check_buf_h(t, "{tag} V", mc.buf[bvh], wvh, BAR_ZERO, Shape(row_width = f.d, head_width = f.hs))
-                check_buf_h(t, "{tag} pos", mc.buf[bph], wph, BAR_ZERO, Shape(row_width = f.d, head_width = f.hs))
-            } elif (!ran) {
-                continue
-            } elif (leg == 1) {
-                t |> success(half_mismatches(mc.buf[bqu], wqu, 0.0, 0.0, "{tag} bias_u poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned content bias reds the Q+u panel")
-            } elif (leg == 2) {
-                t |> success(half_mismatches(mc.buf[bqv], wqv, 0.0, 0.0, "{tag} bias_v poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned rel bias reds the Q+v panel")
-            } elif (leg == 3) {
-                t |> success(half_mismatches(mc.buf[bkh], wkh, 0.0, 0.0, "{tag} K poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned K element reds the K panel")
-            } elif (leg == 4) {
-                t |> success(half_mismatches(mc.buf[bvh], wvh, 0.0, 0.0, "{tag} V poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned V element reds the V panel")
-            } else {
-                t |> success(half_mismatches(mc.buf[bph], wph, 0.0, 0.0, "{tag} pos poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned rel-table element reds the pos panel")
-            }
-        }
-    }
-}
-
-//! np = 24 keeps every live key in simdgroup 0; np = 300 fills every simdgroup and strides each lane twice.
-//! Bars: a weight is the half of a fast-math exp (2 ulp of f32), which can land on the neighbouring half -
-//! one half step is 1e-3 relative, 1e-7 absolute covers the subnormal weights; a stat is one over an f32
-//! lane-then-simdgroup sum against the oracle's double sum, 1e-5 relative as the per-head softmax cell's.
-def private fc_pexp_gate(t : T?; var dev, queue; np : int) {
-    let tag = "fc_pexp np{np}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let ks = kernel_of(@@enc_fc_pexp)
-        var pso = mc |> keep_stamp(ks, err)
-        return if (!pso_ok(t, tag, pso, err))
-        let f = fc_fixture(dev, np)
-        var inscope sc <- [for (i in range(f.heads * f.mp * f.nkp)); float16(0.25 * float((i * 7) % 31) - 3.5)]
-        var inscope sr <- [for (i in range(f.heads * f.mp * f.wwpad)); float16(0.2 * float((i * 5) % 37) - 3.3)]
-        var ka = fc_args(dev, f)
-        //! a pad row and a pad column keep the scores they held; a pad row's stat is 0 (the resize's zeros)
-        var inscope want <- [for (h in sc); float(h)]
-        var inscope wstat : array<float>
-        wstat |> resize(f.heads * f.mp)
-        for (h in range(f.heads)) {
-            for (r in range(f.np)) {
-                let crow = (h * f.mp + r) * f.nkp
-                let rrow = (h * f.mp + r) * f.wwpad + f.np - 1 - r
-                var mx = -3.0e38
-                for (k in range(f.np)) {
-                    mx = max(mx, float(sc[crow + k]) + float(sr[rrow + k]))
-                }
-                var tot = 0.0lf
-                for (k in range(f.np)) {
-                    let e = exp(float(sc[crow + k]) + float(sr[rrow + k]) - mx)
-                    want[crow + k] = float(float16(e))
-                    tot += double(e)
-                }
-                wstat[h * f.mp + r] = float(1.0lf / tot)
-            }
-        }
-        let batt = mc |> in_plain(sc)
-        let bsr = mc |> in_plain(sr)
-        let bstat = mc |> out_words(f.heads * f.mp, -1.0e30)
-        for (leg in range(2)) {
-            if (leg == 1) {
-                mc |> plane_upload(batt, sc)
-                sr[(f.mp + 3) * f.wwpad + (f.np - 1 - 3) + 7] = float16(float(sr[(f.mp + 3) * f.wwpad + (f.np - 1 - 3) + 7]) + 6.0)
-                mc |> plane_upload(bsr, sr)
-            }
-            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-                invoke(ks.enc, enc, pso, mc.buf[batt], mc.buf[bsr], mc.buf[bstat], ka, int64(f.mp), int64(f.heads))
-            }
-            return if (!ran)
-            if (leg == 0) {
-                check_buf_h(t, "{tag} weights", mc.buf[batt], want, Bar(rel = 1.2e-3, abs_floor = 1e-7, poison_scaled = true), Shape(row_width = f.nkp))
-                check_buf(t, "{tag} stat", mc.buf[bstat], wstat, Bar(rel = 1e-5, abs_floor = 1e-7, poison_scaled = true), Shape(row_width = f.mp))
-            } else {
-                t |> success(half_mismatches(mc.buf[batt], want, 1.2e-3, 1e-7, "{tag} rel-score poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned rel score reds the weights")
-                t |> success(buf_mismatches(mc.buf[bstat], wstat, 1e-5, 1e-7, "{tag} rel-score poison (MUST mismatch)") > 0,
-                    "{tag}: a poisoned rel score reds the stat")
             }
         }
     }
@@ -2852,13 +2713,13 @@ def test_metal_prefill_kernels(t : T?) {
                 tower_flash_kvhc_gate(t, dev, queue)
                 tower_win_gate(t, dev, queue)
                 g4a_attn_gate(t, dev, queue)
-                fc_pack_gate(t, dev, queue)
-                fc_softmax_gate(t, dev, queue, 24)
-                fc_softmax_gate(t, dev, queue, 300)
+                fc_operands_gate(t, dev, queue, false)
+                fc_row_gate(t, dev, queue, 24, false)
+                fc_row_gate(t, dev, queue, 300, false)
                 fc_unpack_gate(t, dev, queue)
-                fc_twin_gate(t, dev, queue)
-                fc_pexp_gate(t, dev, queue, 24)
-                fc_pexp_gate(t, dev, queue, 300)
+                fc_operands_gate(t, dev, queue, true)
+                fc_row_gate(t, dev, queue, 24, true)
+                fc_row_gate(t, dev, queue, 300, true)
                 fc_dw_gate(t, dev, queue, false)
                 fc_dw_gate(t, dev, queue, true)
                 pk_front_conv_gate(t, dev, queue, true)
@@ -4145,6 +4006,37 @@ def test_tallkq_pick(t : T?) {
     }
 }
 
+//! the resident panel registry's two classes on the driver's device: an uncharged panel (a routed layer's router rows)
+//! is served outside the dev-W budget and charges nothing, a charged one answers to the budget
+[test]
+def test_resident_panel_charge(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_metal_decode_gate(t) $(var queue : MetalCommandQueue?) {
+            t |> success(queue != null, "the driver's device is up")
+            metal_prefill_shutdown()
+            let before = metal_prefill_resident_ask(0x51ul, 4096ul, false)
+            t |> success(before.got && before.fresh, "an uncharged ask makes its panel")
+            t |> equal(before.charged_bytes, 0ul, "and charges nothing")
+            let again = metal_prefill_resident_ask(0x51ul, 4096ul, false)
+            t |> success(again.got && !again.fresh, "the same key answers with the panel it made")
+            let foreign = metal_prefill_resident_ask(0x51ul, 8192ul, false)
+            t |> success(!foreign.got, "a hit of another size is refused")
+            let charged = metal_prefill_resident_ask(0x52ul, 4096ul, true)
+            let want = charged.got ? 4096ul : 0ul
+            t |> equal(charged.charged_bytes, want, "a charged ask counts its bytes exactly when the budget serves it")
+            t |> success(charged.got || !charged.fresh, "a refused ask makes nothing")
+            metal_prefill_shutdown()
+            let after = metal_prefill_resident_ask(0x52ul, 4096ul, false)
+            t |> success(after.got && after.fresh, "the shutdown dropped the registry: the key is made again")
+            t |> equal(after.charged_bytes, 0ul, "with the charge back at zero")
+            metal_prefill_shutdown()
+        }
+        t |> equal(metal_log_leaks_if_any(), 0l)
+    } else {
+        t |> skip("das_metal is not built on this platform; the registry is not compiled")
+    }
+}
+
 def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim : int; counts : array<int>) {
     let tag = "moe {fmt} mulmm"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -4293,6 +4185,70 @@ def private moe_combine_gate(t : T?; var dev, queue; dim, k : int) {
 
 // ===== deltanet kernel gates (Wave D) =====
 
+//! the sequential delta rule per v-head over the conv rows `cv` from state `st0` (k-heads fan via h % nkh): the beta and decay gates, the output rows, the last state and the state after row npos - 2 (the dual store's)
+def private dn_rule_oracle(cv, braw, graw, aa, dtb, st0 : array<float>; nkh, nvh, npos, ds : int) : tuple<beta : array<float>; decay : array<float>; o : array<float>; st : array<float>; stmid : array<float>> {
+    let kd = nkh * ds
+    let di = nvh * ds
+    let cd = 2 * kd + di
+    var beta <- [for (v in braw); 1.0 / (1.0 + exp(-v))]
+    var decay : array<float>
+    decay |> resize(npos * nvh)
+    for (p in range(npos)) {
+        for (h in range(nvh)) {
+            let gr = graw[p * nvh + h] + dtb[h]
+            decay[p * nvh + h] = exp(aa[h] * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
+        }
+    }
+    var o : array<float>
+    var st : array<float>
+    var stmid : array<float>
+    var inscope skd : array<float>
+    o |> resize(npos * di)
+    st := st0
+    stmid |> resize(nvh * ds * ds)
+    skd |> resize(ds)
+    for (h in range(nvh)) {
+        let kh = h % nkh
+        let sb = h * ds * ds
+        for (p in range(npos)) {
+            let dec = decay[p * nvh + h]
+            let qb = p * cd + kh * ds
+            let kb = p * cd + kd + kh * ds
+            let vb = p * cd + 2 * kd + h * ds
+            for (j in range(ds)) {
+                skd[j] = 0.0
+            }
+            for (i in range(ds)) {
+                let ki = cv[kb + i]
+                for (j in range(ds)) {
+                    let sv = st[sb + i * ds + j] * dec
+                    st[sb + i * ds + j] = sv
+                    skd[j] += ki * sv
+                }
+            }
+            for (j in range(ds)) {
+                skd[j] = (cv[vb + j] - skd[j]) * beta[p * nvh + h]
+                o[p * di + h * ds + j] = 0.0
+            }
+            for (i in range(ds)) {
+                let ki = cv[kb + i]
+                let qi = cv[qb + i]
+                for (j in range(ds)) {
+                    let sv = st[sb + i * ds + j] + ki * skd[j]
+                    st[sb + i * ds + j] = sv
+                    o[p * di + h * ds + j] += qi * sv
+                }
+            }
+            if (p + 2 == npos) {
+                for (k in range(ds * ds)) {
+                    stmid[sb + k] = st[sb + k]
+                }
+            }
+        }
+    }
+    return <- (beta = beta, decay = decay, o = o, st = st, stmid = stmid)
+}
+
 //! MetalDnPrep + MetalDnScanH vs the sequential rule on f16-lattice rows (so the f32 bar); gates compared alone; a rerun on the left state must miss
 def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
     let ds = 128
@@ -4314,57 +4270,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
         var inscope aa <- [for (k in range(nvh)); -(0.4 + 0.15 * float(k))]
         var inscope dtb <- [for (k in range(nvh)); 0.1 * float(k) - 0.2]
         var inscope st0 <- [for (k in range(nvh * ds * ds)); 0.01 * float(k % 37) - 0.18]
-        var inscope bwant <- [for (v in braw); 1.0 / (1.0 + exp(-v))]
-        var inscope gwant : array<float>
-        gwant |> resize(npos * nvh)
-        for (p in range(npos)) {
-            for (h in range(nvh)) {
-                let gr = graw[p * nvh + h] + dtb[h]
-                gwant[p * nvh + h] = exp(aa[h] * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
-            }
-        }
-        var inscope owant : array<float>
-        var inscope stw : array<float>
-        var inscope skd : array<float>
-        owant |> resize(npos * di)
-        stw := st0
-        skd |> resize(ds)
-        var inscope stmid : array<float>   //! the state after row npos - 2, what the dual store keeps
-        stmid |> resize(nvh * ds * ds)
-        for (h in range(nvh)) {
-            let kh = h % nkh
-            let sb = h * ds * ds
-            for (p in range(npos)) {
-                let dec = gwant[p * nvh + h]
-                let qb = p * cd + kh * ds
-                let kb = p * cd + kd + kh * ds
-                let vb = p * cd + 2 * kd + h * ds
-                for (j in range(ds)) {
-                    skd[j] = 0.0
-                }
-                for (i in range(ds)) {
-                    for (j in range(ds)) {
-                        stw[sb + i * ds + j] *= dec
-                        skd[j] += cv[kb + i] * stw[sb + i * ds + j]
-                    }
-                }
-                for (j in range(ds)) {
-                    skd[j] = (cv[vb + j] - skd[j]) * bwant[p * nvh + h]
-                    owant[p * di + h * ds + j] = 0.0
-                }
-                for (i in range(ds)) {
-                    for (j in range(ds)) {
-                        stw[sb + i * ds + j] += cv[kb + i] * skd[j]
-                        owant[p * di + h * ds + j] += cv[qb + i] * stw[sb + i * ds + j]
-                    }
-                }
-                if (p + 2 == npos) {
-                    for (k in range(ds * ds)) {
-                        stmid[sb + k] = stw[sb + k]
-                    }
-                }
-            }
-        }
+        var inscope(bwant, gwant, owant, stw, stmid) <- dn_rule_oracle(cv, braw, graw, aa, dtb, st0, nkh, nvh, npos, ds)
         var inscope cvh <- [for (v in cv); float16(v)]
         var ka = DnArgs(cd = uint(cd), dconv = 4u, npos = uint(npos), kd = uint(kd), ds = uint(ds),
             nvh = uint(nvh), nkh = uint(nkh), di = uint(di), eps = EPS, qscale = 1.0)
@@ -4623,57 +4529,7 @@ def private dn_chain_gate(t : T?; var dev, queue; nkh, nvh, dconv, npos : int) {
         }
         check_buf(t, "dn l2norm npos={npos}", mc.buf[by], cv, BAR_FP, Shape(row_width = cd, head_width = ds))
         // stage 3 mirror: the sequential delta rule per v-head (k-heads fan via h % nkh)
-        var inscope owant : array<float>
-        var inscope stw : array<float>
-        var inscope stmid : array<float>
-        var inscope skd : array<float>
-        owant |> resize(npos * di)
-        stw := st0
-        if (npos >= 2) {
-            stmid |> resize(nvh * ds * ds)
-        }
-        skd |> resize(ds)
-        for (h in range(nvh)) {
-            let kh = h % nkh
-            let sb = h * ds * ds
-            for (p in range(npos)) {
-                let gr = graw[p * nvh + h] + dtb[h]
-                let dec = exp(aa[h] * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
-                let beta = 1.0 / (1.0 + exp(-braw[p * nvh + h]))
-                let qb = p * cd + kh * ds
-                let kb = p * cd + kd + kh * ds
-                let vb = p * cd + 2 * kd + h * ds
-                for (j in range(ds)) {
-                    skd[j] = 0.0
-                }
-                for (i in range(ds)) {
-                    let ki = cv[kb + i]
-                    for (j in range(ds)) {
-                        let sv = stw[sb + i * ds + j] * dec
-                        stw[sb + i * ds + j] = sv
-                        skd[j] += ki * sv
-                    }
-                }
-                for (j in range(ds)) {
-                    skd[j] = (cv[vb + j] - skd[j]) * beta
-                    owant[p * di + h * ds + j] = 0.0
-                }
-                for (i in range(ds)) {
-                    let ki = cv[kb + i]
-                    let qi = cv[qb + i]
-                    for (j in range(ds)) {
-                        let sv = stw[sb + i * ds + j] + ki * skd[j]
-                        stw[sb + i * ds + j] = sv
-                        owant[p * di + h * ds + j] += qi * sv
-                    }
-                }
-                if (npos >= 2 && p == npos - 2) {   // the dual-store point: state after token npos-2
-                    for (k in range(ds * ds)) {
-                        stmid[sb + k] = stw[sb + k]
-                    }
-                }
-            }
-        }
+        var inscope(_, _, owant, stw, stmid) <- dn_rule_oracle(cv, braw, graw, aa, dtb, st0, nkh, nvh, npos, ds)
         let bst = mc |> io_(st0)
         let bbr = mc |> in_(braw)
         let bgr = mc |> in_(graw)

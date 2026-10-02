@@ -237,7 +237,7 @@ still spinning when the step's command is submitted starves the driver's submiss
 the pod (48 vCPUs, `-jit`, `benchmarks/lcpp_bench.das --npl 4`; `PERF_LEDGER.md`'s 2026-09-19
 section) Llama-3.2-1B at four streams read 707 tok/s summed under the 30 ms window and 1053 under
 500 us, the knee at the step's own length. So the Vulkan driver's arm and drop (`rdec_set_active`)
-and a Metal driver's served forward (`metal_note_served`, until the next weights load) report to
+and a Metal driver's served forward (`metal_served`, until the next weights load) report to
 `set_dispatch_gpu_served`, which pushes the GPU window (`g_jobque_spin_gpu_us`, 500 us) to the live
 queue; `setup_dasllama_jobque` reads the window in force for a queue made later. Under the CPU
 window the pool's workers spin through a Metal prefill, and its windows slow within seconds.

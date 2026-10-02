@@ -20,7 +20,8 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   `mm_blob_b`/`mm_bf16_b`/`mm_plane_b` GEMM wrappers, `Clamp`/`read_clamp` (`read_clamp` returns
   the four scalars the projector file stores beside a weight tensor - `<base>.input_min` /
   `.input_max` / `.output_min` / `.output_max` - or an inactive +/-FLT_MAX clamp where the file
-  carries none), `im2col_rgb_patches`, `rope_neox_2d_rows`, `rope_neox_tab_rows`, `avg_pool2d_rows`,
+  carries none), `im2col_rgb_patches`, the Transformer-XL rel-position table `rel_pos_table`
+  (each FastConformer family keeps only its requant and memo), `rope_neox_2d_rows`, `rope_neox_tab_rows`, `avg_pool2d_rows`,
   `interpolate_grid_bilinear_aa`, `tower_read_conv_pair_folded`, the padded stage readers
   (`tower_read_gemm_q8`, `tower_stage_q8_zero_rows`/`tower_stage_q8_pad_cols` and their f32
   twins `tower_stage_f32_zero_rows`/`tower_stage_f32_pad_cols` - the load-scope padded

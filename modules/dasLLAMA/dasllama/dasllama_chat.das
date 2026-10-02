@@ -837,10 +837,8 @@ def private render_think_suppress(m : Model; c : ChatSession; var out : array<in
 //! Render the next turn's prefill token ids — BOS + system on the first turn, then the user turn and
 //! the generation prompt — WITHOUT running the model. For inspection, token counting, and tests.
 def render_turn_(m : Model; c : ChatSession) : array<int64> {
-    var out : array<int64>
-    render_prompt(m, c, out)
-    render_think_suppress(m, c, out)
-    return <- out
+    var turn <- render_turn_marked_(m, c)
+    return <- turn.toks
 }
 
 //! A rendered turn and the length of its opening: the leading tokens the pending turn's own text does not reach.

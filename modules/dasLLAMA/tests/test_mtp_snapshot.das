@@ -35,17 +35,23 @@ def test_first_snapshot_of_a_large_recurrent_state(t : T?) {
     }
     s.dn_conv_state[nc / 2l] = 0.75
     s.dn_pos = 17l
+    s.ple_prev <- [41l, 42l]
+    s.ple_conv_hist <- [for (i in range64(12l)); float(100l + i)]
     mtp_state_snapshot(s)
-    t |> equal(long_length(s.mtp_snap_state), ns, "the state snapshot holds every float")
-    t |> equal(long_length(s.mtp_snap_conv), nc, "the conv snapshot holds every float")
-    t |> equal(s.mtp_snap_pos, 17l, "the position rides along")
+    t |> equal(long_length(s.mtp_snap.state), ns, "the state snapshot holds every float")
+    t |> equal(long_length(s.mtp_snap.conv), nc, "the conv snapshot holds every float")
+    t |> equal(s.mtp_snap.pos, 17l, "the position rides along")
     s.dn_state[ns - 1l] = -9.0
     for (li in range64(lanes)) {
         s.dn_state[li * ns / lanes + 1000l] = -9.0
     }
     s.dn_conv_state[nc / 2l] = -9.0
     s.dn_pos = 18l
+    s.ple_prev[1] = 77l           // a rejected draft joined the n-gram window
+    s.ple_conv_hist[5] = -9.0     // and its row landed in the ring
     mtp_state_restore(s)
+    t |> success(s.ple_prev[0] == 41l && s.ple_prev[1] == 42l, "restore puts the n-gram window back ({s.ple_prev[0]}, {s.ple_prev[1]})")
+    t |> equal(s.ple_conv_hist[5], 105.0, "restore puts the ring row the rejected draft wrote back")
     t |> equal(s.dn_state[ns - 1l], 1.5, "restore puts the snapshot back")
     for (li in range64(lanes)) {
         t |> equal(s.dn_state[li * ns / lanes + 1000l], 3.0 + float(li), "restore covers lane {li}'s span, not only the last element")

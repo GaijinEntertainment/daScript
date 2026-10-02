@@ -1365,6 +1365,28 @@ def dn_mirror_release(mr : DnMirror) {
     }
 }
 
+//! The session's host state and conv arrays against the mirror's region `region`, and the n-gram ring against
+//! its one copy past the regions: mirror to host under `to_host`, host to mirror otherwise.
+def private dn_mirror_copy(var s : Session; mr : DnMirror; region : int64; to_host : bool) {
+    let base = uint64(region) * mr.region_bytes
+    unsafe {
+        var dev = reinterpret<uint8?>(metal_buffer_contents(mr.buf))
+        var spans = fixed_array(
+            (host = addr<void?>(s.dn_state[0]), dev = reinterpret<void?>(dev + base), bytes = long_length(s.dn_state) * 4l),
+            (host = addr<void?>(s.dn_conv_state[0]), dev = reinterpret<void?>(dev + base + mr.conv_off), bytes = long_length(s.dn_conv_state) * 4l),
+            (host = empty(s.ple_conv_hist) ? null : addr<void?>(s.ple_conv_hist[0]),
+                dev = reinterpret<void?>(dev + mr.region_bytes * uint64(mr.regions)), bytes = long_length(s.ple_conv_hist) * 4l))
+        for (sp in spans) {
+            continue if (sp.bytes == 0l)
+            if (to_host) {
+                memcpy(sp.host, sp.dev, sp.bytes)
+            } else {
+                memcpy(sp.dev, sp.host, sp.bytes)
+            }
+        }
+    }
+}
+
 //! A region is [state planes][conv planes]; the n-gram PLE conv ring sits ONCE past every region - it rides
 //! the recurrent mirror because it is the same kind of state (forward-only, per session, synced from the CPU
 //! prefix), but the verify's shadow flip must never retire it: its rows land only for committed positions
@@ -1408,14 +1430,7 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
             return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul, ple_off = 0ul)
         }
         // the CPU ran positions [0, pos) — its state is the source of truth; sync it into region 0
-        unsafe {
-            var dst = reinterpret<uint8?>(metal_buffer_contents(g_dn_mirrors[s.uid].buf))
-            memcpy(reinterpret<void?>(dst), addr<void?>(s.dn_state[0]), sbytes)
-            memcpy(reinterpret<void?>(dst + sbytes), addr<void?>(s.dn_conv_state[0]), cbytes)
-            if (pbytes > 0ul) {
-                memcpy(reinterpret<void?>(dst + rb * uint64(regions)), addr<void?>(s.ple_conv_hist[0]), pbytes)
-            }
-        }
+        dn_mirror_copy(s, g_dn_mirrors[s.uid], 0l, false)
         g_dn_mirrors[s.uid].cur = 0l
         g_dn_mirrors[s.uid].pos = pos
     }
@@ -1438,18 +1453,7 @@ def private dn_mirror_to_host(var s : Session) {
     if (mr.pos < 0l || mr.pos == s.dn_pos) {
         return
     }
-    let sbytes = uint64(long_length(s.dn_state)) * 4ul
-    let cbytes = uint64(long_length(s.dn_conv_state)) * 4ul
-    let pbytes = uint64(long_length(s.ple_conv_hist)) * 4ul
-    unsafe {
-        let src = reinterpret<uint8?>(metal_buffer_contents(mr.buf))
-        let base = uint64(mr.cur) * mr.region_bytes
-        memcpy(addr<void?>(s.dn_state[0]), reinterpret<void?>(src + base), sbytes)
-        memcpy(addr<void?>(s.dn_conv_state[0]), reinterpret<void?>(src + base + mr.conv_off), cbytes)
-        if (pbytes > 0ul) {
-            memcpy(addr<void?>(s.ple_conv_hist[0]), reinterpret<void?>(src + mr.region_bytes * uint64(mr.regions)), pbytes)
-        }
-    }
+    dn_mirror_copy(s, mr, mr.cur, true)
     s.dn_pos = mr.pos
 }
 
@@ -2292,13 +2296,14 @@ def register_reload_prep(f : function<void>) {
     g_reload_preps |> push(f)
 }
 
-//! A Metal driver served a forward: the pool takes the GPU-served spin window, where it stays until
-//! the next weights load. Workers spinning the CPU window through a GPU window burn a core each.
+//! A Metal driver's forward answer, passed through: a served one (`ok`) puts the pool on the GPU-served spin
+//! window, where it stays until the next weights load. Workers spinning the CPU window through a GPU window burn a core each.
 [arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-spin")]
-def metal_note_served {
-    if (!get_dispatch_gpu_served()) {
+def metal_served(ok : bool) : bool {
+    if (ok && !get_dispatch_gpu_served()) {
         set_dispatch_gpu_served(true)
     }
+    return ok
 }
 
 def private metal_spin_window_reset {

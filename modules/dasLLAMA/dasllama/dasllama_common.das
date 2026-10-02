@@ -2242,6 +2242,17 @@ def finalize(var o : DnOwner) {
     moe_gpu_dn_release(o.state_lo, o.state_hi)
 }
 
+//! A session's forward-only state at one position: the recurrent layers' conv history and S, and
+//! the n-gram side input's ring and window. With the K/V rows below `pos` it continues a prompt.
+struct DnSnapshot {
+    pos : int64
+    @exact_size conv : array<float>
+    @exact_size state : array<float>
+    @exact_size ple_hist : array<float>
+    ple_prev : array<int64>
+    mtp_h : array<float>   //! the draft head's carry at `pos` - empty when it stood elsewhere
+}
+
 //! Per-step scratch buffers and the KV cache (allocated once, reused every token).
 struct Session {
     // Stable identity for device-side mirrors (Metal decode KV mirror keys on it): monotonic per
@@ -2542,11 +2553,7 @@ struct Session {
     @scratch mtp_picks : array<int64>      //! the last served verify seat's per-row picks, each its row's argmax: the greedy walk's truth, and the token a pick-asking round commits
     mtp_drafted : int64            // session-lifetime telemetry: drafts attempted / accepted
     mtp_accepted : int64
-    // deltanet rollback for a rejected verify batch, sized lazily on the first snapshot (a 27B hybrid's state is 151 MB)
-    @scratch mtp_snap_conv : array<float>
-    @scratch mtp_snap_state : array<float>
-    @scratch mtp_snap_ple : array<int64>   // the n-gram window before the verify (forward-only state like the deltanet's)
-    mtp_snap_pos : int64
+    mtp_snap : DnSnapshot   //! the rollback for a rejected verify batch, sized on the first snapshot (a 27B hybrid's state is 151 MB) and overwritten after
 }
 
 // Block-codec KV (q8_0/tq4) needs whole 32-blocks everywhere the cache is sliced: rows (kv_dim)
@@ -5066,43 +5073,62 @@ def private copy_floats_par(src : array<float>; var dst : array<float>; n : int6
     }
 }
 
-//! Snapshot/restore the deltanet recurrent state (conv history + S + dn_pos) around a speculative
-//! verify batch: a rejected draft has already advanced the state past itself. KV rows stay correct;
-//! only the recurrent state rolls back, then one plain forward re-advances it.
-def mtp_state_snapshot(var s : Session) {
-    dn_flush_all(s)   // the snapshot must capture device-resident decode-step state
+//! the n-gram window `src` over `dst`: `grow` sizes `dst` to it, else the copy stops at the shorter of the two
+def private ple_window_copy(src : array<int64>; var dst : array<int64>; grow : bool) {
+    if (grow) {
+        dst |> overwrite_resize(long_length(src))
+    }
+    for (i in range64(min(long_length(src), long_length(dst)))) {
+        dst[i] = src[i]
+    }
+}
+
+//! The session's host arrays, window and position into `snap`, whose buffers grow once and are overwritten after.
+def private dn_snapshot_into(s : Session; var snap : DnSnapshot) {
     let nc = long_length(s.dn_conv_state)
     let ns = long_length(s.dn_state)
-    s.mtp_snap_conv |> overwrite_resize(nc)   // reserves once, a no-op after the first call
-    s.mtp_snap_state |> overwrite_resize(ns)
-    copy_floats_par(s.dn_conv_state, s.mtp_snap_conv, nc)
-    copy_floats_par(s.dn_state, s.mtp_snap_state, ns)
-    s.mtp_snap_pos = s.dn_pos
-    mtp_ple_window_snapshot(s)
+    let np = long_length(s.ple_conv_hist)
+    snap.conv |> overwrite_resize(nc)
+    snap.state |> overwrite_resize(ns)
+    snap.ple_hist |> overwrite_resize(np)
+    copy_floats_par(s.dn_conv_state, snap.conv, nc)
+    copy_floats_par(s.dn_state, snap.state, ns)
+    copy_floats_par(s.ple_conv_hist, snap.ple_hist, np)
+    ple_window_copy(s.ple_prev, snap.ple_prev, true)
+    snap.pos = s.dn_pos
 }
 
-//! the n-gram window into `mtp_snap_ple`: forward-only state, so a rejected draft must not stay a predecessor
+//! `snap`'s arrays, window and position into the session's host state, and no device copy standing.
+def private dn_snapshot_apply(var s : Session; snap : DnSnapshot) {
+    copy_floats_par(snap.conv, s.dn_conv_state, long_length(snap.conv))
+    copy_floats_par(snap.state, s.dn_state, long_length(snap.state))
+    copy_floats_par(snap.ple_hist, s.ple_conv_hist, min(long_length(snap.ple_hist), long_length(s.ple_conv_hist)))
+    ple_window_copy(snap.ple_prev, s.ple_prev, false)
+    s.dn_pos = snap.pos
+    moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
+}
+
+//! Snapshot/restore the forward-only state around a speculative verify batch: a rejected draft has
+//! already advanced the state past itself. KV rows stay correct; only this state rolls back, then
+//! one plain forward re-advances it.
+def mtp_state_snapshot(var s : Session) {
+    dn_flush_all(s)   // the snapshot must capture device-resident decode-step state
+    dn_snapshot_into(s, s.mtp_snap)
+}
+
+//! the n-gram window into the round's snapshot: forward-only state, so a rejected draft must not stay a predecessor
 def mtp_ple_window_snapshot(var s : Session) {
-    s.mtp_snap_ple |> overwrite_resize(long_length(s.ple_prev))
-    for (i in range64(long_length(s.ple_prev))) {
-        s.mtp_snap_ple[i] = s.ple_prev[i]
-    }
+    ple_window_copy(s.ple_prev, s.mtp_snap.ple_prev, true)
 }
 
-//! the window back from `mtp_snap_ple`
+//! the window back from the round's snapshot
 def mtp_ple_window_restore(var s : Session) {
-    for (i in range64(min(long_length(s.ple_prev), long_length(s.mtp_snap_ple)))) {
-        s.ple_prev[i] = s.mtp_snap_ple[i]
-    }
+    ple_window_copy(s.mtp_snap.ple_prev, s.ple_prev, false)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
 def mtp_state_restore(var s : Session) {
-    copy_floats_par(s.mtp_snap_conv, s.dn_conv_state, long_length(s.mtp_snap_conv))
-    copy_floats_par(s.mtp_snap_state, s.dn_state, long_length(s.mtp_snap_state))
-    s.dn_pos = s.mtp_snap_pos
-    mtp_ple_window_restore(s)
-    moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
+    dn_snapshot_apply(s, s.mtp_snap)
 }
 
 typedef DnHostSyncFn = function<(var s : Session) : void>
@@ -5124,30 +5150,11 @@ def dn_state_to_host(var s : Session) {
     }
 }
 
-//! A session's forward-only state at one position: the recurrent layers' conv history and S, and
-//! the n-gram side input's ring and window. With the K/V rows below `pos` it continues a prompt.
-struct DnSnapshot {
-    pos : int64
-    @exact_size conv : array<float>
-    @exact_size state : array<float>
-    @exact_size ple_hist : array<float>
-    ple_prev : array<int64>
-    mtp_h : array<float>   //! the draft head's carry at `pos` - empty when it stood elsewhere
-}
-
 //! The recurrent state as it stands (brought to the host first), `pos` the position it expects next.
 def dn_snapshot_take(var s : Session) : DnSnapshot {
     dn_state_to_host(s)
-    var snap <- DnSnapshot(pos = s.dn_pos, ple_prev := s.ple_prev)
-    let nc = long_length(s.dn_conv_state)
-    let ns = long_length(s.dn_state)
-    let np = long_length(s.ple_conv_hist)
-    snap.conv |> reserve_resize(nc)
-    snap.state |> reserve_resize(ns)
-    snap.ple_hist |> reserve_resize(np)
-    copy_floats_par(s.dn_conv_state, snap.conv, nc)
-    copy_floats_par(s.dn_state, snap.state, ns)
-    copy_floats_par(s.ple_conv_hist, snap.ple_hist, np)
+    var snap : DnSnapshot
+    dn_snapshot_into(s, snap)
     if (s.mtp_h_pos1 == s.dn_pos && s.dn_pos > 0l) {
         snap.mtp_h := s.mtp_h
     }
@@ -5160,14 +5167,7 @@ def dn_snapshot_restore(var s : Session; snap : DnSnapshot) {
     if (long_length(snap.state) != long_length(s.dn_state) || long_length(snap.conv) != long_length(s.dn_conv_state)) {
         panic("dn_snapshot_restore: the snapshot holds {long_length(snap.state)} state and {long_length(snap.conv)} conv floats, the session {long_length(s.dn_state)} and {long_length(s.dn_conv_state)} - another model's")
     }
-    copy_floats_par(snap.conv, s.dn_conv_state, long_length(snap.conv))
-    copy_floats_par(snap.state, s.dn_state, long_length(snap.state))
-    copy_floats_par(snap.ple_hist, s.ple_conv_hist, min(long_length(snap.ple_hist), long_length(s.ple_conv_hist)))
-    for (i in range64(min(long_length(s.ple_prev), long_length(snap.ple_prev)))) {
-        s.ple_prev[i] = snap.ple_prev[i]
-    }
-    s.dn_pos = snap.pos
-    moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
+    dn_snapshot_apply(s, snap)
     if (!empty(snap.mtp_h)) {
         s.mtp_h := snap.mtp_h
     }

@@ -425,6 +425,30 @@ def private tmm2d_zero_acc(var acc; m, n : uint) {
     }
 }
 
+//! acc[r][j] (+)= sum_k a[r*lda + k] * b[j*ldb + k] (b[k*ldb + j] when natural_b), k < kk; overwrites unless accumulate.
+def private tmm2d_acc_step(var acc; a; lda : uint; b; ldb : uint; natural_b, accumulate : bool; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    let bk = natural_b ? int(ldb) : 1
+    let bj = natural_b ? 1 : int(ldb)
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (k in range(int(kk))) {
+                    facc += float(a[r * int(lda) + k]) * float(b[j * bj + k * bk])
+                }
+                if (accumulate) {
+                    acc[r * int(n) + j] += facc
+                } else {
+                    acc[r * int(n) + j] = facc
+                }
+            }
+        }
+    }
+}
+
 //! begin: zero the accumulator. m/n/sgs/kk must be call-site constants (kk = chunk K width).
 [unused_argument(sgs, kk), sideeffects]
 def public tmm2d_tg_begin(var acc; m, n, sgs, kk : uint) {
@@ -435,36 +459,14 @@ def public tmm2d_tg_begin(var acc; m, n, sgs, kk : uint) {
 //! tb flat [n][kk] f16, both row-major. Call between the same barriers the staging uses.
 [sideeffects]
 def public tmm2d_tg_step(var acc; ta; tb; m, n, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    for (r in range(int(m))) {
-        for (j in range(int(n))) {
-            var facc = 0.0
-            for (k in range(int(kk))) {
-                facc += float(ta[r * int(kk) + k]) * float(tb[j * int(kk) + k])
-            }
-            acc[r * int(n) + j] += facc
-        }
-    }
+    tmm2d_acc_step(acc, ta, kk, tb, kk, false, true, m, n, kk)
 }
 
 //! One whole tile matmul into THREADGROUP float scratch (fused attention's score tile):
 //! so[r][j] = sum_k ta[r*kk+k] * tb[j*kk+k], overwrite — ta flat [m][kk] f16, tb [n][kk] f16.
 [unused_argument(sgs), sideeffects]
 def public tmm2d_tile_tg(ta; tb; var so; m, n, sgs, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    for (r in range(int(m))) {
-        for (j in range(int(n))) {
-            var facc = 0.0
-            for (k in range(int(kk))) {
-                facc += float(ta[r * int(kk) + k]) * float(tb[j * int(kk) + k])
-            }
-            so[r * int(n) + j] = facc
-        }
-    }
+    tmm2d_acc_step(so, ta, kk, tb, kk, false, false, m, n, kk)
 }
 
 //! Per-row scale of the held accumulator: acc[r][j] *= f[r] — the online-softmax rescale and
@@ -497,21 +499,8 @@ def public tmm2d_tg_begin_deva(var acc; a : auto(TA) const?; m, n, sgs, kk : uin
 //! staged, where ldb mirrors the emitter: 72-half padded rows for a kk=64 tile, kk otherwise.
 [sideeffects]
 def public tmm2d_tg_step_deva(var acc; a : auto(TA) const?; lda : uint; tb; m, n, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    let ldb = kk == 64u ? 72 : int(kk)
-    unsafe {
-        for (r in range(int(m))) {
-            for (j in range(int(n))) {
-                var facc = 0.0
-                for (k in range(int(kk))) {
-                    facc += float(a[r * int(lda) + k]) * float(tb[j * ldb + k])
-                }
-                acc[r * int(n) + j] += facc
-            }
-        }
-    }
+    let ldb = kk == 64u ? 72u : kk
+    tmm2d_acc_step(acc, a, lda, tb, ldb, false, true, m, n, kk)
 }
 
 
@@ -525,18 +514,7 @@ def public tmm2d_tg_begin_nt(var acc; m, n, sgs, kk : uint) {
 //! step, nt flavor: acc[r][j] += ta[r][k] * tb[k][j] — ta flat [m][kk] f16, tb flat [kk][n] f16.
 [sideeffects]
 def public tmm2d_tg_step_nt(var acc; ta; tb; m, n, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    for (r in range(int(m))) {
-        for (j in range(int(n))) {
-            var facc = 0.0
-            for (k in range(int(kk))) {
-                facc += float(ta[r * int(kk) + k]) * float(tb[k * int(n) + j])
-            }
-            acc[r * int(n) + j] += facc
-        }
-    }
+    tmm2d_acc_step(acc, ta, kk, tb, n, true, true, m, n, kk)
 }
 
 //! begin, deva+nt flavor: A streams from device f32, the step's B tile staged NATURAL [kk][n].
@@ -549,20 +527,7 @@ def public tmm2d_tg_begin_devant(var acc; m, n, sgs, kk : uint) {
 //! first element (row stride lda), tb flat [kk][n] f16.
 [sideeffects]
 def public tmm2d_tg_step_devant(var acc; a : float const?; lda : uint; tb; m, n, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    unsafe {
-        for (r in range(int(m))) {
-            for (j in range(int(n))) {
-                var facc = 0.0
-                for (k in range(int(kk))) {
-                    facc += a[r * int(lda) + k] * float(tb[k * int(n) + j])
-                }
-                acc[r * int(n) + j] += facc
-            }
-        }
-    }
+    tmm2d_acc_step(acc, a, lda, tb, n, true, true, m, n, kk)
 }
 
 //! begin, devab flavor: BOTH operands are device float16 streams - nothing is staged, and the
@@ -576,20 +541,7 @@ def public tmm2d_tg_begin_devab(var acc; m, n, sgs : uint) {
 //! layout, one row an output column.
 [sideeffects]
 def public tmm2d_tg_step_devab(var acc; a : float16 const?; lda : uint; b : float16 const?; ldb : uint; m, n, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    unsafe {
-        for (r in range(int(m))) {
-            for (j in range(int(n))) {
-                var facc = 0.0
-                for (k in range(int(kk))) {
-                    facc += float(a[r * int(lda) + k]) * float(b[j * int(ldb) + k])
-                }
-                acc[r * int(n) + j] += facc
-            }
-        }
-    }
+    tmm2d_acc_step(acc, a, lda, b, ldb, false, true, m, n, kk)
 }
 
 //! begin, devab+nt flavor: both operands device float16, the step's B in its NATURAL layout.
@@ -602,20 +554,7 @@ def public tmm2d_tg_begin_devabnt(var acc; m, n, sgs : uint) {
 //! reduction step.
 [sideeffects]
 def public tmm2d_tg_step_devabnt(var acc; a : float16 const?; lda : uint; b : float16 const?; ldb : uint; m, n, kk : uint) {
-    if (gl_LocalInvocationID.x != 0u) {
-        return
-    }
-    unsafe {
-        for (r in range(int(m))) {
-            for (j in range(int(n))) {
-                var facc = 0.0
-                for (k in range(int(kk))) {
-                    facc += float(a[r * int(lda) + k]) * float(b[k * int(ldb) + j])
-                }
-                acc[r * int(n) + j] += facc
-            }
-        }
-    }
+    tmm2d_acc_step(acc, a, lda, b, ldb, true, true, m, n, kk)
 }
 
 //! store with per-output-column bias: C[r][j] = acc[r][j] + bias[j] (overwrite, row stride ldc).

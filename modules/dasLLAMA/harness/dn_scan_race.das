@@ -13,6 +13,7 @@ require metal/das_metal_boost
 require ?das_metal das_metal
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_kernels
+require _race_fixture
 
 let NPOS = 2048
 let NKH = 16
@@ -22,17 +23,6 @@ let KD = NKH * DS
 let DI = NVH * DS
 let CD = 2 * KD + DI
 let LAYERS = 30
-
-def private fill(count, salt : int; amp, bias : float) : array<float> {
-    var xa : array<float>
-    xa |> resize(count)
-    var st = uint(salt) * 2654435761u + 12345u
-    for (i in range(count)) {
-        st = st * 1664525u + 1013904223u
-        xa[i] = (float(int((st >> 9u) & 0xffffu)) / 65536.0 - 0.5) * amp + bias
-    }
-    return <- xa
-}
 
 [export]
 def main {
@@ -46,10 +36,10 @@ def main {
             print("pso: {err}\n")
             return
         }
-        var cvf <- fill(NPOS * CD, 1, 0.18, 0.0)
+        var cvf <- race_fill(NPOS * CD, 1, 0.18, 0.0)
         var cvh <- [for (v in cvf); float16(v)]
-        var raw <- fill(NPOS * NVH, 2, 2.0, 0.0)
-        var prep <- fill(NPOS * NVH, 3, 0.1, 0.9)
+        var raw <- race_fill(NPOS * NVH, 2, 2.0, 0.0)
+        var prep <- race_fill(NPOS * NVH, 3, 0.1, 0.9)
         var bcv = race_buf(dev, uint64(NPOS * CD * 4), unsafe(addr<void?>(cvf[0])))
         var bcvh = race_buf(dev, uint64(NPOS * CD * 2), unsafe(addr<void?>(cvh[0])))
         var bst = race_buf(dev, uint64(NVH * DS * DS * 4), null)

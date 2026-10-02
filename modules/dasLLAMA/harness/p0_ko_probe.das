@@ -18,6 +18,7 @@ require daslib/fio
 require math   // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
 require strings   // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
 require ?das_metal _prefill_probe_fixture
+require ?das_metal ../tests/_compares.das
 
 // ATTRIBUTION SWEEP - its arms attribute the Metal prefill wall across kernel FAMILIES (gemm,
 // moe, attn, the recurrent scan, ew, dense activation converts, weight staging), never selecting
@@ -125,17 +126,7 @@ def private walk_depth(tr : Model; npos, depth : int64; skip, form : string) {
             if (walk == 0) {
                 want := s.logits
             } elif (!held) {
-                var diff = 0.0
-                var mag = 0.0
-                var top_w = 0
-                var top_g = 0
-                for (i, g, w in count(), s.logits, want) {
-                    diff = max(diff, abs(g - w))
-                    mag = max(mag, abs(w))
-                    top_w = w > want[top_w] ? i : top_w
-                    top_g = g > s.logits[top_g] ? i : top_g
-                }
-                print("p0 depth walk={walk} logits, {form} serving vs held: max difference {diff} of max {mag}, top token {top_g} vs {top_w}\n")
+                print("p0 depth walk={walk} logits, {form} serving vs held: max difference {logits_maxdiff(s.logits, want)} of max {logits_maxabs(want)}, top token {argmax_of(s.logits)} vs {argmax_of(want)}\n")
             }
             delete s
         }
@@ -227,13 +218,7 @@ def private race_lever(tr : Model; npos : int64; arms : array<string>; name : st
                 let ms = measure_one(tr, npos, 3)
                 invoke(lever, was)
                 var got <- logits_at(tr, npos, avg, lever)
-                var diff = 0.0
-                var mag = 0.0
-                for (g, w in got, want) {
-                    diff = max(diff, abs(g - w))
-                    mag = max(mag, abs(w))
-                }
-                print("p0 race npos={npos} round={round} {name}={a} ms={ms} | logits vs {name}={arms[0]}: max difference {diff} of max {mag}\n")
+                print("p0 race npos={npos} round={round} {name}={a} ms={ms} | logits vs {name}={arms[0]}: max difference {logits_maxdiff(got, want)} of max {logits_maxabs(want)}\n")
                 delete got
             }
         }

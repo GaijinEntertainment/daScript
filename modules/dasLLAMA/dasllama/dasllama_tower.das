@@ -633,6 +633,19 @@ def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : 
 //! the output length of a k3 / stride-2 / pad-1 conv stage over an axis of `l`
 def conv_s2_out(l : int64) : int64 => (l - 1l) / 2l + 1l
 
+//! the Transformer-XL rel-position table [ww x d] into `pos_emb`: row w at relative position tt - 1 - w, (sin, cos) interleaved
+def rel_pos_table(@scratch var pos_emb : array<float>; d, tt, ww : int64) {
+    ensure_length(pos_emb, ww * d)
+    for (k in range64(d / 2l)) {
+        let freq = exp(-(double(k * 2l) * log(10000.0lf) / double(d)))
+        for (w in range64(ww)) {
+            let theta = float(freq * double(tt - 1l - w))
+            pos_emb[w * d + 2l * k] = sin(theta)
+            pos_emb[w * d + 2l * k + 1l] = cos(theta)
+        }
+    }
+}
+
 //! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in [C][KH][KW]
 //! order (row index c·p² + ky·p + kx), one row per non-overlapping p×p patch walking the canvas
 //! row-major (pos_x = i % n_cols, pos_y = i / n_cols). Returns npos; ``x0`` grows to npos × 3p².

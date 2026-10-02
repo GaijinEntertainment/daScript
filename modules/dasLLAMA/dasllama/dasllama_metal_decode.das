@@ -1017,15 +1017,10 @@ def private ple_side_step(r : StepRes; t : Model; enc : MetalComputeEncoder?) {
 //! them against the window as the CPU prefill would, and the window it advanced is put back - the commit
 //! advances it by the committed tokens alone (`mtp_ple_window_commit`)
 def private mtp_ple_rows_gather(t : Model; var s : Session; nr, pos : int64) {
-    s.mtp_snap_ple |> overwrite_resize(long_length(s.ple_prev))
-    for (i in range64(long_length(s.ple_prev))) {
-        s.mtp_snap_ple[i] = s.ple_prev[i]
-    }
+    mtp_ple_window_snapshot(s)
     forward_prefill_alloc(t, s, nr, pos)
     invoke(t.blocks.pre_stack_prefill, t, s, s.mtp_vbatch, nr, pos)
-    for (i in range64(long_length(s.mtp_snap_ple))) {
-        s.ple_prev[i] = s.mtp_snap_ple[i]
-    }
+    mtp_ple_window_restore(s)
 }
 
 //! The round committed `n` rows of `mtp_vbatch` at `pos`: the window advances over them the way the
@@ -4321,22 +4316,12 @@ def private metal_mtp_owns(t : Model) : bool => t.metal_blob
 
 //! the registered overrides: the drivers, and the pool's spin window follows a step they served
 [hot_path]
-def private metal_decode_served(t : Model; var s : Session; token, pos : int64) : bool {
-    let ok = metal_decode_forward(t, s, token, pos)
-    if (ok) {
-        metal_note_served()
-    }
-    return ok
-}
+def private metal_decode_served(t : Model; var s : Session; token, pos : int64) : bool
+    => metal_served(metal_decode_forward(t, s, token, pos))
 
 [hot_path]
-def private metal_batch_decode_served(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
-    let ok = metal_batch_decode_forward(t, ws, sessions, nrows)
-    if (ok) {
-        metal_note_served()
-    }
-    return ok
-}
+def private metal_batch_decode_served(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool
+    => metal_served(metal_batch_decode_forward(t, ws, sessions, nrows))
 
 [init]
 def dasllama_metal_decode_register() {
