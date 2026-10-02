@@ -156,6 +156,7 @@ jobs:
           -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++" \
           -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++" \
           -DDAS_HV_DISABLED=OFF \
+          -DDAS_CRYPTO_DISABLED=OFF \
           -DDAS_PUGIXML_DISABLED=OFF \
           -DDAS_LLVM_DISABLED=OFF \
           -DDAS_GLFW_DISABLED=OFF \
