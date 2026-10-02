@@ -27,6 +27,7 @@ require openai_server           // the server + route handlers (this directory)
 require model_catalog           // catalog_models_dir — the models-dir resolution
 require user_state              // discover_config + config_save_path + open_logs — what the server writes lives under ~/.dasllama
 require dasllama/dasllama       // load_model / QuantMode / load_asr_model
+require dasllama/dasllama_scheduler
 require daslib/tune             // [tune_policy] + log_tune_status (the injected guard resolves here)
 require [tune_framework]   // nolint:STYLE030,LINT019 — OPTIONAL: tune_suppress_mint, reached under module_exists(llvm_tune)
 require ?llvm dasllama/dasllama_exchange   // nolint:STYLE030,LINT019 — OPTIONAL: the sidecar exchange (boot resolver + submit check), which rides the tune framework
@@ -125,14 +126,17 @@ struct ServerArgs {
     @clarg_doc = "Worker-lane cap for the matmul dispatch (default 16; -1 = all cores)"
     threads : int
 
-    @clarg_doc = "Jobque compute dispatch: hybrid (default; LLM team, ASR inline) | team | inline"
+    @clarg_doc = "Jobque compute dispatch: hybrid (default; LLM team, ASR on the team when every LLM slot decodes on a GPU - Metal, or the whole model resident on a Vulkan device - else inline; TTS inline) | team (every caller uses serialized team publishes) | inline (every caller runs independently)"
     team_dispatch : string
 
     @clarg_doc = "Worker CPU affinity: -1 = platform default (QoS on darwin, off elsewhere), 0 = off, 1 = ideal-CPU hint, 2 = hard mask (DAS_JOBQUE_AFFINITY env overrides)"
     affinity : int = -1
 
-    @clarg_doc = "Prefill chunk in tokens: decode stalls at most this many per tick (default 64)"
+    @clarg_doc = "Prefill chunk in tokens while a stream is decoding: decode stalls at most this many per tick (default: the serving backend's - 64 on the CPU, 512 on a GPU)"
     chunk : int
+
+    @clarg_doc = "Prefill chunk in tokens while no stream is decoding, never under --chunk (default: the serving backend's - 2048 on Metal, 512 elsewhere)"
+    chunk_idle : int
 
     @clarg_doc = "KV page size in positions for paged serving (default 64)"
     page_rows : int
@@ -182,6 +186,7 @@ struct ModelEntry {
     kv_dtype : string = ""
     streams : int = -1
     chunk : int = -1
+    chunk_idle : int = -1
     page_rows : int = -1    // 0 = flat is meaningful, -1 = inherit
     prefix : int = -2       // -1 = unbounded is meaningful, -2 = inherit
     mtp : int = -1          // -1 inherit | 0 off | 1 on
@@ -250,7 +255,7 @@ var private g_cfg_authoritative = false
 
 let CONFIG_KEYS = fixed_array("model", "port", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
     "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "asr_workers", "tts", "tts_lane", "tts_voices_dir",
-    "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "page_rows",
+    "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "chunk_idle", "page_rows",
     "prefix", "flat", "mtp", "rope_scaling", "rope_scale", "yarn_orig_ctx", "lcpp_bin", "models_dir", "models")
 
 def private from_cli(key : string) : bool
@@ -375,6 +380,9 @@ def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 �
     if (cfg.chunk > 0) {
         g_cfg_sources["chunk"] = "cli"
     }
+    if (cfg.chunk_idle > 0) {
+        g_cfg_sources["chunk_idle"] = "cli"
+    }
     if (cfg.page_rows > 0) {
         g_cfg_sources["page_rows"] = "cli"
     }
@@ -447,6 +455,7 @@ def apply_config(var cfg : ServerArgs) : bool {
     cfg_from_toml(root, "team_dispatch", cfg.team_dispatch, auth)
     cfg_from_toml(root, "affinity", cfg.affinity, auth)
     cfg_from_toml(root, "chunk", cfg.chunk, auth)
+    cfg_from_toml(root, "chunk_idle", cfg.chunk_idle, auth)
     cfg_from_toml(root, "page_rows", cfg.page_rows, auth)
     cfg_from_toml(root, "prefix", cfg.prefix, auth)
     cfg_from_toml(root, "flat", cfg.flat, auth)
@@ -519,6 +528,7 @@ def private apply_models_roster(root : JsonValue?) {
             ctx = int(e?["ctx"] ?? 0l), quant = e?["quant"] ?? "",
             kv_dtype = e?["kv_dtype"] ?? "",
             streams = int(e?["streams"] ?? -1l), chunk = int(e?["chunk"] ?? -1l),
+            chunk_idle = int(e?["chunk_idle"] ?? -1l),
             page_rows = int(e?["page_rows"] ?? -1l), prefix = int(e?["prefix"] ?? -2l),
             mtp = has_mtp ? ((e?["mtp"] ?? false) ? 1 : 0) : -1,
             rope_scaling = e?["rope_scaling"] ?? "", rope_scale = float(e?["rope_scale"] ?? 0.0lf),
@@ -582,6 +592,11 @@ def mtp_default_resolved(streams : int; gpu, metal : string) : bool
     => mtp_auto_arms(int64(streams), resolved_metal_mode(metal_mode_of(metal).mode, gpu) != MetalMode.off,
                      gpu == "vulkan" ? "gpu:resident" : "cpu")
 
+//! What an unset `chunk` resolves to on the GET /config surface, before any model loads: the scheduler's own
+//! default (`chunk_default`) over the configured backend. Non-private: test_server_flags.das gates it.
+def chunk_default_resolved(gpu, metal : string) : int
+    => int(chunk_default(gpu == "vulkan" || resolved_metal_mode(metal_mode_of(metal).mode, gpu) != MetalMode.off))
+
 //! One roster entry as the control page's editor reads and writes it; `mtp` rides as the bool the
 //! editor validates, an inherited (-1) knob as absence.
 def private roster_entry_json(ent : ModelEntry) : JsonValue? {
@@ -589,6 +604,7 @@ def private roster_entry_json(ent : ModelEntry) : JsonValue? {
         "name" => JV(ent.name), "path" => JV(ent.path), "backend" => JV(ent.backend),
         "ctx" => JV(int64(ent.ctx)), "quant" => JV(ent.quant), "kv_dtype" => JV(ent.kv_dtype),
         "streams" => JV(int64(ent.streams)), "chunk" => JV(int64(ent.chunk)),
+        "chunk_idle" => JV(int64(ent.chunk_idle)),
         "page_rows" => JV(int64(ent.page_rows)), "prefix" => JV(int64(ent.prefix)),
         "image_mmproj" => JV(ent.image_mmproj),
         "default" => JV(ent.is_default)
@@ -626,6 +642,7 @@ def vulkan_serving_want(cfg : ServerArgs) : GpuTierWant
 // The GET /config surface: RESOLVED effective values (what init actually uses) + per-key
 // provenance. Sentinel-is-meaning keys stay raw: ctx 0 = model default, prefix 0 = auto /
 // -1 = unbounded, threads -1 = all cores, gpu "" = legacy metal/env path.
+[arch(at = "README.md#endpoints")]
 def private build_config_surface(cfg : ServerArgs; save_path : string) : string {
     let gpu = effective_gpu(cfg)
     var config = JV((
@@ -654,7 +671,8 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         threads = cfg.threads == 0 ? 16 : cfg.threads,
         team_dispatch = empty(cfg.team_dispatch) ? "hybrid" : cfg.team_dispatch,
         affinity = cfg.affinity,
-        chunk = cfg.chunk > 0 ? cfg.chunk : 64,
+        chunk = cfg.chunk > 0 ? cfg.chunk : chunk_default_resolved(gpu, cfg.metal),
+        chunk_idle = max(cfg.chunk_idle, 0),
         page_rows = cfg.page_rows > 0 ? cfg.page_rows : 64,
         prefix = cfg.prefix,
         flat = cfg.flat,
@@ -817,7 +835,8 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     let port = g_cfg.port > 0 ? g_cfg.port : 8080     // non-positive (incl. a stray negative) -> default
     let ctx = g_cfg.ctx > 0 ? int64(g_cfg.ctx) : 0l   // 0 = keep the model's trained context_length
     let streams = g_cfg.streams > 0 ? int64(g_cfg.streams) : 4l
-    let chunk = g_cfg.chunk > 0 ? int64(g_cfg.chunk) : 64l
+    let chunk = g_cfg.chunk > 0 ? int64(g_cfg.chunk) : 0l
+    let chunk_idle = g_cfg.chunk_idle > 0 ? int64(g_cfg.chunk_idle) : -1l
     let page_rows = g_cfg.flat ? 0l : (g_cfg.page_rows > 0 ? int64(g_cfg.page_rows) : 64l)
     let prefix = int64(g_cfg.prefix)   // 0 = auto (init_server sizes it), < 0 = unbounded
     let dispatch_mode = to_lower(g_cfg.team_dispatch)
@@ -829,7 +848,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         return
     }
     let team_dispatch = dispatch_mode != "inline"
-    let asr_team_dispatch = dispatch_mode == "team"
+    let asr_team = dispatch_mode == "team" ? 1 : (dispatch_mode == "inline" ? 0 : -1)
     // matmul dispatch lane cap: LLM decode saturates memory bandwidth long before big core
     // counts, and an uncapped dispatch fights every other process on the box. A negative config
     // value maps to 0 here, which set_dispatch_worker_limit reads as "no limit" = all cores.
@@ -977,6 +996,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             if (ent.chunk > 0) {
                 opts.chunk = int64(ent.chunk)
             }
+            if (ent.chunk_idle > 0) {
+                opts.chunk_idle = int64(ent.chunk_idle)
+            }
             if (ent.page_rows >= 0) {
                 opts.page_rows = int64(ent.page_rows)
             }
@@ -1070,8 +1092,8 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         port, streams,
         [chunk_tokens = chunk, page_rows = page_rows, prefix_groups = prefix,
          kv_dtype = pick_kv_dtype(g_cfg.kv_dtype), team_dispatch = team_dispatch,
-         asr_team_dispatch = asr_team_dispatch,
-         mtp = mtp_setting(cfg_sourced("mtp"), g_cfg.mtp)])
+         asr_team = asr_team,
+         mtp = mtp_setting(cfg_sourced("mtp"), g_cfg.mtp), idle_chunk_tokens = chunk_idle])
     if (!g_server_ready) {
         g_exit_code = 2
         request_exit()

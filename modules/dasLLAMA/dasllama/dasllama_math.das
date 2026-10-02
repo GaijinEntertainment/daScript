@@ -207,6 +207,8 @@ var g_dispatch_gpu_served = false
 //! the window the pool runs: the GPU window while the resident driver serves the model, the CPU window otherwise
 def get_jobque_spin_in_force_() : int64 => g_dispatch_gpu_served ? g_jobque_spin_gpu_us : g_jobque_spin_us
 
+def public get_dispatch_gpu_served() : bool => g_dispatch_gpu_served
+
 [arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-spin")]
 def public set_dispatch_gpu_served(on : bool) {
     g_dispatch_gpu_served = on

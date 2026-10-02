@@ -236,14 +236,14 @@ serves the loaded model the pool carries only the sampler's argmax between steps
 still spinning when the step's command is submitted starves the driver's submission thread - on
 the pod (48 vCPUs, `-jit`, `benchmarks/lcpp_bench.das --npl 4`; `PERF_LEDGER.md`'s 2026-09-19
 section) Llama-3.2-1B at four streams read 707 tok/s summed under the 30 ms window and 1053 under
-500 us, the knee at the step's own length. So the driver's arm and drop (`rdec_set_active`) report
-to `set_dispatch_gpu_served`, which pushes the GPU window (`g_jobque_spin_gpu_us`, 500 us) to the
-live queue at once, and `setup_dasllama_jobque` reads whichever window is in force
-(`get_jobque_spin_in_force`) for a queue made after the load. The pool is one per process, so the
-window is process-wide: on a GPU-served slot the CPU audio and speech routes park after the 500 us
-window too, and a box profile's `runtime.jobque_spin_gpu_us` or `set_jobque_spin_gpu_us` widens
-it. An embedder's own `set_jobque_worker_spin` value is replaced whenever a resident model arms or
-drops; the facade's window setters are the way to choose it. The pool's size
+500 us, the knee at the step's own length. So the Vulkan driver's arm and drop (`rdec_set_active`)
+and a Metal driver's served forward (`metal_note_served`, until the next weights load) report to
+`set_dispatch_gpu_served`, which pushes the GPU window (`g_jobque_spin_gpu_us`, 500 us) to the live
+queue; `setup_dasllama_jobque` reads the window in force for a queue made later. Under the CPU
+window the pool's workers spin through a Metal prefill, and its windows slow within seconds.
+The pool is one per process: on a GPU-served slot the CPU audio and speech routes park after
+500 us too, and a box profile's `runtime.jobque_spin_gpu_us` or `set_jobque_spin_gpu_us` widens it.
+An embedder's own `set_jobque_worker_spin` value is replaced at each report. The pool's size
 is the runtime's (`src/misc/job_que.cpp`): the browser's reported cores, capped and floored by
 `DAS_MAX_HW_JOBS` and `DAS_MIN_WEB_JOBS` (eight and four unless the build overrides them), minus
 one for the computing main thread - seven workers on a real box, the pool

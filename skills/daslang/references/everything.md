@@ -3167,11 +3167,12 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 ### Prefix cache
 
-- `create_prefix_cache` - Create a prefix cache for the paged sessions of one `create_kv_pool` pool: finished streams donate KV pages (`prefix_insert`), later requests with the same prefix attach them (`prefix_attach`) instead of re-prefilling.
+- `create_prefix_cache` - Create a prefix cache for the paged sessions of one `create_kv_pool` pool: streams donate KV pages (`prefix_insert`), later requests with the same prefix attach them (`prefix_attach`).
 - `prefix_attach` - Attach the longest cached prefix of `prompt` to a FRESH paged `session` of `pool`: matched pages join the session's block table and `n_past` advances past them, so the caller prefills only the tail.
 - `prefix_chain_list` - Snapshot of the cache's donated chains for dashboards: per donation — page-covered token count, live pages, hit count, born/last-hit ticks, and the caller-provided preview.
+- `prefix_checkpoint_at` - Where a recurrent `session`'s prefill of `prompt` should stop for a `prefix_insert`, after `prefix_attach` matched `matched` tokens: `stable_at` (`render_turn_marked`'s opening) when the caller knows it, else the longest opening an earlier checkpoint shares.
 - `prefix_held_groups` - Pages the cache currently holds (== pool groups retained for reuse).
-- `prefix_insert` - Donate a finished session's KV pages to the cache.
+- `prefix_insert` - Donate a session's KV pages to the cache.
 - `prefix_release` - Release every cached page back to `pool` and clear the cache (pages still used by live sessions stay alive until those sessions release them).
 
 ### Tokenizer
@@ -3220,6 +3221,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `render_turn` - Render the next turn's prefill token ids — BOS + system on the first turn, then the user turn and the generation prompt — WITHOUT running the model.
 - `render_turn_audio` - `render_turn`'s AUDIO twin: the same two-span contract around the audio soft-token splice (the template's audio span markers).
 - `render_turn_image` - `render_turn`'s IMAGE twin: the turn's prefill as the two token spans that bracket the image soft-token splice — `head` before the rows, `tail` after.
+- `render_turn_marked` - `render_turn` with its opening marked: `opening` leading tokens - BOS, prelude and the system turn of a conversation's first turn - are the same for any user text, so a prefix cache can checkpoint there.
 - `respond` - Generate the assistant's reply to the queued user message, streaming pieces through the trailing block (return `false` to stop early).
 - `set_thinking` - Toggle reasoning for a hybrid thinking model (Qwen3 family): `false` appends the template's empty think block so the model answers directly.
 

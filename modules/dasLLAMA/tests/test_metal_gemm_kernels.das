@@ -1428,6 +1428,206 @@ def private attn_av_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv
     }
 }
 
+//! MetalAttnQKDev[128] on the Q twin and the scaled K twin; oracle: the staged gate's, tile height in the skip; the sentinel holds skipped blocks unwritten.
+//! The bar: the operands are f16-exact, so the device differs by the half accumulate and the half store - 2^-11 of a magnitude each, under 2e-3 of the envelope
+def private attn_qk_dev_gate(t : T?; var dev, queue; mt, heads, hs, kv_mul, mp, np32, qoff, window : int; uend : int = 0) {
+    let tag = "attn_qk_dev mt={mt} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window} u={uend}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kqk = mt == 128 ? kernel_of(@@enc_qk_dev128_c) : kernel_of(@@enc_qk_dev_c)
+        var pso = mc |> keep_stamp(kqk, err)
+        return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
+        let qd = heads * hs
+        let kvd = (heads / kv_mul) * hs
+        let scale = 0.125
+        var inscope qv : array<float>
+        q8_x_fill(mp * qd, qv)
+        for (i in range(mp * qd)) {
+            qv[i] = float(float16(qv[i]))   // f16-exact fixture: the oracle dot stays the reference
+        }
+        var inscope kv : array<float>
+        kv |> resize(np32 * kvd)
+        for (i in range(np32 * kvd)) {
+            kv[i] = float((i * 7 + 3) % 15 - 7) * 0.5
+        }
+        var inscope want : array<float>
+        var inscope env : array<float>
+        want |> resize(heads * mp * np32)
+        env |> resize(heads * mp * np32)
+        for (i in range(heads * mp * np32)) {
+            want[i] = -1000.0
+            env[i] = 0.0
+        }
+        for (h in range(heads)) {
+            let kvhoff = (h / kv_mul) * hs
+            for (m in range(mp)) {
+                let mBase = m / mt * mt
+                for (nb in range(np32 / 64)) {
+                    let nBase = nb * 64
+                    let skip = ((uend > 0 ? nBase >= max(uend, qoff + mBase + mt) : nBase > qoff + mBase + mt - 1)
+                        || (window > 0 && qoff + mBase + 1 > window && nBase + 64 <= qoff + mBase + 1 - window))
+                    continue if (skip)
+                    for (pos in range(nBase, nBase + 64)) {
+                        var acc = 0.0lf
+                        var ev = 0.0lf
+                        for (c in range(hs)) {
+                            let p = double(qv[m * qd + h * hs + c]) * double(scale) * double(kv[pos * kvd + kvhoff + c])
+                            acc += p
+                            ev += abs(p)
+                        }
+                        want[(h * mp + m) * np32 + pos] = float(acc)
+                        env[(h * mp + m) * np32 + pos] = float(ev)
+                    }
+                }
+            }
+        }
+        var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
+            npos = uint(np32), np32 = uint(np32), scale = scale, qoff = uint(qoff), qrows = uint(mp),
+            window = uint(window), uend = uint(uend))
+        var inscope qh <- [for (v in qv); float16(v)]
+        var inscope kh <- [for (v in kv); float16(v * scale)]   // k x scale is f16-exact here: the K twin's own values
+        let bq = mc |> in_plain(qh)
+        let bk = mc |> in_plain(kh)
+        let batt = mc |> out_words(heads * mp * np32, float16(-1000.0))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kqk.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+        }
+        return if (!ran)
+        check_buf_h(t, tag, mc.buf[batt], want, env_bar(2e-3, env), Shape(row_width = np32), env)
+    }
+}
+
+//! MetalKvTwin against the RNE narrow of the same f32 values, K under the folded scale: one multiply a value, so the
+//! device rounds as the host does and the bar is no difference at all. The dispatch runs a threadgroup past `total`
+//! over planes that carry that much slack under a sentinel, so the grid guard is what keeps the slack.
+def private kv_twin_gate(t : T?; var dev, queue) {
+    let tag = "kv_twin"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kt = kernel_of(@@enc_kv_twin)
+        var pso = mc |> keep_stamp(kt, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let total = 3 * 256
+        let slack = 256
+        let scale = 0.0883883
+        var inscope kv <- [for (i in range(total + slack)); float(float16(0.07 * float((i * 13) % 41) - 1.3))]
+        var inscope vv <- [for (i in range(total + slack)); float(float16(0.05 * float((i * 7) % 53) - 1.1))]
+        var inscope wk <- [for (i in range(total + slack)); i < total ? float(float16(kv[i] * scale)) : -77.0]
+        var inscope wv <- [for (i in range(total + slack)); i < total ? float(float16(vv[i])) : -77.0]
+        let bk = mc |> in_(kv)
+        let bv = mc |> in_(vv)
+        let bkh = mc |> out_words(total + slack, float16(-77.0))
+        let bvh = mc |> out_words(total + slack, float16(-77.0))
+        var ka = KvTwinArgs(total = uint(total), scale = scale)
+        // one poisoned input per rerun, the previous one's clean plane back first: each compare has its own control
+        for (leg in range(3)) {
+            if (leg == 1) {
+                mc |> plane_upload(bk, poisoned_copy(kv, 300, 2.0))
+            } elif (leg == 2) {
+                mc |> plane_upload(bk, kv)
+                mc |> plane_upload(bv, poisoned_copy(vv, 500, 2.0))
+            }
+            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                invoke(kt.enc, enc, pso, mc.buf[bk], mc.buf[bv], mc.buf[bkh], mc.buf[bvh], ka, int64(total + slack))
+            }
+            if (leg == 0) {
+                return if (!ran)
+                check_buf_h(t, "{tag} K x scale", mc.buf[bkh], wk, Bar(rel = 0.0), Shape(row_width = 256))
+                check_buf_h(t, "{tag} V", mc.buf[bvh], wv, Bar(rel = 0.0), Shape(row_width = 256))
+            } elif (ran) {
+                var inscope halves <- buf_download(mc.buf[leg == 1 ? bkh : bvh], total + slack, type<float16>)
+                var inscope got <- [for (h in halves); float(h)]
+                t |> success(mismatch_rel("{tag} poison (MUST mismatch)", got, leg == 1 ? wk : wv, 0.0, 0.0) > 0,
+                    "{tag}: a poisoned {leg == 1 ? "K" : "V"} element reds its twin")
+            }
+        }
+    }
+}
+
+//! MetalAttnPExp + MetalAttnAVDev[128] in one record against a double softmax; garbage V pads and raw columns past each span red a walk past it.
+//! The bar: each weight is stored a half (2^-11 of its magnitude) and the products accumulate in half, under 2e-3 of the envelope
+def private attn_dev_pair_gate(t : T?; var dev, queue; mt, heads, hs, kv_mul, mp, np32, npos, qoff, window : int;
+                               uend : int = 0; softcap : float = 0.0; hass : bool = false; ulo : int = 0) {
+    let tag = "attn_pexp+av_dev mt={mt} h={heads} hs={hs} m={mp} n={np32} npos={npos} qoff={qoff} w={window} u={ulo}..{uend} cap={softcap} sink={hass}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kpx = kernel_of(@@enc_attn_pexp)
+        let kav = mt == 128 ? kernel_of(@@enc_av_dev128_c) : kernel_of(@@enc_av_dev_c)
+        var pso_px = mc |> keep_stamp(kpx, err)
+        return if (!pso_ok(t, tag, pso_px, err))
+        var pso_av = mc |> keep_stamp(kav, err)
+        return if (!tensor_pso_or_skip(t, tag, pso_av, dev, err))
+        let qd = heads * hs
+        let kvd = (heads / kv_mul) * hs
+        var inscope attf : array<float16>
+        attf |> resize(heads * mp * np32)
+        for (i in range(heads * mp * np32)) {
+            attf[i] = float16(float((i * 3) % 13 - 6) * 0.25)   // raw scores, every slot populated
+        }
+        var inscope sinks <- [for (h in range(heads)); 0.5 - 0.25 * float(h)]
+        var inscope vv : array<float>
+        vv |> resize(np32 * kvd)
+        for (i in range(np32 * kvd)) {
+            vv[i] = i / kvd < npos ? float((i * 7 + 3) % 15 - 7) * 0.5 : 999.0   // garbage pads: no tile's span reaches them
+        }
+        var inscope want : array<float>
+        var inscope env : array<float>
+        var inscope pw : array<double>
+        want |> resize(mp * qd)
+        env |> resize(mp * qd)
+        pw |> resize(npos)
+        for (h in range(heads)) {
+            let kvhoff = (h / kv_mul) * hs
+            for (m in range(mp)) {
+                let qpos = qoff + m
+                let cnt = uend > 0 && qpos >= ulo && qpos < uend ? uend : qpos + 1
+                let jlo = window > 0 && qpos + 1 > window ? qpos + 1 - window : 0
+                var rm = -1.0e30lf
+                for (pos in range(jlo, cnt)) {
+                    let sr = double(float(attf[(h * mp + m) * np32 + pos]))
+                    let cap = double(softcap)
+                    pw[pos] = softcap > 0.0 ? cap * (1.0lf - 2.0lf / (exp(sr * 2.0lf / cap) + 1.0lf)) : sr   // cap x tanh(s / cap)
+                    rm = max(rm, pw[pos])
+                }
+                if (hass) {
+                    rm = max(rm, double(sinks[h]))
+                }
+                var tot = hass ? exp(max(double(sinks[h]) - rm, -80.0lf)) : 0.0lf
+                for (pos in range(jlo, cnt)) {
+                    pw[pos] = exp(pw[pos] - rm)
+                    tot += pw[pos]
+                }
+                for (col in range(hs)) {
+                    var acc = 0.0lf
+                    var ev = 0.0lf
+                    for (pos in range(jlo, cnt)) {
+                        let p = pw[pos] / tot * double(vv[pos * kvd + kvhoff + col])
+                        acc += p
+                        ev += abs(p)
+                    }
+                    want[m * qd + h * hs + col] = float(acc)
+                    env[m * qd + h * hs + col] = float(ev)
+                }
+            }
+        }
+        var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
+            npos = uint(npos), np32 = uint(np32), scale = 1.0, qoff = uint(qoff), qrows = uint(mp),
+            window = uint(window), softcap = softcap, hass = hass ? 1u : 0u, uend = uint(uend), ulo = uint(ulo))
+        var inscope vh <- [for (v in vv); float16(v)]
+        let batt = mc |> in_plain(attf)
+        let bstat = mc |> out_words(heads * mp, -1000.0)
+        let bsink = mc |> in_(sinks)
+        let bv = mc |> in_plain(vh)
+        let bxb = mc |> out_words(mp * qd, -1000.0)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kpx.enc, enc, pso_px, mc.buf[batt], ka, mc.buf[bstat], mc.buf[bsink], int64(mp), int64(heads))
+            invoke(kav.enc, enc, pso_av, mc.buf[batt], mc.buf[bv], mc.buf[bxb], ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bxb], want, env_bar(2e-3, env), Shape(row_width = qd, head_width = hs), env)
+    }
+}
+
 // the stage width is a stamp constant the emitter's census records: the double-buffered stamps
 // read the 128-wide body, the single-tile stamps the 64-wide one - device-free
 [test]
@@ -1601,6 +1801,25 @@ def test_metal_gemm_kernels(t : T?) {
                 attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 128, uend = 192)
                 attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 96, 0, uend = 96)
                 attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 96, 0, uend = 96)
+                // the device pair: both tile heights, continuation, window skip, GQA, uniform span, V pads, softcap, sinks
+                kv_twin_gate(t, dev, queue)
+                attn_qk_dev_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 0, 0)
+                attn_qk_dev_gate(t, dev, queue, 128, 4, 64, 2, 128, 256, 128, 0)
+                attn_qk_dev_gate(t, dev, queue, 32, 4, 64, 2, 32, 256, 224, 128)
+                attn_qk_dev_gate(t, dev, queue, 128, 2, 128, 1, 128, 384, 256, 192)
+                attn_qk_dev_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 0, 0, uend = 128)
+                attn_qk_dev_gate(t, dev, queue, 32, 4, 64, 2, 32, 256, 224, 128, uend = 192)
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 128, 64, 0)
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 96, 32, 0)        // V pads past npos
+                attn_dev_pair_gate(t, dev, queue, 128, 4, 64, 2, 128, 256, 256, 128, 0)
+                attn_dev_pair_gate(t, dev, queue, 128, 2, 128, 1, 128, 320, 300, 172, 0)   // the last tile's span ends at npos
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 32, 256, 256, 224, 128)    // a sliding window
+                attn_dev_pair_gate(t, dev, queue, 128, 4, 64, 2, 128, 384, 384, 256, 160)
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 96, 0, 0, uend = 96)
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 96, 0, 0, uend = 48, ulo = 16)   // causal rows either side of the uniform span
+                attn_dev_pair_gate(t, dev, queue, 128, 4, 64, 2, 128, 256, 200, 64, 0, uend = 160, ulo = 100)
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 128, 64, 0, softcap = 2.0)
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 128, 64, 0, hass = true)
             }
         } else {
             t |> skip("das_metal is not built on this platform; GEMM kernel checks skipped")

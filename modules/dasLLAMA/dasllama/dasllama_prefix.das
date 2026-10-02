@@ -36,9 +36,20 @@ struct PrefixChain {
     preview : string            // caller-provided detokenized head ("" when not given)
 }
 
+//! One recurrent checkpoint: the tokens a session had evaled, the page groups holding their rows
+//! (each held), and the recurrent state after the last of them.
+struct PrefixState {
+    tokens : array<int64>
+    groups : array<int>         // ceil(tokens / page_rows) groups, the last one partial when the count is off a page
+    snap : DnSnapshot
+    last_use : int64
+    hits : int64
+}
+
 //! Page-granular prefix cache over the sessions of ONE ``KVPool`` (``create_prefix_cache_``).
 //! Pure data — every verb takes the pool explicitly, so the cache can live inside any owner
 //! struct without interior pointers. Not thread-safe; drive it from the pool's owning thread.
+[arch(at="../ARCHITECTURE_ENGINE.md#prefix-recurrent-checkpoints")]
 struct PrefixCache {
     entries : table<uint64; PrefixEntry>   // chained page hash -> cached page
     chains : table<int64; PrefixChain>     // chain id -> donation summary (dashboards)
@@ -48,6 +59,10 @@ struct PrefixCache {
     n_hit_pages : int64         // pages attached across all lookups
     n_insert_pages : int64      // pages donated
     n_evicted_pages : int64     // pages LRU-dropped
+    states : array<PrefixState> // a recurrent model's checkpoints
+    max_states : int64          // checkpoint budget (LRU-drops past it); 0 = a recurrent model caches nothing
+    n_state_hits : int64
+    n_state_inserts : int64
 }
 
 // FNV-1a 64 over the 8 bytes of v, continuing h.
@@ -84,27 +99,142 @@ def private page_tokens_match(entry : PrefixEntry; tokens : array<int64>; lo : i
 //! Create a prefix cache for the sessions of one pool. ``max_groups`` caps how many page groups
 //! the cache retains (LRU-dropped past it; a dropped page a session still uses stays alive — only
 //! the cache's hold is released); 0 = unbounded.
-def create_prefix_cache_(max_groups : int64 = 0l) : PrefixCache {
-    return <- PrefixCache(max_groups = max_groups)
+def create_prefix_cache_(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES) : PrefixCache {
+    return <- PrefixCache(max_groups = max_groups, max_states = max(max_states, 0l))
 }
 
-//! Pages the cache currently holds (== held pool groups).
-def prefix_held_groups_(cache : PrefixCache) : int64 => long_length(cache.entries)
+let DEFAULT_PREFIX_STATES = 4l   //! a recurrent model's checkpoints kept: a reused opening, a conversation's last turn, and two to spare
+
+//! how many of `a`'s leading tokens open `b`
+def private shared_opening(a, b : array<int64>) : int64 {
+    let cap = min(long_length(a), long_length(b))
+    var n = 0l
+    while (n < cap && a[n] == b[n]) {
+        n ++
+    }
+    return n
+}
+
+//! Where a recurrent session's prefill of `prompt` stops to leave a checkpoint, `matched` tokens attached: the caller's
+//! stable opening (`stable_at`, 0 = unknown), else the longest opening an earlier checkpoint's tokens share with the
+//! prompt - each only a page or more past the hit, under which a checkpoint saves less than it costs. 0 = nowhere.
+[arch(at="../ARCHITECTURE_ENGINE.md#prefix-recurrent-checkpoints")]
+def prefix_checkpoint_at_(cache : PrefixCache; pool : KVPool; s : Session; prompt : array<int64>; matched, stable_at : int64) : int64 {
+    if (empty(s.dn_state_prefix) || cache.max_states <= 0l) {
+        return 0l
+    }
+    let floor_at = matched + pool.page_rows
+    if (stable_at >= floor_at && stable_at < long_length(prompt)) {
+        return stable_at
+    }
+    var opening = 0l
+    for (st in cache.states) {
+        opening = max(opening, shared_opening(st.tokens, prompt))
+    }
+    opening = min(opening, long_length(prompt) - 1l)
+    return opening >= floor_at ? opening : 0l
+}
+
+def private prefix_state_drop(var cache : PrefixCache; var pool : KVPool; at : int) {
+    for (g in cache.states[at].groups) {
+        kv_pool_release_group(pool, g)
+    }
+    delete cache.states[at]   //! erase is a raw remove: the owned arrays go first
+    cache.states |> erase(at)
+}
+
+//! the deepest checkpoint whose every token opens `prompt`, short of the prompt's last token: its
+//! whole pages shared, its partial page copied (the session writes on from there), its state restored
+def private prefix_attach_state(var cache : PrefixCache; var pool : KVPool; var s : Session; prompt : array<int64>) : int64 {
+    var best = -1
+    var best_n = 0l
+    for (st, i in cache.states, count()) {
+        let n = long_length(st.tokens)
+        if (n > best_n && n < long_length(prompt) && shared_opening(st.tokens, prompt) == n) {
+            best = i
+            best_n = n
+        }
+    }
+    if (best < 0) {
+        return 0l
+    }
+    let kept = (best_n - 1l) / pool.page_rows   //! the page of row n - 1 is copied even when whole: the draft head rewrites that row for the token that follows
+    s.block_table |> reserve(kept + 1l)
+    for (i in range64(kept)) {
+        let g = cache.states[best].groups[i]
+        s.block_table |> push(g)
+        pool.refcnt[g] ++
+    }
+    s.block_table |> push(kv_pool_copy_group(pool, cache.states[best].groups[kept]))
+    dn_snapshot_restore(s, cache.states[best].snap)
+    s.n_past = best_n
+    cache.tick ++
+    cache.states[best].last_use = cache.tick
+    cache.states[best].hits ++
+    cache.n_state_hits ++
+    return best_n
+}
+
+//! a checkpoint of the session where it stands: its first `n_past` tokens, their pages, the
+//! recurrent state. Nothing is kept when the state does not stand at that position.
+def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>) {
+    let n = min(long_length(tokens), s.n_past)
+    if (n <= 0l || cache.max_states <= 0l) {
+        return
+    }
+    cache.tick ++
+    for (st in cache.states) {
+        if (long_length(st.tokens) == n && shared_opening(st.tokens, tokens) == n) {
+            st.last_use = cache.tick
+            return
+        }
+    }
+    var snap <- dn_snapshot_take(s)
+    if (snap.pos != n) {
+        delete snap
+        return
+    }
+    let pr = pool.page_rows
+    var e <- PrefixState(snap <- snap, last_use = cache.tick)
+    e.tokens <- [for (i in range64(n)); tokens[i]]
+    let held = (n + pr - 1l) / pr
+    e.groups |> reserve(held)
+    for (i in range64(held)) {
+        e.groups |> push(s.block_table[i])
+        pool.refcnt[s.block_table[i]] ++
+    }
+    cache.states |> emplace(e)
+    cache.n_state_inserts ++
+    while (long_length(cache.states) > cache.max_states) {
+        var lru = 0
+        for (st, i in cache.states, count()) {
+            lru = st.last_use < cache.states[lru].last_use ? i : lru
+        }
+        prefix_state_drop(cache, pool, lru)
+    }
+}
+
+//! Pool page references the cache currently holds: a cached page each, and every page of every recurrent checkpoint.
+def prefix_held_groups_(cache : PrefixCache) : int64 {
+    var held = long_length(cache.entries)
+    for (st in cache.states) {
+        held += long_length(st.groups)
+    }
+    return held
+}
 
 //! Attach the longest cached prefix of ``prompt`` to a FRESH paged session of ``pool``, copying matched
 //! groups into the block table and setting ``n_past`` accordingly; returns the matched count, capped
 //! at one token short of the prompt so the tail eval always produces sampling logits.
 def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; prompt : array<int64>) : int64 {
-    if (!empty(s.dn_state_prefix)) {
-        // hybrid (deltanet): KV pages alone cannot reconstruct recurrent state, so no cached
-        // prefix is ever attachable — 0 matched is the correct result, the caller prefills all
-        return 0l
-    }
     if (s.kv_pool == null || s.kv_pool != unsafe(addr(pool))) {
         panic("prefix_attach: the session is not paged out of this pool")
     }
     if (s.n_past != 0l || !empty(s.block_table)) {
         panic("prefix_attach: the session already holds context (n_past {s.n_past}, {length(s.block_table)} pages) - attach only to a fresh session")
+    }
+    if (!empty(s.dn_state_prefix)) {
+        return prefix_attach_state(cache, pool, s, prompt)
     }
     let np = long_length(prompt)
     let pr = pool.page_rows
@@ -173,12 +303,13 @@ def private prefix_evict_lru(var cache : PrefixCache; var pool : KVPool) {
 //! Donate a finished session's pages into the cache, bumping pool refcnt so they survive release;
 //! only tokens up to ``n_past`` are eligible, and pages past the budget LRU-drop. Call right before
 //! ``release_kv_pages``. ``preview`` labels the donation's chain on the dashboard surface.
-def prefix_insert_(var cache : PrefixCache; var pool : KVPool; s : Session; tokens : array<int64>; preview : string = "") {
-    if (!empty(s.dn_state_prefix)) {
-        return   // hybrid (deltanet): pages without recurrent state can never be attached — don't cache
-    }
+def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; preview : string = "") {
     if (s.kv_pool == null || s.kv_pool != unsafe(addr(pool))) {
         panic("prefix_insert: the session is not paged out of this pool")
+    }
+    if (!empty(s.dn_state_prefix)) {
+        prefix_insert_state(cache, pool, s, tokens)
+        return
     }
     let pr = pool.page_rows
     let covered = min(long_length(tokens), s.n_past)
@@ -222,6 +353,9 @@ def prefix_release_(var cache : PrefixCache; var pool : KVPool) {
     }
     delete cache.entries
     delete cache.chains
+    while (!empty(cache.states)) {
+        prefix_state_drop(cache, pool, length(cache.states) - 1)
+    }
 }
 
 //! Snapshot of the donated chains for dashboards (order unspecified).

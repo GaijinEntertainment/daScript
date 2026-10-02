@@ -3412,6 +3412,24 @@ def kv_pool_alloc_group(var p : KVPool) : int {
     return g
 }
 
+//! A new group (refcount 1) holding a copy of group `src`'s rows on every blob.
+def kv_pool_copy_group(var p : KVPool; src : int) : int {
+    let g = kv_pool_alloc_group(p)   //! first: the allocation may move the blobs
+    for (b in range64(p.nblobs)) {
+        let kb = p.page_rows * p.krow_bytes[b]
+        let vb = p.page_rows * p.vrow_bytes[b]
+        unsafe {
+            if (kb > 0l) {
+                memcpy(addr(p.kblobs[b][int64(g) * kb]), addr(p.kblobs[b][int64(src) * kb]), kb)
+            }
+            if (vb > 0l) {
+                memcpy(addr(p.vblobs[b][int64(g) * vb]), addr(p.vblobs[b][int64(src) * vb]), vb)
+            }
+        }
+    }
+    return g
+}
+
 //! Drop one reference to group `g`; at zero the group returns to the free list.
 def kv_pool_release_group(var p : KVPool; g : int) {
     verify(p.refcnt[g] > 0)
@@ -5085,6 +5103,75 @@ def mtp_state_restore(var s : Session) {
     s.dn_pos = s.mtp_snap_pos
     mtp_ple_window_restore(s)
     moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
+}
+
+typedef DnHostSyncFn = function<(var s : Session) : void>
+var private g_dn_host_syncs : array<DnHostSyncFn>
+
+//! A driver that keeps a session's recurrent state off the host registers how it comes back:
+//! `fn` writes the state the driver holds into the session's host arrays and sets `dn_pos` to the
+//! position it stands at, and does nothing for a session it holds no state for.
+def register_dn_host_sync(fn : DnHostSyncFn) {
+    g_dn_host_syncs |> push(fn)
+}
+
+//! The session's recurrent state in its host arrays, `dn_pos` the position it stands at, wherever
+//! the state was living.
+def dn_state_to_host(var s : Session) {
+    dn_flush_all(s)
+    for (f in g_dn_host_syncs) {
+        invoke(f, s)
+    }
+}
+
+//! A session's forward-only state at one position: the recurrent layers' conv history and S, and
+//! the n-gram side input's ring and window. With the K/V rows below `pos` it continues a prompt.
+struct DnSnapshot {
+    pos : int64
+    @exact_size conv : array<float>
+    @exact_size state : array<float>
+    @exact_size ple_hist : array<float>
+    ple_prev : array<int64>
+    mtp_h : array<float>   //! the draft head's carry at `pos` - empty when it stood elsewhere
+}
+
+//! The recurrent state as it stands (brought to the host first), `pos` the position it expects next.
+def dn_snapshot_take(var s : Session) : DnSnapshot {
+    dn_state_to_host(s)
+    var snap <- DnSnapshot(pos = s.dn_pos, ple_prev := s.ple_prev)
+    let nc = long_length(s.dn_conv_state)
+    let ns = long_length(s.dn_state)
+    let np = long_length(s.ple_conv_hist)
+    snap.conv |> reserve_resize(nc)
+    snap.state |> reserve_resize(ns)
+    snap.ple_hist |> reserve_resize(np)
+    copy_floats_par(s.dn_conv_state, snap.conv, nc)
+    copy_floats_par(s.dn_state, snap.state, ns)
+    copy_floats_par(s.ple_conv_hist, snap.ple_hist, np)
+    if (s.mtp_h_pos1 == s.dn_pos && s.dn_pos > 0l) {
+        snap.mtp_h := s.mtp_h
+    }
+    return <- snap
+}
+
+//! `snap` into a session of the same geometry: its host arrays, `dn_pos`, and no device copy standing.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
+def dn_snapshot_restore(var s : Session; snap : DnSnapshot) {
+    if (long_length(snap.state) != long_length(s.dn_state) || long_length(snap.conv) != long_length(s.dn_conv_state)) {
+        panic("dn_snapshot_restore: the snapshot holds {long_length(snap.state)} state and {long_length(snap.conv)} conv floats, the session {long_length(s.dn_state)} and {long_length(s.dn_conv_state)} - another model's")
+    }
+    copy_floats_par(snap.conv, s.dn_conv_state, long_length(snap.conv))
+    copy_floats_par(snap.state, s.dn_state, long_length(snap.state))
+    copy_floats_par(snap.ple_hist, s.ple_conv_hist, min(long_length(snap.ple_hist), long_length(s.ple_conv_hist)))
+    for (i in range64(min(long_length(s.ple_prev), long_length(snap.ple_prev)))) {
+        s.ple_prev[i] = snap.ple_prev[i]
+    }
+    s.dn_pos = snap.pos
+    moe_gpu_dn_release(s.dn_owner.state_lo, s.dn_owner.state_hi)
+    if (!empty(snap.mtp_h)) {
+        s.mtp_h := snap.mtp_h
+    }
+    s.mtp_h_pos1 = empty(snap.mtp_h) ? 0l : snap.pos
 }
 
 //! row 0's logits after a rows prefill (the CPU verify's truth for the committed token, into `s.mtp_logits`), and its carry into `s.mtp_h0`

@@ -143,7 +143,12 @@ finiteness and range only; it carries no numeric oracle) and `mtp-gdraft-gpu` (a
 GPU draft step with Metal required).
 
 Prefill parity: `base mm-tail s16
-kq cont span span-fused span-mrope span-ds dim qkv` (mm-tail = the GEMV-tail residue peel -
+kq cont attn-dev span span-fused span-mrope span-ds dim qkv` (attn-dev = the device attention pair
+against the staged trio on one blob twin under the pair's pinned crown - a 300-row window on the
+32-row stamps, then a 384-row continuation on the 128-row ones, the last row's logits within
+0.4% of the largest, the continuation started one token later as the control, the same next
+token on both forms, the census counting each stamp once a layer and the softmax pass twice a
+layer; mm-tail = the GEMV-tail residue peel -
 four fixtures, npos % 32 == 1 (the lone row rides the reduction-split GEMV), == 2 (the b4
 form at 2 rows), == 5 (two b4 dispatches, 4 rows + 1) and npos == 5 (the pure-tail leg,
 no mul_mm at all) - token parity vs the all-CPU control, the tail-off A/B twin, and the
@@ -217,7 +222,15 @@ Conformer cell (f32-lane transcript equality CPU vs GPU + encode rel-l2 + counte
 the lane pin/reset discipline mirrors qwen3a's), the canary Metal FastConformer cell (the
 same discipline over the rel-pos XL block loop; decoder = the q8_0 serving artifact), the
 parakeet Metal FastConformer cell (the same chain over parakeet's f32 blob, minted in memory;
-transcript equality CPU vs GPU + the encoder rows' rel-l2 + counter deltas), plus
+transcript equality CPU vs GPU + the encoder rows' rel-l2 + counter deltas - the subsample front
+counted on the device at every GPU encode - then the front lever off (`set_metal_parakeet_front`:
+no front dispatch, the block seat still serving, the rows within the bar) and the two GEMM
+routes under the `mulmm_q8` crown - the device twin, its engage counted, and the f32 tiles with
+the twin knob off, the counter unmoved - each held to the same rel-l2 bar, then the two attention
+forms under the `mulmm_q8,attn_dev` crown - every head at once, its engage counted
+(`metal_tower_fc_dev_encodes`) and its transcript the CPU's, and the per-head loop with the lever
+off (`set_metal_fc_attn_dev`), the counter unmoved, the two forms' distances from the CPU rail
+asserted to differ; the crowns and the three levers are put back as the cell found them), plus
 the tower q8-decline - a q8 whisper encoder never dispatches and records the `quant_mode`
 decline, and the whisper serving default IS q8 unless `set_asr_fp32` / `set_asr_tower_fp32`
 asks for f32 (whisper carries no lane policy). Canary, parakeet and gemma4a do: un-pinned,
@@ -325,7 +338,17 @@ within one ulp of its carry, the mixed signal within 2e-6 - a 40000-frame cumsum
 accumulator where the two laws part by whole cycles, and the driver's own noise draw through the
 fill kernel (finite, repeatable per seed, moving with it); the STFT on either pad law's stamp and
 the inverse STFT with and without the window envelope. Each carries a poisoned input. The census row is one synthesis each
-on kitten-nano (the ONNX law's stamps) and kokoro-82m (the torch law's) on the file's planes (`cov_tower_styletts2`). The Pocket chain's cells (the same
+on kitten-nano (the ONNX law's stamps) and kokoro-82m (the torch law's) on the file's planes (`cov_tower_styletts2`). The parakeet
+front's cells (the same file): the first conv and the depthwise conv on an 11 x 10 image - odd
+along one axis, even along the other, so each edge drops its own taps - against the in-test
+loops, the sums asserted to take both signs so the first conv's ReLU and the depthwise conv's
+lack of one both show; the feature permute bit for bit with its row pad zero under a sentinel
+fill; the bias-and-ReLU row pass against max(x + b, 0) over sums of both signs. The FastConformer
+all-heads attention's two stamps (the same file): the half operands (`fc_twin`) bit for bit the RNE
+narrow of the host's sum or product over all five panels, their pad rows zero, one poisoned input
+a panel; the rel-shift softmax (`fc_pexp`) over two heads at 24 and 300 keys - the weights within
+one half step of the oracle's, the stat within 1e-5 of a double sum, pad rows and pad columns
+left as they were, a poisoned rel score reddening both. The Pocket chain's cells (the same
 file): the row copies with and without the ELU, the layer scale, the rows rope over a row stride
 from a column with the tables bound at a position's row, the attention
 row against `attention_causal_rows` over a `TtsKvCache` (every key and an 8-key window, an
@@ -866,7 +889,9 @@ draw on each path, the same token wherever the draw clears a CDF boundary (at le
 a half-mass margin as the floor's control), the k+3 tie set surviving a top-k of k, and a top-k
 past the fast cap taking the reference.
 `test_chat.das` - stocked suite; the chat template renderer per family against pinned token
-streams (each cell skips without its carrier), the tool wires, and the gemma-4 E2B cells: the
+streams (each cell skips without its carrier; the Qwen2.5 cell also holds `render_turn_marked`'s
+opening - the system turn on a first turn, none on a later one, its tokens the pinned ChatML
+prefill stream), the tool wires, and the gemma-4 E2B cells: the
 thinking renderer pins (the instruct prefill token for token, the gate + bare opener, the
 thinking-off extras on `effective_stop_ids`, a mid-conversation toggle staying instruct) and
 the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no channel marker in
@@ -885,7 +910,14 @@ The SmolLM cells drop the loaded model's GPU state (`moe_gpu_drop_model`) so the
 the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lane, and the
 tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream
 deltanet cell needs Qwen3.5-0.8B-Q8_0 and `DASLLAMA_GPU=1` on a box whose tier serves the
-deltanet decode step, and skips otherwise. `test_scheduler_device_mode_switch` holds the device
+deltanet decode step, and skips otherwise. `test_scheduler_idle_quantum` holds the prefill
+quantum's two sizes by the tokens one tick prefills: a lone stream's first tick takes the whole
+prompt under the idle quantum and one chunk with it off (`idle_chunk_tokens = 0`), the two streams
+token for token alike under classic prefill, both decoded in the log; a prompt admitted beside a
+decoding stream takes one chunk; an unset chunk and idle size are the serving backend's
+(`chunk_defaults`), and `chunk_default` reads `CPU_CHUNK_TOKENS` on the CPU and
+`DEFAULT_CHUNK_TOKENS` on a GPU. `test_scheduler_chunk_sizes` and `test_scheduler_mtp` pin the idle
+quantum off, since a lone stream would otherwise prefill their prompts in one window. `test_scheduler_device_mode_switch` holds the device
 mode's two CPU-decidable contracts: only an idle scheduler switches its session kind, and
 `submit` refuses a media request in device mode while it takes the same request with the mode off.
 `test_scheduler_mtp_resident_picks` runs a greedy speculative stream through the scheduler under
@@ -1180,7 +1212,11 @@ rows forms are per row, so the joint pass and the solo pass round alike), and it
 the same three streams with the LAST one on a prompt past 200 tokens, so the joint round's groups
 sit at different depths across three 64-row chunk boundaries - the round's chunk count, its
 attention form and every group's layer bases must follow that group's own depth and mirror cap,
-not group 0's; the Llama carrier also
+not group 0's, and the paged cell (`test_metal_paged_mtp`): one speculative stream of 150 reply
+tokens on a scheduler of 64-row pages - the server's session kind - emits token for token what a
+flat session emits, drafts accepted on both sides, the stream's rows asserted to span three pages
+so rounds cross page boundaries, and a Metal-served model's `chunk_defaults` read as
+`METAL_IDLE_CHUNK_TOKENS` idle and `DEFAULT_CHUNK_TOKENS` chunk; the Llama carrier also
 runs the pre-encode cell: four greedy streams through the scheduler with the batched driver's
 pre-encoded step off (the reference, its taken count pinned at zero) and on (the taken count at
 sixteen or more; the shipped default reads off), token for token per stream, then the rail's
@@ -1191,7 +1227,26 @@ kind, each stream's rows past one page - emit token for token what flat sessions
 path over one set of bytes: the mirror gathers the pool's rows verbatim), each side's Metal
 decode steps counted on their own with a one-token reply as the floor's control, both streams
 decoded in the log (a recurrent layer owns no K/V rows, so its pool blob is empty and the
-mirror's walk reads no base for it). Stocked
+mirror's walk reads no base for it); the MTP carrier also runs the prefix checkpoint cells
+(`ARCHITECTURE_ENGINE.md#prefix-recurrent-checkpoints`): `test_metal_prefix_checkpoint` - three
+prompts on one shared opening (asserted past two 64-row pages and off a page boundary) through one speculative scheduler: the first two attach nothing,
+the second's prefill stops at the opening and leaves the checkpoint, the third attaches it, and the
+second and third reply token for token as on a scheduler with no cache whose chunk is the opening
+(the cached run's own cuts), the two replies differing, then a marked request on a scheduler whose
+chunk is three quarters of the opening with the idle quantum off: the first tick prefills the whole
+opening, a checkpoint within a chunk and a half landing in one window; `test_metal_prefix_checkpoint_hinted` - a
+request marked with its stable opening (`PendingReq.stable_at`) leaves the checkpoint at once, the
+second prompt attaches it; a marked first request leaves two checkpoints (its opening and its
+finished turn), an unmarked one only its finished turn's, and the attached reply is token for
+token the uncached reply at the same cut;
+`test_metal_prefix_checkpoint_logits` - the verbs direct: a session attached at a checkpoint off a
+page boundary lands the donor's logits bit for bit after the same tail (the carry's position
+restored, the partial page its own copy), a checkpoint with its recurrent state zeroed lands
+logits 5% of the largest or more away, every page back in the pool - the reply to a strongly
+prompted tail survives a lost state, which is why this cell holds the logits;
+`test_metal_prefix_checkpoint_next_turn` - a finished turn's checkpoint: the prompt plus its 40
+counted tokens attach for the next turn, which continues the count token for token against an
+uncached 80-token stream. Stocked
 suite; skips off the JIT, without dasMetal, or without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
 name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table
 off, where every step is per-row by construction.
@@ -1419,7 +1474,11 @@ which skip without their carriers (the qwen2audio / voxtral / omni-3b f32 mmproj
 mmproj, the canary f32 encoder, the Qwen3-ASR bf16 mmproj), without jfk.wav, without a Vulkan
 device under `DASLLAMA_GPU=1`, and on a das_metal build.
 `test_whisper.das` - stocked suite; model-gated: the whisper/parakeet/canary/gemma4a/omni
-oracle cells, the Vulkan twin `test_whisper_vulkan_twin` (whisper tiny and large-v3-turbo; the
+oracle cells (the parakeet v2 cell also runs the transcription with single-thread mode off and
+on: the team leg dispatches, the one-lane leg never does, and its tokens are the team leg's - the
+decode step's one-lane form against its team publish, both texts logged - and the session that
+read the whole clip reading its first half token for token as a fresh session does, the half clip
+over 8 tokens), the Vulkan twin `test_whisper_vulkan_twin` (whisper tiny and large-v3-turbo; the
 cell described under `test_vulkan_tower_kernels.das`, skipping without the ggml files, without
 jfk.wav, without a Vulkan device under `DASLLAMA_GPU=1`, on a das_metal build, and when
 interpreted), the decoder twin `test_whisper_vulkan_wdec` (tiny and large-v3-turbo on jfk, the q8
@@ -1542,6 +1601,22 @@ the `max_unreserved_size` guard that must not panic.
 `test_from_template.das` - model-free: the `[from_template]` stamp (`dasllama/dasllama_tune`) - a
 placeholder call renames to the annotation's target per stub, and the stub's signature types the
 clone so one template stamps both plane overloads.
+`test_kv_prefix.das` - stocked suite; model-free cells on a synthetic Config: the prefix cache's page
+accounting, the LRU budget and the token verify, then a recurrent session's checkpoints - one
+checkpoint a donation with the page of its last row copied, the `max_states` budget, where a
+prefill stops (`prefix_checkpoint_at_`: the caller's stable opening, else the opening an earlier
+checkpoint shares, a token short of a prompt an earlier one holds whole, nowhere under a page past
+the hit or on a model with no recurrent state), and the side state (the n-gram input's last tokens
+and conv history ride the checkpoint; a snapshot of another state size is refused and leaves the
+session as it stood); model-gated (stories15M): attached pages plus a tail eval read the cold
+prefill's logits bit for bit.
+`test_metal_role_infer.das` - model-free: the `@role` derivation over the `_role_fixtures/` kernels,
+each compiled at run time - the grid micro-grammar, a buffer passed whole taking the callee
+parameter's direction (a contradicting `@role` refused), a pointer into a tracked buffer taking the
+pointee's const, the staged GEMM's device step and the device-pair step and store deriving their
+inline-addr operands (a wrong role on either refused), a generic helper resolved by base name, and
+a body that delegates to methods. Without das_metal the device-pair cell skips and the other cells
+pass after logging that the lens does not load.
 `test_kernel_backend.das` - model-free: the kernel-backend registry - the portable backend
 registered at `[init]` with a row-major default active (`test_portable_backend_always_registered`),
 select / pin / for-load pick a registered backend and an unknown name changes nothing
@@ -2288,6 +2363,8 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
   (the hyphenated directory is unreachable by path require).
 - `utils/dasllama-server/test_worker_dispatch.das` - requires the server (`openai_server`) by
   bare same-dir name, like the server suites beside it.
+- `utils/dasllama-server/test_server_flags.das` - requires the server's program root (`main`) and
+  `openai_server` by bare same-dir name.
 - `utils/dasllama-server/test_exchange_client.das` - requires `dasllama/dasllama_exchange` by
   registered name (nothing pins it to that directory); it stays beside the server suites
   because its fixed test port is coordinated with theirs (see its `TEST_PORT` note).

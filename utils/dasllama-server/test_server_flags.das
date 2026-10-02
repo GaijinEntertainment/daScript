@@ -68,6 +68,19 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> success(!mtp_default_resolved(4, "metal", ""), "four streams on Metal")
         t |> success(!mtp_default_resolved(4, "vulkan", ""), "four streams on a Vulkan device")
     }
+    t |> run("an unset chunk resolves to one window where a GPU prefills, the short chunk on the CPU") @(t : T?) {
+        t |> equal(chunk_default_resolved("metal", ""), 512, "Metal")
+        t |> equal(chunk_default_resolved("vulkan", ""), 512, "a Vulkan device")
+        t |> equal(chunk_default_resolved("", "auto"), 512, "the legacy --metal auto")
+        t |> equal(chunk_default_resolved("", ""), 64, "no device")
+        t |> equal(chunk_default_resolved("off", "required"), 64, "the CPU, whatever --metal says")
+    }
+    t |> run("a slot's default chunk reads its own arm outcome, not the box's GPU tier") @(t : T?) {
+        t |> success(prefills_on_gpu(true, "cpu"), "the Metal flavor - its tier word reads cpu")
+        t |> success(prefills_on_gpu(false, "gpu:resident"), "the whole model resident on a Vulkan device")
+        t |> success(prefills_on_gpu(false, "gpu:rails"), "a model the device serves in part still prefills there")
+        t |> success(!prefills_on_gpu(false, "cpu"), "a CPU slot beside another slot's armed model")
+    }
     t |> run("a slot arms on one stream whose decode runs on a GPU") @(t : T?) {
         t |> success(mtp_auto_arms(1l, true, "cpu"), "the Metal flavor - its tier word reads cpu")
         t |> success(mtp_auto_arms(1l, false, "gpu:resident"), "the whole model resident on a Vulkan device")
@@ -76,6 +89,30 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> success(!mtp_auto_arms(1l, false, "cpu"), "the CPU")
         t |> success(!mtp_auto_arms(4l, true, "cpu"), "four streams on Metal")
         t |> success(!mtp_auto_arms(4l, false, "gpu:resident"), "four streams on a Vulkan device")
+    }
+    t |> run("an unset ASR dispatch joins the team when every LLM slot decodes on a GPU") @(t : T?) {
+        t |> success(decodes_on_gpu(true, "cpu"), "the Metal flavor - its tier word reads cpu")
+        t |> success(decodes_on_gpu(false, "gpu:resident"), "the whole model resident on a Vulkan device")
+        t |> success(!decodes_on_gpu(false, "gpu:resident", true), "... but not where its routed experts sum on the host")
+        t |> success(!decodes_on_gpu(false, "gpu:rails"), "a model the device serves in part decodes on the team")
+        t |> success(!decodes_on_gpu(false, "cpu"), "the CPU")
+        t |> success(asr_auto_team(1, 1), "one slot, on a GPU")
+        t |> success(asr_auto_team(2, 2), "two slots, both on a GPU")
+        t |> success(!asr_auto_team(2, 1), "one slot of two decodes on the CPU: the team is its")
+        t |> success(!asr_auto_team(1, 0), "one slot on the CPU")
+        t |> success(asr_auto_team(0, 0), "a speech-only server: nothing else publishes to the team")
+    }
+    t |> run("the dispatch mode decides which speech workers publish to the team") @(t : T?) {
+        let hybrid_gpu = speech_team_dispatch(true, -1, 1, 1)
+        t |> success(hybrid_gpu.asr && !hybrid_gpu.tts, "hybrid, every slot on a GPU: ASR on the team, TTS inline")
+        let hybrid_cpu = speech_team_dispatch(true, -1, 1, 0)
+        t |> success(!hybrid_cpu.asr && !hybrid_cpu.tts, "hybrid beside a CPU slot: both inline")
+        let team = speech_team_dispatch(true, 1, 1, 0)
+        t |> success(team.asr && team.tts, "team: both publish, whatever the slots decode on")
+        let asr_inline = speech_team_dispatch(true, 0, 1, 1)
+        t |> success(!asr_inline.asr && !asr_inline.tts, "ASR pinned inline beside GPU slots")
+        let inline_mode = speech_team_dispatch(false, 1, 1, 1)
+        t |> success(!inline_mode.asr && !inline_mode.tts, "inline: nobody publishes")
     }
     t |> run("the Metal mode: the --gpu pick when there is one, else the legacy --metal mode") @(t : T?) {
         t |> success(resolved_metal_mode(MetalMode.when_available, "vulkan") == MetalMode.off, "a --gpu pick wins over --metal")

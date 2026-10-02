@@ -185,8 +185,13 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // (qwen4exp): the one carrier is Qwen3.8-Flash-Next (94 GB, the large tier), which no census
     // row loads. Their coverage is the hc_*/ple_* gates in test_metal_misc_kernels.das and the
     // sigmoid leg of dn_chain_gate in test_metal_prefill_kernels.das
-    "MetalHcNorm", "MetalHcLo", "MetalHcInit", "MetalHcMix", "MetalHcCombine", "MetalPleGate", "MetalPleConv",
-    "MetalDnGateSig"
+    "metal_hc_norm", "MetalHcLo", "metal_hc_init", "metal_hc_mix", "metal_hc_combine", "metal_ple_gate", "metal_ple_conv",
+    "MetalDnGateSig",
+    // the device attention pair's 128-row stamps: they serve a window whose padded row count is a
+    // multiple of 128, and the census prompt pads to 608 rows, which the 32-row stamps take. Their
+    // coverage is attn_qk_dev_gate and attn_dev_pair_gate in test_metal_gemm_kernels.das and the
+    // attn-dev arm's 384-row continuation in test_metal_prefill_parity.das
+    "MetalAttnQKDev128", "MetalAttnAVDev128"
 ]
 
 [unused_argument(t, path, family, kdts, nbs)]   // off-Apple the gated body is empty
@@ -677,10 +682,18 @@ def private cov_tower_gemma4uv(t : T?) {
 }
 
 //! Blind entries whose stamp compiles only behind a box crown, and the crown that reaches them:
-//! where the crown IS pinned a stocked carrier dispatches the stamp, so the drain assert would red
-//! on a correct box. `CENSUS_NEVER_DISPATCHED` has no vocabulary for "blind only off this crown",
-//! so the pair is named here.
-let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {"MetalKqMvB2K4R2" => "kq_mvb2_k4_r2"}
+//! where the crown IS pinned a stocked carrier may dispatch the stamp, and where it is NOT the stamp
+//! never compiled and the entry matches no census key - the drain assert would red on a correct box
+//! either way. `CENSUS_NEVER_DISPATCHED` has no vocabulary for "blind only off this crown", so the
+//! pair is named here.
+let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {
+    "MetalKqMvB2K4R2" => "kq_mvb2_k4_r2",
+    "metal_kq_gemv_iq3s_f4" => "kq_gemv_iq3s_f4",
+    "metal_kq_gemv_iq3xxs_f4" => "kq_gemv_iq3xxs_f4",
+    "MetalKqGemvIq2xxsF4" => "kq_gemv_iq2xxs_f4",
+    "MetalAttnQKDev128" => "attn_dev",
+    "MetalAttnAVDev128" => "attn_dev"
+}
 
 //! Did this run compile the GATED stamp families the blind list names? Two gates decide it, both
 //! read from the run itself rather than re-probed: the Metal-4 tensor toolchain - the prefill's PSO
@@ -719,6 +732,10 @@ def private metal_census_blind_drain(t : T?; cov : table<string; int64>) {
             continue
         }
         let crown = CENSUS_CROWN_CONDITIONAL?[blind] ?? ""
+        if (!named && !empty(crown) && !metal_tensor_crowned(crown)) {
+            t |> skip("{blind}: the {crown} crown is not pinned on this box, so its stamp never compiled and the entry matches no census key here")
+            continue
+        }
         if (hits > 0l && !empty(crown) && metal_tensor_crowned(crown)) {
             t |> skip("{blind}: the {crown} crown is pinned on this box, so a stocked carrier reaches it ({hits}) - the entry is blind only off that crown")
             continue

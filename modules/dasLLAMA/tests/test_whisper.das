@@ -14,6 +14,7 @@ require dasllama/dasllama_tower
 require dasllama/dasllama_common   // KVDtype — the oracle cells pin the f32 parity rail
 require dasllama/dasllama_gguf
 require dasllama/dasllama_math   // with_dasllama_jobque_
+require dasllama/dasllama_par    // set_single_thread_ / get_disp_count - the parakeet decode step's one-lane leg
 require daslib/jobque_boost
 require daslib/fio
 require daslib/defer
@@ -331,6 +332,8 @@ def test_parakeet_oracle(t : T?) {
             t |> success(segs[0].text == "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.", "text")
             t |> equal(s.detected_lang, "en")
 
+            reused_session_leg(t, m, s, samples)
+
             t |> equal(m.pk.q8, !parakeet_gpu_serves(), "default load follows the lane policy - q8 unless the Metal driver serves")
             var inscope mf = AsrModel(kind = AsrKind.parakeet)
             var inscope stg <- stage_parakeet_model(path, !m.pk.q8)
@@ -346,6 +349,26 @@ def test_parakeet_oracle(t : T?) {
             t |> equal(length(fsegs[0].tokens), length(segs[0].tokens), "q8/fp32 token count")
             for (a, b in fsegs[0].tokens, segs[0].tokens) {
                 t |> equal(a, b, "q8/fp32 token")
+            }
+            // the decode step's one-lane form against its team publish: the same rows, columns and order either way
+            let was_single = get_single_thread_()
+            set_single_thread_(false)
+            let d0 = get_disp_count()
+            var inscope s0 <- create_session(m)
+            var inscope tsegs <- session_segs(m, s0, samples)
+            let d1 = get_disp_count()
+            set_single_thread_(true)
+            var inscope s1 <- create_session(m)
+            var inscope isegs <- session_segs(m, s1, samples)
+            let d2 = get_disp_count()
+            set_single_thread_(was_single)
+            t |> success(d1 > d0, "the team transcription dispatched ({d1 - d0} times)")
+            t |> equal(d2, d1, "the one-lane transcription never dispatched")
+            t |> success(length(tsegs) == 1 && length(isegs) == 1, "one segment a leg")
+            to_log(LOG_INFO, "parakeet-v2 jfk team eyeball: '{tsegs[0].text}'\nparakeet-v2 jfk one-lane eyeball: '{isegs[0].text}'\n")
+            t |> equal(length(isegs[0].tokens), length(tsegs[0].tokens), "one-lane token count")
+            for (a, b in isegs[0].tokens, tsegs[0].tokens) {
+                t |> equal(a, b, "one-lane token")
             }
         }
     }
@@ -846,6 +869,21 @@ def private session_segs(m; var s; samples : array<float>) : array<TranscribeSeg
         segs |> push_clone(seg)
     }
     return <- segs
+}
+
+//! a serving worker's session sees clips of every length: a session that read the whole clip reads its first half as a fresh one does
+def private reused_session_leg(t : T?; m; var s; samples : array<float>) {
+    var inscope half <- [for (i in range(length(samples) / 2)); samples[i]]
+    var inscope rsegs <- session_segs(m, s, half)
+    var inscope sh <- create_session(m)
+    var inscope hsegs <- session_segs(m, sh, half)
+    t |> success(length(rsegs) == 1 && length(hsegs) == 1, "one segment a leg")
+    to_log(LOG_INFO, "half clip, reused session: '{rsegs[0].text}'\nhalf clip, fresh session: '{hsegs[0].text}'\n")
+    t |> success(length(hsegs[0].tokens) > 8, "the half clip is a transcript of its own ({length(hsegs[0].tokens)} tokens)")
+    t |> equal(length(rsegs[0].tokens), length(hsegs[0].tokens), "reused-session token count")
+    for (a, b in rsegs[0].tokens, hsegs[0].tokens) {
+        t |> equal(a, b, "reused-session token")
+    }
 }
 
 def private segs_text(segs : array<TranscribeSegment>) : string {

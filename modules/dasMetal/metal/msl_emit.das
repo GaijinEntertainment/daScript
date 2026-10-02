@@ -532,6 +532,7 @@ let private MSL_LADDER_OWNED : table<string> <- {
     "tmm2d_tg_begin", "tmm2d_tg_step", "tmm2d_tg_store", "tmm2d_tg_store_bias", "tmm2d_tg_store_half",
     "tmm2d_tg_begin_deva", "tmm2d_tg_step_deva", "tmm2d_tile_tg", "tmm2d_tg_rowscale",
     "tmm2d_tg_begin_nt", "tmm2d_tg_step_nt", "tmm2d_tg_begin_devant", "tmm2d_tg_step_devant",
+    "tmm2d_tg_begin_devab", "tmm2d_tg_step_devab", "tmm2d_tg_begin_devabnt", "tmm2d_tg_step_devabnt",
     "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int"
 }
 
@@ -807,7 +808,8 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
             mark_write_target(ctx, ecs.arguments[1])
         }
         if (((scn == "tmm2d_tg_begin" || scn == "tmm2d_tg_begin_nt" || scn == "tmm2d_tg_begin_devant") && length(ecs.arguments) == 5)
-                || (scn == "tmm2d_tg_begin_deva" && length(ecs.arguments) == 6)) {
+                || (scn == "tmm2d_tg_begin_deva" && length(ecs.arguments) == 6)
+                || ((scn == "tmm2d_tg_begin_devab" || scn == "tmm2d_tg_begin_devabnt") && length(ecs.arguments) == 4)) {
             var acc0 = ecs.arguments[0]
             if (acc0 is ExprRef2Value) {
                 acc0 = (acc0 as ExprRef2Value).subexpr
@@ -2859,6 +2861,71 @@ def private emit_tmm2d_tg_step_deva(var ctx : MslCtx; ec : ExprCall?; indent : s
     lines |> push("{indent}\}")
 }
 
+//! a devab operand streams float16 and nothing else: the flavor exists for the native half x half path
+def private tmm2d_devab_half(var ctx : MslCtx; e : Expression?; what : string) {
+    let t = e._type
+    if (t == null || t.firstType == null || t.firstType.baseType != Type.tFloat16) {
+        err(ctx, e.at, "tmm2d devab: the {what} operand is a device float16 stream, not {t != null && t.firstType != null ? describe(t.firstType) : "an untyped pointer"} - write the operand's half twin first")
+    }
+}
+
+[arch(at="../ARCHITECTURE.md#tmm2d-device-pair")]
+def private emit_tmm2d_tg_begin_devab(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>; natural_b : bool) {
+    let cname = natural_b ? "tmm2d_tg_begin_devabnt" : "tmm2d_tg_begin_devab"
+    if (length(ec.arguments) != 4) {
+        err(ctx, ec.at, "{cname} takes exactly 4 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let m = tmm2d_const_uint(ctx, ec.arguments[1], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[2], "n (tile cols)")
+    let sgs = tmm2d_const_uint(ctx, ec.arguments[3], "sgs (simdgroups)")
+    if (m == 0u || n == 0u || sgs == 0u) {
+        return
+    }
+    var a0 = ec.arguments[0]
+    if (a0 is ExprRef2Value) {
+        a0 = (a0 as ExprRef2Value).subexpr
+    }
+    if (a0 is ExprVar) {
+        ctx.tg_accs[string((a0 as ExprVar).name)] = "{int(m)}|{int(n)}|{int(sgs)}|dyn"
+    }
+    note(ctx, "call.{cname}")
+    lines |> push("{indent}constexpr auto __tgd_{acc} = matmul2d_descriptor({int(m)}, {int(n)}, static_cast<int>(dynamic_extent), false, {natural_b ? "false" : "true"}, true, matmul2d_descriptor::mode::multiply_accumulate);")
+    lines |> push("{indent}matmul2d<__tgd_{acc}, execution_simdgroups<{int(sgs)}>> __tgop_{acc};")
+    lines |> push("{indent}using __tgta_{acc} = tensor<device half, dextents<int32_t, 2>, tensor_inline>;")
+    lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template get_destination_cooperative_tensor<__tgta_{acc}, __tgta_{acc}, float>();")
+}
+
+[arch(at="../ARCHITECTURE.md#tmm2d-device-pair")]
+def private emit_tmm2d_tg_step_devab(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>; natural_b : bool) {
+    let cname = natural_b ? "tmm2d_tg_step_devabnt" : "tmm2d_tg_step_devab"
+    if (length(ec.arguments) != 8) {
+        err(ctx, ec.at, "{cname} takes exactly 8 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    tmm2d_devab_half(ctx, ec.arguments[1], "A")
+    tmm2d_devab_half(ctx, ec.arguments[3], "B")
+    let ap = emit_value(ctx, ec.arguments[1])
+    let lda = emit_value(ctx, ec.arguments[2])
+    let bp = emit_value(ctx, ec.arguments[3])
+    let ldb = emit_value(ctx, ec.arguments[4])
+    let m = tmm2d_const_uint(ctx, ec.arguments[5], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[6], "n (tile cols)")
+    let kk = emit_value(ctx, ec.arguments[7])
+    if (m == 0u || n == 0u) {
+        return
+    }
+    note(ctx, "call.{cname}")
+    let bext = natural_b ? "{int(n)}, int({kk})" : "int({kk}), {int(n)}"
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    auto __A = __tgta_{acc}((device half *)({ap}), dextents<int32_t, 2>(int({kk}), {int(m)}), metal::array<int32_t, 2>\{1, int({lda})\});")
+    lines |> push("{indent}    auto __B = __tgta_{acc}((device half *)({bp}), dextents<int32_t, 2>({bext}), metal::array<int32_t, 2>\{1, int({ldb})\});")
+    lines |> push("{indent}    __tgop_{acc}.run(__A, __B, __tgf_{acc});")
+    lines |> push("{indent}\}")
+}
+
 def private emit_tmm2d_tg_step(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 6) {
         err(ctx, ec.at, "tmm2d_tg_step takes exactly 6 arguments")
@@ -3313,6 +3380,10 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_tmm2d_tg_begin_devant(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_step_devant") {
             emit_tmm2d_tg_step_devant(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_tg_begin_devab" || cname == "tmm2d_tg_begin_devabnt") {
+            emit_tmm2d_tg_begin_devab(ctx, ec, indent, lines, cname == "tmm2d_tg_begin_devabnt")
+        } elif (cname == "tmm2d_tg_step_devab" || cname == "tmm2d_tg_step_devabnt") {
+            emit_tmm2d_tg_step_devab(ctx, ec, indent, lines, cname == "tmm2d_tg_step_devabnt")
         } elif (cname == "tmm2d_tg_step_nt") {
             emit_tmm2d_tg_step_nt(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_step") {

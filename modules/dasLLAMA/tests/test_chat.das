@@ -143,6 +143,21 @@ def test_chat_qwen(t : T?) {
         want |> push(ims)
         want |> push_from(bpe_encode(raw, "assistant\n"))
         t |> success(ids_equal(engine_prefill(m, SYS, USR), want), "qwen chatml prefill token-for-token")
+        // the marked render: a first turn's opening is its system turn, a later turn has none
+        var c = create_chat(m, SYS)
+        add_user(c, USR)
+        var marked <- render_turn_marked(m, c)
+        var inscope sys_toks <- bpe_encode(raw, "system\n{SYS}")
+        var inscope nl_toks <- bpe_encode(raw, "\n")
+        t |> equal(marked.opening, 2l + long_length(sys_toks) + long_length(nl_toks), "the opening is the system turn, marker to newline")
+        t |> success(marked.opening > 0l && marked.opening < long_length(marked.toks), "and stops short of the user turn ({marked.opening} of {long_length(marked.toks)})")
+        t |> success(ids_equal(marked.toks, want), "the marked render's tokens are render_turn's")
+        c.first = false
+        var later <- render_turn_marked(m, c)
+        t |> equal(later.opening, 0l, "a later turn has no opening")
+        delete later
+        delete marked
+        delete c
         delete raw
         delete m
     }

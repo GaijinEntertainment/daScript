@@ -445,10 +445,9 @@ def private hermes_results_text(c : ChatSession) : string {
     return s
 }
 
-// Render this turn's prefill: (first turn) BOS + system, then the user turn and the generation
-// prompt. Deliberately CONST on `c` — render_turn_ inspects through it, so repeated renders must
-// be identical; the displaced-results / open-turn state clears at consumption (consume_pending_).
-def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
+//! Answers the opening's length (a first turn's BOS, prelude, system turn); CONST on `c`: render_turn_ re-renders, so renders match.
+def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : int64 {
+    let base = long_length(out)
     if (c.first && c.tmpl.add_bos) {
         out |> push(bos_id(m))
     }
@@ -473,6 +472,7 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
             }
         }
     }
+    let opening = c.first ? long_length(out) - base : 0l
     let mode = c.tmpl.tool_mode
     // results a later add_user displaced ([…, tool, user]): their turn renders first, in transcript order
     if (!empty(c.pending_results) && !c.pending_is_tool) {
@@ -510,6 +510,7 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) {
     } else {
         render_assistant_open(m, c, out)
     }
+    return opening
 }
 
 // The pending tool results in the family's own framing (everything but hermes): harmony/llama
@@ -840,6 +841,20 @@ def render_turn_(m : Model; c : ChatSession) : array<int64> {
     render_prompt(m, c, out)
     render_think_suppress(m, c, out)
     return <- out
+}
+
+//! A rendered turn and the length of its opening: the leading tokens the pending turn's own text does not reach.
+struct RenderedTurn {
+    toks : array<int64>
+    opening : int64
+}
+
+//! `render_turn_` with the opening marked: BOS, prelude and the system turn on a conversation's first turn, nothing after it.
+def render_turn_marked_(m : Model; c : ChatSession) : RenderedTurn {
+    var turn : RenderedTurn
+    turn.opening = render_prompt(m, c, turn.toks)
+    render_think_suppress(m, c, turn.toks)
+    return <- turn
 }
 
 //! `render_turn_`'s IMAGE twin: the turn's prefill as the two token spans that bracket the image

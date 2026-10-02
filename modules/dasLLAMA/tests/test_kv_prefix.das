@@ -12,7 +12,8 @@ require daslib/jobque_boost
 require daslib/fio
 require daslib/linq
 
-// Prefix cache (S5) — accounting, the attach cap, LRU budget, and token verification on a tiny
+// Prefix cache (S5) — accounting, the attach cap, LRU budget, token verification, and a recurrent
+// session's checkpoints (sharing, the copied page, the budget, where a prefill stops) on a tiny
 // synthetic Config (no model files, never skips); then warm == cold BIT-EXACT reuse on stories15M
 // (classic prefill is chunk-invariant, so attached pages + a tail eval reproduce the cold logits
 // byte for byte).
@@ -128,6 +129,247 @@ def test_prefix_verify_tokens(t : T?) {
         t |> equal(0, length(w.block_table))
         release_kv_pages_(s)
         prefix_release_(cache, pool)
+        delete toks
+        delete w
+        delete s
+        delete cache
+        delete pool
+    }
+}
+
+//! a paged session that reads as recurrent to the cache, standing at `n` evaled rows with its state at the same position
+def private mk_recurrent(c : Config; var pool : KVPool; n : int64) : Session {
+    var s <- make_run_state_paged(c, pool)
+    s.dn_state_prefix |> push(0l)
+    s.dn_conv_prefix |> push(0l)
+    s.dn_state <- [for (i in range64(8l)); float(n * 10l + i)]   // one recurrent layer's state, a value a position
+    s.dn_conv_state <- [for (i in range64(4l)); float(n * 100l + i)]
+    if (n > 0l) {
+        kv_ensure(s, n)
+    }
+    s.n_past = n
+    s.dn_pos = n
+    return <- s
+}
+
+def private live_refs(pool : KVPool) : int {
+    var live = 0
+    for (g in range64(pool.capacity_groups)) {
+        live += pool.refcnt[g]
+    }
+    return live
+}
+
+[test]
+def test_prefix_checkpoint_accounting(t : T?) {
+    t |> run("a recurrent session's donation is one checkpoint: whole pages shared, the page of the last row copied, every page back at release") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_()
+        var s <- mk_recurrent(c, pool, 6l)   // a page and a half at P=4
+        var toks <- [for (i in range64(9l)); 100l + i]
+        prefix_insert_(cache, pool, s, toks)
+        t |> equal(1, length(cache.states), "one checkpoint")
+        t |> equal(6l, long_length(cache.states[0].tokens), "it holds the evaled tokens, not the whole list")
+        t |> equal(0, length(cache.entries), "a recurrent model donates no page chain")
+        t |> equal(2l, prefix_held_groups_(cache), "the cache counts the checkpoint's two pages as held")
+        let g0 = s.block_table[0]
+        let g1 = s.block_table[1]
+        t |> equal(2, pool.refcnt[g0], "the checkpoint holds the whole page")
+        t |> equal(2, pool.refcnt[g1], "and the partial one")
+        prefix_insert_(cache, pool, s, toks)
+        t |> equal(1, length(cache.states), "the same tokens leave no second checkpoint")
+        var w <- mk_recurrent(c, pool, 0l)
+        t |> equal(6l, prefix_attach_(cache, pool, w, toks), "a prompt past the checkpoint attaches all of it")
+        t |> equal(6l, w.n_past)
+        t |> equal(6l, w.dn_pos, "the recurrent state stands at the checkpoint")
+        t |> success(sequence_equal(w.dn_state, s.dn_state) && sequence_equal(w.dn_conv_state, s.dn_conv_state), "and is the donor's, where the fresh session held its own")
+        t |> equal(60.0, w.dn_state[0])
+        t |> equal(2, length(w.block_table))
+        t |> equal(g0, w.block_table[0], "the whole page is shared")
+        t |> success(w.block_table[1] != g1, "the partial page is the session's own copy")
+        t |> equal(3, pool.refcnt[g0])
+        t |> equal(1, pool.refcnt[w.block_table[1]])
+        var same <- [for (i in range64(6l)); 100l + i]
+        var w2 <- mk_recurrent(c, pool, 0l)
+        t |> equal(0l, prefix_attach_(cache, pool, w2, same), "a prompt the checkpoint covers whole attaches nothing: its last token must be evaled")
+        var other <- [for (i in range64(9l)); i < 5l ? 100l + i : 700l + i]
+        t |> equal(0l, prefix_attach_(cache, pool, w2, other), "a prompt leaving the checkpoint's tokens early attaches nothing: the state is at one position only")
+        release_kv_pages_(s)
+        release_kv_pages_(w)
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page is back")
+        t |> equal(0, live_refs(pool))
+        delete other
+        delete same
+        delete toks
+        delete w
+        delete w2
+        delete s
+        delete cache
+        delete pool
+    }
+    t |> run("a checkpoint on a page boundary still copies the page of its last row; a state off the session's position is not kept") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_()
+        var toks <- [for (i in range64(12l)); 100l + i]
+        var off <- mk_recurrent(c, pool, 8l)
+        off.dn_pos = 7l
+        prefix_insert_(cache, pool, off, toks)
+        t |> equal(0, length(cache.states), "a state one position behind its rows leaves no checkpoint")
+        off.dn_pos = 8l
+        prefix_insert_(cache, pool, off, toks)
+        t |> equal(1, length(cache.states))
+        var w <- mk_recurrent(c, pool, 0l)
+        t |> equal(8l, prefix_attach_(cache, pool, w, toks))
+        t |> equal(off.block_table[0], w.block_table[0], "the first page is shared")
+        t |> success(w.block_table[1] != off.block_table[1], "the page of row 7 is copied though it is whole: the draft head rewrites that row")
+        release_kv_pages_(off)
+        release_kv_pages_(w)
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page is back")
+        delete toks
+        delete w
+        delete off
+        delete cache
+        delete pool
+    }
+}
+
+[test]
+def test_prefix_checkpoint_budget(t : T?) {
+    t |> run("max_states drops the checkpoint used longest ago, and a budget of none keeps nothing") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_(0l, 2l)
+        var lists : array<array<int64>>
+        lists |> reserve(3)
+        for (k in range64(3l)) {
+            var s <- mk_recurrent(c, pool, 5l)
+            var toks <- [for (i in range64(8l)); 100l * (k + 1l) + i]
+            if (k == 2l) {   // the first checkpoint is used again before the third lands, so the second is the oldest
+                var w <- mk_recurrent(c, pool, 0l)
+                t |> equal(5l, prefix_attach_(cache, pool, w, lists[0]))
+                release_kv_pages_(w)
+                delete w
+            }
+            prefix_insert_(cache, pool, s, toks)
+            release_kv_pages_(s)
+            lists |> emplace(toks)
+            delete s
+        }
+        t |> equal(2, length(cache.states), "two checkpoints stand")
+        var hits : array<int64>
+        hits |> reserve(3)
+        for (toks in lists) {
+            var w <- mk_recurrent(c, pool, 0l)
+            hits |> push(prefix_attach_(cache, pool, w, toks))
+            release_kv_pages_(w)
+            delete w
+        }
+        t |> equal(5l, hits[0], "the checkpoint used since stands")
+        t |> equal(0l, hits[1], "the one used longest ago is gone")
+        t |> equal(5l, hits[2], "the newest stands")
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "the dropped checkpoint's pages went back with the rest")
+        var none <- create_prefix_cache_(0l, 0l)
+        var s <- mk_recurrent(c, pool, 5l)
+        prefix_insert_(none, pool, s, lists[0])
+        t |> equal(0, length(none.states), "a budget of none keeps no checkpoint")
+        release_kv_pages_(s)
+        delete s
+        delete none
+        delete hits
+        delete lists
+        delete cache
+        delete pool
+    }
+}
+
+[test]
+def test_prefix_checkpoint_at(t : T?) {
+    t |> run("the prefill stops at the caller's stable opening, else at an opening an earlier checkpoint shares, and nowhere on a model with no recurrent state") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 64l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_()
+        var prompt <- [for (i in range64(20l)); 100l + i]
+        var s <- mk_recurrent(c, pool, 0l)
+        t |> equal(0l, prefix_checkpoint_at_(cache, pool, s, prompt, 0l, 0l), "no hint and no checkpoint: nowhere")
+        t |> equal(12l, prefix_checkpoint_at_(cache, pool, s, prompt, 0l, 12l), "the stable opening")
+        t |> equal(0l, prefix_checkpoint_at_(cache, pool, s, prompt, 9l, 12l), "under a page past the hit it is not worth a window")
+        t |> equal(0l, prefix_checkpoint_at_(cache, pool, s, prompt, 0l, 20l), "an opening that is the whole prompt leaves nothing to eval")
+        var plain <- make_run_state_paged(c, pool)
+        t |> equal(0l, prefix_checkpoint_at_(cache, pool, plain, prompt, 0l, 12l), "a model with no recurrent state checkpoints nowhere: its pages are the cache")
+        var donor <- mk_recurrent(c, pool, 14l)
+        var earlier <- [for (i in range64(14l)); i < 10l ? 100l + i : 900l + i]   // shares the prompt's first 10 tokens
+        prefix_insert_(cache, pool, donor, earlier)
+        t |> equal(10l, prefix_checkpoint_at_(cache, pool, s, prompt, 0l, 0l), "with no hint, the opening the earlier prompt shares")
+        t |> equal(12l, prefix_checkpoint_at_(cache, pool, s, prompt, 0l, 12l), "the hint wins over it")
+        t |> equal(0l, prefix_checkpoint_at_(cache, pool, s, prompt, 8l, 0l), "the shared opening under a page past the hit is nowhere too")
+        var none <- create_prefix_cache_(0l, 0l)
+        t |> equal(0l, prefix_checkpoint_at_(none, pool, s, prompt, 0l, 12l), "a cache that keeps no checkpoint asks for none")
+        var longer <- mk_recurrent(c, pool, 24l)
+        var past <- [for (i in range64(24l)); 100l + i]   // the prompt whole, and four tokens more
+        prefix_insert_(cache, pool, longer, past)
+        t |> equal(19l, prefix_checkpoint_at_(cache, pool, s, prompt, 0l, 0l), "an earlier prompt that holds this one whole stops it a token short: the last is evaled")
+        release_kv_pages_(longer)
+        release_kv_pages_(donor)
+        prefix_release_(cache, pool)
+        delete past
+        delete longer
+        delete none
+        delete earlier
+        delete donor
+        delete plain
+        delete s
+        delete prompt
+        delete cache
+        delete pool
+    }
+}
+
+def private restore_panics(var s : Session; snap : DnSnapshot) : bool {
+    var tripped = false
+    try {
+        dn_snapshot_restore(s, snap)
+    } recover {
+        tripped = true
+    }
+    return tripped
+}
+
+[test]
+def test_prefix_checkpoint_side_state(t : T?) {
+    t |> run("a checkpoint carries the n-gram side input's history with the recurrent state, and a state of another geometry is refused") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_()
+        var s <- mk_recurrent(c, pool, 6l)
+        s.ple_prev <- [7l, 8l]
+        s.ple_conv_hist <- [for (i in range64(6l)); float(6000l + i)]
+        var toks <- [for (i in range64(9l)); 100l + i]
+        prefix_insert_(cache, pool, s, toks)
+        s.ple_prev[0] = 99l   // the donor moves on; the checkpoint keeps what it took
+        s.ple_conv_hist[0] = -1.0
+        var w <- mk_recurrent(c, pool, 0l)
+        w.ple_prev <- [-1l, -1l]
+        w.ple_conv_hist |> reserve_resize(6l)
+        t |> equal(6l, prefix_attach_(cache, pool, w, toks))
+        t |> success(w.ple_prev[0] == 7l && w.ple_prev[1] == 8l, "the attached session holds the checkpoint's last tokens ({w.ple_prev[0]}, {w.ple_prev[1]})")
+        t |> success(w.ple_conv_hist[0] == 6000.0 && w.ple_conv_hist[5] == 6005.0, "and its conv history ({w.ple_conv_hist[0]} .. {w.ple_conv_hist[5]})")
+        var snap <- dn_snapshot_take(s)
+        var wide <- mk_recurrent(c, pool, 0l)
+        wide.dn_state |> reserve_resize(16l)
+        t |> success(restore_panics(wide, snap), "a session of another model's state size refuses the snapshot")
+        t |> equal(1.0, wide.dn_state[1], "and is left as it stood")
+        t |> success(!restore_panics(w, snap), "a session of the snapshot's own geometry takes it")
+        release_kv_pages_(s)
+        release_kv_pages_(w)
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page is back")
+        delete snap
+        delete wide
         delete toks
         delete w
         delete s

@@ -262,6 +262,147 @@ def private check_fastmath_default {
     delete files
 }
 
+//! the top-level ` + ` summands of an index expression (parentheses and brackets keep their sums whole)
+def private index_summands(idx : string) : array<string> {
+    var out : array<string>
+    peek_data(idx) $(d) {
+        var depth = 0
+        var from = 0
+        for (i in range(length(d))) {
+            let ch = int(d[i])
+            if (ch == '(' || ch == '[') {
+                depth++
+            } elif (ch == ')' || ch == ']') {
+                depth--
+            } elif (ch == '+' && depth == 0 && i > 0 && int(d[i - 1]) == ' ' && i + 1 < length(d) && int(d[i + 1]) == ' ') {
+                out |> push(strip(slice(d, from, i)))
+                from = i + 1
+            }
+        }
+        out |> push(strip(slice(d, from, length(d))))
+    }
+    return <- out
+}
+
+//! The index texts `line` READS `buf` at: every `buf[...]` that is not the target of an assignment.
+def private indexed_reads(line, buf : string) : array<string> {
+    var out : array<string>
+    peek_data(line) $(d) {
+        var at = find(d, "{buf}[")
+        while (at >= 0) {
+            let open = at + length(buf)
+            var close = open + 1
+            var depth = 1
+            while (close < length(d) && depth > 0) {
+                depth += int(d[close]) == '[' ? 1 : int(d[close]) == ']' ? -1 : 0
+                close++
+            }
+            var after = close
+            while (after < length(d) && int(d[after]) == ' ') {
+                after++
+            }
+            let eq = after < length(d) && int(d[after]) == '=' && !(after + 1 < length(d) && int(d[after + 1]) == '=')
+            let op_eq = after + 1 < length(d) && int(d[after + 1]) == '=' && find("+-*/|&^", slice(d, after, after + 1)) >= 0
+            let whole = at == 0 || !is_ident_byte(int(d[at - 1]))
+            if (whole && depth == 0 && !eq && !op_eq) {
+                out |> push(slice(d, open + 1, close - 1))
+            }
+            at = find(d, "{buf}[", close)
+        }
+    }
+    return <- out
+}
+
+//! How `term` reads once its loops are unrolled: 1 = a constant built from a loop variable (its every name a loop
+//! variable or an integer cast), 0 = a constant with no name at all, -1 = a run-time value.
+def private unrolled_kind(term : string; loop_vars : array<string>) : int {
+    var kind = 0
+    peek_data(term) $(d) {
+        var i = 0
+        while (i < length(d) && kind >= 0) {
+            if (!is_alpha(int(d[i])) && int(d[i]) != '_') {
+                i++
+                continue
+            }
+            let from = i
+            while (i < length(d) && is_ident_byte(int(d[i]))) {
+                i++
+            }
+            let lit_suffix = from > 0 && is_number(int(d[from - 1]))
+            let name = slice(d, from, i)
+            if (lit_suffix || name == "uint" || name == "int") {
+                continue
+            }
+            kind = find_index(loop_vars, name) >= 0 ? 1 : -1
+        }
+    }
+    return kind
+}
+
+//! true when `idx` sums a constant of a fully unrolled loop's variable with a run-time base
+def private sums_loop_var_with_base(idx : string; loop_vars : array<string>) : bool {
+    var inscope terms <- index_summands(idx)
+    var looped = false
+    var based = false
+    for (term in terms) {
+        let kind = unrolled_kind(term, loop_vars)
+        looped ||= kind > 0
+        based ||= kind < 0
+    }
+    return looped && based
+}
+
+//! ARCHITECTURE_GPU_PREFILL_WINDOW.md#kernel-load-addressing, per Metal kernel file: a fully unrolled loop reads a
+//! bound buffer through a pointer taken outside it, never through a sum of a run-time base and the loop variable.
+def private check_load_addressing_in(path : string) {
+    var inscope lines <- split(fread(path), "\n")
+    var inscope bufs : table<string>
+    for (line in lines) {
+        let colon = find(line, " : array<")
+        if (find(line, "@ssbo") >= 0 && colon >= 0) {
+            bufs |> insert(ident_suffix(slice(line, 0, colon)))
+        }
+    }
+    var inscope loop_indent : array<int>
+    var inscope loop_vars : array<string>
+    var line_no = 0
+    for (line in lines) {
+        line_no++
+        let body = strip(line)
+        continue if (empty(body) || starts_with(body, "//"))
+        let indent = find(line, body)
+        while (!empty(loop_indent) && loop_indent[length(loop_indent) - 1] >= indent) {
+            loop_indent |> pop()
+            loop_vars |> pop()
+        }
+        let header = find(body, "for [unroll_full] (")
+        if (header >= 0) {
+            let var_at = header + length("for [unroll_full] (")
+            loop_indent |> push(indent)
+            loop_vars |> push(ident_prefix(slice(body, var_at)))
+            continue
+        }
+        continue if (empty(loop_vars))
+        for (buf in keys(bufs)) {
+            var inscope reads <- indexed_reads(body, buf)
+            for (idx in reads) {
+                if (sums_loop_var_with_base(idx, loop_vars)) {
+                    gate_finding(path, line_no,
+                        "{buf}[{idx}] in a fully unrolled loop adds the loop variable to a run-time base a load - a 32-bit index sum does not fold into one address; take the address once outside the loop (`let p = unsafe(addr({buf}[<base>]))`) and read `unsafe(p[<offset>])` (ARCHITECTURE_GPU_PREFILL_WINDOW.md#kernel-load-addressing)")
+                }
+            }
+        }
+    }
+}
+
+def private check_metal_kernel_load_addressing {
+    dir("modules/dasLLAMA/dasllama") $(name) {
+        if (starts_with(name, "dasllama_metal_") && ends_with(name, ".das")) {
+            check_load_addressing_in("modules/dasLLAMA/dasllama/{name}")
+        }
+    }
+}
+
 def private check_gpu_role_partition {
     dir("modules/dasLLAMA/dasllama") $(name) {
         return if (!ends_with(name, ".das"))
@@ -1741,6 +1882,7 @@ def main() : int {
     check_race_bind_numbers()
     check_gpu_role_partition()
     check_fastmath_default()
+    check_metal_kernel_load_addressing()
     check_image_backing_release()
     check_khr_stage16_abstract()
     check_ar_max_dim_triple()

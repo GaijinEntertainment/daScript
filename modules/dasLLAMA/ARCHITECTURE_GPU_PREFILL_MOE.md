@@ -19,6 +19,13 @@ that parks each routed expert's rows and reduces them in entry order. The select
 GPU-side by the kernels; nothing reads back to the CPU, so encode-ahead and speculation stay
 compatible.
 
+The router's logits are one half x half GEMM (`pf_enc_router_mm`): the routed rows' half twin
+against a half panel of the layer's router rows, a megabyte a layer kept for the weights' life. At
+2048 positions and 256 experts it runs thirteen times the batched slab GEMV's rate
+(`harness/router_race.das`). The GEMV serves a router with a bias, an expert count off the 64-wide
+tile, and a window with no twin. The GEMM's operands are halves, so its logits sit 3e-4 of their
+largest from the GEMV's, and a near-tie between two experts can fall either way.
+
 Pad rows inside each expert's padded bucket carry a stamped sentinel and the reduce never
 references them; rows past the last expert's stamped tail are unstamped stale pool bytes, which
 is why validity tests compare the per-row entry against the live count, never the sentinel.
@@ -35,10 +42,18 @@ hand-binding a tensor twin follows the scaffold's declaration and its base arm f
 tail's; binding a twin at the base's numbers hands the kernel the OUTPUT buffer as X, and the
 race then crowns whichever arm computed nothing. The gather-X pass
 copies the bucket's token rows into a CONTIGUOUS f16 panel with pad rows zeroed, which lets the up
-and gate sites ride the contiguous tensor twins instead of the in-kernel gather form; the panel is
+and gate sites ride the contiguous tensor twins instead of the in-kernel gather form at every window
+size - the in-kernel gather is the slower form from a 17-token window up; the panel is
 minted once per layer and shared by both sites. An X read through the bucket index can never
 form a tensor view, which is why every tensor twin of the MoE family serves contiguous rows
 only.
+
+A routed site rides one of two ladders over an expert's rows. Below a mean of 32 rows an expert
+(`set_metal_moe_tall_avg`) the 32-row stamp serves every tile. From that mean up the tall pair
+serves: the 128-row stamp takes each expert's whole 128-row tiles and the remainder stamp its last
+rows in 32-row tiles past them. Both ladders compute a row the same way, so the logits are the
+same bit for bit; the pair is the faster one from 1024 tokens up on a 256-expert model. A 64-row
+rung between the pair's two stamps serves the same rows in the same time, so the ladder carries none.
 
 The split-format expert twins (k3, q40 and the iquants) do not derive from that scaffold: they
 derive from the format's DENSE split class (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`) with the base's `MOE` axis set and run its

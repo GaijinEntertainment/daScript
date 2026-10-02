@@ -16,6 +16,7 @@ require ?das_metal metal/das_metal_boost  // metal_live_object_count for the lea
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require math   // nolint:STYLE030,LINT019 - min/max inside the das_metal halves
+require daslib/strings_boost   // split / join: the crown list a cell narrows
 require _model_tier
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
 
@@ -27,6 +28,41 @@ require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting
 // not bugs). Skips cleanly without the model, off-Apple, or with no Metal device.
 
 let private COUNT_TO = 120   //! "1, 2, …, 120," — long enough to engage the resident path with margin (~300 llama-3 BPE tokens)
+
+let private ATTN_DEV_COUNT_TO = 260   //! past 684 llama-3 BPE tokens
+let private ATTN_DEV_W1 = 300         //! pads to 320 query rows: off the 128-row stamps
+let private ATTN_DEV_W2 = 384         //! a whole number of 128-row tiles
+let private ATTN_DEV_BAR = 0.004      //! of the row's largest logit: the two forms round P apart, one before the 1/sum and one after (reads 5e-4, one token off 0.8)
+
+//! the comma list `crowns` with `drop`'s names left out
+def private crowns_without(crowns : string; drop : array<string>) : string {
+    var inscope parts <- split(crowns, ",")
+    var inscope kept <- [for (c in parts); c; where find_index(drop, c) < 0]
+    return join(kept, ",")
+}
+
+//! the last row's logits after two prefill windows on one session
+def private two_window_logits(trp : Model; w1, w2 : array<int64>) : array<float> {
+    var out : array<float>
+    with_dasllama_jobque() {
+        var s = make_run_state(trp.config, KVDtype.f16, KVDtype.f16)
+        eval_(trp, s, w1)
+        eval_(trp, s, w2)
+        out := s.logits
+        delete s
+    }
+    return <- out
+}
+
+//! one kernel's dispatch count since the census reset, 0 for a kernel that never ran
+def private kernel_count(name : string) : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope cov <- metal_kernel_coverage()
+        return cov?[name] ?? 0l
+    } else {
+        return 0l
+    }
+}
 
 // chunked prompt-to-continuation: eval chunk 1, eval chunk 2 (start_pos > 0 on the second),
 // then n greedy steps — the M2.5 continuation arm's control/GPU shape (probe-proven)
@@ -389,6 +425,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 t |> success(select_prefill_override("metal"), "override registered")
                 set_metal_prefill_min_npos(1l)
                 let before = metal_prefill_stats().prefills
+                let spin_gpu_before = get_dispatch_gpu_served()
                 let gpu <- continuation(trg, tr, prompt, 40)    // GPU prefill (blob), CPU decode (planar)
                 let served = metal_prefill_stats().prefills - before
                 select_prefill_override("")
@@ -431,8 +468,11 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 // the address-keyed region caches — no driver entry participates, so a driver
                 // that never flushes cannot serve a recycled address's stale buffers
                 t |> success(weight_regions_cached() > 0l, "the served prefill cached {weight_regions_cached()} weight regions")
+                t |> success(!spin_gpu_before, "the pool ran the CPU spin window before any Metal forward served")
+                t |> success(get_dispatch_gpu_served(), "a served Metal prefill moved the pool to the GPU-served spin window")
                 let preps0 = reload_preps_run()
                 bump_weights_epoch()
+                t |> success(!get_dispatch_gpu_served(), "a weights load returns the pool to the CPU spin window")
                 t |> equal(weight_regions_cached(), 0l, "a weights-epoch bump alone drops the address-keyed region caches")
                 t |> success(reload_preps_run() > preps0, "the drop ran the registered reload preps (decode's discard_pre reached through the registry)")
             }
@@ -694,6 +734,70 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete trcg
             }
 
+            // attn-dev arm: device pair vs staged trio on ONE blob twin, 300-row window + 384-row continuation; one-token-short prompt is the control
+            if (arm_on(t, "attn-dev")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                var trag <- blob_twin(t, path, 2048l)
+                let longp <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+                t |> success(length(longp) > ATTN_DEV_W1 + ATTN_DEV_W2, "the prompt covers both windows ({length(longp)} tokens)")
+                var w1 <- [for (i in range(ATTN_DEV_W1)); longp[i]]
+                var w2 <- [for (i in range(ATTN_DEV_W1, ATTN_DEV_W1 + ATTN_DEV_W2)); longp[i]]
+                var w2_off <- [for (i in range(ATTN_DEV_W1 + 1, ATTN_DEV_W1 + ATTN_DEV_W2 + 1)); longp[i]]
+                let prev_crowns = get_metal_tensor_crowns()
+                pin_metal_tensor_crowns("mulmm_q8,attn_qkmm,attn_dev")
+                metal_prefill_shutdown()
+                let prev_override = active_prefill_override()
+                let prev_min_npos = get_metal_prefill_min_npos()
+                select_prefill_override("metal")
+                set_metal_prefill_min_npos(1l)
+                let was_held = set_metal_prefill_held("attn_dev", true)
+                metal_kernel_coverage_reset()
+                var staged <- two_window_logits(trag, w1, w2)
+                let pexp_staged = kernel_count("metal_attn_pexp")
+                set_metal_prefill_held("attn_dev", false)
+                t |> success(pf_attn_dev_ready(), "the device pair's stamps compiled under its crown")
+                metal_kernel_coverage_reset()
+                var device <- two_window_logits(trag, w1, w2)
+                let n_attn = trag.config.n_layers
+                t |> equal(pexp_staged, 0l, "the held leg ran the staged trio")
+                t |> equal(kernel_count("metal_attn_pexp"), n_attn * 2l, "the device leg wrote every attention layer's rows in both windows")
+                t |> equal(kernel_count("MetalAttnQKDev_metal_attn_qk_dev"), n_attn, "the 32-row QK stamp served the first window")
+                t |> equal(kernel_count("MetalAttnQKDev128_metal_attn_qk_dev"), n_attn, "the 128-row QK stamp served the continuation")
+                t |> equal(kernel_count("MetalAttnAVDev_metal_attn_av_dev"), n_attn, "the 32-row AV stamp served the first window")
+                t |> equal(kernel_count("MetalAttnAVDev128_metal_attn_av_dev"), n_attn, "the 128-row AV stamp served the continuation")
+                var device_off <- two_window_logits(trag, w1, w2_off)
+                set_metal_prefill_held("attn_dev", was_held)
+                select_prefill_override(prev_override)
+                set_metal_prefill_min_npos(prev_min_npos)
+                let mag = logits_maxabs(staged)
+                let diff = logits_maxdiff(device, staged)
+                let diff_off = logits_maxdiff(device_off, staged)
+                var pick_device = 0l
+                var pick_staged = 0l
+                with_dasllama_jobque() {
+                    pick_device = argmax_of(device)
+                    pick_staged = argmax_of(staged)
+                }
+                to_log(LOG_INFO, "attn-dev: device pair vs staged trio, last-row logits max difference {diff} of max {mag} (bar {ATTN_DEV_BAR * mag}); one token off {diff_off}; next token '{eyeball_text(tr, [pick_device])}' vs '{eyeball_text(tr, [pick_staged])}'\n")
+                t |> equal(pick_device, pick_staged, "both forms pick the same next token on the counting prompt")
+                t |> success(diff <= ATTN_DEV_BAR * mag, "the device pair's logits sit within the bar of the staged trio's ({diff} of {mag})")
+                t |> success(diff_off > ATTN_DEV_BAR * mag, "the prompt one token off lands outside the bar ({diff_off})")
+                unpin_metal_tensor_crowns()
+                set_metal_tensor_crowns(prev_crowns)
+                metal_prefill_shutdown()
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                delete staged
+                delete device
+                delete device_off
+                delete w1
+                delete w2
+                delete w2_off
+                delete trag
+            }
+
             // span arm (metal-media): the media eval shape — causal head, non-causal embd span
             // at start_pos > 0, greedy decode. Both prefill calls must serve on the GPU (the
             // span through AttnArgs.uend), token-exact vs the all-CPU control, per KV codec.
@@ -787,15 +891,24 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     // - pinned off with them; its coverage is the kernels-suite devw arm.
                     // Tall M-tiles split at 128-row floors - fused vs splice rows land on
                     // different tile mixes, the same form-swap class - pinned off with them.
+                    // The crowned attention forms are that class too: the tensor QK reads a half Q
+                    // twin, and the device pair serves, from the half panel's row floor up, so the
+                    // witness runs with the attention crowns off - the greedy legs above ran under
+                    // the box's own, and the device pair's coverage is the attn-dev arm.
                     set_metal_prefill_mm_tail(false)
                     set_metal_prefill_half_x(false)
                     set_metal_prefill_dev_w(false)
                     set_metal_prefill_tall(false)
+                    let box_crowns = get_metal_tensor_crowns()
+                    set_metal_tensor_crowns(crowns_without(box_crowns, ["attn_qkmm", "attn_dev"]))
+                    metal_prefill_shutdown()
                     var lg_fused <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
                     set_span_fuse(false)
                     set_metal_prefill_min_npos(1l)   // the splice's short head/tail ride the GPU too
                     let pfsp0 = metal_prefill_stats().prefills
                     var lg_splice <- span_fused_prefill_logits(trfg, fhead, fmedia, ftail, kdt)
+                    set_metal_tensor_crowns(box_crowns)
+                    metal_prefill_shutdown()
                     set_metal_prefill_mm_tail(true)
                     set_metal_prefill_half_x(true)
                     set_metal_prefill_dev_w(true)
