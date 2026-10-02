@@ -21,9 +21,8 @@ require daslib/regex
 require daslib/regex_boost
 
 
-// The citation as written in a .das source. A match with `//` earlier on its line is prose or a
-// commented-out annotation and is skipped; one inside a string literal or a block comment is not,
-// so a fixture that plants citation text assembles it rather than spelling it out.
+//! a match behind a `//` on its line cites nothing (`collect_commented_arch_citations` hands it to the lint); one in a
+//! string literal or a block comment cites, so a fixture that plants citation text assembles it rather than spelling it out
 var private ARCH_CITE <- %regex~arch\s*\(\s*at\s*=\s*"([^"]*)"%%
 
 
@@ -216,6 +215,18 @@ def public collect_md_citations(file, text : string) : array<ArchCitation> {
 def public collect_arch_citations(file, text : string) : array<ArchCitation> {
     return <- collect_arch_pointers(file, text) if (is_cpp_source(file))
     return <- collect_md_citations(file, text) if (file |> ends_with(".md"))
+    return <- das_arch_matches(file, text, false)
+}
+
+
+//! every `arch(at="...")` a .das source spells behind a `//` on its line, in file order: prose about the annotation, or a
+//! citation pasted into a comment, which annotates nothing - the lint tells the two apart by whether it resolves
+def public collect_commented_arch_citations(file, text : string) : array<ArchCitation> {
+    return <- das_arch_matches(file, text, true)
+}
+
+
+def private das_arch_matches(file, text : string; commented : bool) : array<ArchCitation> {
     var out : array<ArchCitation>
     var raws : array<string>
     var offsets : array<int>
@@ -229,7 +240,7 @@ def public collect_arch_citations(file, text : string) : array<ArchCitation> {
     let folder = dir_name(file)
     for (raw, off, pos in raws, offsets, positions) {
         let slashes = find(text, "//", pos.line_start)
-        continue if (slashes >= 0 && slashes < off)
+        continue if ((slashes >= 0 && slashes < off) != commented)
         let hash = find(raw, "#")
         if (hash <= 0 || hash == length(raw) - 1) {
             // shape, not resolution: the compiler rejects this on a function, but a structure

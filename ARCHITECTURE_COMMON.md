@@ -40,8 +40,10 @@ own folder tree, by a `// <doc>.md#<anchor>` pointer in a C or C++ source, or by
 is root-relative (`src/ast/ARCHITECTURE.md#...`), found by walking up from the citing file, and
 the folder-tree rule does not bind it - a header under `include/` answers for a mechanism `src/`
 documents.
-An anchor nothing cites, a citation naming no anchor, and a `.das` citation reaching a document
-outside the citer's folder tree are all lint findings (LINT026), in every folder. A mechanism
+An anchor nothing cites, a citation naming no anchor, a `.das` citation reaching a document
+outside the citer's folder tree, and an `arch(at="...")` that resolves but sits inside a `//`
+comment of a `.das` source - it annotates nothing, and counts as no citer - are all lint findings
+(LINT026), in every folder. A mechanism
 another folder's document states is restated here in prose - a paragraph, not a resolved link -
 and the code cites this document. A `[arch]` citation is what makes a section a contract with
 the code; a section only prose cites is narrative the rule documents lean on; a grouping

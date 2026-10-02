@@ -55,7 +55,8 @@ reasons: `skills/mcp_tools.md`.
 **An architecture-doc section is named, not numbered: its heading carries a `{#anchor}`, every
 citation - `[arch(at=...)]` in code, `// <doc>.md#<anchor>` in C++, `<doc>.md#<anchor>` in a
 rule document or ledger - names that anchor, and every anchor is cited.** LINT026 fails a
-citation naming no such file or anchor, and - in every folder, no tag arms it - an anchor nothing
+citation naming no such file or anchor, a `.das` citation that resolves but sits inside a comment
+(it annotates nothing), and - in every folder, no tag arms it - an anchor nothing
 cites. An `[arch]` citation replaces the comment that would have restated the section: the
 mechanism lives in the document, the code names it.
 
