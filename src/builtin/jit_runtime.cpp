@@ -157,9 +157,9 @@ namespace das {
     }
 
     DAS_SUPPRESS_UB vec4f SimNode_JitBlock::eval ( Context & context ) {
-        if ( !blockPtr->argumentsOffset ) return func(&context, nullptr, nullptr, blockPtr );
+        if ( !blockPtr->argumentsOffset ) return context.result = func(&context, nullptr, nullptr, blockPtr );
         auto ba = (BlockArguments *) ( context.stack.bottom() + blockPtr->argumentsOffset );
-        return func(&context, ba->arguments, ba->copyOrMoveResult, blockPtr );
+        return context.result = func(&context, ba->arguments, ba->copyOrMoveResult, blockPtr );
     }
 
     SimNode * SimNode_Jit::visit ( SimVisitor & vis ) {
