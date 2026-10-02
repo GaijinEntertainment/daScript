@@ -31,7 +31,7 @@ require jit
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x97ul   // 0x97: a stack-allocated `new T(f = v)` builds its fields in the ascend's own frame slot
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x98ul   // 0x98: a finally block returns to its caller through a switch on an index, not an indirectbr
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
