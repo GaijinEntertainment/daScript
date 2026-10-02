@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`,
-`ARCHITECTURE_GPU_RACE_SHAPES.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`.
+`ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_GPU_PREFILL_WINDOW.md`. Planned work:
+`followup_metal.md`, `followup_vulkan.md`.
 
 **A kernel body that emits a function pointer or a vtable into the shader is a defect - splice
 the choice at compile time instead.** A `class template` / `def abstract` / `def override`
@@ -28,6 +29,14 @@ inside the extent and never stores that iteration's result.**
 stamp its deciding value, or peel the loop when that value is a per-call extent.** Inside an
 `[unroll]` loop a clamp folds every dead iteration - one past the live count - against a live one
 and costs what the branch saves.
+
+**A diff that adds or changes, inside a `for [unroll_full]` loop of a Metal kernel, a read of a
+kernel buffer argument whose index a local variable or a class method builds as a run-time base
+plus a constant offset of the loop variable takes the address once outside the loop
+(`let p = unsafe(addr(buf[<base>]))`) and reads `unsafe(p[<offset>])`.** `REVIEW.das` flags the same
+sum written directly in the index, and weakening that check is a defect. The Metal compiler does
+not fold a `uint` index sum into one address, so adjacent loads do not merge
+(`ARCHITECTURE_GPU_PREFILL_WINDOW.md#kernel-load-addressing`).
 
 **A diff that adds or changes a `[metal_dispatch]` kernel whose addressing assumes an alignment
 of a value the builder receives - a `params=` name or a kargs field - declares each such

@@ -81,6 +81,20 @@ def test_tmm2d_staged_protocol(t : T?) {
         t |> success(contains(tmmdevant_msl, "using __tgta_acc = tensor<device float, dextents<int32_t, 2>, tensor_inline>;"), "devant streams a float A by construction")
         t |> success(contains(tmmdevant_msl, "auto __A = __tgta_acc((device float *)"), "devant's step streams from device memory")
     }
+    t |> run("devab / devabnt: both operands are device half streams, nothing staged") <| @(t : T?) {
+        t |> success(contains(tmmdevab_msl, "matmul2d_descriptor(8, 16, static_cast<int>(dynamic_extent), false, true, true, matmul2d_descriptor::mode::multiply_accumulate)"), "devab is dynamic-extent K + transpose_right = true")
+        t |> success(contains(tmmdevabnt_msl, "matmul2d_descriptor(8, 16, static_cast<int>(dynamic_extent), false, false, true, matmul2d_descriptor::mode::multiply_accumulate)"), "devabnt is dynamic-extent K + transpose_right = false")
+        for (src in [tmmdevab_msl, tmmdevabnt_msl]) {
+            t |> success(contains(src, "using __tgta_acc = tensor<device half, dextents<int32_t, 2>, tensor_inline>;"), "one device-half tensor type serves both operands")
+            t |> success(contains(src, "get_destination_cooperative_tensor<__tgta_acc, __tgta_acc, float>()"), "the destination is typed by two device-half operands")
+            t |> success(!contains(src, "__tgt_acc"), "no threadgroup operand tensor type")
+            t |> success(contains(src, "auto __A = __tgta_acc((device half *)((xah + (0))), dextents<int32_t, 2>(int(48u), 8), metal::array<int32_t, 2>\{1, int(64u)\});"), "A carries the run-time kk extent and its lda stride")
+            t |> success(contains(src, "__tgop_acc.run(__A, __B, __tgf_acc);"), "each step accumulates into the held tensor")
+            t |> success(contains(src, "__tgf_acc.store(__C);"), "the f32 store lands through the cooperative store")
+        }
+        t |> success(contains(tmmdevab_msl, "auto __B = __tgta_acc((device half *)((wh + (0))), dextents<int32_t, 2>(int(48u), 16), metal::array<int32_t, 2>\{1, int(64u)\});"), "devab B is [n][kk] at stride ldb")
+        t |> success(contains(tmmdevabnt_msl, "auto __B = __tgta_acc((device half *)((wh + (0))), dextents<int32_t, 2>(16, int(48u)), metal::array<int32_t, 2>\{1, int(20u)\});"), "devabnt B is [kk][n] at stride ldb")
+    }
     t |> run("rowscale + stores: each lane edits only the elements it owns") <| @(t : T?) {
         t |> success(contains(tmmdeva_msl, "__tgf_acc[__i] *= (trow)[__ids[1]];"), "rowscale multiplies by the per-ROW factor")
         t |> success(contains(tmmdeva_msl, "= half(__tgf_acc[__i]);"), "store_half narrows per owned element")

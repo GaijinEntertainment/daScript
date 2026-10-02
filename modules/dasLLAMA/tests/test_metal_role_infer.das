@@ -104,6 +104,22 @@ def test_role_whole_buffer_rule(t : T?) {   // nolint:STYLE038 — parallel per-
             feint("das_metal is not built on this platform; the lens does not load\n")
         }
     }
+    t |> run("the device-pair step and the store derive their inline-addr operands") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            // a store arm claiming pointer LOCALS alone derives tmm2d_tg_store's inline-addr buffer 'read': no write hazard declared
+            let good = compile_issues(fixture("_rf_devab_store"))
+            t |> success(good.ok, "two device reads and an inline-addr store match their declared roles: {good.issues}")
+            let bad = compile_issues(fixture("_rf_devab_store_wrong"))
+            t |> success(!bad.ok, "a 'read' declaration on the store's inline-addr buffer must be refused")
+            t |> success(find(bad.issues, "declares @role='read' but the body derives 'write'") >= 0,
+                "the refusal names the contradiction")
+            if (bad.ok) {
+                to_log(LOG_ERROR, "ROLE-INFER: inline-addr store fixture compiled clean under a 'read' role\n")
+            }
+        } else {
+            t |> skip("das_metal is not built on this platform; the lens does not load")
+        }
+    }
     t |> run("a GENERIC helper resolves by base name, not by its mangled instance") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             // lensed: the classifier runs PRE-infer, so the call still carries its bare name

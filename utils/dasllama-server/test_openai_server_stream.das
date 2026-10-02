@@ -52,7 +52,7 @@ def private with_stream_server(t : T?; model_path : string; port : int; blk : bl
             var m <- load_model(model_path, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, TEST_CTX)
             set_model(m, "test-llm-stream")
-            run_server(port)   // scheduler defaults: 4 streams, queue 32, chunk 64
+            run_server(port)
             finished |> notify_and_release
         }
         let base_url = "http://127.0.0.1:{port}"

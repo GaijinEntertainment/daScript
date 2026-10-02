@@ -1048,6 +1048,24 @@ class TmmTensor {
         tmm2d_tg_store_half(acc, cp, 8u, 16u, 16u)
     }
 
+    [metal_kernel(name="tmmdevab_msl"), marker(no_coverage)]
+    def tmm_devab {
+        var acc : float[128]
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_tg_begin_devab(acc, 8u, 16u, 2u)
+        tmm2d_tg_step_devab(acc, unsafe(addr(xah[0])), 64u, unsafe(addr(wh[0])), 64u, 8u, 16u, 48u)
+        tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
+    }
+
+    [metal_kernel(name="tmmdevabnt_msl"), marker(no_coverage)]
+    def tmm_devabnt {
+        var acc : float[128]
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_tg_begin_devabnt(acc, 8u, 16u, 2u)
+        tmm2d_tg_step_devabnt(acc, unsafe(addr(xah[0])), 64u, unsafe(addr(wh[0])), 20u, 8u, 16u, 48u)
+        tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
+    }
+
     // sgmat_to_half: simdgroup_store is same-type-only, so a half store of an f32 accumulator
     // narrows through the public thread_elements() view first
     [metal_kernel(name="sgmathalf_msl"), marker(no_coverage)]
@@ -1294,8 +1312,13 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "call.tmm2d_tg_step_nt",
         "call.tmm2d_tg_begin_devant",
         "call.tmm2d_tg_step_devant",
+        "call.tmm2d_tg_begin_devab",
+        "call.tmm2d_tg_step_devab",
+        "call.tmm2d_tg_begin_devabnt",
+        "call.tmm2d_tg_step_devabnt",
         "call.tmm2d_tile_tg",
         "call.tmm2d_tg_rowscale",
+        "call.tmm2d_tg_store",
         "call.tmm2d_tg_store_half",
         "call.tmm2d_tg_store_bias",
         // math builtins (Phase 6): 1:1 MSL spellings — float scalar + vector classes
@@ -1393,6 +1416,6 @@ def public all_msl_censuses : array<string> {
         ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, consttab_msl_census, statearr_msl_census,
         tmmhw_msl_census, tmmhwh_msl_census, tmmq8u_msl_census, tmmq8uh_msl_census,
         tmmq8uh64_msl_census, tmmq8uh128_msl_census, tmmdeva_msl_census, tmmdevaf_msl_census,
-        tmmnt_msl_census, tmmdevant_msl_census, sgmathalf_msl_census, sgmat_store_tg_msl_census,
+        tmmnt_msl_census, tmmdevant_msl_census, tmmdevab_msl_census, tmmdevabnt_msl_census, sgmathalf_msl_census, sgmat_store_tg_msl_census,
         DerivedName_dkern_msl_census]
 }

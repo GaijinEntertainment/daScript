@@ -56,6 +56,7 @@ struct PendingReq {
     max_new : int64 = 256l                  // reply token budget (>= 1)
     seed : int = 0                          // != 0 => set_seed at admit (reproducible sampling)
     t_submit : int64 = 0l                   // ref_time_ticks at submit (queue-wait logging; 0 = unset)
+    stable_at : int64 = 0l                  //! prompt tokens the request's own last turn does not reach (`render_turn_marked`); a recurrent model's prefill leaves a checkpoint there (0 = unknown)
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
     // prefill BETWEEN prompt[media_at-1] and prompt[media_at] — the render seam hands the two
     // token spans and the encoder hands the rows. Zero rows = an ordinary text request.
@@ -89,6 +90,7 @@ struct Stream {
     state : StreamState = StreamState.prefilling
     finish : string = ""
     n_cached : int64                        // prefix-cache hit length (set at admit; 0 in flat mode)
+    ckpt_at : int64                         //! the prompt position the prefill stops at to leave a recurrent checkpoint (0 = none)
     t_admit : int64                         // ref_time_ticks at admit
     t_first : int64                         // ref_time_ticks at the first sampled token (0 until then)
     ttft_us : int64
@@ -112,13 +114,33 @@ struct DoneStream {
     done_at : int64                         // ref_time_ticks at reap
 }
 
-//! on a device-home stream at least the device's window, and the whole head at once for a model whose device prefill cannot continue past zero
+//! true while a stream is decoding: the tick's prefill chunk is a stall every one of them waits out
+def private any_decoding(sch : Scheduler) : bool {
+    for (st in sch.streams) {
+        return true if (st.state == StreamState.decoding)
+    }
+    return false
+}
+
+//! on a host-cached stream `chunk_tokens` while a stream decodes and at least `idle_chunk_tokens` while none does; on a device-home stream at least the device's window, and the whole head at once for a model whose device prefill cannot continue past zero
 def private prefill_chunk(m : Model; sch : Scheduler; head_end : int64) : int64 {
     if (!sch.device_kv) {
-        return sch.chunk_tokens
+        return any_decoding(sch) ? sch.chunk_tokens : max(sch.chunk_tokens, sch.idle_chunk_tokens)
     }
     return gpu_device_prefill_continues(m) ? max(sch.chunk_tokens, gpu_device_prefill_window()) : head_end   // a chunk under the device's window is one submit per chunk for no bounded-stall gain
 }
+
+let DEFAULT_CHUNK_TOKENS = 512l   //! one prefill window: a window's cost is mostly fixed, so a smaller chunk runs a prompt at a fraction of the window's rate
+let CPU_CHUNK_TOKENS = 64l        //! the CPU's chunk while a stream decodes: a CPU chunk's time is its token count, so the stall follows it down - under 32 tokens a batch leaves the batched kernels
+let METAL_IDLE_CHUNK_TOKENS = 2048l   //! four windows in one call: within a few percent of the whole prompt's rate at a tick a quarter the length
+
+//! The chunk while a stream decodes on a backend: one window where a GPU prefills, `CPU_CHUNK_TOKENS` on the CPU.
+def chunk_default(on_gpu : bool) : int64
+    => on_gpu ? DEFAULT_CHUNK_TOKENS : CPU_CHUNK_TOKENS
+
+//! The prefill quantum's two sizes on the backend `m` is served by: `chunk` while a stream decodes, `idle` while none does.
+def chunk_defaults(m : Model) : tuple<chunk : int64; idle : int64>
+    => (chunk = chunk_default(m.metal_blob || gpu_tier_status().supported), idle = m.metal_blob ? METAL_IDLE_CHUNK_TOKENS : DEFAULT_CHUNK_TOKENS)
 
 //! A finished device-home stream's K/V rows, kept on the device for the next request that opens with the same tokens.
 struct ParkedKv {
@@ -134,7 +156,8 @@ struct Scheduler {
     queue : array<PendingReq>
     max_streams : int64 = 4l
     max_queue : int64 = 32l
-    chunk_tokens : int64 = 64l              // prefill quantum K for TEXT chunks of a host-cached stream (`prefill_chunk` widens a device-home one); a media span evals as ONE body (per-call mask), so it may stall decode by its row count
+    chunk_tokens : int64 = DEFAULT_CHUNK_TOKENS   // prefill quantum K for TEXT chunks of a host-cached stream (`prefill_chunk` widens a device-home one); a media span evals as ONE body (per-call mask), so it may stall decode by its row count
+    idle_chunk_tokens : int64 = DEFAULT_CHUNK_TOKENS   //! the quantum's floor on a tick with no stream decoding (0 = `chunk_tokens` always)
     // paged serving (page_rows > 0 at create): sessions page KV out of the pool, and finished
     // streams donate their pages to the prefix cache so repeat prefixes skip their prefill
     paged : bool
@@ -173,23 +196,29 @@ struct Scheduler {
 }
 
 //! Create a scheduler over `model`: `max_streams` concurrent sessions, `max_queue` waiting
-//! requests, `chunk_tokens` the prefill quantum. `page_rows` > 0 switches to PAGED serving — KV
+//! requests, `chunk_tokens` the prefill quantum while a stream decodes and `idle_chunk_tokens` its
+//! floor while none does (0 = `chunk_tokens` always); a `chunk_tokens` under 1 or a negative
+//! `idle_chunk_tokens` takes the backend's default (`chunk_defaults`). `page_rows` > 0 switches to PAGED serving — KV
 //! pages allocate on demand (memory tracks actual context, not seq_len × streams) and a prefix
 //! cache reuses completed streams' pages across requests (`prefix_groups` caps its retention;
-//! 0 = unbounded); 0 keeps today's flat preallocated sessions. Free with `unsafe(delete sch)` —
+//! 0 = unbounded; a recurrent model keeps `prefix_states` checkpoints instead, 0 = none); 0 keeps
+//! today's flat preallocated sessions. Free with `unsafe(delete sch)` —
 //! live sessions, the pool, and the workspace go with it.
 def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 = 32l;
-                     chunk_tokens : int64 = 64l; page_rows : int64 = 0l;
+                     chunk_tokens : int64 = 0l; page_rows : int64 = 0l;
                      prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
-                     mtp : bool = false) : Scheduler {
+                     mtp : bool = false; idle_chunk_tokens : int64 = -1l;
+                     prefix_states : int64 = DEFAULT_PREFIX_STATES) : Scheduler {
+    let dflt = chunk_defaults(model)
     var sch <- Scheduler(ws <- create_batch_workspace(model), max_streams = max(1l, max_streams),
-                         max_queue = max(1l, max_queue), chunk_tokens = max(1l, chunk_tokens),
+                         max_queue = max(1l, max_queue), chunk_tokens = chunk_tokens > 0l ? chunk_tokens : dflt.chunk,
+                         idle_chunk_tokens = idle_chunk_tokens >= 0l ? idle_chunk_tokens : dflt.idle,
                          kv_dtype = kv_dtype, mtp = mtp && model.config.n_layer_nextn > 0l)
     gpu_dn_room(sch.max_streams)   //! every stream's recurrent state device-resident at once, before the first prefill
     if (page_rows > 0l) {
         sch.paged = true
         sch.pool <- create_kv_pool(model, page_rows, kv_dtype)
-        sch.prefix <- create_prefix_cache(prefix_groups)
+        sch.prefix <- create_prefix_cache(prefix_groups, prefix_states)
     }
     return <- sch
 }
@@ -397,7 +426,7 @@ def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : boo
 }
 
 //! One scheduler tick: admit from the queue while under max_streams, ONE eval_batch decode step
-//! over every decoding stream, at most ONE prefill chunk (`chunk_tokens`, or `prefill_chunk`'s wider one in device mode; FCFS; the final chunk's
+//! over every decoding stream, at most ONE prefill chunk (`chunk_tokens`, or `prefill_chunk`'s wider one on an idle tick and in device mode; FCFS; the final chunk's
 //! logits sample the first token inline), then reap finished streams. Events append to `events`
 //! (the caller drains it). Returns true while any stream or queued request remains.
 [arch(at="../ARCHITECTURE_ENGINE.md#scheduler-step")]
@@ -440,6 +469,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             st.n_prefilled = matched
             st.n_cached = matched
             sch.cached_tokens += matched
+            st.ckpt_at = prefix_checkpoint_at(sch.prefix, sch.pool, st.session, st.prompt, matched, sch.queue[0].stable_at)
             if (matched > 0l) {
                 to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached, no prefill for them\n")
             } else {
@@ -486,9 +516,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         }
         if (sch.mtp) {
             // self-spec tick: the stream trades its cross-stream batch row for up to two positions per
-            // tick, every stream's round verified together below. Donation-side note: an accepted token
-            // is already evaled, so a "length" finish makes donate_stream's pending-eval redundant -
-            // harmless, and unreachable: every MTP-capable arch is a deltanet hybrid, which the prefix cache refuses.
+            // tick, every stream's round verified together below.
             sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
             sch.streams[i].session.pick_asked = sampler_is_argmax(sch.streams[i].params)
             sch.batch_rows |> push(unsafe(addr(sch.streams[i].session)))
@@ -511,6 +539,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             if (acc >= 0l) {
                 if (advance_with(m, sch.streams[i], acc, events)) {
                     sch.gen_tokens ++
+                }
+                if (sch.streams[i].state == StreamState.done) {
+                    sch.streams[i].cur_tok = -1l   //! the accepted draft is evaled already: the close has nothing pending
                 }
             }
             if (sch.streams[i].state == StreamState.decoding) {
@@ -571,7 +602,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         } else {
             let head_end = media_pending ? sch.streams[i].media_at : np
             let chunk = prefill_chunk(m, sch, head_end)
-            let take = min(chunk, head_end - sch.streams[i].n_prefilled)
+            let to_ckpt = sch.streams[i].ckpt_at - sch.streams[i].n_prefilled
+            //! a checkpoint within a chunk and a half ends this chunk: stopping a chunk short of it would add a window, and a window's cost is mostly fixed
+            let take = to_ckpt > 0l && to_ckpt <= chunk + chunk / 2l ? to_ckpt : min(chunk, head_end - sch.streams[i].n_prefilled)
             sch.chunk |> resize(take)
             for (k in range64(take)) {
                 sch.chunk[k] = sch.streams[i].prompt[sch.streams[i].n_prefilled + k]
@@ -579,6 +612,10 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             eval(m, sch.streams[i].session, sch.chunk)
             sch.streams[i].n_prefilled += take
             sch.prefill_tokens += take
+            if (sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) {
+                prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt)
+                to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].ckpt_at} tok: the next prompt on this opening attaches here\n")
+            }
         }
         if (sch.streams[i].n_prefilled >= np && (sch.streams[i].n_media == 0l || sch.streams[i].media_done)) {
             let pf_ms = int64(get_time_usec(sch.streams[i].t_admit)) / 1000l

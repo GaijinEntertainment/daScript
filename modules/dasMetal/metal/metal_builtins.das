@@ -476,7 +476,7 @@ def public tmm2d_tg_rowscale(var acc; f; m, n : uint) {
     }
     for (r in range(int(m))) {
         for (j in range(int(n))) {
-            acc[r * int(n) + j] *= float(f[r])
+            acc[r * int(n) + j] *= float(unsafe(f[r]))   // nolint:STYLE024,LINT019 — f is a tile array or a device pointer; the pointer index needs it
         }
     }
 }
@@ -558,6 +558,59 @@ def public tmm2d_tg_step_devant(var acc; a : float const?; lda : uint; tb; m, n,
                 var facc = 0.0
                 for (k in range(int(kk))) {
                     facc += a[r * int(lda) + k] * float(tb[k * int(n) + j])
+                }
+                acc[r * int(n) + j] += facc
+            }
+        }
+    }
+}
+
+//! begin, devab flavor: BOTH operands are device float16 streams - nothing is staged, and the
+//! reduction width is the step's own run-time `kk`.
+[unused_argument(sgs), sideeffects]
+def public tmm2d_tg_begin_devab(var acc; m, n, sgs : uint) {
+    tmm2d_zero_acc(acc, m, n)
+}
+
+//! step, devab flavor: acc[r][j] += a[r*lda + k] * b[j*ldb + k] for k < kk - B in the weight
+//! layout, one row an output column.
+[sideeffects]
+def public tmm2d_tg_step_devab(var acc; a : float16 const?; lda : uint; b : float16 const?; ldb : uint; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (k in range(int(kk))) {
+                    facc += float(a[r * int(lda) + k]) * float(b[j * int(ldb) + k])
+                }
+                acc[r * int(n) + j] += facc
+            }
+        }
+    }
+}
+
+//! begin, devab+nt flavor: both operands device float16, the step's B in its NATURAL layout.
+[unused_argument(sgs), sideeffects]
+def public tmm2d_tg_begin_devabnt(var acc; m, n, sgs : uint) {
+    tmm2d_zero_acc(acc, m, n)
+}
+
+//! step, devab+nt flavor: acc[r][j] += a[r*lda + k] * b[k*ldb + j] for k < kk - B one row a
+//! reduction step.
+[sideeffects]
+def public tmm2d_tg_step_devabnt(var acc; a : float16 const?; lda : uint; b : float16 const?; ldb : uint; m, n, kk : uint) {
+    if (gl_LocalInvocationID.x != 0u) {
+        return
+    }
+    unsafe {
+        for (r in range(int(m))) {
+            for (j in range(int(n))) {
+                var facc = 0.0
+                for (k in range(int(kk))) {
+                    facc += float(a[r * int(lda) + k]) * float(b[k * int(ldb) + j])
                 }
                 acc[r * int(n) + j] += facc
             }

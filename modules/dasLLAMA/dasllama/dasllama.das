@@ -103,11 +103,18 @@ def release_kv_pages(var session : Session) {
     release_kv_pages_(session)
 }
 
-def create_prefix_cache(max_groups : int64 = 0l) : PrefixCache {
-    //! Create a prefix cache for the paged sessions of one ``create_kv_pool`` pool: finished
-    //! streams donate KV pages (``prefix_insert``), later requests with the same prefix attach them
-    //! (``prefix_attach``) instead of re-prefilling. ``max_groups`` caps retained groups (0 = unbounded).
-    return <- create_prefix_cache_(max_groups)
+def create_prefix_cache(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES) : PrefixCache {
+    //! Create a prefix cache for the paged sessions of one ``create_kv_pool`` pool: streams donate KV pages
+    //! (``prefix_insert``), later requests with the same prefix attach them (``prefix_attach``). ``max_groups`` caps
+    //! retained groups (0 = unbounded); a recurrent model keeps at most ``max_states`` whole checkpoints instead.
+    return <- create_prefix_cache_(max_groups, max_states)
+}
+
+def prefix_checkpoint_at(cache : PrefixCache; pool : KVPool; session : Session; prompt : array<int64>; matched : int64; stable_at : int64 = 0l) : int64 {
+    //! Where a recurrent ``session``'s prefill of ``prompt`` should stop for a ``prefix_insert``, after ``prefix_attach``
+    //! matched ``matched`` tokens: ``stable_at`` (``render_turn_marked``'s opening) when the caller knows it, else the
+    //! longest opening an earlier checkpoint shares. 0 = nowhere - always on a model with no recurrent state.
+    return prefix_checkpoint_at_(cache, pool, session, prompt, matched, stable_at)
 }
 
 def prefix_attach(var cache : PrefixCache; var pool : KVPool; var session : Session; prompt : array<int64>) : int64 {
@@ -117,10 +124,10 @@ def prefix_attach(var cache : PrefixCache; var pool : KVPool; var session : Sess
     return prefix_attach_(cache, pool, session, prompt)
 }
 
-def prefix_insert(var cache : PrefixCache; var pool : KVPool; session : Session; tokens : array<int64>; preview : string = "") {
-    //! Donate a finished session's KV pages to the cache. ``tokens`` is the session's full EVALED
-    //! history (only the first ``n_past`` rows exist); every full page not already cached survives
-    //! ``release_kv_pages``. ``preview`` labels the chain on the ``prefix_chain_list`` surface.
+def prefix_insert(var cache : PrefixCache; var pool : KVPool; var session : Session; tokens : array<int64>; preview : string = "") {
+    //! Donate a session's KV pages to the cache. ``tokens`` is its EVALED history (the first ``n_past`` rows exist);
+    //! every full page not already cached survives ``release_kv_pages``, ``preview`` labels the chain. On a
+    //! recurrent model the donation is one checkpoint at ``n_past``, and may be taken between two prefill calls.
     prefix_insert_(cache, pool, session, tokens, preview)
 }
 
@@ -362,6 +369,12 @@ def render_turn(model : Model; chat : ChatSession) : array<int64> {
     //! Render the next turn's prefill token ids — BOS + system on the first turn, then the user turn
     //! and the generation prompt — WITHOUT running the model. For inspection, token budgeting, tests.
     return <- render_turn_(model, chat)
+}
+
+def render_turn_marked(model : Model; chat : ChatSession) : RenderedTurn {
+    //! ``render_turn`` with its opening marked: ``opening`` leading tokens - BOS, prelude and the system turn of a
+    //! conversation's first turn - are the same for any user text, so a prefix cache can checkpoint there.
+    return <- render_turn_marked_(model, chat)
 }
 
 def render_turn_image(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>) {

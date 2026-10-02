@@ -104,5 +104,7 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_simd_bad_elem", "simd_sum: the operand is a float, int or uint scalar, not")
         check_rejects(t, "_fc_tmm2d_bk", "bk must be 32, 64, or 128 (= 64-deep double-buffered: two ping-pong tiles, an n*144-half wt)")
         check_rejects(t, "_fc_tmm2d_deva_witness", "begin_deva's witness typed")
+        check_rejects(t, "_fc_tmm2d_devab_untyped", "tmm2d devab: the B operand is a device float16 stream, not an untyped pointer")
+        check_rejects(t, "_fc_tmm2d_devab_argc", "tmm2d_tg_step_devab takes exactly 8 arguments")
     }
 }

@@ -277,7 +277,7 @@ def test_scheduler_chunk_sizes(t : T?) {
             var first <- [-1l, -1l, -1l, -1l]
             var streams : array<array<int64>>
             for (ci, K in range(4), [1l, 3l, 17l, 64l]) {
-                var sch <- create_scheduler(m, 1l, 4l, K)
+                var sch <- create_scheduler(m, 1l, 4l, K, [idle_chunk_tokens = 0l])
                 var events : array<SchedEvent>
                 t |> success(submit(m, sch, make_req(int64(ci), prompt, greedy, 6l, none)), "stream queued (K={K})")
                 drain(m, sch, events)
@@ -297,6 +297,66 @@ def test_scheduler_chunk_sizes(t : T?) {
             delete first
             delete streams
             delete prompt
+            delete m
+        }
+    }
+}
+
+[test]
+def test_scheduler_idle_quantum(t : T?) {
+    t |> run("a lone stream prefills in the idle quantum, a stream beside a decoding one in the chunk (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_dasllama_jobque() {
+            var m <- load_capped_cpu(128l)
+            let saved_mode = get_prefill_attn_mode()
+            set_prefill_attn_mode(AttnPrefillMode.classic)   // bit-exact under any chunking: the two quanta must yield one stream
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
+            var short <- encode(m, "Once upon a time", true, false)
+            let np = long_length(prompt)
+            let K = 8l
+            t |> success(np > 3l * K && long_length(short) <= K, "the long prompt spans chunks, the short one fits one ({np} and {length(short)} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var streams : array<array<int64>>
+            for (idle in [-1l, 0l]) {   // the backend's default, then off
+                var sch <- create_scheduler(m, 1l, 4l, K, [idle_chunk_tokens = idle])
+                var events : array<SchedEvent>
+                t |> success(submit(m, sch, make_req(1l, prompt, greedy, 6l, none)), "lone stream queued (idle quantum {idle})")
+                scheduler_step(m, sch, events)
+                t |> equal(sch.idle_chunk_tokens, idle < 0l ? chunk_defaults(m).idle : idle, "idle quantum {idle} resolves to {sch.idle_chunk_tokens}")
+                t |> equal(sch.prefill_tokens, idle != 0l ? np : K, "idle quantum {idle}: the first tick prefilled {sch.prefill_tokens} of {np} tokens")
+                drain(m, sch, events)
+                streams |> emplace(toks_of(events, 1l))
+                delete events
+                delete sch
+            }
+            log_gen_texts(m, "idle quantum (chunked, then widened)", streams[1], streams[0])
+            t |> success(!empty(streams[0]) && ids_equal(streams[0], streams[1]), "the widened prefill emits the chunked prefill's stream")
+            var dsch <- create_scheduler(m)
+            t |> equal(dsch.chunk_tokens, chunk_defaults(m).chunk, "an unset chunk is the serving backend's ({dsch.chunk_tokens})")
+            t |> equal(dsch.idle_chunk_tokens, chunk_defaults(m).idle, "an unset idle size is the serving backend's ({dsch.idle_chunk_tokens})")
+            t |> equal(chunk_default(true), DEFAULT_CHUNK_TOKENS, "where a GPU prefills an unset chunk is one window")
+            t |> equal(chunk_default(false), CPU_CHUNK_TOKENS, "and the short one on the CPU")
+            delete dsch
+            // a stream decoding: the next prompt's chunk is the stall bound again
+            var sch <- create_scheduler(m, 2l, 4l, K)
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(2l, short, greedy, 64l, none)), "decoding stream queued")
+            scheduler_step(m, sch, events)
+            t |> equal(sch.prefill_tokens, long_length(short), "the short prompt prefilled in its first tick")
+            t |> success(submit(m, sch, make_req(3l, prompt, greedy, 6l, none)), "second stream queued beside it")
+            let before = sch.prefill_tokens
+            scheduler_step(m, sch, events)
+            t |> equal(sch.prefill_tokens - before, K, "beside a decoding stream the tick prefilled one chunk ({sch.prefill_tokens - before} tokens)")
+            drain(m, sch, events)
+            set_prefill_attn_mode(saved_mode)
+            delete events
+            delete sch
+            delete streams
+            delete prompt
+            delete short
             delete m
         }
     }
@@ -565,7 +625,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             var none : array<int64>
             let greedy = SamplingParams()
             // reference: the PLAIN scheduler (mtp off), paged, 8-token prefill quanta
-            var sch0 <- create_scheduler(m, 1l, 4l, 8l, 16l)
+            var sch0 <- create_scheduler(m, 1l, 4l, 8l, 16l, [idle_chunk_tokens = 0l])
             var events0 : array<SchedEvent>
             t |> success(submit(m, sch0, make_req(1l, prompt, greedy, 24l, none)), "plain stream queued")
             drain(m, sch0, events0)
@@ -575,7 +635,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             // sessions ride the pool's draft-block slab (the server default rail)
             let prev_spec = get_mtp_spec()
             set_mtp_spec(true)
-            var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true)
+            var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
             var events : array<SchedEvent>
             t |> success(submit(m, sch, make_req(2l, prompt, greedy, 24l, none)), "spec stream queued")
             let census0 = batch_step_census()
@@ -593,14 +653,14 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             t |> equal(finished_of(events, 2l).n_gen, 24l)
             //! top-k 1 makes every draw the penalized argmax, so the seeded sampled stream is deterministic and must equal the plain scheduler's
             let sp = SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1)
-            var sch1 <- create_scheduler(m, 1l, 4l, 8l, 16l)
+            var sch1 <- create_scheduler(m, 1l, 4l, 8l, 16l, [idle_chunk_tokens = 0l])
             var events1 : array<SchedEvent>
             t |> success(submit(m, sch1, make_req(3l, prompt, sp, 24l, none, 4242)), "plain sampled stream queued")
             drain(m, sch1, events1)
             var ref_s <- toks_of(events1, 3l)
             delete sch1
             set_mtp_spec(true)
-            var sch2 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true)
+            var sch2 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
             var events2 : array<SchedEvent>
             t |> success(submit(m, sch2, make_req(4l, prompt, sp, 24l, none, 4242)), "spec sampled stream queued")
             drain(m, sch2, events2)
@@ -615,14 +675,14 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             // spec tick must draw its verify rows through the sampler too - a raw-argmax walk would
             // accept drafts the penalty rejects
             let gp = SamplingParams(penalty = 1.3)
-            var sch3 <- create_scheduler(m, 1l, 4l, 8l, 16l)
+            var sch3 <- create_scheduler(m, 1l, 4l, 8l, 16l, [idle_chunk_tokens = 0l])
             var events3 : array<SchedEvent>
             t |> success(submit(m, sch3, make_req(5l, prompt, gp, 24l, none)), "plain penalized-greedy stream queued")
             drain(m, sch3, events3)
             var ref_p <- toks_of(events3, 5l)
             delete sch3
             set_mtp_spec(true)
-            var sch4 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true)
+            var sch4 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
             var events4 : array<SchedEvent>
             t |> success(submit(m, sch4, make_req(6l, prompt, gp, 24l, none)), "spec penalized-greedy stream queued")
             drain(m, sch4, events4)

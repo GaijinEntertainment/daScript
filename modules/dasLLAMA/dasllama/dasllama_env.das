@@ -229,7 +229,7 @@ struct public MetalEnv {
     @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, the gemma4a Conformer and the canary / parakeet FastConformer block loops (their f32 lanes), the whole StyleTTS2 (kitten / kokoro) synthesis - PL-BERT, the text and duration encoders, the duration head, prosody, the decoder, the harmonic source, the generator and the inverse STFT - on both weight lanes, the Pocket TTS codec and frame loop, and the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default); 0 pins the CPU tower."
     tower : bool = true
 
-    @clarg_doc = "Serve the qwen3v tower's block/merger GEMMs from the image's baked f16 twin plane on the crowned tensor mul_mm twins (the mint bakes the twin only for f16-sourced GEMMs, so it holds the file's own values; needs a tensor crown - a box without one, or an image without the plane, keeps the f32 route); 0 pins the f32 GEMM route - the A/B rail."
+    @clarg_doc = "Serve a tower's weighted GEMMs from a halfword twin of its weights on the crowned tensor mul_mm twins: the image's baked f16 twin plane where the mint bakes one (only for f16-sourced GEMMs, so it holds the file's own values), and the FastConformer chain's device twin of parakeet's f32 blob. Needs a tensor crown - a box without one, or an image without the plane, keeps the f32 route; 0 pins the f32 GEMM route - the A/B rail."
     tower_f16 : bool = true
 
     @clarg_doc = "Serve head-72 tower attention at %64 canvases on the lifted flash kernel (no score slab, no rowstat pass, no head restrides - the gemma3v-geometry ViTs); 0 pins the three-pass slab - the A/B rail."

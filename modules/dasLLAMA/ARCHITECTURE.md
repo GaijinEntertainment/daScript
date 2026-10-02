@@ -28,7 +28,7 @@ any sibling companion that sends a reader to it.
 
 - `ARCHITECTURE_ENGINE.md` - the engine core, arch-registration, support and serving charters, and
   the decode pick tape a parity cell pins one arm's routing on another with
-  (`ARCHITECTURE_ENGINE.md#moe-pick-tape`).
+  (`ARCHITECTURE_ENGINE.md#moe-pick-tape`), and the prefix cache's checkpoints on a recurrent model.
 - `ARCHITECTURE_ENGINE_FORMATS.md` - the format, load-rail and CPU-kernel-tier charters, plus
   the shapes they key off - the bigram merge heap both tokenizer backends run
   (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`), the one RoPE fill over a position source
@@ -76,6 +76,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   dense-KQ tensor mul_mm scaffold.
 - `ARCHITECTURE_GPU_PREFILL_MOE.md` - the Metal prefill driver's routed block - the MoE bucket
   rail, its tensor-twin scaffold, and the split-format expert twins.
+- `ARCHITECTURE_GPU_PREFILL_WINDOW.md` - the Metal prefill driver's device attention pair (the
+  K/V twins, the device-direct QK and AV, the row softmax written in place), the recurrent scan
+  over half rows, and how a kernel's hot loads are addressed.
 - `ARCHITECTURE_GPU_VULKAN.md` - the Vulkan resident driver's prefill chain and byte stores - the
   prefill window chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer,
   the tile probe's shared descriptor set layout, the recurrent block of the prefill window, the
@@ -120,7 +123,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   the hybrid worker pool, the MoE region split, the job queue the engine dispatches on, and the
   mode that dispatches to none.
 - `ARCHITECTURE_MEDIA.md` - the padded tower GEMM widths, the family GPU hooks, the tower weight
-  lane, and the plain-Model ASR decoders.
+  lane, the plain-Model ASR decoders, and the parakeet decode step.
 - `ARCHITECTURE_MEASUREMENT.md` - the benchmark rig, the tune gate, the sanctioned
   instrumentation rails, the ASR board's GPU row pairs, the `[tuned]` perm precedence, the mint
   wall in the sidecar's provenance, and the speculative round's ruler record.

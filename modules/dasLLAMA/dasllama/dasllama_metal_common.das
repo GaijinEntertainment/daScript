@@ -284,6 +284,8 @@ var g_pso_pk_gemv_q8_add_silu : MetalComputePipeline?
 var g_pso_pk_gemv_q8_tail : MetalComputePipeline?
 var g_pso_dn_l2 : MetalComputePipeline?        // q/k per-head L2 norm + q pre-scale
 var g_pso_dn_scan : MetalComputePipeline?      // the fused sequential delta rule
+var g_pso_dn_scan_h : MetalComputePipeline?    // its stamp over half rows and prepared gates
+var g_pso_dn_prep : MetalComputePipeline?      // the gates' prepare pass
 var g_pso_dn_gate : MetalComputePipeline?      // z-gated out-norm
 var g_pso_dn_gate_sig : MetalComputePipeline?  // ... its σ(z) twin (qwen4exp)
 var g_pso_dn_deint : MetalComputePipeline?     // 2x-wide [q|gate] deinterleave
@@ -1426,6 +1428,36 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
         state_alt = alt, conv_alt = alt + mr.conv_off, ple_off = mr.region_bytes * uint64(mr.regions))
 }
 
+//! the mirror's live region into the session's host arrays, `dn_pos` the mirror's position: the host
+//! copy is what a snapshot reads, and the Metal drivers leave it where the session started
+def private dn_mirror_to_host(var s : Session) {
+    if (!key_exists(g_dn_mirrors, s.uid)) {
+        return
+    }
+    let mr = g_dn_mirrors[s.uid]
+    if (mr.pos < 0l || mr.pos == s.dn_pos) {
+        return
+    }
+    let sbytes = uint64(long_length(s.dn_state)) * 4ul
+    let cbytes = uint64(long_length(s.dn_conv_state)) * 4ul
+    let pbytes = uint64(long_length(s.ple_conv_hist)) * 4ul
+    unsafe {
+        let src = reinterpret<uint8?>(metal_buffer_contents(mr.buf))
+        let base = uint64(mr.cur) * mr.region_bytes
+        memcpy(addr<void?>(s.dn_state[0]), reinterpret<void?>(src + base), sbytes)
+        memcpy(addr<void?>(s.dn_conv_state[0]), reinterpret<void?>(src + base + mr.conv_off), cbytes)
+        if (pbytes > 0ul) {
+            memcpy(addr<void?>(s.ple_conv_hist[0]), reinterpret<void?>(src + mr.region_bytes * uint64(mr.regions)), pbytes)
+        }
+    }
+    s.dn_pos = mr.pos
+}
+
+[init]
+def private dn_mirror_host_sync_register {
+    register_dn_host_sync(@@dn_mirror_to_host)
+}
+
 // the step served and its command buffer completed — the GPU state now holds position pos's update
 def dn_mirror_advance(uid : uint64; pos : int64) {
     if (key_exists(g_dn_mirrors, uid)) {
@@ -1862,10 +1894,46 @@ def graph_flush_sched(enc : MetalComputeEncoder?) {
     graph_flush(enc, g_gr_scheds[h].order)
 }
 
+var private g_kprof_on = false
+var private @scratch g_kprof_ms : table<string; double>
+
+//! Time every captured dispatch alone (or stop): a flush then commits and waits a command buffer
+//! a node, so a kernel's GPU time reads on the rows the run really computes. The sum runs over
+//! the window's own GPU time, since dispatches that overlap in one encoder no longer do.
+def public metal_kernel_profile(on : bool) {
+    g_kprof_on = on
+    g_kprof_ms |> clear()
+}
+
+//! GPU ms since `metal_kernel_profile(true)`, by MSL entry name and dispatch grid - one kernel's
+//! sites of different shapes read apart.
+def public metal_kernel_profile_ms() : table<string; double> {
+    return <- clone_to_move(g_kprof_ms)
+}
+
+//! one captured node in a command buffer of its own on the driver's queue, committed and waited
+[cold_path]   // the profile replay only - a serving flush never reaches it
+def private gr_profile_node(n : KNode) {
+    var err = ""
+    var gpu_ms = 0.0lf
+    with_compute_encoder_timed(g_queue, err, gpu_ms) $(enc : MetalComputeEncoder?) {
+        gr_encode_node(enc, n)
+    }
+    let name = g_kcov_names?[intptr(n.pso)] ?? "pso"
+    g_kprof_ms["{name} {int(n.grid.x)}x{int(n.grid.y)}x{int(n.grid.z)}"] += gpu_ms
+}
+
 //! Replay the captured step graph onto `enc` in `order` (empty = capture order), the hz oracle
 //! deriving barriers per step — a schedule permutation can only change speed, never correctness.
 def graph_flush(enc : MetalComputeEncoder?; order : array<int>) {
     g_gr_on = false
+    if (g_kprof_on) {
+        //! capture order: every node waits for the one before it, so the order is any valid one
+        for (i in range(length(g_gr_nodes))) {   // nolint:PERF018 — no for-in lock, as below
+            gr_profile_node(g_gr_nodes[i])
+        }
+        return
+    }
     hz_arm(true)
     // index loops, not for-in: a strict-mode panic must be able to unwind without leaving the
     // node array LOCKED (a recovered test would then die on the next gr_arm's clear)
@@ -2222,6 +2290,24 @@ var private g_reload_preps : array<function<void>>
 //! shared quiesce+release so an in-flight speculative cb never sees released regions.
 def register_reload_prep(f : function<void>) {
     g_reload_preps |> push(f)
+}
+
+//! A Metal driver served a forward: the pool takes the GPU-served spin window, where it stays until
+//! the next weights load. Workers spinning the CPU window through a GPU window burn a core each.
+[arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-spin")]
+def metal_note_served {
+    if (!get_dispatch_gpu_served()) {
+        set_dispatch_gpu_served(true)
+    }
+}
+
+def private metal_spin_window_reset {
+    set_dispatch_gpu_served(false)
+}
+
+[init]
+def private metal_spin_window_register {
+    register_reload_prep(@@metal_spin_window_reset)
 }
 
 [init]

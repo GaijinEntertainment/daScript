@@ -1574,12 +1574,31 @@ def test_parakeet_tower_metal(tst : T?) {
             var enc_rel_l2 = 0.0
             var poison_rel_l2 = 0.0
             var rows_gpu = 0l
+            var twin_delta = 0l
+            var tile_delta = 0l
+            var twin_rel_l2 = 0.0
+            var tile_rel_l2 = 0.0
+            var front_delta = 0l
+            var cpu_front_convs = 0l
+            var cpu_front_encodes = 0l
+            var cpu_front_rel_l2 = 0.0
+            var dev_delta = 0l
+            var dev_off_delta = 0l
+            var dev_rel_l2 = 0.0
+            var dev_off_rel_l2 = 0.0
+            var dev_text = ""
             with_dasllama_jobque_() {
                 var inscope m = AsrModel(kind = AsrKind.parakeet)
                 var inscope stg <- stage_parakeet_model(path, false)
                 mint_parakeet_model(stg, m.pk, false)
                 t |> success(!m.pk.q8, "model is on the f32 rail")
                 nlayer = m.pk.n_layer
+                // every lever a leg below depends on, set here and put back at the cell's end
+                let crowns_prev = get_metal_tensor_crowns()
+                let front_prev = set_metal_parakeet_front(true)
+                let dev_prev = set_metal_fc_attn_dev(true)
+                let twin_prev = get_metal_tower_f16()
+                set_metal_tower_f16(true)
                 set_metal_tower(false)
                 let d0 = metal_tower_stats()
                 var inscope s <- create_session(m, "en")
@@ -1600,6 +1619,7 @@ def test_parakeet_tower_metal(tst : T?) {
                 let s1 = metal_tower_stats()
                 enc_delta = s1.encodes - s0.encodes
                 blk_delta = s1.blocks - s0.blocks
+                front_delta = s1.convs - s0.convs
                 var inscope stc = ParakeetState()
                 var inscope stg2 = ParakeetState()
                 set_metal_tower(false)
@@ -1617,7 +1637,69 @@ def test_parakeet_tower_metal(tst : T?) {
                 }
                 parakeet_encode(m.pk, stg2)
                 poison_rel_l2 = rel_l2(stg2.x, stc.x)
+                // the front left to the CPU: the block seat serves behind it
+                parakeet_log_mel(samples, m.pk, stg2)
+                set_metal_parakeet_front(false)
+                let f0 = metal_tower_stats()
+                parakeet_encode(m.pk, stg2)
+                let f1 = metal_tower_stats()
+                set_metal_parakeet_front(true)
+                cpu_front_convs = f1.convs - f0.convs
+                cpu_front_encodes = f1.encodes - f0.encodes
+                cpu_front_rel_l2 = rel_l2(stg2.x, stc.x)
+                // the two GEMM routes under a pinned tensor crown: the device twin, then the knob's f32 tiles
+                set_metal_tensor_crowns("mulmm_q8")
+                metal_prefill_shutdown()
+                parakeet_log_mel(samples, m.pk, stg2)
+                let tw0 = metal_tower_f16_encodes()
+                parakeet_encode(m.pk, stg2)
+                twin_delta = metal_tower_f16_encodes() - tw0
+                twin_rel_l2 = rel_l2(stg2.x, stc.x)
+                set_metal_tower_f16(false)
+                let tw1 = metal_tower_f16_encodes()
+                parakeet_encode(m.pk, stg2)
+                tile_delta = metal_tower_f16_encodes() - tw1
+                tile_rel_l2 = rel_l2(stg2.x, stc.x)
+                set_metal_tower_f16(true)
+                // the all-heads attention under the device pair's crown, then its lever off: the per-head loop serves
+                set_metal_tensor_crowns("mulmm_q8,attn_dev")
+                metal_prefill_shutdown()
+                let dv0 = metal_tower_fc_dev_encodes()
+                parakeet_encode(m.pk, stg2)
+                dev_delta = metal_tower_fc_dev_encodes() - dv0
+                dev_rel_l2 = rel_l2(stg2.x, stc.x)
+                var inscope s3 <- create_session(m, "en")
+                transcribe(m, s3, samples) $(seg) {
+                    dev_text += seg.text
+                }
+                set_metal_fc_attn_dev(false)
+                let dv1 = metal_tower_fc_dev_encodes()
+                parakeet_encode(m.pk, stg2)
+                dev_off_delta = metal_tower_fc_dev_encodes() - dv1
+                dev_off_rel_l2 = rel_l2(stg2.x, stc.x)
+                set_metal_fc_attn_dev(dev_prev)
+                set_metal_parakeet_front(front_prev)
+                set_metal_tower_f16(twin_prev)
+                set_metal_tensor_crowns(crowns_prev)
+                metal_prefill_shutdown()
             }
+            t |> equal(dev_delta, 1l, "under the device pair's crown the attention ran over every head at once")
+            t |> success(dev_rel_l2 < 5.0e-2, "the all-heads attention tracks the CPU rail (rel-l2 {dev_rel_l2})")
+            t |> equal(dev_text, cpu_text, "the all-heads attention's transcript is the CPU's")
+            t |> equal(dev_off_delta, 0l, "all-heads lever off: the route never engaged")
+            t |> success(dev_off_rel_l2 < 5.0e-2, "all-heads lever off: the per-head loop tracks the CPU rail (rel-l2 {dev_off_rel_l2})")
+            t |> success(dev_rel_l2 != dev_off_rel_l2, "the two attention forms round apart - the lever switched the route")
+            to_log(LOG_INFO, "parakeet mtower encode rel-l2 by attention form: all heads {dev_rel_l2}, per head {dev_off_rel_l2}\n")
+            t |> equal(front_delta, enc_delta, "every GPU encode ran the subsample front on the device ({front_delta} of {enc_delta})")
+            t |> equal(cpu_front_convs, 0l, "front lever off: the front never dispatched")
+            t |> equal(cpu_front_encodes, 1l, "front lever off: the block seat still served the encode")
+            t |> success(cpu_front_rel_l2 < 5.0e-2, "front lever off: the CPU front under the device blocks tracks the CPU rail (rel-l2 {cpu_front_rel_l2})")
+            to_log(LOG_INFO, "parakeet mtower encode rel-l2 with the CPU front: {cpu_front_rel_l2}\n")
+            t |> equal(twin_delta, 1l, "under a tensor crown the encode rode the device twin")
+            t |> success(twin_rel_l2 < 5.0e-2, "the twin route tracks the CPU rail (rel-l2 {twin_rel_l2})")
+            t |> equal(tile_delta, 0l, "twin knob off: the route never engaged")
+            t |> success(tile_rel_l2 < 5.0e-2, "twin knob off: the f32 tile route tracks the CPU rail (rel-l2 {tile_rel_l2})")
+            to_log(LOG_INFO, "parakeet mtower encode rel-l2 by route: twin {twin_rel_l2}, f32 tiles {tile_rel_l2}\n")
             t |> success(parakeet_gpu_serves(), "the driver reports serving with the tower on")
             t |> success(!parakeet_serves_q8(), "the un-pinned lane is the f32 planes while the driver serves")
             t |> equal(off_encodes, 0l, "the tower-off leg never dispatched")

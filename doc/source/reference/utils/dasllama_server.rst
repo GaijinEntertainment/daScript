@@ -167,7 +167,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
 
    bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8] \
        [--asr <asr.bin>] [--asr-workers 2] [--mmproj <mmproj.gguf>] [--image-mmproj <mmproj.gguf>] \
-       [--ctx 4096] [--streams 4] [--chunk 64] [--page-rows 64] [--prefix N] [--tune]
+       [--ctx 4096] [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N] [--tune]
 
 .. list-table::
    :header-rows: 1
@@ -276,15 +276,19 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--team-dispatch``
      -
      - ``hybrid``
-     - ``hybrid``: the LLM uses the worker team while the ASR and TTS workers run inline; ``team``: every caller uses serialized team publishes; ``inline``: every caller runs independently
+     - ``hybrid``: the LLM uses the worker team; the ASR workers use it too when every LLM slot decodes on a GPU (Metal, or the whole model resident on a Vulkan device) and run inline otherwise; the TTS worker runs inline; ``team``: every caller uses serialized team publishes; ``inline``: every caller runs independently
    * - ``--affinity``
      -
      - ``-1``
      - Worker CPU affinity: ``-1`` = the platform default (QoS on darwin, off elsewhere), ``0`` = off, ``1`` = an ideal-CPU hint, ``2`` = a hard mask (``DAS_JOBQUE_AFFINITY`` overrides)
    * - ``--chunk``
      -
-     - ``64``
-     - Prefill quantum in tokens: decode stalls at most this many per tick
+     - *backend*
+     - Prefill quantum in tokens while a stream is decoding: decode stalls at most this many per tick. Default: 512 where a GPU prefills (a window's cost is mostly fixed there, so a small chunk runs a prompt at a fraction of the window's rate), 64 on the CPU (a chunk costs its token count, so a short one keeps the stall short at 13 - 29% of the prompt's rate)
+   * - ``--chunk-idle``
+     -
+     - *backend*
+     - Prefill quantum in tokens while no stream is decoding (never under ``--chunk``): nothing waits on the tick, so the window can be wide. Default: 2048 on Metal, 512 on the other backends
    * - ``--page-rows``
      -
      - ``64``
@@ -360,7 +364,7 @@ weights stay mmap'd, each slot keeps its own KV pool and prefix cache, and one
 model's GPU state lives in VRAM at a time (the tier drops and re-arms on
 switch; ``backend = "cpu"`` slots never evict the GPU owner). Blank keys
 inherit the flat defaults; ``backend`` is ``auto`` | ``cpu`` | ``gpu``, and
-per-entry ``ctx``, ``quant``, ``kv_dtype``, ``streams``, ``chunk``,
+per-entry ``ctx``, ``quant``, ``kv_dtype``, ``streams``, ``chunk``, ``chunk_idle``,
 ``page_rows``, ``prefix``, ``mtp``, ``rope_scaling``, ``rope_scale``, ``yarn_orig_ctx`` and ``image_mmproj`` override per model:
 
 .. code-block:: toml
@@ -383,7 +387,8 @@ roster boots unchanged.
 Chat and completion requests batch continuously (``dasllama/dasllama_scheduler.das``):
 up to ``--streams`` generations run concurrently through one ``eval_batch``
 decode step per tick, with long prompts prefilled in ``--chunk``-token slices,
-so a new arrival never stalls the running streams for more than one chunk.
+so a new arrival never stalls the running streams for more than one chunk
+(with no stream running, the slices are ``--chunk-idle`` tokens).
 Requests beyond ``--streams`` queue (up to 32; then 503). KV is paged by
 default - cache memory tracks each stream's actual context, and finished
 streams donate their pages to a prefix cache, so a repeated prompt prefix (a

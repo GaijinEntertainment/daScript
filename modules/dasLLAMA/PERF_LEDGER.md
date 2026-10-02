@@ -54,6 +54,278 @@ what it costs today and what the fix would change.
   DASLLAMA_PARITY_FULL=1 DAS_JOBQUE_THREADS=8`; the file's one-window hybrid and no-shared-expert cells
   red on the cm2e census floor on this card (117 of 120, 134 of 144) exactly as on master run through
   this binary (`followup_vulkan.md` row 132's reading), unchanged by this entry.
+- **MEASURED (2026-10-01) - the server's ASR worker on the team beside a GPU-decoding LLM: a
+  64-second parakeet clip 281 -> 140 ms a transcription.** M5 Max, `dasllama-server` with the
+  Qwen3.6-35B-A3B on Metal (streams 1) and parakeet-tdt-0.6b-v3 f32, `POST
+  /v1/audio/transcriptions` seven times, medians, wall time at the client (out-of-process;
+  direction-grade across the rows: a server life a dispatch mode).
+
+  | ASR worker | LLM idle | while the LLM decodes 400 tokens | that decode, tok/s |
+  |---|---|---|---|
+  | inline (`hybrid` before) | 281 ms | 390 ms | 136 |
+  | team (`--team-dispatch team`, and `hybrid` now) | 140 ms | 178 ms | 138 |
+
+  A Metal-served decode publishes nothing to the team, so the worker's joint, predictor and mel
+  split across it at no cost to the stream. mlx-audio 0.5.7 reads 162 ms on the clip in its own
+  process (external: `model.generate(clip)` on `mlx-community/parakeet-tdt-0.6b-v3` loaded through
+  `mlx_audio.stt.utils.load_model`, the median of five calls after one warmup).
+- **MEASURED (2026-10-01) - the FastConformer block loop on the half tensor GEMM: 115 -> 63 ms for
+  a 64-second clip.** M5 Max, parakeet-tdt-0.6b-v3 f32, `harness/asr_stage_probe.das -r 5` on a
+  64 s clip; every before -> after pair of this entry is the probe on the tree before and after
+  the change (direction-grade), save where a sentence says one process. Per encode: 187 -> 133 ms, of which the CPU front stays 66 and the rel table 6. The
+  chain's weighted GEMMs ran the f16-staged simdgroup tile stamp (`enc_f32_mm`, ~4.8 T MAC/s over
+  the ~570 G MAC of 24 blocks); they read a device halfword twin of the blob through the half x
+  half tensor GEMM now. The encoder rows read 0.0042 rel-l2 from the CPU rail on the twin and
+  0.0039 on the tiles (jfk), the transcript the CPU's on both - every rel-l2 on jfk in this entry
+  is `test_parakeet_tower_metal`'s log (`tests/test_model_image.das`, `tests/run.das --suite image
+  --arm mtower`), the 64 s clip's the probe's.
+  - What the 63 ms holds, by leaving parts out (best of three, three rounds): the per-head
+    attention loop 25 (41 dispatches a block - a pack, three tile GEMMs and a softmax a head), the
+    weighted GEMMs 27 (~18 T MAC/s with their half converts), the norms, the depthwise conv and
+    the rest ~10.
+  - mlx-audio 0.5.7 on the same clip: 162 ms whole (external, the call of the entry above; its
+    encoder 64 and its decode loop 97 timed apart in the same process). Ours whole, team
+    dispatch: ~220 (front 66, blocks 63, rel table 6, mel 8, decode 80).
+  - **The subsample front on the device, the rel table kept a session: the encode 133 -> 66 ms,
+    the clip whole ~153.** The front's three convs, two 1x1 GEMMs and the pre-projection run ahead
+    of the blocks in the same command buffer (66 ms of CPU, team-dispatched, to under 5), and the
+    rel table is built once a frame count (6 ms an encode before). The same probe, per pass:
+    encode 66, decode 79 (the predictor 38, the joint 25, the pick 13, the encoder projection 2),
+    mel 8. Rows 0.0057 rel-l2 from the CPU rail (jfk), the transcript the CPU's.
+  - **The TDT joint as a column pass over its live inputs, the pick in one exp pass: decode 79 ->
+    61 ms, the clip whole ~133.** The joint row is a ReLU's output, so the joint net's weight laid
+    as input columns adds only the live ones (a transposed copy a session, 21 MB): the joint 25 ->
+    16 ms with the logits split across the team's lanes. One thread alone runs it 56 - the weight
+    streams from memory either way, and the row-dot it replaces had the team. The token mass is
+    the log-sum pass's partial sum: the pick 12.7 -> 6.9. Left: the predictor 31.5 (four 640 x
+    2560 GEMVs a token over 26 MB of f32).
+  - **Run inline - one thread, as the server's ASR worker does by default - the same clip reads
+    ~263 ms:** encode 69, decode 165 (the predictor 86, the joint 45, the encoder projection 23,
+    the pick 7), mel 29. It read 790 before the front and the twin.
+  - **The attention over every head at once on the device pair: the encode 57.0 -> 44.4 ms.** One
+    process, the two forms in turn, seven timed encodes a form after two dropped (per head 56.9 -
+    57.1, all heads 44.3 - 44.5), under the `attn_dev` crown. Five dispatches a block replace
+    forty-one: the half operands, the pair's QK twice (content, rel), the rel-shift softmax, the
+    pair's AV. Rows 0.0056 rel-l2 from the CPU rail on the clip against the per-head form's 0.0059
+    (jfk: 0.0042 against 0.0057), the transcript the CPU's. Not taken: the rel GEMM computes the
+    whole `mp x wwpad` slab though a row reads `npos` of its `2 npos - 1` columns - a band skip
+    halves its 31 G MAC and its slab's bytes.
+  - **The decode step as one team publish over half-precision weights: decode 61 -> 33 ms, team
+    dispatch (inline 165 -> 146).** `asr_stage_probe -r 5`, the 64 s clip, per pass. By change:
+    the predictor's weights read as halves, 31.5 -> 15.7 ms - twice the rate at half the bytes,
+    so a token's predictor is bound by the 26 MB it read; the joint's columns as halves, no change
+    (13.9) - its lanes read a column table in short runs a column apart; the predictor's stages
+    and the joint in one publish, the two together 29.6 -> 24.6; the joint table in 256-logit
+    blocks, a token step 88 -> 81 us and a blank step 50 -> 34 (a 512 block reads 107 and 48, a
+    128 block 82 and 30, with the inline joint 147 -> 159 us); the log-sum's cut and the max and
+    argmax in one pass, the pick 6.8 -> 3.1 ms. Now, per pass: a token step ~83 us x 260, a blank
+    step ~40 us x 42, the pick 3.1 ms, the encoder projection 2.6. A bare six-stage publish over
+    18 lanes measures 14 us and a one-stage one 5, so what is left is the step's bytes - 7.4 MB
+    of predictor halves and ~5 MB of live joint columns a token, about 150 GB/s. The transcripts
+    are the reference's token for token (jfk, v2 and v3).
+  - **What the routes hold, in bytes.** The device twin of the blob is half the blob: 1.25 GB for
+    the 2.51 GB 0.6B file, resident from the first encode to the weights drop. The all-heads score
+    slabs are `heads x mp x (nkp + wwpad) x 2` bytes - 33 MB at 64 s of audio and eight heads -
+    and the route stands down past 256 MB. A session's decode halves are `(8 layers + 1) x pd^2 x
+    2` bytes for the predictor (13.9 MB at two layers of 640) and `blocks x pd x 256 x 2` for the
+    joint table (10.8 MB at 8198 logits).
+- **MEASURED (2026-10-01) - the prefill chunk on the CPU: a prompt alone runs flat from 512 tokens
+  up, and a decoding stream waits one chunk's time a token while another prompt prefills.** M5 Max
+  CPU, `utils/dasllama-server/server_bench.das -b 1 -n 32 --long-prompt 2048 --chunks
+  64,128,256,512,1024,2048`, one process a model, paged sessions.
+
+  | chunk | 64 | 128 | 256 | 512 | 1024 | 2048 |
+  |---|---|---|---|---|---|---|
+  | Llama-3.2-3B Q4_K_M, lone prompt, tok/s | 357 | 388 | 401 | 410 | 413 | 402 |
+  | its decoding stream's gap, p95 ms | 204 | 378 | 736 | 1425 | 2733 | 5020 |
+  | Qwen3.5-0.8B Q8_0, lone prompt, tok/s | 1343 | 1658 | 1832 | 1892 | 1788 | 1991 |
+  | its decoding stream's gap, p95 ms | 50 | 92 | 153 | 283 | 547 | 1032 |
+
+  The idle quantum at 512 is right for the CPU - nothing past it. The chunk a decoding stream
+  waits out is a token count, so its stall is the model's: 512 tokens is 0.28 s on the 0.8B and
+  1.4 s on the 3B (its token gap is 14 ms with nothing prefilling).
+  - **The CPU's chunk beside a decoding stream defaults to 64.** The stall follows the chunk
+    down (50 ms on the 0.8B, 204 on the 3B, ~460 on Mistral-7B Q4_K_M) and the prefilling prompt
+    pays 13 - 29% of its rate, only while a stream decodes; under 32 tokens a batch leaves the
+    batched kernels (the 7B's 2048-token prompt read 19 s against 11). A GPU's chunk stays one
+    window. Measured and not taken: sizing the chunk to a 250 ms stall from the last chunk's
+    rate - on the 3B and the 7B it lands on 64 anyway (311 - 324 and 459 - 462 ms with a
+    64-token floor), and on the 0.8B it keeps 512 (268 - 283 ms); `--chunk` is the same knob.
+- **MEASURED (2026-10-01) - both engines held to what an M4 can run, on the M5 Max: prefill 1.3 -
+  1.4x mlx-lm's, decode level, the warm hit 20 - 30 ms behind.** The 35B through each server
+  (ours streams=1 with speculation; the series of the checkpoint entry below, medians of three,
+  two spaced lives an arm). Ours under the box's manifest with its `metal_tensor` list replaced by
+  the M4 Pro's (`records/m4.tune.2b2e79baf8ab.json`: `mulmm_bf16`, `kq_mvb2_k4_r2` and the
+  `kq_rows_*` forms - no routed, K-quant GEMM or attention tensor crown); mlx-lm 0.32.0 over MLX
+  0.32.3 built with a deployment target of 15.0, which compiles its Metal-4 kernels out
+  (`MLX_METAL_NO_NAX`; no `_nax` kernel in its metallib, 6322 in the stock one). The mlx-lm columns
+  are external - `mlx_lm.server --model mlx-community/Qwen3.6-35B-A3B-4bit --chat-template-args
+  '{"enable_thinking":false}' --max-tokens 4096 --prompt-cache-size 32 --prompt-cache-bytes
+  8589934592`, the same client series - and every column is direction-grade: a server life an arm.
+
+  | | ours, M4 crowns | mlx-lm, no Metal-4 kernels | ours, M5 crowns | mlx-lm, stock |
+  |---|---|---|---|---|
+  | cold 3k, tok/s (TTFT) | 2773 / 2794 (1.07 s) | 1980 (1.50 s) | 4959 (0.60 s) | 4480 (0.66 s) |
+  | cold 9k, tok/s (TTFT) | 2517 / 2534 (3.6 s) | 1892 (4.82 s) | 4603 (1.98 s) | 4217 (2.16 s) |
+  | warm TTFT, 3k / 9k | 0.09 / 0.10 s | 0.06 / 0.08 s | 0.05 / 0.08 s | 0.06 - 0.08 s |
+  | decode, 3k / 9k, tok/s | 121 / 103 | 113 - 120 / 106 - 111 | 139 / 114 | 110 / 105 |
+
+  - The warm hit's short window takes the in-kernel gather K4 form without the routed tensor
+    crown: 64 ms of GPU for 20 tokens against 43 on the M5's crowns.
+  - The numbers are the M5 Max's GPU on the M4's forms, not an M4's: the ratio between the engines
+    is what reads across, and the M4's own race predates the device attention pair and the half
+    scan.
+  - **A life run inside 14 minutes of back-to-back GPU load reads 1.5 - 1.8x slow with no thermal
+    warning from the OS.** Ours: cold 3k 1568 tok/s, decode 91 / 85, a 2945-token window 950 ->
+    1740 ms of GPU; five minutes idle and four between lives put it back (2773, 2794). mlx-lm's
+    lives in the same heat read 1705 and 1524 against 1980 cool. A series is read from spaced lives.
+- **MEASURED (2026-10-01) - pointer loads in every fully unrolled Metal kernel loop: 3% of a dense
+  K-quant window, nothing on the 35B's served path.** 88 loads over the K-quant, IQ and Q4_0 GEMV
+  and staging kernels, the legacy routed stamps, the deltanet norm and gate and the staged
+  attention moved from `buf[base + k]` to a pointer taken outside the loop
+  (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#kernel-load-addressing`). M5 Max, Mistral-7B Q4_K_M,
+  `p0_ko_probe -n 512 --kprof --text skills/design_philosophy.md`, the indexed tree then the
+  pointer tree (direction-grade): the dense K4 stage 69.7 -> 66.6 ms and 19.8 -> 19.3, K6 20.3 -> 20.4, the window
+  as it serves 149.7 -> 145.4 ms. The 35B through the server reads as before the sweep (cold 3k
+  0.62 s, 9k 2.02 s, decode 139 / 114 tok/s) - its expert stamps and its scan took the form
+  already. Decode on the dense model is not read: `lcpp_bench -n 128 -r 12` as a `-jit` script
+  spreads 20% a row (78 - 86 +- 13 - 18 tok/s), past any difference the loads could make.
+- **MEASURED (2026-10-01) - a reused prompt on a deltanet hybrid attaches a checkpoint; warm time
+  to first token 0.6 s -> 0.05 s at 3k, 2.1 s -> 0.08 s at 9k.** M5 Max, the 35B, the server at
+  streams=1 with speculation, a client script outside the tree (`bench_llm.py <server url> <model>
+  <tag>`: a fixed system prompt cut from `skills/design_philosophy.md`, a primed request, three
+  more with other user turns over `/v1/chat/completions`; client side, medians of three;
+  out-of-process, and direction-grade against the tree before the change): warm 3k 0.05 s (server
+  side 48 / 48 / 60 ms), warm 9k 0.08 s (57 / 58 / 71 ms), every request after the prime a hit;
+  mlx-lm 0.32.0's server on the same series reads 0.06 - 0.08 s (external, the `mlx_lm.server`
+  command of the entry above). Cold is where it was: 3k 0.60 s (4959 tok/s), 9k 1.98 s
+  (4603), decode 139 / 114 tok/s. A hit's time is one short window: 17 - 21 tokens read 43 ms at no
+  depth and 45 ms of GPU at 9k, plus 6 - 10 ms of setup.
+  - **The short window was 59 ms: the routed gate and up took the in-kernel gather form below 256
+    tokens.** `p0_ko_probe -n 17 --kprof --depth 9108`: `metal_moe_mulmm_k4` 38.8 of 74 ms. The
+    gathered half panel at every window (`--gather-min 256,1`, three interleaved rounds each):
+    17 tokens 58.9 -> 42.7 ms, 64 80.3 -> 56.0, 128 95.4 -> 65.8, 224 119.2 -> 83.5; the logits
+    move 0.16 - 0.67 of a largest 20 - 25, the half twin against the integer form.
+  - **What is left in a short window is the weight stream.** 17 tokens pick 136 expert rows over
+    77 experts, each a 32-row tile: the K4 pair 17.2 ms and the K5 down 7.0 at 0.2 ms a dispatch,
+    which is 590 KB an expert plane at ~137 GB/s - a decode step's 7.3 ms plus 4.3 us an expert
+    plane past its eight. A shorter tile does not buy it back (an 8-row tile costs 0.62 of a
+    32-row one).
+  - **Stopping a prefill at the checkpoint costs one window, so the chunk ends there.** With the
+    chunk left at its quantum the cold 3k prompt ran 2048 + 897 + 20 tokens, 0.65 s (4556 tok/s);
+    a checkpoint within a chunk and a half ending the chunk runs 2945 + 20, 0.60 s (4959).
+  - Open: the seam row of the draft head declines at the first window of every attached prompt
+    (a quality-only miss, 26 - 34 a series, as before the cache); the close tokens of a finished
+    turn eval as a 2 - 3 token window, 20 - 35 ms after the reply's last token.
+- **MEASURED (2026-10-01) - the job queue's workers spinning the CPU window through Metal work
+  are the box's "slow mode".** M5 Max, the 35B, `p0_ko_probe -n 2048 --depth 10240 --text
+  skills/design_philosophy.md --hold none`, four walks of five windows back to back. Under the
+  30 ms CPU spin window (`--cpu-spin`) the process holds 1086-1296% CPU while the GPU does the
+  work (a sample: the workers in the spin loop's clock read) and the walks read 366 / 388 / 417 /
+  421 / 475, then 361 / 379 / 400 / 417 / 439, then 363 / 389 / 426 / 466 / 512, then 430 / 458 /
+  481 / 504 / 521 ms - 19% slower from the third walk on. Under the GPU-served window (500 us;
+  13-16% CPU) the four walks read 365 / 388 / 415 / 421 / 468, 361 / 380 / 400 / 417 / 440, 359 /
+  379 / 399 / 418 / 438, 362 / 382 / 409 / 429 / 452. The Metal overrides now report a served
+  forward (`metal_note_served`). The server, cold prompts, one stream, MTP on, before -> after
+  (direction-grade, the client series of the checkpoint entry above): 3k 4820 -> 4959 tok/s, 9k
+  4224 -> 4574; decode 138 / 111 -> 137 / 113. mlx-lm 0.32.0's server on the same series: 4480 /
+  4217, decode 110 / 105 (external). A later request of a long series still creeps
+  (9k windows 431 / 460 / 482 / 506 against 362 / 380 / 400 / 418 in the probe) with the CPU idle:
+  that part is the GPU's own.
+  - **The largest gap this entry left on the reused-prompt case:** a deltanet hybrid attached
+    no prefix, so a repeated 9k system prompt cost its whole prefill again (TTFT 2.1 s) where
+    mlx-lm restores a checkpoint (0.06-0.08 s) - closed by the checkpoint entry above.
+
+- **MEASURED (2026-10-01) - a Metal prefill window by kernel, on both engines, and the three
+  forms the reading bought.** M5 Max, Qwen3.6-35B-A3B-MTP UD-Q4_K_M, the device attention pair
+  crowned. `p0_ko_probe --kprof` replays every captured dispatch in a command buffer of its own
+  (`metal_kernel_profile`), so a kernel's GPU time reads on the rows the window really computes:
+  the kernels sum to 436 ms where the window serves in 428, so nothing hides in overlap. mlx-lm
+  0.32.0 the same way (external: its model's `__call__` of every module class wrapped to force an
+  evaluation, a script outside the tree; 536 ms against 363 as it serves, about 0.15 ms of sync a
+  call, so its big modules read true and its small ones high). A 2048-token
+  window at depth 0, ours ms (mlx-lm instrumented, external): the recurrent scan 70 (41); the expert GEMMs
+  146 - K4 96, K5 47, K6 3 (gate 44 + up 53 + down 43); the router 27 (9); the dense half GEMMs
+  95 (in_proj_qkv 41, z 25, out 25, shared expert 31, attention projections ~38); reduce 12,
+  activation 11, gather 8, count 7, bucket 5; the attention trio 11.
+  - **The router as a half GEMM** (`pf_enc_router_mm`; `harness/router_race.das`, 2048 x 256 over
+    2048): the slab GEMV 0.647 ms, a tensor GEMM over f32 operands 0.087, over halves 0.048 -
+    x13.4. The f32-operand tensor form is no more exact than the half one (off the double dot by
+    2.9e-3 against 1.4e-3 of 4.2; the GEMV 8e-7): matmul2d rounds its operands either way. The
+    window 428 -> 402 ms.
+  - **The scan** (`harness/dn_scan_race.das`, a layer at 2048 tokens, thirty dispatches a command
+    buffer). mlx-lm's scan kernel raced beside ours on its own layout (external; an arm the harness
+    does not keep): 1.05 ms on half rows, 1.81 on f32. Ours as it stood:
+    2.25 on f32 rows with the gates in the walk, 1.77 on half rows with the gates prepared - the
+    same algorithm, 1.7x slower. The whole difference was addressing: `cv[cb + koff + i]` under a
+    uint index against a pointer and a constant offset
+    (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#kernel-load-addressing`). With the pointer form: 1.48 on
+    f32 rows, 0.97 on half rows - under mlx-lm's. Two simdgroups a threadgroup read 10% under
+    four. Preparing the gates alone bought 9% (70 -> 64 ms a window); half rows without the
+    pointer form bought nothing net. The window 402 -> 368 ms; the scan 70 -> 29.
+  - **The K-quant expert stage on pointer loads**: K4 95.5 -> 88.4 ms, K5 46.7 -> 40.8; the window
+    368 -> 356.
+  - **The standing** (`--depth 10240 --text skills/design_philosophy.md`, the windows in turn):
+    362 / 380 / 400 / 418 / 445 ms; mlx-lm 0.32.0 on its synthetic ids 365 / 377 / 396 / 412 / 431
+    (external, direction-grade).
+- **MEASURED (2026-10-01) - what a routed tile costs, for the tile ladder.** One process each,
+  hand MSL over a 2048 x 2048 x 2048 half GEMM, device operands (scratch races, not kept):
+  - **A tile's live rows do not make it cheaper.** The A tensor's row extent set under the
+    descriptor's m: a 128-row tile reads flat from 128 live rows to 1 (0.280 -> 0.274 ms); a
+    32-row tile reads 0.330 at 32, 0.636 at 24, 0.414 at 16, 0.287 at 8 - a partial extent takes
+    an edge path that is slower, not faster. Padding is not avoided by telling the op the count.
+  - **A tile's cost is mostly fixed.** The whole GEMM by tile height: 8 rows 0.825 ms, 16 0.461,
+    32 0.332, 64 0.276, 128 0.281 - a tile of 16 costs 0.69 of a tile of 32, 8 costs 0.62, 64
+    costs 1.66, 128 costs 3.38. Fewer, taller tiles win; a remainder of 33..64 rows is one 64-row
+    tile at 1.66 against two 32-row tiles at 2.0, each also staging the plane again.
+  - **An idle threadgroup costs 0.68 ns** (the 128-row expert stamp over a grid no expert fills:
+    32768 threadgroups 0.022 ms, 131072 0.086). A window's idle launches total about 6 ms, most
+    of it the K5 stamps' 32-strip grid.
+  - **The synthetic probe ids route a MoE onto half its experts** (last routed layer: 127 of 256
+    idle, the busiest 1729 rows, 78% of the rows in 128-row tiles); a real prompt leaves 51 idle,
+    59% in 128-row tiles, and 6656 rows in 335 tiles of 32 padded to 10720. The 64-row rung read
+    level on the synthetic ids for that reason; it is owed a reading on text (`--text`).
+  - From the two expert stamps' times and those counts: the multiply runs 22.7 T multiply-adds a
+    second staged (30.7 device-direct at 128 rows), staging is 7% of a 128-row stamp and 23% of
+    the remainder stamp, and the remainder stamp's pad rows are 29% of it.
+
+- **MEASURED (2026-10-01) - a Metal prefill window's cost against the context behind it: the
+  attention is the whole growth, and the device pair
+  (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-attn-device`) takes 2.8x off it.** M5 Max,
+  Qwen3.6-35B-A3B-MTP UD-Q4_K_M (10 attention layers of 40, 16 heads of 256 over 2 KV heads), the
+  box's own mint, `bin/daslang -jit modules/dasLLAMA/harness/p0_ko_probe.das -- -m <gguf> -n 2048
+  --depth 10240`: one session's 2048-token windows in turn, the staged trio and the device pair
+  alternating in one process. Staged, by the rows of context behind the window (0 / 2048 / 4096 /
+  6144 / 8192): 452 / 493 / 563 / 599 / 694 ms. The device pair: 427 / 440 / 466 / 483 / 521 -
+  the five windows 2800 -> 2318 ms, the deepest x1.33. mlx-lm 0.32.0 on the same box
+  (external, direction-grade: `mlx-community/Qwen3.6-35B-A3B-4bit`, its model called a window at a
+  time over one cache by a script outside the tree): 365 / 377 / 396 / 412 / 431. The kernels alone, one layer at 2048 queries on 8192 rows of context
+  (`harness/attn_depth_race.das`, GPU time, best of 3): staged 23.1 ms - QK 9.5, row stats 1.6, AV
+  12.0 - against 8.2 - the K/V twin pass 0.1, QK 3.0, the softmax write 2.3, AV 2.7; both within
+  7e-7 to 9e-4 of the attention computed in double from the f32 operands, the pair the closer of
+  the two at every score spread tried. The time does not move with the scores. The tune race
+  (`race_attn_dev`, 512 queries on 1536 rows, 8 heads of 128): 0.344 -> 0.191 ms.
+  - **The staged tensor AV twin gains nothing at depth** (`attn_avmm` force-crowned through a
+    manifest copy: 446 / 490 / 558 / 590 / 682): threadgroup staging is the cost, not the multiply.
+  - **Idea, not built: the softmax write reads the row twice.** A thread holds 80 scores of a
+    10240-key row; kept in registers between the max and the exp they save one of three slab
+    traversals.
+  - **Idea, not built: a continuation window gathers every prior K/V row from the session's host
+    cache into f32 panels** (`kv_load_row`, 335 MB at 8192 rows of context). The device pair reads
+    halves, so an f16 session's rows could land as halves directly.
+- **MEASURED (2026-10-01) - the knockout probe's shares are not additive on a routed model.**
+  Knocking a family out upstream of a router feeds the router stale rows, the picks collapse onto
+  few experts, and the expert GEMMs' padded tiles shrink: `act_cvt` read 28-45 ms of a 150 ms
+  window on the 35B, and removing two of its three convert passes a layer outright moved the window
+  151 -> 149 ms (512 tokens) and 446 -> 443 (2048), the logits bit for bit. `--census` counts the
+  dispatches instead (`metal_cvt_half` 120 -> 40 a window). On a routed model a family's cost is
+  read by replacing it with a form that keeps the rows valid, as `--depth` does for the attention.
+- **MEASURED (2026-10-01) - the gated delta scan packed eight state columns a simdgroup**
+  (`MetalDnScan`): the scan x1.5 from 64 tokens up at the 35B's geometry, level at one row; the
+  window 160 -> 150 ms at 512 tokens, 526 -> 475 at 2048. **The routed tall pair from a mean of 32
+  rows an expert** (`set_metal_moe_tall_avg`; `p0_ko_probe --tall-avg 32,64,128`, three interleaved
+  rounds, logits bit for bit): the 2048 window 474 -> 449 ms; a 64-row rung between the pair's
+  stamps read level (+2% at 512) and is not carried.
 
 - **MEASURED (2026-10-01) - the NextN head on the hyper-connection chain
   (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`, `#hc-verify-rows`): the round loses on this form while

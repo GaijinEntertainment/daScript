@@ -61,6 +61,42 @@ On the tutorial's 60-token system prompt, B prefills a handful of tail tokens
 instead of the whole prompt — the same ``cached N of M`` line tutorial 13's
 scheduler printed, now with every step visible.
 
+Models that carry state between tokens
+======================================
+
+Some models (the Qwen3.5 family) keep a running state in most layers: each
+token updates it, and the update only goes forward. KV pages do not hold that
+state. So for these models the cache stores a *checkpoint*: the tokens, their
+pages, and the state at exactly one position. A new prompt can attach a
+checkpoint only when it starts with all of the checkpoint's tokens.
+
+That makes the position matter. A checkpoint after the whole prompt helps the
+next turn of the same conversation. A new conversation shares only the system
+prompt, so we want a checkpoint right after it. ``render_turn_marked`` tells us
+where that is: ``opening`` counts the turn's leading tokens that are the same
+for any user question. ``prefix_checkpoint_at`` turns it into a decision: the
+position to stop the prefill at, or 0 when a stop buys nothing. On a model with
+no such state it is always 0 - the pages are already the cache:
+
+.. code-block:: das
+
+   var chat = create_chat_renderer(m, SYSTEM)
+   add_user(chat, Q1)
+   var turn <- render_turn_marked(m, chat)
+   var s = create_session(m, pool)
+   let matched = prefix_attach(cache, pool, s, turn.toks)
+   let stop = prefix_checkpoint_at(cache, pool, s, turn.toks, matched, turn.opening)
+   if (stop > 0l) {
+       let head <- [for (i in range64(matched, stop)); turn.toks[i]]
+       eval(m, s, head)
+       prefix_insert(cache, pool, s, turn.toks)   // a checkpoint at `stop`
+   }
+   // eval() the rest of turn.toks from s.n_past on
+
+``prefix_insert`` on such a model records where the session stands, so we call
+it between two ``eval`` calls. Tutorial 13's scheduler does the same when a
+request carries ``stable_at`` - set it from ``turn.opening``.
+
 What the cache holds, and giving it back
 ========================================
 

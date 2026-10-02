@@ -748,3 +748,185 @@ def test_tmm2d_bk_shapes(t : T?) { // nolint:STYLE038 - one flat cell sweep over
         }
     }
 }
+
+let DV_LD = 56
+let DV_K0 = 40
+let DV_K1 = 8
+
+class TmmDevabKernels {
+    @ssbo @binding = 0 xah : array<float16>
+    @ssbo @binding = 1 wh : array<float16>
+    @ssbo @binding = 2 oc : array<float>
+    @ssbo @binding = 3 dims : array<uint>
+
+    [metal_kernel(name="tmm_devab_msl"), marker(no_coverage)]
+    def tmm_devab_k {
+        var acc : float[128]
+        var cp = unsafe(addr(oc[0]))
+        let k0 = dims[0]
+        tmm2d_tg_begin_devab(acc, 8u, 16u, 2u)
+        tmm2d_tg_step_devab(acc, unsafe(addr(xah[0])), 56u, unsafe(addr(wh[0])), 56u, 8u, 16u, k0)
+        tmm2d_tg_step_devab(acc, unsafe(addr(xah[k0])), 56u, unsafe(addr(wh[k0])), 56u, 8u, 16u, dims[1])
+        tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
+    }
+
+    [metal_kernel(name="tmm_devabnt_msl"), marker(no_coverage)]
+    def tmm_devabnt_k {
+        var acc : float[128]
+        var cp = unsafe(addr(oc[0]))
+        let k0 = dims[0]
+        tmm2d_tg_begin_devabnt(acc, 8u, 16u, 2u)
+        tmm2d_tg_step_devabnt(acc, unsafe(addr(xah[0])), 56u, unsafe(addr(wh[0])), 56u, 8u, 16u, k0)
+        tmm2d_tg_step_devabnt(acc, unsafe(addr(xah[k0])), 56u, unsafe(addr(wh[k0 * 56u])), 56u, 8u, 16u, dims[1])
+        tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
+    }
+}
+
+def private fill_devab_oracle(var o : TmmDevabKernels?) {
+    o.xah |> resize(M * DV_LD)
+    o.wh |> resize((DV_K0 + DV_K1) * DV_LD)
+    o.oc |> resize(M * N)
+    o.dims <- [uint(DV_K0), uint(DV_K1)]
+    for (i in range(M * DV_LD)) {
+        o.xah[i] = float16(float(i % 7 - 3))
+    }
+    for (i in range((DV_K0 + DV_K1) * DV_LD)) {
+        o.wh[i] = float16(float(i % 9 - 4))
+    }
+}
+
+//! the B element at output column 5, reduction step 44 - inside the second step's kk range
+def private devab_poison_index(natural : bool) : int {
+    return natural ? 44 * DV_LD + 5 : 5 * DV_LD + 44
+}
+
+def private devab_replay(var o : TmmDevabKernels?; natural : bool) : array<float> {
+    if (natural) {
+        o->tmm_devabnt_k()
+    } else {
+        o->tmm_devab_k()
+    }
+    return <- clone_to_move(o.oc)
+}
+
+def private diff_count(a, b : array<float>) : int {
+    var bad = 0
+    for (x, y in a, b) {
+        bad += x != y ? 1 : 0
+    }
+    return bad
+}
+
+def private devab_gpu(t : T?; dev; queue; src, entry : string; var bxah, bwh, bdims) : array<float> {   // untyped: instantiated only inside the Apple half
+    var got : array<float>
+    var perr : string
+    var pso = pipeline_from_source(dev, src, entry, false, perr)
+    t |> success(pso != null, "pipeline {entry}: {perr}")
+    if (pso == null) {
+        return <- got
+    }
+    var boc = buf_fill(dev, M * N, 0.0)
+    var bufs <- [bxah, bwh, boc, bdims]
+    var rerr : string
+    let tpg = metal_pipeline_thread_execution_width(pso) * SGS
+    let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr)
+    t |> success(ran, "dispatch {entry}: {rerr}")
+    if (ran) {
+        got <- buf_download(boc, M * N, type<float>)
+    }
+    bufs |> clear()
+    unsafe {
+        delete bufs
+    }
+    metal_release(boc)
+    metal_release(pso)
+    return <- got
+}
+
+[test]
+def test_tmm2d_devab(t : T?) { // nolint:STYLE038 - both flavors x clean/poisoned in one device session
+    t |> run("tmm2d devab / devabnt: two device-half steps at kk = 40 + 8, ldb = 56: GPU == CPU-replay exact") @(t : T?) {
+        var oracle = new TmmDevabKernels()
+        fill_devab_oracle(oracle)
+        gl_LocalInvocationID = uint3(0u, 0u, 0u)
+        gl_WorkGroupSize = uint3(1u, 1u, 1u)
+        var want : array<array<float>>
+        var want_poisoned : array<array<float>>
+        var wh_poisoned : array<array<float16>>
+        want |> reserve(2)
+        want_poisoned |> reserve(2)
+        wh_poisoned |> reserve(2)
+        for (fl in range(2)) {
+            let natural = fl == 1
+            want |> emplace(devab_replay(oracle, natural))
+            var whp := oracle.wh
+            whp[devab_poison_index(natural)] = float16(60.0)
+            var clean <- oracle.wh
+            oracle.wh <- whp
+            want_poisoned |> emplace(devab_replay(oracle, natural))
+            wh_poisoned |> emplace(oracle.wh)
+            oracle.wh <- clean
+            t |> success(diff_count(want[fl], want_poisoned[fl]) > 0, "flavor {fl}: the poisoned B element moves the CPU replay")
+        }
+        t |> success(diff_count(want[0], want[1]) > 0, "the two B layouts replay different products")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            var gpu_bad = -1
+            with_metal_device() $(dev : MetalDevice?) {
+                if (dev == null) {
+                    feint("no Metal device on this box; GPU compare skipped\n")
+                    return
+                }
+                if (!metal4_available(dev)) {
+                    feint("Metal-4 tensor ops unavailable (needs macOS 26 / MSL 4.0); GPU compare skipped\n")
+                    return
+                }
+                var perr0 : string
+                var pso0 = pipeline_from_source(dev, tmm_devab_msl, tmm_devab_msl_entry, false, perr0)
+                if (pso0 == null && find(perr0, "deferred-static-alloca-size") >= 0) {
+                    feint("Metal-4 cooperative tensors unsupported by this device (paravirtual runner); GPU compare skipped\n")
+                    return
+                }
+                if (pso0 != null) {
+                    metal_release(pso0)
+                }
+                var queue = metal_new_command_queue(dev)
+                var bxah = buf_upload(dev, oracle.xah)
+                var bdims = buf_upload(dev, oracle.dims)
+                gpu_bad = 0
+                for (fl in range(2)) {
+                    let src = fl == 1 ? tmm_devabnt_msl : tmm_devab_msl
+                    let entry = fl == 1 ? tmm_devabnt_msl_entry : tmm_devab_msl_entry
+                    var bwh = buf_upload(dev, oracle.wh)
+                    let got <- devab_gpu(t, dev, queue, src, entry, bxah, bwh, bdims)
+                    metal_release(bwh)
+                    var bwhp = buf_upload(dev, wh_poisoned[fl])
+                    let gotp <- devab_gpu(t, dev, queue, src, entry, bxah, bwhp, bdims)
+                    metal_release(bwhp)
+                    if (length(got) != M * N || length(gotp) != M * N) {
+                        gpu_bad++
+                        continue
+                    }
+                    let bad = diff_count(got, want[fl])
+                    t |> equal(bad, 0)
+                    gpu_bad += bad
+                    let badp = diff_count(gotp, want_poisoned[fl])
+                    t |> equal(badp, 0)
+                    gpu_bad += badp
+                    t |> success(diff_count(gotp, want[fl]) > 0, "{entry}: the poisoned B element moves the GPU output")
+                }
+                metal_release(bxah)
+                metal_release(bdims)
+                metal_release(queue)
+            }
+            if (gpu_bad >= 0) {
+                t |> equal(gpu_bad, 0)
+            }
+            t |> equal(metal_live_object_count(), 0l)
+        } else {
+            feint("das_metal is not built on this platform; CPU-reference half only\n")
+        }
+        unsafe {
+            delete oracle
+        }
+    }
+}

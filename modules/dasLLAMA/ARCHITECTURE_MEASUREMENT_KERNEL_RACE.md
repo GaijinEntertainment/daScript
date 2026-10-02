@@ -91,6 +91,14 @@ chain every dispatch through ONE shared output buffer on purpose - the serialize
 the instrument's probe shape, imitating the reference tool it is compared against - and its
 numbers reach the engine only through a human porting decision, never a minted crown.
 
+Two races share an output across their dispatches because the served graph does. The device
+attention pair's race (`race_attn_dev`, `dasllama_metal_prefill`) runs the pair's QK, its
+softmax and its AV over ONE score slab: the slab is the chain's own operand, and a layer's
+three dispatches serialize on it in the served window too. `harness/dn_scan_race.das` walks one
+state plane and one output plane through every timed dispatch, as the served scan does - a
+recurrent layer's walk reads the state the layer before it in the window left in the same
+buffer.
+
 ### The gemv takes its own tune seat {#gemv-seat}
 
 A kq family's manifest entry is its tile-best row, and the gemv gets a SECOND entry when a

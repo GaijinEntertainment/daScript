@@ -265,6 +265,40 @@ class private AccessVisitor : AstVisitor {
         return true
     }
 
+    //! The tracked buffer behind a modeled intrinsic's pointer operand - a pointer local, a
+    //! tracked buffer by name, or an inline `addr(buf[i])` - or "" for an untracked one. The
+    //! node is claimed: the intrinsic's own arm records the direction.
+    def claim_ptr_operand(arg : Expression const?) : string {
+        var cur = arg
+        if (cur is ExprRef2Value) {
+            cur = (cur as ExprRef2Value).subexpr
+        }
+        if (cur is ExprUnsafe) {   // pre-infer bodies keep the unsafe() wrapper node
+            cur = (cur as ExprUnsafe).body
+        }
+        if (cur is ExprVar) {
+            let pn = string((cur as ExprVar).name)
+            let bn = ptrs?[pn] ?? (key_exists(tracked, pn) ? pn : "")
+            if (!empty(bn)) {
+                claimed |> insert("{pn}:{cur.at.line}:{cur.at.column}")
+            }
+            return bn
+        }
+        var sub : Expression const?
+        if (cur is ExprRef2Ptr) {
+            sub = (cur as ExprRef2Ptr).subexpr
+        } elif (cur is ExprCall && (cur as ExprCall).name == "addr" && length((cur as ExprCall).arguments) == 1) {
+            sub = (cur as ExprCall).arguments[0]
+        }
+        return "" if (sub == null || !(sub is ExprAt))
+        var node : Expression const?
+        let name = write_root_name(sub, tracked, fieldMode, node)
+        if (!empty(name)) {
+            claimed |> insert("{name}:{node.at.line}:{node.at.column}")
+        }
+        return name
+    }
+
     def override preVisitExprCopy(expr : ExprCopy?) : void {
         note_write(expr.left, false)
     }
@@ -327,10 +361,22 @@ class private AccessVisitor : AstVisitor {
             }
             return
         }
+        if (cname |> ends_with("tmm2d_tg_step_devab") || cname |> ends_with("tmm2d_tg_step_devabnt")) {
+            if (length(expr.arguments) == 8) {
+                for (ai in [1, 3]) {
+                    let bn = claim_ptr_operand(expr.arguments[ai])
+                    if (!empty(bn)) {
+                        reads |> insert(bn)
+                    }
+                }
+            }
+            return
+        }
         if (cname == "coopmatLoad" || cname == "simdgroup_load"
                 || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode"
                 || cname |> ends_with("tmm2d_tg_begin") || cname |> ends_with("tmm2d_tg_step")
                 || cname |> ends_with("tmm2d_tg_begin_deva")
+                || cname |> ends_with("tmm2d_tg_begin_devab") || cname |> ends_with("tmm2d_tg_begin_devabnt")
                 || cname |> ends_with("tmm2d_tg_begin_nt") || cname |> ends_with("tmm2d_tg_step_nt")
                 || cname |> ends_with("tmm2d_tile_tg") || cname |> ends_with("tmm2d_tg_rowscale")
                 || cname |> ends_with("i_das_ptr_add")
@@ -346,15 +392,8 @@ class private AccessVisitor : AstVisitor {
             let nargs = cname |> ends_with("tmm2d_tg_store_bias") ? 6 : 5
             if (length(expr.arguments) == nargs) {
                 for (ai in range(1, nargs == 6 ? 3 : 2)) {
-                    var cur = expr.arguments[ai]
-                    if (cur is ExprRef2Value) {
-                        cur = (cur as ExprRef2Value).subexpr
-                    }
-                    continue if (!(cur is ExprVar))
-                    let pn = string((cur as ExprVar).name)
-                    let bn = ptrs?[pn] ?? (key_exists(tracked, pn) ? pn : "")
+                    let bn = claim_ptr_operand(expr.arguments[ai])
                     continue if (empty(bn))
-                    claimed |> insert("{pn}:{cur.at.line}:{cur.at.column}")
                     if (ai == 1) {
                         writes |> insert(bn)
                     } else {
@@ -368,15 +407,8 @@ class private AccessVisitor : AstVisitor {
         if (tci >= 0) {
             // pointer operands resolve through the ptr-map: C writes, the rest read
             for (i in range(3, length(expr.arguments))) {
-                var cur = expr.arguments[i]
-                if (cur is ExprRef2Value) {
-                    cur = (cur as ExprRef2Value).subexpr
-                }
-                continue if (!(cur is ExprVar))
-                let pn = string((cur as ExprVar).name)
-                let bn = ptrs?[pn] ?? (key_exists(tracked, pn) ? pn : "")
+                let bn = claim_ptr_operand(expr.arguments[i])
                 continue if (empty(bn))
-                claimed |> insert("{pn}:{cur.at.line}:{cur.at.column}")
                 if (i == tci) {
                     writes |> insert(bn)
                 } else {

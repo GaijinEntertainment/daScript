@@ -45,6 +45,7 @@ def release() {
     release_include_from("modules/dasLLAMA/LICENSE.LLAMA_CPP", "licenses/LLAMA_CPP.LICENSE")
     release_include_from("modules/dasLLAMA/LICENSE.PARAKEET", "licenses/PARAKEET.LICENSE")
     release_include_from("modules/dasLLAMA/LICENSE.VLLM", "licenses/VLLM.LICENSE")
+    release_include_from("modules/dasLLAMA/LICENSE.MLX", "licenses/MLX.LICENSE")
     release_include_from("modules/dasLLAMA/LICENSE.SILERO", "licenses/SILERO.LICENSE")
     release_include_from("modules/dasLLAMA/LICENSE.APACHE-2.0", "licenses/APACHE-2.0.LICENSE")
     release_include_from("modules/dasLLAMA/LICENSE.STYLETTS2", "licenses/STYLETTS2.LICENSE")

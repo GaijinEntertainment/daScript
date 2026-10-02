@@ -26,6 +26,14 @@ informed by the vLLM project's fused-MoE kernels and tuned-configuration tables
 (https://github.com/vllm-project/vllm), Apache License 2.0 - see `LICENSE.VLLM`. No vLLM
 source code is included in this repository.
 
+## MLX / mlx-lm (MIT)
+
+The Metal prefill's recurrent-scan kernel - the packed state-column layout of `MetalDnScanT` in
+`dasllama/dasllama_metal_kernels.das` - derives from the gated delta scan kernel of the mlx-lm
+project (https://github.com/ml-explore/mlx-lm), and other Metal prefill kernels were informed by
+the MLX project's Metal kernels (https://github.com/ml-explore/mlx), Copyright (c) 2023 Apple
+Inc., MIT License - see `LICENSE.MLX`.
+
 ## Silero VAD (MIT)
 
 The voice-activity-detection implementation and the shipped `models/silero_vad.bin` weights

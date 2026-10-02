@@ -13,6 +13,7 @@ require strings
 //   - prefix_insert: a finished stream donates its KV pages
 //   - prefix_attach: the next request skips the donated prefill
 //   - prefix_chain_list + prefix_held_groups: what the cache holds
+//   - render_turn_marked + prefix_checkpoint_at: models that carry state between tokens
 //   - prefix_release: give every page back before the pool dies
 //
 // Tutorial 13's scheduler ran a prefix cache for us. Here we drive the same
@@ -68,7 +69,51 @@ def section_donate_attach(m : Model; var pool : KVPool; var cache : PrefixCache)
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Section 2 — What the cache holds, and giving it back
+// Section 2 — Models that carry state between tokens
+// ──────────────────────────────────────────────────────────────────────────
+//
+// Some models (the Qwen3.5 family) keep a running state in most layers: each
+// token updates it, and the update only goes forward. KV pages do not hold
+// that state. So for these models the cache stores a CHECKPOINT: the tokens,
+// their pages, and the state at exactly one position. A new prompt can attach
+// a checkpoint only when it starts with ALL of the checkpoint's tokens.
+//
+// That makes the position matter. A checkpoint after the whole prompt helps
+// the next turn of the same conversation. A new conversation shares only the
+// system prompt, so we want a checkpoint right after it. render_turn_marked
+// tells us where that is: `opening` counts the turn's leading tokens that are
+// the same for any user question. prefix_checkpoint_at turns it into a
+// decision: the position to stop the prefill at, or 0 when a stop buys nothing
+// (always 0 on a model with no such state - its pages are already the cache).
+
+def section_checkpoint(m : Model; var pool : KVPool; var cache : PrefixCache) {
+    var chat = create_chat_renderer(m, SYSTEM)
+    add_user(chat, Q1)
+    var turn <- render_turn_marked(m, chat)
+    let total = long_length(turn.toks)
+    print("the turn is {total} tokens; the first {turn.opening} are the same for any question\n")
+    var s = create_session(m, pool)
+    let matched = prefix_attach(cache, pool, s, turn.toks)
+    let stop = prefix_checkpoint_at(cache, pool, s, turn.toks, matched, turn.opening)
+    if (stop > 0l) {
+        let head <- [for (i in range64(matched, stop)); turn.toks[i]]
+        eval(m, s, head)
+        prefix_insert(cache, pool, s, turn.toks)   // a checkpoint at `stop`: the session stands exactly there
+        print("stopped at {stop} and left a checkpoint; the next conversation attaches it\n")
+    } else {
+        print("no stop needed: this model keeps no state between tokens\n")
+    }
+    let tail <- [for (i in range64(s.n_past, total)); turn.toks[i]]
+    eval(m, s, tail)
+    print("answer: '{piece(m, sample(s, SamplingParams()))}...'\n\n")
+    release_kv_pages(s)
+    delete s
+    delete turn
+    delete chat
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 3 — What the cache holds, and giving it back
 // ──────────────────────────────────────────────────────────────────────────
 //
 // prefix_chain_list snapshots every donation: how many tokens it covers, how
@@ -109,6 +154,7 @@ def main() {
     with_job_que() {
         setup_dasllama_jobque()
         section_donate_attach(m, pool, cache)
+        section_checkpoint(m, pool, cache)
         section_observe_release(pool, cache)
     }
     delete cache

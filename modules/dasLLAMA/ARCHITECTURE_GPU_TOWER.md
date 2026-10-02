@@ -45,7 +45,7 @@ rows. Three routes serve tower attention:
 
 Each family the tower driver serves gets one chain that encodes the whole encode into ONE
 command buffer and reads back once: the block loop, and - for gemma4a and qwen3a - the mel and
-conv front ahead of it. A chain is dispatch for dispatch the same graph as its family's CPU
+conv front ahead of it, for parakeet the conv front. A chain is dispatch for dispatch the same graph as its family's CPU
 encoder loop, in the same order and at the same operand shapes, so the CPU loop is the chain's
 specification and the CPU-vs-GPU transcript cells are its parity instrument. Every chain is
 best-effort: it answers false (or -1) on any shape, knob, quant-mode or device decline, and the
@@ -64,6 +64,43 @@ gives P*V_h into the head's slot of the AV rows, and one unpack per layer writes
 output. The score slabs are per-head scratch reused head after head - each head's writer is
 encoded after the previous head's reader. The head size is held to a multiple of 64 (the AV
 GEMM's column lattice) and the head count to the per-head uniform seats.
+
+The chain's eleven weighted GEMMs a block read a DEVICE twin of the f32 blob where a tensor crown
+compiled the half GEMM (`pf_hmm_ready`): `fc_twin_attach` converts the whole blob to halfwords on
+the device once a blob, at the f32 element offsets, and the half x half tensor GEMM serves each
+site over it with X converted into one shared half panel. The twin holds the halves the f16-staged tile stamp rounds a tile at
+a time, so the route changes the GEMM, not the values it multiplies; the file is f32, so no image
+carries this twin (`ARCHITECTURE_IMAGE.md#image-tower-twin-plane` is the f16-source form) and it
+drops with the weights epoch and the tower shutdown. `DASLLAMA_METAL_TOWER_F16=0` pins the f32
+tiles, and `metal_tower_f16_encodes()` counts the encodes that rode the twin. The per-head
+attention GEMMs multiply packed f32 panels and stay on the tile stamp.
+
+Under the `attn_dev` crown the attention runs over EVERY head in five dispatches a block instead
+of the per-head loop's forty-one (`pf_enc_fc_attn_dev`), on the prefill driver's device pair
+(`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-attn-device`), which reads Q, K and V in the compact
+row layout with the head in the grid's third axis - so nothing is packed a head at a time and the
+AV writes the compact output itself. `MetalFcTwin` writes the five operands as halves ((Q+u),
+(Q+v), K, V, the projected rel table; the scale folded into K and the table, zeros in every pad
+row); the pair's QK stamp runs twice, content scores into one slab and rel scores into a second
+at the rel table's width; `MetalFcPExp` adds the rel score at the shift, leaves `exp(s - max)` in
+the content slab and the row's reciprocal sum in the stat plane (0 for a pad row); the pair's AV
+reduces over the live keys. The rows sit no farther from the CPU rail than the per-head form's.
+The two score slabs hold all heads at once -
+`heads x mp x (nkp + wwpad)` halves - so past `FC_DEV_SLAB_MAX_BYTES` (about three minutes of
+audio at eight heads) the per-head loop's reused scratch serves; `set_metal_fc_attn_dev` is the
+lever and `metal_tower_fc_dev_encodes()` the engage counter.
+
+Parakeet's chain starts at the mel: its whole-encode seat (`metal_parakeet_encode`,
+`register_parakeet_gpu_encode`) runs the subsample front and the pre-projection ahead of the
+blocks in the same command buffer - the first conv off the one-channel mel with its bias and
+ReLU and the two depthwise stride-2 convs as one-thread-an-element kernels over the blob's
+tap-major taps (`MetalPkFrontConvT`), the two 1x1 convs and the pre-projection as weighted GEMMs
+of the chain with a bias-and-ReLU or a bias row pass behind them, the feature permute between
+(`MetalPkXf`, which also zeroes the pre-projection's row pad). The rel table is the session's
+(`parakeet_pos_table`, built once a frame count). The seat answers -1 with nothing counted on a
+q8 model, a clip whose first conv output passes 1 GB (about five minutes of audio), a shape off
+the lattice or `set_metal_parakeet_front(false)`: the CPU front runs then and the block seat
+serves behind it. `metal_tower_stats().convs` counts the encodes whose front ran on the device.
 
 ### The tower driver's StyleTTS2 synthesis chain {#tower-tts-chain}
 

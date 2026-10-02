@@ -2084,3 +2084,8 @@
    `_*_fixture.das` modules are never linted by the lanes; `--lint-fixtures` reaches them by hand.
    Done = the fixture convention narrowed to the lint rules' own fixture folders, and those
    modules linted clean in the lanes.
+207. **The server measures the chunk for a stall limit.** `--chunk` is a token count, so the
+   stall a decoding stream waits out while another prompt prefills is the model's and the box's:
+   64 tokens is 50 ms on a 0.8B and 460 ms on a 7B (`PERF_LEDGER.md`, the CPU chunk entry). Done =
+   a measure action on the server (the control page and a route) that times the loaded model's
+   prefill at a few chunk sizes and sets the largest chunk whose stall fits a limit the user gives.

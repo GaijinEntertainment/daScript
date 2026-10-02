@@ -25,6 +25,6 @@ the module and install beside these.
 ## Modules with their own notices
 
 - **dasLLAMA** (`modules/dasLLAMA/THIRD_PARTY_NOTICES.md`, installed as
-  `DASLLAMA_THIRD_PARTY_NOTICES.md`): llama.cpp / ggml, whisper.cpp, vLLM, Silero VAD, and the
+  `DASLLAMA_THIRD_PARTY_NOTICES.md`): llama.cpp / ggml, whisper.cpp, vLLM, MLX, Silero VAD, and the
   text-to-speech set (StyleTTS2, KittenTTS, Kokoro, Pocket TTS, misaki, g2p_en, CMUdict, spaCy,
   Universal Dependencies English-EWT), each with its `LICENSE.*` file installed beside this one.

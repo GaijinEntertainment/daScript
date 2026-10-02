@@ -149,7 +149,7 @@ three times - rowstat's max pass, rowstat's sum pass, and AV. Every stage and ev
 ONE `AttnArgs` value, derived once per layer, and ignores the fields it does not read. Two forms
 serve it: the tiled QK/AV GEMM pair (the default, needing `head_size % 64` on BOTH attention
 classes) and the scalar 32x32 trio, which serves when that gate fails or `DASLLAMA_METAL_ATTN=0`
-pins it.
+pins it. A third form over the same slab is `ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-attn-device`.
 
 - **A pad row of K or V stages as 0.** `pf_p_weight` zeroes P columns past each row's live
   length exactly, so the P side needs no guard; the K and V sides do.

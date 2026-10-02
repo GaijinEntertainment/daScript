@@ -66,6 +66,12 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 - **The batched pre-encoded step is Metal-only**: the batch driver encodes the next step under the
   current one's GPU run (`ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode`, `DASLLAMA_METAL_BATCH_PRE`);
   Vulkan's N-row token command records once and resubmits, so it has no encode to move.
+- **The window chain's form levers are Metal-only** (`set_metal_prefill_held` holding one crowned form off for an
+  A/B on one loaded model, `set_metal_moe_gather_min` / `set_metal_moe_tall_avg` moving the routed block's two
+  engage points, `metal_prefill_keep_moe_rows` / `metal_prefill_moe_rows` recording the rows a window routed, and the
+  tower's `set_metal_fc_attn_dev` / `set_metal_parakeet_front`): each picks between two forms the Metal prefill or
+  tower driver carries side by side, and the Vulkan chain has one form at each of those sites, so nothing to pick.
+  The callers outside the backend are the probe `harness/p0_ko_probe.das` and the cells that hold both forms.
 - **The speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one registrant, `gemma_mtp_spec_round`
   (falling through to `metal_mtp_spec_round` with no drafter); Vulkan serves the CPU round around its draft and verify seats (`ARCHITECTURE_GPU_MTP.md`).
 - **The same-slab verify seat is Vulkan-only.** `register_mtp_verify_override("vulkan", ...)` has one registrant, the resident driver's same-slab verify (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), which the CPU round takes in place of its two-row prefill; a verify the seat declines runs the CPU two-row prefill inside a window the resident prefill declines by name (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window`). Metal's same-slab verify runs inside its round seat.

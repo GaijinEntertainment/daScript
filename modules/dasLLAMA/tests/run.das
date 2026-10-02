@@ -365,8 +365,9 @@ let MODULE_AREAS <- {
     "dasllama_arch_qwen2moe" => "llm", "dasllama_arch_qwen3" => "llm", "dasllama_arch_qwen35" => "llm", "dasllama_arch_qwen4exp" => "llm",
     "dasllama_arch_qwen3moe" => "llm", "dasllama_attn_prefill" => "llm", "dasllama_batch" => "llm",
     "dasllama_bpe" => "llm", "dasllama_gpu_resident" => "llm", "dasllama_gpu_tier" => "llm",
-    "dasllama_kv_dtype" => "llm", "dasllama_kv_codec" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
-    "dasllama_metal_prefill" => "llm,tts",   // its rope serves the Pocket codec transformer
+    "dasllama_kv_dtype" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
+    "dasllama_kv_codec" => "llm,audio",   // its f16 dot and axpy serve the parakeet decode
+    "dasllama_metal_prefill" => "llm,tts,audio",   // its rope serves the Pocket codec transformer, its attention pair and FastConformer kernels the audio towers
     "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
     "dasllama_rope" => "llm,tts",   // the TTS slab builds its rope tables through it

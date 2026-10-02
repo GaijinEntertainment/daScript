@@ -291,3 +291,10 @@ overlaps `op.run` on chunk `b`, because the two touch disjoint halves of `wt`. A
 **`bk = 128`'s initial preload is guarded on `nb > 0`.** A `kk` under 64 has no 64-deep chunk to
 preload, and running the preload anyway reads W blocks past the panel's `ldwb` stride and writes
 `wt` bytes the tail chunk then writes again with no barrier between the two.
+
+## 10. tmm2d device-pair steps {#tmm2d-device-pair}
+
+The `devab` steps hand `matmul2d` two device tensors of half and stage nothing: no threadgroup
+tile, no barrier, the reduction width a run-time extent. `devab` reads B in the weight layout, one
+row an output column; `devabnt` reads B in its natural layout, one row a reduction step. A float
+operand is refused, since the pair exists for the native half x half path.

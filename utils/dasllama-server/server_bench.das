@@ -6,7 +6,8 @@ options fast_math = true  // ggml-parity FP laxity — a serving benchmark, not 
 // SchedEvent seam (no HTTP), so every number is server-side truth:
 //   1. aggregate tok/s + TTFT p50/p95 + inter-token p50/p95 vs batch size B
 //   2. chunk interference: a decoding stream's inter-token p95 while a long prompt prefills,
-//      per chunk size K — the data that tunes --chunk
+//      per chunk size K — the data that tunes --chunk; then the prefill rate of that prompt
+//      alone per K — the data that tunes --chunk-idle
 //   3. warm vs cold TTFT for an identical prompt — the prefix-cache collapse
 //   bin/daslang -jit utils/dasllama-server/server_bench.das -- -m <model.gguf> [-b 8] [-n 64] [--long-prompt 512]
 
@@ -128,8 +129,9 @@ def private drive(m : Model; var sch : Scheduler; nreq, p_tokens, max_new, salt0
 
 // Stream A decodes; a long prompt lands mid-run and prefills in K-token chunks. A's inter-token
 // gaps during that window are the interference the chunk size buys or costs.
-def private interference_run(m : Model; var sch : Scheduler; long_p, salt : int64) : array<int64> {
+def private interference_run(m : Model; var sch : Scheduler; long_p, salt : int64; var b_ttft_us : int64&) : array<int64> {
     var itl : array<int64>
+    var b_at = 0l
     var events : array<SchedEvent>
     var req_a <- PendingReq(id = 1l, max_new = long_p)   // enough budget to outlast B's prefill
     req_a.prompt <- build_prompt(64l, salt * 7l + 1l)
@@ -161,9 +163,11 @@ def private interference_run(m : Model; var sch : Scheduler; long_p, salt : int6
                         panic("server_bench: submit B rejected")
                     }
                     b_running = true
+                    b_at = now
                 }
             } elif (e.stream == 2l) {
                 b_first_piece = true   // B's prefill is done — the window closes
+                b_ttft_us = now - b_at
             }
         }
         events |> clear()
@@ -252,9 +256,21 @@ def main() {   // nolint:STYLE038 — bench driver: three numbered arms sharing 
         for (k in chunks) {
             salt ++
             var sch <- create_scheduler(m, 2l, 4l, k, 64l)
-            var itl <- interference_run(m, sch, long_p, salt)
-            print("K={k}: {length(itl)} gaps | p50 {ms(pct(itl, 0.5))}ms | p95 {ms(pct(itl, 0.95))}ms | max {ms(pct(itl, 1.0))}ms\n")
+            var b_us = 0l
+            var itl <- interference_run(m, sch, long_p, salt, b_us)
+            print("K={k}: {length(itl)} gaps | p50 {ms(pct(itl, 0.5))}ms | p95 {ms(pct(itl, 0.95))}ms | max {ms(pct(itl, 1.0))}ms | the prompt's first token after {ms(b_us)}ms\n")
             delete itl
+            delete sch
+        }
+        // ===== 2b. the prefill rate of a prompt alone, per chunk K (the idle quantum off, so K is the chunk) =====
+        print("\n== prefill rate of a lone {long_p}-token prompt, per chunk K ==\n")
+        for (k in chunks) {
+            salt ++
+            var sch <- create_scheduler(m, 1l, 4l, k, 64l, 0l, KVDtype.f16, false, 0l)
+            var st <- drive(m, sch, 1l, long_p, 4l, salt)
+            let us = pct(st.ttft_us, 0.5)
+            print("K={k}: ttft {ms(us)}ms | {us > 0l ? 1000000.0lf * double(long_p) / double(us) : 0.0lf} tok/s\n")
+            delete st
             delete sch
         }
         // ===== 3. warm vs cold TTFT: the prefix-cache prefill collapse =====

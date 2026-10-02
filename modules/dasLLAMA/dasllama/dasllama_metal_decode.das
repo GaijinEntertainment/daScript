@@ -2966,7 +2966,6 @@ def private metal_decode_slow(t : Model; var s : Session; pos : int64) : bool {
 //! The DecodeOverrideFn: runs one token step's whole llama layer stack GPU-resident against the
 //! session's KV mirror. true = done (KV row stored CPU-side too, s.x = final residual, s.logits
 //! when the GPU classifier gates pass); false = declined, the caller runs the CPU layer loop.
-[hot_path]
 def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool {
     // mixed batch/single schedules: a pipelined batch step may still own this session's KV row
     // and logits — land it before reading anything session-side (no-op when nothing pends)
@@ -3383,7 +3382,7 @@ struct private BatchLayerEnc : LayerEncT {
 //! The BatchDecodeOverrideFn (P4): one eval_batch step's whole layer stack GPU-resident — B rows
 //! through ONE weight pass. STACK-ONLY: on true every row's KV is stored (mirror + CPU cache) and
 //! ws.scr.x_b holds the final residuals; false = declined, CPU loop recomputes from clean state.
-[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#batch-same-slab"), arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-dispatch-requires")]
+[arch(at="../ARCHITECTURE_GPU_MTP.md#batch-same-slab"), arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-dispatch-requires")]
 def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     var why = batch_decode_decline(t, ws, sessions, nrows)
     if (why == MetalDecodeDecline.none && !metal_decode_init()) {
@@ -4320,13 +4319,32 @@ def private load_batch_knobs() {
 [hot_path]   // per speculative round, reached through the engine's registered seat owner
 def private metal_mtp_owns(t : Model) : bool => t.metal_blob
 
+//! the registered overrides: the drivers, and the pool's spin window follows a step they served
+[hot_path]
+def private metal_decode_served(t : Model; var s : Session; token, pos : int64) : bool {
+    let ok = metal_decode_forward(t, s, token, pos)
+    if (ok) {
+        metal_note_served()
+    }
+    return ok
+}
+
+[hot_path]
+def private metal_batch_decode_served(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
+    let ok = metal_batch_decode_forward(t, ws, sessions, nrows)
+    if (ok) {
+        metal_note_served()
+    }
+    return ok
+}
+
 [init]
 def dasllama_metal_decode_register() {
     // registered but dormant: only select_decode_override("metal") (env rail DASLLAMA_PIN_DECODE
     // in the harnesses) activates it — the batch twin rides the same name — and unsupported
     // shapes decline per call
-    register_decode_override("metal", @@metal_decode_forward)
-    register_batch_decode_override("metal", @@metal_batch_decode_forward)
+    register_decode_override("metal", @@metal_decode_served)
+    register_batch_decode_override("metal", @@metal_batch_decode_served)
     register_reload_prep(@@discard_pre_encoded_steps)   // a reload orphans the pre-encoded steps — retire them before the regions drop
     register_mtp_spec_override("metal", @@metal_mtp_spec_eval)
     register_mtp_spec_batch_override("metal", @@metal_mtp_spec_eval_batch)

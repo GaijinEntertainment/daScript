@@ -46,6 +46,7 @@ struct SlotOpts {
     backend : string = "auto"
     streams : int64 = -1l
     chunk : int64 = -1l
+    chunk_idle : int64 = -2l        //! -2 = inherit (-1 is meaningful: the backend's default; 0: never wider than chunk)
     page_rows : int64 = -2l         // -2 = inherit (0 is meaningful: flat sessions)
     prefix : int64 = -2l
     kv_dtype : KVDtype = KVDtype.f16
@@ -151,6 +152,7 @@ var g_asr_path = ""
 var g_asr_mmproj = ""
 var g_asr_worker_count = 0
 var g_asr_team_dispatch = false
+var g_tts_team_dispatch = false
 var g_has_tts = false
 var g_tts_path = ""
 var g_tts_id = ""
@@ -304,6 +306,7 @@ def private bind_gpu_slot(si : int) {
         }
         moe_gpu_drop_model()
         g_slots[prev].backend_effective = "cpu"
+        slot_default_chunk(g_slots[prev])
         prev_note = "from {g_slots[prev].name}, "
     }
     install_slot_marks(si)
@@ -311,6 +314,7 @@ def private bind_gpu_slot(si : int) {
     // want, arm, resident upload (bake-slice path for a mapped vulkan-flavor image) — the
     // order-sensitive half of the switch lives in the engine
     g_slots[si].backend_effective = gpu_slot_rearm(g_slots[si].gpu_want, g_slots[si].model)
+    slot_default_chunk(g_slots[si])
     slot_clamp_ctx_to_region(g_slots[si])
     g_slots[si].resident_decline = g_slots[si].backend_effective == "gpu:resident" ? "" : gpu_resident_decline()
     g_slots[si].gpu_regions = gpu_device_sessions()
@@ -2632,7 +2636,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              seed : int = 0; think : ThinkStream = ThinkStream();
                              tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l;
                              media_is_audio : bool = false; media_grid : int2 = int2(0);
-                             var nothink : NothinkStopGuard = NothinkStopGuard()) {
+                             var nothink : NothinkStopGuard = NothinkStopGuard(); stable_at : int64 = 0l) {
     if (bench_hold_active()) {
         service_unavailable(srv, writer, ibench_hold_text())
         return
@@ -2648,7 +2652,8 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed,
                            media_at = media_at, n_media = n_media,
                            media_non_causal = n_media > 0l && !media_is_audio,   // image span rows attend in full; audio rows stay causal
-                           media_grid = media_grid)   // qwen mrope grid; (0,0) on gemma families
+                           media_grid = media_grid,   // qwen mrope grid; (0,0) on gemma families
+                           stable_at = stable_at)
     preq.prompt <- prompt
     preq.stop_ids <- stop_ids
     preq.nothink <- nothink
@@ -2688,7 +2693,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
                                var prompt, stop_ids, close : array<int64>&;
                                var nothink_out : NothinkStopGuard&;
                                var call_open, call_close : string&; var think_out : ThinkStream&;
-                               var tool_mode_out : ToolMode&; var media_at : int64&) : string {
+                               var tool_mode_out : ToolMode&; var media_at, stable_at : int64&) : string {
     var chat <- create_chat_renderer(cur_model(), system, max_new)
     defer() { delete chat }
     if (think_set) {   // absent from the request => the family's own default (gemma-4 E: off)
@@ -2798,6 +2803,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         return "the last message must be a user or tool message"
     }
     media_at = 0l
+    stable_at = 0l
     if (has_media) {
         // the media turn renders as TWO token spans; the soft-token rows prefill between them, so
         // the scheduler gets one flat prompt plus the index the rows splice at
@@ -2813,8 +2819,9 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         delete head
         delete tail
     } else {
-        var turn <- render_turn(cur_model(), chat)
-        rendered |> push_from(turn)
+        var turn <- render_turn_marked(cur_model(), chat)
+        stable_at = long_length(rendered) + turn.opening   //! every earlier turn, and the last turn's own opening
+        rendered |> push_from(turn.toks)
         delete turn
     }
     // out-params: the sole caller hands them in empty and deletes them before every re-render
@@ -3053,11 +3060,12 @@ def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWri
     var think_stream = ThinkStream()
     var wire_tool_mode = ToolMode.none
     var media_at = 0l
+    var stable_at = 0l
     var start = 0
     while (true) {
         let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val,
                                               n_media > 0l, media_is_audio, prompt, stop_ids, close, nothink, call_open, call_close,
-                                              think_stream, wire_tool_mode, media_at)
+                                              think_stream, wire_tool_mode, media_at, stable_at)
         if (!empty(render_error)) {
             bad_request(srv, writer, render_error)
             return
@@ -3082,7 +3090,7 @@ def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWri
     register_request(srv, writer, prompt, stop_ids, close, media, media_at, n_media, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
-                     media_is_audio, media_grid, nothink)
+                     media_is_audio, media_grid, nothink, stable_at)
 }
 
 def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
@@ -3691,7 +3699,7 @@ let private CONFIG_KEY_KINDS <- {
     "gpu_dense" => "b", "gpu_vram_mb" => "i", "asr" => "s", "mmproj" => "s", "asr_workers" => "i",
     "tts" => "s", "tts_lane" => "s", "tts_voices_dir" => "s",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
-    "affinity" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
+    "affinity" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
     "mtp" => "b", "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i",
     "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "models" => "a",
     "exchange_url" => "s", "exchange_accept" => "s", "exchange_submit" => "s"
@@ -3699,7 +3707,7 @@ let private CONFIG_KEY_KINDS <- {
 
 let private MODEL_KEY_KINDS <- {
     "name" => "s", "path" => "s", "backend" => "s", "ctx" => "i", "quant" => "s",
-    "kv_dtype" => "s", "streams" => "i", "chunk" => "i", "page_rows" => "i", "prefix" => "i",
+    "kv_dtype" => "s", "streams" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i",
     "mtp" => "b", "default" => "b", "image_mmproj" => "s",
     "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i"
 }
@@ -4927,7 +4935,7 @@ def private start_tts_worker() {
     let model_path = g_tts_path
     let lane = g_tts_lane
     let voices_dir = g_tts_voices_dir
-    let team_dispatch = g_asr_team_dispatch
+    let team_dispatch = g_tts_team_dispatch
     var jobs_capture = g_tts_jobs
     var events_capture = g_tts_events
     new_thread() <| @capture(= model_path, = lane, = voices_dir, = team_dispatch, = jobs_capture, = events_capture) {
@@ -5494,7 +5502,9 @@ var private g_mtp_spec_changed = false
 //! externally-driven update calls; ``shutdown_server`` destroys it after every worker and owned
 //! queue object has stopped. Call after ``set_model``.
 //! ``max_streams`` concurrent generation streams, ``max_queue`` waiting requests (503 beyond),
-//! ``chunk_tokens`` the prefill quantum (decode stalls at most this many tokens per tick).
+//! ``chunk_tokens`` the prefill quantum while a stream decodes (decode stalls at most this many
+//! tokens per tick) and ``idle_chunk_tokens`` its floor while none does; a ``chunk_tokens`` of 0 and
+//! an ``idle_chunk_tokens`` of -1 take the serving backend's defaults (``chunk_defaults``).
 //! ``page_rows`` > 0 (the default) serves PAGED: KV memory tracks actual context and a prefix
 //! cache reuses completed streams' pages, so repeated prompts (system prompts, multi-turn chats)
 //! skip their prefill; ``prefix_groups`` caps the cache (0 = auto: one full context per stream
@@ -5521,6 +5531,7 @@ struct private SchedDefaults {
     max_streams : int64
     max_queue : int64
     chunk_tokens : int64
+    idle_chunk_tokens : int64
     page_rows : int64
     prefix_groups : int64
     kv_dtype : KVDtype
@@ -5531,11 +5542,35 @@ var private g_sched_defaults = SchedDefaults()
 
 //! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, on a slot the device serves in part, and where the resident driver sums the routed experts on the host (`experts_host`: a hyper-connection MoE the card does not hold whole - `PERF_LEDGER.md`'s NextN entry), the verify round costs more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
 def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false) : bool
-    => streams == 1l && (on_metal || (backend_effective == "gpu:resident" && !experts_host))
+    => streams == 1l && decodes_on_gpu(on_metal, backend_effective, experts_host)
+
+//! Whether a slot's decode runs on a GPU, the worker team left idle: the Metal flavor, or the whole model resident on a Vulkan device with its routed experts on the card. Non-private: test_server_flags.das gates it.
+def decodes_on_gpu(on_metal : bool; backend_effective : string; experts_host : bool = false) : bool
+    => on_metal || (backend_effective == "gpu:resident" && !experts_host)
+
+//! Whether an unset ASR dispatch publishes to the worker team: every LLM slot decodes on a GPU, so nothing else publishes there and a transcription runs at twice its inline rate. Beside a slot that decodes on the CPU the team is that slot's, and the worker runs inline. Non-private: test_server_flags.das gates it.
+def asr_auto_team(llm_slots, gpu_slots : int) : bool
+    => gpu_slots == llm_slots
+
+//! Which speech workers publish to the worker team, by `init_server`'s `asr_team`: 1 puts both on it, 0 neither, -1 the ASR workers where `asr_auto_team` says so. Non-private: test_server_flags.das gates it.
+def speech_team_dispatch(team_dispatch : bool; asr_team, llm_slots, gpu_slots : int) : tuple<asr : bool; tts : bool>
+    => (asr = team_dispatch && (asr_team > 0 || (asr_team < 0 && asr_auto_team(llm_slots, gpu_slots))), tts = team_dispatch && asr_team > 0)
+
+def private gpu_decoding_slots : int {
+    let experts_host = gpu_resident_experts_host()
+    var n = 0
+    for (s in g_slots) {
+        if (decodes_on_gpu(slot_flavor(s) == "metal", s.backend_effective, experts_host)) {
+            n++
+        }
+    }
+    return n
+}
 
 def private init_one_scheduler(var s : ModelSlot) {
     let s_streams = s.opts.streams >= 0l ? s.opts.streams : g_sched_defaults.max_streams
     let s_chunk = s.opts.chunk >= 0l ? s.opts.chunk : g_sched_defaults.chunk_tokens
+    let s_idle = s.opts.chunk_idle != -2l ? s.opts.chunk_idle : g_sched_defaults.idle_chunk_tokens
     let s_pages = s.opts.page_rows != -2l ? s.opts.page_rows : g_sched_defaults.page_rows
     var pfx = s.opts.prefix != -2l ? s.opts.prefix : g_sched_defaults.prefix_groups
     if (s_pages > 0l && pfx == 0l) {   // auto: retain up to one full context per stream slot
@@ -5555,13 +5590,27 @@ def private init_one_scheduler(var s : ModelSlot) {
         }
         spec = false
     }
-    s.sched <- create_scheduler(s.model, s_streams, g_sched_defaults.max_queue, s_chunk, s_pages, pfx, s_kv, spec)
+    s.sched <- create_scheduler(s.model, s_streams, g_sched_defaults.max_queue, s_chunk, s_pages, pfx, s_kv, spec, s_idle)
+    slot_default_chunk(s)
+}
+
+//! Whether a GPU prefills a slot: the Metal flavor, or a Vulkan tier arm of either kind - what picks the slot's default chunk. Non-private: test_server_flags.das gates it.
+def prefills_on_gpu(on_metal : bool; backend_effective : string) : bool
+    => on_metal || backend_effective != "cpu"
+
+//! A slot's unset chunk follows the backend that prefills THIS slot now. The scheduler's own default reads the
+//! tier's one process-wide status, which beside another slot's armed model is that model's answer.
+def private slot_default_chunk(var s : ModelSlot) {
+    let set_chunk = s.opts.chunk >= 0l ? s.opts.chunk : g_sched_defaults.chunk_tokens
+    if (set_chunk <= 0l) {
+        s.sched.chunk_tokens = chunk_default(prefills_on_gpu(slot_flavor(s) == "metal", s.backend_effective))
+    }
 }
 
 // one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
-def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows, prefix_groups : int64; kv_dtype : KVDtype; mtp : int) {
+def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups : int64; kv_dtype : KVDtype; mtp : int) {
     g_sched_defaults = SchedDefaults(max_streams = max_streams, max_queue = max_queue,
-                                     chunk_tokens = chunk_tokens, page_rows = page_rows,
+                                     chunk_tokens = chunk_tokens, idle_chunk_tokens = idle_chunk_tokens, page_rows = page_rows,
                                      prefix_groups = prefix_groups, kv_dtype = kv_dtype, mtp = mtp)
     for (s in g_slots) {
         init_one_scheduler(s)
@@ -5569,9 +5618,11 @@ def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows
 }
 
 //! `mtp`: -1 lets each slot decide (self-speculation on when it runs one stream on a GPU, `mtp_auto_arms`), 0 / 1 set it
-def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 64l;
+//! `asr_team`: -1 lets the slots decide whether the ASR workers publish to the worker team (`asr_auto_team`), 0 runs them inline, 1 puts them and the TTS worker on the team
+def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 0l;
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
-                team_dispatch : bool = true; asr_team_dispatch : bool = false; mtp : int = -1) : bool {
+                team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
+                idle_chunk_tokens : int64 = -1l) : bool {
     if (g_server != null || g_jobque_owned) {
         to_log(LOG_ERROR, "dasllama-server: init_server called while already initialized\n")
         return false
@@ -5587,9 +5638,11 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     g_jobque_owned = true
     setup_dasllama_jobque()
     set_jobque_team_mode(team_dispatch)
-    g_asr_team_dispatch = asr_team_dispatch
-    let dispatch_mode = !team_dispatch ? "inline" : (asr_team_dispatch ? "team" : "hybrid")
-    to_log(LOG_INFO, "dasllama-server: jobque compute dispatch = {dispatch_mode}\n")
+    let speech = speech_team_dispatch(team_dispatch, asr_team, length(g_slots), gpu_decoding_slots())
+    g_tts_team_dispatch = speech.tts
+    g_asr_team_dispatch = speech.asr
+    let dispatch_mode = !team_dispatch ? "inline" : (asr_team > 0 ? "team" : "hybrid")
+    to_log(LOG_INFO, "dasllama-server: jobque compute dispatch = {dispatch_mode}, ASR workers {g_asr_team_dispatch ? "on the team" : "inline"}\n")
     g_asr_jobs = unsafe(channel_create())
     g_asr_events = unsafe(channel_create())
     g_tts_jobs = unsafe(channel_create())
@@ -5606,7 +5659,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
         }
         to_log(LOG_INFO, g_setup_mode ? "dasllama-server: setup mode - serving the catalog/config page only\n" : "dasllama-server: no LLM slot - serving the speech route and the catalog only\n")
     }
-    init_slot_schedulers(max_streams, max_queue, chunk_tokens, page_rows, prefix_groups, kv_dtype, mtp)
+    init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups, kv_dtype, mtp)
     g_active = g_default_slot
     g_cur = g_default_slot
     g_prev_mtp_spec = get_mtp_spec()
@@ -5632,7 +5685,8 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     g_box_ram_gb = box_ram_gb()
     var names <- [for (s in g_slots); s.is_default && length(g_slots) > 1 ? "{s.name}*" : s.name]
     let kv_mode = page_rows > 0l ? "{kv_dtype} paged P={page_rows}" : "{kv_dtype} flat"
-    to_log(LOG_INFO, "dasllama-server listening on http://127.0.0.1:{port}/v1  (models: {join(names, ", ")}; streams: {max_streams}, prefill chunk: {chunk_tokens}, kv: {kv_mode})\n")
+    let chunk_note = empty(g_slots) ? "none" : "{g_slots[g_active].sched.chunk_tokens}, {g_slots[g_active].sched.idle_chunk_tokens} idle"
+    to_log(LOG_INFO, "dasllama-server listening on http://127.0.0.1:{port}/v1  (models: {join(names, ", ")}; streams: {max_streams}, prefill chunk: {chunk_note}, kv: {kv_mode})\n")
     delete names
     return true
 }
@@ -5901,11 +5955,12 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
 
 //! Compatibility wrapper for tests and simple callers. Lifecycle hosts should call
 //! ``init_server`` / ``update_server`` / ``shutdown_server`` directly.
-def run_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 64l;
+def run_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 0l;
                page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
-               team_dispatch : bool = true; asr_team_dispatch : bool = false; mtp : int = -1) {
+               team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
+               idle_chunk_tokens : int64 = -1l) {
     if (init_server(port, max_streams, max_queue, chunk_tokens, page_rows, prefix_groups, kv_dtype,
-            team_dispatch, asr_team_dispatch, mtp)) {
+            team_dispatch, asr_team, mtp, idle_chunk_tokens)) {
         while (update_server()) {
         }
     }
